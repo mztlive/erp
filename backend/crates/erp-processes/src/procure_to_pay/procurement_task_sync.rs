@@ -5,16 +5,16 @@ use std::collections::{HashMap, HashSet};
 use erp_core::common::time::Instant;
 use erp_core::ids::{SalesOrderId, WorkItemId};
 use erp_core::money::Quantity;
+use erp_read_models::purchase_center::repository::load_sales_procurement_coverage;
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::SalesOrderExt;
-use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use id_generator::next_id;
 use persistence_core::Executor;
 use rust_decimal::Decimal;
 
 use crate::{Error, Result};
-use erp_read_models::purchase_center::repository::load_sales_procurement_coverage;
 
 /// 加载当前账号可执行的开放供给分配任务。
 ///
@@ -40,11 +40,8 @@ pub(super) async fn load_owned_open_procurement_task(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<WorkItem> {
-    let item = db
-        .work_items()
-        .find_by_id(work_item_id, executor)
-        .await?
-        .ok_or_else(procurement_task_not_found)?;
+    let item =
+        db.work_items().find_by_id(work_item_id, executor).await?.ok_or_else(procurement_task_not_found)?;
     validate_procurement_task_access(&item, sales_order_id, actor_id)?;
     Ok(item)
 }
@@ -117,26 +114,13 @@ pub async fn sync_procurement_tasks_for_sales_order(
     let remaining_by_line = coverage
         .lines
         .into_iter()
-        .map(|line| {
-            (
-                line.revision_line.sales_order_line_id.to_string(),
-                line.summary.remaining_quantity,
-            )
-        })
+        .map(|line| (line.revision_line.sales_order_line_id.to_string(), line.summary.remaining_quantity))
         .collect::<HashMap<_, _>>();
     let tasks = db
         .work_items()
         .list_procurement_by_sales_order_newest_first(sales_order_id.as_ref(), executor)
         .await?;
-    synchronize_tasks(
-        db,
-        &order,
-        &coverage.revision.base.id,
-        &remaining_by_line,
-        tasks,
-        executor,
-    )
-    .await
+    synchronize_tasks(db, &order, &coverage.revision.base.id, &remaining_by_line, tasks, executor).await
 }
 
 /// 根据同一销售单的当前剩余量更新任务并补建释放任务。
@@ -172,13 +156,10 @@ async fn synchronize_tasks(
         let remaining = remaining_for_scope(task.responsibility_scope_ids(), remaining_by_line)?;
         if task.status == WorkItemStatus::Open {
             if !open_keys.insert(key) {
-                return Err(Error::ConflictError(
-                    "同一责任范围存在多条开放供给分配任务".to_string(),
-                ));
+                return Err(Error::ConflictError("同一责任范围存在多条开放供给分配任务".to_string()));
             }
             if remaining.to_decimal().is_zero() {
-                task.complete_when_requirement_satisfied(Instant::now())
-                    .map_err(Error::Logic)?;
+                task.complete_when_requirement_satisfied(Instant::now()).map_err(Error::Logic)?;
                 db.work_items().update(&mut task, executor).await?;
             } else {
                 let impact =
@@ -230,11 +211,7 @@ fn remaining_for_scope(
         return Err(Error::ConflictError("供给分配任务责任范围为空".to_string()));
     }
     let total = scope_ids.iter().fold(Decimal::ZERO, |sum, line_id| {
-        sum + remaining_by_line
-            .get(line_id)
-            .copied()
-            .map(Quantity::to_decimal)
-            .unwrap_or(Decimal::ZERO)
+        sum + remaining_by_line.get(line_id).copied().map(Quantity::to_decimal).unwrap_or(Decimal::ZERO)
     });
     Quantity::try_from(total).map_err(Error::Logic)
 }
@@ -252,10 +229,7 @@ fn remaining_for_scope(
 /// # 错误
 /// 无。
 fn procurement_impact_summary(order: &SalesOrder, line_count: usize, remaining: Quantity) -> String {
-    format!(
-        "销售单 {} 的 {line_count} 行待分配供给，剩余数量 {remaining}",
-        order.order_no
-    )
+    format!("销售单 {} 的 {line_count} 行待分配供给，剩余数量 {remaining}", order.order_no)
 }
 
 /// 返回采购剩余数量已由并发命令推进后的稳定冲突错误。
@@ -328,8 +302,7 @@ mod tests {
     #[test]
     fn completed_current_owner_task_reports_quantity_conflict() {
         let mut item = procurement_task("user-1");
-        item.complete_when_requirement_satisfied(Instant::from_unix_secs(10))
-            .unwrap();
+        item.complete_when_requirement_satisfied(Instant::from_unix_secs(10)).unwrap();
 
         let error =
             validate_procurement_task_access(&item, &SalesOrderId::new("sales-1"), "user-1").unwrap_err();
@@ -348,8 +321,7 @@ mod tests {
             Err(Error::NotFound(_))
         ));
 
-        item.complete_when_requirement_satisfied(Instant::from_unix_secs(10))
-            .unwrap();
+        item.complete_when_requirement_satisfied(Instant::from_unix_secs(10)).unwrap();
         assert!(matches!(
             validate_procurement_task_access(&item, &SalesOrderId::new("sales-1"), "user-2"),
             Err(Error::NotFound(_))
@@ -360,8 +332,7 @@ mod tests {
     fn previous_owner_cannot_probe_task_after_reassignment_and_completion() {
         let mut item = procurement_task("user-1");
         item.reassign("user-2", Instant::from_unix_secs(5)).unwrap();
-        item.complete_when_requirement_satisfied(Instant::from_unix_secs(10))
-            .unwrap();
+        item.complete_when_requirement_satisfied(Instant::from_unix_secs(10)).unwrap();
 
         assert!(matches!(
             validate_procurement_task_access(&item, &SalesOrderId::new("sales-1"), "user-1"),

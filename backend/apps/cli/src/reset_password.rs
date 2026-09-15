@@ -22,10 +22,7 @@ pub async fn run(config_path: &str, args: ResetPasswordArgs) -> Result<()> {
     let runtime = AdminRuntime::connect(config_path).await?;
     let result = runtime
         .service
-        .reset_admin_password(ResetAdminPasswordParams {
-            account: args.account,
-            password,
-        })
+        .reset_admin_password(ResetAdminPasswordParams { account: args.account, password })
         .await?;
     print_result(&result);
     Ok(())

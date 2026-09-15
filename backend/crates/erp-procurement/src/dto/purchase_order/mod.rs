@@ -17,10 +17,8 @@ mod change_order;
 mod command;
 mod query;
 
-pub use crate::entity::purchase_order::SupplySourceType;
 pub(crate) use application_core::normalize_sort;
-pub use application_core::PageView;
-pub use application_core::SortDir;
+pub use application_core::{PageView, SortDir};
 
 pub use self::change_order::{
     CancelPurchaseChangeApprovalRequest, EffectPurchaseChangeRequest, PurchaseChangeEffectResult,
@@ -28,26 +26,24 @@ pub use self::change_order::{
     StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
 };
 pub use self::command::{
-    CancelPurchaseOrderApprovalRequest, CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest,
-    CreatePurchaseOrderResult, CreatePurchaseOrdersFromSourcingRequest,
-    CreatePurchaseOrdersFromSourcingResult, ExistingStockReservationResult, PurchaseReviewResult,
+    CREATE_ACTION, CREATE_SOURCING_ACTION, CancelPurchaseOrderApprovalRequest,
+    CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult,
+    CreatePurchaseOrdersFromSourcingRequest, CreatePurchaseOrdersFromSourcingResult,
+    ExistingStockReservationResult, PURCHASE_SUBMIT_ACTION, PurchaseReviewResult, SAVE_ACTION,
     SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,
     SavePurchaseOrderLinePatch, SourcingLineAssignment, SubmitPurchaseOrderRequest,
-    SubmitPurchaseOrderResult, VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
-};
-pub use self::command::{
-    CREATE_ACTION, CREATE_SOURCING_ACTION, PURCHASE_SUBMIT_ACTION, SAVE_ACTION, VOID_ACTION,
+    SubmitPurchaseOrderResult, VOID_ACTION, VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
 };
 pub use self::query::{
-    PageParams, PurchaseChangeSummaryView, PurchaseOrderLineView, PurchaseOrderListParams,
-    PurchaseOrderListQuery, PurchaseSalesAllocationView, TotalsView, PURCHASE_ORDER_SORT_FIELDS,
+    PURCHASE_ORDER_SORT_FIELDS, PageParams, PurchaseChangeSummaryView, PurchaseOrderLineView,
+    PurchaseOrderListParams, PurchaseOrderListQuery, PurchaseSalesAllocationView, TotalsView,
 };
+pub use crate::entity::purchase_order::SupplySourceType;
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
-    use crate::entity::purchase_order::PurchaseOrderStatus;
     use erp_core::common::time::BusinessDate;
     use erp_core::money::Quantity;
     use serde_json::json;
@@ -55,15 +51,15 @@ mod tests {
 
     use super::command::submit_request_shape;
     use super::{
-        normalize_sort, CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest,
+        CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest,
         CreatePurchaseOrdersFromSourcingRequest, PurchaseOrderListParams, SavePurchaseOrderDraftRequest,
         SavePurchaseOrderLine, SavePurchaseOrderLinePatch, SortDir, SourcingLineAssignment,
-        SubmitPurchaseOrderRequest, SupplySourceType, VoidPurchaseOrderRequest,
-    };
-    use crate::entity::purchase_order::{
-        PurchaseLineType, PurchaseOrderSubmissionLine, RequestedLine, SourcingAssignment,
+        SubmitPurchaseOrderRequest, SupplySourceType, VoidPurchaseOrderRequest, normalize_sort,
     };
     use crate::Error;
+    use crate::entity::purchase_order::{
+        PurchaseLineType, PurchaseOrderStatus, PurchaseOrderSubmissionLine, RequestedLine, SourcingAssignment,
+    };
 
     /// 作废路径指纹金值：锁定历史算法绝对摘要。
     ///
@@ -292,10 +288,7 @@ mod tests {
             unit_cost_gross: Some("50".to_string()),
             input_tax_rate: None,
         }];
-        assert_eq!(
-            submit_request_shape(&None, &logistics),
-            format!("{:?}|{:?}", None::<String>, logistics)
-        );
+        assert_eq!(submit_request_shape(&None, &logistics), format!("{:?}|{:?}", None::<String>, logistics));
     }
 
     #[test]
@@ -392,12 +385,13 @@ mod tests {
 
     /// 构造当前草稿商品行。
     fn draft_line(id: &str, stable_line_id: &str, quantity: &str) -> PurchaseOrderSubmissionLine {
-        use crate::entity::purchase_order::PurchaseOrderSubmissionLineData;
         use erp_core::ids::{
             ProcurementConfirmationLineId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId,
             SalesOrderLineId, SalesOrderRevisionLineId, SalesOrderSubmissionLineId, SkuId, SkuRevisionId,
         };
         use erp_core::money::{Rate, UnitPrice};
+
+        use crate::entity::purchase_order::PurchaseOrderSubmissionLineData;
         let quantity = Quantity::from_str(quantity).unwrap();
         let (gross, net, tax) = erp_core::money::line_amounts(
             UnitPrice::from_str("5").unwrap(),
@@ -541,10 +535,7 @@ mod tests {
     /// 补丁必须覆盖全部当前草稿行且不得重复。
     #[test]
     fn resolve_line_patches_rejects_partial_and_duplicate_patches() {
-        let existing = vec![
-            draft_line("subl-1", "sol-1", "2"),
-            draft_line("subl-2", "sol-2", "1"),
-        ];
+        let existing = vec![draft_line("subl-1", "sol-1", "2"), draft_line("subl-2", "sol-2", "1")];
         let patch = |line_id: &str| SavePurchaseOrderLinePatch {
             line_id: line_id.to_string(),
             line_type: PurchaseLineType::ItemService,

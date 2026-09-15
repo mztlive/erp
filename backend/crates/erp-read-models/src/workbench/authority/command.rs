@@ -35,10 +35,7 @@ pub(in crate::workbench) const SYSTEM_OBJECT_OWNER: &str = "__system__";
 
 /// Collect object ids of one kind from a fact-key set.
 pub fn object_ids(keys: &HashSet<(ObjectKind, String)>, kind: ObjectKind) -> Vec<String> {
-    keys.iter()
-        .filter(|(candidate, _)| *candidate == kind)
-        .map(|(_, id)| id.clone())
-        .collect()
+    keys.iter().filter(|(candidate, _)| *candidate == kind).map(|(_, id)| id.clone()).collect()
 }
 
 impl super::WorkItemFactsReader {
@@ -61,12 +58,7 @@ impl super::WorkItemFactsReader {
         if ids.is_empty() {
             return Ok(());
         }
-        for batch in self
-            .db
-            .legacy_import_batches()
-            .list_active_by_ids(&ids, executor)
-            .await?
-        {
+        for batch in self.db.legacy_import_batches().list_active_by_ids(&ids, executor).await? {
             facts.insert(
                 (ObjectKind::LegacyImportBatch, batch.base.id.clone()),
                 ObjectFact::new(
@@ -108,10 +100,7 @@ impl super::WorkItemFactsReader {
         }
         for difference in self.read_reconciliation_differences(&ids, executor).await? {
             let fact = reconciliation_difference_fact(&difference);
-            facts.insert(
-                (ObjectKind::ReconciliationDifference, difference.base.id.clone()),
-                fact,
-            );
+            facts.insert((ObjectKind::ReconciliationDifference, difference.base.id.clone()), fact);
         }
         Ok(())
     }
@@ -127,12 +116,7 @@ impl super::WorkItemFactsReader {
         if ids.is_empty() {
             return Ok(());
         }
-        for order in self
-            .db
-            .supplier_fulfillment_orders()
-            .list_active_by_ids(&ids, executor)
-            .await?
-        {
+        for order in self.db.supplier_fulfillment_orders().list_active_by_ids(&ids, executor).await? {
             facts.insert(
                 (ObjectKind::SupplierFulfillmentOrder, order.base.id.clone()),
                 ObjectFact {
@@ -140,10 +124,9 @@ impl super::WorkItemFactsReader {
                     root_document_id: order.base.id.clone(),
                     label: format!("供应商履约订单 {}", order.fulfillment_order_no),
                     created_by: SYSTEM_OBJECT_OWNER.to_string(),
-                    subject_versions: WorkItemSubjectVersions::constrained(vec![order
-                        .base
-                        .version
-                        .to_string()])?,
+                    subject_versions: WorkItemSubjectVersions::constrained(vec![
+                        order.base.version.to_string(),
+                    ])?,
                     counterparty_label: None,
                     impact_summary: None,
                     subject_briefs: HashMap::new(),
@@ -164,11 +147,7 @@ impl super::WorkItemFactsReader {
         if ids.is_empty() {
             return Ok(());
         }
-        let offerings = self
-            .db
-            .supplier_offerings()
-            .list_active_by_ids(&ids, executor)
-            .await?;
+        let offerings = self.db.supplier_offerings().list_active_by_ids(&ids, executor).await?;
         let offering_ids = offerings
             .iter()
             .map(|offering| erp_core::ids::SupplierOfferingId::new(offering.base.id.clone()))
@@ -217,15 +196,9 @@ impl super::WorkItemFactsReader {
 pub(in crate::workbench) fn integration_error_fact(
     task: &erp_integration::entity::integration_ops::IntegrationErrorTask,
 ) -> ObjectFact {
-    let owner = task
-        .owner_user_id
-        .clone()
-        .unwrap_or_else(|| SYSTEM_OBJECT_OWNER.to_string());
-    let mut fact = ObjectFact::new(
-        task.base.id.clone(),
-        format!("集成异常 · {}", task.error_class.label()),
-        owner,
-    );
+    let owner = task.owner_user_id.clone().unwrap_or_else(|| SYSTEM_OBJECT_OWNER.to_string());
+    let mut fact =
+        ObjectFact::new(task.base.id.clone(), format!("集成异常 · {}", task.error_class.label()), owner);
     fact.impact_summary = Some(integration_error_impact(task).to_string());
     fact
 }
@@ -270,18 +243,11 @@ impl super::recipe::CommandFactReads for super::WorkItemFactsReader {
             Step::Inventory => self.load_stock_adjustment_facts(keys, facts, executor).await,
             Step::Settlement => self.load_supplier_settlement_facts(keys, facts, executor).await,
             Step::LegacyImport => self.load_legacy_import_batch_facts(keys, facts, executor).await,
-            Step::IntegrationError => {
-                self.load_integration_error_task_facts(keys, facts, executor)
-                    .await
-            }
-            Step::Reconciliation => {
-                self.load_reconciliation_difference_facts(keys, facts, executor)
-                    .await
-            }
+            Step::IntegrationError => self.load_integration_error_task_facts(keys, facts, executor).await,
+            Step::Reconciliation => self.load_reconciliation_difference_facts(keys, facts, executor).await,
             Step::SupplierFulfillment => {
-                self.load_supplier_fulfillment_order_facts(keys, facts, executor)
-                    .await
-            }
+                self.load_supplier_fulfillment_order_facts(keys, facts, executor).await
+            },
             Step::SupplierOffering => self.load_supplier_offering_facts(keys, facts, executor).await,
         }
     }

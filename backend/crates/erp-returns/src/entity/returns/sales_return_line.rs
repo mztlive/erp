@@ -5,11 +5,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{SalesOrderLineId, SalesReturnCaseId, SalesReturnLineId};
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 退回验收结果（数据模型 §6.11：退回验收；未验收时为空）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -219,8 +218,9 @@ fn validate_receiving(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn qty(value: &str) -> Quantity {
         Quantity::from_str(value).unwrap()
@@ -247,16 +247,10 @@ mod tests {
 
     #[test]
     fn new_rejects_non_positive_request_and_inconsistent_acceptance() {
-        let non_positive = SalesReturnLineData {
-            requested_quantity: qty("0.000000"),
-            ..data()
-        };
+        let non_positive = SalesReturnLineData { requested_quantity: qty("0.000000"), ..data() };
         assert!(SalesReturnLine::new(SalesReturnLineId::new("srl-2"), non_positive).is_err());
 
-        let over_received = SalesReturnLineData {
-            received_quantity: Some(qty("11.000000")),
-            ..data()
-        };
+        let over_received = SalesReturnLineData { received_quantity: Some(qty("11.000000")), ..data() };
         assert!(SalesReturnLine::new(SalesReturnLineId::new("srl-3"), over_received).is_err());
 
         let restockable_without_quality = SalesReturnLineData {
@@ -298,12 +292,13 @@ mod tests {
         assert!(line.is_qualified());
         assert_eq!(line.requested_quantity, qty("10.000000"), "关键字段不改");
 
-        assert!(line
-            .update(SalesReturnLineUpdate {
+        assert!(
+            line.update(SalesReturnLineUpdate {
                 received_quantity: Some(qty("12.000000")),
                 ..Default::default()
             })
-            .is_err());
+            .is_err()
+        );
     }
 
     /// 销售退货明细无审批约束：不得出现绑定字段或任务字段。
@@ -317,10 +312,7 @@ mod tests {
         assert!(!object.contains_key("work_item_id"));
         assert!(!object.contains_key("pending_allocations"));
 
-        let production = include_str!("sales_return_line.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("sales_return_line.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(!production.contains("IN_APPROVAL"));
         assert!(!production.contains("fn start_approval"));
         assert!(!production.contains("approval_subject_version"));

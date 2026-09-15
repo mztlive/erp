@@ -5,14 +5,14 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as IntegrationOpsExt>::INBOX_MESSAGES` 等值。
 
-use crate::repository::owned::{
-    InboxMessageRepository, IntegrationErrorTaskRepository, ReconciliationDifferenceRepository,
-    ReconciliationDifferenceResolutionRepository,
-};
 use mongodb::Database;
 
 use super::integration_ops::{
     InboxMessageFilter, IntegrationErrorTaskFilter, IntegrationOpsRepository, ReconciliationDifferenceFilter,
+};
+use crate::repository::owned::{
+    InboxMessageRepository, IntegrationErrorTaskRepository, ReconciliationDifferenceRepository,
+    ReconciliationDifferenceResolutionRepository,
 };
 
 /// 域 D34 仓储访问器。

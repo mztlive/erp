@@ -4,21 +4,21 @@
 //! `sort_by`/`sort_dir` 扁平传递；业务日期一律 `YYYY-MM-DD`；时间一律秒级时间戳；
 //! 金额/税率按 P0 约定序列化为字符串（`invoice_tax_rate` 为 `Rate` 定点小数）。
 
-use crate::entity::supplier::{
-    CapabilityCode, CapabilityStatus, InvoiceType, QualificationHealth, QualificationStatus,
-    QualificationType, ReconciliationCycle, SettlementMode, SupplierAccount, SupplierAccountStatus,
-    SupplierCapability, SupplierCommercialProfileRevision, SupplierQualification, SupplierRating,
-    SupplierRatingRevision,
-};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{FileAssetId, SupplierCapabilityId};
 use erp_core::money::Rate;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use crate::entity::supplier::{
+    CapabilityCode, CapabilityStatus, InvoiceType, QualificationHealth, QualificationStatus,
+    QualificationType, ReconciliationCycle, SettlementMode, SupplierAccount, SupplierAccountStatus,
+    SupplierCapability, SupplierCommercialProfileRevision, SupplierQualification, SupplierRating,
+    SupplierRatingRevision,
+};
 use crate::error::{Error, Result};
 use crate::ports::{PartyAddressFact, PartyBankAccountFact, PartyContactFact, PartyTaxProfileFact};
-use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 供应商角色列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const SUPPLIER_SORT_FIELDS: &[&str] = &["created_at", "supplier_no", "status"];
@@ -39,6 +39,10 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -52,12 +56,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空。
-use application_core::non_blank;
 
 /// 供应商角色响应视图（列表用，契约形状对齐 `supplier_account` 投影行）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -717,12 +715,7 @@ impl SaveSupplierProfileRequest {
         if self.clear_address && self.address.is_some() {
             return Err(Error::ValidationError("经营地址不能同时替换和清空".to_string()));
         }
-        if self.clear_tax_profile
-            && self
-                .tax_no
-                .as_deref()
-                .is_some_and(|value| !value.trim().is_empty())
-        {
+        if self.clear_tax_profile && self.tax_no.as_deref().is_some_and(|value| !value.trim().is_empty()) {
             return Err(Error::ValidationError("税务档案不能同时替换和清空".to_string()));
         }
         if self.clear_bank_account && self.bank_account.is_some() {
@@ -762,10 +755,7 @@ impl SaveSupplierProfileRequest {
         let value = serde_json::to_value(self)
             .map_err(|error| Error::Internal(format!("供应商命令序列化失败: {error}")))?;
         let canonical = canonical_json_string(&value)?;
-        Ok(format!(
-            "sha256-v1:{}",
-            hex::encode(Sha256::digest(canonical.as_bytes()))
-        ))
+        Ok(format!("sha256-v1:{}", hex::encode(Sha256::digest(canonical.as_bytes()))))
     }
 
     /// 读取更新场景必填版本号。
@@ -802,9 +792,7 @@ impl SaveSupplierProfileRequest {
     /// 纯内存比较，不触及外部状态。
     pub fn ensure_version(actual: u64, expected: u64) -> Result<()> {
         if actual != expected {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         Ok(())
     }
@@ -879,7 +867,7 @@ fn write_canonical_json(value: &serde_json::Value, output: &mut String) -> Resul
                 write_canonical_json(&map[key], output)?;
             }
             output.push('}');
-        }
+        },
         serde_json::Value::Array(values) => {
             output.push('[');
             for (index, value) in values.iter().enumerate() {
@@ -889,11 +877,11 @@ fn write_canonical_json(value: &serde_json::Value, output: &mut String) -> Resul
                 write_canonical_json(value, output)?;
             }
             output.push(']');
-        }
+        },
         other => {
             output
                 .push_str(&serde_json::to_string(other).map_err(|error| Error::Internal(error.to_string()))?);
-        }
+        },
     }
     Ok(())
 }
@@ -923,30 +911,31 @@ pub struct SupplierProfileMutationView {
 mod tests {
     use std::str::FromStr;
 
-    use crate::entity::supplier::{
-        CapabilityCode, InvoiceType, QualificationType, ReconciliationCycle, SettlementMode,
-    };
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::PartyId;
     use erp_core::money::Rate;
     use validator::Validate;
 
     use super::{
-        normalize_sort, SaveSupplierProfileRequest, SortDir, SupplierListParams, SupplierProfileAddressInput,
+        SaveSupplierProfileRequest, SortDir, SupplierListParams, SupplierProfileAddressInput,
         SupplierProfileBankAccountInput, SupplierProfileContactInput, SupplierProfileQualificationInput,
-        SupplierQualificationHealth,
+        SupplierQualificationHealth, normalize_sort,
+    };
+    use crate::entity::supplier::{
+        CapabilityCode, InvoiceType, QualificationType, ReconciliationCycle, SettlementMode,
     };
     use crate::error::Error;
 
     /// Node 种子生成器与 Rust 共享固定日期请求，验证最新 DTO、结算及合同资格合同。
     #[test]
     fn development_seed_requests_match_current_domain_contracts() {
+        use erp_core::ids::{
+            SupplierAccountId, SupplierCommercialProfileRevisionId, SupplierQualificationId,
+        };
+
         use crate::{
             QualificationStatus, SupplierCommercialProfileRevision, SupplierCommercialProfileRevisionData,
             SupplierQualification, SupplierQualificationData,
-        };
-        use erp_core::ids::{
-            SupplierAccountId, SupplierCommercialProfileRevisionId, SupplierQualificationId,
         };
         let rows: Vec<serde_json::Value> = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -985,10 +974,8 @@ mod tests {
                 .unwrap();
                 contracts.push(qualification);
             }
-            let blocked = matches!(
-                request.supplier_no.as_deref(),
-                Some("SUP-DEV-UNVERIFIED" | "SUP-DEV-EXPIRED")
-            );
+            let blocked =
+                matches!(request.supplier_no.as_deref(), Some("SUP-DEV-UNVERIFIED" | "SUP-DEV-EXPIRED"));
             assert_eq!(
                 crate::entity::supplier::eligibility::ensure_linked_contracts_qualified(&contracts, today)
                     .is_err(),
@@ -1112,7 +1099,7 @@ mod tests {
             Error::ValidationError(message) => {
                 assert!(message.contains("幂等键不能为空"));
                 assert!(!message.contains("联系人不能同时替换和清空"));
-            }
+            },
             other => panic!("unexpected error: {other:?}"),
         }
     }
@@ -1143,7 +1130,7 @@ mod tests {
             Error::ValidationError(message) => {
                 assert!(message.contains("联系人姓名不能为空"));
                 assert!(!message.contains("地址不能为空"));
-            }
+            },
             other => panic!("unexpected error: {other:?}"),
         }
     }
@@ -1166,10 +1153,7 @@ mod tests {
         let query = params.normalized().unwrap();
         assert_eq!(query.capability_codes.len(), 2);
         assert_eq!(query.qualification_types.len(), 2);
-        assert_eq!(
-            query.qualification_health,
-            Some(SupplierQualificationHealth::Expiring30)
-        );
+        assert_eq!(query.qualification_health, Some(SupplierQualificationHealth::Expiring30));
     }
 
     #[test]

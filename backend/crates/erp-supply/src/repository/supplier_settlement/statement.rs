@@ -1,22 +1,21 @@
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{PayableAccountId, SupplierAccountId};
+use futures_util::TryStreamExt;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
+use serde::{Deserialize, Serialize};
+
+use super::projection::{statement_sort_doc, supplier_settlement_statement_projection};
 use crate::entity::supplier_settlement::{
     SettlementReviewResult, SettlementStatus, SupplierSettlementSourceEvidence, SupplierSettlementStatement,
 };
 use crate::repository::owned::{
     SupplierSettlementSourceEvidenceRepository, SupplierSettlementStatementRepository,
 };
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::common::time::{BusinessDate, Instant};
-use erp_core::ids::{PayableAccountId, SupplierAccountId};
-use futures_util::TryStreamExt;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use serde::{Deserialize, Serialize};
-
-use super::projection::{statement_sort_doc, supplier_settlement_statement_projection};
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 供应商结算单列表投影行。
 ///
@@ -197,8 +196,7 @@ impl<'a> SupplierSettlementStatementRepository<'a> {
         if statement_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(doc! { "id": { "$in": statement_ids } }, executor)
-            .await
+        self.find_many(doc! { "id": { "$in": statement_ids } }, executor).await
     }
 
     /// 按结算单 ID 集合一次批量返回来源 ID 到结算单号的事实映射（FIN-R03）。
@@ -235,9 +233,7 @@ impl<'a> SupplierSettlementStatementRepository<'a> {
         let rows = mongo_ops::find_many(
             &self.collection().clone_with_type::<SupplierSettlementNoRow>(),
             doc! { "id": { "$in": deduped } },
-            FindOptions::builder()
-                .projection(doc! { "id": 1, "statement_no": 1 })
-                .build(),
+            FindOptions::builder().projection(doc! { "id": 1, "statement_no": 1 }).build(),
             executor,
         )
         .await?;
@@ -270,24 +266,16 @@ impl<'a> SupplierSettlementStatementRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SupplierSettlementStatementRow>> {
         let options = FindOptions::builder()
-            .sort(statement_sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-            ))
+            .sort(statement_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(supplier_settlement_statement_projection())
             .build();
-        let collection = self
-            .collection()
-            .clone_with_type::<SupplierSettlementStatementRow>();
+        let collection = self.collection().clone_with_type::<SupplierSettlementStatementRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按 ERP 结算单号查找唯一结算单。
@@ -310,8 +298,7 @@ impl<'a> SupplierSettlementStatementRepository<'a> {
         statement_no: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierSettlementStatement>> {
-        self.find_one(doc! { "statement_no": statement_no }, executor)
-            .await
+        self.find_one(doc! { "statement_no": statement_no }, executor).await
     }
 
     /// 按稳定 ID 读取供应商结算岗位分离事实。
@@ -380,7 +367,7 @@ impl<'a> SupplierSettlementStatementRepository<'a> {
                     .stream(session)
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
             None => {
                 collection
                     .aggregate(pipeline)
@@ -388,7 +375,7 @@ impl<'a> SupplierSettlementStatementRepository<'a> {
                     .await?
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
         };
         Ok(rows.into_iter().next())
     }
@@ -508,18 +495,12 @@ impl SupplierSettlementStatementRepository<'_> {
             })
             .collect::<Vec<_>>();
         let collection = self.collection();
-        let mut query = collection.distinct(
-            "id",
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": clauses },
-        );
+        let mut query =
+            collection.distinct("id", doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": clauses });
         if let Some(session) = executor.session() {
             query = query.session(session);
         }
-        Ok(query
-            .await?
-            .into_iter()
-            .filter_map(|id| id.as_str().map(str::to_owned))
-            .collect())
+        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
     }
 }
 

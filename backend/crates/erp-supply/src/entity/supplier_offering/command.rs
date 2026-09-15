@@ -2,10 +2,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
 const IDEMPOTENCY_KEY_MAX_LEN: usize = 128;
 const OPERATION_MAX_LEN: usize = 64;
@@ -62,12 +62,8 @@ impl SupplierOfferingCommand {
             IDEMPOTENCY_KEY_MAX_LEN,
             "幂等键过长",
         )?;
-        let operation = normalize_required_text(
-            data.operation,
-            "命令操作不能为空",
-            OPERATION_MAX_LEN,
-            "命令操作过长",
-        )?;
+        let operation =
+            normalize_required_text(data.operation, "命令操作不能为空", OPERATION_MAX_LEN, "命令操作过长")?;
         let request_fingerprint = normalize_required_text(
             data.request_fingerprint,
             "请求指纹不能为空",
@@ -212,8 +208,9 @@ fn fingerprints_match(a: &str, b: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{SupplierOfferingCommand, SupplierOfferingCommandData};
     use serde::Serialize;
+
+    use super::{SupplierOfferingCommand, SupplierOfferingCommandData};
 
     const ZERO_DIGEST: &str = "0000000000000000000000000000000000000000000000000000000000000000";
     const ONE_DIGEST: &str = "1111111111111111111111111111111111111111111111111111111111111111";
@@ -250,9 +247,7 @@ mod tests {
         assert!(command.ensure_replayable("create_offering", ZERO_DIGEST).is_ok());
         assert!(command.ensure_replayable("revise_offering", ZERO_DIGEST).is_err());
         assert!(command.ensure_replayable("create_offering", ONE_DIGEST).is_err());
-        assert!(command
-            .ensure_replayable("create_offering", "bad-fingerprint")
-            .is_err());
+        assert!(command.ensure_replayable("create_offering", "bad-fingerprint").is_err());
     }
 
     /// 覆盖指纹格式校验：非法长度、非十六进制或空白拒绝。
@@ -278,10 +273,7 @@ mod tests {
             offering_id: String,
             revision_no: u32,
         }
-        let expected = OfferingResult {
-            offering_id: "offering-1".to_string(),
-            revision_no: 2,
-        };
+        let expected = OfferingResult { offering_id: "offering-1".to_string(), revision_no: 2 };
         let command = SupplierOfferingCommand::with_result(
             "command-1",
             "key-1",
@@ -290,10 +282,7 @@ mod tests {
             &expected,
         )
         .unwrap();
-        assert_eq!(
-            command.result_json,
-            "{\"offering_id\":\"offering-1\",\"revision_no\":2}"
-        );
+        assert_eq!(command.result_json, "{\"offering_id\":\"offering-1\",\"revision_no\":2}");
         assert_eq!(command.replay_result::<OfferingResult>().unwrap(), expected);
     }
 
@@ -310,9 +299,7 @@ mod tests {
             },
         )
         .unwrap();
-        let error = command
-            .replay_result::<serde_json::Value>()
-            .expect_err("坏结果 JSON 必须失败");
+        let error = command.replay_result::<serde_json::Value>().expect_err("坏结果 JSON 必须失败");
         assert_eq!(error.to_string(), "供给命令结果反序列化失败");
     }
 

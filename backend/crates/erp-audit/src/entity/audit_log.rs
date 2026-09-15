@@ -1,10 +1,8 @@
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
-use erp_core::AccountKind;
-use erp_core::Result;
+use erp_core::{AccountKind, Result};
+use serde::{Deserialize, Serialize};
 
 /// 操作人ID最大长度。
 const ACTOR_ID_MAX_LEN: usize = 128;
@@ -96,8 +94,9 @@ impl AuditLog {
 
 #[cfg(test)]
 mod tests {
-    use super::{AuditLog, AuditLogData};
     use erp_core::AccountKind;
+
+    use super::{AuditLog, AuditLogData};
 
     fn audit_data() -> AuditLogData {
         AuditLogData {

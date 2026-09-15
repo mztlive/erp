@@ -1,11 +1,11 @@
-use crate::entity::facts::{
-    SalesOrderBasisFact as SalesOrder, SalesRevisionFact as SalesOrderRevision,
-    StockBalanceFact as StockBalance,
-};
 use erp_core::money::Quantity;
 
 use super::super::command_receipt::digest_parts;
 use super::super::coverage::SalesProcurementCoverageLine;
+use crate::entity::facts::{
+    SalesOrderBasisFact as SalesOrder, SalesRevisionFact as SalesOrderRevision,
+    StockBalanceFact as StockBalance,
+};
 
 /// 一条可由现有库存直接满足的销售行。
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -16,10 +16,10 @@
 //!   D19 只拥有 `purchase_invoice_allocation`，禁止复制发票实体）；
 //! - D33 `supplier_settlement_statements()` 解析结算单号供展示。
 
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 
 use crate::adapters::identity::shared_rbac_service;
-use erp_identity::SharedRbacService;
 
 mod account;
 
@@ -60,11 +60,7 @@ impl PayableService {
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
         let rbac = shared_rbac_service(db.clone());
-        Self {
-            db,
-            rbac,
-            object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
-        }
+        Self { db, rbac, object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort) }
     }
 
     /// Inject composition-root object-read for approval binding.
@@ -106,10 +102,8 @@ mod supplier_payment_execution_tests {
         assert!(process.contains("request.registration.retention_class"));
         assert!(process.contains("BankReceiptEvidencePolicy::validate("));
 
-        let stored_path = production
-            .split("BankReceiptEvidencePolicy::validate(")
-            .nth(1)
-            .expect("已落库校验入口");
+        let stored_path =
+            production.split("BankReceiptEvidencePolicy::validate(").nth(1).expect("已落库校验入口");
         assert!(stored_path.contains("asset.content_type"));
         assert!(stored_path.contains("asset.sensitivity_class"));
         assert!(stored_path.contains("asset.retention_class"));
@@ -307,10 +301,7 @@ mod supplier_payment_execution_tests {
             ),
             include_str!("../../../../erp-read-models/src/finance/payable/mapping.rs")
         );
-        let batch = production
-            .split("async fn recipient_views_by_ids")
-            .nth(1)
-            .expect("收款批量");
+        let batch = production.split("async fn recipient_views_by_ids").nth(1).expect("收款批量");
         assert!(batch.contains("payment_recipient_view"));
         assert!(!batch.contains("account_number_ciphertext"));
         assert!(!batch.contains("account_number_query_hmac"));

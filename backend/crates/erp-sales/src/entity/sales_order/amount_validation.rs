@@ -23,11 +23,7 @@ pub(crate) fn sum_line_amounts(
 ) -> (Amount, Amount, Amount) {
     let zero = Amount::from_str("0.00").expect("静态零金额必须合法");
     amounts.into_iter().fold((zero, zero, zero), |totals, line| {
-        (
-            totals.0.checked_add(line.0),
-            totals.1.checked_add(line.1),
-            totals.2.checked_add(line.2),
-        )
+        (totals.0.checked_add(line.0), totals.1.checked_add(line.1), totals.2.checked_add(line.2))
     })
 }
 

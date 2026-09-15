@@ -1,10 +1,11 @@
 //! 销售持久化 BSON 往返合同，保留原实体测试的样例和断言。
 
 mod sales_order_entity {
+    use erp_core::ids::{ContractId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId};
+
     use crate::entity::sales_order::{
         BusinessType, OriginSystem, SalesOrder, SalesOrderData, SalesOrderLine, SalesOrderLineData,
     };
-    use erp_core::ids::{ContractId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId};
 
     fn data() -> SalesOrderData {
         SalesOrderData {
@@ -44,17 +45,19 @@ mod sales_order_entity {
 }
 
 mod sales_order_revision {
-    use crate::entity::sales_order::{
-        CardForm, RevisionSource, SalesOrderRevision, SalesOrderRevisionData, SalesOrderVoucherLineRevision,
-        SalesOrderVoucherLineRevisionData,
-    };
+    use std::str::FromStr;
+
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         ContractRevisionId, PartyRevisionId, SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId,
         SalesOrderVoucherLineRevisionId,
     };
     use erp_core::money::{Amount, UnitPrice};
-    use std::str::FromStr;
+
+    use crate::entity::sales_order::{
+        CardForm, RevisionSource, SalesOrderRevision, SalesOrderRevisionData, SalesOrderVoucherLineRevision,
+        SalesOrderVoucherLineRevisionData,
+    };
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -121,17 +124,19 @@ mod sales_order_revision {
 }
 
 mod sales_order_submission {
-    use crate::entity::sales_order::{
-        BusinessType, GoodsLineFields, LineType, SalesOrderSubmission, SalesOrderSubmissionData,
-        SalesOrderSubmissionLineData, WelfareScenario,
-    };
+    use std::str::FromStr;
+
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         ContractRevisionId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId,
         SalesOrderSubmissionId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
     };
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
-    use std::str::FromStr;
+
+    use crate::entity::sales_order::{
+        BusinessType, GoodsLineFields, LineType, SalesOrderSubmission, SalesOrderSubmissionData,
+        SalesOrderSubmissionLineData, WelfareScenario,
+    };
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -220,17 +225,19 @@ mod sales_order_submission {
 }
 
 mod sales_change_submission {
-    use crate::entity::sales_review::{
-        BusinessType, GoodsLineFields, LineType, SalesChangeSubmission, SalesChangeSubmissionData,
-        SalesChangeSubmissionLineData, WelfareScenario,
-    };
+    use std::str::FromStr;
+
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         ContractRevisionId, CustomerAccountId, PartyId, SalesChangeOrderId, SalesChangeSubmissionId,
         SalesOrderId, SalesOrderLineId, SalesOrderRevisionId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
     };
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
-    use std::str::FromStr;
+
+    use crate::entity::sales_review::{
+        BusinessType, GoodsLineFields, LineType, SalesChangeSubmission, SalesChangeSubmissionData,
+        SalesChangeSubmissionLineData, WelfareScenario,
+    };
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()

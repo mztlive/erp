@@ -7,9 +7,12 @@
 pub mod reviewer_options;
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
+use erp_processes::supply_settlement::SupplierSettlementProcess;
+use erp_read_models::supplier_center::settlement::SupplierSettlementReadService;
+use erp_read_models::supplier_center::settlement::dto::{
+    SettlementReviewDecisionResult, SupplierSettlementStatementDetailView,
 };
 use erp_supply::dto::supplier_settlement::{
     CreateSettlementStatementRequest, RecordSettlementSourceEvidenceRequest,
@@ -22,18 +25,11 @@ use erp_supply::dto::supplier_settlement::{
     SupplierSettlementSourceEvidenceView, SupplierSettlementStatementListParams,
     SupplierSettlementStatementListView, SupplierSettlementStatementView, VoidSettlementRequest,
 };
-
-use erp_processes::supply_settlement::SupplierSettlementProcess;
-use erp_read_models::supplier_center::settlement::{
-    dto::{SettlementReviewDecisionResult, SupplierSettlementStatementDetailView},
-    SupplierSettlementReadService,
-};
 use erp_supply::service::supplier_settlement::SupplierSettlementService;
 
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "供应商结算",
@@ -109,9 +105,7 @@ pub async fn supplier_settlement_statement_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSettlementStatementRequest>,
 ) -> Result<SettlementDraftCommandResult> {
-    let view = SupplierSettlementProcess::new(state.db())
-        .create_statement(req, &actor)
-        .await?;
+    let view = SupplierSettlementProcess::new(state.db()).create_statement(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -130,9 +124,7 @@ pub async fn supplier_settlement_statement_refresh(
     Path(id): Path<String>,
     Json(req): Json<RefreshSettlementStatementRequest>,
 ) -> Result<SettlementDraftCommandResult> {
-    let view = SupplierSettlementProcess::new(state.db())
-        .refresh_statement(&id, req, &actor)
-        .await?;
+    let view = SupplierSettlementProcess::new(state.db()).refresh_statement(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -148,9 +140,7 @@ pub async fn supplier_settlement_source_evidence_latest(
     State(state): State<AppState>,
     Query(query): Query<SupplierSettlementSourceEvidenceQuery>,
 ) -> Result<SupplierSettlementSourceEvidenceView> {
-    let view = SupplierSettlementService::new(state.db())
-        .latest_source_evidence(&query)
-        .await?;
+    let view = SupplierSettlementService::new(state.db()).latest_source_evidence(&query).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -167,9 +157,7 @@ pub async fn supplier_settlement_source_evidence_record(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<RecordSettlementSourceEvidenceRequest>,
 ) -> Result<SupplierSettlementSourceEvidenceView> {
-    let view = SupplierSettlementProcess::new(state.db())
-        .record_source_evidence(req, &actor)
-        .await?;
+    let view = SupplierSettlementProcess::new(state.db()).record_source_evidence(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -196,9 +184,7 @@ pub async fn supplier_settlement_statement_submit_review(
     Path(id): Path<String>,
     Json(req): Json<SubmitSettlementReviewRequest>,
 ) -> Result<SubmitSettlementReviewResult> {
-    let view = SupplierSettlementProcess::new(state.db())
-        .submit_review(&id, req, &actor)
-        .await?;
+    let view = SupplierSettlementProcess::new(state.db()).submit_review(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -226,9 +212,7 @@ pub async fn supplier_settlement_statement_review_decide(
     Path(id): Path<String>,
     Json(req): Json<SettlementReviewCommand>,
 ) -> Result<SettlementReviewDecisionResult> {
-    let view = SupplierSettlementProcess::new(state.db())
-        .decide_review(&id, req, &actor)
-        .await?;
+    let view = SupplierSettlementProcess::new(state.db()).decide_review(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -256,9 +240,7 @@ pub async fn supplier_settlement_statement_void(
     Path(id): Path<String>,
     Json(req): Json<VoidSettlementRequest>,
 ) -> Result<SupplierSettlementStatementView> {
-    let view = SupplierSettlementProcess::new(state.db())
-        .void_statement(&id, req, &actor)
-        .await?;
+    let view = SupplierSettlementProcess::new(state.db()).void_statement(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -282,9 +264,7 @@ pub async fn supplier_settlement_item_list(
     State(state): State<AppState>,
     Query(params): Query<SupplierSettlementItemListParams>,
 ) -> Result<SettlementPageView<SupplierSettlementItemView>> {
-    let page = SupplierSettlementService::new(state.db())
-        .supplier_settlement_item_list(&params)
-        .await?;
+    let page = SupplierSettlementService::new(state.db()).supplier_settlement_item_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -308,9 +288,8 @@ pub async fn supplier_settlement_difference_list(
     State(state): State<AppState>,
     Query(params): Query<SupplierSettlementDifferenceListParams>,
 ) -> Result<SettlementPageView<SupplierSettlementDifferenceView>> {
-    let page = SupplierSettlementService::new(state.db())
-        .supplier_settlement_difference_list(&params)
-        .await?;
+    let page =
+        SupplierSettlementService::new(state.db()).supplier_settlement_difference_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -338,9 +317,7 @@ pub async fn supplier_settlement_difference_decide(
     Path(id): Path<String>,
     Json(req): Json<SettlementDifferenceDecisionRequest>,
 ) -> Result<SettlementDifferenceDecisionResult> {
-    let view = SupplierSettlementProcess::new(state.db())
-        .decide_difference(&id, req, &actor)
-        .await?;
+    let view = SupplierSettlementProcess::new(state.db()).decide_difference(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -359,8 +336,7 @@ pub async fn supplier_settlement_difference_evidence_append(
     Path(id): Path<String>,
     Json(req): Json<SettlementDifferenceEvidenceRequest>,
 ) -> Result<SettlementDifferenceEvidenceResult> {
-    let view = SupplierSettlementProcess::new(state.db())
-        .append_difference_evidence(&id, req, &actor)
-        .await?;
+    let view =
+        SupplierSettlementProcess::new(state.db()).append_difference_evidence(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }

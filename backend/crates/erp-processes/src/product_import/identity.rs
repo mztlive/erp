@@ -1,12 +1,12 @@
 //! 导入编号与金额规范化。
 
-use erp_catalog::entity::catalog::product_import::{
-    collapse_import_text, first_import_barcode, import_brand_name, is_import_blank, truncate_import_text,
-    IMPORT_NAME_MAX_CHARS, IMPORT_SPEC_MAX_CHARS,
-};
 use std::collections::HashSet;
 
-use erp_catalog::{SpecEntryInput, PRODUCT_IMPORT_HEADERS, PRODUCT_IMPORT_NAME_COLUMN};
+use erp_catalog::entity::catalog::product_import::{
+    IMPORT_NAME_MAX_CHARS, IMPORT_SPEC_MAX_CHARS, collapse_import_text, first_import_barcode,
+    import_brand_name, is_import_blank, truncate_import_text,
+};
+use erp_catalog::{PRODUCT_IMPORT_HEADERS, PRODUCT_IMPORT_NAME_COLUMN, SpecEntryInput};
 use erp_core::money::Amount;
 use sha2::{Digest, Sha256};
 
@@ -71,24 +71,14 @@ pub fn normalize_import_row(row_number: u32, cells: &[String]) -> Result<Normali
     let specification = if is_import_blank(spec_raw) {
         None
     } else {
-        Some(truncate_import_text(
-            &collapse_import_text(spec_raw),
-            IMPORT_SPEC_MAX_CHARS,
-        ))
+        Some(truncate_import_text(&collapse_import_text(spec_raw), IMPORT_SPEC_MAX_CHARS))
     };
     let barcode = first_import_barcode(cell(1));
     let name = truncate_import_text(&name_raw, IMPORT_NAME_MAX_CHARS);
     let coded = explicit_product_code(cell(0));
     let coded_spu = coded.is_some();
     let product_no = coded.unwrap_or_else(|| {
-        stable_code(
-            "PRD",
-            &[
-                &name,
-                specification.as_deref().unwrap_or(""),
-                barcode.as_deref().unwrap_or(""),
-            ],
-        )
+        stable_code("PRD", &[&name, specification.as_deref().unwrap_or(""), barcode.as_deref().unwrap_or("")])
     });
     let spec_entries = if coded_spu {
         vec![SpecEntryInput {
@@ -126,11 +116,7 @@ pub fn normalize_import_row(row_number: u32, cells: &[String]) -> Result<Normali
 /// 无。
 pub fn explicit_product_code(raw: &str) -> Option<String> {
     let trimmed = collapse_import_text(raw);
-    if is_import_blank(&trimmed) {
-        None
-    } else {
-        Some(truncate_import_text(&trimmed.replace(' ', "-"), 64))
-    }
+    if is_import_blank(&trimmed) { None } else { Some(truncate_import_text(&trimmed.replace(' ', "-"), 64)) }
 }
 
 /// 同一产品编码下用于区分 SKU 的规格值。
@@ -206,16 +192,16 @@ fn parse_optional_amount(value: &str, column: &str) -> Result<Option<Amount>> {
         return Ok(None);
     }
     let text = collapse_import_text(value);
-    text.parse::<Amount>()
-        .map(Some)
-        .map_err(|_| Error::ValidationError(format!("「{column}」不是有效金额")))
+    text.parse::<Amount>().map(Some).map_err(|_| Error::ValidationError(format!("「{column}」不是有效金额")))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{next_sku_no, normalize_import_row, stable_code};
-    use erp_catalog::PRODUCT_IMPORT_HEADERS;
     use std::collections::HashSet;
+
+    use erp_catalog::PRODUCT_IMPORT_HEADERS;
+
+    use super::{next_sku_no, normalize_import_row, stable_code};
 
     #[test]
     fn stable_code_is_deterministic() {

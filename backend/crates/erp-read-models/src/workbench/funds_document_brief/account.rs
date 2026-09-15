@@ -4,10 +4,9 @@ use std::collections::HashSet;
 
 use persistence_core::Executor;
 
-use super::super::brief::{join_list_summary, push_section, ObjectBriefSource};
+use super::super::brief::{ObjectBriefSource, join_list_summary, push_section};
 use super::super::presentation::format_yuan;
-use super::super::WorkbenchReadService;
-use super::super::{object_ids, ObjectKind, WorkbenchObjectFactMap as ObjectFactMap};
+use super::super::{ObjectKind, WorkbenchObjectFactMap as ObjectFactMap, WorkbenchReadService, object_ids};
 use super::mapping::{invoice_tax_profile_label, payable_account_fact, receivable_fact_display};
 use crate::errors::Result;
 use crate::workbench::authority::funds::mapping as authority_mapping;
@@ -35,57 +34,38 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let accounts = self
-            .funds_reader()
-            .read_receivable_accounts(&ids, executor)
-            .await?;
+        let accounts = self.funds_reader().read_receivable_accounts(&ids, executor).await?;
         if accounts.is_empty() {
             return Ok(());
         }
-        let sales_order_ids = accounts
-            .iter()
-            .map(|item| item.sales_order_id.to_string())
-            .collect::<Vec<_>>();
+        let sales_order_ids = accounts.iter().map(|item| item.sales_order_id.to_string()).collect::<Vec<_>>();
         let sales_nos = self.sales_order_numbers(&sales_order_ids, executor).await?;
-        let party_ids = accounts
-            .iter()
-            .map(|item| item.counterparty_party_id.to_string())
-            .collect::<Vec<_>>();
+        let party_ids =
+            accounts.iter().map(|item| item.counterparty_party_id.to_string()).collect::<Vec<_>>();
         let party_names = self.party_legal_names(&party_ids, executor).await?;
-        let revision_briefs = self
-            .receivable_account_revision_briefs(&accounts, executor)
-            .await?;
+        let revision_briefs = self.receivable_account_revision_briefs(&accounts, executor).await?;
         let tax_profile_nos = self
             .current_tax_profile_nos(
-                &accounts
-                    .iter()
-                    .map(|account| account.counterparty_party_id.clone())
-                    .collect::<Vec<_>>(),
+                &accounts.iter().map(|account| account.counterparty_party_id.clone()).collect::<Vec<_>>(),
                 executor,
             )
             .await?;
         let due_dates = self.receivable_account_due_dates(&accounts, executor).await?;
         for account in accounts {
             let sales_no = sales_nos.get(&account.sales_order_id.to_string()).cloned();
-            let counterparty = party_names
-                .get(&account.counterparty_party_id.to_string())
-                .cloned();
+            let counterparty = party_names.get(&account.counterparty_party_id.to_string()).cloned();
             let revision_id = account.source_sales_order_revision_id.to_string();
             let invoice_requirement = revision_briefs.invoice_requirements.get(&revision_id);
             let voucher = revision_briefs.vouchers.get(&revision_id);
             let tax_profile_label = invoice_tax_profile_label(
-                tax_profile_nos
-                    .get(&account.counterparty_party_id.to_string())
-                    .map(String::as_str),
+                tax_profile_nos.get(&account.counterparty_party_id.to_string()).map(String::as_str),
             );
             let due_date = due_dates.get(&account.base.id).map(ToString::to_string);
             let mut fact = receivable_fact_display(
                 authority_mapping::receivable_account_fact(
                     &account,
                     counterparty.clone(),
-                    revision_briefs
-                        .command_voucher_revision_ids
-                        .contains(&revision_id),
+                    revision_briefs.command_voucher_revision_ids.contains(&revision_id),
                 ),
                 voucher.is_some(),
             );
@@ -104,20 +84,10 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 invoice_requirement.map(|item| item.tax_point.as_str()),
                 false,
             );
-            push_section(
-                &mut sections,
-                "开票抬头资料",
-                Some(tax_profile_label.as_str()),
-                false,
-            );
+            push_section(&mut sections, "开票抬头资料", Some(tax_profile_label.as_str()), false);
             push_section(&mut sections, "应收最早到期日", due_date.as_deref(), false);
             if let Some(voucher) = voucher {
-                push_section(
-                    &mut sections,
-                    "卡券有效期",
-                    voucher.expiry_label.as_deref(),
-                    false,
-                );
+                push_section(&mut sections, "卡券有效期", voucher.expiry_label.as_deref(), false);
                 push_section(&mut sections, "面值结构", voucher.face_summary.as_deref(), true);
                 let total_count = (voucher.total_count > 0).then(|| format!("{} 张", voucher.total_count));
                 push_section(&mut sections, "卡券张数", total_count.as_deref(), true);

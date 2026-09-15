@@ -2,14 +2,14 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::supplier_offering::{AvailabilityInterruptionReason, AvailabilityStatus};
 use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierOfferingAvailabilityId, SupplierOfferingId};
 use erp_core::money::Quantity;
 use erp_core::validation::normalize_optional_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::supplier_offering::{AvailabilityInterruptionReason, AvailabilityStatus};
 
 const SOURCE_REVISION_TOKEN_MAX_LEN: usize = 256;
 
@@ -66,11 +66,8 @@ impl SupplierOfferingAvailability {
     /// # 错误
     /// 数量为负、来源版本过长或更新人为空时返回错误。
     pub fn new(id: SupplierOfferingAvailabilityId, data: SupplierOfferingAvailabilityData) -> Result<Self> {
-        let source_revision_token = normalize_optional_text(
-            data.source_revision_token,
-            "来源版本",
-            SOURCE_REVISION_TOKEN_MAX_LEN,
-        )?;
+        let source_revision_token =
+            normalize_optional_text(data.source_revision_token, "来源版本", SOURCE_REVISION_TOKEN_MAX_LEN)?;
         let updated_by = data.updated_by.trim().to_string();
         ensure_valid(data.available_quantity, &updated_by)?;
         Ok(Self {
@@ -102,11 +99,8 @@ impl SupplierOfferingAvailability {
         if data.source_updated_at < self.source_updated_at {
             return Err(Error::from("可供来源时间早于当前数据"));
         }
-        let source_revision_token = normalize_optional_text(
-            data.source_revision_token,
-            "来源版本",
-            SOURCE_REVISION_TOKEN_MAX_LEN,
-        )?;
+        let source_revision_token =
+            normalize_optional_text(data.source_revision_token, "来源版本", SOURCE_REVISION_TOKEN_MAX_LEN)?;
         let updated_by = data.updated_by.trim().to_string();
         ensure_valid(data.available_quantity, &updated_by)?;
         self.availability_status = data.availability_status;
@@ -143,10 +137,7 @@ impl SupplierOfferingAvailability {
     /// # 错误
     /// 当前版本已达到 `u64` 上限时返回领域错误。
     pub fn next_persisted_version(&self) -> Result<u64> {
-        self.base
-            .version
-            .checked_add(1)
-            .ok_or_else(|| Error::from("可供投影版本已达到上限"))
+        self.base.version.checked_add(1).ok_or_else(|| Error::from("可供投影版本已达到上限"))
     }
 
     /// 返回当前可供事实对应的销售安全中断原因。
@@ -160,7 +151,7 @@ impl SupplierOfferingAvailability {
             (AvailabilityStatus::Stale, _) => Some(AvailabilityInterruptionReason::AvailabilityStale),
             (AvailabilityStatus::Available, Some(quantity)) if quantity.to_decimal().is_zero() => {
                 Some(AvailabilityInterruptionReason::ZeroInventory)
-            }
+            },
             _ => None,
         }
     }
@@ -191,11 +182,12 @@ fn ensure_valid(quantity: Option<Quantity>, updated_by: &str) -> Result<()> {
 mod tests {
     use std::str::FromStr;
 
-    use super::{SupplierOfferingAvailability, SupplierOfferingAvailabilityData};
-    use crate::entity::supplier_offering::{AvailabilityInterruptionReason, AvailabilityStatus};
     use erp_core::common::time::Instant;
     use erp_core::ids::{SupplierOfferingAvailabilityId, SupplierOfferingId};
     use erp_core::money::Quantity;
+
+    use super::{SupplierOfferingAvailability, SupplierOfferingAvailabilityData};
+    use crate::entity::supplier_offering::{AvailabilityInterruptionReason, AvailabilityStatus};
 
     fn data(at: i64) -> SupplierOfferingAvailabilityData {
         SupplierOfferingAvailabilityData {
@@ -245,17 +237,9 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(
-            availability.interruption_reason(),
-            Some(AvailabilityInterruptionReason::ZeroInventory)
-        );
+        assert_eq!(availability.interruption_reason(), Some(AvailabilityInterruptionReason::ZeroInventory));
         assert!(availability.ensure_version(availability.base.version).is_ok());
-        assert!(availability
-            .ensure_version(availability.base.version.saturating_add(1))
-            .is_err());
-        assert_eq!(
-            availability.next_persisted_version().unwrap(),
-            availability.base.version + 1
-        );
+        assert!(availability.ensure_version(availability.base.version.saturating_add(1)).is_err());
+        assert_eq!(availability.next_persisted_version().unwrap(), availability.base.version + 1);
     }
 }

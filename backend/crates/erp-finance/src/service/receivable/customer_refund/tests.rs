@@ -1,9 +1,11 @@
 //! 客户退款真实财务生产算法的纯仓储替身合同。
-use super::*;
-use crate::entity::receivable::{AccountReviewStatus, CustomerReceiptData, ReceivableAccountData};
+use std::str::FromStr;
+
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{CustomerAccountId, PartyId, ReceivableAccountId, SalesOrderId, SalesOrderRevisionId};
-use std::str::FromStr;
+
+use super::*;
+use crate::entity::receivable::{AccountReviewStatus, CustomerReceiptData, ReceivableAccountData};
 struct TestExecutor {
     _identity: u8,
 }
@@ -223,9 +225,7 @@ async fn refund_writes_offsets_before_decrease_then_reverse_allocations_with_fro
     let mut store = RecordingStore::new(&mut ex);
     let receipt = receipt();
     let input = refund();
-    post_with_store(&mut store, &input, &receipt, "actor-1", &mut ex)
-        .await
-        .unwrap();
+    post_with_store(&mut store, &input, &receipt, "actor-1", &mut ex).await.unwrap();
     assert_eq!(store.calls, order());
     assert_eq!(receipt.status, CustomerReceiptStatus::Posted);
     assert_eq!(store.offsets[0].offset_amount, a("40"));
@@ -276,23 +276,17 @@ async fn refund_keeps_missing_cross_party_and_settlement_failure_order() {
         match case {
             0 => {
                 store.facts.entries.remove("entry-1");
-            }
+            },
             1 => {
                 store.facts.accounts.remove("account-1");
-            }
+            },
             2 => {
-                store
-                    .facts
-                    .accounts
-                    .get_mut("account-1")
-                    .unwrap()
-                    .counterparty_party_id = PartyId::new("other-party")
-            }
+                store.facts.accounts.get_mut("account-1").unwrap().counterparty_party_id =
+                    PartyId::new("other-party")
+            },
             _ => store.settlement_false = true,
         }
-        let error = post_with_store(&mut store, &refund(), &receipt(), "actor-1", &mut ex)
-            .await
-            .unwrap_err();
+        let error = post_with_store(&mut store, &refund(), &receipt(), "actor-1", &mut ex).await.unwrap_err();
         match case {
             0 => assert!(matches!(error,Error::NotFound(message) if message=="应收分录不存在")),
             1 => assert!(matches!(error,Error::NotFound(message) if message=="应收往来子账不存在")),
@@ -312,9 +306,7 @@ async fn refund_keeps_missing_cross_party_and_settlement_failure_order() {
 async fn refund_reloads_interleaved_reverse_facts_and_rejects_over_reversal() {
     let mut ex = TestExecutor { _identity: 1 };
     let mut store = RecordingStore::new(&mut ex);
-    post_with_store(&mut store, &refund(), &receipt(), "actor-1", &mut ex)
-        .await
-        .unwrap();
+    post_with_store(&mut store, &refund(), &receipt(), "actor-1", &mut ex).await.unwrap();
     store.allocations.extend(store.reverses.clone());
     store.calls.clear();
     store.offsets.clear();
@@ -325,9 +317,7 @@ async fn refund_reloads_interleaved_reverse_facts_and_rejects_over_reversal() {
         amount: a("10"),
         occurred_at: Instant::from_unix_secs(40),
     };
-    post_with_store(&mut store, &second, &receipt(), "actor-1", &mut ex)
-        .await
-        .unwrap();
+    post_with_store(&mut store, &second, &receipt(), "actor-1", &mut ex).await.unwrap();
     assert_eq!(store.reverses.len(), 1);
     assert_eq!(store.reverses[0].receivable_entry_id.as_ref(), "entry-2");
     assert_eq!(store.reverses[0].allocation_seq, 5);

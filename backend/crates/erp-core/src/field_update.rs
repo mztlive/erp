@@ -41,7 +41,7 @@ impl<T> FieldUpdate<T> {
     /// * `target` - 待更新的可空字段
     pub fn apply_to(self, target: &mut Option<T>) {
         match self {
-            Self::Unchanged => {}
+            Self::Unchanged => {},
             Self::Clear => *target = None,
             Self::Set(value) => *target = Some(value),
         }
@@ -118,8 +118,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::FieldUpdate;
     use serde::Deserialize;
+
+    use super::FieldUpdate;
 
     #[derive(Debug, Deserialize)]
     struct SampleUpdate {
@@ -143,14 +144,8 @@ mod tests {
     #[test]
     fn from_optional_text_maps_missing_blank_and_raw_values() {
         assert_eq!(FieldUpdate::from_optional_text(None), FieldUpdate::Unchanged);
-        assert_eq!(
-            FieldUpdate::from_optional_text(Some(String::new())),
-            FieldUpdate::Clear
-        );
-        assert_eq!(
-            FieldUpdate::from_optional_text(Some(" \t\n ".to_string())),
-            FieldUpdate::Clear
-        );
+        assert_eq!(FieldUpdate::from_optional_text(Some(String::new())), FieldUpdate::Clear);
+        assert_eq!(FieldUpdate::from_optional_text(Some(" \t\n ".to_string())), FieldUpdate::Clear);
         assert_eq!(
             FieldUpdate::from_optional_text(Some("PREPAY_50".to_string())),
             FieldUpdate::Set("PREPAY_50".to_string())

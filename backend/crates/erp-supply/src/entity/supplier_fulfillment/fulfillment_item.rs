@@ -6,13 +6,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierOfferingRevisionId};
-use erp_core::money::{round_to_cent, Amount, Quantity, Rate, UnitPrice};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice, round_to_cent};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 
 /// 供应商侧商品与 SKU 编码快照最大长度。
 const SUPPLIER_ITEM_CODE_MAX_LEN: usize = 128;
@@ -69,10 +68,9 @@ impl SupplierFulfillmentItemData {
         unit_cost_snapshot_gross: UnitPrice,
         input_tax_rate: Rate,
     ) -> Result<Self> {
-        let cost_snapshot_total_gross = Amount::try_from(round_to_cent(
-            unit_cost_snapshot_gross.to_decimal() * quantity.to_decimal(),
-        ))
-        .map_err(|_| Error::from("明细成本快照金额无效"))?;
+        let cost_snapshot_total_gross =
+            Amount::try_from(round_to_cent(unit_cost_snapshot_gross.to_decimal() * quantity.to_decimal()))
+                .map_err(|_| Error::from("明细成本快照金额无效"))?;
         Ok(Self {
             supplier_fulfillment_order_id,
             supplier_offering_revision_id,
@@ -204,8 +202,9 @@ fn ensure_snapshot_consistent(quantity: Quantity, unit_cost: UnitPrice, total_gr
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn sample_item_data() -> SupplierFulfillmentItemData {
         SupplierFulfillmentItemData {
@@ -260,14 +259,8 @@ mod tests {
 
     #[test]
     fn item_new_rejects_non_positive_quantity() {
-        for quantity in [
-            Quantity::from_str("0.000000").unwrap(),
-            Quantity::from_str("-1.000000").unwrap(),
-        ] {
-            let data = SupplierFulfillmentItemData {
-                quantity,
-                ..sample_item_data()
-            };
+        for quantity in [Quantity::from_str("0.000000").unwrap(), Quantity::from_str("-1.000000").unwrap()] {
+            let data = SupplierFulfillmentItemData { quantity, ..sample_item_data() };
             assert!(SupplierFulfillmentItem::new(SupplierFulfillmentItemId::new("item-2"), data).is_err());
         }
     }
@@ -283,13 +276,7 @@ mod tests {
 
     #[test]
     fn item_new_rejects_over_scale_money() {
-        assert!(
-            UnitPrice::from_str("9.99999").is_err(),
-            "单价最多 4 位小数，超位必须拒绝"
-        );
-        assert!(
-            Quantity::from_str("1.0000001").is_err(),
-            "数量最多 6 位小数，超位必须拒绝"
-        );
+        assert!(UnitPrice::from_str("9.99999").is_err(), "单价最多 4 位小数，超位必须拒绝");
+        assert!(Quantity::from_str("1.0000001").is_err(), "数量最多 6 位小数，超位必须拒绝");
     }
 }

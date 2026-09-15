@@ -1,12 +1,12 @@
 use std::collections::HashSet;
 
-use crate::entity::sales_order::SalesOrderWorkingCopyLine;
-use crate::ports::sales_order::SellableSkuPort;
 use erp_core::common::time::BusinessDate;
 use persistence_core::{Executor, NoTransaction};
 
 use super::SalesOrderService;
 use crate::dto::sales_order::SalesOrderDraftLineRequest;
+use crate::entity::sales_order::SalesOrderWorkingCopyLine;
+use crate::ports::sales_order::SellableSkuPort;
 use crate::{Error, Result};
 
 impl SalesOrderService {
@@ -99,10 +99,8 @@ impl SalesOrderService {
             .await?
             .into_iter()
             .collect::<HashSet<_>>();
-        let mut invalid = expected
-            .difference(&qualified)
-            .map(|(sku_id, _)| sku_id.clone())
-            .collect::<Vec<_>>();
+        let mut invalid =
+            expected.difference(&qualified).map(|(sku_id, _)| sku_id.clone()).collect::<Vec<_>>();
         invalid.sort();
         if invalid.is_empty() {
             Ok(())

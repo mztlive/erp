@@ -1,12 +1,13 @@
 //! 冻结绑定与业务状态的采购审批只读投影。
-use super::super::dto::{
-    DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
-    DocumentApprovalNodeView, DocumentApprovalView,
-};
 use bpm::engine::DefinitionGraph;
 use erp_procurement::entity::purchase_order::PurchaseOrderStatus;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::policy::ApprovalRequirement;
+
+use super::super::dto::{
+    DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
+    DocumentApprovalNodeView, DocumentApprovalView,
+};
 /// 详情首屏审批历史最多八项。
 pub(in crate::purchase_center) const RECENT_HISTORY_LIMIT: usize = 8;
 /// 由绑定与可选实例事实构造只读审批结构。
@@ -59,10 +60,7 @@ pub fn document_approval_view_with_definition(
         definition: binding.map(|item| definition_view_from_binding(item, graph)),
         instance,
         recent_history: Vec::new(),
-        history_page: DocumentApprovalHistoryPageView {
-            next_cursor: None,
-            has_more: false,
-        },
+        history_page: DocumentApprovalHistoryPageView { next_cursor: None, has_more: false },
         allowed_actions: allowed_document_actions(status),
     }
 }
@@ -79,9 +77,7 @@ pub(in crate::purchase_center) fn definition_view_from_binding(
     binding: &ApprovalDefinitionBinding,
     graph: Option<&DefinitionGraph>,
 ) -> DocumentApprovalDefinitionView {
-    let mut nodes = graph
-        .map(|item| item.nodes.iter().collect::<Vec<_>>())
-        .unwrap_or_default();
+    let mut nodes = graph.map(|item| item.nodes.iter().collect::<Vec<_>>()).unwrap_or_default();
     nodes.sort_by_key(|node| node.display_order);
     DocumentApprovalDefinitionView {
         id: binding.approval_process_definition_id.as_ref().to_string(),
@@ -89,10 +85,7 @@ pub(in crate::purchase_center) fn definition_view_from_binding(
         version: binding.approval_definition_version,
         nodes: nodes
             .into_iter()
-            .map(|node| DocumentApprovalNodeView {
-                key: node.node_key.clone(),
-                name: node.node_name.clone(),
-            })
+            .map(|node| DocumentApprovalNodeView { key: node.node_key.clone(), name: node.node_name.clone() })
             .collect(),
     }
 }
@@ -112,19 +105,17 @@ fn allowed_document_actions(status: PurchaseOrderStatus) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use bpm::ids::ApprovalProcessDefinitionId;
     use erp_core::common::time::Instant;
     use erp_workflow::service::approval::binding::binding_from_published;
+
+    use super::*;
     /// 详情只读审批结构；允许动作不含选择定义或审批人。
     #[test]
     fn detail_approval_is_read_only_and_has_history_cap() {
-        let binding = binding_from_published(
-            ApprovalProcessDefinitionId::new("def-1"),
-            2,
-            Instant::from_unix_secs(1),
-        )
-        .unwrap();
+        let binding =
+            binding_from_published(ApprovalProcessDefinitionId::new("def-1"), 2, Instant::from_unix_secs(1))
+                .unwrap();
         let view = document_approval_view(Some(&binding), None, PurchaseOrderStatus::Draft);
         assert_eq!(view.requirement, "PROCESS_REQUIRED");
         assert_eq!(view.definition.as_ref().unwrap().id, "def-1");
@@ -133,10 +124,7 @@ mod tests {
         assert!(view.instance.is_none());
         assert!(view.recent_history.len() <= RECENT_HISTORY_LIMIT);
         assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
-        assert!(!view
-            .allowed_actions
-            .iter()
-            .any(|item| item.contains("DEFINITION")));
+        assert!(!view.allowed_actions.iter().any(|item| item.contains("DEFINITION")));
         let running = document_approval_view(Some(&binding), None, PurchaseOrderStatus::InApproval);
         assert_eq!(running.allowed_actions, vec!["CANCEL".to_string()]);
     }

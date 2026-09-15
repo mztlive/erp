@@ -6,7 +6,7 @@ mod pending;
 
 pub use audit::{FailClosedAuditPort, PreparedSupportAudit, SupportAuditPort};
 pub use business_document::{
-    is_business_document_type, BusinessDocumentPort, FailClosedBusinessDocumentPort,
-    BUSINESS_DOCUMENT_TYPE_CODES,
+    BUSINESS_DOCUMENT_TYPE_CODES, BusinessDocumentPort, FailClosedBusinessDocumentPort,
+    is_business_document_type,
 };
 pub use pending::{EmptyPendingAttachments, PendingAttachmentBatch};

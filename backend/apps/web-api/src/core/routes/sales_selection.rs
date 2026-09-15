@@ -4,16 +4,13 @@
 //! `/sales-selection-booklets` 为同义路径。公开页走 `/public/selection/{token}`。
 //! 路径必须是字面量，供权限生成扫描。
 
-use axum::{
-    routing::{delete, get, post},
-    Router,
-};
+use axum::Router;
+use axum::routing::{delete, get, post};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::sales_selection, middleware::with_permission},
-};
+use crate::app_state::AppState;
+use crate::core::handler::sales_selection;
+use crate::core::middleware::with_permission;
 
 /// 返回选品管理端路由。
 ///
@@ -105,11 +102,7 @@ fn book_collection_routes(rbac: &SharedRbacService) -> Router<AppState> {
 /// # 返回
 /// 返回实例路由。
 fn book_item_routes(rbac: &SharedRbacService, books: bool) -> Router<AppState> {
-    if books {
-        book_item_routes_books(rbac)
-    } else {
-        book_item_routes_booklets(rbac)
-    }
+    if books { book_item_routes_books(rbac) } else { book_item_routes_booklets(rbac) }
 }
 
 /// `sales-selection-books` 实例路由。
@@ -375,52 +368,19 @@ pub fn public_routes() -> Router<AppState> {
             "/public/selection/{token}/session",
             post(sales_selection::public_save).put(sales_selection::public_save),
         )
-        .route(
-            "/public/selection/{token}/submit",
-            post(sales_selection::public_submit),
-        )
-        .route(
-            "/public/selection/{token}/receipt",
-            get(sales_selection::public_page),
-        )
-        .route(
-            "/public/selection/{token}/images",
-            get(sales_selection::public_image),
-        )
-        .route(
-            "/public/selection/{token}/images/{asset_id}",
-            get(sales_selection::public_image_path),
-        )
-        .route(
-            "/public/selection/{token}/customize",
-            post(sales_selection::public_customize),
-        )
-        .route(
-            "/public/sales-selections/{token}",
-            get(sales_selection::public_page),
-        )
+        .route("/public/selection/{token}/submit", post(sales_selection::public_submit))
+        .route("/public/selection/{token}/receipt", get(sales_selection::public_page))
+        .route("/public/selection/{token}/images", get(sales_selection::public_image))
+        .route("/public/selection/{token}/images/{asset_id}", get(sales_selection::public_image_path))
+        .route("/public/selection/{token}/customize", post(sales_selection::public_customize))
+        .route("/public/sales-selections/{token}", get(sales_selection::public_page))
         .route(
             "/public/sales-selections/{token}/session",
             post(sales_selection::public_save).put(sales_selection::public_save),
         )
-        .route(
-            "/public/sales-selections/{token}/submit",
-            post(sales_selection::public_submit),
-        )
-        .route(
-            "/public/sales-selections/{token}/receipt",
-            get(sales_selection::public_page),
-        )
-        .route(
-            "/public/sales-selections/{token}/images",
-            get(sales_selection::public_image),
-        )
-        .route(
-            "/public/sales-selections/{token}/images/{asset_id}",
-            get(sales_selection::public_image_path),
-        )
-        .route(
-            "/public/sales-selections/{token}/customize",
-            post(sales_selection::public_customize),
-        )
+        .route("/public/sales-selections/{token}/submit", post(sales_selection::public_submit))
+        .route("/public/sales-selections/{token}/receipt", get(sales_selection::public_page))
+        .route("/public/sales-selections/{token}/images", get(sales_selection::public_image))
+        .route("/public/sales-selections/{token}/images/{asset_id}", get(sales_selection::public_image_path))
+        .route("/public/sales-selections/{token}/customize", post(sales_selection::public_customize))
 }

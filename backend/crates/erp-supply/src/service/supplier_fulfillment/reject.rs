@@ -1,14 +1,15 @@
 //! 拒单历史、原PLACE动作状态与同域事务内保存。
-use super::SupplierFulfillmentService;
-use crate::dto::supplier_fulfillment::*;
-use crate::entity::supplier_fulfillment::*;
-use crate::repository::SupplierFulfillmentExt;
-use crate::{Error, Result};
 use erp_core::common::time::Instant;
 use erp_core::ids::SupplierOrderStatusHistoryId;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
+
+use super::SupplierFulfillmentService;
+use crate::dto::supplier_fulfillment::*;
+use crate::entity::supplier_fulfillment::*;
+use crate::repository::SupplierFulfillmentExt;
+use crate::{Error, Result};
 impl SupplierFulfillmentService {
     /// 加载该订单最近一次 `PLACE` 动作。
     ///
@@ -72,9 +73,7 @@ pub async fn persist_reject(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     db.supplier_fulfillment_orders().update(order, executor).await?;
-    db.supplier_order_status_histories()
-        .create(history, executor)
-        .await?;
+    db.supplier_order_status_histories().create(history, executor).await?;
     db.supplier_order_actions().update(action, executor).await?;
     Ok(())
 }

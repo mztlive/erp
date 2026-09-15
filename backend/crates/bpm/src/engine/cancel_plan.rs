@@ -3,9 +3,8 @@
 //! 采购单与采购变更单等所有单据的撤回共用本规则，禁止在 Service 复制状态机
 //! 判断或开放任务约束。调用方只加载运行事实并统计开放任务数量。
 
-use crate::model::{ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance};
-
 use super::EngineResult;
+use crate::model::{ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance};
 
 /// 取消计划输入：运行事实由调用方加载，任务数量由调用方统计。
 #[derive(Debug, Clone, Copy)]
@@ -52,16 +51,12 @@ pub fn plan_cancel(input: CancelPlanInput<'_>) -> EngineResult<CancelPlan> {
     task_policy.ensure_open_task_count(input.open_task_count)?;
     let blocker = input.instance.blocker_code.or(input.current.blocker_code);
     let blocked_port_required = blocker.is_some_and(|code| !code.allows_assignee_recovery());
-    Ok(CancelPlan {
-        task_policy,
-        close_open_task: task_policy.closes_open_task(),
-        blocked_port_required,
-    })
+    Ok(CancelPlan { task_policy, close_open_task: task_policy.closes_open_task(), blocked_port_required })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{plan_cancel, CancelPlan, CancelPlanInput};
+    use super::{CancelPlan, CancelPlanInput, plan_cancel};
     use crate::engine::EngineError;
     use crate::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use crate::model::types::{
@@ -85,8 +80,7 @@ mod tests {
             at: at(10),
         })
         .unwrap();
-        inst.set_current_execution(ApprovalNodeExecutionId::new("e1"), at(11))
-            .unwrap();
+        inst.set_current_execution(ApprovalNodeExecutionId::new("e1"), at(11)).unwrap();
         inst
     }
 
@@ -130,10 +124,7 @@ mod tests {
         .unwrap();
         assert!(plan.close_open_task);
         assert!(!plan.blocked_port_required);
-        assert_eq!(
-            plan.task_policy,
-            crate::model::ApprovalCancellationTaskPolicy::CloseOpenTask
-        );
+        assert_eq!(plan.task_policy, crate::model::ApprovalCancellationTaskPolicy::CloseOpenTask);
     }
 
     /// 运行中实例零开放任务表示运行事实不一致，必须失败关闭。
@@ -177,10 +168,7 @@ mod tests {
         .unwrap();
         assert!(!plan.close_open_task);
         assert!(!plan.blocked_port_required);
-        assert_eq!(
-            plan.task_policy,
-            crate::model::ApprovalCancellationTaskPolicy::NoOpenTask
-        );
+        assert_eq!(plan.task_policy, crate::model::ApprovalCancellationTaskPolicy::NoOpenTask);
     }
 
     /// 受阻实例仍持有开放任务时失败关闭。
@@ -192,10 +180,7 @@ mod tests {
             open_task_count: 1,
         })
         .unwrap_err();
-        assert_eq!(
-            error,
-            EngineError::Model(ModelError::InvalidStatus("受阻审批实例不得存在开放任务"))
-        );
+        assert_eq!(error, EngineError::Model(ModelError::InvalidStatus("受阻审批实例不得存在开放任务")));
     }
 
     /// 人员失效 blocker 只允许业务取消端口。
@@ -241,10 +226,7 @@ mod tests {
             open_task_count: 0,
         })
         .unwrap_err();
-        assert_eq!(
-            error,
-            EngineError::Model(ModelError::InvalidStatus("已最终通过的审批实例不得撤回"))
-        );
+        assert_eq!(error, EngineError::Model(ModelError::InvalidStatus("已最终通过的审批实例不得撤回")));
     }
 
     /// 已取消实例不得重复撤回。
@@ -258,10 +240,7 @@ mod tests {
             open_task_count: 0,
         })
         .unwrap_err();
-        assert_eq!(
-            error,
-            EngineError::Model(ModelError::InvalidStatus("已取消的审批实例不得重复撤回"))
-        );
+        assert_eq!(error, EngineError::Model(ModelError::InvalidStatus("已取消的审批实例不得重复撤回")));
     }
 
     /// 可撤回实例缺少当前执行引用时失败关闭。
@@ -284,10 +263,7 @@ mod tests {
             open_task_count: 1,
         })
         .unwrap_err();
-        assert_eq!(
-            error,
-            EngineError::Model(ModelError::InvalidStatus("可撤回审批实例必须存在当前执行"))
-        );
+        assert_eq!(error, EngineError::Model(ModelError::InvalidStatus("可撤回审批实例必须存在当前执行")));
         assert_eq!(fresh.status, ApprovalProcessInstanceStatus::Running);
     }
 }

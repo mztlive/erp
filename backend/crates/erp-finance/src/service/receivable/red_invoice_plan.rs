@@ -1,5 +1,9 @@
 //! Red-invoice reversal plans and stable per-account delta aggregation.
 
+use std::collections::HashMap;
+
+use erp_core::money::Amount;
+
 use crate::entity::payable::PurchaseInvoiceAllocation;
 use crate::entity::receivable::{
     AllocationAction, InvoiceDirection, RedInvoiceAllocationBasis, RedInvoiceAllocationLine,
@@ -7,8 +11,6 @@ use crate::entity::receivable::{
     SalesInvoiceAllocation,
 };
 use crate::{Error, Result};
-use erp_core::money::Amount;
-use std::collections::HashMap;
 
 /// 将销项分配事实适配为领域红票规划输入并构建计划。
 ///
@@ -83,14 +85,12 @@ fn sales_red_invoice_allocation_reversals(
         .iter()
         .filter(|line| line.allocation_action == AllocationAction::Reverse)
         .filter_map(|line| {
-            line.reverses_allocation_id
-                .as_ref()
-                .map(|original_id| RedInvoiceAllocationReversal {
-                    original_allocation_id: original_id.to_string(),
-                    gross: line.allocated_gross_amount,
-                    net: line.allocated_net_amount,
-                    tax: line.allocated_tax_amount,
-                })
+            line.reverses_allocation_id.as_ref().map(|original_id| RedInvoiceAllocationReversal {
+                original_allocation_id: original_id.to_string(),
+                gross: line.allocated_gross_amount,
+                net: line.allocated_net_amount,
+                tax: line.allocated_tax_amount,
+            })
         })
         .collect()
 }
@@ -200,14 +200,12 @@ fn purchase_red_invoice_allocation_reversals(
         .iter()
         .filter(|line| line.allocation_action == crate::entity::payable::AllocationAction::Reverse)
         .filter_map(|line| {
-            line.reverses_allocation_id
-                .as_ref()
-                .map(|original_id| RedInvoiceAllocationReversal {
-                    original_allocation_id: original_id.to_string(),
-                    gross: line.allocated_gross_amount,
-                    net: line.allocated_net_amount,
-                    tax: line.allocated_tax_amount,
-                })
+            line.reverses_allocation_id.as_ref().map(|original_id| RedInvoiceAllocationReversal {
+                original_allocation_id: original_id.to_string(),
+                gross: line.allocated_gross_amount,
+                net: line.allocated_net_amount,
+                tax: line.allocated_tax_amount,
+            })
         })
         .collect()
 }
@@ -232,20 +230,22 @@ fn map_red_invoice_allocation_plan_error(error: RedInvoiceAllocationPlanError) -
         | RedInvoiceAllocationPlanError::NoRemainingAllocation
         | RedInvoiceAllocationPlanError::InvalidRequestedAmount) => {
             Error::BusinessLogicError(error.to_string())
-        }
+        },
         RedInvoiceAllocationPlanError::UncoveredRequest => {
             Error::Internal("红票反向分配计划未覆盖请求金额".to_string())
-        }
+        },
         RedInvoiceAllocationPlanError::InvalidAmount(error) => Error::Logic(error),
     }
 }
 
 #[cfg(test)]
 mod red_invoice_reversal_tests {
+    use std::str::FromStr;
+
+    use erp_core::money::Amount;
+
     use super::aggregate_reversal_deltas;
     use crate::entity::receivable::RedInvoiceAllocationLine;
-    use erp_core::money::Amount;
-    use std::str::FromStr;
 
     fn line(account: &str, gross: &str) -> RedInvoiceAllocationLine {
         RedInvoiceAllocationLine {
@@ -260,25 +260,17 @@ mod red_invoice_reversal_tests {
     /// 同账户多行聚合为一条并保持首次出现顺序，总额守恒。
     #[test]
     fn same_account_lines_aggregate_with_stable_order_and_conservation() {
-        let lines = [
-            line("acc-a", "100.00"),
-            line("acc-b", "50.00"),
-            line("acc-a", "30.00"),
-        ];
+        let lines = [line("acc-a", "100.00"), line("acc-b", "50.00"), line("acc-a", "30.00")];
         let deltas = aggregate_reversal_deltas(&lines);
         assert_eq!(deltas.len(), 2);
         assert_eq!(deltas[0].0, "acc-a");
         assert_eq!(deltas[0].1, Amount::from_str("130.00").unwrap());
         assert_eq!(deltas[1].0, "acc-b");
         assert_eq!(deltas[1].1, Amount::from_str("50.00").unwrap());
-        let plan_total: Amount = lines.iter().fold(Amount::from_str("0").unwrap(), |sum, line| {
-            sum.checked_add(line.gross)
-        });
-        let delta_total = deltas
-            .iter()
-            .fold(Amount::from_str("0").unwrap(), |sum, (_, gross)| {
-                sum.checked_add(*gross)
-            });
+        let plan_total: Amount =
+            lines.iter().fold(Amount::from_str("0").unwrap(), |sum, line| sum.checked_add(line.gross));
+        let delta_total =
+            deltas.iter().fold(Amount::from_str("0").unwrap(), |sum, (_, gross)| sum.checked_add(*gross));
         assert_eq!(plan_total, delta_total);
     }
 

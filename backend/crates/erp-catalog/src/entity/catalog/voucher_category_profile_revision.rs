@@ -7,13 +7,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::catalog::status::EnableStatus;
 use erp_core::common::revision::RevisionBase;
 use erp_core::ids::{SkuId, VoucherCategoryProfileRevisionId};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::catalog::status::EnableStatus;
 
 /// 卡券类目描述最大长度。
 const DESCRIPTION_MAX_LEN: usize = 512;
@@ -126,9 +126,10 @@ impl VoucherCategoryProfileRevision {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
     use erp_core::ids::VoucherCategoryProfileRevisionId;
+
+    use super::*;
 
     fn data() -> VoucherCategoryProfileRevisionData {
         VoucherCategoryProfileRevisionData {
@@ -155,24 +156,20 @@ mod tests {
     /// 失败路径：必填空与越界（修订序号为 0）各一条。
     #[test]
     fn new_rejects_empty_description_and_zero_revision_no() {
-        let empty = VoucherCategoryProfileRevisionData {
-            description: "  ".to_string(),
-            ..data()
-        };
+        let empty = VoucherCategoryProfileRevisionData { description: "  ".to_string(), ..data() };
         assert!(
             VoucherCategoryProfileRevision::new(VoucherCategoryProfileRevisionId::new("vcp-1"), empty)
                 .is_err()
         );
 
-        let zero_revision = VoucherCategoryProfileRevisionData {
-            revision_no: 0,
-            ..data()
-        };
-        assert!(VoucherCategoryProfileRevision::new(
-            VoucherCategoryProfileRevisionId::new("vcp-1"),
-            zero_revision
-        )
-        .is_err());
+        let zero_revision = VoucherCategoryProfileRevisionData { revision_no: 0, ..data() };
+        assert!(
+            VoucherCategoryProfileRevision::new(
+                VoucherCategoryProfileRevisionId::new("vcp-1"),
+                zero_revision
+            )
+            .is_err()
+        );
     }
 
     /// 后继修订只替换描述并保留 SKU 身份与状态。
@@ -182,11 +179,7 @@ mod tests {
             VoucherCategoryProfileRevision::new(VoucherCategoryProfileRevisionId::new("vcp-1"), data())
                 .unwrap();
         let successor = current
-            .content_successor(
-                VoucherCategoryProfileRevisionId::new("vcp-2"),
-                2,
-                "新描述".to_string(),
-            )
+            .content_successor(VoucherCategoryProfileRevisionId::new("vcp-2"), 2, "新描述".to_string())
             .unwrap();
 
         assert_eq!(successor.revision.revision_no, 2);

@@ -45,10 +45,7 @@ impl BaseModel {
     /// # 返回
     /// 返回创建的实例。
     pub fn fake() -> Self {
-        Self {
-            id: "fake".to_string(),
-            ..Default::default()
-        }
+        Self { id: "fake".to_string(), ..Default::default() }
     }
 }
 

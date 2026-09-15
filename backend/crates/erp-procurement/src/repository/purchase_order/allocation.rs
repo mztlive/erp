@@ -4,13 +4,12 @@
 //! 回到原销售明细（§6.6）。两个方向都由 `$in` 批量取回（禁止 N+1），
 //! 分别命中唯一索引与反向查询索引。分配是事实类集合，**不提供软删除方法**。
 
-use crate::entity::purchase_order::PurchaseLineSalesAllocation;
-use crate::repository::owned::PurchaseLineSalesAllocationRepository;
 use erp_core::ids::PurchaseOrderRevisionLineId;
+use persistence_core::{Executor, Result};
 
 use super::common::in_filter;
-use persistence_core::Executor;
-use persistence_core::Result;
+use crate::entity::purchase_order::PurchaseLineSalesAllocation;
+use crate::repository::owned::PurchaseLineSalesAllocationRepository;
 
 impl<'a> PurchaseLineSalesAllocationRepository<'a> {
     /// 按采购版本行批量取回分配（`$in`，禁止 N+1）。
@@ -36,10 +35,7 @@ impl<'a> PurchaseLineSalesAllocationRepository<'a> {
             return Ok(Vec::new());
         }
         self.find_many(
-            in_filter(
-                "purchase_order_revision_line_id",
-                revision_line_ids.iter().map(|id| id.to_string()),
-            ),
+            in_filter("purchase_order_revision_line_id", revision_line_ids.iter().map(|id| id.to_string())),
             executor,
         )
         .await

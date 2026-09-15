@@ -18,15 +18,14 @@ pub use dto::party::{
     UpdatePartyTaxProfileRequest,
 };
 pub use entity::party::{
-    select_current_default, AddressType, EffectiveRecordStatus, Party, PartyAddress,
-    PartyAddressContentMatch, PartyAddressData, PartyAddressId, PartyAddressUpdate, PartyBankAccount,
-    PartyBankAccountContentMatch, PartyBankAccountData, PartyBankAccountId, PartyBankAccountUpdate,
-    PartyContact, PartyContactContentMatch, PartyContactData, PartyContactId, PartyContactUpdate, PartyData,
-    PartyId, PartyKind, PartyOwned, PartyRevision, PartyRevisionData, PartyRevisionId, PartyStatus,
-    PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileId, PartyTaxProfileUpdate, PartyUpdate,
-    QueryFingerprint, SensitiveFactReuse,
+    AddressType, EffectiveRecordStatus, Party, PartyAddress, PartyAddressContentMatch, PartyAddressData,
+    PartyAddressId, PartyAddressUpdate, PartyBankAccount, PartyBankAccountContentMatch, PartyBankAccountData,
+    PartyBankAccountId, PartyBankAccountUpdate, PartyContact, PartyContactContentMatch, PartyContactData,
+    PartyContactId, PartyContactUpdate, PartyData, PartyId, PartyKind, PartyOwned, PartyRevision,
+    PartyRevisionData, PartyRevisionId, PartyStatus, PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileId,
+    PartyTaxProfileUpdate, PartyUpdate, QueryFingerprint, SensitiveFactReuse, select_current_default,
 };
-pub use error::{known_duplicate_index_message, Error, Result};
+pub use error::{Error, Result, known_duplicate_index_message};
 pub use ports::{
     FailClosedAuditPort, FailClosedSupplierRolePort, PartyAuditPort, PreparedPartyAudit, SupplierRolePort,
 };
@@ -37,7 +36,7 @@ pub use repository::{
     PartyTaxProfileRepository,
 };
 pub use service::party::{
-    ensure_outside_supplier_profile, PartyAddressService, PartyBankAccountService, PartyContactService,
-    PartyDetailView, PartyService, PartyTaxProfileService, SensitiveDataCodec, SensitiveFieldKind,
-    SensitiveRevealScope,
+    PartyAddressService, PartyBankAccountService, PartyContactService, PartyDetailView, PartyService,
+    PartyTaxProfileService, SensitiveDataCodec, SensitiveFieldKind, SensitiveRevealScope,
+    ensure_outside_supplier_profile,
 };

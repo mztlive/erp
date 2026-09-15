@@ -10,8 +10,6 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{
     PurchaseLineSalesAllocationId, PurchaseReceiptLineId, SalesOrderLineId, SkuId, StockReservationEntryId,
     StockReservationId, WarehouseId,
@@ -19,6 +17,7 @@ use erp_core::ids::{
 use erp_core::money::Quantity;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 来源单据标识最大长度。
 const SOURCE_DOCUMENT_MAX_LEN: usize = 256;
@@ -243,11 +242,7 @@ impl StockReservation {
     /// # 错误
     /// 数量为负或状态与数量不一致时返回错误。
     pub fn new(id: StockReservationId, data: StockReservationData) -> Result<Self> {
-        ensure_quantities_valid(
-            data.reserved_quantity,
-            data.consumed_quantity,
-            data.released_quantity,
-        )?;
+        ensure_quantities_valid(data.reserved_quantity, data.consumed_quantity, data.released_quantity)?;
         ensure_status_coherent(
             data.status,
             data.reserved_quantity,
@@ -311,7 +306,7 @@ fn normalize_reservation_source(data: &StockReservationData) -> Result<Option<St
                 return Err(Error::from("采购入库预占不得携带现有库存分配身份"));
             }
             Ok(None)
-        }
+        },
         StockReservationSourceType::ExistingStock => {
             if data.purchase_line_sales_allocation_id.is_some() || data.source_receipt_line_id.is_some() {
                 return Err(Error::from("现有库存预占不得关联采购销售分配或入库行"));
@@ -327,11 +322,8 @@ fn normalize_reservation_source(data: &StockReservationData) -> Result<Option<St
                     )
                 })
                 .transpose()?
-                .map_or_else(
-                    || Err(Error::from("现有库存预占必须关联分配动作")),
-                    |value| Ok(Some(value)),
-                )
-        }
+                .map_or_else(|| Err(Error::from("现有库存预占必须关联分配动作")), |value| Ok(Some(value)))
+        },
     }
 }
 
@@ -461,9 +453,11 @@ impl StockReservationEntry {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use erp_core::ids::{StockReservationEntryId, StockReservationId};
     use std::str::FromStr;
+
+    use erp_core::ids::{StockReservationEntryId, StockReservationId};
+
+    use super::*;
 
     fn data() -> StockReservationData {
         StockReservationData {
@@ -509,10 +503,7 @@ mod tests {
             ..data()
         };
         let reservation = StockReservation::new(StockReservationId::new("direct-1"), direct).unwrap();
-        assert_eq!(
-            reservation.source_allocation_id.as_deref(),
-            Some("stock-allocation-1")
-        );
+        assert_eq!(reservation.source_allocation_id.as_deref(), Some("stock-allocation-1"));
 
         let invalid = StockReservationData {
             source_type: StockReservationSourceType::ExistingStock,
@@ -568,10 +559,8 @@ mod tests {
         };
         assert!(StockReservation::new(StockReservationId::new("r4"), released).is_ok());
 
-        let active_with_consumption = StockReservationData {
-            consumed_quantity: Quantity::from_str("1").unwrap(),
-            ..data()
-        };
+        let active_with_consumption =
+            StockReservationData { consumed_quantity: Quantity::from_str("1").unwrap(), ..data() };
         assert!(StockReservation::new(StockReservationId::new("r5"), active_with_consumption).is_err());
 
         let consumed_with_reserved = StockReservationData {
@@ -597,10 +586,8 @@ mod tests {
     /// 失败路径：负数量。
     #[test]
     fn new_rejects_negative_quantities() {
-        let negative = StockReservationData {
-            consumed_quantity: Quantity::from_str("-1").unwrap(),
-            ..data()
-        };
+        let negative =
+            StockReservationData { consumed_quantity: Quantity::from_str("-1").unwrap(), ..data() };
         assert!(StockReservation::new(StockReservationId::new("r8"), negative).is_err());
     }
 
@@ -627,11 +614,7 @@ mod tests {
                 .is_err(),
             "有消耗时不能回到有效状态"
         );
-        assert_eq!(
-            reservation.status,
-            ReservationStatus::PartiallyConsumed,
-            "失败更新不得破坏原状态"
-        );
+        assert_eq!(reservation.status, ReservationStatus::PartiallyConsumed, "失败更新不得破坏原状态");
     }
 
     /// 状态可操作性：只有有效与部分消耗允许继续消耗或释放。
@@ -659,22 +642,16 @@ mod tests {
     /// 失败路径：数量非正、来源为空。
     #[test]
     fn entry_rejects_invalid_inputs() {
-        let zero_quantity = StockReservationEntryData {
-            quantity: Quantity::from_str("0").unwrap(),
-            ..entry_data()
-        };
+        let zero_quantity =
+            StockReservationEntryData { quantity: Quantity::from_str("0").unwrap(), ..entry_data() };
         assert!(StockReservationEntry::new(StockReservationEntryId::new("e2"), zero_quantity).is_err());
 
-        let blank_source = StockReservationEntryData {
-            source_document_id: "   ".to_string(),
-            ..entry_data()
-        };
+        let blank_source =
+            StockReservationEntryData { source_document_id: "   ".to_string(), ..entry_data() };
         assert!(StockReservationEntry::new(StockReservationEntryId::new("e3"), blank_source).is_err());
 
-        let overlong_source = StockReservationEntryData {
-            source_document_id: "x".repeat(257),
-            ..entry_data()
-        };
+        let overlong_source =
+            StockReservationEntryData { source_document_id: "x".repeat(257), ..entry_data() };
         assert!(StockReservationEntry::new(StockReservationEntryId::new("e4"), overlong_source).is_err());
     }
 
@@ -685,10 +662,7 @@ mod tests {
             serde_json::to_string(&ReservationStatus::PartiallyConsumed).unwrap(),
             "\"PARTIALLY_CONSUMED\""
         );
-        assert_eq!(
-            serde_json::to_string(&ReservationEntryType::Release).unwrap(),
-            "\"RELEASE\""
-        );
+        assert_eq!(serde_json::to_string(&ReservationEntryType::Release).unwrap(), "\"RELEASE\"");
         assert_eq!(ReservationStatus::Released.label(), "已释放");
 
         let reservation = StockReservation::new(StockReservationId::new("rsv-10"), data()).unwrap();

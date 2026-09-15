@@ -1,9 +1,10 @@
 //! 合同 A02—A06、A27—A28、A32 的存储无关授权矩阵。
 
+use entity_core::BaseModel;
+
 use super::*;
 use crate::access_control::{DataScopeData, DataScopeId, ScopeBinding};
 use crate::entity::organization::*;
-use entity_core::BaseModel;
 
 fn node(id: &str, parent: Option<&str>) -> OrgUnit {
     OrgUnit::new(
@@ -37,9 +38,7 @@ fn rule(
                 actions: vec!["detail".into()],
                 target_dimension: ScopeDimension::InternalOrg,
                 target_mode: mode,
-                include_descendants: mode
-                    .filter(|mode| *mode != ScopeTargetMode::ManagedOrgs)
-                    .map(|_| false),
+                include_descendants: mode.filter(|mode| *mode != ScopeTargetMode::ManagedOrgs).map(|_| false),
                 enabled: true,
             },
         },
@@ -65,10 +64,7 @@ fn grant(user: &str, role: &str, org: &str, descendants: bool) -> OrgManagementA
         role_id: role.into(),
         org_unit_id: org.into(),
         include_descendants: descendants,
-        validity: OrgValidity {
-            valid_from: Instant::from_unix_secs(1),
-            valid_to: None,
-        },
+        validity: OrgValidity { valid_from: Instant::from_unix_secs(1), valid_to: None },
         granted_by: "admin".into(),
         reason: "管理授权".into(),
     }
@@ -91,10 +87,7 @@ fn same_manager_role_resolves_each_users_explicit_management_relationships() {
         Some(ScopeTargetMode::ManagedOrgs),
         &[],
     )];
-    let grants = vec![
-        grant("alice", "manager", "one", false),
-        grant("bob", "manager", "two", false),
-    ];
+    let grants = vec![grant("alice", "manager", "one", false), grant("bob", "manager", "two", false)];
     for (user, visible, hidden) in [("alice", "one", "two"), ("bob", "two", "one")] {
         let scope = ScopeResolution {
             user_id: user,
@@ -118,11 +111,7 @@ fn same_manager_role_resolves_each_users_explicit_management_relationships() {
 
 #[test]
 fn descendants_and_cross_team_management_are_explicit_and_role_bound() {
-    let nodes = vec![
-        node("sales", None),
-        node("one", Some("sales")),
-        node("other", None),
-    ];
+    let nodes = vec![node("sales", None), node("one", Some("sales")), node("other", None)];
     let tree = OrgTree::new(&nodes).unwrap();
     let roles = vec!["manager".into()];
     let rules = vec![rule(
@@ -177,20 +166,8 @@ fn company_scope_from_unqualified_role_cannot_supply_a_qualified_role() {
     let tree = OrgTree::new(&[]).unwrap();
     let roles = vec!["reader".into()];
     let rules = vec![
-        rule(
-            DataScopeSubjectType::Role,
-            "other",
-            DataScopeType::Company,
-            None,
-            &[],
-        ),
-        rule(
-            DataScopeSubjectType::User,
-            "alice",
-            DataScopeType::Company,
-            None,
-            &[],
-        ),
+        rule(DataScopeSubjectType::Role, "other", DataScopeType::Company, None, &[]),
+        rule(DataScopeSubjectType::User, "alice", DataScopeType::Company, None, &[]),
     ];
     let scope = ScopeResolution {
         user_id: "alice",
@@ -269,15 +246,9 @@ fn personal_limit_constrains_history_and_empty_own_organization_never_means_comp
 
 #[test]
 fn missing_required_dimension_denies_and_independent_dimensions_intersect() {
-    let only_org = ScopeClause {
-        org_unit_ids: BTreeSet::from(["one".into()]),
-        ..Default::default()
-    };
+    let only_org = ScopeClause { org_unit_ids: BTreeSet::from(["one".into()]), ..Default::default() };
     assert!(!only_org.complete(&[ScopeDimension::InternalOrg, ScopeDimension::Warehouse]));
-    let both = ScopeClause {
-        warehouse_ids: BTreeSet::from(["warehouse".into()]),
-        ..only_org
-    };
+    let both = ScopeClause { warehouse_ids: BTreeSet::from(["warehouse".into()]), ..only_org };
     assert!(both.complete(&[ScopeDimension::InternalOrg, ScopeDimension::Warehouse]));
     let mut facts = object("one");
     assert!(!both.covers(&facts));

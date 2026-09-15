@@ -1,28 +1,27 @@
 //! 采购草稿作废与采购覆盖释放。
 
+use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_audit::AuditExt;
+use erp_audit::{AuditActorLogs, AuditExt};
+use erp_procurement::dto::purchase_order::{VOID_ACTION, VoidPurchaseOrderRequest, VoidPurchaseOrderResult};
 use erp_procurement::entity::purchase_order::{
-    LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
+    LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseOrder,
+    PurchaseOrderStatus,
 };
-use erp_procurement::entity::purchase_order::{PurchaseOrder, PurchaseOrderStatus};
+use erp_procurement::service::purchase_order::void_order::{
+    ensure_current_submission_is_draft, ensure_void_target, load_purchase_order, persist_voided_order,
+};
 use erp_sales::repository::SalesOrderExt;
 use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
-use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::PurchaseOrderProcess;
+use super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
+use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use crate::procure_to_pay::adapters::audit::audit_receipt_fact;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_procurement::dto::purchase_order::{VoidPurchaseOrderRequest, VoidPurchaseOrderResult, VOID_ACTION};
-use erp_procurement::service::purchase_order::void_order::{
-    ensure_current_submission_is_draft, ensure_void_target, load_purchase_order, persist_voided_order,
-};
 
 const VOID_PERMISSION: &str = "purchase_order:delete";
 const VOID_RECEIPT_PREFIX: &str = "purchase-order-void-command-";
@@ -131,10 +130,7 @@ async fn execute_void_draft_transaction(
     authorization: PurchaseOrderAuthorization,
 ) -> Result<VoidPurchaseOrderResult> {
     let db = service.db.clone();
-    let PurchaseOrderAuthorization {
-        rbac,
-        policy_revision,
-    } = authorization;
+    let PurchaseOrderAuthorization { rbac, policy_revision } = authorization;
     let object_scope = service.command_access(actor, "delete")?;
     let transaction_order_id = purchase_order_id.to_string();
     let transaction_actor = actor.clone();
@@ -158,15 +154,8 @@ async fn execute_void_draft_transaction(
             })
         })
         .await;
-    recover_void_draft(
-        transaction_result,
-        &service.db,
-        &receipt_id,
-        &fingerprint,
-        purchase_order_id,
-        actor,
-    )
-    .await
+    recover_void_draft(transaction_result, &service.db, &receipt_id, &fingerprint, purchase_order_id, actor)
+        .await
 }
 
 /// 在 MongoDB 事务内校验并作废采购草稿。
@@ -284,13 +273,13 @@ impl VoidSteps for VoidPosting<'_, '_> {
                     .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
                 sales_order.advance_procurement_guard(self.command.actor.id())?;
                 self.db.sales_orders().update(&mut sales_order, executor).await?;
-            }
+            },
             VoidStep::Order => {
                 persist_voided_order(self.db, self.order, self.command.actor.id(), executor).await?;
-            }
+            },
             VoidStep::Tasks => {
                 sync_procurement_tasks_for_sales_order(self.db, &self.order.sales_order_id, executor).await?;
-            }
+            },
         }
         Ok(())
     }
@@ -351,15 +340,13 @@ async fn replay_void_draft(
         Ok(receipt) => receipt,
         Err(PurchaseCommandReceiptError::IdentityMismatch | PurchaseCommandReceiptError::PayloadConflict) => {
             return Err(Error::ConflictError("幂等键已用于不同采购命令".to_string()));
-        }
+        },
         Err(PurchaseCommandReceiptError::Corrupted(message)) => {
             return Err(Error::Internal(message));
-        }
+        },
     };
     if receipt.payload().purchase_order_id != purchase_order_id {
-        return Err(Error::ConflictError(
-            "采购草稿作废收据与业务资源不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("采购草稿作废收据与业务资源不一致".to_string()));
     }
     let order = load_purchase_order(db, purchase_order_id, executor).await?;
     if order.stable.status != PurchaseOrderStatus::Voided
@@ -398,16 +385,11 @@ async fn recover_void_draft(
 ) -> Result<VoidPurchaseOrderResult> {
     match transaction_result {
         Ok(result) => Ok(result),
-        Err(error) => replay_void_draft(
-            db,
-            receipt_id,
-            fingerprint,
-            purchase_order_id,
-            actor,
-            &mut NoTransaction,
-        )
-        .await?
-        .ok_or(error),
+        Err(error) => {
+            replay_void_draft(db, receipt_id, fingerprint, purchase_order_id, actor, &mut NoTransaction)
+                .await?
+                .ok_or(error)
+        },
     }
 }
 
@@ -462,8 +444,9 @@ impl VoidDraftReceipt {
 
 #[cfg(test)]
 mod tests {
-    use super::VoidDraftReceipt;
     use erp_procurement::dto::purchase_order::VoidPurchaseOrderRequest;
+
+    use super::VoidDraftReceipt;
 
     /// 构造最小作废请求。
     ///
@@ -544,10 +527,8 @@ mod tests {
     /// 作废命令缺少稳定授权快照、事务内账号重验或 policy revision CAS 时测试失败。
     #[test]
     fn void_draft_binds_actor_authorization_to_commit() {
-        let production = include_str!("void_order.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码必须存在");
+        let production =
+            include_str!("void_order.rs").split("#[cfg(test)]").next().expect("生产代码必须存在");
 
         assert!(production.contains("authorize_actor_permission(actor, VOID_PERMISSION)"));
         assert!(production.contains("ensure_purchase_order_actor_account"));
@@ -626,9 +607,7 @@ mod tests {
             seen: vec![],
             fail_at: None,
         };
-        let result = super::execute_void_steps(&mut steps, &mut executor)
-            .await
-            .unwrap();
+        let result = super::execute_void_steps(&mut steps, &mut executor).await.unwrap();
         assert_eq!(steps.seen, [0, 1, 2, 3]);
         assert_eq!(result.lock_version, 5);
         assert_eq!(result.reference, "VOID-V5");
@@ -645,9 +624,7 @@ mod tests {
                 seen: vec![],
                 fail_at: Some(index),
             };
-            let error = super::execute_void_steps(&mut steps, &mut executor)
-                .await
-                .unwrap_err();
+            let error = super::execute_void_steps(&mut steps, &mut executor).await.unwrap_err();
             assert!(
                 matches!(error, crate::Error::ConflictError(message) if message == "original-step-error")
             );

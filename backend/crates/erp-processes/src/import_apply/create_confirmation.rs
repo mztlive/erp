@@ -1,26 +1,22 @@
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::WorkItemId;
 use erp_identity::AccessControlExt;
-use erp_import::LegacyImportExt;
 use erp_import::{
-    ConfirmationMatrixDecision, ConfirmationScope, LegacyImportBatch, LegacyImportConfirmation,
-    LegacyImportConfirmationData, LegacyImportConfirmationId,
+    ConfirmationMatrixDecision, ConfirmationScope, CreateLegacyImportConfirmationRequest,
+    ImportBusinessConfirmationNextStep, LegacyImportBatch, LegacyImportConfirmation,
+    LegacyImportConfirmationData, LegacyImportConfirmationId, LegacyImportExt, required_text,
 };
-use erp_workflow::entity::work_item::{WorkItem, WorkItemType};
 use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemType};
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-
 use super::confirmation_query::confirmation_view;
 use super::dto::LegacyImportConfirmationView;
-use super::{ImportApplyService, IMPORT_CONFIRMATION_OBJECT_TYPE, IMPORT_CONFIRMATION_ORGANIZATION};
-use erp_import::required_text;
-use erp_import::{CreateLegacyImportConfirmationRequest, ImportBusinessConfirmationNextStep};
+use super::{IMPORT_CONFIRMATION_OBJECT_TYPE, IMPORT_CONFIRMATION_ORGANIZATION, ImportApplyService};
+use crate::{Error, Result};
 
 impl ImportApplyService {
     /// 创建待确认确认事实。
@@ -132,19 +128,13 @@ impl ImportApplyService {
                         .ok_or_else(|| Error::NotFound("导入批次不存在".to_string()))?;
                     validate_confirmation_creation_batch(&batch, &scope_for_tx, &import_rule_for_tx)?;
                     batch.prepare_confirmation()?;
-                    let enabled_roles = db
-                        .roles()
-                        .enabled_roles(std::slice::from_ref(&owner_role_for_tx), session)
-                        .await?;
+                    let enabled_roles =
+                        db.roles().enabled_roles(std::slice::from_ref(&owner_role_for_tx), session).await?;
                     if enabled_roles.len() != 1 {
-                        return Err(Error::BusinessLogicError(
-                            "导入确认责任角色未注册或已停用".to_string(),
-                        ));
+                        return Err(Error::BusinessLogicError("导入确认责任角色未注册或已停用".to_string()));
                     }
-                    let mut confirmations = db
-                        .legacy_import_confirmations()
-                        .list_by_batch(&req_for_tx.batch_id, session)
-                        .await?;
+                    let mut confirmations =
+                        db.legacy_import_confirmations().list_by_batch(&req_for_tx.batch_id, session).await?;
                     validate_trial_snapshot(&batch, &confirmations, &req_for_tx, &import_rule_for_tx)?;
                     super::supersede::invalidate_replaced_confirmation(
                         &db,
@@ -168,9 +158,7 @@ impl ImportApplyService {
                             &current_matrix,
                         )),
                     )?;
-                    db.legacy_import_confirmations()
-                        .create(&confirmation_for_tx, session)
-                        .await?;
+                    db.legacy_import_confirmations().create(&confirmation_for_tx, session).await?;
                     db.work_items().create(&work_item_for_tx, session).await?;
                     db.legacy_import_batches().update(&mut batch, session).await?;
                     db.audit_logs().create(&audit, session).await?;
@@ -248,9 +236,7 @@ fn validate_confirmation_creation_batch(
     }
     let scope = ConfirmationScope::parse(scope)?;
     if !batch.required_confirmation_scopes()?.contains(&scope) {
-        return Err(Error::BusinessLogicError(
-            "该责任范围不属于当前批次的必要确认矩阵".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("该责任范围不属于当前批次的必要确认矩阵".to_string()));
     }
     Ok(())
 }
@@ -301,9 +287,7 @@ fn validate_confirmation_creation_replay(
     if exact {
         return Ok(());
     }
-    Err(Error::ConflictError(
-        "同一批次、范围与试算版本已用于不同的确认任务".to_string(),
-    ))
+    Err(Error::ConflictError("同一批次、范围与试算版本已用于不同的确认任务".to_string()))
 }
 
 /// 将本次决策后的事实替换进内存矩阵。
@@ -311,10 +295,7 @@ pub(super) fn replace_confirmation_in_matrix(
     confirmations: &mut [LegacyImportConfirmation],
     decided: &LegacyImportConfirmation,
 ) {
-    if let Some(current) = confirmations
-        .iter_mut()
-        .find(|item| item.base.id == decided.base.id)
-    {
+    if let Some(current) = confirmations.iter_mut().find(|item| item.base.id == decided.base.id) {
         *current = decided.clone();
     }
 }
@@ -332,7 +313,7 @@ pub(super) fn confirmation_next_step(
     match decision {
         ConfirmationMatrixDecision::AwaitOtherConfirmations => {
             ImportBusinessConfirmationNextStep::AwaitOtherConfirmations
-        }
+        },
         ConfirmationMatrixDecision::StartApply => ImportBusinessConfirmationNextStep::StartApply,
         ConfirmationMatrixDecision::FixAndRevalidate => ImportBusinessConfirmationNextStep::FixAndRevalidate,
     }

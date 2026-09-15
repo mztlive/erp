@@ -14,6 +14,14 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use application_core::AuditActor;
+use erp_core::common::time::BusinessDate;
+use erp_core::field_update::FieldUpdate;
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
+use validator::Validate;
+
 use crate::dto::customer::{CreateCustomerRequest, CustomerScope, CustomerView, UpdateCustomerRequest};
 use crate::entity::customer::{
     AssignmentRole, CustomerAccount, CustomerAccountData, CustomerAccountId, CustomerAccountStatus,
@@ -24,14 +32,6 @@ use crate::ports::{
     AccountFactPort, CustomerAuditPort, CustomerDataScopePort, PartyFactPort, PartyIdentityFact,
 };
 use crate::repository::{CustomerAccountRow, CustomerExt};
-use erp_core::common::time::BusinessDate;
-use erp_core::field_update::FieldUpdate;
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
-use validator::Validate;
-
-use application_core::AuditActor;
 
 pub mod access;
 pub mod assignment;
@@ -80,13 +80,7 @@ impl CustomerService {
         accounts: Arc<dyn AccountFactPort>,
         data_scope: Arc<dyn CustomerDataScopePort>,
     ) -> Self {
-        Self {
-            db,
-            audit,
-            party,
-            accounts,
-            data_scope,
-        }
+        Self { db, audit, party, accounts, data_scope }
     }
 
     /// 构造复用本服务授权 Port 的客户访问器。
@@ -133,12 +127,8 @@ impl CustomerService {
         let owner_user_id = actor.id().to_string();
         self.accounts.ensure_can_login(&owner_user_id).await?;
         let (account, assignment) = prepare_new_customer(&req, actor.id())?;
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "customer.create",
-            "customer",
-            account.base.id.clone(),
-        )?;
+        let audit =
+            self.audit.resource_log(actor.clone(), "customer.create", "customer", account.base.id.clone())?;
 
         let db = self.db.clone();
         let client = db.client().clone();
@@ -259,9 +249,7 @@ impl CustomerService {
     ) -> Result<CustomerView> {
         req.validate()?;
         let mut account = self.load_customer(id).await?;
-        account
-            .ensure_version(req.version)
-            .map_err(|error| Error::ConflictError(error.to_string()))?;
+        account.ensure_version(req.version).map_err(|error| Error::ConflictError(error.to_string()))?;
         account.update(
             CustomerAccountUpdate {
                 default_payment_term_id: FieldUpdate::from_optional_text(req.default_payment_term_id),
@@ -269,12 +257,8 @@ impl CustomerService {
             },
             actor.id(),
         )?;
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "customer.update",
-            "customer",
-            account.base.id.clone(),
-        )?;
+        let audit =
+            self.audit.resource_log(actor.clone(), "customer.update", "customer", account.base.id.clone())?;
 
         let db = self.db.clone();
         let client = db.client().clone();
@@ -286,9 +270,7 @@ impl CustomerService {
         let updated = client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    access
-                        .require_with(actor_for_tx, "update", &customer_id, session)
-                        .await?;
+                    access.require_with(actor_for_tx, "update", &customer_id, session).await?;
                     persist_account_update(&db, &mut account_for_tx, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<CustomerAccount, crate::error::Error>(account_for_tx)
@@ -414,33 +396,22 @@ pub(super) fn assemble_customer_views(
     requested_scope: CustomerScope,
     account_names: HashMap<String, String>,
 ) -> Vec<CustomerView> {
-    let identities: HashMap<String, PartyIdentityFact> = identities
-        .into_iter()
-        .map(|fact| (fact.party_id.clone(), fact))
-        .collect();
+    let identities: HashMap<String, PartyIdentityFact> =
+        identities.into_iter().map(|fact| (fact.party_id.clone(), fact)).collect();
     let mut assignments_by_customer: HashMap<String, Vec<CustomerAssignment>> = HashMap::new();
     for assignment in assignments {
-        assignments_by_customer
-            .entry(assignment.customer_id.to_string())
-            .or_default()
-            .push(assignment);
+        assignments_by_customer.entry(assignment.customer_id.to_string()).or_default().push(assignment);
     }
 
     rows.into_iter()
         .map(|row| {
             let identity = identities.get(&row.party_id);
-            let assignments = assignments_by_customer
-                .get(&row.id)
-                .map(Vec::as_slice)
-                .unwrap_or_default();
+            let assignments = assignments_by_customer.get(&row.id).map(Vec::as_slice).unwrap_or_default();
             let owner_user_id = assignments
                 .iter()
                 .find(|assignment| assignment.assignment_role == AssignmentRole::Owner)
                 .map(|assignment| assignment.user_id.clone());
-            let owner_user_name = owner_user_id
-                .as_ref()
-                .and_then(|id| account_names.get(id))
-                .cloned();
+            let owner_user_name = owner_user_id.as_ref().and_then(|id| account_names.get(id)).cloned();
             let collaborator_count = assignments
                 .iter()
                 .filter(|assignment| assignment.assignment_role == AssignmentRole::Collaborator)
@@ -481,14 +452,15 @@ pub(super) fn assemble_customer_views(
 
 #[cfg(test)]
 mod tests {
-    use super::{assemble_customer_views, prepare_new_customer};
-    use crate::dto::customer::{customer_status_blockers, CreateCustomerRequest, CustomerScope};
-    use crate::entity::customer::{AssignmentRole, CustomerAccountStatus, CustomerAssignment};
-    use crate::ports::PartyIdentityFact;
-    use crate::repository::CustomerAccountRow;
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::PartyId;
     use serde_json::json;
+
+    use super::{assemble_customer_views, prepare_new_customer};
+    use crate::dto::customer::{CreateCustomerRequest, CustomerScope, customer_status_blockers};
+    use crate::entity::customer::{AssignmentRole, CustomerAccountStatus, CustomerAssignment};
+    use crate::ports::PartyIdentityFact;
+    use crate::repository::CustomerAccountRow;
 
     #[test]
     fn create_customer_ignores_submitted_owner_and_uses_actor() {
@@ -551,9 +523,7 @@ mod tests {
             vec![assignment],
             "actor-1",
             CustomerScope::Mine,
-            [("actor-1".to_string(), "张三".to_string())]
-                .into_iter()
-                .collect(),
+            [("actor-1".to_string(), "张三".to_string())].into_iter().collect(),
         );
         assert_eq!(views[0].party_no.as_deref(), Some("P-1"));
         assert_eq!(views[0].legal_name.as_deref(), Some("示例"));

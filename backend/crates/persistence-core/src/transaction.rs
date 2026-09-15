@@ -3,15 +3,14 @@
 //! This module provides transaction management for MongoDB operations,
 //! allowing multiple operations to be executed atomically.
 
-use async_trait::async_trait;
-use mongodb::{
-    error::UNKNOWN_TRANSACTION_COMMIT_RESULT,
-    options::{ReadConcern, SessionOptions, TransactionOptions, WriteConcern},
-    Client, ClientSession,
-};
 use std::future::Future;
 use std::pin::Pin;
 use std::time::{Duration, Instant};
+
+use async_trait::async_trait;
+use mongodb::error::UNKNOWN_TRANSACTION_COMMIT_RESULT;
+use mongodb::options::{ReadConcern, SessionOptions, TransactionOptions, WriteConcern};
+use mongodb::{Client, ClientSession};
 
 use crate::errors::{Error, Result};
 
@@ -61,10 +60,10 @@ async fn commit_with_retry(session: &mut ClientSession) -> Result<()> {
                     CommitErrorAction::Retry => continue,
                     CommitErrorAction::OutcomeUnknown => {
                         return Err(Error::CommitOutcomeUnknown(error));
-                    }
+                    },
                     CommitErrorAction::DefiniteFailure => return Err(Error::from(error)),
                 }
-            }
+            },
         }
     }
 }
@@ -116,25 +115,16 @@ impl Transactional for Client {
         E: From<Error> + Send,
     {
         let session_options = SessionOptions::builder().causal_consistency(true).build();
-        let mut session = self
-            .start_session()
-            .with_options(session_options)
-            .await
-            .map_err(Error::from)
-            .map_err(E::from)?;
+        let mut session =
+            self.start_session().with_options(session_options).await.map_err(Error::from).map_err(E::from)?;
         let txn_options = transaction_options();
-        session
-            .start_transaction()
-            .with_options(txn_options)
-            .await
-            .map_err(Error::from)
-            .map_err(E::from)?;
+        session.start_transaction().with_options(txn_options).await.map_err(Error::from).map_err(E::from)?;
 
         match f(&mut session).await {
             Ok(result) => {
                 commit_with_retry(&mut session).await.map_err(E::from)?;
                 Ok(result)
-            }
+            },
             Err(error) => {
                 if let Err(abort_error) = session.abort_transaction().await {
                     tracing::warn!(
@@ -143,17 +133,18 @@ impl Transactional for Client {
                     );
                 }
                 Err(error)
-            }
+            },
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use mongodb::options::{ReadConcern, WriteConcern};
 
-    use super::{commit_error_action, transaction_options, CommitErrorAction, COMMIT_RETRY_TIMEOUT};
-    use std::time::Duration;
+    use super::{COMMIT_RETRY_TIMEOUT, CommitErrorAction, commit_error_action, transaction_options};
 
     #[test]
     fn unknown_commit_result_retries_before_timeout() {
@@ -181,9 +172,6 @@ mod tests {
     #[test]
     fn transactions_require_snapshot_reads_and_majority_commit_durability() {
         assert_eq!(transaction_options().read_concern, Some(ReadConcern::snapshot()));
-        assert_eq!(
-            transaction_options().write_concern,
-            Some(WriteConcern::majority())
-        );
+        assert_eq!(transaction_options().write_concern, Some(WriteConcern::majority()));
     }
 }

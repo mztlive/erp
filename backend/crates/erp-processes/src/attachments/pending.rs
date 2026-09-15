@@ -3,7 +3,6 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use crate::Result;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt, AuditLog};
@@ -16,6 +15,8 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 use validator::Validate;
+
+use crate::Result;
 
 /// Files constructed before a business transaction, waiting to persist with that aggregate.
 #[derive(Debug)]
@@ -42,24 +43,16 @@ impl PendingFileAssets {
             let reference = PendingFileReference::parse(&request.reference)?;
             request.registration.validate()?;
             let sensitivity = request.registration.sensitivity_class;
-            let asset = FileAsset::new(
-                FileAssetId::new(next_id()),
-                request.registration.into_data(actor.id())?,
-            )?;
+            let asset =
+                FileAsset::new(FileAssetId::new(next_id()), request.registration.into_data(actor.id())?)?;
             let asset_id = FileAssetId::new(asset.base.id.clone());
             let audit =
-                actor
-                    .clone()
-                    .resource_log("file_asset.register", "file_asset", asset.base.id.clone())?;
+                actor.clone().resource_log("file_asset.register", "file_asset", asset.base.id.clone())?;
             references.push((reference, asset_id, sensitivity));
             assets.push(asset);
             audits.push(audit);
         }
-        Ok(Self {
-            assets,
-            references: PendingFileReferenceSet::new(references)?,
-            audits,
-        })
+        Ok(Self { assets, references: PendingFileReferenceSet::new(references)?, audits })
     }
 
     /// Wrap the batch as a `'static` consumer port.
@@ -87,12 +80,8 @@ impl PendingAttachmentBatch for PendingFileAssets {
     }
 
     async fn persist(&self, db: &Database, executor: &mut dyn Executor) -> erp_support::Result<()> {
-        db.file_assets()
-            .create_many_ordered(&self.assets, executor)
-            .await?;
-        db.audit_logs()
-            .create_many_ordered(&self.audits, executor)
-            .await?;
+        db.file_assets().create_many_ordered(&self.assets, executor).await?;
+        db.audit_logs().create_many_ordered(&self.audits, executor).await?;
         Ok(())
     }
 
@@ -103,15 +92,17 @@ impl PendingAttachmentBatch for PendingFileAssets {
 
 #[cfg(test)]
 mod tests {
-    use super::PendingFileAssets;
+    use std::collections::HashSet;
+
     use application_core::AuditActor;
-    use erp_core::ids::FileAssetId;
     use erp_core::AccountKind;
+    use erp_core::ids::FileAssetId;
     use erp_support::{
         PendingAttachmentBatch, PendingFileAssetRequest, RegisterFileAssetRequest, RetentionClass,
         SensitivityClass,
     };
-    use std::collections::HashSet;
+
+    use super::PendingFileAssets;
 
     fn actor() -> AuditActor {
         AuditActor::new("acct-1".to_string(), "admin".to_string(), AccountKind::Admin)
@@ -144,10 +135,7 @@ mod tests {
     fn prepare_rejects_duplicate_temporary_references() {
         let hmac = "a".repeat(64);
         let err = PendingFileAssets::prepare(
-            vec![
-                request("pending-file:one", &hmac),
-                request("pending-file:one", &hmac),
-            ],
+            vec![request("pending-file:one", &hmac), request("pending-file:one", &hmac)],
             &actor(),
         )
         .unwrap_err();

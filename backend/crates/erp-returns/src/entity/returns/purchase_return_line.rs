@@ -5,11 +5,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{PurchaseOrderRevisionLineId, PurchaseReturnLineId, PurchaseReturnOrderId, WarehouseId};
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 采购退货明细创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -109,8 +108,9 @@ impl PurchaseReturnLine {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn data() -> PurchaseReturnLineData {
         PurchaseReturnLineData {
@@ -130,16 +130,12 @@ mod tests {
 
     #[test]
     fn new_rejects_non_positive_quantity() {
-        let non_positive = PurchaseReturnLineData {
-            return_quantity: Quantity::from_str("0.000000").unwrap(),
-            ..data()
-        };
+        let non_positive =
+            PurchaseReturnLineData { return_quantity: Quantity::from_str("0.000000").unwrap(), ..data() };
         assert!(PurchaseReturnLine::new(PurchaseReturnLineId::new("prl-2"), non_positive).is_err());
 
-        let negative = PurchaseReturnLineData {
-            return_quantity: Quantity::from_str("-1.000000").unwrap(),
-            ..data()
-        };
+        let negative =
+            PurchaseReturnLineData { return_quantity: Quantity::from_str("-1.000000").unwrap(), ..data() };
         assert!(PurchaseReturnLine::new(PurchaseReturnLineId::new("prl-3"), negative).is_err());
     }
 
@@ -161,10 +157,7 @@ mod tests {
         })
         .unwrap();
         assert_eq!(line.warehouse_id, Some(WarehouseId::new("wh-2")));
-        assert_eq!(
-            line.purchase_order_revision_line_id,
-            PurchaseOrderRevisionLineId::new("po-1-r1-l1")
-        );
+        assert_eq!(line.purchase_order_revision_line_id, PurchaseOrderRevisionLineId::new("po-1-r1-l1"));
     }
 
     /// 采购退货明细无审批约束：不得出现绑定字段或审批状态机。
@@ -177,10 +170,8 @@ mod tests {
         assert!(!object.contains_key("approval_subject_version"));
         assert!(!object.contains_key("pending_allocations"));
 
-        let production = include_str!("purchase_return_line.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production =
+            include_str!("purchase_return_line.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(!production.contains("IN_APPROVAL"));
         assert!(!production.contains("fn start_approval"));
         assert!(!production.contains("approval_subject_version"));

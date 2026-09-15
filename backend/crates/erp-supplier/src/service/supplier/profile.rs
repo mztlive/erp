@@ -30,13 +30,13 @@ pub fn command_view(command: SupplierProfileCommand) -> SupplierProfileMutationV
 mod tests {
     use std::str::FromStr;
 
+    use erp_core::common::time::BusinessDate;
+
+    use super::command_view;
     use crate::dto::supplier::SaveSupplierProfileRequest;
     use crate::entity::supplier::{
         InvoiceType, ReconciliationCycle, SettlementMode, SupplierProfileCommand, SupplierProfileCommandData,
     };
-    use erp_core::common::time::BusinessDate;
-
-    use super::command_view;
 
     #[test]
     fn command_replay_is_bound_to_supplier_and_fingerprint_stable() {
@@ -59,25 +59,15 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(command
-            .ensure_replayable("update", Some("supplier-1"), FP1)
-            .is_ok());
-        assert!(command
-            .ensure_replayable("update", Some("supplier-1"), FP1_V1)
-            .is_ok());
+        assert!(command.ensure_replayable("update", Some("supplier-1"), FP1).is_ok());
+        assert!(command.ensure_replayable("update", Some("supplier-1"), FP1_V1).is_ok());
         let replayed = command_view(command.clone());
         assert_eq!(replayed.effective_from, "2026-01-01");
         assert_eq!(replayed.recorded_at, command.base.created_at);
         assert_eq!(replayed.change_reason, "修订");
-        assert!(command
-            .ensure_replayable("update", Some("supplier-2"), FP1)
-            .is_err());
-        assert!(command
-            .ensure_replayable("update", Some("supplier-1"), FP2)
-            .is_err());
-        assert!(command
-            .ensure_replayable("create", Some("supplier-1"), FP1)
-            .is_err());
+        assert!(command.ensure_replayable("update", Some("supplier-2"), FP1).is_err());
+        assert!(command.ensure_replayable("update", Some("supplier-1"), FP2).is_err());
+        assert!(command.ensure_replayable("create", Some("supplier-1"), FP1).is_err());
         assert!(SupplierProfileCommand::ensure_version(3, 3).is_ok());
         assert!(SupplierProfileCommand::ensure_version(3, 2).is_err());
         assert!(matches!(

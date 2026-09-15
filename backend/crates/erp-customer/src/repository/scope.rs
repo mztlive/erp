@@ -1,9 +1,8 @@
 //! 客户授权条件；由应用层完成 DataScope 解析后再交给仓储。
 
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, QueryFilter, Result};
+use persistence_core::{Executor, QueryFilter, Result, mongo_ops};
 use serde::Deserialize;
 
 use super::customer::CustomerAccountFilter;
@@ -154,13 +153,8 @@ impl CustomerReadScope {
     /// 创建固定以操作人为主责，协作身份与历史参与不得单独放行建档。
     #[cfg(test)]
     pub fn allows_creation(&self, owner: &str, owner_org: Option<&str>) -> bool {
-        self.roles
-            .iter()
-            .any(|clause| clause.allows(owner, owner_org, false))
-            && self
-                .user_limit
-                .as_ref()
-                .is_none_or(|clause| clause.allows(owner, owner_org, false))
+        self.roles.iter().any(|clause| clause.allows(owner, owner_org, false))
+            && self.user_limit.as_ref().is_none_or(|clause| clause.allows(owner, owner_org, false))
     }
 
     /// 判断指定客户是否落在已证明的授权集合内。
@@ -177,9 +171,7 @@ impl CustomerReadScope {
     /// # 关键业务约束
     /// 授权集合必须由 Service 预先求值；仓储不得按登录人自行推断。
     pub fn allows_id(&self, customer_id: &str) -> bool {
-        self.authorized_customer_ids
-            .as_ref()
-            .is_none_or(|ids| ids.iter().any(|id| id == customer_id))
+        self.authorized_customer_ids.as_ref().is_none_or(|ids| ids.iter().any(|id| id == customer_id))
     }
 
     /// 判断授权是否覆盖全部未删除客户。
@@ -260,8 +252,7 @@ impl CustomerAccountRepository<'_> {
         scope: &CustomerReadScope,
         executor: &mut dyn Executor,
     ) -> Result<Option<CustomerAccount>> {
-        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor)
-            .await
+        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
     }
 
     /// 装载查询的有界身份与版本集合，用于跨页及导出一致性校验。
@@ -330,10 +321,7 @@ mod tests {
         let empty = CustomerReadScope::default();
         assert!(!empty.allows_creation("sales-a", Some("org-a")));
         let self_owned = CustomerReadScope {
-            roles: vec![CustomerScopeClause {
-                owner_user_id: Some("sales-a".into()),
-                ..Default::default()
-            }],
+            roles: vec![CustomerScopeClause { owner_user_id: Some("sales-a".into()), ..Default::default() }],
             authorized_customer_ids: Some(Vec::new()),
             owned_customer_ids: vec![],
             collaborative_customer_ids: vec![],
@@ -347,10 +335,7 @@ mod tests {
     #[test]
     fn creation_requires_role_and_personal_limit_without_history() {
         let mut scope = CustomerReadScope {
-            roles: vec![CustomerScopeClause {
-                company: true,
-                ..Default::default()
-            }],
+            roles: vec![CustomerScopeClause { company: true, ..Default::default() }],
             authorized_customer_ids: None,
             owned_customer_ids: vec![],
             collaborative_customer_ids: vec![],
@@ -358,10 +343,8 @@ mod tests {
             user_limit: None,
         };
         assert!(scope.allows_creation("sales-a", Some("org-a")));
-        scope.user_limit = Some(CustomerScopeClause {
-            owner_org_unit_ids: vec!["org-b".into()],
-            ..Default::default()
-        });
+        scope.user_limit =
+            Some(CustomerScopeClause { owner_org_unit_ids: vec!["org-b".into()], ..Default::default() });
         assert!(!scope.allows_creation("sales-a", Some("org-a")));
         assert!(scope.allows_creation("sales-a", Some("org-b")));
         scope.historical_customer_ids.push("old-customer".into());
@@ -372,10 +355,7 @@ mod tests {
 
     #[test]
     fn owner_and_collaborator_are_not_interchangeable() {
-        let owner = CustomerScopeClause {
-            owner_user_id: Some("sales-a".into()),
-            ..Default::default()
-        };
+        let owner = CustomerScopeClause { owner_user_id: Some("sales-a".into()), ..Default::default() };
         let collab = CustomerScopeClause {
             collaborative_customer_ids: vec!["customer-b".into()],
             ..Default::default()
@@ -393,10 +373,7 @@ mod tests {
         assert!(!CustomerReadScope::default().is_company());
         let company = CustomerReadScope {
             authorized_customer_ids: None,
-            roles: vec![CustomerScopeClause {
-                company: true,
-                ..Default::default()
-            }],
+            roles: vec![CustomerScopeClause { company: true, ..Default::default() }],
             user_limit: None,
             historical_customer_ids: vec![],
             owned_customer_ids: vec![],

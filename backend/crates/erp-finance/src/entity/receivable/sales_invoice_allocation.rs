@@ -2,13 +2,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{InvoiceId, ReceivableAccountId, SalesInvoiceAllocationId};
 use erp_core::money::Amount;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
-use super::receipt_allocation::{validate_action_reference, AllocationAction};
+use super::receipt_allocation::{AllocationAction, validate_action_reference};
 
 /// 销项发票分配创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -75,11 +74,7 @@ impl SalesInvoiceAllocation {
     /// # 错误
     /// 当金额恒等不成立/非正、序号为 0 或动作与引用不一致时返回错误。
     pub fn new(id: SalesInvoiceAllocationId, data: SalesInvoiceAllocationData) -> Result<Self> {
-        validate_amounts(
-            data.allocated_gross_amount,
-            data.allocated_net_amount,
-            data.allocated_tax_amount,
-        )?;
+        validate_amounts(data.allocated_gross_amount, data.allocated_net_amount, data.allocated_tax_amount)?;
         if data.allocation_seq == 0 {
             return Err(Error::from("分配序号必须从 1 开始"));
         }
@@ -146,9 +141,11 @@ fn validate_amounts(gross: Amount, net: Amount, tax: Amount) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use erp_core::money::{line_amounts, Quantity, Rate, UnitPrice};
     use std::str::FromStr;
+
+    use erp_core::money::{Quantity, Rate, UnitPrice, line_amounts};
+
+    use super::*;
 
     fn data() -> SalesInvoiceAllocationData {
         let (gross, net, tax) = line_amounts(
@@ -174,15 +171,10 @@ mod tests {
 
         assert_eq!(
             allocation.allocated_gross_amount,
-            allocation
-                .allocated_net_amount
-                .checked_add(allocation.allocated_tax_amount),
+            allocation.allocated_net_amount.checked_add(allocation.allocated_tax_amount),
             "gross = net + tax 必须精确成立"
         );
-        assert_eq!(
-            allocation.allocated_gross_amount,
-            erp_core::money::Amount::from_str("29.97").unwrap()
-        );
+        assert_eq!(allocation.allocated_gross_amount, erp_core::money::Amount::from_str("29.97").unwrap());
     }
 
     #[test]
@@ -193,10 +185,7 @@ mod tests {
         };
         assert!(SalesInvoiceAllocation::new(SalesInvoiceAllocationId::new("si-2"), mismatch).is_err());
 
-        let zero_seq = SalesInvoiceAllocationData {
-            allocation_seq: 0,
-            ..data()
-        };
+        let zero_seq = SalesInvoiceAllocationData { allocation_seq: 0, ..data() };
         assert!(SalesInvoiceAllocation::new(SalesInvoiceAllocationId::new("si-3"), zero_seq).is_err());
     }
 

@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::entity::{AccountCore, LoginAccount};
-
 use crate::error::{Error, Result};
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -34,11 +33,7 @@ impl InitializeSuperAdminParams {
     /// # 错误
     /// 当账号不合法、密码长度不在 6-32 个字符内或名称为空时返回校验错误。
     pub(super) fn into_validated_parts(self) -> Result<(LoginAccount, String, String)> {
-        let Self {
-            account,
-            password,
-            name,
-        } = self;
+        let Self { account, password, name } = self;
         let account =
             LoginAccount::new(account).map_err(|_| Error::ValidationError("超级管理员账号不合法".into()))?;
         ensure_admin_password_length(&password, "超级管理员")?;
@@ -92,9 +87,7 @@ fn ensure_admin_password_length(password: &str, label: &str) -> Result<()> {
         return Ok(());
     }
 
-    Err(Error::ValidationError(format!(
-        "{label}密码长度必须在6-32个字符之间"
-    )))
+    Err(Error::ValidationError(format!("{label}密码长度必须在6-32个字符之间")))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -147,7 +140,6 @@ impl AdminItem {
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::{AccountCore, AccountStatus, LoginAccount, Secret};
     use entity_core::BaseModel;
     use erp_core::AccountKind;
     use serde_json::json;
@@ -157,15 +149,12 @@ mod tests {
         AdminItem, CreateAdminParams, InitializeSuperAdminParams, ResetAdminPasswordParams,
         UpdateAdminParams, UpdateAdminRoleParams,
     };
+    use crate::entity::{AccountCore, AccountStatus, LoginAccount, Secret};
 
     #[test]
     fn admin_item_preserves_the_exact_json_contract() {
         let account = AccountCore {
-            base: BaseModel {
-                id: "admin-1".to_string(),
-                created_at: 42,
-                ..Default::default()
-            },
+            base: BaseModel { id: "admin-1".to_string(), created_at: 42, ..Default::default() },
             secret: Secret::new(LoginAccount::new("root").unwrap(), "secret").unwrap(),
             name: "Root Admin".to_string(),
             kind: AccountKind::Admin,
@@ -230,25 +219,17 @@ mod tests {
 
     #[test]
     fn reset_admin_password_params_preserve_password_and_reject_invalid_values() {
-        let (account, password) = ResetAdminPasswordParams {
-            account: " admin01 ".to_string(),
-            password: " secret ".to_string(),
-        }
-        .into_validated_parts()
-        .unwrap();
+        let (account, password) =
+            ResetAdminPasswordParams { account: " admin01 ".to_string(), password: " secret ".to_string() }
+                .into_validated_parts()
+                .unwrap();
 
         assert_eq!(account.as_str(), "admin01");
         assert_eq!(password, " secret ");
 
         for params in [
-            ResetAdminPasswordParams {
-                account: " ".to_string(),
-                password: "password".to_string(),
-            },
-            ResetAdminPasswordParams {
-                account: "admin01".to_string(),
-                password: String::new(),
-            },
+            ResetAdminPasswordParams { account: " ".to_string(), password: "password".to_string() },
+            ResetAdminPasswordParams { account: "admin01".to_string(), password: String::new() },
         ] {
             assert!(params.into_validated_parts().is_err());
         }
@@ -268,10 +249,7 @@ mod tests {
             password: Some("short".to_string()),
             role_ids: None,
         };
-        let roles = UpdateAdminRoleParams {
-            id: "admin-1".to_string(),
-            role_ids: Vec::new(),
-        };
+        let roles = UpdateAdminRoleParams { id: "admin-1".to_string(), role_ids: Vec::new() };
 
         assert!(create.validate().is_err());
         assert!(update.validate().is_err());

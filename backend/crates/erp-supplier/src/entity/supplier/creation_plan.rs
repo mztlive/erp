@@ -7,14 +7,6 @@
 
 use std::collections::HashMap;
 
-use crate::entity::supplier::{
-    profile_change, validate_profile_selection, CapabilityCode, InvoiceType, QualificationType,
-    ReconciliationCycle, SettlementMode, SupplierAccount, SupplierAccountData, SupplierAccountStatus,
-    SupplierCapability, SupplierCapabilityRevision, SupplierCommercialProfileRevision,
-    SupplierCommercialProfileRevisionData, SupplierQualification, SupplierQualificationCapability,
-    SupplierQualificationRevision, SupplierQualificationSelection, SupplierRating, SupplierRatingRevision,
-    SupplierRatingRevisionData,
-};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     PartyId, PartyRevisionId, SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId,
@@ -22,6 +14,15 @@ use erp_core::ids::{
     SupplierQualificationRevisionId, SupplierRatingRevisionId,
 };
 use erp_core::money::Rate;
+
+use crate::entity::supplier::{
+    CapabilityCode, InvoiceType, QualificationType, ReconciliationCycle, SettlementMode, SupplierAccount,
+    SupplierAccountData, SupplierAccountStatus, SupplierCapability, SupplierCapabilityRevision,
+    SupplierCommercialProfileRevision, SupplierCommercialProfileRevisionData, SupplierQualification,
+    SupplierQualificationCapability, SupplierQualificationRevision, SupplierQualificationSelection,
+    SupplierRating, SupplierRatingRevision, SupplierRatingRevisionData, profile_change,
+    validate_profile_selection,
+};
 
 /// 单份资质创建所需的已分配主键。
 ///
@@ -338,10 +339,10 @@ pub fn plan_supplier_creation(
         (None, None) => None,
         (Some(_), None) => {
             return Err(erp_core::Error::from("供应商评级 ID 缺失"));
-        }
+        },
         (None, Some(_)) => {
             return Err(erp_core::Error::from("供应商评级输入缺失"));
-        }
+        },
     };
 
     Ok(SupplierCreationPlan {
@@ -360,9 +361,11 @@ pub fn plan_supplier_creation(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use erp_core::ids::PartyId;
     use std::str::FromStr;
+
+    use erp_core::ids::PartyId;
+
+    use super::*;
 
     /// 构造最小合法创建输入。
     fn test_inputs() -> SupplierCreationInputs {
@@ -432,23 +435,13 @@ mod tests {
         assert_eq!(plan.party_seed.party_revision_id.to_string(), "party-rev-1");
         assert_eq!(plan.party_seed.party_no, "PARTY-1");
         assert_eq!(
-            plan.supplier
-                .current_commercial_profile_revision_id
-                .as_ref()
-                .map(ToString::to_string)
-                .as_deref(),
+            plan.supplier.current_commercial_profile_revision_id.as_ref().map(ToString::to_string).as_deref(),
             Some(plan.commercial_profile.base.id.as_str())
         );
         assert_eq!(plan.commercial_profile.revision.revision_no, 1);
         assert_eq!(plan.capabilities.len(), 1);
         assert_eq!(plan.capability_revisions.len(), 1);
-        assert_eq!(
-            plan.capability_ids
-                .get("physical")
-                .map(ToString::to_string)
-                .as_deref(),
-            Some("cap-1")
-        );
+        assert_eq!(plan.capability_ids.get("physical").map(ToString::to_string).as_deref(), Some("cap-1"));
         assert_eq!(plan.qualifications.len(), 1);
         assert_eq!(plan.qualification_revisions.len(), 1);
         assert_eq!(plan.qualification_links.len(), 1);
@@ -500,10 +493,7 @@ mod tests {
     /// 能力 ID 数量与输入不一致时失败关闭。
     #[test]
     fn creation_plan_rejects_mismatched_allocated_ids() {
-        let ids = SupplierCreationIds {
-            capability_ids: vec![],
-            ..test_ids(true)
-        };
+        let ids = SupplierCreationIds { capability_ids: vec![], ..test_ids(true) };
         assert!(plan_supplier_creation(ids, test_inputs()).is_err());
     }
 

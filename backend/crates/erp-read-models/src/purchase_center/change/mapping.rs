@@ -1,8 +1,9 @@
 //! 采购变更实体与冻结审批绑定的展示映射。
-use super::super::approval::change::document_approval_view;
-use super::super::dto::PurchaseChangeOrderView;
 use erp_procurement::entity::purchase_order::PurchaseChangeOrder;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+
+use super::super::approval::change::document_approval_view;
+use super::super::dto::PurchaseChangeOrderView;
 
 /// 由变更单构造列表/详情视图。
 ///

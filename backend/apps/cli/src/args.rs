@@ -4,11 +4,7 @@ use clap::{Args, Parser, Subcommand};
 
 /// ERP 运维命令行。
 #[derive(Debug, Parser)]
-#[command(
-    name = "cli",
-    about = "初始化超级管理员与重置管理员密码",
-    disable_help_subcommand = true
-)]
+#[command(name = "cli", about = "初始化超级管理员与重置管理员密码", disable_help_subcommand = true)]
 pub struct Cli {
     /// TOML 配置文件路径。
     #[arg(short, long, default_value = "./config.toml", global = true)]
@@ -135,7 +131,7 @@ mod tests {
                 assert_eq!(args.account, "admin");
                 assert_eq!(args.name, "System Admin");
                 assert_eq!(args.password.as_deref(), Some("secret1"));
-            }
+            },
             Command::ResetPassword(_) => panic!("应解析为 init-admin"),
         }
     }
@@ -148,7 +144,7 @@ mod tests {
             Command::ResetPassword(args) => {
                 assert_eq!(args.account, "admin");
                 assert!(args.password.is_none());
-            }
+            },
             Command::InitAdmin(_) => panic!("应解析为 reset-password"),
         }
     }

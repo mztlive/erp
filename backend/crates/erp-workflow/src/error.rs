@@ -67,13 +67,13 @@ impl Error {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::Rbac(_) | Self::RepositoryError(_) => {
                 ErrorClass::Internal
-            }
+            },
             Self::ConflictError(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_) => {
                 ErrorClass::Conflict
-            }
+            },
             Self::BusinessLogicError(_) | Self::ValidationError(_) | Self::NotFound(_) => {
                 ErrorClass::BusinessRule
-            }
+            },
             Self::Forbidden(_) | Self::Unauthenticated(_) => ErrorClass::Forbidden,
             Self::OutcomeUnknown(_) => ErrorClass::Internal,
             Self::Coded(code) => code.class(),
@@ -109,13 +109,13 @@ impl From<persistence_core::Error> for Error {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
                 Self::ConflictError(duplicate_key_conflict_message(&error))
-            }
+            },
             persistence_core::Error::OptimisticLockingError => {
                 Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            }
+            },
             error @ persistence_core::Error::TransientTransactionConflict(_) => {
                 Self::TransientTransaction(error)
-            }
+            },
             error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
             other => Self::RepositoryError(other),
         }
@@ -145,7 +145,7 @@ pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
         "uk_work_items_open_fulfillment_object" => Some("该履约对象已存在开放任务，请刷新后重试"),
         "uk_work_items_open_customer_acceptance_object" => {
             Some("该销售单已存在开放客户验收任务，请刷新后重试")
-        }
+        },
         _ => None,
     }
 }
@@ -267,8 +267,9 @@ impl std::fmt::Display for ErrorCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{Error, ErrorCode};
     use application_core::ErrorClass;
+
+    use super::{Error, ErrorCode};
 
     #[test]
     fn from_approval_code_preserves_stable_code() {
@@ -286,26 +287,14 @@ mod tests {
     #[test]
     fn known_duplicate_export_keeps_exact_owned_index_matrix() {
         let cases = [
-            (
-                "uk_work_items_open_fulfillment_object",
-                "该履约对象已存在开放任务，请刷新后重试",
-            ),
-            (
-                "uk_work_items_open_customer_acceptance_object",
-                "该销售单已存在开放客户验收任务，请刷新后重试",
-            ),
+            ("uk_work_items_open_fulfillment_object", "该履约对象已存在开放任务，请刷新后重试"),
+            ("uk_work_items_open_customer_acceptance_object", "该销售单已存在开放客户验收任务，请刷新后重试"),
         ];
         for (index, expected) in cases {
             assert_eq!(super::known_duplicate_index_message(index), Some(expected));
-            assert_eq!(
-                super::known_duplicate_index_message(&format!("{index}_extra")),
-                None
-            );
+            assert_eq!(super::known_duplicate_index_message(&format!("{index}_extra")), None);
             assert_eq!(super::known_duplicate_index_message(&format!(" {index}")), None);
-            assert_eq!(
-                super::known_duplicate_index_message(&index.to_ascii_uppercase()),
-                None
-            );
+            assert_eq!(super::known_duplicate_index_message(&index.to_ascii_uppercase()), None);
         }
         assert_eq!(super::known_duplicate_index_message(""), None);
         assert_eq!(super::known_duplicate_index_message("unknown_index"), None);

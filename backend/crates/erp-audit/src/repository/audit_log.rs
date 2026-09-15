@@ -1,14 +1,14 @@
-use crate::entity::AuditLog;
-use crate::repository::owned::AuditLogRepository;
 use application_core::CommandReceiptFact;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Result;
-use persistence_core::{mongo_ops, Executor};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 use serde::Deserialize;
+
+use crate::entity::AuditLog;
+use crate::repository::owned::AuditLogRepository;
 
 #[derive(Debug, Deserialize)]
 struct CommandReceiptRow {
@@ -407,8 +407,9 @@ impl Pagination for AuditLogFilter {
 
 #[cfg(test)]
 mod tests {
-    use super::AuditLogFilter;
     use persistence_core::QueryFilter;
+
+    use super::AuditLogFilter;
 
     #[test]
     fn action_filter_treats_regex_metacharacters_as_literal_text() {
@@ -422,19 +423,15 @@ mod tests {
         }
         .to_doc();
 
-        assert_eq!(
-            filter.get_document("action").unwrap().get_str("$regex").unwrap(),
-            r"audit\.create\+"
-        );
+        assert_eq!(filter.get_document("action").unwrap().get_str("$regex").unwrap(), r"audit\.create\+");
     }
 
     /// 空资源集合直接返回空且不访问数据库。
     #[tokio::test]
     async fn separation_facts_empty_input_returns_empty_without_db() {
         use crate::repository::owned::AuditLogRepository;
-        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
-            .await
-            .expect("客户端句柄创建失败");
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.expect("客户端句柄创建失败");
         let database = client.database("unused");
         let repository = AuditLogRepository::new(&database, "audit_logs");
         let repository: super::AuditLogRepository<'_> = repository;

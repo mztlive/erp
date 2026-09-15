@@ -7,10 +7,6 @@
 
 use std::str::FromStr;
 
-use crate::entity::purchase_order::{
-    compute_header_totals, LineAmountViolation, PurchaseChangeSubmissionLine, PurchaseLineInput,
-    PurchaseLineType, PurchaseOrderSubmissionLine,
-};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     ProcurementConfirmationLineId, PurchaseChangeSubmissionId, PurchaseChangeSubmissionLineId,
@@ -21,6 +17,10 @@ use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use id_generator::next_id;
 
 use crate::dto::purchase_order::SavePurchaseOrderLine;
+use crate::entity::purchase_order::{
+    LineAmountViolation, PurchaseChangeSubmissionLine, PurchaseLineInput, PurchaseLineType,
+    PurchaseOrderSubmissionLine, compute_header_totals,
+};
 use crate::{Error, Result};
 
 impl SavePurchaseOrderLine {
@@ -49,7 +49,7 @@ impl SavePurchaseOrderLine {
                 let unit_cost = parse_unit_price(self.unit_cost_gross.as_deref())?
                     .ok_or_else(|| Error::ValidationError("商品行含税单价不能为空".to_string()))?;
                 (Some(quantity), Some(unit_cost), None)
-            }
+            },
             PurchaseLineType::LogisticsFee => {
                 let gross = parse_amount(self.gross_amount.as_deref())?
                     .ok_or_else(|| Error::ValidationError("物流费用行含税金额不能为空".to_string()))?;
@@ -58,13 +58,10 @@ impl SavePurchaseOrderLine {
                     parse_unit_price(self.unit_cost_gross.as_deref())?,
                     Some(gross),
                 )
-            }
+            },
         };
-        let expected_delivery_date = self
-            .expected_delivery_date
-            .as_deref()
-            .map(parse_business_date)
-            .transpose()?;
+        let expected_delivery_date =
+            self.expected_delivery_date.as_deref().map(parse_business_date).transpose()?;
         let allocated_quantity = parse_quantity(self.allocated_quantity.as_deref())?;
         Ok(PurchaseLineInput {
             line_type: self.line_type,
@@ -73,10 +70,7 @@ impl SavePurchaseOrderLine {
                 .as_ref()
                 .map(|value| ProcurementConfirmationLineId::new(value.clone())),
             sku_id: self.sku_id.as_ref().map(|value| SkuId::new(value.clone())),
-            sku_revision_id: self
-                .sku_revision_id
-                .as_ref()
-                .map(|value| SkuRevisionId::new(value.clone())),
+            sku_revision_id: self.sku_revision_id.as_ref().map(|value| SkuRevisionId::new(value.clone())),
             product_name_snapshot: self.product_name.clone(),
             specification_snapshot: self.specification.clone(),
             quantity,
@@ -142,10 +136,7 @@ pub fn build_submission_lines(
             .clone()
             .into_submission_line_data(submission_id.clone(), (index + 1) as u32)
             .map_err(map_line_amount_violation)?;
-        result.push(PurchaseOrderSubmissionLine::new(
-            PurchaseOrderSubmissionLineId::new(next_id()),
-            data,
-        )?);
+        result.push(PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new(next_id()), data)?);
     }
     Ok(result)
 }
@@ -177,10 +168,7 @@ pub fn build_change_submission_lines(
                 (index + 1) as u32,
             )
             .map_err(map_line_amount_violation)?;
-        result.push(PurchaseChangeSubmissionLine::new(
-            PurchaseChangeSubmissionLineId::new(next_id()),
-            data,
-        )?);
+        result.push(PurchaseChangeSubmissionLine::new(PurchaseChangeSubmissionLineId::new(next_id()), data)?);
     }
     Ok(result)
 }
@@ -263,12 +251,12 @@ fn parse_business_date(value: &str) -> Result<BusinessDate> {
 mod tests {
     use std::str::FromStr;
 
-    use crate::entity::purchase_order::PurchaseLineType;
     use erp_core::common::time::BusinessDate;
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 
-    use super::{compute_request_totals, to_line_inputs, SavePurchaseOrderLine};
+    use super::{SavePurchaseOrderLine, compute_request_totals, to_line_inputs};
     use crate::Error;
+    use crate::entity::purchase_order::PurchaseLineType;
 
     /// 构造完整商品行请求。
     fn goods_line() -> SavePurchaseOrderLine {
@@ -320,38 +308,17 @@ mod tests {
         let input = goods_line().to_line_input().unwrap();
         assert_eq!(input.line_type, PurchaseLineType::ItemService);
         assert_eq!(
-            input
-                .procurement_confirmation_line_id
-                .as_ref()
-                .map(ToString::to_string),
+            input.procurement_confirmation_line_id.as_ref().map(ToString::to_string),
             Some("pcl-1".to_string())
         );
-        assert_eq!(
-            input.sku_id.as_ref().map(ToString::to_string),
-            Some("sku-1".to_string())
-        );
-        assert_eq!(
-            input.sku_revision_id.as_ref().map(ToString::to_string),
-            Some("skur-1".to_string())
-        );
+        assert_eq!(input.sku_id.as_ref().map(ToString::to_string), Some("sku-1".to_string()));
+        assert_eq!(input.sku_revision_id.as_ref().map(ToString::to_string), Some("skur-1".to_string()));
         assert_eq!(input.quantity, Some(Quantity::from_str("3.000000").unwrap()));
-        assert_eq!(
-            input.unit_cost_gross,
-            Some(UnitPrice::from_str("9.9900").unwrap())
-        );
+        assert_eq!(input.unit_cost_gross, Some(UnitPrice::from_str("9.9900").unwrap()));
         assert_eq!(input.input_tax_rate, Some(Rate::from_str("0.130000").unwrap()));
-        assert_eq!(
-            input.expected_delivery_date,
-            Some(BusinessDate::from_ymd(2026, 8, 6).unwrap())
-        );
-        assert_eq!(
-            input.sales_order_line_id.as_ref().map(ToString::to_string),
-            Some("sol-1".to_string())
-        );
-        assert_eq!(
-            input.allocated_quantity,
-            Some(Quantity::from_str("3.000000").unwrap())
-        );
+        assert_eq!(input.expected_delivery_date, Some(BusinessDate::from_ymd(2026, 8, 6).unwrap()));
+        assert_eq!(input.sales_order_line_id.as_ref().map(ToString::to_string), Some("sol-1".to_string()));
+        assert_eq!(input.allocated_quantity, Some(Quantity::from_str("3.000000").unwrap()));
         assert_eq!(input.gross_amount, None);
     }
 
@@ -384,50 +351,21 @@ mod tests {
     /// 非法数量、单价、税率、金额与业务日期返回既有文案。
     #[test]
     fn illegal_values_keep_exact_messages() {
-        let line = SavePurchaseOrderLine {
-            quantity: Some("abc".to_string()),
-            ..goods_line()
-        };
-        assert_eq!(
-            line.to_line_input().unwrap_err().to_string(),
-            "参数验证失败: 非法数量: abc"
-        );
+        let line = SavePurchaseOrderLine { quantity: Some("abc".to_string()), ..goods_line() };
+        assert_eq!(line.to_line_input().unwrap_err().to_string(), "参数验证失败: 非法数量: abc");
 
-        let line = SavePurchaseOrderLine {
-            unit_cost_gross: Some("x".to_string()),
-            ..goods_line()
-        };
-        assert_eq!(
-            line.to_line_input().unwrap_err().to_string(),
-            "参数验证失败: 非法含税单价: x"
-        );
+        let line = SavePurchaseOrderLine { unit_cost_gross: Some("x".to_string()), ..goods_line() };
+        assert_eq!(line.to_line_input().unwrap_err().to_string(), "参数验证失败: 非法含税单价: x");
 
-        let line = SavePurchaseOrderLine {
-            input_tax_rate: Some("y".to_string()),
-            ..goods_line()
-        };
-        assert_eq!(
-            line.to_line_input().unwrap_err().to_string(),
-            "参数验证失败: 非法税率: y"
-        );
+        let line = SavePurchaseOrderLine { input_tax_rate: Some("y".to_string()), ..goods_line() };
+        assert_eq!(line.to_line_input().unwrap_err().to_string(), "参数验证失败: 非法税率: y");
 
-        let line = SavePurchaseOrderLine {
-            gross_amount: Some("z".to_string()),
-            ..logistics_line()
-        };
-        assert_eq!(
-            line.to_line_input().unwrap_err().to_string(),
-            "参数验证失败: 非法金额: z"
-        );
+        let line = SavePurchaseOrderLine { gross_amount: Some("z".to_string()), ..logistics_line() };
+        assert_eq!(line.to_line_input().unwrap_err().to_string(), "参数验证失败: 非法金额: z");
 
-        let line = SavePurchaseOrderLine {
-            expected_delivery_date: Some("not-a-date".to_string()),
-            ..goods_line()
-        };
-        assert_eq!(
-            line.to_line_input().unwrap_err().to_string(),
-            "参数验证失败: 非法业务日期: not-a-date"
-        );
+        let line =
+            SavePurchaseOrderLine { expected_delivery_date: Some("not-a-date".to_string()), ..goods_line() };
+        assert_eq!(line.to_line_input().unwrap_err().to_string(), "参数验证失败: 非法业务日期: not-a-date");
     }
 
     /// 首错优先级与旧实现一致：税率最先，商品行数量在单价前，物流金额在数量前。
@@ -438,50 +376,32 @@ mod tests {
             quantity: Some("abc".to_string()),
             ..goods_line()
         };
-        assert_eq!(
-            line.to_line_input().unwrap_err().to_string(),
-            "参数验证失败: 非法税率: y"
-        );
+        assert_eq!(line.to_line_input().unwrap_err().to_string(), "参数验证失败: 非法税率: y");
 
-        let line = SavePurchaseOrderLine {
-            quantity: None,
-            unit_cost_gross: Some("x".to_string()),
-            ..goods_line()
-        };
-        assert_eq!(
-            line.to_line_input().unwrap_err().to_string(),
-            "参数验证失败: 商品行数量不能为空"
-        );
+        let line =
+            SavePurchaseOrderLine { quantity: None, unit_cost_gross: Some("x".to_string()), ..goods_line() };
+        assert_eq!(line.to_line_input().unwrap_err().to_string(), "参数验证失败: 商品行数量不能为空");
 
         let line = SavePurchaseOrderLine {
             quantity: None,
             expected_delivery_date: Some("not-a-date".to_string()),
             ..goods_line()
         };
-        assert_eq!(
-            line.to_line_input().unwrap_err().to_string(),
-            "参数验证失败: 商品行数量不能为空"
-        );
+        assert_eq!(line.to_line_input().unwrap_err().to_string(), "参数验证失败: 商品行数量不能为空");
 
         let line = SavePurchaseOrderLine {
             gross_amount: None,
             quantity: Some("abc".to_string()),
             ..logistics_line()
         };
-        assert_eq!(
-            line.to_line_input().unwrap_err().to_string(),
-            "参数验证失败: 物流费用行含税金额不能为空"
-        );
+        assert_eq!(line.to_line_input().unwrap_err().to_string(), "参数验证失败: 物流费用行含税金额不能为空");
 
         let line = SavePurchaseOrderLine {
             gross_amount: Some("z".to_string()),
             quantity: Some("abc".to_string()),
             ..logistics_line()
         };
-        assert_eq!(
-            line.to_line_input().unwrap_err().to_string(),
-            "参数验证失败: 非法金额: z"
-        );
+        assert_eq!(line.to_line_input().unwrap_err().to_string(), "参数验证失败: 非法金额: z");
     }
 
     /// 表头汇总与逐行领域计算一致。
@@ -497,13 +417,7 @@ mod tests {
     /// 转换失败时返回 `ValidationError` 分类（HTTP 400 语义）。
     #[test]
     fn conversion_errors_are_validation_errors() {
-        let line = SavePurchaseOrderLine {
-            quantity: None,
-            ..goods_line()
-        };
-        assert!(matches!(
-            line.to_line_input().unwrap_err(),
-            Error::ValidationError(_)
-        ));
+        let line = SavePurchaseOrderLine { quantity: None, ..goods_line() };
+        assert!(matches!(line.to_line_input().unwrap_err(), Error::ValidationError(_)));
     }
 }

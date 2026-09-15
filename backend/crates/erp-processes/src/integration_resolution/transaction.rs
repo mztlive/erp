@@ -2,7 +2,8 @@
 //!
 //! 仅限本域内部调用（`pub(super)`），不对外暴露。
 
-use std::{future::Future, pin::Pin};
+use std::future::Future;
+use std::pin::Pin;
 
 use persistence_core::Transactional;
 
@@ -32,8 +33,6 @@ impl IntegrationResolutionProcess {
     {
         let db = self.db.clone();
         let client = db.client().clone();
-        client
-            .with_transaction(move |session| Box::pin(async move { f(&db, session).await }))
-            .await
+        client.with_transaction(move |session| Box::pin(async move { f(&db, session).await })).await
     }
 }

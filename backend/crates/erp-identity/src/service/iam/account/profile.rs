@@ -1,11 +1,11 @@
-use crate::entity::account_core::AccountCore;
-use crate::entity::rbac::Permission;
-use crate::AccessControlExt;
 use erp_core::AccountKind;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 use serde::Serialize;
 
+use crate::AccessControlExt;
+use crate::entity::account_core::AccountCore;
+use crate::entity::rbac::Permission;
 use crate::error::Result;
 use crate::service::account_support::account_of_kind;
 use crate::service::iam::SharedRbacService;
@@ -75,9 +75,7 @@ impl AccountProfileService {
             .await?
             .map_or(0, |row| row.revision);
         if self.rbac.current_policy_revision().await? != policy_version {
-            return Err(crate::Error::ConflictError(
-                "DATA_SCOPE_CHANGED：权限已变化，请刷新".into(),
-            ));
+            return Err(crate::Error::ConflictError("DATA_SCOPE_CHANGED：权限已变化，请刷新".into()));
         }
         let mut profile = Self::build_profile(account, role_ids, permissions, avatar);
         profile.policy_version = policy_version;
@@ -129,9 +127,7 @@ impl AccountProfileService {
     /// # 返回值
     /// 返回权限集合
     async fn account_permissions(&self, account: &AccountCore) -> Result<Vec<Permission>> {
-        self.rbac
-            .permissions(account.kind, account.base.id.as_str())
-            .await
+        self.rbac.permissions(account.kind, account.base.id.as_str()).await
     }
 
     /// 构建统一账号资料响应。
@@ -151,14 +147,7 @@ impl AccountProfileService {
         permissions: Vec<Permission>,
         avatar: Option<String>,
     ) -> AccountProfile {
-        let AccountCore {
-            base,
-            secret,
-            name,
-            phone,
-            kind,
-            ..
-        } = account;
+        let AccountCore { base, secret, name, phone, kind, .. } = account;
         let subject = crate::subject(kind, base.id.as_str());
 
         AccountProfile {
@@ -186,17 +175,16 @@ impl AccountProfileService {
     /// # 返回值
     /// 返回有效头像地址；空值返回 `None`
     fn normalized_avatar(avatar: Option<&str>) -> Option<String> {
-        avatar
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
+        avatar.map(|value| value.trim().to_string()).filter(|value| !value.is_empty())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use erp_core::AccountKind;
+
     use super::AccountProfileService;
     use crate::entity::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Permission, Secret};
-    use erp_core::AccountKind;
 
     #[test]
     fn build_profile_should_keep_admin_identity_and_phone() {

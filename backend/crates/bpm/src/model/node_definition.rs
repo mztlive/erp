@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId};
 use crate::model::types::{
-    base_model_at, normalize_optional, normalize_required, ApprovalNodeType, ModelError, ModelResult,
-    LABEL_MAX_LEN, NAME_MAX_LEN, NODE_KEY_MAX_LEN, PURPOSE_MAX_LEN,
+    ApprovalNodeType, LABEL_MAX_LEN, ModelError, ModelResult, NAME_MAX_LEN, NODE_KEY_MAX_LEN,
+    PURPOSE_MAX_LEN, base_model_at, normalize_optional, normalize_required,
 };
 use crate::model::{ParticipantId, Timestamp};
 
@@ -147,30 +147,34 @@ mod tests {
     fn node_rejects_zero_order_and_empty_key() {
         let at = Timestamp::from_unix_secs(1).unwrap();
         let assignee = ParticipantId::new("u1").unwrap();
-        assert!(ApprovalNodeDefinition::new(super::NewNodeDefinition {
-            id: ApprovalNodeDefinitionId::new("n-id"),
-            process_definition_id: ApprovalProcessDefinitionId::new("def"),
-            node_key: "n1".into(),
-            node_name: "仓储复核".into(),
-            node_purpose: None,
-            display_order: 0,
-            assignee_participant_id: assignee.clone(),
-            assignee_label_snapshot: "张三".into(),
-            at,
-        })
-        .is_err());
-        assert!(ApprovalNodeDefinition::new(super::NewNodeDefinition {
-            id: ApprovalNodeDefinitionId::new("n-id"),
-            process_definition_id: ApprovalProcessDefinitionId::new("def"),
-            node_key: "  ".into(),
-            node_name: "仓储复核".into(),
-            node_purpose: None,
-            display_order: 1,
-            assignee_participant_id: assignee.clone(),
-            assignee_label_snapshot: "张三".into(),
-            at,
-        })
-        .is_err());
+        assert!(
+            ApprovalNodeDefinition::new(super::NewNodeDefinition {
+                id: ApprovalNodeDefinitionId::new("n-id"),
+                process_definition_id: ApprovalProcessDefinitionId::new("def"),
+                node_key: "n1".into(),
+                node_name: "仓储复核".into(),
+                node_purpose: None,
+                display_order: 0,
+                assignee_participant_id: assignee.clone(),
+                assignee_label_snapshot: "张三".into(),
+                at,
+            })
+            .is_err()
+        );
+        assert!(
+            ApprovalNodeDefinition::new(super::NewNodeDefinition {
+                id: ApprovalNodeDefinitionId::new("n-id"),
+                process_definition_id: ApprovalProcessDefinitionId::new("def"),
+                node_key: "  ".into(),
+                node_name: "仓储复核".into(),
+                node_purpose: None,
+                display_order: 1,
+                assignee_participant_id: assignee.clone(),
+                assignee_label_snapshot: "张三".into(),
+                at,
+            })
+            .is_err()
+        );
         let node = ApprovalNodeDefinition::new(super::NewNodeDefinition {
             id: ApprovalNodeDefinitionId::new("n-id"),
             process_definition_id: ApprovalProcessDefinitionId::new("def"),
@@ -186,24 +190,18 @@ mod tests {
         assert_eq!(node.node_type, ApprovalNodeType::UserApproval);
         assert!(node.node_purpose.is_none());
 
-        let refreshed = node
-            .with_assignee_label_snapshot("李四", Timestamp::from_unix_secs(2).unwrap())
-            .unwrap();
+        let refreshed =
+            node.with_assignee_label_snapshot("李四", Timestamp::from_unix_secs(2).unwrap()).unwrap();
         assert_eq!(refreshed.base.id, node.base.id);
         assert_eq!(refreshed.node_key, node.node_key);
         assert_eq!(refreshed.assignee_label_snapshot, "李四");
-        assert!(node
-            .with_assignee_label_snapshot("   ", Timestamp::from_unix_secs(2).unwrap())
-            .is_err());
+        assert!(node.with_assignee_label_snapshot("   ", Timestamp::from_unix_secs(2).unwrap()).is_err());
     }
 
     /// 摘要准备与实体构造必须共享 trim 和 UTF-8 字节边界。
     #[test]
     fn node_name_normalization_is_public_and_matches_constructor() {
-        assert_eq!(
-            ApprovalNodeDefinition::normalize_name("  仓储复核  ").unwrap(),
-            "仓储复核"
-        );
+        assert_eq!(ApprovalNodeDefinition::normalize_name("  仓储复核  ").unwrap(), "仓储复核");
         assert!(ApprovalNodeDefinition::normalize_name("  ").is_err());
         assert!(ApprovalNodeDefinition::normalize_name("界".repeat(85)).is_ok());
         assert!(ApprovalNodeDefinition::normalize_name("界".repeat(86)).is_err());

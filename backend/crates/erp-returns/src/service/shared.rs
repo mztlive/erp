@@ -1,12 +1,11 @@
 //! 退货与资金纠错的稳定命令编号、来源版本及已过账前置规则。
-use crate::{Error, Result};
 use sha2::{Digest, Sha256};
+
+use crate::{Error, Result};
 
 /// 由操作者与幂等键生成不泄露原键的稳定纠错单号。
 pub fn return_command_no(prefix: &str, actor_id: &str, idempotency_key: &str) -> String {
-    let digest = hex::encode(Sha256::digest(
-        format!("{actor_id}|{}", idempotency_key.trim()).as_bytes(),
-    ));
+    let digest = hex::encode(Sha256::digest(format!("{actor_id}|{}", idempotency_key.trim()).as_bytes()));
     format!("{prefix}-{}", &digest[..8])
 }
 
@@ -46,13 +45,7 @@ mod tests {
     #[test]
     fn correction_source_requires_same_posted_fact() {
         assert!(ensure_posted_source(3, 3, true, "必须已过账").is_ok());
-        assert!(matches!(
-            ensure_posted_source(4, 3, true, "必须已过账"),
-            Err(Error::ConflictError(_))
-        ));
-        assert!(matches!(
-            ensure_posted_source(3, 3, false, "必须已过账"),
-            Err(Error::BusinessLogicError(_))
-        ));
+        assert!(matches!(ensure_posted_source(4, 3, true, "必须已过账"), Err(Error::ConflictError(_))));
+        assert!(matches!(ensure_posted_source(3, 3, false, "必须已过账"), Err(Error::BusinessLogicError(_))));
     }
 }

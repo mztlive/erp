@@ -1,11 +1,10 @@
 use std::collections::HashSet;
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::plan::zero_quantity;
 
@@ -78,10 +77,8 @@ impl SourcingAssignment {
             .map_err(|error| Error::from(format!("本次分配数量非法: {error}")))?;
         let expected_delivery_date = BusinessDate::from_str(expected_delivery_date.trim())
             .map_err(|error| Error::from(format!("预计交付日非法: {error}")))?;
-        let target_warehouse_id = target_warehouse_id
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string);
+        let target_warehouse_id =
+            target_warehouse_id.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string);
         if source_type == SupplySourceType::ExistingStock && target_warehouse_id.is_some() {
             return Err(Error::from("现有库存由所选库存余额确定仓库，不能另行指定目标仓"));
         }
@@ -126,10 +123,7 @@ impl SourcingAssignmentSet {
         let mut seen = HashSet::new();
         let mut normalized = Vec::with_capacity(assignments.len());
         for assignment in assignments {
-            if !seen.insert((
-                assignment.sales_order_line_id.clone(),
-                assignment.basis_id.clone(),
-            )) {
+            if !seen.insert((assignment.sales_order_line_id.clone(), assignment.basis_id.clone())) {
                 return Err(Error::from("同一销售行不能重复使用同一履约方案"));
             }
             normalized.push(assignment.clone());
@@ -139,9 +133,7 @@ impl SourcingAssignmentSet {
                 .cmp(&right.sales_order_line_id)
                 .then_with(|| left.basis_id.cmp(&right.basis_id))
         });
-        Ok(Self {
-            assignments: normalized,
-        })
+        Ok(Self { assignments: normalized })
     }
 
     /// 返回规范化后的逐行分配。

@@ -1,19 +1,17 @@
 //! 现有库存供给的责任范围筛选、数量上限与稳定分组。
+use std::collections::{HashMap, HashSet};
+
 use super::zero_quantity;
 use crate::entity::facts::{ProductKind, StockBalanceFact};
 use crate::entity::purchase_order::{
     SalesProcurementCoverage, SalesProcurementCoverageLine, StockBasisGroup, StockBasisLine,
 };
-use std::collections::{HashMap, HashSet};
 /// 选取当前冻结责任范围内有剩余的实物销售行；保持原行顺序。
 pub fn physical_stock_lines(
     coverage: &SalesProcurementCoverage,
     responsibility_scope_ids: &[String],
 ) -> Vec<SalesProcurementCoverageLine> {
-    let scope = responsibility_scope_ids
-        .iter()
-        .map(String::as_str)
-        .collect::<HashSet<_>>();
+    let scope = responsibility_scope_ids.iter().map(String::as_str).collect::<HashSet<_>>();
     coverage
         .lines
         .iter()
@@ -42,10 +40,7 @@ pub fn stock_groups_from_facts(
                 .filter(|line| line.goods_line.sku_id == balance.sku_id)
                 .cloned()
                 .map(|coverage| StockBasisLine {
-                    max_create_quantity: coverage
-                        .summary
-                        .remaining_quantity
-                        .min(balance.available_quantity),
+                    max_create_quantity: coverage.summary.remaining_quantity.min(balance.available_quantity),
                     coverage,
                 })
                 .collect::<Vec<_>>();

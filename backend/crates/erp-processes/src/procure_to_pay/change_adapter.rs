@@ -22,17 +22,17 @@ use erp_sales::entity::sales_order::SalesOrder;
 use erp_workflow::entity::approval_integration::{
     ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload,
 };
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::DocumentType;
-
-use crate::{Error, Result};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::business_adapter::{
-    adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
+    AdapterReadScope, ApprovalAdapterSpec, adapter_spec_of, ensure_adapter_spec_complete,
 };
 use erp_workflow::service::approval::policy::{
     ApprovalDomainAction, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource, OwnerOrganizationSource,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
+
+use crate::{Error, Result};
 
 /// 详情最近审批历史条数上限。完整历史走分页端点。
 pub const RECENT_HISTORY_LIMIT: usize = 8;
@@ -91,12 +91,8 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<PurchaseChangeOrderAda
         || spec.owner_role.as_str() != "purchase_change_order_approver"
         || spec.owner_organization_source != OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         || spec.read_scope != AdapterReadScope::DocumentOrganizationAndCreator
-        || !spec
-            .subject_snapshot_fields
-            .contains(&ApprovalSubjectSnapshotField::TotalAmount)
-        || !spec
-            .subject_snapshot_fields
-            .contains(&ApprovalSubjectSnapshotField::TotalQuantity)
+        || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalAmount)
+        || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalQuantity)
     {
         return Err(Error::Internal("采购变更单审批适配器登记不完整".to_string()));
     }
@@ -175,9 +171,7 @@ pub fn purchase_change_start_command(
     idempotency_key: &str,
 ) -> PurchaseChangeOrderStartCommand {
     PurchaseChangeOrderStartCommand {
-        subject_kind: process_kind_of(DocumentType::PurchaseChangeOrder)
-            .as_str()
-            .to_string(),
+        subject_kind: process_kind_of(DocumentType::PurchaseChangeOrder).as_str().to_string(),
         subject_id: change_order_id.to_string(),
         subject_version,
         actor_id: actor_id.to_string(),
@@ -215,14 +209,11 @@ pub fn execute_purchase_change_domain_action(
     match action {
         ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange => {
             Ok(ensure_final_approve_effective(order)?)
-        }
+        },
         ApprovalDomainAction::PurchaseChangeOrderCancelApproval => {
             Ok(cancel_purchase_change_to_draft(order, updated_by)?)
-        }
-        other => Err(Error::ValidationError(format!(
-            "动作 {} 不属于采购变更单",
-            other.as_str()
-        ))),
+        },
+        other => Err(Error::ValidationError(format!("动作 {} 不属于采购变更单", other.as_str()))),
     }
 }
 
@@ -234,9 +225,7 @@ pub fn execute_purchase_change_domain_action(
 /// 恒返回冲突。
 #[cfg(test)]
 pub fn reject_legacy_change_review_node() -> Result<()> {
-    Err(Error::ConflictError(
-        "采购变更仓储影响确认与财务复核不得充当审批流程节点".to_string(),
-    ))
+    Err(Error::ConflictError("采购变更仓储影响确认与财务复核不得充当审批流程节点".to_string()))
 }
 
 /// 按单据组织判定审批人对象读取权。
@@ -272,9 +261,7 @@ pub fn purchase_change_order_object_readable(organization_id: &str, assignee_use
 pub fn purchase_change_responsible_org_id(sales_order: &SalesOrder) -> Result<String> {
     let org = sales_order.settlement_party_id.to_string();
     if org.trim().is_empty() {
-        return Err(Error::ValidationError(
-            "采购变更单来源销售单缺少结算主体，无法冻结责任组织".to_string(),
-        ));
+        return Err(Error::ValidationError("采购变更单来源销售单缺少结算主体，无法冻结责任组织".to_string()));
     }
     Ok(org)
 }
@@ -302,9 +289,7 @@ pub fn build_purchase_change_snapshot(
     submitted_at: Instant,
 ) -> Result<ApprovalSubjectSnapshotPayload> {
     if lines.is_empty() {
-        return Err(Error::ValidationError(
-            "采购变更单没有明细，无法启动审批".to_string(),
-        ));
+        return Err(Error::ValidationError("采购变更单没有明细，无法启动审批".to_string()));
     }
     Ok(ApprovalSubjectSnapshotPayload {
         document_no: change_order.base.id.clone(),
@@ -328,9 +313,7 @@ pub fn build_purchase_change_snapshot(
 fn sum_line_quantity(lines: &[PurchaseChangeSubmissionLine]) -> Result<Quantity> {
     let mut quantities = lines.iter().filter_map(|line| line.quantity);
     let Some(first) = quantities.next() else {
-        return Err(Error::ValidationError(
-            "采购变更明细没有数量，无法启动审批".to_string(),
-        ));
+        return Err(Error::ValidationError("采购变更明细没有数量，无法启动审批".to_string()));
     };
     let mut total = first.to_decimal();
     for quantity in quantities {
@@ -341,7 +324,8 @@ fn sum_line_quantity(lines: &[PurchaseChangeSubmissionLine]) -> Result<Quantity>
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
+
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         CustomerAccountId, PartyId, ProcurementConfirmationLineId, PurchaseChangeOrderId,
@@ -355,11 +339,9 @@ mod tests {
         PurchaseChangeSubmissionData, PurchaseChangeSubmissionLineData, PurchaseLineType, PurchaseType,
         SupplierSnapshot,
     };
-    use std::str::FromStr;
-    use {
-        erp_sales::entity::sales_order::BusinessType, erp_sales::entity::sales_order::OriginSystem,
-        erp_sales::entity::sales_order::SalesOrderData,
-    };
+    use erp_sales::entity::sales_order::{BusinessType, OriginSystem, SalesOrderData};
+
+    use super::*;
 
     fn draft_order() -> PurchaseChangeOrder {
         PurchaseChangeOrder::new(
@@ -458,41 +440,24 @@ mod tests {
         assert_eq!(adapter.document_type, DocumentType::PurchaseChangeOrder);
         assert_eq!(adapter.process_kind.as_str(), "purchase_change_order");
         assert_eq!(
-            purchase_change_order_subject_ref("pco-1")
-                .expect("主体引用必须可构造")
-                .subject_kind(),
+            purchase_change_order_subject_ref("pco-1").expect("主体引用必须可构造").subject_kind(),
             "purchase_change_order"
         );
-        assert_eq!(
-            adapter.subject_ref_builder,
-            "subject_ref_for(PurchaseChangeOrder)"
-        );
+        assert_eq!(adapter.subject_ref_builder, "subject_ref_for(PurchaseChangeOrder)");
         assert_eq!(
             adapter.subject_version_source,
             ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
         );
         assert_eq!(adapter.subject_snapshot_builder, "build_purchase_change_snapshot");
-        assert_eq!(
-            adapter.on_approval_start,
-            ApprovalDomainAction::PurchaseChangeOrderSubmitChange
-        );
-        assert_eq!(
-            adapter.on_final_approve,
-            ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange
-        );
-        assert_eq!(
-            adapter.cancel_action,
-            ApprovalDomainAction::PurchaseChangeOrderCancelApproval
-        );
+        assert_eq!(adapter.on_approval_start, ApprovalDomainAction::PurchaseChangeOrderSubmitChange);
+        assert_eq!(adapter.on_final_approve, ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange);
+        assert_eq!(adapter.cancel_action, ApprovalDomainAction::PurchaseChangeOrderCancelApproval);
         assert_eq!(adapter.owner_role, "purchase_change_order_approver");
         assert_eq!(
             adapter.owner_organization_snapshot,
             OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         );
-        assert_eq!(
-            adapter.read_scope,
-            AdapterReadScope::DocumentOrganizationAndCreator
-        );
+        assert_eq!(adapter.read_scope, AdapterReadScope::DocumentOrganizationAndCreator);
         assert_ne!(adapter.on_approval_start, adapter.on_final_approve);
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
     }
@@ -518,14 +483,7 @@ mod tests {
         .unwrap();
         assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::Draft);
         assert_eq!(order.approval_subject_version, 1);
-        assert_eq!(
-            order
-                .current_submission_id
-                .as_ref()
-                .map(ToString::to_string)
-                .as_deref(),
-            Some("pcs-1")
-        );
+        assert_eq!(order.current_submission_id.as_ref().map(ToString::to_string).as_deref(), Some("pcs-1"));
     }
 
     /// 非草稿不得提交；非审批中不得撤回或生效。
@@ -539,16 +497,16 @@ mod tests {
             "user-2",
         )
         .unwrap();
-        effective
-            .apply_effective(PurchaseOrderRevisionId::new("por-2"), "user-2")
-            .unwrap();
-        assert!(start_purchase_change_approval(
-            &mut effective,
-            erp_core::ids::PurchaseChangeSubmissionId::new("pcs-2"),
-            "hash-2",
-            "user-2",
-        )
-        .is_err());
+        effective.apply_effective(PurchaseOrderRevisionId::new("por-2"), "user-2").unwrap();
+        assert!(
+            start_purchase_change_approval(
+                &mut effective,
+                erp_core::ids::PurchaseChangeSubmissionId::new("pcs-2"),
+                "hash-2",
+                "user-2",
+            )
+            .is_err()
+        );
         assert!(cancel_purchase_change_to_draft(&mut effective, "u").is_err());
         assert!(ensure_final_approve_effective(&effective).is_err());
         assert!(reject_legacy_change_review_node().is_err());
@@ -588,15 +546,17 @@ mod tests {
         assert_eq!(payload.submitted_by, "user-1");
         assert_eq!(payload.total_amount.unwrap().to_string(), "10");
         assert_eq!(payload.total_quantity.unwrap().to_string(), "2");
-        assert!(build_purchase_change_snapshot(
-            &draft_order(),
-            &sales_order(),
-            &submission(),
-            &[],
-            "user-1",
-            Instant::from_unix_secs(10)
-        )
-        .is_err());
+        assert!(
+            build_purchase_change_snapshot(
+                &draft_order(),
+                &sales_order(),
+                &submission(),
+                &[],
+                "user-1",
+                Instant::from_unix_secs(10)
+            )
+            .is_err()
+        );
     }
 
     /// 对象读取权空组织或空审批人失败关闭。
@@ -624,11 +584,13 @@ mod tests {
             "user-1",
         )
         .unwrap();
-        assert!(execute_purchase_change_domain_action(
-            &mut order,
-            ApprovalDomainAction::StockAdjustmentSubmit,
-            "user-1",
-        )
-        .is_err());
+        assert!(
+            execute_purchase_change_domain_action(
+                &mut order,
+                ApprovalDomainAction::StockAdjustmentSubmit,
+                "user-1",
+            )
+            .is_err()
+        );
     }
 }

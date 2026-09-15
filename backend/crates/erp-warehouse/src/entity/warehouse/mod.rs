@@ -19,11 +19,9 @@ pub mod warehouse_entity;
 pub mod warehouse_revision;
 pub mod warehouse_sku_policy;
 
-pub use status::EnableStatus;
-pub use warehouse_entity::{Warehouse, WarehouseFulfillmentOperation};
-pub use warehouse_revision::SensitiveText;
-pub use warehouse_revision::WarehouseRevision;
-pub use warehouse_sku_policy::{WarehouseSkuPolicy, WarehouseSkuPolicyPeriod};
-
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
 pub use erp_core::ids::{WarehouseId, WarehouseRevisionId, WarehouseSkuPolicyId};
+pub use status::EnableStatus;
+pub use warehouse_entity::{Warehouse, WarehouseFulfillmentOperation};
+pub use warehouse_revision::{SensitiveText, WarehouseRevision};
+pub use warehouse_sku_policy::{WarehouseSkuPolicy, WarehouseSkuPolicyPeriod};

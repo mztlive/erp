@@ -2,16 +2,13 @@
 //!
 //! 仅保留销售变更单；卡券专用审批、采购确认与低毛利路由已删除。
 
-use axum::{
-    routing::{get, post},
-    Router,
-};
+use axum::Router;
+use axum::routing::{get, post};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::sales_review, middleware::with_permission},
-};
+use crate::app_state::AppState;
+use crate::core::handler::sales_review;
+use crate::core::middleware::with_permission;
 
 /// 返回本域管理端路由集合。
 ///

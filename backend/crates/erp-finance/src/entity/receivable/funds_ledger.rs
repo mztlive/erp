@@ -6,13 +6,14 @@
 
 use std::collections::HashMap;
 
+use erp_core::common::time::Instant;
+use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableAccountId};
+use erp_core::{Error, Result};
+
 use super::allocation_amount::{checked_add_amount, checked_sub_amount, net_receipt_allocated, zero_amount};
 use super::{
     AllocationAction, PendingReceiptAllocation, ReceiptAllocation, ReceiptAllocationData, ReceivableEntry,
 };
-use erp_core::common::time::Instant;
-use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableAccountId};
-use erp_core::{Error, Result};
 
 /// 回款核销账本：按冻结待过账行完成净额、余额、序号与实体构造。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -114,9 +115,8 @@ impl ReceivableFundsLedger {
         }
         let mut entry_allocated: HashMap<String, erp_core::money::Amount> = HashMap::new();
         for allocation in existing {
-            let balance = entry_allocated
-                .entry(allocation.receivable_entry_id.to_string())
-                .or_insert_with(zero_amount);
+            let balance =
+                entry_allocated.entry(allocation.receivable_entry_id.to_string()).or_insert_with(zero_amount);
             let next = match allocation.allocation_action {
                 AllocationAction::Apply => checked_add_amount(*balance, allocation.allocated_amount)?,
                 AllocationAction::Reverse => checked_sub_amount(*balance, allocation.allocated_amount)?,
@@ -190,14 +190,7 @@ impl ReceivableFundsLedger {
         allocation_id: ReceiptAllocationId,
         allocated_at: Instant,
     ) -> Result<()> {
-        self.apply_action(
-            line,
-            entry,
-            allocation_id,
-            allocated_at,
-            AllocationAction::Apply,
-            None,
-        )
+        self.apply_action(line, entry, allocation_id, allocated_at, AllocationAction::Apply, None)
     }
 
     /// 按待过账行顺序冲减一条分录占用。
@@ -267,11 +260,7 @@ impl ReceivableFundsLedger {
     /// # 约束
     /// 过账路径只产出 APPLY 正增量。
     pub fn account_settlement_deltas(&self) -> Vec<(ReceivableAccountId, erp_core::money::Amount)> {
-        self.account_deltas
-            .iter()
-            .filter(|(_, amount)| *amount > zero_amount())
-            .cloned()
-            .collect()
+        self.account_deltas.iter().filter(|(_, amount)| *amount > zero_amount()).cloned().collect()
     }
 
     /// 返回按子账聚合的本次冲减增量（正数）。
@@ -292,10 +281,7 @@ impl ReceivableFundsLedger {
             .iter()
             .filter(|(_, amount)| amount.to_decimal().is_sign_negative())
             .map(|(id, amount)| {
-                (
-                    id.clone(),
-                    erp_core::money::Amount::try_from(-amount.to_decimal()).unwrap_or(*amount),
-                )
+                (id.clone(), erp_core::money::Amount::try_from(-amount.to_decimal()).unwrap_or(*amount))
             })
             .collect()
     }
@@ -373,11 +359,7 @@ impl ReceivableFundsLedger {
         if entry.base.id != line.receivable_entry_id.to_string() {
             return Err(Error::from("核销分录事实与回款行不一致"));
         }
-        let current = self
-            .entry_allocated
-            .get(entry.base.id.as_str())
-            .copied()
-            .unwrap_or_else(zero_amount);
+        let current = self.entry_allocated.get(entry.base.id.as_str()).copied().unwrap_or_else(zero_amount);
         let next_balance = match action {
             AllocationAction::Apply => {
                 let next = checked_add_amount(current, line.allocated_amount)?;
@@ -385,13 +367,13 @@ impl ReceivableFundsLedger {
                     return Err(Error::from("核销金额超过应收分录开放余额"));
                 }
                 next
-            }
+            },
             AllocationAction::Reverse => {
                 if line.allocated_amount > current {
                     return Err(Error::from("核销金额超过应收分录开放余额"));
                 }
                 checked_sub_amount(current, line.allocated_amount)?
-            }
+            },
         };
         let allocation = ReceiptAllocation::new(
             allocation_id,
@@ -412,15 +394,15 @@ impl ReceivableFundsLedger {
             AllocationAction::Reverse => {
                 // 账户进度以正增量 APPLY 推进；REVERSE 从已聚合增量扣减。
                 line.allocated_amount
-            }
+            },
         };
         let next_account_total = match (account_index, action) {
             (Some(index), AllocationAction::Apply) => {
                 checked_add_amount(self.account_deltas[index].1, signed)?
-            }
+            },
             (Some(index), AllocationAction::Reverse) => {
                 checked_sub_amount(self.account_deltas[index].1, signed)?
-            }
+            },
             (None, AllocationAction::Apply) => signed,
             (None, AllocationAction::Reverse) => checked_sub_amount(zero_amount(), signed)?,
         };
@@ -428,10 +410,9 @@ impl ReceivableFundsLedger {
         match account_index {
             Some(index) => self.account_deltas[index].1 = next_account_total,
             None => {
-                self.account_delta_index
-                    .insert(account_id.to_string(), self.account_deltas.len());
+                self.account_delta_index.insert(account_id.to_string(), self.account_deltas.len());
                 self.account_deltas.push((account_id, next_account_total));
-            }
+            },
         }
         self.allocations.push(allocation);
         self.applied_count += 1;
@@ -452,10 +433,8 @@ impl ReceivableFundsLedger {
     /// # 约束
     /// 不修改账本。
     fn expected_seq(&self, line: &PendingReceiptAllocation) -> Result<u32> {
-        let expected = self
-            .pending
-            .get(self.applied_count)
-            .ok_or_else(|| Error::from("核销计划行数超过待过账行数"))?;
+        let expected =
+            self.pending.get(self.applied_count).ok_or_else(|| Error::from("核销计划行数超过待过账行数"))?;
         if expected != line {
             return Err(Error::from("核销行与待过账顺序不一致"));
         }
@@ -465,15 +444,17 @@ impl ReceivableFundsLedger {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableAccountId, ReceivableEntryId};
+    use erp_core::money::Amount;
+
     use super::ReceivableFundsLedger;
     use crate::entity::receivable::{
         AllocationAction, EntryDirection, PendingReceiptAllocation, ReceiptAllocation, ReceiptAllocationData,
         ReceivableEntry, ReceivableEntryData, ReceivableEntryType,
     };
-    use erp_core::common::time::{BusinessDate, Instant};
-    use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableAccountId, ReceivableEntryId};
-    use erp_core::money::Amount;
-    use std::str::FromStr;
 
     fn amount(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -528,29 +509,15 @@ mod tests {
     #[test]
     fn apply_conserves_receipt_entry_and_account() {
         let pending_lines = vec![pending("e-1", "40.00"), pending("e-1", "10.00")];
-        let mut ledger = ReceivableFundsLedger::new(
-            CustomerReceiptId::new("cr-1"),
-            amount("100.00"),
-            &[],
-            &pending_lines,
-        )
-        .unwrap();
+        let mut ledger =
+            ReceivableFundsLedger::new(CustomerReceiptId::new("cr-1"), amount("100.00"), &[], &pending_lines)
+                .unwrap();
         let entry = entry("e-1", "ra-1", "80.00");
         ledger
-            .apply(
-                &pending_lines[0],
-                &entry,
-                ReceiptAllocationId::new("al-1"),
-                Instant::from_unix_secs(1),
-            )
+            .apply(&pending_lines[0], &entry, ReceiptAllocationId::new("al-1"), Instant::from_unix_secs(1))
             .unwrap();
         ledger
-            .apply(
-                &pending_lines[1],
-                &entry,
-                ReceiptAllocationId::new("al-2"),
-                Instant::from_unix_secs(1),
-            )
+            .apply(&pending_lines[1], &entry, ReceiptAllocationId::new("al-2"), Instant::from_unix_secs(1))
             .unwrap();
         assert_eq!(ledger.net_allocated_total(), amount("50.00"));
         assert_eq!(ledger.new_allocations().len(), 2);
@@ -564,14 +531,7 @@ mod tests {
 
     #[test]
     fn reverse_reduces_net_and_account_delta() {
-        let existing_lines = vec![existing(
-            "old-1",
-            "e-1",
-            1,
-            AllocationAction::Apply,
-            "50.00",
-            None,
-        )];
+        let existing_lines = vec![existing("old-1", "e-1", 1, AllocationAction::Apply, "50.00", None)];
         let pending_lines = vec![pending("e-1", "20.00")];
         let mut ledger = ReceivableFundsLedger::new_with_actions(
             CustomerReceiptId::new("cr-1"),
@@ -594,14 +554,8 @@ mod tests {
             .unwrap();
         assert_eq!(ledger.net_allocated_total(), amount("30.00"));
         assert!(ledger.account_settlement_deltas().is_empty());
-        assert_eq!(
-            ledger.account_revert_deltas(),
-            vec![(ReceivableAccountId::new("ra-1"), amount("20.00"))]
-        );
-        assert_eq!(
-            ledger.new_allocations()[0].allocation_action,
-            AllocationAction::Reverse
-        );
+        assert_eq!(ledger.account_revert_deltas(), vec![(ReceivableAccountId::new("ra-1"), amount("20.00"))]);
+        assert_eq!(ledger.new_allocations()[0].allocation_action, AllocationAction::Reverse);
     }
 
     #[test]
@@ -616,12 +570,8 @@ mod tests {
             "999999999999999999999999999.00",
             None,
         )];
-        let overflow = ReceivableFundsLedger::new(
-            CustomerReceiptId::new("cr-1"),
-            huge,
-            &existing_lines,
-            &pending_lines,
-        );
+        let overflow =
+            ReceivableFundsLedger::new(CustomerReceiptId::new("cr-1"), huge, &existing_lines, &pending_lines);
         assert!(overflow.is_err(), "既有净额加待过账必须溢出失败");
 
         let mut max_seq = existing("old-max", "e-1", u32::MAX, AllocationAction::Apply, "10.00", None);
@@ -649,12 +599,7 @@ mod tests {
         .unwrap();
         let entry = entry("e-1", "ra-1", "80.00");
         ledger
-            .apply(
-                &pending_lines[0],
-                &entry,
-                ReceiptAllocationId::new("al-1"),
-                Instant::from_unix_secs(1),
-            )
+            .apply(&pending_lines[0], &entry, ReceiptAllocationId::new("al-1"), Instant::from_unix_secs(1))
             .unwrap();
         ledger
             .reverse(
@@ -669,22 +614,15 @@ mod tests {
             ledger.account_settlement_deltas(),
             vec![(ReceivableAccountId::new("ra-1"), amount("30.00"))]
         );
-        assert_eq!(
-            ledger.new_allocations()[1].allocation_action,
-            AllocationAction::Reverse
-        );
+        assert_eq!(ledger.new_allocations()[1].allocation_action, AllocationAction::Reverse);
     }
 
     #[test]
     fn insufficient_entry_balance_and_receipt_cap_fail_closed() {
         let pending_lines = vec![pending("e-1", "90.00")];
-        let mut ledger = ReceivableFundsLedger::new(
-            CustomerReceiptId::new("cr-1"),
-            amount("100.00"),
-            &[],
-            &pending_lines,
-        )
-        .unwrap();
+        let mut ledger =
+            ReceivableFundsLedger::new(CustomerReceiptId::new("cr-1"), amount("100.00"), &[], &pending_lines)
+                .unwrap();
         let entry = entry("e-1", "ra-1", "80.00");
         assert_eq!(
             ledger
@@ -702,14 +640,9 @@ mod tests {
 
         let over_receipt = vec![pending("e-1", "120.00")];
         assert_eq!(
-            ReceivableFundsLedger::new(
-                CustomerReceiptId::new("cr-1"),
-                amount("100.00"),
-                &[],
-                &over_receipt,
-            )
-            .unwrap_err()
-            .to_string(),
+            ReceivableFundsLedger::new(CustomerReceiptId::new("cr-1"), amount("100.00"), &[], &over_receipt,)
+                .unwrap_err()
+                .to_string(),
             "核销合计超过回款金额"
         );
     }
@@ -717,38 +650,21 @@ mod tests {
     #[test]
     fn out_of_order_and_sequence_are_deterministic() {
         let pending_lines = vec![pending("e-1", "10.00"), pending("e-2", "20.00")];
-        let mut ledger = ReceivableFundsLedger::new(
-            CustomerReceiptId::new("cr-1"),
-            amount("100.00"),
-            &[],
-            &pending_lines,
-        )
-        .unwrap();
+        let mut ledger =
+            ReceivableFundsLedger::new(CustomerReceiptId::new("cr-1"), amount("100.00"), &[], &pending_lines)
+                .unwrap();
         let e2 = entry("e-2", "ra-1", "50.00");
-        assert!(ledger
-            .apply(
-                &pending_lines[1],
-                &e2,
-                ReceiptAllocationId::new("al-1"),
-                Instant::from_unix_secs(1),
-            )
-            .is_err());
+        assert!(
+            ledger
+                .apply(&pending_lines[1], &e2, ReceiptAllocationId::new("al-1"), Instant::from_unix_secs(1),)
+                .is_err()
+        );
         let e1 = entry("e-1", "ra-2", "50.00");
         ledger
-            .apply(
-                &pending_lines[0],
-                &e1,
-                ReceiptAllocationId::new("al-1"),
-                Instant::from_unix_secs(1),
-            )
+            .apply(&pending_lines[0], &e1, ReceiptAllocationId::new("al-1"), Instant::from_unix_secs(1))
             .unwrap();
         ledger
-            .apply(
-                &pending_lines[1],
-                &e2,
-                ReceiptAllocationId::new("al-2"),
-                Instant::from_unix_secs(1),
-            )
+            .apply(&pending_lines[1], &e2, ReceiptAllocationId::new("al-2"), Instant::from_unix_secs(1))
             .unwrap();
         assert_eq!(ledger.account_settlement_deltas().len(), 2);
         assert_eq!(ledger.new_allocations()[0].allocation_seq, 1);

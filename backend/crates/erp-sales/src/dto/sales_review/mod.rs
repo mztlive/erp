@@ -6,12 +6,12 @@
 //!
 //! 契约来源：erp-client `features/sales-orders`（W05 变更轨）。
 
-use crate::entity::sales_review::SalesChangeType;
+use application_core::{page_or_default, page_size_or_default};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::Result;
-use application_core::{page_or_default, page_size_or_default};
+use crate::entity::sales_review::SalesChangeType;
 
 /// 销售变更单列表允许的排序字段白名单。
 pub(crate) const SALES_CHANGE_ORDER_SORT_FIELDS: &[&str] = &["created_at"];
@@ -32,6 +32,10 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -45,12 +49,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空。
-use application_core::non_blank;
 
 // ---------------------------------------------------------------------------
 // sales_change_order（销售变更单，W05 变更轨）
@@ -224,10 +222,7 @@ mod tests {
 
     #[test]
     fn change_type_serializes_with_stable_code() {
-        assert_eq!(
-            serde_json::to_string(&SalesChangeType::Quantity).unwrap(),
-            "\"QUANTITY\""
-        );
+        assert_eq!(serde_json::to_string(&SalesChangeType::Quantity).unwrap(), "\"QUANTITY\"");
     }
 
     #[test]

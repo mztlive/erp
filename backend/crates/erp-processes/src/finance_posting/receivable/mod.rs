@@ -14,10 +14,10 @@
 //! 跨域只经各领域 `*Ext` 扩展 trait 调对方域 Repository：D13 `sales_orders()` 校验来源
 //! 销售单存在；D18 拥有 `invoice` 实体与仓储，D19 经 `invoices()` 复用。
 
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 
 use crate::adapters::identity::shared_rbac_service;
-use erp_identity::SharedRbacService;
 
 mod account;
 mod adapter;

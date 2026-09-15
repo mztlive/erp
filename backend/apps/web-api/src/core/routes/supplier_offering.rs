@@ -1,15 +1,12 @@
 //! 供应商供给管理路由。
 
-use axum::{
-    routing::{get, post},
-    Router,
-};
+use axum::Router;
+use axum::routing::{get, post};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::supplier_offering, middleware::with_permission},
-};
+use crate::app_state::AppState;
+use crate::core::handler::supplier_offering;
+use crate::core::middleware::with_permission;
 
 /// 构建供应商供给管理路由。
 ///
@@ -22,11 +19,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/supplier-offerings",
-            with_permission(
-                get(supplier_offering::list),
-                rbac,
-                supplier_offering::list_permission_key(),
-            ),
+            with_permission(get(supplier_offering::list), rbac, supplier_offering::list_permission_key()),
         )
         .route(
             "/supplier-offerings",

@@ -1,47 +1,47 @@
-use erp_audit::AuditExt;
-use erp_core::common::time::Instant;
-use erp_procurement::entity::purchase_order::{PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrder};
-use erp_read_models::purchase_center::dto::PurchaseChangeOrderView;
-use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
-use erp_workflow::ports::OrderTaskSource;
-use erp_workflow::DocumentRegistryExt;
-use mongodb::ClientSession;
-use persistence_core::{NoTransaction, Transactional};
-use validator::Validate;
-use {erp_procurement::repository::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
-
-use super::super::change_adapter::{
-    build_purchase_change_snapshot, execute_purchase_change_domain_action, purchase_change_order_adapter,
-    purchase_change_order_object_readable, purchase_change_order_subject_ref,
-    purchase_change_responsible_org_id, purchase_change_start_command, require_frozen_binding,
-    start_approval_command_kind, RECENT_HISTORY_LIMIT,
-};
-use super::super::change_cancel::{
-    build_purchase_change_cancel_input, load_cancel_runtime, persist_purchase_change_cancel,
-    PurchaseChangeCancelPersistInput,
-};
-use super::super::change_start::{
-    build_purchase_change_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_purchase_change_start, replay_purchase_change_start_with_executor, PurchaseChangeStartInput,
-    PurchaseChangeStartPersistInput,
-};
-use super::super::PurchaseOrderProcess;
-use crate::{Error, Result};
 use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
+use erp_audit::{AuditActorLogs, AuditExt};
+use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
 use erp_procurement::dto::purchase_order::{
     CancelPurchaseChangeApprovalRequest, PurchaseChangeSubmitResult, StartPurchaseChangeRequest,
     StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
 };
+use erp_procurement::entity::purchase_order::{PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrder};
+use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::service::purchase_order::change::lock_draft_change;
 use erp_procurement::service::purchase_order::change::mapping::content_fingerprint;
 use erp_procurement::service::purchase_order::change::state::start_purchase_change_approval;
 use erp_procurement::service::purchase_order::line_input::{build_change_submission_lines, to_line_inputs};
-use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
+use erp_read_models::purchase_center::dto::PurchaseChangeOrderView;
+use erp_sales::repository::SalesOrderExt;
+use erp_workflow::DocumentRegistryExt;
+use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_workflow::ports::OrderTaskSource;
+use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
+use mongodb::ClientSession;
+use persistence_core::{NoTransaction, Transactional};
+use validator::Validate;
+
+use super::super::PurchaseOrderProcess;
+use super::super::change_adapter::{
+    RECENT_HISTORY_LIMIT, build_purchase_change_snapshot, execute_purchase_change_domain_action,
+    purchase_change_order_adapter, purchase_change_order_object_readable, purchase_change_order_subject_ref,
+    purchase_change_responsible_org_id, purchase_change_start_command, require_frozen_binding,
+    start_approval_command_kind,
+};
+use super::super::change_cancel::{
+    PurchaseChangeCancelPersistInput, build_purchase_change_cancel_input, load_cancel_runtime,
+    persist_purchase_change_cancel,
+};
+use super::super::change_start::{
+    PurchaseChangeStartInput, PurchaseChangeStartPersistInput, build_purchase_change_start_input,
+    load_bound_definition_graph, load_start_receipt, persist_purchase_change_start,
+    replay_purchase_change_start_with_executor,
+};
+use crate::{Error, Result};
 
 impl PurchaseOrderProcess {
     /// 发起采购变更（基于当前生效版本创建变更单）。
@@ -71,14 +71,9 @@ impl PurchaseOrderProcess {
         actor: &AuditActor,
     ) -> Result<StartPurchaseChangeResult> {
         req.validate()?;
-        let order = self
-            .command_access(actor, "update")?
-            .current(id, &mut NoTransaction)
-            .await?;
-        let (order, base_revision) = self
-            .domain()
-            .load_changeable_order(order, req.expected_lock_version)
-            .await?;
+        let order = self.command_access(actor, "update")?.current(id, &mut NoTransaction).await?;
+        let (order, base_revision) =
+            self.domain().load_changeable_order(order, req.expected_lock_version).await?;
         self.domain().ensure_no_in_progress_change(id).await?;
         let change = erp_procurement::service::purchase_order::change::new_change(
             &order,
@@ -128,9 +123,7 @@ impl PurchaseOrderProcess {
             .current(change.purchase_order_id.as_ref(), &mut NoTransaction)
             .await?;
         let change = lock_draft_change(change, req.expected_lock_version)?;
-        let result = self
-            .start_change_approval(change_id, change, req, actor, adapter)
-            .await?;
+        let result = self.start_change_approval(change_id, change, req, actor, adapter).await?;
         Ok(result)
     }
 
@@ -269,26 +262,15 @@ impl PurchaseOrderProcess {
             .find_by_id(&order.sales_order_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
-        let prepared = self
-            .freeze_change_submission(&change, &order, &req, actor)
-            .await?;
+        let prepared = self.freeze_change_submission(&change, &order, &req, actor).await?;
         start_purchase_change_approval(
             &mut change,
             prepared.submission.base.id.clone().into(),
             prepared.content_hash.clone(),
             actor.id(),
         )?;
-        self.dispatch_change_start(
-            ChangeStartDispatch {
-                id,
-                change,
-                sales_order,
-                prepared,
-                adapter,
-            },
-            actor,
-        )
-        .await
+        self.dispatch_change_start(ChangeStartDispatch { id, change, sales_order, prepared, adapter }, actor)
+            .await
     }
 
     /// 构造冻结提交与明细。
@@ -310,10 +292,8 @@ impl PurchaseOrderProcess {
             .ok_or_else(|| Error::NotFound("基准版本不存在".to_string()))?;
         let mut normalized_request = req.clone();
         if normalized_request.lines.is_empty() {
-            normalized_request.lines = self
-                .domain()
-                .change_lines_from_base_revision(&change.base_revision_id)
-                .await?;
+            normalized_request.lines =
+                self.domain().change_lines_from_base_revision(&change.base_revision_id).await?;
         }
         let supplier_names =
             erp_read_models::purchase_center::repository::supplier_names::current_legal_names_by_account_ids(
@@ -329,9 +309,8 @@ impl PurchaseOrderProcess {
         let submission = self
             .build_change_submission(change, order, &base_revision, &supplier_name, &normalized_request)
             .await?;
-        let enriched_lines = self
-            .enrich_change_lines_with_current_sales_revision(order, &normalized_request.lines)
-            .await?;
+        let enriched_lines =
+            self.enrich_change_lines_with_current_sales_revision(order, &normalized_request.lines).await?;
         let inputs = to_line_inputs(&enriched_lines)?;
         let lines = build_change_submission_lines(&submission.base.id.clone(), &inputs)?;
         let mut submission_mut = submission.clone();
@@ -366,17 +345,10 @@ impl PurchaseOrderProcess {
         dispatch: ChangeStartDispatch<'_>,
         actor: &AuditActor,
     ) -> Result<PurchaseChangeSubmitResult> {
-        let ChangeStartDispatch {
-            id,
-            change,
-            sales_order,
-            prepared,
-            adapter,
-        } = dispatch;
+        let ChangeStartDispatch { id, change, sales_order, prepared, adapter } = dispatch;
         let subject = purchase_change_order_subject_ref(id)?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)?;
+        let binding =
+            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let now = Instant::now();
         let snapshot = build_purchase_change_snapshot(
@@ -533,9 +505,7 @@ impl PurchaseOrderProcess {
                             .await?
                             .ok_or_else(|| Error::ConflictError("采购变更冻结提交不存在".to_string()))?;
                         if submission.purchase_change_order_id.as_ref() != change_order_id {
-                            return Err(Error::ConflictError(
-                                "采购变更冻结提交与业务对象不一致".to_string(),
-                            ));
+                            return Err(Error::ConflictError("采购变更冻结提交与业务对象不一致".to_string()));
                         }
                         Ok(Some(PurchaseChangeSubmitResult {
                             change_id: change.base.id.clone(),
@@ -550,8 +520,8 @@ impl PurchaseOrderProcess {
                 .await;
             match recovered {
                 Ok(Some(result)) => return Ok(result),
-                Ok(None) => {}
-                Err(error) if error.command_may_have_committed() => {}
+                Ok(None) => {},
+                Err(error) if error.command_may_have_committed() => {},
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {
@@ -573,9 +543,8 @@ impl PurchaseOrderProcess {
         actor: &AuditActor,
     ) -> Result<()> {
         let adapter = purchase_change_order_adapter()?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)?;
+        let binding =
+            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let subject = purchase_change_order_subject_ref(id)?;
         let runtime =
@@ -678,13 +647,7 @@ async fn persist_created_change_order(
         .with_transaction(move |session| {
             Box::pin(async move {
                 crate::adapters::purchase_access(db.clone(), rbac.clone())
-                    .require_object(
-                        &actor,
-                        "update",
-                        change_order.purchase_order_id.as_ref(),
-                        &[],
-                        session,
-                    )
+                    .require_object(&actor, "update", change_order.purchase_order_id.as_ref(), &[], session)
                     .await?;
                 persist_bound_change_document(
                     &db,

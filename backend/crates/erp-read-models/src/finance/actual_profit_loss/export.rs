@@ -8,10 +8,7 @@ pub(super) fn export(view: ProfitLossView) -> ProfitLossExport {
     lines.extend(view.rows.items.iter().map(row));
     ProfitLossExport {
         csv_content: lines.join("\r\n"),
-        file_name: format!(
-            "实际盈亏-非卡券不含税-{}_{}.csv",
-            view.period.from, view.period.to
-        ),
+        file_name: format!("实际盈亏-非卡券不含税-{}_{}.csv", view.period.from, view.period.to),
         row_count: view.rows.total,
         generated_at: view.freshness.projected_at,
     }
@@ -21,12 +18,7 @@ fn metadata(view: &ProfitLossView) -> Vec<String> {
     vec![
         record(&["实际经营盈亏", "非卡券", "不含税"]),
         record(&["开始日期", &view.period.from, "结束日期", &view.period.to]),
-        record(&[
-            "期间口径",
-            &view.period.basis_label,
-            "生成时点",
-            &view.freshness.projected_at,
-        ]),
+        record(&["期间口径", &view.period.basis_label, "生成时点", &view.freshness.projected_at]),
         record(&["数据范围", &view.scope.label, "计算规则", &view.formula_version]),
         record(&["筛选", &view.filter_summary]),
         record(&["统计说明", &view.excluded_note]),
@@ -52,12 +44,7 @@ fn header() -> String {
 /// 每个分组行使用服务端已校验金额，缺利润保留空值。
 fn row(row: &super::dto::ProfitLossRow) -> String {
     let t = &row.totals;
-    let blockers = row
-        .coverage_blockers
-        .iter()
-        .map(|b| b.message.as_str())
-        .collect::<Vec<_>>()
-        .join("；");
+    let blockers = row.coverage_blockers.iter().map(|b| b.message.as_str()).collect::<Vec<_>>().join("；");
     let coverage = match row.coverage_state.as_str() {
         "COVERED" => "完整",
         "PARTIAL" => "部分",

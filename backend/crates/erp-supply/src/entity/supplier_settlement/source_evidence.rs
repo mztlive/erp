@@ -9,15 +9,14 @@ use std::collections::HashSet;
 use chrono::{FixedOffset, TimeZone};
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId};
 use erp_core::money::{Amount, Quantity};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 const COMMAND_ID_MAX_LEN: usize = 128;
 const POLICY_VALUE_MAX_LEN: usize = 128;
@@ -143,11 +142,8 @@ impl SettlementPeriod {
             .expect("业务日期存在次日")
             .and_hms_opt(0, 0, 0)
             .expect("午夜时刻合法");
-        let end_secs = offset
-            .from_local_datetime(&end_exclusive)
-            .single()
-            .expect("固定时区本地时刻无歧义")
-            .timestamp();
+        let end_secs =
+            offset.from_local_datetime(&end_exclusive).single().expect("固定时区本地时刻无歧义").timestamp();
         (start_secs, end_secs)
     }
 }
@@ -191,11 +187,7 @@ impl SettlementAmountComponents {
     /// 返回合法零金额组合。
     pub fn zero() -> Self {
         let zero = Amount::try_from(Decimal::ZERO).expect("零是合法金额");
-        Self {
-            gross: zero,
-            net: zero,
-            tax: zero,
-        }
+        Self { gross: zero, net: zero, tax: zero }
     }
 
     /// 将两组三元组逐项相加并校验结果。
@@ -276,11 +268,8 @@ impl SettlementCancelEvidence {
                     EVIDENCE_REFERENCE_MAX_LEN,
                     "取消证据引用过长",
                 )?;
-                Ok(Some(Self {
-                    occurred_at,
-                    reference_id,
-                }))
-            }
+                Ok(Some(Self { occurred_at, reference_id }))
+            },
             _ => Err(Error::from("取消发生时间与取消证据引用必须同时提供或同时省略")),
         }
     }
@@ -468,12 +457,7 @@ impl SupplierSettlementSourceEvidenceLine {
         }
         ensure_triple(self.order_gross, self.order_net, self.order_tax, "订单金额")?;
         ensure_triple(self.freight_gross, self.freight_net, self.freight_tax, "运费金额")?;
-        ensure_triple(
-            self.service_fee_gross,
-            self.service_fee_net,
-            self.service_fee_tax,
-            "服务费金额",
-        )?;
+        ensure_triple(self.service_fee_gross, self.service_fee_net, self.service_fee_tax, "服务费金额")?;
         ensure_triple(self.refund_gross, self.refund_net, self.refund_tax, "退款金额")?;
         ensure_triple(self.erp_gross, self.erp_net, self.erp_tax, "ERP 金额")?;
         ensure_triple(
@@ -565,9 +549,7 @@ impl SupplierSettlementSourceEvidenceData {
         ];
         let mut lines = self.lines.iter().collect::<Vec<_>>();
         lines.sort_by(|left, right| {
-            left.supplier_fulfillment_item_id
-                .as_ref()
-                .cmp(right.supplier_fulfillment_item_id.as_ref())
+            left.supplier_fulfillment_item_id.as_ref().cmp(right.supplier_fulfillment_item_id.as_ref())
         });
         for line in lines {
             append_line_digest_parts(&mut parts, line);
@@ -630,10 +612,7 @@ impl SupplierSettlementSourceEvidence {
     /// 候选版本小于等于当前版本时返回领域错误。
     pub fn ensure_newer_source_version(&self, candidate: u64) -> Result<()> {
         if candidate <= self.source_version {
-            return Err(Error::from(format!(
-                "来源版本必须高于当前版本 {}",
-                self.source_version
-            )));
+            return Err(Error::from(format!("来源版本必须高于当前版本 {}", self.source_version)));
         }
         Ok(())
     }
@@ -724,9 +703,7 @@ impl SupplierSettlementSourceEvidence {
             }
         }
         lines.sort_by(|left, right| {
-            left.supplier_fulfillment_item_id
-                .as_ref()
-                .cmp(right.supplier_fulfillment_item_id.as_ref())
+            left.supplier_fulfillment_item_id.as_ref().cmp(right.supplier_fulfillment_item_id.as_ref())
         });
 
         Ok(Self {
@@ -760,18 +737,10 @@ impl SupplierSettlementSourceEvidence {
 /// # 返回
 /// 无；事实类别和证据引用会先排序，保证摘要与集合输入顺序无关。
 fn append_line_digest_parts(parts: &mut Vec<String>, line: &SupplierSettlementSourceEvidenceLine) {
-    let mut fact_types = line
-        .source_fact_types
-        .iter()
-        .map(|value| value.as_str())
-        .collect::<Vec<_>>();
+    let mut fact_types = line.source_fact_types.iter().map(|value| value.as_str()).collect::<Vec<_>>();
     fact_types.sort_unstable();
     fact_types.dedup();
-    let mut references = line
-        .evidence_reference_ids
-        .iter()
-        .map(String::as_str)
-        .collect::<Vec<_>>();
+    let mut references = line.evidence_reference_ids.iter().map(String::as_str).collect::<Vec<_>>();
     references.sort_unstable();
     references.dedup();
     parts.extend([
@@ -814,11 +783,7 @@ fn digest_parts(parts: &[String]) -> String {
         digest.update((part.len() as u64).to_be_bytes());
         digest.update(part.as_bytes());
     }
-    digest
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    digest.finalize().iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 /// 校验金额非负。
@@ -964,9 +929,7 @@ mod tests {
         )
         .unwrap();
         let occurred_at = Instant::from_unix_secs(
-            chrono::DateTime::parse_from_rfc3339("2026-07-01T00:00:00+08:00")
-                .unwrap()
-                .timestamp(),
+            chrono::DateTime::parse_from_rfc3339("2026-07-01T00:00:00+08:00").unwrap().timestamp(),
         );
         assert!(period.contains(occurred_at));
         let cancel =
@@ -987,12 +950,8 @@ mod tests {
         let (start_secs, end_secs) = SettlementPeriod::secs_bounds(start, end);
         // 以小时为步长覆盖期间前后各一天，秒级区间判定必须与上海业务日期
         // 判定完全一致（开始日 00:00 含、结束日次日 00:00 不含）。
-        let first = chrono::DateTime::parse_from_rfc3339("2026-06-30T00:00:00+08:00")
-            .unwrap()
-            .timestamp();
-        let last = chrono::DateTime::parse_from_rfc3339("2026-08-01T00:00:00+08:00")
-            .unwrap()
-            .timestamp();
+        let first = chrono::DateTime::parse_from_rfc3339("2026-06-30T00:00:00+08:00").unwrap().timestamp();
+        let last = chrono::DateTime::parse_from_rfc3339("2026-08-01T00:00:00+08:00").unwrap().timestamp();
         let mut cursor = first;
         while cursor <= last {
             let in_interval = (start_secs..end_secs).contains(&cursor);
@@ -1081,10 +1040,12 @@ mod tests {
         assert!(evidence.ensure_newer_source_version(2).is_ok());
         assert!(evidence.ensure_newer_source_version(1).is_err());
         assert!(evidence.matches_request_hash(&"b".repeat(64)));
-        assert!(SupplierSettlementSourceEvidence::ensure_unique_item_ids(&[
-            SupplierFulfillmentItemId::new("item-1"),
-            SupplierFulfillmentItemId::new("item-1"),
-        ])
-        .is_err());
+        assert!(
+            SupplierSettlementSourceEvidence::ensure_unique_item_ids(&[
+                SupplierFulfillmentItemId::new("item-1"),
+                SupplierFulfillmentItemId::new("item-1"),
+            ])
+            .is_err()
+        );
     }
 }

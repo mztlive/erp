@@ -17,9 +17,8 @@ pub mod snapshot;
 
 pub use contract_revision::{ArchiveSource, ContractRevision, ContractRevisionData};
 pub use entity::{Contract, ContractData, ContractStatus, ContractUpdate};
+/// 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
+pub use erp_core::ids::{ContractId, ContractRevisionId};
 pub use snapshot::{
     CustomerSnapshot, InvoiceRequirementSnapshot, PaymentTermSnapshot, SettlementPartySnapshot,
 };
-
-/// 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
-pub use erp_core::ids::{ContractId, ContractRevisionId};

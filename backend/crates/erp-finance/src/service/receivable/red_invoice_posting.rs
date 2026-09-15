@@ -1,5 +1,12 @@
 //! Red invoice and receivable/payable reversal writes in the caller's transaction.
 
+use erp_core::ids::{
+    InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId, ReceivableAccountId, SalesInvoiceAllocationId,
+};
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::Executor;
+
 use super::red_invoice_plan::aggregate_reversal_deltas;
 use crate::entity::payable::{PurchaseInvoiceAllocation, PurchaseInvoiceAllocationData};
 use crate::entity::receivable::{
@@ -8,12 +15,6 @@ use crate::entity::receivable::{
 };
 use crate::repository::{PayableExt, ReceivableExt};
 use crate::{Error, Result};
-use erp_core::ids::{
-    InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId, ReceivableAccountId, SalesInvoiceAllocationId,
-};
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::Executor;
 
 /// Write the registered red invoice and apply the validated reversal plan atomically.
 ///
@@ -44,10 +45,8 @@ pub async fn persist_red_invoice(
                 .iter()
                 .map(|(account_id, gross)| (ReceivableAccountId::new(account_id.clone()), *gross))
                 .collect::<Vec<_>>();
-            let reverted = db
-                .receivable_accounts()
-                .revert_invoicings_many(&deltas, actor_id, executor)
-                .await?;
+            let reverted =
+                db.receivable_accounts().revert_invoicings_many(&deltas, actor_id, executor).await?;
             if !reverted.rejected.is_empty() {
                 return Err(Error::BusinessLogicError("红冲金额超过已开票进度".to_string()));
             }
@@ -69,20 +68,15 @@ pub async fn persist_red_invoice(
                     },
                 )?);
             }
-            db.receivable()
-                .create_sales_invoice_allocations_many(&new_allocations, executor)
-                .await?;
+            db.receivable().create_sales_invoice_allocations_many(&new_allocations, executor).await?;
             sales_order_account_ids.extend(reversal_deltas.iter().map(|(account_id, _)| account_id.clone()));
-        }
+        },
         InvoiceDirection::Purchase => {
             let deltas = reversal_deltas
                 .iter()
                 .map(|(account_id, gross)| (PayableAccountId::new(account_id.clone()), *gross))
                 .collect::<Vec<_>>();
-            let reverted = db
-                .payable_accounts()
-                .revert_invoicings_many(&deltas, actor_id, executor)
-                .await?;
+            let reverted = db.payable_accounts().revert_invoicings_many(&deltas, actor_id, executor).await?;
             if !reverted.rejected.is_empty() {
                 return Err(Error::BusinessLogicError("红冲金额超过已收票进度".to_string()));
             }
@@ -104,10 +98,8 @@ pub async fn persist_red_invoice(
                     },
                 )?);
             }
-            db.payable()
-                .create_purchase_invoice_allocations_many(&new_allocations, executor)
-                .await?;
-        }
+            db.payable().create_purchase_invoice_allocations_many(&new_allocations, executor).await?;
+        },
     }
     Ok(sales_order_account_ids)
 }

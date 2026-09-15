@@ -40,9 +40,7 @@ impl ApprovalObjectReadPort for FailClosedObjectReadPort {
         assignee_user_id: &str,
     ) -> Result<Option<bool>> {
         if organization_id.trim().is_empty() || assignee_user_id.trim().is_empty() {
-            return Err(crate::error::Error::ValidationError(
-                "单据组织或审批人不能为空".to_string(),
-            ));
+            return Err(crate::error::Error::ValidationError("单据组织或审批人不能为空".to_string()));
         }
         Ok(None)
     }

@@ -1,7 +1,9 @@
 //! 成本部分读取的唯一裁剪规则：金额取获授权分配，整笔字段不通过差额暴露。
-use super::cost::{CostEntryView, ScopedCostEntryView};
-use erp_core::money::Amount;
 use std::collections::BTreeSet;
+
+use erp_core::money::Amount;
+
+use super::cost::{CostEntryView, ScopedCostEntryView};
 
 impl CostEntryView {
     /// 根据独立整笔资格及可见销售分配生成读取视图。
@@ -61,10 +63,12 @@ fn sum(mut values: impl Iterator<Item = Amount>) -> crate::Result<Amount> {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::time::Instant;
+    use erp_core::money::Rate;
+
     use super::*;
     use crate::dto::cost::CostAllocationView;
     use crate::entity::cost::{CostScope, CostStage, CostType};
-    use erp_core::{common::time::Instant, money::Rate};
 
     fn entry() -> CostEntryView {
         CostEntryView {
@@ -103,10 +107,7 @@ mod tests {
     fn reduction_keeps_authoritative_direction_and_only_visible_allocations() {
         let mut cost = entry();
         cost.cost_stage = CostStage::Reduction;
-        let view = cost
-            .restrict(false, &BTreeSet::from(["a".into()]))
-            .unwrap()
-            .unwrap();
+        let view = cost.restrict(false, &BTreeSet::from(["a".into()])).unwrap().unwrap();
         assert_eq!(view.cost_stage, CostStage::Reduction);
         assert_eq!(view.scope_net_amount, "60".parse().unwrap());
         assert!(view.net_amount.is_none());
@@ -114,10 +115,7 @@ mod tests {
 
     #[test]
     fn partial_read_keeps_only_sixty_and_redacts_whole_amounts_and_source() {
-        let view = entry()
-            .restrict(false, &BTreeSet::from(["a".into()]))
-            .unwrap()
-            .unwrap();
+        let view = entry().restrict(false, &BTreeSet::from(["a".into()])).unwrap().unwrap();
         assert_eq!(view.scope_net_amount, "60".parse().unwrap());
         assert_eq!(view.allocations.len(), 1);
         let json = serde_json::to_value(view).unwrap();

@@ -1,11 +1,5 @@
 //! 从当前正式版本准备变更工作副本；跨域绑定和根事务由组合流程持有。
 
-use super::SalesReviewService;
-use crate::dto::sales_review::CreateSalesChangeOrderRequest;
-use crate::entity::sales_order::{SalesContentHash, SalesOrderWorkingCopyLineData, WorkingPurpose};
-use crate::entity::sales_review::{SalesChangeOrder, SalesChangeOrderData};
-use crate::repository::{SalesOrderExt, SalesReviewExt};
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_core::ids::{
     SalesChangeOrderId, SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderWorkingCopyId,
@@ -13,6 +7,13 @@ use erp_core::ids::{
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
+
+use super::SalesReviewService;
+use crate::dto::sales_review::CreateSalesChangeOrderRequest;
+use crate::entity::sales_order::{SalesContentHash, SalesOrderWorkingCopyLineData, WorkingPurpose};
+use crate::entity::sales_review::{SalesChangeOrder, SalesChangeOrderData};
+use crate::repository::{SalesOrderExt, SalesReviewExt};
+use crate::{Error, Result};
 
 /// 创建变更所需的销售集合写入计划；不包含审批登记或审计。
 pub struct CreatedChangeWrite {
@@ -55,12 +56,8 @@ impl CreatedChangeWrite {
     /// # 错误
     /// 保留仓储唯一键与 CAS 冲突；错误交由调用方回滚。
     pub async fn persist(&self, db: &mongodb::Database, executor: &mut dyn Executor) -> Result<()> {
-        db.sales_change_orders()
-            .create(&self.change_order, executor)
-            .await?;
-        db.sales_order_working_copies()
-            .create(&self.working_copy, executor)
-            .await?;
+        db.sales_change_orders().create(&self.change_order, executor).await?;
+        db.sales_order_working_copies().create(&self.working_copy, executor).await?;
         for line in &self.lines {
             db.sales_order_working_copy_lines().create(line, executor).await?;
         }
@@ -105,13 +102,8 @@ impl SalesReviewService {
                 req.expected_base_revision_no, base_revision.revision.revision_no
             )));
         }
-        if self
-            .has_in_progress_change(&req.sales_order_id, &base_revision_id)
-            .await?
-        {
-            return Err(Error::ConflictError(
-                "同一基准版本已有进行中的销售变更单".to_string(),
-            ));
+        if self.has_in_progress_change(&req.sales_order_id, &base_revision_id).await? {
+            return Err(Error::ConflictError("同一基准版本已有进行中的销售变更单".to_string()));
         }
 
         let change_order = SalesChangeOrder::new(
@@ -184,11 +176,7 @@ impl SalesReviewService {
             },
             actor.id(),
         )?;
-        Ok(CreatedChangeWrite {
-            change_order,
-            working_copy,
-            lines,
-        })
+        Ok(CreatedChangeWrite { change_order, working_copy, lines })
     }
     /// 同一销售单同一基准版本是否已有进行中变更。
     ///
@@ -224,23 +212,17 @@ fn build_change_working_copy_lines_from_revision(
     working_copy_id: &SalesOrderWorkingCopyId,
     revision_lines: &[crate::entity::sales_order::SalesOrderRevisionLine],
     goods_lines: &[crate::entity::sales_order::SalesOrderGoodsServiceLineRevision],
-) -> Result<(
-    Vec<SalesOrderWorkingCopyLineData>,
-    Vec<crate::entity::sales_order::SalesOrderWorkingCopyLine>,
-)> {
+) -> Result<(Vec<SalesOrderWorkingCopyLineData>, Vec<crate::entity::sales_order::SalesOrderWorkingCopyLine>)>
+{
     if revision_lines.is_empty() {
-        return Err(Error::ConflictError(
-            "销售单当前版本没有明细，无法发起变更".to_string(),
-        ));
+        return Err(Error::ConflictError("销售单当前版本没有明细，无法发起变更".to_string()));
     }
     let mut datas = Vec::with_capacity(revision_lines.len());
     for line in revision_lines {
-        let goods = goods_lines
-            .iter()
-            .find(|goods| goods.revision_line_id.as_ref() == line.base.id)
-            .ok_or_else(|| {
-                Error::ConflictError(format!("销售单当前版本第 {} 行缺少实物服务快照", line.line_no))
-            })?;
+        let goods =
+            goods_lines.iter().find(|goods| goods.revision_line_id.as_ref() == line.base.id).ok_or_else(
+                || Error::ConflictError(format!("销售单当前版本第 {} 行缺少实物服务快照", line.line_no)),
+            )?;
         datas.push(line.to_goods_working_copy_data(goods)?);
     }
     let mut built = Vec::with_capacity(datas.len());

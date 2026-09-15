@@ -4,10 +4,8 @@
 //! 直接复用 `erp_import` 的领域 DTO 与 `erp_processes::import_apply::dto` 的组合响应，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
 use erp_import::{
     ApplyLegacyImportBatchRequest, CompleteImportBusinessConfirmationCommand, CreateLegacyImportBatchRequest,
     CreateLegacyImportConfirmationRequest, ImportExecutionCommand, ImportExecutionResult,
@@ -18,10 +16,9 @@ use erp_processes::import_apply::dto::{
     CompleteImportBusinessConfirmationResult, LegacyImportConfirmationView,
 };
 
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "导入与期初",
@@ -148,10 +145,7 @@ pub async fn legacy_import_execution_command(
     Path(id): Path<String>,
     Json(command): Json<ImportExecutionCommand>,
 ) -> Result<ImportExecutionResult> {
-    let result = state
-        .import_apply_service()
-        .execute_import_command(&id, command, &actor)
-        .await?;
+    let result = state.import_apply_service().execute_import_command(&id, command, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(result))
 }
@@ -203,10 +197,7 @@ pub async fn legacy_import_confirmation_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<LegacyImportConfirmationListParams>,
 ) -> Result<PageView<LegacyImportConfirmationView>> {
-    let page = state
-        .import_apply_service()
-        .confirmation_list(&params, &actor, state.rbac())
-        .await?;
+    let page = state.import_apply_service().confirmation_list(&params, &actor, state.rbac()).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -232,10 +223,7 @@ pub async fn legacy_import_confirmation_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateLegacyImportConfirmationRequest>,
 ) -> Result<LegacyImportConfirmationView> {
-    let view = state
-        .import_apply_service()
-        .create_confirmation(req, &actor)
-        .await?;
+    let view = state.import_apply_service().create_confirmation(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -261,10 +249,7 @@ pub async fn legacy_import_confirmation_complete(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CompleteImportBusinessConfirmationCommand>,
 ) -> Result<CompleteImportBusinessConfirmationResult> {
-    let view = state
-        .import_apply_service()
-        .complete_import_business_confirmation(req, &actor)
-        .await?;
+    let view = state.import_apply_service().complete_import_business_confirmation(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

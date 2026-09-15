@@ -1,19 +1,20 @@
 //! 创建选品册。
 
-use crate::dto::sales_selection::{
-    CreateSalesSelectionBookletRequest, PrepareSalesSelectionRequest, SalesSelectionBookletView,
-};
-use crate::entity::sales_selection::{
-    normalize_idempotency_key, request_hash, IdempotencyOperation, PoolSource, SalesSelectionBooklet,
-    SalesSelectionBookletData, SalesSelectionIdempotency, SalesSelectionIdempotencyData, TierRule,
-};
-use crate::ports::sales_selection::SelectionCustomerPort;
-use crate::repository::SalesSelectionExt;
-use crate::{Error, Result};
 use erp_core::ids::{CustomerAccountId, SalesSelectionBookletId, SalesSelectionIdempotencyId, SkuId};
 use persistence_core::{Executor, NoTransaction};
 
 use super::{IdempotencyStoreInput, SalesSelectionService};
+use crate::dto::sales_selection::{
+    CreateSalesSelectionBookletRequest, PrepareSalesSelectionRequest, SalesSelectionBookletView,
+};
+use crate::entity::sales_selection::{
+    IdempotencyOperation, PoolSource, SalesSelectionBooklet, SalesSelectionBookletData,
+    SalesSelectionIdempotency, SalesSelectionIdempotencyData, TierRule, normalize_idempotency_key,
+    request_hash,
+};
+use crate::ports::sales_selection::SelectionCustomerPort;
+use crate::repository::SalesSelectionExt;
+use crate::{Error, Result};
 
 impl SalesSelectionService {
     /// 创建选品册并在同一事务内排队首次准备。
@@ -40,9 +41,8 @@ impl SalesSelectionService {
     ) -> Result<SalesSelectionBookletView> {
         let key = normalize_idempotency_key(&req.idempotency_key)?;
         let hash = request_hash(&serde_json::to_string(&req).unwrap_or_default());
-        if let Some(replay) = self
-            .replay_idempotency(IdempotencyOperation::Create, actor_id, &key, &hash, executor)
-            .await?
+        if let Some(replay) =
+            self.replay_idempotency(IdempotencyOperation::Create, actor_id, &key, &hash, executor).await?
         {
             return Ok(replay);
         }
@@ -82,10 +82,7 @@ impl SalesSelectionService {
                 created_by: actor_id.to_string(),
             },
         )?;
-        self.db
-            .sales_selection_booklets()
-            .create(&booklet, executor)
-            .await?;
+        self.db.sales_selection_booklets().create(&booklet, executor).await?;
         let view = self
             .enqueue_prepare(
                 PrepareSalesSelectionRequest::first_prepare(
@@ -143,9 +140,7 @@ impl SalesSelectionService {
         let Some(record) = found else {
             return Ok(None);
         };
-        record
-            .ensure_same_request(hash)
-            .map_err(|error| Error::selection_conflict(error.to_string()))?;
+        record.ensure_same_request(hash).map_err(|error| Error::selection_conflict(error.to_string()))?;
         if operation.replays_live_booklet() {
             if let Some(id) = &record.booklet_id {
                 let book = self.load_booklet(id.as_ref(), executor).await?;
@@ -179,10 +174,7 @@ impl SalesSelectionService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let record = Self::idempotency_record(input)?;
-        self.db
-            .sales_selection_idempotency()
-            .create(&record, executor)
-            .await?;
+        self.db.sales_selection_idempotency().create(&record, executor).await?;
         Ok(())
     }
 

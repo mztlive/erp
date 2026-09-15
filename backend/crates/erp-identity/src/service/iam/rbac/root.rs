@@ -1,12 +1,10 @@
-use crate::entity::rbac::Permission;
-use crate::entity::role::{Role, RoleData};
-use crate::AccessControlExt;
 use persistence_core::NoTransaction;
 
-use super::{
-    policy::{permissions_for_role, root_role_is_current},
-    SharedRbacService, ROOT_ROLE_ID, ROOT_ROLE_INIT_ATTEMPTS, ROOT_ROLE_NAME,
-};
+use super::policy::{permissions_for_role, root_role_is_current};
+use super::{ROOT_ROLE_ID, ROOT_ROLE_INIT_ATTEMPTS, ROOT_ROLE_NAME, SharedRbacService};
+use crate::AccessControlExt;
+use crate::entity::rbac::Permission;
+use crate::entity::role::{Role, RoleData};
 use crate::error::{Error, Result};
 
 /// 确保 root 角色存在、拥有全量权限，且空范围时具备公司级 DataScope。
@@ -70,11 +68,7 @@ async fn ensure_root_company_data_scope(rbac: &SharedRbacService) -> Result<()> 
 /// # 业务约束
 /// 本方法不处理 DataScope；公司级范围由 [`ensure_root_role`] 在角色稳定后单独补齐。
 async fn ensure_root_role_once(rbac: &SharedRbacService, root_permission: &Permission) -> Result<Role> {
-    if let Some(role) = rbac
-        .db
-        .roles()
-        .find_by_id_including_deleted(ROOT_ROLE_ID, &mut NoTransaction)
-        .await?
+    if let Some(role) = rbac.db.roles().find_by_id_including_deleted(ROOT_ROLE_ID, &mut NoTransaction).await?
     {
         let enforcer = rbac.fresh_enforcer().await?.read().await;
         let permissions = permissions_for_role(&enforcer, ROOT_ROLE_ID)?;
@@ -85,19 +79,8 @@ async fn ensure_root_role_once(rbac: &SharedRbacService, root_permission: &Permi
         return rbac.repair_root_role(role, root_permission.clone()).await;
     }
 
-    let data = RoleData {
-        name: ROOT_ROLE_NAME.to_string(),
-        description: None,
-        system: true,
-    };
-    rbac.create_role_with_id(
-        ROOT_ROLE_ID.to_string(),
-        data,
-        vec![root_permission.clone()],
-        None,
-        None,
-    )
-    .await
+    let data = RoleData { name: ROOT_ROLE_NAME.to_string(), description: None, system: true };
+    rbac.create_role_with_id(ROOT_ROLE_ID.to_string(), data, vec![root_permission.clone()], None, None).await
 }
 
 #[cfg(test)]

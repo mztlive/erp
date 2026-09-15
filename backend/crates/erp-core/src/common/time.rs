@@ -10,7 +10,8 @@ use std::fmt;
 use std::str::FromStr;
 
 use chrono::{DateTime, Datelike, FixedOffset, NaiveDate, Utc};
-use serde::{de, de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
+use serde::de::Visitor;
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
 use crate::errors::{Error, Result};
 
@@ -241,10 +242,7 @@ mod tests {
         let from_u64: Instant = serde_json::from_str("1700000000").unwrap();
         assert_eq!(from_u64, instant);
 
-        assert!(
-            serde_json::from_str::<Instant>("1700000000.5").is_err(),
-            "禁止浮点"
-        );
+        assert!(serde_json::from_str::<Instant>("1700000000.5").is_err(), "禁止浮点");
     }
 
     /// Instant 的 BSON 形态为 Int64 且可往返。
@@ -255,9 +253,7 @@ mod tests {
             at: Instant,
         }
 
-        let doc = Doc {
-            at: Instant::from_unix_secs(1_700_000_000),
-        };
+        let doc = Doc { at: Instant::from_unix_secs(1_700_000_000) };
         let bson_doc = bson::serialize_to_document(&doc).unwrap();
         assert!(matches!(bson_doc.get("at"), Some(bson::Bson::Int64(_))));
         let back: Doc = bson::deserialize_from_document(bson_doc).unwrap();

@@ -1,17 +1,17 @@
-use crate::entity::supplier_settlement::{
-    SettlementStatus, SupplierSettlementDifference, SupplierSettlementItem, SupplierSettlementStatement,
-};
-use crate::repository::SupplierSettlementExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
-use super::{dto, zero_amount, SupplierSettlementService};
+use super::{SupplierSettlementService, dto, zero_amount};
+use crate::Result;
 use crate::dto::supplier_fulfillment::SortDir;
 use crate::dto::supplier_settlement::{
     StatementListQuery, SupplierSettlementItemView, SupplierSettlementStatementListParams,
     SupplierSettlementStatementListView, SupplierSettlementStatementView,
 };
-use crate::Result;
+use crate::entity::supplier_settlement::{
+    SettlementStatus, SupplierSettlementDifference, SupplierSettlementItem, SupplierSettlementStatement,
+};
+use crate::repository::SupplierSettlementExt;
 
 /// 结算单列表筛选条件类型（经 `SupplierSettlementExt` 关联类型跨 crate 可达）。
 type StatementFilter = <mongodb::Database as SupplierSettlementExt>::SupplierSettlementStatementFilter;
@@ -171,10 +171,7 @@ pub fn settlement_object_actions(
     actor_id: &str,
 ) -> (Vec<String>, Vec<dto::SettlementReviewActionBlockerView>, String) {
     let editable = statement.is_editable();
-    let pending = differences
-        .iter()
-        .filter(|difference| difference.is_pending())
-        .count();
+    let pending = differences.iter().filter(|difference| difference.is_pending()).count();
     let processing_state = if editable && pending == 0 {
         "READY_FOR_REVIEW"
     } else {
@@ -209,12 +206,7 @@ pub fn settlement_object_actions(
             ));
         }
     } else if editable {
-        for action in [
-            "REFRESH_TRIAL",
-            "RESOLVE_DIFFERENCE",
-            "VOID_DRAFT",
-            "SUBMIT_REVIEW",
-        ] {
+        for action in ["REFRESH_TRIAL", "RESOLVE_DIFFERENCE", "VOID_DRAFT", "SUBMIT_REVIEW"] {
             blockers.push(super::review::review_blocker(
                 action,
                 "PREPARER_REQUIRED",

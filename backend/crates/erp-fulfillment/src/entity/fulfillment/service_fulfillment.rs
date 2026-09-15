@@ -13,22 +13,20 @@ use std::fmt;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::fact::FactBase;
 use erp_core::common::source::SourceType;
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     FileAssetId, PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId, ServiceFulfillmentId,
 };
 use erp_core::money::Quantity;
-use erp_core::validation::normalize_optional_text;
-use erp_core::validation::normalize_required_text;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::electronic_delivery::FulfillmentResult;
-use super::fingerprint::{hmac_sha256_hex, validate_fingerprint, FINGERPRINT_HEX_LEN};
+use super::fingerprint::{FINGERPRINT_HEX_LEN, hmac_sha256_hex, validate_fingerprint};
 
 /// 履约记录号最大长度。
 const FULFILLMENT_NO_MAX_LEN: usize = 64;
@@ -329,10 +327,7 @@ impl fmt::Debug for ServiceFulfillment {
             .field("fulfillment_no", &self.fulfillment_no)
             .field("sales_order_line_id", &self.sales_order_line_id)
             .field("purchase_order_id", &self.purchase_order_id)
-            .field(
-                "purchase_line_sales_allocation_id",
-                &self.purchase_line_sales_allocation_id,
-            )
+            .field("purchase_line_sales_allocation_id", &self.purchase_line_sales_allocation_id)
             .field("recipient_snapshot", &"<redacted>")
             .field("recipient_snapshot_fingerprint", &"<redacted>")
             .field("quantity", &self.quantity)
@@ -778,9 +773,11 @@ fn require_evidence_attachment_id(evidence_attachment_id: FileAssetId) -> Result
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::*;
-    use erp_core::ids::ServiceFulfillmentId;
     use std::str::FromStr;
+
+    use erp_core::ids::ServiceFulfillmentId;
+
+    use super::*;
 
     const PLAINTEXT_RECIPIENT: &str = "收货人 王五 13912345678";
     const PLAINTEXT_LOCATION: &str = "上海市徐汇区漕河泾开发区xx大厦 3F 会议室A";
@@ -837,16 +834,11 @@ pub(crate) mod tests {
     /// 失败路径：必填空、指纹格式非法、服务时间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank_no = ServiceFulfillmentData {
-            fulfillment_no: "   ".to_string(),
-            ..data()
-        };
+        let blank_no = ServiceFulfillmentData { fulfillment_no: "   ".to_string(), ..data() };
         assert!(ServiceFulfillment::new(ServiceFulfillmentId::new("sf-2"), blank_no).is_err());
 
-        let bad_location_fingerprint = ServiceFulfillmentData {
-            service_location_fingerprint: "bad".to_string(),
-            ..data()
-        };
+        let bad_location_fingerprint =
+            ServiceFulfillmentData { service_location_fingerprint: "bad".to_string(), ..data() };
         assert!(
             ServiceFulfillment::new(ServiceFulfillmentId::new("sf-3"), bad_location_fingerprint).is_err()
         );
@@ -858,16 +850,10 @@ pub(crate) mod tests {
         };
         assert!(ServiceFulfillment::new(ServiceFulfillmentId::new("sf-4"), reversed_window).is_err());
 
-        let zero_quantity = ServiceFulfillmentData {
-            quantity: Quantity::from_str("0").unwrap(),
-            ..data()
-        };
+        let zero_quantity = ServiceFulfillmentData { quantity: Quantity::from_str("0").unwrap(), ..data() };
         assert!(ServiceFulfillment::new(ServiceFulfillmentId::new("sf-5"), zero_quantity).is_err());
 
-        let overlong_note = ServiceFulfillmentData {
-            completion_note: Some("x".repeat(513)),
-            ..data()
-        };
+        let overlong_note = ServiceFulfillmentData { completion_note: Some("x".repeat(513)), ..data() };
         assert!(ServiceFulfillment::new(ServiceFulfillmentId::new("sf-6"), overlong_note).is_err());
     }
 
@@ -878,10 +864,7 @@ pub(crate) mod tests {
         assert!(fulfillment.reverse().is_err(), "草稿不能直接冲正");
         assert!(
             fulfillment
-                .update(ServiceFulfillmentUpdate {
-                    result: None,
-                    completion_note: Some("   ".to_string()),
-                })
+                .update(ServiceFulfillmentUpdate { result: None, completion_note: Some("   ".to_string()) })
                 .is_ok(),
             "空完成说明视为清除"
         );
@@ -889,28 +872,18 @@ pub(crate) mod tests {
         // from == to 幂等迁移恒合法（state.rs 契约）；CONFIRMED 不可编辑由 update 把关。
         assert!(fulfillment.confirm().is_ok());
         assert!(
-            fulfillment
-                .update(ServiceFulfillmentUpdate {
-                    result: None,
-                    completion_note: None,
-                })
-                .is_err(),
+            fulfillment.update(ServiceFulfillmentUpdate { result: None, completion_note: None }).is_err(),
             "已确认不可编辑"
         );
         assert!(fulfillment.reverse().is_ok());
-        assert!(
-            fulfillment.reverse().is_ok(),
-            "REVERSED 幂等迁移合法，且无法迁移到其他状态"
-        );
+        assert!(fulfillment.reverse().is_ok(), "REVERSED 幂等迁移合法，且无法迁移到其他状态");
 
         assert!(
             ensure_transition(ServiceFulfillmentState::Draft, ServiceFulfillmentState::Confirmed).is_ok()
         );
-        assert!(ensure_transition(
-            ServiceFulfillmentState::Confirmed,
-            ServiceFulfillmentState::Reversed
-        )
-        .is_ok());
+        assert!(
+            ensure_transition(ServiceFulfillmentState::Confirmed, ServiceFulfillmentState::Reversed).is_ok()
+        );
         assert!(
             ensure_transition(ServiceFulfillmentState::Draft, ServiceFulfillmentState::Reversed).is_err()
         );
@@ -924,10 +897,7 @@ pub(crate) mod tests {
     fn confirm_requires_image_evidence_and_stays_idempotent() {
         let mut missing_evidence = ServiceFulfillment::new(
             ServiceFulfillmentId::new("sf-evidence"),
-            ServiceFulfillmentData {
-                evidence_attachment_id: None,
-                ..data()
-            },
+            ServiceFulfillmentData { evidence_attachment_id: None, ..data() },
         )
         .unwrap();
         assert!(missing_evidence.ensure_evidence_present().is_err());
@@ -948,16 +918,11 @@ pub(crate) mod tests {
         })
         .unwrap();
         missing_evidence.apply_confirmation(confirmation).unwrap();
-        assert_eq!(
-            missing_evidence.evidence_attachment_id,
-            Some(FileAssetId::new("file-confirm"))
-        );
+        assert_eq!(missing_evidence.evidence_attachment_id, Some(FileAssetId::new("file-confirm")));
         missing_evidence.confirm().unwrap();
         assert_eq!(missing_evidence.status, ServiceFulfillmentState::Confirmed);
         assert!(missing_evidence.confirm().is_ok());
-        assert!(missing_evidence
-            .ensure_draft_version(missing_evidence.base.version)
-            .is_err());
+        assert!(missing_evidence.ensure_draft_version(missing_evidence.base.version).is_err());
     }
 
     /// 确认不得放大或缩小采购销售分配冻结的服务数量。
@@ -1037,21 +1002,15 @@ pub(crate) mod tests {
     fn confirmation_and_acceptance_rules_are_entity_owned() {
         let mut fulfillment = ServiceFulfillment::new(ServiceFulfillmentId::new("sf-rule"), data()).unwrap();
         assert!(fulfillment.ensure_confirmable().is_ok());
-        assert!(fulfillment
-            .acceptance_quantity(&SalesOrderLineId::new("so-line-1"))
-            .is_err());
+        assert!(fulfillment.acceptance_quantity(&SalesOrderLineId::new("so-line-1")).is_err());
         fulfillment.confirm().unwrap();
         assert!(fulfillment.ensure_confirmable().is_err());
         assert!(fulfillment.is_acceptance_eligible());
         assert_eq!(
-            fulfillment
-                .acceptance_quantity(&SalesOrderLineId::new("so-line-1"))
-                .unwrap(),
+            fulfillment.acceptance_quantity(&SalesOrderLineId::new("so-line-1")).unwrap(),
             Quantity::from_str("1").unwrap()
         );
-        assert!(fulfillment
-            .acceptance_quantity(&SalesOrderLineId::new("other-line"))
-            .is_err());
+        assert!(fulfillment.acceptance_quantity(&SalesOrderLineId::new("other-line")).is_err());
         assert_eq!(fulfillment.registration_context_id().unwrap(), "so-line-1");
         let mut missing_context = fulfillment.clone();
         missing_context.sales_order_line_id = SalesOrderLineId::new("   ");
@@ -1059,17 +1018,12 @@ pub(crate) mod tests {
 
         let mut failed = ServiceFulfillment::new(
             ServiceFulfillmentId::new("sf-failed"),
-            ServiceFulfillmentData {
-                result: FulfillmentResult::Failure,
-                ..data()
-            },
+            ServiceFulfillmentData { result: FulfillmentResult::Failure, ..data() },
         )
         .unwrap();
         failed.confirm().unwrap();
         assert!(!failed.is_acceptance_eligible());
-        assert!(failed
-            .acceptance_quantity(&SalesOrderLineId::new("so-line-1"))
-            .is_err());
+        assert!(failed.acceptance_quantity(&SalesOrderLineId::new("so-line-1")).is_err());
     }
 
     /// 敏感字段：双指纹稳定且带密钥；Debug 不泄漏明文/密文/指纹。

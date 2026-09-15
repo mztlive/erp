@@ -7,8 +7,9 @@
 //! （pending 路径恒为 `false`，stored 路径为 `destroyed_at.is_some()`），
 //! 校验不依赖当前时间。
 
-use crate::entity::file_asset::{RetentionClass, SensitivityClass};
 use erp_core::{Error, Result};
+
+use crate::entity::file_asset::{RetentionClass, SensitivityClass};
 
 /// 银行回单证据策略。
 ///
@@ -98,15 +99,9 @@ mod tests {
     /// 拒绝的 MIME 及边界形态：非图片、简写、大小写、空白均不得通过。
     #[test]
     fn rejects_unsupported_content_types() {
-        for content_type in [
-            "application/pdf",
-            "image/gif",
-            "image/jpg",
-            "IMAGE/PNG",
-            " image/png",
-            "image/png ",
-            "",
-        ] {
+        for content_type in
+            ["application/pdf", "image/gif", "image/jpg", "IMAGE/PNG", " image/png", "image/png ", ""]
+        {
             let error = BankReceiptEvidencePolicy::validate(
                 content_type,
                 SensitivityClass::Sensitive,

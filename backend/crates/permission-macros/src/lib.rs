@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, punctuated::Punctuated, Expr, ItemFn, Lit, LitStr, MetaNameValue, Token};
+use syn::punctuated::Punctuated;
+use syn::{Expr, ItemFn, Lit, LitStr, MetaNameValue, Token, parse_macro_input};
 
 /// Permission macro arguments.
 ///
@@ -75,7 +76,7 @@ fn parse_permission_args(args: Punctuated<MetaNameValue, Token![,]>) -> syn::Res
         match name.as_deref() {
             Some("resource") => resource = Some(value),
             Some("action") => action = Some(value),
-            _ => {}
+            _ => {},
         }
     }
 

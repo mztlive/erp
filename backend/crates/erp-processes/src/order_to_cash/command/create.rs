@@ -1,42 +1,41 @@
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_contract::ContractExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{BusinessDocumentId, ContractId, CustomerAccountId, SalesOrderId, WorkflowActionId};
 use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
+use erp_sales::dto::sales_order::{
+    CreateSalesOrderRequest, SalesOrderCreateIntent, SalesOrderDraftRequest, SalesOrderEditableDraftRequest,
+};
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::service::sales_order::command::identity::{
     sales_order_create_audit_id, sales_order_create_fingerprint, sales_submission_audit_id,
 };
+use erp_sales::service::sales_order::mapper::{
+    build_stable_lines, build_submission, build_submission_lines, build_working_copy,
+};
+use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::{
     BusinessDocument, BusinessDocumentData, WorkflowAction, WorkflowActionData, WorkflowActionType,
 };
-use erp_workflow::DocumentRegistryExt;
+use erp_workflow::service::approval::execution::prepare_start;
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
+use super::super::SalesOrderCommandProcess;
 use super::super::adapter::{
-    build_sales_order_snapshot, execute_sales_order_domain_action, sales_approval_ports,
-    sales_order_object_readable, sales_order_responsible_org_id, sales_order_start_command,
-    start_approval_command_kind, RECENT_HISTORY_LIMIT,
+    RECENT_HISTORY_LIMIT, build_sales_order_snapshot, execute_sales_order_domain_action,
+    sales_approval_ports, sales_order_object_readable, sales_order_responsible_org_id,
+    sales_order_start_command, start_approval_command_kind,
 };
 use super::super::start_approval::{
-    build_sales_order_start_input, load_bound_definition_graph_with_executor, persist_runtime_writes,
-    SalesOrderRuntimeWriteInput, SalesOrderStartInput,
+    SalesOrderRuntimeWriteInput, SalesOrderStartInput, build_sales_order_start_input,
+    load_bound_definition_graph_with_executor, persist_runtime_writes,
 };
-use super::super::SalesOrderCommandProcess;
 use super::identity::{persist_bound_sales_document, sales_create_bind_command};
 use super::submit::ensure_unified_start_command;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_sales::dto::sales_order::{
-    CreateSalesOrderRequest, SalesOrderCreateIntent, SalesOrderDraftRequest, SalesOrderEditableDraftRequest,
-};
-use erp_sales::service::sales_order::mapper::{
-    build_stable_lines, build_submission, build_submission_lines, build_working_copy,
-};
-use erp_workflow::service::approval::execution::prepare_start;
 
 impl SalesOrderCommandProcess {
     /// 解析销售命令所选合同的客户身份，供 HTTP 层执行客户数据范围校验。
@@ -56,11 +55,7 @@ impl SalesOrderCommandProcess {
     #[tracing::instrument(
         name = "sales_order.resolve_customer_scope",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "sales_order",
-            operation = "resolve_customer_scope"
-        )
+        fields(layer = "service", domain = "sales_order", operation = "resolve_customer_scope")
     )]
     pub async fn sales_command_customer_id(
         &self,
@@ -68,9 +63,7 @@ impl SalesOrderCommandProcess {
         contract_id: &ContractId,
     ) -> Result<CustomerAccountId> {
         let access = self.command_access(actor, "detail")?;
-        let contract = access
-            .load_contract(contract_id.as_ref(), &mut NoTransaction)
-            .await?;
+        let contract = access.load_contract(contract_id.as_ref(), &mut NoTransaction).await?;
         Ok(contract.customer_id)
     }
 
@@ -100,16 +93,12 @@ impl SalesOrderCommandProcess {
         editable.validate()?;
         let contract = access.load_contract(contract_id.as_ref(), executor).await?;
         if contract.stable.status != erp_contract::ContractStatus::Effective {
-            return Err(Error::BusinessLogicError(
-                "合同当前不可用于新销售提交".to_string(),
-            ));
+            return Err(Error::BusinessLogicError("合同当前不可用于新销售提交".to_string()));
         }
         if contract.stable.current_revision_id.as_deref()
             != Some(editable.requested_contract_revision_id.as_ref())
         {
-            return Err(Error::ConflictError(
-                "所选合同版本已不是当前可用版本，请刷新后重新选择".to_string(),
-            ));
+            return Err(Error::ConflictError("所选合同版本已不是当前可用版本，请刷新后重新选择".to_string()));
         }
         let revision = self
             .db
@@ -121,17 +110,11 @@ impl SalesOrderCommandProcess {
             return Err(Error::ValidationError("合同版本不属于所选合同".to_string()));
         }
         if !revision.matches_settlement_party(&contract.settlement_party_id) {
-            return Err(Error::ConflictError(
-                "合同当前结算主体与所选版本不一致，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("合同当前结算主体与所选版本不一致，请刷新后重试".to_string()));
         }
-        let customer = access
-            .load_customer(contract.customer_id.as_ref(), executor)
-            .await?;
+        let customer = access.load_customer(contract.customer_id.as_ref(), executor).await?;
         if !customer.is_active() {
-            return Err(Error::BusinessLogicError(
-                "客户已停用，禁止创建新销售单".to_string(),
-            ));
+            return Err(Error::BusinessLogicError("客户已停用，禁止创建新销售单".to_string()));
         }
         let draft = SalesOrderDraftRequest {
             editor_user_id: editable.editor_user_id,
@@ -194,22 +177,15 @@ impl SalesOrderCommandProcess {
         req.idempotency_key.clone_from(&idempotency_key);
         let audit_id = sales_order_create_audit_id(actor.id(), &idempotency_key);
         let fingerprint = sales_order_create_fingerprint(actor.id(), &req)?;
-        if let Some(order_id) = self
-            .replay_sales_order_creation(&audit_id, &fingerprint, actor.id(), &access)
-            .await?
+        if let Some(order_id) =
+            self.replay_sales_order_creation(&audit_id, &fingerprint, actor.id(), &access).await?
         {
-            return self
-                .read_model()
-                .sales_order_detail(&order_id, None)
-                .await
-                .map_err(crate::Error::from);
+            return self.read_model().sales_order_detail(&order_id, None).await.map_err(crate::Error::from);
         }
         let (customer_id, settlement_party_id, draft) = self
             .resolve_sales_command_draft(&access, &req.contract_id, req.draft.clone(), &mut NoTransaction)
             .await?;
-        self.sales()
-            .ensure_sellable_draft_lines(&draft.lines, &self.catalog())
-            .await?;
+        self.sales().ensure_sellable_draft_lines(&draft.lines, &self.catalog()).await?;
 
         let business_org_unit_id =
             crate::business_ownership::required_business_org(&self.db, actor.id(), &mut NoTransaction)
@@ -225,10 +201,7 @@ impl SalesOrderCommandProcess {
         let document_type = crate::order_to_cash::document_type_of_sales_business(req.business_type);
         let document = BusinessDocument::new(
             BusinessDocumentId::new(order.base.id.clone()),
-            BusinessDocumentData {
-                document_type,
-                document_no: order.order_no.clone(),
-            },
+            BusinessDocumentData { document_type, document_no: order.order_no.clone() },
         )?;
         let stable_lines = build_stable_lines(&order_id, &draft.lines)?;
         let (working_copy, working_copy_lines) = build_working_copy(&order, &stable_lines, &draft, 1, actor)?;
@@ -240,8 +213,7 @@ impl SalesOrderCommandProcess {
                     .map_err(|error| Error::ValidationError(error.to_string()))?;
             let organization_id = sales_order_responsible_org_id(&order)?;
             let _ = sales_order_object_readable(&organization_id, actor.id())?;
-            self.ensure_procurement_responsibility_before_submit(&order, &working_copy_lines)
-                .await?;
+            self.ensure_procurement_responsibility_before_submit(&order, &working_copy_lines).await?;
             let submission = build_submission(&working_copy, &working_copy_lines, 1, actor)?;
             let submission_lines = build_submission_lines(&submission, &working_copy_lines)?;
             let mut submitted_working_copy = working_copy;
@@ -361,9 +333,7 @@ impl SalesOrderCommandProcess {
                                 session,
                             )
                             .await?;
-                        sales
-                            .create_submission(&submission, &submission_lines, session)
-                            .await?;
+                        sales.create_submission(&submission, &submission_lines, session).await?;
                         db.workflow_actions().create(&workflow_action, session).await?;
                         if let erp_workflow::service::approval::execution::PreparedExecution::Apply(writes) =
                             prepared
@@ -389,9 +359,8 @@ impl SalesOrderCommandProcess {
                 })
                 .await;
             if let Err(error) = transaction_result {
-                if let Some(order_id) = self
-                    .replay_sales_order_creation(&audit_id, &fingerprint, actor.id(), &access)
-                    .await?
+                if let Some(order_id) =
+                    self.replay_sales_order_creation(&audit_id, &fingerprint, actor.id(), &access).await?
                 {
                     return self
                         .read_model()
@@ -401,11 +370,7 @@ impl SalesOrderCommandProcess {
                 }
                 return Err(error);
             }
-            return self
-                .read_model()
-                .sales_order_detail(&detail_id, None)
-                .await
-                .map_err(crate::Error::from);
+            return self.read_model().sales_order_detail(&detail_id, None).await.map_err(crate::Error::from);
         }
 
         let audit = actor.clone().resource_log_with_id(
@@ -479,9 +444,8 @@ impl SalesOrderCommandProcess {
             })
             .await;
         if let Err(error) = transaction_result {
-            if let Some(order_id) = self
-                .replay_sales_order_creation(&audit_id, &fingerprint, actor.id(), &access)
-                .await?
+            if let Some(order_id) =
+                self.replay_sales_order_creation(&audit_id, &fingerprint, actor.id(), &access).await?
             {
                 return self
                     .read_model()
@@ -492,10 +456,7 @@ impl SalesOrderCommandProcess {
             return Err(error);
         }
 
-        self.read_model()
-            .sales_order_detail(&order.base.id, None)
-            .await
-            .map_err(crate::Error::from)
+        self.read_model().sales_order_detail(&order.base.id, None).await.map_err(crate::Error::from)
     }
 
     /// 按稳定审计收据回读已创建的销售单身份。
@@ -506,12 +467,7 @@ impl SalesOrderCommandProcess {
         actor_id: &str,
         access: &super::super::authorization::SalesCommandAccess,
     ) -> Result<Option<String>> {
-        let Some(audit) = self
-            .db
-            .audit_logs()
-            .find_by_id(audit_id, &mut NoTransaction)
-            .await?
-        else {
+        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
             return Ok(None);
         };
         if audit.action != "sales_order.create"
@@ -521,13 +477,10 @@ impl SalesOrderCommandProcess {
             return Err(Error::Internal("销售建单幂等收据身份不一致".to_string()));
         }
         if audit.message.as_deref() != Some(&format!("command_sha256={expected_fingerprint}")) {
-            return Err(Error::ConflictError(
-                "同一幂等键已用于不同的销售建单命令".to_string(),
-            ));
+            return Err(Error::ConflictError("同一幂等键已用于不同的销售建单命令".to_string()));
         }
-        let order_id = audit
-            .resource_id
-            .ok_or_else(|| Error::Internal("销售建单幂等收据缺少结果引用".to_string()))?;
+        let order_id =
+            audit.resource_id.ok_or_else(|| Error::Internal("销售建单幂等收据缺少结果引用".to_string()))?;
         let order = self
             .db
             .sales_orders()

@@ -8,7 +8,7 @@ use jwt_hmac::{Hmac, Mac};
 use jwt_sha2::Sha256;
 use serde_json::Value;
 
-use crate::seed::{seed_login, ACCOUNT_VERSION};
+use crate::seed::{ACCOUNT_VERSION, seed_login};
 use crate::{Error, Result};
 
 /// JWT 密钥最小字节数（与 web-api `JwtEngine::new` 一致）。
@@ -58,10 +58,7 @@ fn private_claims(account_id: &str) -> BTreeMap<String, Value> {
     let mut claims = BTreeMap::new();
     claims.insert("id".to_string(), Value::String(account_id.to_string()));
     claims.insert("account".to_string(), Value::String(seed_login(account_id)));
-    claims.insert(
-        "subject_kind".to_string(),
-        Value::String("backoffice".to_string()),
-    );
+    claims.insert("subject_kind".to_string(), Value::String("backoffice".to_string()));
     claims.insert("account_kind".to_string(), Value::String("admin".to_string()));
     claims.insert("account_version".to_string(), Value::from(ACCOUNT_VERSION));
     claims

@@ -12,10 +12,7 @@ pub struct QueueContextField {
 impl QueueContextField {
     /// 构造单值字段。
     pub fn scalar(name: impl Into<String>, value: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            values: vec![value.into()],
-        }
+        Self { name: name.into(), values: vec![value.into()] }
     }
 
     /// 构造可选单值字段，显式区分缺失和值。
@@ -34,10 +31,7 @@ impl QueueContextField {
         let mut values = values.into_iter().collect::<Vec<_>>();
         values.sort();
         values.dedup();
-        Self {
-            name: name.into(),
-            values,
-        }
+        Self { name: name.into(), values }
     }
 
     /// 把多个分量编码为无拼接碰撞的单个集合值。
@@ -99,17 +93,11 @@ mod tests {
     fn unordered_semantic_sets_have_one_identity() {
         let left = QueueContextIdentity::new(
             "work-items",
-            [QueueContextField::set(
-                "types",
-                ["B".to_string(), "A".to_string()],
-            )],
+            [QueueContextField::set("types", ["B".to_string(), "A".to_string()])],
         );
         let right = QueueContextIdentity::new(
             "work-items",
-            [QueueContextField::set(
-                "types",
-                ["A".to_string(), "B".to_string()],
-            )],
+            [QueueContextField::set("types", ["A".to_string(), "B".to_string()])],
         );
         assert_eq!(left, right);
         assert_eq!(left.as_str().len(), 72);
@@ -119,17 +107,11 @@ mod tests {
     fn field_changes_and_tuple_boundaries_change_identity() {
         let left = QueueContextIdentity::new(
             "work-items",
-            [QueueContextField::scalar(
-                "scope",
-                QueueContextField::tuple(["ab".into(), "c".into()]),
-            )],
+            [QueueContextField::scalar("scope", QueueContextField::tuple(["ab".into(), "c".into()]))],
         );
         let right = QueueContextIdentity::new(
             "work-items",
-            [QueueContextField::scalar(
-                "scope",
-                QueueContextField::tuple(["a".into(), "bc".into()]),
-            )],
+            [QueueContextField::scalar("scope", QueueContextField::tuple(["a".into(), "bc".into()]))],
         );
         assert_ne!(left, right);
     }

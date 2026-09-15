@@ -8,10 +8,7 @@ impl WorkItemFactsReader {
         id: &str,
         executor: &mut dyn persistence_core::Executor,
     ) -> crate::errors::Result<bool> {
-        Ok(self
-            .counterparty_numbers(kind, &[id.to_string()], executor)
-            .await?
-            .contains_key(id))
+        Ok(self.counterparty_numbers(kind, &[id.to_string()], executor).await?.contains_key(id))
     }
 
     /// Display numbers for counterparties of one kind.
@@ -32,12 +29,7 @@ impl WorkItemFactsReader {
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<bool> {
         use erp_support::SourceRegistryExt;
-        Ok(self
-            .db
-            .external_identity_maps()
-            .find_by_id(id, executor)
-            .await?
-            .is_some())
+        Ok(self.db.external_identity_maps().find_by_id(id, executor).await?.is_some())
     }
 }
 
@@ -103,9 +95,10 @@ async fn numbers(
 }
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use super::*;
     use crate::errors::Error;
-    use std::sync::Mutex;
     struct TestExecutor {
         reads: usize,
     }
@@ -127,10 +120,7 @@ mod tests {
             id: &str,
             executor: &mut dyn persistence_core::Executor,
         ) -> crate::errors::Result<Option<String>> {
-            assert_eq!(
-                executor as *mut dyn persistence_core::Executor as *mut () as usize,
-                self.executor
-            );
+            assert_eq!(executor as *mut dyn persistence_core::Executor as *mut () as usize, self.executor);
             executor.session();
             self.seen.lock().unwrap().push((kind, id.to_string()));
             match id {
@@ -143,27 +133,11 @@ mod tests {
     #[tokio::test]
     async fn counterparty_recipe_preserves_duplicate_reads_input_order_and_same_executor() {
         let mut ex = TestExecutor { reads: 0 };
-        let source = Source {
-            seen: Mutex::new(Vec::new()),
-            executor: &mut ex as *mut TestExecutor as usize,
-        };
-        let ids = vec![
-            "second".to_string(),
-            "missing".to_string(),
-            "second".to_string(),
-            "first".to_string(),
-        ];
+        let source = Source { seen: Mutex::new(Vec::new()), executor: &mut ex as *mut TestExecutor as usize };
+        let ids =
+            vec!["second".to_string(), "missing".to_string(), "second".to_string(), "first".to_string()];
         let result = numbers(&source, "supplier", &ids, &mut ex).await.unwrap();
-        assert_eq!(
-            source
-                .seen
-                .lock()
-                .unwrap()
-                .iter()
-                .map(|x| x.1.clone())
-                .collect::<Vec<_>>(),
-            ids
-        );
+        assert_eq!(source.seen.lock().unwrap().iter().map(|x| x.1.clone()).collect::<Vec<_>>(), ids);
         assert_eq!(result.len(), 2);
         assert_eq!(result["second"], "second-number");
         assert_eq!(ex.reads, 4);
@@ -171,24 +145,15 @@ mod tests {
     #[tokio::test]
     async fn unknown_kind_performs_no_reads_and_first_error_stops_later_ids() {
         let mut ex = TestExecutor { reads: 0 };
-        let source = Source {
-            seen: Mutex::new(Vec::new()),
-            executor: &mut ex as *mut TestExecutor as usize,
-        };
+        let source = Source { seen: Mutex::new(Vec::new()), executor: &mut ex as *mut TestExecutor as usize };
         let ids = vec!["first".to_string(), "error".to_string(), "never".to_string()];
-        assert!(numbers(&source, "SUPPLIER", &ids, &mut ex)
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(numbers(&source, "SUPPLIER", &ids, &mut ex).await.unwrap().is_empty());
         assert_eq!(ex.reads, 0);
         let error = numbers(&source, "customer", &ids, &mut ex).await.unwrap_err();
         assert!(matches!(error,Error::ValidationError(message) if message=="number-read"));
         assert_eq!(
             *source.seen.lock().unwrap(),
-            vec![
-                (Kind::Customer, "first".to_string()),
-                (Kind::Customer, "error".to_string())
-            ]
+            vec![(Kind::Customer, "first".to_string()), (Kind::Customer, "error".to_string())]
         );
         assert_eq!(ex.reads, 2);
     }

@@ -1,13 +1,13 @@
 //! 应收往来子账与客户回款的写入命令 DTO。
 
-use crate::entity::receivable::AccountReviewStatus;
+use application_core::non_blank;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{CustomerAccountId, PartyId, ReceivableEntryId};
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use application_core::non_blank;
+use crate::entity::receivable::AccountReviewStatus;
 
 /// 应收往来子账创建请求（W11「从销售单登记应收」：子账 + 原始应收分录）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]

@@ -20,7 +20,7 @@ trait EvidenceStore: Send {
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierSettlementDifference>>;
     async fn item(&mut self, id: &str, executor: &mut dyn Executor)
-        -> Result<Option<SupplierSettlementItem>>;
+    -> Result<Option<SupplierSettlementItem>>;
     async fn statement(
         &mut self,
         id: &str,
@@ -50,43 +50,28 @@ impl EvidenceStore for MongoEvidenceStore<'_> {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierSettlementDifference>> {
-        Ok(self
-            .db
-            .supplier_settlement_differences()
-            .find_by_id(id, executor)
-            .await?)
+        Ok(self.db.supplier_settlement_differences().find_by_id(id, executor).await?)
     }
     async fn item(
         &mut self,
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierSettlementItem>> {
-        Ok(self
-            .db
-            .supplier_settlement_items()
-            .find_by_id(id, executor)
-            .await?)
+        Ok(self.db.supplier_settlement_items().find_by_id(id, executor).await?)
     }
     async fn statement(
         &mut self,
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierSettlementStatement>> {
-        Ok(self
-            .db
-            .supplier_settlement_statements()
-            .find_by_id(id, executor)
-            .await?)
+        Ok(self.db.supplier_settlement_statements().find_by_id(id, executor).await?)
     }
     async fn update_statement(
         &mut self,
         statement: &mut SupplierSettlementStatement,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .supplier_settlement_statements()
-            .update(statement, executor)
-            .await?;
+        self.db.supplier_settlement_statements().update(statement, executor).await?;
         Ok(())
     }
     async fn create_evidence(
@@ -94,10 +79,7 @@ impl EvidenceStore for MongoEvidenceStore<'_> {
         evidence: &SupplierSettlementDifferenceEvidence,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .supplier_settlement_difference_evidence()
-            .create(evidence, executor)
-            .await?;
+        self.db.supplier_settlement_difference_evidence().create(evidence, executor).await?;
         Ok(())
     }
 }
@@ -136,18 +118,14 @@ async fn persist_with_store<S: EvidenceStore>(
         .await?
         .ok_or_else(|| Error::NotFound("供应商结算差异不存在".to_string()))?;
     if current.base.version != expected_version {
-        return Err(Error::ConflictError(
-            "结算差异版本已变化，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("结算差异版本已变化，请刷新后重试".to_string()));
     }
     let item = store
         .item(current.statement_item_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("结算差异所属明细不存在".to_string()))?;
     if item.statement_id.as_ref() != statement_id {
-        return Err(Error::BusinessLogicError(
-            "差异不属于命令指定的结算单".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("差异不属于命令指定的结算单".to_string()));
     }
     let mut statement = store
         .statement(statement_id, executor)
@@ -157,9 +135,7 @@ async fn persist_with_store<S: EvidenceStore>(
         statement.status,
         SettlementStatus::Draft | SettlementStatus::PendingReconciliation | SettlementStatus::HasDifference
     ) {
-        return Err(Error::BusinessLogicError(
-            "当前结算状态禁止追加差异补证".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("当前结算状态禁止追加差异补证".to_string()));
     }
     // 补证属于结算主题变更：与提交复核共同 CAS 同一结算单，禁止
     // `PENDING_REVIEW` 状态推进和迟到证据在不同文档上并发穿透。
@@ -170,19 +146,21 @@ async fn persist_with_store<S: EvidenceStore>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::entity::supplier_settlement::{
-        SettlementDifferenceStatus, SettlementDifferenceType, SupplierSettlementDifferenceData,
-        SupplierSettlementDifferenceEvidenceData, SupplierSettlementItemData,
-        SupplierSettlementStatementData,
-    };
+    use std::str::FromStr;
+
     use erp_core::common::time::{BusinessDate, Instant};
     use erp_core::ids::{
         SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
         SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
     };
     use erp_core::money::{Amount, Quantity};
-    use std::str::FromStr;
+
+    use super::*;
+    use crate::entity::supplier_settlement::{
+        SettlementDifferenceStatus, SettlementDifferenceType, SupplierSettlementDifferenceData,
+        SupplierSettlementDifferenceEvidenceData, SupplierSettlementItemData,
+        SupplierSettlementStatementData,
+    };
 
     struct TestExecutor {
         _identity: u8,
@@ -233,8 +211,7 @@ mod tests {
         }
         fn record(&mut self, step: Step, id: &str, executor: &mut dyn Executor) -> Result<()> {
             self.calls.push((step, id.to_string()));
-            self.executors
-                .push(executor as *mut dyn Executor as *mut () as usize);
+            self.executors.push(executor as *mut dyn Executor as *mut () as usize);
             if self.fail == Some(step) {
                 return Err(Error::Forbidden(format!("io:{step:?}")));
             }
@@ -320,21 +297,11 @@ mod tests {
             let evidence = sample_evidence("evidence-1", "difference-1", 1700000000);
             let mut executor = TestExecutor { _identity: 1 };
             let identity = &mut executor as *mut TestExecutor as usize;
-            persist_with_store(
-                &mut store,
-                "difference-1",
-                "statement-1",
-                7,
-                &evidence,
-                &mut executor,
-            )
-            .await
-            .unwrap();
+            persist_with_store(&mut store, "difference-1", "statement-1", 7, &evidence, &mut executor)
+                .await
+                .unwrap();
             assert_trace(&store, 5, identity);
-            assert_eq!(
-                store.written_statement.as_ref().unwrap().base.version,
-                version + 1
-            );
+            assert_eq!(store.written_statement.as_ref().unwrap().base.version, version + 1);
             assert_eq!(store.written_evidence.as_ref(), Some(&evidence));
         }
     }
@@ -347,15 +314,9 @@ mod tests {
             let evidence = sample_evidence("evidence-1", "difference-1", 1700000000);
             let mut executor = TestExecutor { _identity: 2 };
             let identity = &mut executor as *mut TestExecutor as usize;
-            let result = persist_with_store(
-                &mut store,
-                "difference-1",
-                "statement-1",
-                7,
-                &evidence,
-                &mut executor,
-            )
-            .await;
+            let result =
+                persist_with_store(&mut store, "difference-1", "statement-1", 7, &evidence, &mut executor)
+                    .await;
             assert!(matches!(result,Err(Error::Forbidden(message)) if message==format!("io:{step:?}")));
             assert_trace(&store, index + 1, identity);
             assert!(store.written_evidence.is_none());
@@ -364,11 +325,9 @@ mod tests {
 
     #[tokio::test]
     async fn evidence_posting_missing_facts_fail_at_the_original_read() {
-        for (missing, message) in [
-            (0, "供应商结算差异不存在"),
-            (1, "结算差异所属明细不存在"),
-            (2, "供应商结算单不存在"),
-        ] {
+        for (missing, message) in
+            [(0, "供应商结算差异不存在"), (1, "结算差异所属明细不存在"), (2, "供应商结算单不存在")]
+        {
             let mut store = Store::new(SettlementStatus::Draft);
             match missing {
                 0 => store.difference = None,
@@ -378,15 +337,9 @@ mod tests {
             let evidence = sample_evidence("evidence-1", "difference-1", 1700000000);
             let mut executor = TestExecutor { _identity: 3 };
             let identity = &mut executor as *mut TestExecutor as usize;
-            let result = persist_with_store(
-                &mut store,
-                "difference-1",
-                "statement-1",
-                7,
-                &evidence,
-                &mut executor,
-            )
-            .await;
+            let result =
+                persist_with_store(&mut store, "difference-1", "statement-1", 7, &evidence, &mut executor)
+                    .await;
             assert!(matches!(result,Err(Error::NotFound(actual)) if actual==message));
             assert_trace(&store, missing + 1, identity);
         }
@@ -427,24 +380,15 @@ mod tests {
 
     #[tokio::test]
     async fn evidence_posting_noneditable_state_stops_before_both_writes() {
-        for status in [
-            SettlementStatus::PendingReview,
-            SettlementStatus::Confirmed,
-            SettlementStatus::Voided,
-        ] {
+        for status in [SettlementStatus::PendingReview, SettlementStatus::Confirmed, SettlementStatus::Voided]
+        {
             let mut store = Store::new(status);
             let evidence = sample_evidence("evidence-1", "difference-1", 1700000000);
             let mut executor = TestExecutor { _identity: 5 };
             let identity = &mut executor as *mut TestExecutor as usize;
-            let result = persist_with_store(
-                &mut store,
-                "difference-1",
-                "statement-1",
-                7,
-                &evidence,
-                &mut executor,
-            )
-            .await;
+            let result =
+                persist_with_store(&mut store, "difference-1", "statement-1", 7, &evidence, &mut executor)
+                    .await;
             assert!(
                 matches!(result,Err(Error::BusinessLogicError(message)) if message=="当前结算状态禁止追加差异补证")
             );

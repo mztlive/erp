@@ -6,11 +6,9 @@
 //! 保证并发环境下取号唯一、序号连续递增，且序号一经消费永不回收。
 
 use chrono::NaiveDate;
-use mongodb::{
-    bson::{doc, serialize_to_bson, Bson},
-    options::ReturnDocument,
-    Collection, Database,
-};
+use mongodb::bson::{Bson, doc, serialize_to_bson};
+use mongodb::options::ReturnDocument;
+use mongodb::{Collection, Database};
 use persistence_core::{Error as DatabaseError, Executor};
 use serde::{Deserialize, Serialize};
 
@@ -146,13 +144,7 @@ impl DocumentNumberKind {
 /// # 返回值
 /// 返回完整业务编号字符串。
 pub fn format_number(kind: DocumentNumberKind, date: NaiveDate, seq: i64) -> String {
-    format!(
-        "{}{}-{:0width$}",
-        kind.prefix(),
-        date.format("%Y%m%d"),
-        seq,
-        width = SEQ_WIDTH
-    )
+    format!("{}{}-{:0width$}", kind.prefix(), date.format("%Y%m%d"), seq, width = SEQ_WIDTH)
 }
 
 /// 计数器集合中的文档形态。
@@ -258,9 +250,10 @@ impl DocumentNumberGenerator {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_number, DocumentNumberKind, COUNTER_COLLECTION, SEQ_WIDTH};
     use chrono::NaiveDate;
-    use mongodb::bson::{deserialize_from_bson, serialize_to_bson, Bson};
+    use mongodb::bson::{Bson, deserialize_from_bson, serialize_to_bson};
+
+    use super::{COUNTER_COLLECTION, DocumentNumberKind, SEQ_WIDTH, format_number};
 
     const KIND_TABLE: [(DocumentNumberKind, &str); 13] = [
         (DocumentNumberKind::SalesOrder, "SO"),
@@ -316,24 +309,15 @@ mod tests {
     fn format_number_uses_prefix_date_and_zero_padded_seq() {
         let date = NaiveDate::from_ymd_opt(2026, 7, 1).expect("valid date");
 
-        assert_eq!(
-            format_number(DocumentNumberKind::SalesOrder, date, 123),
-            "SO20260701-000123"
-        );
-        assert_eq!(
-            format_number(DocumentNumberKind::Invoice, date, 1),
-            "INV20260701-000001"
-        );
+        assert_eq!(format_number(DocumentNumberKind::SalesOrder, date, 123), "SO20260701-000123");
+        assert_eq!(format_number(DocumentNumberKind::Invoice, date, 1), "INV20260701-000001");
     }
 
     #[test]
     fn format_number_expands_seq_beyond_width_without_truncation() {
         let date = NaiveDate::from_ymd_opt(2026, 12, 31).expect("valid date");
 
-        assert_eq!(
-            format_number(DocumentNumberKind::SalesOrder, date, 1_000_000),
-            "SO20261231-1000000"
-        );
+        assert_eq!(format_number(DocumentNumberKind::SalesOrder, date, 1_000_000), "SO20261231-1000000");
     }
 
     #[test]

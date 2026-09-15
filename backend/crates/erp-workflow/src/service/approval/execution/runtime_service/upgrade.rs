@@ -1,6 +1,6 @@
 //! 未提交单据绑定升级。
 
-use crate::entity::document_registry::{DocumentType, WorkflowActionId};
+use application_core::AuditActor;
 use bpm::ids::ApprovalCommandReceiptId;
 use id_generator::next_id;
 use persistence_core::Transactional;
@@ -9,12 +9,12 @@ use super::super::idempotency::{
     command_may_have_committed, command_recovery_delay, normalize_idempotency_key, upgrade_binding_identity,
 };
 use super::ApprovalRuntimeService;
+use crate::entity::document_registry::{DocumentType, WorkflowActionId};
 use crate::error::{Error, Result};
 use crate::service::approval::binding::{
-    replay_unsubmitted_document_definition_upgrade, upgrade_unsubmitted_document_definition,
     UpgradeBindingResultView, UpgradeUnsubmittedDefinitionCommand,
+    replay_unsubmitted_document_definition_upgrade, upgrade_unsubmitted_document_definition,
 };
-use application_core::AuditActor;
 
 /// 绑定升级命令。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,7 +71,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             Ok(view) => Ok(view),
             Err(error) if command_may_have_committed(&error) => {
                 self.recover_upgrade_binding(actor, prepared, error).await
-            }
+            },
             Err(error) => Err(error),
         }
     }
@@ -141,8 +141,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 .await;
             match recovered {
                 Ok(Some(view)) => return Ok(view),
-                Ok(None) => {}
-                Err(error) if command_may_have_committed(&error) => {}
+                Ok(None) => {},
+                Err(error) if command_may_have_committed(&error) => {},
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {

@@ -1,15 +1,14 @@
-use super::SupplierApiGovernanceProcess;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supplier::SupplierExt;
-use erp_supply::{
-    dto::supplier_api::*,
-    entity::supplier_api::PreparedSupplierConnectionCreate,
-    service::supplier_api::{map_command_shape_rejection, SupplierApiService},
-};
+use erp_supply::dto::supplier_api::*;
+use erp_supply::entity::supplier_api::PreparedSupplierConnectionCreate;
+use erp_supply::service::supplier_api::{SupplierApiService, map_command_shape_rejection};
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+
+use super::SupplierApiGovernanceProcess;
+use crate::{Error, Result};
 impl SupplierApiGovernanceProcess {
     /// 创建供应商 API 连接及其能力声明（跨集合事务写入）。
     ///

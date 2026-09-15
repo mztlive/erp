@@ -1,21 +1,20 @@
 //! 结算单域加载、身份一致性与稳定摘要。
-use crate::entity::supplier_settlement::{SupplierSettlementDifference, SupplierSettlementItem};
-use crate::repository::SupplierSettlementExt;
-use crate::{Error, Result};
+use std::str::FromStr;
+
 use erp_core::money::Amount;
 use mongodb::Database;
 use persistence_core::Executor;
 use sha2::{Digest, Sha256};
-use std::str::FromStr;
+
+use crate::entity::supplier_settlement::{SupplierSettlementDifference, SupplierSettlementItem};
+use crate::repository::SupplierSettlementExt;
+use crate::{Error, Result};
 pub async fn load_statement_items(
     db: &Database,
     statement_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<Vec<SupplierSettlementItem>> {
-    db.supplier_settlement_items()
-        .list_by_statement(statement_id, executor)
-        .await
-        .map_err(Into::into)
+    db.supplier_settlement_items().list_by_statement(statement_id, executor).await.map_err(Into::into)
 }
 
 pub async fn load_statement_differences(
@@ -36,9 +35,7 @@ pub async fn load_statement_differences(
 /// 校验路径身份与命令载荷身份一致。
 pub fn ensure_same_id(path_id: &str, command_id: &str, object_name: &str) -> Result<()> {
     if path_id != command_id {
-        return Err(Error::ValidationError(format!(
-            "{object_name}路径ID与命令载荷不一致"
-        )));
+        return Err(Error::ValidationError(format!("{object_name}路径ID与命令载荷不一致")));
     }
     Ok(())
 }

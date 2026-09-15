@@ -11,8 +11,8 @@ use erp_catalog::{
 use erp_core::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
 use persistence_core::NoTransaction;
 
-use super::identity::stable_code;
 use super::ProductImportProcess;
+use super::identity::stable_code;
 use crate::adapters::catalog_service;
 use crate::{Error, Result};
 
@@ -43,11 +43,8 @@ impl ProductImportProcess {
             return Ok(unit_id);
         }
         let mut tx = NoTransaction;
-        let by_code = self
-            .db
-            .unit_of_measures()
-            .find_enabled_by_code(PRODUCT_IMPORT_UNIT_CODE, &mut tx)
-            .await?;
+        let by_code =
+            self.db.unit_of_measures().find_enabled_by_code(PRODUCT_IMPORT_UNIT_CODE, &mut tx).await?;
         let unit = match by_code {
             Some(unit) => unit,
             None => self
@@ -84,23 +81,13 @@ impl ProductImportProcess {
             return Ok(id.clone());
         }
         let mut tx = NoTransaction;
-        if let Some(existing) = self
-            .db
-            .product_brands()
-            .find_enabled_by_exact_name(name, &mut tx)
-            .await?
-        {
+        if let Some(existing) = self.db.product_brands().find_enabled_by_exact_name(name, &mut tx).await? {
             let id = ProductBrandId::new(existing.base.id);
             cache.brands.insert(name.to_string(), id.clone());
             return Ok(id);
         }
         let brand_code = stable_code("BRD", &[name]);
-        if let Some(existing) = self
-            .db
-            .product_brands()
-            .find_enabled_by_code(&brand_code, &mut tx)
-            .await?
-        {
+        if let Some(existing) = self.db.product_brands().find_enabled_by_code(&brand_code, &mut tx).await? {
             let id = ProductBrandId::new(existing.base.id);
             cache.brands.insert(name.to_string(), id.clone());
             return Ok(id);
@@ -147,11 +134,7 @@ impl ProductImportProcess {
             return Ok(id.clone());
         }
         let mut tx = NoTransaction;
-        if let Some(existing) = self
-            .db
-            .product_categories()
-            .find_enabled_by_exact_name(name, &mut tx)
-            .await?
+        if let Some(existing) = self.db.product_categories().find_enabled_by_exact_name(name, &mut tx).await?
         {
             if existing.product_kind != ProductKind::Physical {
                 return Err(Error::BusinessLogicError(format!("分类「{name}」不允许实物商品")));
@@ -161,11 +144,8 @@ impl ProductImportProcess {
             return Ok(id);
         }
         let category_code = stable_code("CAT", &[name]);
-        if let Some(existing) = self
-            .db
-            .product_categories()
-            .find_enabled_by_code(&category_code, &mut tx)
-            .await?
+        if let Some(existing) =
+            self.db.product_categories().find_enabled_by_code(&category_code, &mut tx).await?
         {
             let id = ProductCategoryId::new(existing.base.id);
             cache.categories.insert(name.to_string(), id.clone());

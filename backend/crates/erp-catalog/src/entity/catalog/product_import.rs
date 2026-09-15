@@ -21,10 +21,7 @@ const PLACEHOLDERS: &[&str] = &["-", "—", "－", "无", "N/A", "n/a"];
 /// 无。
 pub fn is_import_blank(value: &str) -> bool {
     let trimmed = value.trim();
-    trimmed.is_empty()
-        || PLACEHOLDERS
-            .iter()
-            .any(|token| trimmed.eq_ignore_ascii_case(token))
+    trimmed.is_empty() || PLACEHOLDERS.iter().any(|token| trimmed.eq_ignore_ascii_case(token))
 }
 
 /// 折叠空白并去掉首尾空白。
@@ -74,10 +71,8 @@ pub fn truncate_import_text(value: &str, max_chars: usize) -> String {
 /// # 错误
 /// 无。
 pub fn first_import_barcode(value: &str) -> Option<String> {
-    let candidate = value
-        .split(['\n', '\r', ',', '，', ';', '；'])
-        .map(str::trim)
-        .find(|part| !is_import_blank(part))?;
+    let candidate =
+        value.split(['\n', '\r', ',', '，', ';', '；']).map(str::trim).find(|part| !is_import_blank(part))?;
     let collapsed = collapse_import_text(candidate);
     if collapsed.chars().count() > IMPORT_BARCODE_MAX_CHARS {
         return None;
@@ -105,11 +100,7 @@ pub fn dispimg_id(value: &str) -> Option<&str> {
     let rest = rest.strip_prefix("&quot;").or_else(|| rest.strip_prefix('"'))?;
     let end = rest.find("&quot;").or_else(|| rest.find('"'))?;
     let id = rest.get(..end)?.trim();
-    if id.is_empty() {
-        None
-    } else {
-        Some(id)
-    }
+    if id.is_empty() { None } else { Some(id) }
 }
 
 /// 未填写品牌时使用的稳定名称。
@@ -134,11 +125,7 @@ pub fn unspecified_brand_name() -> &'static str {
 /// # 错误
 /// 无。
 pub fn import_brand_name(value: &str) -> String {
-    if is_import_blank(value) {
-        unspecified_brand_name().to_string()
-    } else {
-        collapse_import_text(value)
-    }
+    if is_import_blank(value) { unspecified_brand_name().to_string() } else { collapse_import_text(value) }
 }
 
 #[cfg(test)]
@@ -158,10 +145,7 @@ mod tests {
 
     #[test]
     fn first_barcode_keeps_leading_item() {
-        assert_eq!(
-            first_import_barcode("6979874900058\n6979874900041").as_deref(),
-            Some("6979874900058")
-        );
+        assert_eq!(first_import_barcode("6979874900058\n6979874900041").as_deref(), Some("6979874900058"));
         assert_eq!(first_import_barcode("-"), None);
     }
 

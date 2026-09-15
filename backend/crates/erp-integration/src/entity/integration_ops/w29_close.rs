@@ -68,11 +68,7 @@ impl fmt::Display for W29EvidenceReference {
                 "work_item:{};replacement_work_item:{};audit_log:{}",
                 self.work_item_id, replacement, self.audit_log_id
             ),
-            None => write!(
-                formatter,
-                "work_item:{};audit_log:{}",
-                self.work_item_id, self.audit_log_id
-            ),
+            None => write!(formatter, "work_item:{};audit_log:{}", self.work_item_id, self.audit_log_id),
         }
     }
 }
@@ -105,7 +101,7 @@ impl W29CloseDecision {
                     replacement_work_item_id: Some(replacement),
                     close_reason,
                 })
-            }
+            },
             "MISROUTED" => {
                 if replacement_work_item_id.is_some() {
                     return Err(Error::from("MISROUTED 不得提供替代任务"));
@@ -116,7 +112,7 @@ impl W29CloseDecision {
                     replacement_work_item_id: None,
                     close_reason: format!("MISROUTED: {comment}"),
                 })
-            }
+            },
             _ => Err(Error::from("关闭原因只允许 DUPLICATE 或 MISROUTED")),
         }
     }
@@ -152,11 +148,8 @@ impl W29CloseDecision {
 
     /// 计算下一条不可变差异决定序号。
     pub fn next_resolution_no(latest_resolution_no: Option<u32>) -> Result<u32> {
-        latest_resolution_no.map_or(Ok(1), |value| {
-            value
-                .checked_add(1)
-                .ok_or_else(|| Error::from("差异决定序号已达上限"))
-        })
+        latest_resolution_no
+            .map_or(Ok(1), |value| value.checked_add(1).ok_or_else(|| Error::from("差异决定序号已达上限")))
     }
 }
 
@@ -182,16 +175,10 @@ mod tests {
     fn duplicate_requires_replacement_and_round_trips_historical_evidence() {
         let decision = W29CloseDecision::new(" DUPLICATE ", Some(" 已有有效替代 "), Some("wi-2")).unwrap();
         assert_eq!(decision.resolution_action(), ResolutionAction::CloseDuplicate);
-        assert_eq!(
-            decision.close_reason(),
-            "DUPLICATE replacement=wi-2: 已有有效替代"
-        );
+        assert_eq!(decision.close_reason(), "DUPLICATE replacement=wi-2: 已有有效替代");
         let evidence = decision.evidence_reference("wi-1", "audit-1").unwrap();
         let encoded = evidence.to_string();
-        assert_eq!(
-            encoded,
-            "work_item:wi-1;replacement_work_item:wi-2;audit_log:audit-1"
-        );
+        assert_eq!(encoded, "work_item:wi-1;replacement_work_item:wi-2;audit_log:audit-1");
         assert_eq!(W29EvidenceReference::parse(&encoded).unwrap(), evidence);
     }
 
@@ -202,10 +189,7 @@ mod tests {
         let decision = W29CloseDecision::new("MISROUTED", Some("对象类型登记错误"), None).unwrap();
         assert_eq!(decision.resolution_action(), ResolutionAction::CloseMisrouted);
         assert_eq!(
-            decision
-                .evidence_reference("wi-1", "audit-2")
-                .unwrap()
-                .to_string(),
+            decision.evidence_reference("wi-1", "audit-2").unwrap().to_string(),
             "work_item:wi-1;audit_log:audit-2"
         );
     }

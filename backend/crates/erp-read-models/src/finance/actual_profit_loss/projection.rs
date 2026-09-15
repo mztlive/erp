@@ -1,15 +1,16 @@
 //! 全部匹配订单共用筛选、分组、汇总和导出投影；分页最后执行。
-use super::{
-    calculation::{add, money, percent, totals, OrderResult},
-    dto::*,
-    query::{cost_types, BASIS_LABEL, FORMULA_VERSION},
-};
-use crate::Result;
-use erp_finance::entity::cost::{profit_loss::ProfitLossAmounts, CostStage, CostType};
-use rust_decimal::Decimal;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
+
+use erp_finance::entity::cost::profit_loss::ProfitLossAmounts;
+use erp_finance::entity::cost::{CostStage, CostType};
+use rust_decimal::Decimal;
+
+use super::calculation::{OrderResult, add, money, percent, totals};
+use super::dto::*;
+use super::query::{BASIS_LABEL, FORMULA_VERSION, cost_types};
+use crate::Result;
 
 /// 多维汇总中保留的可靠子集及全部已知成本。
 #[derive(Default)]
@@ -72,22 +73,10 @@ fn merge_costs(target: &mut ProfitLossAmounts, source: &ProfitLossAmounts) -> Re
         (CostStage::Actual, CostType::Product, source.procurement),
         (CostStage::Actual, CostType::Other, source.fulfillment),
         (CostStage::Reduction, CostType::Other, source.reductions),
-        (
-            CostStage::Expected,
-            CostType::Product,
-            source.expected_procurement,
-        ),
+        (CostStage::Expected, CostType::Product, source.expected_procurement),
         (CostStage::Expected, CostType::Other, source.expected_fulfillment),
-        (
-            CostStage::Confirmed,
-            CostType::Product,
-            source.confirmed_procurement,
-        ),
-        (
-            CostStage::Confirmed,
-            CostType::Other,
-            source.confirmed_fulfillment,
-        ),
+        (CostStage::Confirmed, CostType::Product, source.confirmed_procurement),
+        (CostStage::Confirmed, CostType::Other, source.confirmed_fulfillment),
     ] {
         target.add(stage, kind, value)?;
     }
@@ -105,23 +94,13 @@ pub(super) fn project(
     let (user_options, org_options) = super::attribution::options(&orders);
     let matched: Vec<_> = orders.into_iter().filter(|o| matches_query(o, query)).collect();
     let coverage = summarize(&matched)?.coverage(matched.len());
-    let selected: Vec<_> = matched
-        .into_iter()
-        .filter(|o| coverage_matches(o, &query.coverage))
-        .collect();
+    let selected: Vec<_> = matched.into_iter().filter(|o| coverage_matches(o, &query.coverage)).collect();
     let summary = summarize(&selected)?;
     let trend = trend(&selected)?;
     let rows = rows(&selected, query, export)?;
     let mut view = assemble(query, as_of, scope_label, coverage, summary, trend, rows)?;
     if view.rows.total == 0 {
-        view.empty_reason = Some(
-            if has_period_orders {
-                "filtered_empty"
-            } else {
-                "no_data"
-            }
-            .into(),
-        );
+        view.empty_reason = Some(if has_period_orders { "filtered_empty" } else { "no_data" }.into());
     }
     view.attribution_user_options = user_options;
     view.attribution_org_options = org_options;
@@ -149,38 +128,20 @@ fn rows(orders: &[OrderResult], query: &ProfitLossQuery, export: bool) -> Result
     items.sort_by(|a, b| compare_rows(a, b, &query.sort));
     let total = items.len();
     if !export {
-        items = items
-            .into_iter()
-            .skip((query.page - 1) * query.page_size)
-            .take(query.page_size)
-            .collect();
+        items = items.into_iter().skip((query.page - 1) * query.page_size).take(query.page_size).collect();
     }
-    Ok(Rows {
-        dimension: query.dimension.clone(),
-        items,
-        total,
-    })
+    Ok(Rows { dimension: query.dimension.clone(), items, total })
 }
 /// 搜索为销售单号与正式客户快照的字面量包含；场景及成本类型按整单命中。
 fn matches_query(order: &OrderResult, query: &ProfitLossQuery) -> bool {
     let keyword = query.q.as_deref().unwrap_or("").trim().to_lowercase();
-    let text = format!(
-        "{} {}",
-        order.row.identity_label,
-        order.row.customer_label.as_deref().unwrap_or("")
-    )
-    .to_lowercase();
+    let text = format!("{} {}", order.row.identity_label, order.row.customer_label.as_deref().unwrap_or(""))
+        .to_lowercase();
     super::attribution::matches(order, query)
         && text.contains(&keyword)
-        && query
-            .benefit_scenario
-            .as_ref()
-            .is_none_or(|s| order.row.benefit_scenarios.contains(s))
+        && query.benefit_scenario.as_ref().is_none_or(|s| order.row.benefit_scenarios.contains(s))
         && (query.cost_codes().is_empty()
-            || query
-                .cost_codes()
-                .iter()
-                .any(|t| order.composition.contains_key(*t)))
+            || query.cost_codes().iter().any(|t| order.composition.contains_key(*t)))
 }
 /// 只有销售单和客户身份允许链接；多场景订单作为一个组合分组，不重复收入。
 fn group_rows(orders: &[OrderResult], dimension: &str) -> Result<Vec<ProfitLossRow>> {
@@ -192,10 +153,7 @@ fn group_rows(orders: &[OrderResult], dimension: &str) -> Result<Vec<ProfitLossR
         let key = group_key(&order.row, dimension);
         groups.entry(key).or_default().push(order);
     }
-    groups
-        .into_iter()
-        .map(|(key, values)| group_row(&key, &values, dimension))
-        .collect()
+    groups.into_iter().map(|(key, values)| group_row(&key, &values, dimension)).collect()
 }
 /// 人员和组织使用冻结身份分组；缺失快照单列，不用当前负责人回填。
 fn group_key(row: &ProfitLossRow, dimension: &str) -> String {
@@ -244,15 +202,9 @@ fn group_row(key: &str, values: &[&OrderResult], dimension: &str) -> Result<Prof
     }
     // 聚合行不得沿用首单其他人员或组织字段，避免把整组误标为首单归属。
     row.attribution_user_id = (dimension == "attribution_user" && !key.is_empty()).then(|| key.into());
-    row.attribution_user_name = row
-        .attribution_user_id
-        .as_ref()
-        .map(|_| row.identity_label.clone());
+    row.attribution_user_name = row.attribution_user_id.as_ref().map(|_| row.identity_label.clone());
     row.attribution_org_unit_id = (dimension == "attribution_org" && !key.is_empty()).then(|| key.into());
-    row.attribution_org_unit_name = row
-        .attribution_org_unit_id
-        .as_ref()
-        .map(|_| row.identity_label.clone());
+    row.attribution_org_unit_name = row.attribution_org_unit_id.as_ref().map(|_| row.identity_label.clone());
     group_totals(&mut row, &summary, values.len());
     group_sources(&mut row, values);
     Ok(row)
@@ -260,12 +212,7 @@ fn group_row(key: &str, values: &[&OrderResult], dimension: &str) -> Result<Prof
 /// 分组中任一订单未覆盖，整组完整利润即不可用。
 fn group_totals(row: &mut ProfitLossRow, summary: &Summary, count: usize) {
     let complete = summary.covered_count == count;
-    row.totals = totals(
-        summary.revenue,
-        &summary.costs,
-        complete.then_some(summary.profit),
-        summary.revenue,
-    );
+    row.totals = totals(summary.revenue, &summary.costs, complete.then_some(summary.profit), summary.revenue);
     row.coverage_state = if complete {
         "COVERED"
     } else if summary.covered_count > 0 {
@@ -297,10 +244,7 @@ fn group_sources(row: &mut ProfitLossRow, values: &[&OrderResult]) {
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
-    row.latest_cost_occurred_at = values
-        .iter()
-        .filter_map(|o| o.row.latest_cost_occurred_at.clone())
-        .max();
+    row.latest_cost_occurred_at = values.iter().filter_map(|o| o.row.latest_cost_occurred_at.clone()).max();
 }
 /// 趋势遵循同一筛选；横轴为销售单生效月份，金额为查询时点累计结果。
 fn trend(orders: &[OrderResult]) -> Result<Vec<TrendPoint>> {
@@ -398,11 +342,7 @@ const FORMULA: &str = "实际经营盈亏 = 不含税销售收入 − 实际采�
 const EXCLUDED: &str = "卡券不进入本表。按销售单首次生效日选择订单，使用当前正式销售版本及查询时点已发生的累计成本，并非期间现金收支或财务月结。完整覆盖要求履约完成且每条销售明细有实际供货成本；未归属成本、预计与确认成本不代替实际成本。后补费用将改变历史订单结果。";
 /// 当前权限范围不是客户端 scope_id。
 fn scope(label: &str) -> Scope {
-    Scope {
-        id: "authorized".into(),
-        label: label.into(),
-        permission_version: "current-rbac".into(),
-    }
+    Scope { id: "authorized".into(), label: label.into(), permission_version: "current-rbac".into() }
 }
 /// 自然日与口径同时导出。
 fn period(q: &ProfitLossQuery) -> Period {
@@ -416,20 +356,11 @@ fn period(q: &ProfitLossQuery) -> Period {
 }
 /// 即时快照没有异步投影延迟；时点由服务端提供。
 fn freshness(as_of: &str) -> Freshness {
-    Freshness {
-        projected_at: as_of.into(),
-        source_watermark: as_of.into(),
-        state: "fresh".into(),
-    }
+    Freshness { projected_at: as_of.into(), source_watermark: as_of.into(), state: "fresh".into() }
 }
 /// 入口必须同时验证销售与成本查询权限后才调用分析。
 fn permissions() -> FieldPermissions {
-    FieldPermissions {
-        can_view_revenue: true,
-        can_view_cost: true,
-        can_view_profit: true,
-        can_export: true,
-    }
+    FieldPermissions { can_view_revenue: true, can_view_cost: true, can_view_profit: true, can_export: true }
 }
 /// 费用构成使用分配后金额，并保留全部费用类型选项。
 fn composition(s: &Summary) -> Result<Vec<CostComposition>> {
@@ -450,18 +381,8 @@ fn composition(s: &Summary) -> Result<Vec<CostComposition>> {
 /// 两种非实际阶段只提供对照，不计入实际盈亏。
 fn stages(costs: &ProfitLossAmounts) -> Result<Vec<StageReference>> {
     Ok(vec![
-        stage(
-            "EXPECTED",
-            "预计",
-            costs.expected_procurement,
-            costs.expected_fulfillment,
-        )?,
-        stage(
-            "CONFIRMED",
-            "确认",
-            costs.confirmed_procurement,
-            costs.confirmed_fulfillment,
-        )?,
+        stage("EXPECTED", "预计", costs.expected_procurement, costs.expected_fulfillment)?,
+        stage("CONFIRMED", "确认", costs.confirmed_procurement, costs.confirmed_fulfillment)?,
     ])
 }
 /// 阶段汇总同样执行溢出检查。

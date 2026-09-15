@@ -5,19 +5,19 @@
 
 use std::collections::HashMap;
 
-use crate::entity::catalog::{ListingStatus, Product, ProductListingStatus, Sku};
-use crate::repository::CatalogExt;
+use application_core::AuditActor;
 use erp_core::ids::ProductId;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use super::support::ensure_version;
 use super::CatalogService;
+use super::support::ensure_version;
 use crate::dto::{
     ProductListingView, ProductView, SkuView, UpdateProductListingRequest, UpdateSkuListingRequest,
 };
+use crate::entity::catalog::{ListingStatus, Product, ProductListingStatus, Sku};
 use crate::error::{Error, Result};
-use application_core::AuditActor;
+use crate::repository::CatalogExt;
 
 /// 商品上架汇总投影类型（经 `CatalogExt` 关联类型跨 crate 可达）。
 type ProductListingSummary = <mongodb::Database as CatalogExt>::ProductListingSummary;
@@ -51,14 +51,11 @@ impl CatalogService {
         req: UpdateProductListingRequest,
         actor: &AuditActor,
     ) -> Result<ProductListingView> {
-        let change = self
-            .prepare_product_listing_change(product_id, req.listing_status, actor.id())
-            .await?;
+        let change = self.prepare_product_listing_change(product_id, req.listing_status, actor.id()).await?;
         if change.changed.is_empty() {
             return Ok(change.view);
         }
-        self.write_product_listing_change(change, req.listing_status, actor)
-            .await
+        self.write_product_listing_change(change, req.listing_status, actor).await
     }
 
     /// 切换单个 SKU 的上架状态。
@@ -80,15 +77,12 @@ impl CatalogService {
         actor: &AuditActor,
     ) -> Result<SkuView> {
         req.validate()?;
-        let (sku, changed) = self
-            .prepare_sku_listing_change(sku_id, req.version, req.listing_status, actor.id())
-            .await?;
+        let (sku, changed) =
+            self.prepare_sku_listing_change(sku_id, req.version, req.listing_status, actor.id()).await?;
         if !changed {
             return Ok(sku.into());
         }
-        let sku = self
-            .write_sku_listing_change(sku, req.listing_status, actor)
-            .await?;
+        let sku = self.write_sku_listing_change(sku, req.listing_status, actor).await?;
         Ok(sku.into())
     }
 
@@ -104,22 +98,15 @@ impl CatalogService {
             return Err(Error::BusinessLogicError("停用的商品不能上架".to_string()));
         }
         let product_id = ProductId::new(product.base.id);
-        let skus = self
-            .db
-            .skus()
-            .find_by_product_ids(std::slice::from_ref(&product_id), &mut NoTransaction)
-            .await?;
+        let skus =
+            self.db.skus().find_by_product_ids(std::slice::from_ref(&product_id), &mut NoTransaction).await?;
         let active_count = skus.iter().filter(|sku| sku.is_active()).count();
         if target.is_listed() && active_count == 0 {
             return Err(Error::BusinessLogicError("商品下没有可上架的 SKU".to_string()));
         }
         let changed = changed_skus(skus, target, actor_id)?;
         let view = product_listing_view(product_id.as_ref(), active_count, target);
-        Ok(ProductListingChange {
-            product_id,
-            changed,
-            view,
-        })
+        Ok(ProductListingChange { product_id, changed, view })
     }
 
     /// 在一个事务内写入整组 SKU 状态与审计日志。
@@ -129,11 +116,7 @@ impl CatalogService {
         target: ListingStatus,
         actor: &AuditActor,
     ) -> Result<ProductListingView> {
-        let ProductListingChange {
-            product_id,
-            mut changed,
-            view,
-        } = change;
+        let ProductListingChange { product_id, mut changed, view } = change;
         let audit = self.audit.resource_log_with_message(
             actor.clone(),
             "product.listing.update",
@@ -211,28 +194,20 @@ impl CatalogService {
         &self,
         product_ids: &[ProductId],
     ) -> Result<HashMap<String, ProductListingView>> {
-        let summaries = self
-            .db
-            .catalog()
-            .listing_summaries(product_ids, &mut NoTransaction)
-            .await?;
+        let summaries = self.db.catalog().listing_summaries(product_ids, &mut NoTransaction).await?;
         Ok(product_listing_views_from_summaries(product_ids, &summaries))
     }
 
     /// 将商品实体映射为包含实时 SKU 上架汇总的响应。
     pub(super) async fn product_view(&self, product: Product) -> Result<ProductView> {
         let product_id = ProductId::new(product.base.id.clone());
-        let mut summaries = self
-            .product_listing_views(std::slice::from_ref(&product_id))
-            .await?;
-        let summary = summaries
-            .remove(product_id.as_ref())
-            .unwrap_or(ProductListingView {
-                product_id: product_id.to_string(),
-                listing_status: ProductListingStatus::Unlisted,
-                listed_sku_count: 0,
-                sku_count: 0,
-            });
+        let mut summaries = self.product_listing_views(std::slice::from_ref(&product_id)).await?;
+        let summary = summaries.remove(product_id.as_ref()).unwrap_or(ProductListingView {
+            product_id: product_id.to_string(),
+            listing_status: ProductListingStatus::Unlisted,
+            listed_sku_count: 0,
+            sku_count: 0,
+        });
         Ok(ProductView {
             id: product.base.id,
             product_no: product.product_no,
@@ -327,10 +302,10 @@ fn product_listing_views_from_summaries(
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::catalog::ProductListingStatus;
     use erp_core::ids::ProductId;
 
     use super::*;
+    use crate::entity::catalog::ProductListingStatus;
 
     fn summary(product_id: &str, listed_sku_count: u32, sku_count: u32) -> ProductListingSummary {
         ProductListingSummary::new(product_id, listed_sku_count, sku_count)
@@ -358,24 +333,14 @@ mod tests {
         ];
         let views = product_listing_views_from_summaries(
             &product_ids,
-            &[
-                summary("all-listed", 2, 2),
-                summary("partial", 1, 2),
-                summary("all-unlisted", 0, 2),
-            ],
+            &[summary("all-listed", 2, 2), summary("partial", 1, 2), summary("all-unlisted", 0, 2)],
         );
 
         assert_eq!(views["zero"].listing_status, ProductListingStatus::Unlisted);
         assert_eq!(views["zero"].sku_count, 0);
         assert_eq!(views["all-listed"].listing_status, ProductListingStatus::Listed);
-        assert_eq!(
-            views["partial"].listing_status,
-            ProductListingStatus::PartiallyListed
-        );
-        assert_eq!(
-            views["all-unlisted"].listing_status,
-            ProductListingStatus::Unlisted
-        );
+        assert_eq!(views["partial"].listing_status, ProductListingStatus::PartiallyListed);
+        assert_eq!(views["all-unlisted"].listing_status, ProductListingStatus::Unlisted);
         assert_eq!(views["all-unlisted"].sku_count, 2);
     }
 }

@@ -1,17 +1,16 @@
-use crate::repository::owned::{PayableEntryOffsetRepository, PayableEntryRepository};
 use std::collections::HashMap;
 
-use crate::entity::payable::{PayableEntry, PayableEntryOffset};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{PayableAccountId, PayableEntryId};
 use futures_util::TryStreamExt;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, Result, mongo_ops};
 use serde::Deserialize;
 
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
+use crate::entity::payable::{PayableEntry, PayableEntryOffset};
+use crate::repository::owned::{PayableEntryOffsetRepository, PayableEntryRepository};
 
 /// 应付账户最早到期日聚合行。
 #[derive(Debug, Deserialize)]
@@ -62,7 +61,7 @@ impl<'a> PayableEntryRepository<'a> {
                     .stream(session)
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
             None => {
                 self.collection()
                     .aggregate(pipeline)
@@ -70,12 +69,9 @@ impl<'a> PayableEntryRepository<'a> {
                     .await?
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
         };
-        Ok(rows
-            .into_iter()
-            .map(|row| (row.account_id, row.due_date))
-            .collect())
+        Ok(rows.into_iter().map(|row| (row.account_id, row.due_date)).collect())
     }
 
     /// 批量按子账集合取回分录（`$in` 一次取回，禁止 N+1）。
@@ -100,8 +96,7 @@ impl<'a> PayableEntryRepository<'a> {
             return Ok(Vec::new());
         }
         let account_ids: Vec<String> = account_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "payable_account_id": { "$in": account_ids } }, executor)
-            .await
+        self.find_many(doc! { "payable_account_id": { "$in": account_ids } }, executor).await
     }
 
     /// 按主键集合批量取回应付分录（`$in` 一次取回，禁止 N+1）。
@@ -262,18 +257,15 @@ impl<'a> PayableEntryOffsetRepository<'a> {
         increase_entry_id: &PayableEntryId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PayableEntryOffset>> {
-        self.find_many(
-            doc! { "increase_entry_id": increase_entry_id.to_string() },
-            executor,
-        )
-        .await
+        self.find_many(doc! { "increase_entry_id": increase_entry_id.to_string() }, executor).await
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::minimum_due_dates_pipeline;
     use mongodb::bson::doc;
+
+    use super::minimum_due_dates_pipeline;
 
     #[test]
     fn minimum_due_date_pipeline_groups_one_row_per_account() {
@@ -287,9 +279,6 @@ mod tests {
         assert!(matched.get_document("payable_account_id").is_ok());
         let group = pipeline[1].get_document("$group").unwrap();
         assert_eq!(group.get_str("_id").unwrap(), "$payable_account_id");
-        assert_eq!(
-            group.get_document("due_date").unwrap(),
-            &doc! { "$min": "$due_date" }
-        );
+        assert_eq!(group.get_document("due_date").unwrap(), &doc! { "$min": "$due_date" });
     }
 }

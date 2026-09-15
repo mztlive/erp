@@ -3,19 +3,21 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use erp_audit::AuditExt;
+use application_core::{AuditActor, CommandReceipt};
+use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
+use erp_core::ids::{FileAssetId, PartyBankAccountId, SupplierAccountId, SupplierPaymentId, WorkItemId};
 use erp_finance::entity::payable::{SupplierPayment, SupplierPaymentData};
 use erp_finance::repository::PayableExt;
-
-use erp_core::ids::{FileAssetId, PartyBankAccountId, SupplierAccountId, SupplierPaymentId, WorkItemId};
-
+use erp_identity::SharedRbacService;
 use erp_party::PartyExt;
 use erp_supplier::SupplierExt;
-
 use erp_support::{
     BankReceiptEvidencePolicy, EmptyPendingAttachments, FileAssetExt, FileAssetView, PendingAttachmentBatch,
 };
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_workflow::service::approval::binding::BindPublishedDefinitionCommand;
+use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 use id_generator::next_id;
 use mongodb::{ClientSession, Database};
 use persistence_core::{Executor, NoTransaction};
@@ -23,18 +25,9 @@ use validator::Validate;
 
 use super::dto::{CommitSupplierPaymentRequest, SupplierPaymentView};
 use super::mapping::resolve_current_payment_recipient;
-use super::payment_task;
-use super::posting::{post_supplier_payment_in_transaction, PaymentPostSource};
-use super::{PayableService, SupplierPaymentWithAssetsResult};
+use super::posting::{PaymentPostSource, post_supplier_payment_in_transaction};
+use super::{PayableService, SupplierPaymentWithAssetsResult, payment_task};
 use crate::{Error, Result};
-use application_core::AuditActor;
-use application_core::CommandReceipt;
-use erp_audit::AuditActorLogs;
-use erp_audit::CommandReceiptServiceExt as _;
-use erp_identity::SharedRbacService;
-use erp_workflow::service::approval::binding::BindPublishedDefinitionCommand;
-use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
-use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 
 impl PayableService {
     /// 读取付款单归属的银行回单元数据，并记录受控预览审计。
@@ -256,10 +249,10 @@ impl PayableService {
                             view: self.read().supplier_payment_detail(&payment_id).await?,
                             assets_committed: has_pending_assets && assets_may_be_committed,
                         });
-                    }
+                    },
                     None => return Err(error),
                 }
-            }
+            },
         };
 
         Ok(SupplierPaymentWithAssetsResult {
@@ -319,14 +312,9 @@ async fn lock_expected_payment_recipient(
 ) -> Result<()> {
     let mut recipient = resolve_current_payment_recipient(db, supplier_id, executor).await?;
     if !recipient.matches_expected(expected_id, expected_version) {
-        return Err(Error::ConflictError(
-            "供应商收款账户已变化，请刷新付款任务并重新核对".to_string(),
-        ));
+        return Err(Error::ConflictError("供应商收款账户已变化，请刷新付款任务并重新核对".to_string()));
     }
-    db.party_bank_accounts()
-        .update(&mut recipient, executor)
-        .await
-        .map_err(payment_recipient_lock_error)
+    db.party_bank_accounts().update(&mut recipient, executor).await.map_err(payment_recipient_lock_error)
 }
 
 /// 把收款账户占用冲突映射为可操作的刷新提示。
@@ -335,7 +323,7 @@ fn payment_recipient_lock_error(error: persistence_core::Error) -> Error {
         persistence_core::Error::OptimisticLockingError
         | persistence_core::Error::TransientTransactionConflict(_) => {
             Error::ConflictError("供应商收款账户已变化，请刷新付款任务并重新核对".to_string())
-        }
+        },
         other => other.into(),
     }
 }
@@ -401,11 +389,7 @@ async fn persist_unbound_supplier_payment_document(
     )
     .await?;
     if binding.is_some() || document.approval_binding.is_some() {
-        return Err(Error::Internal(
-            "供应商付款为 NO_APPROVAL，不得写入审批绑定".to_string(),
-        ));
+        return Err(Error::Internal("供应商付款为 NO_APPROVAL，不得写入审批绑定".to_string()));
     }
-    persist_registered_document(db, &document, session)
-        .await
-        .map_err(crate::Error::from)
+    persist_registered_document(db, &document, session).await.map_err(crate::Error::from)
 }

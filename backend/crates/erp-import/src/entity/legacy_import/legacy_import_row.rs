@@ -2,12 +2,11 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::ids::{ExternalIdentityMapId, LegacyImportBatchId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 来源对象类型最大长度（客户、供应商、SPU、SKU、卡券销售等）。
 const OBJECT_TYPE_MAX_LEN: usize = 64;
@@ -576,9 +575,10 @@ impl LegacyImportRow {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::state::ensure_transition;
     use erp_core::ids::{ExternalIdentityMapId, LegacyImportBatchId, LegacyImportRowId};
+
+    use super::*;
 
     fn row_data() -> LegacyImportRowData {
         LegacyImportRowData {
@@ -605,16 +605,11 @@ mod tests {
 
     #[test]
     fn new_rejects_empty_and_overlong_fields() {
-        let empty_key = LegacyImportRowData {
-            source_row_key: "   ".to_string(),
-            ..row_data()
-        };
+        let empty_key = LegacyImportRowData { source_row_key: "   ".to_string(), ..row_data() };
         assert!(LegacyImportRow::new(LegacyImportRowId::new("row-2"), empty_key).is_err());
 
-        let overlong_type = LegacyImportRowData {
-            source_object_type: "x".repeat(OBJECT_TYPE_MAX_LEN + 1),
-            ..row_data()
-        };
+        let overlong_type =
+            LegacyImportRowData { source_object_type: "x".repeat(OBJECT_TYPE_MAX_LEN + 1), ..row_data() };
         assert!(LegacyImportRow::new(LegacyImportRowId::new("row-3"), overlong_type).is_err());
 
         let overlong_payload = LegacyImportRowData {
@@ -628,10 +623,7 @@ mod tests {
     fn invalid_row_requires_error_code_and_blocks_mapping() {
         let mut row = LegacyImportRow::new(LegacyImportRowId::new("row-5"), row_data()).unwrap();
 
-        assert!(
-            row.mark_parse_result(ParseStatus::Invalid, None, None).is_err(),
-            "无效行必须给出错误码"
-        );
+        assert!(row.mark_parse_result(ParseStatus::Invalid, None, None).is_err(), "无效行必须给出错误码");
         row.mark_parse_result(
             ParseStatus::Invalid,
             Some(" AMOUNT_NOT_CONSERVED ".to_string()),
@@ -640,10 +632,7 @@ mod tests {
         .unwrap();
         assert_eq!(row.error_code.as_deref(), Some("AMOUNT_NOT_CONSERVED"));
 
-        assert!(
-            row.mark_mapped(ExternalIdentityMapId::new("map-1")).is_err(),
-            "无效行不能进入映射"
-        );
+        assert!(row.mark_mapped(ExternalIdentityMapId::new("map-1")).is_err(), "无效行不能进入映射");
         assert!(row.mark_imported("SO-1".to_string(), None).is_err());
     }
 
@@ -655,13 +644,9 @@ mod tests {
         assert!(row.error_code.is_none(), "有效行清除错误信息");
 
         row.mark_mapped(ExternalIdentityMapId::new("map-1")).unwrap();
-        assert_eq!(
-            row.external_identity_map_id,
-            Some(ExternalIdentityMapId::new("map-1"))
-        );
+        assert_eq!(row.external_identity_map_id, Some(ExternalIdentityMapId::new("map-1")));
 
-        row.mark_imported(" SO-100 ".to_string(), Some(" sales/so-100 ".to_string()))
-            .unwrap();
+        row.mark_imported(" SO-100 ".to_string(), Some(" sales/so-100 ".to_string())).unwrap();
         assert_eq!(row.target_document_id.as_deref(), Some("SO-100"));
         assert_eq!(row.target_object_reference.as_deref(), Some("sales/so-100"));
         assert_eq!(row.import_status, ImportStatus::Imported);
@@ -672,18 +657,14 @@ mod tests {
         let mut row = LegacyImportRow::new(LegacyImportRowId::new("row-retry"), row_data()).unwrap();
         row.mark_parse_result(ParseStatus::Valid, None, None).unwrap();
         row.mark_mapped(ExternalIdentityMapId::new("map-retry")).unwrap();
-        row.mark_import_failed("TEMPORARY_FAILURE".to_string(), Some("可重试".to_string()))
-            .unwrap();
+        row.mark_import_failed("TEMPORARY_FAILURE".to_string(), Some("可重试".to_string())).unwrap();
 
         row.prepare_failed_retry().unwrap();
 
         assert_eq!(row.import_status, ImportStatus::PendingImport);
         assert_eq!(row.parse_status, ParseStatus::Valid);
         assert_eq!(row.mapping_status, MappingStatus::Mapped);
-        assert_eq!(
-            row.external_identity_map_id,
-            Some(ExternalIdentityMapId::new("map-retry"))
-        );
+        assert_eq!(row.external_identity_map_id, Some(ExternalIdentityMapId::new("map-retry")));
         assert!(row.error_code.is_none());
         assert!(row.error_detail.is_none());
     }
@@ -691,20 +672,14 @@ mod tests {
     #[test]
     fn imported_and_skipped_rows_cannot_be_prepared_for_retry() {
         let mut imported = LegacyImportRow::new(LegacyImportRowId::new("row-imported"), row_data()).unwrap();
-        imported
-            .mark_parse_result(ParseStatus::Valid, None, None)
-            .unwrap();
-        imported
-            .mark_mapped(ExternalIdentityMapId::new("map-imported"))
-            .unwrap();
+        imported.mark_parse_result(ParseStatus::Valid, None, None).unwrap();
+        imported.mark_mapped(ExternalIdentityMapId::new("map-imported")).unwrap();
         imported.mark_imported("SO-1".to_string(), None).unwrap();
         assert!(imported.prepare_failed_retry().is_err());
 
         let mut skipped = LegacyImportRow::new(LegacyImportRowId::new("row-skipped"), row_data()).unwrap();
         skipped.mark_parse_result(ParseStatus::Valid, None, None).unwrap();
-        skipped
-            .mark_mapped(ExternalIdentityMapId::new("map-skipped"))
-            .unwrap();
+        skipped.mark_mapped(ExternalIdentityMapId::new("map-skipped")).unwrap();
         skipped.mark_skipped("DUPLICATE".to_string(), None).unwrap();
         assert!(skipped.prepare_failed_retry().is_err());
     }
@@ -719,9 +694,7 @@ mod tests {
 
         let mut ready =
             LegacyImportRow::new(LegacyImportRowId::new("row-prepare-ready"), row_data()).unwrap();
-        ready
-            .prepare_for_import(Some(ExternalIdentityMapId::new("map-ready")))
-            .unwrap();
+        ready.prepare_for_import(Some(ExternalIdentityMapId::new("map-ready"))).unwrap();
         assert_eq!(ready.parse_status, ParseStatus::Valid);
         assert_eq!(ready.mapping_status, MappingStatus::Mapped);
     }
@@ -730,19 +703,13 @@ mod tests {
     fn prepare_for_import_rejects_invalid_or_conflicting_rows() {
         let mut invalid =
             LegacyImportRow::new(LegacyImportRowId::new("row-prepare-invalid"), row_data()).unwrap();
-        invalid
-            .mark_parse_result(ParseStatus::Invalid, Some("INVALID".to_string()), None)
-            .unwrap();
+        invalid.mark_parse_result(ParseStatus::Invalid, Some("INVALID".to_string()), None).unwrap();
         assert!(invalid.prepare_for_import(None).is_err());
 
         let mut conflict =
             LegacyImportRow::new(LegacyImportRowId::new("row-prepare-conflict"), row_data()).unwrap();
-        conflict
-            .mark_parse_result(ParseStatus::Valid, None, None)
-            .unwrap();
-        conflict
-            .mark_conflict("IDENTITY_CONFLICT".to_string(), None)
-            .unwrap();
+        conflict.mark_parse_result(ParseStatus::Valid, None, None).unwrap();
+        conflict.mark_conflict("IDENTITY_CONFLICT".to_string(), None).unwrap();
         assert!(conflict.prepare_for_import(None).is_err());
     }
 
@@ -750,17 +717,12 @@ mod tests {
     fn import_status_counts_are_deterministic() {
         let mut imported =
             LegacyImportRow::new(LegacyImportRowId::new("row-count-imported"), row_data()).unwrap();
-        imported
-            .prepare_for_import(Some(ExternalIdentityMapId::new("map-count")))
-            .unwrap();
+        imported.prepare_for_import(Some(ExternalIdentityMapId::new("map-count"))).unwrap();
         imported.mark_imported("SO-COUNT".to_string(), None).unwrap();
         let pending = LegacyImportRow::new(LegacyImportRowId::new("row-count-pending"), row_data()).unwrap();
         let rows = vec![imported, pending];
 
-        assert_eq!(
-            LegacyImportRow::count_by_import_status(&rows, ImportStatus::Imported),
-            1
-        );
+        assert_eq!(LegacyImportRow::count_by_import_status(&rows, ImportStatus::Imported), 1);
         assert_eq!(LegacyImportRow::pending_import_count(&rows), 1);
     }
 
@@ -769,10 +731,7 @@ mod tests {
         let mut row = LegacyImportRow::new(LegacyImportRowId::new("row-7"), row_data()).unwrap();
         row.mark_parse_result(ParseStatus::Valid, None, None).unwrap();
 
-        assert!(
-            row.mark_imported("SO-1".to_string(), None).is_err(),
-            "未映射不能导入"
-        );
+        assert!(row.mark_imported("SO-1".to_string(), None).is_err(), "未映射不能导入");
     }
 
     #[test]
@@ -780,15 +739,11 @@ mod tests {
         let mut row = LegacyImportRow::new(LegacyImportRowId::new("row-8"), row_data()).unwrap();
         row.mark_parse_result(ParseStatus::Valid, None, None).unwrap();
 
-        row.mark_conflict(" IDENTITY_CONFLICT ".to_string(), None)
-            .unwrap();
+        row.mark_conflict(" IDENTITY_CONFLICT ".to_string(), None).unwrap();
         assert_eq!(row.mapping_status, MappingStatus::Conflict);
         assert_eq!(row.error_code.as_deref(), Some("IDENTITY_CONFLICT"));
 
-        assert!(
-            row.mark_imported("SO-1".to_string(), None).is_err(),
-            "冲突未解决不导入"
-        );
+        assert!(row.mark_imported("SO-1".to_string(), None).is_err(), "冲突未解决不导入");
         assert!(row.mark_mapped(ExternalIdentityMapId::new("map-2")).is_err());
     }
 
@@ -797,18 +752,13 @@ mod tests {
         let mut failed = LegacyImportRow::new(LegacyImportRowId::new("row-9"), row_data()).unwrap();
         failed.mark_parse_result(ParseStatus::Valid, None, None).unwrap();
         failed.mark_mapped(ExternalIdentityMapId::new("map-1")).unwrap();
-        failed
-            .mark_import_failed(" IMPORT_IO_ERROR ".to_string(), None)
-            .unwrap();
+        failed.mark_import_failed(" IMPORT_IO_ERROR ".to_string(), None).unwrap();
         assert_eq!(failed.import_status, ImportStatus::Failed);
 
         let mut skipped = LegacyImportRow::new(LegacyImportRowId::new("row-10"), row_data()).unwrap();
         skipped.mark_parse_result(ParseStatus::Valid, None, None).unwrap();
         skipped.mark_mapped(ExternalIdentityMapId::new("map-1")).unwrap();
-        assert!(
-            skipped.mark_skipped(String::new(), None).is_err(),
-            "跳过必须说明原因"
-        );
+        assert!(skipped.mark_skipped(String::new(), None).is_err(), "跳过必须说明原因");
         skipped.mark_skipped(" DUPLICATE ".to_string(), None).unwrap();
         assert_eq!(skipped.import_status, ImportStatus::Skipped);
     }
@@ -817,10 +767,7 @@ mod tests {
     fn status_machines_are_directed() {
         assert!(ensure_transition(ParseStatus::PendingParse, ParseStatus::Valid).is_ok());
         assert!(ensure_transition(ParseStatus::PendingParse, ParseStatus::Invalid).is_ok());
-        assert!(
-            ensure_transition(ParseStatus::Valid, ParseStatus::Invalid).is_err(),
-            "无效为终态"
-        );
+        assert!(ensure_transition(ParseStatus::Valid, ParseStatus::Invalid).is_err(), "无效为终态");
 
         assert!(ensure_transition(MappingStatus::PendingMapping, MappingStatus::Conflict).is_ok());
         assert!(ensure_transition(MappingStatus::Conflict, MappingStatus::Mapped).is_err());
@@ -831,18 +778,9 @@ mod tests {
 
     #[test]
     fn status_serde_uses_stable_codes() {
-        assert_eq!(
-            serde_json::to_string(&ParseStatus::PendingParse).unwrap(),
-            "\"pending_parse\""
-        );
-        assert_eq!(
-            serde_json::to_string(&MappingStatus::Conflict).unwrap(),
-            "\"conflict\""
-        );
-        assert_eq!(
-            serde_json::to_string(&ImportStatus::Skipped).unwrap(),
-            "\"skipped\""
-        );
+        assert_eq!(serde_json::to_string(&ParseStatus::PendingParse).unwrap(), "\"pending_parse\"");
+        assert_eq!(serde_json::to_string(&MappingStatus::Conflict).unwrap(), "\"conflict\"");
+        assert_eq!(serde_json::to_string(&ImportStatus::Skipped).unwrap(), "\"skipped\"");
         assert_eq!(ImportStatus::Imported.label(), "已导入");
         assert_eq!(ParseStatus::Valid.label(), "有效");
     }

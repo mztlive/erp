@@ -1,20 +1,19 @@
 //! `purchase_order` 采购主表（数据模型 §6.6）与 §7.4 固定状态机。
 
-use serde::{Deserialize, Serialize};
-
 use entity_core::BaseModel;
 use entity_macros::Entity;
-
-use crate::entity::facts::PaymentTermFact;
-use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
 use erp_core::common::stable::StableBase;
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::ids::{
     PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderId, SalesOrderRevisionId,
     SupplierAccountId, WarehouseId,
 };
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::facts::PaymentTermFact;
+use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
 
 /// 采购单号最大长度。
 const PURCHASE_NO_MAX_LEN: usize = 64;
@@ -646,10 +645,8 @@ impl PurchaseOrder {
     ) -> Result<u32> {
         self.ensure_draft()?;
         ensure_transition(self.stable.status, PurchaseOrderStatus::InApproval)?;
-        let next = self
-            .approval_subject_version
-            .checked_add(1)
-            .ok_or_else(|| Error::from("审批提交版本溢出"))?;
+        let next =
+            self.approval_subject_version.checked_add(1).ok_or_else(|| Error::from("审批提交版本溢出"))?;
         self.approval_subject_version = next;
         self.current_submission_id = Some(current_submission_id.into());
         self.stable.status = PurchaseOrderStatus::InApproval;
@@ -787,9 +784,7 @@ impl PurchaseOrder {
         if self.fulfillment_responsibility != FulfillmentResponsibility::Warehouse {
             return Err(Error::from("当前采购单不属于入仓履约"));
         }
-        self.target_warehouse_id
-            .as_ref()
-            .ok_or_else(|| Error::from("采购单未指定目标仓库，请先补齐后再生效"))
+        self.target_warehouse_id.as_ref().ok_or_else(|| Error::from("采购单未指定目标仓库，请先补齐后再生效"))
     }
 
     /// 变更采购单当前责任人。
@@ -808,10 +803,7 @@ impl PurchaseOrder {
         owner_user_id: impl Into<String>,
         updated_by: impl Into<String>,
     ) -> Result<()> {
-        if matches!(
-            self.stable.status,
-            PurchaseOrderStatus::Completed | PurchaseOrderStatus::Voided
-        ) {
+        if matches!(self.stable.status, PurchaseOrderStatus::Completed | PurchaseOrderStatus::Voided) {
             return Err(Error::from("已完成或已作废采购单不能变更责任人"));
         }
         let owner_user_id = normalize_required_text(
@@ -880,16 +872,17 @@ fn ensure_target_warehouse(
 #[cfg(test)]
 mod tests {
 
-    use super::{
-        ProgressStatus, PurchaseOrder, PurchaseOrderData, PurchaseOrderStatus, PurchaseOrderUpdate,
-        PurchaseReviewStatus,
-    };
-    use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
     use erp_core::common::state::ensure_transition;
     use erp_core::ids::{
         PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderId,
         SalesOrderRevisionId, SupplierAccountId,
     };
+
+    use super::{
+        ProgressStatus, PurchaseOrder, PurchaseOrderData, PurchaseOrderStatus, PurchaseOrderUpdate,
+        PurchaseReviewStatus,
+    };
+    use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
 
     fn order_data() -> PurchaseOrderData {
         PurchaseOrderData {
@@ -956,25 +949,27 @@ mod tests {
             purchase_no: "p".repeat(65),
             ..order_data()
         };
-        assert!(PurchaseOrder::new(
-            PurchaseOrderId::new("po-3"),
-            overlong,
-            "admin-1",
-            crate::entity::test_support::payment_term
-        )
-        .is_err());
+        assert!(
+            PurchaseOrder::new(
+                PurchaseOrderId::new("po-3"),
+                overlong,
+                "admin-1",
+                crate::entity::test_support::payment_term
+            )
+            .is_err()
+        );
 
-        let ambiguous_payment_term = PurchaseOrderData {
-            payment_term_code: "先用后付".to_string(),
-            ..order_data()
-        };
-        assert!(PurchaseOrder::new(
-            PurchaseOrderId::new("po-4"),
-            ambiguous_payment_term,
-            "admin-1",
-            crate::entity::test_support::payment_term
-        )
-        .is_err());
+        let ambiguous_payment_term =
+            PurchaseOrderData { payment_term_code: "先用后付".to_string(), ..order_data() };
+        assert!(
+            PurchaseOrder::new(
+                PurchaseOrderId::new("po-4"),
+                ambiguous_payment_term,
+                "admin-1",
+                crate::entity::test_support::payment_term
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -999,24 +994,16 @@ mod tests {
     fn draft_submission_and_change_revision_guards_are_derived_by_entity() {
         let mut order = new_order();
         assert!(order.draft_submission_id().is_err());
-        order
-            .attach_draft_submission(PurchaseOrderSubmissionId::new("sub-1"))
-            .unwrap();
+        order.attach_draft_submission(PurchaseOrderSubmissionId::new("sub-1")).unwrap();
         assert_eq!(order.draft_submission_id().unwrap().as_ref(), "sub-1");
-        assert!(order
-            .attach_draft_submission(PurchaseOrderSubmissionId::new("sub-2"))
-            .is_err());
+        assert!(order.attach_draft_submission(PurchaseOrderSubmissionId::new("sub-2")).is_err());
         assert!(order.revision_id_for_change().is_err());
 
         order.start_approval("sub-1", "admin-1").unwrap();
         assert_eq!(order.submission_id_for_formalization().unwrap().as_ref(), "sub-1");
-        order
-            .formalize_with_revision(PurchaseOrderRevisionId::new("por-1"), "fin-1")
-            .unwrap();
+        order.formalize_with_revision(PurchaseOrderRevisionId::new("por-1"), "fin-1").unwrap();
         assert_eq!(order.revision_id_for_change().unwrap().as_ref(), "por-1");
-        order
-            .apply_change_revision(PurchaseOrderRevisionId::new("por-2"), "approver-1")
-            .unwrap();
+        order.apply_change_revision(PurchaseOrderRevisionId::new("por-2"), "approver-1").unwrap();
         assert_eq!(order.revision_id_for_change().unwrap().as_ref(), "por-2");
         assert_eq!(order.stable.updated_by, "approver-1");
     }
@@ -1025,9 +1012,7 @@ mod tests {
     fn expected_version_guard_accepts_current_and_rejects_stale() {
         let order = new_order();
         order.ensure_expected_version(order.base.version).unwrap();
-        assert!(order
-            .ensure_expected_version(order.base.version.saturating_add(1))
-            .is_err());
+        assert!(order.ensure_expected_version(order.base.version.saturating_add(1)).is_err());
     }
 
     #[test]
@@ -1051,16 +1036,15 @@ mod tests {
         order.start_approval("sub-1", "admin-2").unwrap();
         assert_eq!(order.stable.status(), PurchaseOrderStatus::InApproval);
         assert_eq!(order.approval_subject_version, 1);
-        assert!(order
-            .update(
-                PurchaseOrderUpdate {
-                    payment_term_code: Some("X".to_string()),
-                    ..Default::default()
-                },
-                "admin-3",
-                crate::entity::test_support::payment_term
-            )
-            .is_err());
+        assert!(
+            order
+                .update(
+                    PurchaseOrderUpdate { payment_term_code: Some("X".to_string()), ..Default::default() },
+                    "admin-3",
+                    crate::entity::test_support::payment_term
+                )
+                .is_err()
+        );
     }
 
     /// 验证最终生效守卫只读取审批状态且不会修改聚合。
@@ -1105,10 +1089,7 @@ mod tests {
     #[test]
     fn ensure_can_formalize_rejects_non_approval_states() {
         let draft_error = new_order().ensure_can_formalize().unwrap_err();
-        assert_eq!(
-            draft_error.to_string(),
-            "只有审批中的采购单可以由最终通过动作生效"
-        );
+        assert_eq!(draft_error.to_string(), "只有审批中的采购单可以由最终通过动作生效");
 
         let mut effective = new_order();
         effective.start_approval("sub-1", "admin-1").unwrap();
@@ -1149,36 +1130,28 @@ mod tests {
         assert!(ensure_transition(PurchaseOrderStatus::Draft, PurchaseOrderStatus::Voided).is_ok());
         assert!(ensure_transition(PurchaseOrderStatus::InApproval, PurchaseOrderStatus::Effective).is_ok());
         assert!(ensure_transition(PurchaseOrderStatus::InApproval, PurchaseOrderStatus::Draft).is_ok());
-        assert!(ensure_transition(
-            PurchaseOrderStatus::Draft,
-            PurchaseOrderStatus::PendingFinanceReview
-        )
-        .is_err());
-        assert!(ensure_transition(
-            PurchaseOrderStatus::PendingFinanceReview,
-            PurchaseOrderStatus::Effective
-        )
-        .is_err());
-        assert!(ensure_transition(
-            PurchaseOrderStatus::Effective,
-            PurchaseOrderStatus::PartiallyExecuted
-        )
-        .is_ok());
-        assert!(ensure_transition(
-            PurchaseOrderStatus::PartiallyExecuted,
-            PurchaseOrderStatus::Completed
-        )
-        .is_ok());
+        assert!(
+            ensure_transition(PurchaseOrderStatus::Draft, PurchaseOrderStatus::PendingFinanceReview).is_err()
+        );
+        assert!(
+            ensure_transition(PurchaseOrderStatus::PendingFinanceReview, PurchaseOrderStatus::Effective)
+                .is_err()
+        );
+        assert!(
+            ensure_transition(PurchaseOrderStatus::Effective, PurchaseOrderStatus::PartiallyExecuted).is_ok()
+        );
+        assert!(
+            ensure_transition(PurchaseOrderStatus::PartiallyExecuted, PurchaseOrderStatus::Completed).is_ok()
+        );
 
         assert!(ensure_transition(PurchaseOrderStatus::Draft, PurchaseOrderStatus::Effective).is_err());
         assert!(ensure_transition(PurchaseOrderStatus::Effective, PurchaseOrderStatus::Draft).is_err());
         assert!(ensure_transition(PurchaseOrderStatus::Completed, PurchaseOrderStatus::Draft).is_err());
         assert!(ensure_transition(PurchaseOrderStatus::Voided, PurchaseOrderStatus::Draft).is_err());
-        assert!(ensure_transition(
-            PurchaseOrderStatus::Completed,
-            PurchaseOrderStatus::PartiallyExecuted
-        )
-        .is_err());
+        assert!(
+            ensure_transition(PurchaseOrderStatus::Completed, PurchaseOrderStatus::PartiallyExecuted)
+                .is_err()
+        );
         assert!(ensure_transition(PurchaseOrderStatus::Effective, PurchaseOrderStatus::Completed).is_err());
     }
 
@@ -1204,10 +1177,7 @@ mod tests {
             serde_json::to_string(&PurchaseOrderStatus::PartiallyExecuted).unwrap(),
             "\"PARTIALLY_EXECUTED\""
         );
-        assert_eq!(
-            serde_json::to_string(&PurchaseReviewStatus::Rejected).unwrap(),
-            "\"REJECTED\""
-        );
+        assert_eq!(serde_json::to_string(&PurchaseReviewStatus::Rejected).unwrap(), "\"REJECTED\"");
         assert_eq!(PurchaseOrderStatus::PartiallyExecuted.label(), "部分执行");
         assert_eq!(PurchaseOrderStatus::Voided.label(), "已作废");
         assert_eq!(PurchaseReviewStatus::Pending.label(), "待审核");
@@ -1220,9 +1190,7 @@ mod tests {
         let order = new_order();
         assert_eq!(order.payment_term_code, "POSTPAY_NET30");
         assert!(order.ensure_payment_term_unchanged(None).is_ok());
-        assert!(order
-            .ensure_payment_term_unchanged(Some(" POSTPAY_NET30 "))
-            .is_ok());
+        assert!(order.ensure_payment_term_unchanged(Some(" POSTPAY_NET30 ")).is_ok());
         assert_eq!(
             order.ensure_payment_term_unchanged(Some("PREPAY")),
             Err(crate::entity::purchase_order::draft_edit::DraftLineEditViolation::PaymentTermChanged)
@@ -1265,10 +1233,7 @@ mod tests {
             .unwrap();
         order.stable.status = PurchaseOrderStatus::InApproval;
         let result = order.update(
-            PurchaseOrderUpdate {
-                payment_term_code: Some("NET-15".to_string()),
-                ..Default::default()
-            },
+            PurchaseOrderUpdate { payment_term_code: Some("NET-15".to_string()), ..Default::default() },
             "admin-1",
             |_| panic!("non-draft must fail before resolver"),
         );

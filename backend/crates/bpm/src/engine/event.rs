@@ -1,8 +1,8 @@
 //! 中性 BPM 领域事件。不得包含 ERP URL、权限名、业务命令或通知模板。
 
 use crate::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
-use crate::model::types::ApprovalBlockerCode;
 use crate::model::ParticipantId;
+use crate::model::types::ApprovalBlockerCode;
 
 /// 中性领域事件种类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

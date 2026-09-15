@@ -1,13 +1,11 @@
-use crate::entity::supplier::{CapabilityCode, CapabilityStatus, SupplierCapability};
-use crate::repository::owned::SupplierCapabilityRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::SupplierAccountId;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, Pagination, QueryFilter, Result};
 
-use super::{SupplierRepository, SUPPLIER_CAPABILITIES};
-use persistence_core::Executor;
-use persistence_core::Result;
-use persistence_core::{Pagination, QueryFilter};
+use super::{SUPPLIER_CAPABILITIES, SupplierRepository};
+use crate::entity::supplier::{CapabilityCode, CapabilityStatus, SupplierCapability};
+use crate::repository::owned::SupplierCapabilityRepository;
 
 /// 供应商能力列表筛选条件。
 #[derive(Debug, Clone)]
@@ -229,9 +227,10 @@ impl<'a> SupplierRepository<'a> {
 
 #[cfg(test)]
 mod tests {
+    use persistence_core::QueryFilter;
+
     use super::SupplierCapabilityFilter;
     use crate::entity::supplier::CapabilityStatus;
-    use persistence_core::QueryFilter;
 
     #[test]
     fn capability_filter_applies_supplier_code_and_status() {

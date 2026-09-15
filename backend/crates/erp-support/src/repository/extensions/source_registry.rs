@@ -5,13 +5,13 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as SourceRegistryExt>::SOURCE_SYSTEMS` 等值。
 
-use crate::repository::owned::{
-    ExternalIdentityMapRepository, ExternalIdentityTargetRepository, SourceSystemRepository,
-};
 use mongodb::Database;
 
 use super::super::source_registry::{
     ExternalIdentityMapFilter, SourceRegistryRepository, SourceSystemFilter,
+};
+use crate::repository::owned::{
+    ExternalIdentityMapRepository, ExternalIdentityTargetRepository, SourceSystemRepository,
 };
 
 /// 域 D01 仓储访问器。

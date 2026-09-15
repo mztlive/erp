@@ -6,8 +6,7 @@ use erp_audit::AuditExt;
 use erp_customer::CustomerExt;
 use erp_finance::entity::payable::PayableAccount;
 use erp_finance::entity::receivable::ReceivableAccount;
-use erp_party::Party;
-use erp_party::PartyExt;
+use erp_party::{Party, PartyExt};
 use erp_supplier::SupplierExt;
 use persistence_core::Executor;
 
@@ -31,9 +30,9 @@ impl super::super::WorkItemFactsReader {
             .audit_logs()
             .list_work_item_creation_audits(resource_type, &resource_ids, executor)
             .await?;
-        Ok(first_created_by(audits.iter().map(|audit| {
-            (audit.resource_id.as_deref(), audit.actor_id.as_str())
-        })))
+        Ok(first_created_by(
+            audits.iter().map(|audit| (audit.resource_id.as_deref(), audit.actor_id.as_str())),
+        ))
     }
 
     /// Load payable supplier display names.
@@ -42,10 +41,7 @@ impl super::super::WorkItemFactsReader {
         accounts: &[PayableAccount],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
-        let ids = accounts
-            .iter()
-            .map(|account| account.supplier_id.to_string())
-            .collect::<Vec<_>>();
+        let ids = accounts.iter().map(|account| account.supplier_id.to_string()).collect::<Vec<_>>();
         self.supplier_display_names(&ids, executor).await
     }
 
@@ -55,10 +51,7 @@ impl super::super::WorkItemFactsReader {
         accounts: &[PayableAccount],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
-        let ids = accounts
-            .iter()
-            .map(|account| account.source_document_id.clone())
-            .collect::<Vec<_>>();
+        let ids = accounts.iter().map(|account| account.source_document_id.clone()).collect::<Vec<_>>();
         Ok(self
             .read_purchase_orders(&ids, executor)
             .await?
@@ -96,10 +89,8 @@ impl super::super::WorkItemFactsReader {
         parties: &[Party],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
-        let revision_ids = parties
-            .iter()
-            .filter_map(|party| party.stable.current_revision_id.clone())
-            .collect::<Vec<_>>();
+        let revision_ids =
+            parties.iter().filter_map(|party| party.stable.current_revision_id.clone()).collect::<Vec<_>>();
         if revision_ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -130,23 +121,14 @@ impl super::super::WorkItemFactsReader {
         if customer_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let customers = self
-            .db
-            .customer_accounts()
-            .list_active_by_ids(customer_ids, executor)
-            .await?;
-        let party_ids = customers
-            .iter()
-            .map(|item| item.party_id.to_string())
-            .collect::<Vec<_>>();
+        let customers = self.db.customer_accounts().list_active_by_ids(customer_ids, executor).await?;
+        let party_ids = customers.iter().map(|item| item.party_id.to_string()).collect::<Vec<_>>();
         let party_names = self.party_legal_names(&party_ids, executor).await?;
         Ok(customers
             .into_iter()
             .map(|customer| {
-                let name = party_names
-                    .get(&customer.party_id.to_string())
-                    .cloned()
-                    .unwrap_or(customer.customer_no);
+                let name =
+                    party_names.get(&customer.party_id.to_string()).cloned().unwrap_or(customer.customer_no);
                 (customer.base.id, name)
             })
             .collect())
@@ -161,23 +143,14 @@ impl super::super::WorkItemFactsReader {
         if supplier_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let suppliers = self
-            .db
-            .supplier_accounts()
-            .list_active_by_ids(supplier_ids, executor)
-            .await?;
-        let party_ids = suppliers
-            .iter()
-            .map(|item| item.party_id.to_string())
-            .collect::<Vec<_>>();
+        let suppliers = self.db.supplier_accounts().list_active_by_ids(supplier_ids, executor).await?;
+        let party_ids = suppliers.iter().map(|item| item.party_id.to_string()).collect::<Vec<_>>();
         let party_names = self.party_legal_names(&party_ids, executor).await?;
         Ok(suppliers
             .into_iter()
             .map(|supplier| {
-                let name = party_names
-                    .get(&supplier.party_id.to_string())
-                    .cloned()
-                    .unwrap_or(supplier.supplier_no);
+                let name =
+                    party_names.get(&supplier.party_id.to_string()).cloned().unwrap_or(supplier.supplier_no);
                 (supplier.base.id, name)
             })
             .collect())
@@ -208,9 +181,7 @@ fn first_created_by<'a>(
     let mut created_by = HashMap::new();
     for (resource_id, actor_id) in audits {
         if let Some(resource_id) = resource_id {
-            created_by
-                .entry(resource_id.to_string())
-                .or_insert_with(|| actor_id.to_string());
+            created_by.entry(resource_id.to_string()).or_insert_with(|| actor_id.to_string());
         }
     }
     created_by

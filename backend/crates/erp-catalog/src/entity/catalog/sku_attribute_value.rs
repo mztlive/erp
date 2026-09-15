@@ -5,13 +5,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::catalog::status::EnableStatus;
 use erp_core::common::stable::StableBase;
 use erp_core::ids::{SkuAttributeId, SkuAttributeValueId};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::catalog::status::EnableStatus;
 
 /// 属性值代码最大长度。
 const CODE_MAX_LEN: usize = 64;
@@ -102,12 +102,8 @@ impl SkuAttributeValue {
         data: SkuAttributeValueData,
         created_by: impl Into<String>,
     ) -> Result<Self> {
-        let value_code = normalize_required_text(
-            data.value_code,
-            "属性值代码不能为空",
-            CODE_MAX_LEN,
-            "属性值代码过长",
-        )?;
+        let value_code =
+            normalize_required_text(data.value_code, "属性值代码不能为空", CODE_MAX_LEN, "属性值代码过长")?;
         let display_value = normalize_required_text(
             data.display_value,
             "展示值不能为空",
@@ -188,9 +184,10 @@ fn ensure_non_negative_sort_order(sort_order: i32) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
     use erp_core::ids::SkuAttributeId;
+
+    use super::*;
 
     fn data() -> SkuAttributeValueData {
         SkuAttributeValueData {
@@ -217,16 +214,10 @@ mod tests {
     /// 失败路径：必填空与越界（负排序）各一条。
     #[test]
     fn new_rejects_empty_and_negative_sort_order() {
-        let empty_code = SkuAttributeValueData {
-            value_code: "  ".to_string(),
-            ..data()
-        };
+        let empty_code = SkuAttributeValueData { value_code: "  ".to_string(), ..data() };
         assert!(SkuAttributeValue::new(SkuAttributeValueId::new("val-1"), empty_code, "admin-1").is_err());
 
-        let negative_sort = SkuAttributeValueData {
-            sort_order: -1,
-            ..data()
-        };
+        let negative_sort = SkuAttributeValueData { sort_order: -1, ..data() };
         assert!(SkuAttributeValue::new(SkuAttributeValueId::new("val-1"), negative_sort, "admin-1").is_err());
     }
 
@@ -251,10 +242,7 @@ mod tests {
         assert!(!value.is_active());
         assert_eq!(value.value_code, "L");
 
-        let negative_sort = SkuAttributeValueUpdate {
-            sort_order: Some(-1),
-            ..Default::default()
-        };
+        let negative_sort = SkuAttributeValueUpdate { sort_order: Some(-1), ..Default::default() };
         assert!(value.update(negative_sort, "admin-2").is_err());
     }
 

@@ -1,22 +1,22 @@
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{LegacyImportBatchId, LegacyImportConfirmationId, SourceSystemId, WorkItemId};
+use erp_import::{
+    ConfirmationDecision, ConfirmationMatrixDecision, ConfirmationStatus,
+    CreateLegacyImportConfirmationRequest, ImportBusinessConfirmationNextStep,
+    ImportBusinessConfirmationResultStatus, LegacyImportBatch, LegacyImportBatchData,
+    LegacyImportBatchStatus, LegacyImportConfirmation, LegacyImportConfirmationData,
+    PreparedConfirmationCompletion,
+};
+use erp_workflow::entity::work_item::{WorkItem, WorkItemCloseData};
+use erp_workflow::service::work_item::WorkItemAllowedAction;
+
 use super::complete::{
-    confirmation_command_identity, confirmation_completion_receipt_message, confirmation_result_status,
-    parse_confirmation_completion_receipt, validate_confirmation_completion, ConfirmationCompletionReceipt,
+    ConfirmationCompletionReceipt, confirmation_command_identity, confirmation_completion_receipt_message,
+    confirmation_result_status, parse_confirmation_completion_receipt, validate_confirmation_completion,
 };
 use super::confirmation_query::{append_confirmation_actions, read_only_work_item_view};
 use super::create_confirmation::confirmation_next_step;
 use super::supersede::{collect_superseded_closable_work_items, replaced_confirmation_work_item_ids};
-use erp_core::common::time::{BusinessDate, Instant};
-use erp_core::ids::{LegacyImportBatchId, LegacyImportConfirmationId, SourceSystemId, WorkItemId};
-use erp_import::{
-    ConfirmationDecision, ConfirmationMatrixDecision, ConfirmationStatus, LegacyImportBatch,
-    LegacyImportBatchData, LegacyImportBatchStatus, LegacyImportConfirmation, LegacyImportConfirmationData,
-};
-use erp_import::{
-    CreateLegacyImportConfirmationRequest, ImportBusinessConfirmationNextStep,
-    ImportBusinessConfirmationResultStatus, PreparedConfirmationCompletion,
-};
-use erp_workflow::entity::work_item::{WorkItem, WorkItemCloseData};
-use erp_workflow::service::work_item::WorkItemAllowedAction;
 
 fn batch() -> LegacyImportBatch {
     let mut batch = LegacyImportBatch::new(
@@ -155,11 +155,7 @@ fn domain_actions_require_pending_fact_and_process_responsibility() {
     assert_eq!(mine, ["VIEW", "PROCESS", "CONFIRM_SCOPE", "RETURN_FOR_FIX"]);
 
     let mut view_only = vec!["VIEW".to_string()];
-    append_confirmation_actions(
-        &mut view_only,
-        ConfirmationStatus::Pending,
-        &[WorkItemAllowedAction::View],
-    );
+    append_confirmation_actions(&mut view_only, ConfirmationStatus::Pending, &[WorkItemAllowedAction::View]);
     assert_eq!(view_only, ["VIEW"]);
 
     let mut completed = vec!["VIEW".to_string(), "PROCESS".to_string()];
@@ -196,9 +192,7 @@ fn last_confirmation_prepares_batch_without_starting_application() {
     let next = confirmation_next_step(ConfirmationMatrixDecision::StartApply);
     let mut import_batch = batch();
     if next == ImportBusinessConfirmationNextStep::StartApply {
-        import_batch
-            .advance(LegacyImportBatchStatus::ReadyToApply)
-            .unwrap();
+        import_batch.advance(LegacyImportBatchStatus::ReadyToApply).unwrap();
     }
 
     assert_eq!(next, ImportBusinessConfirmationNextStep::StartApply);
@@ -254,10 +248,7 @@ fn superseded_closable_skips_closed_and_fails_closed_on_missing() {
         )
         .unwrap();
         confirmation
-            .invalidate(
-                LegacyImportConfirmationId::new("c-new"),
-                Instant::from_unix_secs(1_700_000_000),
-            )
+            .invalidate(LegacyImportConfirmationId::new("c-new"), Instant::from_unix_secs(1_700_000_000))
             .unwrap();
         confirmation
     }
@@ -282,16 +273,12 @@ fn superseded_closable_skips_closed_and_fails_closed_on_missing() {
     closed
         .close(
             "user-2",
-            WorkItemCloseData {
-                close_reason: "SUPERSEDED_BY_NEW_IMPORT_TRIAL".to_string(),
-            },
+            WorkItemCloseData { close_reason: "SUPERSEDED_BY_NEW_IMPORT_TRIAL".to_string() },
             Instant::from_unix_secs(1_700_000_001),
         )
         .unwrap();
-    let confirmations = vec![
-        invalidated("c-1", "SALES", "work-item-1"),
-        invalidated("c-2", "PROCUREMENT", "work-item-2"),
-    ];
+    let confirmations =
+        vec![invalidated("c-1", "SALES", "work-item-1"), invalidated("c-2", "PROCUREMENT", "work-item-2")];
     let mut map = HashMap::new();
     map.insert(open.base.id.clone(), open);
     map.insert(closed.base.id.clone(), closed);
@@ -318,10 +305,7 @@ fn idempotency_receipt_rejects_same_key_with_different_command() {
     };
     let message = confirmation_completion_receipt_message(&fingerprint, receipt);
 
-    assert_eq!(
-        parse_confirmation_completion_receipt(&message, &fingerprint).unwrap(),
-        receipt
-    );
+    assert_eq!(parse_confirmation_completion_receipt(&message, &fingerprint).unwrap(), receipt);
     assert!(parse_confirmation_completion_receipt(&message, &"0".repeat(64)).is_err());
     assert!(!identity.audit_id().contains("request-1"));
 }

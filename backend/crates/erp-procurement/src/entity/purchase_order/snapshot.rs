@@ -3,13 +3,13 @@
 //! 快照字段由 P3 在形成提交/版本时填充，P1 只负责定义与校验。
 
 use chrono::{Datelike, Days};
-use serde::{Deserialize, Serialize};
-
-use crate::entity::facts::PaymentTermFact;
 use erp_core::common::time::BusinessDate;
 use erp_core::money::{Amount, Rate};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::facts::PaymentTermFact;
 
 /// 供应商名称最大长度。
 const SUPPLIER_NAME_MAX_LEN: usize = 256;
@@ -154,10 +154,8 @@ impl PaymentTermSnapshot {
             return Ok(approved_on);
         };
         let delivery_on = expected_delivery_on.ok_or("后付条件缺少预计交付日")?;
-        let due = delivery_on
-            .as_naive_date()
-            .checked_add_days(Days::new(days))
-            .ok_or("计划付款日超出支持范围")?;
+        let due =
+            delivery_on.as_naive_date().checked_add_days(Days::new(days)).ok_or("计划付款日超出支持范围")?;
         BusinessDate::from_ymd(due.year(), due.month(), due.day())
             .ok_or_else(|| Error::from("计划付款日无效"))
     }
@@ -166,8 +164,9 @@ impl PaymentTermSnapshot {
 #[cfg(test)]
 mod tests {
 
-    use super::{PaymentTermSnapshot, SupplierSnapshot};
     use erp_core::common::time::BusinessDate;
+
+    use super::{PaymentTermSnapshot, SupplierSnapshot};
 
     #[test]
     fn supplier_snapshot_trims_and_requires_name() {
@@ -178,8 +177,9 @@ mod tests {
 
     #[test]
     fn payment_term_snapshot_normalizes_and_rejects_negative_gates() {
-        use erp_core::money::Amount;
         use std::str::FromStr;
+
+        use erp_core::money::Amount;
 
         let snapshot = PaymentTermSnapshot::new(
             " PREPAY-30 ".to_string(),
@@ -231,23 +231,16 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            prepay
-                .payable_due_date(approved, None, crate::entity::test_support::payment_term)
-                .unwrap(),
+            prepay.payable_due_date(approved, None, crate::entity::test_support::payment_term).unwrap(),
             approved
         );
         assert_eq!(
-            cash.payable_due_date(approved, None, crate::entity::test_support::payment_term)
-                .unwrap(),
+            cash.payable_due_date(approved, None, crate::entity::test_support::payment_term).unwrap(),
             approved
         );
         assert_eq!(
             postpay
-                .payable_due_date(
-                    approved,
-                    Some(delivery),
-                    crate::entity::test_support::payment_term
-                )
+                .payable_due_date(approved, Some(delivery), crate::entity::test_support::payment_term)
                 .unwrap(),
             BusinessDate::from_ymd(2026, 9, 16).unwrap()
         );
@@ -265,50 +258,57 @@ mod tests {
         )
         .unwrap();
 
-        assert!(postpay
-            .payable_due_date(approved, None, crate::entity::test_support::payment_term)
-            .is_err());
-        assert!(PaymentTermSnapshot::new(
-            "先用后付".to_string(),
-            false,
-            None,
-            None,
-            crate::entity::test_support::payment_term
-        )
-        .is_err());
-        assert!(PaymentTermSnapshot::new(
-            "CONTRACT".to_string(),
-            false,
-            None,
-            None,
-            crate::entity::test_support::payment_term
-        )
-        .is_err());
+        assert!(postpay.payable_due_date(approved, None, crate::entity::test_support::payment_term).is_err());
+        assert!(
+            PaymentTermSnapshot::new(
+                "先用后付".to_string(),
+                false,
+                None,
+                None,
+                crate::entity::test_support::payment_term
+            )
+            .is_err()
+        );
+        assert!(
+            PaymentTermSnapshot::new(
+                "CONTRACT".to_string(),
+                false,
+                None,
+                None,
+                crate::entity::test_support::payment_term
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn payment_term_requires_matching_prepay_gate() {
-        assert!(PaymentTermSnapshot::new(
-            "PREPAY_30".to_string(),
-            false,
-            None,
-            None,
-            crate::entity::test_support::payment_term
-        )
-        .is_err());
-        assert!(PaymentTermSnapshot::new(
-            "POSTPAY_NET30".to_string(),
-            true,
-            None,
-            None,
-            crate::entity::test_support::payment_term
-        )
-        .is_err());
+        assert!(
+            PaymentTermSnapshot::new(
+                "PREPAY_30".to_string(),
+                false,
+                None,
+                None,
+                crate::entity::test_support::payment_term
+            )
+            .is_err()
+        );
+        assert!(
+            PaymentTermSnapshot::new(
+                "POSTPAY_NET30".to_string(),
+                true,
+                None,
+                None,
+                crate::entity::test_support::payment_term
+            )
+            .is_err()
+        );
     }
     #[test]
     fn periodic_due_dates_use_delivery_period_and_require_delivery() {
-        use crate::entity::facts::PaymentTermFact;
         use erp_core::common::calendar::CalendarPeriod;
+
+        use crate::entity::facts::PaymentTermFact;
         let approved = BusinessDate::from_ymd(2026, 8, 26).unwrap();
         let delivery = BusinessDate::from_ymd(2026, 9, 10).unwrap();
         for (period, expected) in [
@@ -329,9 +329,7 @@ mod tests {
             };
             let snapshot = PaymentTermSnapshot::new("period".into(), false, None, None, resolve).unwrap();
             assert_eq!(
-                snapshot
-                    .payable_due_date(approved, Some(delivery), resolve)
-                    .unwrap(),
+                snapshot.payable_due_date(approved, Some(delivery), resolve).unwrap(),
                 BusinessDate::from_ymd(expected.0, expected.1, expected.2).unwrap()
             );
             assert!(snapshot.payable_due_date(approved, None, resolve).is_err());

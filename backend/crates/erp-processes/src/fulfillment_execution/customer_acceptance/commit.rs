@@ -1,23 +1,22 @@
 //! 幂等登记根事务：草稿/正式事实、销售进度、任务和命令收据按原顺序组合。
-use super::registration::register_created_customer_acceptance_document;
-use super::task::prepare_customer_acceptance_task_command;
-use super::{
-    completion::{complete_acceptance, CompletionKind},
-    CustomerAcceptanceProcess,
-};
-use crate::{Error, Result};
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::CommandReceiptServiceExt;
 use erp_core::ids::CustomerAcceptanceId;
 use erp_fulfillment::dto::CommitCustomerAcceptanceRequest;
 use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
-use erp_fulfillment::service::document_number::next_customer_acceptance_no;
 use erp_fulfillment::service::FulfillmentService;
+use erp_fulfillment::service::document_number::next_customer_acceptance_no;
 use erp_read_models::fulfillment_center::dto::CommitCustomerAcceptanceView;
 use erp_sales::repository::SalesOrderExt;
 use id_generator::next_id;
 use persistence_core::Transactional;
 use validator::Validate;
+
+use super::CustomerAcceptanceProcess;
+use super::completion::{CompletionKind, complete_acceptance};
+use super::registration::register_created_customer_acceptance_document;
+use super::task::prepare_customer_acceptance_task_command;
+use crate::{Error, Result};
 impl CustomerAcceptanceProcess {
     /// 原子登记并过账客户验收。
     ///
@@ -40,11 +39,7 @@ impl CustomerAcceptanceProcess {
     #[tracing::instrument(
         name = "fulfillment.customer_acceptance_commit",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "customer_acceptance_commit"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "customer_acceptance_commit")
     )]
     pub async fn commit_customer_acceptance(
         &self,
@@ -57,9 +52,7 @@ impl CustomerAcceptanceProcess {
             req.expected_task_version,
         )?;
         if req.acceptance_id.is_some() != req.expected_acceptance_version.is_some() {
-            return Err(Error::ValidationError(
-                "已有草稿必须同时提交草稿主键和期望版本".to_string(),
-            ));
+            return Err(Error::ValidationError("已有草稿必须同时提交草稿主键和期望版本".to_string()));
         }
         let command_receipt = CommandReceipt::from_payload(
             "customer-acceptance-commit-",
@@ -107,9 +100,7 @@ impl CustomerAcceptanceProcess {
                         .await?
                         .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
                     if order.base.version != req.expected_sales_order_version {
-                        return Err(Error::ConflictError(
-                            "销售单已变化，请刷新履约事实后重试".to_string(),
-                        ));
+                        return Err(Error::ConflictError("销售单已变化，请刷新履约事实后重试".to_string()));
                     }
                     let task = prepare_customer_acceptance_task_command(
                         &db,
@@ -150,10 +141,7 @@ impl CustomerAcceptanceProcess {
                         &db,
                         &acceptance,
                         &actor,
-                        CompletionKind::Commit {
-                            task,
-                            receipt: command_receipt_for_tx,
-                        },
+                        CompletionKind::Commit { task, receipt: command_receipt_for_tx },
                         session,
                     )
                     .await?;
@@ -171,14 +159,11 @@ impl CustomerAcceptanceProcess {
                         .committed_customer_acceptance_view(&acceptance_id, &sales_order_id)
                         .await
                         .map_err(crate::Error::from);
-                }
+                },
                 None => return Err(error),
             },
         };
         let remaining_eligibility = self.read.acceptance_eligibility(sales_order_id.as_ref()).await?;
-        Ok(CommitCustomerAcceptanceView {
-            acceptance: posted.into(),
-            remaining_eligibility,
-        })
+        Ok(CommitCustomerAcceptanceView { acceptance: posted.into(), remaining_eligibility })
     }
 }

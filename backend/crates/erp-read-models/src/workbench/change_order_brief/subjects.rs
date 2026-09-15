@@ -12,14 +12,10 @@ pub(super) fn sales(
     number: Option<&str>,
     context: &SalesChangeBriefContext,
 ) {
-    for submission in context
-        .submissions
-        .values()
-        .filter(|row| row.sales_change_order_id.as_ref() == change.base.id)
+    for submission in
+        context.submissions.values().filter(|row| row.sales_change_order_id.as_ref() == change.base.id)
     {
-        let base = context
-            .base_revisions
-            .get(&submission.base_revision_id.to_string());
+        let base = context.base_revisions.get(&submission.base_revision_id.to_string());
         let (lines, more) = lines(
             context.base_lines.get(&submission.base_revision_id.to_string()),
             context.target_lines.get(&submission.base.id),
@@ -30,12 +26,8 @@ pub(super) fn sales(
             impact_summary: fact.display.impact_summary.clone(),
             brief_source: Some(source),
         };
-        fact.display
-            .subject_briefs
-            .insert(submission.submission_no.to_string(), display.clone());
-        fact.display
-            .subject_briefs
-            .insert(submission.base.id.clone(), display);
+        fact.display.subject_briefs.insert(submission.submission_no.to_string(), display.clone());
+        fact.display.subject_briefs.insert(submission.base.id.clone(), display);
     }
 }
 
@@ -52,9 +44,7 @@ fn sales_source(
         && change.current_submission_id.as_ref().map(|id| id.as_ref()) == Some(submission.base.id.as_str());
     let mut source = sales_change_brief_source(change, number, base, Some(submission), lines, more);
     if !current {
-        source
-            .extra_sections
-            .retain(|section| section.label != "原因" && section.label != "变更类型");
+        source.extra_sections.retain(|section| section.label != "原因" && section.label != "变更类型");
         source.list_summary = join_list_summary([
             number.map(|no| format!("销售单 {no}")),
             Some(format!("第 {} 次提交", submission.submission_no)),
@@ -75,14 +65,10 @@ pub(super) fn purchase(
     context: &PurchaseChangeBriefContext,
 ) {
     let aligned = purchase_versions_aligned(change, context);
-    for submission in context
-        .submissions
-        .values()
-        .filter(|row| row.purchase_change_order_id.as_ref() == change.base.id)
+    for submission in
+        context.submissions.values().filter(|row| row.purchase_change_order_id.as_ref() == change.base.id)
     {
-        let base = context
-            .base_revisions
-            .get(&submission.base_revision_id.to_string());
+        let base = context.base_revisions.get(&submission.base_revision_id.to_string());
         let (lines, more) = lines(
             context.base_lines.get(&submission.base_revision_id.to_string()),
             context.target_lines.get(&submission.base.id),
@@ -103,24 +89,15 @@ pub(super) fn purchase(
             None
         };
         if let Some(version) = version {
-            fact.display
-                .subject_briefs
-                .insert(version.to_string(), display.clone());
+            fact.display.subject_briefs.insert(version.to_string(), display.clone());
         }
-        fact.display
-            .subject_briefs
-            .insert(submission.base.id.clone(), display);
+        fact.display.subject_briefs.insert(submission.base.id.clone(), display);
     }
 }
 
 /// 仅接受标准正整数 CS 编号，旧格式不得推测审批版本。
 fn purchase_sequence(submission: &PurchaseChangeSubmission) -> Option<u32> {
-    submission
-        .submission_no
-        .strip_prefix("CS-")?
-        .parse()
-        .ok()
-        .filter(|version| *version > 0)
+    submission.submission_no.strip_prefix("CS-")?.parse().ok().filter(|version| *version > 0)
 }
 
 /// 验证完整提交序列与当前审批计数及提交指针一致；迁移或缺号时仅显示明确绑定的当前提交。
@@ -140,10 +117,7 @@ fn purchase_versions_aligned(change: &PurchaseChangeOrder, context: &PurchaseCha
     {
         return false;
     }
-    let mut versions = rows
-        .iter()
-        .filter_map(|row| purchase_sequence(row))
-        .collect::<Vec<_>>();
+    let mut versions = rows.iter().filter_map(|row| purchase_sequence(row)).collect::<Vec<_>>();
     versions.sort_unstable();
     versions.len() == rows.len() && versions.iter().copied().eq(1..=change.approval_subject_version)
 }

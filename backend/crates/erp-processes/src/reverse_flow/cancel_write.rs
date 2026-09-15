@@ -1,5 +1,4 @@
 //! 审批取消的同事务写入：Apply 更新运行事实，Replay 仍执行本域 CAS 和审计。
-use crate::Result;
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
 use erp_core::common::time::Instant;
@@ -10,6 +9,8 @@ use erp_workflow::service::approval::execution::PreparedExecution;
 use erp_workflow::{BpmExt, WorkItemExt};
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::Result;
 
 pub(super) enum CancelledReturn<'a> {
     CustomerRefund(&'a mut CustomerRefund),
@@ -63,28 +64,23 @@ impl CancelWritePort for MongoCancelWrite<'_> {
         Ok(())
     }
     async fn tasks(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        self.db
-            .work_items()
-            .persist_cancelled_approval_tasks(&self.closed_tasks, executor)
-            .await?;
+        self.db.work_items().persist_cancelled_approval_tasks(&self.closed_tasks, executor).await?;
         Ok(())
     }
     async fn record(&mut self, executor: &mut dyn Executor) -> Result<()> {
         match &mut self.record {
             CancelledReturn::CustomerRefund(record) => {
-                ReturnsService::new(self.db.clone())
-                    .persist_customer_refund(record, executor)
-                    .await?
-            }
+                ReturnsService::new(self.db.clone()).persist_customer_refund(record, executor).await?
+            },
             CancelledReturn::SupplierRefund(record) => {
                 ReturnsService::persist_supplier_refund(self.db, record, executor).await?
-            }
+            },
             CancelledReturn::ReceiptReversal(record) => {
                 ReturnsService::persist_receipt_reversal(self.db, record, executor).await?
-            }
+            },
             CancelledReturn::PaymentReversal(record) => {
                 ReturnsService::persist_payment_reversal(self.db, record, executor).await?
-            }
+            },
         }
         Ok(())
     }
@@ -179,11 +175,8 @@ mod tests {
     #[tokio::test]
     async fn cancellation_stops_at_each_original_write_failure_for_apply_and_replay() {
         for apply in [true, false] {
-            let order: &[&str] = if apply {
-                &["runtime", "tasks", "record", "audit"]
-            } else {
-                &["record", "audit"]
-            };
+            let order: &[&str] =
+                if apply { &["runtime", "tasks", "record", "audit"] } else { &["record", "audit"] };
             for index in 0..order.len() {
                 let (result, calls) = invoke(apply, Some(index)).await;
                 assert!(

@@ -2,13 +2,12 @@
 //!
 //! 政策由代码注册，禁止默认政策、Noop 动作或复制 `process_kind.rs` 映射。
 
-pub use crate::entity::approval_integration::ApprovalDomainAction;
-use crate::entity::document_registry::DocumentType;
 use bpm::ProcessKind;
 
-use crate::error::{Error, ErrorCode, Result};
-
 use super::process_kind::process_kind_of;
+pub use crate::entity::approval_integration::ApprovalDomainAction;
+use crate::entity::document_registry::DocumentType;
+use crate::error::{Error, ErrorCode, Result};
 
 /// 历史销售单草稿可能仍带有的采购确认用途键。发布不再要求，保存时清除。
 pub const SALES_ORDER_PROCUREMENT_CONFIRMATION: &str = "SALES_ORDER_PROCUREMENT_CONFIRMATION";
@@ -354,10 +353,9 @@ pub fn policy_of(document_type: DocumentType) -> Result<DocumentApprovalPolicy> 
 pub fn require_process_required(document_type: DocumentType) -> Result<ProcessRequiredApprovalPolicy> {
     match policy_of(document_type)? {
         DocumentApprovalPolicy::ProcessRequired(policy) => Ok(policy),
-        DocumentApprovalPolicy::NoApproval(_) => Err(Error::BusinessLogicError(format!(
-            "{} 无需审批，不能管理流程定义",
-            document_type.label()
-        ))),
+        DocumentApprovalPolicy::NoApproval(_) => {
+            Err(Error::BusinessLogicError(format!("{} 无需审批，不能管理流程定义", document_type.label())))
+        },
     }
 }
 
@@ -393,10 +391,7 @@ pub fn validate_required_purposes(
     policy: &ProcessRequiredApprovalPolicy,
     node_purposes: &[Option<&str>],
 ) -> Result<()> {
-    let actual = node_purposes
-        .iter()
-        .filter_map(|purpose| *purpose)
-        .collect::<Vec<_>>();
+    let actual = node_purposes.iter().filter_map(|purpose| *purpose).collect::<Vec<_>>();
     match policy.required_node_purposes {
         [] => {
             if policy.document_type == DocumentType::SalesOrder {
@@ -405,11 +400,8 @@ pub fn validate_required_purposes(
             if actual.is_empty() {
                 return Ok(());
             }
-            Err(Error::ValidationError(format!(
-                "{} 不得包含节点用途",
-                policy.document_type.label()
-            )))
-        }
+            Err(Error::ValidationError(format!("{} 不得包含节点用途", policy.document_type.label())))
+        },
         _ => Err(Error::from_approval_code(ErrorCode::ApprovalPolicyNotRegistered)),
     }
 }
@@ -448,24 +440,22 @@ fn process_required(
     final_approve_action: ApprovalDomainAction,
     cancel_action: ApprovalDomainAction,
 ) -> Result<DocumentApprovalPolicy> {
-    Ok(DocumentApprovalPolicy::ProcessRequired(
-        ProcessRequiredApprovalPolicy {
-            document_type,
-            process_kind: process_kind_of(document_type),
-            definition_admin_permission: type_permission(document_type, "approval_definition_admin")?,
-            runtime_admin_permission: type_permission(document_type, "approval_runtime_admin")?,
-            approver_eligibility_policy: ApproverEligibilityPolicy::ActiveBackofficeWithDecidePermission,
-            separation_of_duties_policy: SeparationOfDutiesPolicy::ForbidSubmitterAsApprover,
-            required_node_purposes,
-            subject_version_source,
-            subject_snapshot_fields,
-            work_item_owner_role: owner_role(document_type)?,
-            owner_organization_source: OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId,
-            start_action,
-            final_approve_action,
-            cancel_action,
-        },
-    ))
+    Ok(DocumentApprovalPolicy::ProcessRequired(ProcessRequiredApprovalPolicy {
+        document_type,
+        process_kind: process_kind_of(document_type),
+        definition_admin_permission: type_permission(document_type, "approval_definition_admin")?,
+        runtime_admin_permission: type_permission(document_type, "approval_runtime_admin")?,
+        approver_eligibility_policy: ApproverEligibilityPolicy::ActiveBackofficeWithDecidePermission,
+        separation_of_duties_policy: SeparationOfDutiesPolicy::ForbidSubmitterAsApprover,
+        required_node_purposes,
+        subject_version_source,
+        subject_snapshot_fields,
+        work_item_owner_role: owner_role(document_type)?,
+        owner_organization_source: OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId,
+        start_action,
+        final_approve_action,
+        cancel_action,
+    }))
 }
 
 /// 构造无审批政策。
@@ -592,11 +582,11 @@ mod tests {
                 Some(expected) => {
                     required += 1;
                     assert_required_policy(&policy, document_type, expected);
-                }
+                },
                 None => {
                     no_approval += 1;
                     assert_no_approval_policy(&policy, document_type);
-                }
+                },
             }
         }
         assert_eq!(required, 12);
@@ -620,10 +610,7 @@ mod tests {
     fn sales_order_policy_matches_contract_matrix() {
         let policy = require_process_required(DocumentType::SalesOrder).expect("销售单必须审批");
         assert_eq!(policy.required_node_purposes, NO_PURPOSES);
-        assert_eq!(
-            policy.subject_version_source,
-            ApprovalSubjectVersionSource::SalesOrderSubmissionNo
-        );
+        assert_eq!(policy.subject_version_source, ApprovalSubjectVersionSource::SalesOrderSubmissionNo);
         assert_eq!(policy.subject_snapshot_fields, SALES_PURCHASE_SNAPSHOT);
         assert_eq!(policy.work_item_owner_role.as_str(), "sales_order_approver");
         assert_eq!(
@@ -631,10 +618,7 @@ mod tests {
             OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         );
         ensure_actions_registered(&policy).expect("三类动作必须已注册");
-        assert_eq!(
-            policy.start_action,
-            ApprovalDomainAction::SalesOrderStartApprovalSubmission
-        );
+        assert_eq!(policy.start_action, ApprovalDomainAction::SalesOrderStartApprovalSubmission);
         assert_ne!(policy.start_action, policy.cancel_action);
     }
 
@@ -643,17 +627,10 @@ mod tests {
     fn stock_adjustment_uses_entity_version_and_quantity_snapshot() {
         let policy = require_process_required(DocumentType::StockAdjustment).expect("库存调整必须审批");
         assert!(policy.required_node_purposes.is_empty());
-        assert_eq!(
-            policy.subject_version_source,
-            ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
-        );
+        assert_eq!(policy.subject_version_source, ApprovalSubjectVersionSource::EntityApprovalSubjectVersion);
         assert_eq!(policy.subject_snapshot_fields, STOCK_SNAPSHOT);
-        assert!(policy
-            .subject_snapshot_fields
-            .contains(&ApprovalSubjectSnapshotField::TotalQuantity));
-        assert!(!policy
-            .subject_snapshot_fields
-            .contains(&ApprovalSubjectSnapshotField::TotalAmount));
+        assert!(policy.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalQuantity));
+        assert!(!policy.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalAmount));
     }
 
     /// 资金类快照必填金额、不要求数量。
@@ -826,10 +803,7 @@ mod tests {
             policy.approver_eligibility_policy,
             ApproverEligibilityPolicy::ActiveBackofficeWithDecidePermission
         );
-        assert_eq!(
-            policy.separation_of_duties_policy,
-            SeparationOfDutiesPolicy::ForbidSubmitterAsApprover
-        );
+        assert_eq!(policy.separation_of_duties_policy, SeparationOfDutiesPolicy::ForbidSubmitterAsApprover);
         assert_eq!(policy.required_node_purposes, expected.purposes);
         assert_eq!(policy.subject_version_source, expected.version);
         assert_eq!(policy.subject_snapshot_fields, expected.snapshot);
@@ -878,18 +852,17 @@ mod tests {
             .expect("销售单遗留采购确认用途应通过");
         validate_required_purposes(
             &sales,
-            &[
-                Some(SALES_ORDER_PROCUREMENT_CONFIRMATION),
-                Some(SALES_ORDER_PROCUREMENT_CONFIRMATION),
-            ],
+            &[Some(SALES_ORDER_PROCUREMENT_CONFIRMATION), Some(SALES_ORDER_PROCUREMENT_CONFIRMATION)],
         )
         .expect("销售单多个遗留采购确认用途应通过");
         assert!(validate_required_purposes(&sales, &[Some("WRONG_PURPOSE")]).is_err());
-        assert!(validate_required_purposes(
-            &require_process_required(DocumentType::StockAdjustment).expect("库存调整"),
-            &[Some(SALES_ORDER_PROCUREMENT_CONFIRMATION)],
-        )
-        .is_err());
+        assert!(
+            validate_required_purposes(
+                &require_process_required(DocumentType::StockAdjustment).expect("库存调整"),
+                &[Some(SALES_ORDER_PROCUREMENT_CONFIRMATION)],
+            )
+            .is_err()
+        );
     }
 
     /// 无审批类型不能进入定义管理。

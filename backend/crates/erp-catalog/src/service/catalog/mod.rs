@@ -38,7 +38,7 @@ mod voucher;
 mod voucher_defaults;
 
 pub use self::sellable::{
-    sellable_sku_invalid_error, SellableSkuListParams, SellableSkuSpecificationAttributeView, SellableSkuView,
+    SellableSkuListParams, SellableSkuSpecificationAttributeView, SellableSkuView, sellable_sku_invalid_error,
 };
 pub use crate::dto::{
     CreateProductBrandRequest, CreateProductCategoryRequest, CreateProductRequest, CreateSkuAttributeRequest,
@@ -81,11 +81,7 @@ impl CatalogService {
         audit: Arc<dyn CatalogAuditPort>,
         file_assets: Arc<dyn FileAssetFactsPort>,
     ) -> Self {
-        Self {
-            db,
-            audit,
-            file_assets,
-        }
+        Self { db, audit, file_assets }
     }
 }
 

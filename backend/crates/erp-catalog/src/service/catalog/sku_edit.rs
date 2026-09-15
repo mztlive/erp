@@ -1,17 +1,17 @@
-use crate::entity::catalog::sku::{Sku, SkuData, SkuEditAction, SkuEditIdentity, SkuEditIdentityError};
-use crate::entity::catalog::sku_revision::{SkuRevision, SkuRevisionData};
-use crate::entity::catalog::specification::{compute_specification_signature, SpecSignatureEntry};
-use crate::entity::catalog::{
-    next_revision_no, EnableStatus, ListingStatus, ProductId, SkuId, SkuRevisionId,
-};
-use crate::repository::CatalogExt;
 use erp_core::common::time::BusinessDate;
 use id_generator::next_id;
 use persistence_core::NoTransaction;
 
 use super::CatalogService;
 use crate::dto::{ProductSkuInput, SpecEntryInput};
+use crate::entity::catalog::sku::{Sku, SkuData, SkuEditAction, SkuEditIdentity, SkuEditIdentityError};
+use crate::entity::catalog::sku_revision::{SkuRevision, SkuRevisionData};
+use crate::entity::catalog::specification::{SpecSignatureEntry, compute_specification_signature};
+use crate::entity::catalog::{
+    EnableStatus, ListingStatus, ProductId, SkuId, SkuRevisionId, next_revision_no,
+};
 use crate::error::{Error, Result};
+use crate::repository::CatalogExt;
 
 /// 规格编辑计划中的一行；每种动作都伴随一条新 SKU 修订。
 pub(super) struct SkuEditItem {
@@ -54,9 +54,7 @@ impl CatalogService {
         ctx: NewSkuContext<'_>,
         input: ProductSkuInput,
     ) -> Result<SkuEditItem> {
-        new_sku_edit_identity(&input)
-            .ensure_new()
-            .map_err(map_sku_edit_error)?;
+        new_sku_edit_identity(&input).ensure_new().map_err(map_sku_edit_error)?;
         let signature = specification_signature_for(&input.spec_entries)?;
         self.ensure_barcode_available(&input.barcode, None).await?;
         let revision = build_initial_sku_revision(&input, ctx.effective_from, ctx.effective_to)?;
@@ -73,11 +71,7 @@ impl CatalogService {
             ctx.created_by,
         )?;
         sku.attach_revision(&revision, ctx.created_by)?;
-        Ok(SkuEditItem {
-            action: SkuEditAction::Create,
-            sku,
-            revision,
-        })
+        Ok(SkuEditItem { action: SkuEditAction::Create, sku, revision })
     }
 
     /// 校验条码未被其他在用 SKU 使用。
@@ -96,25 +90,12 @@ impl CatalogService {
         barcode: &Option<String>,
         current_sku_id: Option<&str>,
     ) -> Result<()> {
-        let Some(barcode) = barcode
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        else {
+        let Some(barcode) = barcode.as_deref().map(str::trim).filter(|value| !value.is_empty()) else {
             return Ok(());
         };
-        let owners = self
-            .db
-            .catalog()
-            .barcode_owner_sku_ids(barcode, &mut NoTransaction)
-            .await?;
-        if owners
-            .iter()
-            .any(|sku_id| sku_id != current_sku_id.unwrap_or_default())
-        {
-            return Err(Error::BusinessLogicError(format!(
-                "条码已被其他在用SKU使用: {barcode}"
-            )));
+        let owners = self.db.catalog().barcode_owner_sku_ids(barcode, &mut NoTransaction).await?;
+        if owners.iter().any(|sku_id| sku_id != current_sku_id.unwrap_or_default()) {
+            return Err(Error::BusinessLogicError(format!("条码已被其他在用SKU使用: {barcode}")));
         }
         Ok(())
     }
@@ -130,11 +111,7 @@ impl CatalogService {
     /// # 错误
     /// 仓储查询失败或修订序号达到上限时返回错误。
     pub(super) async fn next_sku_revision_no(&self, sku_id: &SkuId) -> Result<u32> {
-        let latest = self
-            .db
-            .catalog()
-            .latest_sku_revision_no(sku_id, &mut NoTransaction)
-            .await?;
+        let latest = self.db.catalog().latest_sku_revision_no(sku_id, &mut NoTransaction).await?;
         Ok(next_revision_no(latest)?)
     }
 }

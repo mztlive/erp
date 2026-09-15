@@ -2,15 +2,17 @@
 //!
 //! 金额取来源单据当前生效版本，明确标注来源，不冒充本次履约批次金额。
 
-#[cfg(test)]
-use super::authority::fulfillment::fulfillment_source_label;
-use super::brief::{non_empty, push_document_section, push_section, ObjectBriefSource};
-use super::presentation::format_yuan;
-use super::{object_ids, ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchReadService};
-use crate::errors::Result;
+use std::collections::{HashMap, HashSet};
+
 use erp_core::money::Amount;
 use persistence_core::Executor;
-use std::collections::{HashMap, HashSet};
+
+#[cfg(test)]
+use super::authority::fulfillment::fulfillment_source_label;
+use super::brief::{ObjectBriefSource, non_empty, push_document_section, push_section};
+use super::presentation::format_yuan;
+use super::{ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchReadService, object_ids};
+use crate::errors::Result;
 
 type SourceBriefs = HashMap<(ObjectKind, String), ObjectBriefSource>;
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
@@ -33,9 +35,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let mut loaded = erp_workflow::ports::ObjectFactMap::new();
-        self.facts_reader()
-            .load_fulfillment_operation_facts(keys, &mut loaded, executor)
-            .await?;
+        self.facts_reader().load_fulfillment_operation_facts(keys, &mut loaded, executor).await?;
         let source_keys = loaded
             .iter()
             .filter_map(|((kind, _), fact)| {
@@ -59,7 +59,7 @@ fn source_kind(kind: ObjectKind) -> Option<ObjectKind> {
         ObjectKind::Delivery => Some(ObjectKind::SalesOrder),
         ObjectKind::PurchaseReceipt | ObjectKind::ElectronicDelivery | ObjectKind::ServiceFulfillment => {
             Some(ObjectKind::PurchaseOrder)
-        }
+        },
         _ => None,
     }
 }
@@ -88,10 +88,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(HashMap::new());
         }
         let orders = self.facts_reader().read_sales_orders(&ids, executor).await?;
-        let ids = orders
-            .iter()
-            .filter_map(|order| order.stable.current_revision_id.clone())
-            .collect::<Vec<_>>();
+        let ids =
+            orders.iter().filter_map(|order| order.stable.current_revision_id.clone()).collect::<Vec<_>>();
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -116,10 +114,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(HashMap::new());
         }
         let orders = self.facts_reader().read_purchase_orders(&ids, executor).await?;
-        let ids = orders
-            .iter()
-            .filter_map(|order| order.stable.current_revision_id.clone())
-            .collect::<Vec<_>>();
+        let ids =
+            orders.iter().filter_map(|order| order.stable.current_revision_id.clone()).collect::<Vec<_>>();
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -191,11 +187,7 @@ fn source_brief(kind: ObjectKind, id: &str, number: &str, party: &str, amount: &
     let mut sections = Vec::new();
     push_document_section(&mut sections, document_label, Some(number), Some(id));
     push_section(&mut sections, amount_label, Some(&format_yuan(amount)), true);
-    ObjectBriefSource {
-        customer: non_empty(party),
-        extra_sections: sections,
-        ..Default::default()
-    }
+    ObjectBriefSource { customer: non_empty(party), extra_sections: sections, ..Default::default() }
 }
 
 #[cfg(test)]
@@ -204,18 +196,19 @@ mod tests {
 
     #[test]
     fn fulfillment_amount_keeps_source_semantics_and_zero() {
-        for (kind, label) in [
-            (ObjectKind::SalesOrder, "来源销售单金额"),
-            (ObjectKind::PurchaseOrder, "来源采购单金额"),
-        ] {
+        for (kind, label) in
+            [(ObjectKind::SalesOrder, "来源销售单金额"), (ObjectKind::PurchaseOrder, "来源采购单金额")]
+        {
             for raw in ["12800.50", "0"] {
                 let amount = raw.parse().unwrap();
                 let source = source_brief(kind, "source", "ORDER-1", "往来方", &amount);
                 let brief = super::super::brief::assemble_brief(&source, None);
-                assert!(brief
-                    .sections
-                    .iter()
-                    .any(|entry| entry.label == label && entry.value == format_yuan(&amount)));
+                assert!(
+                    brief
+                        .sections
+                        .iter()
+                        .any(|entry| entry.label == label && entry.value == format_yuan(&amount))
+                );
                 assert!(!brief.sections.iter().any(|entry| entry.label == "含税金额"));
                 assert_eq!(
                     brief
@@ -237,13 +230,8 @@ mod tests {
             "source", "发货", "owner",
         ));
         let authority = fact.authority.clone();
-        let brief = source_brief(
-            ObjectKind::SalesOrder,
-            "source",
-            "SO-1",
-            "客户甲",
-            &"12.50".parse().unwrap(),
-        );
+        let brief =
+            source_brief(ObjectKind::SalesOrder, "source", "SO-1", "客户甲", &"12.50".parse().unwrap());
         let sources = HashMap::from([((ObjectKind::SalesOrder, "source".into()), brief)]);
         apply_source_brief(ObjectKind::Delivery, &mut fact, &sources);
         assert_eq!(fact.display.counterparty_label.as_deref(), Some("客户甲"));
@@ -254,13 +242,8 @@ mod tests {
 
     #[test]
     fn absent_or_wrong_kind_source_does_not_invent_amounts() {
-        let source = source_brief(
-            ObjectKind::SalesOrder,
-            "source",
-            "SO-1",
-            "客户甲",
-            &"12.50".parse().unwrap(),
-        );
+        let source =
+            source_brief(ObjectKind::SalesOrder, "source", "SO-1", "客户甲", &"12.50".parse().unwrap());
         let sources = HashMap::from([((ObjectKind::SalesOrder, "source".into()), source)]);
         for (kind, id) in [
             (ObjectKind::Delivery, "missing"),
@@ -273,11 +256,9 @@ mod tests {
             apply_source_brief(kind, &mut fact, &sources);
             assert!(fact.display.brief_source.is_none());
         }
-        for kind in [
-            ObjectKind::PurchaseReceipt,
-            ObjectKind::ElectronicDelivery,
-            ObjectKind::ServiceFulfillment,
-        ] {
+        for kind in
+            [ObjectKind::PurchaseReceipt, ObjectKind::ElectronicDelivery, ObjectKind::ServiceFulfillment]
+        {
             assert_eq!(source_kind(kind), Some(ObjectKind::PurchaseOrder));
         }
     }
@@ -288,10 +269,7 @@ mod tests {
             fulfillment_source_label("供应商直发", "销售单", Some("SO20260826-000001")),
             "供应商直发 · 销售单 SO20260826-000001"
         );
-        assert_eq!(
-            fulfillment_source_label("供应商直发", "销售单", Some("  ")),
-            "供应商直发"
-        );
+        assert_eq!(fulfillment_source_label("供应商直发", "销售单", Some("  ")), "供应商直发");
         assert_eq!(fulfillment_source_label("采购入库", "采购单", None), "采购入库");
     }
 }

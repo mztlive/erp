@@ -19,10 +19,11 @@
 //! - D20 `cost`：`CONFIRMED` 成本事实（审核通过、变更差额）；
 //! - D03 `work_item`：采购审核待办（提交创建、审核完成）。
 
-use crate::{Error, Result};
 use erp_identity::SharedRbacService;
 use erp_procurement::service::purchase_order::PurchaseOrderService;
 use mongodb::Database;
+
+use crate::{Error, Result};
 mod adapter;
 mod adapters;
 mod allocation_maintenance;
@@ -67,11 +68,7 @@ impl PurchaseOrderProcess {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
-        Self {
-            db,
-            rbac: None,
-            object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
-        }
+        Self { db, rbac: None, object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort) }
     }
     /// 创建可绑定发布定义的采购单服务。
     ///
@@ -105,9 +102,7 @@ impl PurchaseOrderProcess {
     /// # 错误
     /// 未注入 RBAC 时返回内部错误，不得跳过绑定。
     pub(super) fn require_rbac(&self) -> Result<&SharedRbacService> {
-        self.rbac
-            .as_ref()
-            .ok_or_else(|| Error::Internal("采购单写命令需要授权源".to_string()))
+        self.rbac.as_ref().ok_or_else(|| Error::Internal("采购单写命令需要授权源".to_string()))
     }
 }
 
@@ -142,9 +137,7 @@ pub async fn cancel_order_approval_in_transaction(
     )
     .await?;
     let audit =
-        actor
-            .clone()
-            .resource_log("purchase_order.cancel_approval", "purchase_order", id.to_string())?;
+        actor.clone().resource_log("purchase_order.cancel_approval", "purchase_order", id.to_string())?;
     db.audit_logs().create(&audit, executor).await?;
     Ok(())
 }

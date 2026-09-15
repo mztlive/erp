@@ -10,17 +10,15 @@ use std::fmt;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::BusinessDate;
 use erp_core::field_update::FieldUpdate;
+pub use erp_core::ids::{PartyBankAccountId, PartyId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::sensitive::{hmac_sha256_hex, normalize_account_number};
 use super::status::EffectiveRecordStatus;
-
-pub use erp_core::ids::{PartyBankAccountId, PartyId};
 
 /// 账户编号最大长度。
 const BANK_ACCOUNT_NO_MAX_LEN: usize = 64;
@@ -203,35 +201,17 @@ impl PartyBankAccount {
             BANK_ACCOUNT_NO_MAX_LEN,
             "账户编号过长",
         )?;
-        let account_name = normalize_required_text(
-            data.account_name,
-            "户名不能为空",
-            ACCOUNT_NAME_MAX_LEN,
-            "户名过长",
-        )?;
-        let bank_name = normalize_required_text(
-            data.bank_name,
-            "银行名称不能为空",
-            BANK_NAME_MAX_LEN,
-            "银行名称过长",
-        )?;
+        let account_name =
+            normalize_required_text(data.account_name, "户名不能为空", ACCOUNT_NAME_MAX_LEN, "户名过长")?;
+        let bank_name =
+            normalize_required_text(data.bank_name, "银行名称不能为空", BANK_NAME_MAX_LEN, "银行名称过长")?;
         let bank_branch_name =
             normalize_optional_text(data.bank_branch_name, "支行名称", BANK_BRANCH_NAME_MAX_LEN)?;
-        let account_number = normalize_required_text(
-            data.account_number,
-            "账号不能为空",
-            ACCOUNT_NUMBER_MAX_LEN,
-            "账号过长",
-        )?;
+        let account_number =
+            normalize_required_text(data.account_number, "账号不能为空", ACCOUNT_NUMBER_MAX_LEN, "账号过长")?;
         let normalized_account_number = normalize_account_number(&account_number);
-        let account_number_last4 = normalized_account_number
-            .chars()
-            .rev()
-            .take(4)
-            .collect::<String>()
-            .chars()
-            .rev()
-            .collect();
+        let account_number_last4 =
+            normalized_account_number.chars().rev().take(4).collect::<String>().chars().rev().collect();
         let created_by = created_by.into();
         ensure_window_valid(data.valid_from, data.valid_to)?;
 
@@ -361,11 +341,12 @@ fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>)
 
 #[cfg(test)]
 mod tests {
-    use super::{PartyBankAccount, PartyBankAccountData, PartyBankAccountUpdate};
-    use crate::entity::party::status::EffectiveRecordStatus;
     use erp_core::common::time::BusinessDate;
     use erp_core::field_update::FieldUpdate;
     use erp_core::ids::{PartyBankAccountId, PartyId};
+
+    use super::{PartyBankAccount, PartyBankAccountData, PartyBankAccountUpdate};
+    use crate::entity::party::status::EffectiveRecordStatus;
 
     const KEY: &[u8] = b"test-fingerprint-key";
 
@@ -387,13 +368,9 @@ mod tests {
     /// happy path：编号/户名去空白，账号移除分隔符后生成指纹，实体不含明文。
     #[test]
     fn new_normalizes_and_fingerprints() {
-        let account = PartyBankAccount::new(
-            PartyBankAccountId::new("ba-1"),
-            bank_account_data(),
-            KEY,
-            "admin-1",
-        )
-        .unwrap();
+        let account =
+            PartyBankAccount::new(PartyBankAccountId::new("ba-1"), bank_account_data(), KEY, "admin-1")
+                .unwrap();
         assert_eq!(account.bank_account_no, "BA-2026-001");
         assert_eq!(account.account_name, "上海示例科技有限公司");
         assert_eq!(account.bank_name, "招商银行");
@@ -415,22 +392,13 @@ mod tests {
     /// 失败路径：必填为空/超长、账号为空/超长、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank_no = PartyBankAccountData {
-            bank_account_no: "   ".to_string(),
-            ..bank_account_data()
-        };
+        let blank_no = PartyBankAccountData { bank_account_no: "   ".to_string(), ..bank_account_data() };
         assert!(PartyBankAccount::new(PartyBankAccountId::new("b"), blank_no, KEY, "admin-1").is_err());
 
-        let blank_number = PartyBankAccountData {
-            account_number: "   ".to_string(),
-            ..bank_account_data()
-        };
+        let blank_number = PartyBankAccountData { account_number: "   ".to_string(), ..bank_account_data() };
         assert!(PartyBankAccount::new(PartyBankAccountId::new("b"), blank_number, KEY, "admin-1").is_err());
 
-        let overlong_name = PartyBankAccountData {
-            account_name: "x".repeat(201),
-            ..bank_account_data()
-        };
+        let overlong_name = PartyBankAccountData { account_name: "x".repeat(201), ..bank_account_data() };
         assert!(PartyBankAccount::new(PartyBankAccountId::new("b"), overlong_name, KEY, "admin-1").is_err());
 
         let reversed = PartyBankAccountData {
@@ -443,13 +411,9 @@ mod tests {
     /// 状态机：启停切换经固定矩阵校验，非法目标被拒。
     #[test]
     fn status_transitions_are_validated() {
-        let mut account = PartyBankAccount::new(
-            PartyBankAccountId::new("ba-2"),
-            bank_account_data(),
-            KEY,
-            "admin-1",
-        )
-        .unwrap();
+        let mut account =
+            PartyBankAccount::new(PartyBankAccountId::new("ba-2"), bank_account_data(), KEY, "admin-1")
+                .unwrap();
         account
             .update(
                 PartyBankAccountUpdate {
@@ -472,10 +436,7 @@ mod tests {
             )
             .unwrap();
         assert!(account.is_active());
-        assert_eq!(
-            account.valid_to,
-            Some(BusinessDate::from_ymd(2026, 6, 30).unwrap())
-        );
+        assert_eq!(account.valid_to, Some(BusinessDate::from_ymd(2026, 6, 30).unwrap()));
         assert!(!account.is_default);
         assert_eq!(account.updated_by, "admin-3");
     }
@@ -513,20 +474,13 @@ mod tests {
     /// 实体 BSON 往返（密文与指纹保持原样，不出现明文）。
     #[test]
     fn entity_roundtrips_through_json() {
-        let account = PartyBankAccount::new(
-            PartyBankAccountId::new("ba-4"),
-            bank_account_data(),
-            KEY,
-            "admin-1",
-        )
-        .unwrap();
+        let account =
+            PartyBankAccount::new(PartyBankAccountId::new("ba-4"), bank_account_data(), KEY, "admin-1")
+                .unwrap();
         let json = serde_json::to_string(&account).unwrap();
         let roundtrip: PartyBankAccount = serde_json::from_str(&json).unwrap();
         assert_eq!(roundtrip.base, account.base);
-        assert_eq!(
-            roundtrip.account_number_query_hmac,
-            account.account_number_query_hmac
-        );
+        assert_eq!(roundtrip.account_number_query_hmac, account.account_number_query_hmac);
     }
 
     /// 收款账户解析：无默认账户时返回 `Ok(None)`（含空集合与全部非默认两种形态）。
@@ -557,9 +511,7 @@ mod tests {
             .unwrap(),
         ];
         assert!(PartyBankAccount::resolve_current_default(&[]).unwrap().is_none());
-        assert!(PartyBankAccount::resolve_current_default(&accounts)
-            .unwrap()
-            .is_none());
+        assert!(PartyBankAccount::resolve_current_default(&accounts).unwrap().is_none());
     }
 
     /// 收款账户解析：恰一个默认账户时返回该账户（与输入顺序无关）。
@@ -590,9 +542,7 @@ mod tests {
             .unwrap(),
             default.clone(),
         ];
-        let resolved = PartyBankAccount::resolve_current_default(&accounts)
-            .unwrap()
-            .expect("唯一默认账户");
+        let resolved = PartyBankAccount::resolve_current_default(&accounts).unwrap().expect("唯一默认账户");
         assert_eq!(resolved.base.id, default.base.id);
         assert!(resolved.is_default);
     }
@@ -630,13 +580,9 @@ mod tests {
     /// expected 身份匹配：ID 与版本同时一致才通过，任一漂移必须拒绝。
     #[test]
     fn matches_expected_accepts_only_exact_identity_and_version() {
-        let account = PartyBankAccount::new(
-            PartyBankAccountId::new("ba-11"),
-            bank_account_data(),
-            KEY,
-            "admin-1",
-        )
-        .unwrap();
+        let account =
+            PartyBankAccount::new(PartyBankAccountId::new("ba-11"), bank_account_data(), KEY, "admin-1")
+                .unwrap();
         let account_id = PartyBankAccountId::new("ba-11");
         assert!(account.matches_expected(&account_id, account.base.version));
 

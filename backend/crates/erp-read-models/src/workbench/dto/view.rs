@@ -1,5 +1,6 @@
 use std::ops::{Deref, DerefMut};
 
+pub use erp_workflow::dto::work_item::{WorkItemApprovalContextView, WorkItemPartyView};
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
@@ -7,12 +8,10 @@ use serde::Serialize;
 
 use super::super::brief::assemble_brief;
 use super::super::presentation::{
-    next_action_hint, reason_label, usable_impact_summary, UNRESOLVED_OWNER_DISPLAY_NAME,
+    UNRESOLVED_OWNER_DISPLAY_NAME, next_action_hint, reason_label, usable_impact_summary,
 };
 use super::status::{ProcessingBlockerView, ProcessingState, WorkItemAllowedAction};
 use crate::errors::{Error, Result};
-
-pub use erp_workflow::dto::work_item::{WorkItemApprovalContextView, WorkItemPartyView};
 
 /// 事项简报中的只读键值。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -150,18 +149,12 @@ impl WorkItemView {
     /// DocumentApproval 缺少已签署页面映射时返回错误。
     pub(crate) fn from_fields(fields: WorkItemFields, queue_context_id: String) -> Result<Self> {
         let WorkItemFields { inner, brief_source } = fields;
-        let route = handler_route(
-            inner.work_item_type,
-            &inner.business_object_type,
-            &inner.owner_role,
-        )?;
+        let route = handler_route(inner.work_item_type, &inner.business_object_type, &inner.owner_role)?;
         let owner_user = inner.owner_user_id.as_ref().map(|id| WorkItemPartyView {
             id: id.clone(),
             display_name: UNRESOLVED_OWNER_DISPLAY_NAME.to_string(),
         });
-        let brief = brief_source
-            .as_ref()
-            .map(|source| assemble_brief(source, inner.reason_code.as_deref()));
+        let brief = brief_source.as_ref().map(|source| assemble_brief(source, inner.reason_code.as_deref()));
         Ok(Self {
             id: inner.id,
             work_item_type: inner.work_item_type,
@@ -215,10 +208,7 @@ impl WorkItemView {
                         .collect()
                 })
                 .unwrap_or_default(),
-            brief_more_count: brief
-                .as_ref()
-                .map(|assembled| assembled.more_count)
-                .filter(|count| *count > 0),
+            brief_more_count: brief.as_ref().map(|assembled| assembled.more_count).filter(|count| *count > 0),
             list_summary: brief
                 .as_ref()
                 .map(|assembled| assembled.list_summary.clone())
@@ -275,19 +265,13 @@ impl DerefMut for WorkItemFields {
 
 impl From<WorkItem> for WorkItemFields {
     fn from(item: WorkItem) -> Self {
-        Self {
-            inner: item.into(),
-            brief_source: None,
-        }
+        Self { inner: item.into(), brief_source: None }
     }
 }
 
 impl From<erp_workflow::WorkItemRow> for WorkItemFields {
     fn from(item: erp_workflow::WorkItemRow) -> Self {
-        Self {
-            inner: item.into(),
-            brief_source: None,
-        }
+        Self { inner: item.into(), brief_source: None }
     }
 }
 
@@ -323,43 +307,41 @@ pub(super) fn handler_route(
         (WorkItemType::IntegrationResultUnknown, "integration_error_task") => ("integration_unknown", "W29"),
         (WorkItemType::BusinessException, "integration_error_task" | "reconciliation_difference") => {
             ("business_exception", "W29")
-        }
+        },
         (WorkItemType::IntegrationResultUnknown, "reconciliation_difference") => {
             ("integration_unknown", "W29")
-        }
+        },
         (WorkItemType::ProcurementOrderCreation, "sales_order") => ("procurement_order_creation", "W08"),
         (WorkItemType::ProcurementOrderCreation, _) => {
             return Err(Error::ValidationError("供给分配任务业务对象未注册".to_string()));
-        }
+        },
         (
             WorkItemType::FulfillmentOperation,
             "purchase_receipt" | "delivery" | "electronic_delivery" | "service_fulfillment",
         ) => ("fulfillment_operation", "W01"),
         (WorkItemType::FulfillmentOperation, _) => {
             return Err(Error::ValidationError("履约任务业务对象未注册".to_string()));
-        }
+        },
         (WorkItemType::CustomerAcceptanceRegistration, "sales_order") => {
             ("customer_acceptance_registration", "W06")
-        }
+        },
         (WorkItemType::CustomerAcceptanceRegistration, _) => {
             return Err(Error::ValidationError("客户验收任务业务对象未注册".to_string()));
-        }
+        },
         (WorkItemType::SupplierPaymentExecution, "payable_account") => ("supplier_payment_execution", "W12"),
         (WorkItemType::SupplierPaymentExecution, _) => {
             return Err(Error::ValidationError("付款执行任务业务对象未注册".to_string()));
-        }
+        },
         (WorkItemType::SalesInvoiceExecution, "receivable_account") => ("sales_invoice_execution", "W11"),
         (WorkItemType::SalesInvoiceExecution, _) => {
-            return Err(Error::ValidationError(
-                "销项开票执行任务业务对象未注册".to_string(),
-            ));
-        }
+            return Err(Error::ValidationError("销项开票执行任务业务对象未注册".to_string()));
+        },
         (WorkItemType::SupplierSettlementReview, "supplier_settlement_statement") => {
             ("supplier_settlement", "W27")
-        }
+        },
         (WorkItemType::ImportBusinessConfirmation, "LEGACY_IMPORT_BATCH") => {
             ("import_business_confirmation", "W18")
-        }
+        },
         (
             WorkItemType::PurchaseOrderReview
             | WorkItemType::SalesChangeImpactReview
@@ -371,7 +353,7 @@ pub(super) fn handler_route(
             _,
         ) => {
             return Err(Error::ValidationError("WORK_ITEM_TYPE_RETIRED".to_string()));
-        }
+        },
         (
             WorkItemType::CardFundsReview
             | WorkItemType::CardFundsDeltaReview
@@ -380,19 +362,16 @@ pub(super) fn handler_route(
             _,
         ) => {
             return Err(Error::ValidationError("WORK_ITEM_HANDLER_UNMAPPED".to_string()));
-        }
+        },
         (WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException, _) => {
             return Err(Error::ValidationError("WORK_ITEM_HANDLER_UNMAPPED".to_string()));
-        }
+        },
         (WorkItemType::DocumentApproval, object_type) => document_approval_route(object_type)?,
     };
     let mut route_context = if work_item_type == WorkItemType::ImportBusinessConfirmation {
         let scope = w18_confirmation_scope(owner_role)
             .ok_or_else(|| Error::ValidationError("IMPORT_CONFIRMATION_SCOPE_UNMAPPED".to_string()))?;
-        Some(WorkItemRouteContext {
-            confirmation_scope: Some(scope.to_string()),
-            document_type: None,
-        })
+        Some(WorkItemRouteContext { confirmation_scope: Some(scope.to_string()), document_type: None })
     } else {
         None
     };
@@ -402,11 +381,7 @@ pub(super) fn handler_route(
             document_type: Some(business_object_type.to_string()),
         });
     }
-    Ok(HandlerRoute {
-        handler_key,
-        destination_workspace_id,
-        route_context,
-    })
+    Ok(HandlerRoute { handler_key, destination_workspace_id, route_context })
 }
 
 fn w18_confirmation_scope(owner_role: &str) -> Option<&'static str> {
@@ -437,11 +412,9 @@ fn document_approval_route(business_object_type: &str) -> Result<(&'static str, 
         "stock_adjustment" => Ok(("document_approval", "W10")),
         "sales_invoice_request" | "customer_receipt" | "customer_refund" | "receipt_reversal" => {
             Ok(("document_approval", "W11"))
-        }
+        },
         "supplier_refund" | "payment_reversal" => Ok(("document_approval", "W12")),
-        _ => Err(Error::ValidationError(
-            "APPROVAL_DOCUMENT_ROUTE_UNMAPPED".to_string(),
-        )),
+        _ => Err(Error::ValidationError("APPROVAL_DOCUMENT_ROUTE_UNMAPPED".to_string())),
     }
 }
 

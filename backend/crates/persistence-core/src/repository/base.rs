@@ -2,16 +2,15 @@
 //!
 //! 提供MongoDB数据库操作的通用接口，包括基础CRUD操作和各实体的特化方法
 
-use crate::errors::{Error, Result};
-use crate::mongo_ops;
-use crate::Executor;
 use entity_core::{BaseModel, HasBaseModel, NOT_DELETED_TIMESTAMP, NOT_DELETED_TIMESTAMP_BSON};
-use mongodb::{
-    bson::{deserialize_from_slice, doc, serialize_to_vec, Document},
-    options::FindOptions,
-    Database,
-};
-use serde::{de::DeserializeOwned, Serialize};
+use mongodb::Database;
+use mongodb::bson::{Document, deserialize_from_slice, doc, serialize_to_vec};
+use mongodb::options::FindOptions;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+
+use crate::errors::{Error, Result};
+use crate::{Executor, mongo_ops};
 
 /// Defines filter behavior for database queries
 ///
@@ -88,10 +87,7 @@ fn write_metadata(base: &BaseModel) -> Result<WriteMetadata> {
 
 /// 使用指定时间计算实体写入元数据。
 fn write_metadata_at(base: &BaseModel, updated_at_bson: i64) -> Result<WriteMetadata> {
-    let next_version = base
-        .version
-        .checked_add(1)
-        .ok_or(Error::EntityMetadataOutOfRange("version"))?;
+    let next_version = base.version.checked_add(1).ok_or(Error::EntityMetadataOutOfRange("version"))?;
     let expected_version =
         i64::try_from(base.version).map_err(|_| Error::EntityMetadataOutOfRange("version"))?;
     let next_version_bson =
@@ -99,13 +95,7 @@ fn write_metadata_at(base: &BaseModel, updated_at_bson: i64) -> Result<WriteMeta
     let updated_at =
         u64::try_from(updated_at_bson).map_err(|_| Error::EntityMetadataOutOfRange("updated_at"))?;
 
-    Ok(WriteMetadata {
-        expected_version,
-        next_version,
-        next_version_bson,
-        updated_at,
-        updated_at_bson,
-    })
+    Ok(WriteMetadata { expected_version, next_version, next_version_bson, updated_at, updated_at_bson })
 }
 
 /// 构建活跃实体的乐观锁过滤条件。
@@ -158,11 +148,7 @@ where
     /// # 返回
     /// 返回创建的实例。
     pub fn new(db: &'a Database, collection_name: &'a str) -> Self {
-        Self {
-            db,
-            collection_name,
-            _phantom: std::marker::PhantomData,
-        }
+        Self { db, collection_name, _phantom: std::marker::PhantomData }
     }
 
     /// Returns the MongoDB database handle bound to this repository.
@@ -233,14 +219,9 @@ where
         document.insert("version", metadata.next_version_bson);
         document.insert("updated_at", metadata.updated_at_bson);
 
-        let result = mongo_ops::update_one(
-            &self.collection(),
-            filter,
-            doc! { "$set": document },
-            false,
-            executor,
-        )
-        .await?;
+        let result =
+            mongo_ops::update_one(&self.collection(), filter, doc! { "$set": document }, false, executor)
+                .await?;
 
         apply_write_result(entity.base_mut(), metadata, None, result.matched_count)
     }
@@ -281,12 +262,7 @@ where
         )
         .await?;
 
-        apply_write_result(
-            entity.base_mut(),
-            metadata,
-            Some(metadata.updated_at),
-            result.matched_count,
-        )
+        apply_write_result(entity.base_mut(), metadata, Some(metadata.updated_at), result.matched_count)
     }
 
     /// 恢复已软删除实体。
@@ -325,12 +301,7 @@ where
         )
         .await?;
 
-        apply_write_result(
-            entity.base_mut(),
-            metadata,
-            Some(NOT_DELETED_TIMESTAMP),
-            result.matched_count,
-        )
+        apply_write_result(entity.base_mut(), metadata, Some(NOT_DELETED_TIMESTAMP), result.matched_count)
     }
 
     /// 查找所有未删除的实体。
@@ -435,13 +406,8 @@ where
         let mut filter = filter;
         filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
 
-        mongo_ops::find_many(
-            &self.collection(),
-            filter,
-            FindOptions::builder().sort(sort).build(),
-            executor,
-        )
-        .await
+        mongo_ops::find_many(&self.collection(), filter, FindOptions::builder().sort(sort).build(), executor)
+            .await
     }
 
     /// 按稳定 ID 批量读取未删除实体。
@@ -482,12 +448,7 @@ where
         let mut filter = filter;
         filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
 
-        mongo_ops::exists(
-            &self.db.collection::<Document>(self.collection_name),
-            filter,
-            executor,
-        )
-        .await
+        mongo_ops::exists(&self.db.collection::<Document>(self.collection_name), filter, executor).await
     }
 
     /// 分页检索实体。
@@ -518,10 +479,7 @@ where
         .await?;
         let total = self.search_count(filter, executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 统计符合条件的实体总数。
@@ -565,9 +523,10 @@ fn persisted_document<T: Serialize>(value: &T) -> Result<Document> {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_write_result, persisted_document, write_metadata_at, Pagination};
-    use crate::errors::Error;
     use entity_core::BaseModel;
+
+    use super::{Pagination, apply_write_result, persisted_document, write_metadata_at};
+    use crate::errors::Error;
 
     struct TestPagination {
         page: u64,
@@ -582,9 +541,10 @@ mod tests {
 
     #[test]
     fn update_document_preserves_optional_decimal_wire_type() {
+        use std::str::FromStr;
+
         use mongodb::bson::{Bson, Decimal128};
         use serde::{Serialize, Serializer};
-        use std::str::FromStr;
 
         struct Quantity;
         impl Serialize for Quantity {
@@ -600,27 +560,15 @@ mod tests {
         struct Availability {
             available_quantity: Option<Quantity>,
         }
-        let document = persisted_document(&Availability {
-            available_quantity: Some(Quantity),
-        })
-        .unwrap();
-        assert!(matches!(
-            document.get("available_quantity"),
-            Some(Bson::Decimal128(_))
-        ));
-        let absent = persisted_document(&Availability {
-            available_quantity: None,
-        })
-        .unwrap();
+        let document = persisted_document(&Availability { available_quantity: Some(Quantity) }).unwrap();
+        assert!(matches!(document.get("available_quantity"), Some(Bson::Decimal128(_))));
+        let absent = persisted_document(&Availability { available_quantity: None }).unwrap();
         assert_eq!(absent.get("available_quantity"), Some(&Bson::Null));
     }
 
     #[test]
     fn pagination_normalizes_zero_to_first_page() {
-        let pagination = TestPagination {
-            page: 0,
-            page_size: 20,
-        };
+        let pagination = TestPagination { page: 0, page_size: 20 };
 
         assert_eq!(pagination.skip(), 0);
         assert_eq!(pagination.limit(), 20);
@@ -628,10 +576,7 @@ mod tests {
 
     #[test]
     fn pagination_calculates_offset_for_regular_page() {
-        let pagination = TestPagination {
-            page: 3,
-            page_size: 20,
-        };
+        let pagination = TestPagination { page: 3, page_size: 20 };
 
         assert_eq!(pagination.skip(), 40);
         assert_eq!(pagination.limit(), 20);

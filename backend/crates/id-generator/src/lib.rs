@@ -7,9 +7,8 @@
 
 mod document_number;
 
-pub use document_number::{format_number, DocumentNumberGenerator, DocumentNumberKind, Error, Result};
+pub use document_number::{DocumentNumberGenerator, DocumentNumberKind, Error, Result, format_number};
 pub use persistence_core::{Executor, NoTransaction};
-
 use uuid::Uuid;
 
 /// 生成新的 UUID v4 字符串 ID。

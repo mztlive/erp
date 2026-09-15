@@ -1,15 +1,14 @@
 //! 启动第 1 轮运行实例并进入入口节点。
 
+use super::enter_node::{EnterNodeInput, plan_enter_node};
+use super::event::{BpmEvent, BpmEventKind};
+use super::transition_plan::TransitionPlan;
+use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
 use crate::ids::{ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use crate::model::types::ApprovalExecutionAssignmentSource;
 use crate::model::{
     ApprovalInstanceAssignee, ApprovalProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp,
 };
-
-use super::enter_node::{plan_enter_node, EnterNodeInput};
-use super::event::{BpmEvent, BpmEventKind};
-use super::transition_plan::TransitionPlan;
-use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
 
 /// 启动命令：调用方提供全部 ID、时间；全部节点资格随绑定一并传入。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,9 +96,7 @@ pub fn start(
 /// 启动绑定必须逐节点匹配定义责任人及其有效资格。
 fn ensure_bindings_valid(graph: &DefinitionGraph, bindings: &[StartAssigneeBinding]) -> EngineResult<()> {
     if bindings.len() != graph.nodes.len() {
-        return Err(EngineError::InvalidCommand(
-            "实例审批人绑定必须与定义节点一一对应",
-        ));
+        return Err(EngineError::InvalidCommand("实例审批人绑定必须与定义节点一一对应"));
     }
     for (index, binding) in bindings.iter().enumerate() {
         if bindings[..index].iter().any(|prior| prior.id == binding.id) {
@@ -115,9 +112,7 @@ fn ensure_bindings_valid(graph: &DefinitionGraph, bindings: &[StartAssigneeBindi
             return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
         }
         if binding.eligibility.blocked_code().is_some() {
-            return Err(EngineError::InvalidCommand(
-                "启动时全部审批人必须有效，不得创建受阻实例",
-            ));
+            return Err(EngineError::InvalidCommand("启动时全部审批人必须有效，不得创建受阻实例"));
         }
     }
     Ok(())
@@ -131,9 +126,7 @@ fn freeze_assignees(
     now: Timestamp,
 ) -> EngineResult<Vec<ApprovalInstanceAssignee>> {
     if bindings.len() != graph.nodes.len() {
-        return Err(EngineError::InvalidCommand(
-            "实例审批人绑定必须与定义节点一一对应",
-        ));
+        return Err(EngineError::InvalidCommand("实例审批人绑定必须与定义节点一一对应"));
     }
     let mut assignees = Vec::with_capacity(graph.nodes.len());
     for node in &graph.nodes {

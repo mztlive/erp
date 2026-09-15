@@ -4,13 +4,12 @@
 //! 数量（单位为张）。Service 只负责把结果写入审批快照，不得再按 `quantity`
 //! 过滤或兜底。
 
-use rust_decimal::Decimal;
-
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+use rust_decimal::Decimal;
 
 use super::submission::{SalesOrderSubmission, SalesOrderSubmissionLine};
-use super::types::{integer_quantity, validate_line_list, BusinessType, LineSummary};
+use super::types::{BusinessType, LineSummary, integer_quantity, validate_line_list};
 
 impl SalesOrderSubmission {
     /// 按业务性质计算审批快照总数量。
@@ -83,9 +82,7 @@ fn sum_goods_quantities(lines: &[SalesOrderSubmissionLine]) -> Result<Quantity> 
     let mut total = Decimal::ZERO;
     for line in lines {
         let quantity = goods_line_quantity(line)?;
-        total = total
-            .checked_add(quantity.to_decimal())
-            .ok_or_else(|| Error::from("审批总数量溢出"))?;
+        total = total.checked_add(quantity.to_decimal()).ok_or_else(|| Error::from("审批总数量溢出"))?;
     }
     quantity_from_total(total)
 }
@@ -104,8 +101,7 @@ fn sum_goods_quantities(lines: &[SalesOrderSubmissionLine]) -> Result<Quantity> 
 /// # 关键业务约束
 /// 不得用零值或空值代替缺失数量。
 fn goods_line_quantity(line: &SalesOrderSubmissionLine) -> Result<Quantity> {
-    line.quantity
-        .ok_or_else(|| Error::from(format!("第 {} 行缺少数量，无法冻结审批快照", line.line_no)))
+    line.quantity.ok_or_else(|| Error::from(format!("第 {} 行缺少数量，无法冻结审批快照", line.line_no)))
 }
 
 /// 将唯一卡券行的卡张数换算为审批数量。
@@ -152,18 +148,18 @@ fn quantity_from_total(total: Decimal) -> Result<Quantity> {
 mod tests {
     use std::str::FromStr;
 
-    use rust_decimal::Decimal;
-
-    use super::*;
-    use crate::entity::sales_order::snapshot::HeaderSnapshotData;
-    use crate::entity::sales_order::submission::SalesOrderSubmissionData;
-    use crate::entity::sales_order::types::{CardForm, GoodsLineFields, LineType, VoucherLineDraft};
     use erp_core::common::time::{BusinessDate, Instant};
     use erp_core::ids::{
         ContractRevisionId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId,
         SalesOrderSubmissionId, SalesOrderSubmissionLineId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
     };
     use erp_core::money::{Amount, Rate, UnitPrice};
+    use rust_decimal::Decimal;
+
+    use super::*;
+    use crate::entity::sales_order::snapshot::HeaderSnapshotData;
+    use crate::entity::sales_order::submission::SalesOrderSubmissionData;
+    use crate::entity::sales_order::types::{CardForm, GoodsLineFields, LineType, VoucherLineDraft};
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -300,11 +296,9 @@ mod tests {
     fn goods_submission(
         line_data: Vec<crate::entity::sales_order::submission::SalesOrderSubmissionLineData>,
     ) -> (SalesOrderSubmission, Vec<SalesOrderSubmissionLine>) {
-        let submission = SalesOrderSubmission::new(
-            SalesOrderSubmissionId::new("s-1"),
-            goods_header(line_data.clone()),
-        )
-        .unwrap();
+        let submission =
+            SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), goods_header(line_data.clone()))
+                .unwrap();
         let lines = line_data
             .into_iter()
             .enumerate()
@@ -323,11 +317,9 @@ mod tests {
     fn voucher_submission(
         line_data: crate::entity::sales_order::submission::SalesOrderSubmissionLineData,
     ) -> (SalesOrderSubmission, SalesOrderSubmissionLine) {
-        let submission = SalesOrderSubmission::new(
-            SalesOrderSubmissionId::new("s-v"),
-            voucher_header(line_data.clone()),
-        )
-        .unwrap();
+        let submission =
+            SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-v"), voucher_header(line_data.clone()))
+                .unwrap();
         let line = SalesOrderSubmissionLine::new(
             SalesOrderSubmissionLineId::new("sl-v"),
             SalesOrderSubmissionId::new("s-v"),
@@ -360,26 +352,26 @@ mod tests {
         assert!(goods.approval_total_quantity(&[]).is_err());
 
         goods_lines[0].quantity = None;
-        assert!(goods
-            .approval_total_quantity(&goods_lines)
-            .unwrap_err()
-            .to_string()
-            .contains("缺少数量"));
+        assert!(goods.approval_total_quantity(&goods_lines).unwrap_err().to_string().contains("缺少数量"));
 
         let (voucher, mut voucher_line) = voucher_submission(voucher_line_data(1, 3));
         voucher_line.card_count = None;
-        assert!(voucher
-            .approval_total_quantity(&[voucher_line.clone()])
-            .unwrap_err()
-            .to_string()
-            .contains("缺少卡张数"));
+        assert!(
+            voucher
+                .approval_total_quantity(&[voucher_line.clone()])
+                .unwrap_err()
+                .to_string()
+                .contains("缺少卡张数")
+        );
 
         voucher_line.card_count = Some(0);
-        assert!(voucher
-            .approval_total_quantity(&[voucher_line])
-            .unwrap_err()
-            .to_string()
-            .contains("必须为正整数"));
+        assert!(
+            voucher
+                .approval_total_quantity(&[voucher_line])
+                .unwrap_err()
+                .to_string()
+                .contains("必须为正整数")
+        );
 
         let (_, extra_voucher) = voucher_submission(voucher_line_data(1, 2));
         let (goods_for_mix, goods_mix_lines) = goods_submission(vec![goods_line_data(1, "1")]);
@@ -391,10 +383,7 @@ mod tests {
         overflow_lines[0].quantity = Some(Quantity::try_from(Decimal::MAX).unwrap());
         overflow_lines[1].quantity = Some(Quantity::try_from(Decimal::MAX).unwrap());
         assert_eq!(
-            overflow_submission
-                .approval_total_quantity(&overflow_lines)
-                .unwrap_err()
-                .to_string(),
+            overflow_submission.approval_total_quantity(&overflow_lines).unwrap_err().to_string(),
             "审批总数量溢出"
         );
     }
@@ -402,10 +391,7 @@ mod tests {
     #[test]
     fn quantity_from_total_rejects_excess_scale() {
         let too_precise = Decimal::new(1, 7);
-        assert!(quantity_from_total(too_precise)
-            .unwrap_err()
-            .to_string()
-            .contains("超出精度"));
+        assert!(quantity_from_total(too_precise).unwrap_err().to_string().contains("超出精度"));
     }
 
     #[test]

@@ -8,25 +8,23 @@
 //! 筛选/行类型定义在本文件，经 `SourceRegistryExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
-use crate::repository::owned::{
-    ExternalIdentityMapRepository, ExternalIdentityTargetRepository, SourceSystemRepository,
-};
 use std::collections::HashMap;
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use serde::{Deserialize, Serialize};
+
+use super::extensions::SourceRegistryExt;
 use crate::entity::source_registry::{
     ExternalIdKey, ExternalIdentityMap, ExternalIdentityTarget, ExternalObjectType, MappingStatus,
     RelationRole, SourceSystem, SourceSystemId, SourceSystemStatus, SourceSystemType, TargetStatus,
 };
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use mongodb::Database;
-use serde::{Deserialize, Serialize};
-
-use super::extensions::SourceRegistryExt;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::repository::owned::{
+    ExternalIdentityMapRepository, ExternalIdentityTargetRepository, SourceSystemRepository,
+};
 
 /// Encode an external identity comparison key as BSON Binary (Generic).
 ///
@@ -142,10 +140,7 @@ impl<'a> SourceSystemRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按来源系统 ID 集合批量读取来源系统（INT-R17）。
@@ -172,10 +167,7 @@ impl<'a> SourceSystemRepository<'a> {
         if source_system_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let ids = source_system_ids
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>();
+        let ids = source_system_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 }
@@ -275,10 +267,7 @@ impl<'a> ExternalIdentityMapRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按「来源系统 + 对象类型 + 规范化比较键」查找唯一映射。
@@ -444,7 +433,7 @@ impl<'a> ExternalIdentityTargetRepository<'a> {
                 Ok(()) => outcome.applied.push(target_id),
                 Err(persistence_core::Error::OptimisticLockingError) => {
                     outcome.conflicts.push(target_id);
-                }
+                },
                 Err(error) => return Err(error),
             }
         }
@@ -560,9 +549,7 @@ impl<'a> SourceRegistryRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
         let targets = mongo_ops::find_many(
-            &self
-                .db
-                .collection::<ExternalIdentityTarget>(EXTERNAL_IDENTITY_TARGETS),
+            &self.db.collection::<ExternalIdentityTarget>(EXTERNAL_IDENTITY_TARGETS),
             active_identity_target_filter(object_type, internal_object_id, as_of_unix_secs),
             FindOptions::builder().sort(doc! { "id": 1 }).build(),
             executor,
@@ -571,10 +558,8 @@ impl<'a> SourceRegistryRepository<'a> {
         if targets.is_empty() {
             return Ok(Vec::new());
         }
-        let map_ids = targets
-            .iter()
-            .map(|target| target.external_identity_map_id.to_string())
-            .collect::<Vec<_>>();
+        let map_ids =
+            targets.iter().map(|target| target.external_identity_map_id.to_string()).collect::<Vec<_>>();
         let maps = mongo_ops::find_many(
             &self.db.collection::<ExternalIdentityMap>(EXTERNAL_IDENTITY_MAPS),
             active_identity_map_filter(source_system_id, object_type, map_ids),
@@ -582,18 +567,12 @@ impl<'a> SourceRegistryRepository<'a> {
             executor,
         )
         .await?;
-        let external_ids = maps
-            .into_iter()
-            .map(|mapping| (mapping.base.id, mapping.external_id))
-            .collect::<HashMap<_, _>>();
+        let external_ids =
+            maps.into_iter().map(|mapping| (mapping.base.id, mapping.external_id)).collect::<HashMap<_, _>>();
 
         Ok(targets
             .into_iter()
-            .filter_map(|target| {
-                external_ids
-                    .get(target.external_identity_map_id.as_ref())
-                    .cloned()
-            })
+            .filter_map(|target| external_ids.get(target.external_identity_map_id.as_ref()).cloned())
             .collect())
     }
 
@@ -626,9 +605,7 @@ impl<'a> SourceRegistryRepository<'a> {
         )
         .await?;
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<ExternalIdentityTarget>(EXTERNAL_IDENTITY_TARGETS),
+            &self.db.collection::<ExternalIdentityTarget>(EXTERNAL_IDENTITY_TARGETS),
             target,
             executor,
         )
@@ -721,10 +698,11 @@ fn external_identity_map_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{active_identity_map_filter, active_identity_target_filter, sort_doc, SourceSystemFilter};
-    use crate::entity::source_registry::{ExternalObjectType, SourceSystemId};
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
+
+    use super::{SourceSystemFilter, active_identity_map_filter, active_identity_target_filter, sort_doc};
+    use crate::entity::source_registry::{ExternalObjectType, SourceSystemId};
 
     #[test]
     fn source_system_filter_applies_optional_fields_and_deleted_filter() {
@@ -758,10 +736,7 @@ mod tests {
         assert_eq!(target.get_str("internal_object_id").unwrap(), "customer-1");
         assert_eq!(target.get_str("relation_role").unwrap(), "PRIMARY");
         assert_eq!(target.get_str("status").unwrap(), "active");
-        assert_eq!(
-            target.get_document("valid_from").unwrap(),
-            &doc! { "$lte": 100_i64 }
-        );
+        assert_eq!(target.get_document("valid_from").unwrap(), &doc! { "$lte": 100_i64 });
         assert!(target.get_array("$or").is_ok());
 
         let maps = active_identity_map_filter(
@@ -777,11 +752,12 @@ mod tests {
 
     #[test]
     fn bson_wire_roundtrip_persists_external_id_key_as_binary() {
+        use erp_core::ids::{ExternalIdentityMapId, SourceSystemId};
+        use mongodb::bson;
+
         use crate::entity::source_registry::{
             ExternalIdentityMap, ExternalIdentityMapData, ExternalObjectType, MappingStatus,
         };
-        use erp_core::ids::{ExternalIdentityMapId, SourceSystemId};
-        use mongodb::bson;
 
         let map = ExternalIdentityMap::new(
             ExternalIdentityMapId::new("map-1"),
@@ -808,12 +784,13 @@ mod tests {
 
     #[test]
     fn entities_roundtrip_through_bson_including_ids() {
+        use erp_core::ids::{ExternalIdentityMapId, ExternalIdentityTargetId, SourceSystemId};
+        use mongodb::bson;
+
         use crate::entity::source_registry::{
             ExternalIdentityTarget, ExternalIdentityTargetData, ExternalObjectType, RelationRole,
             SourceSystem, SourceSystemData, SourceSystemStatus, SourceSystemType, TargetStatus,
         };
-        use erp_core::ids::{ExternalIdentityMapId, ExternalIdentityTargetId, SourceSystemId};
-        use mongodb::bson;
 
         let system = SourceSystem::new(
             SourceSystemId::new("sys-1"),

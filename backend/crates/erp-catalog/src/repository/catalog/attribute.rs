@@ -1,17 +1,15 @@
-use crate::repository::owned::{SkuAttributeRepository, SkuAttributeValueRepository};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::catalog::sku_attribute::AttributeValueType;
-use crate::entity::catalog::EnableStatus;
-
 use super::shared::sort_doc;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::catalog::EnableStatus;
+use crate::entity::catalog::sku_attribute::AttributeValueType;
+use crate::repository::owned::{SkuAttributeRepository, SkuAttributeValueRepository};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SkuAttributeRow {
@@ -104,10 +102,7 @@ impl<'a> SkuAttributeRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SkuAttributeRow>> {
         let options = FindOptions::builder()
-            .sort(sku_attribute_sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-            ))
+            .sort(sku_attribute_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(sku_attribute_projection())
@@ -116,10 +111,7 @@ impl<'a> SkuAttributeRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -217,10 +209,7 @@ impl<'a> SkuAttributeValueRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SkuAttributeValueRow>> {
         let options = FindOptions::builder()
-            .sort(sku_attribute_value_sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-            ))
+            .sort(sku_attribute_value_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(sku_attribute_value_projection())
@@ -229,10 +218,7 @@ impl<'a> SkuAttributeValueRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -287,8 +273,8 @@ fn sku_attribute_value_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entity::catalog::sku_attribute::AttributeValueType;
     use crate::entity::catalog::EnableStatus;
+    use crate::entity::catalog::sku_attribute::AttributeValueType;
 
     #[test]
     fn sku_attribute_filter_applies_optional_fields_and_deleted_filter() {

@@ -1,9 +1,10 @@
 //! 开票申请 HTTP 协议适配；复用拥有领域及读模型 DTO。
-use super::*;
 use erp_finance::dto::receivable::{
     CancelInvoiceRequest, InvoiceRequestAmounts, InvoiceRequestQuery, SubmitInvoiceRequest,
 };
 use erp_read_models::finance::receivable::invoice_request::InvoiceRequestView;
+
+use super::*;
 
 #[permission_macros::permission(
     group = "开票申请",
@@ -19,11 +20,7 @@ pub async fn invoice_request_list(
     State(state): State<AppState>,
     Query(params): Query<InvoiceRequestQuery>,
 ) -> Result<PageView<InvoiceRequestView>> {
-    Ok(ApiResponse::ok_with_data(
-        ReceivableReadService::new(state.db())
-            .invoice_request_list(&params)
-            .await?,
-    ))
+    Ok(ApiResponse::ok_with_data(ReceivableReadService::new(state.db()).invoice_request_list(&params).await?))
 }
 
 #[permission_macros::permission(
@@ -40,11 +37,7 @@ pub async fn invoice_request_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<InvoiceRequestView> {
-    Ok(ApiResponse::ok_with_data(
-        ReceivableReadService::new(state.db())
-            .invoice_request_detail(&id)
-            .await?,
-    ))
+    Ok(ApiResponse::ok_with_data(ReceivableReadService::new(state.db()).invoice_request_detail(&id).await?))
 }
 
 #[permission_macros::permission(
@@ -61,11 +54,7 @@ pub async fn invoice_request_amounts(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<InvoiceRequestAmounts> {
-    Ok(ApiResponse::ok_with_data(
-        ReceivableReadService::new(state.db())
-            .invoice_request_amounts(&id)
-            .await?,
-    ))
+    Ok(ApiResponse::ok_with_data(ReceivableReadService::new(state.db()).invoice_request_amounts(&id).await?))
 }
 
 #[permission_macros::permission(

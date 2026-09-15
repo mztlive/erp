@@ -6,9 +6,6 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierOrderActionId, SupplierOrderActionLineId,
@@ -16,6 +13,8 @@ use erp_core::ids::{
 use erp_core::money::{Amount, Quantity};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 
 /// 幂等键最大长度。
 const IDEMPOTENCY_KEY_MAX_LEN: usize = 128;
@@ -327,11 +326,8 @@ impl SupplierOrderAction {
             IDEMPOTENCY_KEY_MAX_LEN,
             "幂等键过长",
         )?;
-        let external_request_id = normalize_optional_text(
-            data.external_request_id,
-            "供应商请求号",
-            EXTERNAL_REQUEST_ID_MAX_LEN,
-        )?;
+        let external_request_id =
+            normalize_optional_text(data.external_request_id, "供应商请求号", EXTERNAL_REQUEST_ID_MAX_LEN)?;
         let request_summary = normalize_optional_text(data.request_summary, "请求摘要", SUMMARY_MAX_LEN)?;
         let response_summary = normalize_optional_text(data.response_summary, "响应摘要", SUMMARY_MAX_LEN)?;
 
@@ -550,9 +546,11 @@ impl SupplierOrderActionLine {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use erp_core::ids::{SupplierFulfillmentItemId, SupplierOrderActionId, SupplierOrderActionLineId};
     use std::str::FromStr;
+
+    use erp_core::ids::{SupplierFulfillmentItemId, SupplierOrderActionId, SupplierOrderActionLineId};
+
+    use super::*;
 
     fn sample_data() -> SupplierOrderActionData {
         SupplierOrderActionData {
@@ -626,10 +624,7 @@ mod tests {
             "{\"result\":\"accepted\"}",
         );
         assert_eq!(query_result.status, SupplierOrderActionStatus::Succeeded);
-        assert_eq!(
-            query_result.response_summary.as_deref(),
-            Some("{\"result\":\"accepted\"}")
-        );
+        assert_eq!(query_result.response_summary.as_deref(), Some("{\"result\":\"accepted\"}"));
 
         let line = SupplierOrderActionLineData::from_request_index(
             SupplierOrderActionId::new("action-1"),
@@ -656,39 +651,27 @@ mod tests {
 
     #[test]
     fn new_accepts_actions_without_manual_adjustment_reference() {
-        let cancel_without_request = SupplierOrderActionData {
-            action_type: SupplierOrderActionType::Cancel,
-            ..sample_data()
-        };
+        let cancel_without_request =
+            SupplierOrderActionData { action_type: SupplierOrderActionType::Cancel, ..sample_data() };
         assert!(
             SupplierOrderAction::new(SupplierOrderActionId::new("action-4"), cancel_without_request).is_ok()
         );
 
-        let place_with_request = SupplierOrderActionData {
-            action_type: SupplierOrderActionType::Place,
-            ..sample_data()
-        };
+        let place_with_request =
+            SupplierOrderActionData { action_type: SupplierOrderActionType::Place, ..sample_data() };
         assert!(SupplierOrderAction::new(SupplierOrderActionId::new("action-5"), place_with_request).is_ok());
     }
 
     #[test]
     fn new_rejects_empty_or_overlong_idempotency_key_and_summaries() {
-        let empty_key = SupplierOrderActionData {
-            idempotency_key: "   ".to_string(),
-            ..sample_data()
-        };
+        let empty_key = SupplierOrderActionData { idempotency_key: "   ".to_string(), ..sample_data() };
         assert!(SupplierOrderAction::new(SupplierOrderActionId::new("action-6"), empty_key).is_err());
 
-        let overlong_key = SupplierOrderActionData {
-            idempotency_key: "k".repeat(129),
-            ..sample_data()
-        };
+        let overlong_key = SupplierOrderActionData { idempotency_key: "k".repeat(129), ..sample_data() };
         assert!(SupplierOrderAction::new(SupplierOrderActionId::new("action-7"), overlong_key).is_err());
 
-        let overlong_summary = SupplierOrderActionData {
-            response_summary: Some("s".repeat(2049)),
-            ..sample_data()
-        };
+        let overlong_summary =
+            SupplierOrderActionData { response_summary: Some("s".repeat(2049)), ..sample_data() };
         assert!(SupplierOrderAction::new(SupplierOrderActionId::new("action-8"), overlong_summary).is_err());
     }
 
@@ -719,21 +702,21 @@ mod tests {
     fn update_rejects_blank_external_request_id() {
         let mut action =
             SupplierOrderAction::new(SupplierOrderActionId::new("action-1"), sample_data()).unwrap();
-        assert!(action
-            .update(SupplierOrderActionUpdate {
-                external_request_id: Some("   ".to_string()),
-                ..Default::default()
-            })
-            .is_err());
+        assert!(
+            action
+                .update(SupplierOrderActionUpdate {
+                    external_request_id: Some("   ".to_string()),
+                    ..Default::default()
+                })
+                .is_err()
+        );
     }
 
     #[test]
     fn line_new_accepts_valid_line() {
-        let line = SupplierOrderActionLine::new(
-            SupplierOrderActionLineId::new("action-line-1"),
-            sample_line_data(),
-        )
-        .unwrap();
+        let line =
+            SupplierOrderActionLine::new(SupplierOrderActionLineId::new("action-line-1"), sample_line_data())
+                .unwrap();
         assert_eq!(line.line_no, 1);
         assert_eq!(line.quantity, Quantity::from_str("2.000000").unwrap());
         assert_eq!(line.amount, Amount::from_str("19.98").unwrap());
@@ -750,14 +733,11 @@ mod tests {
                 .is_err()
         );
 
-        let negative_amount = SupplierOrderActionLineData {
-            amount: Amount::from_str("-1.00").unwrap(),
-            ..sample_line_data()
-        };
-        assert!(SupplierOrderActionLine::new(
-            SupplierOrderActionLineId::new("action-line-3"),
-            negative_amount
-        )
-        .is_err());
+        let negative_amount =
+            SupplierOrderActionLineData { amount: Amount::from_str("-1.00").unwrap(), ..sample_line_data() };
+        assert!(
+            SupplierOrderActionLine::new(SupplierOrderActionLineId::new("action-line-3"), negative_amount)
+                .is_err()
+        );
     }
 }

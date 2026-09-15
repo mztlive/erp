@@ -1,13 +1,13 @@
 //! 结算复核提交与决定命令。
 
-use crate::entity::supplier_settlement::SettlementReviewRejectReason;
+use application_core::non_blank;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::query::SupplierSettlementStatementView;
 use super::safe_command_id;
 use crate::Result;
-use application_core::non_blank;
+use crate::entity::supplier_settlement::SettlementReviewRejectReason;
 
 /// 结算单对象级提交动作。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -136,10 +136,10 @@ impl SettlementReviewDecisionData {
                     .as_deref()
                     .ok_or_else(|| crate::Error::ValidationError("驳回必须携带原因代码".to_string()))?;
                 Ok(Some(SettlementReviewRejectReason::parse(raw)?))
-            }
-            SettlementReviewAction::Confirm if self.reason_code.is_some() => Err(
-                crate::Error::ValidationError("确认结算不得携带驳回原因代码".to_string()),
-            ),
+            },
+            SettlementReviewAction::Confirm if self.reason_code.is_some() => {
+                Err(crate::Error::ValidationError("确认结算不得携带驳回原因代码".to_string()))
+            },
             SettlementReviewAction::Confirm => Ok(None),
         }
     }

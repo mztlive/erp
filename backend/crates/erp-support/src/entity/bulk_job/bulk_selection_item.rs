@@ -2,11 +2,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{BulkSelectionItemId, BulkSelectionSnapshotId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 对象类型代码最大长度。
 const OBJECT_TYPE_MAX_LEN: usize = 64;
@@ -170,8 +169,9 @@ impl BulkSelectionItem {
 
 #[cfg(test)]
 mod tests {
-    use super::{BulkSelectionItem, BulkSelectionItemData, SelectionItemStatus};
     use erp_core::ids::{BulkSelectionItemId, BulkSelectionSnapshotId};
+
+    use super::{BulkSelectionItem, BulkSelectionItemData, SelectionItemStatus};
 
     fn data() -> BulkSelectionItemData {
         BulkSelectionItemData {
@@ -196,30 +196,21 @@ mod tests {
     /// 失败路径：必填为空被拒。
     #[test]
     fn new_rejects_empty_object_type() {
-        let payload = BulkSelectionItemData {
-            object_type: "  ".to_string(),
-            ..data()
-        };
+        let payload = BulkSelectionItemData { object_type: "  ".to_string(), ..data() };
         assert!(BulkSelectionItem::new(BulkSelectionItemId::new("si-1"), payload).is_err());
     }
 
     /// 失败路径：关联不一致（版本与摘要不成对）被拒。
     #[test]
     fn new_rejects_unpaired_version_and_hash() {
-        let payload = BulkSelectionItemData {
-            expected_hash: None,
-            ..data()
-        };
+        let payload = BulkSelectionItemData { expected_hash: None, ..data() };
         assert!(BulkSelectionItem::new(BulkSelectionItemId::new("si-1"), payload).is_err());
     }
 
     /// 失败路径：超长对象 ID 被拒。
     #[test]
     fn new_rejects_overlong_object_id() {
-        let payload = BulkSelectionItemData {
-            object_id: "x".repeat(129),
-            ..data()
-        };
+        let payload = BulkSelectionItemData { object_id: "x".repeat(129), ..data() };
         assert!(BulkSelectionItem::new(BulkSelectionItemId::new("si-1"), payload).is_err());
     }
 
@@ -232,22 +223,14 @@ mod tests {
 
         let mut failed = BulkSelectionItem::new(BulkSelectionItemId::new("si-2"), data()).unwrap();
         assert!(failed.record_result(SelectionItemStatus::Failed, None).is_err());
-        failed
-            .record_result(
-                SelectionItemStatus::Failed,
-                Some(" VERSION_MISMATCH ".to_string()),
-            )
-            .unwrap();
+        failed.record_result(SelectionItemStatus::Failed, Some(" VERSION_MISMATCH ".to_string())).unwrap();
         assert_eq!(failed.result_code.as_deref(), Some("VERSION_MISMATCH"));
     }
 
     /// 枚举序列化与标签稳定。
     #[test]
     fn result_codes_and_labels_are_stable() {
-        assert_eq!(
-            serde_json::to_string(&SelectionItemStatus::Skipped).unwrap(),
-            "\"skipped\""
-        );
+        assert_eq!(serde_json::to_string(&SelectionItemStatus::Skipped).unwrap(), "\"skipped\"");
         assert_eq!(SelectionItemStatus::Failed.as_str(), "failed");
         assert_eq!(SelectionItemStatus::Success.label(), "成功");
     }

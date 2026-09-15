@@ -8,9 +8,6 @@ mod guard;
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
-use self::guard::command_identity;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_integration::entity::integration_ops::IntegrationCommandIdentity;
@@ -19,6 +16,10 @@ use erp_integration::service::task_decision::action::next_allowed_actions;
 use mongodb::Database;
 use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
+
+#[cfg(test)]
+use self::guard::command_identity;
+use crate::{Error, Result};
 
 const TASK_ACTION_AUDIT: &str = "integration.task_action";
 const TASK_COMPLETION_AUDIT: &str = "integration.task_completion";
@@ -39,11 +40,9 @@ async fn store_receipt<T: Serialize>(
     result: T,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let message = serde_json::to_string(&ReceiptEnvelope {
-        fingerprint: receipt.fingerprint().to_string(),
-        result,
-    })
-    .map_err(|_| Error::Internal("W29 结果无法形成幂等收据".to_string()))?;
+    let message =
+        serde_json::to_string(&ReceiptEnvelope { fingerprint: receipt.fingerprint().to_string(), result })
+            .map_err(|_| Error::Internal("W29 结果无法形成幂等收据".to_string()))?;
     let audit = actor.clone().resource_log_with_id(
         receipt.receipt_id().to_string(),
         receipt.action(),

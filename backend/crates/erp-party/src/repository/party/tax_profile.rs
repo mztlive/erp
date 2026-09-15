@@ -1,15 +1,13 @@
-use crate::entity::party::{EffectiveRecordStatus, PartyTaxProfile};
-use crate::repository::owned::PartyTaxProfileRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PartyId;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::shared::{active_fact_filter, active_fact_window_filter, sort_doc};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::party::{EffectiveRecordStatus, PartyTaxProfile};
+use crate::repository::owned::PartyTaxProfileRepository;
 
 /// 税务资料列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -117,10 +115,7 @@ impl<'a> PartyTaxProfileRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 读取指定日期生效的主体税务资料。
@@ -141,8 +136,7 @@ impl<'a> PartyTaxProfileRepository<'a> {
         as_of: erp_core::common::time::BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyTaxProfile>> {
-        self.find_many(active_fact_filter(party_id, as_of), executor)
-            .await
+        self.find_many(active_fact_filter(party_id, as_of), executor).await
     }
 
     /// 按默认标记与创建时间读取指定日期生效的主体税务资料。
@@ -225,12 +219,8 @@ impl<'a> PartyTaxProfileRepository<'a> {
         exclude_id: Option<&str>,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let rows = self
-            .find_many(
-                doc! { "party_id": party_id.to_string(), "is_default": true },
-                executor,
-            )
-            .await?;
+        let rows =
+            self.find_many(doc! { "party_id": party_id.to_string(), "is_default": true }, executor).await?;
         for mut row in rows {
             if exclude_id.is_some_and(|id| id == row.base.id) {
                 continue;

@@ -26,10 +26,7 @@ mod tests {
         ] {
             let value = serde_json::Value::String(wire.to_string());
             assert_eq!(serde_json::to_value(fact).unwrap(), value);
-            assert_eq!(
-                serde_json::from_value::<SalesBusinessTypeFact>(value).unwrap(),
-                fact
-            );
+            assert_eq!(serde_json::from_value::<SalesBusinessTypeFact>(value).unwrap(), fact);
         }
     }
 }

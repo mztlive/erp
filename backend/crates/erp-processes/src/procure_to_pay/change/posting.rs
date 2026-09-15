@@ -1,17 +1,18 @@
 //! 采购变更生效真实步骤，统一使用调用方执行器；失败不得推进后继写入。
-use super::super::allocation_maintenance::prepare_current_sales_allocations;
-use super::super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
-use super::effect::EffectiveChangePosting;
-use crate::{Error, Result};
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
 use erp_procurement::entity::purchase_order::PurchaseOrder;
 use erp_procurement::service::purchase_order::allocation_maintenance::{
-    persist_current_sales_allocations, PreparedSalesAllocations,
+    PreparedSalesAllocations, persist_current_sales_allocations,
 };
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use super::super::allocation_maintenance::prepare_current_sales_allocations;
+use super::super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
+use super::effect::EffectiveChangePosting;
+use crate::{Error, Result};
 
 /// 原事务中的真实跨域操作；没有成本构造或成本写入步骤，因为原差额成本恒空。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,7 +73,7 @@ impl EffectSteps for MongoEffect<'_> {
             SalesGuard => {
                 advance_source_sales_procurement_guard(self.db, &purchase.order, self.actor_id, executor)
                     .await?
-            }
+            },
             PrepareAllocations => {
                 self.allocations = Some(
                     prepare_current_sales_allocations(
@@ -83,7 +84,7 @@ impl EffectSteps for MongoEffect<'_> {
                     )
                     .await?,
                 );
-            }
+            },
             Revision => purchase.persist_revision(self.db, executor).await?,
             Allocations => {
                 let allocations = self
@@ -91,26 +92,22 @@ impl EffectSteps for MongoEffect<'_> {
                     .as_ref()
                     .ok_or_else(|| Error::Internal("采购变更生效步骤缺少已准备分配".into()))?;
                 persist_current_sales_allocations(self.db, allocations, executor).await?;
-            }
-            CurrentOrder => {
-                purchase
-                    .persist_current_order(self.db, self.actor_id, executor)
-                    .await?
-            }
+            },
+            CurrentOrder => purchase.persist_current_order(self.db, self.actor_id, executor).await?,
             ProcurementTasks => {
                 sync_procurement_tasks_for_sales_order(self.db, &purchase.order.sales_order_id, executor)
                     .await?
-            }
+            },
             Payable => {
                 if let Some(payable) = self.write.payable.as_ref() {
                     payable.persist(self.db, executor).await?;
                 }
-            }
+            },
             Submission => purchase.persist_approved_submission(self.db, executor).await?,
             Change => purchase.persist_change(self.db, executor).await?,
             Audit => {
                 self.db.audit_logs().create(&self.audit, executor).await?;
-            }
+            },
         }
         Ok(())
     }
@@ -130,13 +127,7 @@ pub(super) async fn persist_effective_writes(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<u64> {
-    let mut steps = MongoEffect {
-        db,
-        write,
-        audit,
-        actor_id,
-        allocations: None,
-    };
+    let mut steps = MongoEffect { db, write, audit, actor_id, allocations: None };
     execute(&mut steps, executor).await?;
     Ok(steps.write.purchase.order.base.version)
 }
@@ -211,11 +202,7 @@ mod tests {
         let mut executor = TestExecutor { identity: 1 };
         assert_eq!(executor.identity, 1);
         let identity = &mut executor as *mut TestExecutor as usize;
-        let mut steps = RecordingSteps {
-            calls: Vec::new(),
-            identity,
-            fail_at: None,
-        };
+        let mut steps = RecordingSteps { calls: Vec::new(), identity, fail_at: None };
         execute(&mut steps, &mut executor).await.unwrap();
         assert_eq!(steps.calls, expected());
     }
@@ -224,11 +211,7 @@ mod tests {
         for (index, step) in expected().into_iter().enumerate() {
             let mut executor = TestExecutor { identity: 1 };
             let identity = &mut executor as *mut TestExecutor as usize;
-            let mut steps = RecordingSteps {
-                calls: Vec::new(),
-                identity,
-                fail_at: Some(step),
-            };
+            let mut steps = RecordingSteps { calls: Vec::new(), identity, fail_at: Some(step) };
             let error = execute(&mut steps, &mut executor).await.unwrap_err();
             assert!(
                 matches!(error, Error::ConflictError(message) if message == "original purchase change conflict")

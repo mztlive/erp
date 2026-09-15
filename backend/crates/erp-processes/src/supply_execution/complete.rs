@@ -1,23 +1,21 @@
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
-
+use erp_supply::dto::supplier_fulfillment::SupplierOrderTaskCompletionCommand;
 use erp_supply::repository::SupplierFulfillmentExt;
-use erp_workflow::entity::work_item::WorkItemStatus;
 use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::WorkItemStatus;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::investigate::{ensure_task_subject_matches_order, validate_w26_task};
 use super::receipt::{
-    completion_receipt_message, parse_completion_receipt, parse_positive_version, serialized_fingerprint,
-    stable_digest, stable_evidence_id, stable_internal_idempotency_key, CompletionReceipt,
+    CompletionReceipt, completion_receipt_message, parse_completion_receipt, parse_positive_version,
+    serialized_fingerprint, stable_digest, stable_evidence_id, stable_internal_idempotency_key,
 };
 use super::{SupplierFulfillmentProcess, W26_BUSINESS_OBJECT_TYPE};
 use crate::adapters::workflow::work_item_service;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_supply::dto::supplier_fulfillment::SupplierOrderTaskCompletionCommand;
 
 const COMPLETION_AUDIT_PREFIX: &str = "w26-completion-";
 
@@ -39,14 +37,10 @@ impl SupplierFulfillmentProcess {
         command.validate()?;
         let expected_task_version = parse_positive_version(&command.expected_task_version, "任务版本")?;
         let fingerprint = serialized_fingerprint(&command)?;
-        let audit_id = completion_audit_id(
-            actor.id(),
-            command.work_item_id.as_ref(),
-            &command.idempotency_key,
-        );
-        if let Some(result) = self
-            .replay_task_completion(&audit_id, &fingerprint, command.work_item_id.as_ref())
-            .await?
+        let audit_id =
+            completion_audit_id(actor.id(), command.work_item_id.as_ref(), &command.idempotency_key);
+        if let Some(result) =
+            self.replay_task_completion(&audit_id, &fingerprint, command.work_item_id.as_ref()).await?
         {
             return Ok(result);
         }
@@ -87,11 +81,9 @@ impl SupplierFulfillmentProcess {
                         .find_by_id(command_for_tx.decision.order_id.as_ref(), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商履约订单不存在".to_string()))?;
-                    order
-                        .ensure_version(command_for_tx.decision.expected_order_lock_version)
-                        .map_err(|_| {
-                            Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string())
-                        })?;
+                    order.ensure_version(command_for_tx.decision.expected_order_lock_version).map_err(
+                        |_| Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string()),
+                    )?;
                     ensure_task_subject_matches_order(
                         &work_item,
                         &command_for_tx.expected_subject_version,
@@ -100,10 +92,7 @@ impl SupplierFulfillmentProcess {
                     let evidence = db
                         .supplier_order_actions()
                         .find_by_id(
-                            command_for_tx
-                                .decision
-                                .verified_supplier_action_result_id
-                                .as_ref(),
+                            command_for_tx.decision.verified_supplier_action_result_id.as_ref(),
                             session,
                         )
                         .await?
@@ -167,12 +156,7 @@ impl SupplierFulfillmentProcess {
         expected_fingerprint: &str,
         expected_work_item_id: &str,
     ) -> Result<Option<SupplierOrderTaskCompletionResultView>> {
-        let Some(audit) = self
-            .db
-            .audit_logs()
-            .find_by_id(audit_id, &mut NoTransaction)
-            .await?
-        else {
+        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
             return Ok(None);
         };
         if !audit.success
@@ -196,9 +180,7 @@ impl SupplierFulfillmentProcess {
             .ok_or_else(|| Error::Internal("W26 任务完成业务证据不存在".to_string()))?;
         let record = parse_completion_evidence(&action)?;
         if record.work_item_id() != expected_work_item_id || record.resolution() != receipt.resolution {
-            return Err(Error::Internal(
-                "W26 任务完成幂等收据与业务证据不一致".to_string(),
-            ));
+            return Err(Error::Internal("W26 任务完成幂等收据与业务证据不一致".to_string()));
         }
         Ok(Some(completion_result(expected_work_item_id, receipt)))
     }
@@ -221,15 +203,14 @@ fn completion_result(
 fn completion_audit_id(actor_id: &str, work_item_id: &str, key: &str) -> String {
     format!(
         "{COMPLETION_AUDIT_PREFIX}{}",
-        stable_digest(&format!(
-            "{actor_id}|supplier_fulfillment.task_complete|{work_item_id}|{key}"
-        ))
+        stable_digest(&format!("{actor_id}|supplier_fulfillment.task_complete|{work_item_id}|{key}"))
     )
 }
 
-use super::dto::SupplierOrderTaskCompletionResultView;
 use erp_read_models::supplier_center::fulfillment_access::ensure_task_actor_eligible;
 use erp_supply::service::supplier_fulfillment::complete::{
     ensure_current_resolution, parse_completion_evidence, prepare_terminal_action,
 };
 use erp_supply::service::supplier_fulfillment::investigate::verified_terminal_evidence;
+
+use super::dto::SupplierOrderTaskCompletionResultView;

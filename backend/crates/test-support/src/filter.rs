@@ -1,5 +1,5 @@
 //! 纯内存查询条件测试工具；只支持显式登记的查询操作，不连接数据库。
-use mongodb::bson::{serialize_to_document, Bson, Document};
+use mongodb::bson::{Bson, Document, serialize_to_document};
 use serde_json::Value;
 
 /// 以固定 JSON 样本验证仓储生成的查询条件。
@@ -17,31 +17,26 @@ pub fn matches_filter(filter: &Document, object: &Value) -> bool {
 }
 
 fn matches(filter: &Document, object: &Document) -> bool {
-    filter
-        .iter()
-        .all(|(key, condition)| match (key.as_str(), condition) {
-            ("$and", Bson::Array(parts)) => parts
-                .iter()
-                .all(|part| matches(part.as_document().unwrap(), object)),
-            ("$or", Bson::Array(parts)) => parts
-                .iter()
-                .any(|part| matches(part.as_document().unwrap(), object)),
-            ("$expr", Bson::Boolean(value)) => *value,
-            (_, Bson::Document(operator)) => {
-                assert_eq!(operator.len(), 1, "未知组合操作必须使测试失败");
-                let values = operator.get_array("$in").expect("未知查询操作必须使测试失败");
-                object.get(key).is_some_and(|value| values.contains(value))
-            }
-            (key, _) if key.starts_with('$') => panic!("未知查询操作: {key}"),
-            (_, value) => object.get(key) == Some(value),
-        })
+    filter.iter().all(|(key, condition)| match (key.as_str(), condition) {
+        ("$and", Bson::Array(parts)) => parts.iter().all(|part| matches(part.as_document().unwrap(), object)),
+        ("$or", Bson::Array(parts)) => parts.iter().any(|part| matches(part.as_document().unwrap(), object)),
+        ("$expr", Bson::Boolean(value)) => *value,
+        (_, Bson::Document(operator)) => {
+            assert_eq!(operator.len(), 1, "未知组合操作必须使测试失败");
+            let values = operator.get_array("$in").expect("未知查询操作必须使测试失败");
+            object.get(key).is_some_and(|value| values.contains(value))
+        },
+        (key, _) if key.starts_with('$') => panic!("未知查询操作: {key}"),
+        (_, value) => object.get(key) == Some(value),
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use mongodb::bson::doc;
     use serde_json::json;
+
+    use super::*;
 
     #[test]
     fn conjunction_and_disjunction_keep_empty_sets_distinct() {

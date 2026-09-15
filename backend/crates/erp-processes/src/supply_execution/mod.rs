@@ -38,13 +38,14 @@ mod refund_writes;
 mod reject;
 mod work_item;
 
-use crate::Result;
+use std::sync::Arc;
+
 use erp_supply::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use erp_supply::ports::supplier_gateway::SupplierGateway;
-use erp_supply::service::supplier_fulfillment::SupplierFulfillmentService;
-use erp_supply::service::supplier_fulfillment::W26_BUSINESS_OBJECT_TYPE;
+use erp_supply::service::supplier_fulfillment::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
 use mongodb::Database;
-use std::sync::Arc;
+
+use crate::Result;
 /// 供应商履约服务。
 ///
 /// 提供供应商子订单的下单、查询、取消/退款动作提交与外部结果登记编排。

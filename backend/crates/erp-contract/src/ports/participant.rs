@@ -78,9 +78,10 @@ impl ContractParticipantPort for EmptyContractParticipants {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use persistence_core::NoTransaction;
     use tokio::runtime::Builder;
+
+    use super::*;
 
     #[test]
     fn fail_closed_participant_port_does_not_become_empty_success() {

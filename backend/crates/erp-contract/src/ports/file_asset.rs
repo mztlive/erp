@@ -68,10 +68,11 @@ impl FileAssetFactsPort for FailClosedFileAssetFacts {
 
 #[cfg(test)]
 mod tests {
-    use super::{EmptyFileAssetFacts, FileAssetFactsPort};
     use erp_core::ids::FileAssetId;
     use persistence_core::NoTransaction;
     use tokio::runtime::Builder;
+
+    use super::{EmptyFileAssetFacts, FileAssetFactsPort};
 
     #[test]
     fn empty_file_asset_port_confirms_missing_attachment() {

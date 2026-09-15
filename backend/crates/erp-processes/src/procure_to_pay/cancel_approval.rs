@@ -1,40 +1,38 @@
 //! 采购单撤回：调用统一 `prepare_cancel`，再执行业务 `cancel_action`。
 
+use application_core::AuditActor;
 use async_trait::async_trait;
-use bpm::engine::{plan_cancel, CancelPlan, CancelPlanInput, DefinitionGraph};
+use bpm::engine::{CancelPlan, CancelPlanInput, DefinitionGraph, plan_cancel};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey, ParticipantId, Timestamp};
-use erp_audit::AuditExt;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
+use erp_procurement::dto::purchase_order::CancelPurchaseOrderApprovalRequest;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
-use erp_workflow::BpmExt;
-use erp_workflow::WorkItemExt;
+use erp_workflow::service::approval::execution::authorization::converge_eligibility;
+use erp_workflow::service::approval::execution::start::map_engine_error;
+use erp_workflow::service::approval::execution::{
+    CancelExecutionInput, DocumentCancelCommand, DocumentCancelReplayProof, ExecutionCommandInput,
+    PreparedExecution, claim_and_persist_document_cancel_runtime, command_recovery_delay,
+    normalize_document_cancel_reason, prepare_document_cancel, replay_committed_document_cancel,
+};
+use erp_workflow::service::approval::policy::ApprovalDomainAction;
+use erp_workflow::service::document_registry::find_approval_binding;
+use erp_workflow::{BpmExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
+use validator::Validate;
 
+use super::PurchaseOrderProcess;
 use super::adapter::{
     execute_purchase_order_domain_action, purchase_order_adapter, purchase_order_subject_ref,
     require_frozen_binding,
 };
 use super::start_approval::load_bound_definition_graph;
-use super::PurchaseOrderProcess;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_procurement::dto::purchase_order::CancelPurchaseOrderApprovalRequest;
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::execution::authorization::converge_eligibility;
-use erp_workflow::service::approval::execution::start::map_engine_error;
-use erp_workflow::service::approval::execution::{
-    claim_and_persist_document_cancel_runtime, command_recovery_delay, normalize_document_cancel_reason,
-    prepare_document_cancel, replay_committed_document_cancel, CancelExecutionInput, DocumentCancelCommand,
-    DocumentCancelReplayProof, ExecutionCommandInput, PreparedExecution,
-};
-use erp_workflow::service::approval::policy::ApprovalDomainAction;
-use erp_workflow::service::document_registry::find_approval_binding;
-use validator::Validate;
 
 impl PurchaseOrderProcess {
     /// 撤回审批中的采购单，回到可修正草稿且 `subject_version` 不回退。
@@ -61,10 +59,8 @@ impl PurchaseOrderProcess {
         actor: &AuditActor,
     ) -> Result<()> {
         req.validate()?;
-        let mut order = self
-            .command_access(actor, "cancel_approval")?
-            .current(id, &mut NoTransaction)
-            .await?;
+        let mut order =
+            self.command_access(actor, "cancel_approval")?.current(id, &mut NoTransaction).await?;
         let subject = purchase_order_subject_ref(id)?;
         let command = DocumentCancelCommand::new(
             subject.clone(),
@@ -79,9 +75,8 @@ impl PurchaseOrderProcess {
         }
         self.domain().ensure_version(&order, req.expected_lock_version)?;
         let adapter = purchase_order_adapter()?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)?;
+        let binding =
+            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let runtime =
             load_cancel_runtime(&self.db, &binding, &subject, order.approval_subject_version).await?;
@@ -104,9 +99,7 @@ impl PurchaseOrderProcess {
         )?;
         let _ = ApprovalDomainAction::PurchaseOrderCancelApproval;
         let audit =
-            actor
-                .clone()
-                .resource_log("purchase_order.cancel_approval", "purchase_order", id.to_string())?;
+            actor.clone().resource_log("purchase_order.cancel_approval", "purchase_order", id.to_string())?;
         let result = persist_purchase_order_cancel(
             &self.db,
             PurchaseOrderCancelPersistInput {
@@ -125,7 +118,7 @@ impl PurchaseOrderProcess {
             Ok(()) => Ok(()),
             Err(error) if error.command_may_have_committed() => {
                 recover_purchase_order_cancel(&self.db, &command, error).await
-            }
+            },
             Err(error) => Err(error),
         }
     }
@@ -144,9 +137,7 @@ async fn replay_purchase_order_cancel(
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                replay_committed_document_cancel(&db, &command, session)
-                    .await
-                    .map_err(Error::from)
+                replay_committed_document_cancel(&db, &command, session).await.map_err(Error::from)
             })
         })
         .await
@@ -161,8 +152,8 @@ async fn recover_purchase_order_cancel(
     for attempt in 0..CANCEL_RECOVERY_ATTEMPTS {
         match replay_purchase_order_cancel(db, command).await {
             Ok(Some(_)) => return Ok(()),
-            Ok(None) => {}
-            Err(error) if error.command_may_have_committed() => {}
+            Ok(None) => {},
+            Err(error) if error.command_may_have_committed() => {},
             Err(error) => return Err(error),
         }
         if attempt + 1 < CANCEL_RECOVERY_ATTEMPTS {
@@ -449,16 +440,16 @@ impl CancelSteps for CancelPosting<'_> {
             CancelStep::Runtime => {
                 claim_and_persist_document_cancel_runtime(self.db, self.writes, self.closed_tasks, executor)
                     .await?
-            }
+            },
             CancelStep::Order => {
                 erp_procurement::service::purchase_order::cancel_approval::persist_cancelled_order(
                     self.db, self.order, executor,
                 )
                 .await?
-            }
+            },
             CancelStep::Audit => {
                 self.db.audit_logs().create(self.audit, executor).await?;
-            }
+            },
         }
         Ok(())
     }
@@ -466,18 +457,18 @@ impl CancelSteps for CancelPosting<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_purchase_order_cancel_input, map_cancel_plan_error, LoadedCancelRuntime};
-    use bpm::engine::{plan_cancel, CancelPlanInput, EngineError};
+    use bpm::engine::{CancelPlanInput, EngineError, plan_cancel};
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
     use bpm::model::types::{
         ApprovalBlockerCode, ApprovalExecutionAssignmentSource, ApprovalProcessInstanceStatus, ModelError,
     };
     use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, ParticipantId};
     use erp_core::common::time::Instant;
+    use erp_workflow::service::approval::execution::{PreparedExecution, prepare_document_cancel};
 
-    use crate::procure_to_pay::start_approval::tests::{open_task, two_node_graph};
+    use super::{LoadedCancelRuntime, build_purchase_order_cancel_input, map_cancel_plan_error};
     use crate::Error;
-    use erp_workflow::service::approval::execution::{prepare_document_cancel, PreparedExecution};
+    use crate::procure_to_pay::start_approval::tests::{open_task, two_node_graph};
 
     fn current_execution() -> ApprovalNodeExecution {
         ApprovalNodeExecution::new_active(NewNodeExecution {
@@ -537,13 +528,7 @@ mod tests {
             open_task_count: open_tasks.len(),
         })
         .unwrap();
-        LoadedCancelRuntime {
-            graph: two_node_graph(),
-            instance,
-            current,
-            plan,
-            open_tasks,
-        }
+        LoadedCancelRuntime { graph: two_node_graph(), instance, current, plan, open_tasks }
     }
 
     /// 运行中撤回按 BPM 计划关闭唯一开放任务，并携带实例、执行与任务版本 CAS。
@@ -682,9 +667,7 @@ mod tests {
             seen: vec![],
             fail_at: None,
         };
-        super::execute_cancel_steps(&mut steps, &mut executor)
-            .await
-            .unwrap();
+        super::execute_cancel_steps(&mut steps, &mut executor).await.unwrap();
         assert_eq!(steps.seen, [Runtime, Order, Audit]);
     }
 
@@ -700,9 +683,7 @@ mod tests {
                 seen: vec![],
                 fail_at: Some(step),
             };
-            let error = super::execute_cancel_steps(&mut steps, &mut executor)
-                .await
-                .unwrap_err();
+            let error = super::execute_cancel_steps(&mut steps, &mut executor).await.unwrap_err();
             assert!(
                 matches!(error, crate::Error::ConflictError(message) if message == "original-step-error")
             );

@@ -5,27 +5,27 @@
 //! 指纹密钥见 `super::sensitive`。原地更新只允许切换启停状态、结束有效期
 //! 与调整默认标记；同一主体默认联系人唯一（跨行约束，事务内校验，§6.2）。
 
-use crate::entity::party::{
-    EffectiveRecordStatus, PartyContact, PartyContactData, PartyContactId, PartyContactUpdate, PartyId,
-};
-use crate::ports::{PartyAuditPort, SupplierRolePort};
-use crate::repository::PartyExt;
+use std::sync::Arc;
+
+use application_core::AuditActor;
 use erp_core::field_update::FieldUpdate;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
-use std::sync::Arc;
 use validator::Validate;
-
-use crate::error::{Error, Result};
-use application_core::AuditActor;
 
 use super::sensitive::SensitiveDataCodec;
 use super::{clear_default_marks, normalized_text, page_or_default, page_size_or_default};
 use crate::dto::party::{
-    normalize_sort, CreatePartyContactRequest, PageView, PartyContactListParams, PartyContactView, SortDir,
-    UpdatePartyContactRequest, PARTY_CONTACT_SORT_FIELDS,
+    CreatePartyContactRequest, PARTY_CONTACT_SORT_FIELDS, PageView, PartyContactListParams, PartyContactView,
+    SortDir, UpdatePartyContactRequest, normalize_sort,
 };
+use crate::entity::party::{
+    EffectiveRecordStatus, PartyContact, PartyContactData, PartyContactId, PartyContactUpdate, PartyId,
+};
+use crate::error::{Error, Result};
+use crate::ports::{PartyAuditPort, SupplierRolePort};
+use crate::repository::PartyExt;
 
 /// 联系人列表筛选条件类型（经 `PartyExt` 关联类型跨 crate 可达）。
 type PartyContactFilter = <mongodb::Database as PartyExt>::PartyContactFilter;
@@ -55,12 +55,7 @@ impl PartyContactService {
         audit: Arc<dyn PartyAuditPort>,
         supplier_roles: Arc<dyn SupplierRolePort>,
     ) -> Self {
-        Self {
-            db,
-            sensitive_data,
-            audit,
-            supplier_roles,
-        }
+        Self { db, sensitive_data, audit, supplier_roles }
     }
 
     /// 分页查询联系人列表（投影查询，敏感字段不进投影）。
@@ -94,11 +89,7 @@ impl PartyContactService {
             sort_by: Some(sort_by.to_string()),
             sort_ascending: matches!(sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .party_contacts()
-            .search_party_contacts(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.party_contacts().search_party_contacts(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -119,12 +110,7 @@ impl PartyContactService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 创建联系人（跨行事务：默认联系人唯一 + 新建 + 审计原子写入）。
@@ -227,9 +213,7 @@ impl PartyContactService {
             .ok_or_else(|| Error::NotFound("联系人不存在".to_string()))?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &contact.party_id).await?;
         if contact.base.version != req.version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         contact.update(
             PartyContactUpdate {

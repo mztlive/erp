@@ -4,13 +4,12 @@ mod query;
 mod status;
 mod view;
 
-pub use query::*;
-pub use status::*;
-pub use view::*;
-
 pub(crate) use query::WorkItemListQuery;
+pub use query::*;
 pub(crate) use status::family_of;
+pub use status::*;
 pub(crate) use view::WorkItemFields;
+pub use view::*;
 
 #[cfg(test)]
 mod tests;

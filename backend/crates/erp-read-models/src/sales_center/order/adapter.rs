@@ -1,11 +1,12 @@
 //! Approval definition and history views based on frozen workflow facts.
+use erp_sales::entity::sales_order::{CommercialStatus, ReviewStatus};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::service::approval::policy::ApprovalRequirement;
+
 use super::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView,
     DocumentApprovalInstanceView, DocumentApprovalView,
 };
-use erp_sales::entity::sales_order::{CommercialStatus, ReviewStatus};
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::policy::ApprovalRequirement;
 pub(super) const RECENT_HISTORY_LIMIT: usize = 8;
 /// 由绑定与可选实例事实构造只读审批结构。
 ///
@@ -30,10 +31,7 @@ fn document_approval_view(
         binding,
         instance,
         Vec::new(),
-        DocumentApprovalHistoryPageView {
-            next_cursor: None,
-            has_more: false,
-        },
+        DocumentApprovalHistoryPageView { next_cursor: None, has_more: false },
         commercial,
         review,
     )
@@ -100,33 +98,24 @@ fn allowed_document_actions(commercial: CommercialStatus, review: ReviewStatus) 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use bpm::ids::ApprovalProcessDefinitionId;
     use erp_core::common::time::Instant;
     use erp_workflow::service::approval::binding::binding_from_published;
+
+    use super::*;
     #[test]
     fn detail_approval_is_read_only_and_has_history_cap() {
-        let binding = binding_from_published(
-            ApprovalProcessDefinitionId::new("def-1"),
-            2,
-            Instant::from_unix_secs(1),
-        )
-        .unwrap();
-        let view = document_approval_view(
-            Some(&binding),
-            None,
-            CommercialStatus::Draft,
-            ReviewStatus::NotSubmitted,
-        );
+        let binding =
+            binding_from_published(ApprovalProcessDefinitionId::new("def-1"), 2, Instant::from_unix_secs(1))
+                .unwrap();
+        let view =
+            document_approval_view(Some(&binding), None, CommercialStatus::Draft, ReviewStatus::NotSubmitted);
         assert_eq!(view.requirement, "PROCESS_REQUIRED");
         assert_eq!(view.definition.as_ref().unwrap().id, "def-1");
         assert!(view.instance.is_none());
         assert!(view.recent_history.len() <= RECENT_HISTORY_LIMIT);
         assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
-        assert!(!view
-            .allowed_actions
-            .iter()
-            .any(|item| item.contains("DEFINITION")));
+        assert!(!view.allowed_actions.iter().any(|item| item.contains("DEFINITION")));
         let running = document_approval_view(
             Some(&binding),
             None,
@@ -160,10 +149,7 @@ mod tests {
                 decision_reason: None,
                 decided_at: None,
             }],
-            DocumentApprovalHistoryPageView {
-                next_cursor: None,
-                has_more: false,
-            },
+            DocumentApprovalHistoryPageView { next_cursor: None, has_more: false },
             CommercialStatus::PendingReview,
             ReviewStatus::InApproval,
         );

@@ -4,19 +4,18 @@
 
 mod indexes;
 
+use std::net::SocketAddr;
+use std::sync::Arc;
+
 use config::{Config, S3Config, SafeConfig};
 use erp_processes::background::{
     BackgroundRunner, ProductImportTaskAdapter, SalesSelectionTaskAdapter, SupplierImportTaskAdapter,
 };
-use std::net::SocketAddr;
-use std::sync::Arc;
 use storage::{S3Storage, S3StorageConfig};
 use tracing::{info, warn};
 use web_api::app_state::AppState;
-use web_api::core::{
-    routes,
-    tracing::{init_tracing, TracingConfig},
-};
+use web_api::core::routes;
+use web_api::core::tracing::{TracingConfig, init_tracing};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -35,10 +34,7 @@ impl DbConfigKey {
     /// # 返回
     /// 返回数据库配置摘要。
     fn from_config(config: &Config) -> Self {
-        Self {
-            uri: config.database.uri.clone(),
-            db_name: config.database.db_name.clone(),
-        }
+        Self { uri: config.database.uri.clone(), db_name: config.database.db_name.clone() }
     }
 }
 
@@ -80,10 +76,7 @@ fn env_flag(name: &str) -> bool {
 
 /// 读取非空环境变量；空白值按未配置处理。
 fn non_empty_env(name: &str) -> Option<String> {
-    std::env::var(name)
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
+    std::env::var(name).ok().map(|value| value.trim().to_string()).filter(|value| !value.is_empty())
 }
 
 /// 按标准 OTLP endpoint 与 SDK 禁用开关决定是否创建 exporter。
@@ -92,19 +85,12 @@ fn non_empty_env(name: &str) -> Option<String> {
 fn otel_exporter_enabled() -> bool {
     let traces_endpoint = non_empty_env("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT");
     let endpoint = non_empty_env("OTEL_EXPORTER_OTLP_ENDPOINT");
-    should_enable_otel(
-        env_flag("OTEL_SDK_DISABLED"),
-        traces_endpoint.as_deref(),
-        endpoint.as_deref(),
-    )
+    should_enable_otel(env_flag("OTEL_SDK_DISABLED"), traces_endpoint.as_deref(), endpoint.as_deref())
 }
 
 /// 对已解析的 OpenTelemetry 开关与 endpoint 执行确定性判定。
 fn should_enable_otel(sdk_disabled: bool, traces_endpoint: Option<&str>, endpoint: Option<&str>) -> bool {
-    !sdk_disabled
-        && traces_endpoint
-            .or(endpoint)
-            .is_some_and(|value| !value.trim().is_empty())
+    !sdk_disabled && traces_endpoint.or(endpoint).is_some_and(|value| !value.trim().is_empty())
 }
 
 /// 启动应用程序。
@@ -275,10 +261,7 @@ fn spawn_config_watcher(
                         "S3 configuration change ignored at runtime; restart the application to apply it"
                     );
                 } else {
-                    info!(
-                        restart_required = false,
-                        "S3 configuration reverted to the active startup value"
-                    );
+                    info!(restart_required = false, "S3 configuration reverted to the active startup value");
                 }
                 observed_storage = next_config.s3.clone();
             }
@@ -397,18 +380,16 @@ async fn wait_for_unix_shutdown() {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        database_change_requires_restart, ensure_registered_approval_policies, env_flag, jwt_secret_changed,
-        should_enable_otel, storage_change_requires_restart, DbConfigKey,
-    };
     use config::S3Config;
+
+    use super::{
+        DbConfigKey, database_change_requires_restart, ensure_registered_approval_policies, env_flag,
+        jwt_secret_changed, should_enable_otel, storage_change_requires_restart,
+    };
 
     /// 构造测试使用的数据库配置摘要。
     fn database_key(uri: &str, db_name: &str) -> DbConfigKey {
-        DbConfigKey {
-            uri: uri.to_string(),
-            db_name: db_name.to_string(),
-        }
+        DbConfigKey { uri: uri.to_string(), db_name: db_name.to_string() }
     }
 
     #[test]

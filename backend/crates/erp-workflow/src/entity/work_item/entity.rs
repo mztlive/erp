@@ -7,7 +7,17 @@ mod types;
 mod validation;
 
 pub use approval::{ApprovalDecisionTaskError, ApprovalRuntimeTaskEnding, DocumentApprovalWorkItemData};
-pub use permissions::{casbin_subject, AvailableWorkItemAccount, WorkflowAccountFact};
+use bpm::ApprovalNodeExecutionId;
+use entity_core::BaseModel;
+use entity_macros::Entity;
+#[cfg(test)]
+use erp_core::AccountKind;
+use erp_core::common::time::Instant;
+#[cfg(test)]
+use erp_core::ids::WorkItemId;
+use erp_core::{Error, Result};
+pub use permissions::{AvailableWorkItemAccount, WorkflowAccountFact, casbin_subject};
+use serde::{Deserialize, Serialize};
 pub use status::WorkItemCloseData;
 pub use types::{
     AssignmentSource, WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind, WorkItemBriefRelation,
@@ -15,20 +25,7 @@ pub use types::{
 };
 pub use validation::{WorkItemData, WorkItemSubjectVersions};
 
-use entity_core::BaseModel;
-use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::time::Instant;
-#[cfg(test)]
-use erp_core::ids::WorkItemId;
-#[cfg(test)]
-use erp_core::AccountKind;
-use erp_core::{Error, Result};
-
 use super::FulfillmentResponsibilityKey;
-
-use bpm::ApprovalNodeExecutionId;
 
 /// 当前人工责任事实。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
@@ -117,12 +114,7 @@ impl WorkItem {
             .ok_or_else(|| Error::from("履约任务缺少责任键"))
             .and_then(FulfillmentResponsibilityKey::parse)?;
         let matches = matches!(
-            (
-                self.business_object_type.as_str(),
-                self.owner_role.as_str(),
-                self.reason_code.as_deref(),
-                &key,
-            ),
+            (self.business_object_type.as_str(), self.owner_role.as_str(), self.reason_code.as_deref(), &key,),
             (
                 "delivery",
                 "purchase_order_owner",
@@ -192,10 +184,8 @@ impl WorkItem {
     /// # 返回
     /// 非审批的集成异常或对账差异任务返回 `true`。
     pub fn is_w29_closable(&self) -> bool {
-        self.work_item_type.is_w29_closable(
-            &self.business_object_type,
-            self.approval_node_execution_id.is_some(),
-        )
+        self.work_item_type
+            .is_w29_closable(&self.business_object_type, self.approval_node_execution_id.is_some())
     }
 
     /// 判断本任务可否作为另一 W29 任务的正式替代任务。
@@ -267,20 +257,17 @@ fn account(can_login: bool) -> WorkflowAccountFact {
 
 #[cfg(test)]
 mod tests {
-    use super::{direct_data, AssignmentSource, WorkItem, WorkItemType};
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
+
+    use super::{AssignmentSource, WorkItem, WorkItemType, direct_data};
 
     #[test]
     fn codes_and_bson_shape_are_stable() {
         assert_eq!(AssignmentSource::SystemRule.as_str(), "SYSTEM_RULE");
         assert_eq!(WorkItemType::DocumentApproval.as_str(), "DOCUMENT_APPROVAL");
-        let item = WorkItem::new_at(
-            WorkItemId::new("wi-1"),
-            direct_data(),
-            Instant::from_unix_secs(100),
-        )
-        .unwrap();
+        let item =
+            WorkItem::new_at(WorkItemId::new("wi-1"), direct_data(), Instant::from_unix_secs(100)).unwrap();
         let document = serde_json::to_value(&item).unwrap();
         assert_eq!(document.get("status").and_then(|v| v.as_str()).unwrap(), "OPEN");
         let roundtrip: WorkItem = serde_json::from_value(document).unwrap();

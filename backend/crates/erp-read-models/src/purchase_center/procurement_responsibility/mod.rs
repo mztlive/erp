@@ -8,7 +8,7 @@ mod query;
 mod repository;
 
 pub use catalog::load_procurement_catalog_bundle;
-pub use facts::{collect_rule_list_ids, ProcurementRuleListDisplayFacts, ProcurementRuleListPage};
+pub use facts::{ProcurementRuleListDisplayFacts, ProcurementRuleListPage, collect_rule_list_ids};
 pub use mapping::{apply_rule_list_facts, to_rule_list_views};
 pub use repository::{load_procurement_rule_list_facts, load_procurement_rule_list_page};
 /// 只读取分页规则与该页关联显示事实的服务。

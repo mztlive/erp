@@ -1,8 +1,9 @@
 //! 当前采购分配所消费的销售当前版本行事实。
-use crate::entity::purchase_order::CurrentSalesAllocationLine;
 use async_trait::async_trait;
 use erp_core::ids::SalesOrderId;
 use persistence_core::Executor;
+
+use crate::entity::purchase_order::CurrentSalesAllocationLine;
 /// 当前销售版本行读取；提供方须保持销售单不存在和无当前版本的原首错。
 #[async_trait]
 pub trait SalesAllocationPort: Send + Sync {

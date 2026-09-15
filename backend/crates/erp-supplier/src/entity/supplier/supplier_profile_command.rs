@@ -2,11 +2,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::BusinessDate;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 const IDEMPOTENCY_KEY_MAX_LEN: usize = 128;
 /// 当前供应商资料请求指纹版本前缀（规范 JSON 的 SHA-256）。
@@ -249,7 +248,7 @@ fn fingerprints_match(a: &str, b: &str) -> bool {
 mod tests {
     use erp_core::common::time::BusinessDate;
 
-    use super::{SupplierProfileCommand, SupplierProfileCommandData, FINGERPRINT_V1_PREFIX};
+    use super::{FINGERPRINT_V1_PREFIX, SupplierProfileCommand, SupplierProfileCommandData};
 
     const ZERO_DIGEST: &str = "0000000000000000000000000000000000000000000000000000000000000000";
     const ONE_DIGEST: &str = "1111111111111111111111111111111111111111111111111111111111111111";
@@ -271,10 +270,7 @@ mod tests {
         let command = SupplierProfileCommand::new("command-1", data).unwrap();
         assert_eq!(command.idempotency_key, "supplier-save-1");
 
-        let invalid = SupplierProfileCommandData {
-            idempotency_key: " ".to_string(),
-            ..command_data()
-        };
+        let invalid = SupplierProfileCommandData { idempotency_key: " ".to_string(), ..command_data() };
         assert!(SupplierProfileCommand::new("command-2", invalid).is_err());
     }
 
@@ -282,25 +278,14 @@ mod tests {
     #[test]
     fn replay_is_bound_to_operation_target_and_fingerprint() {
         let command = SupplierProfileCommand::new("command-1", command_data()).unwrap();
-        assert!(command
-            .ensure_replayable("update", Some("supplier-1"), ZERO_DIGEST)
-            .is_ok());
-        assert!(command
-            .ensure_replayable("create", Some("supplier-1"), ZERO_DIGEST)
-            .is_err());
-        assert!(command
-            .ensure_replayable("update", Some("supplier-2"), ZERO_DIGEST)
-            .is_err());
-        assert!(command
-            .ensure_replayable("update", Some("supplier-1"), ONE_DIGEST)
-            .is_err());
+        assert!(command.ensure_replayable("update", Some("supplier-1"), ZERO_DIGEST).is_ok());
+        assert!(command.ensure_replayable("create", Some("supplier-1"), ZERO_DIGEST).is_err());
+        assert!(command.ensure_replayable("update", Some("supplier-2"), ZERO_DIGEST).is_err());
+        assert!(command.ensure_replayable("update", Some("supplier-1"), ONE_DIGEST).is_err());
         // create 场景的 supplier_id 为 None 时不校验目标
         let create = SupplierProfileCommand::new(
             "command-create",
-            SupplierProfileCommandData {
-                operation: "create".to_string(),
-                ..command_data()
-            },
+            SupplierProfileCommandData { operation: "create".to_string(), ..command_data() },
         )
         .unwrap();
         assert!(create.ensure_replayable("create", None, ZERO_DIGEST).is_ok());
@@ -315,45 +300,33 @@ mod tests {
             bare_data(&format!("{FINGERPRINT_V1_PREFIX}{ZERO_DIGEST}")),
         )
         .unwrap();
-        assert!(bare
-            .ensure_replayable("update", Some("supplier-1"), ZERO_DIGEST)
-            .is_ok());
-        assert!(bare
-            .ensure_replayable(
+        assert!(bare.ensure_replayable("update", Some("supplier-1"), ZERO_DIGEST).is_ok());
+        assert!(
+            bare.ensure_replayable(
                 "update",
                 Some("supplier-1"),
                 &format!("{FINGERPRINT_V1_PREFIX}{ZERO_DIGEST}")
             )
-            .is_ok());
-        assert!(versioned
-            .ensure_replayable("update", Some("supplier-1"), ZERO_DIGEST)
-            .is_ok());
-        assert!(versioned
-            .ensure_replayable("update", Some("supplier-1"), ONE_DIGEST)
-            .is_err());
+            .is_ok()
+        );
+        assert!(versioned.ensure_replayable("update", Some("supplier-1"), ZERO_DIGEST).is_ok());
+        assert!(versioned.ensure_replayable("update", Some("supplier-1"), ONE_DIGEST).is_err());
         let doc = serde_json::to_value(&bare).unwrap();
         let roundtrip: SupplierProfileCommand = serde_json::from_value(doc).unwrap();
         assert_eq!(roundtrip.request_fingerprint, ZERO_DIGEST);
         let doc2 = serde_json::to_value(&versioned).unwrap();
         let roundtrip2: SupplierProfileCommand = serde_json::from_value(doc2).unwrap();
-        assert_eq!(
-            roundtrip2.request_fingerprint,
-            format!("{FINGERPRINT_V1_PREFIX}{ZERO_DIGEST}")
-        );
+        assert_eq!(roundtrip2.request_fingerprint, format!("{FINGERPRINT_V1_PREFIX}{ZERO_DIGEST}"));
     }
 
     /// 覆盖指纹格式校验：非法长度或非十六进制拒绝。
     #[test]
     fn fingerprint_format_rejects_invalid() {
-        let bad = SupplierProfileCommandData {
-            request_fingerprint: "not-a-hex".to_string(),
-            ..command_data()
-        };
+        let bad =
+            SupplierProfileCommandData { request_fingerprint: "not-a-hex".to_string(), ..command_data() };
         assert!(SupplierProfileCommand::new("bad-1", bad).is_err());
-        let padded = SupplierProfileCommandData {
-            request_fingerprint: format!(" {ZERO_DIGEST}"),
-            ..command_data()
-        };
+        let padded =
+            SupplierProfileCommandData { request_fingerprint: format!(" {ZERO_DIGEST}"), ..command_data() };
         assert!(SupplierProfileCommand::new("bad-2", padded).is_err());
     }
 
@@ -362,10 +335,7 @@ mod tests {
     fn version_and_identity_contracts() {
         assert!(SupplierProfileCommand::ensure_version(5, 5).is_ok());
         assert!(SupplierProfileCommand::ensure_version(5, 4).is_err());
-        assert_eq!(
-            SupplierProfileCommand::required_update_version(Some(3), "供应商").unwrap(),
-            3
-        );
+        assert_eq!(SupplierProfileCommand::required_update_version(Some(3), "供应商").unwrap(), 3);
         assert!(SupplierProfileCommand::required_update_version(None, "主体").is_err());
         assert_eq!(
             SupplierProfileCommand::required_create_identity(Some(" SUP-001 "), "供应商编号").unwrap(),

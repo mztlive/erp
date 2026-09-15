@@ -21,40 +21,40 @@ pub mod start;
 pub mod store;
 pub mod view;
 
+pub use apply_plan::{DomainActionKind, PlannedWrites, apply_plan};
+pub use authorization::{AuthorizationFailure, converge_eligibility};
 use bpm::engine::{DefinitionGraph, Eligibility};
 use bpm::model::{ApprovalCommandReceipt, IdempotencyKey, Timestamp};
-
-pub use apply_plan::{apply_plan, DomainActionKind, PlannedWrites};
-pub use authorization::{converge_eligibility, AuthorizationFailure};
 pub use cancel::{
+    CancelExecutionInput, DocumentCancelCommand, DocumentCancelReplayProof,
     claim_and_persist_document_cancel_runtime, find_document_cancel_receipt,
     normalize_document_cancel_reason, prepare_cancel, prepare_document_cancel,
-    replay_committed_document_cancel, CancelExecutionInput, DocumentCancelCommand, DocumentCancelReplayProof,
+    replay_committed_document_cancel,
 };
-pub use decision::{prepare_decision, DecisionExecutionInput};
+pub use decision::{DecisionExecutionInput, prepare_decision};
 pub use idempotency::{
-    command_may_have_committed, command_recovery_delay, legacy_payload_digest,
-    legacy_standard_start_receipt_identity, legacy_start_receipt_identity, map_receipt_first_write_error,
-    payload_conflict_error, specialized_start_identity, upgrade_binding_identity, LegacyReceiptIdentity,
-    PreparedCommandIdentity, ReceiptBranch,
+    LegacyReceiptIdentity, PreparedCommandIdentity, ReceiptBranch, command_may_have_committed,
+    command_recovery_delay, legacy_payload_digest, legacy_standard_start_receipt_identity,
+    legacy_start_receipt_identity, map_receipt_first_write_error, payload_conflict_error,
+    specialized_start_identity, upgrade_binding_identity,
 };
 pub use notification_worker::ApprovalNotificationOutboxPort;
-pub use resume::{prepare_resume, ResumeExecutionInput};
+pub use resume::{ResumeExecutionInput, prepare_resume};
 pub use runtime_history::{
-    history_item_from_execution, history_page_from, latest_rejection_reason, RuntimeHistoryItem,
-    RuntimeHistoryPage,
+    RuntimeHistoryItem, RuntimeHistoryPage, history_item_from_execution, history_page_from,
+    latest_rejection_reason,
 };
 pub use runtime_query::{
-    recovery_options_for, RuntimeInstanceListView, RuntimeInstanceStatusFilter, RuntimeRecoveryAction,
+    RuntimeInstanceListView, RuntimeInstanceStatusFilter, RuntimeRecoveryAction, recovery_options_for,
 };
 pub use runtime_service::{
     ApprovalRuntimeService, RuntimeAssigneeCandidate, RuntimeInstanceListCursor, RuntimeInstanceListItem,
     RuntimeInstanceListPage, RuntimeInstanceListQuery, RuntimeRecoveryOptionsView, UpgradeBindingCommand,
 };
-pub use start::{map_engine_error, prepare_start, prepare_start_with_identity, StartExecutionInput};
+pub use start::{StartExecutionInput, map_engine_error, prepare_start, prepare_start_with_identity};
 #[cfg(test)]
-pub use store::{commit_writes, replay_after_duplicate, MemoryRuntimeStore, TaskApplyContext};
-pub use view::{map_command_view, ApprovalCommandOutcome, ApprovalCommandView, OpenTaskSummary};
+pub use store::{MemoryRuntimeStore, TaskApplyContext, commit_writes, replay_after_duplicate};
+pub use view::{ApprovalCommandOutcome, ApprovalCommandView, OpenTaskSummary, map_command_view};
 
 /// 各命令共用的图、资格、收据与时间。
 #[derive(Debug, Clone)]
@@ -87,14 +87,6 @@ pub enum PreparedExecution {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        prepare_cancel, prepare_decision, prepare_document_cancel, prepare_resume, prepare_start,
-        CancelExecutionInput, DecisionExecutionInput, ExecutionCommandInput, PreparedExecution,
-        ResumeExecutionInput, StartExecutionInput,
-    };
-    use crate::entity::approval_integration::ApprovalNotificationEventKind;
-    use crate::service::approval::execution::decision::decision_commits_blocked;
-    use crate::service::approval::execution::idempotency::normalize_idempotency_key;
     use bpm::engine::{
         BpmEventKind, CommitRequired, DefinitionGraph, Eligibility, StartAssigneeBinding, TaskCloseReason,
     };
@@ -111,6 +103,15 @@ mod tests {
         ApprovalCommandReceipt, ApprovalNodeDefinition, ApprovalProcessDefinition,
         ApprovalTransitionDefinition, NewNodeDefinition, ParticipantId, ProcessKind, SubjectRef, Timestamp,
     };
+
+    use super::{
+        CancelExecutionInput, DecisionExecutionInput, ExecutionCommandInput, PreparedExecution,
+        ResumeExecutionInput, StartExecutionInput, prepare_cancel, prepare_decision, prepare_document_cancel,
+        prepare_resume, prepare_start,
+    };
+    use crate::entity::approval_integration::ApprovalNotificationEventKind;
+    use crate::service::approval::execution::decision::decision_commits_blocked;
+    use crate::service::approval::execution::idempotency::normalize_idempotency_key;
 
     /// 内存运行时适配器不得进入非测试构建。
     #[test]
@@ -147,10 +148,7 @@ mod tests {
         let PreparedExecution::Apply(approve_writes) = approved else {
             panic!("通过必须产生写入");
         };
-        assert_eq!(
-            approve_writes.updated_executions[0].status,
-            ApprovalNodeExecutionStatus::Approved
-        );
+        assert_eq!(approve_writes.updated_executions[0].status, ApprovalNodeExecutionStatus::Approved);
 
         let rejected = prepare_decision(decision_input(
             instance,
@@ -183,9 +181,7 @@ mod tests {
         let mut other = writes.receipt.clone();
         other.payload_digest = "other-digest".into();
         let conflict = prepare_start(start_input(eligible("u1", "张三"), Some(other))).unwrap_err();
-        assert!(conflict
-            .to_string()
-            .contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
+        assert!(conflict.to_string().contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
     }
 
     /// 当前审批人失效提交 BLOCKED，而不是回滚为空。
@@ -210,10 +206,7 @@ mod tests {
             panic!("阻塞必须提交");
         };
         assert_eq!(blocked_writes.commit, CommitRequired::Blocked);
-        assert_eq!(
-            blocked_writes.instance.status,
-            ApprovalProcessInstanceStatus::Blocked
-        );
+        assert_eq!(blocked_writes.instance.status, ApprovalProcessInstanceStatus::Blocked);
     }
 
     /// 取消与受阻取消都产生取消领域动作。
@@ -234,10 +227,7 @@ mod tests {
             panic!("取消必须写入");
         };
         assert_eq!(cancel_writes.domain_action, Some(super::DomainActionKind::Cancel));
-        assert_eq!(
-            cancel_writes.instance.status,
-            ApprovalProcessInstanceStatus::Cancelled
-        );
+        assert_eq!(cancel_writes.instance.status, ApprovalProcessInstanceStatus::Cancelled);
     }
 
     /// 业务撤回收据同载荷可回放，业务单据版本漂移必须返回幂等冲突。
@@ -247,12 +237,8 @@ mod tests {
         let PreparedExecution::Apply(start_writes) = started else {
             panic!("启动必须写入");
         };
-        let input = cancel_input(
-            start_writes.instance,
-            start_writes.created_executions[0].clone(),
-            false,
-            None,
-        );
+        let input =
+            cancel_input(start_writes.instance, start_writes.created_executions[0].clone(), false, None);
         let prepared = prepare_document_cancel(input.clone(), 7).unwrap();
         let PreparedExecution::Apply(writes) = prepared else {
             panic!("首次业务撤回必须写入");
@@ -266,9 +252,7 @@ mod tests {
         ));
 
         let conflict = prepare_document_cancel(replay_input, 8).unwrap_err();
-        assert!(conflict
-            .to_string()
-            .contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
+        assert!(conflict.to_string().contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
     }
 
     /// 原审批人恢复创建新执行且不改变审批人绑定。
@@ -301,17 +285,9 @@ mod tests {
         let PreparedExecution::Apply(resume_writes) = resumed else {
             panic!("恢复必须写入");
         };
-        assert_eq!(
-            resume_writes.created_executions[0].status,
-            ApprovalNodeExecutionStatus::Active
-        );
+        assert_eq!(resume_writes.created_executions[0].status, ApprovalNodeExecutionStatus::Active);
         assert!(resume_writes.created_assignees.is_empty());
-        assert_eq!(
-            resume_writes.created_executions[0]
-                .assignee_participant_id
-                .as_str(),
-            "u1"
-        );
+        assert_eq!(resume_writes.created_executions[0].assignee_participant_id.as_str(), "u1");
     }
 
     /// 入口有效但非入口审批人失效时，由 BPM 拒绝创建实例。
@@ -350,9 +326,7 @@ mod tests {
             None,
         ))
         .unwrap_err();
-        assert!(recoverable_blocked
-            .to_string()
-            .contains("原审批人可恢复时不得走受阻取消"));
+        assert!(recoverable_blocked.to_string().contains("原审批人可恢复时不得走受阻取消"));
 
         let mut graph = two_node_graph();
         graph.transitions.clear();
@@ -381,9 +355,7 @@ mod tests {
             None,
         ))
         .unwrap_err();
-        assert!(normal_cancel
-            .to_string()
-            .contains("不可恢复原审批人的阻塞只能走受阻取消"));
+        assert!(normal_cancel.to_string().contains("不可恢复原审批人的阻塞只能走受阻取消"));
         let blocked_cancel = prepare_cancel(cancel_input(
             structural_writes.instance,
             structural_writes.updated_executions[0].clone(),
@@ -394,10 +366,7 @@ mod tests {
         let PreparedExecution::Apply(cancel_writes) = blocked_cancel else {
             panic!("受阻取消必须写入");
         };
-        assert_eq!(
-            cancel_writes.instance.status,
-            ApprovalProcessInstanceStatus::Cancelled
-        );
+        assert_eq!(cancel_writes.instance.status, ApprovalProcessInstanceStatus::Cancelled);
     }
 
     /// 同一执行多个 OPEN 任务提交 OPEN_TASK_CONFLICT。
@@ -421,38 +390,27 @@ mod tests {
         let PreparedExecution::Apply(blocked_writes) = prepared else {
             panic!("任务冲突必须提交");
         };
-        assert_eq!(
-            blocked_writes.instance.blocker_code,
-            Some(ApprovalBlockerCode::OpenTaskConflict)
-        );
+        assert_eq!(blocked_writes.instance.blocker_code, Some(ApprovalBlockerCode::OpenTaskConflict));
         assert_eq!(blocked_writes.commit, CommitRequired::Blocked);
-        assert!(blocked_writes
-            .events
-            .iter()
-            .any(|event| event.kind == BpmEventKind::InstanceBlocked));
+        assert!(blocked_writes.events.iter().any(|event| event.kind == BpmEventKind::InstanceBlocked));
         assert_eq!(
             blocked_writes.close_tasks,
-            vec![(
-                ApprovalNodeExecutionId::new("e1"),
-                TaskCloseReason::ApprovalRuntimeBlocked
-            )]
+            vec![(ApprovalNodeExecutionId::new("e1"), TaskCloseReason::ApprovalRuntimeBlocked)]
         );
         assert_eq!(blocked_writes.notifications.len(), 1);
-        assert_eq!(
-            blocked_writes.notifications[0].event_kind,
-            ApprovalNotificationEventKind::Blocked
-        );
+        assert_eq!(blocked_writes.notifications[0].event_kind, ApprovalNotificationEventKind::Blocked);
         assert_eq!(blocked_writes.notifications[0].dedup_key, "blocked:e1");
     }
 
     /// 事务内应用计划；领域动作失败整单回滚；收据重复键按同/异载荷回读。
     #[test]
     fn execution_commit_writes_and_duplicate_key_replay() {
-        use super::store::{
-            commit_writes, replay_after_duplicate, MemoryRuntimeStore, RecordingDomainActions,
-            TaskApplyContext,
-        };
         use erp_core::common::time::Instant;
+
+        use super::store::{
+            MemoryRuntimeStore, RecordingDomainActions, TaskApplyContext, commit_writes,
+            replay_after_duplicate,
+        };
 
         let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
         let PreparedExecution::Apply(writes) = started else {
@@ -469,10 +427,7 @@ mod tests {
             now: Instant::from_unix_secs(10),
         };
         let mut failing = MemoryRuntimeStore::default();
-        let fail_domain = RecordingDomainActions {
-            fail: true,
-            ..RecordingDomainActions::default()
-        };
+        let fail_domain = RecordingDomainActions { fail: true, ..RecordingDomainActions::default() };
         assert!(commit_writes(&mut failing, &writes, &ctx, &fail_domain).is_err());
         assert!(failing.instance("inst").is_none());
 
@@ -504,9 +459,7 @@ mod tests {
             "other-digest",
         )
         .unwrap_err();
-        assert!(conflict
-            .to_string()
-            .contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
+        assert!(conflict.to_string().contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
     }
 
     /// 运行路径不接受旧恢复动作名称。
@@ -514,10 +467,7 @@ mod tests {
     fn execution_has_no_retry_current_step_symbol() {
         let key = normalize_idempotency_key(" key ").unwrap();
         assert_eq!(key.as_str(), "key");
-        assert_ne!(
-            ApprovalCommandKind::ResumeApprover.as_str(),
-            &format!("{}{}", "RETRY_", "CURRENT_STEP")
-        );
+        assert_ne!(ApprovalCommandKind::ResumeApprover.as_str(), &format!("{}{}", "RETRY_", "CURRENT_STEP"));
     }
 
     fn start_input(entry: Eligibility, receipt: Option<ApprovalCommandReceipt>) -> StartExecutionInput {
@@ -730,18 +680,11 @@ mod tests {
     }
 
     fn eligible(user: &str, name: &str) -> Eligibility {
-        Eligibility::Eligible {
-            participant: participant(user),
-            assignee_name_snapshot: name.into(),
-        }
+        Eligibility::Eligible { participant: participant(user), assignee_name_snapshot: name.into() }
     }
 
     fn blocked(user: &str, name: &str, code: ApprovalBlockerCode) -> Eligibility {
-        Eligibility::Blocked {
-            participant: participant(user),
-            code,
-            assignee_name_snapshot: name.into(),
-        }
+        Eligibility::Blocked { participant: participant(user), code, assignee_name_snapshot: name.into() }
     }
 
     fn participant(id: &str) -> ParticipantId {

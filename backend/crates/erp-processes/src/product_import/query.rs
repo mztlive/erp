@@ -1,7 +1,6 @@
 //! 查询当前操作人的商品导入任务与逐项结果。
 
-use application_core::AuditActor;
-use application_core::PageView;
+use application_core::{AuditActor, PageView};
 use erp_catalog::{
     ProductImportItemListParams, ProductImportItemView, ProductImportJobListParams, ProductImportJobView,
 };
@@ -12,8 +11,8 @@ use erp_support::{
 use persistence_core::NoTransaction;
 use validator::Validate;
 
-use super::views::{file_name_of, item_view, job_view};
 use super::ProductImportProcess;
+use super::views::{file_name_of, item_view, job_view};
 use crate::{Error, Result};
 
 impl ProductImportProcess {
@@ -46,11 +45,7 @@ impl ProductImportProcess {
             sort_by: Some(paging.sort_by.to_string()),
             sort_ascending: false,
         };
-        let page = self
-            .db
-            .background_jobs()
-            .search_background_jobs(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.background_jobs().search_background_jobs(&filter, &mut NoTransaction).await?;
         let mut items = Vec::with_capacity(page.items.len());
         for row in page.items {
             let job = self
@@ -60,22 +55,12 @@ impl ProductImportProcess {
                 .await?
                 .ok_or_else(|| Error::NotFound("导入任务不存在".into()))?;
             let file = match &job.input_file_asset_id {
-                Some(id) => {
-                    self.db
-                        .file_assets()
-                        .find_by_id(id.as_ref(), &mut NoTransaction)
-                        .await?
-                }
+                Some(id) => self.db.file_assets().find_by_id(id.as_ref(), &mut NoTransaction).await?,
                 None => None,
             };
             items.push(job_view(&job, file_name_of(file.as_ref())));
         }
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: paging.page,
-            page_size: paging.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: paging.page, page_size: paging.page_size })
     }
 
     /// 查询单个导入任务详情。
@@ -92,12 +77,7 @@ impl ProductImportProcess {
     pub async fn job_detail(&self, id: &str, actor: &AuditActor) -> Result<ProductImportJobView> {
         let job = self.load_owned_job(id, actor).await?;
         let file = match &job.input_file_asset_id {
-            Some(file_id) => {
-                self.db
-                    .file_assets()
-                    .find_by_id(file_id.as_ref(), &mut NoTransaction)
-                    .await?
-            }
+            Some(file_id) => self.db.file_assets().find_by_id(file_id.as_ref(), &mut NoTransaction).await?,
             None => None,
         };
         Ok(job_view(&job, file_name_of(file.as_ref())))
@@ -127,13 +107,7 @@ impl ProductImportProcess {
         let result = self
             .db
             .background_job_items()
-            .search_job_items(
-                &BackgroundJobId::new(id),
-                None,
-                page,
-                page_size,
-                &mut NoTransaction,
-            )
+            .search_job_items(&BackgroundJobId::new(id), None, page, page_size, &mut NoTransaction)
             .await?;
         Ok(PageView {
             items: result.items.into_iter().map(item_view).collect(),

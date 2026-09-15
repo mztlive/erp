@@ -1,20 +1,19 @@
-use crate::entity::receivable::{
-    CustomerReceipt, CustomerReceiptStatus, PendingReceiptAllocation, ReceiptAllocation,
-};
-use crate::repository::owned::{CustomerReceiptRepository, ReceiptAllocationRepository};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerReceiptId, PartyId, ReceivableEntryId};
 use erp_core::money::Amount;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::receivable::{
+    CustomerReceipt, CustomerReceiptStatus, PendingReceiptAllocation, ReceiptAllocation,
+};
+use crate::repository::owned::{CustomerReceiptRepository, ReceiptAllocationRepository};
 
 /// 客户回款单列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -145,10 +144,7 @@ impl<'a> CustomerReceiptRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按回款单号精确查找（单号全局唯一，`uk_customer_receipts_no` 保证）。
@@ -190,8 +186,7 @@ impl<'a> CustomerReceiptRepository<'a> {
             return Ok(Vec::new());
         }
 
-        self.find_many(doc! { "id": { "$in": receipt_ids } }, executor)
-            .await
+        self.find_many(doc! { "id": { "$in": receipt_ids } }, executor).await
     }
 }
 
@@ -216,8 +211,7 @@ impl<'a> ReceiptAllocationRepository<'a> {
             return Ok(Vec::new());
         }
         let receipt_ids: Vec<String> = receipt_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "customer_receipt_id": { "$in": receipt_ids } }, executor)
-            .await
+        self.find_many(doc! { "customer_receipt_id": { "$in": receipt_ids } }, executor).await
     }
 
     /// 批量按应收分录集合取回核销分配（`$in`，用于反向核销锁定）。
@@ -240,8 +234,7 @@ impl<'a> ReceiptAllocationRepository<'a> {
             return Ok(Vec::new());
         }
         let entry_ids: Vec<String> = entry_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "receivable_entry_id": { "$in": entry_ids } }, executor)
-            .await
+        self.find_many(doc! { "receivable_entry_id": { "$in": entry_ids } }, executor).await
     }
 }
 
@@ -267,8 +260,9 @@ fn customer_receipt_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::CustomerReceiptFilter;
     use persistence_core::QueryFilter;
+
+    use super::CustomerReceiptFilter;
 
     #[test]
     fn receipt_filter_escapes_regex_literals() {
@@ -306,15 +300,7 @@ mod tests {
             sort_ascending: false,
         };
         let receipt_doc = receipt_filter.to_doc();
-        assert_eq!(
-            receipt_doc
-                .get_document("id")
-                .unwrap()
-                .get_array("$in")
-                .unwrap()
-                .len(),
-            0
-        );
+        assert_eq!(receipt_doc.get_document("id").unwrap().get_array("$in").unwrap().len(), 0);
     }
     #[test]
     fn scope_includes_pending_allocations_and_keeps_structural_filters() {
@@ -368,13 +354,7 @@ mod keyword_regression_tests {
         filter.keyword_ids = Some(Vec::new());
         let query = filter.to_doc();
         let clauses = query.get_array("$and").unwrap();
-        let ids = clauses[1]
-            .as_document()
-            .unwrap()
-            .get_document("id")
-            .unwrap()
-            .get_array("$in")
-            .unwrap();
+        let ids = clauses[1].as_document().unwrap().get_document("id").unwrap().get_array("$in").unwrap();
         assert!(ids.is_empty(), "空关键词命中必须保持零结果");
         assert!(clauses[0].as_document().unwrap().contains_key("deleted_at"));
     }

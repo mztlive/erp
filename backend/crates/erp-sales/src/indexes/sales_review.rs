@@ -1,13 +1,11 @@
 //! 域 D14 `sales_review` 的索引声明：sales_change_order、sales_change_submission(+_line)。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::SalesReviewExt;
-use persistence_core::Result;
 
 /// `sales_change_order` 集合名。
 pub(crate) const SALES_CHANGE_ORDERS: &str = <mongodb::Database as SalesReviewExt>::SALES_CHANGE_ORDERS;
@@ -28,12 +26,7 @@ pub(crate) const SALES_CHANGE_SUBMISSION_LINES: &str =
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SALES_CHANGE_ORDERS, sales_change_order_indexes()).await?;
     create_indexes(db, SALES_CHANGE_SUBMISSIONS, sales_change_submission_indexes()).await?;
-    create_indexes(
-        db,
-        SALES_CHANGE_SUBMISSION_LINES,
-        sales_change_submission_line_indexes(),
-    )
-    .await?;
+    create_indexes(db, SALES_CHANGE_SUBMISSION_LINES, sales_change_submission_line_indexes()).await?;
     Ok(())
 }
 
@@ -47,9 +40,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
 /// # 错误
 /// 当已有数据违反唯一约束、同名索引定义冲突或 MongoDB 无法创建索引时返回错误。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -68,10 +59,7 @@ fn sales_change_order_indexes() -> Vec<IndexModel> {
                 ]
             },
         ),
-        named_index(
-            "idx_sales_change_orders_order_status",
-            doc! { "sales_order_id": 1, "status": 1 },
-        ),
+        named_index("idx_sales_change_orders_order_status", doc! { "sales_order_id": 1, "status": 1 }),
     ]
 }
 
@@ -99,10 +87,7 @@ fn sales_change_submission_line_indexes() -> Vec<IndexModel> {
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -118,11 +103,7 @@ fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Documen
     IndexModel::builder()
         .keys(keys)
         .options(
-            IndexOptions::builder()
-                .name(name.into())
-                .unique(true)
-                .partial_filter_expression(filter)
-                .build(),
+            IndexOptions::builder().name(name.into()).unique(true).partial_filter_expression(filter).build(),
         )
         .build()
 }

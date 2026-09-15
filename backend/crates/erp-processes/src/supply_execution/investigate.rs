@@ -1,30 +1,28 @@
-use erp_audit::AuditExt;
-use erp_core::common::time::Instant;
-use erp_supply::entity::supplier_api::SupplierApiCapabilityCode;
-use erp_supply::entity::supplier_fulfillment::{SupplierFulfillmentOrder, SupplierOrderAction};
-use erp_supply::repository::{SupplierApiExt, SupplierFulfillmentExt};
-use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
-use erp_workflow::WorkItemExt;
-use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
-use validator::Validate;
-
-use super::receipt::{
-    investigation_receipt_message, parse_investigation_receipt, parse_positive_version,
-    serialized_fingerprint, stable_digest, stable_evidence_id, stable_internal_idempotency_key,
-    InvestigationReceipt,
-};
-use super::{SupplierFulfillmentProcess, W26_BUSINESS_OBJECT_TYPE};
-use crate::adapters::workflow::work_item_service;
-use crate::{Error, Result};
 use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
+use erp_audit::{AuditActorLogs, AuditExt};
+use erp_core::common::time::Instant;
 use erp_supply::dto::supplier_fulfillment::{
     SupplierOrderActionBlockerView, SupplierOrderInvestigationAction, SupplierOrderInvestigationEvidenceView,
     SupplierOrderInvestigationOutcome, SupplierOrderInvestigationResultStatus,
     SupplierOrderObjectInvestigationCommand, SupplierOrderTaskInvestigationCommand,
 };
+use erp_supply::entity::supplier_api::SupplierApiCapabilityCode;
+use erp_supply::entity::supplier_fulfillment::{SupplierFulfillmentOrder, SupplierOrderAction};
+use erp_supply::repository::{SupplierApiExt, SupplierFulfillmentExt};
 use erp_supply::service::supplier_fulfillment::place::ensure_capability;
+use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
+use validator::Validate;
+
+use super::receipt::{
+    InvestigationReceipt, investigation_receipt_message, parse_investigation_receipt, parse_positive_version,
+    serialized_fingerprint, stable_digest, stable_evidence_id, stable_internal_idempotency_key,
+};
+use super::{SupplierFulfillmentProcess, W26_BUSINESS_OBJECT_TYPE};
+use crate::adapters::workflow::work_item_service;
+use crate::{Error, Result};
 
 const INVESTIGATION_AUDIT_PREFIX: &str = "w26-investigation-";
 
@@ -68,9 +66,8 @@ impl SupplierFulfillmentProcess {
             command.order_id.as_ref(),
             &command.idempotency_key,
         );
-        if let Some(result) = self
-            .replay_investigation(&audit_id, &fingerprint, &command.operation_id, None)
-            .await?
+        if let Some(result) =
+            self.replay_investigation(&audit_id, &fingerprint, &command.operation_id, None).await?
         {
             return Ok(result);
         }
@@ -82,8 +79,7 @@ impl SupplierFulfillmentProcess {
             target_action_id: command.target_supplier_action_id.to_string(),
             task: None,
         };
-        self.execute_investigation(context, audit_id, fingerprint, actor)
-            .await
+        self.execute_investigation(context, audit_id, fingerprint, actor).await
     }
 
     /// 从 W26 正式任务入口查询原结果或执行已证明安全的重放。
@@ -115,12 +111,7 @@ impl SupplierFulfillmentProcess {
             expected_subject_version: command.expected_subject_version,
         };
         if let Some(result) = self
-            .replay_investigation(
-                &audit_id,
-                &fingerprint,
-                &command.action.operation_id,
-                Some(&task_context),
-            )
+            .replay_investigation(&audit_id, &fingerprint, &command.action.operation_id, Some(&task_context))
             .await?
         {
             return Ok(result);
@@ -133,8 +124,7 @@ impl SupplierFulfillmentProcess {
             target_action_id: command.action.target_supplier_action_id.to_string(),
             task: Some(task_context),
         };
-        self.execute_investigation(context, audit_id, fingerprint, actor)
-            .await
+        self.execute_investigation(context, audit_id, fingerprint, actor).await
     }
 
     async fn execute_investigation(
@@ -174,11 +164,9 @@ impl SupplierFulfillmentProcess {
                         .find_by_id(&context_for_tx.order_id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商履约订单不存在".to_string()))?;
-                    order
-                        .ensure_version(context_for_tx.expected_order_version)
-                        .map_err(|_| {
-                            Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string())
-                        })?;
+                    order.ensure_version(context_for_tx.expected_order_version).map_err(|_| {
+                        Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string())
+                    })?;
                     let mut target_action = db
                         .supplier_order_actions()
                         .find_by_id(&context_for_tx.target_action_id, session)
@@ -340,11 +328,9 @@ impl SupplierFulfillmentProcess {
                         .find_by_id(&context.order_id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商履约订单不存在".to_string()))?;
-                    order
-                        .ensure_version(context.expected_order_version)
-                        .map_err(|_| {
-                            Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string())
-                        })?;
+                    order.ensure_version(context.expected_order_version).map_err(|_| {
+                        Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string())
+                    })?;
                     let target_action = db
                         .supplier_order_actions()
                         .find_by_id(&context.target_action_id, session)
@@ -382,10 +368,8 @@ impl SupplierFulfillmentProcess {
                         ensure_replay_safe(&db, &order, &target_action, session).await?;
                     }
 
-                    if let Some(existing) = db
-                        .supplier_order_actions()
-                        .find_by_id(&evidence_id, session)
-                        .await?
+                    if let Some(existing) =
+                        db.supplier_order_actions().find_by_id(&evidence_id, session).await?
                     {
                         validate_investigation_intent(
                             &existing,
@@ -429,11 +413,11 @@ impl SupplierFulfillmentProcess {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    let mut evidence = db
-                        .supplier_order_actions()
-                        .find_by_id(&evidence_id, session)
-                        .await?
-                        .ok_or_else(|| Error::Internal("供应商调查意图记录不存在".to_string()))?;
+                    let mut evidence =
+                        db.supplier_order_actions()
+                            .find_by_id(&evidence_id, session)
+                            .await?
+                            .ok_or_else(|| Error::Internal("供应商调查意图记录不存在".to_string()))?;
                     validate_investigation_intent(&evidence, &context.subject(), &evidence_idempotency_key)?;
                     if evidence.response_summary.is_some() {
                         return Ok(parse_prepared_investigation(&evidence, &context.subject())?);
@@ -514,17 +498,15 @@ impl SupplierFulfillmentProcess {
             SupplierOrderInvestigationAction::QueryResult => {
                 ensure_capability(&capabilities, SupplierApiCapabilityCode::Query)?;
                 Ok(PreparedInvestigation::Queried(
-                    self.gateway
-                        .investigate(&target_action, &order, &connection)
-                        .await,
+                    self.gateway.investigate(&target_action, &order, &connection).await,
                 ))
-            }
+            },
             SupplierOrderInvestigationAction::Replay => {
                 ensure_capability(&capabilities, capability_for_action(target_action.action_type)?)?;
                 Ok(PreparedInvestigation::Replayed(
                     self.gateway.dispatch(&target_action, &order, &connection).await,
                 ))
-            }
+            },
         }
     }
 
@@ -535,12 +517,7 @@ impl SupplierFulfillmentProcess {
         expected_operation_id: &str,
         task: Option<&InvestigationTaskContext>,
     ) -> Result<Option<SupplierOrderInvestigationResultView>> {
-        let Some(audit) = self
-            .db
-            .audit_logs()
-            .find_by_id(audit_id, &mut NoTransaction)
-            .await?
-        else {
+        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
             return Ok(None);
         };
         if !audit.success
@@ -553,10 +530,7 @@ impl SupplierFulfillmentProcess {
             return Err(Error::Internal("W26 调查幂等收据身份非法".to_string()));
         }
         let receipt = parse_investigation_receipt(
-            audit
-                .message
-                .as_deref()
-                .ok_or_else(|| Error::Internal("W26 调查幂等收据为空".to_string()))?,
+            audit.message.as_deref().ok_or_else(|| Error::Internal("W26 调查幂等收据为空".to_string()))?,
             expected_fingerprint,
         )?;
         if task.is_some() != receipt.task_version.is_some() {
@@ -572,9 +546,7 @@ impl SupplierFulfillmentProcess {
         if record.operation_id() != expected_operation_id {
             return Err(Error::ConflictError("请求标识已用于不同的调查命令".to_string()));
         }
-        let order = self
-            .load_order(evidence.supplier_fulfillment_order_id.as_ref())
-            .await?;
+        let order = self.load_order(evidence.supplier_fulfillment_order_id.as_ref()).await?;
         if audit.resource_id.as_deref() != Some(order.base.id.as_str()) {
             return Err(Error::Internal("W26 调查幂等收据对象不一致".to_string()));
         }
@@ -613,19 +585,13 @@ pub(super) fn validate_w26_task(
         || item.business_object_id != order_id
         || false
     {
-        return Err(Error::BusinessLogicError(
-            "正式任务未注册到当前供应商履约订单".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("正式任务未注册到当前供应商履约订单".to_string()));
     }
     if item.subject_version != expected_subject_version {
-        return Err(Error::ConflictError(
-            "任务主体版本已变化，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("任务主体版本已变化，请刷新后重试".to_string()));
     }
     if !item.is_owned_by(actor_id) {
-        return Err(Error::Forbidden(
-            "当前用户不是该供应商履约任务的当前责任人".to_string(),
-        ));
+        return Err(Error::Forbidden("当前用户不是该供应商履约任务的当前责任人".to_string()));
     }
     Ok(())
 }
@@ -639,9 +605,7 @@ pub(super) fn ensure_task_subject_matches_order(
     if item.subject_version == current_order_version && expected_subject_version == current_order_version {
         return Ok(());
     }
-    Err(Error::ConflictError(
-        "任务关联的订单版本已变化，请刷新后重试".to_string(),
-    ))
+    Err(Error::ConflictError("任务关联的订单版本已变化，请刷新后重试".to_string()))
 }
 
 async fn ensure_no_active_w26_task(db: &Database, order_id: &str, executor: &mut dyn Executor) -> Result<()> {
@@ -653,9 +617,7 @@ async fn ensure_no_active_w26_task(db: &Database, order_id: &str, executor: &mut
         .next()
         .is_some();
     if has_active_task {
-        return Err(Error::ConflictError(
-            "当前订单存在正式异常任务，必须使用任务调查命令".to_string(),
-        ));
+        return Err(Error::ConflictError("当前订单存在正式异常任务，必须使用任务调查命令".to_string()));
     }
     Ok(())
 }
@@ -671,24 +633,22 @@ fn investigation_result(
         SupplierOrderInvestigationOutcome::VerifiedTerminal
         | SupplierOrderInvestigationOutcome::VerifiedNoResult => {
             SupplierOrderInvestigationResultStatus::Succeeded
-        }
+        },
         SupplierOrderInvestigationOutcome::ResultUnknown => SupplierOrderInvestigationResultStatus::Unknown,
     };
     let allowed_actions = match record.outcome() {
         SupplierOrderInvestigationOutcome::VerifiedTerminal => {
             vec!["CONFIRM_VERIFIED_TERMINAL_RESULT".to_string()]
-        }
+        },
         SupplierOrderInvestigationOutcome::VerifiedNoResult => vec!["REPLAY".to_string()],
         SupplierOrderInvestigationOutcome::ResultUnknown => vec!["QUERY_RESULT".to_string()],
     };
     let work_item =
-        work_item_id
-            .zip(task_version)
-            .map(|(id, task_version)| SupplierOrderInvestigationWorkItemView {
-                id: id.to_string(),
-                status: WorkItemStatus::Open,
-                task_version,
-            });
+        work_item_id.zip(task_version).map(|(id, task_version)| SupplierOrderInvestigationWorkItemView {
+            id: id.to_string(),
+            status: WorkItemStatus::Open,
+            task_version,
+        });
     SupplierOrderInvestigationResultView {
         result_status,
         message: record.summary().to_string(),
@@ -720,9 +680,10 @@ fn investigation_audit_id(actor_id: &str, action: &str, object_id: &str, key: &s
     )
 }
 
-use super::dto::{SupplierOrderInvestigationResultView, SupplierOrderInvestigationWorkItemView};
 use erp_read_models::supplier_center::fulfillment_access::ensure_task_actor_eligible;
 use erp_supply::service::supplier_fulfillment::investigate::*;
+
+use super::dto::{SupplierOrderInvestigationResultView, SupplierOrderInvestigationWorkItemView};
 impl InvestigationCommandContext {
     fn subject(&self) -> InvestigationSubject {
         InvestigationSubject {

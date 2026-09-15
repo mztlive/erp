@@ -1,15 +1,15 @@
-use std::{
-    future::Future,
-    pin::Pin,
-    sync::{atomic::Ordering, Arc},
-};
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
+use application_core::owned_task::await_owned;
 use mongodb::ClientSession;
 use persistence_core::Transactional;
 
-use super::{policy::commit_outcome_unknown, RbacService};
+use super::RbacService;
+use super::policy::commit_outcome_unknown;
 use crate::error::{Error, Result};
-use application_core::owned_task::await_owned;
 
 impl RbacService {
     /// 在取消安全的所有权任务内运行系统初始化 policy 事务。
@@ -72,8 +72,7 @@ impl RbacService {
             + Send
             + 'static,
     {
-        self.run_policy_transaction_at_revision(Some(policy_revision), transaction)
-            .await
+        self.run_policy_transaction_at_revision(Some(policy_revision), transaction).await
     }
 
     /// 运行 policy 写事务，并按需绑定事务前授权使用的版本。
@@ -112,10 +111,8 @@ impl RbacService {
                         let value = transaction(session).await?;
                         match expected_revision {
                             Some(revision) => {
-                                policy_store
-                                    .bump_policy_revision_if_matches(revision, session)
-                                    .await?;
-                            }
+                                policy_store.bump_policy_revision_if_matches(revision, session).await?;
+                            },
                             None => policy_store.bump_policy_revision(session).await?,
                         }
                         Ok::<_, E>(value)
@@ -193,7 +190,7 @@ impl RbacService {
                     );
                 }
                 Ok(value)
-            }
+            },
             Err(error) if commit_outcome_unknown(&error) => {
                 self.policy_consistency_unknown.store(true, Ordering::Release);
                 self.policy_stale.store(true, Ordering::Release);
@@ -203,7 +200,7 @@ impl RbacService {
                     "RBAC policy commit outcome is unknown; authorization has been stopped"
                 );
                 Err(error)
-            }
+            },
             Err(error) => Err(error),
         }
     }
@@ -211,9 +208,7 @@ impl RbacService {
     /// 在提交结果未知后阻止授权读取和后续 policy 写入，避免旧快照被误判为最新状态。
     pub(super) fn ensure_policy_consistency_known(&self) -> Result<()> {
         if self.policy_consistency_unknown.load(Ordering::Acquire) {
-            return Err(Error::Rbac(
-                "授权策略提交结果未知，当前进程已停止授权，请重启服务".to_string(),
-            ));
+            return Err(Error::Rbac("授权策略提交结果未知，当前进程已停止授权，请重启服务".to_string()));
         }
         Ok(())
     }

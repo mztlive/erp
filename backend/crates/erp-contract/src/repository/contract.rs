@@ -5,19 +5,18 @@
 //! 本文件只补充域特有查询与跨集合多步骤写入入口；集合名常量统一取
 //! `ContractExt` 关联常量（单一权威来源，conventions §4.3）。
 
-use crate::entity::contract::{Contract, ContractId, ContractRevision, ContractStatus};
-use crate::repository::owned::{ContractRepository, ContractRevisionRepository};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
 use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
+use crate::entity::contract::{Contract, ContractId, ContractRevision, ContractStatus};
 use crate::repository::extensions::ContractExt;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::repository::owned::{ContractRepository, ContractRevisionRepository};
 
 /// `contract` 集合名（单一来源：`ContractExt` 关联常量）。
 const CONTRACTS: &str = <mongodb::Database as ContractExt>::CONTRACTS;
@@ -141,10 +140,7 @@ impl<'a> ContractRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 查找当前客户范围内指向指定结算主体的生效合同。
@@ -193,8 +189,7 @@ impl<'a> ContractRevisionRepository<'a> {
         if revision_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(doc! { "id": { "$in": revision_ids } }, executor)
-            .await
+        self.find_many(doc! { "id": { "$in": revision_ids } }, executor).await
     }
 
     /// 列出合同的全部版本（新版本在前）。
@@ -300,9 +295,7 @@ impl<'a> ContractDomainRepository<'a> {
         )
         .await?;
         contract.attach_revision(&revision.base.id, contract.stable.updated_by.clone());
-        ContractRepository::new(self.db, CONTRACTS)
-            .update(contract, executor)
-            .await
+        ContractRepository::new(self.db, CONTRACTS).update(contract, executor).await
     }
 
     /// 归档合同新版本（插入版本 + 绑定当前版本指针）。
@@ -332,9 +325,7 @@ impl<'a> ContractDomainRepository<'a> {
         )
         .await?;
         contract.attach_revision(&revision.base.id, contract.stable.updated_by.clone());
-        ContractRepository::new(self.db, CONTRACTS)
-            .update(contract, executor)
-            .await
+        ContractRepository::new(self.db, CONTRACTS).update(contract, executor).await
     }
 }
 
@@ -382,7 +373,7 @@ fn insert_authorization_filter(
             } else {
                 Some(Vec::new())
             }
-        }
+        },
     };
     let auth = crate::repository::scope::authorization_document(narrowed.as_deref(), historical_contract_ids);
     if auth.is_empty() {
@@ -454,23 +445,20 @@ impl ContractRepository<'_> {
         if let Some(session) = executor.session() {
             query = query.session(session);
         }
-        Ok(query
-            .await?
-            .into_iter()
-            .filter_map(|id| id.as_str().map(str::to_owned))
-            .collect())
+        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        contract_revision_no_from_rows, latest_contract_revision_filter, latest_contract_revision_options,
-        sort_doc, ContractFilter, ContractRevisionNoRow,
-    };
     use erp_core::ids::ContractId;
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
+
+    use super::{
+        ContractFilter, ContractRevisionNoRow, contract_revision_no_from_rows,
+        latest_contract_revision_filter, latest_contract_revision_options, sort_doc,
+    };
 
     #[test]
     fn contract_filter_applies_optional_fields_and_deleted_filter() {
@@ -488,18 +476,8 @@ mod tests {
 
         let document = filter.to_doc();
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
-        assert_eq!(
-            document
-                .get_document("contract_no")
-                .unwrap()
-                .get_str("$regex")
-                .unwrap(),
-            r"HT\-2026"
-        );
-        assert_eq!(
-            document.get_document("customer_id").unwrap(),
-            &doc! { "$in": ["cust-1"] }
-        );
+        assert_eq!(document.get_document("contract_no").unwrap().get_str("$regex").unwrap(), r"HT\-2026");
+        assert_eq!(document.get_document("customer_id").unwrap(), &doc! { "$in": ["cust-1"] });
         assert_eq!(document.get_str("status").unwrap(), "EFFECTIVE");
     }
 
@@ -543,25 +521,16 @@ mod tests {
             customer_ids: Some(vec!["cust-1".to_string(), "cust-2".to_string()]),
             ..in_scope.clone()
         };
-        assert_eq!(
-            hit.to_doc().get_document("customer_id").unwrap(),
-            &doc! { "$in": ["cust-2"] }
-        );
+        assert_eq!(hit.to_doc().get_document("customer_id").unwrap(), &doc! { "$in": ["cust-2"] });
 
         let miss = ContractFilter {
             customer_id: Some("cust-9".to_string()),
             customer_ids: Some(vec!["cust-1".to_string()]),
             ..in_scope.clone()
         };
-        assert_eq!(
-            miss.to_doc(),
-            doc! { "$and": [{ "deleted_at": 0_i64 }, { "$expr": false }] }
-        );
+        assert_eq!(miss.to_doc(), doc! { "$and": [{ "deleted_at": 0_i64 }, { "$expr": false }] });
 
-        let history = ContractFilter {
-            historical_contract_ids: vec!["ht-old".to_string()],
-            ..in_scope
-        };
+        let history = ContractFilter { historical_contract_ids: vec!["ht-old".to_string()], ..in_scope };
         assert_eq!(
             history.to_doc().get_array("$and").unwrap()[1],
             doc! {
@@ -591,19 +560,17 @@ mod tests {
         assert_eq!(options.limit, Some(1));
         assert_eq!(options.projection, Some(doc! { "revision_no": 1, "_id": 0 }));
         assert_eq!(contract_revision_no_from_rows(Vec::new()), None);
-        assert_eq!(
-            contract_revision_no_from_rows(vec![ContractRevisionNoRow { revision_no: 7 }]),
-            Some(7)
-        );
+        assert_eq!(contract_revision_no_from_rows(vec![ContractRevisionNoRow { revision_no: 7 }]), Some(7));
     }
 
     #[test]
     fn contract_and_revision_bson_keep_identity_status_and_snapshot_fields() {
+        use erp_core::common::time::BusinessDate;
+        use erp_core::ids::{ContractId, ContractRevisionId, CustomerAccountId, FileAssetId, PartyId};
+
         use crate::entity::contract::{
             ArchiveSource, Contract, ContractData, ContractRevision, ContractRevisionData, ContractStatus,
         };
-        use erp_core::common::time::BusinessDate;
-        use erp_core::ids::{ContractId, ContractRevisionId, CustomerAccountId, FileAssetId, PartyId};
 
         let contract = Contract::new(
             ContractId::new("c-1"),
@@ -652,19 +619,11 @@ mod tests {
         assert_eq!(revision_doc.get_str("contract_pdf_file_id").unwrap(), "file-1");
         assert_eq!(revision_doc.get_str("archive_source").unwrap(), "CONTRACT_CENTER");
         assert_eq!(
-            revision_doc
-                .get_document("customer_snapshot")
-                .unwrap()
-                .get_str("customer_name")
-                .unwrap(),
+            revision_doc.get_document("customer_snapshot").unwrap().get_str("customer_name").unwrap(),
             "东方企业"
         );
         assert_eq!(
-            revision_doc
-                .get_document("payment_term_snapshot")
-                .unwrap()
-                .get_str("payment_term_code")
-                .unwrap(),
+            revision_doc.get_document("payment_term_snapshot").unwrap().get_str("payment_term_code").unwrap(),
             "NET30"
         );
         let contract_roundtrip: Contract =

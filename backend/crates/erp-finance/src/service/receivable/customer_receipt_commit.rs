@@ -5,11 +5,9 @@
 //! 使非法字段组合在进入事务前即可拒绝；Service 仅负责存在性、
 //! 版本锁与事务编排，不再复制字段组合判断。
 
-use crate::entity::receivable::PendingReceiptAllocation;
-
-use crate::{Error, Result};
-
 use crate::dto::receivable::{CommitCustomerReceiptRequest, CreateCustomerReceiptRequest};
+use crate::entity::receivable::PendingReceiptAllocation;
+use crate::{Error, Result};
 
 /// 已验证的客户回款提交命令。
 ///
@@ -92,17 +90,16 @@ impl CommitCustomerReceiptRequest {
             return Err(Error::ValidationError("至少提供一条核销分配".to_string()));
         }
         match (&self.receipt_id, self.expected_version, &self.receipt) {
-            (None, None, Some(receipt)) => Ok(PreparedCustomerReceiptCommit::New {
-                receipt: receipt.clone(),
-                allocations,
-            }),
+            (None, None, Some(receipt)) => {
+                Ok(PreparedCustomerReceiptCommit::New { receipt: receipt.clone(), allocations })
+            },
             (Some(receipt_id), Some(version), None) if version > 0 => {
                 Ok(PreparedCustomerReceiptCommit::Existing {
                     receipt_id: receipt_id.clone(),
                     expected_version: version,
                     allocations,
                 })
-            }
+            },
             _ => Err(Error::ValidationError(
                 "新回款必须提交 receipt；已有草稿必须提交 receipt_id 与 expected_version".to_string(),
             )),
@@ -112,10 +109,12 @@ impl CommitCustomerReceiptRequest {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
+
     use erp_core::ids::{CustomerAccountId, PartyId, ReceivableEntryId};
     use erp_core::money::Amount;
-    use std::str::FromStr;
+
+    use super::*;
 
     fn valid_receipt() -> CreateCustomerReceiptRequest {
         CreateCustomerReceiptRequest {
@@ -147,17 +146,14 @@ mod tests {
 
     #[test]
     fn prepare_accepts_new_with_receipt_and_allocations() {
-        let req = CommitCustomerReceiptRequest {
-            receipt: Some(valid_receipt()),
-            ..base_request()
-        };
+        let req = CommitCustomerReceiptRequest { receipt: Some(valid_receipt()), ..base_request() };
         let prepared = req.prepare().expect("new 形态必须通过");
         match prepared {
             PreparedCustomerReceiptCommit::New { receipt, allocations } => {
                 assert_eq!(receipt.receipt_no, "RC-TEST-001");
                 assert_eq!(allocations.len(), 1);
                 assert_eq!(allocations[0].allocated_amount.to_string(), "100.00");
-            }
+            },
             _ => panic!("应为 New"),
         }
     }
@@ -172,15 +168,11 @@ mod tests {
         };
         let prepared = req.prepare().expect("existing 形态必须通过");
         match prepared {
-            PreparedCustomerReceiptCommit::Existing {
-                receipt_id,
-                expected_version,
-                allocations,
-            } => {
+            PreparedCustomerReceiptCommit::Existing { receipt_id, expected_version, allocations } => {
                 assert_eq!(receipt_id, "cr-1");
                 assert_eq!(expected_version, 2);
                 assert_eq!(allocations.len(), 1);
-            }
+            },
             _ => panic!("应为 Existing"),
         }
     }
@@ -283,9 +275,10 @@ mod tests {
             idempotency_key: "k".to_string(),
         };
         let err = req.prepare().unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("新回款必须提交 receipt；已有草稿必须提交 receipt_id 与 expected_version"));
+        assert!(
+            err.to_string()
+                .contains("新回款必须提交 receipt；已有草稿必须提交 receipt_id 与 expected_version")
+        );
     }
 
     #[test]
@@ -304,7 +297,7 @@ mod tests {
                 assert_eq!(allocations[0].allocated_amount.to_string(), "10.00");
                 assert_eq!(allocations[1].allocated_amount.to_string(), "20.00");
                 assert_eq!(allocations[2].allocated_amount.to_string(), "30.00");
-            }
+            },
             _ => panic!("should be New"),
         }
     }

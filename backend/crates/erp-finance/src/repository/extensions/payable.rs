@@ -8,14 +8,14 @@
 //! `invoice` 由 D18 拥有，D19 在 P3 通过 `ReceivableExt::invoices()` 复用，
 //! 本域只拥有 `purchase_invoice_allocation`（domains.md §3）。
 
-use crate::repository::owned::{
-    PayableAccountRepository, PayableEntryOffsetRepository, PayableEntryRepository,
-    PaymentAllocationRepository, PurchaseInvoiceAllocationRepository, SupplierPaymentRepository,
-};
 use mongodb::Database;
 
 use super::super::payable::{
     PayableAccountFilter, PayableRepository, PurchaseInvoiceAllocationFilter, SupplierPaymentFilter,
+};
+use crate::repository::owned::{
+    PayableAccountRepository, PayableEntryOffsetRepository, PayableEntryRepository,
+    PaymentAllocationRepository, PurchaseInvoiceAllocationRepository, SupplierPaymentRepository,
 };
 
 /// 域 D19 仓储访问器。

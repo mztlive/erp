@@ -1,13 +1,15 @@
 //! W29 权威证据事实与调用方事务内查询端口。
 
+use std::future::Future;
+use std::pin::Pin;
+
+use persistence_core::Executor;
+
+use crate::Result;
 use crate::dto::ControlledEvidenceRef;
 use crate::entity::integration_ops::{
     CanonicalEvidenceReference, IntegrationErrorTask, ReconciliationDifference,
 };
-use crate::Result;
-use persistence_core::Executor;
-use std::future::Future;
-use std::pin::Pin;
 
 /// W29 当前业务项的证据上下文；只包含关联校验所需的稳定身份。
 #[derive(Debug, Clone)]
@@ -155,25 +157,13 @@ mod tests {
         let subject = EvidenceSubject::difference(&difference);
         assert_eq!(subject.item_id, "diff-context");
         assert!(subject.message_id.is_none());
-        assert_eq!(
-            subject.business_object_type.as_deref(),
-            Some(difference.business_object_type.as_str())
-        );
-        assert_eq!(
-            subject.business_object_id.as_deref(),
-            Some(difference.business_object_id.as_str())
-        );
+        assert_eq!(subject.business_object_type.as_deref(), Some(difference.business_object_type.as_str()));
+        assert_eq!(subject.business_object_id.as_deref(), Some(difference.business_object_id.as_str()));
         assert_eq!(subject.fact_references, ["left-fact", "right-fact"]);
         difference.left_fact_reference = None;
-        assert_eq!(
-            EvidenceSubject::difference(&difference).fact_references,
-            ["right-fact"]
-        );
+        assert_eq!(EvidenceSubject::difference(&difference).fact_references, ["right-fact"]);
         difference.left_fact_reference = Some("left-fact".to_string());
         difference.right_fact_reference = None;
-        assert_eq!(
-            EvidenceSubject::difference(&difference).fact_references,
-            ["left-fact"]
-        );
+        assert_eq!(EvidenceSubject::difference(&difference).fact_references, ["left-fact"]);
     }
 }

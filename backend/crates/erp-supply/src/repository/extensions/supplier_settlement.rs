@@ -5,16 +5,16 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_STATEMENTS` 等值。
 
-use crate::repository::owned::{
-    SupplierSettlementDifferenceEvidenceRepository, SupplierSettlementDifferenceRepository,
-    SupplierSettlementItemRepository, SupplierSettlementSourceEvidenceRepository,
-    SupplierSettlementStatementRepository,
-};
 use mongodb::Database;
 
 use super::super::supplier_settlement::{
     SupplierSettlementDifferenceFilter, SupplierSettlementItemFilter, SupplierSettlementRepository,
     SupplierSettlementStatementFilter,
+};
+use crate::repository::owned::{
+    SupplierSettlementDifferenceEvidenceRepository, SupplierSettlementDifferenceRepository,
+    SupplierSettlementItemRepository, SupplierSettlementSourceEvidenceRepository,
+    SupplierSettlementStatementRepository,
 };
 
 /// 域 D33 仓储访问器。

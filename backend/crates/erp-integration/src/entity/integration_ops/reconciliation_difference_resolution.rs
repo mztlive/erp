@@ -6,11 +6,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::Instant;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::{ReconciliationDifferenceId, ReconciliationDifferenceResolutionId};
 
@@ -78,7 +77,7 @@ impl ResolutionAction {
             Self::QueryOriginalResult | Self::ReplayOriginal => ResultingStatus::Open,
             Self::Reattribute | Self::LinkCompensation | Self::AddEvidence => {
                 ResultingStatus::EvidencePending
-            }
+            },
             Self::ConfirmNoError => ResultingStatus::ConfirmedNoError,
             Self::ConfirmValidDifference => ResultingStatus::ConfirmedValidDifference,
             Self::CloseDuplicate | Self::CloseMisrouted => ResultingStatus::Closed,
@@ -132,10 +131,7 @@ impl ResultingStatus {
 
     /// 判断状态是否已经形成正式业务结论。
     pub fn is_terminal(self) -> bool {
-        matches!(
-            self,
-            Self::ConfirmedNoError | Self::ConfirmedValidDifference | Self::Closed
-        )
+        matches!(self, Self::ConfirmedNoError | Self::ConfirmedValidDifference | Self::Closed)
     }
 }
 
@@ -300,10 +296,7 @@ impl ReconciliationDifferenceResolution {
         handled_by: String,
         handled_at: Instant,
     ) -> Result<Self> {
-        if !matches!(
-            action,
-            ResolutionAction::CloseDuplicate | ResolutionAction::CloseMisrouted
-        ) {
+        if !matches!(action, ResolutionAction::CloseDuplicate | ResolutionAction::CloseMisrouted) {
             return Err(Error::from("领域关闭证据只接受重复或误派关闭动作"));
         }
         if evidence_reference.resolution_action() != action {
@@ -337,12 +330,8 @@ impl ReconciliationDifferenceResolution {
         if data.resulting_status != data.resolution_action.derived_status() {
             return Err(Error::from("决定后的派生状态与决定不一致"));
         }
-        let handled_by = normalize_required_text(
-            data.handled_by,
-            "决定人不能为空",
-            HANDLED_BY_MAX_LEN,
-            "决定人标识过长",
-        )?;
+        let handled_by =
+            normalize_required_text(data.handled_by, "决定人不能为空", HANDLED_BY_MAX_LEN, "决定人标识过长")?;
         let evidence_reference =
             normalize_optional_text(data.evidence_reference, "证据引用", EVIDENCE_REFERENCE_MAX_LEN)?;
         if data.resolution_action.requires_evidence() && evidence_reference.is_none() {
@@ -363,13 +352,14 @@ impl ReconciliationDifferenceResolution {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{ReconciliationDifferenceId, ReconciliationDifferenceResolutionId};
+
     use super::{
         ReconciliationDifferenceResolution, ReconciliationDifferenceResolutionData, ResolutionAction,
         ResolutionVersionCheck, ResultingStatus,
     };
     use crate::entity::integration_ops::W29EvidenceReference;
-    use erp_core::common::time::Instant;
-    use erp_core::ids::{ReconciliationDifferenceId, ReconciliationDifferenceResolutionId};
 
     pub(crate) fn data(action: ResolutionAction) -> ReconciliationDifferenceResolutionData {
         ReconciliationDifferenceResolutionData {
@@ -405,20 +395,19 @@ pub(crate) mod tests {
             ResolutionAction::ConfirmNoError,
             ResolutionAction::ConfirmValidDifference,
         ] {
-            assert!(ReconciliationDifferenceResolution::new(
-                ReconciliationDifferenceResolutionId::new(format!("res-{}", action.as_str())),
-                data(action),
-            )
-            .is_err());
+            assert!(
+                ReconciliationDifferenceResolution::new(
+                    ReconciliationDifferenceResolutionId::new(format!("res-{}", action.as_str())),
+                    data(action),
+                )
+                .is_err()
+            );
         }
     }
 
     #[test]
     fn terminal_statuses_are_decision_specific() {
-        assert_eq!(
-            ResolutionAction::ConfirmNoError.derived_status(),
-            ResultingStatus::ConfirmedNoError
-        );
+        assert_eq!(ResolutionAction::ConfirmNoError.derived_status(), ResultingStatus::ConfirmedNoError);
         assert_eq!(
             ResolutionAction::ConfirmValidDifference.derived_status(),
             ResultingStatus::ConfirmedValidDifference
@@ -483,10 +472,7 @@ pub(crate) mod tests {
             ResolutionVersionCheck::Invalid
         );
         assert!(ReconciliationDifferenceResolution::is_open(None));
-        assert_eq!(
-            ReconciliationDifferenceResolution::next_resolution_no(None),
-            Some(1)
-        );
+        assert_eq!(ReconciliationDifferenceResolution::next_resolution_no(None), Some(1));
 
         let mut input = data(ResolutionAction::ConfirmNoError);
         input.resolution_no = 7;
@@ -501,10 +487,7 @@ pub(crate) mod tests {
             ResolutionVersionCheck::Current
         );
         assert!(!ReconciliationDifferenceResolution::is_open(Some(&terminal)));
-        assert_eq!(
-            ReconciliationDifferenceResolution::next_resolution_no(Some(&terminal)),
-            Some(8)
-        );
+        assert_eq!(ReconciliationDifferenceResolution::next_resolution_no(Some(&terminal)), Some(8));
     }
 
     #[test]
@@ -546,26 +529,30 @@ pub(crate) mod tests {
             saturated,
         )
         .unwrap();
-        assert!(ReconciliationDifferenceResolution::append(
-            ReconciliationDifferenceResolutionId::new("append-overflow"),
-            ReconciliationDifferenceId::new("diff-1"),
-            Some(&record),
-            ResolutionAction::QueryOriginalResult,
-            None,
-            "ops-1".to_string(),
-            Instant::from_unix_secs(1_700_000_002),
-        )
-        .is_err());
+        assert!(
+            ReconciliationDifferenceResolution::append(
+                ReconciliationDifferenceResolutionId::new("append-overflow"),
+                ReconciliationDifferenceId::new("diff-1"),
+                Some(&record),
+                ResolutionAction::QueryOriginalResult,
+                None,
+                "ops-1".to_string(),
+                Instant::from_unix_secs(1_700_000_002),
+            )
+            .is_err()
+        );
 
-        assert!(ReconciliationDifferenceResolution::append(
-            ReconciliationDifferenceResolutionId::new("append-no-evidence"),
-            ReconciliationDifferenceId::new("diff-1"),
-            None,
-            ResolutionAction::AddEvidence,
-            None,
-            "ops-1".to_string(),
-            Instant::from_unix_secs(1_700_000_003),
-        )
-        .is_err());
+        assert!(
+            ReconciliationDifferenceResolution::append(
+                ReconciliationDifferenceResolutionId::new("append-no-evidence"),
+                ReconciliationDifferenceId::new("diff-1"),
+                None,
+                ResolutionAction::AddEvidence,
+                None,
+                "ops-1".to_string(),
+                Instant::from_unix_secs(1_700_000_003),
+            )
+            .is_err()
+        );
     }
 }

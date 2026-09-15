@@ -1,13 +1,14 @@
 //! 客户退款列表投影的 Mongo 分页/存在性验收（SALES-R06）。
 
+use std::str::FromStr;
+
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerAccountId, CustomerReceiptId, CustomerRefundId};
 use erp_core::money::Amount;
 use erp_returns::entity::returns::{CustomerRefund, CustomerRefundData, CustomerRefundStatus};
-use erp_returns::repository::returns::{CustomerRefundFilter, CustomerRefundRow};
 use erp_returns::repository::ReturnsExt;
+use erp_returns::repository::returns::{CustomerRefundFilter, CustomerRefundRow};
 use persistence_core::NoTransaction;
-use std::str::FromStr;
 
 fn test_refund(
     id: &str,
@@ -62,13 +63,11 @@ fn list_filter(
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn search_customer_refunds_pages_filters_and_projects_view_facts() {
-    use test_support::{require_mongo, TestDb};
+    use test_support::{TestDb, require_mongo};
 
     require_mongo!(async {
         let fixture = TestDb::new("crf_search_page").await.expect("测试数据库创建失败");
-        erp_returns::indexes::ensure(fixture.db())
-            .await
-            .expect("索引创建失败");
+        erp_returns::indexes::ensure(fixture.db()).await.expect("索引创建失败");
         let repo = fixture.db().customer_refunds();
         let mut deleted = test_refund("crf-del", "RF-DEL", "cust-a", "9.00", 9, 9);
         deleted.base.deleted_at = 1;
@@ -79,9 +78,7 @@ async fn search_customer_refunds_pages_filters_and_projects_view_facts() {
             test_refund("crf-b1", "RF-B1", "cust-b", "50.00", 40, 40),
             deleted,
         ] {
-            repo.create(&refund, &mut NoTransaction)
-                .await
-                .expect("退款写入失败");
+            repo.create(&refund, &mut NoTransaction).await.expect("退款写入失败");
         }
 
         let desc = repo
@@ -119,10 +116,7 @@ async fn search_customer_refunds_pages_filters_and_projects_view_facts() {
             )
             .await
             .expect("升序第一页必须成功");
-        assert_eq!(
-            asc.items.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
-            vec!["crf-a3", "crf-a2"]
-        );
+        assert_eq!(asc.items.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(), vec!["crf-a3", "crf-a2"]);
 
         let missing = repo
             .search_customer_refunds(
@@ -140,28 +134,18 @@ async fn search_customer_refunds_pages_filters_and_projects_view_facts() {
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn search_customer_refunds_id_tiebreaker_is_stable() {
-    use test_support::{require_mongo, TestDb};
+    use test_support::{TestDb, require_mongo};
 
     require_mongo!(async {
-        let fixture = TestDb::new("crf_search_id_sort")
-            .await
-            .expect("测试数据库创建失败");
-        erp_returns::indexes::ensure(fixture.db())
-            .await
-            .expect("索引创建失败");
+        let fixture = TestDb::new("crf_search_id_sort").await.expect("测试数据库创建失败");
+        erp_returns::indexes::ensure(fixture.db()).await.expect("索引创建失败");
         let repo = fixture.db().customer_refunds();
-        repo.create(
-            &test_refund("crf-z", "RF-Z", "cust-a", "10.00", 100, 100),
-            &mut NoTransaction,
-        )
-        .await
-        .expect("写入失败");
-        repo.create(
-            &test_refund("crf-a", "RF-A", "cust-a", "10.00", 100, 100),
-            &mut NoTransaction,
-        )
-        .await
-        .expect("写入失败");
+        repo.create(&test_refund("crf-z", "RF-Z", "cust-a", "10.00", 100, 100), &mut NoTransaction)
+            .await
+            .expect("写入失败");
+        repo.create(&test_refund("crf-a", "RF-A", "cust-a", "10.00", 100, 100), &mut NoTransaction)
+            .await
+            .expect("写入失败");
 
         let desc = repo
             .search_customer_refunds(
@@ -170,10 +154,7 @@ async fn search_customer_refunds_id_tiebreaker_is_stable() {
             )
             .await
             .expect("降序必须成功");
-        assert_eq!(
-            desc.items.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
-            vec!["crf-z", "crf-a"]
-        );
+        assert_eq!(desc.items.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(), vec!["crf-z", "crf-a"]);
         let asc = repo
             .search_customer_refunds(
                 &list_filter(Some("cust-a"), 1, 10, "occurred_at", true),
@@ -181,10 +162,7 @@ async fn search_customer_refunds_id_tiebreaker_is_stable() {
             )
             .await
             .expect("升序必须成功");
-        assert_eq!(
-            asc.items.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
-            vec!["crf-a", "crf-z"]
-        );
+        assert_eq!(asc.items.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(), vec!["crf-a", "crf-z"]);
     });
 }
 

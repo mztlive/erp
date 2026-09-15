@@ -2,14 +2,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerReceiptId, FileAssetId, ReceiptReversalId};
 use erp_core::money::Amount;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::customer_refund::validate_actor_pair;
 
@@ -298,10 +297,8 @@ impl ReceiptReversal {
         if self.status != ReceiptReversalStatus::Draft {
             return Err(Error::from("只有草稿状态的回款冲正单可以提交审批"));
         }
-        let next = self
-            .approval_subject_version
-            .checked_add(1)
-            .ok_or_else(|| Error::from("审批提交版本溢出"))?;
+        let next =
+            self.approval_subject_version.checked_add(1).ok_or_else(|| Error::from("审批提交版本溢出"))?;
         self.approval_subject_version = next;
         self.transition(ReceiptReversalStatus::InApproval)?;
         Ok(next)
@@ -357,9 +354,11 @@ impl ReceiptReversal {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::*;
-    use erp_core::money::Amount;
     use std::str::FromStr;
+
+    use erp_core::money::Amount;
+
+    use super::*;
 
     pub(crate) fn data() -> ReceiptReversalData {
         ReceiptReversalData {
@@ -396,28 +395,16 @@ pub(crate) mod tests {
 
     #[test]
     fn new_rejects_blank_no_same_actor_and_non_positive() {
-        let blank_no = ReceiptReversalData {
-            reversal_no: "   ".to_string(),
-            ..data()
-        };
+        let blank_no = ReceiptReversalData { reversal_no: "   ".to_string(), ..data() };
         assert!(ReceiptReversal::new(ReceiptReversalId::new("rr-2"), blank_no, "creator-1").is_err());
 
-        let overlong = ReceiptReversalData {
-            reason_text: "r".repeat(513),
-            ..data()
-        };
+        let overlong = ReceiptReversalData { reason_text: "r".repeat(513), ..data() };
         assert!(ReceiptReversal::new(ReceiptReversalId::new("rr-3"), overlong, "creator-1").is_err());
 
-        let same_actor = ReceiptReversalData {
-            reviewed_by: "handler-1".to_string(),
-            ..data()
-        };
+        let same_actor = ReceiptReversalData { reviewed_by: "handler-1".to_string(), ..data() };
         assert!(ReceiptReversal::new(ReceiptReversalId::new("rr-4"), same_actor, "creator-1").is_err());
 
-        let non_positive = ReceiptReversalData {
-            amount: Amount::from_str("0.00").unwrap(),
-            ..data()
-        };
+        let non_positive = ReceiptReversalData { amount: Amount::from_str("0.00").unwrap(), ..data() };
         assert!(ReceiptReversal::new(ReceiptReversalId::new("rr-5"), non_positive, "creator-1").is_err());
     }
 
@@ -439,18 +426,20 @@ pub(crate) mod tests {
         reversal.start_approval().unwrap();
         reversal.mark_posted().unwrap();
         assert!(reversal.is_posted());
-        assert!(reversal
-            .update(ReceiptReversalUpdate {
-                amount: Some(Amount::from_str("1.00").unwrap()),
-                ..Default::default()
-            })
-            .is_err());
+        assert!(
+            reversal
+                .update(ReceiptReversalUpdate {
+                    amount: Some(Amount::from_str("1.00").unwrap()),
+                    ..Default::default()
+                })
+                .is_err()
+        );
     }
 
     #[test]
     fn state_machine_forces_in_approval_before_posting() {
-        use erp_core::common::state::ensure_transition as tr;
         use ReceiptReversalStatus as S;
+        use erp_core::common::state::ensure_transition as tr;
 
         assert!(tr(S::Draft, S::InApproval).is_ok());
         assert!(tr(S::InApproval, S::Posted).is_ok());
@@ -474,9 +463,7 @@ pub(crate) mod tests {
     #[test]
     fn start_approval_increments_version_and_cancel_does_not_rollback() {
         let mut reversal = ReceiptReversal::new(ReceiptReversalId::new("rr-1"), data(), "creator-1").unwrap();
-        reversal
-            .ensure_initial_approval_state()
-            .expect("新建草稿是初始未提交状态");
+        reversal.ensure_initial_approval_state().expect("新建草稿是初始未提交状态");
         assert_eq!(reversal.approval_subject_version, 0);
         let version = reversal.start_approval().unwrap();
         assert_eq!(version, 1);
@@ -490,17 +477,11 @@ pub(crate) mod tests {
 
     #[test]
     fn status_serializes_with_stable_codes_and_labels() {
-        assert_eq!(
-            serde_json::to_string(&ReceiptReversalStatus::InApproval).unwrap(),
-            "\"IN_APPROVAL\""
-        );
+        assert_eq!(serde_json::to_string(&ReceiptReversalStatus::InApproval).unwrap(), "\"IN_APPROVAL\"");
         assert_eq!(ReceiptReversalStatus::Posted.label(), "已过账");
         assert_eq!(ReceiptReversalStatus::Reversed.as_str(), "reversed");
         assert_eq!(ReceiptReversalStatus::Draft.as_str(), "draft");
-        let production = include_str!("receipt_reversal.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("receipt_reversal.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(!production.contains("PendingReview"));
         assert!(!production.contains("pending_review"));
     }

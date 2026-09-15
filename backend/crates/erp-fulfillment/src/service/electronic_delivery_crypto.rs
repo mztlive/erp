@@ -2,16 +2,15 @@
 //!
 //! 指纹密钥不出本文件；领域工厂只收强类型指纹结果。
 
-use crate::entity::fulfillment::{
-    ElectronicDelivery, ElectronicDeliveryDraft, ElectronicDeliveryDraftData, ElectronicRecipientFingerprint,
-};
 use erp_core::common::time::Instant;
 use erp_core::ids::ElectronicDeliveryId;
 use id_generator::next_id;
 
-use crate::{Error, Result};
-
 use crate::dto::CreateElectronicDeliveryRequest;
+use crate::entity::fulfillment::{
+    ElectronicDelivery, ElectronicDeliveryDraft, ElectronicDeliveryDraftData, ElectronicRecipientFingerprint,
+};
+use crate::{Error, Result};
 
 /// 在 Service/crypto port 计算交付对象快照指纹。
 ///

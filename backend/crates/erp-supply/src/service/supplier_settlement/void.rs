@@ -1,9 +1,10 @@
+use persistence_core::Executor;
+use validator::Validate;
+
 use super::SupplierSettlementService;
 use crate::dto::supplier_settlement::*;
 use crate::entity::supplier_settlement::*;
 use crate::{Error, Result};
-use persistence_core::Executor;
-use validator::Validate;
 impl SupplierSettlementService {
     /// 结算本域prepare_void，保持原校验、构造和执行器顺序。
     pub async fn prepare_void(
@@ -19,9 +20,7 @@ impl SupplierSettlementService {
             return Ok((statement, true));
         }
         if !statement.is_prepared_by(actor_id) || !statement.is_editable() {
-            return Err(Error::BusinessLogicError(
-                "只有经办人可以作废尚未提交复核的结算草稿".to_string(),
-            ));
+            return Err(Error::BusinessLogicError("只有经办人可以作废尚未提交复核的结算草稿".to_string()));
         }
         statement
             .ensure_version(req.version)

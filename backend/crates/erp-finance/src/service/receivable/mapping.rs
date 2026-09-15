@@ -1,19 +1,19 @@
 //! Finance fact projections and stable money, version, and ledger error contracts.
 
+use std::str::FromStr;
+
+use erp_core::money::Amount;
+
 use crate::dto::receivable::{ReceivableInvoiceFactView, ReceivableReceiptFactView};
 use crate::entity::receivable::{AllocationAction, CustomerReceiptStatus, InvoiceKind, InvoiceStatus};
 use crate::ports::receivable::ReceivableSnapshot;
 use crate::{Error, Result};
-use erp_core::money::Amount;
-use std::str::FromStr;
 
 /// 装配当前账户关联的正式回款事实投影。
 pub fn receipt_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableReceiptFactView> {
     let mut receipts = snapshot.receipts.iter().collect::<Vec<_>>();
     receipts.sort_by(|left, right| {
-        left.received_at
-            .cmp(&right.received_at)
-            .then_with(|| left.base.id.cmp(&right.base.id))
+        left.received_at.cmp(&right.received_at).then_with(|| left.base.id.cmp(&right.base.id))
     });
     receipts
         .into_iter()
@@ -22,11 +22,9 @@ pub fn receipt_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableReceip
                 .receipt_allocations
                 .iter()
                 .filter(|allocation| allocation.customer_receipt_id.as_ref() == receipt.base.id.as_str())
-                .fold(zero_amount(), |total, allocation| {
-                    match allocation.allocation_action {
-                        AllocationAction::Apply => total.checked_add(allocation.allocated_amount),
-                        AllocationAction::Reverse => total.checked_sub(allocation.allocated_amount),
-                    }
+                .fold(zero_amount(), |total, allocation| match allocation.allocation_action {
+                    AllocationAction::Apply => total.checked_add(allocation.allocated_amount),
+                    AllocationAction::Reverse => total.checked_sub(allocation.allocated_amount),
                 });
             ReceivableReceiptFactView {
                 receipt_id: receipt.base.id.clone(),
@@ -45,9 +43,7 @@ pub fn receipt_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableReceip
 pub fn invoice_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableInvoiceFactView> {
     let mut invoices = snapshot.invoices.iter().collect::<Vec<_>>();
     invoices.sort_by(|left, right| {
-        left.invoice_date
-            .cmp(&right.invoice_date)
-            .then_with(|| left.base.id.cmp(&right.base.id))
+        left.invoice_date.cmp(&right.invoice_date).then_with(|| left.base.id.cmp(&right.base.id))
     });
     invoices
         .into_iter()
@@ -56,11 +52,9 @@ pub fn invoice_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableInvoic
                 .invoice_allocations
                 .iter()
                 .filter(|allocation| allocation.invoice_id.as_ref() == invoice.base.id.as_str())
-                .fold(zero_amount(), |total, allocation| {
-                    match allocation.allocation_action {
-                        AllocationAction::Apply => total.checked_add(allocation.allocated_gross_amount),
-                        AllocationAction::Reverse => total.checked_sub(allocation.allocated_gross_amount),
-                    }
+                .fold(zero_amount(), |total, allocation| match allocation.allocation_action {
+                    AllocationAction::Apply => total.checked_add(allocation.allocated_gross_amount),
+                    AllocationAction::Reverse => total.checked_sub(allocation.allocated_gross_amount),
                 });
             ReceivableInvoiceFactView {
                 invoice_id: invoice.base.id.clone(),
@@ -88,9 +82,7 @@ pub fn parse_task_version(value: &str) -> Result<u64> {
         .parse::<u64>()
         .map_err(|_| Error::ValidationError("任务版本必须是无符号整数字符串".to_string()))?;
     if parsed == 0 || parsed.to_string() != normalized {
-        return Err(Error::ValidationError(
-            "任务版本必须是规范的正整数字符串".to_string(),
-        ));
+        return Err(Error::ValidationError("任务版本必须是规范的正整数字符串".to_string()));
     }
     Ok(parsed)
 }
@@ -128,7 +120,5 @@ pub fn ensure_expected_version(actual: u64, expected: u64) -> Result<()> {
     if actual == expected {
         return Ok(());
     }
-    Err(Error::ConflictError(
-        "数据已被其他请求修改，请刷新后重试".to_string(),
-    ))
+    Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))
 }

@@ -1,15 +1,15 @@
-use crate::entity::inventory::{StockAdjustment, StockAdjustmentUpdate};
-use crate::repository::InventoryExt;
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::StockAdjustmentId;
 use persistence_core::Transactional;
 use validator::Validate;
 
-use super::mapping::build_adjustment_line_updates;
 use super::InventoryService;
+use super::mapping::build_adjustment_line_updates;
 use crate::dto::{StockAdjustmentView, UpdateStockAdjustmentRequest};
+use crate::entity::inventory::{StockAdjustment, StockAdjustmentUpdate};
 use crate::error::{Error, Result};
-use application_core::AuditActor;
+use crate::repository::InventoryExt;
 
 impl InventoryService {
     /// 更新库存调整单（仅草稿/驳回；乐观锁语义）。
@@ -29,11 +29,7 @@ impl InventoryService {
     #[tracing::instrument(
         name = "inventory.stock_adjustment_update",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "inventory",
-            operation = "stock_adjustment_update"
-        )
+        fields(layer = "service", domain = "inventory", operation = "stock_adjustment_update")
     )]
     pub async fn update_stock_adjustment(
         &self,
@@ -71,9 +67,7 @@ impl InventoryService {
                         return Err(Error::NotFound("库存调整单不存在".to_string()));
                     }
                     if !adjustment.matches_version(req.version) {
-                        return Err(Error::ConflictError(
-                            "数据已被其他请求修改，请刷新后重试".to_string(),
-                        ));
+                        return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
                     }
                     adjustment.update(StockAdjustmentUpdate {
                         reason_type: req.reason_type,

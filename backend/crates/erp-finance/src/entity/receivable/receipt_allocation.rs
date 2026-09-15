@@ -1,15 +1,14 @@
 //! `receipt_allocation` 回款核销分配（数据模型 §6.8）。
 
-use entity_core::BaseModel;
-use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use std::str::FromStr;
 
+use entity_core::BaseModel;
+use entity_macros::Entity;
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableEntryId};
 use erp_core::money::Amount;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 分配动作（数据模型 §6.8：`APPLY` 或 `REVERSE`）。
 ///
@@ -175,10 +174,10 @@ pub(crate) fn validate_action_reference<T: AllocationIdRef>(
     match action {
         AllocationAction::Apply if reverses_allocation_id.is_some() => {
             Err(Error::from("APPLY 分配不得引用原分配"))
-        }
+        },
         AllocationAction::Reverse if reverses_allocation_id.is_none() => {
             Err(Error::from("REVERSE 分配必须引用原 APPLY 分配"))
-        }
+        },
         _ => Ok(()),
     }
 }
@@ -289,15 +288,10 @@ impl ReceiptAllocation {
                 }
             }
         }
-        let mut applies: Vec<&ReceiptAllocation> = allocations
-            .iter()
-            .filter(|a| a.allocation_action == AllocationAction::Apply)
-            .collect();
-        applies.sort_by(|a, b| {
-            a.allocation_seq
-                .cmp(&b.allocation_seq)
-                .then_with(|| a.base.id.cmp(&b.base.id))
-        });
+        let mut applies: Vec<&ReceiptAllocation> =
+            allocations.iter().filter(|a| a.allocation_action == AllocationAction::Apply).collect();
+        applies
+            .sort_by(|a, b| a.allocation_seq.cmp(&b.allocation_seq).then_with(|| a.base.id.cmp(&b.base.id)));
         let mut remaining = amount;
         let mut rows = Vec::new();
         let mut chunks = Vec::new();
@@ -310,11 +304,7 @@ impl ReceiptAllocation {
             if effective.to_decimal().is_zero() {
                 continue;
             }
-            let chunk = if effective >= remaining {
-                remaining
-            } else {
-                effective
-            };
+            let chunk = if effective >= remaining { remaining } else { effective };
             if chunk.to_decimal().is_zero() {
                 continue;
             }
@@ -341,8 +331,9 @@ impl ReceiptAllocation {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn data() -> ReceiptAllocationData {
         ReceiptAllocationData {
@@ -365,16 +356,11 @@ mod tests {
 
     #[test]
     fn new_rejects_non_positive_amount_and_zero_seq() {
-        let non_positive = ReceiptAllocationData {
-            allocated_amount: Amount::from_str("0.00").unwrap(),
-            ..data()
-        };
+        let non_positive =
+            ReceiptAllocationData { allocated_amount: Amount::from_str("0.00").unwrap(), ..data() };
         assert!(ReceiptAllocation::new(ReceiptAllocationId::new("rc-2"), non_positive).is_err());
 
-        let zero_seq = ReceiptAllocationData {
-            allocation_seq: 0,
-            ..data()
-        };
+        let zero_seq = ReceiptAllocationData { allocation_seq: 0, ..data() };
         assert!(ReceiptAllocation::new(ReceiptAllocationId::new("rc-3"), zero_seq).is_err());
     }
 
@@ -463,22 +449,10 @@ mod tests {
     #[test]
     fn receipt_plan_deducts_multiple_reverses_and_insufficient_fails() {
         let a1 = receipt_allocation_for_plan("rc-1", 1, AllocationAction::Apply, "100.00", "re-1", None);
-        let r1 = receipt_allocation_for_plan(
-            "rc-r1",
-            2,
-            AllocationAction::Reverse,
-            "30.00",
-            "re-1",
-            Some("rc-1"),
-        );
-        let r2 = receipt_allocation_for_plan(
-            "rc-r2",
-            3,
-            AllocationAction::Reverse,
-            "20.00",
-            "re-1",
-            Some("rc-1"),
-        );
+        let r1 =
+            receipt_allocation_for_plan("rc-r1", 2, AllocationAction::Reverse, "30.00", "re-1", Some("rc-1"));
+        let r2 =
+            receipt_allocation_for_plan("rc-r2", 3, AllocationAction::Reverse, "20.00", "re-1", Some("rc-1"));
         let allocations = vec![a1.clone(), r1, r2];
         let (rows, _) =
             ReceiptAllocation::plan_reverse(&allocations, Amount::from_str("50.00").unwrap()).unwrap();
@@ -507,14 +481,8 @@ mod tests {
     #[test]
     fn receipt_plan_insufficient_and_zero_effective_skipped() {
         let a1 = receipt_allocation_for_plan("rc-1", 1, AllocationAction::Apply, "50.00", "re-1", None);
-        let r1 = receipt_allocation_for_plan(
-            "rc-r1",
-            2,
-            AllocationAction::Reverse,
-            "50.00",
-            "re-1",
-            Some("rc-1"),
-        );
+        let r1 =
+            receipt_allocation_for_plan("rc-r1", 2, AllocationAction::Reverse, "50.00", "re-1", Some("rc-1"));
         let a2 = receipt_allocation_for_plan("rc-2", 3, AllocationAction::Apply, "30.00", "re-2", None);
         // a1 already fully reversed, should skip
         let (rows, _) =
@@ -531,21 +499,12 @@ mod tests {
         let a3 = receipt_allocation_for_plan("rc-3", 5, AllocationAction::Apply, "10.00", "re-3", None);
         assert_eq!(ReceiptAllocation::next_allocation_seq(&[a1, a2, a3]).unwrap(), 6);
         let range = ReceiptAllocation::next_allocation_seq_range(
-            &[receipt_allocation_for_plan(
-                "rc-1",
-                3,
-                AllocationAction::Apply,
-                "10.00",
-                "re-1",
-                None,
-            )],
+            &[receipt_allocation_for_plan("rc-1", 3, AllocationAction::Apply, "10.00", "re-1", None)],
             3,
         )
         .unwrap();
         assert_eq!(range, vec![4, 5, 6]);
-        assert!(ReceiptAllocation::next_allocation_seq_range(&[], 0)
-            .unwrap()
-            .is_empty());
+        assert!(ReceiptAllocation::next_allocation_seq_range(&[], 0).unwrap().is_empty());
     }
 
     #[test]

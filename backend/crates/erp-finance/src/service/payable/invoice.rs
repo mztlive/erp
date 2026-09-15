@@ -1,26 +1,28 @@
 //! 财务进项发票分配查询与事务内事实写入。
+use erp_core::ids::{PartyId, PayableAccountId, PurchaseInvoiceAllocationId};
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::Executor;
+
 use crate::dto::payable::RegisterPurchaseInvoiceRequest;
 use crate::entity::payable::{
     PayableAccount, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationLine, PurchaseInvoiceAllocationPlan,
 };
 use crate::entity::receivable::{Invoice, InvoiceData, InvoiceDirection, InvoiceKind};
 use crate::repository::{PayableExt, ReceivableExt};
-use erp_core::ids::{PartyId, PayableAccountId, PurchaseInvoiceAllocationId};
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::Executor;
 fn zero_amount() -> erp_core::money::Amount {
     erp_core::money::Amount::zero()
 }
+use erp_core::ids::InvoiceId;
+use persistence_core::NoTransaction;
+use validator::Validate;
+
 use super::PayableService;
 use crate::dto::payable::{
     PageView, PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView,
     PurchaseInvoiceRegisteredView, SortDir,
 };
 use crate::{Error, Result};
-use erp_core::ids::InvoiceId;
-use persistence_core::NoTransaction;
-use validator::Validate;
 type PurchaseInvoiceAllocationFilter = <mongodb::Database as PayableExt>::PurchaseInvoiceAllocationFilter;
 impl PayableService {
     /// 按已提交发票主键回读稳定登记结果。
@@ -122,10 +124,7 @@ pub(super) fn purchase_invoice_allocation_view(
         allocated_gross_amount: allocation.allocated_gross_amount,
         allocated_net_amount: allocation.allocated_net_amount,
         allocated_tax_amount: allocation.allocated_tax_amount,
-        reverses_allocation_id: allocation
-            .reverses_allocation_id
-            .as_ref()
-            .map(|id| id.to_string()),
+        reverses_allocation_id: allocation.reverses_allocation_id.as_ref().map(|id| id.to_string()),
     }
 }
 
@@ -187,9 +186,8 @@ pub async fn prepare_purchase_invoice_allocations_in_transaction(
             allocated_tax_amount: line.allocated_tax_amount,
         })
         .collect();
-    let allocation_ids: Vec<PurchaseInvoiceAllocationId> = (0..lines.len())
-        .map(|_| PurchaseInvoiceAllocationId::new(next_id()))
-        .collect();
+    let allocation_ids: Vec<PurchaseInvoiceAllocationId> =
+        (0..lines.len()).map(|_| PurchaseInvoiceAllocationId::new(next_id())).collect();
     let plan = PurchaseInvoiceAllocationPlan::new(
         invoice_for_tx.base.id.clone().into(),
         invoice_for_tx.gross_amount,
@@ -201,15 +199,9 @@ pub async fn prepare_purchase_invoice_allocations_in_transaction(
 
     // 账户/供应商事实一次批量装载；按行首次出现顺序逐账户校验，
     // 保持原逐行首错语义（存在性 → 供应商 → 跨供应商主体一致）。
-    let account_ids: Vec<PayableAccountId> = plan
-        .account_invoicing_deltas()
-        .iter()
-        .map(|(account_id, _)| account_id.clone())
-        .collect();
-    let accounts = db
-        .payable_accounts()
-        .find_accounts_by_ids(&account_ids, session)
-        .await?;
+    let account_ids: Vec<PayableAccountId> =
+        plan.account_invoicing_deltas().iter().map(|(account_id, _)| account_id.clone()).collect();
+    let accounts = db.payable_accounts().find_accounts_by_ids(&account_ids, session).await?;
     Ok((plan, accounts))
 }
 /// 使用原 Executor 更新收票额度、发票状态与分配事实，禁止在此写工作项或审计。
@@ -225,16 +217,12 @@ pub async fn persist_purchase_invoice_in_transaction(
         .apply_invoicings_many(plan.account_invoicing_deltas(), actor_id, session)
         .await?;
     if !invoicing.rejected.is_empty() {
-        return Err(Error::BusinessLogicError(
-            "子账剩余可收票额度不足，收票被拒绝".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("子账剩余可收票额度不足，收票被拒绝".to_string()));
     }
     let mut invoice_mut = invoice_for_tx;
     invoice_mut.mark_registered(actor_id)?;
     db.invoices().create(&invoice_mut, session).await?;
-    db.payable()
-        .create_purchase_invoice_allocations_many(plan.new_allocations(), session)
-        .await?;
+    db.payable().create_purchase_invoice_allocations_many(plan.new_allocations(), session).await?;
     Ok(invoice_mut)
 }
 
@@ -242,13 +230,13 @@ pub async fn persist_purchase_invoice_in_transaction(
 mod purchase_invoice_allocation_list_tests {
     use std::str::FromStr;
 
-    use crate::entity::payable::{
-        AllocationAction, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationData,
-    };
     use erp_core::ids::{InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId};
     use erp_core::money::Amount;
 
     use super::purchase_invoice_allocation_view;
+    use crate::entity::payable::{
+        AllocationAction, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationData,
+    };
 
     /// 构造具有指定稳定 ID 与秒级创建时间的最小进项发票分配事实。
     ///
@@ -286,10 +274,7 @@ mod purchase_invoice_allocation_list_tests {
     /// FIN-R06：列表只装载当前页，过滤、稳定排序与总数由 Repository 服务端完成。
     #[test]
     fn allocation_list_uses_server_pagination() {
-        let production = include_str!("invoice.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("invoice.rs").split("#[cfg(test)]").next().expect("生产代码");
         let body = production
             .split("pub async fn purchase_invoice_allocation_list")
             .nth(1)
@@ -306,19 +291,13 @@ mod purchase_invoice_allocation_list_tests {
     /// 升序按创建时间再按稳定 ID 返回。
     #[test]
     fn allocation_stable_order_sorts_ascending() {
-        assert_eq!(
-            stable_order(&[("a-3", 30), ("a-1", 10), ("a-2", 20)], true),
-            ["a-1", "a-2", "a-3"]
-        );
+        assert_eq!(stable_order(&[("a-3", 30), ("a-1", 10), ("a-2", 20)], true), ["a-1", "a-2", "a-3"]);
     }
 
     /// 降序对创建时间与稳定 ID 使用同一方向。
     #[test]
     fn allocation_stable_order_sorts_descending() {
-        assert_eq!(
-            stable_order(&[("a-1", 10), ("a-3", 30), ("a-2", 20)], false),
-            ["a-3", "a-2", "a-1"]
-        );
+        assert_eq!(stable_order(&[("a-1", 10), ("a-3", 30), ("a-2", 20)], false), ["a-3", "a-2", "a-1"]);
     }
 
     /// 同秒事实跨页边界保持确定，无重复、无遗漏。

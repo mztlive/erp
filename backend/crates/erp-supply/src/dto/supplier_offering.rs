@@ -1,9 +1,5 @@
 //! 供应商供给 HTTP DTO；Handler 直接复用本文件类型.
 
-use crate::entity::supplier_offering::{
-    AvailabilityStatus, FromGrossPricesParams, OfferingSourceType, OfferingStatus, PrefillSourceRefs,
-    SupplierOfferingAvailabilityData, SupplierOfferingData, SupplierOfferingRevisionData,
-};
 use erp_core::common::time::Instant;
 use erp_core::ids::{SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierOfferingId};
 use erp_core::money::Quantity;
@@ -11,6 +7,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
+use crate::entity::supplier_offering::{
+    AvailabilityStatus, FromGrossPricesParams, OfferingSourceType, OfferingStatus, PrefillSourceRefs,
+    SupplierOfferingAvailabilityData, SupplierOfferingData, SupplierOfferingRevisionData,
+};
 use crate::{Error, Result};
 
 /// 新增供给命令的稳定操作名。
@@ -22,7 +22,6 @@ pub const UPDATE_OFFERING_AVAILABILITY_COMMAND: &str = "update_offering_availabi
 
 /// 分页响应。
 pub use application_core::PageView;
-
 use application_core::non_blank;
 
 /// 供给商业条款公共写入字段。
@@ -365,24 +364,22 @@ impl SupplierOfferingTermsWrite {
             .map(write_data::parse_business_date)
             .transpose()
             .map_err(|error| Error::ValidationError(error.to_string()))?;
-        Ok(SupplierOfferingRevisionData::from_gross_prices(
-            FromGrossPricesParams {
-                supplier_offering_id: offering_id,
-                revision_no,
-                dropship_supply_price_gross: dropship_gross,
-                bulk_supply_price_gross: bulk_gross,
-                input_tax_rate: rate,
-                dropship_express: self.dropship_express.clone(),
-                freight_amount: freight,
-                service_fee_amount: service_fee,
-                bulk_minimum_order_quantity: moq,
-                supply_region: self.supply_region.clone(),
-                product_capabilities: self.product_capabilities.clone(),
-                valid_from,
-                valid_to,
-                prefill_source_refs: PrefillSourceRefs::default(),
-            },
-        ))
+        Ok(SupplierOfferingRevisionData::from_gross_prices(FromGrossPricesParams {
+            supplier_offering_id: offering_id,
+            revision_no,
+            dropship_supply_price_gross: dropship_gross,
+            bulk_supply_price_gross: bulk_gross,
+            input_tax_rate: rate,
+            dropship_express: self.dropship_express.clone(),
+            freight_amount: freight,
+            service_fee_amount: service_fee,
+            bulk_minimum_order_quantity: moq,
+            supply_region: self.supply_region.clone(),
+            product_capabilities: self.product_capabilities.clone(),
+            valid_from,
+            valid_to,
+            prefill_source_refs: PrefillSourceRefs::default(),
+        }))
     }
 }
 
@@ -528,9 +525,10 @@ pub fn resolve_source_updated_at(requested: Option<i64>, received_at: Instant) -
 
 #[cfg(test)]
 mod tests {
+    use serde::Serialize;
+
     use super::*;
     use crate::entity::supplier_offering::{AvailabilityStatus, OfferingSourceType, OfferingStatus};
-    use serde::Serialize;
 
     /// 覆盖新增供给命令指纹：同一请求确定稳定，任一载荷字段变化必须产生不同指纹。
     #[test]
@@ -672,15 +670,9 @@ mod tests {
     fn terms_try_into_revision_data_covers_first_and_next_revision() {
         use erp_core::ids::SupplierOfferingId;
         let req = create_request();
-        let first = req
-            .terms
-            .try_into_revision_data(SupplierOfferingId::new("offering-1"), 1)
-            .unwrap();
+        let first = req.terms.try_into_revision_data(SupplierOfferingId::new("offering-1"), 1).unwrap();
         assert_eq!(first.revision_no, 1);
-        let next = req
-            .terms
-            .try_into_revision_data(SupplierOfferingId::new("offering-1"), 2)
-            .unwrap();
+        let next = req.terms.try_into_revision_data(SupplierOfferingId::new("offering-1"), 2).unwrap();
         assert_eq!(next.revision_no, 2);
         assert_eq!(first.valid_from, next.valid_from);
     }
@@ -690,30 +682,20 @@ mod tests {
         use erp_core::ids::SupplierOfferingId;
         let mut bad = terms();
         bad.input_tax_rate = "  ".to_string();
-        assert!(bad
-            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
-            .is_err());
+        assert!(bad.try_into_revision_data(SupplierOfferingId::new("o1"), 1).is_err());
         let mut bad_price = terms();
         bad_price.dropship_supply_price_gross = "abc".to_string();
-        let err = bad_price
-            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
-            .unwrap_err();
+        let err = bad_price.try_into_revision_data(SupplierOfferingId::new("o1"), 1).unwrap_err();
         assert!(err.to_string().contains("非法一件代发供给价"));
         let mut bad_moq = terms();
         bad_moq.bulk_minimum_order_quantity = "0".to_string();
-        assert!(bad_moq
-            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
-            .is_ok());
+        assert!(bad_moq.try_into_revision_data(SupplierOfferingId::new("o1"), 1).is_ok());
         let mut bad_window = terms();
         bad_window.valid_from = "not-a-date".to_string();
-        assert!(bad_window
-            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
-            .is_err());
+        assert!(bad_window.try_into_revision_data(SupplierOfferingId::new("o1"), 1).is_err());
         let mut bad_amount = terms();
         bad_amount.freight_amount = Some("abc".to_string());
-        let err = bad_amount
-            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
-            .unwrap_err();
+        let err = bad_amount.try_into_revision_data(SupplierOfferingId::new("o1"), 1).unwrap_err();
         assert!(err.to_string().contains("非法金额"));
     }
 
@@ -748,14 +730,16 @@ mod tests {
         assert!(data.available_quantity.is_none());
         let mut illegal = req.clone();
         illegal.available_quantity = Some("abc".to_string());
-        assert!(illegal
-            .try_into_availability_data(
-                SupplierOfferingId::new("offering-1"),
-                source,
-                received,
-                "actor-1".to_string()
-            )
-            .is_err());
+        assert!(
+            illegal
+                .try_into_availability_data(
+                    SupplierOfferingId::new("offering-1"),
+                    source,
+                    received,
+                    "actor-1".to_string()
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -763,30 +747,25 @@ mod tests {
         use erp_core::ids::SupplierOfferingId;
         let mut bad_to = terms();
         bad_to.valid_to = Some("abc".to_string());
-        let err = bad_to
-            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
-            .unwrap_err();
+        let err = bad_to.try_into_revision_data(SupplierOfferingId::new("o1"), 1).unwrap_err();
         assert!(err.to_string().contains("非法业务日期"));
         let mut blank_amounts = terms();
         blank_amounts.freight_amount = Some("  ".to_string());
         blank_amounts.service_fee_amount = Some(String::new());
-        let data = blank_amounts
-            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
-            .unwrap();
+        let data = blank_amounts.try_into_revision_data(SupplierOfferingId::new("o1"), 1).unwrap();
         assert!(data.freight_amount.is_none());
         assert!(data.service_fee_amount.is_none());
     }
 
     #[test]
     fn inverted_validity_window_fails_closed_at_entity_construction() {
-        use crate::entity::supplier_offering::SupplierOfferingRevision;
         use erp_core::ids::{SupplierOfferingId, SupplierOfferingRevisionId};
+
+        use crate::entity::supplier_offering::SupplierOfferingRevision;
         let mut window = terms();
         window.valid_from = "2026-02-01".to_string();
         window.valid_to = Some("2026-01-01".to_string());
-        let data = window
-            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
-            .unwrap();
+        let data = window.try_into_revision_data(SupplierOfferingId::new("o1"), 1).unwrap();
         let err = SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("r1"), data).unwrap_err();
         assert!(err.to_string().contains("有效期结束必须晚于开始"));
     }
@@ -799,16 +778,12 @@ mod tests {
         multi.dropship_supply_price_gross = "abc".to_string();
         multi.bulk_minimum_order_quantity = "abc".to_string();
         multi.valid_from = "abc".to_string();
-        let err = multi
-            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
-            .unwrap_err();
+        let err = multi.try_into_revision_data(SupplierOfferingId::new("o1"), 1).unwrap_err();
         assert!(err.to_string().contains("非法进项税率"));
         let mut second = terms();
         second.dropship_supply_price_gross = "abc".to_string();
         second.bulk_supply_price_gross = "abc".to_string();
-        let err = second
-            .try_into_revision_data(SupplierOfferingId::new("o1"), 1)
-            .unwrap_err();
+        let err = second.try_into_revision_data(SupplierOfferingId::new("o1"), 1).unwrap_err();
         assert!(err.to_string().contains("非法一件代发供给价"));
     }
 

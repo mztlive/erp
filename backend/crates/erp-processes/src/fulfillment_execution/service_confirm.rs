@@ -1,30 +1,27 @@
 //! 线下服务履约确认：写入现场事实与图片凭证后由草稿迁到已确认。
 
 use std::collections::HashSet;
-
 use std::sync::Arc;
 
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::{FileAssetId, ServiceFulfillmentId};
+use erp_fulfillment::dto::{ConfirmServiceFulfillmentRequest, ServiceFulfillmentView};
 use erp_fulfillment::entity::fulfillment::{
     ServiceEvidencePolicy, ServiceFulfillment, ServiceFulfillmentConfirmation,
 };
+use erp_fulfillment::service::FulfillmentService;
+use erp_fulfillment::service::service_fulfillment_confirm::service_confirmation_from_request;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_support::{EmptyPendingAttachments, FileAssetExt, PendingAttachmentBatch};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-
-use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
-use super::service_crypto::{evidence_metadata, ServiceCryptoAdapter};
 use super::FulfillmentProcess;
-use erp_fulfillment::dto::{ConfirmServiceFulfillmentRequest, ServiceFulfillmentView};
-use erp_fulfillment::service::service_fulfillment_confirm::service_confirmation_from_request;
-use erp_fulfillment::service::FulfillmentService;
+use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
+use super::service_crypto::{ServiceCryptoAdapter, evidence_metadata};
+use crate::{Error, Result};
 
 impl FulfillmentProcess {
     /// 确认服务履约（草稿 → 已确认；§8.1.5 + §6.7 跨集合事务）。
@@ -48,8 +45,7 @@ impl FulfillmentProcess {
         req: ConfirmServiceFulfillmentRequest,
         actor: &AuditActor,
     ) -> Result<ServiceFulfillmentView> {
-        self.confirm_service_fulfillment_with_assets(id, req, Arc::new(EmptyPendingAttachments), actor)
-            .await
+        self.confirm_service_fulfillment_with_assets(id, req, Arc::new(EmptyPendingAttachments), actor).await
     }
 
     /// 确认服务履约，同时登记本次上传的现场图片凭证。
@@ -74,11 +70,7 @@ impl FulfillmentProcess {
     #[tracing::instrument(
         name = "fulfillment.service_fulfillment_confirm",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "service_fulfillment_confirm"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "service_fulfillment_confirm")
     )]
     pub async fn confirm_service_fulfillment_with_assets(
         &self,
@@ -177,14 +169,7 @@ async fn confirm_service_fulfillment_in_transaction(
     session: &mut dyn Executor,
 ) -> Result<ServiceFulfillment> {
     execute_confirmation(
-        &MongoServiceConfirmation {
-            db,
-            record_id,
-            expected_version,
-            confirmation,
-            pending_assets,
-            actor,
-        },
+        &MongoServiceConfirmation { db, record_id, expected_version, confirmation, pending_assets, actor },
         session,
     )
     .await
@@ -242,13 +227,8 @@ pub(super) async fn ensure_service_evidence_asset_in_transaction(
         .await?
         .ok_or_else(|| Error::NotFound("现场图片凭证不存在".to_string()))?;
     let (sensitivity, retention) = evidence_metadata(asset.sensitivity_class, asset.retention_class);
-    ServiceEvidencePolicy::validate(
-        &asset.content_type,
-        sensitivity,
-        retention,
-        asset.destroyed_at.is_some(),
-    )
-    .map_err(|error| Error::ValidationError(error.to_string()))
+    ServiceEvidencePolicy::validate(&asset.content_type, sensitivity, retention, asset.destroyed_at.is_some())
+        .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 真实确认步骤边界；替身测试与 Mongo 适配器共同执行同一顺序。
@@ -400,14 +380,14 @@ impl ServiceConfirmationPort for MongoServiceConfirmation<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{service_confirmation_from_request, ServiceCryptoAdapter};
+    use std::str::FromStr;
+
     use erp_core::ids::FileAssetId;
     use erp_core::money::Quantity;
     use erp_fulfillment::entity::fulfillment::{FulfillmentResult, ServiceFulfillment};
     use erp_party::SensitiveDataCodec;
-    use std::str::FromStr;
 
-    use super::ConfirmServiceFulfillmentRequest;
+    use super::{ConfirmServiceFulfillmentRequest, ServiceCryptoAdapter, service_confirmation_from_request};
 
     /// 确认边界只持久化密文，并以同一份规范化明文计算查询指纹。
     #[test]
@@ -434,12 +414,7 @@ mod tests {
         .unwrap();
 
         assert_ne!(confirmation.service_location_encrypted, "客户现场");
-        assert_eq!(
-            sensitive_data
-                .decrypt(&confirmation.service_location_encrypted)
-                .unwrap(),
-            "客户现场"
-        );
+        assert_eq!(sensitive_data.decrypt(&confirmation.service_location_encrypted).unwrap(), "客户现场");
         assert_eq!(
             confirmation.service_location_fingerprint,
             ServiceFulfillment::service_location_fingerprint("客户现场", fingerprint_key)
@@ -450,10 +425,7 @@ mod tests {
     #[test]
     fn confirm_does_not_start_approval() {
         let production = [
-            include_str!("service_confirm.rs")
-                .split("#[cfg(test)]")
-                .next()
-                .expect("流程生产代码"),
+            include_str!("service_confirm.rs").split("#[cfg(test)]").next().expect("流程生产代码"),
             include_str!("../../../erp-fulfillment/src/service/service_fulfillment_confirm.rs")
                 .split("#[cfg(test)]")
                 .next()
@@ -473,10 +445,7 @@ mod tests {
     #[test]
     fn evidence_rules_do_not_stay_in_service() {
         let production = [
-            include_str!("service_confirm.rs")
-                .split("#[cfg(test)]")
-                .next()
-                .expect("流程生产代码"),
+            include_str!("service_confirm.rs").split("#[cfg(test)]").next().expect("流程生产代码"),
             include_str!("../../../erp-fulfillment/src/service/service_fulfillment_confirm.rs")
                 .split("#[cfg(test)]")
                 .next()
@@ -494,10 +463,12 @@ mod tests {
 
 #[cfg(test)]
 mod confirmation_order_tests {
-    use super::{execute_confirmation, ServiceConfirmationPort};
-    use crate::{Error, Result};
-    use persistence_core::Executor;
     use std::sync::Mutex;
+
+    use persistence_core::Executor;
+
+    use super::{ServiceConfirmationPort, execute_confirmation};
+    use crate::{Error, Result};
 
     struct TestExecutor {
         visits: usize,

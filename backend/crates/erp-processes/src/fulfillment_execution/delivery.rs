@@ -1,22 +1,23 @@
 //! 发货创建、更新与无审批注册的跨域事务编排。
 
-use super::FulfillmentProcess;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_fulfillment::dto::{CreateDeliveryRequest, DeliveryView, UpdateDeliveryRequest};
 use erp_fulfillment::entity::fulfillment::{Delivery, DeliveryLine};
 use erp_identity::SharedRbacService;
+use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::{
-    binding_decision, BindPublishedDefinitionCommand, BindingDecision,
+    BindPublishedDefinitionCommand, BindingDecision, binding_decision,
 };
-use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
-use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
+use erp_workflow::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
+use erp_workflow::service::approval::policy::{DocumentApprovalPolicy, policy_of};
 use erp_workflow::service::document_registry::new_registered_document;
-use erp_workflow::DocumentRegistryExt;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
+
+use super::FulfillmentProcess;
+use crate::{Error, Result};
 
 impl FulfillmentProcess {
     /// 创建发货单（草稿，跨集合：表头 + 行 + 审计）。
@@ -84,9 +85,7 @@ impl FulfillmentProcess {
         actor: &AuditActor,
     ) -> Result<DeliveryView> {
         let mut delivery = self.domain().prepare_delivery_update(id, req).await?;
-        let audit = actor
-            .clone()
-            .resource_log("delivery.update", "delivery", id.to_string())?;
+        let audit = actor.clone().resource_log("delivery.update", "delivery", id.to_string())?;
         let db = self.db.clone();
         let actor_id = actor.id().to_string();
         let client = db.client().clone();
@@ -127,10 +126,10 @@ fn delivery_create_binding_decision() -> Result<BindingDecision> {
                 return Err(Error::Internal("发货政策类型不匹配".to_string()));
             }
             Ok(binding_decision(policy.requirement()))
-        }
-        DocumentApprovalPolicy::ProcessRequired(_) => Err(Error::Internal(
-            "发货必须是 NO_APPROVAL，不得绑定流程".to_string(),
-        )),
+        },
+        DocumentApprovalPolicy::ProcessRequired(_) => {
+            Err(Error::Internal("发货必须是 NO_APPROVAL，不得绑定流程".to_string()))
+        },
     }
 }
 
@@ -213,9 +212,7 @@ async fn persist_unbound_delivery_document(
     document
         .ensure_no_approval_registration(DocumentType::Delivery, binding.as_ref())
         .map_err(|error| Error::Internal(error.to_string()))?;
-    db.business_documents()
-        .register_no_approval_document(&document, executor)
-        .await?;
+    db.business_documents().register_no_approval_document(&document, executor).await?;
     Ok(())
 }
 
@@ -232,12 +229,9 @@ async fn register_created_delivery_document(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let bind_command = delivery_bind_command(delivery, actor.id())?;
-    let document = new_registered_document(
-        &delivery.base.id,
-        DocumentType::Delivery,
-        delivery.delivery_no.clone(),
-    )
-    .map_err(crate::Error::from)?;
+    let document =
+        new_registered_document(&delivery.base.id, DocumentType::Delivery, delivery.delivery_no.clone())
+            .map_err(crate::Error::from)?;
     persist_unbound_delivery_document(db, rbac, object_read, document, &bind_command, actor, executor).await
 }
 
@@ -253,9 +247,7 @@ async fn persist_created_delivery(
     lines: Vec<DeliveryLine>,
     actor: AuditActor,
 ) -> Result<()> {
-    let audit = actor
-        .clone()
-        .resource_log("delivery.create", "delivery", delivery.base.id.clone())?;
+    let audit = actor.clone().resource_log("delivery.create", "delivery", delivery.base.id.clone())?;
     let db = db.clone();
     let rbac = rbac.clone();
     let object_read = object_read.clone();
@@ -290,18 +282,19 @@ async fn persist_created_delivery(
 
 #[cfg(test)]
 mod delivery_no_approval_tests {
-    use super::{
-        delivery_bind_command, delivery_create_binding_decision, ensure_delivery_has_no_adapter,
-        ensure_delivery_skips_approval_binding, policy_of, BindingDecision, Delivery, DocumentApprovalPolicy,
-        DocumentType,
-    };
-    use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
+    use bpm::ids::ApprovalProcessDefinitionId;
     use erp_core::common::time::Instant;
     use erp_core::ids::{DeliveryId, SalesOrderId, WarehouseId};
     use erp_fulfillment::entity::fulfillment::{DeliveryData, DeliveryType};
     use erp_workflow::service::approval::binding::binding_from_published;
     use erp_workflow::service::document_registry::new_registered_document;
+
+    use super::{
+        BindingDecision, Delivery, DocumentApprovalPolicy, DocumentType, delivery_bind_command,
+        delivery_create_binding_decision, ensure_delivery_has_no_adapter,
+        ensure_delivery_skips_approval_binding, policy_of,
+    };
 
     fn draft_delivery() -> Delivery {
         Delivery::new(
@@ -330,10 +323,7 @@ mod delivery_no_approval_tests {
         };
         assert_eq!(no_approval.document_type, DocumentType::Delivery);
         assert_eq!(no_approval.process_kind, ProcessKind::Delivery);
-        assert_eq!(
-            delivery_create_binding_decision().expect("绑定决定"),
-            BindingDecision::SkipNoApproval
-        );
+        assert_eq!(delivery_create_binding_decision().expect("绑定决定"), BindingDecision::SkipNoApproval);
         assert_eq!(
             ensure_delivery_skips_approval_binding().expect("必须跳过"),
             BindingDecision::SkipNoApproval
@@ -350,36 +340,23 @@ mod delivery_no_approval_tests {
         assert_eq!(command.business_object_id, delivery.base.id);
         assert_eq!(command.context.organization_id, "so-1");
 
-        let document = new_registered_document(
-            &delivery.base.id,
-            DocumentType::Delivery,
-            delivery.delivery_no.clone(),
-        )
-        .expect("可注册");
+        let document =
+            new_registered_document(&delivery.base.id, DocumentType::Delivery, delivery.delivery_no.clone())
+                .expect("可注册");
         assert!(document.approval_binding.is_none());
-        document
-            .ensure_no_approval_registration(DocumentType::Delivery, None)
-            .expect("空绑定");
+        document.ensure_no_approval_registration(DocumentType::Delivery, None).expect("空绑定");
         assert!(document.approval_binding.is_none());
 
-        let forged = binding_from_published(
-            ApprovalProcessDefinitionId::new("def-1"),
-            1,
-            Instant::from_unix_secs(10),
-        )
-        .expect("测试绑定");
-        assert!(document
-            .ensure_no_approval_registration(DocumentType::Delivery, Some(&forged))
-            .is_err());
+        let forged =
+            binding_from_published(ApprovalProcessDefinitionId::new("def-1"), 1, Instant::from_unix_secs(10))
+                .expect("测试绑定");
+        assert!(document.ensure_no_approval_registration(DocumentType::Delivery, Some(&forged)).is_err());
     }
 
     /// 创建路径调用统一绑定端口，不查询发布定义、不启动实例、不建任务。
     #[test]
     fn create_does_not_query_definition_or_start_instance() {
-        let production = include_str!("delivery.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("delivery.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("persist_created_delivery"));
         assert!(production.contains("register_created_delivery_document"));
         assert!(production.contains("persist_unbound_delivery_document"));

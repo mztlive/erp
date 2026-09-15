@@ -1,12 +1,13 @@
 //! 付款任务合并候选的只读契约。
 
-use crate::dto::payable::PaymentRecipientView;
 use application_core::non_blank;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{PayableAccountId, SupplierAccountId, WorkItemId};
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+
+use crate::dto::payable::PaymentRecipientView;
 
 /// 查询当前付款任务可合并的同供应商开放任务。
 #[derive(Debug, Clone, Deserialize, Validate)]

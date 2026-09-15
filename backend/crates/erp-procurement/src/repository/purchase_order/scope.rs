@@ -1,6 +1,6 @@
 //! 采购单当前责任范围查询；输入必须由应用层完成资源动作授权。
 
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use persistence_core::QueryFilter;
 
 /// 一个已经通过同角色权限证明的采购责任范围。
@@ -112,14 +112,8 @@ impl PurchaseReadScope {
     #[cfg(test)]
     pub fn allows_creation(&self, owner: &str, org: &str) -> bool {
         self.roles.iter().any(|clause| clause.allows(owner, org))
-            && self
-                .user_limit
-                .as_ref()
-                .is_none_or(|clause| clause.allows(owner, org))
-            && self
-                .required_scopes
-                .iter()
-                .all(|scope| scope.allows_creation(owner, org))
+            && self.user_limit.as_ref().is_none_or(|clause| clause.allows(owner, org))
+            && self.required_scopes.iter().all(|scope| scope.allows_creation(owner, org))
     }
 
     /// 判断完整采购集合是否已获授权，个人上限仍须允许公司范围。
@@ -157,10 +151,7 @@ impl PurchaseReadScope {
     pub fn is_empty(&self) -> bool {
         self.required_scopes.iter().any(Self::is_empty)
             || (self.roles.iter().all(PurchaseScopeClause::is_empty) && self.historical_order_ids.is_empty())
-            || self
-                .user_limit
-                .as_ref()
-                .is_some_and(PurchaseScopeClause::is_empty)
+            || self.user_limit.as_ref().is_some_and(PurchaseScopeClause::is_empty)
     }
 
     /// 生成角色并集与个人上限交集，仓库字段不参与授权。
@@ -177,21 +168,13 @@ impl PurchaseReadScope {
     /// # 关键业务约束
     /// 历史参与只补充读取，且继续受个人上限约束。
     pub fn document(&self) -> Document {
-        let mut grants = self
-            .roles
-            .iter()
-            .map(PurchaseScopeClause::document)
-            .collect::<Vec<_>>();
+        let mut grants = self.roles.iter().map(PurchaseScopeClause::document).collect::<Vec<_>>();
         if !self.historical_order_ids.is_empty() {
             grants.push(doc! { "id": { "$in": &self.historical_order_ids } });
         }
         let mut roles = union(grants);
         if !self.required_scopes.is_empty() {
-            let mut required = self
-                .required_scopes
-                .iter()
-                .map(Self::document)
-                .collect::<Vec<_>>();
+            let mut required = self.required_scopes.iter().map(Self::document).collect::<Vec<_>>();
             required.push(roles);
             roles = doc! { "$and": required };
         }
@@ -224,8 +207,7 @@ impl super::super::owned::PurchaseOrderRepository<'_> {
         scope: &PurchaseReadScope,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Option<crate::entity::purchase_order::PurchaseOrder>> {
-        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor)
-            .await
+        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
     }
 
     /// 读取范围内采购单主键，供变更单和退货沿来源单过滤。
@@ -335,10 +317,7 @@ mod tests {
     #[test]
     fn creation_requires_role_scope_and_every_action_and_personal_limit() {
         let mut scope = PurchaseReadScope {
-            roles: vec![PurchaseScopeClause {
-                company: true,
-                ..Default::default()
-            }],
+            roles: vec![PurchaseScopeClause { company: true, ..Default::default() }],
             required_scopes: vec![PurchaseReadScope {
                 roles: vec![PurchaseScopeClause {
                     owner_user_id: Some("buyer-a".into()),
@@ -350,10 +329,8 @@ mod tests {
         };
         assert!(scope.allows_creation("buyer-a", "org-a"));
         assert!(!scope.allows_creation("buyer-b", "org-a"));
-        scope.user_limit = Some(PurchaseScopeClause {
-            business_org_unit_ids: vec!["org-b".into()],
-            ..Default::default()
-        });
+        scope.user_limit =
+            Some(PurchaseScopeClause { business_org_unit_ids: vec!["org-b".into()], ..Default::default() });
         assert!(!scope.allows_creation("buyer-a", "org-a"));
         assert!(scope.allows_creation("buyer-a", "org-b"));
         scope.roles.clear();
@@ -367,31 +344,20 @@ mod tests {
         assert!(PurchaseReadScope::default().is_empty());
         let scope = PurchaseReadScope {
             required_scopes: vec![],
-            roles: vec![PurchaseScopeClause {
-                company: true,
-                ..Default::default()
-            }],
+            roles: vec![PurchaseScopeClause { company: true, ..Default::default() }],
             user_limit: Some(PurchaseScopeClause::default()),
             historical_order_ids: vec![],
         };
-        assert_eq!(
-            scope.document(),
-            doc! { "$and": [{ "$or": [{}] }, { "$expr": false }] }
-        );
+        assert_eq!(scope.document(), doc! { "$and": [{ "$or": [{}] }, { "$expr": false }] });
         assert!(scope.is_empty());
     }
 
     #[test]
     fn historical_participation_adds_reads_without_bypassing_personal_limit() {
-        let mut scope = PurchaseReadScope {
-            historical_order_ids: vec!["old-order".into()],
-            ..Default::default()
-        };
+        let mut scope =
+            PurchaseReadScope { historical_order_ids: vec!["old-order".into()], ..Default::default() };
         assert!(!scope.is_empty());
-        assert_eq!(
-            scope.document(),
-            doc! { "$or": [{ "id": { "$in": ["old-order"] } }] }
-        );
+        assert_eq!(scope.document(), doc! { "$or": [{ "id": { "$in": ["old-order"] } }] });
         scope.user_limit = Some(PurchaseScopeClause::default());
         assert!(scope.is_empty());
         assert_eq!(

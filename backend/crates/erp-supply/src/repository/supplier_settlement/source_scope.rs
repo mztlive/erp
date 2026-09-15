@@ -1,23 +1,22 @@
-use crate::repository::owned::{
-    SupplierFulfillmentItemRepository, SupplierFulfillmentOrderRepository,
-    SupplierRefundAllocationRepository, SupplierRefundFactRepository,
-};
 use std::collections::BTreeSet;
 
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId};
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, Result};
+
+use super::{
+    SUPPLIER_FULFILLMENT_ITEMS, SUPPLIER_FULFILLMENT_ORDERS, SUPPLIER_REFUND_ALLOCATIONS,
+    SUPPLIER_REFUND_FACTS, SupplierSettlementRepository,
+};
 use crate::entity::supplier_fulfillment::{
     SupplierFulfillmentItem, SupplierFulfillmentOrder, SupplierRefundAllocation, SupplierRefundFact,
 };
 use crate::entity::supplier_settlement::SettlementPeriod;
-use erp_core::common::time::BusinessDate;
-use erp_core::ids::{SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId};
-use mongodb::bson::{doc, Document};
-
-use super::{
-    SupplierSettlementRepository, SUPPLIER_FULFILLMENT_ITEMS, SUPPLIER_FULFILLMENT_ORDERS,
-    SUPPLIER_REFUND_ALLOCATIONS, SUPPLIER_REFUND_FACTS,
+use crate::repository::owned::{
+    SupplierFulfillmentItemRepository, SupplierFulfillmentOrderRepository,
+    SupplierRefundAllocationRepository, SupplierRefundFactRepository,
 };
-use persistence_core::Executor;
-use persistence_core::Result;
 
 /// 供应商结算来源范围的最小事实快照。
 ///
@@ -76,15 +75,8 @@ impl<'a> SupplierSettlementRepository<'a> {
                     executor,
                 )
                 .await?;
-        let mut order_ids = requested_order_ids
-            .iter()
-            .map(ToString::to_string)
-            .collect::<BTreeSet<_>>();
-        order_ids.extend(
-            refund_facts
-                .iter()
-                .map(|fact| fact.supplier_fulfillment_order_id.to_string()),
-        );
+        let mut order_ids = requested_order_ids.iter().map(ToString::to_string).collect::<BTreeSet<_>>();
+        order_ids.extend(refund_facts.iter().map(|fact| fact.supplier_fulfillment_order_id.to_string()));
         let mut orders: Vec<SupplierFulfillmentOrder> =
             SupplierFulfillmentOrderRepository::new(self.db, SUPPLIER_FULFILLMENT_ORDERS)
                 .find_many_sorted(
@@ -93,10 +85,7 @@ impl<'a> SupplierSettlementRepository<'a> {
                     executor,
                 )
                 .await?;
-        let fetched_order_ids = orders
-            .iter()
-            .map(|order| order.base.id.clone())
-            .collect::<BTreeSet<_>>();
+        let fetched_order_ids = orders.iter().map(|order| order.base.id.clone()).collect::<BTreeSet<_>>();
         let items: Vec<SupplierFulfillmentItem> =
             SupplierFulfillmentItemRepository::new(self.db, SUPPLIER_FULFILLMENT_ITEMS)
                 .find_many_sorted(
@@ -128,10 +117,7 @@ impl<'a> SupplierSettlementRepository<'a> {
             orders.extend(extra);
             orders.sort_by(|left, right| left.base.id.cmp(&right.base.id));
         }
-        let fact_ids = refund_facts
-            .iter()
-            .map(|fact| fact.base.id.clone())
-            .collect::<Vec<_>>();
+        let fact_ids = refund_facts.iter().map(|fact| fact.base.id.clone()).collect::<Vec<_>>();
         let refund_allocations = if fact_ids.is_empty() {
             Vec::new()
         } else {
@@ -143,12 +129,7 @@ impl<'a> SupplierSettlementRepository<'a> {
                 )
                 .await?
         };
-        Ok(SupplierSettlementSourceScope {
-            orders,
-            items,
-            refund_facts,
-            refund_allocations,
-        })
+        Ok(SupplierSettlementSourceScope { orders, items, refund_facts, refund_allocations })
     }
 }
 

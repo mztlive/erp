@@ -23,8 +23,8 @@ mod pending_reference;
 pub use bank_receipt_evidence_policy::BankReceiptEvidencePolicy;
 pub use document_attachment::{AttachmentUsage, DocumentAttachment, DocumentAttachmentData};
 pub use entity::{
-    content_fingerprint, ContentHmac, FileAsset, FileAssetData, RetentionClass, SecurityScanStatus,
-    SensitivityClass,
+    ContentHmac, FileAsset, FileAssetData, RetentionClass, SecurityScanStatus, SensitivityClass,
+    content_fingerprint,
 };
 pub use erp_core::ids::{DocumentAttachmentId, FileAssetId};
-pub use pending_reference::{PendingFileReference, PendingFileReferenceSet, PENDING_FILE_REFERENCE_PREFIX};
+pub use pending_reference::{PENDING_FILE_REFERENCE_PREFIX, PendingFileReference, PendingFileReferenceSet};

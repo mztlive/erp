@@ -2,13 +2,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::catalog::status::EnableStatus;
+use erp_core::Result;
 use erp_core::common::stable::StableBase;
 use erp_core::ids::{FileAssetId, ProductBrandId};
 use erp_core::validation::normalize_required_text;
-use erp_core::Result;
+use serde::{Deserialize, Serialize};
+
+use crate::entity::catalog::status::EnableStatus;
 
 /// 品牌代码最大长度。
 const CODE_MAX_LEN: usize = 64;
@@ -140,9 +140,10 @@ impl ProductBrand {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
     use erp_core::ids::ProductBrandId;
+
+    use super::*;
 
     fn data() -> ProductBrandData {
         ProductBrandData {
@@ -168,16 +169,10 @@ mod tests {
     /// 失败路径：必填空与超长各一条。
     #[test]
     fn new_rejects_empty_and_overlong_fields() {
-        let empty_code = ProductBrandData {
-            brand_code: "   ".to_string(),
-            ..data()
-        };
+        let empty_code = ProductBrandData { brand_code: "   ".to_string(), ..data() };
         assert!(ProductBrand::new(ProductBrandId::new("brand-1"), empty_code, "admin-1").is_err());
 
-        let overlong_name = ProductBrandData {
-            name: "n".repeat(129),
-            ..data()
-        };
+        let overlong_name = ProductBrandData { name: "n".repeat(129), ..data() };
         assert!(ProductBrand::new(ProductBrandId::new("brand-1"), overlong_name, "admin-1").is_err());
     }
 

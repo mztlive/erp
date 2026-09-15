@@ -1,7 +1,6 @@
 //! 采购命令重验与创建依据视图共用的数据来源；所有读取使用调用方 Executor。
-use super::mapping::{sales_order_basis_fact, stock_balance_fact};
-use super::{load_creation_basis_facts, load_sales_procurement_coverage};
-use crate::{Error, Result};
+use std::collections::{HashMap, HashSet};
+
 use erp_core::ids::SalesOrderId;
 use erp_inventory::InventoryExt;
 use erp_procurement::entity::purchase_order::{
@@ -10,13 +9,14 @@ use erp_procurement::entity::purchase_order::{
 use erp_procurement::service::purchase_order::creation_basis::{
     basis_groups_from_facts, physical_stock_lines, stock_groups_from_facts, zero_quantity,
 };
-use erp_sales::{
-    entity::sales_order::{CommercialStatus, SalesOrder},
-    repository::SalesOrderExt,
-};
+use erp_sales::entity::sales_order::{CommercialStatus, SalesOrder};
+use erp_sales::repository::SalesOrderExt;
 use erp_warehouse::WarehouseExt;
 use persistence_core::Executor;
-use std::collections::{HashMap, HashSet};
+
+use super::mapping::{sales_order_basis_fact, stock_balance_fact};
+use super::{load_creation_basis_facts, load_sales_procurement_coverage};
+use crate::{Error, Result};
 /// 加载可作为采购来源的已生效销售单。
 ///
 /// # 参数
@@ -71,11 +71,7 @@ pub async fn basis_groups_for_order(
     responsibility_scope_ids: &[String],
     executor: &mut dyn Executor,
 ) -> Result<Vec<BasisGroup>> {
-    Ok(
-        basis_groups_and_facts(db, order, responsibility_scope_ids, executor)
-            .await?
-            .0,
-    )
+    Ok(basis_groups_and_facts(db, order, responsibility_scope_ids, executor).await?.0)
 }
 
 /// 由销售当前版本、当前覆盖和批量供给事实形成精确依据集合，并返回本次事实。
@@ -106,12 +102,8 @@ pub async fn basis_groups_and_facts(
     }
     let coverage = load_sales_procurement_coverage(db, order, executor).await?;
     let facts = creation_basis_facts_for_order(db, &coverage, responsibility_scope_ids, executor).await?;
-    let groups = basis_groups_from_facts(
-        &sales_order_basis_fact(order),
-        &coverage,
-        responsibility_scope_ids,
-        &facts,
-    )?;
+    let groups =
+        basis_groups_from_facts(&sales_order_basis_fact(order), &coverage, responsibility_scope_ids, &facts)?;
     Ok((groups, facts))
 }
 
@@ -138,10 +130,7 @@ async fn creation_basis_facts_for_order(
     responsibility_scope_ids: &[String],
     executor: &mut dyn Executor,
 ) -> Result<CreationBasisFacts> {
-    let scope = responsibility_scope_ids
-        .iter()
-        .map(String::as_str)
-        .collect::<HashSet<_>>();
+    let scope = responsibility_scope_ids.iter().map(String::as_str).collect::<HashSet<_>>();
     let sku_ids = coverage
         .lines
         .iter()
@@ -151,9 +140,7 @@ async fn creation_basis_facts_for_order(
         })
         .map(|line| line.goods_line.sku_id.clone())
         .collect::<Vec<_>>();
-    load_creation_basis_facts(db, &sku_ids, executor)
-        .await
-        .map_err(Into::into)
+    load_creation_basis_facts(db, &sku_ids, executor).await.map_err(Into::into)
 }
 
 /// 由销售当前版本、统一覆盖与公司可用库存形成现有库存供给依据。
@@ -168,40 +155,24 @@ pub async fn stock_basis_groups_for_order(
     }
     let coverage = load_sales_procurement_coverage(db, order, executor).await?;
     let physical_lines = physical_stock_lines(&coverage, responsibility_scope_ids);
-    let sku_ids = physical_lines
-        .iter()
-        .map(|line| line.goods_line.sku_id.clone())
-        .collect::<Vec<_>>();
-    let balances = db
-        .inventory()
-        .available_balances_for_skus(&sku_ids, executor)
-        .await?;
+    let sku_ids = physical_lines.iter().map(|line| line.goods_line.sku_id.clone()).collect::<Vec<_>>();
+    let balances = db.inventory().available_balances_for_skus(&sku_ids, executor).await?;
     let warehouse_ids = balances
         .iter()
         .map(|balance| balance.warehouse_id.to_string())
         .collect::<HashSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
-    let warehouses = db
-        .warehouses()
-        .list_active_by_ids(&warehouse_ids, executor)
-        .await?;
-    let active_warehouses = warehouses
-        .into_iter()
-        .filter(|warehouse| warehouse.is_active())
-        .collect::<Vec<_>>();
-    let active_warehouse_ids = active_warehouses
-        .iter()
-        .map(|warehouse| warehouse.base.id.clone())
-        .collect::<HashSet<_>>();
+    let warehouses = db.warehouses().list_active_by_ids(&warehouse_ids, executor).await?;
+    let active_warehouses =
+        warehouses.into_iter().filter(|warehouse| warehouse.is_active()).collect::<Vec<_>>();
+    let active_warehouse_ids =
+        active_warehouses.iter().map(|warehouse| warehouse.base.id.clone()).collect::<HashSet<_>>();
     let revision_ids = active_warehouses
         .iter()
         .filter_map(|warehouse| warehouse.stable.current_revision_id.clone())
         .collect::<Vec<_>>();
-    let revisions = db
-        .warehouse_revisions()
-        .list_active_by_ids(&revision_ids, executor)
-        .await?;
+    let revisions = db.warehouse_revisions().list_active_by_ids(&revision_ids, executor).await?;
     let names = active_warehouses
         .into_iter()
         .map(|warehouse| {

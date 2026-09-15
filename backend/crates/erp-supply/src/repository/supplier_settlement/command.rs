@@ -2,14 +2,13 @@
 
 mod draft_write;
 
+use mongodb::Database;
+use persistence_core::{Executor, Result, mongo_ops};
+
+use super::{SUPPLIER_SETTLEMENT_DIFFERENCES, SUPPLIER_SETTLEMENT_ITEMS, SUPPLIER_SETTLEMENT_STATEMENTS};
 use crate::entity::supplier_settlement::{
     SupplierSettlementDifference, SupplierSettlementItem, SupplierSettlementStatement,
 };
-use mongodb::Database;
-
-use super::{SUPPLIER_SETTLEMENT_DIFFERENCES, SUPPLIER_SETTLEMENT_ITEMS, SUPPLIER_SETTLEMENT_STATEMENTS};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
 
 /// D33 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
 ///
@@ -56,26 +55,20 @@ impl<'a> SupplierSettlementRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<SupplierSettlementStatement>(SUPPLIER_SETTLEMENT_STATEMENTS),
+            &self.db.collection::<SupplierSettlementStatement>(SUPPLIER_SETTLEMENT_STATEMENTS),
             statement,
             executor,
         )
         .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<SupplierSettlementItem>(SUPPLIER_SETTLEMENT_ITEMS),
+            &self.db.collection::<SupplierSettlementItem>(SUPPLIER_SETTLEMENT_ITEMS),
             items.to_vec(),
             executor,
         )
         .await?;
         if !differences.is_empty() {
             mongo_ops::insert_many(
-                &self
-                    .db
-                    .collection::<SupplierSettlementDifference>(SUPPLIER_SETTLEMENT_DIFFERENCES),
+                &self.db.collection::<SupplierSettlementDifference>(SUPPLIER_SETTLEMENT_DIFFERENCES),
                 differences.to_vec(),
                 executor,
             )

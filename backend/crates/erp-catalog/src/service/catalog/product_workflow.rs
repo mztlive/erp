@@ -1,35 +1,35 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use crate::entity::catalog::product::{Product, ProductData};
-use crate::entity::catalog::product_revision::{ProductRevision, ProductRevisionData};
-use crate::entity::catalog::product_revision_media::{
-    ensure_unique_media_sort_orders, MediaRole, ProductRevisionMedia, ProductRevisionMediaData,
-};
-use crate::entity::catalog::sku::{Sku, SkuEditAction};
-use crate::entity::catalog::sku_revision::{SkuRevision, SkuRevisionData};
-use crate::entity::catalog::{
-    next_revision_no, EnableStatus, ProductBrandId, ProductCategoryId, ProductId, ProductKind,
-    ProductRevisionId, ProductRevisionMediaId, SkuId, SkuRevisionId, SpecificationSignatureSet,
-    UnitOfMeasure, UnitOfMeasureId,
-};
-use crate::ports::{EmptyPendingAttachments, PendingAttachmentBatch};
-use crate::repository::CatalogExt;
+use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use super::sku_edit::{
-    existing_sku_edit_identity, map_sku_edit_error, specification_signature_for, NewSkuContext, SkuEditItem,
-};
 use super::CatalogService;
+use super::sku_edit::{
+    NewSkuContext, SkuEditItem, existing_sku_edit_identity, map_sku_edit_error, specification_signature_for,
+};
 use crate::dto::{
     CreateProductRequest, DisableProductRequest, ProductMediaInput, ProductSkuInput, ProductView,
     UpdateProductRequest,
 };
+use crate::entity::catalog::product::{Product, ProductData};
+use crate::entity::catalog::product_revision::{ProductRevision, ProductRevisionData};
+use crate::entity::catalog::product_revision_media::{
+    MediaRole, ProductRevisionMedia, ProductRevisionMediaData, ensure_unique_media_sort_orders,
+};
+use crate::entity::catalog::sku::{Sku, SkuEditAction};
+use crate::entity::catalog::sku_revision::{SkuRevision, SkuRevisionData};
+use crate::entity::catalog::{
+    EnableStatus, ProductBrandId, ProductCategoryId, ProductId, ProductKind, ProductRevisionId,
+    ProductRevisionMediaId, SkuId, SkuRevisionId, SpecificationSignatureSet, UnitOfMeasure, UnitOfMeasureId,
+    next_revision_no,
+};
 use crate::error::{Error, Result};
-use application_core::AuditActor;
+use crate::ports::{EmptyPendingAttachments, PendingAttachmentBatch};
+use crate::repository::CatalogExt;
 
 /// 商品（SPU）创建草稿（全部 ID 在事务外预生成，事务内只做写入）。
 struct ProductDraft {
@@ -81,8 +81,7 @@ impl CatalogService {
     /// * `BusinessLogicError` - 分类不允许商品类型、规格不适用于分类、条码冲突等
     /// * `ConflictError` - 唯一约束冲突或并发事务冲突
     pub async fn product_create(&self, req: CreateProductRequest, actor: &AuditActor) -> Result<ProductView> {
-        self.product_create_with_assets(req, Arc::new(EmptyPendingAttachments), actor)
-            .await
+        self.product_create_with_assets(req, Arc::new(EmptyPendingAttachments), actor).await
     }
 
     /// 创建商品，并把同一次 multipart 命令携带的文件资产与商品聚合原子登记。
@@ -141,8 +140,7 @@ impl CatalogService {
         req: UpdateProductRequest,
         actor: &AuditActor,
     ) -> Result<ProductView> {
-        self.product_update_with_assets(id, req, Arc::new(EmptyPendingAttachments), actor)
-            .await
+        self.product_update_with_assets(id, req, Arc::new(EmptyPendingAttachments), actor).await
     }
 
     /// 编辑商品，并把同一次 multipart 命令携带的文件资产与新修订原子登记。
@@ -175,9 +173,7 @@ impl CatalogService {
         pending_assets.ensure_all_used(&used)?;
         let mut product = self.load_product(id).await?;
         ensure_product_version(&product, req.version)?;
-        let plan = self
-            .build_spec_edit_plan(&mut product, req, actor, &pending_assets)
-            .await?;
+        let plan = self.build_spec_edit_plan(&mut product, req, actor, &pending_assets).await?;
         let product = self.write_spec_edit_plan(plan, actor, pending_assets).await?;
         self.product_view(product).await
     }
@@ -253,9 +249,7 @@ impl CatalogService {
                         .collect::<std::result::Result<Vec<_>, _>>()?;
                     product.attach_revision(&revision, &actor_id)?;
                     db.products().update(&mut product, session).await?;
-                    db.catalog()
-                        .create_product_revision_with_media(&revision, &media, session)
-                        .await?;
+                    db.catalog().create_product_revision_with_media(&revision, &media, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<Product, crate::error::Error>(product)
                 })
@@ -295,20 +289,11 @@ impl CatalogService {
         let status = req.status.unwrap_or(EnableStatus::Active);
         let product = Product::new(
             product_id.clone(),
-            ProductData {
-                product_no: req.product_no,
-                product_kind: req.product_kind,
-                status,
-            },
+            ProductData { product_no: req.product_no, product_kind: req.product_kind, status },
             actor.id(),
         )?;
         let media = self
-            .build_media_rows(
-                &revision_id,
-                &req.carousel_media,
-                MediaRole::Carousel,
-                pending_assets,
-            )
+            .build_media_rows(&revision_id, &req.carousel_media, MediaRole::Carousel, pending_assets)
             .await?
             .into_iter()
             .chain(
@@ -351,13 +336,7 @@ impl CatalogService {
             },
         )?;
         product.attach_revision(&revision, actor.id())?;
-        Ok(ProductDraft {
-            change_reason: req.change_reason,
-            product,
-            revision,
-            media,
-            sku_items,
-        })
+        Ok(ProductDraft { change_reason: req.change_reason, product, revision, media, sku_items })
     }
 
     /// 校验商品创建/编辑引用的字典（分类/品牌/基础单位）与分类-商品类型兼容性。
@@ -381,18 +360,13 @@ impl CatalogService {
         product_kind: ProductKind,
         pending_assets: &dyn PendingAttachmentBatch,
     ) -> Result<()> {
-        let unit_ids = skus
-            .iter()
-            .map(|sku| sku.base_unit_id.clone())
-            .collect::<Vec<_>>();
+        let unit_ids = skus.iter().map(|sku| sku.base_unit_id.clone()).collect::<Vec<_>>();
         let references = self
             .db
             .catalog()
             .catalog_reference_data(Some(category_id), brand_id, &unit_ids, &mut NoTransaction)
             .await?;
-        let category = references
-            .category
-            .ok_or_else(|| Error::NotFound("商品分类不存在".to_string()))?;
+        let category = references.category.ok_or_else(|| Error::NotFound("商品分类不存在".to_string()))?;
         if category.product_kind != product_kind {
             return Err(Error::BusinessLogicError("所选分类不允许该商品类型".to_string()));
         }
@@ -406,12 +380,7 @@ impl CatalogService {
             .filter(|asset_id| !pending_assets.contains_id(asset_id))
             .cloned()
             .collect::<Vec<_>>();
-        if !self
-            .file_assets
-            .missing_ids(&asset_ids, &mut NoTransaction)
-            .await?
-            .is_empty()
-        {
+        if !self.file_assets.missing_ids(&asset_ids, &mut NoTransaction).await?.is_empty() {
             return Err(Error::NotFound("SKU 主图文件不存在".to_string()));
         }
         Ok(())
@@ -442,12 +411,7 @@ impl CatalogService {
             .filter(|asset_id| !pending_assets.contains_id(asset_id))
             .cloned()
             .collect::<Vec<_>>();
-        if !self
-            .file_assets
-            .missing_ids(&asset_ids, &mut NoTransaction)
-            .await?
-            .is_empty()
-        {
+        if !self.file_assets.missing_ids(&asset_ids, &mut NoTransaction).await?.is_empty() {
             return Err(Error::NotFound("媒体文件不存在".to_string()));
         }
         let rows = inputs
@@ -489,13 +453,7 @@ impl CatalogService {
         actor: &AuditActor,
         pending_assets: Arc<dyn PendingAttachmentBatch>,
     ) -> Result<Product> {
-        let ProductDraft {
-            change_reason,
-            product,
-            revision,
-            media,
-            sku_items,
-        } = draft;
+        let ProductDraft { change_reason, product, revision, media, sku_items } = draft;
         let audit = self.audit.resource_log_with_message(
             actor.clone(),
             "product.create",
@@ -511,9 +469,7 @@ impl CatalogService {
                 Box::pin(async move {
                     pending_assets.persist(&db, session).await?;
                     db.products().create(&product, session).await?;
-                    db.catalog()
-                        .create_product_revision_with_media(&revision, &media, session)
-                        .await?;
+                    db.catalog().create_product_revision_with_media(&revision, &media, session).await?;
                     for item in &sku_items {
                         db.catalog()
                             .create_sku_with_revision(&item.sku, &item.revision, &[], session)
@@ -553,24 +509,13 @@ impl CatalogService {
         )
         .await?;
         let product_id = ProductId::new(product.base.id.clone());
-        let existing = self
-            .db
-            .catalog()
-            .skus_for_product(&product_id, &mut NoTransaction)
-            .await?;
-        let current_by_signature: HashMap<String, Sku> = existing
-            .into_iter()
-            .map(|sku| (sku.specification_signature.clone(), sku))
-            .collect();
+        let existing = self.db.catalog().skus_for_product(&product_id, &mut NoTransaction).await?;
+        let current_by_signature: HashMap<String, Sku> =
+            existing.into_iter().map(|sku| (sku.specification_signature.clone(), sku)).collect();
         let next_product_revision_no = self.next_product_revision_no(&product_id).await?;
         let revision_id = ProductRevisionId::new(next_id());
         let media = self
-            .build_media_rows(
-                &revision_id,
-                &req.carousel_media,
-                MediaRole::Carousel,
-                pending_assets,
-            )
+            .build_media_rows(&revision_id, &req.carousel_media, MediaRole::Carousel, pending_assets)
             .await?
             .into_iter()
             .chain(
@@ -583,17 +528,13 @@ impl CatalogService {
         let mut signatures = SpecificationSignatureSet::new();
         let mut disable = Vec::new();
         let change_reason = req.change_reason.as_deref().map(str::trim);
-        let audit_message = change_reason
-            .filter(|reason| !reason.is_empty())
-            .map(str::to_string);
+        let audit_message = change_reason.filter(|reason| !reason.is_empty()).map(str::to_string);
         for sku_input in req.skus {
             let signature = specification_signature_for(&sku_input.spec_entries)?;
             signatures.register_signature(signature.clone())?;
             if let Some(mut existing_sku) = current_by_signature.get(&signature).cloned() {
                 let identity = existing_sku_edit_identity(&sku_input, change_reason);
-                let action = existing_sku
-                    .classify_edit(&identity)
-                    .map_err(map_sku_edit_error)?;
+                let action = existing_sku.classify_edit(&identity).map_err(map_sku_edit_error)?;
                 self.ensure_barcode_available(&sku_input.barcode, Some(existing_sku.base.id.as_str()))
                     .await?;
                 let sku_id = SkuId::new(existing_sku.base.id.clone());
@@ -606,11 +547,7 @@ impl CatalogService {
                     &sku_input,
                 )?;
                 existing_sku.attach_revision(&revision, actor.id())?;
-                sku_items.push(SkuEditItem {
-                    action,
-                    sku: existing_sku,
-                    revision,
-                });
+                sku_items.push(SkuEditItem { action, sku: existing_sku, revision });
             } else {
                 let item = self
                     .build_new_sku_item(
@@ -680,14 +617,7 @@ impl CatalogService {
         actor: &AuditActor,
         pending_assets: Arc<dyn PendingAttachmentBatch>,
     ) -> Result<Product> {
-        let SpecEditPlan {
-            change_reason,
-            mut product,
-            revision,
-            media,
-            sku_items,
-            mut disable,
-        } = plan;
+        let SpecEditPlan { change_reason, mut product, revision, media, sku_items, mut disable } = plan;
         let audit = self.audit.resource_log_with_message(
             actor.clone(),
             "product.update",
@@ -703,21 +633,19 @@ impl CatalogService {
                 Box::pin(async move {
                     pending_assets.persist(&db, session).await?;
                     db.products().update(&mut product, session).await?;
-                    db.catalog()
-                        .create_product_revision_with_media(&revision, &media, session)
-                        .await?;
+                    db.catalog().create_product_revision_with_media(&revision, &media, session).await?;
                     for item in &sku_items {
                         match item.action {
                             SkuEditAction::Create => {
                                 db.catalog()
                                     .create_sku_with_revision(&item.sku, &item.revision, &[], session)
                                     .await?;
-                            }
+                            },
                             SkuEditAction::Keep | SkuEditAction::Reactivate => {
                                 db.sku_revisions().create(&item.revision, session).await?;
                                 let mut sku = item.sku.clone();
                                 db.skus().update(&mut sku, session).await?;
-                            }
+                            },
                         }
                     }
                     for sku in &mut disable {
@@ -783,11 +711,7 @@ impl CatalogService {
     /// # 错误
     /// 数据库查询失败时返回错误。
     pub(super) async fn next_product_revision_no(&self, product_id: &ProductId) -> Result<u32> {
-        let latest = self
-            .db
-            .catalog()
-            .latest_product_revision_no(product_id, &mut NoTransaction)
-            .await?;
+        let latest = self.db.catalog().latest_product_revision_no(product_id, &mut NoTransaction).await?;
         Ok(next_revision_no(latest)?)
     }
 }
@@ -824,9 +748,7 @@ fn resolve_product_file_references(
 /// 版本不一致时返回稳定的 409 冲突错误。
 fn ensure_product_version(product: &Product, expected: u64) -> Result<()> {
     if !product.has_version(expected) {
-        return Err(Error::ConflictError(
-            "数据已被其他请求修改，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
     }
     Ok(())
 }

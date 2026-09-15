@@ -1,20 +1,22 @@
 //! Multipart 图片上传的 HTTP 协议适配与输入校验。
 
-use std::{path::Path, sync::OnceLock, time::Duration};
+use std::path::Path;
+use std::sync::OnceLock;
+use std::time::Duration;
 
-use axum::{
-    extract::{multipart::Field, DefaultBodyLimit, Multipart, Request, State},
-    middleware::{self, Next},
-    response::{IntoResponse, Response},
-    routing::MethodRouter,
-};
+use axum::extract::multipart::Field;
+use axum::extract::{DefaultBodyLimit, Multipart, Request, State};
+use axum::middleware::{self, Next};
+use axum::response::{IntoResponse, Response};
+use axum::routing::MethodRouter;
 use erp_catalog::MAX_PRODUCT_IMPORT_FILE_BYTES;
 use tracing::{error, warn};
 
-use crate::{
-    app_state::AppState,
-    core::{errors, middleware::RbacSubject, rate_limit::RateLimiter, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors;
+use crate::core::middleware::RbacSubject;
+use crate::core::rate_limit::RateLimiter;
+use crate::core::response::ApiResponse;
 
 /// 单个上传文件内容允许的最大字节数。
 pub(crate) const MAX_UPLOAD_FILE_BYTES: usize = 5 * 1024 * 1024;
@@ -139,7 +141,7 @@ pub(crate) async fn enforce_admission(
                 );
             }
             return errors::Error::from(admission_error).into_response();
-        }
+        },
     };
 
     let response = next.run(request).await;
@@ -148,10 +150,7 @@ pub(crate) async fn enforce_admission(
 }
 
 fn upload_subject(request: &Request) -> Option<&str> {
-    request
-        .extensions()
-        .get::<RbacSubject>()
-        .map(|subject| subject.0.as_str())
+    request.extensions().get::<RbacSubject>().map(|subject| subject.0.as_str())
 }
 
 /// 从 Multipart 表单中提取的原始文件。
@@ -191,11 +190,7 @@ impl FormFile {
             return Err(Error::ImageContentMismatch);
         }
 
-        Ok(ValidatedImage {
-            content: self.content,
-            extension,
-            content_type: expected_mime,
-        })
+        Ok(ValidatedImage { content: self.content, extension, content_type: expected_mime })
     }
 
     /// 读取 Multipart 字段，并在累计内容超过限制时立即失败。
@@ -215,11 +210,7 @@ impl FormFile {
             content.extend_from_slice(&chunk);
         }
 
-        Ok(Self {
-            filename,
-            content,
-            content_type,
-        })
+        Ok(Self { filename, content, content_type })
     }
 }
 
@@ -310,11 +301,13 @@ pub(crate) fn detect_image_mime(content: &[u8]) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    use axum::{body::Body, extract::Request};
+    use axum::body::Body;
+    use axum::extract::Request;
 
-    use crate::core::{errors, middleware::RbacSubject, rate_limit::Error as RateLimitError};
-
-    use super::{limiter, new_limiter, upload_subject, Error, FormFile, MAX_UPLOAD_FILE_BYTES};
+    use super::{Error, FormFile, MAX_UPLOAD_FILE_BYTES, limiter, new_limiter, upload_subject};
+    use crate::core::errors;
+    use crate::core::middleware::RbacSubject;
+    use crate::core::rate_limit::Error as RateLimitError;
 
     fn form_file(filename: &str, content_type: Option<&str>, content: &[u8]) -> FormFile {
         FormFile {
@@ -329,12 +322,7 @@ mod tests {
         let cases = [
             ("avatar.JpG", "image/jpeg", &b"\xff\xd8\xff\xe0"[..], "jpg"),
             ("avatar.png", "image/png", &b"\x89PNG\r\n\x1a\n"[..], "png"),
-            (
-                "avatar.webp",
-                "image/webp",
-                &b"RIFF\x04\x00\x00\x00WEBP"[..],
-                "webp",
-            ),
+            ("avatar.webp", "image/webp", &b"RIFF\x04\x00\x00\x00WEBP"[..], "webp"),
             ("legacy.gif", "image/gif", &b"GIF87a"[..], "gif"),
             ("avatar.gif", "image/gif", &b"GIF89a"[..], "gif"),
         ];
@@ -377,13 +365,9 @@ mod tests {
         let extension_error = form_file("avatar.svg", Some("image/svg+xml"), b"<svg/>")
             .validate_image()
             .expect_err("unsupported extension should fail");
-        let mime_error = form_file(
-            "avatar.png",
-            Some("application/octet-stream"),
-            b"\x89PNG\r\n\x1a\n",
-        )
-        .validate_image()
-        .expect_err("unsupported mime should fail");
+        let mime_error = form_file("avatar.png", Some("application/octet-stream"), b"\x89PNG\r\n\x1a\n")
+            .validate_image()
+            .expect_err("unsupported mime should fail");
 
         assert_eq!(extension_error, Error::UnsupportedExtension);
         assert_eq!(mime_error, Error::UnsupportedMime);
@@ -451,10 +435,7 @@ mod tests {
             drop(limiter.admit("user:admin:1").unwrap());
         }
 
-        assert!(matches!(
-            limiter.admit("user:admin:1"),
-            Err(RateLimitError::KeyExceeded { .. })
-        ));
+        assert!(matches!(limiter.admit("user:admin:1"), Err(RateLimitError::KeyExceeded { .. })));
         assert!(limiter.admit("user:admin:2").is_ok());
     }
 
@@ -477,9 +458,7 @@ mod tests {
         let mut request = Request::new(Body::empty());
         assert_eq!(upload_subject(&request), None);
 
-        request
-            .extensions_mut()
-            .insert(RbacSubject("user:admin:1".to_string()));
+        request.extensions_mut().insert(RbacSubject("user:admin:1".to_string()));
         assert_eq!(upload_subject(&request), Some("user:admin:1"));
     }
 }

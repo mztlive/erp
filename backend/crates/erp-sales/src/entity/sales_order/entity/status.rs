@@ -1,7 +1,6 @@
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::state::DocumentState;
 use erp_core::money::Amount;
+use serde::{Deserialize, Serialize};
 
 /// 商业主状态（数据模型 §7.1：仅 4 值，审核环节走 `review_status` 审核轨）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -134,15 +133,13 @@ impl DocumentState for ReviewStatus {
     /// 旧逐节点复核态与 `REJECTED` 不得由新提交写入；邻接仅保留给未删除旧数据。
     fn allowed_next(self) -> &'static [Self] {
         match self {
-            Self::NotSubmitted => &[
-                Self::PendingProcurementConfirmation,
-                Self::PendingSalesLeader,
-                Self::InApproval,
-            ],
+            Self::NotSubmitted => {
+                &[Self::PendingProcurementConfirmation, Self::PendingSalesLeader, Self::InApproval]
+            },
             Self::InApproval => &[Self::Approved, Self::NotSubmitted],
             Self::PendingProcurementConfirmation => {
                 &[Self::PendingLowMarginSuperior, Self::Approved, Self::Rejected]
-            }
+            },
             Self::PendingLowMarginSuperior => &[Self::PendingProcurementConfirmation],
             Self::PendingSalesLeader => &[Self::PendingOperations, Self::Rejected],
             Self::PendingOperations => &[Self::Approved, Self::Rejected],
@@ -370,10 +367,7 @@ impl CloseStatus {
     /// 履约完成且回款结清返回 `Closed`；仅满足其一返回 `Closeable`；均未满足返回
     /// `NotSatisfied`。开票进度不参与关闭判定。
     pub fn from_progress(fulfillment: FulfillmentProgress, collection: CollectionProgress) -> Self {
-        match (
-            fulfillment == FulfillmentProgress::Completed,
-            collection == CollectionProgress::Settled,
-        ) {
+        match (fulfillment == FulfillmentProgress::Completed, collection == CollectionProgress::Settled) {
             (true, true) => Self::Closed,
             (true, false) | (false, true) => Self::Closeable,
             (false, false) => Self::NotSatisfied,

@@ -1,21 +1,17 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::atomic::Ordering,
-};
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::Ordering;
 
-use crate::entity::Permission;
 use casbin::{CoreApi, DefaultModel, Enforcer};
 use erp_core::AccountKind;
 use persistence_core::{Executor, NoTransaction};
 use tokio::sync::RwLock;
 
-use super::{
-    policy::{
-        ensure_policy_snapshot_revision, policy_revisions_match, rbac_error, role_ids_for_account,
-        stable_policy_revision,
-    },
-    RbacService, RolePermissionSnapshot, MAX_STABLE_POLICY_LOAD_ATTEMPTS, RBAC_MODEL,
+use super::policy::{
+    ensure_policy_snapshot_revision, policy_revisions_match, rbac_error, role_ids_for_account,
+    stable_policy_revision,
 };
+use super::{MAX_STABLE_POLICY_LOAD_ATTEMPTS, RBAC_MODEL, RbacService, RolePermissionSnapshot};
+use crate::entity::Permission;
 use crate::error::{Error, Result};
 
 impl RbacService {
@@ -59,10 +55,7 @@ impl RbacService {
             return Ok(false);
         }
         let database_revision = self.policy_store.policy_revision(&mut NoTransaction).await?;
-        Ok(policy_revisions_match(
-            self.loaded_policy_revision.load(Ordering::Acquire),
-            database_revision,
-        ))
+        Ok(policy_revisions_match(self.loaded_policy_revision.load(Ordering::Acquire), database_revision))
     }
 
     /// 从 MongoDB 重新加载稳定 policy 快照，并维护 fail-closed stale 状态。
@@ -78,9 +71,7 @@ impl RbacService {
                 return Ok(());
             }
         }
-        Err(Error::Rbac(
-            "授权策略持续变化，无法加载稳定快照，请稍后重试".to_string(),
-        ))
+        Err(Error::Rbac("授权策略持续变化，无法加载稳定快照，请稍后重试".to_string()))
     }
 
     /// 提交外部 policy 事务后，立即刷新本地 Enforcer。

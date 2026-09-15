@@ -47,6 +47,12 @@ pub use entity::{
     CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress, InvoiceProgress, LineStatus,
     ReviewStatus, SalesOrder, SalesOrderData, SalesOrderLine, SalesOrderLineData, SalesOrderUpdate,
 };
+/// 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 erp_core::ids）。
+pub use erp_core::ids::{
+    SalesOrderGoodsServiceLineRevisionId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
+    SalesOrderRevisionLineId, SalesOrderSubmissionId, SalesOrderSubmissionLineId,
+    SalesOrderVoucherLineRevisionId, SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId,
+};
 pub use formal_revision::{
     FormalRevisionContext, FormalRevisionIdentities, FormalRevisionLineIdentity,
     FormalRevisionSubtypeIdentity, SalesOrderRevisionAggregate,
@@ -72,11 +78,4 @@ pub use types::{
 pub use working_copy::{
     SalesOrderWorkingCopy, SalesOrderWorkingCopyData, SalesOrderWorkingCopyLine,
     SalesOrderWorkingCopyLineData, SalesOrderWorkingCopyUpdate, WorkingCopyStatus, WorkingPurpose,
-};
-
-/// 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 erp_core::ids）。
-pub use erp_core::ids::{
-    SalesOrderGoodsServiceLineRevisionId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
-    SalesOrderRevisionLineId, SalesOrderSubmissionId, SalesOrderSubmissionLineId,
-    SalesOrderVoucherLineRevisionId, SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId,
 };

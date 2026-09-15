@@ -26,9 +26,7 @@ macro_rules! owned_repo {
             /// # 错误
             /// 无。
             pub fn new(db: &'a mongodb::Database, collection_name: &'a str) -> Self {
-                Self {
-                    inner: persistence_core::Repository::new(db, collection_name),
-                }
+                Self { inner: persistence_core::Repository::new(db, collection_name) }
             }
 
             /// 插入实体。
@@ -132,51 +130,19 @@ macro_rules! owned_repo {
     };
 }
 
-owned_repo!(
-    SalesSelectionBookletRepository,
-    SalesSelectionBooklet,
-    "选品册仓储。"
-);
-owned_repo!(
-    SalesSelectionDisplayItemRepository,
-    SalesSelectionDisplayItem,
-    "陈列项仓储。"
-);
-owned_repo!(
-    SalesSelectionPoolMemberRepository,
-    SalesSelectionPoolMember,
-    "商品池成员仓储。"
-);
-owned_repo!(
-    SalesSelectionPrepareTaskRepository,
-    SalesSelectionPrepareTask,
-    "准备任务仓储。"
-);
-owned_repo!(
-    SalesSelectionSessionRepository,
-    SalesSelectionSession,
-    "选品会话仓储。"
-);
-owned_repo!(
-    SalesSelectionProposalRepository,
-    SalesSelectionProposal,
-    "销售方案仓储。"
-);
+owned_repo!(SalesSelectionBookletRepository, SalesSelectionBooklet, "选品册仓储。");
+owned_repo!(SalesSelectionDisplayItemRepository, SalesSelectionDisplayItem, "陈列项仓储。");
+owned_repo!(SalesSelectionPoolMemberRepository, SalesSelectionPoolMember, "商品池成员仓储。");
+owned_repo!(SalesSelectionPrepareTaskRepository, SalesSelectionPrepareTask, "准备任务仓储。");
+owned_repo!(SalesSelectionSessionRepository, SalesSelectionSession, "选品会话仓储。");
+owned_repo!(SalesSelectionProposalRepository, SalesSelectionProposal, "销售方案仓储。");
 owned_repo!(
     SalesSelectionProposalDisplayLineRepository,
     SalesSelectionProposalDisplayLine,
     "方案陈列行仓储。"
 );
-owned_repo!(
-    SalesSelectionProposalSkuLineRepository,
-    SalesSelectionProposalSkuLine,
-    "方案 SKU 行仓储。"
-);
-owned_repo!(
-    SalesSelectionIdempotencyRepository,
-    SalesSelectionIdempotency,
-    "幂等记录仓储。"
-);
+owned_repo!(SalesSelectionProposalSkuLineRepository, SalesSelectionProposalSkuLine, "方案 SKU 行仓储。");
+owned_repo!(SalesSelectionIdempotencyRepository, SalesSelectionIdempotency, "幂等记录仓储。");
 
 impl SalesSelectionBookletRepository<'_> {
     /// 按令牌哈希查找选品册。
@@ -195,9 +161,7 @@ impl SalesSelectionBookletRepository<'_> {
         token_hash: &str,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Option<SalesSelectionBooklet>> {
-        self.inner
-            .find_one(mongodb::bson::doc! { "link_token_hash": token_hash }, executor)
-            .await
+        self.inner.find_one(mongodb::bson::doc! { "link_token_hash": token_hash }, executor).await
     }
 
     /// 按客户、形态、状态、提交方式列表查询。
@@ -252,9 +216,7 @@ impl SalesSelectionDisplayItemRepository<'_> {
         booklet_id: &str,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Vec<SalesSelectionDisplayItem>> {
-        self.inner
-            .find_many(mongodb::bson::doc! { "booklet_id": booklet_id }, executor)
-            .await
+        self.inner.find_many(mongodb::bson::doc! { "booklet_id": booklet_id }, executor).await
     }
 
     /// 读取一册一批次陈列。
@@ -276,10 +238,7 @@ impl SalesSelectionDisplayItemRepository<'_> {
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Vec<SalesSelectionDisplayItem>> {
         self.inner
-            .find_many(
-                mongodb::bson::doc! { "booklet_id": booklet_id, "batch_id": batch_id },
-                executor,
-            )
+            .find_many(mongodb::bson::doc! { "booklet_id": booklet_id, "batch_id": batch_id }, executor)
             .await
     }
 }
@@ -304,10 +263,7 @@ impl SalesSelectionPoolMemberRepository<'_> {
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Vec<SalesSelectionPoolMember>> {
         self.inner
-            .find_many(
-                mongodb::bson::doc! { "booklet_id": booklet_id, "batch_id": batch_id },
-                executor,
-            )
+            .find_many(mongodb::bson::doc! { "booklet_id": booklet_id, "batch_id": batch_id }, executor)
             .await
     }
 }
@@ -368,10 +324,7 @@ impl SalesSelectionPrepareTaskRepository<'_> {
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Vec<SalesSelectionPrepareTask>> {
         self.inner
-            .find_many(
-                mongodb::bson::doc! { "status": { "$in": ["QUEUED", "RUNNING"] } },
-                executor,
-            )
+            .find_many(mongodb::bson::doc! { "status": { "$in": ["QUEUED", "RUNNING"] } }, executor)
             .await
     }
 }
@@ -393,9 +346,7 @@ impl SalesSelectionSessionRepository<'_> {
         booklet_id: &str,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Option<SalesSelectionSession>> {
-        self.inner
-            .find_one(mongodb::bson::doc! { "booklet_id": booklet_id }, executor)
-            .await
+        self.inner.find_one(mongodb::bson::doc! { "booklet_id": booklet_id }, executor).await
     }
 }
 
@@ -417,10 +368,7 @@ impl SalesSelectionProposalRepository<'_> {
     ) -> persistence_core::Result<Vec<SalesSelectionProposal>> {
         let mut filter = mongodb::bson::Document::new();
         if let Some(ids) = authorized {
-            filter.insert(
-                "$and",
-                vec![mongodb::bson::doc! { "customer_id": { "$in": ids } }],
-            );
+            filter.insert("$and", vec![mongodb::bson::doc! { "customer_id": { "$in": ids } }]);
         }
         if let Some(id) = customer_id {
             filter.insert("customer_id", id);
@@ -447,9 +395,7 @@ impl SalesSelectionProposalRepository<'_> {
         booklet_id: &str,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Option<SalesSelectionProposal>> {
-        self.inner
-            .find_one(mongodb::bson::doc! { "booklet_id": booklet_id }, executor)
-            .await
+        self.inner.find_one(mongodb::bson::doc! { "booklet_id": booklet_id }, executor).await
     }
 
     /// 按客户列出方案。
@@ -493,9 +439,7 @@ impl SalesSelectionProposalDisplayLineRepository<'_> {
         proposal_id: &str,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Vec<SalesSelectionProposalDisplayLine>> {
-        self.inner
-            .find_many(mongodb::bson::doc! { "proposal_id": proposal_id }, executor)
-            .await
+        self.inner.find_many(mongodb::bson::doc! { "proposal_id": proposal_id }, executor).await
     }
 }
 
@@ -516,9 +460,7 @@ impl SalesSelectionProposalSkuLineRepository<'_> {
         proposal_id: &str,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Vec<SalesSelectionProposalSkuLine>> {
-        self.inner
-            .find_many(mongodb::bson::doc! { "proposal_id": proposal_id }, executor)
-            .await
+        self.inner.find_many(mongodb::bson::doc! { "proposal_id": proposal_id }, executor).await
     }
 }
 
@@ -571,10 +513,7 @@ impl<'a> SalesSelectionRateRepository<'a> {
             .upsert(true)
             .return_document(mongodb::options::ReturnDocument::After)
             .await?;
-        let count = result
-            .as_ref()
-            .and_then(|doc| doc.get_i64("count").ok())
-            .unwrap_or(1);
+        let count = result.as_ref().and_then(|doc| doc.get_i64("count").ok()).unwrap_or(1);
         Ok(count <= limit)
     }
 }

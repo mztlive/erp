@@ -13,6 +13,7 @@ pub mod process_instance;
 pub mod transition_definition;
 pub mod types;
 
+use chrono::{DateTime, Utc};
 pub use command_identity::{
     ApprovalCommandIdentity, CanonicalCommandPayload, CommandDigest, CommandPayloadField, CommandScope,
     IdempotencyKey,
@@ -23,6 +24,7 @@ pub use node_definition::{ApprovalNodeDefinition, NewNodeDefinition};
 pub use node_execution::{ApprovalNodeExecution, NewNodeExecution};
 pub use process_definition::ApprovalProcessDefinition;
 pub use process_instance::{ApprovalCancellationTaskPolicy, ApprovalProcessInstance, NewProcessInstance};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 pub use transition_definition::ApprovalTransitionDefinition;
 pub use types::{
     ApprovalAssigneeBindingSource, ApprovalBlockerCode, ApprovalCommandKind, ApprovalDecision,
@@ -30,9 +32,6 @@ pub use types::{
     ApprovalNodeExecutionStatus, ApprovalNodeType, ApprovalProcessInstanceStatus, ApprovalTerminalResult,
     ApprovalTransitionEvent, ModelError, ModelResult,
 };
-
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::error::{Error, Result};
 
@@ -190,10 +189,7 @@ impl SubjectRef {
     pub fn new(subject_kind: impl Into<String>, subject_id: impl Into<String>) -> Result<Self> {
         let subject_kind = normalize_ref_field(subject_kind, "业务对象种类")?;
         let subject_id = normalize_ref_field(subject_id, "业务对象标识")?;
-        Ok(Self {
-            subject_kind,
-            subject_id,
-        })
+        Ok(Self { subject_kind, subject_id })
     }
 
     /// 返回对象种类。
@@ -347,8 +343,8 @@ fn normalize_ref_field(value: impl Into<String>, empty_message: &'static str) ->
 #[cfg(test)]
 mod tests {
     use super::{
-        ParticipantId, ProcessKind, SubjectRef, Timestamp, PARTICIPANT_ID_MAX_LEN, PROCESS_KIND_MAX_LEN,
-        SUBJECT_REF_FIELD_MAX_LEN,
+        PARTICIPANT_ID_MAX_LEN, PROCESS_KIND_MAX_LEN, ParticipantId, ProcessKind, SUBJECT_REF_FIELD_MAX_LEN,
+        SubjectRef, Timestamp,
     };
     use crate::error::Error;
 
@@ -390,10 +386,7 @@ mod tests {
     #[test]
     fn process_kind_rejects_unknown_or_empty_code() {
         assert_eq!(ProcessKind::try_from_code(""), Err(Error::InvalidProcessKind));
-        assert_eq!(
-            ProcessKind::try_from_code("not_a_registered_kind"),
-            Err(Error::InvalidProcessKind)
-        );
+        assert_eq!(ProcessKind::try_from_code("not_a_registered_kind"), Err(Error::InvalidProcessKind));
         assert_eq!(
             ProcessKind::try_from_code(&"x".repeat(PROCESS_KIND_MAX_LEN + 1)),
             Err(Error::InvalidProcessKind)
@@ -488,14 +481,8 @@ mod tests {
     /// 超出 chrono 可表示范围的秒值必须失败关闭。
     #[test]
     fn timestamp_rejects_unrepresentable_unix_secs() {
-        assert_eq!(
-            Timestamp::from_unix_secs(i64::MAX),
-            Err(Error::InvalidTimestamp("超出可表示范围"))
-        );
-        assert_eq!(
-            Timestamp::from_unix_secs(i64::MIN),
-            Err(Error::InvalidTimestamp("超出可表示范围"))
-        );
+        assert_eq!(Timestamp::from_unix_secs(i64::MAX), Err(Error::InvalidTimestamp("超出可表示范围")));
+        assert_eq!(Timestamp::from_unix_secs(i64::MIN), Err(Error::InvalidTimestamp("超出可表示范围")));
         assert!(serde_json::from_str::<Timestamp>(&i64::MAX.to_string()).is_err());
     }
 }

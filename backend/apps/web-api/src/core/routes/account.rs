@@ -1,9 +1,9 @@
-use axum::{middleware, routing::get, Router};
+use axum::routing::get;
+use axum::{Router, middleware};
 
-use crate::{
-    app_state::AppState,
-    core::{handler::auth, middleware::authenticate},
-};
+use crate::app_state::AppState;
+use crate::core::handler::auth;
+use crate::core::middleware::authenticate;
 
 /// 当前账号相关路由入口。
 ///

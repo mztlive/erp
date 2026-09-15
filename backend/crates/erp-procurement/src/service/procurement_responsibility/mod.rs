@@ -4,7 +4,7 @@ mod resolver;
 mod rules;
 
 use mongodb::Database;
-pub use resolver::{eligible_owner, CandidateResolution, ResolutionInput};
+pub use resolver::{CandidateResolution, ResolutionInput, eligible_owner};
 
 /// 采购责任领域服务，不持有身份或目录提供方。
 pub struct ProcurementResponsibilityService {

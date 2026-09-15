@@ -2,20 +2,20 @@
 
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::product_import::{collapse_import_text, truncate_import_text};
-use erp_catalog::{ProductImportJobView, PRODUCT_IMPORT_SHEET_NAME};
+use erp_catalog::{PRODUCT_IMPORT_SHEET_NAME, ProductImportJobView};
 use erp_support::{
-    product_import_job_no, BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData,
-    BackgroundJobId, BackgroundJobItem, BackgroundJobItemDraft, BackgroundJobItemId,
-    BackgroundJobRegistration, BulkJobExt, FileAsset, FileAssetExt, FileAssetId, JobType,
-    RegisterFileAssetRequest, PRODUCT_IMPORT_DOMAIN_JOB_TYPE,
+    BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId, BackgroundJobItem,
+    BackgroundJobItemDraft, BackgroundJobItemId, BackgroundJobRegistration, BulkJobExt, FileAsset,
+    FileAssetExt, FileAssetId, JobType, PRODUCT_IMPORT_DOMAIN_JOB_TYPE, RegisterFileAssetRequest,
+    product_import_job_no,
 };
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 
-use super::parse::{parse_product_quote_xlsx, ParsedProductSheet};
+use super::ProductImportProcess;
+use super::parse::{ParsedProductSheet, parse_product_quote_xlsx};
 use super::row_manifest::{build_row_manifest, delete_manifest_objects, write_row_manifest};
 use super::views::job_view;
-use super::ProductImportProcess;
 use crate::{Error, Result};
 
 impl ProductImportProcess {
@@ -47,8 +47,7 @@ impl ProductImportProcess {
             .await
             .map_err(|_| Error::Internal("解析导入文件失败".into()))??;
         let file_asset = FileAsset::new(FileAssetId::new(next_id()), registration.into_data(actor.id())?)?;
-        self.create_job_from_parsed(file_asset, parsed, file_name, request_id, actor, &shared_bytes)
-            .await
+        self.create_job_from_parsed(file_asset, parsed, file_name, request_id, actor, &shared_bytes).await
     }
 
     /// 由已解析工作表创建导入任务（表单上传与浏览器直传共用）。
@@ -82,11 +81,7 @@ impl ProductImportProcess {
             .map(|row| {
                 let name = row.cells.get(8).and_then(|value| {
                     let text = collapse_import_text(value);
-                    if text.is_empty() {
-                        None
-                    } else {
-                        Some(truncate_import_text(&text, 128))
-                    }
+                    if text.is_empty() { None } else { Some(truncate_import_text(&text, 128)) }
                 });
                 BackgroundJobItemDraft {
                     id: BackgroundJobItemId::new(next_id()),
@@ -124,7 +119,7 @@ impl ProductImportProcess {
             Err(error) => {
                 delete_manifest_objects(&self.storage, &built.uploaded_object_keys).await;
                 return Err(error);
-            }
+            },
         };
         let mut manifest_keys = built.uploaded_object_keys;
         manifest_keys.push(manifest_key);
@@ -135,7 +130,7 @@ impl ProductImportProcess {
                     delete_manifest_objects(&self.storage, &manifest_keys).await;
                 }
                 Err(error)
-            }
+            },
         }
     }
 
@@ -154,9 +149,7 @@ impl ProductImportProcess {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     db.file_assets().create(&file_for_tx, session).await?;
-                    db.bulk_job()
-                        .create_job_with_items(&job_for_tx, items, session)
-                        .await
+                    db.bulk_job().create_job_with_items(&job_for_tx, items, session).await
                 })
             })
             .await;
@@ -165,7 +158,7 @@ impl ProductImportProcess {
             Ok(BackgroundJobRegistration::ReplaySame(existing)) => Ok(job_view(&existing, Some(file_name))),
             Ok(BackgroundJobRegistration::ConflictDifferentPayload(_)) => {
                 Err(Error::ConflictError("同一请求身份已用于不同导入任务".into()))
-            }
+            },
             Err(persistence_core::Error::DuplicateKey(_)) => self.replay_existing_job(&job.request_id).await,
             Err(error) => Err(error.into()),
         }

@@ -1,13 +1,15 @@
 //! 采购首次正式化的原始应付账户与分录构造、事务内写入。
-use crate::entity::payable::{PayableAccount, PayableEntry};
-use crate::repository::PayableExt;
-use crate::Result;
+use std::str::FromStr;
+
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{PayableEntryId, SupplierAccountId};
 use erp_core::money::Amount;
 use id_generator::next_id;
 use persistence_core::Executor;
-use std::str::FromStr;
+
+use crate::Result;
+use crate::entity::payable::{PayableAccount, PayableEntry};
+use crate::repository::PayableExt;
 /// 采购原始应付消费事实；到期日由采购冻结付款条件计算。
 pub struct InitialPurchasePayable<'a> {
     /// 采购单主键。
@@ -63,8 +65,5 @@ pub async fn persist(
     entry: &PayableEntry,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    Ok(db
-        .payable()
-        .create_payable_with_entry(account, entry, executor)
-        .await?)
+    Ok(db.payable().create_payable_with_entry(account, entry, executor).await?)
 }

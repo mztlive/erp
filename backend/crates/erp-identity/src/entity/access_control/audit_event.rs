@@ -4,11 +4,10 @@ use std::collections::HashSet;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::AuditEventId;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 操作者 ID 最大长度。
 const ACTOR_ID_MAX_LEN: usize = 128;
@@ -168,24 +167,16 @@ impl AuditEvent {
     /// # 错误
     /// 当必填字段为空/超长，或变更字段名数量越界时返回错误。
     pub fn new(id: AuditEventId, data: AuditEventData) -> Result<Self> {
-        let actor_id = normalize_required_text(
-            data.actor_id,
-            "操作者ID不能为空",
-            ACTOR_ID_MAX_LEN,
-            "操作者ID过长",
-        )?;
+        let actor_id =
+            normalize_required_text(data.actor_id, "操作者ID不能为空", ACTOR_ID_MAX_LEN, "操作者ID过长")?;
         let actor_label = normalize_required_text(
             data.actor_label,
             "操作者名称不能为空",
             ACTOR_LABEL_MAX_LEN,
             "操作者名称过长",
         )?;
-        let actor_role = normalize_required_text(
-            data.actor_role,
-            "责任角色不能为空",
-            ACTOR_ROLE_MAX_LEN,
-            "责任角色过长",
-        )?;
+        let actor_role =
+            normalize_required_text(data.actor_role, "责任角色不能为空", ACTOR_ROLE_MAX_LEN, "责任角色过长")?;
         let action_type =
             normalize_required_text(data.action_type, "动作不能为空", ACTION_TYPE_MAX_LEN, "动作过长")?;
         let object_type = normalize_required_text(
@@ -235,9 +226,7 @@ impl AuditEvent {
 /// 当数量超过上限或任一字段名为空/超长时返回错误。
 fn normalize_field_names(field_names: Vec<String>) -> Result<Vec<String>> {
     if field_names.len() > MAX_CHANGED_FIELDS {
-        return Err(Error::from(format!(
-            "变更字段名数量不能超过 {MAX_CHANGED_FIELDS}"
-        )));
+        return Err(Error::from(format!("变更字段名数量不能超过 {MAX_CHANGED_FIELDS}")));
     }
     let mut seen = HashSet::new();
     let mut normalized = Vec::with_capacity(field_names.len());
@@ -252,8 +241,9 @@ fn normalize_field_names(field_names: Vec<String>) -> Result<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AuditEvent, AuditEventData, AuditEventResult};
     use erp_core::ids::AuditEventId;
+
+    use super::{AuditEvent, AuditEventData, AuditEventResult};
 
     fn data() -> AuditEventData {
         AuditEventData {
@@ -286,21 +276,14 @@ mod tests {
         assert_eq!(event.actor_label, "张三");
         assert_eq!(event.object_id.as_deref(), Some("SO-1"));
         assert_eq!(event.source_ip.as_deref(), Some("10.0.0.1"));
-        assert_eq!(
-            event.changed_field_names,
-            vec!["status", "gross_amount"],
-            "重复字段名去重且保序"
-        );
+        assert_eq!(event.changed_field_names, vec!["status", "gross_amount"], "重复字段名去重且保序");
         assert_eq!(event.result, AuditEventResult::Success);
     }
 
     /// 失败路径：必填为空被拒。
     #[test]
     fn new_rejects_empty_action_type() {
-        let payload = AuditEventData {
-            action_type: "  ".to_string(),
-            ..data()
-        };
+        let payload = AuditEventData { action_type: "  ".to_string(), ..data() };
         assert!(AuditEvent::new(AuditEventId::new("ae-1"), payload).is_err());
     }
 
@@ -308,9 +291,7 @@ mod tests {
     #[test]
     fn new_rejects_too_many_changed_fields() {
         let payload = AuditEventData {
-            changed_field_names: (0..super::MAX_CHANGED_FIELDS + 1)
-                .map(|i| format!("field_{i}"))
-                .collect(),
+            changed_field_names: (0..super::MAX_CHANGED_FIELDS + 1).map(|i| format!("field_{i}")).collect(),
             ..data()
         };
         assert!(AuditEvent::new(AuditEventId::new("ae-1"), payload).is_err());
@@ -319,20 +300,14 @@ mod tests {
     /// 失败路径：超长对象标题被拒。
     #[test]
     fn new_rejects_overlong_object_label() {
-        let payload = AuditEventData {
-            object_label: Some("x".repeat(257)),
-            ..data()
-        };
+        let payload = AuditEventData { object_label: Some("x".repeat(257)), ..data() };
         assert!(AuditEvent::new(AuditEventId::new("ae-1"), payload).is_err());
     }
 
     /// 枚举序列化与标签稳定。
     #[test]
     fn result_codes_and_labels_are_stable() {
-        assert_eq!(
-            serde_json::to_string(&AuditEventResult::Denied).unwrap(),
-            "\"DENIED\""
-        );
+        assert_eq!(serde_json::to_string(&AuditEventResult::Denied).unwrap(), "\"DENIED\"");
         assert_eq!(AuditEventResult::Unknown.as_str(), "UNKNOWN");
         assert_eq!(AuditEventResult::Failed.label(), "失败");
         assert_eq!(AuditEventResult::Success.label(), "成功");

@@ -1,14 +1,14 @@
 //! 采购责任规则实体、选择器形状与规范化。
 
-use super::status::EnableStatus;
-use crate::entity::facts::ProductKind;
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, SkuId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use super::status::EnableStatus;
+use crate::entity::facts::ProductKind;
 
 const SERVICE_REGION_MAX_LEN: usize = 128;
 const ACTOR_MAX_LEN: usize = 128;
@@ -122,11 +122,11 @@ impl ProcurementResponsibilityRuleData {
                 ProcurementResponsibilitySelectorReference::Category(
                     self.category_id.as_ref().expect("选择器形状已校验"),
                 )
-            }
+            },
             ProcurementResponsibilityRuleType::ProductKind
             | ProcurementResponsibilityRuleType::DefaultDispatcher => {
                 ProcurementResponsibilitySelectorReference::None
-            }
+            },
         })
     }
 }
@@ -297,10 +297,8 @@ impl TryFrom<ProcurementResponsibilityRuleData> for NormalizedRuleData {
 /// # 错误
 /// 区域超过长度上限时返回错误。
 pub fn normalize_service_region(value: Option<String>) -> Result<Option<String>> {
-    Ok(
-        normalize_optional_text(value, "服务区域", SERVICE_REGION_MAX_LEN)?
-            .map(|region| region.to_ascii_uppercase()),
-    )
+    Ok(normalize_optional_text(value, "服务区域", SERVICE_REGION_MAX_LEN)?
+        .map(|region| region.to_ascii_uppercase()))
 }
 
 /// 校验规则类型与选择器字段严格一一对应。
@@ -324,31 +322,31 @@ fn ensure_selector_shape(
                 && data.category_id.is_none()
                 && service_region.is_none()
                 && data.product_kind.is_none()
-        }
+        },
         ProcurementResponsibilityRuleType::CategoryServiceRegion => {
             data.sku_id.is_none()
                 && data.category_id.is_some()
                 && service_region.is_some()
                 && data.product_kind.is_none()
-        }
+        },
         ProcurementResponsibilityRuleType::Category => {
             data.sku_id.is_none()
                 && data.category_id.is_some()
                 && service_region.is_none()
                 && data.product_kind.is_none()
-        }
+        },
         ProcurementResponsibilityRuleType::ProductKind => {
             data.sku_id.is_none()
                 && data.category_id.is_none()
                 && service_region.is_none()
                 && data.product_kind.is_some()
-        }
+        },
         ProcurementResponsibilityRuleType::DefaultDispatcher => {
             data.sku_id.is_none()
                 && data.category_id.is_none()
                 && service_region.is_none()
                 && data.product_kind.is_none()
-        }
+        },
     };
     if !valid {
         return Err(Error::from("采购责任规则类型与选择器字段不一致"));
@@ -371,7 +369,7 @@ fn selector_key(data: &ProcurementResponsibilityRuleData, service_region: Option
     match data.rule_type {
         ProcurementResponsibilityRuleType::Sku => {
             format!("sku:{}", data.sku_id.as_ref().expect("形状已校验"))
-        }
+        },
         ProcurementResponsibilityRuleType::CategoryServiceRegion => format!(
             "category_region:{}:{}",
             data.category_id.as_ref().expect("形状已校验"),
@@ -379,10 +377,10 @@ fn selector_key(data: &ProcurementResponsibilityRuleData, service_region: Option
         ),
         ProcurementResponsibilityRuleType::Category => {
             format!("category:{}", data.category_id.as_ref().expect("形状已校验"))
-        }
+        },
         ProcurementResponsibilityRuleType::ProductKind => {
             format!("product_kind:{}", data.product_kind.expect("形状已校验").as_str())
-        }
+        },
         ProcurementResponsibilityRuleType::DefaultDispatcher => "default_dispatcher".to_string(),
     }
 }
@@ -403,9 +401,8 @@ fn normalize_actor(value: String) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::procurement_responsibility::EnableStatus;
-
     use super::*;
+    use crate::entity::procurement_responsibility::EnableStatus;
 
     #[test]
     fn entity_normalizes_selector_and_rejects_mixed_shapes() {
@@ -437,12 +434,14 @@ mod tests {
             owner_user_id: "buyer-1".to_string(),
             status: EnableStatus::Active,
         };
-        assert!(ProcurementResponsibilityRule::new(
-            ProcurementResponsibilityRuleId::new("r-2"),
-            invalid,
-            "admin-1"
-        )
-        .is_err());
+        assert!(
+            ProcurementResponsibilityRule::new(
+                ProcurementResponsibilityRuleId::new("r-2"),
+                invalid,
+                "admin-1"
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -461,10 +460,8 @@ mod tests {
             ProcurementResponsibilitySelectorReference::Sku(id) if id.as_ref() == "sku-1"
         ));
 
-        let invalid = ProcurementResponsibilityRuleData {
-            category_id: Some(ProductCategoryId::new("cat-1")),
-            ..sku
-        };
+        let invalid =
+            ProcurementResponsibilityRuleData { category_id: Some(ProductCategoryId::new("cat-1")), ..sku };
         assert!(invalid.selector_reference().is_err());
     }
 }

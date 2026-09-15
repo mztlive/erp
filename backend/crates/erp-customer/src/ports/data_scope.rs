@@ -80,9 +80,7 @@ impl CustomerResolvedScope {
     /// # 关键业务约束
     /// 只看角色条款；个人上限不单独构成“有范围规则”。
     pub fn has_scope_rules(&self) -> bool {
-        self.role_clauses
-            .iter()
-            .any(CustomerResolvedClause::has_scope_rules)
+        self.role_clauses.iter().any(CustomerResolvedClause::has_scope_rules)
     }
 }
 
@@ -290,40 +288,40 @@ mod tests {
     #[test]
     fn configured_self_owned_is_not_no_scope_when_objects_are_empty() {
         assert!(!CustomerResolvedClause::default().has_scope_rules());
-        assert!(CustomerResolvedClause {
-            self_owned: true,
-            ..CustomerResolvedClause::default()
-        }
-        .has_scope_rules());
-        assert!(CustomerResolvedClause {
-            collaborative: true,
-            ..CustomerResolvedClause::default()
-        }
-        .has_scope_rules());
-        assert!(CustomerResolvedClause {
-            company: true,
-            ..CustomerResolvedClause::default()
-        }
-        .has_scope_rules());
-        assert!(CustomerResolvedClause {
-            org_unit_ids: vec!["org-a".into()],
-            ..CustomerResolvedClause::default()
-        }
-        .has_scope_rules());
-        assert!(!CustomerResolvedScope {
-            user_id: "u1".into(),
-            resource: "customer".into(),
-            action: "list".into(),
-            role_clauses: vec![],
-            user_limit: Some(CustomerResolvedClause {
-                self_owned: true,
+        assert!(
+            CustomerResolvedClause { self_owned: true, ..CustomerResolvedClause::default() }
+                .has_scope_rules()
+        );
+        assert!(
+            CustomerResolvedClause { collaborative: true, ..CustomerResolvedClause::default() }
+                .has_scope_rules()
+        );
+        assert!(
+            CustomerResolvedClause { company: true, ..CustomerResolvedClause::default() }.has_scope_rules()
+        );
+        assert!(
+            CustomerResolvedClause {
+                org_unit_ids: vec!["org-a".into()],
                 ..CustomerResolvedClause::default()
-            }),
-            policy_version: 1,
-            organization_version: 1,
-            scope_version: "v1".into(),
-            as_of: Instant::from_unix_secs(0),
-        }
-        .has_scope_rules());
+            }
+            .has_scope_rules()
+        );
+        assert!(
+            !CustomerResolvedScope {
+                user_id: "u1".into(),
+                resource: "customer".into(),
+                action: "list".into(),
+                role_clauses: vec![],
+                user_limit: Some(CustomerResolvedClause {
+                    self_owned: true,
+                    ..CustomerResolvedClause::default()
+                }),
+                policy_version: 1,
+                organization_version: 1,
+                scope_version: "v1".into(),
+                as_of: Instant::from_unix_secs(0),
+            }
+            .has_scope_rules()
+        );
     }
 }

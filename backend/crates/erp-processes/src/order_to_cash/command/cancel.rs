@@ -1,24 +1,24 @@
-use erp_core::common::time::Instant;
-use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
-use persistence_core::NoTransaction;
-use validator::Validate;
-
-use super::super::adapter::{
-    execute_sales_order_domain_action, require_frozen_binding, sales_approval_ports,
-};
-use super::super::cancel_approval::{
-    build_sales_order_cancel_input, load_cancel_runtime, persist_sales_order_cancel,
-    SalesOrderCancelPersistInput,
-};
-use super::super::SalesOrderCommandProcess;
-use super::submit::latest_submission_no;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_core::common::time::Instant;
+use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
 use erp_sales::dto::sales_order::CancelSalesOrderApprovalRequest;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::prepare_cancel;
 use erp_workflow::service::document_registry::find_approval_binding;
+use persistence_core::NoTransaction;
+use validator::Validate;
+
+use super::super::SalesOrderCommandProcess;
+use super::super::adapter::{
+    execute_sales_order_domain_action, require_frozen_binding, sales_approval_ports,
+};
+use super::super::cancel_approval::{
+    SalesOrderCancelPersistInput, build_sales_order_cancel_input, load_cancel_runtime,
+    persist_sales_order_cancel,
+};
+use super::submit::latest_submission_no;
+use crate::{Error, Result};
 
 impl SalesOrderCommandProcess {
     /// 撤回审批中的销售单，回到可修正草稿。
@@ -54,14 +54,11 @@ impl SalesOrderCommandProcess {
         let mut order = authorized_order;
         let expected_order_version = order.base.version;
         if !order.matches_version(req.expected_version) {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         let ports = sales_approval_ports(order.business_type)?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)?;
+        let binding =
+            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let subject = crate::order_to_cash::subject_ref_for_sales_business(order.business_type, id)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
@@ -74,9 +71,7 @@ impl SalesOrderCommandProcess {
         let prepared = prepare_cancel(input)?;
         execute_sales_order_domain_action(&mut order, ports.cancel_action, actor.id())?;
         let audit =
-            actor
-                .clone()
-                .resource_log("sales_order.cancel_approval", "sales_order", id.to_string())?;
+            actor.clone().resource_log("sales_order.cancel_approval", "sales_order", id.to_string())?;
         persist_sales_order_cancel(
             &self.db,
             access,
@@ -92,9 +87,6 @@ impl SalesOrderCommandProcess {
             },
         )
         .await?;
-        self.read_model()
-            .sales_order_detail(id, None)
-            .await
-            .map_err(crate::Error::from)
+        self.read_model().sales_order_detail(id, None).await.map_err(crate::Error::from)
     }
 }

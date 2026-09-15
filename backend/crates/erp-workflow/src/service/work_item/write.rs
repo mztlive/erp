@@ -2,16 +2,14 @@
 
 use std::future::Future;
 
-use crate::entity::work_item::WorkItem;
-use crate::repository::WorkItemExt;
-use application_core::CommandReceipt;
+use application_core::{AuditActor, CommandReceipt};
 use persistence_core::NoTransaction;
-
-use crate::error::{Error, Result};
-use application_core::AuditActor;
 
 use super::access::detail_scope;
 use super::{WorkItemConflict, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemService};
+use crate::entity::work_item::WorkItem;
+use crate::error::{Error, Result};
+use crate::repository::WorkItemExt;
 
 pub(super) const IDEMPOTENCY_AUDIT_PREFIX: &str = "work-item-command-";
 
@@ -87,9 +85,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         actor: &AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
         let _ = actor;
-        Ok(WorkItemMutationOutcome::Applied {
-            work_item_id: item.base.id.clone(),
-        })
+        Ok(WorkItemMutationOutcome::Applied { work_item_id: item.base.id.clone() })
     }
 
     /// 冲突后返回任务 ID，供 HTTP 向 read-models 投影。
@@ -100,12 +96,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         actor: &AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
         let _ = actor;
-        let exists = self
-            .db
-            .work_items()
-            .find_work_item(item_id, &mut NoTransaction)
-            .await?
-            .is_some();
+        let exists = self.db.work_items().find_work_item(item_id, &mut NoTransaction).await?.is_some();
         Ok(WorkItemMutationOutcome::Conflict(WorkItemConflict::new(
             kind,
             exists.then(|| item_id.to_string()),
@@ -130,11 +121,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             allowed_actions: view_access.allowed_actions,
             processing_state: view_access.processing_state,
             processing_blocker: view_access.processing_blocker,
-            action_blockers: view_access
-                .action_blockers
-                .into_iter()
-                .map(|blocker| blocker.message)
-                .collect(),
+            action_blockers: view_access.action_blockers.into_iter().map(|blocker| blocker.message).collect(),
         })
     }
 }
@@ -165,9 +152,8 @@ pub(super) fn required_text(value: &str, message: &str) -> Result<String> {
 /// 将 HTTP 任务版本解析为正整数乐观锁版本。
 pub fn expected_task_version(value: &str) -> Result<u64> {
     let value = value.trim();
-    let version = value
-        .parse::<u64>()
-        .map_err(|_| Error::ValidationError("任务版本必须为正整数字符串".to_string()))?;
+    let version =
+        value.parse::<u64>().map_err(|_| Error::ValidationError("任务版本必须为正整数字符串".to_string()))?;
     if version == 0 {
         return Err(Error::ValidationError("任务版本必须为正整数字符串".to_string()));
     }

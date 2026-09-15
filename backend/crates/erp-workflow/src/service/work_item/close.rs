@@ -2,26 +2,21 @@
 
 use std::sync::Arc;
 
-use crate::entity::work_item::{WorkItem, WorkItemCloseData};
-use crate::ports::W29CloseFact;
-use crate::repository::WorkItemExt;
-use application_core::CommandReceipt;
-
+use application_core::{AuditActor, CommandReceipt};
 use erp_core::common::time::Instant;
 use persistence_core::Transactional;
 use validator::Validate;
 
-use crate::error::{Error, Result};
-use crate::ports::PreparedWorkflowAudit;
-use application_core::AuditActor;
-
-use super::access::{ensure_generic_work_item_mutation, ensure_item_in_managed_scope, ActorAccess};
-use super::dto;
+use super::access::{ActorAccess, ensure_generic_work_item_mutation, ensure_item_in_managed_scope};
 use super::write::{
-    expected_task_version, required_text, work_item_update_error, WorkItemWriteError, WorkItemWriteOutcome,
-    IDEMPOTENCY_AUDIT_PREFIX,
+    IDEMPOTENCY_AUDIT_PREFIX, WorkItemWriteError, WorkItemWriteOutcome, expected_task_version, required_text,
+    work_item_update_error,
 };
-use super::{CloseWorkItemRequest, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemService};
+use super::{CloseWorkItemRequest, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemService, dto};
+use crate::entity::work_item::{WorkItem, WorkItemCloseData};
+use crate::error::{Error, Result};
+use crate::ports::{PreparedWorkflowAudit, W29CloseFact};
+use crate::repository::WorkItemExt;
 
 /// W29 关闭命令的领域证据与审计输入。
 ///
@@ -74,8 +69,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .map(|value| required_text(value, "替代任务ID不能为空"))
             .transpose()?;
         let decision =
-            self.facts
-                .prepare_w29_close(&reason_code, req.comment.as_deref(), replacement_id.as_deref())?;
+            self.facts.prepare_w29_close(&reason_code, req.comment.as_deref(), replacement_id.as_deref())?;
         let expected_task_version = expected_task_version(&req.expected_task_version)?;
         let version = expected_task_version.to_string();
         let receipt = CommandReceipt::from_resource_parts(
@@ -96,35 +90,24 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             return self.applied_outcome(replayed, &actor).await;
         }
         if item.base.version != expected_task_version {
-            return self
-                .conflict_outcome(&id, WorkItemConflictKind::Version, &actor)
-                .await;
+            return self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await;
         }
         ensure_item_in_managed_scope(&item, &managed_access)?;
         self.ensure_object_participation(&actor, &item).await?;
         if !item.is_w29_closable() {
-            return Err(Error::BusinessLogicError(
-                "只有 W29 登记的异常任务允许受控关闭".to_string(),
-            ));
+            return Err(Error::BusinessLogicError("只有 W29 登记的异常任务允许受控关闭".to_string()));
         }
         if let Some(replacement_id) = decision.replacement_work_item_id.as_deref() {
-            self.ensure_w29_replacement(&item, replacement_id, &actor, &managed_access)
-                .await?;
+            self.ensure_w29_replacement(&item, replacement_id, &actor, &managed_access).await?;
         }
         let updated = self
-            .close_with_domain_evidence(CloseDomainEvidenceInput {
-                item,
-                actor: &actor,
-                decision,
-                receipt,
-            })
+            .close_with_domain_evidence(CloseDomainEvidenceInput { item, actor: &actor, decision, receipt })
             .await?;
         match updated {
             WorkItemWriteOutcome::Updated(item) => self.applied_outcome(*item, &actor).await,
             WorkItemWriteOutcome::VersionConflict => {
-                self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor)
-                    .await
-            }
+                self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await
+            },
         }
     }
 
@@ -141,9 +124,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         }
         let replacement = self.load(replacement_id.to_string()).await?;
         if !replacement.is_w29_replacement_for(current) {
-            return Err(Error::ConflictError(
-                "替代任务必须是同一 W29 对象类别的开放正式任务".to_string(),
-            ));
+            return Err(Error::ConflictError("替代任务必须是同一 W29 对象类别的开放正式任务".to_string()));
         }
         ensure_item_in_managed_scope(&replacement, access)?;
         self.ensure_object_participation(actor, &replacement).await
@@ -169,20 +150,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         &self,
         input: CloseDomainEvidenceInput<'_>,
     ) -> Result<WorkItemWriteOutcome> {
-        let CloseDomainEvidenceInput {
-            mut item,
-            actor,
-            decision,
-            receipt,
-        } = input;
+        let CloseDomainEvidenceInput { mut item, actor, decision, receipt } = input;
         let closed_at = Instant::now();
-        item.close(
-            actor.id(),
-            WorkItemCloseData {
-                close_reason: decision.close_reason.clone(),
-            },
-            closed_at,
-        )?;
+        item.close(actor.id(), WorkItemCloseData { close_reason: decision.close_reason.clone() }, closed_at)?;
         let evidence_reference = decision.evidence_reference(&item.base.id, receipt.id());
         let replay_receipt = receipt.clone();
         let replay_item_id = item.base.id.clone();
@@ -207,10 +177,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                             session,
                         )
                         .await?;
-                    db.work_items()
-                        .update(&mut item, session)
-                        .await
-                        .map_err(work_item_update_error)?;
+                    db.work_items().update(&mut item, session).await.map_err(work_item_update_error)?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<WorkItem, WorkItemWriteError>(item)
                 })
@@ -224,7 +191,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                     Some(item) => Ok(WorkItemWriteOutcome::Updated(Box::new(item))),
                     None => Err(error),
                 }
-            }
+            },
         }
     }
 }
@@ -240,8 +207,5 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
 /// # 错误
 /// 无。
 pub(super) fn is_w29_fields_closable(item: &dto::WorkItemFields) -> bool {
-    item.work_item_type.is_w29_closable(
-        &item.business_object_type,
-        item.approval_node_execution_id.is_some(),
-    )
+    item.work_item_type.is_w29_closable(&item.business_object_type, item.approval_node_execution_id.is_some())
 }

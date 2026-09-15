@@ -2,17 +2,15 @@
 
 mod access;
 
+use std::net::SocketAddr;
+
 use application_core::AuditActor;
-use axum::{
-    body::Body,
-    extract::{ConnectInfo, Path, Query, State},
-    http::{
-        header::{CACHE_CONTROL, CONTENT_TYPE, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS},
-        HeaderValue, StatusCode,
-    },
-    response::Response,
-    Extension, Json,
-};
+use axum::body::Body;
+use axum::extract::{ConnectInfo, Path, Query, State};
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS};
+use axum::http::{HeaderValue, StatusCode};
+use axum::response::Response;
+use axum::{Extension, Json};
 use erp_processes::sales_selection::SalesSelectionProcess;
 use erp_sales::dto::sales_selection::{
     CopyLinkView, CreateSalesSelectionBookletRequest, DeleteDisplayItemRequest, PrepareSalesSelectionRequest,
@@ -22,18 +20,13 @@ use erp_sales::dto::sales_selection::{
     SalesSelectionSessionView, SaveSelectionSessionRequest, SubmitSelectionSessionRequest,
 };
 use serde::Deserialize;
-use std::net::SocketAddr;
 
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::{Error, Result},
-        extractor::UserID,
-        handler::customer::ensure_customer_access,
-        middleware::RbacSubject,
-        response::ApiResponse,
-    },
-};
+use crate::app_state::AppState;
+use crate::core::errors::{Error, Result};
+use crate::core::extractor::UserID;
+use crate::core::handler::customer::ensure_customer_access;
+use crate::core::middleware::RbacSubject;
+use crate::core::response::ApiResponse;
 
 fn process(state: &AppState) -> SalesSelectionProcess {
     SalesSelectionProcess::new(
@@ -65,9 +58,7 @@ pub async fn booklet_list(
     Query(mut params): Query<SalesSelectionBookletListParams>,
 ) -> Result<SalesSelectionBookletPage> {
     params.authorized_customer_ids = access::customer_ids(&state, &subject, &user_id).await?;
-    Ok(ApiResponse::ok_with_data(
-        process(&state).booklet_list(params).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).booklet_list(params).await?))
 }
 
 #[permission_macros::permission(
@@ -91,9 +82,7 @@ pub async fn booklet_detail(
     Path(id): Path<String>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(
-        process(&state).booklet_detail(&id).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).booklet_detail(&id).await?))
 }
 
 #[permission_macros::permission(
@@ -118,9 +107,7 @@ pub async fn booklet_create(
     Json(req): Json<CreateSalesSelectionBookletRequest>,
 ) -> Result<SalesSelectionBookletView> {
     ensure_customer_access(&state, &actor, "detail", &req.customer_id).await?;
-    Ok(ApiResponse::ok_with_data(
-        process(&state).create(req, actor.id().to_string()).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).create(req, actor.id().to_string()).await?))
 }
 
 #[permission_macros::permission(
@@ -147,11 +134,7 @@ pub async fn booklet_prepare(
     Json(req): Json<PrepareSalesSelectionRequest>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(
-        process(&state)
-            .start_prepare(id, req, actor.id().to_string())
-            .await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).start_prepare(id, req, actor.id().to_string()).await?))
 }
 
 #[permission_macros::permission(
@@ -179,9 +162,7 @@ pub async fn booklet_delete_item(
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(
-        process(&state)
-            .delete_display_item(id, item_id, req, actor.id().to_string())
-            .await?,
+        process(&state).delete_display_item(id, item_id, req, actor.id().to_string()).await?,
     ))
 }
 
@@ -210,9 +191,7 @@ pub async fn booklet_delete_item_post(
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(
-        process(&state)
-            .delete_display_item(id, item_id, req, actor.id().to_string())
-            .await?,
+        process(&state).delete_display_item(id, item_id, req, actor.id().to_string()).await?,
     ))
 }
 
@@ -240,9 +219,7 @@ pub async fn booklet_publish(
     Json(req): Json<PublishSalesSelectionRequest>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(
-        process(&state).publish(id, req, actor.id().to_string()).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).publish(id, req, actor.id().to_string()).await?))
 }
 
 #[permission_macros::permission(
@@ -290,9 +267,7 @@ pub async fn booklet_copy_link_url(
     Path(id): Path<String>,
 ) -> Result<CopyLinkView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(
-        process(&state).copy_link_url(&id).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).copy_link_url(&id).await?))
 }
 
 #[permission_macros::permission(
@@ -316,9 +291,7 @@ pub async fn booklet_session(
     Path(id): Path<String>,
 ) -> Result<SalesSelectionSessionView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(
-        process(&state).admin_session(&id).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).admin_session(&id).await?))
 }
 
 #[permission_macros::permission(
@@ -345,11 +318,7 @@ pub async fn booklet_rotate_link(
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(
-        process(&state)
-            .rotate_link(id, req, actor.id().to_string())
-            .await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).rotate_link(id, req, actor.id().to_string()).await?))
 }
 
 #[permission_macros::permission(
@@ -376,9 +345,7 @@ pub async fn booklet_close(
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(
-        process(&state).close(id, req, actor.id().to_string()).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).close(id, req, actor.id().to_string()).await?))
 }
 
 #[permission_macros::permission(
@@ -405,9 +372,7 @@ pub async fn booklet_revoke(
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(
-        process(&state).revoke(id, req, actor.id().to_string()).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).revoke(id, req, actor.id().to_string()).await?))
 }
 
 #[permission_macros::permission(
@@ -434,9 +399,7 @@ pub async fn booklet_void(
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(
-        process(&state).void(id, req, actor.id().to_string()).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).void(id, req, actor.id().to_string()).await?))
 }
 
 #[permission_macros::permission(
@@ -461,9 +424,7 @@ pub async fn proposal_list(
     Query(mut params): Query<SalesSelectionProposalListParams>,
 ) -> Result<SalesSelectionProposalPage> {
     params.authorized_customer_ids = access::customer_ids(&state, &subject, &user_id).await?;
-    Ok(ApiResponse::ok_with_data(
-        process(&state).proposal_list(params).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).proposal_list(params).await?))
 }
 
 #[permission_macros::permission(
@@ -514,9 +475,7 @@ pub async fn admin_image(
         CONTENT_TYPE,
         HeaderValue::from_str(&content_type).unwrap_or_else(|_| HeaderValue::from_static("image/jpeg")),
     );
-    response
-        .headers_mut()
-        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    response.headers_mut().insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
     Ok(response)
 }
 
@@ -534,11 +493,7 @@ pub async fn public_page(
     Path(token): Path<String>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> Result<PublicSelectionPageView> {
-    Ok(ApiResponse::ok_with_data(
-        process(&state)
-            .public_page(&token, &addr.ip().to_string())
-            .await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).public_page(&token, &addr.ip().to_string()).await?))
 }
 
 /// 公开保存会话。
@@ -557,11 +512,7 @@ pub async fn public_save(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(req): Json<SaveSelectionSessionRequest>,
 ) -> Result<PublicSelectionPageView> {
-    Ok(ApiResponse::ok_with_data(
-        process(&state)
-            .public_save(token, req, addr.ip().to_string())
-            .await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).public_save(token, req, addr.ip().to_string()).await?))
 }
 
 /// 公开提交。
@@ -580,11 +531,7 @@ pub async fn public_submit(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(req): Json<SubmitSelectionSessionRequest>,
 ) -> Result<PublicSelectionPageView> {
-    Ok(ApiResponse::ok_with_data(
-        process(&state)
-            .public_submit(token, req, addr.ip().to_string())
-            .await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).public_submit(token, req, addr.ip().to_string()).await?))
 }
 
 /// 公开图片。
@@ -634,9 +581,7 @@ pub async fn public_image_path(
 /// # 错误
 /// 始终拒绝并提示后续能力。
 pub async fn public_customize() -> Result<PublicSelectionPageView> {
-    Err(Error::Unprocessable(
-        "换品与自组为后续能力，当前仅支持整套选择".into(),
-    ))
+    Err(Error::Unprocessable("换品与自组为后续能力，当前仅支持整套选择".into()))
 }
 
 /// 公开图片查询。
@@ -667,9 +612,7 @@ async fn respond_public_image(
     addr: SocketAddr,
 ) -> std::result::Result<Response, Error> {
     let proc = process(state);
-    let key = proc
-        .public_image_key(token, asset_id, &addr.ip().to_string())
-        .await?;
+    let key = proc.public_image_key(token, asset_id, &addr.ip().to_string()).await?;
     let (bytes, content_type) = proc.read_image_bytes(&key).await?;
     let mut response = Response::new(Body::from(bytes));
     *response.status_mut() = StatusCode::OK;
@@ -677,14 +620,8 @@ async fn respond_public_image(
         CONTENT_TYPE,
         HeaderValue::from_str(&content_type).unwrap_or_else(|_| HeaderValue::from_static("image/jpeg")),
     );
-    response
-        .headers_mut()
-        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
-    response
-        .headers_mut()
-        .insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
-    response
-        .headers_mut()
-        .insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+    response.headers_mut().insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    response.headers_mut().insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    response.headers_mut().insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
     Ok(response)
 }

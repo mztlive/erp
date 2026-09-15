@@ -1,7 +1,5 @@
 //! Receivable account creation coordinating finance, workflow tasks and audit.
 
-use super::ReceivableProcess;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
@@ -18,6 +16,9 @@ use erp_sales::repository::SalesOrderExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+
+use super::ReceivableProcess;
+use crate::{Error, Result};
 
 impl ReceivableProcess {
     // -----------------------------------------------------------------------
@@ -64,9 +65,7 @@ impl ReceivableProcess {
             && sales_order.stable.current_revision_id.as_deref()
                 != Some(req.source_sales_order_revision_id.as_str())
         {
-            return Err(Error::ConflictError(
-                "卡券应收必须绑定来源销售单的当前正式版本".to_string(),
-            ));
+            return Err(Error::ConflictError("卡券应收必须绑定来源销售单的当前正式版本".to_string()));
         }
         let account_id = ReceivableAccountId::new(next_id());
         let entry_id = ReceivableEntryId::new(next_id());
@@ -118,19 +117,14 @@ impl ReceivableProcess {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    db.receivable()
-                        .create_receivable_with_entry(&account, &entry, session)
-                        .await?;
+                    db.receivable().create_receivable_with_entry(&account, &entry, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::Error>(())
                 })
             })
             .await?;
 
-        self.read
-            .receivable_account_detail(&account_id)
-            .await
-            .map_err(crate::Error::from)
+        self.read.receivable_account_detail(&account_id).await.map_err(crate::Error::from)
     }
 }
 
@@ -143,9 +137,9 @@ fn sales_business_type_fact(
     match value {
         erp_sales::entity::sales_order::BusinessType::GoodsService => {
             erp_finance::entity::receivable::SalesBusinessTypeFact::GoodsService
-        }
+        },
         erp_sales::entity::sales_order::BusinessType::Voucher => {
             erp_finance::entity::receivable::SalesBusinessTypeFact::Voucher
-        }
+        },
     }
 }

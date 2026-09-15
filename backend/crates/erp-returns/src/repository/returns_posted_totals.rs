@@ -3,18 +3,17 @@
 //! 草稿与审批中不占正式额度，已冲正单据不再计入；四个聚合均使用 Decimal128
 //! `$sum`，不得加载完整实体后在内存折叠。
 
-use crate::repository::owned::{
-    CustomerRefundRepository, PaymentReversalRepository, ReceiptReversalRepository, SupplierRefundRepository,
-};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{CustomerReceiptId, SupplierPaymentId};
 use erp_core::money::Amount;
 use futures_util::TryStreamExt;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, Result};
 use serde::Deserialize;
 
-use persistence_core::Executor;
-use persistence_core::Result;
+use crate::repository::owned::{
+    CustomerRefundRepository, PaymentReversalRepository, ReceiptReversalRepository, SupplierRefundRepository,
+};
 
 /// 已过账金额聚合行（Decimal128 求和结果）。
 #[derive(Debug, Deserialize)]
@@ -56,7 +55,7 @@ where
                 .stream(session)
                 .try_collect::<Vec<_>>()
                 .await?
-        }
+        },
         None => {
             collection
                 .aggregate(pipeline)
@@ -64,7 +63,7 @@ where
                 .await?
                 .try_collect::<Vec<_>>()
                 .await?
-        }
+        },
     };
 
     Ok(rows.into_iter().next().map_or_else(Amount::zero, |row| row.total))
@@ -234,18 +233,12 @@ mod tests {
 
         assert_eq!(matched.get_str("original_receipt_id").unwrap(), "rcpt-1");
         assert_eq!(matched.get_str("status").unwrap(), "posted");
-        assert_eq!(
-            matched.get_document("id").unwrap().get_str("$ne").unwrap(),
-            "refund-9"
-        );
+        assert_eq!(matched.get_document("id").unwrap().get_str("$ne").unwrap(), "refund-9");
         assert_eq!(matched.get_i64("deleted_at").expect("未删除条件"), 0);
 
         let group = pipeline[1].get_document("$group").expect("分组阶段");
 
-        assert_eq!(
-            group.get_document("total").unwrap().get_str("$sum").unwrap(),
-            "$amount"
-        );
+        assert_eq!(group.get_document("total").unwrap().get_str("$sum").unwrap(), "$amount");
     }
 
     /// 四类原单字段名不同但管道形态一致。
@@ -273,9 +266,6 @@ mod tests {
         let total = mongodb::bson::Decimal128::from_str("1234567890.12").unwrap();
         let row: super::PostedAmountTotalRow =
             mongodb::bson::deserialize_from_document(mongodb::bson::doc! { "total": total }).unwrap();
-        assert_eq!(
-            row.total,
-            erp_core::money::Amount::from_str("1234567890.12").unwrap()
-        );
+        assert_eq!(row.total, erp_core::money::Amount::from_str("1234567890.12").unwrap());
     }
 }

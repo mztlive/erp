@@ -1,15 +1,14 @@
 //! `background_job`：后台任务中心统一注册表（数据模型 §6.1）。
 
+use application_core::command::CommandFingerprint;
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use application_core::command::CommandFingerprint;
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::{BackgroundJobId, BulkSelectionSnapshotId, FileAssetId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 任务编号最大长度。
 const JOB_NO_MAX_LEN: usize = 128;
@@ -135,12 +134,7 @@ impl DocumentState for JobStatus {
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Pending => &[Self::Running, Self::Cancelled],
-            Self::Running => &[
-                Self::PartiallySucceeded,
-                Self::Succeeded,
-                Self::Failed,
-                Self::Cancelled,
-            ],
+            Self::Running => &[Self::PartiallySucceeded, Self::Succeeded, Self::Failed, Self::Cancelled],
             Self::PartiallySucceeded => &[Self::Succeeded, Self::Failed, Self::Cancelled],
             Self::Succeeded | Self::Failed | Self::Cancelled => &[],
         }
@@ -254,18 +248,10 @@ impl BackgroundJob {
     pub fn new(id: BackgroundJobId, data: BackgroundJobData) -> Result<Self> {
         let job_no =
             normalize_required_text(data.job_no, "任务编号不能为空", JOB_NO_MAX_LEN, "任务编号过长")?;
-        let requested_by = normalize_required_text(
-            data.requested_by,
-            "发起人不能为空",
-            REQUESTED_BY_MAX_LEN,
-            "发起人过长",
-        )?;
-        let request_id = normalize_required_text(
-            data.request_id,
-            "请求身份不能为空",
-            REQUEST_ID_MAX_LEN,
-            "请求身份过长",
-        )?;
+        let requested_by =
+            normalize_required_text(data.requested_by, "发起人不能为空", REQUESTED_BY_MAX_LEN, "发起人过长")?;
+        let request_id =
+            normalize_required_text(data.request_id, "请求身份不能为空", REQUEST_ID_MAX_LEN, "请求身份过长")?;
         let domain_job_type =
             normalize_optional_text(data.domain_job_type, "领域任务类型", DOMAIN_JOB_TYPE_MAX_LEN)?;
         let domain_job_id = normalize_optional_text(data.domain_job_id, "领域任务ID", DOMAIN_JOB_ID_MAX_LEN)?;
@@ -518,19 +504,18 @@ impl BackgroundJob {
     /// `SUCCEEDED` / `FAILED` / `CANCELLED`，或已全部结束的混合
     /// `PARTIALLY_SUCCEEDED`（已写入 `finished_at`）时返回 `true`。
     pub fn is_terminal(&self) -> bool {
-        matches!(
-            self.status,
-            JobStatus::Succeeded | JobStatus::Failed | JobStatus::Cancelled
-        ) || (self.status == JobStatus::PartiallySucceeded && self.finished_at.is_some())
+        matches!(self.status, JobStatus::Succeeded | JobStatus::Failed | JobStatus::Cancelled)
+            || (self.status == JobStatus::PartiallySucceeded && self.finished_at.is_some())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{BackgroundJob, BackgroundJobData, JobStatus, JobType, JobUpdate};
     use erp_core::common::state::ensure_transition;
     use erp_core::common::time::Instant;
     use erp_core::ids::{BackgroundJobId, FileAssetId};
+
+    use super::{BackgroundJob, BackgroundJobData, JobStatus, JobType, JobUpdate};
 
     fn data() -> BackgroundJobData {
         BackgroundJobData {
@@ -562,10 +547,7 @@ mod tests {
     /// 失败路径：必填为空被拒。
     #[test]
     fn new_rejects_empty_request_id() {
-        let payload = BackgroundJobData {
-            request_id: "  ".to_string(),
-            ..data()
-        };
+        let payload = BackgroundJobData { request_id: "  ".to_string(), ..data() };
         assert!(BackgroundJob::new(BackgroundJobId::new("job-1"), payload).is_err());
     }
 
@@ -583,21 +565,17 @@ mod tests {
     fn record_progress_enforces_count_arithmetic() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-1"), data()).unwrap();
         job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
-        job.record_progress(3, 1, 0, Instant::from_unix_secs(1_700_000_100))
-            .unwrap();
+        job.record_progress(3, 1, 0, Instant::from_unix_secs(1_700_000_100)).unwrap();
         assert_eq!(job.processed_count, 4);
         assert_eq!(job.success_count, 3);
         assert_eq!(job.skipped_count, 1);
         assert_eq!(job.failed_count, 0);
 
         assert!(
-            job.record_progress(2, 0, 0, Instant::from_unix_secs(1_700_000_200))
-                .is_err(),
+            job.record_progress(2, 0, 0, Instant::from_unix_secs(1_700_000_200)).is_err(),
             "超过目标总数被拒"
         );
-        assert!(job
-            .record_progress(1, 0, 0, Instant::from_unix_secs(1_700_000_200))
-            .is_ok());
+        assert!(job.record_progress(1, 0, 0, Instant::from_unix_secs(1_700_000_200)).is_ok());
         assert_eq!(job.processed_count, 5);
     }
 
@@ -605,9 +583,7 @@ mod tests {
     #[test]
     fn record_progress_rejects_pending_job() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-1"), data()).unwrap();
-        assert!(job
-            .record_progress(1, 0, 0, Instant::from_unix_secs(1_700_000_100))
-            .is_err());
+        assert!(job.record_progress(1, 0, 0, Instant::from_unix_secs(1_700_000_100)).is_err());
     }
 
     /// 状态机：合法迁移（部分成功 → 成功、取消）。
@@ -615,14 +591,11 @@ mod tests {
     fn lifecycle_running_to_terminal() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-1"), data()).unwrap();
         job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
-        job.record_progress(3, 0, 1, Instant::from_unix_secs(1_700_000_100))
-            .unwrap();
+        job.record_progress(3, 0, 1, Instant::from_unix_secs(1_700_000_100)).unwrap();
         job.mark_partially_succeeded().unwrap();
         assert_eq!(job.status, JobStatus::PartiallySucceeded);
-        job.record_progress(1, 0, 0, Instant::from_unix_secs(1_700_000_200))
-            .unwrap();
-        job.mark_succeeded(Instant::from_unix_secs(1_700_000_300))
-            .unwrap();
+        job.record_progress(1, 0, 0, Instant::from_unix_secs(1_700_000_200)).unwrap();
+        job.mark_succeeded(Instant::from_unix_secs(1_700_000_300)).unwrap();
         assert_eq!(job.status, JobStatus::Succeeded);
         assert!(job.is_terminal());
 
@@ -636,14 +609,11 @@ mod tests {
     fn prepare_failed_retry_preserves_committed_results() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-retry"), data()).unwrap();
         job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
-        job.record_progress(2, 1, 2, Instant::from_unix_secs(1_700_000_100))
-            .unwrap();
+        job.record_progress(2, 1, 2, Instant::from_unix_secs(1_700_000_100)).unwrap();
         job.mark_partially_succeeded().unwrap();
-        job.mark_succeeded(Instant::from_unix_secs(1_700_000_200))
-            .unwrap();
+        job.mark_succeeded(Instant::from_unix_secs(1_700_000_200)).unwrap();
 
-        job.prepare_failed_retry(2, Instant::from_unix_secs(1_700_000_300))
-            .unwrap();
+        job.prepare_failed_retry(2, Instant::from_unix_secs(1_700_000_300)).unwrap();
 
         assert_eq!(job.status, JobStatus::Pending);
         assert_eq!(job.processed_count, 3);
@@ -658,13 +628,10 @@ mod tests {
     fn prepare_failed_retry_rejects_mismatched_count() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-retry"), data()).unwrap();
         job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
-        job.record_progress(2, 1, 2, Instant::from_unix_secs(1_700_000_100))
-            .unwrap();
+        job.record_progress(2, 1, 2, Instant::from_unix_secs(1_700_000_100)).unwrap();
         job.mark_partially_succeeded().unwrap();
 
-        assert!(job
-            .prepare_failed_retry(1, Instant::from_unix_secs(1_700_000_200))
-            .is_err());
+        assert!(job.prepare_failed_retry(1, Instant::from_unix_secs(1_700_000_200)).is_err());
         assert_eq!(job.status, JobStatus::PartiallySucceeded);
         assert_eq!(job.processed_count, 5);
         assert_eq!(job.failed_count, 2);
@@ -675,13 +642,10 @@ mod tests {
     fn prepare_failed_retry_rejects_cancelled_job() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-cancelled"), data()).unwrap();
         job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
-        job.record_progress(1, 0, 1, Instant::from_unix_secs(1_700_000_100))
-            .unwrap();
+        job.record_progress(1, 0, 1, Instant::from_unix_secs(1_700_000_100)).unwrap();
         job.cancel(Instant::from_unix_secs(1_700_000_200)).unwrap();
 
-        assert!(job
-            .prepare_failed_retry(1, Instant::from_unix_secs(1_700_000_300))
-            .is_err());
+        assert!(job.prepare_failed_retry(1, Instant::from_unix_secs(1_700_000_300)).is_err());
         assert_eq!(job.status, JobStatus::Cancelled);
         assert_eq!(job.processed_count, 2);
         assert_eq!(job.failed_count, 1);
@@ -691,25 +655,14 @@ mod tests {
     #[test]
     fn illegal_transitions_are_rejected() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-1"), data()).unwrap();
-        assert!(job
-            .record_progress(1, 0, 0, Instant::from_unix_secs(1_700_000_100))
-            .is_err());
-        assert!(
-            job.mark_succeeded(Instant::from_unix_secs(1_700_000_100))
-                .is_err(),
-            "未开始不能成功"
-        );
+        assert!(job.record_progress(1, 0, 0, Instant::from_unix_secs(1_700_000_100)).is_err());
+        assert!(job.mark_succeeded(Instant::from_unix_secs(1_700_000_100)).is_err(), "未开始不能成功");
 
         job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
-        assert!(
-            job.mark_succeeded(Instant::from_unix_secs(1_700_000_100))
-                .is_err(),
-            "未处理完不能成功"
-        );
+        assert!(job.mark_succeeded(Instant::from_unix_secs(1_700_000_100)).is_err(), "未处理完不能成功");
         job.cancel(Instant::from_unix_secs(1_700_000_100)).unwrap();
         assert!(
-            job.record_progress(1, 0, 0, Instant::from_unix_secs(1_700_000_200))
-                .is_err(),
+            job.record_progress(1, 0, 0, Instant::from_unix_secs(1_700_000_200)).is_err(),
             "终态不能记录进度"
         );
     }

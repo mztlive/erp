@@ -1,13 +1,13 @@
 //! 采购责任规则管理与逐行预览 DTO。
 
-use crate::entity::facts::ProductKind;
-use crate::entity::procurement_responsibility::EnableStatus;
-use crate::entity::procurement_responsibility::{
-    ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
-};
 use erp_core::ids::{ProductCategoryId, SkuId};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+
+use crate::entity::facts::ProductKind;
+use crate::entity::procurement_responsibility::{
+    EnableStatus, ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
+};
 
 /// 创建采购责任规则请求。
 #[derive(Debug, Clone, Deserialize, Validate)]

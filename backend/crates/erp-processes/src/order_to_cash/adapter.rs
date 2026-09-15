@@ -15,18 +15,18 @@ use erp_sales::service::sales_order::lifecycle::{
 use erp_workflow::entity::approval_integration::{
     ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload,
 };
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::DocumentType;
-
-use crate::{Error, Result};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::business_adapter::{
-    adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
+    AdapterReadScope, ApprovalAdapterSpec, adapter_spec_of, ensure_adapter_spec_complete,
 };
 use erp_workflow::service::approval::policy::{
     ApprovalDomainAction, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource,
     OwnerOrganizationSource, SALES_ORDER_PROCUREMENT_CONFIRMATION,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
+
+use crate::{Error, Result};
 
 /// 详情最近审批历史条数上限。完整历史走分页端点。
 pub const RECENT_HISTORY_LIMIT: usize = 8;
@@ -125,12 +125,8 @@ fn voucher_adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<VoucherSalesOr
         || spec.owner_role.as_str() != "voucher_sales_order_approver"
         || spec.owner_organization_source != OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         || spec.read_scope != AdapterReadScope::DocumentOrganizationAndCreator
-        || !spec
-            .subject_snapshot_fields
-            .contains(&ApprovalSubjectSnapshotField::TotalAmount)
-        || !spec
-            .subject_snapshot_fields
-            .contains(&ApprovalSubjectSnapshotField::TotalQuantity)
+        || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalAmount)
+        || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalQuantity)
     {
         return Err(Error::Internal("卡券销售单审批适配器登记不完整".to_string()));
     }
@@ -185,7 +181,7 @@ pub fn sales_approval_ports(business_type: BusinessType) -> Result<SalesApproval
                 cancel_action: adapter.cancel_action,
                 owner_role: adapter.owner_role,
             })
-        }
+        },
         BusinessType::Voucher => {
             let adapter = voucher_sales_order_adapter()?;
             Ok(SalesApprovalPorts {
@@ -195,7 +191,7 @@ pub fn sales_approval_ports(business_type: BusinessType) -> Result<SalesApproval
                 cancel_action: adapter.cancel_action,
                 owner_role: adapter.owner_role,
             })
-        }
+        },
     }
 }
 
@@ -213,12 +209,8 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<SalesOrderAdapter> {
         || spec.owner_role.as_str() != "sales_order_approver"
         || spec.owner_organization_source != OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         || spec.read_scope != AdapterReadScope::DocumentOrganizationAndCreator
-        || !spec
-            .subject_snapshot_fields
-            .contains(&ApprovalSubjectSnapshotField::TotalAmount)
-        || !spec
-            .subject_snapshot_fields
-            .contains(&ApprovalSubjectSnapshotField::TotalQuantity)
+        || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalAmount)
+        || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalQuantity)
     {
         return Err(Error::Internal("销售单审批适配器登记不完整".to_string()));
     }
@@ -330,11 +322,7 @@ pub fn execute_sales_order_domain_action(
     if action == ports.cancel_action {
         return Ok(cancel_sales_order_to_draft(order, updated_by)?);
     }
-    Err(Error::ValidationError(format!(
-        "动作 {} 不属于 {}",
-        action.as_str(),
-        ports.document_type.label()
-    )))
+    Err(Error::ValidationError(format!("动作 {} 不属于 {}", action.as_str(), ports.document_type.label())))
 }
 
 /// 卡券专用决定路径新写立即失败关闭。
@@ -342,9 +330,7 @@ pub fn execute_sales_order_domain_action(
 /// # 错误
 /// 恒返回冲突，不得回退 `CARD_SALES_APPROVAL` 或专用决定端口。
 pub fn reject_legacy_card_sales_decision() -> Result<()> {
-    Err(Error::ConflictError(
-        "卡券销售单必须走统一审批，禁止写入卡券专用决定路径".to_string(),
-    ))
+    Err(Error::ConflictError("卡券销售单必须走统一审批，禁止写入卡券专用决定路径".to_string()))
 }
 
 /// `CardSalesManagerApproval` / `CardSalesOperationApproval` 新写立即失败关闭。
@@ -358,7 +344,7 @@ pub fn reject_legacy_card_sales_work_item(work_item_type: &str) -> Result<()> {
     match work_item_type {
         "CARD_SALES_MANAGER_APPROVAL" | "CARD_SALES_OPERATION_APPROVAL" => {
             Err(Error::ConflictError("禁止新建卡券专用审批工作项".to_string()))
-        }
+        },
         _ => Ok(()),
     }
 }
@@ -396,9 +382,7 @@ pub fn sales_order_object_readable(organization_id: &str, assignee_user_id: &str
 pub fn sales_order_responsible_org_id(order: &SalesOrder) -> Result<String> {
     let org = order.settlement_party_id.to_string();
     if org.trim().is_empty() {
-        return Err(Error::ValidationError(
-            "销售单缺少结算主体，无法冻结责任组织".to_string(),
-        ));
+        return Err(Error::ValidationError("销售单缺少结算主体，无法冻结责任组织".to_string()));
     }
     Ok(org)
 }
@@ -443,7 +427,8 @@ pub fn build_sales_order_snapshot(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
+
     use erp_core::common::time::{BusinessDate, Instant};
     use erp_core::ids::{
         CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId, SalesOrderSubmissionId,
@@ -451,11 +436,12 @@ mod tests {
     };
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
     use erp_sales::entity::sales_order::{
-        CardForm, GoodsLineFields, HeaderSnapshotData, LineType, SalesOrderData, SalesOrderSubmissionData,
-        SalesOrderSubmissionLineData, VoucherLineDraft, WelfareScenario,
+        CardForm, CommercialStatus, GoodsLineFields, HeaderSnapshotData, LineType, ReviewStatus,
+        SalesOrderData, SalesOrderSubmissionData, SalesOrderSubmissionLineData, VoucherLineDraft,
+        WelfareScenario,
     };
-    use erp_sales::entity::sales_order::{CommercialStatus, ReviewStatus};
-    use std::str::FromStr;
+
+    use super::*;
 
     fn draft_order() -> SalesOrder {
         SalesOrder::new(
@@ -632,32 +618,17 @@ mod tests {
             "sales_order"
         );
         assert_eq!(adapter.subject_ref_builder, "subject_ref_for(SalesOrder)");
-        assert_eq!(
-            adapter.subject_version_source,
-            ApprovalSubjectVersionSource::SalesOrderSubmissionNo
-        );
+        assert_eq!(adapter.subject_version_source, ApprovalSubjectVersionSource::SalesOrderSubmissionNo);
         assert_eq!(adapter.subject_snapshot_builder, "build_sales_order_snapshot");
-        assert_eq!(
-            adapter.on_approval_start,
-            ApprovalDomainAction::SalesOrderStartApprovalSubmission
-        );
-        assert_eq!(
-            adapter.on_final_approve,
-            ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission
-        );
-        assert_eq!(
-            adapter.cancel_action,
-            ApprovalDomainAction::SalesOrderCancelApprovalSubmission
-        );
+        assert_eq!(adapter.on_approval_start, ApprovalDomainAction::SalesOrderStartApprovalSubmission);
+        assert_eq!(adapter.on_final_approve, ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission);
+        assert_eq!(adapter.cancel_action, ApprovalDomainAction::SalesOrderCancelApprovalSubmission);
         assert_eq!(adapter.owner_role, "sales_order_approver");
         assert_eq!(
             adapter.owner_organization_snapshot,
             OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         );
-        assert_eq!(
-            adapter.read_scope,
-            AdapterReadScope::DocumentOrganizationAndCreator
-        );
+        assert_eq!(adapter.read_scope, AdapterReadScope::DocumentOrganizationAndCreator);
         assert_ne!(adapter.on_approval_start, adapter.on_final_approve);
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
         assert_eq!(
@@ -686,22 +657,13 @@ mod tests {
             .subject_kind(),
             "voucher_sales_order"
         );
-        assert_eq!(
-            adapter.subject_version_source,
-            ApprovalSubjectVersionSource::SalesOrderSubmissionNo
-        );
-        assert_eq!(
-            adapter.on_approval_start,
-            ApprovalDomainAction::VoucherSalesOrderStartApprovalSubmission
-        );
+        assert_eq!(adapter.subject_version_source, ApprovalSubjectVersionSource::SalesOrderSubmissionNo);
+        assert_eq!(adapter.on_approval_start, ApprovalDomainAction::VoucherSalesOrderStartApprovalSubmission);
         assert_eq!(
             adapter.on_final_approve,
             ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission
         );
-        assert_eq!(
-            adapter.cancel_action,
-            ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission
-        );
+        assert_eq!(adapter.cancel_action, ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission);
         assert_eq!(adapter.owner_role, "voucher_sales_order_approver");
         assert_ne!(adapter.on_approval_start, adapter.on_final_approve);
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
@@ -788,14 +750,10 @@ mod tests {
         assert_eq!(payload.submitted_by, "user-1");
         assert_eq!(payload.total_amount.unwrap().to_string(), "10");
         assert_eq!(payload.total_quantity.unwrap().to_string(), "2");
-        assert!(build_sales_order_snapshot(
-            &order,
-            &submission(),
-            &[],
-            "user-1",
-            Instant::from_unix_secs(10)
-        )
-        .is_err());
+        assert!(
+            build_sales_order_snapshot(&order, &submission(), &[], "user-1", Instant::from_unix_secs(10))
+                .is_err()
+        );
     }
 
     /// 卡券审批快照必须冻结卡张数，不得因 `quantity` 为空而漏量。
@@ -847,18 +805,22 @@ mod tests {
             "user-1",
         )
         .unwrap();
-        assert!(execute_sales_order_domain_action(
-            &mut order,
-            ApprovalDomainAction::StockAdjustmentSubmit,
-            "user-1",
-        )
-        .is_err());
-        assert!(execute_sales_order_domain_action(
-            &mut order,
-            ApprovalDomainAction::VoucherSalesOrderStartApprovalSubmission,
-            "user-1",
-        )
-        .is_err());
+        assert!(
+            execute_sales_order_domain_action(
+                &mut order,
+                ApprovalDomainAction::StockAdjustmentSubmit,
+                "user-1",
+            )
+            .is_err()
+        );
+        assert!(
+            execute_sales_order_domain_action(
+                &mut order,
+                ApprovalDomainAction::VoucherSalesOrderStartApprovalSubmission,
+                "user-1",
+            )
+            .is_err()
+        );
     }
 
     /// 卡券领域动作只接受本类型三类签署动作；驳回不改业务状态。
@@ -890,12 +852,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(order.commercial_status, CommercialStatus::Draft);
-        assert!(execute_sales_order_domain_action(
-            &mut order,
-            ApprovalDomainAction::SalesOrderStartApprovalSubmission,
-            "user-1",
-        )
-        .is_err());
+        assert!(
+            execute_sales_order_domain_action(
+                &mut order,
+                ApprovalDomainAction::SalesOrderStartApprovalSubmission,
+                "user-1",
+            )
+            .is_err()
+        );
     }
 
     /// 卡券专用决定与专用工作项新写必须失败关闭。

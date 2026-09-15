@@ -3,11 +3,11 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use application_core::AuditActor;
+use erp_workflow::WorkflowAuthorizationPort;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::WorkItemStatus;
 use erp_workflow::ports::{ObjectFactMap, OrderTaskSource, RolePermissionSnapshotFact, WorkflowAccountFact};
 use erp_workflow::service::work_item::access::required_execution_permissions;
-use erp_workflow::WorkflowAuthorizationPort;
 use persistence_core::Executor;
 
 use super::{
@@ -92,9 +92,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
             if !decisions.contains_key(&account.id) {
                 decisions.insert(
                     account.id.clone(),
-                    self.auth
-                        .resolve_workflow_scope(&actor, "approval_instance:decide", executor)
-                        .await?,
+                    self.auth.resolve_workflow_scope(&actor, "approval_instance:decide", executor).await?,
                 );
             }
             let read_key = (account.id.clone(), kind);
@@ -123,11 +121,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         groups: OwnerGroups,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let ids = groups
-            .keys()
-            .filter(|id| !id.is_empty())
-            .cloned()
-            .collect::<Vec<_>>();
+        let ids = groups.keys().filter(|id| !id.is_empty()).cloned().collect::<Vec<_>>();
         let accounts = self
             .auth
             .load_accounts(&ids, executor)
@@ -136,10 +130,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .map(|account| (account.id.clone(), account))
             .collect::<HashMap<_, _>>();
         for (owner, tasks) in groups {
-            let Some(account) = accounts
-                .get(&owner)
-                .filter(|account| account.is_active_backoffice())
-            else {
+            let Some(account) = accounts.get(&owner).filter(|account| account.is_active_backoffice()) else {
                 for (index, _) in tasks {
                     block_owner(&mut items[index]);
                 }
@@ -166,21 +157,11 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .collect::<BTreeSet<_>>();
         let grants = self
             .auth
-            .role_permission_snapshot(
-                account.kind,
-                &account.id,
-                &required.into_iter().collect::<Vec<_>>(),
-            )
+            .role_permission_snapshot(account.kind, &account.id, &required.into_iter().collect::<Vec<_>>())
             .await?;
         let enabled_roles = self.auth.enabled_role_ids(grants.role_ids(), executor).await?;
-        let sources = tasks
-            .iter()
-            .map(|(_, source)| source.clone())
-            .collect::<BTreeSet<_>>();
-        let readable = self
-            .auth
-            .readable_order_sources(&actor, &sources, executor)
-            .await?;
+        let sources = tasks.iter().map(|(_, source)| source.clone()).collect::<BTreeSet<_>>();
+        let readable = self.auth.readable_order_sources(&actor, &sources, executor).await?;
         for (index, source) in tasks {
             let item = &mut items[*index];
             if !readable.contains(source) || !can_execute(item, &grants, &enabled_roles) {
@@ -207,10 +188,7 @@ fn can_execute(item: &WorkItemView, grants: &RolePermissionSnapshotFact, enabled
         return false;
     };
     required.iter().all(|permission| {
-        grants
-            .granting_role_ids(permission)
-            .iter()
-            .any(|role| enabled_roles.contains(role))
+        grants.granting_role_ids(permission).iter().any(|role| enabled_roles.contains(role))
     })
 }
 
@@ -231,10 +209,7 @@ fn owner_groups(items: &[WorkItemView], facts: &ObjectFactMap) -> Result<OwnerGr
             .and_then(|fact| fact.order_scope_source.clone())
             .filter(|source| source.matches_kind(relation.object_kind))
             .ok_or_else(|| Error::Internal("订单关联任务缺少权威范围来源".into()))?;
-        groups
-            .entry(item.owner_user_id.clone().unwrap_or_default())
-            .or_default()
-            .push((index, source));
+        groups.entry(item.owner_user_id.clone().unwrap_or_default()).or_default().push((index, source));
     }
     Ok(groups)
 }
@@ -244,11 +219,7 @@ fn block_owner(item: &mut WorkItemView) {
     let approval = item.work_item_type.is_document_approval() || item.approval_node_execution_id.is_some();
     item.allowed_actions.retain(|action| {
         *action == WorkItemAllowedAction::View
-            || (!approval
-                && matches!(
-                    action,
-                    WorkItemAllowedAction::Reassign | WorkItemAllowedAction::Close
-                ))
+            || (!approval && matches!(action, WorkItemAllowedAction::Reassign | WorkItemAllowedAction::Close))
     });
     if item.processing_state == ProcessingState::ApprovalBlocked {
         return;
@@ -264,12 +235,13 @@ fn block_owner(item: &mut WorkItemView) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::workbench::dto::WorkItemFields;
     use erp_core::ids::WorkItemId;
     use erp_workflow::entity::work_item::{
         AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
     };
+
+    use super::*;
+    use crate::workbench::dto::WorkItemFields;
 
     fn view() -> WorkItemView {
         let item = WorkItem::new_with_responsibility_key(
@@ -315,11 +287,7 @@ mod tests {
         assert_eq!(item.processing_state, ProcessingState::ExecutionBlocked);
         assert_eq!(
             item.allowed_actions,
-            vec![
-                WorkItemAllowedAction::View,
-                WorkItemAllowedAction::Reassign,
-                WorkItemAllowedAction::Close
-            ]
+            vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Reassign, WorkItemAllowedAction::Close]
         );
     }
 
@@ -328,10 +296,8 @@ mod tests {
         let mut item = view();
         item.work_item_type = WorkItemType::DocumentApproval;
         item.processing_state = ProcessingState::ApprovalBlocked;
-        let original = ProcessingBlockerView {
-            code: "APPROVAL_BLOCKED".into(),
-            message: "审批原阻断".into(),
-        };
+        let original =
+            ProcessingBlockerView { code: "APPROVAL_BLOCKED".into(), message: "审批原阻断".into() };
         item.processing_blocker = Some(original.clone());
         block_owner(&mut item);
         assert_eq!(item.processing_state, ProcessingState::ApprovalBlocked);
@@ -349,10 +315,7 @@ mod tests {
             roles.clone(),
             HashMap::from([
                 (roles[0].clone(), vec![required[0].to_string()]),
-                (
-                    roles[1].clone(),
-                    required[1..].iter().map(|code| code.to_string()).collect(),
-                ),
+                (roles[1].clone(), required[1..].iter().map(|code| code.to_string()).collect()),
             ]),
             1,
         );
@@ -360,10 +323,7 @@ mod tests {
         assert!(!can_execute(&item, &split, &roles[..1]));
         let complete = RolePermissionSnapshotFact::new(
             roles.clone(),
-            HashMap::from([(
-                roles[0].clone(),
-                required.iter().map(|code| code.to_string()).collect(),
-            )]),
+            HashMap::from([(roles[0].clone(), required.iter().map(|code| code.to_string()).collect())]),
             1,
         );
         assert!(can_execute(&item, &complete, &roles));

@@ -22,22 +22,13 @@ pub async fn current_legal_names_by_account_ids(
     supplier_ids: &[SupplierAccountId],
     executor: &mut dyn Executor,
 ) -> Result<HashMap<String, String>> {
-    let refs = db
-        .supplier()
-        .supplier_party_ids_by_account_ids(supplier_ids, executor)
-        .await?;
+    let refs = db.supplier().supplier_party_ids_by_account_ids(supplier_ids, executor).await?;
     let party_ids: Vec<PartyId> = refs.values().cloned().collect();
-    let party_names = db
-        .party()
-        .current_legal_names_by_party_ids(&party_ids, executor)
-        .await?;
+    let party_names = db.party().current_legal_names_by_party_ids(&party_ids, executor).await?;
     Ok(refs
         .into_iter()
         .filter_map(|(supplier_id, party_id)| {
-            party_names
-                .get(&party_id.to_string())
-                .cloned()
-                .map(|legal_name| (supplier_id, legal_name))
+            party_names.get(&party_id.to_string()).cloned().map(|legal_name| (supplier_id, legal_name))
         })
         .collect())
 }

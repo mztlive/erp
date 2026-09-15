@@ -11,8 +11,8 @@
 //! 筛选/行类型定义在职责子模块，经本模块重新导出并由 `ReceivableExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
-use mongodb::bson::{doc, Document};
 use mongodb::Database;
+use mongodb::bson::{Document, doc};
 
 use super::extensions::ReceivableExt;
 
@@ -68,9 +68,7 @@ impl<'a> ReceivableRepository<'a> {
 /// 返回排序条件文档。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
-    let field = sort_by
-        .filter(|name| allowed.contains(name))
-        .unwrap_or("created_at");
+    let field = sort_by.filter(|name| allowed.contains(name)).unwrap_or("created_at");
     doc! { field: direction, "id": direction }
 }
 

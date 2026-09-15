@@ -4,28 +4,21 @@
 //! 直接复用 销售域和销售中心的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
+use erp_processes::order_to_cash::SalesOrderCommandProcess;
+use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
+use erp_read_models::sales_center::order::{SalesListParams, SalesListView, SalesOrderReadService};
 use erp_sales::dto::sales_order::{
     CancelSalesOrderApprovalRequest, CreateSalesOrderRequest, SaveWorkingCopyRequest, SubmissionView,
     SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
 };
 
-use erp_processes::order_to_cash::SalesOrderCommandProcess;
-use erp_read_models::sales_center::order::{
-    dto::SalesOrderDetailView, SalesListParams, SalesListView, SalesOrderReadService,
-};
-
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::Result,
-        handler::{contract::ensure_contract_access, customer::ensure_customer_access},
-        response::ApiResponse,
-    },
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::handler::contract::ensure_contract_access;
+use crate::core::handler::customer::ensure_customer_access;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "销售单",
@@ -47,9 +40,8 @@ pub async fn sales_order_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SalesListParams>,
 ) -> Result<SalesListView> {
-    let page = SalesOrderReadService::with_rbac(state.db(), state.rbac())
-        .sales_order_list(&params, &actor)
-        .await?;
+    let page =
+        SalesOrderReadService::with_rbac(state.db(), state.rbac()).sales_order_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -84,9 +76,7 @@ pub async fn sales_order_create(
     let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
         .with_object_read(state.approval_object_read());
     ensure_contract_access(&state, &actor, "detail", req.contract_id.as_ref()).await?;
-    let customer_id = service
-        .sales_command_customer_id(&actor, &req.contract_id)
-        .await?;
+    let customer_id = service.sales_command_customer_id(&actor, &req.contract_id).await?;
     ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.create_sales_order(req, &actor).await?;
 
@@ -152,9 +142,7 @@ pub async fn sales_order_save_working_copy(
     ensure_contract_access(&state, &actor, "detail", req.contract_id.as_ref()).await?;
     let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
         .with_object_read(state.approval_object_read());
-    let customer_id = service
-        .sales_command_customer_id(&actor, &req.contract_id)
-        .await?;
+    let customer_id = service.sales_command_customer_id(&actor, &req.contract_id).await?;
     ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.save_working_copy(&id, req, &actor).await?;
 
@@ -193,9 +181,7 @@ pub async fn sales_order_submit(
     ensure_contract_access(&state, &actor, "detail", req.contract_id.as_ref()).await?;
     let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
         .with_object_read(state.approval_object_read());
-    let customer_id = service
-        .sales_command_customer_id(&actor, &req.contract_id)
-        .await?;
+    let customer_id = service.sales_command_customer_id(&actor, &req.contract_id).await?;
     ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.submit_sales_order(&id, req, &actor).await?;
 
@@ -269,14 +255,8 @@ mod tests {
     /// HTTP 构造审批命令时必须同时接入授权源和对象读取端口，禁止退回未接线默认值。
     #[test]
     fn approval_commands_wire_object_read_port() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
-        let constructors: Vec<_> = production
-            .split("SalesOrderCommandProcess::with_rbac(")
-            .skip(1)
-            .collect();
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
+        let constructors: Vec<_> = production.split("SalesOrderCommandProcess::with_rbac(").skip(1).collect();
         assert!(!constructors.is_empty());
         for constructor in constructors {
             let statement = constructor.split(';').next().expect("构造语句");
@@ -287,10 +267,7 @@ mod tests {
     /// HTTP 调用方对卡券销售单只走统一提交/撤回，不得新增专用决定入口。
     #[test]
     fn voucher_sales_order_http_uses_unified_ports() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("submit_sales_order"));
         assert!(production.contains("cancel_approval_submission"));
         assert!(production.contains("VoucherSalesOrder"));
@@ -303,7 +280,8 @@ mod tests {
 
 #[cfg(test)]
 mod owner_query_tests {
-    use axum::{extract::Query, http::Uri};
+    use axum::extract::Query;
+    use axum::http::Uri;
     use erp_contract::dto::contract::ContractListParams;
     use erp_customer::CustomerListParams;
     use erp_procurement::dto::purchase_order::PurchaseOrderListParams;
@@ -314,12 +292,7 @@ mod owner_query_tests {
     fn all_four_resources_validate_identity_queries() {
         let valid: Uri = "/?owner_user_ids=user-2,user-1,user-2&page=2".parse().unwrap();
         assert_eq!(
-            Query::<CustomerListParams>::try_from_uri(&valid)
-                .unwrap()
-                .0
-                .owner_user_ids
-                .unwrap()
-                .as_slice(),
+            Query::<CustomerListParams>::try_from_uri(&valid).unwrap().0.owner_user_ids.unwrap().as_slice(),
             &["user-1", "user-2"]
         );
         assert!(Query::<ContractListParams>::try_from_uri(&valid).is_ok());
@@ -342,8 +315,9 @@ mod owner_query_tests {
 
 #[cfg(test)]
 mod scope_query_tests {
-    use super::*;
     use axum::http::Uri;
+
+    use super::*;
 
     #[test]
     fn sales_scope_version_does_not_break_url_numbers_or_id_filters() {

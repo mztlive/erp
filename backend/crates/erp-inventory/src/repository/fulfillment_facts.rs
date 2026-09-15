@@ -1,9 +1,10 @@
 //! 库存拥有的履约入库预占来源查询。
 
-use crate::repository::owned::StockReservationRepository;
-use crate::StockReservation;
 use erp_core::ids::PurchaseReceiptLineId;
 use persistence_core::{Executor, Result};
+
+use crate::StockReservation;
+use crate::repository::owned::StockReservationRepository;
 
 impl StockReservationRepository<'_> {
     /// 查询入库行形成的库存预占。
@@ -25,10 +26,7 @@ impl StockReservationRepository<'_> {
         if receipt_line_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let ids = receipt_line_ids
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>();
+        let ids = receipt_line_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
         self.find_many(
             mongodb::bson::doc! {
                 "source_receipt_line_id": { "$in": ids },

@@ -13,35 +13,30 @@ mod transaction;
 #[cfg(test)]
 mod tests;
 
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{
-        atomic::{AtomicBool, AtomicU64},
-        Arc,
-    },
-};
-
-use crate::entity::rbac::{Permission, PermissionSet};
-use crate::ports::IdentityAuditPort;
-use crate::MongoCasbinAdapter;
-use casbin::Enforcer;
-use erp_core::AccountKind;
-use mongodb::Database;
-use tokio::sync::{Mutex, OnceCell, RwLock};
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 
 #[cfg(test)]
 use authorize::{
     ensure_all_roles_assignable, ensure_management_subset, ensure_permission_subset, ensure_role_deletable,
     ensure_role_mutable, ensure_roles_delegable, ensure_target_roles_manageable,
 };
+use casbin::Enforcer;
+use erp_core::AccountKind;
+use mongodb::Database;
 #[cfg(test)]
 use policy::{
     collect_role_ids, collect_role_permissions, commit_outcome_unknown, ensure_policy_snapshot_revision,
     parse_policy_permissions, permission_pairs, permissions_for_roles, policy_revisions_match, role_key,
     role_or_not_found, root_role_is_current, stable_policy_revision,
 };
-
 pub use root::ensure_root_role;
+use tokio::sync::{Mutex, OnceCell, RwLock};
+
+use crate::MongoCasbinAdapter;
+use crate::entity::rbac::{Permission, PermissionSet};
+use crate::ports::IdentityAuditPort;
 
 pub const ROOT_ROLE_ID: &str = "role-root";
 const ROOT_ROLE_NAME: &str = "超级管理员";
@@ -100,9 +95,7 @@ impl RolePermissionSnapshot {
         self.role_ids
             .iter()
             .filter(|role_id| {
-                self.grants
-                    .get(*role_id)
-                    .is_some_and(|permissions| permissions.contains(permission))
+                self.grants.get(*role_id).is_some_and(|permissions| permissions.contains(permission))
             })
             .cloned()
             .collect()

@@ -35,13 +35,7 @@ pub(crate) struct AssembledBrief {
 /// # 错误
 /// 无。
 pub(crate) fn submission_origin_label(reason_code: Option<&str>) -> Option<&'static str> {
-    match reason_code
-        .unwrap_or("")
-        .trim()
-        .replace('-', "_")
-        .to_ascii_lowercase()
-        .as_str()
-    {
+    match reason_code.unwrap_or("").trim().replace('-', "_").to_ascii_lowercase().as_str() {
         "procurement_confirmation_dispatched" => Some("初次提交"),
         "procurement_confirmation_resubmitted" => Some("驳回后重提"),
         "low_margin_approved_procurement_confirmation" => Some("低毛利通过后再确认"),
@@ -68,12 +62,7 @@ pub(crate) fn assemble_brief(source: &ObjectBriefSource, reason_code: Option<&st
         push_section(&mut sections, "含税金额", source.amount_label.as_deref(), true);
     }
     if !has_section(&sections, "提交来源") {
-        push_section(
-            &mut sections,
-            "提交来源",
-            submission_origin_label(reason_code),
-            false,
-        );
+        push_section(&mut sections, "提交来源", submission_origin_label(reason_code), false);
     }
     if !has_section(&sections, "提交人") {
         push_section(&mut sections, "提交人", source.submitter_name.as_deref(), false);
@@ -153,10 +142,7 @@ pub(crate) fn push_document_section(
     let Some(value) = value.map(str::trim).filter(|text| !text.is_empty()) else {
         return;
     };
-    let object_id = object_id
-        .map(str::trim)
-        .filter(|text| !text.is_empty())
-        .map(str::to_string);
+    let object_id = object_id.map(str::trim).filter(|text| !text.is_empty()).map(str::to_string);
     sections.push(BriefSection {
         label: label.to_string(),
         value: value.to_string(),
@@ -213,9 +199,7 @@ pub(crate) fn join_list_summary(parts: impl IntoIterator<Item = Option<String>>)
 /// 无。
 pub(crate) fn line_title(item_name: &str, spec: Option<&str>) -> String {
     let name = item_name.trim();
-    let spec = spec
-        .map(str::trim)
-        .filter(|text| !text.is_empty() && text.chars().count() <= 16);
+    let spec = spec.map(str::trim).filter(|text| !text.is_empty() && text.chars().count() <= 16);
     match spec {
         Some(spec) if !name.is_empty() => format!("{name} {spec}"),
         _ if !name.is_empty() => name.to_string(),
@@ -330,14 +314,8 @@ mod tests {
 
     #[test]
     fn origin_labels_use_business_language() {
-        assert_eq!(
-            submission_origin_label(Some("procurement_confirmation_dispatched")),
-            Some("初次提交")
-        );
-        assert_eq!(
-            submission_origin_label(Some("PROCUREMENT_CONFIRMATION_RESUBMITTED")),
-            Some("驳回后重提")
-        );
+        assert_eq!(submission_origin_label(Some("procurement_confirmation_dispatched")), Some("初次提交"));
+        assert_eq!(submission_origin_label(Some("PROCUREMENT_CONFIRMATION_RESUBMITTED")), Some("驳回后重提"));
         assert_eq!(
             submission_origin_label(Some("low_margin_approved_procurement_confirmation")),
             Some("低毛利通过后再确认")
@@ -351,10 +329,7 @@ mod tests {
         assert_eq!(format_instant_date(noon_utc), "2026-08-23");
         assert_eq!(format_instant_due_label(noon_utc), "8/23 交");
         assert_eq!(format_instant_datetime(noon_utc), "2026-08-23 12:00");
-        assert_eq!(
-            join_list_summary([Some("甲".into()), None, Some("¥1".into())]),
-            "甲 · ¥1"
-        );
+        assert_eq!(join_list_summary([Some("甲".into()), None, Some("¥1".into())]), "甲 · ¥1");
         assert_eq!(non_empty("  ").as_deref(), None);
         assert_eq!(non_empty(" 客户 ").as_deref(), Some("客户"));
     }

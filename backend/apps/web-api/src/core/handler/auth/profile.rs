@@ -1,14 +1,11 @@
-use axum::{extract::State, Extension};
+use axum::Extension;
+use axum::extract::State;
 use erp_identity::{AccountProfile, AccountProfileService};
 
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::Result,
-        extractor::{AccountKind, UserID},
-        response::ApiResponse,
-    },
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::extractor::{AccountKind, UserID};
+use crate::core::response::ApiResponse;
 
 /// 获取当前账号信息。
 ///
@@ -27,9 +24,8 @@ pub async fn account_profile(
     Extension(UserID(user_id)): Extension<UserID>,
     Extension(account_kind): Extension<AccountKind>,
 ) -> Result<AccountProfile> {
-    let profile = AccountProfileService::new(state.db(), state.rbac())
-        .account_profile(&user_id, account_kind)
-        .await?;
+    let profile =
+        AccountProfileService::new(state.db(), state.rbac()).account_profile(&user_id, account_kind).await?;
 
     Ok(ApiResponse::ok_with_data(profile))
 }

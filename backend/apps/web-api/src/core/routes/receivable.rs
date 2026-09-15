@@ -5,16 +5,13 @@
 //! 每条路由统一走 JWT + RBAC（`with_permission`），handler 标注
 //! `#[permission_macros::permission]`。
 
-use axum::{
-    routing::{get, post},
-    Router,
-};
+use axum::Router;
+use axum::routing::{get, post};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::receivable, middleware::with_permission},
-};
+use crate::app_state::AppState;
+use crate::core::handler::receivable;
+use crate::core::middleware::with_permission;
 
 /// 返回本域管理端路由集合。
 ///
@@ -107,11 +104,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         )
         .route(
             "/invoices",
-            with_permission(
-                get(receivable::invoice_list),
-                rbac,
-                receivable::invoice_list_permission_key(),
-            ),
+            with_permission(get(receivable::invoice_list), rbac, receivable::invoice_list_permission_key()),
         )
         .route(
             "/invoices",
@@ -179,11 +172,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         )
         .route(
             "/invoices/{id}/post",
-            with_permission(
-                post(receivable::invoice_post),
-                rbac,
-                receivable::invoice_post_permission_key(),
-            ),
+            with_permission(post(receivable::invoice_post), rbac, receivable::invoice_post_permission_key()),
         )
         .route(
             "/invoices/{id}/red-issue",
@@ -200,10 +189,8 @@ mod tests {
     /// 客户回款路由暴露提交与撤回，不再把过账当客户端旁路入口。
     #[test]
     fn customer_receipt_routes_expose_submit_and_cancel() {
-        let production = include_str!("receivable.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产路由必须存在");
+        let production =
+            include_str!("receivable.rs").split("#[cfg(test)]").next().expect("生产路由必须存在");
         assert!(production.contains("/customer-receipts/{id}/submit"));
         assert!(production.contains("/customer-receipts/{id}/cancel-approval"));
         assert!(production.contains("customer_receipt_submit"));
@@ -217,10 +204,7 @@ mod retired_review_routes_tests {
     /// 复核接口撤销后，正常回款、发票及应收接口必须继续保留。
     #[test]
     fn funds_review_routes_are_removed_and_finance_routes_remain() {
-        let source = include_str!("receivable.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .unwrap();
+        let source = include_str!("receivable.rs").split("#[cfg(test)]").next().unwrap();
         assert!(!source.contains("/receivable-funds-reviews"));
         assert!(!source.contains("/card-funds-review/"));
         for path in [

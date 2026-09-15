@@ -1,19 +1,18 @@
-use crate::repository::owned::SupplierAccountRepository;
 use std::collections::{HashMap, HashSet};
 
-use crate::entity::supplier::{SupplierAccount, SupplierAccountStatus};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{PartyId, SupplierAccountId};
 use futures_util::TryStreamExt;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
-use super::{SupplierRepository, SUPPLIER_ACCOUNTS};
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use super::{SUPPLIER_ACCOUNTS, SupplierRepository};
+use crate::entity::supplier::{SupplierAccount, SupplierAccountStatus};
+use crate::repository::owned::SupplierAccountRepository;
 
 /// 供应商角色列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -108,11 +107,11 @@ impl QueryFilter for SupplierAccountFilter {
                         doc! { "party_id": { "$in": ids } },
                     ],
                 );
-            }
+            },
             (Some(keyword), _) => {
                 insert_literal_regex_filter(&mut filter, "supplier_no", Some(keyword));
-            }
-            (None, _) => {}
+            },
+            (None, _) => {},
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
@@ -202,9 +201,7 @@ impl<'a> SupplierAccountRepository<'a> {
                 "id": { "$in": ids },
                 "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
             },
-            FindOptions::builder()
-                .projection(doc! { "id": 1, "supplier_no": 1 })
-                .build(),
+            FindOptions::builder().projection(doc! { "id": 1, "supplier_no": 1 }).build(),
             executor,
         )
         .await?;
@@ -268,10 +265,7 @@ impl<'a> SupplierAccountRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按共用企业主体查找供应商角色（一个主体至多一个供应商角色，由
@@ -291,8 +285,7 @@ impl<'a> SupplierAccountRepository<'a> {
         party_id: &PartyId,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierAccount>> {
-        self.find_one(doc! { "party_id": party_id.to_string() }, executor)
-            .await
+        self.find_one(doc! { "party_id": party_id.to_string() }, executor).await
     }
 }
 
@@ -345,10 +338,7 @@ impl<'a> SupplierRepository<'a> {
             return Ok(HashMap::new());
         }
         let suppliers = self.supplier_party_refs(&supplier_ids, executor).await?;
-        Ok(suppliers
-            .into_iter()
-            .map(|row| (row.id, PartyId::new(row.party_id)))
-            .collect())
+        Ok(suppliers.into_iter().map(|row| (row.id, PartyId::new(row.party_id))).collect())
     }
 
     /// 批量读取未删除供应商账号到企业主体的关联。
@@ -370,9 +360,7 @@ impl<'a> SupplierRepository<'a> {
         mongo_ops::find_many(
             &self.db.collection::<SupplierPartyRefRow>(SUPPLIER_ACCOUNTS),
             active_ids_filter(supplier_ids),
-            FindOptions::builder()
-                .projection(supplier_party_ref_projection())
-                .build(),
+            FindOptions::builder().projection(supplier_party_ref_projection()).build(),
             executor,
         )
         .await
@@ -419,9 +407,7 @@ impl<'a> SupplierRepository<'a> {
 /// 返回排序条件文档。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
-    let field = sort_by
-        .filter(|candidate| allowed.contains(candidate))
-        .unwrap_or("created_at");
+    let field = sort_by.filter(|candidate| allowed.contains(candidate)).unwrap_or("created_at");
     doc! { field: direction }
 }
 
@@ -508,7 +494,7 @@ async fn aggregate_id_duplicates(
                 .stream(session)
                 .try_collect::<Vec<_>>()
                 .await
-        }
+        },
         None => {
             collection
                 .aggregate(pipeline)
@@ -516,7 +502,7 @@ async fn aggregate_id_duplicates(
                 .await?
                 .try_collect::<Vec<_>>()
                 .await
-        }
+        },
     }
     .map_err(persistence_core::Error::from)?;
     Ok(rows)
@@ -566,25 +552,21 @@ impl SupplierAccountRepository<'_> {
         let rows = mongo_ops::find_many(
             &self.collection().clone_with_type::<SupplierSearchId>(),
             filter,
-            FindOptions::builder()
-                .projection(doc! { "id": 1, "_id": 0 })
-                .build(),
+            FindOptions::builder().projection(doc! { "id": 1, "_id": 0 }).build(),
             executor,
         )
         .await?;
-        Ok(rows
-            .into_iter()
-            .map(|row| SupplierAccountId::new(row.id))
-            .collect())
+        Ok(rows.into_iter().map(|row| SupplierAccountId::new(row.id)).collect())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, SupplierAccountFilter};
-    use crate::entity::supplier::SupplierAccountStatus;
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
+
+    use super::{SupplierAccountFilter, sort_doc};
+    use crate::entity::supplier::SupplierAccountStatus;
 
     #[test]
     fn account_filter_applies_candidate_and_excluded_supplier_ids() {
@@ -631,11 +613,7 @@ mod tests {
         assert!(rendered.contains("$sort"));
         assert!(rendered.contains("$project"));
         assert_eq!(
-            pipeline[1]
-                .get_document("$match")
-                .unwrap()
-                .get_document("count")
-                .unwrap(),
+            pipeline[1].get_document("$match").unwrap().get_document("count").unwrap(),
             &doc! { "$gt": 1 }
         );
     }

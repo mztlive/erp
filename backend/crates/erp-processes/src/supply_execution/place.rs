@@ -1,5 +1,3 @@
-use super::SupplierFulfillmentProcess;
-use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
@@ -17,6 +15,9 @@ use erp_supply::repository::SupplierFulfillmentExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+
+use super::SupplierFulfillmentProcess;
+use crate::Result;
 
 impl SupplierFulfillmentProcess {
     /// 供应商下单（幂等键：`fulfillment_order_no`，§6.19）。
@@ -119,7 +120,7 @@ impl SupplierFulfillmentProcess {
         let can_auto_retry = match &outcome {
             DispatchOutcome::Failed { error_class, .. } => {
                 crate::adapters::supplier_failure::integration_class(*error_class).can_auto_retry()
-            }
+            },
             _ => false,
         };
         let applied =
@@ -136,15 +137,14 @@ impl SupplierFulfillmentProcess {
                     processed_at: Some(Instant::now()),
                 })?;
                 None
-            }
+            },
             DispatchMessageResult::Failed(class) => self.build_error_task(
                 message,
                 order,
                 crate::adapters::supplier_failure::integration_class(class),
             )?,
         };
-        self.write_dispatch_result(order, action, message, task.as_ref(), actor)
-            .await
+        self.write_dispatch_result(order, action, message, task.as_ref(), actor).await
     }
 
     /// 构建失败路径错误任务并把消息置为失败（§6.21 错误分类）。
@@ -165,10 +165,8 @@ impl SupplierFulfillmentProcess {
         order: &SupplierFulfillmentOrder,
         error_class: ErrorClass,
     ) -> Result<Option<IntegrationErrorTask>> {
-        message.update(InboxMessageUpdate {
-            status: Some(InboxMessageStatus::Failed),
-            ..Default::default()
-        })?;
+        message
+            .update(InboxMessageUpdate { status: Some(InboxMessageStatus::Failed), ..Default::default() })?;
         let task = IntegrationErrorTask::new(
             IntegrationErrorTaskId::new(next_id()),
             IntegrationErrorTaskData {
@@ -302,4 +300,4 @@ fn outcome_label(outcome: &DispatchOutcome) -> &'static str {
     }
 }
 
-use erp_supply::service::supplier_fulfillment::place::{persist_place_facts, DispatchMessageResult};
+use erp_supply::service::supplier_fulfillment::place::{DispatchMessageResult, persist_place_facts};

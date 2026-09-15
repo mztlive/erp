@@ -5,16 +5,16 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as InventoryExt>::STOCK_MOVEMENTS` 等值。
 
-use crate::entity::inventory::StockReservationEntry;
-use crate::repository::owned::{
-    StockAdjustmentLineRepository, StockAdjustmentRepository, StockBalanceRepository,
-    StockMovementRepository, StockReservationRepository,
-};
 use mongodb::Database;
 
 use super::super::inventory::{
     InventoryRepository, StockAdjustmentFilter, StockBalanceFilter, StockMovementFilter,
     StockReservationFilter,
+};
+use crate::entity::inventory::StockReservationEntry;
+use crate::repository::owned::{
+    StockAdjustmentLineRepository, StockAdjustmentRepository, StockBalanceRepository,
+    StockMovementRepository, StockReservationRepository,
 };
 
 /// 域 D17 仓储访问器。

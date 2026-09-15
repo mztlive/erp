@@ -3,15 +3,15 @@
 //! 字段名与 HTTP 契约一致（api-contract.md）：分页参数 `page`/`page_size`/
 //! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；本域无金额字段。
 
+use application_core::{normalized_text, page_or_default, page_size_or_default};
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+
 use crate::entity::bulk_job::{
     BackgroundJob, BulkSelectionSnapshot, ItemStatus, JobStatus, JobType, SelectionItemStatus,
     SelectionStatus, SelectionType,
 };
-use serde::{Deserialize, Serialize};
-use validator::Validate;
-
 use crate::error::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 选择快照列表允许的排序字段白名单。
 pub(crate) const SNAPSHOT_SORT_FIELDS: &[&str] = &["created_at", "updated_at"];
@@ -34,6 +34,10 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -47,12 +51,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空。
-use application_core::non_blank;
 
 /// 选择快照响应视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -489,19 +487,16 @@ pub struct CancelAllBackgroundJobsResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, BackgroundJobListParams, BulkSelectionSnapshotListParams, SortDir};
-    use crate::entity::bulk_job::{JobStatus, JobType, SelectionStatus, SelectionType};
     use validator::Validate;
+
+    use super::{BackgroundJobListParams, BulkSelectionSnapshotListParams, SortDir, normalize_sort};
+    use crate::entity::bulk_job::{JobStatus, JobType, SelectionStatus, SelectionType};
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields() {
         assert!(normalize_sort(&Some("job_no".to_string()), &None, &["created_at"]).is_err());
-        let (field, direction) = normalize_sort(
-            &Some(" updated_at ".to_string()),
-            &None,
-            &["created_at", "updated_at"],
-        )
-        .unwrap();
+        let (field, direction) =
+            normalize_sort(&Some(" updated_at ".to_string()), &None, &["created_at", "updated_at"]).unwrap();
         assert_eq!(field, "updated_at");
         assert_eq!(direction, SortDir::Desc);
     }

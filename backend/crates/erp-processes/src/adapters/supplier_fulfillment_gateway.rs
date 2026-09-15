@@ -90,11 +90,11 @@ fn simulate_outcome(
 ) -> DispatchOutcome {
     let endpoint = connection.endpoint_reference.trim();
     match endpoint.strip_prefix("sim://") {
-        Some("reject") => DispatchOutcome::Rejected {
-            summary: "供应商明确拒绝（模拟）".to_string(),
+        Some("reject") => {
+            DispatchOutcome::Rejected { summary: "供应商明确拒绝（模拟）".to_string() }
         },
-        Some("timeout") => DispatchOutcome::ResultUnknown {
-            summary: "请求超时，结果未知（模拟）".to_string(),
+        Some("timeout") => {
+            DispatchOutcome::ResultUnknown { summary: "请求超时，结果未知（模拟）".to_string() }
         },
         Some("query-no-result") => DispatchOutcome::ResultUnknown {
             summary: "请求结果未知，需查询原结果（模拟）".to_string(),
@@ -141,7 +141,8 @@ fn simulate_investigation(
 
 #[cfg(test)]
 mod tests {
-    use super::{simulate_investigation, simulate_outcome, DispatchOutcome, InvestigationOutcome};
+    use std::str::FromStr;
+
     use erp_core::common::time::Instant;
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
     use erp_supply::entity::supplier_api::{
@@ -152,7 +153,8 @@ mod tests {
         SupplierFulfillmentOrderData, SupplierFulfillmentOrderId, SupplierOrderAction,
         SupplierOrderActionData, SupplierOrderActionId, SupplierOrderActionStatus, SupplierOrderActionType,
     };
-    use std::str::FromStr;
+
+    use super::{DispatchOutcome, InvestigationOutcome, simulate_investigation, simulate_outcome};
 
     fn sample_connection(endpoint_reference: &str) -> SupplierApiConnection {
         SupplierApiConnection::new(
@@ -215,11 +217,8 @@ mod tests {
     fn ordinary_endpoint_never_simulates_accepted_place() {
         let order = sample_order();
         let action = sample_action(SupplierOrderActionType::Place);
-        let outcome = simulate_outcome(
-            &action,
-            &order,
-            &sample_connection("https://supplier.example.com/api"),
-        );
+        let outcome =
+            simulate_outcome(&action, &order, &sample_connection("https://supplier.example.com/api"));
         assert!(matches!(
             outcome,
             DispatchOutcome::Failed {
@@ -256,11 +255,7 @@ mod tests {
         let action = sample_action(SupplierOrderActionType::Place);
 
         assert!(matches!(
-            simulate_investigation(
-                &action,
-                &order,
-                &sample_connection("https://supplier.example.com/api")
-            ),
+            simulate_investigation(&action, &order, &sample_connection("https://supplier.example.com/api")),
             InvestigationOutcome::ResultUnknown { .. }
         ));
         assert!(matches!(
@@ -290,13 +285,7 @@ mod tests {
         let order = sample_order();
         let action = sample_action(SupplierOrderActionType::Refund);
         let outcome = simulate_outcome(&action, &order, &sample_connection("sim://success"));
-        assert!(matches!(
-            outcome,
-            DispatchOutcome::Succeeded {
-                external_order_no: None,
-                ..
-            }
-        ));
+        assert!(matches!(outcome, DispatchOutcome::Succeeded { external_order_no: None, .. }));
     }
 
     #[test]

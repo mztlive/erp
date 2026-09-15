@@ -1,17 +1,16 @@
 use std::collections::HashMap;
 
-use crate::entity::purchase_order::{
-    digest_parts, normalize_requested_lines, payload_fingerprint, DraftLineEdit, PurchaseLineType,
-    PurchaseOrderSubmissionLine, PurchaseType, RequestedLine, SourcingAssignment, SourcingAssignmentSet,
-};
+use application_core::non_blank;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::{Error, Result};
-use application_core::non_blank;
-
-use super::query::TotalsView;
 use super::SupplySourceType;
+use super::query::TotalsView;
+use crate::entity::purchase_order::{
+    DraftLineEdit, PurchaseLineType, PurchaseOrderSubmissionLine, PurchaseType, RequestedLine,
+    SourcingAssignment, SourcingAssignmentSet, digest_parts, normalize_requested_lines, payload_fingerprint,
+};
+use crate::{Error, Result};
 
 /// 作废草稿命令的服务端固定审计动作（同时参与请求指纹）。
 pub const VOID_ACTION: &str = "purchase_order.void";
@@ -100,12 +99,8 @@ impl CreatePurchaseOrderFromBasisRequest {
         let mut parsed = Vec::with_capacity(self.lines.len());
         for line in &self.lines {
             parsed.push(
-                RequestedLine::parse(
-                    &line.sales_order_line_id,
-                    &line.quantity,
-                    &line.expected_delivery_date,
-                )
-                .map_err(|error| Error::ValidationError(error.to_string()))?,
+                RequestedLine::parse(&line.sales_order_line_id, &line.quantity, &line.expected_delivery_date)
+                    .map_err(|error| Error::ValidationError(error.to_string()))?,
             );
         }
         normalize_requested_lines(&parsed).map_err(|error| Error::ValidationError(error.to_string()))
@@ -131,17 +126,10 @@ impl CreatePurchaseOrderFromBasisRequest {
             self.basis_id.trim().to_string(),
             self.purchase_type.as_str().to_string(),
             self.payment_term_code.trim().to_string(),
-            self.target_warehouse_id
-                .as_deref()
-                .map(str::trim)
-                .unwrap_or_default()
-                .to_string(),
+            self.target_warehouse_id.as_deref().map(str::trim).unwrap_or_default().to_string(),
         ];
         parts.extend(lines.iter().map(|line| {
-            format!(
-                "{}|{}|{}",
-                line.sales_order_line_id, line.quantity, line.expected_delivery_date
-            )
+            format!("{}|{}|{}", line.sales_order_line_id, line.quantity, line.expected_delivery_date)
         }));
         digest_parts(parts)
     }
@@ -198,10 +186,7 @@ pub struct CreatePurchaseOrdersFromSourcingRequest {
     #[validate(custom(function = "non_blank", message = "销售单不能为空"))]
     pub sales_order_id: String,
     /// 已选定的供给分配；同一销售行允许按库存与采购依据拆分。
-    #[validate(
-        length(min = 1, max = 200, message = "本次供给分配明细必须在1-200行之间"),
-        nested
-    )]
+    #[validate(length(min = 1, max = 200, message = "本次供给分配明细必须在1-200行之间"), nested)]
     pub lines: Vec<SourcingLineAssignment>,
     /// 幂等键（同一命令重复提交时返回原库存预占与采购单）。
     #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
@@ -342,9 +327,7 @@ impl SavePurchaseOrderDraftRequest {
     /// 两种都提供或都缺失，或任一补丁字段非法时返回校验错误。
     pub fn ensure_shape(&self) -> Result<()> {
         if self.lines.is_empty() == self.line_patches.is_empty() {
-            return Err(Error::ValidationError(
-                "完整采购行与草稿行补丁必须且只能提供一种".to_string(),
-            ));
+            return Err(Error::ValidationError("完整采购行与草稿行补丁必须且只能提供一种".to_string()));
         }
         for patch in &self.line_patches {
             patch.validate()?;
@@ -446,16 +429,11 @@ impl SavePurchaseOrderLinePatch {
         existing: &[PurchaseOrderSubmissionLine],
     ) -> Result<Vec<SavePurchaseOrderLine>> {
         if patches.len() != existing.len() {
-            return Err(Error::ValidationError(
-                "采购草稿行补丁必须覆盖全部当前草稿行".to_string(),
-            ));
+            return Err(Error::ValidationError("采购草稿行补丁必须覆盖全部当前草稿行".to_string()));
         }
         let mut patch_map = HashMap::with_capacity(patches.len());
         for patch in patches {
-            if patch_map
-                .insert(patch.line_id.trim().to_string(), patch)
-                .is_some()
-            {
+            if patch_map.insert(patch.line_id.trim().to_string(), patch).is_some() {
                 return Err(Error::ValidationError("采购草稿包含重复行补丁".to_string()));
             }
         }
@@ -471,10 +449,7 @@ impl SavePurchaseOrderLinePatch {
                 }
                 let is_item = line.line_type == PurchaseLineType::ItemService;
                 let quantity = if is_item {
-                    patch
-                        .quantity
-                        .clone()
-                        .or_else(|| line.quantity.map(|value| value.to_string()))
+                    patch.quantity.clone().or_else(|| line.quantity.map(|value| value.to_string()))
                 } else {
                     None
                 };
@@ -489,11 +464,7 @@ impl SavePurchaseOrderLinePatch {
                     product_name: line.product_name_snapshot.clone(),
                     specification: line.specification_snapshot.clone(),
                     quantity: quantity.clone(),
-                    base_unit_code: if is_item {
-                        line.base_unit_code.clone()
-                    } else {
-                        None
-                    },
+                    base_unit_code: if is_item { line.base_unit_code.clone() } else { None },
                     unit_cost_gross: if is_item {
                         patch
                             .unit_cost_gross
@@ -524,10 +495,7 @@ impl SavePurchaseOrderLinePatch {
                     gross_amount: if is_item {
                         None
                     } else {
-                        patch
-                            .unit_cost_gross
-                            .clone()
-                            .or_else(|| Some(line.gross_amount.to_string()))
+                        patch.unit_cost_gross.clone().or_else(|| Some(line.gross_amount.to_string()))
                     },
                 })
             })

@@ -5,10 +5,8 @@
 //! 商品字典接口见同目录 `mod.rs`。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Multipart, Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Multipart, Path, Query, State};
+use axum::{Extension, Json};
 use erp_catalog::{
     CreateProductRequest, CreateVoucherCategoryRequest, DisableProductRequest, PageView, ProductListParams,
     ProductListingView, ProductRevisionListParams, ProductRevisionView, ProductView, SellableSkuListParams,
@@ -19,17 +17,13 @@ use erp_catalog::{
 use erp_support::SensitivityClass;
 use serde::Deserialize;
 
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::Result,
-        handler::file_asset::{
-            delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
-            store_pending_asset_files,
-        },
-        response::ApiResponse,
-    },
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::handler::file_asset::{
+    delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
+    store_pending_asset_files,
 };
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "商品与仓库",
@@ -130,7 +124,7 @@ pub async fn product_create_with_assets(
                 delete_pending_asset_objects(&state, &pending).await;
             }
             Err(error.into())
-        }
+        },
     }
 }
 
@@ -189,7 +183,7 @@ pub async fn product_update_with_assets(
                 delete_pending_asset_objects(&state, &pending).await;
             }
             Err(error.into())
-        }
+        },
     }
 }
 
@@ -244,10 +238,7 @@ pub async fn product_listing_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateProductListingRequest>,
 ) -> Result<ProductListingView> {
-    let view = state
-        .catalog_service()
-        .product_listing_update(&id, req, &actor)
-        .await?;
+    let view = state.catalog_service().product_listing_update(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -322,10 +313,7 @@ pub async fn sku_listing_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateSkuListingRequest>,
 ) -> Result<SkuView> {
-    let view = state
-        .catalog_service()
-        .sku_listing_update(&id, req, &actor)
-        .await?;
+    let view = state.catalog_service().sku_listing_update(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -372,10 +360,7 @@ pub async fn voucher_category_profile_list(
     State(state): State<AppState>,
     Query(params): Query<VoucherCategoryProfileListParams>,
 ) -> Result<PageView<VoucherCategoryProfileView>> {
-    let page = state
-        .catalog_service()
-        .voucher_category_profile_list(&params)
-        .await?;
+    let page = state.catalog_service().voucher_category_profile_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -403,10 +388,7 @@ pub async fn voucher_category_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateVoucherCategoryRequest>,
 ) -> Result<VoucherCategoryProfileView> {
-    let view = state
-        .catalog_service()
-        .voucher_category_create(req, &actor)
-        .await?;
+    let view = state.catalog_service().voucher_category_create(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -434,10 +416,7 @@ pub async fn voucher_category_update(
     Path(sku_id): Path<String>,
     Json(req): Json<UpdateVoucherCategoryRequest>,
 ) -> Result<VoucherCategoryProfileView> {
-    let view = state
-        .catalog_service()
-        .voucher_category_update(&sku_id, req, &actor)
-        .await?;
+    let view = state.catalog_service().voucher_category_update(&sku_id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -539,10 +518,7 @@ pub async fn product_detail_sku_revisions(
     Path(id): Path<String>,
     Query(query): Query<ProductDetailSkuRevisionQuery>,
 ) -> Result<PageView<SkuRevisionView>> {
-    let page = state
-        .catalog_service()
-        .product_detail_sku_revisions(&id, query.sku_id.as_deref())
-        .await?;
+    let page = state.catalog_service().product_detail_sku_revisions(&id, query.sku_id.as_deref()).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }

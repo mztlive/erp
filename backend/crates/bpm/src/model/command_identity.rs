@@ -6,7 +6,8 @@
 
 use std::fmt;
 
-use serde::{de::Error as DeserializeError, Deserialize, Deserializer, Serialize};
+use serde::de::Error as DeserializeError;
+use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::types::{ApprovalCommandKind, ModelError, ModelResult, SCOPE_MAX_LEN};
@@ -153,12 +154,7 @@ impl CommandScope {
         payload: &CanonicalCommandPayload,
     ) -> ModelResult<Self> {
         validate_domain(domain)?;
-        Ok(Self(versioned_hash(
-            COMMAND_SCOPE_NAMESPACE,
-            command_kind,
-            domain,
-            payload,
-        )))
+        Ok(Self(versioned_hash(COMMAND_SCOPE_NAMESPACE, command_kind, domain, payload)))
     }
 
     /// 返回稳定持久化字符串。
@@ -198,12 +194,7 @@ impl CommandDigest {
         payload: &CanonicalCommandPayload,
     ) -> ModelResult<Self> {
         validate_domain(domain)?;
-        Ok(Self(versioned_hash(
-            COMMAND_DIGEST_NAMESPACE,
-            command_kind,
-            domain,
-            payload,
-        )))
+        Ok(Self(versioned_hash(COMMAND_DIGEST_NAMESPACE, command_kind, domain, payload)))
     }
 
     /// 返回稳定持久化字符串。
@@ -317,22 +308,22 @@ fn encode_field(field: &CommandPayloadField<'_>, target: &mut Vec<u8>) {
                 Some(value) => {
                     encoded.push(1);
                     encoded.extend_from_slice(value.as_bytes());
-                }
+                },
                 None => encoded.push(0),
             }
             (4, encoded)
-        }
+        },
         CommandPayloadField::OptionalU64(value) => {
             let mut encoded = Vec::new();
             match value {
                 Some(value) => {
                     encoded.push(1);
                     encoded.extend_from_slice(&value.to_be_bytes());
-                }
+                },
                 None => encoded.push(0),
             }
             (5, encoded)
-        }
+        },
         CommandPayloadField::Sequence(fields) => {
             let mut encoded = Vec::new();
             encoded.extend_from_slice(&(fields.len() as u64).to_be_bytes());
@@ -340,7 +331,7 @@ fn encode_field(field: &CommandPayloadField<'_>, target: &mut Vec<u8>) {
                 encode_field(field, &mut encoded);
             }
             (6, encoded)
-        }
+        },
     };
     target.push(tag);
     target.extend_from_slice(&(value.len() as u64).to_be_bytes());
@@ -357,10 +348,7 @@ mod tests {
     #[test]
     fn idempotency_key_normalizes_external_input_and_enforces_utf8_byte_boundary() {
         assert_eq!(IdempotencyKey::parse("  key-1  ").unwrap().as_str(), "key-1");
-        assert_eq!(
-            IdempotencyKey::parse("界".repeat(42)).unwrap().as_str().len(),
-            126
-        );
+        assert_eq!(IdempotencyKey::parse("界".repeat(42)).unwrap().as_str().len(), 126);
         assert!(IdempotencyKey::parse("界".repeat(43)).is_err());
         assert!(IdempotencyKey::parse(" \t\n ").is_err());
         assert!(IdempotencyKey::parse("k".repeat(128)).is_ok());
@@ -423,12 +411,10 @@ mod tests {
             digest(CanonicalCommandPayload::new().field(CommandPayloadField::Text("e\u{301}")))
         );
         assert_ne!(
-            digest(
-                CanonicalCommandPayload::new().field(CommandPayloadField::Sequence(vec![
-                    CommandPayloadField::Text("a"),
-                    CommandPayloadField::Text("b"),
-                ]))
-            ),
+            digest(CanonicalCommandPayload::new().field(CommandPayloadField::Sequence(vec![
+                CommandPayloadField::Text("a"),
+                CommandPayloadField::Text("b"),
+            ]))),
             digest(
                 CanonicalCommandPayload::new()
                     .field(CommandPayloadField::Text("a"))
@@ -456,24 +442,12 @@ mod tests {
         };
 
         assert_ne!(
-            digest(
-                " 审批 ",
-                vec![CommandPayloadField::Text("甲"), CommandPayloadField::Text("乙")]
-            ),
-            digest(
-                "审批",
-                vec![CommandPayloadField::Text("甲"), CommandPayloadField::Text("乙")]
-            )
+            digest(" 审批 ", vec![CommandPayloadField::Text("甲"), CommandPayloadField::Text("乙")]),
+            digest("审批", vec![CommandPayloadField::Text("甲"), CommandPayloadField::Text("乙")])
         );
         assert_ne!(
-            digest(
-                "审批",
-                vec![CommandPayloadField::Text("甲"), CommandPayloadField::Text("乙")]
-            ),
-            digest(
-                "审批",
-                vec![CommandPayloadField::Text("乙"), CommandPayloadField::Text("甲")]
-            )
+            digest("审批", vec![CommandPayloadField::Text("甲"), CommandPayloadField::Text("乙")]),
+            digest("审批", vec![CommandPayloadField::Text("乙"), CommandPayloadField::Text("甲")])
         );
     }
 

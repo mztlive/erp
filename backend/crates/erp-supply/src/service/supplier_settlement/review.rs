@@ -1,10 +1,11 @@
 //! 结算复核的本域快照、差异完整性与岗位分离规则。
+use mongodb::Database;
+use persistence_core::Executor;
+
 use super::shared::{load_statement_differences, load_statement_items};
 use crate::dto::supplier_settlement::{self as dto, *};
 use crate::entity::supplier_settlement::{SupplierSettlementDifference, SupplierSettlementStatement};
 use crate::{Error, Result};
-use mongodb::Database;
-use persistence_core::Executor;
 /// 结算复核的固定财务责任角色。
 pub const SETTLEMENT_REVIEW_OWNER_ROLE: &str = "role-finance";
 /// 当前结算模型尚无更细组织上下文，使用明确的最小公司根并在资格校验中重验。
@@ -16,9 +17,7 @@ pub async fn ensure_review_submission_ready(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     if !statement.is_prepared_by(actor_id) || !statement.is_editable() {
-        return Err(Error::ConflictError(
-            "结算单责任或状态已变化，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("结算单责任或状态已变化，请刷新后重试".to_string()));
     }
     let items = load_statement_items(db, &statement.base.id, executor).await?;
     if items.is_empty() {
@@ -95,11 +94,7 @@ pub fn settlement_review_access(
     }
     (
         Vec::new(),
-        vec![review_blocker(
-            "REVIEW_DECISION",
-            "CURRENT_OWNER_MISMATCH",
-            "该复核任务当前由其他账号负责",
-        )],
+        vec![review_blocker("REVIEW_DECISION", "CURRENT_OWNER_MISMATCH", "该复核任务当前由其他账号负责")],
     )
 }
 pub fn ensure_reviewer_separation(statement: &SupplierSettlementStatement, actor_id: &str) -> Result<()> {

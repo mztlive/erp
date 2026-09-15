@@ -2,12 +2,12 @@
 
 use std::collections::HashSet;
 
+use erp_workflow::ports::{ObjectFactMap, ObjectKind};
 use persistence_core::Executor;
 
 use super::super::object_ids;
 use super::mapping;
 use crate::errors::Result;
-use erp_workflow::ports::{ObjectFactMap, ObjectKind};
 
 impl super::super::WorkItemFactsReader {
     /// Load customer-receipt identity, creator, counterparty and impact.
@@ -20,11 +20,7 @@ impl super::super::WorkItemFactsReader {
         use erp_finance::repository::ReceivableExt;
         let request_ids = object_ids(keys, ObjectKind::SalesInvoiceRequest);
         if !request_ids.is_empty() {
-            for request in self
-                .db
-                .sales_invoice_requests()
-                .list_active_by_ids(&request_ids, executor)
-                .await?
+            for request in self.db.sales_invoice_requests().list_active_by_ids(&request_ids, executor).await?
             {
                 facts.insert(
                     (ObjectKind::SalesInvoiceRequest, request.base.id.clone()),
@@ -47,18 +43,14 @@ impl super::super::WorkItemFactsReader {
                 executor,
             )
             .await?;
-        let party_ids = receipts
-            .iter()
-            .map(|item| item.counterparty_party_id.to_string())
-            .collect::<Vec<_>>();
+        let party_ids =
+            receipts.iter().map(|item| item.counterparty_party_id.to_string()).collect::<Vec<_>>();
         let party_names = self.party_legal_names(&party_ids, executor).await?;
         for receipt in receipts {
             let fact = mapping::customer_receipt_fact(
                 &receipt,
                 created_by.get(&receipt.base.id),
-                party_names
-                    .get(&receipt.counterparty_party_id.to_string())
-                    .cloned(),
+                party_names.get(&receipt.counterparty_party_id.to_string()).cloned(),
             );
             facts.insert((ObjectKind::CustomerReceipt, receipt.base.id.clone()), fact);
         }
@@ -84,10 +76,7 @@ impl super::super::WorkItemFactsReader {
                 executor,
             )
             .await?;
-        let customer_ids = refunds
-            .iter()
-            .map(|refund| refund.customer_id.to_string())
-            .collect::<Vec<_>>();
+        let customer_ids = refunds.iter().map(|refund| refund.customer_id.to_string()).collect::<Vec<_>>();
         let customer_names = self.customer_display_names(&customer_ids, executor).await?;
         let receipt_ids = refunds
             .iter()
@@ -96,12 +85,7 @@ impl super::super::WorkItemFactsReader {
         let receipt_origins = self.customer_receipt_origins(&receipt_ids, executor).await?;
         let entry_ids = refunds
             .iter()
-            .filter_map(|refund| {
-                refund
-                    .original_receivable_entry_id
-                    .as_ref()
-                    .map(ToString::to_string)
-            })
+            .filter_map(|refund| refund.original_receivable_entry_id.as_ref().map(ToString::to_string))
             .collect::<Vec<_>>();
         let entry_origins = self.receivable_entry_origins(&entry_ids, executor).await?;
         for refund in refunds {

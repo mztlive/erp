@@ -2,16 +2,14 @@
 
 use std::sync::Arc;
 
-use crate::entity::{
-    access_control::{DataScope, DataScopeData, DataScopeId, DataScopeSubjectType},
-    Permission, PermissionSet, RoleData,
-};
-use crate::service::access_control::consumers::validate_binding;
-use crate::{AccessControlExt, MongoCasbinAdapter};
 use persistence_core::NoTransaction;
 
 use super::RbacService;
+use crate::entity::access_control::{DataScope, DataScopeData, DataScopeId, DataScopeSubjectType};
+use crate::entity::{Permission, PermissionSet, RoleData};
 use crate::error::{Error, Result};
+use crate::service::access_control::consumers::validate_binding;
+use crate::{AccessControlExt, MongoCasbinAdapter};
 
 impl RbacService {
     /// 若角色 ID 尚不存在则创建预定义角色及其权限；已存在（含软删除）则不改动。
@@ -38,20 +36,11 @@ impl RbacService {
         data: RoleData,
         permissions: Vec<Permission>,
     ) -> Result<bool> {
-        if self
-            .db
-            .roles()
-            .find_by_id_including_deleted(id, &mut NoTransaction)
-            .await?
-            .is_some()
-        {
+        if self.db.roles().find_by_id_including_deleted(id, &mut NoTransaction).await?.is_some() {
             return Ok(false);
         }
 
-        match self
-            .create_role_with_id(id.to_string(), data, permissions, None, None)
-            .await
-        {
+        match self.create_role_with_id(id.to_string(), data, permissions, None, None).await {
             Ok(_) => Ok(true),
             Err(Error::ConflictError(_)) => Ok(false),
             Err(error) => Err(error),
@@ -90,8 +79,7 @@ impl RbacService {
         if self.direct_role_permissions(role_id).await? != previous {
             return Ok(false);
         }
-        self.commit_seeded_role_permissions(role_id, desired, |latest| latest == &desired_set)
-            .await
+        self.commit_seeded_role_permissions(role_id, desired, |latest| latest == &desired_set).await
     }
 
     /// 为已存在的预定义角色补齐当前种子中尚未覆盖的权限。
@@ -139,11 +127,8 @@ impl RbacService {
         if !self.active_role_exists(role_id).await? {
             return Ok(());
         }
-        let existing = self
-            .db
-            .data_scopes()
-            .has_subject_resource_history(role_id, resource, &mut NoTransaction)
-            .await?;
+        let existing =
+            self.db.data_scopes().has_subject_resource_history(role_id, resource, &mut NoTransaction).await?;
         if existing {
             return Ok(());
         }
@@ -151,12 +136,7 @@ impl RbacService {
             .into_iter()
             .map(|data| {
                 DataScope::new(
-                    DataScopeId::new(format!(
-                        "s2:{}:{}:{}",
-                        role_id,
-                        resource,
-                        data.scope_type.as_str()
-                    )),
+                    DataScopeId::new(format!("s2:{}:{}:{}", role_id, resource, data.scope_type.as_str())),
                     data,
                 )
             })
@@ -183,9 +163,7 @@ impl RbacService {
                     for scope in &scopes {
                         db.data_scopes().create(scope, session).await?;
                     }
-                    MongoCasbinAdapter::new(db.clone())
-                        .bump_policy_revision(session)
-                        .await?;
+                    MongoCasbinAdapter::new(db.clone()).bump_policy_revision(session).await?;
                     Ok::<(), Error>(())
                 })
             })
@@ -206,11 +184,7 @@ impl RbacService {
     /// # 业务约束
     /// 软删除角色不补权限，避免把已下线岗位重新写回 policy。
     async fn active_role_exists(&self, role_id: &str) -> Result<bool> {
-        Ok(self
-            .db
-            .roles()
-            .exists_active_by_id(role_id, &mut NoTransaction)
-            .await?)
+        Ok(self.db.roles().exists_active_by_id(role_id, &mut NoTransaction).await?)
     }
 
     /// 提交预定义角色权限替换，并把并发冲突收敛为幂等结果。
@@ -234,10 +208,7 @@ impl RbacService {
         permissions: Vec<Permission>,
         conflict_settled: impl Fn(&PermissionSet) -> bool,
     ) -> Result<bool> {
-        match self
-            .replace_role_permissions(role_id, permissions, None, None)
-            .await
-        {
+        match self.replace_role_permissions(role_id, permissions, None, None).await {
             Ok(_) => Ok(true),
             Err(error @ Error::ConflictError(_)) => {
                 if conflict_settled(&self.direct_role_permissions(role_id).await?) {
@@ -245,7 +216,7 @@ impl RbacService {
                 } else {
                     Err(error)
                 }
-            }
+            },
             Err(error) => Err(error),
         }
     }

@@ -1,11 +1,12 @@
 //! 连接命令身份、版本指纹与能力内存变更；不执行外部 I/O。
+use erp_core::ids::SupplierApiCapabilityId;
+use id_generator::next_id;
+
 pub use super::context::digest;
 use super::context::ensure_version;
 use crate::dto::supplier_api::*;
 use crate::entity::supplier_api::*;
 use crate::{Error, Result};
-use erp_core::ids::SupplierApiCapabilityId;
-use id_generator::next_id;
 /// 连接命令的确定性身份；原始幂等键不进入持久化事实。
 pub struct CommandIdentity {
     pub connection_id: String,
@@ -20,12 +21,8 @@ impl CommandIdentity {
     /// 按操作人、连接、动作和原始命令生成原幂等摘要。
     pub fn new(id: &str, actor_id: &str, command: &SupplierConnectionCommand) -> Result<Self> {
         required(Some(command.idempotency_key.as_str()), "幂等键不能为空")?;
-        let idempotency_hash = digest(&[
-            actor_id,
-            id,
-            command.action.as_str(),
-            command.idempotency_key.trim(),
-        ]);
+        let idempotency_hash =
+            digest(&[actor_id, id, command.action.as_str(), command.idempotency_key.trim()]);
         let fingerprint = command_fingerprint(id, command);
         Ok(Self {
             connection_id: id.to_string(),
@@ -68,10 +65,7 @@ pub(super) fn apply_validated_changes(
     let mut updates = Vec::with_capacity(classified.len());
     let mut creates = Vec::new();
     for change in classified.changes() {
-        match capabilities
-            .iter()
-            .find(|capability| capability.capability_code == change.code)
-        {
+        match capabilities.iter().find(|capability| capability.capability_code == change.code) {
             Some(existing) => {
                 ensure_version(existing.base.version, change.expected_version)?;
                 if change.enabled
@@ -92,7 +86,7 @@ pub(super) fn apply_validated_changes(
                     constraint_snapshot: change.constraint_snapshot.clone(),
                 })?;
                 updates.push(updated);
-            }
+            },
             None => {
                 creates.push(SupplierApiCapability::new(
                     SupplierApiCapabilityId::new(next_id()),
@@ -103,7 +97,7 @@ pub(super) fn apply_validated_changes(
                         constraint_snapshot: change.constraint_snapshot.clone(),
                     },
                 )?);
-            }
+            },
         }
     }
     Ok((updates, creates))
@@ -124,13 +118,13 @@ pub fn map_capability_change_rejection(rejection: CapabilityChangeSetRejection) 
         | CapabilityChangeSetRejection::MissingExpectedVersion(_)
         | CapabilityChangeSetRejection::UnexpectedExpectedVersion(_) => {
             Error::ValidationError(rejection.to_string())
-        }
+        },
         CapabilityChangeSetRejection::NewCapabilityVersionMustBeZero(_) => {
             Error::ConflictError(rejection.to_string())
-        }
+        },
         CapabilityChangeSetRejection::NewCapabilityMustStartDisabled(_) => {
             Error::BusinessLogicError(rejection.to_string())
-        }
+        },
     }
 }
 
@@ -166,11 +160,7 @@ fn command_fingerprint(id: &str, command: &SupplierConnectionCommand) -> String 
         &command.expected_version.to_string(),
         command.payload_reference.as_deref().unwrap_or_default(),
         command.reason_code.as_deref().unwrap_or_default(),
-        command
-            .check_type
-            .map(|value| format!("{value:?}"))
-            .as_deref()
-            .unwrap_or_default(),
+        command.check_type.map(|value| format!("{value:?}")).as_deref().unwrap_or_default(),
     ])
 }
 

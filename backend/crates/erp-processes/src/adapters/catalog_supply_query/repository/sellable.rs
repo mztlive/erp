@@ -1,21 +1,17 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use futures_util::TryStreamExt;
-use mongodb::bson::{doc, Bson, Document};
-use serde::{Deserialize, Serialize};
-
 use erp_catalog::entity::catalog::{EnableStatus, ListingStatus, ProductKind, Sku};
+use erp_catalog::repository::{CatalogExt, SellableSkuFilter, SellableSkuRow};
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
 use erp_supply::entity::supplier_offering::{AvailabilityStatus, OfferingStatus};
-
-use super::shared::{PRODUCT_REVISIONS, SKUS, SKU_REVISIONS, SUPPLIER_OFFERINGS};
-use super::CatalogSupplyRepository;
-use erp_catalog::repository::CatalogExt;
-use erp_catalog::repository::{SellableSkuFilter, SellableSkuRow};
 use erp_supply::repository::SupplierOfferingExt;
-use persistence_core::Executor;
-use persistence_core::PageResult;
-use persistence_core::Result;
+use futures_util::TryStreamExt;
+use mongodb::bson::{Bson, Document, doc};
+use persistence_core::{Executor, PageResult, Result};
+use serde::{Deserialize, Serialize};
+
+use super::CatalogSupplyRepository;
+use super::shared::{PRODUCT_REVISIONS, SKU_REVISIONS, SKUS, SUPPLIER_OFFERINGS};
 
 /// `supplier_offering_revision` 集合名（公司商品池资格依赖的当前供给修订）。
 const SUPPLIER_OFFERING_REVISIONS: &str =
@@ -64,10 +60,7 @@ impl CatalogSupplyRepository<'_> {
         let match_doc = sellable_sku_match(None, None, &[]);
         let pipeline = sellable_sku_pipeline(match_doc, filter, Some((filter.page, filter.page_size)));
         let facet = self.aggregate_sellable_skus(pipeline, executor).await?;
-        Ok(PageResult {
-            items: facet.items,
-            total: facet.total.first().map_or(0, |row| row.count),
-        })
+        Ok(PageResult { items: facet.items, total: facet.total.first().map_or(0, |row| row.count) })
     }
 
     /// 批量校验销售单引用的精确公司 SKU 修订是否仍具备销售资格。
@@ -142,7 +135,7 @@ impl CatalogSupplyRepository<'_> {
                     .stream(session)
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
             None => {
                 collection
                     .aggregate(pipeline)
@@ -150,12 +143,9 @@ impl CatalogSupplyRepository<'_> {
                     .await?
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
         };
-        Ok(rows.into_iter().next().unwrap_or(SellableSkuFacet {
-            items: Vec::new(),
-            total: Vec::new(),
-        }))
+        Ok(rows.into_iter().next().unwrap_or(SellableSkuFacet { items: Vec::new(), total: Vec::new() }))
     }
 }
 
@@ -202,12 +192,7 @@ fn bson_for<T: Serialize>(value: T) -> Bson {
 /// # 错误
 /// 无；合法 `Amount` 必须可转换为 Decimal128，否则在测试阶段即失败。
 fn amount_filter_bson(amount: Amount) -> Bson {
-    Bson::Decimal128(
-        amount
-            .to_string()
-            .parse()
-            .expect("合法 Amount 必须可转换为 MongoDB Decimal128"),
-    )
+    Bson::Decimal128(amount.to_string().parse().expect("合法 Amount 必须可转换为 MongoDB Decimal128"))
 }
 
 /// 在资格聚合完成后追加可选业务筛选。
@@ -225,37 +210,19 @@ fn append_sellable_optional_filters(pipeline: &mut Vec<Document>, filter: &Sella
     if let Some(kind) = filter.product_kind {
         pipeline.push(doc! { "$match": { "product.product_kind": bson_for(kind) } });
     }
-    if let Some(category_id) = filter
-        .category_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
+    if let Some(category_id) = filter.category_id.as_deref().map(str::trim).filter(|value| !value.is_empty())
     {
         pipeline.push(doc! { "$match": { "product_revision.category_id": category_id } });
     }
-    if let Some(brand_id) = filter
-        .brand_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
+    if let Some(brand_id) = filter.brand_id.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
         pipeline.push(doc! { "$match": { "product_revision.brand_id": brand_id } });
     }
-    if let Some(supplier_id) = filter
-        .supplier_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
+    if let Some(supplier_id) = filter.supplier_id.as_deref().map(str::trim).filter(|value| !value.is_empty())
     {
         // 仅匹配资格供给中的供应商；响应投影仍不返回供应商身份。
         pipeline.push(doc! { "$match": { "supplier_ids": supplier_id } });
     }
-    if let Some(region) = filter
-        .supply_region
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
+    if let Some(region) = filter.supply_region.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
         pipeline.push(doc! { "$match": { "supply_regions": region } });
     }
     if filter.nationwide_only {
@@ -285,12 +252,7 @@ fn append_sellable_optional_filters(pipeline: &mut Vec<Document>, filter: &Sella
             "$match": { "sku_revision.sales_visible_price_gross": range }
         });
     }
-    if let Some(value) = filter
-        .keyword
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
+    if let Some(value) = filter.keyword.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
         let pattern = regex::escape(value);
         pipeline.push(doc! {
             "$match": {
@@ -329,10 +291,7 @@ fn sellable_sku_pipeline(
     let zero_quantity = Bson::Decimal128("0".parse().expect("零必须可转换为 MongoDB Decimal128"));
 
     let (skip, limit) = paging.map_or((0_i64, i64::MAX), |(page, page_size)| {
-        (
-            ((page.saturating_sub(1)) * u64::from(page_size)) as i64,
-            i64::from(page_size),
-        )
+        (((page.saturating_sub(1)) * u64::from(page_size)) as i64, i64::from(page_size))
     });
     let mut item_stages = vec![doc! { "$sort": { "sku_no": 1, "id": 1 } }, doc! { "$skip": skip }];
     if paging.is_some() {
@@ -522,12 +481,13 @@ fn sellable_sku_pipeline(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
 
     use erp_catalog::entity::catalog::ProductKind;
     use erp_core::common::time::BusinessDate;
     use erp_core::money::Amount;
+
+    use super::*;
 
     /// 公司商品池管道同时约束 SKU 已上架、当前修订与有效供给，并禁止投影采购成本。
     #[test]

@@ -1,12 +1,11 @@
-use crate::entity::catalog::{EnableStatus, SkuAttribute, SkuAttributeValue};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::ids::SkuAttributeId;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::common::{PageParams, non_blank, normalize_sort};
+use crate::entity::catalog::{EnableStatus, SkuAttribute, SkuAttributeValue};
 use crate::error::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
-
-use super::common::{non_blank, normalize_sort, PageParams};
 
 /// 规格属性列表允许的排序字段白名单。
 pub(crate) const SKU_ATTRIBUTE_SORT_FIELDS: &[&str] = &["created_at", "attribute_code", "name"];

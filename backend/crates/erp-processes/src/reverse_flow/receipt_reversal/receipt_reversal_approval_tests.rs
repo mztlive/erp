@@ -1,14 +1,16 @@
 //! 随原回款冲正命令迁入的八项既有内联合同测试。
 
-use super::super::adapter::execute_receipt_reversal_domain_action;
+use std::str::FromStr;
+
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerReceiptId, ReceiptReversalId};
 use erp_core::money::Amount;
 use erp_returns::entity::returns::{ReceiptReversal, ReceiptReversalData, ReceiptReversalStatus};
-use erp_returns::service::approval::start_receipt_reversal_approval;
 use erp_returns::service::ReturnsService;
+use erp_returns::service::approval::start_receipt_reversal_approval;
 use erp_workflow::service::approval::policy::ApprovalDomainAction;
-use std::str::FromStr;
+
+use super::super::adapter::execute_receipt_reversal_domain_action;
 
 fn draft_reversal() -> ReceiptReversal {
     ReceiptReversal::new(

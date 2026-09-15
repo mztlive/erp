@@ -1,12 +1,11 @@
 //! 财务列表关键词关联。只读取财务自有集合，外域名称和单号由读取模型解析。
 //! 关联包含已登记分配历史（含后续冲减）及回款待审批分配，不推定同主体全部单据相关。
-use crate::repository::{PayableExt, ReceivableExt};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::{
-    bson::{doc, Document},
-    Database,
-};
-use persistence_core::{insert_literal_regex_filter, Executor, Result};
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, Result, insert_literal_regex_filter};
+
+use crate::repository::{PayableExt, ReceivableExt};
 
 /// 外域提供的关键词命中事实；不包含分页、结构化筛选或权限条件。
 #[derive(Debug, Clone, Default)]
@@ -57,30 +56,14 @@ impl<'a> FinanceKeywordRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
         let side = Side::for_target(target);
-        let source_accounts = self
-            .ids(side.accounts, source_filter(&side, facts), "id", executor)
-            .await?;
-        let fund_ids = self
-            .ids(side.funds, literal(side.fund_number, &facts.q), "id", executor)
-            .await?;
+        let source_accounts = self.ids(side.accounts, source_filter(&side, facts), "id", executor).await?;
+        let fund_ids = self.ids(side.funds, literal(side.fund_number, &facts.q), "id", executor).await?;
         let invoice_ids = self
-            .ids(
-                <Database as ReceivableExt>::INVOICES,
-                invoice_filter(&side, facts),
-                "id",
-                executor,
-            )
+            .ids(<Database as ReceivableExt>::INVOICES, invoice_filter(&side, facts), "id", executor)
             .await?;
         let fund_accounts = self.fund_accounts(&side, &fund_ids, executor).await?;
-        let invoice_accounts = self
-            .related(
-                side.invoices,
-                "invoice_id",
-                &invoice_ids,
-                side.account_key,
-                executor,
-            )
-            .await?;
+        let invoice_accounts =
+            self.related(side.invoices, "invoice_id", &invoice_ids, side.account_key, executor).await?;
         match target {
             FinanceSearchTarget::Receivable | FinanceSearchTarget::Payable => {
                 let condition = account_filter(
@@ -89,20 +72,13 @@ impl<'a> FinanceKeywordRepository<'a> {
                     &joined(&source_accounts, &joined(&fund_accounts, &invoice_accounts)),
                 );
                 self.ids(side.accounts, condition, "id", executor).await
-            }
+            },
             FinanceSearchTarget::Receipt | FinanceSearchTarget::Payment => {
-                self.funds(
-                    &side,
-                    facts,
-                    &joined(&source_accounts, &invoice_accounts),
-                    executor,
-                )
-                .await
-            }
+                self.funds(&side, facts, &joined(&source_accounts, &invoice_accounts), executor).await
+            },
             FinanceSearchTarget::SalesInvoice | FinanceSearchTarget::PurchaseInvoice => {
-                self.invoices(&side, facts, &joined(&source_accounts, &fund_accounts), executor)
-                    .await
-            }
+                self.invoices(&side, facts, &joined(&source_accounts, &fund_accounts), executor).await
+            },
         }
     }
 
@@ -120,11 +96,7 @@ impl<'a> FinanceKeywordRepository<'a> {
         if let Some(session) = executor.session() {
             query = query.session(session);
         }
-        Ok(query
-            .await?
-            .into_iter()
-            .filter_map(|value| value.as_str().map(str::to_owned))
-            .collect())
+        Ok(query.await?.into_iter().filter_map(|value| value.as_str().map(str::to_owned)).collect())
     }
 
     /// 空关联身份直接短路；不得去掉空集合条件扩大范围。
@@ -139,8 +111,7 @@ impl<'a> FinanceKeywordRepository<'a> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.ids(collection, doc! { key: { "$in": ids } }, field, executor)
-            .await
+        self.ids(collection, doc! { key: { "$in": ids } }, field, executor).await
     }
 
     /// 沿付款/回款的正式分配及回款待审批分配定位账户。
@@ -150,23 +121,15 @@ impl<'a> FinanceKeywordRepository<'a> {
         funds: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
-        let mut entries = self
-            .related(side.allocations, side.fund_key, funds, side.entry_key, executor)
-            .await?;
+        let mut entries =
+            self.related(side.allocations, side.fund_key, funds, side.entry_key, executor).await?;
         if side.sales {
             entries.extend(
-                self.related(
-                    side.funds,
-                    "id",
-                    funds,
-                    "pending_allocations.receivable_entry_id",
-                    executor,
-                )
-                .await?,
+                self.related(side.funds, "id", funds, "pending_allocations.receivable_entry_id", executor)
+                    .await?,
             );
         }
-        self.related(side.entries, "id", &entries, side.account_key, executor)
-            .await
+        self.related(side.entries, "id", &entries, side.account_key, executor).await
     }
 
     /// 按自身编号/主体或关联账户匹配收付款单，其他同主体单据不参与扩展。
@@ -177,18 +140,8 @@ impl<'a> FinanceKeywordRepository<'a> {
         accounts: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
-        let entries = self
-            .related(side.entries, side.account_key, accounts, "id", executor)
-            .await?;
-        let ids = self
-            .related(
-                side.allocations,
-                side.entry_key,
-                &entries,
-                side.fund_key,
-                executor,
-            )
-            .await?;
+        let entries = self.related(side.entries, side.account_key, accounts, "id", executor).await?;
+        let ids = self.related(side.allocations, side.entry_key, &entries, side.fund_key, executor).await?;
         let mut clauses = vec![
             literal(side.fund_number, &facts.q),
             doc! { side.party_key: { "$in": side.parties(facts) } },
@@ -197,8 +150,7 @@ impl<'a> FinanceKeywordRepository<'a> {
         if side.sales {
             clauses.push(doc! { "pending_allocations.receivable_entry_id": { "$in": entries } });
         }
-        self.ids(side.funds, doc! { "$or": clauses }, "id", executor)
-            .await
+        self.ids(side.funds, doc! { "$or": clauses }, "id", executor).await
     }
 
     /// 发票号/主体 OR 同一账户的指定来源单据，方向始终限制在当前财务侧。
@@ -209,9 +161,7 @@ impl<'a> FinanceKeywordRepository<'a> {
         accounts: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
-        let ids = self
-            .related(side.invoices, side.account_key, accounts, "invoice_id", executor)
-            .await?;
+        let ids = self.related(side.invoices, side.account_key, accounts, "invoice_id", executor).await?;
         self.ids(<Database as ReceivableExt>::INVOICES, doc! { "invoice_direction": side.direction, "$or": [
             literal("invoice_no", &facts.q), doc! { "party_id": { "$in": &facts.party_ids } }, doc! { "id": { "$in": ids } }
         ] }, "id", executor).await
@@ -298,10 +248,8 @@ fn source_filter(side: &Side, facts: &FinanceKeyword) -> Document {
 }
 /// 账户按名称及显式单据关联匹配，应收保留原接口对内部身份的兼容检索。
 fn account_filter(side: &Side, facts: &FinanceKeyword, accounts: &[String]) -> Document {
-    let mut clauses = vec![
-        doc! { "id": { "$in": accounts } },
-        doc! { side.party_key: { "$in": side.parties(facts) } },
-    ];
+    let mut clauses =
+        vec![doc! { "id": { "$in": accounts } }, doc! { side.party_key: { "$in": side.parties(facts) } }];
     if side.sales {
         clauses.extend(
             ["id", "sales_order_id", "customer_id", "counterparty_party_id"]
@@ -332,14 +280,10 @@ mod tests {
 
     #[test]
     fn invoice_number_is_literal_and_direction_cannot_be_widened() {
-        let facts = FinanceKeyword {
-            q: "Inv.[1]*".into(),
-            ..Default::default()
-        };
-        for (target, direction) in [
-            (FinanceSearchTarget::SalesInvoice, "sales"),
-            (FinanceSearchTarget::PurchaseInvoice, "purchase"),
-        ] {
+        let facts = FinanceKeyword { q: "Inv.[1]*".into(), ..Default::default() };
+        for (target, direction) in
+            [(FinanceSearchTarget::SalesInvoice, "sales"), (FinanceSearchTarget::PurchaseInvoice, "purchase")]
+        {
             let query = invoice_filter(&Side::for_target(target), &facts);
             assert_eq!(query.get_str("invoice_direction").unwrap(), direction);
             let regex = query.get_document("invoice_no").unwrap();
@@ -367,10 +311,7 @@ mod tests {
     #[test]
     fn empty_source_search_keeps_a_match_nothing_condition() {
         assert_eq!(
-            source_filter(
-                &Side::for_target(FinanceSearchTarget::Receipt),
-                &FinanceKeyword::default()
-            ),
+            source_filter(&Side::for_target(FinanceSearchTarget::Receipt), &FinanceKeyword::default()),
             doc! { "sales_order_id": { "$in": [] } }
         );
         assert_eq!(joined(&["a".into(), "b".into()], &["b".into()]), vec!["a", "b"]);

@@ -1,14 +1,15 @@
 //! 销售变更正式版本准备和事务内销售写入；保留原 NoTransaction 读取边界。
 
-use super::formalization::{build_change_revision, revision_gross};
-use super::SalesReviewService;
-use crate::entity::sales_review::{SalesChangeOrder, SalesChangeSubmission, SalesChangeSubmissionLine};
-use crate::repository::{SalesOrderExt, SalesReviewExt};
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
 use persistence_core::NoTransaction;
+
+use super::SalesReviewService;
+use super::formalization::{build_change_revision, revision_gross};
+use crate::entity::sales_review::{SalesChangeOrder, SalesChangeSubmission, SalesChangeSubmissionLine};
+use crate::repository::{SalesOrderExt, SalesReviewExt};
+use crate::{Error, Result};
 
 impl SalesReviewService {
     /// 校验最终通过状态并准备销售修订；本方法只产生销售本域写入计划。
@@ -60,9 +61,7 @@ async fn prepare_effective_change_write(
         .current_revision_id()
         .ok_or_else(|| Error::BusinessLogicError("销售单缺少当前版本".to_string()))?;
     if !change_order.base_revision_matches(current_revision_id) {
-        return Err(Error::ConflictError(
-            "基准版本已不是销售单当前版本，请刷新后重新发起变更".to_string(),
-        ));
+        return Err(Error::ConflictError("基准版本已不是销售单当前版本，请刷新后重新发起变更".to_string()));
     }
     prepare_effective_revision_write(db, change_order, order, submission, submission_lines, actor).await
 }

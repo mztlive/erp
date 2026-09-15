@@ -1,13 +1,13 @@
 //! 恢复原审批人编排。
 
-use bpm::engine::{resume, ResumeCommand};
+use bpm::engine::{ResumeCommand, resume};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId};
 use bpm::model::{
     ApprovalCommandReceipt, ApprovalInstanceAssignee, ApprovalNodeExecution, ApprovalProcessInstance,
 };
 
 use super::apply_plan::apply_plan;
-use super::idempotency::{resume_identity, ReceiptBranch};
+use super::idempotency::{ReceiptBranch, resume_identity};
 use super::start::map_engine_error;
 use super::{ExecutionCommandInput, PreparedExecution};
 use crate::error::{Error, Result};
@@ -61,11 +61,9 @@ pub fn prepare_resume(input: ResumeExecutionInput) -> Result<PreparedExecution> 
     match identity.classify(input.command.receipt.as_ref()) {
         ReceiptBranch::PayloadConflict => return Err(super::idempotency::payload_conflict_error()),
         ReceiptBranch::SamePayload(receipt) => {
-            return Ok(PreparedExecution::Replay {
-                receipt: receipt.clone(),
-            });
-        }
-        ReceiptBranch::Fresh => {}
+            return Ok(PreparedExecution::Replay { receipt: receipt.clone() });
+        },
+        ReceiptBranch::Fresh => {},
     }
     let plan = resume(
         input.instance,
@@ -87,7 +85,5 @@ pub fn prepare_resume(input: ResumeExecutionInput) -> Result<PreparedExecution> 
         input.command.now,
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
-    Ok(PreparedExecution::Apply(Box::new(apply_plan(
-        plan, receipt, None,
-    ))))
+    Ok(PreparedExecution::Apply(Box::new(apply_plan(plan, receipt, None))))
 }

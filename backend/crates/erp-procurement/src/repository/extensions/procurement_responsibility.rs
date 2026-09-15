@@ -1,10 +1,9 @@
 //! 采购责任规则仓储访问器。
 
-use crate::repository::owned::ProcurementResponsibilityRuleRepository;
-
 use mongodb::Database;
 
 use super::super::procurement_responsibility::ProcurementResponsibilityRuleFilter;
+use crate::repository::owned::ProcurementResponsibilityRuleRepository;
 
 /// 采购责任规则仓储访问入口。
 pub trait ProcurementResponsibilityExt {

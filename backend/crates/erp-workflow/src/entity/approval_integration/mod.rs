@@ -9,8 +9,8 @@ pub mod subject_snapshot;
 
 pub use action_policy::ApprovalDomainAction;
 pub use identity::{
-    document_type_from_subject_kind, document_type_of, document_type_of_sales_business, process_kind_of,
-    subject_ref_for, subject_ref_for_sales_business, SalesBusinessKind,
+    SalesBusinessKind, document_type_from_subject_kind, document_type_of, document_type_of_sales_business,
+    process_kind_of, subject_ref_for, subject_ref_for_sales_business,
 };
 pub use notification_outbox::{
     ApprovalNotificationDeliveryStatus, ApprovalNotificationEventKind, ApprovalNotificationOutbox,

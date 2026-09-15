@@ -1,13 +1,12 @@
-use crate::repository::owned::PayableAccountRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PayableAccountId;
 use erp_core::money::Amount;
-use mongodb::bson::{doc, Bson, Document};
+use mongodb::bson::{Bson, Document, doc};
+use persistence_core::{Executor, Result};
 
-use super::write::{amount_bson, progress_pipeline};
 use super::InvoicingBatchResult;
-use persistence_core::Executor;
-use persistence_core::Result;
+use super::write::{amount_bson, progress_pipeline};
+use crate::repository::owned::PayableAccountRepository;
 
 impl<'a> PayableAccountRepository<'a> {
     /// 条件收票：增加净已收票进度（不超过可收票额度）。
@@ -38,13 +37,7 @@ impl<'a> PayableAccountRepository<'a> {
         let filter = invoicing_guard(id, &amount);
         self.conditional_update(
             filter,
-            progress_pipeline(
-                "invoiced_total",
-                "open_invoiceable_total",
-                &amount,
-                true,
-                updated_by,
-            ),
+            progress_pipeline("invoiced_total", "open_invoiceable_total", &amount, true, updated_by),
             executor,
         )
         .await
@@ -86,13 +79,7 @@ impl<'a> PayableAccountRepository<'a> {
             let hit = self
                 .conditional_update(
                     filter,
-                    progress_pipeline(
-                        "invoiced_total",
-                        "open_invoiceable_total",
-                        &amount,
-                        true,
-                        updated_by,
-                    ),
+                    progress_pipeline("invoiced_total", "open_invoiceable_total", &amount, true, updated_by),
                     executor,
                 )
                 .await?;
@@ -139,13 +126,7 @@ impl<'a> PayableAccountRepository<'a> {
         };
         self.conditional_update(
             filter,
-            progress_pipeline(
-                "invoiced_total",
-                "open_invoiceable_total",
-                &amount,
-                false,
-                updated_by,
-            ),
+            progress_pipeline("invoiced_total", "open_invoiceable_total", &amount, false, updated_by),
             executor,
         )
         .await
@@ -192,13 +173,7 @@ impl<'a> PayableAccountRepository<'a> {
             let hit = self
                 .conditional_update(
                     filter,
-                    progress_pipeline(
-                        "invoiced_total",
-                        "open_invoiceable_total",
-                        &amount,
-                        false,
-                        updated_by,
-                    ),
+                    progress_pipeline("invoiced_total", "open_invoiceable_total", &amount, false, updated_by),
                     executor,
                 )
                 .await?;

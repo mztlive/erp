@@ -15,7 +15,7 @@ use erp_core::ids::{
     ProcurementConfirmationLineId, PurchaseChangeSubmissionId, PurchaseOrderSubmissionId, SalesOrderLineId,
     SalesOrderRevisionLineId, SalesOrderSubmissionLineId, SkuId, SkuRevisionId,
 };
-use erp_core::money::{line_amounts, round_to_cent, Amount, Quantity, Rate, UnitPrice};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice, line_amounts, round_to_cent};
 
 use super::change_order::PurchaseChangeSubmissionLineData;
 use super::purchase_submission::PurchaseOrderSubmissionLineData;
@@ -97,11 +97,9 @@ impl PurchaseLineInput {
         match self.line_type {
             PurchaseLineType::ItemService => {
                 let quantity = self.quantity.ok_or(LineAmountViolation::MissingQuantity)?;
-                let unit_cost = self
-                    .unit_cost_gross
-                    .ok_or(LineAmountViolation::MissingUnitCostGross)?;
+                let unit_cost = self.unit_cost_gross.ok_or(LineAmountViolation::MissingUnitCostGross)?;
                 Ok(line_amounts(unit_cost, quantity, tax_rate))
-            }
+            },
             PurchaseLineType::LogisticsFee => {
                 let gross = self.gross_amount.ok_or(LineAmountViolation::MissingGrossAmount)?;
                 let tax = Amount::try_from(round_to_cent(gross.to_decimal() * tax_rate.to_decimal()))
@@ -109,7 +107,7 @@ impl PurchaseLineInput {
                 let net = Amount::try_from(gross.to_decimal() - tax.to_decimal())
                     .expect("物流行净额小数位不超过 2 位");
                 Ok((gross, net, tax))
-            }
+            },
         }
     }
 
@@ -255,7 +253,7 @@ mod tests {
     };
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 
-    use super::{compute_header_totals, LineAmountViolation, PurchaseLineInput};
+    use super::{LineAmountViolation, PurchaseLineInput, compute_header_totals};
     use crate::entity::purchase_order::types::PurchaseLineType;
 
     fn goods_input() -> PurchaseLineInput {
@@ -355,41 +353,20 @@ mod tests {
     /// 商品行缺数量/单价、物流行缺金额分别返回对应违规。
     #[test]
     fn missing_required_amount_inputs_are_rejected() {
-        let input = PurchaseLineInput {
-            quantity: None,
-            ..goods_input()
-        };
-        assert_eq!(
-            input.compute_amounts().unwrap_err(),
-            LineAmountViolation::MissingQuantity
-        );
+        let input = PurchaseLineInput { quantity: None, ..goods_input() };
+        assert_eq!(input.compute_amounts().unwrap_err(), LineAmountViolation::MissingQuantity);
 
-        let input = PurchaseLineInput {
-            unit_cost_gross: None,
-            ..goods_input()
-        };
-        assert_eq!(
-            input.compute_amounts().unwrap_err(),
-            LineAmountViolation::MissingUnitCostGross
-        );
+        let input = PurchaseLineInput { unit_cost_gross: None, ..goods_input() };
+        assert_eq!(input.compute_amounts().unwrap_err(), LineAmountViolation::MissingUnitCostGross);
 
-        let input = PurchaseLineInput {
-            gross_amount: None,
-            ..logistics_input()
-        };
-        assert_eq!(
-            input.compute_amounts().unwrap_err(),
-            LineAmountViolation::MissingGrossAmount
-        );
+        let input = PurchaseLineInput { gross_amount: None, ..logistics_input() };
+        assert_eq!(input.compute_amounts().unwrap_err(), LineAmountViolation::MissingGrossAmount);
     }
 
     /// 未提供进项税率时按 0 计税。
     #[test]
     fn missing_tax_rate_taxes_at_zero() {
-        let input = PurchaseLineInput {
-            input_tax_rate: None,
-            ..goods_input()
-        };
+        let input = PurchaseLineInput { input_tax_rate: None, ..goods_input() };
         let (gross, net, tax) = input.compute_amounts().unwrap();
         assert_eq!(gross, Amount::from_str("29.97").unwrap());
         assert_eq!(net, Amount::from_str("29.97").unwrap());
@@ -413,30 +390,21 @@ mod tests {
     /// 提交行数据工厂逐字段映射，行号透传且金额由领域计算。
     #[test]
     fn submission_line_data_maps_all_fields_and_computes_amounts() {
-        let data = goods_input()
-            .into_submission_line_data(PurchaseOrderSubmissionId::new("sub-1"), 2)
-            .unwrap();
+        let data =
+            goods_input().into_submission_line_data(PurchaseOrderSubmissionId::new("sub-1"), 2).unwrap();
         assert_eq!(data.purchase_order_submission_id.as_ref(), "sub-1");
         assert_eq!(data.line_no, 2);
         assert_eq!(data.line_type, PurchaseLineType::ItemService);
         assert_eq!(
-            data.procurement_confirmation_line_id
-                .as_ref()
-                .map(ToString::to_string),
+            data.procurement_confirmation_line_id.as_ref().map(ToString::to_string),
             Some("pcl-1".to_string())
         );
-        assert_eq!(
-            data.sku_id.as_ref().map(ToString::to_string),
-            Some("sku-1".to_string())
-        );
+        assert_eq!(data.sku_id.as_ref().map(ToString::to_string), Some("sku-1".to_string()));
         assert_eq!(data.quantity, Some(Quantity::from_str("3.000000").unwrap()));
         assert_eq!(data.gross_amount, Amount::from_str("29.97").unwrap());
         assert_eq!(data.net_amount, Amount::from_str("26.07").unwrap());
         assert_eq!(data.tax_amount, Amount::from_str("3.90").unwrap());
-        assert_eq!(
-            data.expected_delivery_date,
-            Some(BusinessDate::from_ymd(2026, 8, 6).unwrap())
-        );
+        assert_eq!(data.expected_delivery_date, Some(BusinessDate::from_ymd(2026, 8, 6).unwrap()));
     }
 
     /// 空白可选字段在数据工厂中原样保留为 `None`。

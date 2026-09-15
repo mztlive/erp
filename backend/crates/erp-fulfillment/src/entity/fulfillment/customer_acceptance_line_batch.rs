@@ -2,12 +2,12 @@
 //!
 //! 验收行输入顺序、连续行号、默认无凭证与数量约束的唯一规则源。
 
-use serde::{Deserialize, Serialize};
-
-use crate::entity::fulfillment::{CustomerAcceptanceLine, CustomerAcceptanceLineData};
 use erp_core::ids::{CustomerAcceptanceId, CustomerAcceptanceLineId, SalesOrderLineId};
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::fulfillment::{CustomerAcceptanceLine, CustomerAcceptanceLineData};
 
 /// 单行领域输入（已验证形态，不含行号/表头/凭证）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -80,8 +80,9 @@ impl CustomerAcceptanceLineBatch {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn spec(id: &str) -> CustomerAcceptanceLineSpec {
         CustomerAcceptanceLineSpec {
@@ -110,27 +111,28 @@ mod tests {
     /// 数量约束由实体直接覆盖：负数量失败。
     #[test]
     fn quantity_violations_fail() {
-        assert!(CustomerAcceptanceLineBatch::build(
-            CustomerAcceptanceId::new("a-1"),
-            vec![CustomerAcceptanceLineSpec {
-                accepted_quantity: Quantity::from_str("-1").unwrap(),
-                ..spec("l-1")
-            }],
-        )
-        .is_err());
+        assert!(
+            CustomerAcceptanceLineBatch::build(
+                CustomerAcceptanceId::new("a-1"),
+                vec![CustomerAcceptanceLineSpec {
+                    accepted_quantity: Quantity::from_str("-1").unwrap(),
+                    ..spec("l-1")
+                }],
+            )
+            .is_err()
+        );
     }
 
     /// 原因超长失败。
     #[test]
     fn overlong_reason_fails() {
-        assert!(CustomerAcceptanceLineBatch::build(
-            CustomerAcceptanceId::new("a-1"),
-            vec![CustomerAcceptanceLineSpec {
-                reason: Some("x".repeat(513)),
-                ..spec("l-1")
-            }],
-        )
-        .is_err());
+        assert!(
+            CustomerAcceptanceLineBatch::build(
+                CustomerAcceptanceId::new("a-1"),
+                vec![CustomerAcceptanceLineSpec { reason: Some("x".repeat(513)), ..spec("l-1") }],
+            )
+            .is_err()
+        );
     }
 
     /// 空行失败（调用方不得先建表头）；超 200 行失败。

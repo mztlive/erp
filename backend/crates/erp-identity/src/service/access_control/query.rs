@@ -1,15 +1,15 @@
 //! 范围配置列表查询；信封版本与空集字段与组织查询同口径。
 
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use persistence_core::Transactional;
 use validator::Validate;
 
 use super::{AccessControlService, DataScopeFilter};
+use crate::AccessControlExt;
 use crate::dto::{DataScopeListMeta, DataScopeListParams, DataScopeListView, DataScopeView, PageView};
 use crate::error::{Error, Result};
 use crate::repository::OrganizationRepository;
-use crate::AccessControlExt;
-use application_core::AuditActor;
 
 impl AccessControlService {
     /// 分页查询数据范围列表，并返回与组织查询同口径的信封。
@@ -39,10 +39,7 @@ impl AccessControlService {
     ) -> Result<DataScopeListView> {
         params.validate()?;
         let query = params.normalized()?;
-        let rbac = self
-            .rbac
-            .clone()
-            .ok_or_else(|| Error::Forbidden("未装配范围配置授权".into()))?;
+        let rbac = self.rbac.clone().ok_or_else(|| Error::Forbidden("未装配范围配置授权".into()))?;
         let db = self.db.clone();
         let actor = actor.clone();
         db.client()
@@ -50,8 +47,7 @@ impl AccessControlService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let policy_version = rbac.current_policy_revision().await?;
-                    rbac.ensure_policy_snapshot_with_executor(policy_version, session)
-                        .await?;
+                    rbac.ensure_policy_snapshot_with_executor(policy_version, session).await?;
                     let organizations = OrganizationRepository::new(&db).state(session).await?;
                     let as_of = Instant::now();
                     let scope_version = format!(
@@ -100,12 +96,7 @@ impl AccessControlService {
                         })
                         .collect();
                     Ok::<_, Error>(DataScopeListView::compose(
-                        PageView {
-                            items,
-                            total: page.total,
-                            page: filter.page,
-                            page_size: filter.page_size,
-                        },
+                        PageView { items, total: page.total, page: filter.page, page_size: filter.page_size },
                         DataScopeListMeta {
                             scope_version,
                             policy_version,

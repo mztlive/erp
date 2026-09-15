@@ -1,13 +1,14 @@
 //! 集成本域查询、实体准备与调用方事务内写入。
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction};
+use validator::Validate;
+
 use super::IntegrationOpsService;
 use crate::dto::*;
 use crate::entity::integration_ops::*;
 use crate::repository::IntegrationOpsExt;
 use crate::{Error, Result};
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
-use validator::Validate;
 /// 对账差异列表筛选条件类型。
 type DifferenceFilter = <Database as IntegrationOpsExt>::ReconciliationDifferenceFilter;
 impl IntegrationOpsService {
@@ -30,11 +31,8 @@ impl IntegrationOpsService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .reconciliation_differences()
-            .search_differences(&filter, &mut NoTransaction)
-            .await?;
+        let page =
+            self.db.reconciliation_differences().search_differences(&filter, &mut NoTransaction).await?;
         let difference_ids = page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
         let latest_by_difference = self
             .db
@@ -43,9 +41,9 @@ impl IntegrationOpsService {
             .await?;
         let mut items = Vec::with_capacity(page.items.len());
         for row in page.items {
-            let (status, version) = latest_by_difference.get(&row.id).map_or((None, 0), |record| {
-                (Some(record.resulting_status), u64::from(record.resolution_no))
-            });
+            let (status, version) = latest_by_difference
+                .get(&row.id)
+                .map_or((None, 0), |record| (Some(record.resulting_status), u64::from(record.resolution_no)));
             items.push(DifferenceView {
                 id: row.id,
                 business_object_type: row.business_object_type,
@@ -58,12 +56,7 @@ impl IntegrationOpsService {
                 created_at: row.created_at,
             });
         }
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 }
 /// 构造差异并保留原字段不变量的 ValidationError 映射。
@@ -93,9 +86,7 @@ pub async fn persist_difference(
     difference: &ReconciliationDifference,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    db.reconciliation_differences()
-        .create(difference, executor)
-        .await?;
+    db.reconciliation_differences().create(difference, executor).await?;
     Ok(())
 }
 
@@ -106,10 +97,7 @@ mod tests {
     /// # 返回
     /// 返回去掉测试模块后的生产代码全文。
     fn production_source() -> &'static str {
-        include_str!("reconciliation_difference.rs")
-            .split("mod tests {")
-            .next()
-            .expect("必须存在生产代码")
+        include_str!("reconciliation_difference.rs").split("mod tests {").next().expect("必须存在生产代码")
     }
 
     /// 分层守卫（INT-R26）：差异列表经单次批量装载最新决定，无逐行查询。

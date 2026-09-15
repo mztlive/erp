@@ -1,14 +1,12 @@
-use super::*;
 use serde::de::DeserializeOwned;
 use serde_json::json;
+
+use super::*;
 
 /// 由真实实体的持久化形状构造两次提交，避免以展示 DTO 自证版本正确。
 fn entity<T: DeserializeOwned>(id: &str, fields: serde_json::Value) -> T {
     let mut value = serde_json::to_value(entity_core::BaseModel::new(id.to_string())).unwrap();
-    value
-        .as_object_mut()
-        .unwrap()
-        .extend(fields.as_object().unwrap().clone());
+    value.as_object_mut().unwrap().extend(fields.as_object().unwrap().clone());
     serde_json::from_value(value).unwrap()
 }
 
@@ -109,10 +107,7 @@ fn purchase_change_history_keeps_frozen_supplier_amount_and_lines() {
     purchase(&mut fact, &change, Some("PO1"), &context);
     assert!(!fact.display.subject_briefs.contains_key("1"));
     assert!(!fact.display.subject_briefs.contains_key("2"));
-    assert_eq!(
-        fact.display.subject_briefs["5"].counterparty_label.as_deref(),
-        Some("新供应商")
-    );
+    assert_eq!(fact.display.subject_briefs["5"].counterparty_label.as_deref(), Some("新供应商"));
     assert!(fact.display.subject_briefs.contains_key("s1"));
 }
 
@@ -124,18 +119,16 @@ fn assert_versions(fact: &WorkbenchObjectFact, old_party: &str, new_party: &str)
         let source = display.brief_source.as_ref().unwrap();
         assert!(source.amount_label.as_ref().unwrap().contains(amount));
         assert!(source.lines[0].title.contains(party));
-        assert!(!source
-            .extra_sections
-            .iter()
-            .any(|section| section.label == "原因" || section.label == "变更类型"));
+        assert!(
+            !source
+                .extra_sections
+                .iter()
+                .any(|section| section.label == "原因" || section.label == "变更类型")
+        );
         assert!(!source.list_summary.contains("当前草稿原因"));
         assert_eq!(
             source.amount_label,
-            fact.display.subject_briefs[&format!("s{version}")]
-                .brief_source
-                .as_ref()
-                .unwrap()
-                .amount_label
+            fact.display.subject_briefs[&format!("s{version}")].brief_source.as_ref().unwrap().amount_label
         );
     }
     assert!(crate::workbench::approval_list::document_summary(fact, Some(3)).is_none());

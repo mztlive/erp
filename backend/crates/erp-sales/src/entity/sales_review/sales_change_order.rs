@@ -7,13 +7,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::stable::StableBase;
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::ids::{SalesChangeOrderId, SalesChangeSubmissionId, SalesOrderId, SalesOrderRevisionId};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 变更原因最大长度。
 const REASON_MAX_LEN: usize = 512;
@@ -279,9 +278,7 @@ impl SalesChangeOrder {
     /// # 错误
     /// 变更单尚未提交审批时返回错误。
     pub fn required_current_submission_id(&self) -> Result<&SalesChangeSubmissionId> {
-        self.current_submission_id
-            .as_ref()
-            .ok_or_else(|| Error::from("变更单尚未提交审批"))
+        self.current_submission_id.as_ref().ok_or_else(|| Error::from("变更单尚未提交审批"))
     }
 
     /// 判断销售单当前版本是否仍等于变更基准版本。
@@ -451,16 +448,10 @@ mod tests {
 
     #[test]
     fn new_rejects_blank_and_overlong_reason() {
-        let blank = SalesChangeOrderData {
-            reason: "   ".to_string(),
-            ..data()
-        };
+        let blank = SalesChangeOrderData { reason: "   ".to_string(), ..data() };
         assert!(SalesChangeOrder::new(SalesChangeOrderId::new("co-1"), blank, "admin-1").is_err());
 
-        let overlong = SalesChangeOrderData {
-            reason: "x".repeat(513),
-            ..data()
-        };
+        let overlong = SalesChangeOrderData { reason: "x".repeat(513), ..data() };
         assert!(SalesChangeOrder::new(SalesChangeOrderId::new("co-1"), overlong, "admin-1").is_err());
     }
 
@@ -471,9 +462,7 @@ mod tests {
         assert!(order.is_draft());
         assert!(order.base_revision_matches("rev-1"));
         assert!(order.required_current_submission_id().is_err());
-        order
-            .start_approval(SalesChangeSubmissionId::new("sub-1"), "hash-1", "admin-1")
-            .unwrap();
+        order.start_approval(SalesChangeSubmissionId::new("sub-1"), "hash-1", "admin-1").unwrap();
         assert!(!order.is_draft());
         assert_eq!(order.required_current_submission_id().unwrap().as_ref(), "sub-1");
     }
@@ -482,18 +471,11 @@ mod tests {
     fn submit_enters_in_approval_and_cancel_returns_draft_without_rolling_back_submission() {
         let mut order = SalesChangeOrder::new(SalesChangeOrderId::new("co-1"), data(), "admin-1").unwrap();
         order
-            .start_approval(
-                SalesChangeSubmissionId::new("cs-1"),
-                " hash-1 ".to_string(),
-                "admin-1",
-            )
+            .start_approval(SalesChangeSubmissionId::new("cs-1"), " hash-1 ".to_string(), "admin-1")
             .unwrap();
         assert_eq!(order.stable.status(), SalesChangeOrderStatus::InApproval);
         assert_eq!(order.target_content_hash.as_deref(), Some("hash-1"));
-        assert_eq!(
-            order.current_submission_id,
-            Some(SalesChangeSubmissionId::new("cs-1"))
-        );
+        assert_eq!(order.current_submission_id, Some(SalesChangeSubmissionId::new("cs-1")));
 
         order.cancel_approval("admin-1").unwrap();
         assert_eq!(order.stable.status(), SalesChangeOrderStatus::Draft);
@@ -503,70 +485,51 @@ mod tests {
             "撤回不得回退 subject_version / 提交引用"
         );
 
-        order
-            .start_approval(SalesChangeSubmissionId::new("cs-2"), "hash-2", "admin-1")
-            .unwrap();
-        order
-            .apply_effective(SalesOrderRevisionId::new("rev-2"), "finance")
-            .unwrap();
+        order.start_approval(SalesChangeSubmissionId::new("cs-2"), "hash-2", "admin-1").unwrap();
+        order.apply_effective(SalesOrderRevisionId::new("rev-2"), "finance").unwrap();
         assert_eq!(order.stable.status(), SalesChangeOrderStatus::Effective);
-        assert_eq!(
-            order.effective_revision_id,
-            Some(SalesOrderRevisionId::new("rev-2"))
-        );
+        assert_eq!(order.effective_revision_id, Some(SalesOrderRevisionId::new("rev-2")));
     }
 
     #[test]
     fn status_machine_edges_are_directed() {
         assert!(ensure_transition(SalesChangeOrderStatus::Draft, SalesChangeOrderStatus::InApproval).is_ok());
         assert!(ensure_transition(SalesChangeOrderStatus::Draft, SalesChangeOrderStatus::Voided).is_ok());
-        assert!(ensure_transition(
-            SalesChangeOrderStatus::InApproval,
-            SalesChangeOrderStatus::Effective
-        )
-        .is_ok());
+        assert!(
+            ensure_transition(SalesChangeOrderStatus::InApproval, SalesChangeOrderStatus::Effective).is_ok()
+        );
         assert!(ensure_transition(SalesChangeOrderStatus::InApproval, SalesChangeOrderStatus::Draft).is_ok());
         assert!(ensure_transition(SalesChangeOrderStatus::Draft, SalesChangeOrderStatus::Effective).is_err());
         assert!(ensure_transition(SalesChangeOrderStatus::Effective, SalesChangeOrderStatus::Draft).is_err());
         assert!(ensure_transition(SalesChangeOrderStatus::Voided, SalesChangeOrderStatus::Draft).is_err());
         assert!(SalesChangeOrderStatus::Effective.allowed_next().is_empty());
         assert!(SalesChangeOrderStatus::Voided.allowed_next().is_empty());
-        assert!(SalesChangeOrderStatus::PendingImpactConfirmation
-            .allowed_next()
-            .is_empty());
-        assert!(SalesChangeOrderStatus::PendingFinanceReview
-            .allowed_next()
-            .is_empty());
+        assert!(SalesChangeOrderStatus::PendingImpactConfirmation.allowed_next().is_empty());
+        assert!(SalesChangeOrderStatus::PendingFinanceReview.allowed_next().is_empty());
         assert!(SalesChangeOrderStatus::Rejected.allowed_next().is_empty());
-        assert!(ensure_transition(
-            SalesChangeOrderStatus::Draft,
-            SalesChangeOrderStatus::PendingImpactConfirmation
-        )
-        .is_err());
-        assert!(ensure_transition(
-            SalesChangeOrderStatus::InApproval,
-            SalesChangeOrderStatus::Rejected
-        )
-        .is_err());
+        assert!(
+            ensure_transition(
+                SalesChangeOrderStatus::Draft,
+                SalesChangeOrderStatus::PendingImpactConfirmation
+            )
+            .is_err()
+        );
+        assert!(
+            ensure_transition(SalesChangeOrderStatus::InApproval, SalesChangeOrderStatus::Rejected).is_err()
+        );
     }
 
     #[test]
     fn start_approval_requires_paired_submission_and_hash() {
         let mut order = SalesChangeOrder::new(SalesChangeOrderId::new("co-1"), data(), "admin-1").unwrap();
         assert!(
-            order
-                .start_approval(SalesChangeSubmissionId::new("cs-1"), "  ", "admin-1")
-                .is_err(),
+            order.start_approval(SalesChangeSubmissionId::new("cs-1"), "  ", "admin-1").is_err(),
             "内容指纹必填"
         );
 
-        order
-            .start_approval(SalesChangeSubmissionId::new("cs-1"), "hash-1", "admin-1")
-            .unwrap();
+        order.start_approval(SalesChangeSubmissionId::new("cs-1"), "hash-1", "admin-1").unwrap();
         assert!(
-            order
-                .start_approval(SalesChangeSubmissionId::new("cs-2"), "hash-2", "admin-1")
-                .is_err(),
+            order.start_approval(SalesChangeSubmissionId::new("cs-2"), "hash-2", "admin-1").is_err(),
             "审批中不可再次提交"
         );
     }
@@ -586,11 +549,7 @@ mod tests {
         assert_eq!(order.change_type, SalesChangeType::Amount);
         assert_eq!(order.reason, "调整金额");
 
-        order
-            .start_approval(SalesChangeSubmissionId::new("cs-1"), "hash-1", "admin-2")
-            .unwrap();
-        assert!(order
-            .update(SalesChangeOrderUpdate::default(), "admin-3")
-            .is_err());
+        order.start_approval(SalesChangeSubmissionId::new("cs-1"), "hash-1", "admin-2").unwrap();
+        assert!(order.update(SalesChangeOrderUpdate::default(), "admin-3").is_err());
     }
 }

@@ -1,14 +1,12 @@
-use crate::repository::owned::WorkItemRepository;
 use std::num::NonZeroU32;
 
-use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, QueryFilter, Result, mongo_ops};
 
 use super::{WorkItemFilter, WorkItemRow};
-use persistence_core::Executor;
-use persistence_core::QueryFilter;
-use persistence_core::{mongo_ops, Result};
+use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use crate::repository::owned::WorkItemRepository;
 
 impl<'a> WorkItemRepository<'a> {
     /// 按固定批次读取队列候选任务投影。
@@ -241,15 +239,9 @@ mod tests {
     #[test]
     fn sort_doc_is_whitelisted() {
         assert_eq!(sort_doc(None, false), doc! { "created_at": -1 });
-        assert_eq!(
-            sort_doc(Some("last_activity_at"), true),
-            doc! { "last_activity_at": 1 }
-        );
+        assert_eq!(sort_doc(Some("last_activity_at"), true), doc! { "last_activity_at": 1 });
         assert_eq!(sort_doc(Some("assigned_at"), false), doc! { "assigned_at": -1 });
-        assert_eq!(
-            sort_doc(Some("business_object_id"), false),
-            doc! { "created_at": -1 }
-        );
+        assert_eq!(sort_doc(Some("business_object_id"), false), doc! { "created_at": -1 });
     }
 
     #[test]

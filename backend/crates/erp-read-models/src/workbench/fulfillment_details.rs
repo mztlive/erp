@@ -1,7 +1,6 @@
 //! 履约公共事实：批次、业务数量、物流与履约凭证；所有可读角色使用同一装载路径。
-use super::brief::{format_instant_datetime, line_title, push_section, BriefLine, BriefSection};
-use super::{object_ids, ObjectKind, WorkbenchObjectFactMap, WorkbenchReadService};
-use crate::errors::Result;
+use std::collections::{HashMap, HashSet};
+
 use erp_core::money::Quantity;
 use erp_fulfillment::entity::fulfillment::{
     Delivery, ElectronicDelivery, ElectronicDeliveryState, PurchaseReceipt, PurchaseReceiptLine,
@@ -12,7 +11,10 @@ use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
 use erp_warehouse::repository::WarehouseExt;
 use persistence_core::Executor;
-use std::collections::{HashMap, HashSet};
+
+use super::brief::{BriefLine, BriefSection, format_instant_datetime, line_title, push_section};
+use super::{ObjectKind, WorkbenchObjectFactMap, WorkbenchReadService, object_ids};
+use crate::errors::Result;
 
 type Names = HashMap<String, (String, Option<String>)>;
 
@@ -41,22 +43,11 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let rows = self
-            .db
-            .purchase_receipts()
-            .list_active_by_ids(&ids, executor)
-            .await?;
+        let rows = self.db.purchase_receipts().list_active_by_ids(&ids, executor).await?;
         let receipt_ids = ids.iter().cloned().map(Into::into).collect::<Vec<_>>();
-        let lines = self
-            .db
-            .fulfillment()
-            .receipt_lines_by_receipt_ids(&receipt_ids, executor)
-            .await?;
+        let lines = self.db.fulfillment().receipt_lines_by_receipt_ids(&receipt_ids, executor).await?;
         let names = self.receipt_line_names(&lines, executor).await?;
-        let warehouse_ids = rows
-            .iter()
-            .map(|r| r.warehouse_id.to_string())
-            .collect::<Vec<_>>();
+        let warehouse_ids = rows.iter().map(|r| r.warehouse_id.to_string()).collect::<Vec<_>>();
         let warehouses = self.warehouse_labels(&warehouse_ids, executor).await?;
         for row in rows {
             let fields = receipt_fields(&row, &warehouses);
@@ -83,20 +74,11 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         }
         let rows = self.db.deliveries().list_active_by_ids(&ids, executor).await?;
         let delivery_ids = ids.iter().cloned().map(Into::into).collect::<Vec<_>>();
-        let lines = self
-            .db
-            .fulfillment()
-            .delivery_lines_by_delivery_ids(&delivery_ids, executor)
-            .await?;
-        let sales_ids = rows
-            .iter()
-            .map(|r| r.sales_order_id.to_string())
-            .collect::<Vec<_>>();
+        let lines = self.db.fulfillment().delivery_lines_by_delivery_ids(&delivery_ids, executor).await?;
+        let sales_ids = rows.iter().map(|r| r.sales_order_id.to_string()).collect::<Vec<_>>();
         let names = self.sales_line_names(&sales_ids, executor).await?;
-        let warehouse_ids = rows
-            .iter()
-            .filter_map(|r| r.warehouse_id.as_ref().map(ToString::to_string))
-            .collect::<Vec<_>>();
+        let warehouse_ids =
+            rows.iter().filter_map(|r| r.warehouse_id.as_ref().map(ToString::to_string)).collect::<Vec<_>>();
         let warehouses = self.warehouse_labels(&warehouse_ids, executor).await?;
         for row in rows {
             let fields = delivery_fields(&row, &warehouses);
@@ -121,26 +103,13 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let rows = self
-            .db
-            .electronic_deliveries()
-            .list_active_by_ids(&ids, executor)
-            .await?;
-        let purchase_ids = rows
-            .iter()
-            .map(|r| r.purchase_order_id.to_string())
-            .collect::<Vec<_>>();
+        let rows = self.db.electronic_deliveries().list_active_by_ids(&ids, executor).await?;
+        let purchase_ids = rows.iter().map(|r| r.purchase_order_id.to_string()).collect::<Vec<_>>();
         let names = self.purchase_sales_line_names(&purchase_ids, executor).await?;
         for row in rows {
             let fields = electronic_fields(&row);
             let line = item_line(names.get(row.sales_order_line_id.as_ref()), 1, &row.quantity);
-            apply(
-                facts,
-                ObjectKind::ElectronicDelivery,
-                &row.base.id,
-                fields,
-                vec![line],
-            );
+            apply(facts, ObjectKind::ElectronicDelivery, &row.base.id, fields, vec![line]);
         }
         Ok(())
     }
@@ -156,26 +125,13 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let rows = self
-            .db
-            .service_fulfillments()
-            .list_active_by_ids(&ids, executor)
-            .await?;
-        let purchase_ids = rows
-            .iter()
-            .map(|r| r.purchase_order_id.to_string())
-            .collect::<Vec<_>>();
+        let rows = self.db.service_fulfillments().list_active_by_ids(&ids, executor).await?;
+        let purchase_ids = rows.iter().map(|r| r.purchase_order_id.to_string()).collect::<Vec<_>>();
         let names = self.purchase_sales_line_names(&purchase_ids, executor).await?;
         for row in rows {
             let fields = service_fields(&row);
             let line = item_line(names.get(row.sales_order_line_id.as_ref()), 1, &row.quantity);
-            apply(
-                facts,
-                ObjectKind::ServiceFulfillment,
-                &row.base.id,
-                fields,
-                vec![line],
-            );
+            apply(facts, ObjectKind::ServiceFulfillment, &row.base.id, fields, vec![line]);
         }
         Ok(())
     }
@@ -186,10 +142,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         lines: &[PurchaseReceiptLine],
         executor: &mut dyn Executor,
     ) -> Result<Names> {
-        let ids = lines
-            .iter()
-            .map(|l| l.purchase_order_revision_line_id.to_string())
-            .collect::<Vec<_>>();
+        let ids = lines.iter().map(|l| l.purchase_order_revision_line_id.to_string()).collect::<Vec<_>>();
         Ok(self
             .db
             .purchase_order_revision_lines()
@@ -208,16 +161,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
 
     /// 从采购来源找到销售生效行，名称只用于展示。
     async fn purchase_sales_line_names(&self, ids: &[String], executor: &mut dyn Executor) -> Result<Names> {
-        let orders = self
-            .db
-            .purchase_orders()
-            .list_active_by_ids(ids, executor)
-            .await?;
+        let orders = self.db.purchase_orders().list_active_by_ids(ids, executor).await?;
         self.sales_line_names(
-            &orders
-                .iter()
-                .map(|r| r.sales_order_id.to_string())
-                .collect::<Vec<_>>(),
+            &orders.iter().map(|r| r.sales_order_id.to_string()).collect::<Vec<_>>(),
             executor,
         )
         .await
@@ -239,10 +185,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .map(|l| {
                 (
                     l.sales_order_line_id.to_string(),
-                    (
-                        line_title(&l.item_name_snapshot, l.spec_snapshot.as_deref()),
-                        l.unit_snapshot,
-                    ),
+                    (line_title(&l.item_name_snapshot, l.spec_snapshot.as_deref()), l.unit_snapshot),
                 )
             })
             .collect())
@@ -255,10 +198,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
         let warehouses = self.db.warehouses().list_active_by_ids(ids, executor).await?;
-        let revision_ids = warehouses
-            .iter()
-            .filter_map(|w| w.stable.current_revision_id.clone())
-            .collect::<Vec<_>>();
+        let revision_ids =
+            warehouses.iter().filter_map(|w| w.stable.current_revision_id.clone()).collect::<Vec<_>>();
         let names = self
             .db
             .warehouse_revisions()
@@ -301,12 +242,7 @@ fn head(number: &str, status: &str) -> Vec<BriefSection> {
 
 /// 缺失业务字段明确显示尚未登记。
 fn field(fields: &mut Vec<BriefSection>, label: &str, value: Option<&str>) {
-    push_section(
-        fields,
-        label,
-        Some(value.filter(|v| !v.trim().is_empty()).unwrap_or("未登记")),
-        false,
-    );
+    push_section(fields, label, Some(value.filter(|v| !v.trim().is_empty()).unwrap_or("未登记")), false);
 }
 
 /// 凭证保留受控文件引用，界面渲染附件入口而非文件内部 ID。
@@ -326,9 +262,7 @@ fn qty(value: &Quantity, name: Option<&(String, Option<String>)>) -> String {
 /// 产品资料缺失时保留业务行号，不把稳定主键显示为品名。
 fn item_line(name: Option<&(String, Option<String>)>, line_no: u32, quantity: &Quantity) -> BriefLine {
     BriefLine {
-        title: name
-            .map(|n| n.0.clone())
-            .unwrap_or_else(|| format!("履约明细 {line_no}")),
+        title: name.map(|n| n.0.clone()).unwrap_or_else(|| format!("履约明细 {line_no}")),
         quantity: Some(qty(quantity, name)),
         due_label: None,
     }
@@ -354,16 +288,8 @@ fn apply(
 /// 收货批次共享已登记的仓库和过账时点。
 fn receipt_fields(row: &PurchaseReceipt, warehouses: &HashMap<String, String>) -> Vec<BriefSection> {
     let mut fields = head(&row.receipt_no, pending_status(row.status.label(), "待入库"));
-    field(
-        &mut fields,
-        "收货仓库",
-        warehouses.get(row.warehouse_id.as_ref()).map(String::as_str),
-    );
-    field(
-        &mut fields,
-        "入库时间",
-        row.posted_at.map(format_instant_datetime).as_deref(),
-    );
+    field(&mut fields, "收货仓库", warehouses.get(row.warehouse_id.as_ref()).map(String::as_str));
+    field(&mut fields, "入库时间", row.posted_at.map(format_instant_datetime).as_deref());
     fields
 }
 
@@ -371,9 +297,7 @@ fn receipt_fields(row: &PurchaseReceipt, warehouses: &HashMap<String, String>) -
 fn receipt_line(row: &PurchaseReceiptLine, names: &Names) -> BriefLine {
     let name = names.get(row.purchase_order_revision_line_id.as_ref());
     BriefLine {
-        title: name
-            .map(|n| n.0.clone())
-            .unwrap_or_else(|| format!("入库明细 {}", row.line_no)),
+        title: name.map(|n| n.0.clone()).unwrap_or_else(|| format!("入库明细 {}", row.line_no)),
         quantity: Some(format!(
             "收货 {} · 合格 {} · 不合格 {}",
             qty(&row.received_quantity, name),
@@ -389,19 +313,11 @@ fn delivery_fields(row: &Delivery, warehouses: &HashMap<String, String>) -> Vec<
     let mut fields = head(&row.delivery_no, pending_status(row.status.label(), "待发货"));
     field(&mut fields, "发货方式", Some(row.delivery_type.label()));
     if let Some(id) = &row.warehouse_id {
-        field(
-            &mut fields,
-            "发货仓库",
-            warehouses.get(id.as_ref()).map(String::as_str),
-        );
+        field(&mut fields, "发货仓库", warehouses.get(id.as_ref()).map(String::as_str));
     }
     field(&mut fields, "承运方", row.carrier.as_deref());
     field(&mut fields, "物流单号", row.tracking_no.as_deref());
-    field(
-        &mut fields,
-        "发货时间",
-        row.shipped_at.map(format_instant_datetime).as_deref(),
-    );
+    field(&mut fields, "发货时间", row.shipped_at.map(format_instant_datetime).as_deref());
     fields
 }
 
@@ -413,14 +329,9 @@ fn electronic_fields(row: &ElectronicDelivery) -> Vec<BriefSection> {
     field(
         &mut fields,
         "交付时间",
-        confirmed
-            .then(|| format_instant_datetime(row.fact.occurred_at))
-            .as_deref(),
+        confirmed.then(|| format_instant_datetime(row.fact.occurred_at)).as_deref(),
     );
-    evidence(
-        &mut fields,
-        row.evidence_attachment_id.as_ref().map(|id| id.as_ref()),
-    );
+    evidence(&mut fields, row.evidence_attachment_id.as_ref().map(|id| id.as_ref()));
     fields
 }
 
@@ -432,35 +343,22 @@ fn service_fields(row: &ServiceFulfillment) -> Vec<BriefSection> {
         "履约结果",
         (row.status != ServiceFulfillmentState::Draft).then_some(row.result.label()),
     );
-    field(
-        &mut fields,
-        "服务开始",
-        row.service_started_at.map(format_instant_datetime).as_deref(),
-    );
-    field(
-        &mut fields,
-        "服务结束",
-        row.service_ended_at.map(format_instant_datetime).as_deref(),
-    );
+    field(&mut fields, "服务开始", row.service_started_at.map(format_instant_datetime).as_deref());
+    field(&mut fields, "服务结束", row.service_ended_at.map(format_instant_datetime).as_deref());
     field(&mut fields, "完成说明", row.completion_note.as_deref());
-    evidence(
-        &mut fields,
-        row.evidence_attachment_id.as_ref().map(|id| id.as_ref()),
-    );
+    evidence(&mut fields, row.evidence_attachment_id.as_ref().map(|id| id.as_ref()));
     fields
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     fn entity<T: serde::de::DeserializeOwned>(fields: serde_json::Value) -> T {
         let mut value = serde_json::to_value(entity_core::BaseModel::new("internal-id".into())).unwrap();
-        value
-            .as_object_mut()
-            .unwrap()
-            .extend(fields.as_object().unwrap().clone());
+        value.as_object_mut().unwrap().extend(fields.as_object().unwrap().clone());
         serde_json::from_value(value).unwrap()
     }
 
@@ -473,12 +371,8 @@ mod tests {
         );
         let fields = delivery_fields(&row, &HashMap::new());
         assert!(fields.iter().any(|s| s.value == "SF123"));
-        assert!(fields
-            .iter()
-            .any(|s| s.label == "履约状态" && s.value == "待发货"));
-        assert!(fields
-            .iter()
-            .any(|s| s.label == "履约批次" && s.value == "DL-001"));
+        assert!(fields.iter().any(|s| s.label == "履约状态" && s.value == "待发货"));
+        assert!(fields.iter().any(|s| s.label == "履约批次" && s.value == "DL-001"));
         assert!(!format!("{fields:?}").contains("secret-cipher"));
         assert!(!format!("{fields:?}").contains("sales-id"));
     }
@@ -492,10 +386,7 @@ mod tests {
         let names = Names::from([("revision-line".into(), ("龙井礼盒".into(), Some("盒".into())))]);
         let line = receipt_line(&row, &names);
         assert_eq!(line.title, "龙井礼盒");
-        assert_eq!(
-            line.quantity.as_deref(),
-            Some("收货 2 盒 · 合格 2 盒 · 不合格 0 盒")
-        );
+        assert_eq!(line.quantity.as_deref(), Some("收货 2 盒 · 合格 2 盒 · 不合格 0 盒"));
         assert_eq!(receipt_line(&row, &Names::new()).title, "入库明细 1");
     }
 
@@ -508,27 +399,14 @@ mod tests {
             "service_location_encrypted":"private", "service_location_fingerprint":"hash", "completion_note":"已完成服务"});
         let mut electronic: ElectronicDelivery = entity(fields.clone());
         let mut service: ServiceFulfillment = entity(fields);
-        assert!(electronic_fields(&electronic)
-            .iter()
-            .any(|s| s.label == "交付结果" && s.value == "未登记"));
-        assert!(electronic_fields(&electronic)
-            .iter()
-            .any(|s| s.label == "交付时间" && s.value == "未登记"));
-        assert!(service_fields(&service)
-            .iter()
-            .any(|s| s.label == "履约结果" && s.value == "未登记"));
+        assert!(electronic_fields(&electronic).iter().any(|s| s.label == "交付结果" && s.value == "未登记"));
+        assert!(electronic_fields(&electronic).iter().any(|s| s.label == "交付时间" && s.value == "未登记"));
+        assert!(service_fields(&service).iter().any(|s| s.label == "履约结果" && s.value == "未登记"));
         electronic.status = ElectronicDeliveryState::Confirmed;
         service.status = ServiceFulfillmentState::Confirmed;
-        assert!(electronic_fields(&electronic)
-            .iter()
-            .any(|s| s.label == "交付结果" && s.value == "成功"));
-        assert!(service_fields(&service)
-            .iter()
-            .any(|s| s.label == "完成说明" && s.value == "已完成服务"));
-        let evidence = service_fields(&service)
-            .into_iter()
-            .find(|s| s.label == "履约凭证")
-            .unwrap();
+        assert!(electronic_fields(&electronic).iter().any(|s| s.label == "交付结果" && s.value == "成功"));
+        assert!(service_fields(&service).iter().any(|s| s.label == "完成说明" && s.value == "已完成服务"));
+        let evidence = service_fields(&service).into_iter().find(|s| s.label == "履约凭证").unwrap();
         assert_eq!(evidence.value, "查看凭证");
         assert_eq!(evidence.object_id.as_deref(), Some("file-id"));
         assert!(!format!("{:?}", service_fields(&service)).contains("private"));

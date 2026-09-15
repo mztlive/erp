@@ -6,21 +6,18 @@
 
 mod prepayment;
 
-use erp_workflow::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
-use erp_workflow::WorkItemExt;
-use futures_util::TryStreamExt;
-use mongodb::bson::{doc, Document};
-use mongodb::Database;
-use serde::Deserialize;
-
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_fulfillment::repository::FulfillmentExt;
+use erp_procurement::repository::PurchaseOrderExt;
+use erp_sales::repository::SalesOrderExt;
 use erp_warehouse::WarehouseExt;
-use persistence_core::Executor;
-use persistence_core::{Error, Result};
-use {
-    erp_fulfillment::repository::FulfillmentExt, erp_procurement::repository::PurchaseOrderExt,
-    erp_sales::repository::SalesOrderExt,
-};
+use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
+use futures_util::TryStreamExt;
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use persistence_core::{Error, Executor, Result};
+use serde::Deserialize;
 
 const PURCHASE_RECEIPTS: &str = <Database as FulfillmentExt>::PURCHASE_RECEIPTS;
 const DELIVERIES: &str = <Database as FulfillmentExt>::DELIVERIES;
@@ -193,7 +190,7 @@ impl<'a> FulfillmentQueueRepository<'a> {
                     .stream(session)
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
             None => {
                 collection
                     .aggregate(pipeline)
@@ -201,7 +198,7 @@ impl<'a> FulfillmentQueueRepository<'a> {
                     .await?
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
         };
         let facet = rows.into_iter().next().unwrap_or(FulfillmentQueueFacetRow {
             items: Vec::new(),
@@ -679,10 +676,10 @@ fn append_optional_filters(pipeline: &mut Vec<Document>, filter: &FulfillmentQue
         match matched.get_document_mut("operation.due_at") {
             Ok(range) => {
                 range.insert("$lt", due_before);
-            }
+            },
             Err(_) => {
                 matched.insert("operation.due_at", doc! { "$lt": due_before });
-            }
+            },
         }
     }
     if let Some(gate) = &filter.gate {
@@ -765,7 +762,7 @@ fn counterparty_lookup(accounts: &str, account_id: &str, output: &str) -> Docume
 
 #[cfg(test)]
 mod tests {
-    use super::{fulfillment_queue_pipeline, FulfillmentQueueFilter};
+    use super::{FulfillmentQueueFilter, fulfillment_queue_pipeline};
 
     #[test]
     fn pipeline_starts_from_owned_open_work_items_and_returns_one_facet() {
@@ -813,10 +810,7 @@ mod tests {
                     .is_some_and(|lookup| lookup.get_str("as").ok() == Some("_customer_names"))
             })
             .unwrap();
-        let facet = pipeline
-            .iter()
-            .position(|stage| stage.contains_key("$facet"))
-            .unwrap();
+        let facet = pipeline.iter().position(|stage| stage.contains_key("$facet")).unwrap();
         assert!(customer_lookup < facet, "名称过滤必须先于分页和计数");
         assert!(rendered.contains("party.current_revision_id"));
         assert!(rendered.contains("revision.party_id"));

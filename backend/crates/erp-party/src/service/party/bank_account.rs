@@ -6,28 +6,28 @@
 //! 有效期与调整默认标记；同一主体同一时点最多一个默认有效账户（跨行约束，
 //! 事务内校验，§6.2）。
 
-use crate::entity::party::{
-    EffectiveRecordStatus, PartyBankAccount, PartyBankAccountData, PartyBankAccountId,
-    PartyBankAccountUpdate, PartyId,
-};
-use crate::ports::{PartyAuditPort, SupplierRolePort};
-use crate::repository::PartyExt;
+use std::sync::Arc;
+
+use application_core::AuditActor;
 use erp_core::field_update::FieldUpdate;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
-use std::sync::Arc;
 use validator::Validate;
-
-use crate::error::{Error, Result};
-use application_core::AuditActor;
 
 use super::sensitive::SensitiveDataCodec;
 use super::{clear_default_marks, page_or_default, page_size_or_default};
 use crate::dto::party::{
-    normalize_sort, CreatePartyBankAccountRequest, PageView, PartyBankAccountListParams,
-    PartyBankAccountView, SortDir, UpdatePartyBankAccountRequest, PARTY_BANK_ACCOUNT_SORT_FIELDS,
+    CreatePartyBankAccountRequest, PARTY_BANK_ACCOUNT_SORT_FIELDS, PageView, PartyBankAccountListParams,
+    PartyBankAccountView, SortDir, UpdatePartyBankAccountRequest, normalize_sort,
 };
+use crate::entity::party::{
+    EffectiveRecordStatus, PartyBankAccount, PartyBankAccountData, PartyBankAccountId,
+    PartyBankAccountUpdate, PartyId,
+};
+use crate::error::{Error, Result};
+use crate::ports::{PartyAuditPort, SupplierRolePort};
+use crate::repository::PartyExt;
 
 /// 银行账户列表筛选条件类型（经 `PartyExt` 关联类型跨 crate 可达）。
 type PartyBankAccountFilter = <mongodb::Database as PartyExt>::PartyBankAccountFilter;
@@ -57,12 +57,7 @@ impl PartyBankAccountService {
         audit: Arc<dyn PartyAuditPort>,
         supplier_roles: Arc<dyn SupplierRolePort>,
     ) -> Self {
-        Self {
-            db,
-            sensitive_data,
-            audit,
-            supplier_roles,
-        }
+        Self { db, sensitive_data, audit, supplier_roles }
     }
 
     /// 分页查询银行账户列表（投影查询，敏感字段不进投影）。
@@ -94,11 +89,8 @@ impl PartyBankAccountService {
             sort_by: Some(sort_by.to_string()),
             sort_ascending: matches!(sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .party_bank_accounts()
-            .search_party_bank_accounts(&filter, &mut NoTransaction)
-            .await?;
+        let page =
+            self.db.party_bank_accounts().search_party_bank_accounts(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -119,12 +111,7 @@ impl PartyBankAccountService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 创建银行账户（跨行事务：默认账户唯一 + 新建 + 审计原子写入）。
@@ -228,9 +215,7 @@ impl PartyBankAccountService {
             .ok_or_else(|| Error::NotFound("银行账户不存在".to_string()))?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &account.party_id).await?;
         if account.base.version != req.version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         account.update(
             PartyBankAccountUpdate {
@@ -265,9 +250,7 @@ impl PartyBankAccountService {
                             session
                         );
                     }
-                    db.party_bank_accounts()
-                        .update(&mut account_for_tx, session)
-                        .await?;
+                    db.party_bank_accounts().update(&mut account_for_tx, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<PartyBankAccount, crate::error::Error>(account_for_tx)
                 })

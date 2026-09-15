@@ -1,5 +1,9 @@
 //! 销售选品 HTTP/Service DTO。Handler 直接复用本模块类型。
 
+use application_core::PageView;
+pub use application_core::PageView as SelectionPageView;
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -7,11 +11,6 @@ use crate::entity::sales_selection::{
     BookletStatus, PoolFilterSnapshot, PoolSourceKind, PrepareKind, PrepareStage, SearchStopReason,
     SelectionForm, SubmitMode, TierRule,
 };
-use application_core::PageView;
-use erp_core::common::time::{BusinessDate, Instant};
-use erp_core::money::Amount;
-
-pub use application_core::PageView as SelectionPageView;
 
 /// 创建选品册。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]

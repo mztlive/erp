@@ -148,10 +148,8 @@ impl PartyFactsPort for MongoSupplierPartyFacts {
         executor: &mut dyn Executor,
     ) -> erp_supplier::Result<HashMap<String, String>> {
         let (parties, revisions) = self.list_with_current_revisions(party_ids, executor).await?;
-        let revisions: HashMap<String, PartyRevisionFact> = revisions
-            .into_iter()
-            .map(|revision| (revision.id.clone(), revision))
-            .collect();
+        let revisions: HashMap<String, PartyRevisionFact> =
+            revisions.into_iter().map(|revision| (revision.id.clone(), revision)).collect();
         Ok(parties
             .into_iter()
             .filter_map(|party| {

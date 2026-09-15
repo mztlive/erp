@@ -1,8 +1,11 @@
 use std::time::Duration;
 
-use crate::{app_state::AppState, core::handler::auth};
-use axum::{extract::DefaultBodyLimit, routing::post, Extension, Router};
+use axum::extract::DefaultBodyLimit;
+use axum::routing::post;
+use axum::{Extension, Router};
 
+use crate::app_state::AppState;
+use crate::core::handler::auth;
 use crate::core::rate_limit::RateLimiter;
 
 const LOGIN_ATTEMPTS_PER_SOURCE: usize = 20;
@@ -24,10 +27,7 @@ pub fn routes(app_state: AppState) -> Router<AppState> {
         .route("/login", post(auth::login::login))
         .layer(Extension(login_limiter()))
         .layer(login_body_limit());
-    Router::new()
-        .merge(login)
-        .merge(super::sales_selection::public_routes())
-        .with_state(app_state)
+    Router::new().merge(login).merge(super::sales_selection::public_routes()).with_state(app_state)
 }
 
 /// 创建公开登录入口使用的进程内限流器。
@@ -51,20 +51,17 @@ fn login_body_limit() -> DefaultBodyLimit {
 
 #[cfg(test)]
 mod tests {
-    use axum::{
-        body::Body,
-        http::{Request, StatusCode},
-        routing::post,
-        Router,
-    };
+    use axum::Router;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use axum::routing::post;
     use tower::Service;
 
-    use crate::core::rate_limit::Error as RateLimitError;
-
     use super::{
-        login_body_limit, login_limiter, EMERGENCY_GLOBAL_LOGIN_ATTEMPTS, LOGIN_ATTEMPTS_PER_SOURCE,
-        LOGIN_ATTEMPTS_PER_SOURCE_ACCOUNT, MAX_LOGIN_REQUEST_BYTES,
+        EMERGENCY_GLOBAL_LOGIN_ATTEMPTS, LOGIN_ATTEMPTS_PER_SOURCE, LOGIN_ATTEMPTS_PER_SOURCE_ACCOUNT,
+        MAX_LOGIN_REQUEST_BYTES, login_body_limit, login_limiter,
     };
+    use crate::core::rate_limit::Error as RateLimitError;
 
     #[test]
     fn login_policy_limits_one_source_account_combination() {
@@ -118,12 +115,8 @@ mod tests {
             StatusCode::OK
         }
 
-        let mut router = Router::new()
-            .route("/", post(accept_body))
-            .layer(login_body_limit());
-        let request = Request::post("/")
-            .body(Body::from("x".repeat(MAX_LOGIN_REQUEST_BYTES + 1)))
-            .unwrap();
+        let mut router = Router::new().route("/", post(accept_body)).layer(login_body_limit());
+        let request = Request::post("/").body(Body::from("x".repeat(MAX_LOGIN_REQUEST_BYTES + 1))).unwrap();
 
         let response = router.call(request).await.unwrap();
 

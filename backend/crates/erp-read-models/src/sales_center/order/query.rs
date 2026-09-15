@@ -3,31 +3,27 @@
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
+use application_core::AuditActor;
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
 use erp_finance::repository::ReceivableExt;
-use erp_identity::AccessControlExt;
-use erp_identity::Permission;
+use erp_identity::{AccessControlExt, Permission, subject};
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_sales::dto::sales_order::{PageView, SalesOrderLineView, SubmissionView};
 use erp_sales::entity::sales_order::{BusinessType, ReviewStatus, SalesOrderSubmissionLine, WorkingPurpose};
-use erp_sales::repository::SalesOrderExt;
-use erp_sales::repository::SalesReviewExt;
+use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
+use erp_sales::service::sales_order::mapper::submission_view;
 use erp_workflow::WorkItemExt;
+use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::NoTransaction;
 
 use super::approval_query::load_document_approval;
-use super::dto;
 use super::dto::{
     ActiveCardSalesApprovalView, PurchaseCreationAccessView, SalesOrderDetailView, SalesOrderView,
     SalesProcurementCoverageView,
 };
 use super::status::{close_eligibility_view, compute_can_start_sales_change, stage_code_label_tone};
-use super::SalesOrderReadService;
+use super::{SalesOrderReadService, dto};
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_identity::subject;
-use erp_sales::dto::sales_order::{PageView, SalesOrderLineView, SubmissionView};
-use erp_sales::service::sales_order::mapper::submission_view;
-use erp_workflow::service::document_registry::find_approval_binding;
 
 /// 构造尚无当前销售版本时的零采购覆盖视图。
 ///
@@ -77,22 +73,14 @@ impl SalesOrderReadService {
     ) -> Result<super::SalesListView> {
         let expected = params.scope_version.as_deref();
         if params.page.unwrap_or(1) > 1 && expected.is_none_or(str::is_empty) {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into(),
-            ));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into()));
         }
         validator::Validate::validate(params)?;
         let search = self.keyword_search(params.q.as_deref()).await?;
-        let super::scope::SalesSnapshot {
-            page,
-            owner_options,
-            context,
-            no_scope,
-        } = self.list_snapshot(params, search.clone(), actor).await?;
+        let super::scope::SalesSnapshot { page, owner_options, context, no_scope } =
+            self.list_snapshot(params, search.clone(), actor).await?;
         if expected.is_some_and(|value| value != context.scope_version) {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into(),
-            ));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
         }
 
         let owners = self
@@ -106,11 +94,7 @@ impl SalesOrderReadService {
             .await?;
         let owner_names = self
             .resolve_account_names_batch(
-                &page
-                    .items
-                    .iter()
-                    .map(|row| row.sales_owner_user_id.clone())
-                    .collect::<Vec<_>>(),
+                &page.items.iter().map(|row| row.sales_owner_user_id.clone()).collect::<Vec<_>>(),
             )
             .await?;
 
@@ -161,13 +145,10 @@ impl SalesOrderReadService {
             })
             .collect();
 
-        let current = self
-            .list_snapshot(params, self.keyword_search(params.q.as_deref()).await?, actor)
-            .await?;
+        let current =
+            self.list_snapshot(params, self.keyword_search(params.q.as_deref()).await?, actor).await?;
         if current.context.scope_version != context.scope_version {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into(),
-            ));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into()));
         }
         Ok(super::SalesListView {
             scope_version: context.scope_version,
@@ -179,12 +160,7 @@ impl SalesOrderReadService {
             data: application_core::FilteredPage {
                 owner_options,
                 ownership_basis: "document_sales_owner",
-                page: PageView {
-                    items,
-                    total: page.total,
-                    page: page.page,
-                    page_size: page.page_size,
-                },
+                page: PageView { items, total: page.total, page: page.page, page_size: page.page_size },
             },
         })
     }
@@ -227,11 +203,8 @@ impl SalesOrderReadService {
 
         let order_id = SalesOrderId::new(order.base.id.clone());
 
-        let stable_lines = self
-            .db
-            .sales_order_lines()
-            .list_lines_by_order(&order_id, &mut NoTransaction)
-            .await?;
+        let stable_lines =
+            self.db.sales_order_lines().list_lines_by_order(&order_id, &mut NoTransaction).await?;
 
         let working_copy = self
             .db
@@ -249,10 +222,8 @@ impl SalesOrderReadService {
             .sales_order_submissions()
             .list_by_order_newest_first(&order_id, &mut NoTransaction)
             .await?;
-        let submission_ids = submissions
-            .iter()
-            .map(|s| SalesOrderSubmissionId::new(s.base.id.clone()))
-            .collect::<Vec<_>>();
+        let submission_ids =
+            submissions.iter().map(|s| SalesOrderSubmissionId::new(s.base.id.clone())).collect::<Vec<_>>();
 
         let submission_lines = self
             .db
@@ -263,18 +234,13 @@ impl SalesOrderReadService {
         let mut lines_by_submission: HashMap<String, Vec<SalesOrderSubmissionLine>> = HashMap::new();
 
         for line in submission_lines {
-            lines_by_submission
-                .entry(line.submission_id.to_string())
-                .or_default()
-                .push(line);
+            lines_by_submission.entry(line.submission_id.to_string()).or_default().push(line);
         }
 
         let submission_views: Vec<SubmissionView> = submissions
             .into_iter()
             .map(|submission| {
-                let mut lines = lines_by_submission
-                    .remove(&submission.base.id)
-                    .unwrap_or_default();
+                let mut lines = lines_by_submission.remove(&submission.base.id).unwrap_or_default();
                 lines.sort_by_key(|line| line.line_no);
                 submission_view(submission, lines)
             })
@@ -285,15 +251,11 @@ impl SalesOrderReadService {
         let owner_user_id = order.sales_owner_user_id.clone();
 
         let owner_user_name = self.account_name(&owner_user_id).await?;
-        let purchase_order_count = self
-            .db
-            .purchase_orders()
-            .count_active_by_sales_order(&order_id, &mut NoTransaction)
-            .await?;
+        let purchase_order_count =
+            self.db.purchase_orders().count_active_by_sales_order(&order_id, &mut NoTransaction).await?;
         let purchase_coverage = self.sales_procurement_coverage(&order).await?;
-        let purchase_creation_access = self
-            .purchase_creation_access(&order, &purchase_coverage, actor)
-            .await?;
+        let purchase_creation_access =
+            self.purchase_creation_access(&order, &purchase_coverage, actor).await?;
 
         let active_card_sales_approval = match (actor, submission_ids.first()) {
             (Some(actor), Some(submission_id)) => {
@@ -304,7 +266,7 @@ impl SalesOrderReadService {
                     actor,
                 )
                 .await?
-            }
+            },
             _ => None,
         };
 
@@ -326,11 +288,8 @@ impl SalesOrderReadService {
             order.fulfillment_progress,
         );
 
-        let receivable_summary = self
-            .db
-            .receivable_accounts()
-            .sales_order_amount_summary(&order_id, &mut NoTransaction)
-            .await?;
+        let receivable_summary =
+            self.db.receivable_accounts().sales_order_amount_summary(&order_id, &mut NoTransaction).await?;
         let settled_total = receivable_summary.settled_total;
         let invoiced_total = receivable_summary.invoiced_total;
         let close_eligibility = close_eligibility_view(order.closure_facts().assess(
@@ -349,7 +308,7 @@ impl SalesOrderReadService {
                         &mut NoTransaction,
                     )
                     .await?
-            }
+            },
             None => false,
         };
         let (can_start_sales_change_order, change_order_blocker) = compute_can_start_sales_change(
@@ -359,10 +318,7 @@ impl SalesOrderReadService {
             has_active_change_order,
         );
 
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
-            .await
-            .ok()
-            .flatten();
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await.ok().flatten();
         let approval = Some(
             load_document_approval(
                 &self.db,
@@ -472,19 +428,11 @@ impl SalesOrderReadService {
         if let Some(message) = self.purchase_creation_actor_blocker(actor).await? {
             return Ok(blocked_purchase_creation_access(message));
         }
-        let task_count = self
-            .purchase_creation_task_count(&order.base.id, actor.id())
-            .await?;
+        let task_count = self.purchase_creation_task_count(&order.base.id, actor.id()).await?;
         if task_count == 0 {
-            return Ok(blocked_purchase_creation_access(
-                "当前账号不是该销售单供给分配任务负责人",
-            ));
+            return Ok(blocked_purchase_creation_access("当前账号不是该销售单供给分配任务负责人"));
         }
-        Ok(PurchaseCreationAccessView {
-            allowed: true,
-            task_count,
-            blocker: None,
-        })
+        Ok(PurchaseCreationAccessView { allowed: true, task_count, blocker: None })
     }
 
     /// 重验当前账号的登录状态、身份与供给分配权限。
@@ -502,20 +450,14 @@ impl SalesOrderReadService {
     /// 必须使用当前账号记录和规范 Casbin 主体，不能仅信任请求中的历史认证
     /// 快照。
     async fn purchase_creation_actor_blocker(&self, actor: &AuditActor) -> Result<Option<&'static str>> {
-        let account = self
-            .db
-            .accounts()
-            .find_by_id(actor.id(), &mut NoTransaction)
-            .await?;
+        let account = self.db.accounts().find_by_id(actor.id(), &mut NoTransaction).await?;
         let Some(account) = account.filter(|account| account.kind == actor.kind() && account.can_login())
         else {
             return Ok(Some("当前账号不存在、已停用或身份已变化，不能分配供给"));
         };
         let permission = Permission::parse("purchase_order:create")?;
-        let allowed = self
-            .require_rbac()?
-            .enforce(&subject(account.kind, &account.base.id), &permission)
-            .await?;
+        let allowed =
+            self.require_rbac()?.enforce(&subject(account.kind, &account.base.id), &permission).await?;
         Ok((!allowed).then_some("当前账号缺少 purchase_order:create 权限"))
     }
 
@@ -603,12 +545,7 @@ impl SalesOrderReadService {
     /// # 错误
     /// 数据库查询失败时返回仓储错误。
     async fn account_name(&self, user_id: &str) -> Result<Option<String>> {
-        Ok(self
-            .db
-            .accounts()
-            .find_by_id(user_id, &mut NoTransaction)
-            .await?
-            .map(|account| account.name))
+        Ok(self.db.accounts().find_by_id(user_id, &mut NoTransaction).await?.map(|account| account.name))
     }
 
     /// 解析当前审核轨阶段的责任角色、责任人和时限（详情页专用）。
@@ -632,9 +569,7 @@ impl SalesOrderReadService {
         if !review_status.has_active_review_task() {
             return Ok((None, None, None));
         }
-        let object_type = super::document_type_of_sales_business(business_type)
-            .as_str()
-            .to_string();
+        let object_type = super::document_type_of_sales_business(business_type).as_str().to_string();
         let tasks = self
             .db
             .work_items()
@@ -643,11 +578,7 @@ impl SalesOrderReadService {
         let Some(task) = tasks.into_iter().next() else {
             return Ok((None, None, None));
         };
-        Ok((
-            Some(task.owner_role),
-            task.owner_user_id,
-            task.due_at.map(|due_at| due_at.unix_secs() as u64),
-        ))
+        Ok((Some(task.owner_role), task.owner_user_id, task.due_at.map(|due_at| due_at.unix_secs() as u64)))
     }
 
     /// 批量解析本页销售单的当前阶段责任人和时限。
@@ -669,12 +600,7 @@ impl SalesOrderReadService {
             .iter()
             .filter(|(_, _, review_status)| review_status.has_active_review_task())
             .map(|(id, business_type, _)| {
-                (
-                    super::document_type_of_sales_business(*business_type)
-                        .as_str()
-                        .to_string(),
-                    id.clone(),
-                )
+                (super::document_type_of_sales_business(*business_type).as_str().to_string(), id.clone())
             })
             .collect::<Vec<_>>();
         let tasks = self
@@ -684,19 +610,14 @@ impl SalesOrderReadService {
             .await?;
         let owner_names = self
             .resolve_account_names_batch(
-                &tasks
-                    .iter()
-                    .filter_map(|task| task.owner_user_id.clone())
-                    .collect::<Vec<_>>(),
+                &tasks.iter().filter_map(|task| task.owner_user_id.clone()).collect::<Vec<_>>(),
             )
             .await?;
         Ok(tasks
             .into_iter()
             .map(|task| {
-                let owner_name = task
-                    .owner_user_id
-                    .as_ref()
-                    .and_then(|owner_id| owner_names.get(owner_id).cloned());
+                let owner_name =
+                    task.owner_user_id.as_ref().and_then(|owner_id| owner_names.get(owner_id).cloned());
                 (
                     task.business_object_id,
                     (
@@ -721,21 +642,9 @@ impl SalesOrderReadService {
     /// # 错误
     /// 账号仓储查询失败时返回仓储错误。
     async fn resolve_account_names_batch(&self, account_ids: &[String]) -> Result<HashMap<String, String>> {
-        let unique_ids = account_ids
-            .iter()
-            .cloned()
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
-        let accounts = self
-            .db
-            .accounts()
-            .list_by_ids(&unique_ids, &mut NoTransaction)
-            .await?;
-        Ok(accounts
-            .into_iter()
-            .map(|account| (account.base.id, account.name))
-            .collect())
+        let unique_ids = account_ids.iter().cloned().collect::<HashSet<_>>().into_iter().collect::<Vec<_>>();
+        let accounts = self.db.accounts().list_by_ids(&unique_ids, &mut NoTransaction).await?;
+        Ok(accounts.into_iter().map(|account| (account.base.id, account.name)).collect())
     }
 }
 
@@ -753,11 +662,7 @@ impl SalesOrderReadService {
 /// # 关键业务约束
 /// 禁止分支不得泄露任何开放任务数量，避免把未授权任务事实下发给调用方。
 fn blocked_purchase_creation_access(message: &str) -> PurchaseCreationAccessView {
-    PurchaseCreationAccessView {
-        allowed: false,
-        task_count: 0,
-        blocker: Some(message.to_string()),
-    }
+    PurchaseCreationAccessView { allowed: false, task_count: 0, blocker: Some(message.to_string()) }
 }
 
 impl SalesOrderReadService {
@@ -782,21 +687,10 @@ impl SalesOrderReadService {
             .into_iter()
             .map(|id| id.to_string())
             .collect::<Vec<_>>();
-        let customer_ids = self
-            .db
-            .customer_accounts()
-            .matching_ids_by_parties(&party_ids, &mut NoTransaction)
-            .await?;
-        let contract_ids = self
-            .db
-            .contracts()
-            .matching_ids_by_number(&q, &mut NoTransaction)
-            .await?;
-        Ok(erp_sales::repository::sales_order::SalesOrderSearch {
-            q: Some(q),
-            customer_ids,
-            contract_ids,
-        })
+        let customer_ids =
+            self.db.customer_accounts().matching_ids_by_parties(&party_ids, &mut NoTransaction).await?;
+        let contract_ids = self.db.contracts().matching_ids_by_number(&q, &mut NoTransaction).await?;
+        Ok(erp_sales::repository::sales_order::SalesOrderSearch { q: Some(q), customer_ids, contract_ids })
     }
 }
 
@@ -821,11 +715,7 @@ mod tests {
 
     #[test]
     fn terminal_review_states_do_not_require_open_tasks() {
-        for status in [
-            ReviewStatus::NotSubmitted,
-            ReviewStatus::Approved,
-            ReviewStatus::Rejected,
-        ] {
+        for status in [ReviewStatus::NotSubmitted, ReviewStatus::Approved, ReviewStatus::Rejected] {
             assert!(!status.has_active_review_task());
         }
     }
@@ -846,16 +736,10 @@ mod tests {
     #[test]
     fn purchase_creation_access_revalidates_account_and_permission_before_tasks() {
         let source = include_str!("query.rs");
-        let access = source
-            .split_once("async fn purchase_creation_access")
-            .expect("必须存在采购创建访问投影")
-            .1;
-        let actor_gate = access
-            .find("purchase_creation_actor_blocker(actor)")
-            .expect("必须先重验账号与权限");
-        let task_query = access
-            .find("purchase_creation_task_count")
-            .expect("必须查询开放采购任务");
+        let access =
+            source.split_once("async fn purchase_creation_access").expect("必须存在采购创建访问投影").1;
+        let actor_gate = access.find("purchase_creation_actor_blocker(actor)").expect("必须先重验账号与权限");
+        let task_query = access.find("purchase_creation_task_count").expect("必须查询开放采购任务");
         assert!(actor_gate < task_query);
 
         let actor_check = source
@@ -863,12 +747,9 @@ mod tests {
             .expect("必须存在账号与权限重验 helper")
             .1;
         let account = actor_check.find(".accounts()").expect("必须加载当前账号");
-        let can_login = actor_check
-            .find("account.can_login()")
-            .expect("必须检查当前账号可登录");
-        let permission = actor_check
-            .find("Permission::parse(\"purchase_order:create\")")
-            .expect("必须解析采购建单权限");
+        let can_login = actor_check.find("account.can_login()").expect("必须检查当前账号可登录");
+        let permission =
+            actor_check.find("Permission::parse(\"purchase_order:create\")").expect("必须解析采购建单权限");
         let enforce = actor_check
             .find(".enforce(&subject(account.kind, &account.base.id), &permission)")
             .expect("必须用规范账号主体重验权限");
@@ -899,9 +780,6 @@ mod tests {
 
         assert!(!view.allowed);
         assert_eq!(view.task_count, 0);
-        assert_eq!(
-            view.blocker.as_deref(),
-            Some("当前账号缺少 purchase_order:create 权限")
-        );
+        assert_eq!(view.blocker.as_deref(), Some("当前账号缺少 purchase_order:create 权限"));
     }
 }

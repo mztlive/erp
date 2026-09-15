@@ -6,7 +6,7 @@ use bpm::model::{
     ApprovalCommandReceipt, ApprovalInstanceAssignee, ApprovalNodeExecution, ApprovalProcessInstance,
 };
 
-use super::notification_outbox::{map_notification_intents, NotificationIntent};
+use super::notification_outbox::{NotificationIntent, map_notification_intents};
 
 /// 强类型领域动作。适配器尚未接线时由调用方失败关闭。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,8 +104,6 @@ pub fn final_approve_requires_domain_action(writes: &PlannedWrites) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_plan, final_approve_requires_domain_action, DomainActionKind};
-    use crate::service::approval::execution::idempotency::{decision_identity, normalize_idempotency_key};
     use bpm::engine::{CommitRequired, TaskCloseReason, TaskIntent, TransitionPlan};
     use bpm::ids::{
         ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessDefinitionId,
@@ -116,6 +114,9 @@ mod tests {
         ApprovalCommandReceipt, ApprovalProcessInstance, NewProcessInstance, ParticipantId, ProcessKind,
         SubjectRef, Timestamp,
     };
+
+    use super::{DomainActionKind, apply_plan, final_approve_requires_domain_action};
+    use crate::service::approval::execution::idempotency::{decision_identity, normalize_idempotency_key};
 
     /// 任务意图按类型拆分，终态通过必须带最终动作。
     #[test]
@@ -132,9 +133,7 @@ mod tests {
         })
         .unwrap();
         let mut plan = TransitionPlan::for_instance(instance, CommitRequired::TerminalApproved);
-        plan.task_intents.push(TaskIntent::CompleteTask {
-            execution_id: ApprovalNodeExecutionId::new("e1"),
-        });
+        plan.task_intents.push(TaskIntent::CompleteTask { execution_id: ApprovalNodeExecutionId::new("e1") });
         plan.task_intents.push(TaskIntent::CloseTask {
             execution_id: ApprovalNodeExecutionId::new("e0"),
             reason: TaskCloseReason::ApprovalRuntimeBlocked,

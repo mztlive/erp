@@ -62,10 +62,10 @@ impl Error {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
             Self::ConflictError(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_) => {
                 ErrorClass::Conflict
-            }
+            },
             Self::BusinessLogicError(_) | Self::ValidationError(_) | Self::NotFound(_) => {
                 ErrorClass::BusinessRule
-            }
+            },
             Self::Forbidden(_) | Self::Unauthenticated(_) => ErrorClass::Forbidden,
             Self::OutcomeUnknown(_) => ErrorClass::Internal,
         }
@@ -81,13 +81,13 @@ impl From<persistence_core::Error> for Error {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
                 Self::ConflictError(duplicate_key_conflict_message(&error))
-            }
+            },
             persistence_core::Error::OptimisticLockingError => {
                 Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            }
+            },
             error @ persistence_core::Error::TransientTransactionConflict(_) => {
                 Self::TransientTransaction(error)
-            }
+            },
             error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
             other => Self::RepositoryError(other),
         }
@@ -115,16 +115,14 @@ impl From<validator::ValidationErrors> for Error {
 
 #[cfg(test)]
 mod tests {
+    use application_core::ErrorClass;
     use mongodb::error::Error as MongoError;
 
     use super::Error;
-    use application_core::ErrorClass;
 
     #[test]
     fn import_unique_conflicts_keep_original_messages() {
-        let generic = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom(
-            "duplicate key",
-        )));
+        let generic = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
         assert_eq!(generic.class(), ErrorClass::Conflict);
         assert_eq!(generic.to_string(), "数据冲突: 数据已存在，请勿重复提交");
         assert_eq!(

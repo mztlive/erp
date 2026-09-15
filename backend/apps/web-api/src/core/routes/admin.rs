@@ -1,23 +1,15 @@
-use axum::{
-    middleware,
-    routing::{delete, get, post, put},
-    Router,
-};
+use axum::routing::{delete, get, post, put};
+use axum::{Router, middleware};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{
-        handler::admin,
-        middleware::{authenticate, with_permission},
-        routes::{
-            access_control, approval_instance, bulk_job, catalog, contract, cost, customer,
-            document_registry, file_asset, fulfillment, integration_ops, inventory, legacy_import, party,
-            payable, purchase_order, receivable, returns, sales_order, sales_review, sales_selection,
-            source_registry, supplier, supplier_api, supplier_fulfillment, supplier_offering,
-            supplier_settlement, warehouse, work_item,
-        },
-    },
+use crate::app_state::AppState;
+use crate::core::handler::admin;
+use crate::core::middleware::{authenticate, with_permission};
+use crate::core::routes::{
+    access_control, approval_instance, bulk_job, catalog, contract, cost, customer, document_registry,
+    file_asset, fulfillment, integration_ops, inventory, legacy_import, party, payable, purchase_order,
+    receivable, returns, sales_order, sales_review, sales_selection, source_registry, supplier, supplier_api,
+    supplier_fulfillment, supplier_offering, supplier_settlement, warehouse, work_item,
 };
 
 /// 管理后台路由入口。

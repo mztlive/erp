@@ -1,8 +1,5 @@
 //! Fulfillment commands that register on-site evidence files in the same transaction.
 
-use crate::fulfillment_execution::service_crypto::evidence_metadata;
-use crate::fulfillment_execution::FulfillmentProcess;
-use crate::Result;
 use application_core::AuditActor;
 use erp_fulfillment::dto::{
     ConfirmElectronicDeliveryRequest, ConfirmServiceFulfillmentRequest, ElectronicDeliveryView,
@@ -12,6 +9,9 @@ use erp_fulfillment::entity::fulfillment::ServiceEvidencePolicy;
 use erp_support::PendingFileAssetRequest;
 
 use super::pending::PendingFileAssets;
+use crate::Result;
+use crate::fulfillment_execution::FulfillmentProcess;
+use crate::fulfillment_execution::service_crypto::evidence_metadata;
 
 /// Confirm a service fulfillment and persist uploaded evidence images atomically.
 ///
@@ -32,17 +32,13 @@ pub async fn confirm_service_fulfillment_with_assets(
     actor: AuditActor,
 ) -> Result<ServiceFulfillmentView> {
     for request in &asset_requests {
-        let (sensitivity, retention) = evidence_metadata(
-            request.registration.sensitivity_class,
-            request.registration.retention_class,
-        );
+        let (sensitivity, retention) =
+            evidence_metadata(request.registration.sensitivity_class, request.registration.retention_class);
         ServiceEvidencePolicy::validate(&request.registration.content_type, sensitivity, retention, false)
             .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
     }
     let pending = PendingFileAssets::prepare(asset_requests, &actor)?.shared();
-    service
-        .confirm_service_fulfillment_with_assets(&id, req, pending, &actor)
-        .await
+    service.confirm_service_fulfillment_with_assets(&id, req, pending, &actor).await
 }
 
 /// Confirm a service fulfillment and persist uploaded evidence images atomically.
@@ -64,15 +60,11 @@ pub async fn confirm_electronic_delivery_with_assets(
     actor: AuditActor,
 ) -> Result<ElectronicDeliveryView> {
     for request in &asset_requests {
-        let (sensitivity, retention) = evidence_metadata(
-            request.registration.sensitivity_class,
-            request.registration.retention_class,
-        );
+        let (sensitivity, retention) =
+            evidence_metadata(request.registration.sensitivity_class, request.registration.retention_class);
         ServiceEvidencePolicy::validate(&request.registration.content_type, sensitivity, retention, false)
             .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
     }
     let pending = PendingFileAssets::prepare(asset_requests, &actor)?.shared();
-    service
-        .confirm_electronic_delivery(&id, req, pending, &actor)
-        .await
+    service.confirm_electronic_delivery(&id, req, pending, &actor).await
 }

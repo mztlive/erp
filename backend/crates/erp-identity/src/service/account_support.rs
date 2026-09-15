@@ -1,12 +1,12 @@
 //! 账号生命周期的共享校验与更新解析。
 
-use crate::entity::account_core::{AccountCore, AccountCoreUpdate};
-use crate::entity::auth::LoginAccount;
-use crate::AccessControlExt;
 use erp_core::AccountKind;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::AccessControlExt;
+use crate::entity::account_core::{AccountCore, AccountCoreUpdate};
+use crate::entity::auth::LoginAccount;
 use crate::error::Result;
 use crate::service::auth::password;
 
@@ -51,10 +51,7 @@ pub async fn ensure_account_available(
     exclude_account_id: Option<&str>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let Some(existing) = db
-        .accounts()
-        .find_by_account_including_deleted(account.as_str(), executor)
-        .await?
+    let Some(existing) = db.accounts().find_by_account_including_deleted(account.as_str(), executor).await?
     else {
         return Ok(());
     };
@@ -97,16 +94,16 @@ pub async fn apply_account_update(
 
 #[cfg(test)]
 mod tests {
+    use erp_core::AccountKind;
+
     use super::{account_of_kind, apply_account_update};
     use crate::entity::{AccountCore, AccountCoreData, AccountCoreUpdate, AccountStatus, LoginAccount};
-    use crate::service::auth::password::{hash_secret, verify_password, PasswordCheck};
-    use erp_core::AccountKind;
+    use crate::service::auth::password::{PasswordCheck, hash_secret, verify_password};
 
     #[tokio::test]
     async fn password_update_returns_fully_prepared_account() {
-        let secret = hash_secret(LoginAccount::new("admin01").unwrap(), "password123".to_string())
-            .await
-            .unwrap();
+        let secret =
+            hash_secret(LoginAccount::new("admin01").unwrap(), "password123".to_string()).await.unwrap();
         let account = AccountCore::new(
             "account-1".to_string(),
             AccountCoreData {
@@ -134,9 +131,7 @@ mod tests {
 
         assert_eq!(account.name, "新管理员");
         assert!(matches!(
-            verify_password(Some(account.secret), "next-password".to_string())
-                .await
-                .unwrap(),
+            verify_password(Some(account.secret), "next-password".to_string()).await.unwrap(),
             PasswordCheck::Current
         ));
     }

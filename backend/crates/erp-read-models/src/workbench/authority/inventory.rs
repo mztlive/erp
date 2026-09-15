@@ -6,7 +6,7 @@ use erp_core::ids::SupplierSettlementItemId;
 use erp_supply::entity::supplier_settlement::{SupplierSettlementDifference, SupplierSettlementItem};
 use persistence_core::Executor;
 
-use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
+use super::{ObjectFact, ObjectFactMap, ObjectKind, object_ids};
 use crate::errors::Result;
 
 struct SettlementFactContext {
@@ -47,33 +47,16 @@ impl super::WorkItemFactsReader {
             return Ok(());
         }
         let statements = self.read_settlement_statements(&ids, executor).await?;
-        let context = self
-            .supplier_settlement_fact_context(&statements, executor)
-            .await?;
+        let context = self.supplier_settlement_fact_context(&statements, executor).await?;
         for statement in statements {
-            let supplier = context
-                .supplier_names
-                .get(&statement.supplier_id.to_string())
-                .cloned();
-            let items = context
-                .items_by_statement
-                .get(&statement.base.id)
-                .map(Vec::as_slice)
-                .unwrap_or_default();
+            let supplier = context.supplier_names.get(&statement.supplier_id.to_string()).cloned();
+            let items =
+                context.items_by_statement.get(&statement.base.id).map(Vec::as_slice).unwrap_or_default();
             let differences = items
                 .iter()
-                .flat_map(|item| {
-                    context
-                        .differences_by_item
-                        .get(&item.base.id)
-                        .into_iter()
-                        .flatten()
-                })
+                .flat_map(|item| context.differences_by_item.get(&item.base.id).into_iter().flatten())
                 .collect::<Vec<_>>();
-            let pending_count = differences
-                .iter()
-                .filter(|difference| difference.is_pending())
-                .count();
+            let pending_count = differences.iter().filter(|difference| difference.is_pending()).count();
             let fact = settlement_fact(&statement, supplier, differences.len(), pending_count);
             facts.insert((ObjectKind::SupplierSettlement, statement.base.id.clone()), fact);
         }
@@ -85,22 +68,14 @@ impl super::WorkItemFactsReader {
         statements: &[erp_supply::entity::supplier_settlement::SupplierSettlementStatement],
         executor: &mut dyn Executor,
     ) -> Result<SettlementFactContext> {
-        let statement_ids = statements
-            .iter()
-            .map(|statement| statement.base.id.clone())
-            .collect::<Vec<_>>();
+        let statement_ids = statements.iter().map(|statement| statement.base.id.clone()).collect::<Vec<_>>();
         let items = self.read_settlement_items(&statement_ids, executor).await?;
-        let item_ids = items
-            .iter()
-            .map(|item| SupplierSettlementItemId::new(item.base.id.clone()))
-            .collect::<Vec<_>>();
+        let item_ids =
+            items.iter().map(|item| SupplierSettlementItemId::new(item.base.id.clone())).collect::<Vec<_>>();
         let differences = self.read_settlement_differences(&item_ids, executor).await?;
         let supplier_names = self
             .supplier_display_names(
-                &statements
-                    .iter()
-                    .map(|statement| statement.supplier_id.to_string())
-                    .collect::<Vec<_>>(),
+                &statements.iter().map(|statement| statement.supplier_id.to_string()).collect::<Vec<_>>(),
                 executor,
             )
             .await?;
@@ -118,10 +93,7 @@ pub(in crate::workbench) fn group_settlement_items(
 ) -> HashMap<String, Vec<SupplierSettlementItem>> {
     let mut grouped: HashMap<String, Vec<SupplierSettlementItem>> = HashMap::new();
     for item in items {
-        grouped
-            .entry(item.statement_id.to_string())
-            .or_default()
-            .push(item);
+        grouped.entry(item.statement_id.to_string()).or_default().push(item);
     }
     grouped
 }
@@ -132,10 +104,7 @@ pub(in crate::workbench) fn group_settlement_differences(
 ) -> HashMap<String, Vec<SupplierSettlementDifference>> {
     let mut grouped: HashMap<String, Vec<SupplierSettlementDifference>> = HashMap::new();
     for difference in differences {
-        grouped
-            .entry(difference.statement_item_id.to_string())
-            .or_default()
-            .push(difference);
+        grouped.entry(difference.statement_item_id.to_string()).or_default().push(difference);
     }
     grouped
 }

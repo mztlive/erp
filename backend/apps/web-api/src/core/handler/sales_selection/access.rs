@@ -1,10 +1,10 @@
 //! 选品内部入口复用客户领域的有效归属政策。
-use super::super::customer::{ensure_customer_access, has_permission};
-use crate::{
-    app_state::AppState,
-    core::{errors::Error, middleware::RbacSubject},
-};
 use application_core::AuditActor;
+
+use super::super::customer::{ensure_customer_access, has_permission};
+use crate::app_state::AppState;
+use crate::core::errors::Error;
+use crate::core::middleware::RbacSubject;
 
 /// 解析列表允许访问的客户集合。全量权限必须在服务端验证。
 /// # 错误
@@ -18,10 +18,7 @@ pub(super) async fn customer_ids(
     if has_permission(state, subject, "customer_scope:detail").await? {
         scope = erp_customer::CustomerScope::AllAuthorized;
     }
-    Ok(state
-        .customer_service()
-        .customer_ids_for_scope(scope, user)
-        .await?)
+    Ok(state.customer_service().customer_ids_for_scope(scope, user).await?)
 }
 
 /// 按册定位客户，再执行现有客户权限校验；包含幂等重放入口。

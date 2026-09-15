@@ -6,6 +6,4 @@ mod view;
 
 pub use command::*;
 pub use status::*;
-pub use view::*;
-
-pub use view::WorkItemFields;
+pub use view::{WorkItemFields, *};

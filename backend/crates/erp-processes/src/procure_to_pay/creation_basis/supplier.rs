@@ -5,8 +5,8 @@ use erp_core::ids::SupplierAccountId;
 use erp_procurement::entity::facts::{PaymentTermFact, SupplierRoleFact};
 use erp_procurement::entity::purchase_order::PurchaseType;
 use erp_procurement::ports::creation_basis::CreationBasisSupplierPort;
-use erp_supplier::entity::supplier::eligibility::OfferingProductKind;
 use erp_supplier::SupplierExt;
+use erp_supplier::entity::supplier::eligibility::OfferingProductKind;
 use mongodb::Database;
 use persistence_core::Executor;
 /// 绑定组合根数据库，不提前执行读取。
@@ -47,14 +47,9 @@ impl CreationBasisSupplierPort for CreationBasisSupplierAdapter {
         id: &SupplierAccountId,
         executor: &mut dyn Executor,
     ) -> erp_procurement::Result<Option<SupplierRoleFact>> {
-        Ok(self
-            .db
-            .supplier_accounts()
-            .find_by_id(id, executor)
-            .await?
-            .map(|supplier| SupplierRoleFact {
-                current_commercial_profile_revision_id: supplier.current_commercial_profile_revision_id,
-            }))
+        Ok(self.db.supplier_accounts().find_by_id(id, executor).await?.map(|supplier| SupplierRoleFact {
+            current_commercial_profile_revision_id: supplier.current_commercial_profile_revision_id,
+        }))
     }
     fn payment_term(&self, code: &str) -> erp_core::Result<PaymentTermFact> {
         super::super::adapters::payment_term::parse(code)

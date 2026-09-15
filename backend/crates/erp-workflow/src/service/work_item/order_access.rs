@@ -16,7 +16,7 @@ pub(super) fn task_read_error(error: Error) -> Error {
     match error {
         Error::Forbidden(_) | Error::NotFound(_) => {
             Error::Forbidden("当前账号不具备任务业务对象读取资格".into())
-        }
+        },
         error => error,
     }
 }
@@ -87,10 +87,7 @@ pub async fn filter_order_facts(
     let allowed = auth.readable_order_sources(&actor, &sources, executor).await?;
     facts.retain(|(kind, _), fact| {
         !OrderTaskSource::required_for(*kind)
-            || fact
-                .order_scope_source
-                .as_ref()
-                .is_some_and(|source| allowed.contains(source))
+            || fact.order_scope_source.as_ref().is_some_and(|source| allowed.contains(source))
     });
     Ok(())
 }
@@ -112,11 +109,11 @@ fn order_sources(facts: &ObjectFactMap) -> Result<BTreeSet<OrderTaskSource>> {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::AccountKind;
     use persistence_core::NoTransaction;
 
     use super::*;
     use crate::ports::FailClosedWorkflowAuthorizationPort;
-    use erp_core::AccountKind;
 
     #[test]
     fn typed_order_sources_are_deduplicated_and_never_inferred_from_display_root() {
@@ -132,10 +129,8 @@ mod tests {
             ObjectFact::new("display", "title", "creator"),
         );
         assert!(order_sources(&facts).is_err());
-        facts
-            .get_mut(&(ObjectKind::Delivery, "sales-delivery".into()))
-            .unwrap()
-            .order_scope_source = Some(OrderTaskSource::Purchase("wrong-dimension".into()));
+        facts.get_mut(&(ObjectKind::Delivery, "sales-delivery".into())).unwrap().order_scope_source =
+            Some(OrderTaskSource::Purchase("wrong-dimension".into()));
         assert!(order_sources(&facts).is_err());
     }
 
@@ -144,13 +139,9 @@ mod tests {
         let auth = FailClosedWorkflowAuthorizationPort;
         let actor = AuditActor::new("actor".into(), "account".into(), AccountKind::Admin);
         let source = OrderTaskSource::Sales("sales".into());
-        assert!(auth
-            .require_order_task_read(&actor, &source, &mut NoTransaction)
-            .await
-            .is_err());
-        assert!(auth
-            .readable_order_sources(&actor, &BTreeSet::from([source]), &mut NoTransaction)
-            .await
-            .is_err());
+        assert!(auth.require_order_task_read(&actor, &source, &mut NoTransaction).await.is_err());
+        assert!(
+            auth.readable_order_sources(&actor, &BTreeSet::from([source]), &mut NoTransaction).await.is_err()
+        );
     }
 }

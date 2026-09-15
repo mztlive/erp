@@ -1,15 +1,13 @@
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{SupplierAccountId, SupplierQualificationId};
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, Pagination, QueryFilter, Result};
+
+use super::{SUPPLIER_QUALIFICATIONS, SupplierRepository};
 use crate::entity::supplier::{
     QualificationStatus, QualificationType, SupplierQualification, SupplierQualificationCapability,
 };
 use crate::repository::owned::{SupplierQualificationCapabilityRepository, SupplierQualificationRepository};
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::ids::{SupplierAccountId, SupplierQualificationId};
-use mongodb::bson::{doc, Document};
-
-use super::{SupplierRepository, SUPPLIER_QUALIFICATIONS};
-use persistence_core::Executor;
-use persistence_core::Result;
-use persistence_core::{Pagination, QueryFilter};
 
 /// 供应商资质列表筛选条件。
 #[derive(Debug, Clone)]
@@ -137,10 +135,7 @@ impl<'a> SupplierQualificationRepository<'a> {
         filter.insert("status", QualificationStatus::Active.as_str());
         filter.insert("$and", vec![verified_window_filter()]);
         filter.insert("valid_from", doc! { "$lte": as_of });
-        filter.insert(
-            "$or",
-            vec![doc! { "valid_to": null }, doc! { "valid_to": { "$gte": as_of } }],
-        );
+        filter.insert("$or", vec![doc! { "valid_to": null }, doc! { "valid_to": { "$gte": as_of } }]);
         super::find_supplier_ids(self.collection().clone_with_type(), filter, executor).await
     }
 
@@ -223,10 +218,7 @@ impl SupplierQualificationRepository<'_> {
             .supplier_qualification_capabilities()
             .find_many(doc! { "capability_id": capability_id }, executor)
             .await?;
-        let ids: Vec<String> = links
-            .into_iter()
-            .map(|link| link.qualification_id.to_string())
-            .collect();
+        let ids: Vec<String> = links.into_iter().map(|link| link.qualification_id.to_string()).collect();
         if ids.is_empty() {
             return Ok(vec![]);
         }
@@ -248,8 +240,7 @@ impl<'a> SupplierQualificationCapabilityRepository<'a> {
             return Ok(Vec::new());
         }
         let ids: Vec<String> = qualification_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "qualification_id": { "$in": ids } }, executor)
-            .await
+        self.find_many(doc! { "qualification_id": { "$in": ids } }, executor).await
     }
 }
 
@@ -264,10 +255,7 @@ fn qualification_type_filter(qualification_types: &[QualificationType]) -> Docum
     if qualification_types.is_empty() {
         return Document::new();
     }
-    let types: Vec<&str> = qualification_types
-        .iter()
-        .map(QualificationType::as_str)
-        .collect();
+    let types: Vec<&str> = qualification_types.iter().map(QualificationType::as_str).collect();
     doc! { "qualification_type": { "$in": types } }
 }
 
@@ -434,9 +422,10 @@ impl<'a> SupplierRepository<'a> {
 
 #[cfg(test)]
 mod tests {
+    use persistence_core::QueryFilter;
+
     use super::SupplierQualificationFilter;
     use crate::entity::supplier::QualificationStatus;
-    use persistence_core::QueryFilter;
 
     #[test]
     fn qualification_filter_applies_type_and_status() {

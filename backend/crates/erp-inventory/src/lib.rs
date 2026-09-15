@@ -32,4 +32,4 @@ pub use repository::{
     StockBalanceRow, StockMovementFilter, StockMovementRepository, StockMovementRow, StockReservationFilter,
     StockReservationRepository, StockReservationRow,
 };
-pub use service::{apply_posted_adjustment_in_transaction, build_adjustment_line_updates, InventoryService};
+pub use service::{InventoryService, apply_posted_adjustment_in_transaction, build_adjustment_line_updates};

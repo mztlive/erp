@@ -139,13 +139,13 @@ impl From<persistence_core::Error> for Error {
                 } else {
                     Self::ConflictError(duplicate_key_conflict_message(&error))
                 }
-            }
+            },
             persistence_core::Error::OptimisticLockingError => {
                 Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            }
+            },
             error @ persistence_core::Error::TransientTransactionConflict(_) => {
                 Self::TransientTransaction(error)
-            }
+            },
             error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
             other => Self::RepositoryError(other),
         }
@@ -224,8 +224,9 @@ impl Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{Error, WorkflowErrorCode};
     use mongodb::error::Error as MongoError;
+
+    use super::{Error, WorkflowErrorCode};
 
     fn named_duplicate(index: &str) -> persistence_core::Error {
         use mongodb::error::{ErrorKind, WriteError, WriteFailure};
@@ -236,9 +237,7 @@ mod tests {
             "errInfo": null,
         }))
         .expect("Mongo write error fixture");
-        persistence_core::Error::from(MongoError::from(ErrorKind::Write(WriteFailure::WriteError(
-            write,
-        ))))
+        persistence_core::Error::from(MongoError::from(ErrorKind::Write(WriteFailure::WriteError(write))))
     }
 
     #[test]
@@ -260,10 +259,7 @@ mod tests {
 
     #[test]
     fn unknown_duplicate_and_similar_historical_name_remain_ordinary_conflict() {
-        for index in [
-            "unknown_index",
-            "uk_product_publication_revisions_publication_revision_extra",
-        ] {
+        for index in ["unknown_index", "uk_product_publication_revisions_publication_revision_extra"] {
             let error = Error::from(named_duplicate(index));
             assert!(matches!(&error, Error::ConflictError(message) if message == "数据已存在，请勿重复提交"));
         }

@@ -8,13 +8,12 @@ use std::fmt;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::state::ensure_transition;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentOrderId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 // 兼容既有深层导入路径：`supplier_fulfillment::fulfillment_order::{...}`。
 pub use super::fulfillment_item::{SupplierFulfillmentItem, SupplierFulfillmentItemData};
@@ -260,19 +259,19 @@ impl SupplierFulfillmentOrder {
         match to {
             FulfillmentStatus::Submitting => {
                 self.submitted_at.get_or_insert_with(Instant::now);
-            }
+            },
             FulfillmentStatus::Accepted => {
                 self.accepted_at.get_or_insert_with(Instant::now);
-            }
+            },
             FulfillmentStatus::Completed => {
                 self.completed_at.get_or_insert_with(Instant::now);
-            }
+            },
             FulfillmentStatus::Received
             | FulfillmentStatus::Rejected
             | FulfillmentStatus::ResultUnknown
             | FulfillmentStatus::Fulfilling
             | FulfillmentStatus::Shipped
-            | FulfillmentStatus::Exception => {}
+            | FulfillmentStatus::Exception => {},
         }
         Ok(())
     }
@@ -385,10 +384,10 @@ impl SupplierFulfillmentOrder {
             SupplierOrderActionType::Place => match (self.fulfillment_status, action.status) {
                 (FulfillmentStatus::Completed, SupplierOrderActionStatus::Succeeded) => {
                     Some(VerifiedSupplierOrderResolution::OrderCompleted)
-                }
+                },
                 (FulfillmentStatus::Rejected, SupplierOrderActionStatus::Failed) => {
                     Some(VerifiedSupplierOrderResolution::OrderRejected)
-                }
+                },
                 (
                     FulfillmentStatus::Accepted | FulfillmentStatus::Fulfilling | FulfillmentStatus::Shipped,
                     SupplierOrderActionStatus::Succeeded,
@@ -400,13 +399,13 @@ impl SupplierFulfillmentOrder {
                     && action.status == SupplierOrderActionStatus::Succeeded =>
             {
                 Some(VerifiedSupplierOrderResolution::Canceled)
-            }
+            },
             SupplierOrderActionType::Refund
                 if self.refund_status == RefundStatus::Refunded
                     && action.status == SupplierOrderActionStatus::Succeeded =>
             {
                 Some(VerifiedSupplierOrderResolution::Refunded)
-            }
+            },
             SupplierOrderActionType::Cancel
             | SupplierOrderActionType::Refund
             | SupplierOrderActionType::Query => None,
@@ -471,10 +470,7 @@ fn ensure_timestamp_consistency(
     if status != FulfillmentStatus::Received && submitted_at.is_none() {
         return Err(Error::from("进入提交中后 submitted_at 必填"));
     }
-    if !matches!(
-        status,
-        FulfillmentStatus::Received | FulfillmentStatus::Submitting
-    ) && accepted_at.is_none()
+    if !matches!(status, FulfillmentStatus::Received | FulfillmentStatus::Submitting) && accepted_at.is_none()
     {
         return Err(Error::from("进入已接单后 accepted_at 必填"));
     }
@@ -504,11 +500,7 @@ pub fn fingerprint(plain: &str, key: &[u8]) -> String {
     type HmacSha256 = Hmac<Sha256>;
     let mut mac = HmacSha256::new_from_slice(key).expect("HMAC 接受任意长度密钥");
     mac.update(plain.trim().as_bytes());
-    mac.finalize()
-        .into_bytes()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    mac.finalize().into_bytes().iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 #[cfg(test)]
@@ -569,34 +561,24 @@ mod tests {
 
     #[test]
     fn new_rejects_empty_or_overlong_fulfillment_order_no() {
-        let empty = SupplierFulfillmentOrderData {
-            fulfillment_order_no: "   ".to_string(),
-            ..sample_data()
-        };
+        let empty = SupplierFulfillmentOrderData { fulfillment_order_no: "   ".to_string(), ..sample_data() };
         assert!(SupplierFulfillmentOrder::new(SupplierFulfillmentOrderId::new("order-2"), empty).is_err());
 
-        let overlong = SupplierFulfillmentOrderData {
-            fulfillment_order_no: "x".repeat(65),
-            ..sample_data()
-        };
+        let overlong = SupplierFulfillmentOrderData { fulfillment_order_no: "x".repeat(65), ..sample_data() };
         assert!(SupplierFulfillmentOrder::new(SupplierFulfillmentOrderId::new("order-3"), overlong).is_err());
     }
 
     #[test]
     fn new_rejects_overlong_address_snapshot() {
-        let overlong_address = SupplierFulfillmentOrderData {
-            address_snapshot_encrypted: "a".repeat(8193),
-            ..sample_data()
-        };
+        let overlong_address =
+            SupplierFulfillmentOrderData { address_snapshot_encrypted: "a".repeat(8193), ..sample_data() };
         assert!(
             SupplierFulfillmentOrder::new(SupplierFulfillmentOrderId::new("order-4"), overlong_address)
                 .is_err()
         );
 
-        let blank_address = SupplierFulfillmentOrderData {
-            address_snapshot_encrypted: " ".to_string(),
-            ..sample_data()
-        };
+        let blank_address =
+            SupplierFulfillmentOrderData { address_snapshot_encrypted: " ".to_string(), ..sample_data() };
         assert!(
             SupplierFulfillmentOrder::new(SupplierFulfillmentOrderId::new("order-5"), blank_address).is_err()
         );
@@ -608,11 +590,13 @@ mod tests {
             fulfillment_status: FulfillmentStatus::Submitting,
             ..sample_data()
         };
-        assert!(SupplierFulfillmentOrder::new(
-            SupplierFulfillmentOrderId::new("order-6"),
-            submitting_without_time
-        )
-        .is_err());
+        assert!(
+            SupplierFulfillmentOrder::new(
+                SupplierFulfillmentOrderId::new("order-6"),
+                submitting_without_time
+            )
+            .is_err()
+        );
 
         let completed_without_time = SupplierFulfillmentOrderData {
             fulfillment_status: FulfillmentStatus::Completed,
@@ -620,11 +604,10 @@ mod tests {
             accepted_at: Some(Instant::from_unix_secs(1_700_000_100)),
             ..sample_data()
         };
-        assert!(SupplierFulfillmentOrder::new(
-            SupplierFulfillmentOrderId::new("order-7"),
-            completed_without_time
-        )
-        .is_err());
+        assert!(
+            SupplierFulfillmentOrder::new(SupplierFulfillmentOrderId::new("order-7"), completed_without_time)
+                .is_err()
+        );
     }
 
     #[test]
@@ -645,26 +628,17 @@ mod tests {
 
         let completed_at = order.completed_at;
         order.advance_fulfillment(FulfillmentStatus::Completed).unwrap();
-        assert_eq!(
-            order.completed_at, completed_at,
-            "重复回调的幂等迁移不覆盖里程碑时间"
-        );
+        assert_eq!(order.completed_at, completed_at, "重复回调的幂等迁移不覆盖里程碑时间");
     }
 
     #[test]
     fn advance_fulfillment_rejects_illegal_and_regressive_transitions() {
         let mut order = sample_order();
-        assert!(
-            order.advance_fulfillment(FulfillmentStatus::Accepted).is_err(),
-            "跳过 SUBMITTING 非法"
-        );
+        assert!(order.advance_fulfillment(FulfillmentStatus::Accepted).is_err(), "跳过 SUBMITTING 非法");
 
         order.advance_fulfillment(FulfillmentStatus::Submitting).unwrap();
         order.advance_fulfillment(FulfillmentStatus::Rejected).unwrap();
-        assert!(
-            order.advance_fulfillment(FulfillmentStatus::Submitting).is_err(),
-            "REJECTED 是终态"
-        );
+        assert!(order.advance_fulfillment(FulfillmentStatus::Submitting).is_err(), "REJECTED 是终态");
         assert!(order.advance_fulfillment(FulfillmentStatus::Exception).is_err());
     }
 
@@ -750,19 +724,13 @@ mod tests {
         order.completed_at = Some(Instant::from_unix_secs(1_700_000_200));
         assert!(order.confirmed_completed_at().is_err());
         order.fulfillment_status = FulfillmentStatus::Completed;
-        assert_eq!(
-            order.confirmed_completed_at().unwrap(),
-            Some(Instant::from_unix_secs(1_700_000_200))
-        );
+        assert_eq!(order.confirmed_completed_at().unwrap(), Some(Instant::from_unix_secs(1_700_000_200)));
     }
 
     #[test]
     fn debug_redacts_address_snapshot() {
         let debug = format!("{:?}", sample_order());
-        assert!(
-            !debug.contains("encrypted-address"),
-            "Debug 不得输出地址快照加密值"
-        );
+        assert!(!debug.contains("encrypted-address"), "Debug 不得输出地址快照加密值");
         assert!(!debug.contains("fingerprint-address"), "Debug 不得输出查询指纹");
         assert!(debug.contains("<redacted>"));
     }
@@ -782,21 +750,17 @@ mod tests {
     fn update_sets_external_order_no() {
         let mut order = sample_order();
         order
-            .update(SupplierFulfillmentOrderUpdate {
-                external_order_no: Some(" SUP-1001 ".to_string()),
-            })
+            .update(SupplierFulfillmentOrderUpdate { external_order_no: Some(" SUP-1001 ".to_string()) })
             .unwrap();
         assert_eq!(order.external_order_no.as_deref(), Some("SUP-1001"));
 
-        assert!(order
-            .update(SupplierFulfillmentOrderUpdate {
-                external_order_no: Some("  ".to_string()),
-            })
-            .is_err());
-        assert!(order
-            .update(SupplierFulfillmentOrderUpdate {
-                external_order_no: Some("x".repeat(65)),
-            })
-            .is_err());
+        assert!(
+            order
+                .update(SupplierFulfillmentOrderUpdate { external_order_no: Some("  ".to_string()) })
+                .is_err()
+        );
+        assert!(
+            order.update(SupplierFulfillmentOrderUpdate { external_order_no: Some("x".repeat(65)) }).is_err()
+        );
     }
 }

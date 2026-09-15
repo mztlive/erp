@@ -1,12 +1,12 @@
 //! 启动审批的单事务编排核心。
 
-use bpm::engine::{start, StartAssigneeBinding, StartCommand, TransitionPlan};
+use bpm::engine::{StartAssigneeBinding, StartCommand, TransitionPlan, start};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalCommandReceipt, ParticipantId, ProcessKind, SubjectRef, Timestamp};
 
-use super::apply_plan::{apply_plan, DomainActionKind};
+use super::apply_plan::{DomainActionKind, apply_plan};
 use super::idempotency::{
-    start_identity, start_scope_candidates, PreparedCommandIdentity, ReceiptBranch, StartIdentityParams,
+    PreparedCommandIdentity, ReceiptBranch, StartIdentityParams, start_identity, start_scope_candidates,
 };
 use super::{ExecutionCommandInput, PreparedExecution};
 use crate::error::{Error, ErrorCode, Result};
@@ -82,18 +82,14 @@ pub fn prepare_start_with_identity(
     .next()
     .ok_or_else(|| Error::Internal("启动命令缺少 V3 scope".to_string()))?;
     if identity.current().scope().as_str() != expected_scope {
-        return Err(Error::ValidationError(
-            "启动命令 scope 与业务主体不一致".to_string(),
-        ));
+        return Err(Error::ValidationError("启动命令 scope 与业务主体不一致".to_string()));
     }
     match identity.classify(input.command.receipt.as_ref()) {
         ReceiptBranch::PayloadConflict => return Err(super::idempotency::payload_conflict_error()),
         ReceiptBranch::SamePayload(receipt) => {
-            return Ok(PreparedExecution::Replay {
-                receipt: receipt.clone(),
-            });
-        }
-        ReceiptBranch::Fresh => {}
+            return Ok(PreparedExecution::Replay { receipt: receipt.clone() });
+        },
+        ReceiptBranch::Fresh => {},
     }
     let plan = start(
         StartCommand {
@@ -110,11 +106,7 @@ pub fn prepare_start_with_identity(
     )
     .map_err(map_engine_error)?;
     let receipt = build_receipt(input.receipt_id, identity.current(), &plan, input.command.now)?;
-    Ok(PreparedExecution::Apply(Box::new(apply_plan(
-        plan,
-        receipt,
-        Some(DomainActionKind::Start),
-    ))))
+    Ok(PreparedExecution::Apply(Box::new(apply_plan(plan, receipt, Some(DomainActionKind::Start)))))
 }
 
 /// 由计划构造收据。
@@ -135,7 +127,7 @@ pub fn map_engine_error(error: bpm::engine::EngineError) -> Error {
         bpm::engine::EngineError::InvalidCommand(message) => Error::ValidationError(message.to_string()),
         bpm::engine::EngineError::GraphCorrupted => {
             Error::from_approval_code(ErrorCode::ApprovalInstanceBlocked)
-        }
+        },
         bpm::engine::EngineError::Model(error) => Error::BusinessLogicError(error.to_string()),
     }
 }

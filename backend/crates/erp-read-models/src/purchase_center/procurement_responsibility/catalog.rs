@@ -1,12 +1,10 @@
-use erp_catalog::ProductCategory;
+use erp_catalog::{CatalogExt, ProductCategory};
 use erp_core::ids::{ProductCategoryId, ProductRevisionId, SkuId};
 use erp_procurement::entity::procurement_responsibility::ProcurementCatalogBundle;
+use persistence_core::{Executor, Result};
 
 use super::super::repository::mapping::{category_fact, product_fact, product_revision_fact, sku_fact};
 use super::ids::unique_ids;
-use erp_catalog::CatalogExt;
-use persistence_core::Executor;
-use persistence_core::Result;
 
 /// 批量加载采购责任目录所需的最小持久化事实.
 ///
@@ -49,17 +47,12 @@ pub async fn load_procurement_catalog_bundle(
     for product in product_list {
         products.insert(product.base.id.clone(), product);
     }
-    let revision_ids = unique_ids(products.values().filter_map(|product| {
-        product
-            .stable
-            .current_revision_id
-            .as_deref()
-            .map(ProductRevisionId::new)
-    }));
-    let revision_list = db
-        .product_revisions()
-        .find_by_ids(&revision_ids, executor)
-        .await?;
+    let revision_ids = unique_ids(
+        products
+            .values()
+            .filter_map(|product| product.stable.current_revision_id.as_deref().map(ProductRevisionId::new)),
+    );
+    let revision_list = db.product_revisions().find_by_ids(&revision_ids, executor).await?;
     let mut revisions = HashMap::with_capacity(revision_list.len());
     for revision in revision_list {
         revisions.insert(revision.base.id.clone(), revision);
@@ -67,22 +60,10 @@ pub async fn load_procurement_catalog_bundle(
     let initial_category_ids = unique_ids(revisions.values().map(|revision| revision.category_id.clone()));
     let categories = load_category_ancestors(db, initial_category_ids, executor).await?;
     Ok(ProcurementCatalogBundle {
-        skus: skus
-            .into_iter()
-            .map(|(id, value)| (id, sku_fact(value)))
-            .collect(),
-        products: products
-            .into_iter()
-            .map(|(id, value)| (id, product_fact(value)))
-            .collect(),
-        revisions: revisions
-            .into_iter()
-            .map(|(id, value)| (id, product_revision_fact(value)))
-            .collect(),
-        categories: categories
-            .into_iter()
-            .map(|(id, value)| (id, category_fact(value)))
-            .collect(),
+        skus: skus.into_iter().map(|(id, value)| (id, sku_fact(value))).collect(),
+        products: products.into_iter().map(|(id, value)| (id, product_fact(value))).collect(),
+        revisions: revisions.into_iter().map(|(id, value)| (id, product_revision_fact(value))).collect(),
+        categories: categories.into_iter().map(|(id, value)| (id, category_fact(value))).collect(),
     })
 }
 

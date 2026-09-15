@@ -1,5 +1,12 @@
 //! Invoice lists and details assembled exclusively from finance facts.
 
+use std::collections::HashMap;
+
+use erp_core::ids::InvoiceId;
+use erp_core::money::Amount;
+use persistence_core::NoTransaction;
+use validator::Validate;
+
 use super::ReceivableService;
 use crate::dto::receivable::{InvoiceListParams, InvoiceView, PageView, SortDir};
 use crate::entity::payable::PurchaseInvoiceAllocation;
@@ -7,11 +14,6 @@ use crate::entity::receivable::{AllocationAction, InvoiceDirection, InvoiceKind,
 use crate::repository::{PayableExt, ReceivableExt};
 use crate::service::receivable::mapping::zero_amount;
 use crate::{Error, Result};
-use erp_core::ids::InvoiceId;
-use erp_core::money::Amount;
-use persistence_core::NoTransaction;
-use std::collections::HashMap;
-use validator::Validate;
 
 impl ReceivableService {
     /// 分页查询发票列表（销项/进项共用，`invoice_direction` 筛选）。
@@ -49,16 +51,9 @@ impl ReceivableService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .receivable()
-            .search_invoices_in_account_scope(&scope_query, &mut NoTransaction)
-            .await?;
-        let invoice_ids = page
-            .items
-            .iter()
-            .map(|row| InvoiceId::new(row.id.clone()))
-            .collect::<Vec<_>>();
+        let page =
+            self.db.receivable().search_invoices_in_account_scope(&scope_query, &mut NoTransaction).await?;
+        let invoice_ids = page.items.iter().map(|row| InvoiceId::new(row.id.clone())).collect::<Vec<_>>();
         let mut sales_allocations_by_invoice = HashMap::<String, Vec<SalesInvoiceAllocation>>::new();
         for allocation in self
             .db
@@ -94,11 +89,9 @@ impl ReceivableService {
             let (allocated_total, allocations) = match row.invoice_direction {
                 InvoiceDirection::Sales => {
                     sales_allocation_view(&sales_allocations_by_invoice.remove(&row.id).unwrap_or_default())
-                }
+                },
                 InvoiceDirection::Purchase => purchase_allocation_view(
-                    &purchase_allocations_by_invoice
-                        .remove(&row.id)
-                        .unwrap_or_default(),
+                    &purchase_allocations_by_invoice.remove(&row.id).unwrap_or_default(),
                 ),
             };
             views.push(InvoiceView {
@@ -172,7 +165,7 @@ impl ReceivableService {
                     .find_allocations_by_invoices(&[invoice.base.id.clone().into()], &mut NoTransaction)
                     .await?;
                 purchase_allocation_view(&rows)
-            }
+            },
             InvoiceDirection::Sales => {
                 let allocations = self
                     .db
@@ -180,7 +173,7 @@ impl ReceivableService {
                     .find_allocations_by_invoices(&[invoice.base.id.clone().into()], &mut NoTransaction)
                     .await?;
                 sales_allocation_view(&allocations)
-            }
+            },
         };
         Ok(InvoiceView {
             sales_invoice_request_id: invoice.sales_invoice_request_id.clone(),
@@ -236,10 +229,7 @@ fn sales_allocation_view(
                 allocated_gross_amount: allocation.allocated_gross_amount,
                 allocated_net_amount: allocation.allocated_net_amount,
                 allocated_tax_amount: allocation.allocated_tax_amount,
-                reverses_allocation_id: allocation
-                    .reverses_allocation_id
-                    .as_ref()
-                    .map(|id| id.to_string()),
+                reverses_allocation_id: allocation.reverses_allocation_id.as_ref().map(|id| id.to_string()),
             }
         })
         .collect();
@@ -276,10 +266,7 @@ fn purchase_allocation_view(
                 allocated_gross_amount: allocation.allocated_gross_amount,
                 allocated_net_amount: allocation.allocated_net_amount,
                 allocated_tax_amount: allocation.allocated_tax_amount,
-                reverses_allocation_id: allocation
-                    .reverses_allocation_id
-                    .as_ref()
-                    .map(|id| id.to_string()),
+                reverses_allocation_id: allocation.reverses_allocation_id.as_ref().map(|id| id.to_string()),
             }
         })
         .collect();
@@ -296,22 +283,17 @@ fn unallocated_amount(kind: InvoiceKind, gross: Amount, allocated: Amount) -> Am
 
 #[cfg(test)]
 mod tests {
-    use super::{unallocated_amount, InvoiceKind};
     use erp_core::money::Amount;
+
+    use super::{InvoiceKind, unallocated_amount};
 
     /// 正票面与负冲减分配必须守恒，完整红冲不得产生两倍未分配额。
     #[test]
     fn invoice_remainder_respects_red_allocation_direction() {
         let gross: Amount = "2576.00".parse().unwrap();
         let reversed: Amount = "-2576.00".parse().unwrap();
-        assert_eq!(
-            unallocated_amount(InvoiceKind::Red, gross, reversed),
-            "0.00".parse().unwrap()
-        );
-        assert_eq!(
-            unallocated_amount(InvoiceKind::Blue, gross, gross),
-            "0.00".parse().unwrap()
-        );
+        assert_eq!(unallocated_amount(InvoiceKind::Red, gross, reversed), "0.00".parse().unwrap());
+        assert_eq!(unallocated_amount(InvoiceKind::Blue, gross, gross), "0.00".parse().unwrap());
         assert_eq!(
             unallocated_amount(InvoiceKind::Red, gross, "-1000.00".parse().unwrap()),
             "1576.00".parse().unwrap()

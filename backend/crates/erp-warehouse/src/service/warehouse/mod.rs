@@ -16,7 +16,21 @@
 
 use std::sync::Arc;
 
+use application_core::AuditActor;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{WarehouseId, WarehouseRevisionId};
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
+use validator::Validate;
+
 use crate::dto::warehouse::SortDir;
+pub use crate::dto::warehouse::{
+    CreateWarehouseRequest, CreateWarehouseSkuPolicyRequest, PageView,
+    UpdateWarehouseFulfillmentHandlersRequest, UpdateWarehouseRequest, UpdateWarehouseSkuPolicyRequest,
+    WarehouseFulfillmentHandlerOptionView, WarehouseListParams, WarehouseRevisionListParams,
+    WarehouseRevisionView, WarehouseSkuPolicyListParams, WarehouseSkuPolicyView, WarehouseView,
+};
 use crate::entity::warehouse::status::EnableStatus;
 use crate::entity::warehouse::warehouse_entity::{Warehouse, WarehouseData, WarehouseUpdate};
 use crate::entity::warehouse::warehouse_revision::{SensitiveText, WarehouseRevision, WarehouseRevisionData};
@@ -26,22 +40,6 @@ use crate::ports::{
     AttachmentFingerprintPort, HandlerDuty, HandlerIdentityFact, IdentityFactPort, WarehouseAuditPort,
 };
 use crate::repository::WarehouseExt;
-use erp_core::common::time::BusinessDate;
-use erp_core::ids::WarehouseId;
-use erp_core::ids::WarehouseRevisionId;
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
-use validator::Validate;
-
-use application_core::AuditActor;
-
-pub use crate::dto::warehouse::{
-    CreateWarehouseRequest, CreateWarehouseSkuPolicyRequest, PageView,
-    UpdateWarehouseFulfillmentHandlersRequest, UpdateWarehouseRequest, UpdateWarehouseSkuPolicyRequest,
-    WarehouseFulfillmentHandlerOptionView, WarehouseListParams, WarehouseRevisionListParams,
-    WarehouseRevisionView, WarehouseSkuPolicyListParams, WarehouseSkuPolicyView, WarehouseView,
-};
 
 /// 仓库列表筛选条件类型（经 `WarehouseExt` 关联类型跨 crate 可达）。
 type WarehouseFilter = <mongodb::Database as WarehouseExt>::WarehouseFilter;
@@ -82,12 +80,7 @@ impl WarehouseService {
         audit: Arc<dyn WarehouseAuditPort>,
         fingerprint: Arc<dyn AttachmentFingerprintPort>,
     ) -> Self {
-        Self {
-            db,
-            identity,
-            audit,
-            fingerprint,
-        }
+        Self { db, identity, audit, fingerprint }
     }
 
     /// 分页查询仓库列表。
@@ -115,11 +108,7 @@ impl WarehouseService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .warehouses()
-            .search_warehouses(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.warehouses().search_warehouses(&filter, &mut NoTransaction).await?;
         // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结），按字段映射为响应视图。
         let items = page
             .items
@@ -134,12 +123,7 @@ impl WarehouseService {
                 version: row.version,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 创建仓库（仓库稳定身份 + 首个修订，跨集合事务）。
@@ -163,10 +147,8 @@ impl WarehouseService {
         actor: &AuditActor,
     ) -> Result<WarehouseView> {
         req.validate()?;
-        self.ensure_handler_eligible(&req.inbound_handler_user_id, HandlerDuty::Inbound)
-            .await?;
-        self.ensure_handler_eligible(&req.outbound_handler_user_id, HandlerDuty::Outbound)
-            .await?;
+        self.ensure_handler_eligible(&req.inbound_handler_user_id, HandlerDuty::Inbound).await?;
+        self.ensure_handler_eligible(&req.outbound_handler_user_id, HandlerDuty::Outbound).await?;
         let id = WarehouseId::new(next_id());
         let revision_id = WarehouseRevisionId::new(next_id());
         let mut warehouse = Warehouse::new(
@@ -194,17 +176,14 @@ impl WarehouseService {
             self.fingerprint.as_ref(),
         )?;
         let audit =
-            self.audit
-                .resource_log(actor.clone(), "warehouse.create", "warehouse", id.to_string())?;
+            self.audit.resource_log(actor.clone(), "warehouse.create", "warehouse", id.to_string())?;
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    db.warehouse()
-                        .create_warehouse_with_revision(&mut warehouse, &revision, session)
-                        .await?;
+                    db.warehouse().create_warehouse_with_revision(&mut warehouse, &revision, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<Warehouse, Error>(warehouse)
                 })
@@ -230,11 +209,7 @@ impl WarehouseService {
         revision: &WarehouseRevision,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(self
-            .db
-            .warehouse()
-            .create_warehouse_with_revision(warehouse, revision, executor)
-            .await?)
+        Ok(self.db.warehouse().create_warehouse_with_revision(warehouse, revision, executor).await?)
     }
 
     /// 更新仓库（追加新修订并更新稳定身份，跨集合事务）。
@@ -260,10 +235,8 @@ impl WarehouseService {
         actor: &AuditActor,
     ) -> Result<WarehouseView> {
         req.validate()?;
-        self.ensure_handler_eligible(&req.inbound_handler_user_id, HandlerDuty::Inbound)
-            .await?;
-        self.ensure_handler_eligible(&req.outbound_handler_user_id, HandlerDuty::Outbound)
-            .await?;
+        self.ensure_handler_eligible(&req.inbound_handler_user_id, HandlerDuty::Inbound).await?;
+        self.ensure_handler_eligible(&req.outbound_handler_user_id, HandlerDuty::Outbound).await?;
         let mut warehouse = self
             .db
             .warehouse()
@@ -271,15 +244,9 @@ impl WarehouseService {
             .await?
             .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
         if !warehouse.matches_version(req.version) {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
-        let revision_no = self
-            .db
-            .warehouse()
-            .next_revision_no(id, &mut NoTransaction)
-            .await?;
+        let revision_no = self.db.warehouse().next_revision_no(id, &mut NoTransaction).await?;
         let revision = build_warehouse_revision(
             WarehouseId::new(id.to_string()),
             WarehouseRevisionId::new(next_id()),
@@ -347,10 +314,8 @@ impl WarehouseService {
         actor: &AuditActor,
     ) -> Result<WarehouseView> {
         req.validate()?;
-        self.ensure_handler_eligible(&req.inbound_handler_user_id, HandlerDuty::Inbound)
-            .await?;
-        self.ensure_handler_eligible(&req.outbound_handler_user_id, HandlerDuty::Outbound)
-            .await?;
+        self.ensure_handler_eligible(&req.inbound_handler_user_id, HandlerDuty::Inbound).await?;
+        self.ensure_handler_eligible(&req.outbound_handler_user_id, HandlerDuty::Outbound).await?;
 
         let mut warehouse = self
             .db
@@ -359,9 +324,7 @@ impl WarehouseService {
             .await?
             .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
         if !warehouse.matches_version(req.version) {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         let audit_message = format!(
             "inbound:{}->{};outbound:{}->{}",
@@ -438,11 +401,8 @@ impl WarehouseService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .warehouse_revisions()
-            .search_warehouse_revisions(&filter, &mut NoTransaction)
-            .await?;
+        let page =
+            self.db.warehouse_revisions().search_warehouse_revisions(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -458,12 +418,7 @@ impl WarehouseService {
                 version: row.version,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 分页查询仓库-SKU 预警策略列表。
@@ -511,12 +466,7 @@ impl WarehouseService {
                 version: row.version,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 更新仓库-SKU 预警策略（乐观锁语义；`warehouse_id`/`sku_id` 是策略身份）。
@@ -546,9 +496,7 @@ impl WarehouseService {
             .await?
             .ok_or_else(|| Error::NotFound("预警策略不存在".to_string()))?;
         if !policy.matches_version(req.version) {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         policy.update(WarehouseSkuPolicyUpdate {
             minimum_available_quantity: req.minimum_available_quantity,
@@ -559,9 +507,7 @@ impl WarehouseService {
             .warehouse()
             .sku_policies_for_dimensions(&policy.warehouse_id, &policy.sku_id, &mut NoTransaction)
             .await?;
-        policy
-            .ensure_no_overlap(&existing)
-            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+        policy.ensure_no_overlap(&existing).map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "warehouse_sku_policy.update",
@@ -614,9 +560,7 @@ impl WarehouseService {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    db.warehouse_sku_policies()
-                        .soft_delete(&mut policy, session)
-                        .await?;
+                    db.warehouse_sku_policies().soft_delete(&mut policy, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<(), Error>(())
                 })
@@ -639,21 +583,15 @@ pub(crate) fn ensure_handler_fact_eligible(
 ) -> Result<()> {
     let label = duty.label();
     let Some(fact) = fact else {
-        return Err(Error::BusinessLogicError(format!(
-            "{label}经办人账号不存在或已停用，请重新选择"
-        )));
+        return Err(Error::BusinessLogicError(format!("{label}经办人账号不存在或已停用，请重新选择")));
     };
     if !fact.can_login {
-        return Err(Error::BusinessLogicError(format!(
-            "{label}经办人账号不可用，请重新选择"
-        )));
+        return Err(Error::BusinessLogicError(format!("{label}经办人账号不可用，请重新选择")));
     }
     if duty.is_eligible(fact) {
         return Ok(());
     }
-    Err(Error::BusinessLogicError(format!(
-        "{label}经办人缺少对应操作权限，请先调整角色或重新选择"
-    )))
+    Err(Error::BusinessLogicError(format!("{label}经办人缺少对应操作权限，请先调整角色或重新选择")))
 }
 
 /// 把身份事实投影为经办人选项；跳过不可登录且两项资格都没有的账号。
@@ -662,9 +600,7 @@ pub(crate) fn handler_option_views(
 ) -> Vec<WarehouseFulfillmentHandlerOptionView> {
     facts.retain(|fact| fact.can_login && (fact.inbound_eligible || fact.outbound_eligible));
     facts.sort_by(|left, right| {
-        left.display_name
-            .cmp(&right.display_name)
-            .then_with(|| left.user_id.cmp(&right.user_id))
+        left.display_name.cmp(&right.display_name).then_with(|| left.user_id.cmp(&right.user_id))
     });
     facts
         .into_iter()
@@ -742,14 +678,15 @@ fn build_warehouse_revision(
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_handler_fact_eligible, handler_option_views, HandlerDuty};
+    use erp_core::ids::WarehouseId;
+
+    use super::{HandlerDuty, ensure_handler_fact_eligible, handler_option_views};
+    use crate::entity::warehouse::EnableStatus;
     use crate::entity::warehouse::warehouse_entity::{
         Warehouse, WarehouseData, WarehouseFulfillmentOperation, WarehouseUpdate,
     };
-    use crate::entity::warehouse::EnableStatus;
     use crate::error::Error;
     use crate::ports::HandlerIdentityFact;
-    use erp_core::ids::WarehouseId;
 
     fn fact(
         user_id: &str,
@@ -800,15 +737,10 @@ mod tests {
             fact("u-none", "赵六", true, false, false),
         ]);
         assert_eq!(
-            options
-                .iter()
-                .map(|item| item.user_id.as_str())
-                .collect::<Vec<_>>(),
+            options.iter().map(|item| item.user_id.as_str()).collect::<Vec<_>>(),
             vec!["u-org-a", "u-org-b"]
         );
-        assert!(options
-            .iter()
-            .all(|item| item.inbound_eligible || item.outbound_eligible));
+        assert!(options.iter().all(|item| item.inbound_eligible || item.outbound_eligible));
         assert!(
             options.iter().all(|item| item.user_id.starts_with("u-org-")),
             "选项保持公司范围，不按组织裁剪"
@@ -856,23 +788,20 @@ mod tests {
 
     #[test]
     fn revision_fingerprint_uses_untrimmed_request_plaintext() {
-        use super::{build_warehouse_revision, WarehouseRevisionInput, FINGERPRINT_KEY};
-        use crate::ports::AttachmentFingerprintPort;
         use erp_core::common::time::BusinessDate;
         use erp_core::ids::{WarehouseId, WarehouseRevisionId};
         use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
+
+        use super::{FINGERPRINT_KEY, WarehouseRevisionInput, build_warehouse_revision};
+        use crate::ports::AttachmentFingerprintPort;
 
         struct SupportFingerprint;
         impl AttachmentFingerprintPort for SupportFingerprint {
             fn content_fingerprint(&self, plain: &str, key: &[u8]) -> String {
                 let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC 接受任意长度密钥");
                 mac.update(plain.as_bytes());
-                mac.finalize()
-                    .into_bytes()
-                    .iter()
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect()
+                mac.finalize().into_bytes().iter().map(|byte| format!("{byte:02x}")).collect()
             }
         }
 

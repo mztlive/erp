@@ -2,10 +2,8 @@
 //!
 //! 写请求使用 `deny_unknown_fields`，拒绝 instance/execution/definition/next 等禁用字段。
 
-use axum::{
-    extract::{FromRequestParts, Query},
-    http::request::Parts,
-};
+use axum::extract::{FromRequestParts, Query};
+use axum::http::request::Parts;
 use erp_workflow::service::approval::execution::{
     RuntimeInstanceListCursor, RuntimeInstanceListQuery, RuntimeInstanceListView, RuntimeInstanceStatusFilter,
 };
@@ -71,9 +69,8 @@ impl PreparedInstanceListQuery {
     /// # 错误
     /// cursor wire 非法或 Service 查询合同不成立时返回 422。
     fn prepare(query: InstanceListQuery, headers: &axum::http::HeaderMap) -> Result<Self, ApprovalHttpError> {
-        let cursor = query
-            .decode_cursor()
-            .map_err(|message| ApprovalHttpError::unprocessable(message, headers))?;
+        let cursor =
+            query.decode_cursor().map_err(|message| ApprovalHttpError::unprocessable(message, headers))?;
         let view = query.view;
         let query = RuntimeInstanceListQuery::prepare(
             view,
@@ -86,7 +83,7 @@ impl PreparedInstanceListQuery {
         .map_err(|error| match erp_processes::Error::from(error) {
             erp_processes::Error::ValidationError(message) => {
                 ApprovalHttpError::unprocessable(message, headers)
-            }
+            },
             error => ApprovalHttpError::from_service(error, headers),
         })?;
         Ok(Self { view, query })
@@ -128,14 +125,8 @@ impl InstanceListCursor {
         if view != expected {
             return Err("cursor 不得跨 view 使用".to_string());
         }
-        let sort_time = sort_time
-            .parse::<i64>()
-            .map_err(|_| "cursor 的排序时间必须是整数".to_string())?;
-        Ok(Self {
-            view,
-            sort_time,
-            id: id.to_string(),
-        })
+        let sort_time = sort_time.parse::<i64>().map_err(|_| "cursor 的排序时间必须是整数".to_string())?;
+        Ok(Self { view, sort_time, id: id.to_string() })
     }
 
     /// 由 Service 游标形成 HTTP opaque cursor。
@@ -147,11 +138,7 @@ impl InstanceListCursor {
     /// # 返回
     /// 返回只负责 wire 编码的 HTTP 游标。
     pub fn from_runtime(view: RuntimeInstanceListView, cursor: RuntimeInstanceListCursor) -> Self {
-        Self {
-            view,
-            sort_time: cursor.sort_time,
-            id: cursor.id,
-        }
+        Self { view, sort_time: cursor.sort_time, id: cursor.id }
     }
 
     /// 转为 Service 稳定游标。
@@ -159,10 +146,7 @@ impl InstanceListCursor {
     /// # 返回
     /// 返回已完成 wire 解码的 `sort_time/id`。
     pub fn into_runtime(self) -> RuntimeInstanceListCursor {
-        RuntimeInstanceListCursor {
-            sort_time: self.sort_time,
-            id: self.id,
-        }
+        RuntimeInstanceListCursor { sort_time: self.sort_time, id: self.id }
     }
 }
 
@@ -224,17 +208,10 @@ impl InstanceHistoryQuery {
     /// # 错误
     /// 非空但不是无符号整数时返回说明。
     pub fn normalized_cursor(&self) -> Result<Option<u32>, String> {
-        let Some(raw) = self
-            .cursor
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        else {
+        let Some(raw) = self.cursor.as_deref().map(str::trim).filter(|value| !value.is_empty()) else {
             return Ok(None);
         };
-        raw.parse::<u32>()
-            .map(Some)
-            .map_err(|_| "cursor 必须是执行序号".to_string())
+        raw.parse::<u32>().map(Some).map_err(|_| "cursor 必须是执行序号".to_string())
     }
 }
 
@@ -341,9 +318,8 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        CancelBlockedHttpRequest, InstanceHistoryQuery, InstanceListCursor, InstanceListQuery,
-        ResumeApproverHttpRequest, SubmitDecisionHttpRequest, UpgradeBindingHttpRequest,
-        DETAIL_HISTORY_LIMIT,
+        CancelBlockedHttpRequest, DETAIL_HISTORY_LIMIT, InstanceHistoryQuery, InstanceListCursor,
+        InstanceListQuery, ResumeApproverHttpRequest, SubmitDecisionHttpRequest, UpgradeBindingHttpRequest,
     };
 
     #[test]
@@ -374,39 +350,42 @@ mod tests {
                 "idempotency_key": "k1"
             });
             value[field] = json!("forged");
-            assert!(
-                serde_json::from_value::<SubmitDecisionHttpRequest>(value).is_err(),
-                "{field} 必须拒绝"
-            );
+            assert!(serde_json::from_value::<SubmitDecisionHttpRequest>(value).is_err(), "{field} 必须拒绝");
         }
     }
 
     #[test]
     fn resume_cancel_upgrade_deny_unknown_fields() {
-        assert!(serde_json::from_value::<ResumeApproverHttpRequest>(json!({
-            "expected_instance_version": "1",
-            "expected_execution_version": "1",
-            "expected_assignment_version": "1",
-            "idempotency_key": "k1",
-            "target_user_id": "u9"
-        }))
-        .is_err());
-        assert!(serde_json::from_value::<CancelBlockedHttpRequest>(json!({
-            "reason": "冻结",
-            "expected_instance_version": "1",
-            "expected_execution_version": "1",
-            "idempotency_key": "k1",
-            "next_node": "n2"
-        }))
-        .is_err());
-        assert!(serde_json::from_value::<UpgradeBindingHttpRequest>(json!({
-            "reason": "升版",
-            "expected_document_version": "1",
-            "expected_approval_binding_version": "1",
-            "idempotency_key": "k1",
-            "definition_id": "def-2"
-        }))
-        .is_err());
+        assert!(
+            serde_json::from_value::<ResumeApproverHttpRequest>(json!({
+                "expected_instance_version": "1",
+                "expected_execution_version": "1",
+                "expected_assignment_version": "1",
+                "idempotency_key": "k1",
+                "target_user_id": "u9"
+            }))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<CancelBlockedHttpRequest>(json!({
+                "reason": "冻结",
+                "expected_instance_version": "1",
+                "expected_execution_version": "1",
+                "idempotency_key": "k1",
+                "next_node": "n2"
+            }))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<UpgradeBindingHttpRequest>(json!({
+                "reason": "升版",
+                "expected_document_version": "1",
+                "expected_approval_binding_version": "1",
+                "idempotency_key": "k1",
+                "definition_id": "def-2"
+            }))
+            .is_err()
+        );
     }
 
     #[test]
@@ -421,11 +400,13 @@ mod tests {
         assert_eq!(query.view, RuntimeInstanceListView::Managed);
         assert_eq!(query.status, Some(RuntimeInstanceStatusFilter::Approved));
 
-        assert!(serde_json::from_value::<InstanceListQuery>(json!({
-            "view": "mine",
-            "unexpected": true
-        }))
-        .is_err());
+        assert!(
+            serde_json::from_value::<InstanceListQuery>(json!({
+                "view": "mine",
+                "unexpected": true
+            }))
+            .is_err()
+        );
     }
 
     #[test]
@@ -445,10 +426,7 @@ mod tests {
         for sort_time in [i64::MIN, i64::MAX] {
             let encoded = InstanceListCursor::from_runtime(
                 RuntimeInstanceListView::Mine,
-                RuntimeInstanceListCursor {
-                    sort_time,
-                    id: "wi-1".to_string(),
-                },
+                RuntimeInstanceListCursor { sort_time, id: "wi-1".to_string() },
             )
             .encode();
             let decoded = InstanceListCursor::decode(&encoded, RuntimeInstanceListView::Mine)
@@ -467,16 +445,11 @@ mod tests {
         };
         assert_eq!(first_page.decode_cursor().expect("未提交 cursor"), None);
 
-        let empty = InstanceListQuery {
-            cursor: Some(String::new()),
-            ..first_page.clone()
-        };
+        let empty = InstanceListQuery { cursor: Some(String::new()), ..first_page.clone() };
         assert!(empty.decode_cursor().unwrap_err().contains("不能为空"));
 
-        let negative_mine = InstanceListQuery {
-            cursor: Some("mine|-1|wi-1".to_string()),
-            ..first_page.clone()
-        };
+        let negative_mine =
+            InstanceListQuery { cursor: Some("mine|-1|wi-1".to_string()), ..first_page.clone() };
         assert!(negative_mine.decode_cursor().unwrap_err().contains("不能为负数"));
 
         let negative_managed = InstanceListQuery {
@@ -498,25 +471,13 @@ mod tests {
     /// 历史游标只接受执行序号。
     #[test]
     fn history_cursor_parses_execution_no() {
-        let empty = InstanceHistoryQuery {
-            cursor: None,
-            limit: None,
-        };
+        let empty = InstanceHistoryQuery { cursor: None, limit: None };
         assert_eq!(empty.normalized_cursor().expect("首页"), None);
-        let blank = InstanceHistoryQuery {
-            cursor: Some("  ".into()),
-            limit: None,
-        };
+        let blank = InstanceHistoryQuery { cursor: Some("  ".into()), limit: None };
         assert_eq!(blank.normalized_cursor().expect("空白等同首页"), None);
-        let ok = InstanceHistoryQuery {
-            cursor: Some("8".into()),
-            limit: Some(50),
-        };
+        let ok = InstanceHistoryQuery { cursor: Some("8".into()), limit: Some(50) };
         assert_eq!(ok.normalized_cursor().expect("合法序号"), Some(8));
-        let bad = InstanceHistoryQuery {
-            cursor: Some("round-1".into()),
-            limit: None,
-        };
+        let bad = InstanceHistoryQuery { cursor: Some("round-1".into()), limit: None };
         assert!(bad.normalized_cursor().is_err());
     }
 }

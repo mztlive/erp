@@ -1,13 +1,13 @@
 //! 不可变来源证据命令与视图。
 
-use crate::entity::supplier_settlement::SupplierSettlementSourceEvidence;
+use application_core::non_blank;
 use erp_core::ids::{SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId};
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::safe_command_id;
-use application_core::non_blank;
+use crate::entity::supplier_settlement::SupplierSettlementSourceEvidence;
 
 /// 录入来源证据时由客户端提供、并由服务端逐行校验与补全的行。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]

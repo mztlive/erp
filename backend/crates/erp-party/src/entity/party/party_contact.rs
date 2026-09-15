@@ -9,19 +9,17 @@ use std::fmt;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::BusinessDate;
 use erp_core::field_update::FieldUpdate;
+pub use erp_core::ids::{PartyContactId, PartyId};
 use erp_core::validation::{
     normalize_optional_email, normalize_optional_phone, normalize_optional_text, normalize_required_text,
 };
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::sensitive::{hmac_sha256_hex, normalize_mobile};
 use super::status::EffectiveRecordStatus;
-
-pub use erp_core::ids::{PartyContactId, PartyId};
 
 /// 联系人姓名最大长度。
 const CONTACT_NAME_MAX_LEN: usize = 100;
@@ -205,14 +203,7 @@ impl PartyContact {
         let title = normalize_optional_text(data.title, "职务/用途", TITLE_MAX_LEN)?;
         let mobile = normalize_optional_phone(Some(data.mobile), MOBILE_MAX_LEN)?
             .ok_or_else(|| Error::from("手机号不能为空"))?;
-        let mobile_last4 = mobile
-            .chars()
-            .rev()
-            .take(4)
-            .collect::<String>()
-            .chars()
-            .rev()
-            .collect();
+        let mobile_last4 = mobile.chars().rev().take(4).collect::<String>().chars().rev().collect();
         let telephone = normalize_optional_text(data.telephone, "电话", TELEPHONE_MAX_LEN)?;
         let email = normalize_optional_email(data.email, EMAIL_MAX_LEN)?;
         let created_by = created_by.into();
@@ -297,11 +288,12 @@ fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>)
 
 #[cfg(test)]
 mod tests {
-    use super::{PartyContact, PartyContactData, PartyContactUpdate};
-    use crate::entity::party::status::EffectiveRecordStatus;
     use erp_core::common::time::BusinessDate;
     use erp_core::field_update::FieldUpdate;
     use erp_core::ids::{PartyContactId, PartyId};
+
+    use super::{PartyContact, PartyContactData, PartyContactUpdate};
+    use crate::entity::party::status::EffectiveRecordStatus;
 
     const KEY: &[u8] = b"test-fingerprint-key";
 
@@ -329,10 +321,7 @@ mod tests {
         assert_eq!(contact.title.as_deref(), Some("采购负责人"));
         assert_eq!(contact.email.as_deref(), Some("zhangsan@example.com"));
         assert_eq!(contact.telephone.as_deref(), Some("021-12345678"));
-        assert_eq!(
-            contact.mobile_query_hmac,
-            PartyContact::mobile_fingerprint("13800138000", KEY)
-        );
+        assert_eq!(contact.mobile_query_hmac, PartyContact::mobile_fingerprint("13800138000", KEY));
         assert!(contact.mobile_ciphertext.is_empty(), "P3 加密填充");
         assert!(contact.is_active());
     }
@@ -340,22 +329,13 @@ mod tests {
     /// 失败路径：姓名为空/超长、手机号格式非法、邮箱格式非法、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank_name = PartyContactData {
-            contact_name: "   ".to_string(),
-            ..contact_data()
-        };
+        let blank_name = PartyContactData { contact_name: "   ".to_string(), ..contact_data() };
         assert!(PartyContact::new(PartyContactId::new("c"), blank_name, KEY, "admin-1").is_err());
 
-        let bad_mobile = PartyContactData {
-            mobile: "12345".to_string(),
-            ..contact_data()
-        };
+        let bad_mobile = PartyContactData { mobile: "12345".to_string(), ..contact_data() };
         assert!(PartyContact::new(PartyContactId::new("c"), bad_mobile, KEY, "admin-1").is_err());
 
-        let bad_email = PartyContactData {
-            email: Some("invalid".to_string()),
-            ..contact_data()
-        };
+        let bad_email = PartyContactData { email: Some("invalid".to_string()), ..contact_data() };
         assert!(PartyContact::new(PartyContactId::new("c"), bad_email, KEY, "admin-1").is_err());
 
         let reversed = PartyContactData {
@@ -412,10 +392,7 @@ mod tests {
                 "admin-2",
             )
             .unwrap();
-        assert_eq!(
-            contact.valid_to,
-            Some(BusinessDate::from_ymd(2026, 6, 30).unwrap())
-        );
+        assert_eq!(contact.valid_to, Some(BusinessDate::from_ymd(2026, 6, 30).unwrap()));
         assert!(!contact.is_default);
 
         let reversed = PartyContactUpdate {

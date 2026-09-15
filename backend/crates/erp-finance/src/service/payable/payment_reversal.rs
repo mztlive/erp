@@ -1,5 +1,14 @@
 //! 付款冲正的财务分段写入；付款任务位于回冲结算与反向分配之间。
 
+use std::collections::HashSet;
+
+use erp_core::common::time::Instant;
+use erp_core::ids::{PayableAccountId, PaymentAllocationId, SupplierPaymentId};
+use erp_core::money::Amount;
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::Executor;
+
 use super::offset_batch::load_payable_offset_facts;
 use crate::entity::payable::{
     AllocationAction as PayableAllocationAction, PaymentAllocation, PaymentAllocationData,
@@ -7,13 +16,6 @@ use crate::entity::payable::{
 };
 use crate::repository::PayableExt;
 use crate::{Error, Result};
-use erp_core::common::time::Instant;
-use erp_core::ids::{PayableAccountId, PaymentAllocationId, SupplierPaymentId};
-use erp_core::money::Amount;
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::Executor;
-use std::collections::HashSet;
 
 /// 反向财务分配实际消费的金额与原发生时间。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,15 +68,7 @@ pub async fn prepare_payment_reversal(
     let (reverse_rows, chunks) = PaymentAllocation::plan_reverse(&allocations, reversal.amount)?;
     let seqs = PaymentAllocation::next_allocation_seq_range(&allocations, reverse_rows.len())?;
     let affected_accounts = revert_payment_settlements(db, &chunks, actor_id, executor).await?;
-    Ok((
-        PaymentReversalWrite {
-            payment,
-            reversal,
-            reverse_rows,
-            seqs,
-        },
-        affected_accounts,
-    ))
+    Ok((PaymentReversalWrite { payment, reversal, reverse_rows, seqs }, affected_accounts))
 }
 
 impl PaymentReversalWrite {
@@ -106,12 +100,9 @@ async fn revert_payment_settlements(
     actor_id: &str,
     session: &mut dyn Executor,
 ) -> Result<HashSet<PayableAccountId>> {
-    let facts = load_payable_offset_facts(
-        db,
-        chunks.iter().map(|chunk| chunk.increase_entry_id.clone()),
-        session,
-    )
-    .await?;
+    let facts =
+        load_payable_offset_facts(db, chunks.iter().map(|chunk| chunk.increase_entry_id.clone()), session)
+            .await?;
     let mut affected_accounts = HashSet::new();
     for chunk in chunks {
         let entry = facts

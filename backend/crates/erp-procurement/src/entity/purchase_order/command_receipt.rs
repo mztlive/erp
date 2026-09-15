@@ -5,11 +5,12 @@
 //! 目标身份校验与指纹校验；Service 只读取审计事实、执行授权与事务并映射响应。
 //! 摘要与消息形态必须保持历史兼容，任何变化都会破坏存量收据回放。
 
-use crate::entity::facts::AuditReceiptFact as AuditLog;
-use serde::{de::DeserializeOwned, Serialize};
+use erp_core::{Error, Result};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
 
-use erp_core::{Error, Result};
+use crate::entity::facts::AuditReceiptFact as AuditLog;
 
 /// 收据消息的前缀；历史持久化形态，禁止变更。
 const COMMAND_FINGERPRINT_PREFIX: &str = "command_sha256=";
@@ -199,10 +200,7 @@ impl<T> PurchaseCommandReceipt<T> {
         if legacy == LegacyReceiptIdScheme::WholeStringJoined {
             let target_id = target_id.ok_or_else(|| Error::from("整串摘要收据身份必须携带目标 ID"))?;
             let joined = format!("{actor_id}|{action}|{target_id}|{idempotency_key}");
-            legacy_receipt_ids.push(format!(
-                "{prefix}{}",
-                hex::encode(Sha256::digest(joined.as_bytes()))
-            ));
+            legacy_receipt_ids.push(format!("{prefix}{}", hex::encode(Sha256::digest(joined.as_bytes()))));
         }
         Ok(PurchaseCommandReceiptIdentity {
             receipt_id: format!("{prefix}{}", digest_parts(parts)),
@@ -225,10 +223,7 @@ impl<T> PurchaseCommandReceipt<T> {
     /// # 关键业务约束
     /// 结果不得包含原始幂等键；指纹必须由本模块摘要函数生成。
     pub fn new(fingerprint: impl Into<String>, result: T) -> Self {
-        Self {
-            fingerprint: fingerprint.into(),
-            result,
-        }
+        Self { fingerprint: fingerprint.into(), result }
     }
 
     /// 返回当前请求载荷指纹。
@@ -293,10 +288,7 @@ impl<T: PurchaseReceiptWire> PurchaseCommandReceipt<T> {
     /// 消息形态必须与存量收据一致，保证历史消息可被 `decode` 回放。
     pub fn encode_message(&self) -> Result<String> {
         let result = self.result.encode_wire()?;
-        Ok(format!(
-            "{COMMAND_FINGERPRINT_PREFIX}{};result={result}",
-            self.fingerprint
-        ))
+        Ok(format!("{COMMAND_FINGERPRINT_PREFIX}{};result={result}", self.fingerprint))
     }
 
     /// 校验审计身份、请求指纹并解码采购命令收据。
@@ -351,10 +343,7 @@ impl<T: PurchaseReceiptWire> PurchaseCommandReceipt<T> {
         }
         let result = T::decode_wire(result)
             .ok_or_else(|| PurchaseCommandReceiptError::Corrupted("采购命令幂等收据结果非法".to_string()))?;
-        Ok(Self {
-            fingerprint: fingerprint.to_string(),
-            result,
-        })
+        Ok(Self { fingerprint: fingerprint.to_string(), result })
     }
 }
 
@@ -410,17 +399,15 @@ pub fn payload_fingerprint<T: Serialize>(action: &str, target_id: &str, payload:
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::facts::AuditReceiptFact as AuditLog;
-
+    use erp_core::Result;
     use serde::{Deserialize, Serialize};
     use sha2::{Digest, Sha256};
 
     use super::{
-        digest_parts, payload_fingerprint, LegacyReceiptIdScheme, PurchaseCommandReceipt,
-        PurchaseCommandReceiptError, PurchaseReceiptWire,
+        LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseReceiptWire,
+        digest_parts, payload_fingerprint,
     };
-
-    use erp_core::Result;
+    use crate::entity::facts::AuditReceiptFact as AuditLog;
 
     /// 标准 JSON 形态的测试结果载荷。
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -455,10 +442,7 @@ mod tests {
             if fields.next().is_some() {
                 return None;
             }
-            Some(Self {
-                purchase_no,
-                lock_version,
-            })
+            Some(Self { purchase_no, lock_version })
         }
     }
 
@@ -766,51 +750,61 @@ mod tests {
     /// 前缀、操作人、动作、目标或幂等键为空未被拒绝时测试失败。
     #[test]
     fn identity_rejects_empty_identity_fields() {
-        assert!(PurchaseCommandReceipt::<TestReceipt>::identity(
-            " ",
-            "actor-1",
-            "purchase_order.update",
-            Some("po-1"),
-            "key-1",
-            LegacyReceiptIdScheme::None,
-        )
-        .is_err());
-        assert!(PurchaseCommandReceipt::<TestReceipt>::identity(
-            "prefix-",
-            " ",
-            "purchase_order.update",
-            Some("po-1"),
-            "key-1",
-            LegacyReceiptIdScheme::None,
-        )
-        .is_err());
-        assert!(PurchaseCommandReceipt::<TestReceipt>::identity(
-            "prefix-",
-            "actor-1",
-            " ",
-            Some("po-1"),
-            "key-1",
-            LegacyReceiptIdScheme::None,
-        )
-        .is_err());
-        assert!(PurchaseCommandReceipt::<TestReceipt>::identity(
-            "prefix-",
-            "actor-1",
-            "purchase_order.update",
-            Some(" "),
-            "key-1",
-            LegacyReceiptIdScheme::None,
-        )
-        .is_err());
-        assert!(PurchaseCommandReceipt::<TestReceipt>::identity(
-            "prefix-",
-            "actor-1",
-            "purchase_order.update",
-            Some("po-1"),
-            " ",
-            LegacyReceiptIdScheme::None,
-        )
-        .is_err());
+        assert!(
+            PurchaseCommandReceipt::<TestReceipt>::identity(
+                " ",
+                "actor-1",
+                "purchase_order.update",
+                Some("po-1"),
+                "key-1",
+                LegacyReceiptIdScheme::None,
+            )
+            .is_err()
+        );
+        assert!(
+            PurchaseCommandReceipt::<TestReceipt>::identity(
+                "prefix-",
+                " ",
+                "purchase_order.update",
+                Some("po-1"),
+                "key-1",
+                LegacyReceiptIdScheme::None,
+            )
+            .is_err()
+        );
+        assert!(
+            PurchaseCommandReceipt::<TestReceipt>::identity(
+                "prefix-",
+                "actor-1",
+                " ",
+                Some("po-1"),
+                "key-1",
+                LegacyReceiptIdScheme::None,
+            )
+            .is_err()
+        );
+        assert!(
+            PurchaseCommandReceipt::<TestReceipt>::identity(
+                "prefix-",
+                "actor-1",
+                "purchase_order.update",
+                Some(" "),
+                "key-1",
+                LegacyReceiptIdScheme::None,
+            )
+            .is_err()
+        );
+        assert!(
+            PurchaseCommandReceipt::<TestReceipt>::identity(
+                "prefix-",
+                "actor-1",
+                "purchase_order.update",
+                Some("po-1"),
+                " ",
+                LegacyReceiptIdScheme::None,
+            )
+            .is_err()
+        );
     }
 
     /// 验证请求指纹稳定、随载荷变化且不泄露敏感载荷。
@@ -830,37 +824,24 @@ mod tests {
             reason: " 重复采购 ".to_string(),
         };
         let fingerprint = payload_fingerprint("purchase_order.void", "po-1", &payload).unwrap();
-        assert_eq!(
-            fingerprint,
-            payload_fingerprint("purchase_order.void", "po-1", &payload).unwrap()
-        );
+        assert_eq!(fingerprint, payload_fingerprint("purchase_order.void", "po-1", &payload).unwrap());
         assert_ne!(
             fingerprint,
             payload_fingerprint(
                 "purchase_order.void",
                 "po-1",
-                &TestFingerprintPayload {
-                    reason: "供应商错误".to_string(),
-                    ..payload.clone()
-                },
+                &TestFingerprintPayload { reason: "供应商错误".to_string(), ..payload.clone() },
             )
             .unwrap()
         );
-        assert_ne!(
-            fingerprint,
-            payload_fingerprint("purchase_order.void", "po-2", &payload).unwrap()
-        );
+        assert_ne!(fingerprint, payload_fingerprint("purchase_order.void", "po-2", &payload).unwrap());
         assert_eq!(fingerprint.len(), 64);
         assert!(fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit()));
         assert!(!fingerprint.contains("raw-secret-key"));
         let payload_json = serde_json::to_string(&payload).unwrap();
         assert_eq!(
             fingerprint,
-            digest_parts([
-                "purchase_order.void".to_string(),
-                "po-1".to_string(),
-                payload_json,
-            ])
+            digest_parts(["purchase_order.void".to_string(), "po-1".to_string(), payload_json,])
         );
     }
 
@@ -880,19 +861,13 @@ mod tests {
             payload_fingerprint("purchase_order.update", "po-1", &(1_u64, "payload-a")).unwrap();
         let receipt = PurchaseCommandReceipt::new(
             fingerprint.clone(),
-            TestReceipt {
-                purchase_order_id: "po-1".to_string(),
-                lock_version: 2,
-            },
+            TestReceipt { purchase_order_id: "po-1".to_string(), lock_version: 2 },
         );
         let message = receipt.encode_message().unwrap();
         let legacy_wire = format!(
             "command_sha256={fingerprint};result={}",
-            serde_json::to_string(&TestReceipt {
-                purchase_order_id: "po-1".to_string(),
-                lock_version: 2,
-            })
-            .unwrap()
+            serde_json::to_string(&TestReceipt { purchase_order_id: "po-1".to_string(), lock_version: 2 })
+                .unwrap()
         );
         assert_eq!(message, legacy_wire);
 
@@ -936,18 +911,12 @@ mod tests {
             payload_fingerprint("purchase_order.update", "po-1", &(1_u64, "payload-a")).unwrap();
         let message = PurchaseCommandReceipt::new(
             fingerprint.clone(),
-            TestReceipt {
-                purchase_order_id: "po-1".to_string(),
-                lock_version: 2,
-            },
+            TestReceipt { purchase_order_id: "po-1".to_string(), lock_version: 2 },
         )
         .encode_message()
         .unwrap();
 
-        let wrong_actor = AuditLog {
-            actor_id: "actor-2".to_string(),
-            ..audit_data(Some(message.clone()))
-        };
+        let wrong_actor = AuditLog { actor_id: "actor-2".to_string(), ..audit_data(Some(message.clone())) };
         assert_eq!(
             PurchaseCommandReceipt::<TestReceipt>::decode(
                 &wrong_actor,
@@ -979,10 +948,7 @@ mod tests {
             Err(PurchaseCommandReceiptError::IdentityMismatch)
         );
 
-        let failed = AuditLog {
-            success: false,
-            ..audit_data(Some(message))
-        };
+        let failed = AuditLog { success: false, ..audit_data(Some(message)) };
         assert_eq!(
             PurchaseCommandReceipt::<TestReceipt>::decode(
                 &failed,
@@ -1054,9 +1020,7 @@ mod tests {
                 Some("po-1"),
                 &fingerprint,
             ),
-            Err(PurchaseCommandReceiptError::Corrupted(
-                "采购命令幂等收据结果非法".to_string()
-            ))
+            Err(PurchaseCommandReceiptError::Corrupted("采购命令幂等收据结果非法".to_string()))
         );
     }
 
@@ -1075,10 +1039,7 @@ mod tests {
         let fingerprint = "b".repeat(64);
         let message = PurchaseCommandReceipt::new(
             fingerprint.clone(),
-            PipeReceipt {
-                purchase_no: "PO-1".to_string(),
-                lock_version: 2,
-            },
+            PipeReceipt { purchase_no: "PO-1".to_string(), lock_version: 2 },
         )
         .encode_message()
         .unwrap();
@@ -1091,13 +1052,7 @@ mod tests {
             &fingerprint,
         )
         .unwrap();
-        assert_eq!(
-            replayed.into_payload(),
-            PipeReceipt {
-                purchase_no: "PO-1".to_string(),
-                lock_version: 2,
-            }
-        );
+        assert_eq!(replayed.into_payload(), PipeReceipt { purchase_no: "PO-1".to_string(), lock_version: 2 });
 
         let truncated = audit_fixture(format!("command_sha256={fingerprint};result=PO-1"));
         assert!(matches!(

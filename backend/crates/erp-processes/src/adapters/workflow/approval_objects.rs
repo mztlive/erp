@@ -1,6 +1,7 @@
 //! 审批当前范围事实批量读取；每种强实体及父链按去重 ID 一次查询。
 
-use crate::{Error, Result};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+
 use erp_customer::CustomerExt;
 use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_inventory::InventoryExt;
@@ -13,7 +14,8 @@ use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::ports::{OrderTaskSource, WorkflowScopeObject, WorkflowScopeObjects};
 use mongodb::Database;
 use persistence_core::Executor;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+
+use crate::{Error, Result};
 
 type Keys = HashSet<(DocumentType, String)>;
 
@@ -27,11 +29,7 @@ pub(super) async fn load(
     }
     let mut result = orders(db, keys, executor).await?;
     let stock_ids = ids(keys, DocumentType::StockAdjustment);
-    for row in db
-        .stock_adjustments()
-        .list_active_by_ids(&stock_ids, executor)
-        .await?
-    {
+    for row in db.stock_adjustments().list_active_by_ids(&stock_ids, executor).await? {
         result.insert(
             (DocumentType::StockAdjustment, row.base.id),
             WorkflowScopeObject {
@@ -42,22 +40,14 @@ pub(super) async fn load(
         );
     }
     let request_ids = ids(keys, DocumentType::SalesInvoiceRequest);
-    for row in db
-        .sales_invoice_requests()
-        .list_active_by_ids(&request_ids, executor)
-        .await?
-    {
+    for row in db.sales_invoice_requests().list_active_by_ids(&request_ids, executor).await? {
         result.insert(
             (DocumentType::SalesInvoiceRequest, row.base.id),
             party(row.created_by, row.counterparty_party_id.to_string()),
         );
     }
     let receipt_ids = ids(keys, DocumentType::CustomerReceipt);
-    for row in db
-        .customer_receipts()
-        .list_active_by_ids(&receipt_ids, executor)
-        .await?
-    {
+    for row in db.customer_receipts().list_active_by_ids(&receipt_ids, executor).await? {
         result.insert(
             (DocumentType::CustomerReceipt, row.base.id),
             party(row.created_by, row.counterparty_party_id.to_string()),
@@ -69,17 +59,10 @@ pub(super) async fn load(
 }
 
 fn ids(keys: &Keys, kind: DocumentType) -> Vec<String> {
-    keys.iter()
-        .filter(|(k, _)| *k == kind)
-        .map(|(_, id)| id.clone())
-        .collect()
+    keys.iter().filter(|(k, _)| *k == kind).map(|(_, id)| id.clone()).collect()
 }
 fn party(owner: String, id: String) -> WorkflowScopeObject {
-    WorkflowScopeObject {
-        owner_user_id: owner,
-        settlement_party_id: Some(id),
-        ..Default::default()
-    }
+    WorkflowScopeObject { owner_user_id: owner, settlement_party_id: Some(id), ..Default::default() }
 }
 
 async fn orders(db: &Database, keys: &Keys, executor: &mut dyn Executor) -> Result<WorkflowScopeObjects> {
@@ -87,32 +70,15 @@ async fn orders(db: &Database, keys: &Keys, executor: &mut dyn Executor) -> Resu
         .iter()
         .filter_map(|(kind, id)| OrderTaskSource::approval_kind(*kind).map(|k| (k, id.clone())))
         .collect();
-    let facts = WorkItemFactsReader::new(db.clone())
-        .load(&fact_keys, executor)
-        .await?;
-    let sources = facts
-        .values()
-        .filter_map(|f| f.order_scope_source.clone())
-        .collect::<BTreeSet<_>>();
+    let facts = WorkItemFactsReader::new(db.clone()).load(&fact_keys, executor).await?;
+    let sources = facts.values().filter_map(|f| f.order_scope_source.clone()).collect::<BTreeSet<_>>();
     let sales = sources
         .iter()
-        .filter_map(|s| {
-            if let OrderTaskSource::Sales(id) = s {
-                Some(id.clone())
-            } else {
-                None
-            }
-        })
+        .filter_map(|s| if let OrderTaskSource::Sales(id) = s { Some(id.clone()) } else { None })
         .collect::<Vec<_>>();
     let purchases = sources
         .iter()
-        .filter_map(|s| {
-            if let OrderTaskSource::Purchase(id) = s {
-                Some(id.clone())
-            } else {
-                None
-            }
-        })
+        .filter_map(|s| if let OrderTaskSource::Purchase(id) = s { Some(id.clone()) } else { None })
         .collect::<Vec<_>>();
     let mut by_source = BTreeMap::new();
     for row in db.sales_orders().list_active_by_ids(&sales, executor).await? {
@@ -128,11 +94,7 @@ async fn orders(db: &Database, keys: &Keys, executor: &mut dyn Executor) -> Resu
             },
         );
     }
-    for row in db
-        .purchase_orders()
-        .list_active_by_ids(&purchases, executor)
-        .await?
-    {
+    for row in db.purchase_orders().list_active_by_ids(&purchases, executor).await? {
         let owner = row.current_owner_user_id()?.to_string();
         let source = OrderTaskSource::Purchase(row.base.id);
         by_source.insert(
@@ -171,10 +133,8 @@ async fn refunds(
     result: &mut WorkflowScopeObjects,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let customers = db
-        .customer_refunds()
-        .list_active_by_ids(&ids(keys, DocumentType::CustomerRefund), executor)
-        .await?;
+    let customers =
+        db.customer_refunds().list_active_by_ids(&ids(keys, DocumentType::CustomerRefund), executor).await?;
     let customer_ids = customers
         .iter()
         .map(|r| r.customer_id.to_string())
@@ -190,16 +150,11 @@ async fn refunds(
         .collect::<HashMap<_, _>>();
     for row in customers {
         if let Some(id) = parties.get(row.customer_id.as_ref()) {
-            result.insert(
-                (DocumentType::CustomerRefund, row.base.id),
-                party(row.created_by, id.clone()),
-            );
+            result.insert((DocumentType::CustomerRefund, row.base.id), party(row.created_by, id.clone()));
         }
     }
-    let suppliers = db
-        .supplier_refunds()
-        .list_active_by_ids(&ids(keys, DocumentType::SupplierRefund), executor)
-        .await?;
+    let suppliers =
+        db.supplier_refunds().list_active_by_ids(&ids(keys, DocumentType::SupplierRefund), executor).await?;
     let supplier_ids = suppliers
         .iter()
         .map(|r| r.supplier_id.to_string())
@@ -215,10 +170,7 @@ async fn refunds(
         .collect::<HashMap<_, _>>();
     for row in suppliers {
         if let Some(id) = parties.get(row.supplier_id.as_ref()) {
-            result.insert(
-                (DocumentType::SupplierRefund, row.base.id),
-                party(row.created_by, id.clone()),
-            );
+            result.insert((DocumentType::SupplierRefund, row.base.id), party(row.created_by, id.clone()));
         }
     }
     Ok(())
@@ -249,10 +201,7 @@ async fn reversals(
         .collect::<HashMap<_, _>>();
     for row in rows {
         if let Some(id) = parties.get(row.original_customer_receipt_id.as_ref()) {
-            result.insert(
-                (DocumentType::ReceiptReversal, row.base.id),
-                party(row.created_by, id.clone()),
-            );
+            result.insert((DocumentType::ReceiptReversal, row.base.id), party(row.created_by, id.clone()));
         }
     }
     let rows = db
@@ -265,10 +214,7 @@ async fn reversals(
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
-    let payments = db
-        .supplier_payments()
-        .list_active_by_ids(&payment_ids, executor)
-        .await?;
+    let payments = db.supplier_payments().list_active_by_ids(&payment_ids, executor).await?;
     let supplier_ids = payments
         .iter()
         .map(|p| p.supplier_id.to_string())
@@ -284,18 +230,11 @@ async fn reversals(
         .collect::<HashMap<_, _>>();
     let parties = payments
         .into_iter()
-        .filter_map(|p| {
-            suppliers
-                .get(p.supplier_id.as_ref())
-                .map(|party| (p.base.id, party.clone()))
-        })
+        .filter_map(|p| suppliers.get(p.supplier_id.as_ref()).map(|party| (p.base.id, party.clone())))
         .collect::<HashMap<_, _>>();
     for row in rows {
         if let Some(id) = parties.get(row.original_supplier_payment_id.as_ref()) {
-            result.insert(
-                (DocumentType::PaymentReversal, row.base.id),
-                party(row.created_by, id.clone()),
-            );
+            result.insert((DocumentType::PaymentReversal, row.base.id), party(row.created_by, id.clone()));
         }
     }
     Ok(())

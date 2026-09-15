@@ -1,11 +1,12 @@
 //! 导入沿用供应商创建权限，每行仍由服务端执行全部根命令校验。
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
 use application_core::AuditActor;
-use axum::{extract::State, Extension, Json};
+use axum::extract::State;
+use axum::{Extension, Json};
 use erp_supplier::dto::import::{SupplierImportRequest, SupplierImportResult};
+
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "供应商",
@@ -23,9 +24,7 @@ pub async fn supplier_import(
     Extension(actor): Extension<AuditActor>,
     Json(request): Json<SupplierImportRequest>,
 ) -> Result<Vec<SupplierImportResult>> {
-    Ok(ApiResponse::ok_with_data(
-        state.supplier_profile_service().import(request, &actor).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(state.supplier_profile_service().import(request, &actor).await?))
 }
 
 /// 提交供应商后台导入任务。
@@ -43,9 +42,7 @@ pub async fn supplier_import_submit(
     Extension(actor): Extension<AuditActor>,
     Json(request): Json<erp_supplier::dto::import_job::SupplierImportJobRequest>,
 ) -> Result<erp_support::BackgroundJobView> {
-    Ok(ApiResponse::ok_with_data(
-        state.supplier_import_process().submit(request, &actor).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(state.supplier_import_process().submit(request, &actor).await?))
 }
 
 /// 下载供应商导入待处理行，仅原提交人可读取。
@@ -63,7 +60,5 @@ pub async fn supplier_import_failures(
     Extension(actor): Extension<AuditActor>,
     axum::extract::Path(id): axum::extract::Path<String>,
 ) -> Result<erp_supplier::dto::import_job::SupplierImportFailures> {
-    Ok(ApiResponse::ok_with_data(
-        state.supplier_import_process().failures(&id, &actor).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(state.supplier_import_process().failures(&id, &actor).await?))
 }

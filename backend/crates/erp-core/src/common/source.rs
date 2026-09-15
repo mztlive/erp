@@ -49,11 +49,7 @@ mod tests {
     fn label_and_serde_shape() {
         let cases = [
             (SourceType::Erp, "ERP 系统", "\"erp\""),
-            (
-                SourceType::SupplierCallback,
-                "供应商回调",
-                "\"supplier_callback\"",
-            ),
+            (SourceType::SupplierCallback, "供应商回调", "\"supplier_callback\""),
             (SourceType::ManualImport, "人工导入", "\"manual_import\""),
         ];
 

@@ -1,13 +1,14 @@
 //! 集成本域查询、实体准备与调用方事务内写入。
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction};
+use validator::Validate;
+
 use super::IntegrationOpsService;
 use crate::dto::*;
 use crate::entity::integration_ops::*;
 use crate::repository::IntegrationOpsExt;
 use crate::{Error, Result};
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
-use validator::Validate;
 /// 错误任务列表筛选条件类型。
 type ErrorTaskFilter = <Database as IntegrationOpsExt>::IntegrationErrorTaskFilter;
 impl IntegrationOpsService {
@@ -31,11 +32,7 @@ impl IntegrationOpsService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .integration_error_tasks()
-            .search_error_tasks(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.integration_error_tasks().search_error_tasks(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -56,12 +53,7 @@ impl IntegrationOpsService {
                 created_at: row.created_at,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     pub async fn ensure_message_exists(&self, id: &str) -> Result<()> {

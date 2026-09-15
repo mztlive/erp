@@ -1,12 +1,14 @@
 //! 不可变来源证据的审计、根事务与原失败恢复。
-use super::SupplierSettlementProcess;
-use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supply::dto::supplier_settlement::*;
-use erp_supply::service::supplier_settlement::{source::source_request_hash, SupplierSettlementService};
+use erp_supply::service::supplier_settlement::SupplierSettlementService;
+use erp_supply::service::supplier_settlement::source::source_request_hash;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+
+use super::SupplierSettlementProcess;
+use crate::Result;
 impl SupplierSettlementProcess {
     /// 录入一个经服务端逐行核验、不可变且可幂等恢复的来源证据批次。
     ///
@@ -30,10 +32,8 @@ impl SupplierSettlementProcess {
     ) -> Result<SupplierSettlementSourceEvidenceView> {
         req.validate()?;
         let request_hash = source_request_hash(&req);
-        if let Some(existing) = self
-            .domain()
-            .replay_source(&req.request_id, &request_hash, &mut NoTransaction)
-            .await?
+        if let Some(existing) =
+            self.domain().replay_source(&req.request_id, &request_hash, &mut NoTransaction).await?
         {
             return Ok(existing);
         }
@@ -61,10 +61,8 @@ impl SupplierSettlementProcess {
             })
             .await;
         if let Err(error) = transaction_result {
-            if let Some(existing) = self
-                .domain()
-                .replay_source(&req.request_id, &request_hash, &mut NoTransaction)
-                .await?
+            if let Some(existing) =
+                self.domain().replay_source(&req.request_id, &request_hash, &mut NoTransaction).await?
             {
                 return Ok(existing);
             }

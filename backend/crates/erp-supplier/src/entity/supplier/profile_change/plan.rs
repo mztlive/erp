@@ -1,9 +1,10 @@
-use crate::entity::supplier::{
-    qualification_identity_key, CapabilityCode, CapabilityStatus, QualificationStatus, QualificationType,
-    SupplierCapability, SupplierQualification,
-};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::SupplierCapabilityId;
+
+use crate::entity::supplier::{
+    CapabilityCode, CapabilityStatus, QualificationStatus, QualificationType, SupplierCapability,
+    SupplierQualification, qualification_identity_key,
+};
 
 /// 能力变更中需切换状态的既有能力。
 ///
@@ -88,25 +89,17 @@ impl SupplierProfileChangePlan {
         requested_qualifications: &[PlannedQualificationInput],
     ) -> erp_core::Result<Self> {
         use std::collections::{HashMap, HashSet};
-        let requested_set: HashSet<String> = requested_capability_codes
-            .iter()
-            .map(|code| code.as_str().to_string())
-            .collect();
-        let capability_index: HashMap<String, &SupplierCapability> = capabilities
-            .iter()
-            .map(|cap| (cap.capability_code.as_str().to_string(), cap))
-            .collect();
+        let requested_set: HashSet<String> =
+            requested_capability_codes.iter().map(|code| code.as_str().to_string()).collect();
+        let capability_index: HashMap<String, &SupplierCapability> =
+            capabilities.iter().map(|cap| (cap.capability_code.as_str().to_string(), cap)).collect();
         let mut capability_toggles = Vec::new();
         for cap in capabilities {
             let wanted = requested_set.contains(cap.capability_code.as_str());
             if wanted == cap.is_active() {
                 continue;
             }
-            let target_status = if wanted {
-                CapabilityStatus::Active
-            } else {
-                CapabilityStatus::Disabled
-            };
+            let target_status = if wanted { CapabilityStatus::Active } else { CapabilityStatus::Disabled };
             capability_toggles.push(CapabilityToggle {
                 capability_id: SupplierCapabilityId::new(&cap.base.id),
                 code: cap.capability_code,
@@ -121,12 +114,7 @@ impl SupplierProfileChangePlan {
         }
         let requested_map: HashMap<String, &PlannedQualificationInput> = requested_qualifications
             .iter()
-            .map(|input| {
-                (
-                    qualification_identity_key(input.qualification_type, &input.certificate_no),
-                    input,
-                )
-            })
+            .map(|input| (qualification_identity_key(input.qualification_type, &input.certificate_no), input))
             .collect();
         let existing_keys: HashSet<String> = qualifications.iter().map(|q| q.identity_key()).collect();
         let mut qualification_updates = Vec::new();
@@ -144,10 +132,7 @@ impl SupplierProfileChangePlan {
                             .ok_or_else(|| erp_core::Error::from("资质适用能力不存在"))
                     })
                     .collect::<erp_core::Result<_>>()?;
-                let current_links = linked_capabilities
-                    .get(&qual.base.id)
-                    .cloned()
-                    .unwrap_or_default();
+                let current_links = linked_capabilities.get(&qual.base.id).cloned().unwrap_or_default();
                 if qual.matches_profile_fields(
                     input.issuer.as_deref(),
                     input.valid_from,

@@ -1,4 +1,6 @@
 //! 本域版本、形态、连接读取与固定权限名；授权执行属于组合层。
+use sha2::{Digest, Sha256};
+
 use super::SupplierApiService;
 use crate::dto::supplier_api::{RelatedImpactView, SafeReferenceView, SupplierActionBlockerView};
 use crate::entity::supplier_api::{
@@ -7,7 +9,6 @@ use crate::entity::supplier_api::{
 };
 use crate::repository::SupplierApiExt;
 use crate::{Error, Result};
-use sha2::{Digest, Sha256};
 type SupplierConnectionImpact = <mongodb::Database as SupplierApiExt>::SupplierConnectionImpact;
 impl SupplierApiService {
     /// 使用调用方事务读取连接；不存在时保留连接命令的固定错误。
@@ -44,7 +45,7 @@ pub fn action_permission(action: SupplierConnectionAction) -> &'static str {
         SupplierConnectionAction::BindEndpointReference => "supplier_api_connection:bind_endpoint_reference",
         SupplierConnectionAction::BindCredentialReference => {
             "supplier_api_connection:manage_credential_reference"
-        }
+        },
         SupplierConnectionAction::RunHealthCheck => "supplier_api_connection:health_check",
         SupplierConnectionAction::Enable => "supplier_api_connection:enable",
         SupplierConnectionAction::Disable => "supplier_api_connection:disable",
@@ -79,12 +80,7 @@ pub fn governance_blocker_view(blocker: SupplierGovernanceBlocker) -> SupplierAc
 
 /// 只投影绑定与可见状态，不暴露内部引用。
 pub fn safe_reference(bound: bool, visible: bool) -> SafeReferenceView {
-    SafeReferenceView {
-        state: if bound { "BOUND" } else { "MISSING" },
-        alias: None,
-        version: None,
-        visible,
-    }
+    SafeReferenceView { state: if bound { "BOUND" } else { "MISSING" }, alias: None, version: None, visible }
 }
 
 /// 把完整权威影响事实映射为原三个计数字段。
@@ -100,9 +96,7 @@ pub(super) fn ensure_version(actual: u64, expected: u64) -> Result<()> {
     if actual == expected {
         return Ok(());
     }
-    Err(Error::ConflictError(
-        "数据已被其他请求修改，请刷新后重试".to_string(),
-    ))
+    Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))
 }
 
 /// 对每段字节使用 u64 大端长度前缀后计算 SHA-256，供命令与任务共用身份。

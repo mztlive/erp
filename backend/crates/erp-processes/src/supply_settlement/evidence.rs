@@ -1,17 +1,16 @@
 //! W27 结算差异的不可变补证强命令。
 //!
 //! 审计和根事务由本流程组合；本域复验与 CAS 由供应链服务完成。
-use super::SupplierSettlementProcess;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supply::dto::supplier_settlement::*;
-use erp_supply::service::supplier_settlement::{
-    evidence::{evidence_command_hash, evidence_result},
-    SupplierSettlementService,
-};
+use erp_supply::service::supplier_settlement::SupplierSettlementService;
+use erp_supply::service::supplier_settlement::evidence::{evidence_command_hash, evidence_result};
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+
+use super::SupplierSettlementProcess;
+use crate::{Error, Result};
 impl SupplierSettlementProcess {
     /// 为一个精确差异追加不可变证据引用与业务意见。
     ///
@@ -77,10 +76,6 @@ impl SupplierSettlementProcess {
             }
             return Err(error);
         }
-        Ok(evidence_result(
-            evidence,
-            "RECORDED",
-            "差异补证已登记，不会直接改变正式差异结论",
-        ))
+        Ok(evidence_result(evidence, "RECORDED", "差异补证已登记，不会直接改变正式差异结论"))
     }
 }

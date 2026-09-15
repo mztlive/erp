@@ -1,11 +1,8 @@
 //! 审计日志集合索引。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
-
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
 const AUDIT_LOGS: &str = "audit_logs";
@@ -24,9 +21,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -34,19 +29,13 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 fn audit_log_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_audit_logs_id", doc! { "id": 1 }),
-        named_index(
-            "idx_audit_logs_active_created",
-            doc! { "deleted_at": 1, "created_at": -1 },
-        ),
+        named_index("idx_audit_logs_active_created", doc! { "deleted_at": 1, "created_at": -1 }),
     ]
 }
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -71,8 +60,6 @@ mod tests {
             index.options.as_ref().and_then(|options| options.name.as_deref()) == Some("uk_audit_logs_id")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "deleted_at": 1, "created_at": -1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "deleted_at": 1, "created_at": -1 }));
     }
 }

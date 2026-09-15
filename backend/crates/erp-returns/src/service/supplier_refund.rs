@@ -1,19 +1,20 @@
 //! SupplierRefund 本域草稿、累计限额与事务内状态持久化。
 
+use erp_core::common::time::Instant;
+use erp_core::ids::{SupplierAccountId, SupplierPaymentId, SupplierRefundId};
+use erp_core::money::Amount;
+use id_generator::next_id;
+use persistence_core::Executor;
+
+use super::ReturnsService;
 use super::approval::ensure_supplier_refund_final_approve_posting;
 use super::shared::return_command_no;
-use super::ReturnsService;
 use crate::dto::{CommitSupplierRefundRequest, CreateSupplierRefundRequest};
 use crate::entity::returns::{
     CumulativeAmountLimit, SupplierRefund, SupplierRefundData, SupplierRefundStatus,
 };
 use crate::repository::ReturnsExt;
 use crate::{Error, Result};
-use erp_core::common::time::Instant;
-use erp_core::ids::{SupplierAccountId, SupplierPaymentId, SupplierRefundId};
-use erp_core::money::Amount;
-use id_generator::next_id;
-use persistence_core::Executor;
 
 /// 退款/冲正消费的最小原付款事实，不携带完整财务聚合。
 pub struct SupplierRefundSourceFact {
@@ -153,9 +154,7 @@ impl ReturnsService {
 
     /// 客户端直接过账恒按原冲突规则拒绝。
     pub fn reject_supplier_refund_client_post() -> Result<std::convert::Infallible> {
-        Err(Error::ConflictError(
-            "供应商退款过账只能由审批最终通过动作执行，客户端不得直接过账".to_string(),
-        ))
+        Err(Error::ConflictError("供应商退款过账只能由审批最终通过动作执行，客户端不得直接过账".to_string()))
     }
 }
 

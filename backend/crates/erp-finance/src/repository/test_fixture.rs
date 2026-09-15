@@ -28,11 +28,7 @@ impl TestDb {
             .filter(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
             .take(32)
             .collect();
-        let prefix = if sanitized.is_empty() {
-            "test".to_string()
-        } else {
-            sanitized
-        };
+        let prefix = if sanitized.is_empty() { "test".to_string() } else { sanitized };
         let name = format!("{prefix}_{}", mongodb::bson::oid::ObjectId::new().to_hex());
         let db = client.database(&name);
         db.create_collection("_fixture").await?;
@@ -64,9 +60,7 @@ impl Drop for TestDb {
 
 /// `ERP_TEST_MONGO_URI` 已设置且非空时返回 `true`。
 pub(crate) fn mongo_env_present() -> bool {
-    std::env::var("ERP_TEST_MONGO_URI")
-        .map(|uri| !uri.trim().is_empty())
-        .unwrap_or(false)
+    std::env::var("ERP_TEST_MONGO_URI").map(|uri| !uri.trim().is_empty()).unwrap_or(false)
 }
 
 /// 需要真实 MongoDB 的集成测试门控宏。

@@ -1,22 +1,21 @@
-use crate::test_indexes::ensure_indexes;
 use erp_catalog::entity::catalog::product::ProductData;
 use erp_catalog::entity::catalog::product_category::ProductCategoryData;
 use erp_catalog::entity::catalog::product_revision::ProductRevisionData;
 use erp_catalog::entity::catalog::sku::SkuData;
-use erp_catalog::CatalogExt;
-use erp_catalog::{EnableStatus, ListingStatus, Product, ProductCategory, ProductRevision, Sku};
+use erp_catalog::{CatalogExt, EnableStatus, ListingStatus, Product, ProductCategory, ProductRevision, Sku};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     ProductBrandId, ProductCategoryId, ProductId, ProductRevisionId, SkuId, UnitOfMeasureId,
 };
 use erp_procurement::entity::procurement_responsibility::{
-    build_catalog_facts, ProcurementResponsibilityResolutionLine,
+    ProcurementResponsibilityResolutionLine, build_catalog_facts,
 };
 use mongodb::bson::doc;
 use persistence_core::{NoTransaction, Transactional};
-use test_support::{require_mongo, TestDb};
+use test_support::{TestDb, require_mongo};
 
 use super::load_procurement_catalog_bundle;
+use crate::test_indexes::ensure_indexes;
 
 fn test_category(id: &str, parent: Option<&str>) -> ProductCategory {
     ProductCategory::new(
@@ -100,9 +99,7 @@ fn test_sku(id: &str, product_id: &str) -> Sku {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn empty_sku_ids_returns_empty_bundle() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_catalog_empty")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_catalog_empty").await.expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
         let bundle = load_procurement_catalog_bundle(fixture.db(), &[], &mut NoTransaction)
             .await
@@ -131,38 +128,16 @@ async fn empty_sku_ids_returns_empty_bundle() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn duplicate_sku_ids_are_deduplicated_and_stable() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_catalog_dedup")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_catalog_dedup").await.expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
         let cat = test_category("cat-1", None);
-        fixture
-            .db()
-            .product_categories()
-            .create(&cat, &mut NoTransaction)
-            .await
-            .expect("分类写入失败");
+        fixture.db().product_categories().create(&cat, &mut NoTransaction).await.expect("分类写入失败");
         let prod = test_product("prod-1", Some("rev-1"));
-        fixture
-            .db()
-            .products()
-            .create(&prod, &mut NoTransaction)
-            .await
-            .expect("商品写入失败");
+        fixture.db().products().create(&prod, &mut NoTransaction).await.expect("商品写入失败");
         let rev = test_revision("rev-1", "prod-1", "cat-1");
-        fixture
-            .db()
-            .product_revisions()
-            .create(&rev, &mut NoTransaction)
-            .await
-            .expect("修订写入失败");
+        fixture.db().product_revisions().create(&rev, &mut NoTransaction).await.expect("修订写入失败");
         let sku = test_sku("sku-1", "prod-1");
-        fixture
-            .db()
-            .skus()
-            .create(&sku, &mut NoTransaction)
-            .await
-            .expect("SKU写入失败");
+        fixture.db().skus().create(&sku, &mut NoTransaction).await.expect("SKU写入失败");
 
         let sku_id = SkuId::new("sku-1");
         let dup_ids = vec![sku_id.clone(), sku_id.clone(), sku_id.clone()];
@@ -175,10 +150,7 @@ async fn duplicate_sku_ids_are_deduplicated_and_stable() {
                 .expect("单次 bundle 加载失败");
         assert_eq!(bundle_dup.skus.len(), 1);
         assert_eq!(bundle_once.skus.len(), 1);
-        assert_eq!(
-            bundle_dup.skus.keys().collect::<Vec<_>>(),
-            bundle_once.skus.keys().collect::<Vec<_>>()
-        );
+        assert_eq!(bundle_dup.skus.keys().collect::<Vec<_>>(), bundle_once.skus.keys().collect::<Vec<_>>());
         assert!(bundle_dup.skus.contains_key("sku-1"));
     });
 }
@@ -200,32 +172,15 @@ async fn duplicate_sku_ids_are_deduplicated_and_stable() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn missing_facts_are_sparse_and_detected_by_entity() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_catalog_missing")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_catalog_missing").await.expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
         // Only create category and product/revision, but no SKU.
         let cat = test_category("cat-1", None);
-        fixture
-            .db()
-            .product_categories()
-            .create(&cat, &mut NoTransaction)
-            .await
-            .expect("分类写入失败");
+        fixture.db().product_categories().create(&cat, &mut NoTransaction).await.expect("分类写入失败");
         let prod = test_product("prod-1", Some("rev-1"));
-        fixture
-            .db()
-            .products()
-            .create(&prod, &mut NoTransaction)
-            .await
-            .expect("商品写入失败");
+        fixture.db().products().create(&prod, &mut NoTransaction).await.expect("商品写入失败");
         let rev = test_revision("rev-1", "prod-1", "cat-1");
-        fixture
-            .db()
-            .product_revisions()
-            .create(&rev, &mut NoTransaction)
-            .await
-            .expect("修订写入失败");
+        fixture.db().product_revisions().create(&rev, &mut NoTransaction).await.expect("修订写入失败");
         // Do not create SKU "sku-missing"
         let sku_id = SkuId::new("sku-missing");
         let bundle =
@@ -251,23 +206,16 @@ async fn missing_facts_are_sparse_and_detected_by_entity() {
 
         // Missing product: create sku pointing to non-existent product
         let sku2 = test_sku("sku-2", "prod-missing");
-        fixture
-            .db()
-            .skus()
-            .create(&sku2, &mut NoTransaction)
-            .await
-            .expect("SKU写入失败");
+        fixture.db().skus().create(&sku2, &mut NoTransaction).await.expect("SKU写入失败");
         let bundle2 =
             load_procurement_catalog_bundle(fixture.db(), &[SkuId::new("sku-2")], &mut NoTransaction)
                 .await
                 .expect("bundle 加载失败");
         assert!(bundle2.products.is_empty());
-        let inputs2 = vec![ProcurementResponsibilityResolutionLine::new(
-            "line-2".to_string(),
-            SkuId::new("sku-2"),
-            None,
-        )
-        .unwrap()];
+        let inputs2 = vec![
+            ProcurementResponsibilityResolutionLine::new("line-2".to_string(), SkuId::new("sku-2"), None)
+                .unwrap(),
+        ];
         let err2 = build_catalog_facts(
             &inputs2,
             &bundle2.skus,
@@ -283,44 +231,22 @@ async fn missing_facts_are_sparse_and_detected_by_entity() {
 
         // Missing category: revision points to non-existent category
         let cat2 = test_category("cat-2", None);
-        fixture
-            .db()
-            .product_categories()
-            .create(&cat2, &mut NoTransaction)
-            .await
-            .expect("分类写入失败");
+        fixture.db().product_categories().create(&cat2, &mut NoTransaction).await.expect("分类写入失败");
         let prod3 = test_product("prod-3", Some("rev-3"));
-        fixture
-            .db()
-            .products()
-            .create(&prod3, &mut NoTransaction)
-            .await
-            .expect("商品写入失败");
+        fixture.db().products().create(&prod3, &mut NoTransaction).await.expect("商品写入失败");
         let rev3 = test_revision("rev-3", "prod-3", "cat-missing");
-        fixture
-            .db()
-            .product_revisions()
-            .create(&rev3, &mut NoTransaction)
-            .await
-            .expect("修订写入失败");
+        fixture.db().product_revisions().create(&rev3, &mut NoTransaction).await.expect("修订写入失败");
         let sku3 = test_sku("sku-3", "prod-3");
-        fixture
-            .db()
-            .skus()
-            .create(&sku3, &mut NoTransaction)
-            .await
-            .expect("SKU写入失败");
+        fixture.db().skus().create(&sku3, &mut NoTransaction).await.expect("SKU写入失败");
         let bundle3 =
             load_procurement_catalog_bundle(fixture.db(), &[SkuId::new("sku-3")], &mut NoTransaction)
                 .await
                 .expect("bundle 加载失败");
         assert!(bundle3.categories.is_empty() || !bundle3.categories.contains_key("cat-missing"));
-        let inputs3 = vec![ProcurementResponsibilityResolutionLine::new(
-            "line-3".to_string(),
-            SkuId::new("sku-3"),
-            None,
-        )
-        .unwrap()];
+        let inputs3 = vec![
+            ProcurementResponsibilityResolutionLine::new("line-3".to_string(), SkuId::new("sku-3"), None)
+                .unwrap(),
+        ];
         let err3 = build_catalog_facts(
             &inputs3,
             &bundle3.skus,
@@ -355,56 +281,27 @@ async fn missing_facts_are_sparse_and_detected_by_entity() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn soft_deleted_facts_are_filtered() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_catalog_soft_delete")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_catalog_soft_delete").await.expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
         let cat = test_category("cat-1", None);
-        fixture
-            .db()
-            .product_categories()
-            .create(&cat, &mut NoTransaction)
-            .await
-            .expect("分类写入失败");
+        fixture.db().product_categories().create(&cat, &mut NoTransaction).await.expect("分类写入失败");
         let prod = test_product("prod-1", Some("rev-1"));
-        fixture
-            .db()
-            .products()
-            .create(&prod, &mut NoTransaction)
-            .await
-            .expect("商品写入失败");
+        fixture.db().products().create(&prod, &mut NoTransaction).await.expect("商品写入失败");
         let rev = test_revision("rev-1", "prod-1", "cat-1");
-        fixture
-            .db()
-            .product_revisions()
-            .create(&rev, &mut NoTransaction)
-            .await
-            .expect("修订写入失败");
+        fixture.db().product_revisions().create(&rev, &mut NoTransaction).await.expect("修订写入失败");
         let mut sku = test_sku("sku-1", "prod-1");
-        fixture
-            .db()
-            .skus()
-            .create(&sku, &mut NoTransaction)
-            .await
-            .expect("SKU写入失败");
+        fixture.db().skus().create(&sku, &mut NoTransaction).await.expect("SKU写入失败");
         // Soft delete SKU
-        fixture
-            .db()
-            .skus()
-            .soft_delete(&mut sku, &mut NoTransaction)
-            .await
-            .expect("软删除失败");
+        fixture.db().skus().soft_delete(&mut sku, &mut NoTransaction).await.expect("软删除失败");
         let bundle =
             load_procurement_catalog_bundle(fixture.db(), &[SkuId::new("sku-1")], &mut NoTransaction)
                 .await
                 .expect("bundle 加载失败");
         assert!(bundle.skus.is_empty(), "软删除 SKU 应被过滤");
-        let inputs = vec![ProcurementResponsibilityResolutionLine::new(
-            "line-1".to_string(),
-            SkuId::new("sku-1"),
-            None,
-        )
-        .unwrap()];
+        let inputs = vec![
+            ProcurementResponsibilityResolutionLine::new("line-1".to_string(), SkuId::new("sku-1"), None)
+                .unwrap(),
+        ];
         let err = build_catalog_facts(
             &inputs,
             &bundle.skus,
@@ -413,19 +310,11 @@ async fn soft_deleted_facts_are_filtered() {
             &bundle.categories,
         )
         .unwrap_err();
-        assert!(
-            err.to_string().contains("SKU"),
-            "Entity 应检出软删除后的缺失: {err}"
-        );
+        assert!(err.to_string().contains("SKU"), "Entity 应检出软删除后的缺失: {err}");
 
         // Soft delete category similarly
         let mut cat2 = test_category("cat-2", None);
-        fixture
-            .db()
-            .product_categories()
-            .create(&cat2, &mut NoTransaction)
-            .await
-            .expect("分类写入失败");
+        fixture.db().product_categories().create(&cat2, &mut NoTransaction).await.expect("分类写入失败");
         fixture
             .db()
             .product_categories()
@@ -433,26 +322,11 @@ async fn soft_deleted_facts_are_filtered() {
             .await
             .expect("分类软删除失败");
         let prod2 = test_product("prod-2", Some("rev-2"));
-        fixture
-            .db()
-            .products()
-            .create(&prod2, &mut NoTransaction)
-            .await
-            .expect("商品写入失败");
+        fixture.db().products().create(&prod2, &mut NoTransaction).await.expect("商品写入失败");
         let rev2 = test_revision("rev-2", "prod-2", "cat-2");
-        fixture
-            .db()
-            .product_revisions()
-            .create(&rev2, &mut NoTransaction)
-            .await
-            .expect("修订写入失败");
+        fixture.db().product_revisions().create(&rev2, &mut NoTransaction).await.expect("修订写入失败");
         let sku2 = test_sku("sku-2", "prod-2");
-        fixture
-            .db()
-            .skus()
-            .create(&sku2, &mut NoTransaction)
-            .await
-            .expect("SKU写入失败");
+        fixture.db().skus().create(&sku2, &mut NoTransaction).await.expect("SKU写入失败");
         let bundle2 =
             load_procurement_catalog_bundle(fixture.db(), &[SkuId::new("sku-2")], &mut NoTransaction)
                 .await
@@ -478,49 +352,23 @@ async fn soft_deleted_facts_are_filtered() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn bounded_batch_queries_no_n_plus_one() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_catalog_bounded")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_catalog_bounded").await.expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
         // Depth 3 chain: cat-1 <- cat-2 <- cat-3
-        for (id, parent) in [
-            ("cat-1", None),
-            ("cat-2", Some("cat-1")),
-            ("cat-3", Some("cat-2")),
-        ] {
+        for (id, parent) in [("cat-1", None), ("cat-2", Some("cat-1")), ("cat-3", Some("cat-2"))] {
             let cat = test_category(id, parent);
-            fixture
-                .db()
-                .product_categories()
-                .create(&cat, &mut NoTransaction)
-                .await
-                .expect("分类写入失败");
+            fixture.db().product_categories().create(&cat, &mut NoTransaction).await.expect("分类写入失败");
         }
         let prod = test_product("prod-1", Some("rev-1"));
-        fixture
-            .db()
-            .products()
-            .create(&prod, &mut NoTransaction)
-            .await
-            .expect("商品写入失败");
+        fixture.db().products().create(&prod, &mut NoTransaction).await.expect("商品写入失败");
         let rev = test_revision("rev-1", "prod-1", "cat-3");
-        fixture
-            .db()
-            .product_revisions()
-            .create(&rev, &mut NoTransaction)
-            .await
-            .expect("修订写入失败");
+        fixture.db().product_revisions().create(&rev, &mut NoTransaction).await.expect("修订写入失败");
         // Create 5 SKUs all pointing to same product
         let mut sku_ids = Vec::new();
         for i in 1..=5 {
             let sku_id = format!("sku-{i}");
             let sku = test_sku(&sku_id, "prod-1");
-            fixture
-                .db()
-                .skus()
-                .create(&sku, &mut NoTransaction)
-                .await
-                .expect("SKU写入失败");
+            fixture.db().skus().create(&sku, &mut NoTransaction).await.expect("SKU写入失败");
             sku_ids.push(SkuId::new(sku_id));
         }
         let bundle = load_procurement_catalog_bundle(fixture.db(), &sku_ids, &mut NoTransaction)
@@ -564,26 +412,11 @@ async fn transaction_reuses_caller_executor_read_your_writes() {
         let fixture = TestDb::new("proc_catalog_txn").await.expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
         let cat = test_category("cat-1", None);
-        fixture
-            .db()
-            .product_categories()
-            .create(&cat, &mut NoTransaction)
-            .await
-            .expect("分类写入失败");
+        fixture.db().product_categories().create(&cat, &mut NoTransaction).await.expect("分类写入失败");
         let prod = test_product("prod-1", Some("rev-1"));
-        fixture
-            .db()
-            .products()
-            .create(&prod, &mut NoTransaction)
-            .await
-            .expect("商品写入失败");
+        fixture.db().products().create(&prod, &mut NoTransaction).await.expect("商品写入失败");
         let rev = test_revision("rev-1", "prod-1", "cat-1");
-        fixture
-            .db()
-            .product_revisions()
-            .create(&rev, &mut NoTransaction)
-            .await
-            .expect("修订写入失败");
+        fixture.db().product_revisions().create(&rev, &mut NoTransaction).await.expect("修订写入失败");
 
         let db = fixture.db().clone();
         let client = db.client().clone();
@@ -601,12 +434,10 @@ async fn transaction_reuses_caller_executor_read_your_writes() {
                         load_procurement_catalog_bundle(&db, std::slice::from_ref(&sku_id), session).await?;
                     assert!(bundle.skus.contains_key("sku-txn"), "事务内应能 read-your-writes");
                     // Also verify Entity can build facts inside txn
-                    let inputs = vec![ProcurementResponsibilityResolutionLine::new(
-                        "line-1".to_string(),
-                        sku_id,
-                        None,
-                    )
-                    .unwrap()];
+                    let inputs = vec![
+                        ProcurementResponsibilityResolutionLine::new("line-1".to_string(), sku_id, None)
+                            .unwrap(),
+                    ];
                     let facts = build_catalog_facts(
                         &inputs,
                         &bundle.skus,
@@ -649,9 +480,7 @@ async fn transaction_reuses_caller_executor_read_your_writes() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn explain_id_queries_use_ixscan() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_catalog_explain")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_catalog_explain").await.expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
         for collection in ["skus", "products", "product_revisions", "product_categories"] {
             let explain = fixture
@@ -669,12 +498,11 @@ async fn explain_id_queries_use_ixscan() {
             // Document the current state: if IXSCAN missing, mark N/A with reason instead of hard fail in this wave.
             // For proc-catalog wave, id 索引由现有 catalog 索引或 PROC-R10 补充，当前若为 COLLSCAN 则记录 N/A。
             if rendered.contains("COLLSCAN") {
-                eprintln!("N/A: {collection} id 查询当前为 COLLSCAN，未建专用 id 索引，依赖后续索引批次（PROC-R10）; explain={rendered}");
-            } else {
-                assert!(
-                    rendered.contains("IXSCAN"),
-                    "explain 未使用 IXSCAN for {collection}: {rendered}"
+                eprintln!(
+                    "N/A: {collection} id 查询当前为 COLLSCAN，未建专用 id 索引，依赖后续索引批次（PROC-R10）; explain={rendered}"
                 );
+            } else {
+                assert!(rendered.contains("IXSCAN"), "explain 未使用 IXSCAN for {collection}: {rendered}");
             }
         }
     });
@@ -697,69 +525,37 @@ async fn explain_id_queries_use_ixscan() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn category_ring_is_detected_by_entity() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_catalog_ring")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_catalog_ring").await.expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
         // Create ring: cat-a -> cat-b -> cat-a (via parent chain)
         // Since entity creation rejects self-loop, we mutate after creation via direct update
         let cat_a = test_category("cat-a", None);
         let cat_b = test_category("cat-b", Some("cat-a"));
-        fixture
-            .db()
-            .product_categories()
-            .create(&cat_a, &mut NoTransaction)
-            .await
-            .expect("分类写入失败");
-        fixture
-            .db()
-            .product_categories()
-            .create(&cat_b, &mut NoTransaction)
-            .await
-            .expect("分类写入失败");
+        fixture.db().product_categories().create(&cat_a, &mut NoTransaction).await.expect("分类写入失败");
+        fixture.db().product_categories().create(&cat_b, &mut NoTransaction).await.expect("分类写入失败");
         // Directly update cat-a to parent cat-b to form ring, bypassing entity check
         fixture
             .db()
             .collection::<mongodb::bson::Document>("product_categories")
-            .update_one(
-                doc! {"id": "cat-a"},
-                doc! {"$set": {"parent_category_id": "cat-b"}},
-            )
+            .update_one(doc! {"id": "cat-a"}, doc! {"$set": {"parent_category_id": "cat-b"}})
             .await
             .expect("环构造失败");
         let prod = test_product("prod-1", Some("rev-1"));
-        fixture
-            .db()
-            .products()
-            .create(&prod, &mut NoTransaction)
-            .await
-            .expect("商品写入失败");
+        fixture.db().products().create(&prod, &mut NoTransaction).await.expect("商品写入失败");
         let rev = test_revision("rev-1", "prod-1", "cat-b");
-        fixture
-            .db()
-            .product_revisions()
-            .create(&rev, &mut NoTransaction)
-            .await
-            .expect("修订写入失败");
+        fixture.db().product_revisions().create(&rev, &mut NoTransaction).await.expect("修订写入失败");
         let sku = test_sku("sku-1", "prod-1");
-        fixture
-            .db()
-            .skus()
-            .create(&sku, &mut NoTransaction)
-            .await
-            .expect("SKU写入失败");
+        fixture.db().skus().create(&sku, &mut NoTransaction).await.expect("SKU写入失败");
         let bundle =
             load_procurement_catalog_bundle(fixture.db(), &[SkuId::new("sku-1")], &mut NoTransaction)
                 .await
                 .expect("bundle 加载失败");
         assert!(bundle.categories.contains_key("cat-a"));
         assert!(bundle.categories.contains_key("cat-b"));
-        let inputs = vec![ProcurementResponsibilityResolutionLine::new(
-            "line-1".to_string(),
-            SkuId::new("sku-1"),
-            None,
-        )
-        .unwrap()];
+        let inputs = vec![
+            ProcurementResponsibilityResolutionLine::new("line-1".to_string(), SkuId::new("sku-1"), None)
+                .unwrap(),
+        ];
         let err = build_catalog_facts(
             &inputs,
             &bundle.skus,

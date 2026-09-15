@@ -2,13 +2,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use super::image::PackageCoverRef;
-use super::sku_snapshot::{package_price, SkuSnapshot};
 use erp_core::ids::{SalesSelectionBookletId, SalesSelectionDisplayItemId};
 use erp_core::money::Amount;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use super::image::PackageCoverRef;
+use super::sku_snapshot::{SkuSnapshot, package_price};
 
 /// 陈列项形态。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,12 +115,7 @@ impl SalesSelectionDisplayItem {
             effective: true,
             removed: false,
             public_item_id: id.to_string(),
-            kind: DisplayKind::Package {
-                tier_id,
-                members,
-                cover,
-                price,
-            },
+            kind: DisplayKind::Package { tier_id, members, cover, price },
         })
     }
 
@@ -188,11 +183,9 @@ impl SalesSelectionDisplayItem {
     /// 无。
     pub fn authorized_asset_ids(&self) -> Vec<String> {
         match &self.kind {
-            DisplayKind::SingleSku { sku } => sku
-                .image
-                .as_ref()
-                .map(|image| vec![image.file_asset_id.clone()])
-                .unwrap_or_default(),
+            DisplayKind::SingleSku { sku } => {
+                sku.image.as_ref().map(|image| vec![image.file_asset_id.clone()]).unwrap_or_default()
+            },
             DisplayKind::Package { members, cover, .. } => {
                 let mut ids = vec![cover.file_asset_id.clone()];
                 for member in members {
@@ -201,7 +194,7 @@ impl SalesSelectionDisplayItem {
                     }
                 }
                 ids
-            }
+            },
         }
     }
 
@@ -219,11 +212,10 @@ impl SalesSelectionDisplayItem {
         match &self.kind {
             DisplayKind::SingleSku { sku } => {
                 vec![(sku.sku_id.to_string(), sku.sku_revision_id.to_string())]
-            }
-            DisplayKind::Package { members, .. } => members
-                .iter()
-                .map(|sku| (sku.sku_id.to_string(), sku.sku_revision_id.to_string()))
-                .collect(),
+            },
+            DisplayKind::Package { members, .. } => {
+                members.iter().map(|sku| (sku.sku_id.to_string(), sku.sku_revision_id.to_string())).collect()
+            },
         }
     }
 
@@ -295,9 +287,7 @@ pub fn ensure_publishable_display<'a>(
         let count = publishable
             .iter()
             .filter(|item| match &item.kind {
-                DisplayKind::Package {
-                    tier_id: item_tier, ..
-                } => item_tier == tier_id,
+                DisplayKind::Package { tier_id: item_tier, .. } => item_tier == tier_id,
                 DisplayKind::SingleSku { .. } => false,
             })
             .count();

@@ -3,10 +3,11 @@
 //! 集中“供应商-能力-修订在业务日是否合格”的纯领域规则；不依赖
 //! 数据库、HTTP、全局时钟或全局 ID，仅对已加载事实做确定性校验。
 
+use erp_core::common::time::BusinessDate;
+
 use crate::entity::supplier::{
     CapabilityStatus, SupplierAccount, SupplierCapability, SupplierCapabilityRevision,
 };
-use erp_core::common::time::BusinessDate;
 
 /// 供应商能力修订的不合格原因。
 ///
@@ -123,9 +124,7 @@ pub fn ensure_linked_contracts_qualified(
     if contracts.is_empty() || contracts.iter().any(|contract| contract.is_valid_on(on_date)) {
         return Ok(());
     }
-    Err(erp_core::Error::from(
-        "供应商该项能力的合同有效期未核实、未生效或已到期，请先维护有效合同",
-    ))
+    Err(erp_core::Error::from("供应商该项能力的合同有效期未核实、未生效或已到期，请先维护有效合同"))
 }
 
 /// 供应商供给消费的公司商品类型事实；不依赖catalog实体。
@@ -149,15 +148,15 @@ pub fn required_offering_capability(kind: OfferingProductKind) -> crate::entity:
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_capability_qualified, CapabilityEligibilityViolation};
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{PartyId, SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId};
+
+    use super::{CapabilityEligibilityViolation, ensure_capability_qualified};
     use crate::entity::supplier::{
         CapabilityCode, CapabilityStatus, SupplierAccount, SupplierAccountData, SupplierAccountStatus,
         SupplierCapability, SupplierCapabilityData, SupplierCapabilityRevision,
         SupplierCapabilityRevisionData,
     };
-    use erp_core::common::time::BusinessDate;
-    use erp_core::ids::PartyId;
-    use erp_core::ids::{SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId};
 
     fn test_supplier(status: SupplierAccountStatus) -> SupplierAccount {
         SupplierAccount::new(
@@ -483,17 +482,14 @@ mod tests {
 
 #[cfg(test)]
 mod offering_kind_tests {
-    use super::{required_offering_capability, OfferingProductKind};
+    use super::{OfferingProductKind, required_offering_capability};
     use crate::entity::supplier::CapabilityCode;
     #[test]
     fn offering_kind_preserves_all_four_mappings() {
         for (kind, code) in [
             (OfferingProductKind::Physical, CapabilityCode::Physical),
             (OfferingProductKind::Virtual, CapabilityCode::Virtual),
-            (
-                OfferingProductKind::OfflineService,
-                CapabilityCode::OfflineService,
-            ),
+            (OfferingProductKind::OfflineService, CapabilityCode::OfflineService),
             (OfferingProductKind::Voucher, CapabilityCode::Virtual),
         ] {
             assert_eq!(required_offering_capability(kind), code);

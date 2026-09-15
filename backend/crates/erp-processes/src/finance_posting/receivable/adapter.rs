@@ -8,22 +8,22 @@ use bpm::SubjectRef;
 use erp_core::common::time::Instant;
 use erp_core::ids::CustomerAccountId;
 use erp_finance::entity::receivable::{CustomerReceipt, CustomerReceiptStatus, PendingReceiptAllocation};
+#[cfg(test)]
+use erp_read_models::finance::receivable::approval_view::document_approval_view;
 use erp_workflow::entity::approval_integration::{
     ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload,
 };
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::DocumentType;
-
-use crate::{Error, Result};
-#[cfg(test)]
-use erp_read_models::finance::receivable::approval_view::document_approval_view;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::business_adapter::{
-    adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
+    AdapterReadScope, ApprovalAdapterSpec, adapter_spec_of, ensure_adapter_spec_complete,
 };
 use erp_workflow::service::approval::policy::{
     ApprovalDomainAction, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource, OwnerOrganizationSource,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
+
+use crate::{Error, Result};
 
 /// 详情最近审批历史条数上限。完整历史走分页端点。
 pub const RECENT_HISTORY_LIMIT: usize = 8;
@@ -82,9 +82,7 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<CustomerReceiptAdapter
         || spec.owner_role.as_str() != "customer_receipt_approver"
         || spec.owner_organization_source != OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         || spec.read_scope != AdapterReadScope::DocumentOrganizationAndCreator
-        || !spec
-            .subject_snapshot_fields
-            .contains(&ApprovalSubjectSnapshotField::TotalAmount)
+        || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalAmount)
     {
         return Err(Error::Internal("客户回款单审批适配器登记不完整".to_string()));
     }
@@ -153,9 +151,7 @@ pub fn cancel_customer_receipt_to_draft(receipt: &mut CustomerReceipt) -> Result
 /// 状态不是审批中时返回冲突。
 pub fn ensure_final_approve_posting(receipt: &CustomerReceipt) -> Result<()> {
     if receipt.status != CustomerReceiptStatus::InApproval {
-        return Err(Error::ConflictError(
-            "只有审批中的客户回款单可以由最终通过动作过账".to_string(),
-        ));
+        return Err(Error::ConflictError("只有审批中的客户回款单可以由最终通过动作过账".to_string()));
     }
     Ok(())
 }
@@ -205,9 +201,7 @@ pub fn customer_receipt_start_command(
     idempotency_key: &str,
 ) -> CustomerReceiptStartCommand {
     CustomerReceiptStartCommand {
-        subject_kind: process_kind_of(DocumentType::CustomerReceipt)
-            .as_str()
-            .to_string(),
+        subject_kind: process_kind_of(DocumentType::CustomerReceipt).as_str().to_string(),
         subject_id: receipt_id.to_string(),
         subject_version,
         actor_id: actor_id.to_string(),
@@ -243,10 +237,7 @@ pub fn execute_customer_receipt_domain_action(
     match action {
         ApprovalDomainAction::CustomerReceiptPost => ensure_final_approve_posting(receipt),
         ApprovalDomainAction::CustomerReceiptCancelApproval => cancel_customer_receipt_to_draft(receipt),
-        other => Err(Error::ValidationError(format!(
-            "动作 {} 不属于客户回款单",
-            other.as_str()
-        ))),
+        other => Err(Error::ValidationError(format!("动作 {} 不属于客户回款单", other.as_str()))),
     }
 }
 
@@ -284,9 +275,7 @@ pub fn customer_receipt_object_readable(organization_id: &str, assignee_user_id:
 /// # 错误
 /// 往来主体为空时返回校验错误。
 pub fn customer_receipt_responsible_org_id(receipt: &CustomerReceipt) -> Result<String> {
-    receipt
-        .approval_responsible_org_id()
-        .map_err(|error| Error::ValidationError(error.to_string()))
+    receipt.approval_responsible_org_id().map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 按合同 §4.4.5 冻结客户回款快照。
@@ -306,19 +295,15 @@ pub fn build_customer_receipt_snapshot(
     submitted_by: &str,
     submitted_at: Instant,
 ) -> Result<ApprovalSubjectSnapshotPayload> {
-    let facts = receipt
-        .approval_facts()
-        .map_err(|error| Error::ValidationError(error.to_string()))?;
+    let facts = receipt.approval_facts().map_err(|error| Error::ValidationError(error.to_string()))?;
     Ok(ApprovalSubjectSnapshotPayload {
         document_no: facts.document_no,
         responsible_org_id: facts.responsible_org_id,
         submitted_by: submitted_by.to_string(),
         submitted_at,
-        counterparty: facts
-            .customer_id
-            .map(|customer_id| ApprovalSubjectCounterparty::Customer {
-                customer_id: CustomerAccountId::new(customer_id.to_string()),
-            }),
+        counterparty: facts.customer_id.map(|customer_id| ApprovalSubjectCounterparty::Customer {
+            customer_id: CustomerAccountId::new(customer_id.to_string()),
+        }),
         total_amount: Some(facts.total_amount),
         total_quantity: None,
         line_count: facts.line_count,
@@ -327,12 +312,14 @@ pub fn build_customer_receipt_snapshot(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
+
     use bpm::ids::ApprovalProcessDefinitionId;
     use erp_core::ids::{CustomerReceiptId, PartyId, ReceivableEntryId};
     use erp_finance::entity::receivable::CustomerReceiptData;
     use erp_workflow::service::approval::binding::binding_from_published;
-    use std::str::FromStr;
+
+    use super::*;
 
     fn draft_receipt() -> CustomerReceipt {
         CustomerReceipt::new(
@@ -365,9 +352,7 @@ mod tests {
         assert_eq!(adapter.document_type, DocumentType::CustomerReceipt);
         assert_eq!(adapter.process_kind.as_str(), "customer_receipt");
         assert_eq!(
-            customer_receipt_subject_ref("cr-1")
-                .expect("主体引用必须可构造")
-                .subject_kind(),
+            customer_receipt_subject_ref("cr-1").expect("主体引用必须可构造").subject_kind(),
             "customer_receipt"
         );
         assert_eq!(adapter.subject_ref_builder, "subject_ref_for(CustomerReceipt)");
@@ -375,31 +360,16 @@ mod tests {
             adapter.subject_version_source,
             ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
         );
-        assert_eq!(
-            adapter.subject_snapshot_builder,
-            "build_customer_receipt_snapshot"
-        );
-        assert_eq!(
-            adapter.on_approval_start,
-            ApprovalDomainAction::CustomerReceiptSubmit
-        );
-        assert_eq!(
-            adapter.on_final_approve,
-            ApprovalDomainAction::CustomerReceiptPost
-        );
-        assert_eq!(
-            adapter.cancel_action,
-            ApprovalDomainAction::CustomerReceiptCancelApproval
-        );
+        assert_eq!(adapter.subject_snapshot_builder, "build_customer_receipt_snapshot");
+        assert_eq!(adapter.on_approval_start, ApprovalDomainAction::CustomerReceiptSubmit);
+        assert_eq!(adapter.on_final_approve, ApprovalDomainAction::CustomerReceiptPost);
+        assert_eq!(adapter.cancel_action, ApprovalDomainAction::CustomerReceiptCancelApproval);
         assert_eq!(adapter.owner_role, "customer_receipt_approver");
         assert_eq!(
             adapter.owner_organization_snapshot,
             OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         );
-        assert_eq!(
-            adapter.read_scope,
-            AdapterReadScope::DocumentOrganizationAndCreator
-        );
+        assert_eq!(adapter.read_scope, AdapterReadScope::DocumentOrganizationAndCreator);
         assert_ne!(adapter.on_approval_start, adapter.on_final_approve);
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
     }
@@ -478,22 +448,16 @@ mod tests {
     /// 详情只读审批结构；允许动作不含选择定义或审批人。
     #[test]
     fn detail_approval_is_read_only_and_has_history_cap() {
-        let binding = binding_from_published(
-            ApprovalProcessDefinitionId::new("def-1"),
-            2,
-            Instant::from_unix_secs(1),
-        )
-        .unwrap();
+        let binding =
+            binding_from_published(ApprovalProcessDefinitionId::new("def-1"), 2, Instant::from_unix_secs(1))
+                .unwrap();
         let view = document_approval_view(Some(&binding), None, CustomerReceiptStatus::Draft);
         assert_eq!(view.requirement, "PROCESS_REQUIRED");
         assert_eq!(view.definition.as_ref().unwrap().id, "def-1");
         assert!(view.instance.is_none());
         assert!(view.recent_history.len() <= RECENT_HISTORY_LIMIT);
         assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
-        assert!(!view
-            .allowed_actions
-            .iter()
-            .any(|item| item.contains("DEFINITION")));
+        assert!(!view.allowed_actions.iter().any(|item| item.contains("DEFINITION")));
         let running = document_approval_view(Some(&binding), None, CustomerReceiptStatus::InApproval);
         assert_eq!(running.allowed_actions, vec!["CANCEL".to_string()]);
     }

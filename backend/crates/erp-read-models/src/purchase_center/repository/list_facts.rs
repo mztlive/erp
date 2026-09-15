@@ -9,16 +9,14 @@
 use std::collections::{HashMap, HashSet};
 
 use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderId, SupplierAccountId};
-use erp_procurement::entity::purchase_order::{PurchaseOrderRevision, PurchaseOrderSubmission};
-use mongodb::Database;
-
 use erp_identity::AccessControlExt;
-use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
+use erp_procurement::entity::purchase_order::{PurchaseOrderRevision, PurchaseOrderSubmission};
+use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::purchase_order::PurchaseOrderFilter;
-use persistence_core::Executor;
-use persistence_core::PageResult;
-use persistence_core::Result;
-use {erp_procurement::repository::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
+use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
+use erp_sales::repository::SalesOrderExt;
+use mongodb::Database;
+use persistence_core::{Executor, PageResult, Result};
 
 /// 采购单列表关联事实。
 ///
@@ -65,14 +63,9 @@ pub async fn load_purchase_order_list_page(
     filter: &PurchaseOrderFilter,
     scope: &PurchaseReadScope,
     executor: &mut dyn Executor,
-) -> Result<(
-    PageResult<erp_procurement::repository::purchase_order::PurchaseOrderRow>,
-    PurchaseOrderListFacts,
-)> {
-    let page = db
-        .purchase_orders()
-        .search_purchase_orders(filter, scope, executor)
-        .await?;
+) -> Result<(PageResult<erp_procurement::repository::purchase_order::PurchaseOrderRow>, PurchaseOrderListFacts)>
+{
+    let page = db.purchase_orders().search_purchase_orders(filter, scope, executor).await?;
     if page.items.is_empty() {
         return Ok((page, PurchaseOrderListFacts::default()));
     }
@@ -88,11 +81,8 @@ pub async fn load_purchase_order_list_page(
     let owner_ids = unique_owner_ids(&page);
     let owner_names = db.accounts().names_by_ids(&owner_ids, executor).await?;
     let (submission_keys, revision_keys) = split_pointer_ids(&page);
-    let submission_ids = submission_keys
-        .iter()
-        .cloned()
-        .map(PurchaseOrderSubmissionId::new)
-        .collect::<Vec<_>>();
+    let submission_ids =
+        submission_keys.iter().cloned().map(PurchaseOrderSubmissionId::new).collect::<Vec<_>>();
     let submissions = db
         .purchase_order()
         .find_submissions_by_ids(&submission_ids, executor)
@@ -100,11 +90,7 @@ pub async fn load_purchase_order_list_page(
         .into_iter()
         .map(|submission| (submission.base.id.clone(), submission))
         .collect::<HashMap<_, _>>();
-    let revision_ids = revision_keys
-        .iter()
-        .cloned()
-        .map(PurchaseOrderRevisionId::new)
-        .collect::<Vec<_>>();
+    let revision_ids = revision_keys.iter().cloned().map(PurchaseOrderRevisionId::new).collect::<Vec<_>>();
     let revisions = db
         .purchase_order()
         .find_revisions_by_ids(&revision_ids, executor)
@@ -114,13 +100,7 @@ pub async fn load_purchase_order_list_page(
         .collect::<HashMap<_, _>>();
     Ok((
         page,
-        PurchaseOrderListFacts {
-            supplier_names,
-            sales_order_nos,
-            owner_names,
-            submissions,
-            revisions,
-        },
+        PurchaseOrderListFacts { supplier_names, sales_order_nos, owner_names, submissions, revisions },
     ))
 }
 
@@ -265,18 +245,9 @@ pub(crate) async fn keyword_reference_ids(
     let Some(keyword) = keyword.filter(|value| !value.trim().is_empty()) else {
         return Ok((Vec::new(), Vec::new()));
     };
-    let sales_ids = db
-        .sales_orders()
-        .matching_ids_by_number(keyword, executor)
-        .await?;
-    let party_ids = db
-        .party()
-        .matching_current_party_ids_by_name(keyword, executor)
-        .await?;
-    let supplier_ids = db
-        .supplier_accounts()
-        .matching_ids_by_parties(&party_ids, executor)
-        .await?;
+    let sales_ids = db.sales_orders().matching_ids_by_number(keyword, executor).await?;
+    let party_ids = db.party().matching_current_party_ids_by_name(keyword, executor).await?;
+    let supplier_ids = db.supplier_accounts().matching_ids_by_parties(&party_ids, executor).await?;
     Ok((sales_ids, supplier_ids))
 }
 
@@ -286,9 +257,9 @@ mod tests {
     use erp_procurement::entity::purchase_order::{
         ProgressStatus, PurchaseOrderStatus, PurchaseReviewStatus, PurchaseType,
     };
+    use persistence_core::PageResult;
 
     use super::{split_pointer_ids, unique_owner_ids, unique_sales_ids, unique_supplier_ids};
-    use persistence_core::PageResult;
 
     /// 构造最小列表行。
     fn row(
@@ -350,10 +321,7 @@ mod tests {
             ],
             total: 5,
         };
-        assert_eq!(
-            split_pointer_ids(&page),
-            (vec!["sub-1".to_string()], vec!["rev-2".to_string()])
-        );
+        assert_eq!(split_pointer_ids(&page), (vec!["sub-1".to_string()], vec!["rev-2".to_string()]));
     }
 
     /// 供应商与销售单 ID 去重保持首次顺序。
@@ -368,17 +336,11 @@ mod tests {
             total: 3,
         };
         assert_eq!(
-            unique_supplier_ids(&page)
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>(),
+            unique_supplier_ids(&page).iter().map(ToString::to_string).collect::<Vec<_>>(),
             vec!["sup-1".to_string(), "sup-2".to_string()]
         );
         assert_eq!(
-            unique_sales_ids(&page)
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>(),
+            unique_sales_ids(&page).iter().map(ToString::to_string).collect::<Vec<_>>(),
             vec!["so-1".to_string(), "so-2".to_string()]
         );
     }
@@ -395,15 +357,14 @@ mod isolation_tests {
         PurchaseOrderStatus, PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseType,
         SupplierSnapshot,
     };
-    use test_support::{require_mongo, TestDb};
-
-    use crate::test_indexes::ensure_indexes;
     use erp_procurement::repository::PurchaseOrderExt;
+    use erp_procurement::repository::purchase_order::PurchaseOrderFilter;
+    use erp_procurement::repository::purchase_order::scope::{PurchaseReadScope, PurchaseScopeClause};
     use persistence_core::{NoTransaction, Transactional};
+    use test_support::{TestDb, require_mongo};
 
     use super::load_purchase_order_list_page;
-    use erp_procurement::repository::purchase_order::scope::{PurchaseReadScope, PurchaseScopeClause};
-    use erp_procurement::repository::purchase_order::PurchaseOrderFilter;
+    use crate::test_indexes::ensure_indexes;
 
     /// 隔离库测试使用公司范围，避免空授权掩盖事实加载断言。
     ///
@@ -420,10 +381,7 @@ mod isolation_tests {
     /// 仅用于被忽略的 Mongo 夹具，不得作为生产缺范围兜底。
     fn company_scope() -> PurchaseReadScope {
         PurchaseReadScope {
-            roles: vec![PurchaseScopeClause {
-                company: true,
-                ..Default::default()
-            }],
+            roles: vec![PurchaseScopeClause { company: true, ..Default::default() }],
             ..Default::default()
         }
     }
@@ -462,9 +420,7 @@ mod isolation_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn empty_page_returns_empty_facts() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_po_list_empty")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_po_list_empty").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
             let (page, facts) = load_purchase_order_list_page(
                 fixture.db(),
@@ -501,9 +457,7 @@ mod isolation_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn loads_current_pointers_and_excludes_historical_submission() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_po_list_pointers")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_po_list_pointers").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
             let mut order = PurchaseOrder::new(
                 PurchaseOrderId::new("po-1"),
@@ -526,12 +480,7 @@ mod isolation_tests {
             .expect("采购单构造失败");
             order.current_submission_id = Some("sub-current".to_string());
             order.stable.status = PurchaseOrderStatus::Draft;
-            fixture
-                .db()
-                .purchase_orders()
-                .create(&order, &mut NoTransaction)
-                .await
-                .expect("采购单写入失败");
+            fixture.db().purchase_orders().create(&order, &mut NoTransaction).await.expect("采购单写入失败");
             let current = PurchaseOrderSubmission::new(
                 erp_core::ids::PurchaseOrderSubmissionId::new("sub-current"),
                 PurchaseOrderSubmissionData {
@@ -602,10 +551,7 @@ mod isolation_tests {
             .expect("事实加载失败");
             assert_eq!(page.total, 1);
             assert!(facts.submissions.contains_key("sub-current"));
-            assert!(
-                !facts.submissions.contains_key("sub-history"),
-                "历史提交不得进入列表事实"
-            );
+            assert!(!facts.submissions.contains_key("sub-history"), "历史提交不得进入列表事实");
         });
     }
 

@@ -1,14 +1,12 @@
 //! `workflow_action`：提交、审批、驳回、确认、完成等追加式动作（数据模型 §6.1）。
 
+use bpm::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{BusinessDocumentId, WorkflowActionId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
-
-use bpm::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
+use serde::{Deserialize, Serialize};
 
 /// 状态代码最大长度。
 const STATUS_CODE_MAX_LEN: usize = 64;
@@ -152,10 +150,7 @@ impl WorkflowActionType {
 
     /// 判断动作是否必须携带审批定义绑定变更事实。
     pub fn requires_approval_binding_context(self) -> bool {
-        matches!(
-            self,
-            Self::ApprovalDefinitionBound | Self::ApprovalDefinitionUpgraded
-        )
+        matches!(self, Self::ApprovalDefinitionBound | Self::ApprovalDefinitionUpgraded)
     }
 }
 
@@ -298,12 +293,8 @@ impl WorkflowAction {
         let to_status = normalize_status_code(data.to_status, "迁移后状态")?;
         let actor_id =
             normalize_required_text(data.actor_id, "操作者不能为空", ACTOR_ID_MAX_LEN, "操作者过长")?;
-        let actor_role = normalize_required_text(
-            data.actor_role,
-            "责任角色不能为空",
-            ACTOR_ROLE_MAX_LEN,
-            "责任角色过长",
-        )?;
+        let actor_role =
+            normalize_required_text(data.actor_role, "责任角色不能为空", ACTOR_ROLE_MAX_LEN, "责任角色过长")?;
         let comment = normalize_optional_text(data.comment, "意见", COMMENT_MAX_LEN)?;
         let (approval_context, approval_binding_context) =
             validate_approval_contexts(data.action_type, approval_context, approval_binding_context)?;
@@ -330,10 +321,7 @@ fn validate_approval_contexts(
     action_type: WorkflowActionType,
     approval_context: Option<ApprovalActionContext>,
     approval_binding_context: Option<ApprovalBindingActionContext>,
-) -> Result<(
-    Option<ApprovalActionContext>,
-    Option<ApprovalBindingActionContext>,
-)> {
+) -> Result<(Option<ApprovalActionContext>, Option<ApprovalBindingActionContext>)> {
     if action_type.requires_approval_runtime_context() {
         if approval_binding_context.is_some() {
             return Err(Error::from("审批运行动作不得携带定义绑定上下文"));
@@ -386,24 +374,20 @@ fn normalize_status_code(value: String, label: &str) -> Result<String> {
         STATUS_CODE_MAX_LEN,
         &format!("{label}过长"),
     )?;
-    if !value
-        .chars()
-        .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_')
-    {
-        return Err(Error::from(format!(
-            "{label}必须是稳定状态代码（大写字母/数字/下划线）"
-        )));
+    if !value.chars().all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_') {
+        return Err(Error::from(format!("{label}必须是稳定状态代码（大写字母/数字/下划线）")));
     }
     Ok(value)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        normalize_status_code, ApprovalBindingActionContext, WorkflowAction, WorkflowActionData,
-        WorkflowActionType,
-    };
     use erp_core::ids::{BusinessDocumentId, WorkflowActionId};
+
+    use super::{
+        ApprovalBindingActionContext, WorkflowAction, WorkflowActionData, WorkflowActionType,
+        normalize_status_code,
+    };
 
     fn data() -> WorkflowActionData {
         WorkflowActionData {
@@ -431,20 +415,14 @@ mod tests {
     /// 失败路径：状态代码为空被拒。
     #[test]
     fn new_rejects_empty_status_code() {
-        let payload = WorkflowActionData {
-            from_status: "  ".to_string(),
-            ..data()
-        };
+        let payload = WorkflowActionData { from_status: "  ".to_string(), ..data() };
         assert!(WorkflowAction::new(WorkflowActionId::new("wa-1"), payload).is_err());
     }
 
     /// 失败路径：状态代码含非法字符（非大写代码形态）被拒。
     #[test]
     fn new_rejects_invalid_status_code_shape() {
-        let payload = WorkflowActionData {
-            from_status: "effective".to_string(),
-            ..data()
-        };
+        let payload = WorkflowActionData { from_status: "effective".to_string(), ..data() };
         assert!(WorkflowAction::new(WorkflowActionId::new("wa-1"), payload).is_err());
         assert!(normalize_status_code("PENDING_REVIEW".to_string(), "状态").is_ok());
     }
@@ -452,20 +430,14 @@ mod tests {
     /// 失败路径：超长状态代码被拒。
     #[test]
     fn new_rejects_overlong_status_code() {
-        let payload = WorkflowActionData {
-            to_status: "S".repeat(65),
-            ..data()
-        };
+        let payload = WorkflowActionData { to_status: "S".repeat(65), ..data() };
         assert!(WorkflowAction::new(WorkflowActionId::new("wa-1"), payload).is_err());
     }
 
     /// 枚举序列化与标签稳定。
     #[test]
     fn action_type_codes_and_labels_are_stable() {
-        assert_eq!(
-            serde_json::to_string(&WorkflowActionType::Void).unwrap(),
-            "\"void\""
-        );
+        assert_eq!(serde_json::to_string(&WorkflowActionType::Void).unwrap(), "\"void\"");
         assert_eq!(WorkflowActionType::Submit.as_str(), "submit");
         assert_eq!(WorkflowActionType::Reject.label(), "驳回");
         assert_eq!(WorkflowActionType::Confirm.label(), "确认");
@@ -478,18 +450,12 @@ mod tests {
     /// 审批动作必须带结构化上下文，身份不得只写在意见里。
     #[test]
     fn approval_action_requires_structured_context() {
-        let missing = WorkflowActionData {
-            action_type: WorkflowActionType::ApprovalStarted,
-            ..data()
-        };
+        let missing = WorkflowActionData { action_type: WorkflowActionType::ApprovalStarted, ..data() };
         assert!(WorkflowAction::new(WorkflowActionId::new("wa-2"), missing).is_err());
 
         let action = WorkflowAction::new_with_approval_context(
             WorkflowActionId::new("wa-3"),
-            WorkflowActionData {
-                action_type: WorkflowActionType::ApprovalNodeRejected,
-                ..data()
-            },
+            WorkflowActionData { action_type: WorkflowActionType::ApprovalNodeRejected, ..data() },
             super::ApprovalActionContext {
                 approval_process_instance_id: bpm::ApprovalProcessInstanceId::new("inst-1"),
                 current_round_no: 2,
@@ -519,27 +485,19 @@ mod tests {
         )
         .unwrap();
         assert!(upgrade.approval_context.is_none());
-        assert_eq!(
-            upgrade
-                .approval_binding_context
-                .as_ref()
-                .unwrap()
-                .business_object_version,
-            7
+        assert_eq!(upgrade.approval_binding_context.as_ref().unwrap().business_object_version, 7);
+        assert!(
+            WorkflowAction::new_with_approval_context(
+                WorkflowActionId::new("wa-5"),
+                WorkflowActionData { action_type: WorkflowActionType::ApprovalDefinitionUpgraded, ..data() },
+                super::ApprovalActionContext {
+                    approval_process_instance_id: bpm::ApprovalProcessInstanceId::new("inst-1"),
+                    current_round_no: 1,
+                    approval_node_execution_id: bpm::ApprovalNodeExecutionId::new("exec-1"),
+                },
+            )
+            .is_err()
         );
-        assert!(WorkflowAction::new_with_approval_context(
-            WorkflowActionId::new("wa-5"),
-            WorkflowActionData {
-                action_type: WorkflowActionType::ApprovalDefinitionUpgraded,
-                ..data()
-            },
-            super::ApprovalActionContext {
-                approval_process_instance_id: bpm::ApprovalProcessInstanceId::new("inst-1"),
-                current_round_no: 1,
-                approval_node_execution_id: bpm::ApprovalNodeExecutionId::new("exec-1"),
-            },
-        )
-        .is_err());
     }
 
     /// BSON 往返。

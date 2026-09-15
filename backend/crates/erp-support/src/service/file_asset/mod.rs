@@ -12,24 +12,23 @@
 
 use std::sync::Arc;
 
-use crate::dto::file_asset::{self as dto};
-use crate::entity::file_asset::{AttachmentUsage, DocumentAttachment, FileAsset};
-use crate::ports::{BusinessDocumentPort, SupportAuditPort};
-use crate::repository::FileAssetExt;
+use application_core::AuditActor;
 use erp_core::ids::{BusinessDocumentId, DocumentAttachmentId, FileAssetId};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::error::{Error, Result};
-use application_core::AuditActor;
-
+use crate::dto::file_asset::{self as dto};
 pub use crate::dto::file_asset::{
     AttachToDocumentRequest, DestroyFileAssetRequest, DocumentAttachmentView, FileAssetListItemView,
     FileAssetListParams, FileAssetView, MarkScanResultRequest, PageView, PendingFileAssetRequest,
     RegisterFileAssetRequest,
 };
+use crate::entity::file_asset::{AttachmentUsage, DocumentAttachment, FileAsset};
+use crate::error::{Error, Result};
+use crate::ports::{BusinessDocumentPort, SupportAuditPort};
+use crate::repository::FileAssetExt;
 
 /// 文件资产列表筛选条件类型（经 `FileAssetExt` 关联类型跨 crate 可达）。
 type FileAssetFilter = <mongodb::Database as FileAssetExt>::FileAssetFilter;
@@ -90,11 +89,7 @@ impl FileAssetService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, dto::SortDir::Asc),
         };
-        let page = self
-            .db
-            .file_assets()
-            .search_file_assets(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.file_assets().search_file_assets(&filter, &mut NoTransaction).await?;
         // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结，无法命名），
         // 此处按字段映射为响应视图，避免把仓储类型泄漏到接口层。
         let items = page
@@ -114,12 +109,7 @@ impl FileAssetService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 查询文件资产详情。
@@ -154,8 +144,7 @@ impl FileAssetService {
     pub async fn file_asset_preview(&self, id: &str, actor: &AuditActor) -> Result<FileAssetView> {
         let view = self.file_asset_detail(id).await?;
         let audit =
-            self.audit
-                .resource_log(actor.clone(), "file_asset.preview", "file_asset", id.to_string())?;
+            self.audit.resource_log(actor.clone(), "file_asset.preview", "file_asset", id.to_string())?;
         self.audit.persist(&audit, &mut NoTransaction).await?;
         Ok(view)
     }
@@ -206,8 +195,7 @@ impl FileAssetService {
         usage: AttachmentUsage,
         actor: &AuditActor,
     ) -> Result<FileAssetView> {
-        self.register_file_asset_command(req, Some((document_id, usage)), actor)
-            .await
+        self.register_file_asset_command(req, Some((document_id, usage)), actor).await
     }
 
     /// 执行文件资产登记命令，并按需在同一事务内追加附件关联。
@@ -245,7 +233,7 @@ impl FileAssetService {
                     attachment.base.id.clone(),
                 )?;
                 (Some(attachment), Some(audit))
-            }
+            },
             None => (None, None),
         };
         let db = self.db.clone();
@@ -311,9 +299,7 @@ impl FileAssetService {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    db.document_attachments()
-                        .create(&attachment_for_tx, session)
-                        .await?;
+                    db.document_attachments().create(&attachment_for_tx, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<(), crate::error::Error>(())
                 })
@@ -337,11 +323,7 @@ impl FileAssetService {
         &self,
         document_id: &BusinessDocumentId,
     ) -> Result<Vec<DocumentAttachmentView>> {
-        let items = self
-            .db
-            .document_attachments()
-            .list_by_document(document_id, &mut NoTransaction)
-            .await?;
+        let items = self.db.document_attachments().list_by_document(document_id, &mut NoTransaction).await?;
         Ok(items.into_iter().map(Into::into).collect())
     }
 
@@ -419,9 +401,7 @@ impl FileAssetService {
             .await?
             .ok_or_else(|| Error::NotFound("文件资产不存在".to_string()))?;
         if asset.base.version != expected_version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         Ok(asset)
     }
@@ -447,9 +427,7 @@ impl FileAssetService {
         action: &str,
         actor: &AuditActor,
     ) -> Result<FileAssetView> {
-        let audit = self
-            .audit
-            .resource_log(actor.clone(), action, "file_asset", asset.base.id.clone())?;
+        let audit = self.audit.resource_log(actor.clone(), action, "file_asset", asset.base.id.clone())?;
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
@@ -477,20 +455,19 @@ impl FileAssetService {
     /// # 错误
     /// 单据未注册时返回 `NotFound`。
     async fn ensure_business_document_registered(&self, document_id: &BusinessDocumentId) -> Result<()> {
-        self.documents
-            .ensure_registered(document_id.as_ref(), &mut NoTransaction)
-            .await
+        self.documents.ensure_registered(document_id.as_ref(), &mut NoTransaction).await
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::file_asset::{
-        content_fingerprint, ContentHmac, FileAsset, FileAssetData, RetentionClass, SecurityScanStatus,
-        SensitivityClass,
-    };
     use erp_core::common::time::Instant;
     use erp_core::ids::FileAssetId;
+
+    use crate::entity::file_asset::{
+        ContentHmac, FileAsset, FileAssetData, RetentionClass, SecurityScanStatus, SensitivityClass,
+        content_fingerprint,
+    };
 
     fn asset() -> FileAsset {
         FileAsset::new(
@@ -522,9 +499,6 @@ mod tests {
 
         first.destroy(Instant::from_unix_secs(1)).unwrap();
         assert!(first.destroy(Instant::from_unix_secs(2)).is_err());
-        assert_eq!(
-            first.destroy(Instant::from_unix_secs(2)).unwrap_err().to_string(),
-            "文件资产已销毁"
-        );
+        assert_eq!(first.destroy(Instant::from_unix_secs(2)).unwrap_err().to_string(), "文件资产已销毁");
     }
 }

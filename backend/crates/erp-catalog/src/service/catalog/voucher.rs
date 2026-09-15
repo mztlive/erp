@@ -1,3 +1,15 @@
+use application_core::AuditActor;
+use erp_core::common::time::BusinessDate;
+use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
+use validator::Validate;
+
+use super::CatalogService;
+use super::sku_edit::{NewSkuContext, SkuEditItem};
+use crate::dto::{
+    CreateVoucherCategoryRequest, NewVoucherCategoryInput, PageView, SortDir, UpdateVoucherCategoryRequest,
+    VoucherCategoryProfileListParams, VoucherCategoryProfileView, VoucherSkuInput,
+};
 use crate::entity::catalog::product::{Product, ProductData};
 use crate::entity::catalog::product_category::{ProductCategory, ProductCategoryData};
 use crate::entity::catalog::product_revision::{ProductRevision, ProductRevisionData};
@@ -5,23 +17,11 @@ use crate::entity::catalog::sku::Sku;
 use crate::entity::catalog::sku_revision::SkuRevision;
 use crate::entity::catalog::voucher_category_profile_revision::VoucherCategoryProfileRevision;
 use crate::entity::catalog::{
-    next_revision_no, EnableStatus, ProductCategoryId, ProductId, ProductKind, ProductRevisionId, SkuId,
-    SkuRevisionId, VoucherCategoryProfileRevisionId, VoucherCategorySelection,
-};
-use crate::repository::CatalogExt;
-use erp_core::common::time::BusinessDate;
-use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
-use validator::Validate;
-
-use super::sku_edit::{NewSkuContext, SkuEditItem};
-use super::CatalogService;
-use crate::dto::{
-    CreateVoucherCategoryRequest, NewVoucherCategoryInput, PageView, SortDir, UpdateVoucherCategoryRequest,
-    VoucherCategoryProfileListParams, VoucherCategoryProfileView, VoucherSkuInput,
+    EnableStatus, ProductCategoryId, ProductId, ProductKind, ProductRevisionId, SkuId, SkuRevisionId,
+    VoucherCategoryProfileRevisionId, VoucherCategorySelection, next_revision_no,
 };
 use crate::error::{Error, Result};
-use application_core::AuditActor;
+use crate::repository::CatalogExt;
 
 /// 卡券类目扩展修订仓储筛选条件类型。
 type VoucherCategoryProfileRevisionFilter =
@@ -95,11 +95,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .catalog()
-            .voucher_profile_page(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.catalog().voucher_profile_page(&filter, &mut NoTransaction).await?;
         Ok(PageView {
             items: page
                 .items
@@ -146,9 +142,7 @@ impl CatalogService {
         actor: &AuditActor,
     ) -> Result<VoucherCategoryProfileView> {
         req.validate()?;
-        let draft = self
-            .build_voucher_category_update_draft(sku_id, req, actor)
-            .await?;
+        let draft = self.build_voucher_category_update_draft(sku_id, req, actor).await?;
         let revision = self.write_voucher_category_update_draft(draft, actor).await?;
         self.voucher_profile_view(&revision).await
     }
@@ -192,11 +186,7 @@ impl CatalogService {
         &self,
         revision: &VoucherCategoryProfileRevision,
     ) -> Result<VoucherCategoryProfileView> {
-        let row = self
-            .db
-            .catalog()
-            .voucher_profile(revision, &mut NoTransaction)
-            .await?;
+        let row = self.db.catalog().voucher_profile(revision, &mut NoTransaction).await?;
         Ok(VoucherCategoryProfileView {
             id: row.id,
             sku_id: row.sku_id,
@@ -241,22 +231,20 @@ impl CatalogService {
             effective_from,
             effective_to,
         } = req;
-        let (category_id, new_category) = self
-            .resolve_voucher_category(category_id, new_category, actor)
-            .await?;
+        let (category_id, new_category) =
+            self.resolve_voucher_category(category_id, new_category, actor).await?;
         let brand_id = match brand_id {
             Some(brand_id) => {
                 self.load_brand(brand_id.as_ref()).await?;
                 brand_id
-            }
+            },
             None => self.ensure_voucher_default_brand(actor).await?,
         };
         let sku = match sku {
             Some(sku) => sku,
             None => VoucherSkuInput::default_for_unit(self.ensure_voucher_default_unit(actor).await?),
         };
-        self.ensure_brand_and_unit_ok(&brand_id, std::iter::once(&sku.base_unit_id))
-            .await?;
+        self.ensure_brand_and_unit_ok(&brand_id, std::iter::once(&sku.base_unit_id)).await?;
         self.assemble_voucher_category_draft(
             ResolvedVoucherCategoryInput {
                 voucher_no,
@@ -300,16 +288,13 @@ impl CatalogService {
             VoucherCategorySelection::Existing(category_id) => {
                 let category = self.load_category(category_id.as_ref()).await?;
                 if category.product_kind != ProductKind::Voucher {
-                    return Err(Error::BusinessLogicError(
-                        "所选分类不允许 VOUCHER 类型".to_string(),
-                    ));
+                    return Err(Error::BusinessLogicError("所选分类不允许 VOUCHER 类型".to_string()));
                 }
                 Ok((category_id, None))
-            }
+            },
             VoucherCategorySelection::New(input) => {
                 let category_id = ProductCategoryId::new(next_id());
-                self.ensure_parent_chain_ok(category_id.as_ref(), input.parent_category_id.as_ref())
-                    .await?;
+                self.ensure_parent_chain_ok(category_id.as_ref(), input.parent_category_id.as_ref()).await?;
                 let category = ProductCategory::new(
                     category_id.clone(),
                     ProductCategoryData {
@@ -322,10 +307,10 @@ impl CatalogService {
                     actor.id(),
                 )?;
                 Ok((category_id, Some(category)))
-            }
+            },
             VoucherCategorySelection::DefaultRoot => {
                 Ok((self.ensure_voucher_root_category(actor).await?, None))
-            }
+            },
         }
     }
 
@@ -406,13 +391,7 @@ impl CatalogService {
                 status: product_status,
             },
         )?;
-        Ok(VoucherCategoryDraft {
-            new_category,
-            product,
-            revision,
-            sku_item,
-            voucher_revision,
-        })
+        Ok(VoucherCategoryDraft { new_category, product, revision, sku_item, voucher_revision })
     }
 
     /// 在单个事务内写入卡券类目创建草稿。
@@ -437,13 +416,7 @@ impl CatalogService {
             "voucher_category_profile",
             draft.voucher_revision.base.id.clone(),
         )?;
-        let VoucherCategoryDraft {
-            new_category,
-            product,
-            revision,
-            sku_item,
-            voucher_revision,
-        } = draft;
+        let VoucherCategoryDraft { new_category, product, revision, sku_item, voucher_revision } = draft;
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
@@ -454,15 +427,11 @@ impl CatalogService {
                         db.product_categories().create(category, session).await?;
                     }
                     db.products().create(&product, session).await?;
-                    db.catalog()
-                        .create_product_revision_with_media(&revision, &[], session)
-                        .await?;
+                    db.catalog().create_product_revision_with_media(&revision, &[], session).await?;
                     db.catalog()
                         .create_sku_with_revision(&sku_item.sku, &sku_item.revision, &[], session)
                         .await?;
-                    db.voucher_category_profile_revisions()
-                        .create(&voucher_revision, session)
-                        .await?;
+                    db.voucher_category_profile_revisions().create(&voucher_revision, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<VoucherCategoryProfileRevision, crate::error::Error>(voucher_revision)
                 })
@@ -496,9 +465,7 @@ impl CatalogService {
             .ok_or_else(|| Error::NotFound("卡券类目 SKU 不存在".to_string()))?;
         let mut product = self.load_product(sku.product_id.as_ref()).await?;
         if product.product_kind != ProductKind::Voucher {
-            return Err(Error::BusinessLogicError(
-                "目标 SKU 不属于卡券类目商品".to_string(),
-            ));
+            return Err(Error::BusinessLogicError("目标 SKU 不属于卡券类目商品".to_string()));
         }
         ensure_product_version(&product, req.version)?;
         let current_product_revision = self
@@ -523,8 +490,7 @@ impl CatalogService {
         let effective_from = req.effective_from.unwrap_or_else(BusinessDate::today);
         let mut product_revision = current_product_revision.content_successor(
             ProductRevisionId::new(next_id()),
-            self.next_product_revision_no(&ProductId::new(product.base.id.clone()))
-                .await?,
+            self.next_product_revision_no(&ProductId::new(product.base.id.clone())).await?,
             req.name.clone(),
             Some(req.description.clone()),
             effective_from,
@@ -548,11 +514,8 @@ impl CatalogService {
         }
         // attach_revision 统一同步稳定状态，并执行停用即下架的 SKU 约束。
         sku.attach_revision(&sku_revision, actor.id())?;
-        let latest_voucher_revision_no = self
-            .db
-            .catalog()
-            .latest_voucher_profile_revision_no(&sku_id, &mut NoTransaction)
-            .await?;
+        let latest_voucher_revision_no =
+            self.db.catalog().latest_voucher_profile_revision_no(&sku_id, &mut NoTransaction).await?;
         let mut voucher_revision = current_voucher_revision.content_successor(
             VoucherCategoryProfileRevisionId::new(next_id()),
             next_revision_no(latest_voucher_revision_no)?,
@@ -561,13 +524,7 @@ impl CatalogService {
         if let Some(status) = req.status {
             voucher_revision.status = status;
         }
-        Ok(VoucherCategoryUpdateDraft {
-            product,
-            product_revision,
-            sku,
-            sku_revision,
-            voucher_revision,
-        })
+        Ok(VoucherCategoryUpdateDraft { product, product_revision, sku, sku_revision, voucher_revision })
     }
 
     /// 在事务内写入卡券类目更新草稿。
@@ -606,14 +563,10 @@ impl CatalogService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     db.products().update(&mut product, session).await?;
-                    db.catalog()
-                        .create_product_revision_with_media(&product_revision, &[], session)
-                        .await?;
+                    db.catalog().create_product_revision_with_media(&product_revision, &[], session).await?;
                     db.skus().update(&mut sku, session).await?;
                     db.sku_revisions().create(&sku_revision, session).await?;
-                    db.voucher_category_profile_revisions()
-                        .create(&voucher_revision, session)
-                        .await?;
+                    db.voucher_category_profile_revisions().create(&voucher_revision, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<VoucherCategoryProfileRevision, crate::error::Error>(voucher_revision)
                 })
@@ -635,9 +588,7 @@ impl CatalogService {
 /// 版本不一致时返回稳定的 409 冲突错误。
 fn ensure_product_version(product: &Product, expected: u64) -> Result<()> {
     if !product.has_version(expected) {
-        return Err(Error::ConflictError(
-            "数据已被其他请求修改，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
     }
     Ok(())
 }

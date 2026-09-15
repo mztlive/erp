@@ -7,9 +7,8 @@ mod revalidate;
 mod types;
 mod upgrade;
 
-use crate::error::{Error, ErrorCode, Result};
-
 use super::policy::ApprovalRequirement;
+use crate::error::{Error, ErrorCode, Result};
 
 /// 绑定审计动作。
 pub const DEFINITION_BOUND_AUDIT_ACTION: &str = "approval.definition.bound";

@@ -1,7 +1,8 @@
 //! 命令的原版本解析与稳定身份；无审计或工作项依赖。
-use crate::{Error, Result};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+
+use crate::{Error, Result};
 pub fn parse_positive_version(value: &str, field: &str) -> Result<u64> {
     let version = value
         .trim()

@@ -8,30 +8,22 @@
 
 use erp_core::ids::{SalesChangeOrderId, SalesOrderId};
 use erp_customer::CustomerExt;
-use erp_finance::repository::PayableExt;
-use erp_finance::repository::ReceivableExt;
+use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_inventory::InventoryExt;
+use erp_procurement::entity::purchase_order::{PurchaseChangeOrderStatus, PurchaseOrderStatus};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_returns::repository::ReturnsExt;
+use erp_sales::entity::sales_order::{BusinessType, CommercialStatus, ReviewStatus};
 use erp_sales::entity::sales_review::SalesChangeOrderStatus;
-use erp_sales::repository::SalesOrderExt;
-use erp_sales::repository::SalesReviewExt;
+use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
 use erp_supplier::SupplierExt;
 use erp_workflow::entity::document_registry::DocumentType;
-use mongodb::Database;
-use persistence_core::Executor;
-use {
-    erp_procurement::entity::purchase_order::PurchaseChangeOrderStatus,
-    erp_procurement::entity::purchase_order::PurchaseOrderStatus,
-};
-use {
-    erp_sales::entity::sales_order::BusinessType, erp_sales::entity::sales_order::CommercialStatus,
-    erp_sales::entity::sales_order::ReviewStatus,
-};
-
-use crate::{Error, Result};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::policy::require_process_required;
+use mongodb::Database;
+use persistence_core::Executor;
+
+use crate::{Error, Result};
 
 /// 审批绑定升级使用的强业务对象事实。
 ///
@@ -81,14 +73,14 @@ impl ApprovalUpgradeSubjectFacts {
         match document_type {
             DocumentType::SalesOrder | DocumentType::VoucherSalesOrder => {
                 load_sales_order(db, document_type, document_id, executor).await
-            }
+            },
             DocumentType::SalesChangeOrder => load_sales_change(db, document_id, executor).await,
             DocumentType::PurchaseOrder => load_purchase_order(db, document_id, executor).await,
             DocumentType::PurchaseChangeOrder => load_purchase_change(db, document_id, executor).await,
             DocumentType::StockAdjustment => load_stock_adjustment(db, document_id, executor).await,
-            DocumentType::SalesInvoiceRequest => Err(Error::ConflictError(
-                "开票申请创建即提交，不支持升级已提交申请的审批绑定".into(),
-            )),
+            DocumentType::SalesInvoiceRequest => {
+                Err(Error::ConflictError("开票申请创建即提交，不支持升级已提交申请的审批绑定".into()))
+            },
             DocumentType::CustomerReceipt => load_customer_receipt(db, document_id, executor).await,
             DocumentType::CustomerRefund => load_customer_refund(db, document_id, executor).await,
             DocumentType::SupplierRefund => load_supplier_refund(db, document_id, executor).await,
@@ -102,9 +94,9 @@ impl ApprovalUpgradeSubjectFacts {
             | DocumentType::CustomerAcceptance
             | DocumentType::Invoice
             | DocumentType::SalesReturnCase
-            | DocumentType::PurchaseReturnOrder => Err(Error::Internal(
-                "NO_APPROVAL 类型通过了审批绑定升级政策门禁".to_string(),
-            )),
+            | DocumentType::PurchaseReturnOrder => {
+                Err(Error::Internal("NO_APPROVAL 类型通过了审批绑定升级政策门禁".to_string()))
+            },
         }
     }
 
@@ -129,9 +121,7 @@ impl ApprovalUpgradeSubjectFacts {
     /// 版本不一致时返回冲突，调用方不得继续升级注册投影。
     pub fn ensure_expected_business_object_version(&self, expected: u64) -> Result<()> {
         if self.business_object_version != expected {
-            return Err(Error::ConflictError(
-                "强业务对象版本已变化，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("强业务对象版本已变化，请刷新后重试".to_string()));
         }
         Ok(())
     }
@@ -183,14 +173,14 @@ pub async fn ensure_initial_unsubmitted_approval_upgrade_subject(
     match facts.document_type {
         DocumentType::SalesOrder | DocumentType::VoucherSalesOrder => {
             ensure_fresh_sales_order(db, facts, executor).await
-        }
+        },
         DocumentType::SalesChangeOrder => ensure_fresh_sales_change(db, facts, executor).await,
         DocumentType::PurchaseOrder => ensure_fresh_purchase_order(db, facts, executor).await,
         DocumentType::PurchaseChangeOrder => ensure_fresh_purchase_change(db, facts, executor).await,
         DocumentType::StockAdjustment => ensure_fresh_stock_adjustment(db, facts, executor).await,
-        DocumentType::SalesInvoiceRequest => Err(Error::ConflictError(
-            "开票申请创建即提交，不支持升级已提交申请的审批绑定".into(),
-        )),
+        DocumentType::SalesInvoiceRequest => {
+            Err(Error::ConflictError("开票申请创建即提交，不支持升级已提交申请的审批绑定".into()))
+        },
         DocumentType::CustomerReceipt => ensure_fresh_customer_receipt(db, facts, executor).await,
         DocumentType::CustomerRefund => ensure_fresh_customer_refund(db, facts, executor).await,
         DocumentType::SupplierRefund => ensure_fresh_supplier_refund(db, facts, executor).await,
@@ -204,9 +194,9 @@ pub async fn ensure_initial_unsubmitted_approval_upgrade_subject(
         | DocumentType::CustomerAcceptance
         | DocumentType::Invoice
         | DocumentType::SalesReturnCase
-        | DocumentType::PurchaseReturnOrder => Err(Error::Internal(
-            "NO_APPROVAL 类型进入了审批绑定升级 Fresh 门禁".to_string(),
-        )),
+        | DocumentType::PurchaseReturnOrder => {
+            Err(Error::Internal("NO_APPROVAL 类型进入了审批绑定升级 Fresh 门禁".to_string()))
+        },
     }
 }
 
@@ -554,9 +544,7 @@ async fn ensure_fresh_stock_adjustment(
         .await?
         .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
     ensure_fresh_subject_identity(facts, &adjustment.base.id, adjustment.base.version)?;
-    adjustment
-        .ensure_initial_approval_state()
-        .map_err(|_| already_submitted(DocumentType::StockAdjustment))
+    adjustment.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::StockAdjustment))
 }
 
 async fn ensure_fresh_customer_receipt(
@@ -570,9 +558,7 @@ async fn ensure_fresh_customer_receipt(
         .await?
         .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
     ensure_fresh_subject_identity(facts, &receipt.base.id, receipt.base.version)?;
-    receipt
-        .ensure_initial_approval_state()
-        .map_err(|_| already_submitted(DocumentType::CustomerReceipt))
+    receipt.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::CustomerReceipt))
 }
 
 async fn ensure_fresh_customer_refund(
@@ -586,9 +572,7 @@ async fn ensure_fresh_customer_refund(
         .await?
         .ok_or_else(|| Error::NotFound("客户退款单不存在".to_string()))?;
     ensure_fresh_subject_identity(facts, &refund.base.id, refund.base.version)?;
-    refund
-        .ensure_initial_approval_state()
-        .map_err(|_| already_submitted(DocumentType::CustomerRefund))
+    refund.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::CustomerRefund))
 }
 
 async fn ensure_fresh_supplier_refund(
@@ -602,9 +586,7 @@ async fn ensure_fresh_supplier_refund(
         .await?
         .ok_or_else(|| Error::NotFound("供应商退款单不存在".to_string()))?;
     ensure_fresh_subject_identity(facts, &refund.base.id, refund.base.version)?;
-    refund
-        .ensure_initial_approval_state()
-        .map_err(|_| already_submitted(DocumentType::SupplierRefund))
+    refund.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::SupplierRefund))
 }
 
 async fn ensure_fresh_receipt_reversal(
@@ -618,9 +600,7 @@ async fn ensure_fresh_receipt_reversal(
         .await?
         .ok_or_else(|| Error::NotFound("回款冲正单不存在".to_string()))?;
     ensure_fresh_subject_identity(facts, &reversal.base.id, reversal.base.version)?;
-    reversal
-        .ensure_initial_approval_state()
-        .map_err(|_| already_submitted(DocumentType::ReceiptReversal))
+    reversal.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::ReceiptReversal))
 }
 
 async fn ensure_fresh_payment_reversal(
@@ -634,9 +614,7 @@ async fn ensure_fresh_payment_reversal(
         .await?
         .ok_or_else(|| Error::NotFound("付款冲正单不存在".to_string()))?;
     ensure_fresh_subject_identity(facts, &reversal.base.id, reversal.base.version)?;
-    reversal
-        .ensure_initial_approval_state()
-        .map_err(|_| already_submitted(DocumentType::PaymentReversal))
+    reversal.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::PaymentReversal))
 }
 
 fn ensure_fresh_subject_identity(
@@ -648,9 +626,7 @@ fn ensure_fresh_subject_identity(
         return Err(Error::Internal("Fresh 强业务对象主键不一致".to_string()));
     }
     if facts.business_object_version != actual_version {
-        return Err(Error::ConflictError(
-            "强业务对象版本已变化，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("强业务对象版本已变化，请刷新后重试".to_string()));
     }
     Ok(())
 }
@@ -685,10 +661,7 @@ fn ensure_known_sales_business_type(actual: BusinessType) -> Result<()> {
 
 fn ensure_goods_service_source(actual: BusinessType, target: DocumentType) -> Result<()> {
     if actual != BusinessType::GoodsService {
-        return Err(Error::ValidationError(format!(
-            "{} 的来源销售单必须是实物及服务销售单",
-            target.label()
-        )));
+        return Err(Error::ValidationError(format!("{} 的来源销售单必须是实物及服务销售单", target.label())));
     }
     Ok(())
 }
@@ -781,10 +754,7 @@ fn ensure_exact_nonempty_fact(value: &str, message: &str) -> Result<()> {
 }
 
 fn already_submitted(document_type: DocumentType) -> Error {
-    Error::ConflictError(format!(
-        "{}不是从未提交审批的初始草稿，不能升级绑定",
-        document_type.label()
-    ))
+    Error::ConflictError(format!("{}不是从未提交审批的初始草稿，不能升级绑定", document_type.label()))
 }
 
 /// Process-owned upgrade-subject adapter over remaining domain aggregates.
@@ -901,9 +871,7 @@ mod tests {
                 creator_id: "creator-1".to_string(),
             }
         );
-        facts
-            .ensure_expected_business_object_version(7)
-            .expect("强对象版本一致");
+        facts.ensure_expected_business_object_version(7).expect("强对象版本一致");
         assert!(facts.ensure_expected_business_object_version(8).is_err());
     }
 

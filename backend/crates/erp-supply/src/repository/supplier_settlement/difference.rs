@@ -1,3 +1,12 @@
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::Instant;
+use erp_core::ids::SupplierSettlementItemId;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use serde::{Deserialize, Serialize};
+
+use super::projection::{difference_sort_doc, supplier_settlement_difference_projection};
 use crate::entity::supplier_settlement::{
     SettlementDifferenceStatus, SettlementDifferenceType, SupplierSettlementDifference,
     SupplierSettlementDifferenceEvidence,
@@ -5,17 +14,6 @@ use crate::entity::supplier_settlement::{
 use crate::repository::owned::{
     SupplierSettlementDifferenceEvidenceRepository, SupplierSettlementDifferenceRepository,
 };
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::common::time::Instant;
-use erp_core::ids::SupplierSettlementItemId;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use serde::{Deserialize, Serialize};
-
-use super::projection::{difference_sort_doc, supplier_settlement_difference_projection};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 供应商结算差异列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -166,23 +164,15 @@ impl<'a> SupplierSettlementDifferenceRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SupplierSettlementDifferenceRow>> {
         let options = FindOptions::builder()
-            .sort(difference_sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-            ))
+            .sort(difference_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(supplier_settlement_difference_projection())
             .build();
-        let collection = self
-            .collection()
-            .clone_with_type::<SupplierSettlementDifferenceRow>();
+        let collection = self.collection().clone_with_type::<SupplierSettlementDifferenceRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }

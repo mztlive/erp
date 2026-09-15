@@ -1,8 +1,9 @@
-use super::{command_identity, next_allowed_actions};
 use erp_integration::dto::{
     IntegrationActionOutcome, IntegrationItemType, IntegrationNonTerminalTaskAction,
     IntegrationTaskActionCommand, IntegrationTaskActionKind,
 };
+
+use super::{command_identity, next_allowed_actions};
 
 fn command(key: &str, kind: IntegrationTaskActionKind) -> IntegrationTaskActionCommand {
     IntegrationTaskActionCommand {
@@ -42,10 +43,8 @@ fn receipt_never_contains_raw_idempotency_key() {
 
 #[test]
 fn terminal_evidence_allows_explicit_resolve_without_completing_action() {
-    let actions = next_allowed_actions(
-        IntegrationItemType::ErrorTask,
-        IntegrationActionOutcome::TerminalEvidenceFound,
-    );
+    let actions =
+        next_allowed_actions(IntegrationItemType::ErrorTask, IntegrationActionOutcome::TerminalEvidenceFound);
     assert!(actions.iter().any(|action| action == "RESOLVE"));
 
     let actions = next_allowed_actions(
@@ -57,10 +56,8 @@ fn terminal_evidence_allows_explicit_resolve_without_completing_action() {
 
 #[test]
 fn confirmed_no_result_allows_replay_only_for_error_task() {
-    let actions = next_allowed_actions(
-        IntegrationItemType::ErrorTask,
-        IntegrationActionOutcome::NoResultConfirmed,
-    );
+    let actions =
+        next_allowed_actions(IntegrationItemType::ErrorTask, IntegrationActionOutcome::NoResultConfirmed);
     assert!(actions.iter().any(|action| action == "REPLAY_ORIGINAL"));
 
     let actions = next_allowed_actions(

@@ -2,13 +2,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::Instant;
 use erp_core::ids::{CostEntryId, FileAssetId, SupplierAccountId};
 use erp_core::money::{Amount, Rate};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 来源事实类型最大长度。
 const FACT_TYPE_MAX_LEN: usize = 64;
@@ -454,9 +453,11 @@ fn validate_basis(scope: CostScope, basis: Option<CostBasis>) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use erp_core::money::Amount;
     use std::str::FromStr;
+
+    use erp_core::money::Amount;
+
+    use super::*;
 
     fn data() -> CostEntryData {
         CostEntryData {
@@ -493,28 +494,16 @@ mod tests {
 
     #[test]
     fn new_rejects_blank_overlong_and_negative_amounts() {
-        let blank = CostEntryData {
-            source_line_id: "   ".to_string(),
-            ..data()
-        };
+        let blank = CostEntryData { source_line_id: "   ".to_string(), ..data() };
         assert!(CostEntry::new(CostEntryId::new("ce-2"), blank).is_err());
 
-        let overlong = CostEntryData {
-            source_version: "x".repeat(65),
-            ..data()
-        };
+        let overlong = CostEntryData { source_version: "x".repeat(65), ..data() };
         assert!(CostEntry::new(CostEntryId::new("ce-3"), overlong).is_err());
 
-        let mismatch = CostEntryData {
-            net_amount: Amount::from_str("99.00").unwrap(),
-            ..data()
-        };
+        let mismatch = CostEntryData { net_amount: Amount::from_str("99.00").unwrap(), ..data() };
         assert!(CostEntry::new(CostEntryId::new("ce-4"), mismatch).is_err());
 
-        let negative_tax = CostEntryData {
-            input_tax_rate: Rate::from_str("-0.01").unwrap(),
-            ..data()
-        };
+        let negative_tax = CostEntryData { input_tax_rate: Rate::from_str("-0.01").unwrap(), ..data() };
         assert!(CostEntry::new(CostEntryId::new("ce-5"), negative_tax).is_err());
     }
 
@@ -525,20 +514,11 @@ mod tests {
             cost_basis: Some(CostBasis::None),
             ..data()
         };
-        assert!(
-            CostEntry::new(CostEntryId::new("ce-6"), none_basis).is_err(),
-            "NONE 不得形成成本事实"
-        );
+        assert!(CostEntry::new(CostEntryId::new("ce-6"), none_basis).is_err(), "NONE 不得形成成本事实");
 
-        let missing_basis = CostEntryData {
-            cost_scope: CostScope::MallConsumption,
-            cost_basis: None,
-            ..data()
-        };
-        assert!(
-            CostEntry::new(CostEntryId::new("ce-7"), missing_basis).is_err(),
-            "商城消费必填取值基础"
-        );
+        let missing_basis =
+            CostEntryData { cost_scope: CostScope::MallConsumption, cost_basis: None, ..data() };
+        assert!(CostEntry::new(CostEntryId::new("ce-7"), missing_basis).is_err(), "商城消费必填取值基础");
 
         let actual_basis = CostEntryData {
             cost_scope: CostScope::MallConsumption,
@@ -550,22 +530,13 @@ mod tests {
 
     #[test]
     fn phase1_profit_relevance_only_for_non_voucher_actual_reduction() {
-        let not_actual = CostEntryData {
-            cost_stage: CostStage::Confirmed,
-            ..data()
-        };
+        let not_actual = CostEntryData { cost_stage: CostStage::Confirmed, ..data() };
         let entry = CostEntry::new(CostEntryId::new("ce-9"), not_actual).unwrap();
         assert!(!entry.is_phase1_profit_relevant(), "CONFIRMED 不进入一期实际盈亏");
 
-        let card_scope = CostEntryData {
-            cost_scope: CostScope::CardDirectFulfillment,
-            ..data()
-        };
+        let card_scope = CostEntryData { cost_scope: CostScope::CardDirectFulfillment, ..data() };
         let entry = CostEntry::new(CostEntryId::new("ce-10"), card_scope).unwrap();
-        assert!(
-            !entry.is_phase1_profit_relevant(),
-            "卡券直接履约费用不进卡券实际盈亏"
-        );
+        assert!(!entry.is_phase1_profit_relevant(), "卡券直接履约费用不进卡券实际盈亏");
 
         assert!(CostStage::Actual.is_profit_relevant());
         assert!(CostStage::Reduction.is_profit_relevant());
@@ -580,22 +551,10 @@ mod tests {
 
     #[test]
     fn enums_serialize_with_stable_codes_and_labels() {
-        assert_eq!(
-            serde_json::to_string(&CostType::PlatformTech).unwrap(),
-            "\"platform_tech\""
-        );
-        assert_eq!(
-            serde_json::to_string(&CostStage::Reduction).unwrap(),
-            "\"reduction\""
-        );
-        assert_eq!(
-            serde_json::to_string(&CostScope::WechatCost).unwrap(),
-            "\"wechat_cost\""
-        );
-        assert_eq!(
-            serde_json::to_string(&CostBasis::Standard).unwrap(),
-            "\"standard\""
-        );
+        assert_eq!(serde_json::to_string(&CostType::PlatformTech).unwrap(), "\"platform_tech\"");
+        assert_eq!(serde_json::to_string(&CostStage::Reduction).unwrap(), "\"reduction\"");
+        assert_eq!(serde_json::to_string(&CostScope::WechatCost).unwrap(), "\"wechat_cost\"");
+        assert_eq!(serde_json::to_string(&CostBasis::Standard).unwrap(), "\"standard\"");
         assert_eq!(CostType::OfflineService.label(), "线下服务");
         assert_eq!(CostStage::Confirmed.label(), "确认");
         assert_eq!(CostScope::NonVoucherFulfillment.label(), "非卡券履约");

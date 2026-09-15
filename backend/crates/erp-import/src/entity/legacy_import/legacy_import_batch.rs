@@ -2,13 +2,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::FileAssetId;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::ConfirmationScope;
 
@@ -288,7 +287,7 @@ impl LegacyImportBatch {
             LegacyImportBatchStatus::PendingValidation => {
                 self.advance(LegacyImportBatchStatus::Validating)?;
                 self.advance(LegacyImportBatchStatus::PendingConfirmation)
-            }
+            },
             LegacyImportBatchStatus::Validating => self.advance(LegacyImportBatchStatus::PendingConfirmation),
             LegacyImportBatchStatus::PendingConfirmation => Ok(()),
             _ => Err(Error::from("批次已离开可确认阶段，禁止创建确认事实")),
@@ -324,10 +323,7 @@ impl LegacyImportBatch {
     /// # 返回
     /// 待应用或导入中状态返回 `true`。
     pub fn accepts_pending_cancellation(&self) -> bool {
-        matches!(
-            self.status,
-            LegacyImportBatchStatus::ReadyToApply | LegacyImportBatchStatus::Importing
-        )
+        matches!(self.status, LegacyImportBatchStatus::ReadyToApply | LegacyImportBatchStatus::Importing)
     }
 
     /// 判断批次是否允许重新准备失败项目。
@@ -335,10 +331,7 @@ impl LegacyImportBatch {
     /// # 返回
     /// 部分失败或失败状态返回 `true`。
     pub fn accepts_failed_retry(&self) -> bool {
-        matches!(
-            self.status,
-            LegacyImportBatchStatus::PartialFailed | LegacyImportBatchStatus::Failed
-        )
+        matches!(self.status, LegacyImportBatchStatus::PartialFailed | LegacyImportBatchStatus::Failed)
     }
 
     /// 根据待处理与失败行数派生应用后的批次状态。
@@ -475,9 +468,10 @@ impl LegacyImportBatch {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::state::ensure_transition;
     use erp_core::ids::{LegacyImportBatchId, SourceSystemId};
+
+    use super::*;
 
     fn batch_data() -> LegacyImportBatchData {
         LegacyImportBatchData {
@@ -511,16 +505,11 @@ mod tests {
 
     #[test]
     fn new_rejects_empty_and_overlong_required_fields() {
-        let empty_no = LegacyImportBatchData {
-            batch_no: "   ".to_string(),
-            ..batch_data()
-        };
+        let empty_no = LegacyImportBatchData { batch_no: "   ".to_string(), ..batch_data() };
         assert!(LegacyImportBatch::new(LegacyImportBatchId::new("b-2"), empty_no).is_err());
 
-        let overlong_set = LegacyImportBatchData {
-            source_object_set: "x".repeat(OBJECT_SET_MAX_LEN + 1),
-            ..batch_data()
-        };
+        let overlong_set =
+            LegacyImportBatchData { source_object_set: "x".repeat(OBJECT_SET_MAX_LEN + 1), ..batch_data() };
         assert!(LegacyImportBatch::new(LegacyImportBatchId::new("b-3"), overlong_set).is_err());
 
         let overlong_hmac = LegacyImportBatchData {
@@ -532,12 +521,8 @@ mod tests {
 
     #[test]
     fn new_rejects_inconsistent_counts() {
-        let bad_counts = LegacyImportBatchData {
-            total_rows: 10,
-            success_rows: 8,
-            failed_rows: 3,
-            ..batch_data()
-        };
+        let bad_counts =
+            LegacyImportBatchData { total_rows: 10, success_rows: 8, failed_rows: 3, ..batch_data() };
         assert!(LegacyImportBatch::new(LegacyImportBatchId::new("b-5"), bad_counts).is_err());
     }
 
@@ -548,10 +533,7 @@ mod tests {
         batch.update_counts(50, 40, 10).unwrap();
         assert_eq!(batch.total_rows, 50);
 
-        assert!(
-            batch.update_counts(10, 8, 3).is_err(),
-            "success + failed 不能超过 total"
-        );
+        assert!(batch.update_counts(10, 8, 3).is_err(), "success + failed 不能超过 total");
     }
 
     #[test]
@@ -559,66 +541,58 @@ mod tests {
         let mut batch = LegacyImportBatch::new(LegacyImportBatchId::new("b-7"), batch_data()).unwrap();
 
         batch.advance(LegacyImportBatchStatus::Validating).unwrap();
-        batch
-            .advance(LegacyImportBatchStatus::PendingConfirmation)
-            .unwrap();
+        batch.advance(LegacyImportBatchStatus::PendingConfirmation).unwrap();
         batch.advance(LegacyImportBatchStatus::ReadyToApply).unwrap();
         batch.advance(LegacyImportBatchStatus::Importing).unwrap();
         batch.advance(LegacyImportBatchStatus::Completed).unwrap();
 
-        assert!(
-            batch.advance(LegacyImportBatchStatus::Failed).is_err(),
-            "完成态为终态"
-        );
+        assert!(batch.advance(LegacyImportBatchStatus::Failed).is_err(), "完成态为终态");
 
         let mut failed = LegacyImportBatch::new(LegacyImportBatchId::new("b-8"), batch_data()).unwrap();
         failed.advance(LegacyImportBatchStatus::Validating).unwrap();
         failed.advance(LegacyImportBatchStatus::Failed).unwrap();
-        assert!(failed
-            .advance(LegacyImportBatchStatus::PendingConfirmation)
-            .is_err());
+        assert!(failed.advance(LegacyImportBatchStatus::PendingConfirmation).is_err());
     }
 
     #[test]
     fn status_machine_directed_edges() {
-        assert!(ensure_transition(
-            LegacyImportBatchStatus::PendingValidation,
-            LegacyImportBatchStatus::Validating
-        )
-        .is_ok());
-        assert!(ensure_transition(
-            LegacyImportBatchStatus::Validating,
-            LegacyImportBatchStatus::Failed
-        )
-        .is_ok());
-        assert!(ensure_transition(
-            LegacyImportBatchStatus::Importing,
-            LegacyImportBatchStatus::PartialFailed
-        )
-        .is_ok());
-        assert!(ensure_transition(
-            LegacyImportBatchStatus::PendingConfirmation,
-            LegacyImportBatchStatus::ReadyToApply
-        )
-        .is_ok());
-        assert!(ensure_transition(
-            LegacyImportBatchStatus::PartialFailed,
-            LegacyImportBatchStatus::ReadyToApply
-        )
-        .is_ok());
         assert!(
             ensure_transition(
                 LegacyImportBatchStatus::PendingValidation,
-                LegacyImportBatchStatus::Completed
+                LegacyImportBatchStatus::Validating
             )
-            .is_err(),
+            .is_ok()
+        );
+        assert!(
+            ensure_transition(LegacyImportBatchStatus::Validating, LegacyImportBatchStatus::Failed).is_ok()
+        );
+        assert!(
+            ensure_transition(LegacyImportBatchStatus::Importing, LegacyImportBatchStatus::PartialFailed)
+                .is_ok()
+        );
+        assert!(
+            ensure_transition(
+                LegacyImportBatchStatus::PendingConfirmation,
+                LegacyImportBatchStatus::ReadyToApply
+            )
+            .is_ok()
+        );
+        assert!(
+            ensure_transition(LegacyImportBatchStatus::PartialFailed, LegacyImportBatchStatus::ReadyToApply)
+                .is_ok()
+        );
+        assert!(
+            ensure_transition(LegacyImportBatchStatus::PendingValidation, LegacyImportBatchStatus::Completed)
+                .is_err(),
             "禁止跳级"
         );
-        assert!(ensure_transition(
-            LegacyImportBatchStatus::PendingConfirmation,
-            LegacyImportBatchStatus::Importing
-        )
-        .is_err());
+        assert!(
+            ensure_transition(
+                LegacyImportBatchStatus::PendingConfirmation,
+                LegacyImportBatchStatus::Importing
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -632,10 +606,7 @@ mod tests {
         assert_eq!(batch.status, LegacyImportBatchStatus::PendingConfirmation);
         assert!(batch.accepts_confirmation_decision());
         assert!(!batch.is_ready_to_apply());
-        assert!(batch
-            .required_confirmation_scopes()
-            .unwrap()
-            .contains(&ConfirmationScope::Sales));
+        assert!(batch.required_confirmation_scopes().unwrap().contains(&ConfirmationScope::Sales));
         batch.advance(LegacyImportBatchStatus::ReadyToApply).unwrap();
         assert!(batch.is_ready_to_apply());
         assert!(batch.accepts_pending_cancellation());
@@ -643,48 +614,25 @@ mod tests {
         assert!(batch.accepts_pending_cancellation());
         batch.advance(LegacyImportBatchStatus::PartialFailed).unwrap();
         assert!(batch.accepts_failed_retry());
-        assert_eq!(
-            LegacyImportBatch::application_outcome(0, 0),
-            LegacyImportBatchStatus::Completed
-        );
-        assert_eq!(
-            LegacyImportBatch::application_outcome(0, 1),
-            LegacyImportBatchStatus::PartialFailed
-        );
-        assert_eq!(
-            LegacyImportBatch::application_outcome(1, 0),
-            LegacyImportBatchStatus::Importing
-        );
+        assert_eq!(LegacyImportBatch::application_outcome(0, 0), LegacyImportBatchStatus::Completed);
+        assert_eq!(LegacyImportBatch::application_outcome(0, 1), LegacyImportBatchStatus::PartialFailed);
+        assert_eq!(LegacyImportBatch::application_outcome(1, 0), LegacyImportBatchStatus::Importing);
     }
 
     #[test]
     fn asset_attachments_and_summaries() {
         let mut batch = LegacyImportBatch::new(LegacyImportBatchId::new("b-9"), batch_data()).unwrap();
 
-        batch
-            .attach_success_assets(FileAssetId::new("fa-ok"), FileAssetId::new("fa-manifest"))
-            .unwrap();
-        batch
-            .attach_failure_diagnostic_asset(FileAssetId::new("fa-fail"))
-            .unwrap();
-        assert_eq!(
-            batch.successful_sanitized_file_asset_id,
-            Some(FileAssetId::new("fa-ok"))
-        );
-        assert_eq!(
-            batch.failure_diagnostic_file_asset_id,
-            Some(FileAssetId::new("fa-fail"))
-        );
+        batch.attach_success_assets(FileAssetId::new("fa-ok"), FileAssetId::new("fa-manifest")).unwrap();
+        batch.attach_failure_diagnostic_asset(FileAssetId::new("fa-fail")).unwrap();
+        assert_eq!(batch.successful_sanitized_file_asset_id, Some(FileAssetId::new("fa-ok")));
+        assert_eq!(batch.failure_diagnostic_file_asset_id, Some(FileAssetId::new("fa-fail")));
 
-        batch
-            .update_summaries(Some(" CODE-1:3 ".to_string()), Some(" sales:2/3 ".to_string()))
-            .unwrap();
+        batch.update_summaries(Some(" CODE-1:3 ".to_string()), Some(" sales:2/3 ".to_string())).unwrap();
         assert_eq!(batch.failure_code_summary.as_deref(), Some("CODE-1:3"));
         assert_eq!(batch.confirmation_status_summary.as_deref(), Some("sales:2/3"));
 
-        assert!(batch
-            .update_summaries(Some("x".repeat(SUMMARY_MAX_LEN + 1)), None)
-            .is_err());
+        assert!(batch.update_summaries(Some("x".repeat(SUMMARY_MAX_LEN + 1)), None).is_err());
     }
 
     #[test]

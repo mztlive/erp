@@ -11,7 +11,7 @@ use erp_workflow::ports::OrderTaskSource;
 use persistence_core::Executor;
 
 use super::amount::{non_empty, purchase_review_impact_summary};
-use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, SubjectBrief};
+use super::{ObjectFact, ObjectFactMap, ObjectKind, SubjectBrief, object_ids};
 use crate::errors::Result;
 
 struct PurchaseReviewDisplay {
@@ -66,9 +66,7 @@ impl super::WorkItemFactsReader {
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, PurchaseReviewDisplay>> {
         let submissions = self.purchase_submissions_for_orders(orders, executor).await?;
-        let line_counts = self
-            .purchase_submission_line_counts(&submissions, executor)
-            .await?;
+        let line_counts = self.purchase_submission_line_counts(&submissions, executor).await?;
         Ok(assemble_purchase_review_displays(&submissions, &line_counts))
     }
 
@@ -88,10 +86,7 @@ impl super::WorkItemFactsReader {
         orders: &[PurchaseOrder],
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchaseOrderSubmission>> {
-        let order_ids = orders
-            .iter()
-            .map(|order| order.base.id.clone())
-            .collect::<Vec<_>>();
+        let order_ids = orders.iter().map(|order| order.base.id.clone()).collect::<Vec<_>>();
         if order_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -107,9 +102,7 @@ impl super::WorkItemFactsReader {
         submissions: &[PurchaseOrderSubmission],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, usize>> {
-        Ok(purchase_line_counts(
-            &self.purchase_submission_lines(submissions, executor).await?,
-        ))
+        Ok(purchase_line_counts(&self.purchase_submission_lines(submissions, executor).await?))
     }
     /// 只读取原提交行来源；命令计数与显示行状态消费同一返回值。
     pub(in crate::workbench) async fn purchase_submission_lines(
@@ -138,10 +131,8 @@ fn insert_purchase_order_facts(
     displays: &HashMap<String, PurchaseReviewDisplay>,
 ) {
     for order in orders {
-        facts.insert(
-            (ObjectKind::PurchaseOrder, order.base.id.clone()),
-            purchase_order_fact(order, displays),
-        );
+        facts
+            .insert((ObjectKind::PurchaseOrder, order.base.id.clone()), purchase_order_fact(order, displays));
     }
 }
 
@@ -183,11 +174,7 @@ fn assemble_purchase_review_displays(
             let previous = previous_ids.contains_key(&submission.base.id);
             (
                 submission.base.id.clone(),
-                purchase_review_display(
-                    submission,
-                    line_counts.get(&submission.base.id).copied(),
-                    previous,
-                ),
+                purchase_review_display(submission, line_counts.get(&submission.base.id).copied(), previous),
             )
         })
         .collect()
@@ -247,9 +234,7 @@ pub(in crate::workbench) fn purchase_line_counts(
 ) -> HashMap<String, usize> {
     let mut counts = HashMap::new();
     for line in lines {
-        *counts
-            .entry(line.purchase_order_submission_id.to_string())
-            .or_default() += 1;
+        *counts.entry(line.purchase_order_submission_id.to_string()).or_default() += 1;
     }
     counts
 }
@@ -260,10 +245,6 @@ pub(in crate::workbench) fn purchase_facts(
     counts: &HashMap<String, usize>,
 ) -> ObjectFactMap {
     let mut facts = ObjectFactMap::new();
-    insert_purchase_order_facts(
-        &mut facts,
-        orders,
-        &assemble_purchase_review_displays(submissions, counts),
-    );
+    insert_purchase_order_facts(&mut facts, orders, &assemble_purchase_review_displays(submissions, counts));
     facts
 }

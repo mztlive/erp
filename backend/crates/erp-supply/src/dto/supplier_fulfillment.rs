@@ -4,10 +4,7 @@
 //! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；金额/数量使用
 //! `entities::money` 定点类型（serde_json 下自动字符串化）。
 
-use crate::entity::supplier_fulfillment::{
-    AllocationAction, CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentOrder,
-    SupplierOrderAction, SupplierOrderActionStatus, SupplierOrderActionType, SupplierOrderStatusHistory,
-};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::source::SourceType;
 use erp_core::ids::{
     CostAllocationId, CostEntryId, PayableEntryId, PaymentAllocationId, SupplierAccountId,
@@ -19,7 +16,10 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use crate::entity::supplier_fulfillment::{
+    AllocationAction, CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentOrder,
+    SupplierOrderAction, SupplierOrderActionStatus, SupplierOrderActionType, SupplierOrderStatusHistory,
+};
 
 /// 供应商履约订单列表允许的排序字段白名单（Service 层校验，禁止任意字段透传）。
 pub(crate) const FULFILLMENT_ORDER_SORT_FIELDS: &[&str] =
@@ -41,6 +41,8 @@ pub(crate) struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -58,9 +60,6 @@ pub(crate) struct PageParams {
 /// 跨域复用入口：D33 的列表参数同样使用本函数（后续若出现第三处使用，
 /// 应走地基修订把该逻辑下沉到 `services::query`）。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
 
 /// 供应商履约订单列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -786,10 +785,11 @@ pub struct RefundAllocationRequest {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, SortDir, SupplierFulfillmentOrderListParams};
-    use crate::entity::supplier_fulfillment::{CancelStatus, FulfillmentStatus, RefundStatus};
     use serde_json::json;
     use validator::Validate;
+
+    use super::{SortDir, SupplierFulfillmentOrderListParams, normalize_sort};
+    use crate::entity::supplier_fulfillment::{CancelStatus, FulfillmentStatus, RefundStatus};
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {

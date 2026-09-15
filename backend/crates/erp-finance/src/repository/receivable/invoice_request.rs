@@ -1,9 +1,10 @@
 //! 开票申请查询与额度占用读取。并发申请必须由调用方先写锁应收子账。
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
+
 use crate::dto::receivable::invoice_request::InvoiceRequestQuery;
 use crate::entity::receivable::SalesInvoiceRequest;
 use crate::repository::owned::SalesInvoiceRequestRepository;
-use mongodb::bson::{doc, Document};
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
 
 /// 经过分页上限约束的申请查询。
 struct RequestFilter<'a>(&'a InvoiceRequestQuery);
@@ -37,10 +38,7 @@ impl QueryFilter for RequestFilter<'_> {
 }
 impl Pagination for RequestFilter<'_> {
     fn page_and_size(&self) -> (u64, u64) {
-        (
-            self.0.page.unwrap_or(1).max(1),
-            self.0.page_size.unwrap_or(20).clamp(1, 100).into(),
-        )
+        (self.0.page.unwrap_or(1).max(1), self.0.page_size.unwrap_or(20).clamp(1, 100).into())
     }
 }
 impl SalesInvoiceRequestRepository<'_> {
@@ -75,10 +73,7 @@ impl SalesInvoiceRequestRepository<'_> {
         let total =
             persistence_core::mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor)
                 .await?;
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
     /// 查询占用当前应收额度的申请，供同一应收写锁内计算可用额度。
     /// # 错误
@@ -116,11 +111,7 @@ mod tests {
         assert_eq!(filter.get_str("status").unwrap(), "approved");
         let terms = filter.get_array("$or").unwrap();
         assert_eq!(terms.len(), 3);
-        let text = terms[0]
-            .as_document()
-            .unwrap()
-            .get_document("request_no")
-            .unwrap();
+        let text = terms[0].as_document().unwrap().get_document("request_no").unwrap();
         assert_eq!(text.get_str("$regex").unwrap(), r"KP\.\*");
         assert_eq!(text.get_str("$options").unwrap(), "i");
     }

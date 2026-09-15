@@ -7,12 +7,6 @@
 //! 供给、修订、可供投影与供应商结算事实（[`CreationBasisFacts`]），Service
 //! 负责加载事实、校验任务归属与 RBAC、注入业务日期并执行事务。
 
-use crate::entity::facts::{
-    AvailabilityFact as SupplierOfferingAvailability, OfferingFact as SupplierOffering,
-    OfferingRevisionFact as SupplierOfferingRevision, ProductKind, SalesOrderBasisFact as SalesOrder,
-    SalesRevisionFact as SalesOrderRevision, SupplierCommercialFact as SupplierCommercialProfileRevision,
-    SupplierRoleFact as SupplierAccount,
-};
 use std::collections::HashSet;
 use std::str::FromStr;
 
@@ -24,6 +18,12 @@ use erp_core::{Error, Result};
 use super::command_receipt::digest_parts;
 use super::coverage::SalesProcurementCoverageLine;
 use super::types::{FulfillmentResponsibility, PurchaseType};
+use crate::entity::facts::{
+    AvailabilityFact as SupplierOfferingAvailability, OfferingFact as SupplierOffering,
+    OfferingRevisionFact as SupplierOfferingRevision, ProductKind, SalesOrderBasisFact as SalesOrder,
+    SalesRevisionFact as SalesOrderRevision, SupplierCommercialFact as SupplierCommercialProfileRevision,
+    SupplierRoleFact as SupplierAccount,
+};
 
 /// 单条销售当前版本明细的合格供应商供给。
 #[derive(Debug, Clone)]
@@ -130,11 +130,7 @@ impl RequestedLine {
         if quantity <= zero_quantity() {
             return Err(Error::from("本次数量必须大于 0"));
         }
-        Ok(Self {
-            sales_order_line_id,
-            quantity,
-            expected_delivery_date,
-        })
+        Ok(Self { sales_order_line_id, quantity, expected_delivery_date })
     }
 }
 
@@ -236,11 +232,7 @@ fn basis_line_fingerprint(line: &BasisLine) -> String {
         line.supply.revision.base.id,
         line.supply.availability.base.id,
         line.supply.availability.base.version,
-        line.supply
-            .availability
-            .source_revision_token
-            .as_deref()
-            .unwrap_or("-"),
+        line.supply.availability.source_revision_token.as_deref().unwrap_or("-"),
     )
 }
 
@@ -371,10 +363,9 @@ pub fn purchase_type_from_product_kind(kind: ProductKind) -> Result<PurchaseType
 /// 实物允许采购在入仓与供应商直发之间选择；其他类型由商品事实唯一限定。
 pub fn fulfillment_options(kind: ProductKind) -> Result<&'static [FulfillmentResponsibility]> {
     match kind {
-        ProductKind::Physical => Ok(&[
-            FulfillmentResponsibility::Warehouse,
-            FulfillmentResponsibility::SupplierDirect,
-        ]),
+        ProductKind::Physical => {
+            Ok(&[FulfillmentResponsibility::Warehouse, FulfillmentResponsibility::SupplierDirect])
+        },
         ProductKind::Virtual => Ok(&[FulfillmentResponsibility::Electronic]),
         ProductKind::OfflineService => Ok(&[FulfillmentResponsibility::Service]),
         ProductKind::Voucher => Err(Error::from("卡券商品不能进入商品/服务采购建单路径")),
@@ -400,15 +391,6 @@ fn zero_quantity() -> Quantity {
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::facts::{
-        AvailabilityFact as SupplierOfferingAvailability, AvailabilityStatus, CurrentRevisionFact,
-        FactIdentity, OfferingFact as SupplierOffering, OfferingRevisionFact as SupplierOfferingRevision,
-        ProductKind, SalesCustomerSnapshotFact, SalesGoodsLineFact as SalesOrderGoodsServiceLineRevision,
-        SalesLineType as LineType, SalesOrderBasisFact, SalesRevisionFact as SalesOrderRevision,
-        SalesRevisionLineFact as SalesOrderRevisionLine, VersionedFactIdentity,
-    };
-    use crate::entity::purchase_order::ProcurementCoverageSummary;
-
     use std::str::FromStr;
 
     use erp_core::common::time::Instant;
@@ -418,22 +400,27 @@ mod tests {
     use erp_core::money::{Quantity, Rate, UnitPrice};
 
     use super::{
-        basis_id_for, basis_scope_key, compose_basis_id, fulfillment_options, maximum_create_quantity,
-        normalize_requested_lines, purchase_type_from_product_kind, supply_cost, BasisGroup, BasisLine,
-        BasisScope, LineSupply, RequestedLine,
+        BasisGroup, BasisLine, BasisScope, LineSupply, RequestedLine, basis_id_for, basis_scope_key,
+        compose_basis_id, fulfillment_options, maximum_create_quantity, normalize_requested_lines,
+        purchase_type_from_product_kind, supply_cost,
+    };
+    use crate::entity::facts::{
+        AvailabilityFact as SupplierOfferingAvailability, AvailabilityStatus, CurrentRevisionFact,
+        FactIdentity, OfferingFact as SupplierOffering, OfferingRevisionFact as SupplierOfferingRevision,
+        ProductKind, SalesCustomerSnapshotFact, SalesGoodsLineFact as SalesOrderGoodsServiceLineRevision,
+        SalesLineType as LineType, SalesOrderBasisFact, SalesRevisionFact as SalesOrderRevision,
+        SalesRevisionLineFact as SalesOrderRevisionLine, VersionedFactIdentity,
     };
     use crate::entity::purchase_order::coverage::SalesProcurementCoverageLine;
-    use crate::entity::purchase_order::{FulfillmentResponsibility, PurchaseType};
+    use crate::entity::purchase_order::{
+        FulfillmentResponsibility, ProcurementCoverageSummary, PurchaseType,
+    };
 
     /// 构造销售当前版本头。
     fn revision(id: &str) -> SalesOrderRevision {
         SalesOrderRevision {
-            base: FactIdentity {
-                id: format!("rev-{id}"),
-            },
-            customer_snapshot: SalesCustomerSnapshotFact {
-                customer_name: "客户".to_string(),
-            },
+            base: FactIdentity { id: format!("rev-{id}") },
+            customer_snapshot: SalesCustomerSnapshotFact { customer_name: "客户".to_string() },
             contract_snapshot: None,
         }
     }
@@ -495,9 +482,7 @@ mod tests {
         valid_to: Option<&str>,
     ) -> SupplierOfferingRevision {
         SupplierOfferingRevision {
-            base: FactIdentity {
-                id: format!("offrev-{offering_id}"),
-            },
+            base: FactIdentity { id: format!("offrev-{offering_id}") },
             dropship_supply_price_gross: UnitPrice::from_str("6").unwrap(),
             bulk_supply_price_gross: UnitPrice::from_str("5").unwrap(),
             input_tax_rate: Rate::from_str("0.13").unwrap(),
@@ -509,10 +494,7 @@ mod tests {
     /// 构造供给实时可供投影。
     fn availability(offering_id: &str, quantity: Option<&str>) -> SupplierOfferingAvailability {
         SupplierOfferingAvailability {
-            base: VersionedFactIdentity {
-                id: format!("avail-{offering_id}"),
-                version: 1,
-            },
+            base: VersionedFactIdentity { id: format!("avail-{offering_id}"), version: 1 },
             supplier_offering_id: SupplierOfferingId::new(offering_id),
             availability_status: AvailabilityStatus::Available,
             available_quantity: quantity.map(|value| Quantity::from_str(value).unwrap()),
@@ -579,16 +561,8 @@ mod tests {
     #[test]
     fn target_warehouse_scopes_creation_basis_identity() {
         let common_parts = vec!["guard-1".to_string(), "scope-1".to_string()];
-        let first = compose_basis_id(
-            "so-1",
-            common_parts.clone(),
-            Some(&WarehouseId::new("warehouse-1")),
-        );
-        let second = compose_basis_id(
-            "so-1",
-            common_parts.clone(),
-            Some(&WarehouseId::new("warehouse-2")),
-        );
+        let first = compose_basis_id("so-1", common_parts.clone(), Some(&WarehouseId::new("warehouse-1")));
+        let second = compose_basis_id("so-1", common_parts.clone(), Some(&WarehouseId::new("warehouse-2")));
         let selectable = compose_basis_id("so-1", common_parts, None);
 
         assert_ne!(first, second);
@@ -634,14 +608,8 @@ mod tests {
     /// 商品稳定类型决定采购类型，销售字段不得参与。
     #[test]
     fn product_kind_determines_purchase_type() {
-        assert_eq!(
-            purchase_type_from_product_kind(ProductKind::Physical).unwrap(),
-            PurchaseType::Physical
-        );
-        assert_eq!(
-            purchase_type_from_product_kind(ProductKind::Virtual).unwrap(),
-            PurchaseType::Virtual
-        );
+        assert_eq!(purchase_type_from_product_kind(ProductKind::Physical).unwrap(), PurchaseType::Physical);
+        assert_eq!(purchase_type_from_product_kind(ProductKind::Virtual).unwrap(), PurchaseType::Virtual);
         assert_eq!(
             purchase_type_from_product_kind(ProductKind::OfflineService).unwrap(),
             PurchaseType::Service
@@ -654,10 +622,7 @@ mod tests {
     fn product_kind_limits_fulfillment_options() {
         assert_eq!(
             fulfillment_options(ProductKind::Physical).unwrap(),
-            &[
-                FulfillmentResponsibility::Warehouse,
-                FulfillmentResponsibility::SupplierDirect,
-            ]
+            &[FulfillmentResponsibility::Warehouse, FulfillmentResponsibility::SupplierDirect,]
         );
         assert_eq!(
             fulfillment_options(ProductKind::Virtual).unwrap(),
@@ -676,10 +641,7 @@ mod tests {
         let remaining = Quantity::from_str("10").unwrap();
         let available = Quantity::from_str("3.5").unwrap();
 
-        assert_eq!(
-            maximum_create_quantity(remaining, Some(available)).unwrap(),
-            available
-        );
+        assert_eq!(maximum_create_quantity(remaining, Some(available)).unwrap(), available);
         assert_eq!(maximum_create_quantity(remaining, None).unwrap(), remaining);
         assert!(maximum_create_quantity(remaining, Some(Quantity::from_str("-1").unwrap())).is_err());
     }
@@ -733,17 +695,11 @@ mod tests {
 
         let normalized = normalize_requested_lines(&[b.clone(), a]).unwrap();
         assert_eq!(
-            normalized
-                .iter()
-                .map(|line| line.sales_order_line_id.clone())
-                .collect::<Vec<_>>(),
+            normalized.iter().map(|line| line.sales_order_line_id.clone()).collect::<Vec<_>>(),
             vec!["sol-a".to_string(), "sol-b".to_string()]
         );
         assert!(normalize_requested_lines(&[b, duplicate]).is_err());
-        assert_eq!(
-            normalize_requested_lines(&[]).unwrap(),
-            Vec::<RequestedLine>::new()
-        );
+        assert_eq!(normalize_requested_lines(&[]).unwrap(), Vec::<RequestedLine>::new());
     }
 
     /// 依据 ID 只接受销售单加 SHA-256 指纹形态。

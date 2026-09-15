@@ -1,14 +1,12 @@
-use crate::entity::supplier_settlement::SupplierSettlementItem;
-use crate::repository::owned::SupplierSettlementItemRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::projection::{item_sort_doc, supplier_settlement_item_projection};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::supplier_settlement::SupplierSettlementItem;
+use crate::repository::owned::SupplierSettlementItemRepository;
 
 /// 供应商结算明细列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -169,9 +167,6 @@ impl<'a> SupplierSettlementItemRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }

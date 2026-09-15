@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use crate::entity::inventory::{MovementType, StockMovement};
-use crate::repository::InventoryExt;
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
@@ -9,10 +8,9 @@ use validator::Validate;
 
 use super::InventoryService;
 use crate::dto::{PageView, SortDir, StockMovementListParams, StockMovementView};
+use crate::entity::inventory::{MovementType, StockMovement};
 use crate::error::{Error, Result};
-use application_core::AuditActor;
-
-use crate::repository::StockMovementFilter;
+use crate::repository::{InventoryExt, StockMovementFilter};
 
 impl InventoryService {
     /// 分页查询库存流水台账（W10 流水视图，正式事实）。
@@ -75,11 +73,7 @@ impl InventoryService {
                         sort_by: Some(query.paging.sort_by.to_string()),
                         sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
                     };
-                    Ok::<_, Error>(
-                        db.stock_movements()
-                            .search_stock_movements(&filter, session)
-                            .await?,
-                    )
+                    Ok::<_, Error>(db.stock_movements().search_stock_movements(&filter, session).await?)
                 })
             })
             .await?;
@@ -106,12 +100,7 @@ impl InventoryService {
         for item in &mut items {
             item.source_document_no = source_document_nos.get(&item.source_document_id).cloned();
         }
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: page_no,
-            page_size,
-        })
+        Ok(PageView { items, total: page.total, page: page_no, page_size })
     }
 }
 
@@ -146,10 +135,8 @@ pub(super) async fn load_movement_source_document_nos(
         .map(|movement| movement.source_document_id.clone())
         .collect();
     if !adjustment_ids.is_empty() {
-        let adjustments = db
-            .inventory()
-            .stock_adjustments_by_ids(&adjustment_ids, &mut NoTransaction)
-            .await?;
+        let adjustments =
+            db.inventory().stock_adjustments_by_ids(&adjustment_ids, &mut NoTransaction).await?;
         for adjustment in adjustments {
             document_nos.insert(adjustment.base.id.clone(), adjustment.adjustment_no.clone());
         }
@@ -160,9 +147,7 @@ pub(super) async fn load_movement_source_document_nos(
         .map(|movement| movement.source_document_id.clone())
         .collect();
     if !receipt_ids.is_empty() {
-        let receipts = fulfillment
-            .receipt_nos_by_ids(&receipt_ids, &mut NoTransaction)
-            .await?;
+        let receipts = fulfillment.receipt_nos_by_ids(&receipt_ids, &mut NoTransaction).await?;
         for (id, receipt) in receipts {
             document_nos.insert(id, receipt.receipt_no);
         }

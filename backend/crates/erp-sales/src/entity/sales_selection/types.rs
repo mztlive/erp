@@ -1,8 +1,7 @@
 //! 选品册形态、提交方式与商品池来源等创建后不可改的取值。
 
-use serde::{Deserialize, Serialize};
-
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 选品形态：创建时选定，之后不可改。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

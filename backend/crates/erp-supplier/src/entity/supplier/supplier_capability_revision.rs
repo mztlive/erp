@@ -6,16 +6,14 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::revision::RevisionBase;
 use erp_core::common::time::BusinessDate;
+pub use erp_core::ids::{SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::supplier_capability::CapabilityStatus;
-
-pub use erp_core::ids::{SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId};
 
 /// 服务区域引用最大长度。
 const SERVICE_REGION_MAX_LEN: usize = 128;
@@ -137,10 +135,11 @@ fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>)
 
 #[cfg(test)]
 mod tests {
-    use super::{SupplierCapabilityRevision, SupplierCapabilityRevisionData};
-    use crate::entity::supplier::supplier_capability::CapabilityCode;
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::{SupplierAccountId, SupplierCapabilityRevisionId};
+
+    use super::{SupplierCapabilityRevision, SupplierCapabilityRevisionData};
+    use crate::entity::supplier::supplier_capability::CapabilityCode;
 
     fn revision_data() -> SupplierCapabilityRevisionData {
         SupplierCapabilityRevisionData {
@@ -172,10 +171,8 @@ mod tests {
     /// 失败路径：负责人为空/超长、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank_owner = SupplierCapabilityRevisionData {
-            owner_user_id: "   ".to_string(),
-            ..revision_data()
-        };
+        let blank_owner =
+            SupplierCapabilityRevisionData { owner_user_id: "   ".to_string(), ..revision_data() };
         assert!(
             SupplierCapabilityRevision::new(SupplierCapabilityRevisionId::new("r"), blank_owner,).is_err()
         );
@@ -194,11 +191,7 @@ mod tests {
             SupplierCapabilityRevision::new(SupplierCapabilityRevisionId::new("cap-rev-2"), revision_data())
                 .unwrap();
         assert_eq!(revision.supplier_id, SupplierAccountId::new("supplier-1"));
-        assert_eq!(
-            revision.capability_code.as_str(),
-            "api",
-            "快照字段携带稳定能力代码，不引用能力实体"
-        );
+        assert_eq!(revision.capability_code.as_str(), "api", "快照字段携带稳定能力代码，不引用能力实体");
     }
 
     /// 实体 BSON 往返。

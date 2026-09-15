@@ -5,16 +5,13 @@
 //! 每条路由统一走 JWT + RBAC（`with_permission`），handler 标注
 //! `#[permission_macros::permission]`。
 
-use axum::{
-    routing::{get, post},
-    Router,
-};
+use axum::Router;
+use axum::routing::{get, post};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::supplier_settlement, middleware::with_permission},
-};
+use crate::app_state::AppState;
+use crate::core::handler::supplier_settlement;
+use crate::core::middleware::with_permission;
 
 /// 返回本域管理端路由集合。
 ///

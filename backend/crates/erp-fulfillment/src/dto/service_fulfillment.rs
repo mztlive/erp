@@ -1,13 +1,13 @@
 //! 履约service_fulfillment请求及单域查询 DTO。
-use super::non_blank;
-use super::{normalize_sort, PageParams, SERVICE_FULFILLMENT_SORT_FIELDS};
-use crate::entity::fulfillment::{FulfillmentResult, ServiceFulfillmentState};
-use crate::Result;
 use application_core::{page_or_default, page_size_or_default};
 use erp_core::ids::{FileAssetId, PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId};
 use erp_core::money::Quantity;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+
+use super::{PageParams, SERVICE_FULFILLMENT_SORT_FIELDS, non_blank, normalize_sort};
+use crate::Result;
+use crate::entity::fulfillment::{FulfillmentResult, ServiceFulfillmentState};
 
 /// 线下服务履约记录创建请求（初始状态为草稿，确认后不可覆盖）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]

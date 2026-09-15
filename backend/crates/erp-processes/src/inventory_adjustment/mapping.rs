@@ -1,16 +1,18 @@
 use bpm::model::{ApprovalNodeExecution, CommandPayloadField};
 use erp_core::common::time::Instant;
-use erp_inventory::StockAdjustmentLineUpdate;
+use erp_inventory::{
+    StockAdjustmentLineUpdate, StockAdjustmentLineUpdateInput, SubmitStockAdjustmentRequest,
+};
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
-
-use crate::{Error, Result};
-use erp_inventory::{StockAdjustmentLineUpdateInput, SubmitStockAdjustmentRequest};
 use erp_workflow::service::approval::execution::idempotency::{
-    legacy_payload_digest, legacy_standard_start_receipt_identity, legacy_start_receipt_identity,
-    normalize_idempotency_key, specialized_start_identity, start_scope_candidates, PreparedCommandIdentity,
+    PreparedCommandIdentity, legacy_payload_digest, legacy_standard_start_receipt_identity,
+    legacy_start_receipt_identity, normalize_idempotency_key, specialized_start_identity,
+    start_scope_candidates,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
+
+use crate::{Error, Result};
 
 const STOCK_ADJUSTMENT_START_DIGEST_VERSION: &str = "STOCK_ADJUSTMENT_START_V1";
 const STOCK_ADJUSTMENT_START_VARIANT: &str = "STOCK_ADJUSTMENT_SUBMISSION";
@@ -41,10 +43,7 @@ pub(super) fn stock_adjustment_start_digest(
             (
                 line.line_id,
                 line.quantity.to_decimal().normalize().to_string(),
-                line.direction
-                    .map(|value| value.as_str())
-                    .unwrap_or("")
-                    .to_string(),
+                line.direction.map(|value| value.as_str()).unwrap_or("").to_string(),
             )
         })
         .collect::<Vec<_>>();
@@ -88,10 +87,7 @@ pub(super) fn stock_adjustment_start_identity(
             (
                 line.line_id,
                 line.quantity.to_decimal().normalize().to_string(),
-                line.direction
-                    .map(|value| value.as_str())
-                    .unwrap_or("")
-                    .to_string(),
+                line.direction.map(|value| value.as_str()).unwrap_or("").to_string(),
             )
         })
         .collect::<Vec<_>>();
@@ -184,10 +180,7 @@ fn has_versioned_sha256(value: &str, prefix: &str) -> bool {
 }
 
 fn has_bare_sha256(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 /// 由入口执行构造有界列表投影。

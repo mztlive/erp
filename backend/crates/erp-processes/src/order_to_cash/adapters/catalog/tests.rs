@@ -1,10 +1,10 @@
-use super::*;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use erp_catalog::repository::{ProductFilter, ProductRow, SellableSkuFilter, SellableSkuRow};
 use persistence_core::PageResult;
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
-};
+
+use super::*;
 
 struct TestExecutor(u64);
 impl Executor for TestExecutor {
@@ -86,10 +86,7 @@ async fn exact_qualification_keeps_refs_date_and_nonzero_executor() {
         fail: false,
     });
     let adapter = CatalogQualificationAdapter { query: query.clone() };
-    let result = adapter
-        .qualified_refs(&refs, "2026-09-07".parse().unwrap(), &mut executor)
-        .await
-        .unwrap();
+    let result = adapter.qualified_refs(&refs, "2026-09-07".parse().unwrap(), &mut executor).await.unwrap();
     assert_eq!(result, refs);
     assert_eq!(query.calls.load(Ordering::SeqCst), 1);
 }
@@ -105,9 +102,7 @@ async fn exact_qualification_keeps_persistence_failure_without_retry() {
         fail: true,
     });
     let adapter = CatalogQualificationAdapter { query: query.clone() };
-    assert!(
-        matches!(adapter.qualified_refs(&refs, "2026-09-07".parse().unwrap(), &mut executor).await,
-        Err(erp_sales::Error::ConflictError(message)) if message == "数据已被其他请求修改，请刷新后重试")
-    );
+    assert!(matches!(adapter.qualified_refs(&refs, "2026-09-07".parse().unwrap(), &mut executor).await,
+        Err(erp_sales::Error::ConflictError(message)) if message == "数据已被其他请求修改，请刷新后重试"));
     assert_eq!(query.calls.load(Ordering::SeqCst), 1);
 }

@@ -12,15 +12,13 @@ use std::fmt;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::de::{SeqAccess, Visitor};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
 use erp_core::common::stable::StableBase;
-use erp_core::validation::{normalize_optional_text, normalize_required_text};
-use erp_core::{Error, Result};
-
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
 pub use erp_core::ids::{ExternalIdentityMapId, ExternalIdentityTargetId, SourceSystemId};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
+use serde::de::{SeqAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// 来源系统代码最大长度。
 const CODE_MAX_LEN: usize = 64;
@@ -465,18 +463,10 @@ impl SourceSystem {
     /// # 错误
     /// 当 code/name 为空、超长或含未规范化空白时返回错误。
     pub fn new(id: SourceSystemId, data: SourceSystemData, created_by: impl Into<String>) -> Result<Self> {
-        let code = normalize_required_text(
-            data.code,
-            "来源系统代码不能为空",
-            CODE_MAX_LEN,
-            "来源系统代码过长",
-        )?;
-        let name = normalize_required_text(
-            data.name,
-            "来源系统名称不能为空",
-            NAME_MAX_LEN,
-            "来源系统名称过长",
-        )?;
+        let code =
+            normalize_required_text(data.code, "来源系统代码不能为空", CODE_MAX_LEN, "来源系统代码过长")?;
+        let name =
+            normalize_required_text(data.name, "来源系统名称不能为空", NAME_MAX_LEN, "来源系统名称过长")?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -598,12 +588,8 @@ impl ExternalIdentityMap {
     /// # 错误
     /// 当 external_id 为空/超长，或 `mapped_at` 与 `mapped_by` 不同时出现时返回错误。
     pub fn new(id: ExternalIdentityMapId, data: ExternalIdentityMapData) -> Result<Self> {
-        let external_id = normalize_required_text(
-            data.external_id,
-            "外部ID不能为空",
-            EXTERNAL_ID_MAX_LEN,
-            "外部ID过长",
-        )?;
+        let external_id =
+            normalize_required_text(data.external_id, "外部ID不能为空", EXTERNAL_ID_MAX_LEN, "外部ID过长")?;
         let mapped_by = normalize_optional_text(data.mapped_by, "映射责任人", ACTOR_MAX_LEN)?;
         if data.mapped_at.is_some() != mapped_by.is_some() {
             return Err(Error::from("映射时间与映射责任人必须同时提供或同时省略"));
@@ -765,12 +751,13 @@ impl ExternalIdentityTarget {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::ids::{ExternalIdentityMapId, ExternalIdentityTargetId, SourceSystemId};
+
     use super::{
         ExternalIdKey, ExternalIdentityMap, ExternalIdentityMapData, ExternalIdentityTarget,
         ExternalIdentityTargetData, ExternalObjectType, MappingStatus, RelationRole, SourceSystem,
         SourceSystemData, SourceSystemStatus, SourceSystemType, SourceSystemUpdate, TargetStatus,
     };
-    use erp_core::ids::{ExternalIdentityMapId, ExternalIdentityTargetId, SourceSystemId};
 
     fn source_system_data() -> SourceSystemData {
         SourceSystemData {
@@ -808,25 +795,16 @@ mod tests {
 
     #[test]
     fn source_system_new_rejects_empty_code() {
-        let data = SourceSystemData {
-            code: "   ".to_string(),
-            ..source_system_data()
-        };
+        let data = SourceSystemData { code: "   ".to_string(), ..source_system_data() };
         assert!(SourceSystem::new(SourceSystemId::new("sys-1"), data, "admin-1").is_err());
     }
 
     #[test]
     fn source_system_new_rejects_overlong_code_and_name() {
-        let overlong_code = SourceSystemData {
-            code: "x".repeat(65),
-            ..source_system_data()
-        };
+        let overlong_code = SourceSystemData { code: "x".repeat(65), ..source_system_data() };
         assert!(SourceSystem::new(SourceSystemId::new("sys-1"), overlong_code, "admin-1").is_err());
 
-        let overlong_name = SourceSystemData {
-            name: "n".repeat(65),
-            ..source_system_data()
-        };
+        let overlong_name = SourceSystemData { name: "n".repeat(65), ..source_system_data() };
         assert!(SourceSystem::new(SourceSystemId::new("sys-1"), overlong_name, "admin-1").is_err());
     }
 
@@ -856,15 +834,11 @@ mod tests {
         let mut system =
             SourceSystem::new(SourceSystemId::new("sys-1"), source_system_data(), "admin-1").unwrap();
 
-        assert!(system
-            .update(
-                SourceSystemUpdate {
-                    name: Some("   ".to_string()),
-                    status: None,
-                },
-                "admin-2",
-            )
-            .is_err());
+        assert!(
+            system
+                .update(SourceSystemUpdate { name: Some("   ".to_string()), status: None }, "admin-2",)
+                .is_err()
+        );
     }
 
     #[test]
@@ -892,11 +866,8 @@ mod tests {
         assert_eq!(map.external_id_key, ExternalIdKey::new(b"SO-2025-001".to_vec()));
         assert_eq!(map.mapping_status, MappingStatus::Pending);
 
-        let half_pair = ExternalIdentityMapData {
-            mapped_at: Some(1_700_000_000),
-            mapped_by: None,
-            ..map_data()
-        };
+        let half_pair =
+            ExternalIdentityMapData { mapped_at: Some(1_700_000_000), mapped_by: None, ..map_data() };
         assert!(ExternalIdentityMap::new(ExternalIdentityMapId::new("map-2"), half_pair).is_err());
     }
 
@@ -919,10 +890,7 @@ mod tests {
         assert_eq!(target.internal_object_id, "SO-2025-001");
         assert_eq!(target.relation_role, RelationRole::Primary);
 
-        let reversed_window = ExternalIdentityTargetData {
-            valid_to: Some(1_699_913_600),
-            ..data.clone()
-        };
+        let reversed_window = ExternalIdentityTargetData { valid_to: Some(1_699_913_600), ..data.clone() };
         assert!(
             ExternalIdentityTarget::new(ExternalIdentityTargetId::new("target-2"), reversed_window).is_err()
         );
@@ -939,18 +907,9 @@ mod tests {
 
     #[test]
     fn enums_serialize_with_stable_codes_and_expose_labels() {
-        assert_eq!(
-            serde_json::to_string(&SourceSystemType::Mall).unwrap(),
-            "\"MALL\""
-        );
-        assert_eq!(
-            serde_json::to_string(&RelationRole::MergedInto).unwrap(),
-            "\"MERGED_INTO\""
-        );
-        assert_eq!(
-            serde_json::to_string(&MappingStatus::Pending).unwrap(),
-            "\"pending\""
-        );
+        assert_eq!(serde_json::to_string(&SourceSystemType::Mall).unwrap(), "\"MALL\"");
+        assert_eq!(serde_json::to_string(&RelationRole::MergedInto).unwrap(), "\"MERGED_INTO\"");
+        assert_eq!(serde_json::to_string(&MappingStatus::Pending).unwrap(), "\"pending\"");
         assert_eq!(
             serde_json::to_string(&ExternalObjectType::VoucherCategory).unwrap(),
             "\"voucher_category\""

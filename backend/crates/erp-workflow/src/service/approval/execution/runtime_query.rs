@@ -103,8 +103,9 @@ pub fn recovery_options_for(
 
 #[cfg(test)]
 mod tests {
-    use super::{recovery_options_for, RuntimeRecoveryAction};
     use bpm::model::types::ApprovalBlockerCode;
+
+    use super::{RuntimeRecoveryAction, recovery_options_for};
 
     /// 可恢复原审批人的 blocker 只给恢复；结构 blocker 只给受阻取消。
     #[test]

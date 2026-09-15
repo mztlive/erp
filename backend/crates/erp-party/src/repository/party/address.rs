@@ -1,15 +1,13 @@
-use crate::entity::party::{AddressType, EffectiveRecordStatus, PartyAddress};
-use crate::repository::owned::PartyAddressRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PartyId;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::shared::{active_fact_filter, sort_doc};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::party::{AddressType, EffectiveRecordStatus, PartyAddress};
+use crate::repository::owned::PartyAddressRepository;
 
 /// 地址列表投影行。
 ///
@@ -127,10 +125,7 @@ impl<'a> PartyAddressRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按地址 ID 查找未删除地址事实。
@@ -166,8 +161,7 @@ impl<'a> PartyAddressRepository<'a> {
         as_of: erp_core::common::time::BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyAddress>> {
-        self.find_many(active_fact_filter(party_id, as_of), executor)
-            .await
+        self.find_many(active_fact_filter(party_id, as_of), executor).await
     }
 
     /// 按默认标记与创建时间读取指定日期生效的主体地址。
@@ -216,12 +210,8 @@ impl<'a> PartyAddressRepository<'a> {
         exclude_id: Option<&str>,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let rows = self
-            .find_many(
-                doc! { "party_id": party_id.to_string(), "is_default": true },
-                executor,
-            )
-            .await?;
+        let rows =
+            self.find_many(doc! { "party_id": party_id.to_string(), "is_default": true }, executor).await?;
         for mut row in rows {
             if exclude_id.is_some_and(|id| id == row.base.id) {
                 continue;

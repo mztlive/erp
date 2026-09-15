@@ -2,9 +2,10 @@
 
 use std::future::Future;
 
-use crate::Result;
 use async_trait::async_trait;
 use persistence_core::Executor;
+
+use crate::Result;
 
 /// 首次回放命中时不准备事务；任意事务错误只做一次全新回放。
 pub(super) async fn execute_with_receipt<T, R, RF, W, WF>(mut replay: R, write: W) -> Result<T>

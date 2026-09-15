@@ -29,9 +29,7 @@ pub(super) async fn managed_owners(
     };
     let owners = owners(&scope);
     if owners.as_ref().is_some_and(|ids| ids.len() > 20_000) {
-        return Err(Error::ValidationError(
-            "任务管理范围超过 20000 人，请缩小配置范围".into(),
-        ));
+        return Err(Error::ValidationError("任务管理范围超过 20000 人，请缩小配置范围".into()));
     }
     Ok(owners)
 }
@@ -71,11 +69,12 @@ fn owners(context: &AuthorizedDataScope) -> Option<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use entity_core::BaseModel;
     use erp_core::common::time::Instant;
     use erp_identity::access_control::{ResolvedScope, ScopeClause};
     use erp_identity::entity::organization::{OrgMembership, OrgValidity};
+
+    use super::*;
 
     fn context() -> AuthorizedDataScope {
         let membership = |id: &str, user: &str, org: &str, end: Option<i64>| OrgMembership {
@@ -118,15 +117,9 @@ mod tests {
     fn task_manager_uses_current_membership_not_responsibility_organization() {
         let mut scope = context();
         assert_eq!(owners(&scope), Some(vec!["worker-a".into()]));
-        scope.scope.user_limit = Some(ScopeClause {
-            self_owned: true,
-            ..Default::default()
-        });
+        scope.scope.user_limit = Some(ScopeClause { self_owned: true, ..Default::default() });
         assert_eq!(owners(&scope), Some(vec![]));
-        scope.scope.role_clauses = vec![ScopeClause {
-            company: true,
-            ..Default::default()
-        }];
+        scope.scope.role_clauses = vec![ScopeClause { company: true, ..Default::default() }];
         assert_eq!(owners(&scope), Some(vec!["manager".into()]));
         scope.scope.user_limit = None;
         assert_eq!(owners(&scope), None);

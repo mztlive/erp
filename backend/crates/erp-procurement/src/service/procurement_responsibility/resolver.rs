@@ -1,18 +1,20 @@
 //! 采购责任候选解析：目录完整性、规则优先级和账号资格由本域顺序执行。
 
+use std::collections::HashMap;
+
+use async_trait::async_trait;
+use persistence_core::Executor;
+
 use super::ProcurementResponsibilityService;
 use crate::entity::facts::IdentityOwnerFact;
 use crate::entity::procurement_responsibility::{
-    build_catalog_facts, EligibleProcurementOwner, ProcurementResponsibilityContext,
-    ProcurementResponsibilityResolutionBatch, ProcurementResponsibilityResolutionLine,
-    ProcurementResponsibilityRule, ProcurementResponsibilityRuleSet, ProcurementResponsibilityRuleType,
+    EligibleProcurementOwner, ProcurementResponsibilityContext, ProcurementResponsibilityResolutionBatch,
+    ProcurementResponsibilityResolutionLine, ProcurementResponsibilityRule, ProcurementResponsibilityRuleSet,
+    ProcurementResponsibilityRuleType, build_catalog_facts,
 };
 use crate::ports::procurement_responsibility::ProcurementResponsibilityFactsPort;
 use crate::repository::ProcurementResponsibilityExt;
 use crate::{Error, Result};
-use async_trait::async_trait;
-use persistence_core::Executor;
-use std::collections::HashMap;
 
 /// 保持调用方稳定行键、SKU 与区域的解析输入。
 pub type ResolutionInput = ProcurementResponsibilityResolutionLine;
@@ -72,22 +74,12 @@ async fn resolve_candidates(
     inputs: &[ResolutionInput],
     executor: &mut dyn Executor,
 ) -> Result<Vec<CandidateResolution>> {
-    let inputs = ProcurementResponsibilityResolutionBatch::new(inputs)
-        .map_err(Error::Logic)?
-        .lines();
+    let inputs = ProcurementResponsibilityResolutionBatch::new(inputs).map_err(Error::Logic)?.lines();
     let sku_ids = unique_sku_ids(inputs);
-    let bundle = port
-        .load_catalog(&sku_ids, executor)
-        .await
-        .map_err(|e| Error::Internal(e.to_string()))?;
-    let facts = build_catalog_facts(
-        inputs,
-        &bundle.skus,
-        &bundle.products,
-        &bundle.revisions,
-        &bundle.categories,
-    )
-    .map_err(Error::Logic)?;
+    let bundle = port.load_catalog(&sku_ids, executor).await.map_err(|e| Error::Internal(e.to_string()))?;
+    let facts =
+        build_catalog_facts(inputs, &bundle.skus, &bundle.products, &bundle.revisions, &bundle.categories)
+            .map_err(Error::Logic)?;
     let rules = store.active_rules(executor).await?;
     let rule_set = ProcurementResponsibilityRuleSet::new(&rules);
     let mut selected = Vec::with_capacity(inputs.len());
@@ -159,9 +151,7 @@ fn unique_strings<'a>(values: impl Iterator<Item = &'a str>) -> Vec<String> {
 /// 任一目录事实缺失或已删除时返回校验错误。
 fn ensure_all_ids_present<T>(label: &str, ids: &[String], map: &HashMap<String, T>) -> Result<()> {
     if let Some(missing) = ids.iter().find(|id| !map.contains_key(id.as_str())) {
-        return Err(Error::ValidationError(format!(
-            "{label}不存在或已删除：{missing}"
-        )));
+        return Err(Error::ValidationError(format!("{label}不存在或已删除：{missing}")));
     }
     Ok(())
 }
@@ -174,17 +164,12 @@ async fn attach_owner_accounts(
 ) -> Result<Vec<CandidateResolution>> {
     let owner_ids = unique_strings(selected.iter().map(|(_, rule)| rule.owner_user_id.as_str()));
     let accounts = port.load_owners(&owner_ids, executor).await?;
-    let account_map = accounts
-        .into_iter()
-        .map(|account| (account.id.clone(), account))
-        .collect();
+    let account_map = accounts.into_iter().map(|account| (account.id.clone(), account)).collect();
     ensure_all_ids_present("采购负责人账号", &owner_ids, &account_map)?;
     selected
         .into_iter()
         .map(|(line_key, rule)| {
-            let account = account_map
-                .get(rule.owner_user_id.as_str())
-                .expect("完整性已校验");
+            let account = account_map.get(rule.owner_user_id.as_str()).expect("完整性已校验");
             let owner = eligible_owner(account)?;
             Ok(CandidateResolution {
                 line_key,
@@ -205,6 +190,11 @@ pub fn eligible_owner(account: &IdentityOwnerFact) -> Result<EligibleProcurement
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
+    use erp_core::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, ProductId, SkuId};
+    use mongodb::ClientSession;
+
     use super::*;
     use crate::entity::facts::{
         CurrentRevisionFact, FactIdentity, ProductCategoryFact, ProductFact, ProductKind,
@@ -213,9 +203,6 @@ mod tests {
     use crate::entity::procurement_responsibility::{
         EnableStatus, ProcurementCatalogBundle, ProcurementResponsibilityRuleData,
     };
-    use erp_core::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, ProductId, SkuId};
-    use mongodb::ClientSession;
-    use std::sync::Mutex;
 
     struct Fixture {
         events: Mutex<Vec<&'static str>>,
@@ -235,48 +222,41 @@ mod tests {
                 catalog: ProcurementCatalogBundle {
                     skus: HashMap::from([(
                         "sku-1".into(),
-                        SkuFact {
-                            base: id("sku-1"),
-                            product_id: ProductId::new("product-1"),
-                        },
+                        SkuFact { base: id("sku-1"), product_id: ProductId::new("product-1") },
                     )]),
                     products: HashMap::from([(
                         "product-1".into(),
                         ProductFact {
                             base: id("product-1"),
-                            stable: CurrentRevisionFact {
-                                current_revision_id: Some("revision-1".into()),
-                            },
+                            stable: CurrentRevisionFact { current_revision_id: Some("revision-1".into()) },
                             product_kind: ProductKind::Physical,
                         },
                     )]),
                     revisions: HashMap::from([(
                         "revision-1".into(),
-                        ProductRevisionFact {
-                            category_id: ProductCategoryId::new("category-1"),
-                        },
+                        ProductRevisionFact { category_id: ProductCategoryId::new("category-1") },
                     )]),
                     categories: HashMap::from([(
                         "category-1".into(),
-                        ProductCategoryFact {
-                            parent_category_id: None,
-                        },
+                        ProductCategoryFact { parent_category_id: None },
                     )]),
                 },
-                rules: vec![ProcurementResponsibilityRule::new(
-                    ProcurementResponsibilityRuleId::new("rule-1"),
-                    ProcurementResponsibilityRuleData {
-                        rule_type: ProcurementResponsibilityRuleType::Sku,
-                        sku_id: Some(SkuId::new("sku-1")),
-                        category_id: None,
-                        service_region: None,
-                        product_kind: None,
-                        owner_user_id: "owner-1".into(),
-                        status: EnableStatus::Active,
-                    },
-                    "actor-1",
-                )
-                .unwrap()],
+                rules: vec![
+                    ProcurementResponsibilityRule::new(
+                        ProcurementResponsibilityRuleId::new("rule-1"),
+                        ProcurementResponsibilityRuleData {
+                            rule_type: ProcurementResponsibilityRuleType::Sku,
+                            sku_id: Some(SkuId::new("sku-1")),
+                            category_id: None,
+                            service_region: None,
+                            product_kind: None,
+                            owner_user_id: "owner-1".into(),
+                            status: EnableStatus::Active,
+                        },
+                        "actor-1",
+                    )
+                    .unwrap(),
+                ],
                 owners: vec![IdentityOwnerFact {
                     id: "owner-1".into(),
                     name: "张三".into(),
@@ -288,10 +268,7 @@ mod tests {
         }
         fn record(&self, event: &'static str, executor: &mut dyn Executor) -> persistence_core::Result<()> {
             self.events.lock().unwrap().push(event);
-            self.executors
-                .lock()
-                .unwrap()
-                .push(executor as *mut dyn Executor as *mut () as usize);
+            self.executors.lock().unwrap().push(executor as *mut dyn Executor as *mut () as usize);
             assert!(executor.session().is_none());
             if self.failure == Some(event) {
                 return Err(persistence_core::Error::OptimisticLockingError);
@@ -378,17 +355,11 @@ mod tests {
         let mut executor = RecordingExecutor::default();
         let address = &mut executor as *mut RecordingExecutor as usize;
         let candidates = fixture.run(&mut executor).await.unwrap();
-        assert_eq!(
-            *fixture.events.lock().unwrap(),
-            vec!["catalog", "rules", "owners"]
-        );
+        assert_eq!(*fixture.events.lock().unwrap(), vec!["catalog", "rules", "owners"]);
         assert_eq!(*fixture.executors.lock().unwrap(), vec![address; 3]);
         assert_eq!(executor.visits, 3);
         assert_eq!(
-            candidates
-                .iter()
-                .map(|line| line.line_key.as_str())
-                .collect::<Vec<_>>(),
+            candidates.iter().map(|line| line.line_key.as_str()).collect::<Vec<_>>(),
             ["line-2", "line-1"]
         );
         assert!(candidates.iter().all(|line| line.owner_user_id == "owner-1"
@@ -434,14 +405,10 @@ mod tests {
     async fn duplicate_input_fails_before_any_port_read() {
         let fixture = Fixture::new();
         let line = ResolutionInput::new("line-1".into(), SkuId::new("sku-1"), None).unwrap();
-        let error = resolve_candidates(
-            &fixture,
-            &fixture,
-            &[line.clone(), line],
-            &mut RecordingExecutor::default(),
-        )
-        .await
-        .unwrap_err();
+        let error =
+            resolve_candidates(&fixture, &fixture, &[line.clone(), line], &mut RecordingExecutor::default())
+                .await
+                .unwrap_err();
         assert!(
             matches!(error, Error::Logic(error) if error.to_string().contains("采购责任解析行键不能重复"))
         );

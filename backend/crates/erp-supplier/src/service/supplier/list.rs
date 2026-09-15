@@ -2,19 +2,19 @@
 
 use std::collections::HashMap;
 
-use super::list_view::{assemble_supplier_views, commercial_party_ids, SupplierViewAssembleInput};
-use super::SupplierService;
-use crate::dto::supplier::{
-    PageView, SortDir, SupplierListParams, SupplierListQuery, SupplierQualificationHealth, SupplierView,
-};
-use crate::entity::supplier::SupplierCommercialProfileRevision;
-use crate::ports::PartyFactsPort;
-use crate::repository::{SupplierExt, SupplierListSearchInput};
 use erp_core::common::time::BusinessDate;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
+use super::SupplierService;
+use super::list_view::{SupplierViewAssembleInput, assemble_supplier_views, commercial_party_ids};
+use crate::dto::supplier::{
+    PageView, SortDir, SupplierListParams, SupplierListQuery, SupplierQualificationHealth, SupplierView,
+};
+use crate::entity::supplier::SupplierCommercialProfileRevision;
 use crate::error::Result;
+use crate::ports::PartyFactsPort;
+use crate::repository::{SupplierExt, SupplierListSearchInput};
 
 impl SupplierService {
     /// 分页查询供应商角色列表。
@@ -34,24 +34,16 @@ impl SupplierService {
         let query = params.normalized()?;
         let as_of = BusinessDate::today();
         let keyword_party_ids = match query.keyword.as_deref() {
-            Some(keyword) => Some(
-                self.party
-                    .matching_current_party_ids_by_name(keyword, &mut NoTransaction)
-                    .await?,
-            ),
+            Some(keyword) => {
+                Some(self.party.matching_current_party_ids_by_name(keyword, &mut NoTransaction).await?)
+            },
             None => None,
         };
         let input = supplier_list_search_input(&query, as_of.to_string(), keyword_party_ids);
-        let bundle = self
-            .db
-            .supplier()
-            .load_supplier_list_bundle(&input, &mut NoTransaction)
-            .await?;
+        let bundle = self.db.supplier().load_supplier_list_bundle(&input, &mut NoTransaction).await?;
         let total = bundle.page.total;
-        let (parties, revisions) = self
-            .party
-            .list_with_current_revisions(&bundle.party_ids, &mut NoTransaction)
-            .await?;
+        let (parties, revisions) =
+            self.party.list_with_current_revisions(&bundle.party_ids, &mut NoTransaction).await?;
         let entity_names = load_entity_names(self.party.as_ref(), &bundle.profiles).await?;
         let items = assemble_supplier_views(SupplierViewAssembleInput {
             rows: bundle.page.items,
@@ -64,12 +56,7 @@ impl SupplierService {
             as_of,
         });
 
-        Ok(PageView {
-            items,
-            total,
-            page: input.page,
-            page_size: input.page_size,
-        })
+        Ok(PageView { items, total, page: input.page, page_size: input.page_size })
     }
 }
 
@@ -131,7 +118,5 @@ async fn load_entity_names(
     if ids.is_empty() {
         return Ok(HashMap::new());
     }
-    party
-        .current_legal_names_by_party_ids(&ids, &mut NoTransaction)
-        .await
+    party.current_legal_names_by_party_ids(&ids, &mut NoTransaction).await
 }

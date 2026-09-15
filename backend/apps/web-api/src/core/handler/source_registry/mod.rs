@@ -4,19 +4,16 @@
 //! 直接复用 支撑领域的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
 use erp_support::{
     CreateExternalIdentityMapRequest, CreateSourceSystemRequest, ExternalIdentityMapListParams,
     ExternalIdentityMapView, PageView, SourceSystemListParams, SourceSystemView, UpdateSourceSystemRequest,
 };
 
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "来源注册",
@@ -37,10 +34,7 @@ pub async fn source_system_list(
     State(state): State<AppState>,
     Query(params): Query<SourceSystemListParams>,
 ) -> Result<PageView<SourceSystemView>> {
-    let page = state
-        .source_registry_service()
-        .source_system_list(&params)
-        .await?;
+    let page = state.source_registry_service().source_system_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -94,10 +88,7 @@ pub async fn source_system_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateSourceSystemRequest>,
 ) -> Result<SourceSystemView> {
-    let view = state
-        .source_registry_service()
-        .update_source_system(&id, req, &actor)
-        .await?;
+    let view = state.source_registry_service().update_source_system(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -121,10 +112,7 @@ pub async fn external_identity_map_list(
     State(state): State<AppState>,
     Query(params): Query<ExternalIdentityMapListParams>,
 ) -> Result<PageView<ExternalIdentityMapView>> {
-    let page = state
-        .source_registry_service()
-        .external_identity_map_list(&params)
-        .await?;
+    let page = state.source_registry_service().external_identity_map_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -150,10 +138,7 @@ pub async fn external_identity_map_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateExternalIdentityMapRequest>,
 ) -> Result<ExternalIdentityMapView> {
-    let view = state
-        .source_registry_service()
-        .create_external_identity_map(req, &actor)
-        .await?;
+    let view = state.source_registry_service().create_external_identity_map(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

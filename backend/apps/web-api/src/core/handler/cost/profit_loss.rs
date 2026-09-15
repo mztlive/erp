@@ -1,21 +1,16 @@
 //! 实际盈亏协议入口；资源范围及同角色权限在报表读取事务内重验。
+use axum::extract::{Query, State};
+use axum::{Extension, Json};
+use erp_read_models::finance::actual_profit_loss::dto::{
+    PeriodBasisConfig, ProfitLossExport, ProfitLossQuery, ProfitLossView,
+};
+use erp_read_models::finance::actual_profit_loss::{ActualProfitLossReadModel, ProfitLossAccess};
+
+use crate::app_state::AppState;
+use crate::core::errors::{Error, Result};
 use crate::core::handler::customer::has_permission;
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::{Error, Result},
-        middleware::RbacSubject,
-        response::ApiResponse,
-    },
-};
-use axum::{
-    extract::{Query, State},
-    Extension, Json,
-};
-use erp_read_models::finance::actual_profit_loss::{
-    dto::{PeriodBasisConfig, ProfitLossExport, ProfitLossQuery, ProfitLossView},
-    ActualProfitLossReadModel, ProfitLossAccess,
-};
+use crate::core::middleware::RbacSubject;
+use crate::core::response::ApiResponse;
 
 /// 复核协议入口的读取权限，具体数据范围由组合层在事务内解析。
 async fn access(state: &AppState, subject: &RbacSubject) -> std::result::Result<ProfitLossAccess, Error> {
@@ -35,9 +30,7 @@ async fn access(state: &AppState, subject: &RbacSubject) -> std::result::Result<
     action = "list"
 )]
 pub async fn period_basis() -> Result<PeriodBasisConfig> {
-    Ok(ApiResponse::ok_with_data(
-        ActualProfitLossReadModel::period_basis(),
-    ))
+    Ok(ApiResponse::ok_with_data(ActualProfitLossReadModel::period_basis()))
 }
 /// 返回当前权限下的真实经营分析视图。
 #[permission_macros::permission(
@@ -55,9 +48,7 @@ pub async fn view(
 ) -> Result<ProfitLossView> {
     let access = access(&state, &subject).await?;
     Ok(ApiResponse::ok_with_data(
-        ActualProfitLossReadModel::new(state.db(), state.rbac())
-            .view(query, access, &actor)
-            .await?,
+        ActualProfitLossReadModel::new(state.db(), state.rbac()).view(query, access, &actor).await?,
     ))
 }
 /// 全量筛选导出与查询采用相同授权、金额规则和来源快照。
@@ -76,9 +67,7 @@ pub async fn export(
 ) -> Result<ProfitLossExport> {
     let access = access(&state, &subject).await?;
     Ok(ApiResponse::ok_with_data(
-        ActualProfitLossReadModel::new(state.db(), state.rbac())
-            .export(query, access, &actor)
-            .await?,
+        ActualProfitLossReadModel::new(state.db(), state.rbac()).export(query, access, &actor).await?,
     ))
 }
 
@@ -87,10 +76,7 @@ mod tests {
     use super::*;
     #[test]
     fn all_routes_require_existing_cost_read_permission() {
-        assert_eq!(
-            view_permission_key(),
-            super::super::cost_entry_list_permission_key()
-        );
+        assert_eq!(view_permission_key(), super::super::cost_entry_list_permission_key());
         assert_eq!(period_basis_permission_key(), view_permission_key());
         assert_eq!(export_permission_key(), view_permission_key());
     }

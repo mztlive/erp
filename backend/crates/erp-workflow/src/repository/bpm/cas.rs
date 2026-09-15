@@ -2,15 +2,14 @@ use bpm::ids::ApprovalNodeExecutionId;
 use bpm::model::types::{ApprovalDefinitionStatus, ApprovalNodeExecutionStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessDefinition};
 use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
-use mongodb::bson::{doc, serialize_to_document, Document};
+use mongodb::bson::{Document, doc, serialize_to_document};
+use persistence_core::{Error, Executor, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    i64_version, merge_documents, AssignDocumentNoOutcome, BpmWorkflowRepository, CasReplaceSpec,
-    CasWriteOutcome, DEFINITIONS, EXECUTIONS,
+    AssignDocumentNoOutcome, BpmWorkflowRepository, CasReplaceSpec, CasWriteOutcome, DEFINITIONS, EXECUTIONS,
+    i64_version, merge_documents,
 };
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Error, Result};
 
 impl<'a> BpmWorkflowRepository<'a> {
     pub(super) async fn cas_write_definition(
@@ -112,13 +111,13 @@ pub(super) fn draft_or_status_filter(
     match required_status {
         [status] => {
             filter.insert("status", status.as_str());
-        }
+        },
         statuses => {
             filter.insert(
                 "status",
                 doc! { "$in": statuses.iter().map(|status| status.as_str()).collect::<Vec<_>>() },
             );
-        }
+        },
     }
     Ok(filter)
 }
@@ -155,9 +154,7 @@ pub fn classify_cas_miss<T: HasBaseModel>(
 }
 
 fn next_version_i64(expected_version: u64) -> Result<i64> {
-    let next = expected_version
-        .checked_add(1)
-        .ok_or(Error::EntityMetadataOutOfRange("version"))?;
+    let next = expected_version.checked_add(1).ok_or(Error::EntityMetadataOutOfRange("version"))?;
     i64_version(next)
 }
 

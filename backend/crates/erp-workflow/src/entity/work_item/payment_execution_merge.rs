@@ -113,10 +113,7 @@ impl PaymentExecutionMergeSet {
     /// # 错误
     /// 无。
     pub fn payable_account_ids(&self) -> Vec<&str> {
-        self.members
-            .iter()
-            .map(|member| member.payable_account_id.as_str())
-            .collect()
+        self.members.iter().map(|member| member.payable_account_id.as_str()).collect()
     }
 
     /// 校验核销行覆盖且不超出本集合。
@@ -136,21 +133,15 @@ impl PaymentExecutionMergeSet {
         if allocation_account_ids.is_empty() {
             return Err(Error::from("至少提供一条核销分配"));
         }
-        let allowed: HashSet<&str> = self
-            .members
-            .iter()
-            .map(|member| member.payable_account_id.as_str())
-            .collect();
+        let allowed: HashSet<&str> =
+            self.members.iter().map(|member| member.payable_account_id.as_str()).collect();
         for account_id in allocation_account_ids {
             if !allowed.contains(account_id.as_str()) {
                 return Err(Error::from(self.out_of_scope_message()));
             }
         }
-        let mut covered: HashMap<&str, bool> = self
-            .members
-            .iter()
-            .map(|member| (member.payable_account_id.as_str(), false))
-            .collect();
+        let mut covered: HashMap<&str, bool> =
+            self.members.iter().map(|member| (member.payable_account_id.as_str(), false)).collect();
         for account_id in allocation_account_ids {
             if let Some(flag) = covered.get_mut(account_id.as_str()) {
                 *flag = true;
@@ -234,21 +225,27 @@ mod tests {
     #[test]
     fn invalid_members_fail_closed() {
         assert!(PaymentExecutionMergeSet::try_new(Vec::new()).is_err());
-        assert!(PaymentExecutionMergeSet::try_new(vec![
-            member("wi-1", "pa-1", "sup-1"),
-            member("wi-1", "pa-2", "sup-1"),
-        ])
-        .is_err());
-        assert!(PaymentExecutionMergeSet::try_new(vec![
-            member("wi-1", "pa-1", "sup-1"),
-            member("wi-2", "pa-1", "sup-1"),
-        ])
-        .is_err());
-        assert!(PaymentExecutionMergeSet::try_new(vec![
-            member("wi-1", "pa-1", "sup-1"),
-            member("wi-2", "pa-2", "sup-2"),
-        ])
-        .is_err());
+        assert!(
+            PaymentExecutionMergeSet::try_new(vec![
+                member("wi-1", "pa-1", "sup-1"),
+                member("wi-1", "pa-2", "sup-1"),
+            ])
+            .is_err()
+        );
+        assert!(
+            PaymentExecutionMergeSet::try_new(vec![
+                member("wi-1", "pa-1", "sup-1"),
+                member("wi-2", "pa-1", "sup-1"),
+            ])
+            .is_err()
+        );
+        assert!(
+            PaymentExecutionMergeSet::try_new(vec![
+                member("wi-1", "pa-1", "sup-1"),
+                member("wi-2", "pa-2", "sup-2"),
+            ])
+            .is_err()
+        );
         let too_many = (0..MAX_PAYMENT_EXECUTION_MERGE + 1)
             .map(|index| member(&format!("wi-{index}"), &format!("pa-{index}"), "sup-1"))
             .collect();
@@ -259,12 +256,8 @@ mod tests {
     #[test]
     fn single_task_rejects_foreign_allocation_with_legacy_message() {
         let set = PaymentExecutionMergeSet::try_new(vec![member("wi-1", "pa-1", "sup-1")]).unwrap();
-        let err = set
-            .ensure_allocations_in_scope(&["pa-2".to_string()])
-            .unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("一次付款只能核销当前任务绑定应付子账中的分录"));
+        let err = set.ensure_allocations_in_scope(&["pa-2".to_string()]).unwrap_err();
+        assert!(err.to_string().contains("一次付款只能核销当前任务绑定应付子账中的分录"));
     }
 
     /// 合并打款要求每条已勾选任务都有核销，且禁止集合外分录。
@@ -275,20 +268,12 @@ mod tests {
             member("wi-2", "pa-2", "sup-1"),
         ])
         .unwrap();
-        set.ensure_allocations_in_scope(&["pa-1".to_string(), "pa-2".to_string()])
-            .unwrap();
-        let missing = set
-            .ensure_allocations_in_scope(&["pa-1".to_string()])
-            .unwrap_err();
-        assert!(missing
-            .to_string()
-            .contains("合并付款必须为每条已勾选任务分配付款金额"));
-        let outsider = set
-            .ensure_allocations_in_scope(&["pa-1".to_string(), "pa-3".to_string()])
-            .unwrap_err();
-        assert!(outsider
-            .to_string()
-            .contains("一次付款只能核销已勾选付款任务对应应付中的分录"));
+        set.ensure_allocations_in_scope(&["pa-1".to_string(), "pa-2".to_string()]).unwrap();
+        let missing = set.ensure_allocations_in_scope(&["pa-1".to_string()]).unwrap_err();
+        assert!(missing.to_string().contains("合并付款必须为每条已勾选任务分配付款金额"));
+        let outsider =
+            set.ensure_allocations_in_scope(&["pa-1".to_string(), "pa-3".to_string()]).unwrap_err();
+        assert!(outsider.to_string().contains("一次付款只能核销已勾选付款任务对应应付中的分录"));
         assert!(set.ensure_allocations_in_scope(&[]).is_err());
     }
 }

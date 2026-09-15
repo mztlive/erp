@@ -6,21 +6,16 @@
 pub mod profit_loss;
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
+use erp_finance::dto::cost::{
+    CostAllocationView, CostEntryView, CreateCostEntryRequest, PageView, ScopedCostEntryView,
 };
-use erp_finance::dto::cost::CostAllocationView;
-use erp_finance::dto::cost::CostEntryView;
-use erp_finance::dto::cost::CreateCostEntryRequest;
-use erp_finance::dto::cost::PageView;
-use erp_finance::dto::cost::ScopedCostEntryView;
 use erp_read_models::finance::cost::{AllocationReadParams, CostReadModel, CostReadParams, CostReadResult};
 
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "实际经营盈亏",
@@ -42,9 +37,7 @@ pub async fn cost_entry_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<CostReadParams>,
 ) -> Result<CostReadResult<PageView<ScopedCostEntryView>>> {
-    let page = CostReadModel::new(state.db(), state.rbac())
-        .list(params, &actor)
-        .await?;
+    let page = CostReadModel::new(state.db(), state.rbac()).list(params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -69,9 +62,7 @@ pub async fn cost_entry_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<CostReadResult<ScopedCostEntryView>> {
-    let view = CostReadModel::new(state.db(), state.rbac())
-        .detail(&id, &actor)
-        .await?;
+    let view = CostReadModel::new(state.db(), state.rbac()).detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -124,23 +115,20 @@ pub async fn cost_allocation_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<AllocationReadParams>,
 ) -> Result<CostReadResult<PageView<CostAllocationView>>> {
-    let page = CostReadModel::new(state.db(), state.rbac())
-        .allocations(params, &actor)
-        .await?;
+    let page = CostReadModel::new(state.db(), state.rbac()).allocations(params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use axum::http::Uri;
+
+    use super::*;
 
     #[test]
     fn scope_query_decodes_real_url_numbers_and_rejects_unregistered_filters() {
-        let uri: Uri = "/?page=2&page_size=25&scope_version=v1&cost_stage=actual"
-            .parse()
-            .unwrap();
+        let uri: Uri = "/?page=2&page_size=25&scope_version=v1&cost_stage=actual".parse().unwrap();
         let Query(params) = Query::<CostReadParams>::try_from_uri(&uri).unwrap();
         assert_eq!(params.page, Some(2));
         assert_eq!(params.scope_version.as_deref(), Some("v1"));

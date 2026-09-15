@@ -1,36 +1,31 @@
 //! 发票列表、详情、草稿创建、销项提交与过账编排。
 
-use erp_finance::repository::ReceivableExt;
-
-use erp_audit::AuditExt;
+use application_core::{AuditActor, CommandReceipt};
+use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
 use erp_core::ids::InvoiceId;
 use erp_finance::entity::receivable::{Invoice, InvoiceData, InvoiceStatus};
-
+use erp_finance::repository::ReceivableExt;
+use erp_finance::service::receivable::invoice_commit::{
+    PreparedInvoiceCommit, convert_post_allocations, ensure_sales_invoice,
+};
+use erp_finance::service::receivable::mapping::{ensure_expected_version, zero_amount};
+use erp_identity::SharedRbacService;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_workflow::service::approval::binding::{
+    BindPublishedDefinitionCommand, BindingDecision, binding_decision,
+};
+use erp_workflow::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
+use erp_workflow::service::approval::policy::{DocumentApprovalPolicy, policy_of};
+use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::dto::{CommitInvoiceRequest, CreateInvoiceRequest, InvoiceView, PostInvoiceRequest};
 use super::ReceivableProcess;
+use super::dto::{CommitInvoiceRequest, CreateInvoiceRequest, InvoiceView, PostInvoiceRequest};
 use crate::{Error, Result};
-use application_core::AuditActor;
-use application_core::CommandReceipt;
-use erp_audit::AuditActorLogs;
-use erp_audit::CommandReceiptServiceExt as _;
-use erp_finance::service::receivable::invoice_commit::{
-    convert_post_allocations, ensure_sales_invoice, PreparedInvoiceCommit,
-};
-use erp_finance::service::receivable::mapping::{ensure_expected_version, zero_amount};
-use erp_identity::SharedRbacService;
-use erp_workflow::service::approval::binding::{
-    binding_decision, BindPublishedDefinitionCommand, BindingDecision,
-};
-use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
-use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
-use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 
 impl ReceivableProcess {
     // -----------------------------------------------------------------------
@@ -79,10 +74,7 @@ impl ReceivableProcess {
             actor.clone(),
         )
         .await?;
-        self.finance
-            .invoice_detail(&invoice.base.id)
-            .await
-            .map_err(Error::from)
+        self.finance.invoice_detail(&invoice.base.id).await.map_err(Error::from)
     }
 
     /// 原子创建或提交销项发票并完成分配。
@@ -113,11 +105,7 @@ impl ReceivableProcess {
             &req,
         )?;
         if let Some(invoice_id) = command_receipt.committed_resource_id(&self.db).await? {
-            return self
-                .finance
-                .invoice_detail(&invoice_id)
-                .await
-                .map_err(Error::from);
+            return self.finance.invoice_detail(&invoice_id).await.map_err(Error::from);
         }
         let prepared = req.prepare()?;
         let expected_task_version =
@@ -168,12 +156,8 @@ impl ReceivableProcess {
                             .await?;
                             db.invoices().create(&new_invoice, session).await?;
                             (new_invoice, allocations)
-                        }
-                        PreparedInvoiceCommit::Existing {
-                            invoice_id,
-                            expected_version,
-                            allocations,
-                        } => {
+                        },
+                        PreparedInvoiceCommit::Existing { invoice_id, expected_version, allocations } => {
                             let invoice = db
                                 .invoices()
                                 .find_by_id(&invoice_id, session)
@@ -182,7 +166,7 @@ impl ReceivableProcess {
                             ensure_expected_version(invoice.base.version, expected_version)?;
                             ensure_sales_invoice(&invoice)?;
                             (invoice, allocations)
-                        }
+                        },
                     };
                     if invoice.stable.status() != InvoiceStatus::Draft {
                         return Err(Error::ConflictError("发票已登记，请勿重复提交".to_string()));
@@ -195,10 +179,7 @@ impl ReceivableProcess {
                             session,
                         )
                         .await?;
-                    if duplicate
-                        .as_ref()
-                        .is_some_and(|other| other.base.id != invoice.base.id)
-                    {
+                    if duplicate.as_ref().is_some_and(|other| other.base.id != invoice.base.id) {
                         return Err(Error::ConflictError("发票号码已登记，请勿重复提交".to_string()));
                     }
                     super::invoice_posting::post_invoice_in_transaction(
@@ -332,10 +313,10 @@ fn invoice_create_binding_decision() -> Result<BindingDecision> {
                 return Err(Error::Internal("发票政策类型不匹配".to_string()));
             }
             Ok(binding_decision(policy.requirement()))
-        }
-        DocumentApprovalPolicy::ProcessRequired(_) => Err(Error::Internal(
-            "发票必须是 NO_APPROVAL，不得绑定流程".to_string(),
-        )),
+        },
+        DocumentApprovalPolicy::ProcessRequired(_) => {
+            Err(Error::Internal("发票必须是 NO_APPROVAL，不得绑定流程".to_string()))
+        },
     }
 }
 
@@ -375,9 +356,7 @@ fn ensure_invoice_has_no_adapter() -> Result<()> {
 fn invoice_binding_organization_id(invoice: &Invoice) -> Result<String> {
     let org = invoice.party_id.to_string();
     if org.trim().is_empty() {
-        return Err(Error::ValidationError(
-            "发票缺少往来主体，无法构造绑定上下文".to_string(),
-        ));
+        return Err(Error::ValidationError("发票缺少往来主体，无法构造绑定上下文".to_string()));
     }
     Ok(org)
 }
@@ -422,9 +401,7 @@ fn apply_invoice_create_binding(
     binding: Option<ApprovalDefinitionBinding>,
 ) -> Result<Option<ApprovalDefinitionBinding>> {
     if binding.is_some() {
-        return Err(Error::Internal(
-            "发票为 NO_APPROVAL，不得写入审批绑定".to_string(),
-        ));
+        return Err(Error::Internal("发票为 NO_APPROVAL，不得写入审批绑定".to_string()));
     }
     if document.approval_binding.is_some() {
         return Err(Error::Internal("发票注册行不得预置审批绑定".to_string()));
@@ -462,9 +439,7 @@ async fn persist_unbound_invoice_document(
     )
     .await?;
     apply_invoice_create_binding(&mut document, binding)?;
-    persist_registered_document(db, &document, executor)
-        .await
-        .map_err(crate::Error::from)
+    persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
 }
 
 /// 为已构造发票登记 `BusinessDocument` 并调用统一绑定端口。
@@ -480,12 +455,9 @@ pub(super) async fn register_created_invoice_document(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let bind_command = invoice_bind_command(invoice, actor.id())?;
-    let document = new_registered_document(
-        &invoice.base.id,
-        DocumentType::Invoice,
-        invoice.invoice_no.clone(),
-    )
-    .map_err(crate::Error::from)?;
+    let document =
+        new_registered_document(&invoice.base.id, DocumentType::Invoice, invoice.invoice_no.clone())
+            .map_err(crate::Error::from)?;
     persist_unbound_invoice_document(db, rbac, object_read, document, &bind_command, actor, executor).await
 }
 
@@ -500,9 +472,7 @@ async fn persist_created_invoice(
     invoice: Invoice,
     actor: AuditActor,
 ) -> Result<()> {
-    let audit = actor
-        .clone()
-        .resource_log("invoice.create", "invoice", invoice.base.id.clone())?;
+    let audit = actor.clone().resource_log("invoice.create", "invoice", invoice.base.id.clone())?;
     let db = db.clone();
     let rbac = rbac.clone();
     let object_read = object_read.clone();
@@ -529,20 +499,22 @@ async fn persist_created_invoice(
 
 #[cfg(test)]
 mod invoice_no_approval_tests {
-    use super::{
-        apply_invoice_create_binding, ensure_invoice_has_no_adapter, ensure_invoice_skips_approval_binding,
-        invoice_bind_command, invoice_create_binding_decision, policy_of, BindingDecision,
-        DocumentApprovalPolicy, DocumentType, Invoice, InvoiceData,
-    };
-    use bpm::ids::ApprovalProcessDefinitionId;
+    use std::str::FromStr;
+
     use bpm::ProcessKind;
+    use bpm::ids::ApprovalProcessDefinitionId;
     use erp_core::common::time::{BusinessDate, Instant};
     use erp_core::ids::{InvoiceId, PartyId};
     use erp_core::money::Amount;
     use erp_finance::entity::receivable::{InvoiceDirection, InvoiceKind};
     use erp_workflow::service::approval::binding::binding_from_published;
     use erp_workflow::service::document_registry::new_registered_document;
-    use std::str::FromStr;
+
+    use super::{
+        BindingDecision, DocumentApprovalPolicy, DocumentType, Invoice, InvoiceData,
+        apply_invoice_create_binding, ensure_invoice_has_no_adapter, ensure_invoice_skips_approval_binding,
+        invoice_bind_command, invoice_create_binding_decision, policy_of,
+    };
 
     fn draft_invoice() -> Invoice {
         Invoice::new(
@@ -575,10 +547,7 @@ mod invoice_no_approval_tests {
         };
         assert_eq!(no_approval.document_type, DocumentType::Invoice);
         assert_eq!(no_approval.process_kind, ProcessKind::Invoice);
-        assert_eq!(
-            invoice_create_binding_decision().expect("绑定决定"),
-            BindingDecision::SkipNoApproval
-        );
+        assert_eq!(invoice_create_binding_decision().expect("绑定决定"), BindingDecision::SkipNoApproval);
         assert_eq!(
             ensure_invoice_skips_approval_binding().expect("必须跳过"),
             BindingDecision::SkipNoApproval
@@ -595,33 +564,24 @@ mod invoice_no_approval_tests {
         assert_eq!(command.business_object_id, invoice.base.id);
         assert_eq!(command.context.organization_id, "party-1");
 
-        let mut document = new_registered_document(
-            &invoice.base.id,
-            DocumentType::Invoice,
-            invoice.invoice_no.clone(),
-        )
-        .expect("可注册");
+        let mut document =
+            new_registered_document(&invoice.base.id, DocumentType::Invoice, invoice.invoice_no.clone())
+                .expect("可注册");
         assert!(document.approval_binding.is_none());
         let empty = apply_invoice_create_binding(&mut document, None).expect("空绑定");
         assert!(empty.is_none());
         assert!(document.approval_binding.is_none());
 
-        let forged = binding_from_published(
-            ApprovalProcessDefinitionId::new("def-1"),
-            1,
-            Instant::from_unix_secs(10),
-        )
-        .expect("测试绑定");
+        let forged =
+            binding_from_published(ApprovalProcessDefinitionId::new("def-1"), 1, Instant::from_unix_secs(10))
+                .expect("测试绑定");
         assert!(apply_invoice_create_binding(&mut document, Some(forged)).is_err());
     }
 
     /// 创建路径调用统一绑定端口，不查询发布定义、不启动实例、不建任务。
     #[test]
     fn create_does_not_query_definition_or_start_instance() {
-        let production = include_str!("invoice.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("invoice.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("persist_created_invoice"));
         assert!(production.contains("register_created_invoice_document"));
         assert!(production.contains("persist_unbound_invoice_document"));

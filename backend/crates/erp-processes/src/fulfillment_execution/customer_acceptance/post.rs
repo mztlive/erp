@@ -1,10 +1,4 @@
 //! 客户验收草稿过账根事务；原状态机冲突语义不转换为收据回放。
-use super::task::prepare_customer_acceptance_task_command;
-use super::{
-    completion::{complete_acceptance, CompletionKind},
-    CustomerAcceptanceProcess,
-};
-use crate::Result;
 use application_core::AuditActor;
 use erp_core::ids::CustomerAcceptanceId;
 use erp_fulfillment::dto::{CustomerAcceptanceView, PostCustomerAcceptanceRequest};
@@ -12,6 +6,11 @@ use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
 use erp_fulfillment::service::FulfillmentService;
 use persistence_core::Transactional;
 use validator::Validate;
+
+use super::CustomerAcceptanceProcess;
+use super::completion::{CompletionKind, complete_acceptance};
+use super::task::prepare_customer_acceptance_task_command;
+use crate::Result;
 impl CustomerAcceptanceProcess {
     /// 过账客户验收（草稿 → 已过账；§8.2 第 5 条跨集合事务）。
     ///
@@ -39,11 +38,7 @@ impl CustomerAcceptanceProcess {
     #[tracing::instrument(
         name = "fulfillment.customer_acceptance_post",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "customer_acceptance_post"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "customer_acceptance_post")
     )]
     pub async fn post_customer_acceptance(
         &self,

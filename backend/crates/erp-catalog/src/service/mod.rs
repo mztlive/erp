@@ -3,6 +3,6 @@
 pub mod catalog;
 
 pub use catalog::{
-    sellable_sku_invalid_error, CatalogService, SellableSkuListParams, SellableSkuSpecificationAttributeView,
-    SellableSkuView,
+    CatalogService, SellableSkuListParams, SellableSkuSpecificationAttributeView, SellableSkuView,
+    sellable_sku_invalid_error,
 };

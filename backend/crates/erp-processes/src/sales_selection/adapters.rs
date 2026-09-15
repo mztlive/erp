@@ -1,20 +1,21 @@
 //! 选品册跨域适配器。
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
-use erp_catalog::entity::catalog::{read_specification_signature, SpecificationSignatureRead};
+use erp_catalog::entity::catalog::{SpecificationSignatureRead, read_specification_signature};
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use erp_core::common::time::BusinessDate;
 use erp_customer::CustomerAccountStatus;
+use erp_sales::Result as SalesResult;
 use erp_sales::entity::sales_selection::{
     ImageAssetSnapshot, PoolFilterSnapshot, SpecificationAttributeSnapshot,
 };
 use erp_sales::ports::sales_selection::{
     SelectionCatalogPort, SelectionCustomerFact, SelectionCustomerPort, SelectionImagePort, SelectionSkuFact,
 };
-use erp_sales::Result as SalesResult;
 use mongodb::Database;
 use persistence_core::NoTransaction;
-use std::sync::Arc;
 use storage::S3Storage;
 
 /// 客户适配器。
@@ -142,10 +143,7 @@ impl SelectionCatalogPort for CatalogAdapter {
             .find_sellable_sku_refs(refs, as_of, &mut NoTransaction)
             .await
             .map_err(map_store)?;
-        Ok(rows
-            .into_iter()
-            .map(|row| (row.sku_id, row.sku_revision_id))
-            .collect())
+        Ok(rows.into_iter().map(|row| (row.sku_id, row.sku_revision_id)).collect())
     }
 }
 
@@ -190,15 +188,8 @@ impl SelectionImagePort for ImageAdapter {
             return Ok(None);
         };
         let new_key = format!("sales-selection/{booklet_id}/{batch_id}/{source_asset_id}");
-        if self
-            .storage
-            .save_with_content_type(&new_key, &bytes, Some(&view.content_type))
-            .await
-            .is_err()
-        {
-            return Err(erp_sales::Error::selection_prepare_failed(
-                "图片快照保存失败，请重新准备",
-            ));
+        if self.storage.save_with_content_type(&new_key, &bytes, Some(&view.content_type)).await.is_err() {
+            return Err(erp_sales::Error::selection_prepare_failed("图片快照保存失败，请重新准备"));
         }
         Ok(Some(ImageAssetSnapshot {
             file_asset_id: view.id,
@@ -256,10 +247,7 @@ fn to_fact(row: erp_catalog::repository::SellableSkuRow) -> SelectionSkuFact {
         category_id: row.category_id,
         name: row.name,
         specification_attributes,
-        unit: row
-            .base_unit_name
-            .or(row.base_unit_code)
-            .unwrap_or_else(|| "件".into()),
+        unit: row.base_unit_name.or(row.base_unit_code).unwrap_or_else(|| "件".into()),
         main_image_asset_id: row.main_image_asset_id,
         sales_visible_price_gross: row.sales_visible_price_gross,
     }

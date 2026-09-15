@@ -1,15 +1,17 @@
 //! 采购责任授权快照与事务内重验；真实 RBAC 适配器和纯测试共用顺序函数。
 
-use super::resolver::{
-    authorized_line, plan_identities, purchase_create_permission, AuthorizedResolutionPlan,
-};
-use crate::{Error, Result};
+use std::collections::HashSet;
+
 use async_trait::async_trait;
 use erp_core::AccountKind;
-use erp_identity::{subject, SharedRbacService};
+use erp_identity::{SharedRbacService, subject};
 use erp_procurement::service::procurement_responsibility::CandidateResolution;
 use persistence_core::Executor;
-use std::collections::HashSet;
+
+use super::resolver::{
+    AuthorizedResolutionPlan, authorized_line, plan_identities, purchase_create_permission,
+};
+use crate::{Error, Result};
 
 #[async_trait]
 trait ResponsibilityPolicy: Send + Sync {
@@ -27,10 +29,7 @@ impl ResponsibilityPolicy for RbacPolicy<'_> {
     }
     async fn enforce_owner(&self, owner_id: &str) -> Result<bool> {
         let permission = purchase_create_permission()?;
-        Ok(self
-            .0
-            .enforce(&subject(AccountKind::Admin, owner_id), &permission)
-            .await?)
+        Ok(self.0.enforce(&subject(AccountKind::Admin, owner_id), &permission).await?)
     }
     async fn revision_with_executor(&self, executor: &mut dyn Executor) -> Result<u64> {
         Ok(self.0.policy_revision_with_executor(executor).await?)
@@ -71,18 +70,13 @@ async fn authorize(
     }
     let after = policy.revision().await?;
     if after != policy_revision {
-        return Err(Error::ConflictError(
-            "采购负责人授权策略正在变化，请重试".to_string(),
-        ));
+        return Err(Error::ConflictError("采购负责人授权策略正在变化，请重试".to_string()));
     }
     let mut lines = Vec::with_capacity(candidates.len());
     for candidate in candidates {
         lines.push(authorized_line(candidate)?);
     }
-    Ok(AuthorizedResolutionPlan {
-        lines,
-        policy_revision,
-    })
+    Ok(AuthorizedResolutionPlan { lines, policy_revision })
 }
 
 async fn revalidate(
@@ -94,26 +88,24 @@ async fn revalidate(
     let actual = plan_identities(candidates)?;
     let expected_identity = expected.identities();
     if actual != expected_identity {
-        return Err(Error::ConflictError(
-            "采购责任规则或目录事实已变化，请重新提交审批".to_string(),
-        ));
+        return Err(Error::ConflictError("采购责任规则或目录事实已变化，请重新提交审批".to_string()));
     }
     let revision = policy.revision_with_executor(executor).await?;
     if revision != expected.policy_revision {
-        return Err(Error::ConflictError(
-            "采购负责人授权策略已变化，请重新提交审批".to_string(),
-        ));
+        return Err(Error::ConflictError("采购负责人授权策略已变化，请重新提交审批".to_string()));
     }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use erp_procurement::entity::procurement_responsibility::ProcurementResponsibilityRuleType;
-    use mongodb::ClientSession;
     use std::collections::VecDeque;
     use std::sync::Mutex;
+
+    use erp_procurement::entity::procurement_responsibility::ProcurementResponsibilityRuleType;
+    use mongodb::ClientSession;
+
+    use super::*;
 
     struct Fixture {
         revisions: Mutex<VecDeque<u64>>,
@@ -189,10 +181,7 @@ mod tests {
         .unwrap();
         assert_eq!(plan.policy_revision, 7);
         assert_eq!(
-            plan.lines
-                .iter()
-                .map(|line| line.identity.line_key.as_str())
-                .collect::<Vec<_>>(),
+            plan.lines.iter().map(|line| line.identity.line_key.as_str()).collect::<Vec<_>>(),
             ["line-2", "line-1", "line-3"]
         );
         assert_eq!(
@@ -207,10 +196,7 @@ mod tests {
         fixture.denied = Some("owner-1");
         let error = authorize(
             &fixture,
-            vec![
-                candidate("line-1", "owner-1", "管理员"),
-                candidate("line-2", "owner-2", "李四"),
-            ],
+            vec![candidate("line-1", "owner-1", "管理员"), candidate("line-2", "owner-2", "李四")],
         )
         .await
         .unwrap_err();
@@ -223,9 +209,7 @@ mod tests {
     #[tokio::test]
     async fn policy_change_prevents_creation_of_authorized_plan() {
         let fixture = Fixture::new(&[7, 8]);
-        let error = authorize(&fixture, vec![candidate("line-1", "owner-1", "张三")])
-            .await
-            .unwrap_err();
+        let error = authorize(&fixture, vec![candidate("line-1", "owner-1", "张三")]).await.unwrap_err();
         assert!(
             matches!(error, Error::ConflictError(message) if message == "采购负责人授权策略正在变化，请重试")
         );
@@ -236,14 +220,9 @@ mod tests {
         let fixture = Fixture::new(&[7]);
         let mut executor = RecordingExecutor::default();
         let address = &mut executor as *mut RecordingExecutor as usize;
-        revalidate(
-            &fixture,
-            &[candidate("line-1", "owner-1", "新姓名")],
-            &plan(),
-            &mut executor,
-        )
-        .await
-        .unwrap();
+        revalidate(&fixture, &[candidate("line-1", "owner-1", "新姓名")], &plan(), &mut executor)
+            .await
+            .unwrap();
         assert_eq!(*fixture.events.lock().unwrap(), ["transaction.revision"]);
         assert_eq!(*fixture.executor.lock().unwrap(), Some(address));
         assert_eq!(executor.visits, 1);

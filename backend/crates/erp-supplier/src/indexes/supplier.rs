@@ -6,14 +6,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::SupplierExt;
-use persistence_core::Result;
 
 /// `supplier_account` 集合名。
 pub(crate) const SUPPLIER_ACCOUNTS: &str = <mongodb::Database as SupplierExt>::SUPPLIER_ACCOUNTS;
@@ -59,27 +57,12 @@ pub(crate) const SUPPLIER_PROFILE_COMMANDS: &str =
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SUPPLIER_ACCOUNTS, supplier_account_indexes()).await?;
-    create_indexes(
-        db,
-        SUPPLIER_COMMERCIAL_PROFILE_REVISIONS,
-        commercial_profile_indexes(),
-    )
-    .await?;
+    create_indexes(db, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS, commercial_profile_indexes()).await?;
     create_indexes(db, SUPPLIER_CAPABILITIES, capability_indexes()).await?;
     create_indexes(db, SUPPLIER_CAPABILITY_REVISIONS, capability_revision_indexes()).await?;
     create_indexes(db, SUPPLIER_QUALIFICATIONS, qualification_indexes()).await?;
-    create_indexes(
-        db,
-        SUPPLIER_QUALIFICATION_REVISIONS,
-        qualification_revision_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        SUPPLIER_QUALIFICATION_CAPABILITIES,
-        qualification_capability_indexes(),
-    )
-    .await?;
+    create_indexes(db, SUPPLIER_QUALIFICATION_REVISIONS, qualification_revision_indexes()).await?;
+    create_indexes(db, SUPPLIER_QUALIFICATION_CAPABILITIES, qualification_capability_indexes()).await?;
     create_indexes(db, SUPPLIER_RATING_REVISIONS, rating_revision_indexes()).await?;
     create_indexes(db, SUPPLIER_PROFILE_COMMANDS, profile_command_indexes()).await?;
     Ok(())
@@ -87,9 +70,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -133,10 +114,7 @@ fn capability_indexes() -> Vec<IndexModel> {
             "idx_supplier_capabilities_selection",
             doc! { "capability_code": 1, "status": 1, "valid_to": 1 },
         ),
-        named_index(
-            "idx_supplier_capabilities_supplier_status",
-            doc! { "supplier_id": 1, "status": 1 },
-        ),
+        named_index("idx_supplier_capabilities_supplier_status", doc! { "supplier_id": 1, "status": 1 }),
     ]
 }
 
@@ -155,10 +133,7 @@ fn qualification_indexes() -> Vec<IndexModel> {
             "uk_supplier_qualifications_identity",
             doc! { "supplier_id": 1, "qualification_type": 1, "certificate_no": 1 },
         ),
-        named_index(
-            "idx_supplier_qualifications_expiry",
-            doc! { "valid_to": 1, "status": 1 },
-        ),
+        named_index("idx_supplier_qualifications_expiry", doc! { "valid_to": 1, "status": 1 }),
         named_index(
             "idx_supplier_qualifications_supplier",
             doc! { "supplier_id": 1, "qualification_type": 1, "status": 1 },
@@ -196,9 +171,7 @@ fn qualification_capability_indexes() -> Vec<IndexModel> {
         IndexModel::builder()
             .keys(doc! { "capability_id": 1, "qualification_id": 1 })
             .options(
-                IndexOptions::builder()
-                    .name("idx_supplier_capability_qualifications".to_string())
-                    .build(),
+                IndexOptions::builder().name("idx_supplier_capability_qualifications".to_string()).build(),
             )
             .build(),
     ]
@@ -220,18 +193,12 @@ fn rating_revision_indexes() -> Vec<IndexModel> {
 
 /// 返回根级保存命令的幂等唯一约束。
 fn profile_command_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_supplier_profile_commands_idempotency_key",
-        doc! { "idempotency_key": 1 },
-    )]
+    vec![unique_index("uk_supplier_profile_commands_idempotency_key", doc! { "idempotency_key": 1 })]
 }
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -255,11 +222,9 @@ mod tests {
     fn supplier_account_identity_indexes_are_globally_unique() {
         let indexes = supplier_account_indexes();
 
-        for name in [
-            "uk_supplier_accounts_id",
-            "uk_supplier_accounts_party",
-            "uk_supplier_accounts_supplier_no",
-        ] {
+        for name in
+            ["uk_supplier_accounts_id", "uk_supplier_accounts_party", "uk_supplier_accounts_supplier_no"]
+        {
             let index = indexes
                 .iter()
                 .find(|index| {
@@ -282,10 +247,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(index.keys, doc! { "id": 1 });
-        assert_eq!(
-            index.options.as_ref().and_then(|options| options.unique),
-            Some(true)
-        );
+        assert_eq!(index.options.as_ref().and_then(|options| options.unique), Some(true));
     }
 
     #[test]
@@ -335,9 +297,7 @@ mod tests {
                 }
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "valid_to": 1, "status": 1 } }));
+        assert!(indexes.iter().any(|index| { index.keys == doc! { "valid_to": 1, "status": 1 } }));
     }
 
     #[test]
@@ -347,9 +307,9 @@ mod tests {
             index.keys == doc! { "qualification_id": 1, "capability_id": 1 }
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
-        assert!(links
-            .iter()
-            .any(|index| { index.keys == doc! { "capability_id": 1, "qualification_id": 1 } }));
+        assert!(
+            links.iter().any(|index| { index.keys == doc! { "capability_id": 1, "qualification_id": 1 } })
+        );
 
         let ratings = rating_revision_indexes();
         assert!(ratings.iter().any(|index| {

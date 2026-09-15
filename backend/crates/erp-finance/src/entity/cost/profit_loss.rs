@@ -1,7 +1,8 @@
 //! 一期实际经营盈亏的纯金额规则；冲减为正数事实，在公式中只加回一次。
-use super::{CostStage, CostType};
 use erp_core::{Error, Result};
 use rust_decimal::Decimal;
+
+use super::{CostStage, CostType};
 
 /// 一组成本事实的阶段汇总。预计、确认不进入实际金额。
 #[derive(Debug, Clone, Default)]
@@ -30,9 +31,7 @@ impl ProfitLossAmounts {
             (CostStage::Confirmed, true) => &mut self.confirmed_procurement,
             (CostStage::Confirmed, false) => &mut self.confirmed_fulfillment,
         };
-        *target = target
-            .checked_add(net)
-            .ok_or_else(|| Error::from("盈亏金额超出范围"))?;
+        *target = target.checked_add(net).ok_or_else(|| Error::from("盈亏金额超出范围"))?;
         Ok(())
     }
     /// 收入减实际成本再加冲减；不完整的成本由调用方禁止输出利润。
@@ -60,9 +59,7 @@ impl ProfitLossAmounts {
     pub fn coverage_gaps(&self, evidence: CoverageEvidence<'_>) -> Result<Vec<CoverageGap>> {
         let mut gaps = evidence.gaps();
         let mut actual = self.procurement;
-        actual = actual
-            .checked_add(self.fulfillment)
-            .ok_or_else(|| Error::from("实际成本超出范围"))?;
+        actual = actual.checked_add(self.fulfillment).ok_or_else(|| Error::from("实际成本超出范围"))?;
         if self.reductions > actual {
             gaps.push(CoverageGap {
                 code: "EXCESS_REDUCTION",
@@ -131,16 +128,11 @@ mod tests {
             a.add(stage, kind, Decimal::from(value)).unwrap();
         }
         assert_eq!(a.profit(Decimal::from(100)).unwrap(), Decimal::from(35));
-        assert!(a
-            .add(CostStage::Reduction, CostType::Product, Decimal::NEGATIVE_ONE)
-            .is_err());
+        assert!(a.add(CostStage::Reduction, CostType::Product, Decimal::NEGATIVE_ONE).is_err());
     }
     #[test]
     fn zero_and_negative_margin_are_valid() {
-        let a = ProfitLossAmounts {
-            procurement: Decimal::from(110),
-            ..Default::default()
-        };
+        let a = ProfitLossAmounts { procurement: Decimal::from(110), ..Default::default() };
         assert_eq!(a.profit(Decimal::from(100)).unwrap(), Decimal::from(-10));
         assert_eq!(a.profit(Decimal::ZERO).unwrap(), Decimal::from(-110));
     }

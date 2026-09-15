@@ -2,13 +2,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_core::ids::{SalesSelectionBookletId, SalesSelectionDisplayItemId, SalesSelectionSessionId};
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::limits::{QUANTITY_MAX, QUANTITY_MIN};
 use super::types::SubmitMode;
-use erp_core::ids::{SalesSelectionBookletId, SalesSelectionDisplayItemId, SalesSelectionSessionId};
-use erp_core::money::Amount;
-use erp_core::{Error, Result};
 
 /// 会话内一项选择。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -121,9 +121,7 @@ impl SalesSelectionSession {
         }
         let mut total = Amount::zero();
         for choice in &self.choices {
-            let quantity = choice
-                .quantity
-                .ok_or_else(|| Error::from("按份采购必须填写份数"))?;
+            let quantity = choice.quantity.ok_or_else(|| Error::from("按份采购必须填写份数"))?;
             let price = price_of(&choice.display_item_id).ok_or_else(|| Error::from("选择了无效陈列项"))?;
             total = super::pricing::try_add(total, super::pricing::try_mul_u32(price, quantity)?)?;
         }
@@ -206,30 +204,28 @@ fn normalize_quantity(quantity: Option<u32>, submit_mode: SubmitMode) -> Result<
                 return Err(Error::from("份数必须是 1 到 100000 的整数"));
             }
             Ok(Some(quantity))
-        }
+        },
         SubmitMode::MallRedeem => {
             if quantity.is_some() {
                 return Err(Error::from("商城兑换不能填写份数"));
             }
             Ok(None)
-        }
+        },
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_choices, SessionChoice};
-    use crate::entity::sales_selection::types::SubmitMode;
     use erp_core::ids::SalesSelectionDisplayItemId;
+
+    use super::{SessionChoice, normalize_choices};
+    use crate::entity::sales_selection::types::SubmitMode;
 
     #[test]
     fn mall_redeem_rejects_quantity() {
         let id = SalesSelectionDisplayItemId::new("d1");
         let error = normalize_choices(
-            vec![SessionChoice {
-                display_item_id: id.clone(),
-                quantity: Some(1),
-            }],
+            vec![SessionChoice { display_item_id: id.clone(), quantity: Some(1) }],
             SubmitMode::MallRedeem,
             &[id],
         )
@@ -240,10 +236,7 @@ mod tests {
     #[test]
     fn by_quantity_rejects_duplicate() {
         let id = SalesSelectionDisplayItemId::new("d1");
-        let choice = SessionChoice {
-            display_item_id: id.clone(),
-            quantity: Some(2),
-        };
+        let choice = SessionChoice { display_item_id: id.clone(), quantity: Some(2) };
         let error =
             normalize_choices(vec![choice.clone(), choice], SubmitMode::ByQuantity, &[id]).unwrap_err();
         assert!(error.to_string().contains("重复"));

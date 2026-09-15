@@ -479,9 +479,6 @@ mod tests {
             std::any::type_name::<ApprovalSubjectSnapshotId>(),
             std::any::type_name::<ApprovalNotificationOutboxId>()
         );
-        assert_ne!(
-            std::any::type_name::<ApprovalSubjectSnapshotId>(),
-            std::any::type_name::<WorkItemId>()
-        );
+        assert_ne!(std::any::type_name::<ApprovalSubjectSnapshotId>(), std::any::type_name::<WorkItemId>());
     }
 }

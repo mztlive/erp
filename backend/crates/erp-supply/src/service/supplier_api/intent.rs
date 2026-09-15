@@ -1,13 +1,12 @@
 //! 连接后台任务的本域资格、健康快照与命令回执。
-use super::{
-    command::CommandIdentity,
-    context::{digest, ensure_version},
-    SupplierApiService,
-};
+use persistence_core::Executor;
+
+use super::SupplierApiService;
+use super::command::CommandIdentity;
+use super::context::{digest, ensure_version};
 use crate::entity::supplier_api::*;
 use crate::repository::SupplierApiExt;
 use crate::{Error, Result};
-use persistence_core::Executor;
 impl SupplierApiService {
     /// 在任务 ID 生成之前执行原连接版本与能力治理资格。
     pub async fn prepare_job_target(
@@ -71,10 +70,7 @@ impl SupplierApiService {
         run: &SupplierHealthCheckRun,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .supplier_api_health_check_runs()
-            .create(run, executor)
-            .await?;
+        self.db.supplier_api_health_check_runs().create(run, executor).await?;
         Ok(())
     }
     /// 原 receipt 构造器，不构造或写入审计。
@@ -107,10 +103,7 @@ impl SupplierApiService {
         receipt: &SupplierConnectionCommandReceipt,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .supplier_api_command_receipts()
-            .create(receipt, executor)
-            .await?;
+        self.db.supplier_api_command_receipts().create(receipt, executor).await?;
         Ok(())
     }
 }

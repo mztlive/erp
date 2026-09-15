@@ -1,16 +1,18 @@
 //! 只读事实委派唯一读模型；跨域责任写入仍在流程适配器。
 
-use super::{map_service, purchase_responsibility, w29_close};
-use crate::errors::Error;
+use std::collections::{HashMap, HashSet};
+
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_read_models::workbench::authority::WorkItemFactsReader;
+use erp_workflow::Result as WorkflowResult;
 use erp_workflow::entity::work_item::WorkItem;
 use erp_workflow::ports::{ObjectFactKey, ObjectFactMap, ObjectFactPort, W29CloseFact};
-use erp_workflow::Result as WorkflowResult;
 use mongodb::Database;
 use persistence_core::Executor;
-use std::collections::{HashMap, HashSet};
+
+use super::{map_service, purchase_responsibility, w29_close};
+use crate::errors::Error;
 
 /// Domain-object facts consumed by work-item commands.
 #[derive(Clone)]
@@ -21,10 +23,7 @@ pub struct WorkflowObjectFacts {
 impl WorkflowObjectFacts {
     /// Bind domain repositories used by work-item authorization without reading them.
     pub fn new(db: Database) -> Self {
-        Self {
-            reader: WorkItemFactsReader::new(db.clone()),
-            db,
-        }
+        Self { reader: WorkItemFactsReader::new(db.clone()), db }
     }
     fn db(&self) -> &Database {
         &self.db
@@ -37,10 +36,7 @@ impl ObjectFactPort for WorkflowObjectFacts {
         keys: &HashSet<ObjectFactKey>,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<ObjectFactMap> {
-        self.reader
-            .load(keys, executor)
-            .await
-            .map_err(|error| map_service(Error::from(error)))
+        self.reader.load(keys, executor).await.map_err(|error| map_service(Error::from(error)))
     }
     async fn counterparty_is_active(
         &self,
@@ -69,10 +65,7 @@ impl ObjectFactPort for WorkflowObjectFacts {
         id: &str,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<bool> {
-        self.reader
-            .external_identity_map_exists(id, executor)
-            .await
-            .map_err(erp_workflow::Error::from)
+        self.reader.external_identity_map_exists(id, executor).await.map_err(erp_workflow::Error::from)
     }
     async fn assignment_separation_actors(
         &self,
@@ -132,14 +125,7 @@ impl ObjectFactPort for WorkflowObjectFacts {
     ) -> WorkflowResult<()> {
         w29_close::persist_w29_close(
             self.db(),
-            w29_close::W29CloseInput {
-                item,
-                decision,
-                evidence_reference,
-                actor_id,
-                receipt_id,
-                closed_at,
-            },
+            w29_close::W29CloseInput { item, decision, evidence_reference, actor_id, receipt_id, closed_at },
             executor,
         )
         .await

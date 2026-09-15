@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-use crate::entity::{Permission, PermissionSet, Role};
+use application_core::AuditActor;
 use casbin::{Enforcer, RbacApi};
 use erp_core::AccountKind;
 
-use super::{subject, ROLE_PREFIX};
+use super::{ROLE_PREFIX, subject};
+use crate::entity::{Permission, PermissionSet, Role};
 use crate::error::{Error, Result};
-use application_core::AuditActor;
 
 pub(super) fn role_key(role_id: &str) -> String {
     format!("{ROLE_PREFIX}{role_id}")
@@ -25,10 +25,7 @@ pub(super) fn collect_role_permissions(
     enforcer: &Enforcer,
     role_ids: &[String],
 ) -> Result<HashMap<String, Vec<Permission>>> {
-    role_ids
-        .iter()
-        .map(|role_id| Ok((role_id.clone(), permissions_for_role(enforcer, role_id)?)))
-        .collect()
+    role_ids.iter().map(|role_id| Ok((role_id.clone(), permissions_for_role(enforcer, role_id)?))).collect()
 }
 
 pub(super) fn permissions_for_actor(enforcer: &Enforcer, actor: &AuditActor) -> Result<PermissionSet> {
@@ -72,12 +69,7 @@ pub(super) fn collect_role_ids(
 ) -> HashMap<String, Vec<String>> {
     account_ids
         .iter()
-        .map(|account_id| {
-            (
-                account_id.clone(),
-                role_ids_for_account(enforcer, account_kind, account_id),
-            )
-        })
+        .map(|account_id| (account_id.clone(), role_ids_for_account(enforcer, account_kind, account_id)))
         .collect()
 }
 
@@ -145,9 +137,7 @@ pub(super) fn ensure_policy_snapshot_revision(expected: u64, visible: u64) -> Re
     if expected == visible {
         return Ok(());
     }
-    Err(Error::Rbac(
-        "授权策略版本已变化，无法在当前事务中证明授权快照".to_string(),
-    ))
+    Err(Error::Rbac("授权策略版本已变化，无法在当前事务中证明授权快照".to_string()))
 }
 
 pub(super) fn rbac_error(error: impl std::fmt::Display) -> Error {

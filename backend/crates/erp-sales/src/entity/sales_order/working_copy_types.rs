@@ -3,9 +3,8 @@
 //! 该文件只承载工作副本的目的、状态稳定代码、中文标签与固定状态机邻接表，
 //! 不依赖表头或行实体，供 `working_copy` 聚合模块通过 `pub use` 重新导出。
 
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::state::DocumentState;
+use serde::{Deserialize, Serialize};
 
 /// 工作副本编辑目的（数据模型 §6.5：首次提交或销售变更）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

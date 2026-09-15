@@ -13,11 +13,9 @@ use std::fmt;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::fact::FactBase;
 use erp_core::common::source::SourceType;
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     ElectronicDeliveryId, FileAssetId, PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId,
@@ -25,8 +23,9 @@ use erp_core::ids::{
 use erp_core::money::Quantity;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
-use super::fingerprint::{hmac_sha256_hex, validate_fingerprint, FINGERPRINT_HEX_LEN};
+use super::fingerprint::{FINGERPRINT_HEX_LEN, hmac_sha256_hex, validate_fingerprint};
 
 /// 履约记录号最大长度。
 const FULFILLMENT_NO_MAX_LEN: usize = 64;
@@ -248,10 +247,7 @@ impl fmt::Debug for ElectronicDelivery {
             .field("fulfillment_no", &self.fulfillment_no)
             .field("sales_order_line_id", &self.sales_order_line_id)
             .field("purchase_order_id", &self.purchase_order_id)
-            .field(
-                "purchase_line_sales_allocation_id",
-                &self.purchase_line_sales_allocation_id,
-            )
+            .field("purchase_line_sales_allocation_id", &self.purchase_line_sales_allocation_id)
             .field("recipient_snapshot", &"<redacted>")
             .field("recipient_snapshot_fingerprint", &"<redacted>")
             .field("quantity", &self.quantity)
@@ -546,9 +542,11 @@ fn normalize_optional_source_reference(source_reference: Option<String>) -> Opti
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::*;
-    use erp_core::ids::ElectronicDeliveryId;
     use std::str::FromStr;
+
+    use erp_core::ids::ElectronicDeliveryId;
+
+    use super::*;
 
     const PLAINTEXT_RECIPIENT: &str = "收货人 李四 13812345678 电子邮箱 lisi@example.com";
     const FINGERPRINT_KEY: &[u8] = b"test-fingerprint-key";
@@ -622,10 +620,7 @@ pub(crate) mod tests {
         record.apply_confirmation(submitted).unwrap();
         assert_eq!(record.recipient_snapshot, "encrypted-confirmed-recipient");
         assert_eq!(record.fact.occurred_at.unix_secs(), 1_700_000_020);
-        assert_eq!(
-            record.evidence_attachment_id.as_ref().unwrap().as_ref(),
-            "confirmed-evidence"
-        );
+        assert_eq!(record.evidence_attachment_id.as_ref().unwrap().as_ref(), "confirmed-evidence");
         record.confirm().unwrap();
         let confirmed = serde_json::to_value(&record).unwrap();
         assert!(record.apply_confirmation(data()).is_err());
@@ -635,34 +630,21 @@ pub(crate) mod tests {
     /// 失败路径：必填空、超长、指纹格式非法、数量越界、时间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank_no = ElectronicDeliveryData {
-            fulfillment_no: "   ".to_string(),
-            ..data()
-        };
+        let blank_no = ElectronicDeliveryData { fulfillment_no: "   ".to_string(), ..data() };
         assert!(ElectronicDelivery::new(ElectronicDeliveryId::new("ed-2"), blank_no).is_err());
 
-        let overlong_snapshot = ElectronicDeliveryData {
-            recipient_snapshot: "x".repeat(4097),
-            ..data()
-        };
+        let overlong_snapshot = ElectronicDeliveryData { recipient_snapshot: "x".repeat(4097), ..data() };
         assert!(ElectronicDelivery::new(ElectronicDeliveryId::new("ed-3"), overlong_snapshot).is_err());
 
-        let bad_fingerprint = ElectronicDeliveryData {
-            recipient_snapshot_fingerprint: "zz".to_string(),
-            ..data()
-        };
+        let bad_fingerprint =
+            ElectronicDeliveryData { recipient_snapshot_fingerprint: "zz".to_string(), ..data() };
         assert!(ElectronicDelivery::new(ElectronicDeliveryId::new("ed-4"), bad_fingerprint).is_err());
 
-        let zero_quantity = ElectronicDeliveryData {
-            quantity: Quantity::from_str("0").unwrap(),
-            ..data()
-        };
+        let zero_quantity = ElectronicDeliveryData { quantity: Quantity::from_str("0").unwrap(), ..data() };
         assert!(ElectronicDelivery::new(ElectronicDeliveryId::new("ed-5"), zero_quantity).is_err());
 
-        let reversed_time = ElectronicDeliveryData {
-            recorded_at: Instant::from_unix_secs(1_699_999_999),
-            ..data()
-        };
+        let reversed_time =
+            ElectronicDeliveryData { recorded_at: Instant::from_unix_secs(1_699_999_999), ..data() };
         assert!(ElectronicDelivery::new(ElectronicDeliveryId::new("ed-6"), reversed_time).is_err());
     }
 
@@ -671,50 +653,40 @@ pub(crate) mod tests {
     fn state_machine_directed_edges() {
         let mut delivery = ElectronicDelivery::new(ElectronicDeliveryId::new("ed-7"), data()).unwrap();
         assert!(delivery.reverse().is_err(), "草稿不能直接冲正");
-        assert!(delivery
-            .update(ElectronicDeliveryUpdate {
-                result: Some(FulfillmentResult::Failure),
-                evidence_attachment_id: None,
-            })
-            .is_ok());
+        assert!(
+            delivery
+                .update(ElectronicDeliveryUpdate {
+                    result: Some(FulfillmentResult::Failure),
+                    evidence_attachment_id: None,
+                })
+                .is_ok()
+        );
         delivery.confirm().unwrap();
         // from == to 幂等迁移恒合法（state.rs 契约）；CONFIRMED 不可编辑由 update 把关。
         assert!(delivery.confirm().is_ok());
         assert!(
-            delivery
-                .update(ElectronicDeliveryUpdate {
-                    result: None,
-                    evidence_attachment_id: None,
-                })
-                .is_err(),
+            delivery.update(ElectronicDeliveryUpdate { result: None, evidence_attachment_id: None }).is_err(),
             "已确认不可编辑"
         );
         assert!(delivery.reverse().is_ok());
-        assert!(
-            delivery.reverse().is_ok(),
-            "REVERSED 幂等迁移合法，且无法迁移到其他状态"
-        );
+        assert!(delivery.reverse().is_ok(), "REVERSED 幂等迁移合法，且无法迁移到其他状态");
 
         assert!(ensure_transition(ElectronicDeliveryState::Draft, ElectronicDeliveryState::Draft).is_ok());
         assert!(
             ensure_transition(ElectronicDeliveryState::Draft, ElectronicDeliveryState::Confirmed).is_ok()
         );
-        assert!(ensure_transition(
-            ElectronicDeliveryState::Confirmed,
-            ElectronicDeliveryState::Reversed
-        )
-        .is_ok());
+        assert!(
+            ensure_transition(ElectronicDeliveryState::Confirmed, ElectronicDeliveryState::Reversed).is_ok()
+        );
         assert!(
             ensure_transition(ElectronicDeliveryState::Draft, ElectronicDeliveryState::Reversed).is_err()
         );
         assert!(
             ensure_transition(ElectronicDeliveryState::Confirmed, ElectronicDeliveryState::Draft).is_err()
         );
-        assert!(ensure_transition(
-            ElectronicDeliveryState::Reversed,
-            ElectronicDeliveryState::Confirmed
-        )
-        .is_err());
+        assert!(
+            ensure_transition(ElectronicDeliveryState::Reversed, ElectronicDeliveryState::Confirmed).is_err()
+        );
     }
 
     /// 确认与验收资格由实体状态及销售明细关联共同决定。
@@ -722,20 +694,14 @@ pub(crate) mod tests {
     fn confirmation_and_acceptance_rules_are_entity_owned() {
         let mut delivery = ElectronicDelivery::new(ElectronicDeliveryId::new("ed-rule"), data()).unwrap();
         assert!(delivery.ensure_confirmable().is_ok());
-        assert!(delivery
-            .acceptance_quantity(&SalesOrderLineId::new("so-line-1"))
-            .is_err());
+        assert!(delivery.acceptance_quantity(&SalesOrderLineId::new("so-line-1")).is_err());
         delivery.confirm().unwrap();
         assert!(delivery.ensure_confirmable().is_err());
         assert_eq!(
-            delivery
-                .acceptance_quantity(&SalesOrderLineId::new("so-line-1"))
-                .unwrap(),
+            delivery.acceptance_quantity(&SalesOrderLineId::new("so-line-1")).unwrap(),
             Quantity::from_str("2").unwrap()
         );
-        assert!(delivery
-            .acceptance_quantity(&SalesOrderLineId::new("other-line"))
-            .is_err());
+        assert!(delivery.acceptance_quantity(&SalesOrderLineId::new("other-line")).is_err());
         assert_eq!(delivery.registration_context_id().unwrap(), "so-line-1");
         let mut missing_context = delivery.clone();
         missing_context.sales_order_line_id = SalesOrderLineId::new("   ");
@@ -750,10 +716,7 @@ pub(crate) mod tests {
             a,
             ElectronicDelivery::recipient_snapshot_fingerprint(PLAINTEXT_RECIPIENT, FINGERPRINT_KEY)
         );
-        assert_ne!(
-            a,
-            ElectronicDelivery::recipient_snapshot_fingerprint(PLAINTEXT_RECIPIENT, b"other-key")
-        );
+        assert_ne!(a, ElectronicDelivery::recipient_snapshot_fingerprint(PLAINTEXT_RECIPIENT, b"other-key"));
         assert_eq!(a.len(), 64);
 
         let delivery = ElectronicDelivery::new(ElectronicDeliveryId::new("ed-8"), data()).unwrap();
@@ -778,10 +741,8 @@ pub(crate) mod tests {
         assert_eq!(ElectronicDeliveryState::Confirmed.as_str(), "CONFIRMED");
         assert_eq!(ElectronicDeliveryState::Reversed.as_str(), "REVERSED");
 
-        let production = include_str!("electronic_delivery.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production =
+            include_str!("electronic_delivery.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(!production.contains("IN_APPROVAL"));
         assert!(!production.contains("fn start_approval"));
         assert!(!production.contains("approval_subject_version"));

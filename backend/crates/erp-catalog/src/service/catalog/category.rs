@@ -1,17 +1,17 @@
-use crate::entity::catalog::product_category::{ProductCategory, ProductCategoryUpdate};
-use crate::entity::catalog::ProductCategoryId;
-use crate::repository::CatalogExt;
+use application_core::AuditActor;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use super::support::ensure_version;
 use super::CatalogService;
+use super::support::ensure_version;
 use crate::dto::{
     MoveProductCategoryRequest, PageView, ProductCategoryListParams, ProductCategoryView, SortDir,
     UpdateProductCategoryRequest,
 };
+use crate::entity::catalog::ProductCategoryId;
+use crate::entity::catalog::product_category::{ProductCategory, ProductCategoryUpdate};
 use crate::error::{Error, Result};
-use application_core::AuditActor;
+use crate::repository::CatalogExt;
 
 /// 商品分类列表筛选条件类型（经 `CatalogExt` 关联类型跨 crate 可达）。
 type ProductCategoryFilter = <mongodb::Database as CatalogExt>::ProductCategoryFilter;
@@ -49,11 +49,8 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .product_categories()
-            .search_product_categories(&filter, &mut NoTransaction)
-            .await?;
+        let page =
+            self.db.product_categories().search_product_categories(&filter, &mut NoTransaction).await?;
         // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结），按字段映射为响应视图。
         let items = page
             .items
@@ -69,12 +66,7 @@ impl CatalogService {
                 version: row.version,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 更新商品分类（乐观锁语义；名称、类型、状态与可选父级变更原子提交）。
@@ -100,15 +92,10 @@ impl CatalogService {
         let mut category = self.load_category(id).await?;
         ensure_version(category.base.version, req.version)?;
         if let Some(parent_change) = &req.parent_change {
-            self.ensure_parent_chain_ok(&category.base.id, parent_change.parent_category_id.as_ref())
-                .await?;
+            self.ensure_parent_chain_ok(&category.base.id, parent_change.parent_category_id.as_ref()).await?;
         }
         category.update(
-            ProductCategoryUpdate {
-                name: req.name,
-                product_kind: req.product_kind,
-                status: req.status,
-            },
+            ProductCategoryUpdate { name: req.name, product_kind: req.product_kind, status: req.status },
             actor.id(),
         )?;
         if let Some(parent_change) = req.parent_change {
@@ -160,8 +147,7 @@ impl CatalogService {
         req.validate()?;
         let mut category = self.load_category(id).await?;
         ensure_version(category.base.version, req.version)?;
-        self.ensure_parent_chain_ok(&category.base.id, req.parent_category_id.as_ref())
-            .await?;
+        self.ensure_parent_chain_ok(&category.base.id, req.parent_category_id.as_ref()).await?;
         category.set_parent(req.parent_category_id, actor.id())?;
         let audit = self.audit.resource_log(
             actor.clone(),
@@ -201,15 +187,9 @@ impl CatalogService {
     /// * `ConflictError` - 并发修改（CAS 冲突）
     pub async fn product_category_delete(&self, id: &str, actor: &AuditActor) -> Result<()> {
         let mut category = self.load_category(id).await?;
-        let has_children = self
-            .db
-            .product_categories()
-            .has_children(id, &mut NoTransaction)
-            .await?;
+        let has_children = self.db.product_categories().has_children(id, &mut NoTransaction).await?;
         if has_children {
-            return Err(Error::BusinessLogicError(
-                "分类下存在子分类，不能删除".to_string(),
-            ));
+            return Err(Error::BusinessLogicError("分类下存在子分类，不能删除".to_string()));
         }
         let audit = self.audit.resource_log(
             actor.clone(),
@@ -223,9 +203,7 @@ impl CatalogService {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    db.product_categories()
-                        .soft_delete(&mut category, session)
-                        .await?;
+                    db.product_categories().soft_delete(&mut category, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<(), crate::error::Error>(())
                 })
@@ -255,11 +233,7 @@ impl CatalogService {
         if parent_id.is_some_and(|parent| parent.as_ref() == id) {
             return Err(Error::BusinessLogicError("父子关系不能形成环".to_string()));
         }
-        let fact = self
-            .db
-            .product_categories()
-            .parent_chain(parent_id, &mut NoTransaction)
-            .await?;
+        let fact = self.db.product_categories().parent_chain(parent_id, &mut NoTransaction).await?;
         interpret_parent_chain(id, &fact)
     }
 }
@@ -287,9 +261,7 @@ fn interpret_parent_chain(self_id: &str, fact: &CategoryParentChainFact) -> Resu
         return Err(Error::NotFound("父分类不存在".to_string()));
     }
     if fact.truncated {
-        return Err(Error::BusinessLogicError(
-            "分类祖先链过深或存在环，已失败关闭".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("分类祖先链过深或存在环，已失败关闭".to_string()));
     }
     Ok(())
 }
@@ -327,10 +299,7 @@ mod tests {
         let ancestor_hit = fact(Some("parent"), None, false, false)
             .with_link("parent".to_string(), Some("child".to_string()))
             .with_link("child".to_string(), None);
-        assert!(matches!(
-            interpret_parent_chain("child", &ancestor_hit),
-            Err(Error::BusinessLogicError(_))
-        ));
+        assert!(matches!(interpret_parent_chain("child", &ancestor_hit), Err(Error::BusinessLogicError(_))));
 
         let indirect = interpret_parent_chain("child", &fact(Some("parent"), None, true, false));
         assert!(matches!(indirect, Err(Error::BusinessLogicError(_))));

@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use erp_catalog::{Product, Sku, SkuRevision};
+use erp_catalog::{CatalogExt, Product, Sku, SkuRevision};
 use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
 use erp_party::{Party, PartyRevision};
 use erp_supplier::SupplierAccount;
@@ -14,14 +14,11 @@ use erp_supply::entity::supplier_offering::{
     AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOfferingAvailability,
     SupplierOfferingRevision,
 };
+use erp_supply::repository::SupplierOfferingExt;
+use erp_supply::repository::supplier_offering::{SupplierOfferingFilter, SupplierOfferingRow};
+use persistence_core::{Executor, PageResult, Result};
 
 use super::SupplierOfferingReadRepository;
-use erp_catalog::CatalogExt;
-use erp_supply::repository::supplier_offering::{SupplierOfferingFilter, SupplierOfferingRow};
-use erp_supply::repository::SupplierOfferingExt;
-use persistence_core::Executor;
-use persistence_core::PageResult;
-use persistence_core::Result;
 
 /// 供给列表的高层查询条件。
 ///
@@ -113,12 +110,7 @@ impl<'a> SupplierOfferingReadRepository<'a> {
             None => None,
         };
         let keyword_sku_ids = match query.keyword.as_deref() {
-            Some(keyword) => Some(
-                self.db
-                    .catalog()
-                    .resolve_sku_ids_by_keyword(keyword, executor)
-                    .await?,
-            ),
+            Some(keyword) => Some(self.db.catalog().resolve_sku_ids_by_keyword(keyword, executor).await?),
             None => None,
         };
         let sku_ids = self
@@ -162,10 +154,7 @@ impl<'a> SupplierOfferingReadRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SupplierOfferingRow>> {
         let filter = self.resolve_list_filter(query, executor).await?;
-        self.db
-            .supplier_offerings()
-            .search_supplier_offerings(&filter, executor)
-            .await
+        self.db.supplier_offerings().search_supplier_offerings(&filter, executor).await
     }
 
     /// 一次装载供给列表页的全部最小展示事实。
@@ -191,11 +180,8 @@ impl<'a> SupplierOfferingReadRepository<'a> {
     ) -> Result<SupplierOfferingListBundle> {
         let page = self.search_offering_list(query, executor).await?;
         let revisions = self.load_current_revisions(&page.items, executor).await?;
-        let offering_ids = page
-            .items
-            .iter()
-            .map(|row| SupplierOfferingId::new(row.id.clone()))
-            .collect::<Vec<_>>();
+        let offering_ids =
+            page.items.iter().map(|row| SupplierOfferingId::new(row.id.clone())).collect::<Vec<_>>();
         let availabilities = self
             .db
             .supplier_offering_availabilities()
@@ -318,18 +304,9 @@ mod tests {
         assert_eq!(query.product_no.as_deref(), Some("SPU-9"));
         assert_eq!(query.sku_no.as_deref(), Some("SKU-9"));
         assert_eq!(query.sku_id.map(|id| id.to_string()).as_deref(), Some("sku-9"));
-        assert_eq!(
-            query.supplier_id.map(|id| id.to_string()).as_deref(),
-            Some("supplier-9")
-        );
-        assert_eq!(
-            query.status,
-            Some(erp_supply::entity::supplier_offering::OfferingStatus::Paused)
-        );
-        assert_eq!(
-            query.source_type,
-            Some(erp_supply::entity::supplier_offering::OfferingSourceType::Api)
-        );
+        assert_eq!(query.supplier_id.map(|id| id.to_string()).as_deref(), Some("supplier-9"));
+        assert_eq!(query.status, Some(erp_supply::entity::supplier_offering::OfferingStatus::Paused));
+        assert_eq!(query.source_type, Some(erp_supply::entity::supplier_offering::OfferingSourceType::Api));
         assert_eq!((query.page, query.page_size), (2, 15));
         assert_eq!(query.sort_by.as_deref(), Some("supplier_sku_code"));
         assert!(query.sort_ascending);
@@ -351,21 +328,16 @@ mod isolation_tests {
         SupplierOfferingAvailabilityData, SupplierOfferingData, SupplierOfferingRevision,
         SupplierOfferingRevisionData,
     };
-    use test_support::{require_mongo, TestDb};
-
     use erp_supply::indexes::ensure as ensure_indexes;
     use erp_supply::repository::SupplierOfferingExt;
     use persistence_core::{NoTransaction, Transactional};
+    use test_support::{TestDb, require_mongo};
 
     /// 构造最小供给三元组（供给头 + 首版修订 + 可供投影）。
     fn offering_triple(
         id: &str,
         status: AvailabilityStatus,
-    ) -> (
-        SupplierOffering,
-        SupplierOfferingRevision,
-        SupplierOfferingAvailability,
-    ) {
+    ) -> (SupplierOffering, SupplierOfferingRevision, SupplierOfferingAvailability) {
         let offering_id = SupplierOfferingId::new(id);
         let revision_id = SupplierOfferingRevisionId::new(format!("{id}-rev-1"));
         let mut offering = SupplierOffering::new(
@@ -437,9 +409,7 @@ mod isolation_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn empty_db_returns_empty_bundle() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_offering_list_empty")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_offering_list_empty").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
             let query = super::SupplierOfferingListQuery {
                 availability_status: None,
@@ -484,9 +454,7 @@ mod isolation_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn bundle_returns_current_facts_and_prefilters_before_paging() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_offering_list_facts")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_offering_list_facts").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
             let (offering, revision, availability) =
                 offering_triple("offering-1", AvailabilityStatus::Available);
@@ -562,9 +530,7 @@ mod isolation_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn transaction_reads_own_writes_with_same_session() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_offering_list_txn")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_offering_list_txn").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
             let db = fixture.db().clone();
             let client = db.client().clone();

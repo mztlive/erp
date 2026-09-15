@@ -7,14 +7,14 @@
 //! 契约来源：erp-client `features/contracts`（W04）；本域接口按后端实体字段
 //! 形状提供，与前端 mock 的 `ContractCenterView` 差异见批次报告「契约变更」。
 
-use crate::entity::contract::{ArchiveSource, ContractStatus};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{CustomerAccountId, FileAssetId, PartyId};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use crate::entity::contract::{ArchiveSource, ContractStatus};
 use crate::error::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 合同列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub(crate) const CONTRACT_SORT_FIELDS: &[&str] = &[
@@ -45,6 +45,11 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
+/// 不生效，空 contract_no 需要按「空白视为空」拒绝，落入 HTTP 400）。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -58,13 +63,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
-/// 不生效，空 contract_no 需要按「空白视为空」拒绝，落入 HTTP 400）。
-use application_core::non_blank;
 
 /// 合同首次归档请求（W04 上传 PDF：合同身份 + 首个不可变版本 + PDF 关联原子形成）。
 ///
@@ -305,9 +303,7 @@ impl ContractListParams {
     pub(crate) fn normalized(&self) -> Result<ContractListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, CONTRACT_SORT_FIELDS)?;
         if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
-            return Err(crate::error::Error::ValidationError(
-                "包含下级时必须提供组织筛选".into(),
-            ));
+            return Err(crate::error::Error::ValidationError("包含下级时必须提供组织筛选".into()));
         }
         Ok(ContractListQuery {
             owner_user_ids: self.owner_user_ids.clone(),
@@ -474,8 +470,9 @@ impl From<crate::entity::contract::ContractRevision> for ContractRevisionView {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, SortDir};
     use erp_core::ids::CustomerAccountId;
+
+    use super::{SortDir, normalize_sort};
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
@@ -494,9 +491,10 @@ mod tests {
 
     #[test]
     fn contract_list_params_normalize_filters_and_paging() {
+        use serde_json::json;
+
         use super::ContractListParams;
         use crate::entity::contract::ContractStatus;
-        use serde_json::json;
 
         let params: ContractListParams = serde_json::from_value(json!({
             "contract_no": " HT-2026 ",
@@ -514,10 +512,7 @@ mod tests {
             "scope": "assigned",
         }))
         .unwrap();
-        assert_eq!(
-            assigned.normalized().unwrap().scope,
-            super::ContractListScope::Assigned
-        );
+        assert_eq!(assigned.normalized().unwrap().scope, super::ContractListScope::Assigned);
         assert_eq!(query.paging.page, 1);
         assert_eq!(query.paging.page_size, 20);
         assert_eq!(query.paging.sort_by, "created_at");
@@ -525,8 +520,9 @@ mod tests {
 
     #[test]
     fn contract_list_params_accept_scope_version_and_org_filters() {
-        use super::ContractListParams;
         use serde_json::json;
+
+        use super::ContractListParams;
 
         let params: ContractListParams = serde_json::from_value(json!({
             "page": 2,
@@ -538,10 +534,7 @@ mod tests {
         .unwrap();
         assert_eq!(params.scope_version.as_deref(), Some("v1"));
         let query = params.normalized().unwrap();
-        assert_eq!(
-            query.org_unit_ids.unwrap().as_slice(),
-            &["org-1".to_string(), "org-2".to_string()]
-        );
+        assert_eq!(query.org_unit_ids.unwrap().as_slice(), &["org-1".to_string(), "org-2".to_string()]);
         assert_eq!(query.include_descendants, Some(true));
         assert!(serde_json::from_value::<ContractListParams>(json!({"owner": "张三"})).is_err());
         assert!(serde_json::from_value::<ContractListParams>(json!({"owner_name": "张三"})).is_err());
@@ -549,32 +542,17 @@ mod tests {
 
     #[test]
     fn customer_id_serializes_as_transparent_string() {
-        assert_eq!(
-            serde_json::to_string(&CustomerAccountId::new("cust-1")).unwrap(),
-            "\"cust-1\""
-        );
+        assert_eq!(serde_json::to_string(&CustomerAccountId::new("cust-1")).unwrap(), "\"cust-1\"");
     }
 
     #[test]
     fn status_and_archive_source_keep_json_wire_contracts() {
         use crate::entity::contract::{ArchiveSource, ContractStatus};
 
-        assert_eq!(
-            serde_json::to_string(&ContractStatus::Effective).unwrap(),
-            "\"EFFECTIVE\""
-        );
-        assert_eq!(
-            serde_json::to_string(&ContractStatus::Terminated).unwrap(),
-            "\"TERMINATED\""
-        );
-        assert_eq!(
-            serde_json::to_string(&ContractStatus::Expired).unwrap(),
-            "\"EXPIRED\""
-        );
-        assert_eq!(
-            serde_json::to_string(&ArchiveSource::ContractCenter).unwrap(),
-            "\"CONTRACT_CENTER\""
-        );
+        assert_eq!(serde_json::to_string(&ContractStatus::Effective).unwrap(), "\"EFFECTIVE\"");
+        assert_eq!(serde_json::to_string(&ContractStatus::Terminated).unwrap(), "\"TERMINATED\"");
+        assert_eq!(serde_json::to_string(&ContractStatus::Expired).unwrap(), "\"EXPIRED\"");
+        assert_eq!(serde_json::to_string(&ArchiveSource::ContractCenter).unwrap(), "\"CONTRACT_CENTER\"");
         assert_eq!(
             serde_json::to_string(&ArchiveSource::SalesOrderCreate).unwrap(),
             "\"SALES_ORDER_CREATE\""
@@ -583,8 +561,9 @@ mod tests {
 
     #[test]
     fn create_and_upload_requests_keep_json_field_contracts() {
-        use super::{CreateContractRequest, UploadContractRequest};
         use serde_json::json;
+
+        use super::{CreateContractRequest, UploadContractRequest};
 
         let created: CreateContractRequest = serde_json::from_value(json!({
             "contract_no": "HT-1",
@@ -603,10 +582,7 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(created.contract_no, "HT-1");
-        assert_eq!(
-            created.archive_source,
-            Some(crate::entity::contract::ArchiveSource::SalesOrderCreate)
-        );
+        assert_eq!(created.archive_source, Some(crate::entity::contract::ArchiveSource::SalesOrderCreate));
 
         let unknown = serde_json::from_value::<UploadContractRequest>(json!({
             "contract_no": "HT-1",
@@ -626,9 +602,10 @@ mod tests {
 
     #[test]
     fn contract_view_json_keeps_list_row_shape() {
+        use serde_json::json;
+
         use super::ContractView;
         use crate::entity::contract::ContractStatus;
-        use serde_json::json;
 
         let view = ContractView {
             id: "c-1".to_string(),

@@ -3,8 +3,9 @@
 //! 筛选接口按「是否存在某一状态的资质」命中供应商；列表展示把同一供应商的
 //! 全部资质折叠为一条最需要处理的状态，供扫表识别，不改变筛选语义。
 
-use super::supplier_qualification::{QualificationStatus, QualificationType, SupplierQualification};
 use erp_core::common::time::BusinessDate;
+
+use super::supplier_qualification::{QualificationStatus, QualificationType, SupplierQualification};
 
 /// 列表展示用的资质健康状态，语义与筛选枚举一一对应。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,11 +66,9 @@ impl SupplierQualification {
         if self.valid_from.is_some_and(|start| start > as_of) {
             return None;
         }
-        let expiring = self.valid_to.is_some_and(|end| {
-            Self::expiry_cutoff(as_of, 30)
-                .map(|cutoff| end <= cutoff)
-                .unwrap_or(false)
-        });
+        let expiring = self
+            .valid_to
+            .is_some_and(|end| Self::expiry_cutoff(as_of, 30).map(|cutoff| end <= cutoff).unwrap_or(false));
         if expiring {
             return Some(QualificationHealth::Expiring30);
         }
@@ -122,10 +121,8 @@ impl SupplierQualification {
     where
         I: IntoIterator<Item = &'a Self>,
     {
-        let mut types: Vec<QualificationType> = qualifications
-            .into_iter()
-            .map(|qualification| qualification.qualification_type)
-            .collect();
+        let mut types: Vec<QualificationType> =
+            qualifications.into_iter().map(|qualification| qualification.qualification_type).collect();
         types.sort_by_key(QualificationType::as_str);
         types.dedup();
         types
@@ -134,10 +131,11 @@ impl SupplierQualification {
 
 #[cfg(test)]
 mod tests {
-    use super::{QualificationHealth, SupplierQualification};
-    use crate::entity::supplier::{QualificationStatus, QualificationType, SupplierQualificationData};
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::{SupplierAccountId, SupplierQualificationId};
+
+    use super::{QualificationHealth, SupplierQualification};
+    use crate::entity::supplier::{QualificationStatus, QualificationType, SupplierQualificationData};
 
     /// 构造指定类型、状态与日期窗口的资质。
     ///
@@ -183,22 +181,14 @@ mod tests {
     #[test]
     fn rollup_empty_is_not_registered() {
         let none: &[SupplierQualification] = &[];
-        assert_eq!(
-            SupplierQualification::rollup_health(none, as_of()),
-            QualificationHealth::NotRegistered
-        );
+        assert_eq!(SupplierQualification::rollup_health(none, as_of()), QualificationHealth::NotRegistered);
     }
 
     /// 合同缺日期为未核实；停用且日期已核实时不参与折叠。
     #[test]
     fn unverified_outranks_disabled() {
-        let unverified = qualification(
-            "ht-open",
-            QualificationType::Contract,
-            QualificationStatus::Active,
-            None,
-            None,
-        );
+        let unverified =
+            qualification("ht-open", QualificationType::Contract, QualificationStatus::Active, None, None);
         let disabled = qualification(
             "lic-off",
             QualificationType::FoodLicense,
@@ -206,10 +196,7 @@ mod tests {
             Some((2026, 1, 1)),
             Some((2026, 12, 31)),
         );
-        assert_eq!(
-            unverified.health_on(as_of()),
-            Some(QualificationHealth::Unverified)
-        );
+        assert_eq!(unverified.health_on(as_of()), Some(QualificationHealth::Unverified));
         assert_eq!(disabled.health_on(as_of()), None);
         assert_eq!(
             SupplierQualification::rollup_health([&unverified, &disabled], as_of()),
@@ -241,14 +228,8 @@ mod tests {
             Some((2026, 1, 1)),
             Some((2027, 12, 31)),
         );
-        assert_eq!(
-            expired_status.health_on(as_of()),
-            Some(QualificationHealth::Expired)
-        );
-        assert_eq!(
-            expired_date.health_on(as_of()),
-            Some(QualificationHealth::Expired)
-        );
+        assert_eq!(expired_status.health_on(as_of()), Some(QualificationHealth::Expired));
+        assert_eq!(expired_date.health_on(as_of()), Some(QualificationHealth::Expired));
         assert_eq!(
             SupplierQualification::rollup_health([&expired_date, &valid], as_of()),
             QualificationHealth::Expired

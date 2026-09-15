@@ -1,21 +1,22 @@
-use super::dto::{SettlementDifferenceDecisionRequest, SettlementDifferenceDecisionResult};
-use super::{
-    command_audit_id, dto, ensure_audit_resource, ensure_same_id, parse_receipt_number, receipt_result,
-    SupplierSettlementProcess, COMMAND_FINGERPRINT_PREFIX,
-};
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supply::entity::supplier_settlement::{
     SettlementDifferenceConclusion, SupplierSettlementDifference, SupplierSettlementStatement,
 };
 use erp_supply::repository::SupplierSettlementExt;
-use erp_supply::service::supplier_settlement::{
-    difference::{difference_conclusion_kind, difference_decision_fingerprint, settlement_difference_view},
-    SupplierSettlementService,
+use erp_supply::service::supplier_settlement::SupplierSettlementService;
+use erp_supply::service::supplier_settlement::difference::{
+    difference_conclusion_kind, difference_decision_fingerprint, settlement_difference_view,
 };
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+
+use super::dto::{SettlementDifferenceDecisionRequest, SettlementDifferenceDecisionResult};
+use super::{
+    COMMAND_FINGERPRINT_PREFIX, SupplierSettlementProcess, command_audit_id, dto, ensure_audit_resource,
+    ensure_same_id, parse_receipt_number, receipt_result,
+};
+use crate::{Error, Result};
 
 impl SupplierSettlementProcess {
     /// 登记财务经办的强类型差异结论。
@@ -40,16 +41,9 @@ impl SupplierSettlementProcess {
         )
         .map_err(|error| Error::ValidationError(error.to_string()))?;
         let fingerprint = difference_decision_fingerprint(&req, &conclusion);
-        let audit_id = command_audit_id(
-            actor.id(),
-            "supplier_settlement.difference_decision",
-            id,
-            &req.idempotency_key,
-        );
-        if let Some(result) = self
-            .replay_difference_decision(&audit_id, &fingerprint, id)
-            .await?
-        {
+        let audit_id =
+            command_audit_id(actor.id(), "supplier_settlement.difference_decision", id, &req.idempotency_key);
+        if let Some(result) = self.replay_difference_decision(&audit_id, &fingerprint, id).await? {
             return Ok(result);
         }
         let (mut statement, mut difference) = self
@@ -92,14 +86,11 @@ impl SupplierSettlementProcess {
         let (statement, difference) = match transaction_result {
             Ok(result) => result,
             Err(error) => {
-                if let Some(result) = self
-                    .replay_difference_decision(&audit_id, &fingerprint, id)
-                    .await?
-                {
+                if let Some(result) = self.replay_difference_decision(&audit_id, &fingerprint, id).await? {
                     return Ok(result);
                 }
                 return Err(error);
-            }
+            },
         };
         Ok(SettlementDifferenceDecisionResult {
             result_status: dto::SettlementDifferenceDecisionStatus::Resolved,
@@ -118,12 +109,7 @@ impl SupplierSettlementProcess {
         expected_fingerprint: &str,
         difference_id: &str,
     ) -> Result<Option<SettlementDifferenceDecisionResult>> {
-        let Some(audit) = self
-            .db
-            .audit_logs()
-            .find_by_id(audit_id, &mut NoTransaction)
-            .await?
-        else {
+        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
             return Ok(None);
         };
         ensure_audit_resource(&audit, difference_id)?;
@@ -149,10 +135,7 @@ impl SupplierSettlementProcess {
             difference.base.version,
             difference.is_pending(),
         )?;
-        let statement = self
-            .domain()
-            .load_statement(&receipt.statement_id, &mut NoTransaction)
-            .await?;
+        let statement = self.domain().load_statement(&receipt.statement_id, &mut NoTransaction).await?;
         ensure_difference_statement_version(&receipt, statement.base.version)?;
         Ok(Some(SettlementDifferenceDecisionResult {
             result_status: dto::SettlementDifferenceDecisionStatus::Resolved,
@@ -207,9 +190,7 @@ fn ensure_difference_replay(
     pending: bool,
 ) -> Result<()> {
     if receipt.statement_id != statement_id || difference_version != receipt.difference_version || pending {
-        return Err(Error::ConflictError(
-            "差异决定幂等收据与当前正式事实不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("差异决定幂等收据与当前正式事实不一致".to_string()));
     }
     Ok(())
 }
@@ -219,9 +200,7 @@ fn ensure_difference_statement_version(
     current_version: u64,
 ) -> Result<()> {
     if current_version < receipt.statement_version {
-        return Err(Error::ConflictError(
-            "差异决定幂等收据的结算单版本非法".to_string(),
-        ));
+        return Err(Error::ConflictError("差异决定幂等收据的结算单版本非法".to_string()));
     }
     Ok(())
 }
@@ -241,10 +220,7 @@ mod replay_tests {
                 ensure_difference_replay(&receipt, "statement-1", version, false).is_ok(),
                 version == 2
             );
-            assert_eq!(
-                ensure_difference_statement_version(&receipt, version).is_ok(),
-                version >= 2
-            );
+            assert_eq!(ensure_difference_statement_version(&receipt, version).is_ok(), version >= 2);
         }
         assert!(ensure_difference_replay(&receipt, "statement-2", 2, false).is_err());
         assert!(ensure_difference_replay(&receipt, "statement-1", 2, true).is_err());

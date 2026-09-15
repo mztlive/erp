@@ -6,25 +6,23 @@
 use std::collections::{HashMap, HashSet};
 
 use erp_core::money::{Amount, Quantity};
-use erp_supplier::{split_encoded_payment_term_snapshot, SupplierPaymentTerm};
-use persistence_core::Executor;
-use {
-    erp_procurement::entity::purchase_order::PaymentTermSnapshot,
-    erp_procurement::entity::purchase_order::PurchaseLineType,
-    erp_procurement::entity::purchase_order::PurchaseOrder,
-    erp_procurement::entity::purchase_order::PurchaseOrderSubmission,
-    erp_procurement::entity::purchase_order::PurchaseOrderSubmissionLine,
+use erp_procurement::entity::purchase_order::{
+    PaymentTermSnapshot, PurchaseLineType, PurchaseOrder, PurchaseOrderSubmission,
+    PurchaseOrderSubmissionLine,
 };
+use erp_supplier::{SupplierPaymentTerm, split_encoded_payment_term_snapshot};
+use persistence_core::Executor;
 
 use super::authority::purchase::{previous_formal_submission_ids, purchase_facts, purchase_line_counts};
 use super::brief::{
-    format_business_due_label, format_quantity, line_title, push_document_section, BriefLine, BriefSection,
-    ObjectBriefSource,
+    BriefLine, BriefSection, ObjectBriefSource, format_business_due_label, format_quantity, line_title,
+    push_document_section,
 };
-use super::change_order_brief::{change_diff_lines, purchase_order_submission_line_states, LineStateMap};
+use super::change_order_brief::{LineStateMap, change_diff_lines, purchase_order_submission_line_states};
 use super::presentation::{format_yuan, purchase_review_impact_summary};
-use super::WorkbenchReadService;
-use super::{ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchSubjectDisplay};
+use super::{
+    ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchReadService, WorkbenchSubjectDisplay,
+};
 use crate::errors::Result;
 
 /// 采购审核在对象事实中按提交版本保存的展示包。
@@ -70,10 +68,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         facts: &mut WorkbenchObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let orders = self
-            .facts_reader()
-            .purchase_orders_for_keys(keys, executor)
-            .await?;
+        let orders = self.facts_reader().purchase_orders_for_keys(keys, executor).await?;
         if orders.is_empty() {
             return Ok(());
         }
@@ -97,18 +92,10 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         &self,
         orders: &[PurchaseOrder],
         executor: &mut dyn Executor,
-    ) -> Result<(
-        HashMap<String, PurchaseReviewDisplay>,
-        erp_workflow::ports::ObjectFactMap,
-    )> {
-        let submissions = self
-            .facts_reader()
-            .purchase_submissions_for_orders(orders, executor)
-            .await?;
+    ) -> Result<(HashMap<String, PurchaseReviewDisplay>, erp_workflow::ports::ObjectFactMap)> {
+        let submissions = self.facts_reader().purchase_submissions_for_orders(orders, executor).await?;
         let sales_order_nos = self.sales_order_numbers_for_orders(orders, executor).await?;
-        let line_context = self
-            .purchase_submission_brief_lines(&submissions, executor)
-            .await?;
+        let line_context = self.purchase_submission_brief_lines(&submissions, executor).await?;
         let submitter_names = HashMap::<String, String>::new();
         let _ = executor;
         let authority = purchase_facts(orders, &submissions, &line_context.line_counts);
@@ -140,10 +127,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         orders: &[PurchaseOrder],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
-        let sales_order_ids = orders
-            .iter()
-            .map(|order| order.sales_order_id.to_string())
-            .collect::<Vec<_>>();
+        let sales_order_ids = orders.iter().map(|order| order.sales_order_id.to_string()).collect::<Vec<_>>();
         if sales_order_ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -172,10 +156,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         submissions: &[PurchaseOrderSubmission],
         executor: &mut dyn Executor,
     ) -> Result<PurchaseSubmissionLineContext> {
-        let lines = self
-            .facts_reader()
-            .purchase_submission_lines(submissions, executor)
-            .await?;
+        let lines = self.facts_reader().purchase_submission_lines(submissions, executor).await?;
         let line_counts = purchase_line_counts(&lines);
         let line_states = purchase_order_submission_line_states(&lines);
         let mut grouped: HashMap<String, Vec<(u32, PurchaseOrderSubmissionLine)>> = HashMap::new();
@@ -189,17 +170,10 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .into_iter()
             .map(|(submission_id, mut rows)| {
                 rows.sort_by_key(|(line_no, _)| *line_no);
-                (
-                    submission_id,
-                    purchase_brief_lines(rows.into_iter().map(|(_, line)| line)),
-                )
+                (submission_id, purchase_brief_lines(rows.into_iter().map(|(_, line)| line)))
             })
             .collect();
-        Ok(PurchaseSubmissionLineContext {
-            line_counts,
-            brief_lines,
-            line_states,
-        })
+        Ok(PurchaseSubmissionLineContext { line_counts, brief_lines, line_states })
     }
 }
 
@@ -267,28 +241,16 @@ fn assemble_purchase_review_displays(
                 .get(&submission.base.id)
                 .and_then(|id| submissions_by_id.get(id.as_str()).copied());
             let changed_lines = previous.map(|previous| {
-                change_diff_lines(
-                    line_states.get(&previous.base.id),
-                    line_states.get(&submission.base.id),
-                )
+                change_diff_lines(line_states.get(&previous.base.id), line_states.get(&submission.base.id))
             });
-            let current_lines = lines_by_submission
-                .get(&submission.base.id)
-                .cloned()
-                .unwrap_or_default();
-            let display_lines = changed_lines
-                .as_ref()
-                .filter(|lines| !lines.is_empty())
-                .cloned()
-                .unwrap_or(current_lines);
+            let current_lines = lines_by_submission.get(&submission.base.id).cloned().unwrap_or_default();
+            let display_lines =
+                changed_lines.as_ref().filter(|lines| !lines.is_empty()).cloned().unwrap_or(current_lines);
             let display = purchase_review_display(
                 submission,
                 source_sales_order,
                 display_lines,
-                submission
-                    .submitted_by
-                    .as_ref()
-                    .and_then(|actor| submitter_names.get(actor).cloned()),
+                submission.submitted_by.as_ref().and_then(|actor| submitter_names.get(actor).cloned()),
                 origins.get(&submission.base.id).copied(),
                 previous,
                 changed_lines.as_ref().map(Vec::len),
@@ -363,9 +325,7 @@ fn purchase_order_fact(
             fact.display.brief_source = brief.brief_source.clone();
         }
         if let Some(version) = display.subject_version {
-            fact.display
-                .subject_briefs
-                .insert(version.to_string(), brief.clone());
+            fact.display.subject_briefs.insert(version.to_string(), brief.clone());
         }
         fact.display.subject_briefs.insert(submission_id.clone(), brief);
     }
@@ -387,11 +347,7 @@ fn submission_origins(submissions: &[PurchaseOrderSubmission]) -> HashMap<String
         .iter()
         .filter_map(|submission| {
             let sequence = submission.formal_sequence()?;
-            let origin = if sequence == 1 {
-                "初次提交"
-            } else {
-                "再次提交"
-            };
+            let origin = if sequence == 1 { "初次提交" } else { "再次提交" };
             Some((submission.base.id.clone(), origin))
         })
         .collect()
@@ -431,11 +387,7 @@ fn purchase_review_display(
         visible_lines,
         more_count,
         submitter_name,
-        PurchaseSubmissionComparison {
-            origin,
-            previous,
-            changed_line_count,
-        },
+        PurchaseSubmissionComparison { origin, previous, changed_line_count },
     );
     let line_count = Some(brief.lines.len() + brief.more_count as usize).filter(|count| *count > 0);
     let mut impact = purchase_review_impact_summary(
@@ -541,49 +493,19 @@ fn purchase_review_sections(
         sales_order_no.map(str::trim).filter(|text| !text.is_empty()),
         sales_order_id,
     );
-    push_section(
-        &mut sections,
-        "含税金额",
-        Some(format_yuan(&submission.gross_amount)).as_deref(),
-        true,
-    );
-    push_section(
-        &mut sections,
-        "不含税金额",
-        Some(format_yuan(&submission.net_amount)).as_deref(),
-        true,
-    );
+    push_section(&mut sections, "含税金额", Some(format_yuan(&submission.gross_amount)).as_deref(), true);
+    push_section(&mut sections, "不含税金额", Some(format_yuan(&submission.net_amount)).as_deref(), true);
     if !submission.tax_amount.to_decimal().is_zero() {
-        push_section(
-            &mut sections,
-            "税额",
-            Some(format_yuan(&submission.tax_amount)).as_deref(),
-            true,
-        );
+        push_section(&mut sections, "税额", Some(format_yuan(&submission.tax_amount)).as_deref(), true);
     }
     push_section(&mut sections, "付款条件", payment, false);
     let category = split_encoded_payment_term_snapshot(&submission.payment_term_snapshot.payment_term_code)
         .business_category;
     push_section(&mut sections, "经营类目", category.as_deref(), false);
-    push_section(
-        &mut sections,
-        "采购类型",
-        Some(submission.purchase_type.label()),
-        false,
-    );
-    push_section(
-        &mut sections,
-        "履约责任",
-        Some(submission.fulfillment_responsibility.label()),
-        false,
-    );
+    push_section(&mut sections, "采购类型", Some(submission.purchase_type.label()), false);
+    push_section(&mut sections, "履约责任", Some(submission.fulfillment_responsibility.label()), false);
     push_section(&mut sections, "提交来源", origin, false);
-    push_section(
-        &mut sections,
-        "提交号",
-        non_empty(&submission.submission_no).as_deref(),
-        false,
-    );
+    push_section(&mut sections, "提交号", non_empty(&submission.submission_no).as_deref(), false);
     if let Some(previous) = previous {
         push_resubmission_comparisons(
             &mut sections,
@@ -602,12 +524,7 @@ fn push_resubmission_comparisons(
     current: &PurchaseOrderSubmission,
     changed_line_count: usize,
 ) {
-    push_section(
-        sections,
-        "对比基准",
-        non_empty(&previous.submission_no).as_deref(),
-        false,
-    );
+    push_section(sections, "对比基准", non_empty(&previous.submission_no).as_deref(), false);
     let mut header_change_count = 0usize;
     header_change_count += usize::from(push_changed_section(
         sections,
@@ -775,9 +692,8 @@ fn first_line_summary(line: &BriefLine) -> String {
 /// # 错误
 /// 无。
 fn split_purchase_brief_lines(lines: Vec<BriefLine>) -> (Vec<BriefLine>, u32) {
-    let (items, fees): (Vec<_>, Vec<_>) = lines
-        .into_iter()
-        .partition(|line| line.title != PurchaseLineType::LogisticsFee.label());
+    let (items, fees): (Vec<_>, Vec<_>) =
+        lines.into_iter().partition(|line| line.title != PurchaseLineType::LogisticsFee.label());
     let more_count = items.len().saturating_sub(super::brief::BRIEF_LINE_LIMIT) as u32;
     let mut visible = items;
     visible.truncate(super::brief::BRIEF_LINE_LIMIT);
@@ -867,9 +783,7 @@ fn payment_term_label(snapshot: &PaymentTermSnapshot) -> Option<String> {
     if code.is_empty() {
         return snapshot.prepay_gate.then(|| "先款后货".to_string());
     }
-    let named = SupplierPaymentTerm::parse(&code)
-        .map(SupplierPaymentTerm::label)
-        .unwrap_or(code);
+    let named = SupplierPaymentTerm::parse(&code).map(SupplierPaymentTerm::label).unwrap_or(code);
     if snapshot.prepay_gate && !named.contains("先款") {
         Some(format!("{named} · 先款后货"))
     } else {
@@ -938,24 +852,15 @@ mod tests {
     use erp_core::ids::{
         PurchaseOrderId, PurchaseOrderSubmissionId, SupplierAccountId, SupplierCommercialProfileRevisionId,
     };
-    use {
-        erp_procurement::entity::purchase_order::FulfillmentResponsibility,
-        erp_procurement::entity::purchase_order::PurchaseOrderSubmissionData,
-        erp_procurement::entity::purchase_order::PurchaseType,
-        erp_procurement::entity::purchase_order::SupplierSnapshot,
+    use erp_procurement::entity::purchase_order::{
+        FulfillmentResponsibility, PurchaseOrderSubmissionData, PurchaseType, SupplierSnapshot,
     };
 
     use super::*;
 
     fn payment(code: &str, prepay: bool) -> PaymentTermSnapshot {
-        PaymentTermSnapshot::new(
-            code.to_string(),
-            prepay,
-            None,
-            None,
-            resolve_procurement_payment_term,
-        )
-        .expect("付款条件必须合法")
+        PaymentTermSnapshot::new(code.to_string(), prepay, None, None, resolve_procurement_payment_term)
+            .expect("付款条件必须合法")
     }
 
     fn amount(value: &str) -> Amount {
@@ -992,14 +897,8 @@ mod tests {
 
     #[test]
     fn payment_term_uses_business_labels_and_prepay_gate() {
-        assert_eq!(
-            payment_term_label(&payment("PREPAY_30", true)).as_deref(),
-            Some("先款 30%")
-        );
-        assert_eq!(
-            payment_term_label(&payment("POSTPAY_NET30", false)).as_deref(),
-            Some("货到 30 天")
-        );
+        assert_eq!(payment_term_label(&payment("PREPAY_30", true)).as_deref(), Some("先款 30%"));
+        assert_eq!(payment_term_label(&payment("POSTPAY_NET30", false)).as_deref(), Some("货到 30 天"));
         assert_eq!(
             payment_term_label(&payment("现结｜经营类目：礼盒", false)).as_deref(),
             Some("现结（审批通过日）")
@@ -1074,10 +973,7 @@ mod tests {
 
         let previous = previous_formal_submission_ids(&[draft, first, second]);
 
-        assert_eq!(
-            previous.get("submission-2").map(String::as_str),
-            Some("submission-1")
-        );
+        assert_eq!(previous.get("submission-2").map(String::as_str), Some("submission-1"));
         assert!(!previous.contains_key("submission-1"));
     }
 
@@ -1159,15 +1055,9 @@ mod tests {
             purchase_item_quantity(Some(&qty("20")), Some("件"), &amount("1600")).as_deref(),
             Some("20 件 · ¥1,600")
         );
-        assert_eq!(
-            purchase_item_quantity(None, None, &amount("80")).as_deref(),
-            Some("¥80")
-        );
+        assert_eq!(purchase_item_quantity(None, None, &amount("80")).as_deref(), Some("¥80"));
         assert_eq!(PurchaseType::Physical.label(), "实物");
         assert_eq!(FulfillmentResponsibility::Warehouse.label(), "入仓");
-        assert_eq!(
-            format_business_due_label(BusinessDate::from_ymd(2026, 8, 20).unwrap()),
-            "8/20 交"
-        );
+        assert_eq!(format_business_due_label(BusinessDate::from_ymd(2026, 8, 20).unwrap()), "8/20 交");
     }
 }

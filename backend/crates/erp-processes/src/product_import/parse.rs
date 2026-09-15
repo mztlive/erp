@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
 
-use erp_catalog::{ensure_product_import_headers, PRODUCT_IMPORT_HEADERS, PRODUCT_IMPORT_SHEET_NAME};
+use erp_catalog::{PRODUCT_IMPORT_HEADERS, PRODUCT_IMPORT_SHEET_NAME, ensure_product_import_headers};
 use regex::Regex;
 use zip::ZipArchive;
 
@@ -52,11 +52,7 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
     }
     let headers = &rows[0].cells;
     ensure_product_import_headers(headers).map_err(Error::from)?;
-    let data_rows = rows
-        .into_iter()
-        .skip(1)
-        .filter(|row| row_has_content(&row.cells))
-        .collect::<Vec<_>>();
+    let data_rows = rows.into_iter().skip(1).filter(|row| row_has_content(&row.cells)).collect::<Vec<_>>();
     if data_rows.is_empty() {
         return Err(Error::ValidationError("模板没有可导入的数据行".into()));
     }
@@ -114,18 +110,10 @@ fn locate_internal_sheet(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<Stri
         rid_to_target.insert(cap[1].to_string(), cap[2].to_string());
     }
     let Some((_, rid)) = sheets.iter().find(|(name, _)| name == PRODUCT_IMPORT_SHEET_NAME) else {
-        return Err(Error::ValidationError(
-            "未找到「对内」工作表，请使用原产品报价表模板".into(),
-        ));
+        return Err(Error::ValidationError("未找到「对内」工作表，请使用原产品报价表模板".into()));
     };
-    let target = rid_to_target
-        .get(rid)
-        .ok_or_else(|| Error::ValidationError("对内工作表路径无效".into()))?;
-    if target.starts_with("xl/") {
-        Ok(target.clone())
-    } else {
-        Ok(format!("xl/{target}"))
-    }
+    let target = rid_to_target.get(rid).ok_or_else(|| Error::ValidationError("对内工作表路径无效".into()))?;
+    if target.starts_with("xl/") { Ok(target.clone()) } else { Ok(format!("xl/{target}")) }
 }
 
 fn read_shared_strings(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<Vec<String>> {
@@ -150,9 +138,7 @@ fn parse_sheet_rows(xml: &str, shared: &[String]) -> Result<Vec<ParsedProductRow
     let mut by_row: HashMap<u32, HashMap<u32, String>> = HashMap::new();
     for cap in cell_re.captures_iter(xml) {
         let col = column_index(&cap[1]);
-        let row: u32 = cap[2]
-            .parse()
-            .map_err(|_| Error::ValidationError("工作表行号无效".into()))?;
+        let row: u32 = cap[2].parse().map_err(|_| Error::ValidationError("工作表行号无效".into()))?;
         let attrs = &cap[3];
         let inner = &cap[4];
         let value = cell_text(attrs, inner, shared);
@@ -181,11 +167,7 @@ fn cell_text(attrs: &str, inner: &str, shared: &[String]) -> String {
     if let Some(formula) = capture_tag(inner, "f") {
         let formula = unescape_xml(&formula);
         if formula.contains("DISPIMG") {
-            return if formula.starts_with('=') {
-                formula
-            } else {
-                format!("={formula}")
-            };
+            return if formula.starts_with('=') { formula } else { format!("={formula}") };
         }
     }
     if let Some(value) = capture_tag(inner, "v") {
@@ -223,14 +205,8 @@ fn parse_image_targets(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<HashMa
     };
     let name_re = Regex::new(r#"name="(ID_[A-Fa-f0-9]+)""#).expect("name regex");
     let embed_re = Regex::new(r#"r:embed="(rId\d+)""#).expect("embed regex");
-    let names = name_re
-        .captures_iter(&xml)
-        .map(|cap| cap[1].to_string())
-        .collect::<Vec<_>>();
-    let embeds = embed_re
-        .captures_iter(&xml)
-        .map(|cap| cap[1].to_string())
-        .collect::<Vec<_>>();
+    let names = name_re.captures_iter(&xml).map(|cap| cap[1].to_string()).collect::<Vec<_>>();
+    let embeds = embed_re.captures_iter(&xml).map(|cap| cap[1].to_string()).collect::<Vec<_>>();
     let rel_re = Regex::new(r#"Id="(rId\d+)"[^>]*Target="([^"]+)""#).expect("image rel regex");
     let mut rid_to_target = HashMap::new();
     for cap in rel_re.captures_iter(&rels) {
@@ -259,12 +235,9 @@ fn read_zip_text(archive: &mut ZipArchive<Cursor<&[u8]>>, name: &str) -> Result<
 }
 
 fn read_zip_bytes(archive: &mut ZipArchive<Cursor<&[u8]>>, name: &str) -> Result<Vec<u8>> {
-    let mut file = archive
-        .by_name(name)
-        .map_err(|_| Error::ValidationError(format!("缺少文件 {name}")))?;
+    let mut file = archive.by_name(name).map_err(|_| Error::ValidationError(format!("缺少文件 {name}")))?;
     let mut buf = Vec::new();
-    file.read_to_end(&mut buf)
-        .map_err(|_| Error::ValidationError("读取压缩包失败".into()))?;
+    file.read_to_end(&mut buf).map_err(|_| Error::ValidationError("读取压缩包失败".into()))?;
     Ok(buf)
 }
 
@@ -282,12 +255,7 @@ fn parse_merge_ranges(xml: &str) -> Vec<(u32, u32, u32, u32)> {
     let re = Regex::new(r#"<mergeCell[^>]*\bref="([A-Z]+)(\d+):([A-Z]+)(\d+)""#).expect("merge regex");
     re.captures_iter(xml)
         .filter_map(|cap| {
-            Some((
-                column_index(&cap[1]),
-                cap[2].parse().ok()?,
-                column_index(&cap[3]),
-                cap[4].parse().ok()?,
-            ))
+            Some((column_index(&cap[1]), cap[2].parse().ok()?, column_index(&cap[3]), cap[4].parse().ok()?))
         })
         .collect()
 }
@@ -305,10 +273,7 @@ fn parse_merge_ranges(xml: &str) -> Vec<(u32, u32, u32, u32)> {
 /// 无。
 fn fill_merged_cells(by_row: &mut HashMap<u32, HashMap<u32, String>>, merges: &[(u32, u32, u32, u32)]) {
     for &(start_col, start_row, end_col, end_row) in merges {
-        let origin = by_row
-            .get(&start_row)
-            .and_then(|cols| cols.get(&start_col))
-            .cloned();
+        let origin = by_row.get(&start_row).and_then(|cols| cols.get(&start_col)).cloned();
         let Some(value) = origin else {
             continue;
         };
@@ -327,8 +292,7 @@ fn fill_merged_cells(by_row: &mut HashMap<u32, HashMap<u32, String>>, merges: &[
 }
 
 fn column_index(col: &str) -> u32 {
-    col.chars()
-        .fold(0, |acc, ch| acc * 26 + u32::from(ch as u8 - b'A' + 1))
+    col.chars().fold(0, |acc, ch| acc * 26 + u32::from(ch as u8 - b'A' + 1))
 }
 
 fn unescape_xml(value: &str) -> String {
@@ -342,8 +306,9 @@ fn unescape_xml(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{cell_text, column_index, parse_sheet_rows};
     use erp_catalog::entity::catalog::product_import::dispimg_id;
+
+    use super::{cell_text, column_index, parse_sheet_rows};
 
     #[test]
     fn column_index_matches_excel() {

@@ -1,9 +1,10 @@
 //! 采购启动审批时的冻结提交与旧草稿持久化。
 
+use persistence_core::Executor;
+
+use crate::Result;
 use crate::entity::purchase_order::{PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine};
 use crate::repository::PurchaseOrderExt;
-use crate::Result;
-use persistence_core::Executor;
 
 /// 在调用方事务内写入冻结提交、提交行和采购单当前提交指针。
 ///
@@ -19,9 +20,7 @@ pub async fn persist_started_submission(
     lines: &[PurchaseOrderSubmissionLine],
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    db.purchase_order()
-        .create_purchase_submission(order, submission, lines, executor)
-        .await?;
+    db.purchase_order().create_purchase_submission(order, submission, lines, executor).await?;
     Ok(())
 }
 

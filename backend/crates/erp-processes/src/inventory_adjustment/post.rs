@@ -1,24 +1,17 @@
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::StockAdjustmentId;
-use erp_inventory::InventoryExt;
-use erp_inventory::StockAdjustment;
+use erp_inventory::{InventoryExt, StockAdjustment, StockAdjustmentView};
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
-use erp_workflow::ApprovalIntegrationExt;
-use erp_workflow::BpmExt;
-use erp_workflow::WorkItemExt;
+use erp_workflow::{ApprovalActionContext, ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_workflow::ApprovalActionContext;
-
+use super::InventoryAdjustmentService;
 use super::adapter::{require_frozen_binding, stock_adjustment_adapter};
 use super::approval_query::load_approval_binding;
-use super::InventoryAdjustmentService;
-use erp_inventory::StockAdjustmentView;
+use crate::{Error, Result};
 
 impl InventoryAdjustmentService {
     /// 在审批运行时持有的唯一事务内过账库存调整单。
@@ -47,9 +40,7 @@ impl InventoryAdjustmentService {
         let session = executor
             .session()
             .ok_or_else(|| Error::Internal("库存调整审批过账缺少运行时事务会话".to_string()))?;
-        post_stock_adjustment_write(&self.db, context, actor, session)
-            .await
-            .map(Into::into)
+        post_stock_adjustment_write(&self.db, context, actor, session).await.map(Into::into)
     }
 }
 
@@ -79,20 +70,15 @@ async fn post_stock_adjustment_write(
         .await?
         .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
     validate_post_runtime_context(db, context, actor, &adjustment, session).await?;
-    adjustment
-        .ensure_approval_postable()
-        .map_err(|error| Error::ConflictError(error.to_string()))?;
+    adjustment.ensure_approval_postable().map_err(|error| Error::ConflictError(error.to_string()))?;
     let lines = db
         .inventory()
         .adjustment_lines_by_adjustment_ids(std::slice::from_ref(&adjustment_id), session)
         .await?;
     erp_inventory::apply_posted_adjustment_in_transaction(db, &mut adjustment, &lines, actor, session)
         .await?;
-    let audit = actor.clone().resource_log(
-        "stock_adjustment.post",
-        "stock_adjustment",
-        adjustment_id.to_string(),
-    )?;
+    let audit =
+        actor.clone().resource_log("stock_adjustment.post", "stock_adjustment", adjustment_id.to_string())?;
     db.audit_logs().create(&audit, session).await?;
     Ok(adjustment)
 }
@@ -149,10 +135,7 @@ async fn validate_post_runtime_context(
             subject_version,
         )
         .map_err(|_| Error::ConflictError("库存调整审批冻结快照已变化".to_string()))?;
-    let current_execution = instance
-        .current_node_execution_id
-        .as_ref()
-        .map(ToString::to_string);
+    let current_execution = instance.current_node_execution_id.as_ref().map(ToString::to_string);
     if instance.status != bpm::model::types::ApprovalProcessInstanceStatus::Running
         || instance.process_kind
             != erp_workflow::service::approval::process_kind::process_kind_of(DocumentType::StockAdjustment)
@@ -187,12 +170,7 @@ async fn validate_post_runtime_context(
     if task.work_item_type != WorkItemType::DocumentApproval
         || task.status != WorkItemStatus::Open
         || task.assignment_source != AssignmentSource::ApprovalRuntime
-        || task
-            .approval_node_execution_id
-            .as_ref()
-            .map(ToString::to_string)
-            .as_deref()
-            != Some(execution_id)
+        || task.approval_node_execution_id.as_ref().map(ToString::to_string).as_deref() != Some(execution_id)
         || task.business_object_type != DocumentType::StockAdjustment.as_str()
         || task.business_object_id != adjustment.base.id
         || task.subject_version != context.subject_version()

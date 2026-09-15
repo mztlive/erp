@@ -1,12 +1,11 @@
 //! 单据审批任务构造与审批运行时完成、关闭。
 
 use bpm::ApprovalNodeExecutionId;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::validation::USER_ID_MAX_LEN;
 use super::{
@@ -144,9 +143,7 @@ impl WorkItem {
         if self.base.version != expected_version {
             return Err(ApprovalDecisionTaskError::VersionConflict);
         }
-        self.approval_node_execution_id
-            .clone()
-            .ok_or(ApprovalDecisionTaskError::MissingExecution)
+        self.approval_node_execution_id.clone().ok_or(ApprovalDecisionTaskError::MissingExecution)
     }
 
     /// 由审批运行时完成当前开放的单据审批任务。
@@ -201,13 +198,7 @@ impl WorkItem {
         if self.approval_node_execution_id.is_none() {
             return Err(Error::from("单据审批任务缺少节点执行引用"));
         }
-        self.close_open(
-            closed_by,
-            WorkItemCloseData {
-                close_reason: reason.into(),
-            },
-            at,
-        )?;
+        self.close_open(closed_by, WorkItemCloseData { close_reason: reason.into() }, at)?;
         Ok(self)
     }
 
@@ -233,10 +224,7 @@ impl WorkItem {
         reason: &str,
         at: Instant,
     ) -> Result<Vec<Self>> {
-        items
-            .into_iter()
-            .map(|item| item.close_for_approval_cancellation(closed_by, reason, at))
-            .collect()
+        items.into_iter().map(|item| item.close_for_approval_cancellation(closed_by, reason, at)).collect()
     }
 
     /// 批量终结同一节点执行关联的全部开放审批任务。
@@ -270,16 +258,14 @@ impl WorkItem {
             match ending {
                 ApprovalRuntimeTaskEnding::Complete => {
                     item.complete_by_approval_runtime(actor_id, at)?;
-                }
+                },
                 ApprovalRuntimeTaskEnding::Close { reason } => {
                     item.close_by_approval_runtime(
                         actor_id,
-                        WorkItemCloseData {
-                            close_reason: reason.clone(),
-                        },
+                        WorkItemCloseData { close_reason: reason.clone() },
                         at,
                     )?;
-                }
+                },
             }
         }
         Ok(items)
@@ -296,14 +282,14 @@ impl WorkItem {
 #[cfg(test)]
 mod tests {
     use bpm::ApprovalNodeExecutionId;
-
-    use super::super::{
-        approval_item, direct_data, ApprovalDecisionTaskError, ApprovalRuntimeTaskEnding, WorkItem,
-        WorkItemStatus, WorkItemType,
-    };
     use erp_core::common::state::ensure_transition;
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
+
+    use super::super::{
+        ApprovalDecisionTaskError, ApprovalRuntimeTaskEnding, WorkItem, WorkItemStatus, WorkItemType,
+        approval_item, direct_data,
+    };
 
     /// 单据审批任务固定带个人责任与节点执行，且禁止通用改派。
     ///
@@ -313,8 +299,7 @@ mod tests {
         let mut item = approval_item("wi-approval");
         assert_eq!(item.work_item_type, WorkItemType::DocumentApproval);
         assert!(item.reassign("bob", Instant::from_unix_secs(110)).is_err());
-        item.complete_by_approval_runtime("alice", Instant::from_unix_secs(110))
-            .unwrap();
+        item.complete_by_approval_runtime("alice", Instant::from_unix_secs(110)).unwrap();
         assert_eq!(item.status, WorkItemStatus::Completed);
         assert!(ensure_transition(WorkItemStatus::Open, WorkItemStatus::Completed).is_ok());
     }
@@ -324,12 +309,7 @@ mod tests {
     fn approval_decision_preconditions_are_owned_by_work_item() {
         let item = approval_item("wi-decision");
         let version = item.base.version;
-        assert_eq!(
-            item.approval_execution_for_decision("alice", version)
-                .unwrap()
-                .as_ref(),
-            "exec-1"
-        );
+        assert_eq!(item.approval_execution_for_decision("alice", version).unwrap().as_ref(), "exec-1");
         assert_eq!(
             item.approval_execution_for_decision("bob", version),
             Err(ApprovalDecisionTaskError::NotCurrentOwner)
@@ -343,9 +323,7 @@ mod tests {
         closed
             .close_by_approval_runtime(
                 "alice",
-                super::WorkItemCloseData {
-                    close_reason: "运行时关闭".to_string(),
-                },
+                super::WorkItemCloseData { close_reason: "运行时关闭".to_string() },
                 Instant::from_unix_secs(110),
             )
             .unwrap();
@@ -382,18 +360,17 @@ mod tests {
         assert_eq!(closed[0].status, WorkItemStatus::Closed);
         assert_eq!(closed[0].closed_by.as_deref(), Some("submitter"));
         assert_eq!(closed[0].close_reason.as_deref(), Some("撤回重改"));
-        assert_eq!(
-            closed[0].approval_node_execution_id.as_ref().map(AsRef::as_ref),
-            Some("exec-1")
+        assert_eq!(closed[0].approval_node_execution_id.as_ref().map(AsRef::as_ref), Some("exec-1"));
+        assert!(
+            WorkItem::close_all_for_approval_cancellation(
+                Vec::new(),
+                "submitter",
+                "受阻取消",
+                Instant::from_unix_secs(121),
+            )
+            .unwrap()
+            .is_empty()
         );
-        assert!(WorkItem::close_all_for_approval_cancellation(
-            Vec::new(),
-            "submitter",
-            "受阻取消",
-            Instant::from_unix_secs(121),
-        )
-        .unwrap()
-        .is_empty());
     }
 
     /// 审批取消不得关闭独立任务、缺失执行引用或已终态任务。
@@ -401,38 +378,41 @@ mod tests {
     /// 任一非法任务都会使批量规则整体失败关闭。
     #[test]
     fn approval_cancellation_rejects_invalid_task_facts() {
-        let generic = WorkItem::new_at(
-            WorkItemId::new("wi-generic"),
-            direct_data(),
-            Instant::from_unix_secs(100),
-        )
-        .unwrap();
-        assert!(generic
-            .close_for_approval_cancellation("submitter", "撤回", Instant::from_unix_secs(120))
-            .is_err());
+        let generic =
+            WorkItem::new_at(WorkItemId::new("wi-generic"), direct_data(), Instant::from_unix_secs(100))
+                .unwrap();
+        assert!(
+            generic
+                .close_for_approval_cancellation("submitter", "撤回", Instant::from_unix_secs(120))
+                .is_err()
+        );
 
         let mut missing_execution = approval_item("wi-missing-execution");
         missing_execution.approval_node_execution_id = None;
-        assert!(missing_execution
-            .close_for_approval_cancellation("submitter", "撤回", Instant::from_unix_secs(120))
-            .is_err());
+        assert!(
+            missing_execution
+                .close_for_approval_cancellation("submitter", "撤回", Instant::from_unix_secs(120))
+                .is_err()
+        );
 
         let completed = approval_item("wi-completed");
         let mut completed = completed;
-        completed
-            .complete_by_approval_runtime("alice", Instant::from_unix_secs(110))
-            .unwrap();
-        assert!(completed
-            .close_for_approval_cancellation("submitter", "撤回", Instant::from_unix_secs(120))
-            .is_err());
+        completed.complete_by_approval_runtime("alice", Instant::from_unix_secs(110)).unwrap();
+        assert!(
+            completed
+                .close_for_approval_cancellation("submitter", "撤回", Instant::from_unix_secs(120))
+                .is_err()
+        );
 
-        assert!(WorkItem::close_all_for_approval_cancellation(
-            vec![approval_item("wi-valid"), approval_item("wi-invalid")],
-            "",
-            "撤回",
-            Instant::from_unix_secs(120),
-        )
-        .is_err());
+        assert!(
+            WorkItem::close_all_for_approval_cancellation(
+                vec![approval_item("wi-valid"), approval_item("wi-invalid")],
+                "",
+                "撤回",
+                Instant::from_unix_secs(120),
+            )
+            .is_err()
+        );
     }
 
     /// 同一执行的遗留重复开放任务必须按确定性顺序全部完成或关闭。
@@ -448,17 +428,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(completed.len(), 2);
-        assert!(completed
-            .iter()
-            .all(|item| item.status == WorkItemStatus::Completed));
+        assert!(completed.iter().all(|item| item.status == WorkItemStatus::Completed));
 
         let closed = WorkItem::end_all_for_approval_execution(
             vec![approval_item("wi-3"), approval_item("wi-4")],
             &execution_id,
             "runtime",
-            &ApprovalRuntimeTaskEnding::Close {
-                reason: "APPROVAL_RUNTIME_BLOCKED".to_string(),
-            },
+            &ApprovalRuntimeTaskEnding::Close { reason: "APPROVAL_RUNTIME_BLOCKED".to_string() },
             Instant::from_unix_secs(121),
         )
         .unwrap();
@@ -471,21 +447,25 @@ mod tests {
     /// 批量终结必须拒绝外来执行和完成责任人漂移。
     #[test]
     fn approval_runtime_batch_rejects_foreign_execution_or_owner() {
-        assert!(WorkItem::end_all_for_approval_execution(
-            vec![approval_item("wi-foreign")],
-            &ApprovalNodeExecutionId::new("exec-other"),
-            "alice",
-            &ApprovalRuntimeTaskEnding::Complete,
-            Instant::from_unix_secs(120),
-        )
-        .is_err());
-        assert!(WorkItem::end_all_for_approval_execution(
-            vec![approval_item("wi-owner")],
-            &ApprovalNodeExecutionId::new("exec-1"),
-            "bob",
-            &ApprovalRuntimeTaskEnding::Complete,
-            Instant::from_unix_secs(120),
-        )
-        .is_err());
+        assert!(
+            WorkItem::end_all_for_approval_execution(
+                vec![approval_item("wi-foreign")],
+                &ApprovalNodeExecutionId::new("exec-other"),
+                "alice",
+                &ApprovalRuntimeTaskEnding::Complete,
+                Instant::from_unix_secs(120),
+            )
+            .is_err()
+        );
+        assert!(
+            WorkItem::end_all_for_approval_execution(
+                vec![approval_item("wi-owner")],
+                &ApprovalNodeExecutionId::new("exec-1"),
+                "bob",
+                &ApprovalRuntimeTaskEnding::Complete,
+                Instant::from_unix_secs(120),
+            )
+            .is_err()
+        );
     }
 }

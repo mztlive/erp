@@ -1,13 +1,13 @@
-use crate::entity::catalog::unit_of_measure::{UnitOfMeasure, UnitOfMeasureUpdate};
-use crate::repository::CatalogExt;
+use application_core::AuditActor;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use super::support::ensure_version;
 use super::CatalogService;
+use super::support::ensure_version;
 use crate::dto::{PageView, SortDir, UnitOfMeasureListParams, UnitOfMeasureView, UpdateUnitOfMeasureRequest};
+use crate::entity::catalog::unit_of_measure::{UnitOfMeasure, UnitOfMeasureUpdate};
 use crate::error::Result;
-use application_core::AuditActor;
+use crate::repository::CatalogExt;
 
 /// 计量单位列表筛选条件类型。
 type UnitOfMeasureFilter = <mongodb::Database as CatalogExt>::UnitOfMeasureFilter;
@@ -40,11 +40,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .unit_of_measures()
-            .search_unit_of_measures(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.unit_of_measures().search_unit_of_measures(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -59,12 +55,7 @@ impl CatalogService {
                 version: row.version,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 更新计量单位（乐观锁语义）。

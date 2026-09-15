@@ -1,20 +1,18 @@
 //! 目录同步启动与结果事务；保留与健康检查不同的读取时点。
-use super::{
-    execution::{execute, ConnectionJobExecutionPort},
-    failure::persist_health_failure_task,
-    SupplierConnectionExecutionProcess,
-};
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_supply::entity::supplier_api::SupplierApiConnection;
-use erp_supply::{
-    ports::supplier_api_gateway::ClassifiedError,
-    service::supplier_api::{context::digest, SupplierApiService},
-};
+use erp_supply::ports::supplier_api_gateway::ClassifiedError;
+use erp_supply::service::supplier_api::SupplierApiService;
+use erp_supply::service::supplier_api::context::digest;
 use erp_support::{BackgroundJob, BulkJobExt, JobStatus};
 use persistence_core::{NoTransaction, Transactional};
+
+use super::SupplierConnectionExecutionProcess;
+use super::execution::{ConnectionJobExecutionPort, execute};
+use super::failure::persist_health_failure_task;
+use crate::{Error, Result};
 
 impl SupplierConnectionExecutionProcess {
     pub(super) async fn process_catalog_job(&self, job: BackgroundJob, actor: &AuditActor) -> Result<()> {
@@ -107,8 +105,6 @@ impl ConnectionJobExecutionPort for CatalogExecution<'_> {
         self.0.gateway.catalog_sync(&started.0).await
     }
     async fn finish(&self, started: Self::Started, outcome: Self::Outcome, actor: &AuditActor) -> Result<()> {
-        self.0
-            .finish_catalog_job(started.1, started.0, outcome, actor)
-            .await
+        self.0.finish_catalog_job(started.1, started.0, outcome, actor).await
     }
 }

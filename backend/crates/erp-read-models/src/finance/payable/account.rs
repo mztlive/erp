@@ -2,14 +2,13 @@
 
 use std::collections::{HashMap, HashSet};
 
+use erp_core::ids::{PayableAccountId, SupplierAccountId};
 use erp_finance::entity::payable::{PayableEntry, PayableSourceType};
 use erp_finance::repository::PayableExt;
-use {erp_procurement::repository::PurchaseOrderExt, erp_supply::repository::SupplierSettlementExt};
-
-use erp_core::ids::{PayableAccountId, SupplierAccountId};
 use erp_party::PartyExt;
+use erp_procurement::repository::PurchaseOrderExt;
 use erp_supplier::SupplierExt;
-
+use erp_supply::repository::SupplierSettlementExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
@@ -18,7 +17,6 @@ use super::dto::{
     PageView, PayableAccountListParams, PayableAccountSummaryView, PayableAccountView, SortDir,
 };
 use super::mapping::{payment_recipient_view, resolve_optional_payment_recipient_for_read};
-
 use super::{PayableAccountFilter, PayableReadService};
 use crate::{Error, Result};
 
@@ -60,27 +58,14 @@ impl PayableReadService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .payable_accounts()
-            .search_payable_accounts(&filter, &mut NoTransaction)
-            .await?;
-        let account_ids = page
-            .items
-            .iter()
-            .map(|row| PayableAccountId::new(row.id.clone()))
-            .collect::<Vec<_>>();
+        let page = self.db.payable_accounts().search_payable_accounts(&filter, &mut NoTransaction).await?;
+        let account_ids =
+            page.items.iter().map(|row| PayableAccountId::new(row.id.clone())).collect::<Vec<_>>();
         let mut entries_by_account = HashMap::<String, Vec<PayableEntry>>::new();
-        for entry in self
-            .db
-            .payable_entries()
-            .find_entries_by_accounts(&account_ids, &mut NoTransaction)
-            .await?
+        for entry in
+            self.db.payable_entries().find_entries_by_accounts(&account_ids, &mut NoTransaction).await?
         {
-            entries_by_account
-                .entry(entry.payable_account_id.to_string())
-                .or_default()
-                .push(entry);
+            entries_by_account.entry(entry.payable_account_id.to_string()).or_default().push(entry);
         }
         for entries in entries_by_account.values_mut() {
             entries.sort_unstable_by_key(|entry| entry.source_sequence);
@@ -93,41 +78,29 @@ impl PayableReadService {
             .collect::<HashSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let suppliers = self
-            .db
-            .supplier_accounts()
-            .find_accounts_by_ids(&supplier_ids, &mut NoTransaction)
-            .await?;
+        let suppliers =
+            self.db.supplier_accounts().find_accounts_by_ids(&supplier_ids, &mut NoTransaction).await?;
         let party_ids = suppliers
             .iter()
             .map(|supplier| supplier.party_id.clone())
             .collect::<HashSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let parties = self
-            .db
-            .parties()
-            .find_parties_by_ids(&party_ids, &mut NoTransaction)
-            .await?;
+        let parties = self.db.parties().find_parties_by_ids(&party_ids, &mut NoTransaction).await?;
         let revision_ids = parties
             .iter()
             .filter_map(|party| party.stable.current_revision_id.clone())
             .collect::<HashSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let revisions = self
-            .db
-            .party_revisions()
-            .find_revisions_by_ids(&revision_ids, &mut NoTransaction)
-            .await?;
+        let revisions =
+            self.db.party_revisions().find_revisions_by_ids(&revision_ids, &mut NoTransaction).await?;
         let supplier_by_id = suppliers
             .into_iter()
             .map(|supplier| (supplier.base.id.clone(), supplier))
             .collect::<HashMap<_, _>>();
-        let party_by_id = parties
-            .into_iter()
-            .map(|party| (party.base.id.clone(), party))
-            .collect::<HashMap<_, _>>();
+        let party_by_id =
+            parties.into_iter().map(|party| (party.base.id.clone(), party)).collect::<HashMap<_, _>>();
         let revision_by_id = revisions
             .into_iter()
             .map(|revision| (revision.base.id.clone(), revision))
@@ -219,12 +192,7 @@ impl PayableReadService {
                 entries,
             });
         }
-        Ok(PageView {
-            items: views,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items: views, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 查询应付往来子账详情（子账 + 分录）。

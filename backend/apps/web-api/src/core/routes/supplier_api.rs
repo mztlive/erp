@@ -1,15 +1,12 @@
 //! 域 D25 `supplier_api` 管理端路由。
 
-use axum::{
-    routing::{get, post, put},
-    Router,
-};
+use axum::Router;
+use axum::routing::{get, post, put};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::supplier_api, middleware::with_permission},
-};
+use crate::app_state::AppState;
+use crate::core::handler::supplier_api;
+use crate::core::middleware::with_permission;
 
 /// 返回本域管理端路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {

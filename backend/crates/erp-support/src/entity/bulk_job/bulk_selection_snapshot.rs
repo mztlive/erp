@@ -2,13 +2,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::BulkSelectionSnapshotId;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 创建人标识最大长度。
 const CREATED_BY_MAX_LEN: usize = 128;
@@ -180,12 +179,8 @@ impl BulkSelectionSnapshot {
     /// # 错误
     /// 当创建人为空/超长、`item_count` 为零或超过上限时返回错误。
     pub fn new(id: BulkSelectionSnapshotId, data: BulkSelectionSnapshotData) -> Result<Self> {
-        let created_by = normalize_required_text(
-            data.created_by,
-            "创建人不能为空",
-            CREATED_BY_MAX_LEN,
-            "创建人过长",
-        )?;
+        let created_by =
+            normalize_required_text(data.created_by, "创建人不能为空", CREATED_BY_MAX_LEN, "创建人过长")?;
         if data.item_count == 0 {
             return Err(Error::from("冻结目标数必须大于零"));
         }
@@ -281,10 +276,11 @@ impl BulkSelectionSnapshot {
 
 #[cfg(test)]
 mod tests {
-    use super::{BulkSelectionSnapshot, BulkSelectionSnapshotData, SelectionStatus, SelectionType};
     use erp_core::common::state::ensure_transition;
     use erp_core::common::time::Instant;
     use erp_core::ids::BulkSelectionSnapshotId;
+
+    use super::{BulkSelectionSnapshot, BulkSelectionSnapshotData, SelectionStatus, SelectionType};
 
     fn data() -> BulkSelectionSnapshotData {
         BulkSelectionSnapshotData {
@@ -310,26 +306,17 @@ mod tests {
     /// 失败路径：必填为空被拒。
     #[test]
     fn new_rejects_empty_creator() {
-        let payload = BulkSelectionSnapshotData {
-            created_by: "  ".to_string(),
-            ..data()
-        };
+        let payload = BulkSelectionSnapshotData { created_by: "  ".to_string(), ..data() };
         assert!(BulkSelectionSnapshot::new(BulkSelectionSnapshotId::new("snap-1"), payload).is_err());
     }
 
     /// 失败路径：目标数为零与超上限被拒（列表越界）。
     #[test]
     fn new_rejects_out_of_range_item_count() {
-        let zero = BulkSelectionSnapshotData {
-            item_count: 0,
-            ..data()
-        };
+        let zero = BulkSelectionSnapshotData { item_count: 0, ..data() };
         assert!(BulkSelectionSnapshot::new(BulkSelectionSnapshotId::new("snap-1"), zero).is_err());
 
-        let over = BulkSelectionSnapshotData {
-            item_count: super::MAX_ITEM_COUNT + 1,
-            ..data()
-        };
+        let over = BulkSelectionSnapshotData { item_count: super::MAX_ITEM_COUNT + 1, ..data() };
         assert!(BulkSelectionSnapshot::new(BulkSelectionSnapshotId::new("snap-1"), over).is_err());
     }
 

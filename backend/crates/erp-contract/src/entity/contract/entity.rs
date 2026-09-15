@@ -6,13 +6,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::stable::StableBase;
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::ids::{ContractId, CustomerAccountId, PartyId};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 合同编号最大长度。
 const CONTRACT_NO_MAX_LEN: usize = 64;
@@ -261,10 +260,7 @@ impl Contract {
     /// # 错误
     /// 已终止或已到期时返回错误。
     fn ensure_mutable(&self) -> Result<()> {
-        if matches!(
-            self.stable.status,
-            ContractStatus::Terminated | ContractStatus::Expired
-        ) {
+        if matches!(self.stable.status, ContractStatus::Terminated | ContractStatus::Expired) {
             return Err(Error::from("已终止或已到期的合同不允许修改"));
         }
         Ok(())
@@ -273,8 +269,9 @@ impl Contract {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::ids::ContractId;
+
+    use super::*;
 
     fn data() -> ContractData {
         ContractData {
@@ -297,16 +294,10 @@ mod tests {
 
     #[test]
     fn new_rejects_blank_and_overlong_contract_no() {
-        let blank = ContractData {
-            contract_no: "   ".to_string(),
-            ..data()
-        };
+        let blank = ContractData { contract_no: "   ".to_string(), ..data() };
         assert!(Contract::new(ContractId::new("c-1"), blank, "admin-1").is_err());
 
-        let overlong = ContractData {
-            contract_no: "x".repeat(65),
-            ..data()
-        };
+        let overlong = ContractData { contract_no: "x".repeat(65), ..data() };
         assert!(Contract::new(ContractId::new("c-1"), overlong, "admin-1").is_err());
     }
 
@@ -380,7 +371,7 @@ mod tests {
             Error::InvalidStateTransition { from, to } => {
                 assert_eq!(from, "Terminated");
                 assert_eq!(to, "Effective");
-            }
+            },
             other => panic!("期望 InvalidStateTransition，得到 {other:?}"),
         }
     }

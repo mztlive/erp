@@ -59,29 +59,22 @@ pub(crate) fn ensure_targets(change: &OrganizationOperation, access: &Authorized
     let mut targets = Vec::<Option<&str>>::new();
     match change {
         CreateUnit { parent_id, .. } => targets.push(parent_id.as_deref()),
-        MoveUnit {
-            org_unit_id,
-            parent_id,
-        } => {
+        MoveUnit { org_unit_id, parent_id } => {
             targets.push(parent_id.as_deref());
             add_subtree_targets(state, org_unit_id, &mut targets)?;
-        }
+        },
         RenameUnit { org_unit_id, .. } | DisableUnit { org_unit_id } => targets.push(Some(org_unit_id)),
         TransferMember { user_id, org_unit_id } => {
             targets.push(Some(org_unit_id));
             targets.push(state.own_org(user_id, access.as_of)?);
-        }
+        },
         EndMembership { user_id } => targets.push(state.own_org(user_id, access.as_of)?),
-        GrantManagement {
-            org_unit_id,
-            include_descendants,
-            ..
-        } => {
+        GrantManagement { org_unit_id, include_descendants, .. } => {
             targets.push(Some(org_unit_id));
             if *include_descendants {
                 add_subtree_targets(state, org_unit_id, &mut targets)?;
             }
-        }
+        },
         RevokeManagement { assignment_id } => {
             let grant = state
                 .management
@@ -92,7 +85,7 @@ pub(crate) fn ensure_targets(change: &OrganizationOperation, access: &Authorized
             if grant.include_descendants {
                 add_subtree_targets(state, &grant.org_unit_id, &mut targets)?;
             }
-        }
+        },
     }
     if targets.into_iter().any(|id| !covers(access, id)) {
         return Err(Error::Forbidden("目标超出组织配置管理边界".into()));
@@ -122,13 +115,7 @@ fn add_subtree_targets<'a>(
 ) -> Result<()> {
     let tree = OrgTree::new(&state.units)?;
     let ids = tree.expand(id, true)?;
-    targets.extend(
-        state
-            .units
-            .iter()
-            .filter(|u| ids.contains(&u.base.id))
-            .map(|u| Some(u.base.id.as_str())),
-    );
+    targets.extend(state.units.iter().filter(|u| ids.contains(&u.base.id)).map(|u| Some(u.base.id.as_str())));
     Ok(())
 }
 
@@ -175,11 +162,7 @@ pub(crate) fn replay(
 /// 缺范围得到空集，不得补 Company 或泄露不可见父节点身份。
 pub(crate) fn visible_state(mut state: OrganizationState, access: &AuthorizedDataScope) -> OrganizationState {
     state.units.retain(|u| covers(access, Some(&u.base.id)));
-    let ids = state
-        .units
-        .iter()
-        .map(|u| u.base.id.clone())
-        .collect::<std::collections::BTreeSet<_>>();
+    let ids = state.units.iter().map(|u| u.base.id.clone()).collect::<std::collections::BTreeSet<_>>();
     for unit in &mut state.units {
         if unit.parent_id.as_ref().is_some_and(|id| !ids.contains(id)) {
             unit.parent_id = None;
@@ -264,15 +247,8 @@ mod tests {
     use crate::entity::organization::{OrgMembership, OrgUnit, OrgUnitKind, OrgValidity};
 
     fn unit(id: &str) -> OrgUnit {
-        OrgUnit::new(
-            id.into(),
-            id.into(),
-            None,
-            OrgUnitKind::Department,
-            "admin".into(),
-            "初始化".into(),
-        )
-        .unwrap()
+        OrgUnit::new(id.into(), id.into(), None, OrgUnitKind::Department, "admin".into(), "初始化".into())
+            .unwrap()
     }
 
     fn state() -> OrganizationState {
@@ -283,10 +259,7 @@ mod tests {
                 base: BaseModel::new("membership".into()),
                 user_id: "sales".into(),
                 org_unit_id: "one".into(),
-                validity: OrgValidity {
-                    valid_from: Instant::from_unix_secs(1),
-                    valid_to: None,
-                },
+                validity: OrgValidity { valid_from: Instant::from_unix_secs(1), valid_to: None },
                 changed_by: "admin".into(),
                 reason: "初始化".into(),
             }],
@@ -311,10 +284,7 @@ mod tests {
     fn company_access(organizations: OrganizationState) -> AuthorizedDataScope {
         access_with(
             ResolvedScope {
-                role_clauses: vec![ScopeClause {
-                    company: true,
-                    ..ScopeClause::default()
-                }],
+                role_clauses: vec![ScopeClause { company: true, ..ScopeClause::default() }],
                 user_limit: None,
             },
             organizations,
@@ -334,10 +304,7 @@ mod tests {
     #[test]
     fn preview_does_not_persist_and_stale_version_fails_for_both_paths() {
         let access = company_access(state());
-        let change = OrganizationOperation::RenameUnit {
-            org_unit_id: "one".into(),
-            name: "一部".into(),
-        };
+        let change = OrganizationOperation::RenameUnit { org_unit_id: "one".into(), name: "一部".into() };
         let (receipt, persist) = prepare_organization_change(
             true,
             None,
@@ -349,16 +316,7 @@ mod tests {
         )
         .unwrap();
         assert!(!persist);
-        assert_eq!(
-            receipt
-                .after
-                .units
-                .iter()
-                .find(|u| u.base.id == "one")
-                .unwrap()
-                .name,
-            "一部"
-        );
+        assert_eq!(receipt.after.units.iter().find(|u| u.base.id == "one").unwrap().name, "一部");
 
         let (receipt, persist) = prepare_organization_change(
             false,
@@ -392,13 +350,7 @@ mod tests {
     /// 角色缺范围时可见状态为空集，不得补 Company。
     #[test]
     fn no_scope_projects_empty_visible_state() {
-        let access = access_with(
-            ResolvedScope {
-                role_clauses: Vec::new(),
-                user_limit: None,
-            },
-            state(),
-        );
+        let access = access_with(ResolvedScope { role_clauses: Vec::new(), user_limit: None }, state());
         let visible = visible_state(access.organizations.clone(), &access);
         assert!(visible.units.is_empty());
         assert!(visible.memberships.is_empty());
@@ -421,10 +373,7 @@ mod tests {
         let err = prepare_organization_change(
             true,
             None,
-            request(OrganizationOperation::RenameUnit {
-                org_unit_id: "two".into(),
-                name: "二部".into(),
-            }),
+            request(OrganizationOperation::RenameUnit { org_unit_id: "two".into(), name: "二部".into() }),
             &access,
             "new-id",
             "admin",
@@ -438,10 +387,8 @@ mod tests {
     #[test]
     fn idempotent_replay_rejects_different_payload() {
         let access = company_access(state());
-        let first = request(OrganizationOperation::RenameUnit {
-            org_unit_id: "one".into(),
-            name: "一部".into(),
-        });
+        let first =
+            request(OrganizationOperation::RenameUnit { org_unit_id: "one".into(), name: "一部".into() });
         let (saved, persist) = prepare_organization_change(
             false,
             None,

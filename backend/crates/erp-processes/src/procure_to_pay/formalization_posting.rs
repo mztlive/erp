@@ -1,11 +1,12 @@
 //! 采购正式化生产步骤与调用方唯一执行器的顺序合同。
-use super::review::{FormalizedOrderPersist, FormalizedPurchaseEffects};
-use crate::{Error, Result};
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
 use mongodb::Database;
 use persistence_core::Executor;
+
+use super::review::{FormalizedOrderPersist, FormalizedPurchaseEffects};
+use crate::{Error, Result};
 
 /// 采购正式化与跨域后续写入的既有边界。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,14 +25,9 @@ trait PostingSteps: Send {
 }
 /// 生产流程与失败替身共同使用的顺序入口。
 async fn execute(steps: &mut impl PostingSteps, executor: &mut dyn Executor) -> Result<()> {
-    for step in [
-        Step::Purchase,
-        Step::Payable,
-        Step::PaymentTask,
-        Step::Costs,
-        Step::Fulfillment,
-        Step::Audit,
-    ] {
+    for step in
+        [Step::Purchase, Step::Payable, Step::PaymentTask, Step::Costs, Step::Fulfillment, Step::Audit]
+    {
         steps.apply(step, executor).await?;
     }
     Ok(())
@@ -45,9 +41,7 @@ struct MongoPosting<'a> {
 }
 impl MongoPosting<'_> {
     fn effects(&self) -> Result<&FormalizedPurchaseEffects> {
-        self.effects
-            .as_ref()
-            .ok_or_else(|| Error::Internal("采购正式化写入计划缺少采购结果".to_string()))
+        self.effects.as_ref().ok_or_else(|| Error::Internal("采购正式化写入计划缺少采购结果".to_string()))
     }
 }
 #[async_trait]
@@ -60,21 +54,21 @@ impl PostingSteps for MongoPosting<'_> {
                     .take()
                     .ok_or_else(|| Error::Internal("采购正式化写入计划已消费".to_string()))?;
                 self.effects = Some(persist.persist_order(self.db, self.actor, executor).await?);
-            }
+            },
             Step::Payable => {
                 let payable = self.effects()?.payable();
                 erp_finance::service::payable::purchase_initial::persist(
                     self.db, &payable.0, &payable.1, executor,
                 )
                 .await?;
-            }
+            },
             Step::PaymentTask => {
                 let payable = self.effects()?.payable();
                 crate::finance_posting::payable::payment_task::ensure_purchase_payment_task(
                     self.db, &payable.0, &payable.1, executor,
                 )
                 .await?;
-            }
+            },
             Step::Costs => {
                 erp_finance::service::cost::purchase_initial::persist(
                     self.db,
@@ -82,19 +76,17 @@ impl PostingSteps for MongoPosting<'_> {
                     executor,
                 )
                 .await?
-            }
+            },
             Step::Fulfillment => {
                 let effects = self
                     .effects
                     .take()
                     .ok_or_else(|| Error::Internal("采购正式化写入计划缺少采购结果".to_string()))?;
-                effects
-                    .persist_fulfillment(self.db, self.actor.id(), executor)
-                    .await?;
-            }
+                effects.persist_fulfillment(self.db, self.actor.id(), executor).await?;
+            },
             Step::Audit => {
                 self.db.audit_logs().create(self.audit, executor).await?;
-            }
+            },
         }
         Ok(())
     }
@@ -107,17 +99,7 @@ pub(super) async fn post(
     audit: &AuditLog,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    execute(
-        &mut MongoPosting {
-            db,
-            actor,
-            audit,
-            persist: Some(persist),
-            effects: None,
-        },
-        executor,
-    )
-    .await
+    execute(&mut MongoPosting { db, actor, audit, persist: Some(persist), effects: None }, executor).await
 }
 
 #[cfg(test)]
@@ -158,26 +140,13 @@ mod tests {
         execute(&mut steps, &mut executor).await.unwrap();
         assert_eq!(
             steps.calls,
-            [
-                Step::Purchase,
-                Step::Payable,
-                Step::PaymentTask,
-                Step::Costs,
-                Step::Fulfillment,
-                Step::Audit
-            ]
+            [Step::Purchase, Step::Payable, Step::PaymentTask, Step::Costs, Step::Fulfillment, Step::Audit]
         );
     }
     #[tokio::test]
     async fn every_failure_preserves_original_error_and_stops_later_writes() {
-        let order = [
-            Step::Purchase,
-            Step::Payable,
-            Step::PaymentTask,
-            Step::Costs,
-            Step::Fulfillment,
-            Step::Audit,
-        ];
+        let order =
+            [Step::Purchase, Step::Payable, Step::PaymentTask, Step::Costs, Step::Fulfillment, Step::Audit];
         for (index, step) in order.into_iter().enumerate() {
             let mut executor = TestExecutor { _identity: 1 };
             let mut steps = RecordingSteps {

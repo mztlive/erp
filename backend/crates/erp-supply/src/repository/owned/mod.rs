@@ -23,7 +23,6 @@ mod supplier_settlement_item;
 mod supplier_settlement_source_evidence;
 mod supplier_settlement_statement;
 pub use business_capability_confirmation::BusinessCapabilityConfirmationRepository;
-
 pub use supplier_api_capability::SupplierApiCapabilityRepository;
 pub use supplier_api_connection::SupplierApiConnectionRepository;
 pub use supplier_connection_command_receipt::SupplierConnectionCommandReceiptRepository;

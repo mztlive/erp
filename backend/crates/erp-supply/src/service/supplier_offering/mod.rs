@@ -5,12 +5,20 @@
 //! 商业条款修订；库存与可供状态只更新独立投影。
 
 //! 供给单域命令：身份、商业修订、实时可供及命令重放。
+use erp_core::common::time::Instant;
+use erp_core::ids::{SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId};
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::Executor;
+use serde::de::DeserializeOwned;
+use validator::Validate;
+
 use crate::dto::supplier_offering as dto;
 use crate::dto::supplier_offering::{
-    CreateSupplierOfferingRequest, CreateSupplierOfferingResult, ReviseSupplierOfferingRequest,
-    ReviseSupplierOfferingResult, UpdateSupplierOfferingAvailabilityRequest,
-    UpdateSupplierOfferingAvailabilityResult, CREATE_OFFERING_COMMAND, REVISE_OFFERING_COMMAND,
-    UPDATE_OFFERING_AVAILABILITY_COMMAND,
+    CREATE_OFFERING_COMMAND, CreateSupplierOfferingRequest, CreateSupplierOfferingResult,
+    REVISE_OFFERING_COMMAND, ReviseSupplierOfferingRequest, ReviseSupplierOfferingResult,
+    UPDATE_OFFERING_AVAILABILITY_COMMAND, UpdateSupplierOfferingAvailabilityRequest,
+    UpdateSupplierOfferingAvailabilityResult,
 };
 use crate::entity::supplier_offering::{
     OfferingStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingCommand,
@@ -19,13 +27,6 @@ use crate::entity::supplier_offering::{
 use crate::ports::offering_qualification::QualificationPort;
 use crate::repository::{SupplierApiExt, SupplierOfferingExt};
 use crate::{Error, Result};
-use erp_core::common::time::Instant;
-use erp_core::ids::{SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId};
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::Executor;
-use serde::de::DeserializeOwned;
-use validator::Validate;
 mod recovery;
 mod write;
 
@@ -105,12 +106,7 @@ impl SupplierOfferingService {
         let revision =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new(next_id()), revision_data)?;
         qualification
-            .ensure_qualified(
-                &offering.supplier_id,
-                &offering.sku_id,
-                revision.valid_from,
-                executor,
-            )
+            .ensure_qualified(&offering.supplier_id, &offering.sku_id, revision.valid_from, executor)
             .await?;
         let received_at = Instant::now();
         let source_updated_at = dto::resolve_source_updated_at(req.source_updated_at, received_at);
@@ -192,20 +188,14 @@ impl SupplierOfferingService {
         let next_no = offering
             .next_revision_no(current_no, req.expected_revision_no)
             .map_err(|_| Error::ConflictError("供给版本已经变化，请刷新后重新保存".to_string()))?;
-        let revision_data = req
-            .terms
-            .try_into_revision_data(SupplierOfferingId::new(offering.base.id.clone()), next_no)?;
+        let revision_data =
+            req.terms.try_into_revision_data(SupplierOfferingId::new(offering.base.id.clone()), next_no)?;
         let revision =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new(next_id()), revision_data)?;
         let next_status = req.status.unwrap_or(offering.stable.status);
         if next_status == OfferingStatus::Active {
             qualification
-                .ensure_qualified(
-                    &offering.supplier_id,
-                    &offering.sku_id,
-                    revision.valid_from,
-                    executor,
-                )
+                .ensure_qualified(&offering.supplier_id, &offering.sku_id, revision.valid_from, executor)
                 .await?;
         }
         offering.update_status(next_status, actor_id)?;
@@ -331,9 +321,7 @@ impl SupplierOfferingService {
             .await?
             .ok_or_else(|| Error::NotFound("供应商 API 连接不存在".to_string()))?;
         if connection.supplier_id != offering.supplier_id || !connection.is_active() {
-            return Err(Error::BusinessLogicError(
-                "供应商 API 连接不属于该供应商或未启用".to_string(),
-            ));
+            return Err(Error::BusinessLogicError("供应商 API 连接不属于该供应商或未启用".to_string()));
         }
         Ok(())
     }
@@ -396,15 +384,7 @@ impl SupplierOfferingService {
         T: DeserializeOwned,
         E: From<Error>,
     {
-        recovery::resolve(
-            self,
-            transaction_result,
-            idempotency_key,
-            operation,
-            fingerprint,
-            executor,
-        )
-        .await
+        recovery::resolve(self, transaction_result, idempotency_key, operation, fingerprint, executor).await
     }
 }
 #[cfg(test)]
@@ -431,12 +411,8 @@ mod tests {
             },
         )
         .unwrap();
-        stored
-            .ensure_replayable(CREATE_OFFERING_COMMAND, &fingerprint)
-            .unwrap();
-        assert!(stored
-            .ensure_replayable(REVISE_OFFERING_COMMAND, &fingerprint)
-            .is_err());
+        stored.ensure_replayable(CREATE_OFFERING_COMMAND, &fingerprint).unwrap();
+        assert!(stored.ensure_replayable(REVISE_OFFERING_COMMAND, &fingerprint).is_err());
         let result: CreateSupplierOfferingResult = stored.replay_result().unwrap();
         assert_eq!(result.offering_id, "offering-1");
         assert_eq!(result.revision_no, 1);
@@ -473,13 +449,11 @@ mod tests {
     }
     #[test]
     fn write_paths_use_dto_try_into_data_with_money_precision() {
-        use crate::entity::supplier_offering::SupplierOfferingRevision;
         use erp_core::ids::{SupplierOfferingId, SupplierOfferingRevisionId};
+
+        use crate::entity::supplier_offering::SupplierOfferingRevision;
         let req = create_request();
-        let data = req
-            .terms
-            .try_into_revision_data(SupplierOfferingId::new("offering-1"), 1)
-            .unwrap();
+        let data = req.terms.try_into_revision_data(SupplierOfferingId::new("offering-1"), 1).unwrap();
         let revision =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("revision-1"), data).unwrap();
         assert_eq!(revision.revision.revision_no, 1);

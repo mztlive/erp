@@ -9,11 +9,11 @@
 //! `crate::entity::purchase_order::coverage::build_procurement_coverage` 领域构造函数
 //! 承担；本模块只负责当前指针解析、仓储调用与领域错误映射。
 
-use crate::entity::purchase_order::{build_procurement_coverage, SalesProcurementCoverage};
-use crate::ports::coverage::ProcurementCoveragePort;
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId};
 use persistence_core::Executor;
 
+use crate::entity::purchase_order::{SalesProcurementCoverage, build_procurement_coverage};
+use crate::ports::coverage::ProcurementCoveragePort;
 use crate::{Error, Result};
 
 /// 加载销售单当前版本及采购覆盖数量。
@@ -54,10 +54,12 @@ pub async fn load_sales_procurement_coverage(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
+    use async_trait::async_trait;
+
     use super::*;
     use crate::entity::purchase_order::ProcurementCoverageFacts;
-    use async_trait::async_trait;
-    use std::sync::Mutex;
     struct RecordingExecutor {
         marker: u64,
     }
@@ -79,14 +81,8 @@ mod tests {
             order: &SalesOrderId,
             executor: &mut dyn Executor,
         ) -> crate::Result<ProcurementCoverageFacts> {
-            assert_eq!(
-                executor as *mut dyn Executor as *mut () as usize,
-                self.expected_executor
-            );
-            self.calls
-                .lock()
-                .unwrap()
-                .push((revision.to_string(), order.to_string()));
+            assert_eq!(executor as *mut dyn Executor as *mut () as usize, self.expected_executor);
+            self.calls.lock().unwrap().push((revision.to_string(), order.to_string()));
             Err(Error::Internal("coverage provider failed".to_string()))
         }
     }
@@ -122,10 +118,7 @@ mod tests {
         )
         .await;
         assert!(matches!(result,Err(Error::Internal(message)) if message=="coverage provider failed"));
-        assert_eq!(
-            port.calls.into_inner().unwrap(),
-            vec![("revision-1".to_string(), "so-1".to_string())]
-        );
+        assert_eq!(port.calls.into_inner().unwrap(), vec![("revision-1".to_string(), "so-1".to_string())]);
         assert_eq!(executor.marker, 91);
     }
 }

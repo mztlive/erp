@@ -26,8 +26,9 @@ pub fn ensure_sourcing_quantity(quantity: Quantity, scale: Option<u8>, unit: &st
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     /// 整盒拒绝半盒，尾随零不改变单位粒度。
     #[test]

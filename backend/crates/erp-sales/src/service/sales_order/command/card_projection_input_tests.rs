@@ -1,8 +1,9 @@
+use serde_json::json;
+
 use super::{
     sales_order_create_audit_id, sales_order_create_fingerprint, sales_submission_audit_id,
     sales_submission_fingerprint,
 };
-use serde_json::json;
 
 fn submission_request(version: u64) -> super::SubmitSalesOrderRequest {
     serde_json::from_value(json!({
@@ -44,10 +45,7 @@ fn submission_request(version: u64) -> super::SubmitSalesOrderRequest {
 #[test]
 fn submission_idempotency_identity_is_stable_and_payload_bound() {
     let receipt = sales_submission_audit_id("actor-1", "order-1", "secret-request");
-    assert_eq!(
-        receipt,
-        sales_submission_audit_id("actor-1", "order-1", "secret-request")
-    );
+    assert_eq!(receipt, sales_submission_audit_id("actor-1", "order-1", "secret-request"));
     assert!(!receipt.contains("secret-request"));
     assert_ne!(
         sales_submission_fingerprint("actor-1", "order-1", &submission_request(1)).unwrap(),

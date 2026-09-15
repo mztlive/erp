@@ -3,16 +3,16 @@
 //! Repository 仅负责批量拉取 SKU、商品、当前修订与分类的原始持久化事实；
 //! 本模块负责目录完整性、当前修订一致性、分类链顺序与成环拒绝的纯业务规则。
 
-use crate::entity::facts::{
-    ProductCategoryFact as ProductCategory, ProductFact as Product, ProductKind,
-    ProductRevisionFact as ProductRevision, SkuFact as Sku,
-};
 use std::collections::{HashMap, HashSet};
 
 use erp_core::ids::{ProductCategoryId, ProductRevisionId};
 use erp_core::{Error, Result};
 
 use super::resolution::ProcurementResponsibilityResolutionLine;
+use crate::entity::facts::{
+    ProductCategoryFact as ProductCategory, ProductFact as Product, ProductKind,
+    ProductRevisionFact as ProductRevision, SkuFact as Sku,
+};
 
 /// 单行采购责任目录解析事实。
 ///
@@ -115,10 +115,7 @@ pub fn build_catalog_facts(
         let category_chain = category_chain(&revision.category_id, categories)?;
         facts.insert(
             input.line_key.clone(),
-            ProcurementCatalogFact {
-                category_chain,
-                product_kind: product.product_kind,
-            },
+            ProcurementCatalogFact { category_chain, product_kind: product.product_kind },
         );
     }
     Ok(facts)
@@ -207,46 +204,32 @@ where
 
 #[cfg(test)]
 mod tests {
+    use erp_core::ids::{ProductCategoryId, ProductId, SkuId};
+
+    use super::*;
     use crate::entity::facts::{
         CurrentRevisionFact, FactIdentity, ProductCategoryFact as ProductCategory, ProductFact as Product,
         ProductKind, ProductRevisionFact as ProductRevision, SkuFact as Sku,
     };
 
-    use super::*;
-
-    use erp_core::ids::{ProductCategoryId, ProductId, SkuId};
-
     fn test_product(current_revision_id: Option<&str>) -> Product {
         Product {
-            base: FactIdentity {
-                id: "product-1".to_string(),
-            },
-            stable: CurrentRevisionFact {
-                current_revision_id: current_revision_id.map(str::to_string),
-            },
+            base: FactIdentity { id: "product-1".to_string() },
+            stable: CurrentRevisionFact { current_revision_id: current_revision_id.map(str::to_string) },
             product_kind: ProductKind::Physical,
         }
     }
 
     fn test_revision(category_id: &str) -> ProductRevision {
-        ProductRevision {
-            category_id: ProductCategoryId::new(category_id),
-        }
+        ProductRevision { category_id: ProductCategoryId::new(category_id) }
     }
 
     fn test_category(_id: &str, parent: Option<&str>) -> ProductCategory {
-        ProductCategory {
-            parent_category_id: parent.map(ProductCategoryId::new),
-        }
+        ProductCategory { parent_category_id: parent.map(ProductCategoryId::new) }
     }
 
     fn test_sku() -> Sku {
-        Sku {
-            base: FactIdentity {
-                id: "sku-1".to_string(),
-            },
-            product_id: ProductId::new("product-1"),
-        }
+        Sku { base: FactIdentity { id: "sku-1".to_string() }, product_id: ProductId::new("product-1") }
     }
 
     #[test]
@@ -321,10 +304,7 @@ mod tests {
         prod_c.base.id = "product-c".to_string();
         products.insert("product-c".to_string(), prod_c);
         let ids = current_revision_ids(&products).unwrap();
-        assert_eq!(
-            ids,
-            vec![ProductRevisionId::new("rev-1"), ProductRevisionId::new("rev-2")]
-        );
+        assert_eq!(ids, vec![ProductRevisionId::new("rev-1"), ProductRevisionId::new("rev-2")]);
     }
 
     #[test]
@@ -383,13 +363,7 @@ mod tests {
         products.insert("product-unique".to_string(), prod_unique);
         let ids = current_revision_ids(&products).unwrap();
         // Sorted order: rev-alpha < rev-shared lexicographically.
-        assert_eq!(
-            ids,
-            vec![
-                ProductRevisionId::new("rev-alpha"),
-                ProductRevisionId::new("rev-shared")
-            ]
-        );
+        assert_eq!(ids, vec![ProductRevisionId::new("rev-alpha"), ProductRevisionId::new("rev-shared")]);
     }
 
     #[test]
@@ -401,12 +375,10 @@ mod tests {
 
     #[test]
     fn build_catalog_facts_is_deterministic_and_preserves_leaf_to_root() {
-        let inputs = vec![ProcurementResponsibilityResolutionLine::new(
-            "line-1".to_string(),
-            SkuId::new("sku-1"),
-            None,
-        )
-        .unwrap()];
+        let inputs = vec![
+            ProcurementResponsibilityResolutionLine::new("line-1".to_string(), SkuId::new("sku-1"), None)
+                .unwrap(),
+        ];
         let sku = test_sku();
         let mut skus = HashMap::new();
         skus.insert("sku-1".to_string(), sku);
@@ -430,12 +402,10 @@ mod tests {
 
     #[test]
     fn build_catalog_facts_propagates_category_ring_error() {
-        let inputs = vec![ProcurementResponsibilityResolutionLine::new(
-            "line-1".to_string(),
-            SkuId::new("sku-1"),
-            None,
-        )
-        .unwrap()];
+        let inputs = vec![
+            ProcurementResponsibilityResolutionLine::new("line-1".to_string(), SkuId::new("sku-1"), None)
+                .unwrap(),
+        ];
         let sku = test_sku();
         let mut skus = HashMap::new();
         skus.insert("sku-1".to_string(), sku);

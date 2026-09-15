@@ -1,11 +1,12 @@
-use super::SupplierFulfillmentProcess;
-use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supply::dto::supplier_fulfillment::{RecordSupplierRejectRequest, SupplierOrderStatusHistoryView};
 use erp_supply::repository::SupplierFulfillmentExt;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+
+use super::SupplierFulfillmentProcess;
+use crate::Result;
 
 impl SupplierFulfillmentProcess {
     /// 登记供应商拒单结果（回调幂等键 `(connection_id, external_event_id)`，§6.19）。

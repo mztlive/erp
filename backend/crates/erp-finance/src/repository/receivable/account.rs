@@ -1,18 +1,17 @@
-use crate::entity::receivable::{ReceivableAccount, ReceivableAccountStatus};
-use crate::repository::owned::ReceivableAccountRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::stable::StableBase;
 use erp_core::ids::{CustomerAccountId, PartyId, ReceivableAccountId, SalesOrderId, SalesOrderRevisionId};
 use erp_core::money::Amount;
-use mongodb::bson::{doc, Bson, Document};
+use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::receivable::{ReceivableAccount, ReceivableAccountStatus};
+use crate::repository::owned::ReceivableAccountRepository;
 
 /// 应收往来子账列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -195,10 +194,7 @@ impl<'a> ReceivableAccountRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 条件核销：增加已核销进度（不超额核销）。
@@ -323,13 +319,7 @@ impl<'a> ReceivableAccountRepository<'a> {
         };
         self.conditional_update(
             filter,
-            progress_pipeline(
-                "invoiced_total",
-                "open_invoiceable_total",
-                &amount,
-                true,
-                updated_by,
-            ),
+            progress_pipeline("invoiced_total", "open_invoiceable_total", &amount, true, updated_by),
             executor,
         )
         .await
@@ -370,13 +360,7 @@ impl<'a> ReceivableAccountRepository<'a> {
             let hit = self
                 .conditional_update(
                     filter,
-                    progress_pipeline(
-                        "invoiced_total",
-                        "open_invoiceable_total",
-                        &amount,
-                        true,
-                        updated_by,
-                    ),
+                    progress_pipeline("invoiced_total", "open_invoiceable_total", &amount, true, updated_by),
                     executor,
                 )
                 .await?;
@@ -423,13 +407,7 @@ impl<'a> ReceivableAccountRepository<'a> {
         };
         self.conditional_update(
             filter,
-            progress_pipeline(
-                "invoiced_total",
-                "open_invoiceable_total",
-                &amount,
-                false,
-                updated_by,
-            ),
+            progress_pipeline("invoiced_total", "open_invoiceable_total", &amount, false, updated_by),
             executor,
         )
         .await
@@ -477,13 +455,7 @@ impl<'a> ReceivableAccountRepository<'a> {
             let hit = self
                 .conditional_update(
                     filter,
-                    progress_pipeline(
-                        "invoiced_total",
-                        "open_invoiceable_total",
-                        &amount,
-                        false,
-                        updated_by,
-                    ),
+                    progress_pipeline("invoiced_total", "open_invoiceable_total", &amount, false, updated_by),
                     executor,
                 )
                 .await?;
@@ -518,12 +490,7 @@ impl<'a> ReceivableAccountRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<bool> {
         let result = match executor.session() {
-            Some(session) => {
-                self.collection()
-                    .update_one(filter, pipeline)
-                    .session(session)
-                    .await?
-            }
+            Some(session) => self.collection().update_one(filter, pipeline).session(session).await?,
             None => self.collection().update_one(filter, pipeline).await?,
         };
         Ok(result.matched_count == 1)
@@ -537,8 +504,7 @@ impl<'a> ReceivableAccountRepository<'a> {
         sales_order_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ReceivableAccount>> {
-        self.find_many(doc! { "sales_order_id": sales_order_id }, executor)
-            .await
+        self.find_many(doc! { "sales_order_id": sales_order_id }, executor).await
     }
 
     /// 批量按应收子账 ID 读取活跃账户。
@@ -561,8 +527,7 @@ impl<'a> ReceivableAccountRepository<'a> {
             return Ok(Vec::new());
         }
 
-        self.find_many(doc! { "id": { "$in": account_ids } }, executor)
-            .await
+        self.find_many(doc! { "id": { "$in": account_ids } }, executor).await
     }
 
     /// 列出销售单的全部应收子账。
@@ -664,11 +629,7 @@ impl<'a> ReceivableAccountRepository<'a> {
         revision_id: &SalesOrderRevisionId,
         executor: &mut dyn Executor,
     ) -> Result<Option<ReceivableAccount>> {
-        self.find_one(
-            doc! { "source_sales_order_revision_id": revision_id.to_string() },
-            executor,
-        )
-        .await
+        self.find_one(doc! { "source_sales_order_revision_id": revision_id.to_string() }, executor).await
     }
 }
 
@@ -738,11 +699,7 @@ pub(super) fn progress_pipeline(
     increase: bool,
     updated_by: &str,
 ) -> Vec<Document> {
-    let total_field = if progress_field == "settled_total" {
-        "gross_total"
-    } else {
-        "invoiceable_total"
-    };
+    let total_field = if progress_field == "settled_total" { "gross_total" } else { "invoiceable_total" };
     let new_progress = if increase {
         doc! { "$add": ["$" .to_owned() + progress_field, amount] }
     } else {
@@ -805,16 +762,17 @@ fn receivable_account_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{amount_bson, progress_pipeline, sort_doc, ReceivableAccountFilter};
-    use crate::entity::receivable::ReceivableAccountStatus;
-    use crate::repository::owned::ReceivableAccountRepository;
-    use crate::repository::ReceivableExt;
+    use std::str::FromStr;
+
     use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
     use erp_core::money::Amount;
-    use mongodb::bson::{doc, Bson};
-    use persistence_core::NoTransaction;
-    use persistence_core::QueryFilter;
-    use std::str::FromStr;
+    use mongodb::bson::{Bson, doc};
+    use persistence_core::{NoTransaction, QueryFilter};
+
+    use super::{ReceivableAccountFilter, amount_bson, progress_pipeline, sort_doc};
+    use crate::entity::receivable::ReceivableAccountStatus;
+    use crate::repository::ReceivableExt;
+    use crate::repository::owned::ReceivableAccountRepository;
 
     #[test]
     fn account_filter_applies_optional_fields_and_deleted_filter() {
@@ -846,14 +804,8 @@ mod tests {
         let searched = filter.to_doc();
         let alternatives = searched.get_array("$or").unwrap();
         assert_eq!(alternatives.len(), 6);
-        assert_eq!(
-            alternatives[4],
-            Bson::Document(doc! { "sales_order_id": { "$in": ["sales-1"] } })
-        );
-        assert_eq!(
-            alternatives[5],
-            Bson::Document(doc! { "counterparty_party_id": { "$in": ["party-1"] } })
-        );
+        assert_eq!(alternatives[4], Bson::Document(doc! { "sales_order_id": { "$in": ["sales-1"] } }));
+        assert_eq!(alternatives[5], Bson::Document(doc! { "counterparty_party_id": { "$in": ["party-1"] } }));
         assert_eq!(searched.get_str("customer_id").unwrap(), "cust-1");
         assert_eq!(searched.get_str("status").unwrap(), "open");
         assert_eq!(searched.get_i64("deleted_at").unwrap(), 0);
@@ -861,34 +813,19 @@ mod tests {
 
     #[test]
     fn sort_doc_maps_whitelisted_fields_and_falls_back() {
-        assert_eq!(
-            sort_doc(Some("amount"), true, &["amount", "received_at"]),
-            doc! { "amount": 1, "id": 1 }
-        );
-        assert_eq!(
-            sort_doc(Some("$where"), false, &["amount"]),
-            doc! { "created_at": -1, "id": -1 }
-        );
+        assert_eq!(sort_doc(Some("amount"), true, &["amount", "received_at"]), doc! { "amount": 1, "id": 1 });
+        assert_eq!(sort_doc(Some("$where"), false, &["amount"]), doc! { "created_at": -1, "id": -1 });
         assert_eq!(sort_doc(None, true, &[]), doc! { "created_at": 1, "id": 1 });
     }
 
     #[test]
     fn apply_pipeline_guards_status_and_keeps_decimal_fidelity() {
         let amount = Amount::from_str("100.50").unwrap();
-        let pipeline = progress_pipeline(
-            "settled_total",
-            "open_total",
-            &amount_bson(&amount).unwrap(),
-            true,
-            "admin-1",
-        );
+        let pipeline =
+            progress_pipeline("settled_total", "open_total", &amount_bson(&amount).unwrap(), true, "admin-1");
 
         let set = pipeline[0].get_document("$set").unwrap();
-        let add = set
-            .get_document("settled_total")
-            .unwrap()
-            .get_array("$add")
-            .unwrap();
+        let add = set.get_document("settled_total").unwrap().get_array("$add").unwrap();
         assert_eq!(add[0], Bson::String("$settled_total".to_string()));
         assert!(matches!(add[1], Bson::Decimal128(_)));
         assert!(set.get_document("status").unwrap().get("$cond").is_some());
@@ -914,22 +851,13 @@ mod tests {
     #[test]
     fn revert_pipeline_derives_open_when_progress_reaches_zero() {
         let amount = Amount::from_str("1000.00").unwrap();
-        let pipeline = progress_pipeline(
-            "settled_total",
-            "open_total",
-            &amount_bson(&amount).unwrap(),
-            false,
-            "sys",
-        );
+        let pipeline =
+            progress_pipeline("settled_total", "open_total", &amount_bson(&amount).unwrap(), false, "sys");
 
         let set = pipeline[0].get_document("$set").unwrap();
         let cond = set.get_document("status").unwrap().get_array("$cond").unwrap();
         assert!(cond[0].as_document().unwrap().get_array("$eq").is_ok());
-        assert_eq!(
-            cond[1],
-            Bson::String("settled".to_string()),
-            "开放余额归零为已结清"
-        );
+        assert_eq!(cond[1], Bson::String("settled".to_string()), "开放余额归零为已结清");
         let nested = cond[2].as_document().unwrap().get_array("$cond").unwrap();
         assert!(nested[0].as_document().unwrap().get_array("$eq").is_ok());
         assert_eq!(nested[1], Bson::String("open".to_string()), "已核销归零为未结");
@@ -939,9 +867,8 @@ mod tests {
     /// 空输入批量回退直接成功且不访问数据库。
     #[tokio::test]
     async fn revert_invoicings_many_empty_input_returns_empty_without_db() {
-        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
-            .await
-            .expect("客户端句柄创建失败");
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.expect("客户端句柄创建失败");
         let database = client.database("unused");
         let repository = ReceivableAccountRepository::new(
             &database,
@@ -981,13 +908,7 @@ mod keyword_regression_tests {
         filter.keyword_ids = Some(Vec::new());
         let query = filter.to_doc();
         let clauses = query.get_array("$and").unwrap();
-        let ids = clauses[1]
-            .as_document()
-            .unwrap()
-            .get_document("id")
-            .unwrap()
-            .get_array("$in")
-            .unwrap();
+        let ids = clauses[1].as_document().unwrap().get_document("id").unwrap().get_array("$in").unwrap();
         assert!(ids.is_empty(), "空关键词命中必须保持零结果");
         assert!(clauses[0].as_document().unwrap().contains_key("deleted_at"));
     }

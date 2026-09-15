@@ -2,7 +2,6 @@
 mod cancel;
 mod execution;
 mod submit;
-use crate::{Error, Result};
 pub(crate) use cancel::cancel_in_transaction;
 use erp_core::money::Amount;
 use erp_finance::entity::receivable::{ReceivableAccount, SalesInvoiceRequest};
@@ -10,6 +9,8 @@ use erp_finance::repository::ReceivableExt;
 pub(crate) use execution::*;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::{Error, Result};
 
 /// 加载指定申请，不存在时返回可处理的业务错误。
 async fn load(db: &Database, id: &str, executor: &mut dyn Executor) -> Result<SalesInvoiceRequest> {

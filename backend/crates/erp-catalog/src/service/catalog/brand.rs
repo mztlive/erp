@@ -1,22 +1,22 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use crate::entity::catalog::product_brand::{ProductBrand, ProductBrandData, ProductBrandUpdate};
-use crate::entity::catalog::{EnableStatus, ProductBrandId};
-use crate::ports::{EmptyPendingAttachments, PendingAttachmentBatch};
-use crate::repository::CatalogExt;
+use application_core::AuditActor;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use super::support::ensure_version;
 use super::CatalogService;
+use super::support::ensure_version;
 use crate::dto::{
     CreateProductBrandRequest, PageView, ProductBrandListParams, ProductBrandView, SortDir,
     UpdateProductBrandRequest,
 };
+use crate::entity::catalog::product_brand::{ProductBrand, ProductBrandData, ProductBrandUpdate};
+use crate::entity::catalog::{EnableStatus, ProductBrandId};
 use crate::error::Result;
-use application_core::AuditActor;
+use crate::ports::{EmptyPendingAttachments, PendingAttachmentBatch};
+use crate::repository::CatalogExt;
 
 /// 商品品牌列表筛选条件类型。
 type ProductBrandFilter = <mongodb::Database as CatalogExt>::ProductBrandFilter;
@@ -48,11 +48,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .product_brands()
-            .search_product_brands(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.product_brands().search_product_brands(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -66,12 +62,7 @@ impl CatalogService {
                 version: row.version,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 创建商品品牌（品牌、文件元数据与审计日志在同一事务内提交）。
@@ -91,8 +82,7 @@ impl CatalogService {
         req: CreateProductBrandRequest,
         actor: &AuditActor,
     ) -> Result<ProductBrandView> {
-        self.product_brand_create_with_assets(req, Arc::new(EmptyPendingAttachments), actor)
-            .await
+        self.product_brand_create_with_assets(req, Arc::new(EmptyPendingAttachments), actor).await
     }
 
     /// 创建品牌，并把同一次 multipart 命令携带的 Logo 文件资产原子登记。
@@ -119,8 +109,7 @@ impl CatalogService {
             pending_assets.resolve_id(asset_id, &mut used)?;
         }
         pending_assets.ensure_all_used(&used)?;
-        self.ensure_brand_logo_exists(req.logo_file_asset_id.as_ref(), &pending_assets)
-            .await?;
+        self.ensure_brand_logo_exists(req.logo_file_asset_id.as_ref(), &pending_assets).await?;
         let id = ProductBrandId::new(next_id());
         let brand = ProductBrand::new(
             id.clone(),
@@ -174,8 +163,7 @@ impl CatalogService {
         req: UpdateProductBrandRequest,
         actor: &AuditActor,
     ) -> Result<ProductBrandView> {
-        self.product_brand_update_with_assets(id, req, Arc::new(EmptyPendingAttachments), actor)
-            .await
+        self.product_brand_update_with_assets(id, req, Arc::new(EmptyPendingAttachments), actor).await
     }
 
     /// 更新品牌，并把同一次 multipart 命令携带的 Logo 文件资产原子登记。

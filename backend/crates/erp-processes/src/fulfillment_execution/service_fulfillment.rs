@@ -1,26 +1,24 @@
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
+use erp_fulfillment::dto::{CreateServiceFulfillmentRequest, ServiceFulfillmentView};
 use erp_fulfillment::entity::fulfillment::ServiceFulfillment;
-use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_fulfillment::service::FulfillmentService;
+use erp_fulfillment::service::service_fulfillment_crypto::service_fulfillment_draft_from_request;
+use erp_identity::SharedRbacService;
 use erp_workflow::DocumentRegistryExt;
+use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_workflow::service::approval::binding::{
+    BindPublishedDefinitionCommand, BindingDecision, binding_decision,
+};
+use erp_workflow::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
+use erp_workflow::service::approval::policy::{DocumentApprovalPolicy, policy_of};
+use erp_workflow::service::document_registry::new_registered_document;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_identity::SharedRbacService;
-use erp_workflow::service::approval::binding::{
-    binding_decision, BindPublishedDefinitionCommand, BindingDecision,
-};
-use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
-use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
-use erp_workflow::service::document_registry::new_registered_document;
-
 use super::FulfillmentProcess;
-use erp_fulfillment::dto::{CreateServiceFulfillmentRequest, ServiceFulfillmentView};
-use erp_fulfillment::service::service_fulfillment_crypto::service_fulfillment_draft_from_request;
-use erp_fulfillment::service::FulfillmentService;
+use crate::{Error, Result};
 
 impl FulfillmentProcess {
     /// 创建线下服务履约记录（草稿）。
@@ -44,11 +42,7 @@ impl FulfillmentProcess {
     #[tracing::instrument(
         name = "fulfillment.service_fulfillment_create",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "service_fulfillment_create"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "service_fulfillment_create")
     )]
     pub async fn create_service_fulfillment(
         &self,
@@ -84,10 +78,10 @@ fn service_fulfillment_create_binding_decision() -> Result<BindingDecision> {
                 return Err(Error::Internal("服务履约政策类型不匹配".to_string()));
             }
             Ok(binding_decision(policy.requirement()))
-        }
-        DocumentApprovalPolicy::ProcessRequired(_) => Err(Error::Internal(
-            "服务履约必须是 NO_APPROVAL，不得绑定流程".to_string(),
-        )),
+        },
+        DocumentApprovalPolicy::ProcessRequired(_) => {
+            Err(Error::Internal("服务履约必须是 NO_APPROVAL，不得绑定流程".to_string()))
+        },
     }
 }
 
@@ -173,9 +167,7 @@ async fn persist_unbound_service_fulfillment_document(
     document
         .ensure_no_approval_registration(DocumentType::ServiceFulfillment, binding.as_ref())
         .map_err(|error| Error::Internal(error.to_string()))?;
-    db.business_documents()
-        .register_no_approval_document(&document, executor)
-        .await?;
+    db.business_documents().register_no_approval_document(&document, executor).await?;
     Ok(())
 }
 
@@ -260,13 +252,10 @@ async fn persist_created_service_fulfillment(
 
 #[cfg(test)]
 mod service_fulfillment_no_approval_tests {
-    use super::{
-        ensure_service_fulfillment_has_no_adapter, ensure_service_fulfillment_skips_approval_binding,
-        policy_of, service_fulfillment_bind_command, service_fulfillment_create_binding_decision,
-        BindingDecision, DocumentApprovalPolicy, DocumentType, ServiceFulfillment,
-    };
-    use bpm::ids::ApprovalProcessDefinitionId;
+    use std::str::FromStr;
+
     use bpm::ProcessKind;
+    use bpm::ids::ApprovalProcessDefinitionId;
     use erp_core::common::source::SourceType;
     use erp_core::common::time::Instant;
     use erp_core::ids::{
@@ -276,7 +265,12 @@ mod service_fulfillment_no_approval_tests {
     use erp_fulfillment::entity::fulfillment::{FulfillmentResult, ServiceFulfillmentData};
     use erp_workflow::service::approval::binding::binding_from_published;
     use erp_workflow::service::document_registry::new_registered_document;
-    use std::str::FromStr;
+
+    use super::{
+        BindingDecision, DocumentApprovalPolicy, DocumentType, ServiceFulfillment,
+        ensure_service_fulfillment_has_no_adapter, ensure_service_fulfillment_skips_approval_binding,
+        policy_of, service_fulfillment_bind_command, service_fulfillment_create_binding_decision,
+    };
 
     fn draft_service_fulfillment() -> ServiceFulfillment {
         ServiceFulfillment::new(
@@ -351,29 +345,24 @@ mod service_fulfillment_no_approval_tests {
         )
         .expect("可注册");
         assert!(document.approval_binding.is_none());
-        document
-            .ensure_no_approval_registration(DocumentType::ServiceFulfillment, None)
-            .expect("空绑定");
+        document.ensure_no_approval_registration(DocumentType::ServiceFulfillment, None).expect("空绑定");
         assert!(document.approval_binding.is_none());
 
-        let forged = binding_from_published(
-            ApprovalProcessDefinitionId::new("def-1"),
-            1,
-            Instant::from_unix_secs(10),
-        )
-        .expect("测试绑定");
-        assert!(document
-            .ensure_no_approval_registration(DocumentType::ServiceFulfillment, Some(&forged))
-            .is_err());
+        let forged =
+            binding_from_published(ApprovalProcessDefinitionId::new("def-1"), 1, Instant::from_unix_secs(10))
+                .expect("测试绑定");
+        assert!(
+            document
+                .ensure_no_approval_registration(DocumentType::ServiceFulfillment, Some(&forged))
+                .is_err()
+        );
     }
 
     /// 创建路径调用统一绑定端口，不查询发布定义、不启动实例、不建任务。
     #[test]
     fn create_does_not_query_definition_or_start_instance() {
-        let production = include_str!("service_fulfillment.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production =
+            include_str!("service_fulfillment.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("persist_created_service_fulfillment"));
         assert!(production.contains("register_created_service_fulfillment_document"));
         assert!(production.contains("persist_unbound_service_fulfillment_document"));
@@ -401,22 +390,11 @@ mod service_fulfillment_no_approval_tests {
     /// 创建路径经领域草稿工厂与双指纹 crypto port：旧 Service helper 已删除。
     #[test]
     fn create_uses_draft_factory_and_dual_fingerprints() {
-        let production = include_str!("service_fulfillment.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
-        assert!(
-            !production.contains("fn service_fulfillment_from_request"),
-            "旧 helper 必须删除"
-        );
-        assert!(
-            production.contains("service_fulfillment_draft_from_request"),
-            "创建路径必须调用草稿编排"
-        );
-        assert!(
-            !production.contains("SourceType::Erp"),
-            "来源默认不得留在 Service"
-        );
+        let production =
+            include_str!("service_fulfillment.rs").split("#[cfg(test)]").next().expect("生产代码");
+        assert!(!production.contains("fn service_fulfillment_from_request"), "旧 helper 必须删除");
+        assert!(production.contains("service_fulfillment_draft_from_request"), "创建路径必须调用草稿编排");
+        assert!(!production.contains("SourceType::Erp"), "来源默认不得留在 Service");
         let crypto = include_str!("../../../erp-fulfillment/src/service/service_fulfillment_crypto.rs")
             .split("#[cfg(test)]")
             .next()

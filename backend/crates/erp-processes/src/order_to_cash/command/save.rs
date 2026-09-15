@@ -1,4 +1,6 @@
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
+use erp_sales::dto::sales_order::{SaveWorkingCopyRequest, WorkingCopyView};
 use erp_sales::entity::sales_order::SalesOrderWorkingCopy;
 use erp_sales::repository::SalesOrderExt;
 use persistence_core::{NoTransaction, Transactional};
@@ -6,9 +8,6 @@ use validator::Validate;
 
 use super::super::SalesOrderCommandProcess;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_sales::dto::sales_order::{SaveWorkingCopyRequest, WorkingCopyView};
 
 impl SalesOrderCommandProcess {
     /// 保存草稿（整表头覆盖 + 明细整批替换，乐观锁语义）。
@@ -50,16 +49,11 @@ impl SalesOrderCommandProcess {
         let order = authorized_order;
         let expected_order_version = order.base.version;
         if !order.matches_contract_context(&req.contract_id, &customer_id, &settlement_party_id) {
-            return Err(Error::ConflictError(
-                "销售单合同归属已变化，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("销售单合同归属已变化，请刷新后重试".to_string()));
         }
-        self.sales()
-            .ensure_sellable_draft_lines(&draft.lines, &self.catalog())
-            .await?;
-        let (mut working_copy, stable, opened_new) = self
-            .load_or_reopen_first_submission_working_copy(&order, req.version, &draft, actor)
-            .await?;
+        self.sales().ensure_sellable_draft_lines(&draft.lines, &self.catalog()).await?;
+        let (mut working_copy, stable, opened_new) =
+            self.load_or_reopen_first_submission_working_copy(&order, req.version, &draft, actor).await?;
         if opened_new {
             return Ok(self.sales().working_copy_view(&working_copy).await?);
         }
@@ -78,9 +72,7 @@ impl SalesOrderCommandProcess {
             .sales_order_working_copy_lines()
             .list_lines_by_working_copy(&working_copy.base.id.clone().into(), &mut NoTransaction)
             .await?;
-        let audit = actor
-            .clone()
-            .resource_log("sales_order.save_draft", "sales_order", id.to_string())?;
+        let audit = actor.clone().resource_log("sales_order.save_draft", "sales_order", id.to_string())?;
         let db = self.db.clone();
         let client = db.client().clone();
         let lines_for_tx = lines.clone();
@@ -91,9 +83,7 @@ impl SalesOrderCommandProcess {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     access.related_order(&order, session).await?;
-                    access
-                        .revalidate(&order.base.id, expected_order_version, session)
-                        .await?;
+                    access.revalidate(&order.base.id, expected_order_version, session).await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                         .ensure_sellable_refs(
                             &sellable_refs_for_tx,

@@ -1,13 +1,14 @@
 //! 售后动作的本域明细归属、实体构造与同执行器写入。
+use erp_core::ids::{SupplierOrderActionId, SupplierOrderActionLineId};
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction};
+
 use super::SupplierFulfillmentService;
 use crate::dto::supplier_fulfillment::*;
 use crate::entity::supplier_fulfillment::*;
 use crate::repository::SupplierFulfillmentExt;
 use crate::{Error, Result};
-use erp_core::ids::{SupplierOrderActionId, SupplierOrderActionLineId};
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
 impl SupplierFulfillmentService {
     /// 构建取消/退款动作头。
     ///
@@ -99,9 +100,7 @@ impl SupplierFulfillmentService {
             items.iter().map(|item| item.base.id.as_ref()).collect();
         for line in &req.lines {
             if !item_ids.contains(line.supplier_fulfillment_item_id.as_ref()) {
-                return Err(Error::BusinessLogicError(
-                    "动作行不属于该供应商子订单".to_string(),
-                ));
+                return Err(Error::BusinessLogicError("动作行不属于该供应商子订单".to_string()));
             }
         }
         Ok(())
@@ -115,7 +114,7 @@ impl SupplierFulfillmentService {
         match action_type {
             SupplierOrderActionType::Cancel => order.advance_cancel(CancelStatus::CancelPending)?,
             SupplierOrderActionType::Refund => order.advance_refund(RefundStatus::RefundPending)?,
-            _ => {}
+            _ => {},
         }
         Ok(())
     }

@@ -1,11 +1,6 @@
 //! DTO ↔ 实体/视图映射：构建稳定明细、工作副本、提交快照与视图转换。
 
-use crate::entity::sales_order::{
-    SalesContentHash, SalesOrder, SalesOrderLine, SalesOrderLineData, SalesOrderRevision,
-    SalesOrderRevisionLine, SalesOrderSubmission, SalesOrderSubmissionData, SalesOrderSubmissionLine,
-    SalesOrderSubmissionLineData, SalesOrderWorkingCopy, SalesOrderWorkingCopyData,
-    SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineData, WorkingPurpose,
-};
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     SalesOrderId, SalesOrderLineId, SalesOrderSubmissionId, SalesOrderSubmissionLineId,
@@ -17,8 +12,13 @@ use crate::dto::sales_order::{
     RevisionLineView, RevisionView, SalesOrderDraftLineRequest, SalesOrderDraftRequest,
     SalesOrderWorkingCopyLineView, SubmissionView,
 };
+use crate::entity::sales_order::{
+    SalesContentHash, SalesOrder, SalesOrderLine, SalesOrderLineData, SalesOrderRevision,
+    SalesOrderRevisionLine, SalesOrderSubmission, SalesOrderSubmissionData, SalesOrderSubmissionLine,
+    SalesOrderSubmissionLineData, SalesOrderWorkingCopy, SalesOrderWorkingCopyData,
+    SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineData, WorkingPurpose,
+};
 use crate::{Error, Result};
-use application_core::AuditActor;
 
 /// 构建稳定明细行（订单创建时按草稿行号建立）。
 ///
@@ -37,18 +37,13 @@ pub fn build_stable_lines(
 ) -> Result<Vec<SalesOrderLine>> {
     let mut stable = Vec::with_capacity(lines.len());
     for line in lines {
-        if stable
-            .iter()
-            .any(|existing: &SalesOrderLine| existing.line_no == line.line_no)
-        {
+        if stable.iter().any(|existing: &SalesOrderLine| existing.line_no == line.line_no) {
             return Err(Error::ValidationError(format!("行号 {} 重复", line.line_no)));
         }
         stable.push(SalesOrderLine::new(
             SalesOrderLineId::new(next_id()),
             order_id.clone(),
-            SalesOrderLineData {
-                line_no: line.line_no,
-            },
+            SalesOrderLineData { line_no: line.line_no },
         )?);
     }
     Ok(stable)
@@ -106,9 +101,7 @@ pub fn build_working_copy(
             project_name: draft.project_name.clone(),
             business_remark: draft.business_remark.clone(),
             voucher_category_sku_id: draft.voucher_category_sku_id.clone(),
-            voucher_expiry_at: draft
-                .voucher_expiry_at
-                .map(|secs| Instant::from_unix_secs(secs as i64)),
+            voucher_expiry_at: draft.voucher_expiry_at.map(|secs| Instant::from_unix_secs(secs as i64)),
             receivable_due_date: draft.receivable_due_date,
             gross_amount: gross,
             net_amount: net,
@@ -304,10 +297,7 @@ pub fn submission_view(
         status: submission.stable.status,
         business_type: submission.business_type,
         customer_name: submission.customer_snapshot.customer_name.clone(),
-        contract_no: submission
-            .contract_snapshot
-            .as_ref()
-            .map(|s| s.contract_no.clone()),
+        contract_no: submission.contract_snapshot.as_ref().map(|s| s.contract_no.clone()),
         contract_revision_id: submission.contract_revision_id.as_ref().map(ToString::to_string),
         settlement_party_name: submission
             .settlement_party_snapshot
@@ -319,13 +309,8 @@ pub fn submission_view(
         tax_point: submission.invoice_requirement_snapshot.tax_point.clone(),
         project_name: submission.project_name.clone(),
         business_remark: submission.business_remark.clone(),
-        voucher_category_sku_id: submission
-            .voucher_category_sku_id
-            .as_ref()
-            .map(ToString::to_string),
-        voucher_expiry_at: submission
-            .voucher_expiry_at
-            .map(|instant| instant.unix_secs() as u64),
+        voucher_category_sku_id: submission.voucher_category_sku_id.as_ref().map(ToString::to_string),
+        voucher_expiry_at: submission.voucher_expiry_at.map(|instant| instant.unix_secs() as u64),
         receivable_due_date: submission.receivable_due_date,
         gross_amount: submission.gross_amount,
         net_amount: submission.net_amount,
@@ -461,10 +446,7 @@ fn revision_line_summary(lines: &[SalesOrderRevisionLine]) -> String {
     if lines.is_empty() {
         return String::new();
     }
-    let names = lines
-        .iter()
-        .map(|line| line.item_name_snapshot.as_str())
-        .collect::<Vec<_>>();
+    let names = lines.iter().map(|line| line.item_name_snapshot.as_str()).collect::<Vec<_>>();
     format!("{} 共 {} 项", names.join("、"), lines.len())
 }
 
@@ -510,10 +492,6 @@ fn submission_line_view(line: SalesOrderSubmissionLine) -> SalesOrderWorkingCopy
 mod tests {
     use std::str::FromStr;
 
-    use crate::entity::sales_order::{
-        HeaderSnapshotData, LineType, RevisionSource, SalesOrderRevision, SalesOrderRevisionData,
-        SalesOrderRevisionLine, SalesOrderRevisionLineData,
-    };
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         ContractRevisionId, PartyRevisionId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
@@ -522,6 +500,10 @@ mod tests {
     use erp_core::money::{Amount, Rate};
 
     use super::{revision_line_summary, revision_view};
+    use crate::entity::sales_order::{
+        HeaderSnapshotData, LineType, RevisionSource, SalesOrderRevision, SalesOrderRevisionData,
+        SalesOrderRevisionLine, SalesOrderRevisionLineData,
+    };
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()

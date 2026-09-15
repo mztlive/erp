@@ -1,12 +1,12 @@
+use erp_core::ids::PartyId;
+use persistence_core::PageResult;
+
+use super::SupplierAccountRow;
 use crate::entity::supplier::{
     CapabilityCode, QualificationType, SupplierAccount, SupplierAccountStatus, SupplierCapability,
     SupplierCommercialProfileRevision, SupplierQualification, SupplierQualificationCapability,
     SupplierRatingRevision,
 };
-use erp_core::ids::PartyId;
-
-use super::SupplierAccountRow;
-use persistence_core::PageResult;
 
 mod detail;
 mod list;

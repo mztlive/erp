@@ -1,4 +1,8 @@
 //! 客户验收单域列表、详情和视图映射。
+use erp_core::ids::CustomerAcceptanceLineId;
+use persistence_core::NoTransaction;
+use validator::Validate;
+
 use super::FulfillmentService;
 use crate::dto::{
     AcceptanceAllocationView, CustomerAcceptanceDetailView, CustomerAcceptanceLineView,
@@ -9,9 +13,6 @@ use crate::entity::fulfillment::{
 };
 use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
-use erp_core::ids::CustomerAcceptanceLineId;
-use persistence_core::NoTransaction;
-use validator::Validate;
 
 /// 客户验收单列表筛选条件类型。
 type CustomerAcceptanceFilter = <mongodb::Database as FulfillmentExt>::CustomerAcceptanceFilter;
@@ -33,11 +34,7 @@ impl FulfillmentService {
     #[tracing::instrument(
         name = "fulfillment.customer_acceptance_list",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "customer_acceptance_list"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "customer_acceptance_list")
     )]
     pub async fn customer_acceptance_list(
         &self,
@@ -53,11 +50,8 @@ impl FulfillmentService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .customer_acceptances()
-            .search_customer_acceptances(&filter, &mut NoTransaction)
-            .await?;
+        let page =
+            self.db.customer_acceptances().search_customer_acceptances(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -73,12 +67,7 @@ impl FulfillmentService {
                 created_at: row.created_at,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 查询客户验收单详情（表头 + 行 + 分配）。
@@ -95,11 +84,7 @@ impl FulfillmentService {
     #[tracing::instrument(
         name = "fulfillment.customer_acceptance_detail",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "customer_acceptance_detail"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "customer_acceptance_detail")
     )]
     pub async fn customer_acceptance_detail(&self, id: &str) -> Result<CustomerAcceptanceDetailView> {
         let acceptance = self
@@ -115,11 +100,8 @@ impl FulfillmentService {
             .await?;
         let line_ids: Vec<CustomerAcceptanceLineId> =
             lines.iter().map(|line| line.base.id.clone().into()).collect();
-        let allocations = self
-            .db
-            .fulfillment()
-            .allocations_by_acceptance_lines(&line_ids, &mut NoTransaction)
-            .await?;
+        let allocations =
+            self.db.fulfillment().allocations_by_acceptance_lines(&line_ids, &mut NoTransaction).await?;
         Ok(CustomerAcceptanceDetailView {
             acceptance: acceptance.into(),
             lines: lines.into_iter().map(Into::into).collect(),
@@ -202,12 +184,14 @@ pub fn prepare_customer_acceptance_draft(
 }
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use erp_core::ids::{CustomerAcceptanceId, SalesOrderLineId};
+    use erp_core::money::Quantity;
+
     use crate::dto::AcceptanceLineInput;
     use crate::entity::fulfillment::CustomerAcceptanceLineBatch;
     use crate::service::customer_acceptance_lines::acceptance_line_specs;
-    use erp_core::ids::{CustomerAcceptanceId, SalesOrderLineId};
-    use erp_core::money::Quantity;
-    use std::str::FromStr;
 
     #[test]
     fn acceptance_lines_are_built_and_validated() {
@@ -229,17 +213,9 @@ mod tests {
     /// 创建路径经实体批量工厂编号：旧 Service helper 已删除。
     #[test]
     fn acceptance_create_uses_entity_batch_factory() {
-        let production = include_str!("customer_acceptance.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
-        assert!(
-            !production.contains("fn build_acceptance_lines"),
-            "旧 helper 必须删除"
-        );
-        assert!(
-            production.contains("CustomerAcceptanceLineBatch::build"),
-            "创建路径必须调用实体工厂"
-        );
+        let production =
+            include_str!("customer_acceptance.rs").split("#[cfg(test)]").next().expect("生产代码");
+        assert!(!production.contains("fn build_acceptance_lines"), "旧 helper 必须删除");
+        assert!(production.contains("CustomerAcceptanceLineBatch::build"), "创建路径必须调用实体工厂");
     }
 }

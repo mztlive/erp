@@ -4,13 +4,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::{LegacyImportBatchId, WorkItemId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 确认范围（销售、采购、运营、仓储、财务等）最大长度。
 const SCOPE_MAX_LEN: usize = 64;
@@ -348,10 +347,7 @@ impl LegacyImportConfirmation {
     /// # 返回
     /// 返回稳定的 `batch/trial/rule` 组合版本。
     pub fn subject_version(batch_version: u32, trial_version: u32, rule_version: &str) -> String {
-        format!(
-            "batch:{batch_version};trial:{trial_version};rule:{}",
-            rule_version.trim()
-        )
+        format!("batch:{batch_version};trial:{trial_version};rule:{}", rule_version.trim())
     }
 
     /// 判断确认事实是否属于指定试算快照。
@@ -450,20 +446,15 @@ impl LegacyImportConfirmation {
         {
             return Err(Error::from("新试算版本不得低于已有确认版本"));
         }
-        let same_trial = confirmations
-            .iter()
-            .filter(|item| item.trial_version == trial_version)
-            .collect::<Vec<_>>();
+        let same_trial =
+            confirmations.iter().filter(|item| item.trial_version == trial_version).collect::<Vec<_>>();
         if same_trial
             .iter()
             .any(|item| item.batch_version != batch_version || item.import_rule_version != rule_version)
         {
             return Err(Error::from("同一试算矩阵的批次或规则版本不一致"));
         }
-        if same_trial
-            .iter()
-            .any(|item| item.status == ConfirmationStatus::Rejected)
-        {
+        if same_trial.iter().any(|item| item.status == ConfirmationStatus::Rejected) {
             return Err(Error::from("当前试算已被退回，必须修复并生成新试算版本"));
         }
         Ok(())
@@ -508,10 +499,7 @@ impl LegacyImportConfirmation {
         confirmations: &[Self],
         required_scopes: &BTreeSet<ConfirmationScope>,
     ) -> bool {
-        if confirmations
-            .iter()
-            .any(|item| item.status == ConfirmationStatus::Rejected)
-        {
+        if confirmations.iter().any(|item| item.status == ConfirmationStatus::Rejected) {
             return false;
         }
         let confirmed = confirmations
@@ -613,10 +601,7 @@ impl LegacyImportConfirmation {
         comment: Option<String>,
     ) -> Result<()> {
         if self.status != ConfirmationStatus::Pending {
-            return Err(Error::from(format!(
-                "仅待确认事实可决策，当前状态：{}",
-                self.status.label()
-            )));
+            return Err(Error::from(format!("仅待确认事实可决策，当前状态：{}", self.status.label())));
         }
         let status = match decision {
             ConfirmationDecision::ConfirmScope => ConfirmationStatus::Confirmed,
@@ -629,7 +614,7 @@ impl LegacyImportConfirmation {
                 )?;
                 self.reason_code = Some(reason_code);
                 ConfirmationStatus::Rejected
-            }
+            },
         };
         self.decision = Some(decision);
         self.comment = normalize_optional_text(comment, "意见", COMMENT_MAX_LEN)?;
@@ -674,9 +659,10 @@ impl LegacyImportConfirmation {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::state::ensure_transition;
     use erp_core::ids::{LegacyImportConfirmationId, WorkItemId};
+
+    use super::*;
 
     fn confirmation_data() -> LegacyImportConfirmationData {
         LegacyImportConfirmationData {
@@ -706,16 +692,12 @@ mod tests {
 
     #[test]
     fn new_rejects_empty_and_overlong_fields() {
-        let empty_scope = LegacyImportConfirmationData {
-            confirmation_scope: "   ".to_string(),
-            ..confirmation_data()
-        };
+        let empty_scope =
+            LegacyImportConfirmationData { confirmation_scope: "   ".to_string(), ..confirmation_data() };
         assert!(LegacyImportConfirmation::new(LegacyImportConfirmationId::new("c-2"), empty_scope).is_err());
 
-        let overlong_role = LegacyImportConfirmationData {
-            owner_role: "r".repeat(ROLE_MAX_LEN + 1),
-            ..confirmation_data()
-        };
+        let overlong_role =
+            LegacyImportConfirmationData { owner_role: "r".repeat(ROLE_MAX_LEN + 1), ..confirmation_data() };
         assert!(
             LegacyImportConfirmation::new(LegacyImportConfirmationId::new("c-3"), overlong_role).is_err()
         );
@@ -755,13 +737,7 @@ mod tests {
 
         assert!(
             confirmation
-                .decide(
-                    ConfirmationDecision::ReturnForFix,
-                    "财务".to_string(),
-                    at,
-                    None,
-                    None
-                )
+                .decide(ConfirmationDecision::ReturnForFix, "财务".to_string(), at, None, None)
                 .is_err(),
             "退回原因必填"
         );
@@ -786,32 +762,16 @@ mod tests {
             LegacyImportConfirmation::new(LegacyImportConfirmationId::new("c-6"), confirmation_data())
                 .unwrap();
         let at = Instant::from_unix_secs(1_700_000_000);
-        confirmation
-            .decide(
-                ConfirmationDecision::ConfirmScope,
-                "运营".to_string(),
-                at,
-                None,
-                None,
-            )
-            .unwrap();
+        confirmation.decide(ConfirmationDecision::ConfirmScope, "运营".to_string(), at, None, None).unwrap();
 
         assert!(
             confirmation
-                .decide(
-                    ConfirmationDecision::ConfirmScope,
-                    "运营".to_string(),
-                    at,
-                    None,
-                    None
-                )
+                .decide(ConfirmationDecision::ConfirmScope, "运营".to_string(), at, None, None)
                 .is_err(),
             "已完成确认不可重复决策"
         );
         assert!(
-            confirmation
-                .invalidate(LegacyImportConfirmationId::new("c-7"), at)
-                .is_err(),
+            confirmation.invalidate(LegacyImportConfirmationId::new("c-7"), at).is_err(),
             "已完成确认不可失效"
         );
     }
@@ -823,15 +783,10 @@ mod tests {
                 .unwrap();
         let at = Instant::from_unix_secs(1_700_000_000);
 
-        confirmation
-            .invalidate(LegacyImportConfirmationId::new("c-9"), at)
-            .unwrap();
+        confirmation.invalidate(LegacyImportConfirmationId::new("c-9"), at).unwrap();
         assert_eq!(confirmation.status, ConfirmationStatus::Invalidated);
         assert_eq!(confirmation.invalidated_at, Some(at));
-        assert_eq!(
-            confirmation.replacement_confirmation_id,
-            Some(LegacyImportConfirmationId::new("c-9"))
-        );
+        assert_eq!(confirmation.replacement_confirmation_id, Some(LegacyImportConfirmationId::new("c-9")));
     }
 
     #[test]
@@ -848,28 +803,16 @@ mod tests {
 
     #[test]
     fn status_and_decision_serde_use_stable_codes() {
-        assert_eq!(
-            serde_json::to_string(&ConfirmationStatus::Pending).unwrap(),
-            "\"PENDING\""
-        );
-        assert_eq!(
-            serde_json::to_string(&ConfirmationStatus::Invalidated).unwrap(),
-            "\"INVALIDATED\""
-        );
-        assert_eq!(
-            serde_json::to_string(&ConfirmationDecision::ReturnForFix).unwrap(),
-            "\"RETURN_FOR_FIX\""
-        );
+        assert_eq!(serde_json::to_string(&ConfirmationStatus::Pending).unwrap(), "\"PENDING\"");
+        assert_eq!(serde_json::to_string(&ConfirmationStatus::Invalidated).unwrap(), "\"INVALIDATED\"");
+        assert_eq!(serde_json::to_string(&ConfirmationDecision::ReturnForFix).unwrap(), "\"RETURN_FOR_FIX\"");
         assert_eq!(ConfirmationStatus::Rejected.label(), "已退回");
         assert_eq!(ConfirmationDecision::ConfirmScope.label(), "确认本范围");
     }
 
     #[test]
     fn scope_registry_derives_roles_and_required_matrix() {
-        assert_eq!(
-            ConfirmationScope::parse(" sales ").unwrap(),
-            ConfirmationScope::Sales
-        );
+        assert_eq!(ConfirmationScope::parse(" sales ").unwrap(), ConfirmationScope::Sales);
         assert_eq!(ConfirmationScope::Finance.owner_role(), "role-finance");
         let scopes = ConfirmationScope::required_for_object_set(
             "CUSTOMER;SUPPLIER|CARD_CATEGORY/期初库存、CARD_OPENING_AR",
@@ -892,10 +835,7 @@ mod tests {
     fn matrix_rules_own_snapshot_version_and_next_decision() {
         let mut sales = LegacyImportConfirmation::new(
             LegacyImportConfirmationId::new("c-sales"),
-            LegacyImportConfirmationData {
-                confirmation_scope: "SALES".to_string(),
-                ..confirmation_data()
-            },
+            LegacyImportConfirmationData { confirmation_scope: "SALES".to_string(), ..confirmation_data() },
         )
         .unwrap();
         assert!(sales.is_pending());
@@ -922,16 +862,8 @@ mod tests {
             "batch:1;trial:2;rule:rule-1"
         );
         assert!(sales.belongs_to_snapshot(1, 2, "v1"));
-        assert_eq!(
-            LegacyImportConfirmation::latest_active_trial(&[sales.clone()], " v1 "),
-            Some(2)
-        );
-        assert!(LegacyImportConfirmation::is_trial_confirmed(
-            &[sales.clone()],
-            2,
-            "v1",
-            &required,
-        ));
+        assert_eq!(LegacyImportConfirmation::latest_active_trial(&[sales.clone()], " v1 "), Some(2));
+        assert!(LegacyImportConfirmation::is_trial_confirmed(&[sales.clone()], 2, "v1", &required,));
         assert!(LegacyImportConfirmation::matrix_summary(2, &[sales]).contains("SALES=CONFIRMED"));
         assert!(LegacyImportConfirmation::ensure_trial_snapshot(&[], u32::MAX, u32::MAX, "v1").is_err());
     }
@@ -940,10 +872,7 @@ mod tests {
     fn matrix_confirmation_rejects_incomplete_or_returned_scopes() {
         let mut sales = LegacyImportConfirmation::new(
             LegacyImportConfirmationId::new("c-matrix-sales"),
-            LegacyImportConfirmationData {
-                confirmation_scope: "SALES".to_string(),
-                ..confirmation_data()
-            },
+            LegacyImportConfirmationData { confirmation_scope: "SALES".to_string(), ..confirmation_data() },
         )
         .unwrap();
         sales
@@ -956,10 +885,7 @@ mod tests {
             )
             .unwrap();
         let required = BTreeSet::from([ConfirmationScope::Sales, ConfirmationScope::Finance]);
-        assert!(!LegacyImportConfirmation::is_matrix_confirmed(
-            &[sales.clone()],
-            &required,
-        ));
+        assert!(!LegacyImportConfirmation::is_matrix_confirmed(&[sales.clone()], &required,));
 
         let mut finance = LegacyImportConfirmation::new(
             LegacyImportConfirmationId::new("c-matrix-finance"),
@@ -979,15 +905,9 @@ mod tests {
                 None,
             )
             .unwrap();
-        assert!(!LegacyImportConfirmation::is_matrix_confirmed(
-            &[sales.clone(), finance.clone()],
-            &required,
-        ));
-        assert!(!LegacyImportConfirmation::is_trial_confirmed(
-            &[sales, finance],
-            2,
-            "v1",
-            &required,
-        ));
+        assert!(
+            !LegacyImportConfirmation::is_matrix_confirmed(&[sales.clone(), finance.clone()], &required,)
+        );
+        assert!(!LegacyImportConfirmation::is_trial_confirmed(&[sales, finance], 2, "v1", &required,));
     }
 }

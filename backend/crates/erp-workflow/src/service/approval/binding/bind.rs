@@ -1,25 +1,23 @@
-use crate::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use crate::entity::document_registry::{BusinessDocument, DocumentType};
-use crate::repository::bpm::DefinitionGraph;
-use crate::repository::{BpmExt, DocumentRegistryExt};
+use application_core::AuditActor;
 use bpm::ids::ApprovalProcessDefinitionId;
-
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Executor;
-
-use crate::error::{Error, Result};
-use crate::ports::{ApprovalObjectReadPort, PreparedWorkflowAudit};
-use application_core::AuditActor;
 
 use super::super::policy::{policy_of, require_process_required};
 use super::super::process_kind::process_kind_of;
 use super::revalidate::{revalidate_binding_graph, revalidate_published_graph};
 use super::types::BindPublishedDefinitionCommand;
 use super::{
-    binding_decision, published_definition_or_not_configured, BindingDecision, DEFINITION_BOUND_AUDIT_ACTION,
-    DEFINITION_POLICY_AUDIT_ACTION,
+    BindingDecision, DEFINITION_BOUND_AUDIT_ACTION, DEFINITION_POLICY_AUDIT_ACTION, binding_decision,
+    published_definition_or_not_configured,
 };
+use crate::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use crate::entity::document_registry::{BusinessDocument, DocumentType};
+use crate::error::{Error, Result};
+use crate::ports::{ApprovalObjectReadPort, PreparedWorkflowAudit};
+use crate::repository::bpm::DefinitionGraph;
+use crate::repository::{BpmExt, DocumentRegistryExt};
 
 /// 创建单据时绑定当前发布定义。
 ///
@@ -55,12 +53,12 @@ pub async fn bind_published_definition_on_document_create(
         BindingDecision::SkipNoApproval => {
             record_no_approval_policy(db, audit_port, command, actor, executor).await?;
             Ok(None)
-        }
+        },
         BindingDecision::RequirePublished => {
             let binding =
                 bind_required_definition(db, rbac, object_read, audit_port, command, actor, executor).await?;
             Ok(Some(binding))
-        }
+        },
     }
 }
 
@@ -117,9 +115,7 @@ pub(super) async fn load_published_graph(
     executor: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
     let graph = published_definition_or_not_configured(
-        db.bpm_workflow()
-            .load_published_definition_graph(process_kind_of(document_type), executor)
-            .await?,
+        db.bpm_workflow().load_published_definition_graph(process_kind_of(document_type), executor).await?,
     )?;
     revalidate_published_graph(&graph)?;
     Ok(graph)
@@ -144,10 +140,7 @@ async fn record_no_approval_policy(
         DEFINITION_POLICY_AUDIT_ACTION,
         "business_document",
         command.business_object_id.clone(),
-        Some(format!(
-            "requirement=NO_APPROVAL document_type={}",
-            command.document_type.as_str()
-        )),
+        Some(format!("requirement=NO_APPROVAL document_type={}", command.document_type.as_str())),
     )?;
     let _ = db;
     audit_port.persist(&audit, executor).await?;

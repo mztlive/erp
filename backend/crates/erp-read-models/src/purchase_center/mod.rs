@@ -9,11 +9,11 @@ pub mod procurement_responsibility;
 mod query;
 pub mod repository;
 mod scope;
-pub use change::query::PurchaseChangeListView;
-pub use scope::{PurchaseListParams, PurchaseListView};
-
-use erp_procurement::{FailClosedPurchaseDataScopePort, PurchaseDataScopePort};
 use std::sync::Arc;
+
+pub use change::query::PurchaseChangeListView;
+use erp_procurement::{FailClosedPurchaseDataScopePort, PurchaseDataScopePort};
+pub use scope::{PurchaseListParams, PurchaseListView};
 
 /// 使用提供方公开事实装配采购视图；构造本身不访问数据库。
 pub struct PurchaseOrderReadService {
@@ -35,10 +35,7 @@ impl PurchaseOrderReadService {
     /// # 关键业务约束
     /// 列表、详情与导出必须改用 `with_scope`，未注入时失败关闭。
     pub fn new(db: mongodb::Database) -> Self {
-        Self {
-            db,
-            data_scope: FailClosedPurchaseDataScopePort::shared(),
-        }
+        Self { db, data_scope: FailClosedPurchaseDataScopePort::shared() }
     }
 
     /// 使用数据库句柄和采购范围 Port 构造只读查询服务。

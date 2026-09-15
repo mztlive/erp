@@ -4,7 +4,7 @@ use erp_workflow::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItem
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::status::{family_of, WorkItemFamily, WorkItemScope, WorkItemSort, WORK_ITEM_TYPES};
+use super::status::{WORK_ITEM_TYPES, WorkItemFamily, WorkItemScope, WorkItemSort, family_of};
 use super::view::WorkItemView;
 use crate::errors::{Error, Result};
 
@@ -217,9 +217,9 @@ fn normalize_statuses(scope: WorkItemScope, status: Option<WorkItemStatus>) -> R
         WorkItemScope::History => match status {
             None => Ok(vec![WorkItemStatus::Completed, WorkItemStatus::Closed]),
             Some(WorkItemStatus::Completed | WorkItemStatus::Closed) => Ok(vec![status.unwrap()]),
-            Some(WorkItemStatus::Open) => Err(Error::ValidationError(
-                "处理历史只能查询已完成或已关闭任务".to_string(),
-            )),
+            Some(WorkItemStatus::Open) => {
+                Err(Error::ValidationError("处理历史只能查询已完成或已关闭任务".to_string()))
+            },
         },
         _ => match status {
             None | Some(WorkItemStatus::Open) => Ok(vec![WorkItemStatus::Open]),
@@ -247,9 +247,7 @@ pub(super) fn parse_priorities(value: Option<&str>) -> Result<Vec<WorkItemPriori
 fn ensure_supported_query(params: &WorkItemListParams) -> Result<()> {
     let timezone = params.timezone.as_deref().unwrap_or(DEFAULT_TIMEZONE).trim();
     if timezone != DEFAULT_TIMEZONE {
-        return Err(Error::ValidationError(
-            "当前任务队列只支持 Asia/Shanghai 时区".to_string(),
-        ));
+        return Err(Error::ValidationError("当前任务队列只支持 Asia/Shanghai 时区".to_string()));
     }
     Ok(())
 }

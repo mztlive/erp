@@ -2,12 +2,12 @@
 //!
 //! 入库行连续编号与请求到领域数据转换的唯一规则源；质量规则不复制。
 
-use serde::{Deserialize, Serialize};
-
-use crate::entity::fulfillment::{PurchaseReceiptLine, PurchaseReceiptLineData, QualityResult};
 use erp_core::ids::{PurchaseOrderRevisionLineId, PurchaseReceiptId, PurchaseReceiptLineId};
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::fulfillment::{PurchaseReceiptLine, PurchaseReceiptLineData, QualityResult};
 
 /// 单行领域输入（不含行号/质量结果派生）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -73,8 +73,9 @@ impl PurchaseReceiptLineBatch {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn spec(id: &str) -> PurchaseReceiptLineSpec {
         PurchaseReceiptLineSpec {
@@ -123,14 +124,16 @@ mod tests {
     /// 数量守恒违规失败；空输入失败。
     #[test]
     fn quantity_conservation_and_empty_fail() {
-        assert!(PurchaseReceiptLineBatch::build(
-            PurchaseReceiptId::new("r-1"),
-            vec![PurchaseReceiptLineSpec {
-                received_quantity: Quantity::from_str("5").unwrap(),
-                ..spec("l-1")
-            }],
-        )
-        .is_err());
+        assert!(
+            PurchaseReceiptLineBatch::build(
+                PurchaseReceiptId::new("r-1"),
+                vec![PurchaseReceiptLineSpec {
+                    received_quantity: Quantity::from_str("5").unwrap(),
+                    ..spec("l-1")
+                }],
+            )
+            .is_err()
+        );
         assert!(PurchaseReceiptLineBatch::build(PurchaseReceiptId::new("r-1"), vec![]).is_err());
     }
 }

@@ -1,12 +1,13 @@
 //! 电子交付本域查询及事实持久化。
 
+use persistence_core::{Executor, NoTransaction};
+use validator::Validate;
+
 use super::FulfillmentService;
 use crate::dto::{ElectronicDeliveryListParams, ElectronicDeliveryView, PageView, SortDir};
 use crate::entity::fulfillment::ElectronicDelivery;
 use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
-use persistence_core::{Executor, NoTransaction};
-use validator::Validate;
 
 type ElectronicDeliveryFilter = <mongodb::Database as FulfillmentExt>::ElectronicDeliveryFilter;
 
@@ -27,11 +28,7 @@ impl FulfillmentService {
     #[tracing::instrument(
         name = "fulfillment.electronic_delivery_list",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "electronic_delivery_list"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "electronic_delivery_list")
     )]
     pub async fn electronic_delivery_list(
         &self,
@@ -47,11 +44,8 @@ impl FulfillmentService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .electronic_deliveries()
-            .search_electronic_deliveries(&filter, &mut NoTransaction)
-            .await?;
+        let page =
+            self.db.electronic_deliveries().search_electronic_deliveries(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -69,12 +63,7 @@ impl FulfillmentService {
                 version: row.version,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 按主键查询电子交付记录。
@@ -93,11 +82,7 @@ impl FulfillmentService {
     #[tracing::instrument(
         name = "fulfillment.electronic_delivery_detail",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "electronic_delivery_detail"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "electronic_delivery_detail")
     )]
     pub async fn electronic_delivery_detail(&self, id: &str) -> Result<ElectronicDeliveryView> {
         let record = self
@@ -154,9 +139,7 @@ impl FulfillmentService {
             .find_by_id(record_id.as_ref(), executor)
             .await?
             .ok_or_else(|| Error::NotFound("电子交付记录不存在".to_string()))?;
-        record
-            .ensure_confirmable()
-            .map_err(|error| Error::ConflictError(error.to_string()))?;
+        record.ensure_confirmable().map_err(|error| Error::ConflictError(error.to_string()))?;
         Ok(record)
     }
 

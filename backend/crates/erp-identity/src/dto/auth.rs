@@ -37,26 +37,21 @@ pub struct PasswordLoginPayload {
 #[cfg(test)]
 mod tests {
     use erp_core::AccountKind;
+    use validator::Validate;
 
     use super::{AuthRequest, PasswordLoginPayload};
-    use validator::Validate;
 
     #[test]
     fn password_login_payload_should_accept_valid_credentials() {
-        let payload = PasswordLoginPayload {
-            account: "admin01".to_string(),
-            password: "password123".to_string(),
-        };
+        let payload =
+            PasswordLoginPayload { account: "admin01".to_string(), password: "password123".to_string() };
 
         assert!(payload.validate().is_ok());
     }
 
     #[test]
     fn password_login_payload_should_reject_short_password() {
-        let payload = PasswordLoginPayload {
-            account: "admin01".to_string(),
-            password: "short".to_string(),
-        };
+        let payload = PasswordLoginPayload { account: "admin01".to_string(), password: "short".to_string() };
 
         assert!(payload.validate().is_err());
     }

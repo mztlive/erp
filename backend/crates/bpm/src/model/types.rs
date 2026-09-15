@@ -492,10 +492,7 @@ pub(crate) fn base_model_at(id: impl Into<String>, at: Timestamp) -> ModelResult
 /// 时间为负或版本溢出时返回错误。
 pub(crate) fn touch_base(base: &mut BaseModel, at: Timestamp) -> ModelResult<()> {
     base.updated_at = persistence_stamp(at)?;
-    base.version = base
-        .version
-        .checked_add(1)
-        .ok_or(ModelError::Overflow("乐观锁版本"))?;
+    base.version = base.version.checked_add(1).ok_or(ModelError::Overflow("乐观锁版本"))?;
     Ok(())
 }
 
@@ -572,14 +569,8 @@ mod tests {
         assert_eq!(execution_sources.len(), 2);
         assert_eq!(end_reasons.len(), 1);
         assert_eq!(ApprovalAssigneeBindingSource::Definition.as_str(), "DEFINITION");
-        assert_eq!(
-            ApprovalExecutionAssignmentSource::AssigneeRecovery.as_str(),
-            "ASSIGNEE_RECOVERY"
-        );
-        assert_eq!(
-            ApprovalExecutionEndReason::AssigneeRecovered.as_str(),
-            "ASSIGNEE_RECOVERED"
-        );
+        assert_eq!(ApprovalExecutionAssignmentSource::AssigneeRecovery.as_str(), "ASSIGNEE_RECOVERY");
+        assert_eq!(ApprovalExecutionEndReason::AssigneeRecovered.as_str(), "ASSIGNEE_RECOVERED");
     }
 
     /// 开发期硬切换不得为已删除的审批改派枚举保留反序列化别名。
@@ -630,10 +621,7 @@ mod tests {
         assert!(ApprovalProcessInstanceStatus::Approved.is_terminal());
         assert!(ApprovalNodeExecutionStatus::Approved.is_ended());
         assert!(!ApprovalNodeExecutionStatus::Blocked.is_ended());
-        assert_eq!(
-            ApprovalExecutionEndReason::AssigneeRecovered.as_str(),
-            "ASSIGNEE_RECOVERED"
-        );
+        assert_eq!(ApprovalExecutionEndReason::AssigneeRecovered.as_str(), "ASSIGNEE_RECOVERED");
     }
 
     /// 仅前六类人员阻塞允许恢复原审批人。

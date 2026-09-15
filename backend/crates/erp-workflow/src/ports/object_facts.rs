@@ -54,7 +54,7 @@ impl OrderTaskSource {
                         kind,
                         ObjectKind::SalesOrder | ObjectKind::SalesChangeOrder | ObjectKind::Delivery
                     )
-            }
+            },
             Self::Purchase(id) => {
                 !id.trim().is_empty()
                     && matches!(
@@ -65,7 +65,7 @@ impl OrderTaskSource {
                             | ObjectKind::ElectronicDelivery
                             | ObjectKind::ServiceFulfillment
                     )
-            }
+            },
         }
     }
     /// 判断对象注册类型是否必须提供订单来源。
@@ -179,7 +179,7 @@ pub trait ObjectFactPort: Send + Sync {
 
     /// Whether a customer or supplier counterparty is active.
     async fn counterparty_is_active(&self, kind: &str, id: &str, executor: &mut dyn Executor)
-        -> Result<bool>;
+    -> Result<bool>;
 
     /// Display numbers for counterparties of one kind (`supplier` or `customer`).
     async fn counterparty_numbers(
@@ -306,9 +306,7 @@ impl ObjectFactPort for FailClosedObjectFactPort {
         _comment: Option<&str>,
         _replacement_work_item_id: Option<&str>,
     ) -> Result<W29CloseFact> {
-        Err(crate::error::Error::ValidationError(
-            "W29 关闭适配未接线，已按安全策略拒绝".to_string(),
-        ))
+        Err(crate::error::Error::ValidationError("W29 关闭适配未接线，已按安全策略拒绝".to_string()))
     }
 
     async fn persist_w29_close(

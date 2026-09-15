@@ -5,15 +5,15 @@
 //! 敏感值（手机号、地址、银行账号）只出现在创建入参，响应视图不返回明文
 //! （数据模型 §4.5.5：实体只保存带密钥 HMAC 指纹，明文永不入库）。
 
-use crate::entity::party::{
-    AddressType, EffectiveRecordStatus, Party, PartyContact, PartyKind, PartyRevision, PartyStatus,
-};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use crate::entity::party::{
+    AddressType, EffectiveRecordStatus, Party, PartyContact, PartyKind, PartyRevision, PartyStatus,
+};
 use crate::error::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 主体列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub(crate) const PARTY_SORT_FIELDS: &[&str] = &["created_at", "party_no", "status"];
@@ -44,6 +44,10 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串不生效）。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -57,12 +61,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串不生效）。
-use application_core::non_blank;
 
 /// 主体创建请求（HTTP 契约：`{ party_no, legal_name, ... }`）。
 ///
@@ -682,10 +680,11 @@ pub(crate) fn masked_last4(last4: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, PartyListParams, SortDir};
-    use crate::entity::party::PartyStatus;
     use serde_json::json;
     use validator::Validate;
+
+    use super::{PartyListParams, SortDir, normalize_sort};
+    use crate::entity::party::PartyStatus;
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {

@@ -1,10 +1,11 @@
 //! 批量取消后台任务的权限、状态和逐任务事务编排。
-use super::{BulkJobService, CancelAllBackgroundJobsRequest, CancelAllBackgroundJobsResponse};
-use crate::{BackgroundJob, BulkJobExt, Error, Result};
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+
+use super::{BulkJobService, CancelAllBackgroundJobsRequest, CancelAllBackgroundJobsResponse};
+use crate::{BackgroundJob, BulkJobExt, Error, Result};
 
 impl BulkJobService {
     /// 停止并取消全部未完成后台任务（仅管理员）。
@@ -33,16 +34,10 @@ impl BulkJobService {
             return Err(Error::Forbidden("只有管理员可以停止全部后台任务".to_string()));
         }
         req.validate()?;
-        let candidates = self
-            .db
-            .background_jobs()
-            .cancellation_candidates(req.job_type, &mut NoTransaction)
-            .await?;
-        let mut result = CancelAllBackgroundJobsResponse {
-            cancelled_count: 0,
-            skipped_count: 0,
-            failed_count: 0,
-        };
+        let candidates =
+            self.db.background_jobs().cancellation_candidates(req.job_type, &mut NoTransaction).await?;
+        let mut result =
+            CancelAllBackgroundJobsResponse { cancelled_count: 0, skipped_count: 0, failed_count: 0 };
         for job in candidates {
             match self.cancel_candidate(job, actor).await {
                 Ok(true) => result.cancelled_count += 1,

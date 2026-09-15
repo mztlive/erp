@@ -153,9 +153,6 @@ mod tests {
         assert_eq!(OfferingSourceType::Api.as_str(), "API");
         assert_eq!(OfferingStatus::Paused.label(), "暂停");
         assert_eq!(AvailabilityStatus::Stale.as_str(), "STALE");
-        assert_eq!(
-            serde_json::to_string(&OfferingStatus::Active).unwrap(),
-            "\"ACTIVE\""
-        );
+        assert_eq!(serde_json::to_string(&OfferingStatus::Active).unwrap(), "\"ACTIVE\"");
     }
 }

@@ -1,20 +1,16 @@
 //! 客户资料敏感字段令牌、归属校验与解密。
 
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::PartyId;
-use erp_party::PartyExt;
-use erp_party::{PartyAddress, PartyBankAccount, PartyContact, PartyOwned};
+use erp_customer::{CustomerSensitiveFieldView, CustomerSensitiveRevealView, RevealCustomerSensitiveRequest};
+use erp_party::{PartyAddress, PartyBankAccount, PartyContact, PartyExt, PartyOwned, SensitiveFieldKind};
 use persistence_core::NoTransaction;
 use validator::Validate;
 
-use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_party::SensitiveFieldKind;
-
 use super::CustomerProfileService;
-use erp_customer::{CustomerSensitiveFieldView, CustomerSensitiveRevealView, RevealCustomerSensitiveRequest};
+use crate::{Error, Result};
 
 impl CustomerProfileService {
     /// 验证短时令牌和客户归属后解密单个敏感字段，并记录成功审计。
@@ -32,14 +28,10 @@ impl CustomerProfileService {
         let now = unix_now()?;
         let scope = self.sensitive_data.verify_reveal_token(&req.reveal_token, now)?;
         let account = self.load_customer(&scope.supplier_id).await?;
-        let ciphertext = self
-            .sensitive_ciphertext(scope.kind, &scope.record_id, &account.party_id)
-            .await?;
+        let ciphertext = self.sensitive_ciphertext(scope.kind, &scope.record_id, &account.party_id).await?;
         let value = self.sensitive_data.decrypt(&ciphertext)?;
         let audit =
-            actor
-                .clone()
-                .resource_log("customer_sensitive.reveal", "customer_sensitive", scope.record_id)?;
+            actor.clone().resource_log("customer_sensitive.reveal", "customer_sensitive", scope.record_id)?;
         self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
         Ok(CustomerSensitiveRevealView { value })
     }
@@ -94,8 +86,7 @@ impl CustomerProfileService {
         expires_at: u64,
     ) -> Result<CustomerSensitiveFieldView> {
         let reveal_token =
-            self.sensitive_data
-                .issue_reveal_token(kind, record_id, customer_id, expires_at)?;
+            self.sensitive_data.issue_reveal_token(kind, record_id, customer_id, expires_at)?;
         Ok(CustomerSensitiveFieldView {
             kind: super::views::customer_sensitive_kind(kind),
             record_id: record_id.to_string(),
@@ -120,11 +111,9 @@ impl CustomerProfileService {
                     .find_contact(record_id, &mut NoTransaction)
                     .await?
                     .ok_or_else(|| Error::NotFound("联系人不存在".to_string()))?;
-                record
-                    .ensure_party(party_id)
-                    .map_err(|error| Error::Forbidden(error.to_string()))?;
+                record.ensure_party(party_id).map_err(|error| Error::Forbidden(error.to_string()))?;
                 Ok(record.mobile_ciphertext)
-            }
+            },
             SensitiveFieldKind::Address => {
                 let record = self
                     .db
@@ -132,11 +121,9 @@ impl CustomerProfileService {
                     .find_address(record_id, &mut NoTransaction)
                     .await?
                     .ok_or_else(|| Error::NotFound("地址不存在".to_string()))?;
-                record
-                    .ensure_party(party_id)
-                    .map_err(|error| Error::Forbidden(error.to_string()))?;
+                record.ensure_party(party_id).map_err(|error| Error::Forbidden(error.to_string()))?;
                 Ok(record.address_ciphertext)
-            }
+            },
             SensitiveFieldKind::BankAccountNumber => {
                 let record = self
                     .db
@@ -144,11 +131,9 @@ impl CustomerProfileService {
                     .find_bank_account(record_id, &mut NoTransaction)
                     .await?
                     .ok_or_else(|| Error::NotFound("银行账户不存在".to_string()))?;
-                record
-                    .ensure_party(party_id)
-                    .map_err(|error| Error::Forbidden(error.to_string()))?;
+                record.ensure_party(party_id).map_err(|error| Error::Forbidden(error.to_string()))?;
                 Ok(record.account_number_ciphertext)
-            }
+            },
         }
     }
 }
@@ -159,9 +144,5 @@ fn unix_now() -> Result<u64> {
 
 /// 生成不可逆末四位掩码。
 fn masked_last4(last4: &str) -> String {
-    if last4.is_empty() {
-        "****".to_string()
-    } else {
-        format!("****{last4}")
-    }
+    if last4.is_empty() { "****".to_string() } else { format!("****{last4}") }
 }

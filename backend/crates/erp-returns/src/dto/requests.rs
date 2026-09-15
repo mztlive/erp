@@ -1,5 +1,4 @@
 //! 退货、退款与冲正的创建及审批命令请求；字段与原 HTTP 合同一致。
-use crate::entity::returns::{CaseType, ReturnMode, ReturnRoute};
 use application_core::non_blank;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
@@ -10,6 +9,8 @@ use erp_core::ids::{
 use erp_core::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+
+use crate::entity::returns::{CaseType, ReturnMode, ReturnRoute};
 // ---------------------------------------------------------------------------
 
 /// 销售退货/拒收处理单创建请求（W05 退货入口：处理单 + 明细行原子可见）。

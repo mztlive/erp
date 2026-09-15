@@ -38,12 +38,7 @@ impl<Status: Copy + PartialEq> StableBase<Status> {
     /// `current_revision_id` 为 `None`。
     pub fn new(status: Status, created_by: impl Into<String>) -> Self {
         let created_by = created_by.into();
-        Self {
-            status,
-            current_revision_id: None,
-            updated_by: created_by.clone(),
-            created_by,
-        }
+        Self { status, current_revision_id: None, updated_by: created_by.clone(), created_by }
     }
 
     /// 记录一次更新。
@@ -68,8 +63,9 @@ impl<Status: Copy + PartialEq> StableBase<Status> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde::{Deserialize, Serialize};
+
+    use super::*;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
     enum DemoStatus {

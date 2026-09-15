@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::ids::ApprovalProcessDefinitionId;
 use crate::model::types::{
-    base_model_at, normalize_required, touch_base, ApprovalDefinitionStatus, ModelError, ModelResult,
-    NAME_MAX_LEN, NODE_KEY_MAX_LEN,
+    ApprovalDefinitionStatus, ModelError, ModelResult, NAME_MAX_LEN, NODE_KEY_MAX_LEN, base_model_at,
+    normalize_required, touch_base,
 };
 use crate::model::{ParticipantId, ProcessKind, Timestamp};
 
@@ -204,12 +204,8 @@ impl ApprovalProcessDefinition {
         at: Timestamp,
     ) -> ModelResult<()> {
         self.ensure_mutable()?;
-        self.entry_node_key = normalize_required(
-            entry_node_key,
-            "入口节点键不能为空",
-            NODE_KEY_MAX_LEN,
-            "入口节点键过长",
-        )?;
+        self.entry_node_key =
+            normalize_required(entry_node_key, "入口节点键不能为空", NODE_KEY_MAX_LEN, "入口节点键过长")?;
         touch_base(&mut self.base, at)
     }
 
@@ -254,7 +250,7 @@ impl ApprovalProcessDefinition {
             Some(mut previous) => {
                 previous.retire(actor.clone(), at)?;
                 Some(previous)
-            }
+            },
             None => None,
         };
         self.publish(actor, at)?;
@@ -314,22 +310,15 @@ mod tests {
     /// 名称规范化、下一版本与锁校验由定义模型统一提供。
     #[test]
     fn definition_helpers_are_deterministic_and_fail_closed() {
-        assert_eq!(
-            ApprovalProcessDefinition::normalize_name(" 库存调整 ").unwrap(),
-            "库存调整"
-        );
+        assert_eq!(ApprovalProcessDefinition::normalize_name(" 库存调整 ").unwrap(), "库存调整");
         assert!(ApprovalProcessDefinition::normalize_name("   ").is_err());
         assert_eq!(ApprovalProcessDefinition::next_version_after(0).unwrap(), 1);
         assert_eq!(ApprovalProcessDefinition::next_version_after(7).unwrap(), 8);
         assert!(ApprovalProcessDefinition::next_version_after(u32::MAX).is_err());
 
         let definition = draft();
-        assert!(definition
-            .ensure_lock_version(definition.definition_lock_version())
-            .is_ok());
-        assert!(definition
-            .ensure_lock_version(definition.definition_lock_version() + 1)
-            .is_err());
+        assert!(definition.ensure_lock_version(definition.definition_lock_version()).is_ok());
+        assert!(definition.ensure_lock_version(definition.definition_lock_version() + 1).is_err());
     }
 
     /// 版本 0 与空名称失败关闭。
@@ -350,16 +339,10 @@ mod tests {
             ),
             Err(ModelError::InvalidField(_))
         ));
-        assert!(ApprovalProcessDefinition::new_draft(
-            id,
-            ProcessKind::StockAdjustment,
-            1,
-            "  ",
-            "n1",
-            actor,
-            at
-        )
-        .is_err());
+        assert!(
+            ApprovalProcessDefinition::new_draft(id, ProcessKind::StockAdjustment, 1, "  ", "n1", actor, at)
+                .is_err()
+        );
     }
 
     /// 发布后不得再改草稿字段；退役只能从已发布进入。
@@ -379,26 +362,19 @@ mod tests {
         previous.base.id = "def-old".to_string();
         previous.publish(actor.clone(), at).unwrap();
         let (published, retired) = replacement
-            .publish_replacing(
-                Some(previous),
-                actor.clone(),
-                Timestamp::from_unix_secs(3).unwrap(),
-            )
+            .publish_replacing(Some(previous), actor.clone(), Timestamp::from_unix_secs(3).unwrap())
             .unwrap();
         assert_eq!(published.status, ApprovalDefinitionStatus::Published);
         assert_eq!(retired.unwrap().status, ApprovalDefinitionStatus::Retired);
 
-        definition
-            .retire(actor, Timestamp::from_unix_secs(3).unwrap())
-            .unwrap();
+        definition.retire(actor, Timestamp::from_unix_secs(3).unwrap()).unwrap();
         assert_eq!(definition.status, ApprovalDefinitionStatus::Retired);
         assert!(!definition.is_published());
         assert!(!draft().is_published());
-        assert!(definition
-            .retire(
-                ParticipantId::new("admin").unwrap(),
-                Timestamp::from_unix_secs(4).unwrap()
-            )
-            .is_err());
+        assert!(
+            definition
+                .retire(ParticipantId::new("admin").unwrap(), Timestamp::from_unix_secs(4).unwrap())
+                .is_err()
+        );
     }
 }

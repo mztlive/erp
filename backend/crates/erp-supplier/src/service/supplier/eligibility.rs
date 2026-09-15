@@ -3,19 +3,21 @@
 //! 纯业务规则已下沉至 `crate::entity::supplier::eligibility`；本模块仅负责
 //! 已持久化事实的加载与领域判定的适配，不持有可复用的校验实现。
 
-use crate::entity::supplier::eligibility::{required_offering_capability, OfferingProductKind};
-use crate::entity::supplier::{
-    eligibility::{ensure_capability_qualified as ensure_qualified_domain, CapabilityEligibilityViolation},
-    CapabilityCode, SupplierAccount, SupplierCapability, SupplierCapabilityRevision,
-};
-use crate::repository::SupplierExt;
 use async_trait::async_trait;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{SupplierAccountId, SupplierCapabilityRevisionId};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
+use crate::entity::supplier::eligibility::{
+    CapabilityEligibilityViolation, OfferingProductKind,
+    ensure_capability_qualified as ensure_qualified_domain, required_offering_capability,
+};
+use crate::entity::supplier::{
+    CapabilityCode, SupplierAccount, SupplierCapability, SupplierCapabilityRevision,
+};
 use crate::error::{Error, Result};
+use crate::repository::SupplierExt;
 
 /// 校验指定供应商能力修订在业务日是否仍为当前启用版本。
 ///
@@ -84,14 +86,7 @@ pub async fn ensure_offering_capability_qualified(
     on_date: BusinessDate,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    ensure_offering_with_port(
-        &MongoQualificationFacts { db },
-        supplier_id,
-        kind,
-        on_date,
-        executor,
-    )
-    .await
+    ensure_offering_with_port(&MongoQualificationFacts { db }, supplier_id, kind, on_date, executor).await
 }
 #[async_trait]
 trait QualificationFactsPort: Sync {
@@ -129,22 +124,14 @@ impl QualificationFactsPort for MongoQualificationFacts<'_> {
         capability_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<crate::SupplierQualification>> {
-        Ok(self
-            .db
-            .supplier_qualifications()
-            .linked_contracts(supplier_id, capability_id, executor)
-            .await?)
+        Ok(self.db.supplier_qualifications().linked_contracts(supplier_id, capability_id, executor).await?)
     }
     async fn supplier(
         &self,
         id: &SupplierAccountId,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierAccount>> {
-        self.db
-            .supplier_accounts()
-            .find_by_id(id, executor)
-            .await
-            .map_err(Into::into)
+        self.db.supplier_accounts().find_by_id(id, executor).await.map_err(Into::into)
     }
     async fn revision(
         &self,
@@ -207,14 +194,12 @@ async fn ensure_qualified_with_port<P: QualificationFactsPort>(
         |violation| match violation {
             CapabilityEligibilityViolation::SupplierDisabled => {
                 Error::BusinessLogicError("供应商已停用，不能用于供给或采购".to_string())
-            }
+            },
             _ => Error::BusinessLogicError("供应商能力已停用、过期或版本已变化".to_string()),
         },
     )?;
 
-    let contracts = port
-        .linked_contracts(supplier_id, &capability.base.id, executor)
-        .await?;
+    let contracts = port.linked_contracts(supplier_id, &capability.base.id, executor).await?;
     crate::entity::supplier::eligibility::ensure_linked_contracts_qualified(&contracts, on_date)
         .map_err(|error| Error::BusinessLogicError(error.to_string()))
 }
@@ -242,13 +227,15 @@ async fn load_capability_revision(
 
 #[cfg(test)]
 mod provider_tests {
+    use std::sync::Mutex;
+
+    use erp_core::ids::{PartyId, SupplierCapabilityId};
+
     use super::*;
     use crate::entity::supplier::{
         CapabilityStatus, SupplierAccountData, SupplierAccountStatus, SupplierCapabilityData,
         SupplierCapabilityRevisionData,
     };
-    use erp_core::ids::{PartyId, SupplierCapabilityId};
-    use std::sync::Mutex;
     struct Marker(u64);
     impl Executor for Marker {
         fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
@@ -296,11 +283,8 @@ mod provider_tests {
         ) -> Result<Option<SupplierAccount>> {
             assert_eq!(id.as_ref(), "supplier-1");
             self.record("supplier", executor)?;
-            let status = if self.disabled {
-                SupplierAccountStatus::Disabled
-            } else {
-                SupplierAccountStatus::Active
-            };
+            let status =
+                if self.disabled { SupplierAccountStatus::Disabled } else { SupplierAccountStatus::Active };
             Ok(Some(test_supplier(status)))
         }
         async fn revision(
@@ -333,11 +317,7 @@ mod provider_tests {
             } else {
                 CapabilityStatus::Active
             };
-            let pointer = if self.missing_pointer {
-                None
-            } else {
-                Some("cap-rev-1")
-            };
+            let pointer = if self.missing_pointer { None } else { Some("cap-rev-1") };
             Ok(Some(test_capability("supplier-1", status, pointer)))
         }
     }
@@ -372,20 +352,14 @@ mod provider_tests {
     async fn offering_qualification_checks_contracts_after_original_reads() {
         let (result, calls) = invoke(None, false, false, false).await;
         result.unwrap();
-        assert_eq!(
-            calls,
-            ["capability", "supplier", "revision", "capability", "contracts"]
-        );
+        assert_eq!(calls, ["capability", "supplier", "revision", "capability", "contracts"]);
     }
     #[tokio::test]
     async fn offering_qualification_stops_on_every_provider_error() {
         for i in 0..5 {
             let (result, calls) = invoke(Some(i), false, false, false).await;
             assert!(matches!(result,Err(Error::ConflictError(ref e)) if e==&format!("qualification {i}")));
-            assert_eq!(
-                calls,
-                ["capability", "supplier", "revision", "capability", "contracts"][..=i]
-            );
+            assert_eq!(calls, ["capability", "supplier", "revision", "capability", "contracts"][..=i]);
         }
     }
     #[tokio::test]

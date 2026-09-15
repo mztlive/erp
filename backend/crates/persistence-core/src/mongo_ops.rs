@@ -5,15 +5,15 @@
 //! 收敛到一处，使 Repository 只面向 [`Executor`](crate::Executor) 编写一份实现。
 
 use futures_util::StreamExt;
-use mongodb::{
-    bson::{doc, Document},
-    options::{FindOptions, ReturnDocument},
-    results::{DeleteResult, UpdateResult},
-    Collection,
-};
-use serde::{de::DeserializeOwned, Serialize};
+use mongodb::Collection;
+use mongodb::bson::{Document, doc};
+use mongodb::options::{FindOptions, ReturnDocument};
+use mongodb::results::{DeleteResult, UpdateResult};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
-use crate::{errors::Result, Executor};
+use crate::Executor;
+use crate::errors::Result;
 
 /// 按执行器语义插入单个文档。
 ///
@@ -100,13 +100,7 @@ where
     T: Send + Sync,
 {
     let result = match executor.session() {
-        Some(session) => {
-            collection
-                .update_one(filter, update)
-                .upsert(upsert)
-                .session(session)
-                .await?
-        }
+        Some(session) => collection.update_one(filter, update).upsert(upsert).session(session).await?,
         None => collection.update_one(filter, update).upsert(upsert).await?,
     };
     Ok(result)
@@ -138,9 +132,7 @@ pub async fn find_one_and_update_pipeline<T>(
 where
     T: DeserializeOwned + Send + Sync,
 {
-    let operation = collection
-        .find_one_and_update(filter, pipeline)
-        .return_document(ReturnDocument::After);
+    let operation = collection.find_one_and_update(filter, pipeline).return_document(ReturnDocument::After);
     let document = match executor.session() {
         Some(session) => operation.session(session).await?,
         None => operation.await?,
@@ -256,21 +248,17 @@ where
     let mut documents = Vec::new();
     match executor.session() {
         Some(session) => {
-            let mut cursor = collection
-                .find(filter)
-                .with_options(options)
-                .session(&mut *session)
-                .await?;
+            let mut cursor = collection.find(filter).with_options(options).session(&mut *session).await?;
             while let Some(document) = cursor.next(&mut *session).await.transpose()? {
                 documents.push(document);
             }
-        }
+        },
         None => {
             let mut cursor = collection.find(filter).with_options(options).await?;
             while let Some(document) = cursor.next().await {
                 documents.push(document?);
             }
-        }
+        },
     }
     Ok(documents)
 }
@@ -296,13 +284,7 @@ pub async fn exists(
 ) -> Result<bool> {
     let projection = doc! { "_id": 1 };
     let document = match executor.session() {
-        Some(session) => {
-            collection
-                .find_one(filter)
-                .projection(projection)
-                .session(session)
-                .await?
-        }
+        Some(session) => collection.find_one(filter).projection(projection).session(session).await?,
         None => collection.find_one(filter).projection(projection).await?,
     };
     Ok(document.is_some())

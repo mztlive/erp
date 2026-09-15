@@ -5,9 +5,8 @@
 //! 数据模型第 7 章未定义本域文档状态机，第 13.3 条要求邻接矩阵固化、
 //! 禁止运行时扩展。
 
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::state::DocumentState;
+use serde::{Deserialize, Serialize};
 
 /// 启用/停用状态（数据模型 §6.3：启用、停用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -69,10 +68,7 @@ mod tests {
     /// 规则筛选与历史文档保持原小写状态代码。
     #[test]
     fn enable_status_preserves_rule_wire_codes() {
-        for (status, code) in [
-            (EnableStatus::Active, "active"),
-            (EnableStatus::Disabled, "disabled"),
-        ] {
+        for (status, code) in [(EnableStatus::Active, "active"), (EnableStatus::Disabled, "disabled")] {
             let value = serde_json::Value::String(code.to_string());
             assert_eq!(serde_json::to_value(status).unwrap(), value);
             assert_eq!(serde_json::from_value::<EnableStatus>(value).unwrap(), status);

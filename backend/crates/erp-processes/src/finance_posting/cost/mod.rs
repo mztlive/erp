@@ -10,7 +10,6 @@
 //! 只落地 D13 校验与查询编排，D15/D16 的采购/履约来源由对方域在 P3 经
 //! `CostExt` 直接写入）。
 
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::CostEntryId;
@@ -22,6 +21,8 @@ use erp_finance::service::cost::{
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
+
+use crate::{Error, Result};
 /// 手工成本登记的根流程服务。
 pub struct CostService {
     db: Database,
@@ -58,25 +59,17 @@ impl CostService {
         validate_create_cost_entry(&req)?;
         // 归属销售单存在性：先去重、一次批量读取存在性事实，再解释缺失订单；
         // Repository 只返回已存在 ID 的最小事实，跨聚合报错决策保留 Service。
-        let requested_order_ids = req
-            .allocations
-            .iter()
-            .map(|line| line.sales_order_id.clone())
-            .collect::<Vec<_>>();
+        let requested_order_ids =
+            req.allocations.iter().map(|line| line.sales_order_id.clone()).collect::<Vec<_>>();
         let unique_order_ids = dedupe_order_ids(&requested_order_ids);
-        let existing_order_ids = self
-            .db
-            .sales_order()
-            .find_existing_ids(&unique_order_ids, &mut NoTransaction)
-            .await?;
+        let existing_order_ids =
+            self.db.sales_order().find_existing_ids(&unique_order_ids, &mut NoTransaction).await?;
         if missing_order_id(&unique_order_ids, &existing_order_ids).is_some() {
             return Err(Error::NotFound("成本归属销售单不存在".to_string()));
         }
         let prepared = prepare_cost_entry(req)?;
         let entry_id = CostEntryId::new(prepared.entry.base.id.clone());
-        let audit = actor
-            .clone()
-            .resource_log("cost_entry.create", "cost_entry", entry_id.to_string())?;
+        let audit = actor.clone().resource_log("cost_entry.create", "cost_entry", entry_id.to_string())?;
 
         let db = self.db.clone();
         let client = db.client().clone();
@@ -90,8 +83,6 @@ impl CostService {
             })
             .await?;
 
-        Ok(erp_finance::service::cost::CostService::new(self.db.clone())
-            .cost_entry_detail(&entry_id)
-            .await?)
+        Ok(erp_finance::service::cost::CostService::new(self.db.clone()).cost_entry_detail(&entry_id).await?)
     }
 }

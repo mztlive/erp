@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
+use application_core::AuditActor;
 use erp_core::ids::{PayableAccountId, SupplierAccountId, WorkItemId};
 use erp_core::money::Amount;
 use erp_finance::dto::payment_merge::{
@@ -13,17 +14,16 @@ use erp_finance::repository::PayableExt;
 use erp_party::PartyExt;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_supplier::SupplierExt;
-use erp_workflow::entity::work_item::{
-    matches_supplier_payment_identity, WorkItem, WorkItemStatus, MAX_PAYMENT_EXECUTION_MERGE,
-};
 use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::{
+    MAX_PAYMENT_EXECUTION_MERGE, WorkItem, WorkItemStatus, matches_supplier_payment_identity,
+};
 use persistence_core::NoTransaction;
 use validator::Validate;
 
-use super::mapping::{payment_recipient_view, resolve_optional_payment_recipient_for_read};
 use super::PayableService;
+use super::mapping::{payment_recipient_view, resolve_optional_payment_recipient_for_read};
 use crate::{Error, Result};
-use application_core::AuditActor;
 
 impl PayableService {
     /// 查询当前付款任务可合并的同供应商开放任务。
@@ -78,14 +78,10 @@ async fn load_merge_anchor(
         .await?
         .ok_or_else(|| Error::NotFound("供应商付款执行任务不存在".to_string()))?;
     if task.status != WorkItemStatus::Open {
-        return Err(Error::BusinessLogicError(
-            "当前付款任务已结束，无法合并付款".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("当前付款任务已结束，无法合并付款".to_string()));
     }
     if !task.is_owned_by(actor.id()) {
-        return Err(Error::Forbidden(
-            "当前账号不是开放付款任务的当前责任人".to_string(),
-        ));
+        return Err(Error::Forbidden("当前账号不是开放付款任务的当前责任人".to_string()));
     }
     let account = db
         .payable_accounts()
@@ -127,10 +123,7 @@ async fn assemble_merge_candidates(
         .payable_accounts()
         .find_unsettled_purchase_accounts_by_supplier(&anchor_account.supplier_id, executor)
         .await?;
-    if !accounts
-        .iter()
-        .any(|account| account.base.id == anchor_account.base.id)
-    {
+    if !accounts.iter().any(|account| account.base.id == anchor_account.base.id) {
         accounts.push(anchor_account.clone());
     }
     let payable_ids: Vec<String> = accounts.iter().map(|account| account.base.id.clone()).collect();
@@ -139,14 +132,10 @@ async fn assemble_merge_candidates(
         .list_open_payment_execution_by_payables_and_owner(&payable_ids, actor.id(), executor)
         .await?;
     if tasks.len() > MAX_PAYMENT_EXECUTION_MERGE {
-        return Err(Error::BusinessLogicError(
-            "一次合并付款最多包含 50 条任务".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("一次合并付款最多包含 50 条任务".to_string()));
     }
-    let account_by_id: HashMap<&str, &PayableAccount> = accounts
-        .iter()
-        .map(|account| (account.base.id.as_str(), account))
-        .collect();
+    let account_by_id: HashMap<&str, &PayableAccount> =
+        accounts.iter().map(|account| (account.base.id.as_str(), account)).collect();
     let mut items = collect_candidate_items(anchor_task, &tasks, &account_by_id)?;
     fill_candidate_details(db, &mut items, &accounts, executor).await?;
     sort_candidate_items(&mut items, &anchor_task.base.id);
@@ -321,10 +310,7 @@ async fn purchase_source_nos(
         .filter(|account| account.source_type == PayableSourceType::PurchaseOrder)
         .map(|account| account.source_document_id.clone())
         .collect();
-    db.purchase_order()
-        .purchase_nos_by_ids(&purchase_ids, executor)
-        .await
-        .map_err(Into::into)
+    db.purchase_order().purchase_nos_by_ids(&purchase_ids, executor).await.map_err(Into::into)
 }
 
 /// 为候选行补齐最早到期日。
@@ -346,10 +332,7 @@ async fn attach_due_dates(
 ) -> Result<()> {
     let account_ids: Vec<PayableAccountId> =
         items.iter().map(|item| item.payable_account_id.clone()).collect();
-    let due_dates = db
-        .payable_entries()
-        .minimum_due_dates_by_accounts(&account_ids, executor)
-        .await?;
+    let due_dates = db.payable_entries().minimum_due_dates_by_accounts(&account_ids, executor).await?;
     for item in items {
         item.due_date = due_dates.get(item.payable_account_id.as_ref()).copied();
     }
@@ -373,18 +356,10 @@ async fn load_supplier_name(
     supplier_id: &SupplierAccountId,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<Option<String>> {
-    let Some(supplier) = db
-        .supplier_accounts()
-        .find_by_id(supplier_id.as_ref(), executor)
-        .await?
-    else {
+    let Some(supplier) = db.supplier_accounts().find_by_id(supplier_id.as_ref(), executor).await? else {
         return Ok(None);
     };
-    let Some(party) = db
-        .parties()
-        .find_by_id(supplier.party_id.as_ref(), executor)
-        .await?
-    else {
+    let Some(party) = db.parties().find_by_id(supplier.party_id.as_ref(), executor).await? else {
         return Ok(None);
     };
     let Some(revision_id) = party.stable.current_revision_id.clone() else {
@@ -394,27 +369,22 @@ async fn load_supplier_name(
         return Ok(None);
     };
     let name = revision.legal_name.trim();
-    if name.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(name.to_string()))
-    }
+    if name.is_empty() { Ok(None) } else { Ok(Some(name.to_string())) }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::sum_open_totals;
-    use erp_core::money::Amount;
     use std::str::FromStr;
+
+    use erp_core::money::Amount;
+
+    use super::sum_open_totals;
 
     /// 多条开放余额必须精确加总到分。
     #[test]
     fn merge_candidate_totals_sum_to_the_cent() {
-        let total = sum_open_totals([
-            Amount::from_str("10.10").unwrap(),
-            Amount::from_str("20.20").unwrap(),
-        ])
-        .unwrap();
+        let total = sum_open_totals([Amount::from_str("10.10").unwrap(), Amount::from_str("20.20").unwrap()])
+            .unwrap();
         assert_eq!(total, Amount::from_str("30.30").unwrap());
     }
 }

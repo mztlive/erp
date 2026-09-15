@@ -1,5 +1,8 @@
 //! 报表按销售单当前访问责任授权，历史快照仅用于贡献分组。
 
+use std::collections::BTreeSet;
+use std::hash::{Hash, Hasher};
+
 use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_customer::{AssignmentRole, CustomerExt};
@@ -8,19 +11,15 @@ use erp_identity::entity::organization::OrgTree;
 use erp_identity::repository::OrganizationRepository;
 use erp_identity::service::access_control::consumers::registration;
 use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
-use erp_identity::Permission;
+use erp_identity::{Permission, SharedRbacService};
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::sales_order::scope::{SalesReadScope, SalesScopeClause};
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
 use erp_workflow::DocumentRegistryExt;
-use persistence_core::Executor;
-use persistence_core::Transactional;
-use std::collections::BTreeSet;
-use std::hash::{Hash, Hasher};
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 
 use crate::{Error, Result};
-use erp_identity::SharedRbacService;
-use mongodb::Database;
 
 /// 销售对象读取范围；供报表、详情和关联分配查询复用。
 #[derive(Clone)]
@@ -63,10 +62,8 @@ impl SalesAccess {
                     if !Self::allows(&context, &scope, &order)? {
                         return Err(Error::NotFound("销售单不存在或无权查看".into()));
                     }
-                    let version = format!(
-                        "{}:{}:{}",
-                        context.scope_version, order.base.id, order.base.version
-                    );
+                    let version =
+                        format!("{}:{}:{}", context.scope_version, order.base.id, order.base.version);
                     Ok((order, version))
                 })
             })
@@ -80,8 +77,7 @@ impl SalesAccess {
         permissions: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<(AuthorizedDataScope, SalesReadScope)> {
-        self.resolve_resource(actor, "sales_order", action, permissions, executor)
-            .await
+        self.resolve_resource(actor, "sales_order", action, permissions, executor).await
     }
 
     /// 按资源动作证明范围，并使用关联销售责任解释内部组织及个人范围。
@@ -102,9 +98,8 @@ impl SalesAccess {
         let mut access = DataScopeService::new(self.db.clone(), self.rbac.clone())
             .resolve_permissions(actor, resource, action, permissions, executor)
             .await?;
-        let customers = self
-            .collaborating_customers(actor.id(), business_date(access.as_of)?, executor)
-            .await?;
+        let customers =
+            self.collaborating_customers(actor.id(), business_date(access.as_of)?, executor).await?;
         let history = if allows_history(resource, action) {
             self.participant_orders(actor.id(), executor).await?
         } else {
@@ -169,10 +164,7 @@ impl SalesAccess {
     pub fn allows(access: &AuthorizedDataScope, scope: &SalesReadScope, order: &SalesOrder) -> Result<bool> {
         let consumer = registration(&access.resource, &access.action)?;
         let collaborating = scope.roles.iter().chain(scope.user_limit.iter()).any(|clause| {
-            clause
-                .collaborative_customer_ids
-                .iter()
-                .any(|id| id == order.customer_id.as_ref())
+            clause.collaborative_customer_ids.iter().any(|id| id == order.customer_id.as_ref())
         });
         Ok(access.scope.allows(
             &ScopedObject {
@@ -212,15 +204,9 @@ impl SalesAccess {
         if scope.is_company() {
             return Ok(None);
         }
-        let ids = self
-            .db
-            .sales_orders()
-            .list_authorized_ids(scope, executor)
-            .await?;
+        let ids = self.db.sales_orders().list_authorized_ids(scope, executor).await?;
         if ids.len() > 10_000 {
-            return Err(Error::ValidationError(
-                "销售单查询超过上限，请收窄组织或负责人条件".into(),
-            ));
+            return Err(Error::ValidationError("销售单查询超过上限，请收窄组织或负责人条件".into()));
         }
         Ok(Some(ids))
     }
@@ -285,8 +271,7 @@ impl SalesAccess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    this.require_attached_document(&actor, &action, &document_id, executor)
-                        .await
+                    this.require_attached_document(&actor, &action, &document_id, executor).await
                 })
             })
             .await
@@ -331,18 +316,13 @@ impl SalesAccess {
         ) else {
             return Ok(());
         };
-        self.require_object(actor, action, object_id, &[], executor)
-            .await?;
+        self.require_object(actor, action, object_id, &[], executor).await?;
         Ok(())
     }
 
     /// 完整读取动作已由身份域证明，参与事实独立补充读取并继续受个人上限约束。
     async fn participant_orders(&self, user: &str, executor: &mut dyn Executor) -> Result<Vec<String>> {
-        let ids = self
-            .db
-            .document_participants()
-            .document_ids_by_user(user, executor)
-            .await?;
+        let ids = self.db.document_participants().document_ids_by_user(user, executor).await?;
         if ids.len() > 10_000 {
             return Err(Error::ValidationError("历史参与范围超过查询上限".into()));
         }
@@ -367,9 +347,7 @@ impl SalesAccess {
         customers.sort();
         customers.dedup();
         if customers.len() > 10_000 {
-            return Err(Error::ValidationError(
-                "协作范围超过查询上限，请收窄授权范围".into(),
-            ));
+            return Err(Error::ValidationError("协作范围超过查询上限，请收窄授权范围".into()));
         }
         Ok(customers)
     }
@@ -427,17 +405,8 @@ pub fn sales_scope(
     SalesReadScope {
         required_scopes: vec![],
         historical_order_ids: history,
-        roles: access
-            .scope
-            .role_clauses
-            .iter()
-            .map(|c| clause(c, user, customers))
-            .collect(),
-        user_limit: access
-            .scope
-            .user_limit
-            .as_ref()
-            .map(|c| clause(c, user, customers)),
+        roles: access.scope.role_clauses.iter().map(|c| clause(c, user, customers)).collect(),
+        user_limit: access.scope.user_limit.as_ref().map(|c| clause(c, user, customers)),
     }
 }
 
@@ -447,11 +416,7 @@ fn clause(scope: &ScopeClause, actor: &str, customers: &[String]) -> SalesScopeC
         company: scope.company,
         owner_user_id: scope.self_owned.then(|| actor.into()),
         business_org_unit_ids: scope.org_unit_ids.iter().cloned().collect(),
-        collaborative_customer_ids: if scope.collaborative {
-            customers.to_vec()
-        } else {
-            Vec::new()
-        },
+        collaborative_customer_ids: if scope.collaborative { customers.to_vec() } else { Vec::new() },
     }
 }
 
@@ -465,15 +430,7 @@ mod tests {
             assert!(allows_history("sales_order", action));
             assert!(!allows_history("cost_entry", action));
         }
-        for action in [
-            "create",
-            "update",
-            "submit",
-            "cancel_approval",
-            "delete",
-            "transfer",
-            "*",
-        ] {
+        for action in ["create", "update", "submit", "cancel_approval", "delete", "transfer", "*"] {
             assert!(!allows_history("sales_order", action));
         }
     }
@@ -493,27 +450,15 @@ mod tests {
     /// 不得用附件列表授权代替对象范围。
     #[test]
     fn attached_sales_documents_require_object_and_invisible_objects_are_not_found() {
-        assert_eq!(
-            attached_sales_object_id(Some("so-1"), Some("so-from-change")),
-            Some("so-1")
-        );
-        assert_eq!(
-            attached_sales_object_id(None, Some("so-from-change")),
-            Some("so-from-change")
-        );
+        assert_eq!(attached_sales_object_id(Some("so-1"), Some("so-from-change")), Some("so-1"));
+        assert_eq!(attached_sales_object_id(None, Some("so-from-change")), Some("so-from-change"));
         assert_eq!(attached_sales_object_id(None, None), None);
 
         let source = include_str!("access.rs");
-        let attached = source
-            .split("pub async fn require_attached_document")
-            .nth(1)
-            .expect("附件重验");
+        let attached = source.split("pub async fn require_attached_document").nth(1).expect("附件重验");
         assert!(attached.contains("attached_sales_object_id"));
         assert!(attached.contains("require_object(actor, action, object_id"));
-        let require_object = source
-            .split("pub async fn require_object")
-            .nth(1)
-            .expect("对象重验");
+        let require_object = source.split("pub async fn require_object").nth(1).expect("对象重验");
         assert!(require_object.contains("销售单不存在或无权操作"));
     }
 
@@ -547,7 +492,7 @@ mod tests {
         match tree.expand("missing", false) {
             Err(erp_identity::Error::ValidationError(message)) => {
                 assert!(message.contains("组织节点不存在"));
-            }
+            },
             other => panic!("expected missing org rejection, got {other:?}"),
         }
         let list_scope = include_str!("order/scope.rs");
@@ -560,15 +505,11 @@ mod tests {
         let before = chrono::DateTime::parse_from_rfc3339("2026-09-13T15:59:59Z").unwrap();
         let after = chrono::DateTime::parse_from_rfc3339("2026-09-13T16:00:00Z").unwrap();
         assert_eq!(
-            business_date(Instant::from_unix_secs(before.timestamp()))
-                .unwrap()
-                .to_string(),
+            business_date(Instant::from_unix_secs(before.timestamp())).unwrap().to_string(),
             "2026-09-13"
         );
         assert_eq!(
-            business_date(Instant::from_unix_secs(after.timestamp()))
-                .unwrap()
-                .to_string(),
+            business_date(Instant::from_unix_secs(after.timestamp())).unwrap().to_string(),
             "2026-09-14"
         );
     }

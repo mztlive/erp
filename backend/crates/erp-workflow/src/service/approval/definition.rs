@@ -16,7 +16,7 @@ mod query;
 mod replace;
 mod retire;
 
-pub use super::scope::{definition_management_visibility, DefinitionManagementVisibility};
+pub use super::scope::{DefinitionManagementVisibility, definition_management_visibility};
 
 /// 审批流程定义管理服务。
 pub struct ApprovalDefinitionService<A> {
@@ -35,11 +35,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// # 返回
     /// 返回尚未接线 HTTP 的应用端口。
     pub fn new(db: Database, auth: A) -> Self {
-        Self {
-            db,
-            auth,
-            audit: Arc::new(FailClosedAuditPort),
-        }
+        Self { db, auth, audit: Arc::new(FailClosedAuditPort) }
     }
 
     /// Create a definition service with an injected audit port.
@@ -89,11 +85,7 @@ pub(super) mod test_support {
     }
 
     pub fn source_fn<'a>(source: &'a str, name: &str, next: &str) -> &'a str {
-        source
-            .split(name)
-            .nth(1)
-            .and_then(|body| body.split(next).next())
-            .unwrap_or(source)
+        source.split(name).nth(1).and_then(|body| body.split(next).next()).unwrap_or(source)
     }
 
     pub fn draft_definition(process_kind: ProcessKind, entry: &str) -> ApprovalProcessDefinition {
@@ -139,7 +131,7 @@ pub(super) mod test_support {
 
 #[cfg(test)]
 mod tests {
-    use super::super::policy::{policy_of, ALL_DOCUMENT_TYPES};
+    use super::super::policy::{ALL_DOCUMENT_TYPES, policy_of};
     use super::super::process_kind::{document_type_of, process_kind_of};
     use super::test_support::production_source;
 

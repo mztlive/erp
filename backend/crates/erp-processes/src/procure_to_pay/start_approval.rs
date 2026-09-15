@@ -1,7 +1,7 @@
 //! 采购单提交启动：加载定义图、构造 `prepare_start` 输入并持久化运行事实。
 
 use async_trait::async_trait;
-use bpm::engine::{plan_start, DefinitionGraph, StartBindingInput, StartPlanInput, TaskIntent};
+use bpm::engine::{DefinitionGraph, StartBindingInput, StartPlanInput, TaskIntent, plan_start};
 use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
@@ -9,37 +9,33 @@ use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
+use erp_procurement::dto::purchase_order::SavePurchaseOrderLine;
 use erp_procurement::entity::purchase_order::{
-    validate_draft_line_edits, PurchaseCommandReceipt, PurchaseOrder, PurchaseOrderSubmission,
-    PurchaseOrderSubmissionLine,
+    PurchaseCommandReceipt, PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
+    validate_draft_line_edits,
 };
 use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
-use erp_workflow::entity::work_item::DocumentApprovalWorkItemData;
-use erp_workflow::entity::work_item::{WorkItem, WorkItemPriority};
+use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
-use erp_workflow::ApprovalIntegrationExt;
-use erp_workflow::BpmExt;
-use erp_workflow::DocumentRegistryExt;
-use erp_workflow::WorkItemExt;
+use erp_workflow::service::approval::execution::authorization::{AuthorizationFailure, converge_eligibility};
+use erp_workflow::service::approval::execution::idempotency::{
+    ReceiptBranch, StartIdentityParams, normalize_idempotency_key, payload_conflict_error, start_identity,
+    start_scope_candidates,
+};
+use erp_workflow::service::approval::execution::start::map_engine_error;
+use erp_workflow::service::approval::execution::{
+    ExecutionCommandInput, PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
+};
+use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::{ClientSession, Database};
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::adapter::purchase_order_object_readable;
 use crate::{Error, Result};
-use erp_procurement::dto::purchase_order::SavePurchaseOrderLine;
-use erp_workflow::service::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
-use erp_workflow::service::approval::execution::idempotency::{
-    normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
-    StartIdentityParams,
-};
-use erp_workflow::service::approval::execution::start::map_engine_error;
-use erp_workflow::service::approval::execution::{
-    map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
-};
-use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
 ///
@@ -95,11 +91,7 @@ pub(super) async fn load_bound_definition_graph_with_executor(
 /// # 返回
 /// 返回引擎可消费的定义图。
 fn engine_graph(graph: erp_workflow::repository::bpm::DefinitionGraph) -> DefinitionGraph {
-    DefinitionGraph {
-        definition: graph.definition,
-        nodes: graph.nodes,
-        transitions: graph.transitions,
-    }
+    DefinitionGraph { definition: graph.definition, nodes: graph.nodes, transitions: graph.transitions }
 }
 
 /// 读取同载荷启动收据；不存在时返回 `None`。
@@ -202,9 +194,7 @@ pub(super) async fn replay_purchase_order_start_with_executor(
         || instance.process_definition_id != binding.approval_process_definition_id
         || instance.definition_version != binding.approval_definition_version
     {
-        return Err(Error::ConflictError(
-            "采购启动收据与冻结运行事实不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("采购启动收据与冻结运行事实不一致".to_string()));
     }
     Ok(Some(instance.base.id))
 }
@@ -459,11 +449,7 @@ pub(super) async fn persist_purchase_order_start_with_session(
     if let Some(scope) = &input.object_scope {
         scope.current(&input.order.base.id, session).await?;
     }
-    let mut posting = StartPosting {
-        db,
-        input,
-        first_task: None,
-    };
+    let mut posting = StartPosting { db, input, first_task: None };
     execute_start_steps(&mut posting, session).await?;
     Ok(posting.first_task)
 }
@@ -525,7 +511,7 @@ impl StartSteps for StartPosting<'_> {
                     .insert_command_receipt(&writes.receipt, executor)
                     .await
                     .map_err(map_receipt_first_write_error)?;
-            }
+            },
             StartStep::DocumentGuard => {
                 let guarded = self
                     .db
@@ -540,11 +526,9 @@ impl StartSteps for StartPosting<'_> {
                     )
                     .await?;
                 if !guarded {
-                    return Err(Error::ConflictError(
-                        "采购单审批启动守卫冲突，请刷新后重试".to_string(),
-                    ));
+                    return Err(Error::ConflictError("采购单审批启动守卫冲突，请刷新后重试".to_string()));
                 }
-            }
+            },
             StartStep::ProcurementGuard => {
                 if let Some(guard) = input.procurement_guard.take() {
                     let coverage = super::draft_edit::advance_guard_and_load_coverage(
@@ -564,7 +548,7 @@ impl StartSteps for StartPosting<'_> {
                             erp_procurement::service::purchase_order::draft_edit::map_draft_edit_violation,
                         )?;
                 }
-            }
+            },
             StartStep::SupplierQualification => {
                 use erp_procurement::ports::creation_basis::CreationBasisSupplierPort;
                 super::creation_basis::supplier::CreationBasisSupplierAdapter::new(self.db.clone())
@@ -575,7 +559,7 @@ impl StartSteps for StartPosting<'_> {
                         executor,
                     )
                     .await?;
-            }
+            },
             StartStep::Submission => {
                 erp_procurement::service::purchase_order::start_approval::persist_started_submission(
                     self.db,
@@ -585,7 +569,7 @@ impl StartSteps for StartPosting<'_> {
                     executor,
                 )
                 .await?;
-            }
+            },
             StartStep::SupersededDraft => {
                 erp_procurement::service::purchase_order::start_approval::persist_superseded_draft(
                     self.db,
@@ -593,7 +577,7 @@ impl StartSteps for StartPosting<'_> {
                     executor,
                 )
                 .await?;
-            }
+            },
             StartStep::Runtime => {
                 self.first_task = persist_runtime_writes(
                     self.db,
@@ -605,7 +589,7 @@ impl StartSteps for StartPosting<'_> {
                     executor,
                 )
                 .await?;
-            }
+            },
             StartStep::Audit => {
                 if let Some((fingerprint, receipt)) = input.receipt.take() {
                     let receipt = receipt.with_first_task(self.first_task.as_ref());
@@ -613,7 +597,7 @@ impl StartSteps for StartPosting<'_> {
                         Some(PurchaseCommandReceipt::new(fingerprint, receipt).encode_message()?);
                 }
                 self.db.audit_logs().create(&input.audit, executor).await?;
-            }
+            },
         }
         Ok(())
     }
@@ -654,9 +638,7 @@ async fn persist_runtime_writes(
         snapshot_payload.clone(),
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
-    db.approval_subject_snapshots()
-        .create_immutable_snapshot(&snapshot, session)
-        .await?;
+    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, session).await?;
     persist_open_tasks(db, writes, owner_role, organization_id, now, session).await
 }
 
@@ -697,12 +679,7 @@ async fn persist_open_tasks(
 ) -> Result<Option<(String, u64)>> {
     let mut first_task = None;
     for intent in &writes.create_tasks {
-        let TaskIntent::HumanTaskRequested {
-            execution_id,
-            assignee,
-            ..
-        } = intent
-        else {
+        let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
             continue;
         };
         let item = WorkItem::new_document_approval(
@@ -730,7 +707,6 @@ async fn persist_open_tasks(
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::{build_purchase_order_start_input, map_start_plan_error, PurchaseOrderStartInput};
     use bpm::engine::EngineError;
     use bpm::graph::DefinitionGraph;
     use bpm::ids::{
@@ -744,14 +720,15 @@ pub(crate) mod tests {
     };
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
-    use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
     use erp_workflow::entity::document_registry::DocumentType;
+    use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
     use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
-
-    use crate::Error;
-    use erp_workflow::service::approval::execution::idempotency::{start_identity, StartIdentityParams};
-    use erp_workflow::service::approval::execution::{prepare_start, PreparedExecution};
+    use erp_workflow::service::approval::execution::idempotency::{StartIdentityParams, start_identity};
+    use erp_workflow::service::approval::execution::{PreparedExecution, prepare_start};
     use erp_workflow::service::approval::process_kind::process_kind_of;
+
+    use super::{PurchaseOrderStartInput, build_purchase_order_start_input, map_start_plan_error};
+    use crate::Error;
 
     fn node(
         id: &str,
@@ -946,10 +923,7 @@ pub(crate) mod tests {
         let mut built =
             build_purchase_order_start_input(input(two_node_graph(), &binding(1), "org-1")).unwrap();
         built.command.receipt = Some(receipt);
-        assert!(matches!(
-            prepare_start(built).unwrap(),
-            PreparedExecution::Replay { .. }
-        ));
+        assert!(matches!(prepare_start(built).unwrap(), PreparedExecution::Replay { .. }));
     }
 
     /// 计划前置条件映射保持冲突语义。
@@ -1028,9 +1002,7 @@ pub(crate) mod tests {
             seen: vec![],
             fail_at: None,
         };
-        super::execute_start_steps(&mut steps, &mut executor)
-            .await
-            .unwrap();
+        super::execute_start_steps(&mut steps, &mut executor).await.unwrap();
         assert_eq!(
             steps.seen,
             [
@@ -1067,9 +1039,7 @@ pub(crate) mod tests {
                 seen: vec![],
                 fail_at: Some(step),
             };
-            let error = super::execute_start_steps(&mut steps, &mut executor)
-                .await
-                .unwrap_err();
+            let error = super::execute_start_steps(&mut steps, &mut executor).await.unwrap_err();
             assert!(
                 matches!(error, crate::Error::ConflictError(message) if message == "original-step-error")
             );

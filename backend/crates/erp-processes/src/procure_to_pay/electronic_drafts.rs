@@ -1,20 +1,19 @@
 //! 采购生效后按冻结分配生成电子交付草稿与履约工作项。
-use crate::{Error, Result};
-use erp_core::{
-    common::time::Instant,
-    ids::{PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId},
-    money::Quantity,
-};
-use erp_fulfillment::{
-    dto::CreateElectronicDeliveryRequest,
-    entity::fulfillment::{ElectronicDelivery, FulfillmentResult},
-    repository::FulfillmentExt,
-    service::electronic_delivery_crypto::electronic_delivery_draft_from_request,
-};
+use std::collections::HashMap;
+use std::str::FromStr;
+
+use erp_core::common::time::Instant;
+use erp_core::ids::{PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId};
+use erp_core::money::Quantity;
+use erp_fulfillment::dto::CreateElectronicDeliveryRequest;
+use erp_fulfillment::entity::fulfillment::{ElectronicDelivery, FulfillmentResult};
+use erp_fulfillment::repository::FulfillmentExt;
+use erp_fulfillment::service::electronic_delivery_crypto::electronic_delivery_draft_from_request;
 use erp_procurement::entity::purchase_order::{PurchaseLineType, PurchaseOrder, PurchaseOrderRevisionLine};
 use id_generator::next_id;
 use persistence_core::Executor;
-use std::{collections::HashMap, str::FromStr};
+
+use crate::{Error, Result};
 
 // 草稿占位值不含个人信息；正式确认替换为加密快照及配置密钥计算的指纹。
 const DRAFT_FINGERPRINT_KEY: &[u8] = b"erp-electronic-delivery-draft-key-v1";
@@ -75,9 +74,5 @@ fn draft(
         occurred_at: Instant::now().unix_secs(),
         evidence_attachment_id: None,
     };
-    Ok(electronic_delivery_draft_from_request(
-        request,
-        actor_id,
-        DRAFT_FINGERPRINT_KEY,
-    )?)
+    Ok(electronic_delivery_draft_from_request(request, actor_id, DRAFT_FINGERPRINT_KEY)?)
 }

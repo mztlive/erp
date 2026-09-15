@@ -1,19 +1,16 @@
 //! HTTP 请求 Trace ID 与耗时日志中间件。
 
-use axum::{
-    extract::{MatchedPath, Request},
-    http::{HeaderMap, HeaderValue, Method, StatusCode},
-    middleware::Next,
-    response::Response,
-};
-use opentelemetry::{
-    propagation::{Extractor, TextMapPropagator},
-    trace::{Status as OtelStatus, TraceContextExt},
-    Context,
-};
-use opentelemetry_sdk::propagation::TraceContextPropagator;
 use std::time::Instant;
-use tracing::{info_span, Instrument};
+
+use axum::extract::{MatchedPath, Request};
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
+use axum::middleware::Next;
+use axum::response::Response;
+use opentelemetry::Context;
+use opentelemetry::propagation::{Extractor, TextMapPropagator};
+use opentelemetry::trace::{Status as OtelStatus, TraceContextExt};
+use opentelemetry_sdk::propagation::TraceContextPropagator;
+use tracing::{Instrument, info_span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
@@ -40,10 +37,7 @@ pub(crate) async fn trace_middleware(mut request: Request, next: Next) -> Result
     let method = request.method().clone();
     let uri = request.uri().clone();
     let path = redacted_path(uri.path());
-    let matched_route = request
-        .extensions()
-        .get::<MatchedPath>()
-        .map(|matched| matched.as_str().to_string());
+    let matched_route = request.extensions().get::<MatchedPath>().map(|matched| matched.as_str().to_string());
     let span_name = http_span_name(&method, matched_route.as_deref());
 
     let start_time = Instant::now();
@@ -144,21 +138,17 @@ impl Extractor for HeaderExtractor<'_> {
 
 #[cfg(test)]
 mod tests {
-    use axum::{
-        body::Body,
-        http::{HeaderMap, HeaderValue, Request},
-        middleware,
-        routing::get,
-        Router,
-    };
+    use axum::body::Body;
+    use axum::http::{HeaderMap, HeaderValue, Request};
+    use axum::routing::get;
+    use axum::{Router, middleware};
+    use opentelemetry::trace::TraceContextExt;
     use tower::ServiceExt;
     use uuid::Uuid;
 
-    use opentelemetry::trace::TraceContextExt;
-
     use super::{
-        extract_or_generate_trace_id, extract_remote_context, http_span_name, trace_middleware,
-        TRACE_ID_HEADER,
+        TRACE_ID_HEADER, extract_or_generate_trace_id, extract_remote_context, http_span_name,
+        trace_middleware,
     };
 
     #[test]
@@ -201,10 +191,7 @@ mod tests {
 
         assert!(span_context.is_valid());
         assert!(span_context.is_remote());
-        assert_eq!(
-            span_context.trace_id().to_string(),
-            "4bf92f3577b34da6a3ce929d0e0e4736"
-        );
+        assert_eq!(span_context.trace_id().to_string(), "4bf92f3577b34da6a3ce929d0e0e4736");
     }
 
     #[test]
@@ -219,18 +206,14 @@ mod tests {
 
     #[test]
     fn span_name_uses_matched_route_instead_of_concrete_path() {
-        assert_eq!(
-            http_span_name(&axum::http::Method::GET, Some("/orders/{id}")),
-            "GET /orders/{id}"
-        );
+        assert_eq!(http_span_name(&axum::http::Method::GET, Some("/orders/{id}")), "GET /orders/{id}");
         assert_eq!(http_span_name(&axum::http::Method::POST, None), "POST");
     }
 
     #[tokio::test]
     async fn trace_id_is_returned_in_response_header() {
-        let app = Router::new()
-            .route("/", get(|| async { "ok" }))
-            .layer(middleware::from_fn(trace_middleware));
+        let app =
+            Router::new().route("/", get(|| async { "ok" })).layer(middleware::from_fn(trace_middleware));
         let request = Request::builder()
             .uri("/")
             .header(TRACE_ID_HEADER, "client-trace-id")
@@ -239,10 +222,7 @@ mod tests {
 
         let response = app.oneshot(request).await.expect("request should complete");
 
-        assert_eq!(
-            response.headers().get(TRACE_ID_HEADER).unwrap(),
-            "client-trace-id"
-        );
+        assert_eq!(response.headers().get(TRACE_ID_HEADER).unwrap(), "client-trace-id");
     }
 }
 

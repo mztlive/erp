@@ -9,10 +9,10 @@ mod publish;
 mod query;
 mod session;
 
+use erp_core::ids::SalesSelectionBookletId;
 use mongodb::Database;
 
 use crate::entity::sales_selection::IdempotencyOperation;
-use erp_core::ids::SalesSelectionBookletId;
 
 /// 幂等写入上下文对象。
 #[derive(Debug)]

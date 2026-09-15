@@ -1,9 +1,10 @@
-use regex::Regex;
 use std::sync::LazyLock;
+
+use regex::Regex;
 use validator::ValidationError;
 
-use crate::errors::{Error, Result};
 use crate::FieldUpdate;
+use crate::errors::{Error, Result};
 
 type ValidationResult = std::result::Result<(), ValidationError>;
 
@@ -163,11 +164,7 @@ pub fn normalize_optional_text(value: Option<String>, label: &str, max_len: usiz
         return Ok(None);
     }
 
-    ensure_max_len(
-        value.as_str(),
-        max_len,
-        format!("{}长度不符合要求", label).as_str(),
-    )?;
+    ensure_max_len(value.as_str(), max_len, format!("{}长度不符合要求", label).as_str())?;
 
     Ok(Some(value))
 }

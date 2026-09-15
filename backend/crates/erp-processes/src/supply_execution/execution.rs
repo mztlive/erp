@@ -1,6 +1,7 @@
 //! 供应商外呼只在原意图提交成功之后进入；不把执行器传给外部步骤。
-use crate::Result;
 use std::future::Future;
+
+use crate::Result;
 
 /// 原意图失败时禁止进入供应商步骤，保留最先返回的错误。
 pub(super) async fn after_intent<I, N, F, T>(intent: I, next: N) -> Result<T>
@@ -37,15 +38,16 @@ where
                 return Ok(result);
             }
             Err(error)
-        }
+        },
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
     use super::{after_intent, recover_final_result, reuse_or_prepare};
     use crate::Error;
-    use std::sync::{Arc, Mutex};
 
     #[tokio::test]
     async fn committed_intent_precedes_external_dispatch_and_result() {
@@ -71,20 +73,15 @@ mod tests {
     async fn failed_intent_never_dispatches_and_result_error_is_preserved() {
         let called = Arc::new(Mutex::new(false));
         let external = called.clone();
-        let result = after_intent(
-            async { Err(Error::ConflictError("intent".into())) },
-            move || async move {
-                *external.lock().unwrap() = true;
-                Ok(())
-            },
-        )
+        let result = after_intent(async { Err(Error::ConflictError("intent".into())) }, move || async move {
+            *external.lock().unwrap() = true;
+            Ok(())
+        })
         .await;
         assert!(matches!(result,Err(Error::ConflictError(message)) if message=="intent"));
         assert!(!*called.lock().unwrap());
-        let result = after_intent(async { Ok(()) }, || async {
-            Err::<(), _>(Error::NotFound("result".into()))
-        })
-        .await;
+        let result =
+            after_intent(async { Ok(()) }, || async { Err::<(), _>(Error::NotFound("result".into())) }).await;
         assert!(matches!(result,Err(Error::NotFound(message)) if message=="result"));
     }
 
@@ -150,9 +147,7 @@ mod tests {
             .await;
         assert!(matches!(result,Err(Error::ConflictError(message)) if message=="original"));
         let result = recover_final_result(Ok(9), || async {
-            Err(Error::Internal(
-                "successful final transaction must not replay".into(),
-            ))
+            Err(Error::Internal("successful final transaction must not replay".into()))
         })
         .await
         .unwrap();

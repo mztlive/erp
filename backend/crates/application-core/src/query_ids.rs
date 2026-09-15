@@ -1,7 +1,8 @@
 //! 有界、去重的 HTTP 身份筛选；不表达或授予数据权限。
 
-use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeSet;
+
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// 逗号分隔的稳定 ID 集合。显式空值、空片段及超过 100 项的请求拒绝。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -28,9 +29,7 @@ impl<'de> Deserialize<'de> for QueryIds {
             let id = part.trim();
             if id.is_empty()
                 || id.len() > 128
-                || !id
-                    .bytes()
-                    .all(|c| c.is_ascii_alphanumeric() || b"_-".contains(&c))
+                || !id.bytes().all(|c| c.is_ascii_alphanumeric() || b"_-".contains(&c))
             {
                 return Err(serde::de::Error::custom("人员筛选必须为非空的稳定 ID"));
             }
@@ -42,17 +41,15 @@ impl<'de> Deserialize<'de> for QueryIds {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde::de::value::{Error, StrDeserializer};
+
+    use super::*;
     fn parse(raw: &str) -> Result<QueryIds, Error> {
         QueryIds::deserialize(StrDeserializer::new(raw))
     }
     #[test]
     fn identities_are_deduplicated_and_names_are_rejected() {
-        assert_eq!(
-            parse(" user-2,user-1,user-2 ").unwrap().as_slice(),
-            &["user-1", "user-2"]
-        );
+        assert_eq!(parse(" user-2,user-1,user-2 ").unwrap().as_slice(), &["user-1", "user-2"]);
         for raw in ["", " ", "张三", "user-1,", "user-1,,user-2"] {
             assert!(parse(raw).is_err());
         }

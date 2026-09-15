@@ -5,30 +5,23 @@
 mod http;
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    http::HeaderMap,
-    Extension, Json,
-};
-use erp_processes::adapters::workflow::{workflow_audit, workflow_auth, WorkflowAuth};
+use axum::extract::{Path, Query, State};
+use axum::http::HeaderMap;
+use axum::{Extension, Json};
+use erp_processes::adapters::workflow::{WorkflowAuth, workflow_audit, workflow_auth};
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::service::approval::definition::{
-    definition_management_visibility, ApprovalDefinitionService,
+    ApprovalDefinitionService, definition_management_visibility,
 };
 use erp_workflow::service::approval::definition_dto::{
     CreateDefinitionDraftRequest, DefinitionCatalogItem, DefinitionDetailView, DefinitionVersionItem,
     PublishDefinitionRequest, ReplaceDefinitionNodesRequest, RetireDefinitionRequest,
 };
 
-use crate::{
-    app_state::AppState,
-    core::{
-        handler::approval_instance::error::{parse_version, ApprovalHttpError},
-        response::ApiResponse,
-    },
-};
-
 use self::http::{DefinitionLockHttpRequest, EligibleAssigneesQuery, ReplaceNodesHttpRequest};
+use crate::app_state::AppState;
+use crate::core::handler::approval_instance::error::{ApprovalHttpError, parse_version};
+use crate::core::response::ApiResponse;
 
 /// 定义 Handler 结果。
 type ApprovalResult<T> = std::result::Result<ApiResponse<T>, ApprovalHttpError>;
@@ -247,9 +240,8 @@ pub async fn eligible_assignees(
     Path(document_type): Path<DocumentType>,
     Query(query): Query<EligibleAssigneesQuery>,
 ) -> ApprovalResult<Vec<erp_workflow::service::approval::execution::RuntimeAssigneeCandidate>> {
-    let limit = query
-        .normalized_limit()
-        .map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
+    let limit =
+        query.normalized_limit().map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
     let page = definition_service(&state)
         .eligible_assignees(
             &actor,
@@ -375,11 +367,13 @@ mod tests {
 
     #[test]
     fn publish_request_rejects_actor_and_definition_fields() {
-        assert!(serde_json::from_value::<DefinitionLockHttpRequest>(json!({
-            "expected_definition_lock_version": "1",
-            "idempotency_key": "k1",
-            "next_node": "n2"
-        }))
-        .is_err());
+        assert!(
+            serde_json::from_value::<DefinitionLockHttpRequest>(json!({
+                "expected_definition_lock_version": "1",
+                "idempotency_key": "k1",
+                "next_node": "n2"
+            }))
+            .is_err()
+        );
     }
 }

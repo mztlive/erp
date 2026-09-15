@@ -49,8 +49,7 @@ pub(super) async fn availability<P: OfferingWritePort>(
     prepared: &mut PreparedAvailability,
     executor: &mut dyn Executor,
 ) -> Result<UpdateSupplierOfferingAvailabilityResult> {
-    port.update_availability(&mut prepared.availability, executor)
-        .await?;
+    port.update_availability(&mut prepared.availability, executor).await?;
     let result = UpdateSupplierOfferingAvailabilityResult {
         offering_id: prepared.offering_id.to_string(),
         availability_status: prepared.availability.availability_status,
@@ -71,11 +70,13 @@ pub(super) async fn availability<P: OfferingWritePort>(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
+    use async_trait::async_trait;
+
     use super::*;
     use crate::dto::supplier_offering::SupplierOfferingTermsWrite;
     use crate::entity::supplier_offering::{AvailabilityStatus, OfferingSourceType};
-    use async_trait::async_trait;
-    use std::sync::Mutex;
     struct Marker(u64);
     impl Executor for Marker {
         fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
@@ -217,22 +218,12 @@ mod tests {
             &result,
         )
         .unwrap();
-        PreparedCreate {
-            offering,
-            revision,
-            availability,
-            command,
-            result,
-            fingerprint,
-        }
+        PreparedCreate { offering, revision, availability, command, result, fingerprint }
     }
     async fn invoke(kind: u8, fail: Option<usize>) -> (Result<()>, Vec<&'static str>) {
         let mut executor = Marker(163);
-        let port = Recorder {
-            pointer: &mut executor as *mut Marker as usize,
-            calls: Mutex::new(vec![]),
-            fail,
-        };
+        let port =
+            Recorder { pointer: &mut executor as *mut Marker as usize, calls: Mutex::new(vec![]), fail };
         let f = fixture();
         let result = match kind {
             0 => created(&port, &f, &mut executor).await,
@@ -253,7 +244,7 @@ mod tests {
                     assert_eq!(result.revision_no, p.revision.revision.revision_no);
                     assert_eq!(result.safety_pause, None);
                 })
-            }
+            },
             _ => {
                 let mut p = PreparedAvailability {
                     result_version: f.availability.base.version + 1,
@@ -267,7 +258,7 @@ mod tests {
                     assert_eq!(result.source_updated_at, 100);
                     assert_eq!(result.safety_pause, None);
                 })
-            }
+            },
         };
         assert_eq!(executor.0, 163);
         (result, port.calls.into_inner().unwrap())

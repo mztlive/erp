@@ -1,39 +1,38 @@
 //! 采购草稿冻结并调用统一 `start_approval`。
 
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
-
+use erp_procurement::dto::purchase_order::{
+    PURCHASE_SUBMIT_ACTION, SavePurchaseOrderLinePatch, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
+};
 use erp_procurement::entity::purchase_order::{
     LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
     PurchaseCommandReceiptIdentity, PurchaseReceiptWire,
 };
-
-use persistence_core::{NoTransaction, Transactional};
-use validator::Validate;
-use {erp_procurement::repository::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
-
-use super::adapter::{
-    build_purchase_order_snapshot, execute_purchase_order_domain_action, purchase_order_adapter,
-    purchase_order_object_readable, purchase_order_responsible_org_id, purchase_order_start_command,
-    purchase_order_subject_ref, require_frozen_binding, start_approval_command_kind, RECENT_HISTORY_LIMIT,
-};
-use super::start_approval::{
-    build_purchase_order_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_purchase_order_start, replay_purchase_order_start_with_executor, PurchaseOrderStartInput,
-    PurchaseOrderStartPersistInput, PurchaseSubmitProcurementGuard,
-};
-use super::PurchaseOrderProcess;
-use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_procurement::dto::purchase_order::{
-    SavePurchaseOrderLinePatch, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult, PURCHASE_SUBMIT_ACTION,
-};
+use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::service::purchase_order::draft_edit::map_draft_edit_violation;
 use erp_procurement::service::purchase_order::submission::assign_formal_purchase_no;
+use erp_sales::repository::SalesOrderExt;
 use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_start};
 use erp_workflow::service::approval::policy::ApprovalDomainAction;
 use erp_workflow::service::document_registry::{find_approval_binding, find_registered_document};
+use persistence_core::{NoTransaction, Transactional};
+use validator::Validate;
+
+use super::PurchaseOrderProcess;
+use super::adapter::{
+    RECENT_HISTORY_LIMIT, build_purchase_order_snapshot, execute_purchase_order_domain_action,
+    purchase_order_adapter, purchase_order_object_readable, purchase_order_responsible_org_id,
+    purchase_order_start_command, purchase_order_subject_ref, require_frozen_binding,
+    start_approval_command_kind,
+};
+use super::start_approval::{
+    PurchaseOrderStartInput, PurchaseOrderStartPersistInput, PurchaseSubmitProcurementGuard,
+    build_purchase_order_start_input, load_bound_definition_graph, load_start_receipt,
+    persist_purchase_order_start, replay_purchase_order_start_with_executor,
+};
+use crate::{Error, Result};
 
 const PURCHASE_SUBMIT_RECEIPT_PREFIX: &str = "purchase-submit-command-";
 
@@ -98,45 +97,32 @@ impl PurchaseOrderProcess {
             LegacyReceiptIdScheme::WholeStringJoined,
         )?;
         let audit_id = receipt_identity.receipt_id().to_string();
-        if let Some(result) = self
-            .replay_purchase_submit(&receipt_identity, &fingerprint, id, actor)
-            .await?
-        {
+        if let Some(result) = self.replay_purchase_submit(&receipt_identity, &fingerprint, id, actor).await? {
             return Ok(result);
         }
         let adapter = purchase_order_adapter()?;
         let subject = purchase_order_subject_ref(id)?;
-        let mut order = self
-            .command_access(actor, "submit")?
-            .current(id, &mut NoTransaction)
-            .await?;
+        let mut order = self.command_access(actor, "submit")?.current(id, &mut NoTransaction).await?;
         order
             .ensure_expected_version(req.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
         order
             .ensure_draft_for_submission()
             .map_err(|_| Error::ConflictError("采购单已提交或已生效，请勿重复提交".to_string()))?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)?;
+        let binding =
+            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
-        let draft_id = order
-            .draft_submission_id()
-            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+        let draft_id =
+            order.draft_submission_id().map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         let mut draft = self
             .db
             .purchase_order_submissions()
             .find_by_id(&draft_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("草稿提交不存在".to_string()))?;
-        draft
-            .ensure_draft()
-            .map_err(|_| Error::ConflictError("草稿提交已冻结".to_string()))?;
-        let mut draft_lines = self
-            .db
-            .purchase_order()
-            .list_submission_lines(&draft_id, &mut NoTransaction)
-            .await?;
+        draft.ensure_draft().map_err(|_| Error::ConflictError("草稿提交已冻结".to_string()))?;
+        let mut draft_lines =
+            self.db.purchase_order().list_submission_lines(&draft_id, &mut NoTransaction).await?;
         let sales_order = self
             .db
             .sales_orders()
@@ -164,10 +150,8 @@ impl PurchaseOrderProcess {
             let existing_lines = draft_lines.clone();
             let requested_lines =
                 SavePurchaseOrderLinePatch::resolve_all(&req.line_patches, &existing_lines)?;
-            let (submission, lines) = self
-                .domain()
-                .freeze_submission_from_lines(&order, &draft, &requested_lines, actor)
-                .await?;
+            let (submission, lines) =
+                self.domain().freeze_submission_from_lines(&order, &draft, &requested_lines, actor).await?;
             draft_lines = lines;
             draft = submission;
             Some(PurchaseSubmitProcurementGuard {
@@ -179,9 +163,7 @@ impl PurchaseOrderProcess {
         let submission = if procurement_guard.is_some() {
             draft
         } else {
-            self.domain()
-                .freeze_submission(&mut order, &mut draft, &mut draft_lines, actor)
-                .await?
+            self.domain().freeze_submission(&mut order, &mut draft, &mut draft_lines, actor).await?
         };
         execute_purchase_order_domain_action(
             &mut order,
@@ -200,13 +182,9 @@ impl PurchaseOrderProcess {
         let owner_role = adapter.owner_role;
         let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
         let graph = load_bound_definition_graph(&self.db, &binding).await?;
-        let existing_receipt = load_start_receipt(
-            &self.db,
-            &subject,
-            order.approval_subject_version,
-            &req.idempotency_key,
-        )
-        .await?;
+        let existing_receipt =
+            load_start_receipt(&self.db, &subject, order.approval_subject_version, &req.idempotency_key)
+                .await?;
         let start_input = build_purchase_order_start_input(PurchaseOrderStartInput {
             graph,
             binding: &binding,
@@ -271,7 +249,7 @@ impl PurchaseOrderProcess {
                         original_error: error,
                     })
                     .await;
-            }
+            },
             Err(error) => return Err(error),
         };
         let (work_item_id, task_version) = first_task.unwrap_or((String::new(), 0));
@@ -298,12 +276,7 @@ impl PurchaseOrderProcess {
     ) -> Result<Option<SubmitPurchaseOrderResult>> {
         let mut audit = None;
         for candidate in identity.id_candidates() {
-            if let Some(found) = self
-                .db
-                .audit_logs()
-                .find_by_id(candidate, &mut NoTransaction)
-                .await?
-            {
+            if let Some(found) = self.db.audit_logs().find_by_id(candidate, &mut NoTransaction).await? {
                 audit = Some(found);
                 break;
             }
@@ -321,13 +294,13 @@ impl PurchaseOrderProcess {
             Ok(receipt) => receipt,
             Err(PurchaseCommandReceiptError::IdentityMismatch) => {
                 return Err(Error::Internal("采购提交幂等收据与业务对象不一致".to_string()));
-            }
+            },
             Err(PurchaseCommandReceiptError::PayloadConflict) => {
                 return Err(Error::ConflictError("幂等键已用于不同的采购提交命令".to_string()));
-            }
+            },
             Err(PurchaseCommandReceiptError::Corrupted(message)) => {
                 return Err(Error::Internal(message));
-            }
+            },
         }
         .into_payload();
         let _order = self
@@ -421,9 +394,9 @@ impl PurchaseOrderProcess {
                     {
                         return Ok(result);
                     }
-                }
-                Ok(None) => {}
-                Err(error) if error.command_may_have_committed() => {}
+                },
+                Ok(None) => {},
+                Err(error) if error.command_may_have_committed() => {},
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {
@@ -515,8 +488,15 @@ impl PurchaseReceiptWire for PurchaseSubmitReceipt {
     /// 字段缺失或版本非法必须返回 `None`，由收据解码统一映射为内部错误。
     fn decode_wire(wire: &str) -> Option<Self> {
         let fields = wire.split('|').collect::<Vec<_>>();
-        let [purchase_no, submission_id, submission_no, work_item_id, task_version, subject_version, lock_version] =
-            fields.as_slice()
+        let [
+            purchase_no,
+            submission_id,
+            submission_no,
+            work_item_id,
+            task_version,
+            subject_version,
+            lock_version,
+        ] = fields.as_slice()
         else {
             return None;
         };
@@ -534,16 +514,15 @@ impl PurchaseReceiptWire for PurchaseSubmitReceipt {
 
 #[cfg(test)]
 mod tests {
-    use erp_audit::AuditLog;
-    use erp_audit::AuditLogData;
+    use erp_audit::{AuditLog, AuditLogData};
     use erp_core::AccountKind;
+    use erp_procurement::dto::purchase_order::PURCHASE_SUBMIT_ACTION;
     use erp_procurement::entity::purchase_order::{
         LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
     };
     use sha2::{Digest, Sha256};
 
-    use super::{PurchaseSubmitReceipt, PURCHASE_SUBMIT_RECEIPT_PREFIX};
-    use erp_procurement::dto::purchase_order::PURCHASE_SUBMIT_ACTION;
+    use super::{PURCHASE_SUBMIT_RECEIPT_PREFIX, PurchaseSubmitReceipt};
 
     /// 构造最小有效采购提交审计日志。
     ///
@@ -584,9 +563,8 @@ mod tests {
             subject_version: "1".to_string(),
             lock_version: 2,
         };
-        let message = PurchaseCommandReceipt::new(fingerprint.clone(), receipt.clone())
-            .encode_message()
-            .unwrap();
+        let message =
+            PurchaseCommandReceipt::new(fingerprint.clone(), receipt.clone()).encode_message().unwrap();
         let audit = submit_audit_fixture(message.clone());
 
         assert_eq!(

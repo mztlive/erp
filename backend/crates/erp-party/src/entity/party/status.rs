@@ -4,10 +4,9 @@
 //! 修改，启停状态是唯一允许原地切换的生命周期字段；状态机对称可逆，
 //! 用 [`erp_core::common::state::assert_adjacency_closed`] 验证闭包。
 
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::state::{ensure_transition, DocumentState};
 use erp_core::Result;
+use erp_core::common::state::{DocumentState, ensure_transition};
+use serde::{Deserialize, Serialize};
 
 /// 从属事实行的启停状态（§6.2：启用/停用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -107,8 +106,9 @@ pub fn select_current_default<T>(
 
 #[cfg(test)]
 mod tests {
-    use super::EffectiveRecordStatus;
     use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
+
+    use super::EffectiveRecordStatus;
 
     /// 状态机邻接矩阵对称闭合。
     #[test]
@@ -126,10 +126,7 @@ mod tests {
         let mut status = EffectiveRecordStatus::Active;
         status.transition_to(EffectiveRecordStatus::Disabled).unwrap();
         assert_eq!(status, EffectiveRecordStatus::Disabled);
-        assert!(
-            status.transition_to(EffectiveRecordStatus::Disabled).is_ok(),
-            "幂等迁移合法"
-        );
+        assert!(status.transition_to(EffectiveRecordStatus::Disabled).is_ok(), "幂等迁移合法");
         assert!(status.transition_to(EffectiveRecordStatus::Active).is_ok());
     }
 
@@ -147,16 +144,8 @@ mod tests {
     #[test]
     fn select_prefers_enabled_default() {
         let facts = vec![
-            Fact {
-                name: "first-active",
-                is_default: false,
-                active: true,
-            },
-            Fact {
-                name: "default-active",
-                is_default: true,
-                active: true,
-            },
+            Fact { name: "first-active", is_default: false, active: true },
+            Fact { name: "default-active", is_default: true, active: true },
         ];
         assert_eq!(select(&facts), Some("default-active"));
     }
@@ -165,21 +154,9 @@ mod tests {
     #[test]
     fn select_falls_back_to_first_active_when_default_disabled() {
         let facts = vec![
-            Fact {
-                name: "default-disabled",
-                is_default: true,
-                active: false,
-            },
-            Fact {
-                name: "first-active",
-                is_default: false,
-                active: true,
-            },
-            Fact {
-                name: "second-active",
-                is_default: false,
-                active: true,
-            },
+            Fact { name: "default-disabled", is_default: true, active: false },
+            Fact { name: "first-active", is_default: false, active: true },
+            Fact { name: "second-active", is_default: false, active: true },
         ];
         assert_eq!(select(&facts), Some("first-active"));
     }
@@ -188,21 +165,9 @@ mod tests {
     #[test]
     fn select_returns_first_active_without_default() {
         let facts = vec![
-            Fact {
-                name: "disabled",
-                is_default: false,
-                active: false,
-            },
-            Fact {
-                name: "first-active",
-                is_default: false,
-                active: true,
-            },
-            Fact {
-                name: "second-active",
-                is_default: false,
-                active: true,
-            },
+            Fact { name: "disabled", is_default: false, active: false },
+            Fact { name: "first-active", is_default: false, active: true },
+            Fact { name: "second-active", is_default: false, active: true },
         ];
         assert_eq!(select(&facts), Some("first-active"));
     }
@@ -211,16 +176,8 @@ mod tests {
     #[test]
     fn select_returns_none_when_all_disabled() {
         let facts = vec![
-            Fact {
-                name: "default-disabled",
-                is_default: true,
-                active: false,
-            },
-            Fact {
-                name: "other-disabled",
-                is_default: false,
-                active: false,
-            },
+            Fact { name: "default-disabled", is_default: true, active: false },
+            Fact { name: "other-disabled", is_default: false, active: false },
         ];
         assert_eq!(select(&facts), None);
     }

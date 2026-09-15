@@ -1,19 +1,15 @@
-use crate::entity::{AuditLog, AuditLogData};
-use crate::repository::{AuditExt, AuditLogFilter};
-use application_core::AuditActor;
-use application_core::CommandReceiptMatch;
+pub use application_core::CommandReceipt;
+use application_core::{AuditActor, CommandReceiptMatch, Page};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
-use crate::error::{Error, Result};
-use application_core::Page;
-
 use crate::dto::NormalizedAuditLogListParams;
 pub use crate::dto::{AuditLogItem, AuditLogListParams};
-
-pub use application_core::CommandReceipt;
+use crate::entity::{AuditLog, AuditLogData};
+use crate::error::{Error, Result};
+use crate::repository::{AuditExt, AuditLogFilter};
 
 /// 由审计领域消费 [`AuditActor`] 构造可持久化审计日志。
 pub trait AuditActorLogs {
@@ -114,10 +110,7 @@ pub trait CommandReceiptServiceExt {
 impl CommandReceiptServiceExt for CommandReceipt {
     async fn committed_resource_id(&self, db: &Database) -> Result<Option<String>> {
         let candidates = self.id_candidates();
-        let facts = db
-            .audit_logs()
-            .find_command_receipts_by_ids(&candidates, &mut NoTransaction)
-            .await?;
+        let facts = db.audit_logs().find_command_receipts_by_ids(&candidates, &mut NoTransaction).await?;
         for candidate in candidates {
             let Some(fact) = facts.iter().find(|fact| fact.id == candidate) else {
                 continue;
@@ -192,27 +185,10 @@ impl AuditLogService {
     /// 返回分页后的审计日志集合
     pub async fn audit_log_list(&self, params: &AuditLogListParams) -> Result<Page<AuditLogItem>> {
         params.validate()?;
-        let NormalizedAuditLogListParams {
-            actor_account,
-            action,
-            resource_type,
-            success,
-            page,
-            page_size,
-        } = params.normalized();
-        let filter = AuditLogFilter {
-            actor_account,
-            action,
-            resource_type,
-            success,
-            page,
-            page_size,
-        };
-        let page = self
-            .db
-            .audit_logs()
-            .search_logs(&filter, &mut NoTransaction)
-            .await?;
+        let NormalizedAuditLogListParams { actor_account, action, resource_type, success, page, page_size } =
+            params.normalized();
+        let filter = AuditLogFilter { actor_account, action, resource_type, success, page, page_size };
+        let page = self.db.audit_logs().search_logs(&filter, &mut NoTransaction).await?;
         let items = page.items.into_iter().map(Into::into).collect();
         Ok(Page::new(items, page.total))
     }
@@ -220,12 +196,9 @@ impl AuditLogService {
 
 #[cfg(test)]
 mod tests {
-    use serde::Serialize;
-
-    use application_core::{CommandReceiptFact, CommandReceiptMatch};
+    use application_core::{AuditActor, CommandReceiptFact, CommandReceiptMatch};
     use erp_core::AccountKind;
-
-    use application_core::AuditActor;
+    use serde::Serialize;
 
     use super::{AuditActorLogs, CommandReceipt, CommandReceiptServiceExt as _};
 
@@ -284,10 +257,7 @@ mod tests {
     #[test]
     fn command_receipt_hides_raw_key_and_replays_matching_resource() {
         let actor = AuditActor::new("admin-1".to_string(), "root".to_string(), AccountKind::Admin);
-        let payload = CommandPayload {
-            amount: 100,
-            idempotency_key: "raw-operation-key".to_string(),
-        };
+        let payload = CommandPayload { amount: 100, idempotency_key: "raw-operation-key".to_string() };
         let receipt = CommandReceipt::from_payload(
             "receipt-command-",
             actor.id(),
@@ -310,23 +280,14 @@ mod tests {
             success: audit.success,
             message: audit.message,
         };
-        assert_eq!(
-            receipt.match_fact(&fact),
-            CommandReceiptMatch::SamePayload("receipt-1".to_string())
-        );
+        assert_eq!(receipt.match_fact(&fact), CommandReceiptMatch::SamePayload("receipt-1".to_string()));
     }
 
     #[test]
     fn command_receipt_rejects_same_key_with_different_payload() {
         let actor = AuditActor::new("admin-1".to_string(), "root".to_string(), AccountKind::Admin);
-        let first = CommandPayload {
-            amount: 100,
-            idempotency_key: "operation-key".to_string(),
-        };
-        let changed = CommandPayload {
-            amount: 200,
-            idempotency_key: "operation-key".to_string(),
-        };
+        let first = CommandPayload { amount: 100, idempotency_key: "operation-key".to_string() };
+        let changed = CommandPayload { amount: 200, idempotency_key: "operation-key".to_string() };
         let first_receipt = CommandReceipt::from_payload(
             "receipt-command-",
             actor.id(),
@@ -336,9 +297,7 @@ mod tests {
             &first,
         )
         .unwrap();
-        let audit = first_receipt
-            .audit(actor.clone(), "receipt-1".to_string())
-            .unwrap();
+        let audit = first_receipt.audit(actor.clone(), "receipt-1".to_string()).unwrap();
         let changed_receipt = CommandReceipt::from_payload(
             "receipt-command-",
             actor.id(),
@@ -358,9 +317,6 @@ mod tests {
             success: audit.success,
             message: audit.message,
         };
-        assert_eq!(
-            changed_receipt.match_fact(&fact),
-            CommandReceiptMatch::DifferentPayload
-        );
+        assert_eq!(changed_receipt.match_fact(&fact), CommandReceiptMatch::DifferentPayload);
     }
 }

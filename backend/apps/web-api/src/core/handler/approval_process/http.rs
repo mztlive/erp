@@ -71,61 +71,65 @@ mod tests {
 
     #[test]
     fn draft_and_node_requests_deny_unknown_and_forbidden_fields() {
-        assert!(serde_json::from_value::<CreateDefinitionDraftRequest>(json!({
-            "document_type": "stock_adjustment",
-            "name": "库存",
-            "draft_source": "EMPTY",
-            "idempotency_key": "k1",
-            "source_definition_id": "forged"
-        }))
-        .is_err());
-        assert!(serde_json::from_value::<DefinitionNodeRequest>(json!({
-            "node_name": "仓储",
-            "display_order": 1,
-            "assignee_user_id": "u1",
-            "node_key": "client"
-        }))
-        .is_err());
-        assert!(serde_json::from_value::<DefinitionNodeRequest>(json!({
-            "node_name": "仓储",
-            "display_order": 1,
-            "assignee_user_id": "u1",
-            "transitions": []
-        }))
-        .is_err());
-        assert!(serde_json::from_value::<ReplaceNodesHttpRequest>(json!({
-            "expected_definition_lock_version": "1",
-            "nodes": [],
-            "idempotency_key": "k1",
-            "definition_id": "forged"
-        }))
-        .is_err());
-        assert!(serde_json::from_value::<ReplaceNodesHttpRequest>(json!({
-            "expected_definition_lock_version": "1",
-            "nodes": []
-        }))
-        .is_err());
-        assert!(serde_json::from_value::<DefinitionLockHttpRequest>(json!({
-            "expected_definition_lock_version": "1",
-            "idempotency_key": "k1",
-            "actor_id": "forged"
-        }))
-        .is_err());
+        assert!(
+            serde_json::from_value::<CreateDefinitionDraftRequest>(json!({
+                "document_type": "stock_adjustment",
+                "name": "库存",
+                "draft_source": "EMPTY",
+                "idempotency_key": "k1",
+                "source_definition_id": "forged"
+            }))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<DefinitionNodeRequest>(json!({
+                "node_name": "仓储",
+                "display_order": 1,
+                "assignee_user_id": "u1",
+                "node_key": "client"
+            }))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<DefinitionNodeRequest>(json!({
+                "node_name": "仓储",
+                "display_order": 1,
+                "assignee_user_id": "u1",
+                "transitions": []
+            }))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<ReplaceNodesHttpRequest>(json!({
+                "expected_definition_lock_version": "1",
+                "nodes": [],
+                "idempotency_key": "k1",
+                "definition_id": "forged"
+            }))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<ReplaceNodesHttpRequest>(json!({
+                "expected_definition_lock_version": "1",
+                "nodes": []
+            }))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<DefinitionLockHttpRequest>(json!({
+                "expected_definition_lock_version": "1",
+                "idempotency_key": "k1",
+                "actor_id": "forged"
+            }))
+            .is_err()
+        );
     }
 
     #[test]
     fn eligible_assignee_query_caps_limit() {
-        let query = EligibleAssigneesQuery {
-            search: Some("张".to_string()),
-            cursor: None,
-            limit: Some(50),
-        };
+        let query = EligibleAssigneesQuery { search: Some("张".to_string()), cursor: None, limit: Some(50) };
         assert_eq!(query.normalized_limit().expect("max"), 50);
-        let overflow = EligibleAssigneesQuery {
-            search: None,
-            cursor: None,
-            limit: Some(51),
-        };
+        let overflow = EligibleAssigneesQuery { search: None, cursor: None, limit: Some(51) };
         assert!(overflow.normalized_limit().is_err());
     }
 }

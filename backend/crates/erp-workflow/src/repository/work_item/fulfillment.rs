@@ -1,10 +1,9 @@
-use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
-use crate::repository::owned::WorkItemRepository;
 use erp_core::ids::SalesOrderId;
 use mongodb::bson::doc;
+use persistence_core::{Executor, Result};
 
-use persistence_core::Executor;
-use persistence_core::Result;
+use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use crate::repository::owned::WorkItemRepository;
 
 impl<'a> WorkItemRepository<'a> {
     /// 查询同一责任键下全部开放采购履约任务。
@@ -70,8 +69,7 @@ impl<'a> WorkItemRepository<'a> {
         if let Some(work_item_id) = work_item_id {
             filter.insert("id", work_item_id);
         }
-        self.find_many_sorted(filter, doc! { "created_at": 1 }, executor)
-            .await
+        self.find_many_sorted(filter, doc! { "created_at": 1 }, executor).await
     }
 
     /// 查询销售单全部供给分配任务并把最新任务排在前面。

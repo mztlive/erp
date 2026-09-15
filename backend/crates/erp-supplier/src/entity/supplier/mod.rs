@@ -30,12 +30,12 @@ pub mod supplier_qualification_revision;
 pub mod supplier_rating_revision;
 
 pub use business_category::{
-    normalize_business_category, split_encoded_payment_term_snapshot, PaymentTermSnapshotParts,
+    PaymentTermSnapshotParts, normalize_business_category, split_encoded_payment_term_snapshot,
 };
 pub use creation_plan::{
-    plan_supplier_creation, SupplierCreationIds, SupplierCreationInputs, SupplierCreationPlan,
-    SupplierCreationQualificationIds, SupplierCreationQualificationInput, SupplierCreationRatingInput,
-    SupplierPartySeed,
+    SupplierCreationIds, SupplierCreationInputs, SupplierCreationPlan, SupplierCreationQualificationIds,
+    SupplierCreationQualificationInput, SupplierCreationRatingInput, SupplierPartySeed,
+    plan_supplier_creation,
 };
 pub use erp_core::ids::{
     SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId,
@@ -44,9 +44,9 @@ pub use erp_core::ids::{
 };
 pub use payment_term::{SettlementMode, SupplierPaymentTerm};
 pub use profile_change::{
-    apply_qualification_input, new_capability, new_qualification, plan_commercial_profile_revision,
     CapabilityToggle, NewQualificationParams, PlanCommercialProfileRevisionParams, PlannedQualificationInput,
-    SupplierProfileChangePlan,
+    SupplierProfileChangePlan, apply_qualification_input, new_capability, new_qualification,
+    plan_commercial_profile_revision,
 };
 pub use qualification_health::QualificationHealth;
 pub use supplier_account::{
@@ -63,8 +63,8 @@ pub use supplier_commercial_profile_revision::{
 };
 pub use supplier_profile_command::{SupplierProfileCommand, SupplierProfileCommandData};
 pub use supplier_qualification::{
-    qualification_identity_key, QualificationAttachmentSensitivity, QualificationStatus, QualificationType,
-    SupplierQualification, SupplierQualificationData, SupplierQualificationUpdate,
+    QualificationAttachmentSensitivity, QualificationStatus, QualificationType, SupplierQualification,
+    SupplierQualificationData, SupplierQualificationUpdate, qualification_identity_key,
 };
 pub use supplier_qualification_capability::{
     SupplierQualificationCapability, SupplierQualificationCapabilityData,
@@ -128,11 +128,7 @@ pub fn validate_profile_selection(
         if !qualification_keys.insert(key) {
             return Err(erp_core::Error::from("同类资质编号不能重复"));
         }
-        if qualification
-            .capability_codes
-            .iter()
-            .any(|code| !capability_set.contains(code))
-        {
+        if qualification.capability_codes.iter().any(|code| !capability_set.contains(code)) {
             return Err(erp_core::Error::from("资质引用了未启用的供应商能力"));
         }
     }
@@ -142,8 +138,8 @@ pub fn validate_profile_selection(
 #[cfg(test)]
 mod profile_selection_tests {
     use super::{
-        next_supplier_revision_no, validate_profile_selection, CapabilityCode, QualificationType,
-        SupplierQualificationSelection,
+        CapabilityCode, QualificationType, SupplierQualificationSelection, next_supplier_revision_no,
+        validate_profile_selection,
     };
 
     /// 修订序列从一开始、按最大值推进并拒绝溢出。

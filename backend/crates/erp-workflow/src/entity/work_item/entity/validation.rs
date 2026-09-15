@@ -1,12 +1,11 @@
 //! 工作项构造与字段校验。
 
 use entity_core::BaseModel;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::{AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType};
 
@@ -308,14 +307,10 @@ impl WorkItem {
         if self.status == WorkItemStatus::Open {
             return Err(Error::from("开放供给分配任务不能创建释放后继任务"));
         }
-        let responsibility_key = self
-            .responsibility_key()
-            .ok_or_else(|| Error::from("历史供给分配任务缺少责任键"))?
-            .to_string();
-        let owner_user_id = self
-            .owner_user_id
-            .clone()
-            .ok_or_else(|| Error::from("历史供给分配任务缺少具体责任人"))?;
+        let responsibility_key =
+            self.responsibility_key().ok_or_else(|| Error::from("历史供给分配任务缺少责任键"))?.to_string();
+        let owner_user_id =
+            self.owner_user_id.clone().ok_or_else(|| Error::from("历史供给分配任务缺少具体责任人"))?;
         Self::new_with_responsibility_scope(
             id,
             WorkItemData {
@@ -374,12 +369,7 @@ fn normalize_responsibility_scope(scope_ids: Vec<String>) -> Result<Vec<String>>
     let mut normalized = scope_ids
         .into_iter()
         .map(|scope_id| {
-            normalize_required_text(
-                scope_id,
-                "责任范围行不能为空",
-                OBJECT_ID_MAX_LEN,
-                "责任范围行过长",
-            )
+            normalize_required_text(scope_id, "责任范围行不能为空", OBJECT_ID_MAX_LEN, "责任范围行过长")
         })
         .collect::<Result<Vec<_>>>()?;
     normalized.sort();
@@ -455,13 +445,14 @@ impl TryFrom<WorkItemData> for NormalizedWorkItemData {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{
-        account, direct_data, AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData,
-        WorkItemStatus, WorkItemSubjectVersions, WorkItemType,
-    };
+    use erp_core::AccountKind;
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
-    use erp_core::AccountKind;
+
+    use super::super::{
+        AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemStatus,
+        WorkItemSubjectVersions, WorkItemType, account, direct_data,
+    };
     #[test]
     fn account_and_subject_version_value_objects_fail_closed() {
         let active = account(true);
@@ -485,70 +476,50 @@ mod tests {
 
     #[test]
     fn open_task_requires_personal_owner() {
-        let item = WorkItem::new_at(
-            WorkItemId::new("wi-1"),
-            direct_data(),
-            Instant::from_unix_secs(100),
-        )
-        .unwrap();
+        let item =
+            WorkItem::new_at(WorkItemId::new("wi-1"), direct_data(), Instant::from_unix_secs(100)).unwrap();
         assert_eq!(item.status, WorkItemStatus::Open);
         assert_eq!(item.owner_user_id.as_deref(), Some("alice"));
         assert_eq!(item.responsibility_actor_ids, vec!["alice".to_string()]);
-        let missing = WorkItemData {
-            owner_user_id: "   ".to_string(),
-            ..direct_data()
-        };
+        let missing = WorkItemData { owner_user_id: "   ".to_string(), ..direct_data() };
         assert!(WorkItem::new_at(WorkItemId::new("wi-2"), missing, Instant::from_unix_secs(100)).is_err());
     }
 
     #[test]
     fn procurement_task_cannot_bypass_frozen_scope_constructor() {
-        let data = WorkItemData {
-            work_item_type: WorkItemType::ProcurementOrderCreation,
-            ..direct_data()
-        };
-        assert!(WorkItem::new_at(
-            WorkItemId::new("wi-procurement"),
-            data.clone(),
-            Instant::from_unix_secs(100),
-        )
-        .is_err());
-        assert!(WorkItem::new_with_responsibility_key(
-            WorkItemId::new("wi-procurement-key"),
-            data,
-            "sales-lines:key",
-        )
-        .is_err());
+        let data = WorkItemData { work_item_type: WorkItemType::ProcurementOrderCreation, ..direct_data() };
+        assert!(
+            WorkItem::new_at(WorkItemId::new("wi-procurement"), data.clone(), Instant::from_unix_secs(100),)
+                .is_err()
+        );
+        assert!(
+            WorkItem::new_with_responsibility_key(
+                WorkItemId::new("wi-procurement-key"),
+                data,
+                "sales-lines:key",
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn responsibility_scope_is_normalized_and_system_completion_preserves_history() {
         let mut item = WorkItem::new_with_responsibility_scope(
             WorkItemId::new("wi-procurement"),
-            WorkItemData {
-                work_item_type: WorkItemType::ProcurementOrderCreation,
-                ..direct_data()
-            },
+            WorkItemData { work_item_type: WorkItemType::ProcurementOrderCreation, ..direct_data() },
             " sales-lines:key ",
             vec![" line-b ".to_string(), "line-a".to_string(), "line-a".to_string()],
         )
         .unwrap();
         assert_eq!(item.responsibility_key(), Some("sales-lines:key"));
-        assert_eq!(
-            item.responsibility_scope_ids(),
-            &["line-a".to_string(), "line-b".to_string()]
-        );
-        item.update_impact_summary(Some(" 剩余 6 件待采购 ".to_string()))
-            .unwrap();
+        assert_eq!(item.responsibility_scope_ids(), &["line-a".to_string(), "line-b".to_string()]);
+        item.update_impact_summary(Some(" 剩余 6 件待采购 ".to_string())).unwrap();
         assert_eq!(item.impact_summary.as_deref(), Some("剩余 6 件待采购"));
-        item.complete_when_requirement_satisfied(Instant::from_unix_secs(120))
-            .unwrap();
+        item.complete_when_requirement_satisfied(Instant::from_unix_secs(120)).unwrap();
         assert_eq!(item.status, WorkItemStatus::Completed);
         assert_eq!(item.completed_by.as_deref(), Some("__system__"));
         assert_eq!(item.owner_user_id.as_deref(), Some("alice"));
-        assert!(item
-            .complete_when_requirement_satisfied(Instant::from_unix_secs(130))
-            .is_err());
+        assert!(item.complete_when_requirement_satisfied(Instant::from_unix_secs(130)).is_err());
 
         let successor = item
             .successor_for_released_requirement(
@@ -564,28 +535,21 @@ mod tests {
         assert_eq!(successor.owner_user_id.as_deref(), Some("alice"));
         assert_eq!(successor.assignment_source, AssignmentSource::SystemRule);
         assert_eq!(successor.responsibility_key(), Some("sales-lines:key"));
-        assert_eq!(
-            successor.responsibility_scope_ids(),
-            item.responsibility_scope_ids()
-        );
-        assert_eq!(
-            successor.reason_code.as_deref(),
-            Some("PROCUREMENT_QUANTITY_RELEASED")
-        );
+        assert_eq!(successor.responsibility_scope_ids(), item.responsibility_scope_ids());
+        assert_eq!(successor.reason_code.as_deref(), Some("PROCUREMENT_QUANTITY_RELEASED"));
         assert_eq!(successor.impact_summary.as_deref(), Some("剩余 4 件待采购"));
     }
 
     #[test]
     fn responsibility_scope_rejects_empty_lines() {
-        assert!(WorkItem::new_with_responsibility_scope(
-            WorkItemId::new("wi-empty"),
-            WorkItemData {
-                work_item_type: WorkItemType::ProcurementOrderCreation,
-                ..direct_data()
-            },
-            "sales-lines:key",
-            Vec::new(),
-        )
-        .is_err());
+        assert!(
+            WorkItem::new_with_responsibility_scope(
+                WorkItemId::new("wi-empty"),
+                WorkItemData { work_item_type: WorkItemType::ProcurementOrderCreation, ..direct_data() },
+                "sales-lines:key",
+                Vec::new(),
+            )
+            .is_err()
+        );
     }
 }

@@ -4,6 +4,6 @@
 //! field names and serde shapes stay unchanged.
 
 pub use erp_workflow::dto::work_item::{
-    family_of, ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemFamily, WorkItemScope,
-    WorkItemSort, WORK_ITEM_TYPES,
+    ProcessingBlockerView, ProcessingState, WORK_ITEM_TYPES, WorkItemAllowedAction, WorkItemFamily,
+    WorkItemScope, WorkItemSort, family_of,
 };

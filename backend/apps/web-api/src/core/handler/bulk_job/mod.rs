@@ -4,10 +4,8 @@
 //! 直接复用 支撑领域的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
 use erp_support::{
     BackgroundJobItemView, BackgroundJobListParams, BackgroundJobView, BulkSelectionItemView,
     BulkSelectionSnapshotListParams, BulkSelectionSnapshotView, CancelAllBackgroundJobsRequest,
@@ -16,10 +14,9 @@ use erp_support::{
     PageView,
 };
 
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "批量任务",
@@ -40,10 +37,7 @@ pub async fn bulk_selection_snapshot_list(
     State(state): State<AppState>,
     Query(params): Query<BulkSelectionSnapshotListParams>,
 ) -> Result<PageView<BulkSelectionSnapshotView>> {
-    let page = state
-        .bulk_job_service()
-        .bulk_selection_snapshot_list(&params)
-        .await?;
+    let page = state.bulk_job_service().bulk_selection_snapshot_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -69,10 +63,7 @@ pub async fn bulk_selection_snapshot_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateBulkSelectionSnapshotRequest>,
 ) -> Result<BulkSelectionSnapshotView> {
-    let view = state
-        .bulk_job_service()
-        .create_bulk_selection_snapshot(req, &actor)
-        .await?;
+    let view = state.bulk_job_service().create_bulk_selection_snapshot(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -100,10 +91,7 @@ pub async fn bulk_selection_snapshot_confirm(
     Path(id): Path<String>,
     Json(req): Json<ConfirmBulkSelectionSnapshotRequest>,
 ) -> Result<BulkSelectionSnapshotView> {
-    let view = state
-        .bulk_job_service()
-        .confirm_bulk_selection_snapshot(&id, req, &actor)
-        .await?;
+    let view = state.bulk_job_service().confirm_bulk_selection_snapshot(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -131,10 +119,7 @@ pub async fn bulk_selection_snapshot_expire(
     Path(id): Path<String>,
     Json(req): Json<ExpireBulkSelectionSnapshotRequest>,
 ) -> Result<BulkSelectionSnapshotView> {
-    let view = state
-        .bulk_job_service()
-        .expire_bulk_selection_snapshot(&id, req, &actor)
-        .await?;
+    let view = state.bulk_job_service().expire_bulk_selection_snapshot(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -192,10 +177,7 @@ pub async fn background_job_list(
     Query(params): Query<BackgroundJobListParams>,
 ) -> Result<PageView<BackgroundJobView>> {
     let is_admin = is_background_job_admin(&state, &actor).await;
-    let page = state
-        .bulk_job_service()
-        .background_job_list(&params, &actor, is_admin)
-        .await?;
+    let page = state.bulk_job_service().background_job_list(&params, &actor, is_admin).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -224,10 +206,7 @@ pub async fn background_job_detail(
     Path(id): Path<String>,
 ) -> Result<BackgroundJobView> {
     let is_admin = is_background_job_admin(&state, &actor).await;
-    let view = state
-        .bulk_job_service()
-        .background_job_detail(&id, &actor, is_admin)
-        .await?;
+    let view = state.bulk_job_service().background_job_detail(&id, &actor, is_admin).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -253,10 +232,7 @@ pub async fn background_job_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateBackgroundJobRequest>,
 ) -> Result<BackgroundJobView> {
-    let view = state
-        .bulk_job_service()
-        .create_background_job(req, &actor)
-        .await?;
+    let view = state.bulk_job_service().create_background_job(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -287,10 +263,7 @@ pub async fn background_job_cancel(
     Json(req): Json<CancelBackgroundJobRequest>,
 ) -> Result<BackgroundJobView> {
     let is_admin = is_background_job_admin(&state, &actor).await;
-    let view = state
-        .bulk_job_service()
-        .cancel_background_job(&id, req, &actor, is_admin)
-        .await?;
+    let view = state.bulk_job_service().cancel_background_job(&id, req, &actor, is_admin).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -319,10 +292,7 @@ pub async fn background_job_cancel_all(
     Json(req): Json<CancelAllBackgroundJobsRequest>,
 ) -> Result<CancelAllBackgroundJobsResponse> {
     let is_admin = is_background_job_admin(&state, &actor).await;
-    let view = state
-        .bulk_job_service()
-        .cancel_all_background_jobs(req, &actor, is_admin)
-        .await?;
+    let view = state.bulk_job_service().cancel_all_background_jobs(req, &actor, is_admin).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -376,13 +346,11 @@ const BACKGROUND_JOB_ADMIN_ROLES: [&str; 2] = ["role-root", "role-sysadmin"];
 /// 超级管理员或系统管理员返回 `true`，其余返回 `false`。
 async fn is_background_job_admin(state: &AppState, actor: &AuditActor) -> bool {
     match state.rbac().role_ids(actor.kind(), actor.id()).await {
-        Ok(role_ids) => role_ids
-            .iter()
-            .any(|role_id| BACKGROUND_JOB_ADMIN_ROLES.contains(&role_id.as_str())),
+        Ok(role_ids) => role_ids.iter().any(|role_id| BACKGROUND_JOB_ADMIN_ROLES.contains(&role_id.as_str())),
         Err(error) => {
             tracing::warn!(error = %error, "后台任务管理员判定失败，已按普通用户隔离");
             false
-        }
+        },
     }
 }
 

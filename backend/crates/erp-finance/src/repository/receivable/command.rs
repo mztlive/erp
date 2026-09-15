@@ -1,3 +1,11 @@
+use erp_core::ids::{PartyId, ReceivableAccountId};
+use mongodb::bson::doc;
+use persistence_core::{Executor, PageResult, Result, mongo_ops};
+
+use super::super::extensions::ReceivableExt;
+use super::invoice::{InvoiceFilter, InvoiceRow};
+use super::receipt::{CustomerReceiptFilter, CustomerReceiptRow};
+use super::{RECEIVABLE_ENTRIES, ReceivableRepository};
 use crate::entity::receivable::{
     CustomerReceiptStatus, InvoiceDirection, InvoiceKind, InvoiceStatus, ReceiptAllocation,
     ReceivableAccount, ReceivableEntry, SalesInvoiceAllocation,
@@ -6,16 +14,6 @@ use crate::repository::owned::{
     CustomerReceiptRepository, InvoiceRepository, ReceiptAllocationRepository, ReceivableAccountRepository,
     ReceivableEntryRepository, SalesInvoiceAllocationRepository,
 };
-use erp_core::ids::{PartyId, ReceivableAccountId};
-use mongodb::bson::doc;
-
-use super::super::extensions::ReceivableExt;
-use super::invoice::{InvoiceFilter, InvoiceRow};
-use super::receipt::{CustomerReceiptFilter, CustomerReceiptRow};
-use super::{ReceivableRepository, RECEIVABLE_ENTRIES};
-use persistence_core::Executor;
-use persistence_core::PageResult;
-use persistence_core::{mongo_ops, Result};
 
 /// 回款/发票列表的账户关联作用域（FIN-R08）。
 ///
@@ -121,12 +119,8 @@ impl<'a> ReceivableRepository<'a> {
             executor,
         )
         .await?;
-        mongo_ops::insert_one(
-            &self.db.collection::<ReceivableEntry>(RECEIVABLE_ENTRIES),
-            entry,
-            executor,
-        )
-        .await?;
+        mongo_ops::insert_one(&self.db.collection::<ReceivableEntry>(RECEIVABLE_ENTRIES), entry, executor)
+            .await?;
         Ok(())
     }
 
@@ -305,10 +299,7 @@ impl<'a> ReceivableRepository<'a> {
         if entries.is_empty() {
             return Ok(Vec::new());
         }
-        let mut entry_ids = entries
-            .iter()
-            .map(|entry| entry.base.id.clone())
-            .collect::<Vec<_>>();
+        let mut entry_ids = entries.iter().map(|entry| entry.base.id.clone()).collect::<Vec<_>>();
         entry_ids.sort();
         entry_ids.dedup();
         Ok(entry_ids)
@@ -332,10 +323,8 @@ impl<'a> ReceivableRepository<'a> {
         )
         .find_many(doc! { "receivable_account_id": { "$in": account_ids } }, executor)
         .await?;
-        let mut invoice_ids = allocations
-            .into_iter()
-            .map(|allocation| allocation.invoice_id.to_string())
-            .collect::<Vec<_>>();
+        let mut invoice_ids =
+            allocations.into_iter().map(|allocation| allocation.invoice_id.to_string()).collect::<Vec<_>>();
         invoice_ids.sort();
         invoice_ids.dedup();
         Ok(invoice_ids)
@@ -367,9 +356,7 @@ impl<'a> ReceivableRepository<'a> {
             return Ok(vec![account.base.id]);
         }
         if let Some(sales_order_id) = &scope.sales_order_id {
-            let rows = accounts
-                .find_many(doc! { "sales_order_id": sales_order_id }, executor)
-                .await?;
+            let rows = accounts.find_many(doc! { "sales_order_id": sales_order_id }, executor).await?;
             return Ok(rows.into_iter().map(|row| row.base.id).collect());
         }
         Ok(Vec::new())
@@ -378,21 +365,23 @@ impl<'a> ReceivableRepository<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::ReceivableListScope;
     use erp_core::ids::ReceivableAccountId;
+
+    use super::ReceivableListScope;
 
     #[test]
     fn list_scope_empty_only_when_both_dimensions_absent() {
         assert!(ReceivableListScope::default().is_empty());
-        assert!(!ReceivableListScope {
-            sales_order_id: Some("so-1".to_string()),
-            receivable_account_id: None,
-        }
-        .is_empty());
-        assert!(!ReceivableListScope {
-            sales_order_id: None,
-            receivable_account_id: Some(ReceivableAccountId::new("acct-1")),
-        }
-        .is_empty());
+        assert!(
+            !ReceivableListScope { sales_order_id: Some("so-1".to_string()), receivable_account_id: None }
+                .is_empty()
+        );
+        assert!(
+            !ReceivableListScope {
+                sales_order_id: None,
+                receivable_account_id: Some(ReceivableAccountId::new("acct-1")),
+            }
+            .is_empty()
+        );
     }
 }

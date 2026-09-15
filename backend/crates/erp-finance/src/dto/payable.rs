@@ -22,6 +22,7 @@ pub enum PaymentReversalStatus {
     /// 已冲正。
     Reversed,
 }
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{FileAssetId, PayableAccountId, PayableEntryId, SupplierAccountId, WorkItemId};
 use erp_core::money::Amount;
@@ -29,16 +30,10 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 应付往来子账列表允许的排序字段白名单。
-pub(crate) const PAYABLE_ACCOUNT_SORT_FIELDS: &[&str] = &[
-    "gross_total",
-    "settled_total",
-    "open_total",
-    "open_invoiceable_total",
-    "created_at",
-];
+pub(crate) const PAYABLE_ACCOUNT_SORT_FIELDS: &[&str] =
+    &["gross_total", "settled_total", "open_total", "open_invoiceable_total", "created_at"];
 /// 供应商付款单列表允许的排序字段白名单。
 pub(crate) const SUPPLIER_PAYMENT_SORT_FIELDS: &[&str] = &["paid_at", "amount", "created_at"];
 /// 进项发票分配列表允许的排序字段白名单。
@@ -60,6 +55,10 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -73,12 +72,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空。
-use application_core::non_blank;
 
 // ---------------------------------------------------------------------------
 // 应付往来子账（payable_account）
@@ -444,10 +437,7 @@ impl CommitSupplierPaymentRequest {
     /// [`crate::entity::payable::PaymentAllocationLedger`] 承担，本方法不下沉
     /// 那些规则，也不读取数据库。
     pub fn pending_allocations(&self) -> Result<Vec<PendingPaymentAllocation>> {
-        self.allocations
-            .iter()
-            .map(PaymentAllocationLineRequest::to_pending)
-            .collect()
+        self.allocations.iter().map(PaymentAllocationLineRequest::to_pending).collect()
     }
 }
 
@@ -728,11 +718,8 @@ impl PurchaseInvoiceAllocationListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub fn normalized(&self) -> Result<PurchaseInvoiceAllocationListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(
-            &self.sort_by,
-            &self.sort_dir,
-            PURCHASE_INVOICE_ALLOCATION_SORT_FIELDS,
-        )?;
+        let (sort_by, sort_dir) =
+            normalize_sort(&self.sort_by, &self.sort_dir, PURCHASE_INVOICE_ALLOCATION_SORT_FIELDS)?;
         Ok(PurchaseInvoiceAllocationListQuery {
             payable_account_id: self.payable_account_id.clone(),
             paging: PageParams {
@@ -766,22 +753,20 @@ impl From<&PaymentAllocation> for PaymentAllocationView {
             source_document_no: None,
             allocated_amount: allocation.allocated_amount,
             allocated_at: allocation.allocated_at,
-            reverses_allocation_id: allocation
-                .reverses_allocation_id
-                .as_ref()
-                .map(|id| id.to_string()),
+            reverses_allocation_id: allocation.reverses_allocation_id.as_ref().map(|id| id.to_string()),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use validator::Validate;
+
     use super::{
-        normalize_sort, PayableAccountListParams, PurchaseInvoiceAllocationListParams, SortDir,
-        SupplierPaymentListParams,
+        PayableAccountListParams, PurchaseInvoiceAllocationListParams, SortDir, SupplierPaymentListParams,
+        normalize_sort,
     };
     use crate::entity::payable::{PayableAccountStatus, PayableSourceType, SupplierPaymentStatus};
-    use validator::Validate;
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
@@ -848,12 +833,12 @@ mod tests {
     fn payment_allocation_view_leaves_source_blank_before_enrichment() {
         use std::str::FromStr;
 
-        use crate::entity::payable::{AllocationAction, PaymentAllocation, PaymentAllocationData};
         use erp_core::common::time::Instant;
         use erp_core::ids::{PayableEntryId, PaymentAllocationId, SupplierPaymentId};
         use erp_core::money::Amount;
 
         use super::PaymentAllocationView;
+        use crate::entity::payable::{AllocationAction, PaymentAllocation, PaymentAllocationData};
 
         let allocation = PaymentAllocation::new(
             PaymentAllocationId::new("alloc-1"),

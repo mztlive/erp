@@ -4,9 +4,9 @@ use std::collections::HashSet;
 
 use persistence_core::NoTransaction;
 
-use super::access::{authorized_item_fields, ActorAccess};
+use super::access::{ActorAccess, authorized_item_fields};
 use super::order_access::filter_order_facts;
-use super::{dto, WorkItemService};
+use super::{WorkItemService, dto};
 use crate::entity::work_item::WorkItem;
 use crate::error::Result;
 use crate::ports::ObjectFactMap;
@@ -28,10 +28,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .collect::<HashSet<_>>();
         let mut facts: ObjectFactMap = self.facts.load_object_facts(&keys, &mut NoTransaction).await?;
         filter_order_facts(&self.auth, &access.actor_id, &mut facts, &mut NoTransaction).await?;
-        Ok(items
-            .into_iter()
-            .filter_map(|item| authorized_item_fields(item, access, &facts))
-            .collect())
+        Ok(items.into_iter().filter_map(|item| authorized_item_fields(item, access, &facts)).collect())
     }
 }
 
@@ -77,12 +74,7 @@ impl<T> AuthorizedPageCollector<T> {
         let end = start
             .checked_add(u64::from(page_size))
             .ok_or_else(|| crate::error::Error::ValidationError("分页偏移超出支持范围".to_string()))?;
-        Ok(Self {
-            start,
-            end,
-            total: 0,
-            items: Vec::with_capacity(page_size as usize),
-        })
+        Ok(Self { start, end, total: 0, items: Vec::with_capacity(page_size as usize) })
     }
 
     pub(super) fn extend(&mut self, authorized: impl IntoIterator<Item = T>) {
@@ -96,10 +88,7 @@ impl<T> AuthorizedPageCollector<T> {
     }
 
     pub(super) fn finish(self) -> AuthorizedPage<T> {
-        AuthorizedPage {
-            items: self.items,
-            total: i64::try_from(self.total).unwrap_or(i64::MAX),
-        }
+        AuthorizedPage { items: self.items, total: i64::try_from(self.total).unwrap_or(i64::MAX) }
     }
 }
 
@@ -113,12 +102,10 @@ pub(super) fn counts_as_processable_stat(
         return false;
     }
     match scope {
-        WorkItemScope::Mine => access.allowed_actions.iter().any(|action| {
-            matches!(
-                action,
-                WorkItemAllowedAction::Process | WorkItemAllowedAction::Approve
-            )
-        }),
+        WorkItemScope::Mine => access
+            .allowed_actions
+            .iter()
+            .any(|action| matches!(action, WorkItemAllowedAction::Process | WorkItemAllowedAction::Approve)),
         WorkItemScope::Managed | WorkItemScope::History => false,
     }
 }
@@ -157,10 +144,10 @@ pub(super) fn family_counts_for_types(
             WorkItemFamily::Approval => counts.approval = counts.approval.saturating_add(1),
             WorkItemFamily::Procurement => {
                 counts.procurement = counts.procurement.saturating_add(1);
-            }
+            },
             WorkItemFamily::Fulfillment => {
                 counts.fulfillment = counts.fulfillment.saturating_add(1);
-            }
+            },
             WorkItemFamily::Finance => counts.finance = counts.finance.saturating_add(1),
             WorkItemFamily::Exception => counts.exception = counts.exception.saturating_add(1),
         }

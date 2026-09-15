@@ -2,11 +2,11 @@
 //!
 //! DTO 到领域规格的转换与系统行 ID 注入；行号与数量规则归实体批量工厂。
 
-use crate::entity::fulfillment::CustomerAcceptanceLineSpec;
 use erp_core::ids::CustomerAcceptanceLineId;
 use id_generator::next_id;
 
 use crate::dto::AcceptanceLineInput;
+use crate::entity::fulfillment::CustomerAcceptanceLineSpec;
 
 /// 将创建请求行映射为领域规格（含系统行 ID 注入）。
 ///

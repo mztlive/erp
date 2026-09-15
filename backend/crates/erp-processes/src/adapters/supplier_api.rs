@@ -1,5 +1,6 @@
 //! 供应商 API 与引用注册表的默认失败关闭生产实现。
-use erp_supply::entity::{failure::SupplierFailureClass, supplier_api::SupplierApiConnection};
+use erp_supply::entity::failure::SupplierFailureClass;
+use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::ports::supplier_api_gateway::{ClassifiedError, SupplierApiGateway};
 use erp_supply::ports::supplier_reference_registry::{
     ResolvedSupplierReference, SupplierReferenceKind, SupplierReferenceRegistry,
@@ -95,10 +96,8 @@ mod tests {
     #[tokio::test]
     async fn default_gateway_fails_closed_with_classified_error() {
         let gateway = UnavailableSupplierApiGateway;
-        let error: ClassifiedError = gateway
-            .health_check(&sample_connection())
-            .await
-            .expect_err("默认网关必须失败关闭");
+        let error: ClassifiedError =
+            gateway.health_check(&sample_connection()).await.expect_err("默认网关必须失败关闭");
         assert_eq!(error.class, SupplierFailureClass::TransientFailure);
         assert_eq!(error.code, "ENDPOINT_UNRESOLVED");
     }

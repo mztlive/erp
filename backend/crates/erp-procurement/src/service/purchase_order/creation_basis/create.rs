@@ -1,16 +1,18 @@
 //! 采购创建依据的请求校验、金额计算和草稿行构造。
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId};
+use erp_core::money::{Amount, Quantity, UnitPrice, line_amounts};
+use id_generator::next_id;
+
 use super::{business_date_of, zero_amount};
 use crate::dto::purchase_order::CreatePurchaseOrderFromBasisRequest;
 use crate::entity::facts::SalesOrderBasisFact;
 use crate::entity::purchase_order::{
-    basis_id_for, stable_line_id, supply_cost, BasisGroup, BasisLine, BasisScope, FulfillmentResponsibility,
-    PurchaseLineType, PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, RequestedLine,
+    BasisGroup, BasisLine, BasisScope, FulfillmentResponsibility, PurchaseLineType,
+    PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, RequestedLine, basis_id_for,
+    stable_line_id, supply_cost,
 };
 use crate::{Error, Result};
-use erp_core::common::time::BusinessDate;
-use erp_core::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId};
-use erp_core::money::{line_amounts, Amount, Quantity, UnitPrice};
-use id_generator::next_id;
 
 /// 已通过事务内最新剩余量校验的采购行。
 #[derive(Debug, Clone)]
@@ -68,26 +70,14 @@ pub fn compute_selected_lines(
     let mut lines = Vec::with_capacity(selected_lines.len());
     for selected in selected_lines {
         let cost = supply_cost(&selected.basis.supply.revision, responsibility);
-        let (gross, net, tax) = line_amounts(
-            cost,
-            selected.quantity,
-            selected.basis.supply.revision.input_tax_rate,
-        );
+        let (gross, net, tax) =
+            line_amounts(cost, selected.quantity, selected.basis.supply.revision.input_tax_rate);
         gross_total = gross_total.checked_add(gross);
         net_total = net_total.checked_add(net);
         tax_total = tax_total.checked_add(tax);
-        lines.push(ComputedLine {
-            selected: selected.clone(),
-            cost,
-            gross,
-            net,
-            tax,
-        });
+        lines.push(ComputedLine { selected: selected.clone(), cost, gross, net, tax });
     }
-    ComputedSelection {
-        totals: (gross_total, net_total, tax_total),
-        lines,
-    }
+    ComputedSelection { totals: (gross_total, net_total, tax_total), lines }
 }
 
 /// 构造单条采购草稿行。
@@ -257,9 +247,7 @@ pub fn ensure_expected_delivery_within_sales_due(
     sales_due: BusinessDate,
 ) -> Result<()> {
     if expected_delivery_date > sales_due {
-        return Err(Error::ValidationError(format!(
-            "预计交付日不能晚于销售承诺期限 {sales_due}"
-        )));
+        return Err(Error::ValidationError(format!("预计交付日不能晚于销售承诺期限 {sales_due}")));
     }
     Ok(())
 }
@@ -278,10 +266,8 @@ pub fn ensure_expected_delivery_within_sales_due(
 /// # 关键业务约束
 /// 不兼容旧 `{sales_order_id}:{supplier_id}` 依据 ID。
 pub fn parse_basis_sales_order_id(basis_id: &str) -> Result<SalesOrderId> {
-    let (sales_order_id, digest) = basis_id
-        .trim()
-        .split_once(':')
-        .ok_or_else(|| Error::NotFound("采购创建依据不存在".to_string()))?;
+    let (sales_order_id, digest) =
+        basis_id.trim().split_once(':').ok_or_else(|| Error::NotFound("采购创建依据不存在".to_string()))?;
     if sales_order_id.is_empty()
         || digest.len() != 64
         || !digest.bytes().all(|value| value.is_ascii_hexdigit())

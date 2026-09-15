@@ -4,6 +4,7 @@
 //! 时间戳；金额一律十进制字符串；数量一律十进制字符串。
 //! 契约来源：W05 销售单、W09 收货发货、W11 客户往来、W12 供应商往来。
 
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerAccountId, PurchaseOrderId, SalesOrderId};
 use erp_core::money::{Amount, Quantity};
@@ -15,7 +16,6 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 销售退货处理单列表允许的排序字段白名单。
 pub(crate) const SALES_RETURN_CASE_SORT_FIELDS: &[&str] = &["discovered_at", "created_at"];
@@ -39,6 +39,8 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）。
+pub use application_core::PageView;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -52,9 +54,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）。
-pub use application_core::PageView;
 
 // ---------------------------------------------------------------------------
 // 销售退货/拒收处理单（sales_return_case）
@@ -552,11 +551,12 @@ pub struct PaymentReversalView {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        normalize_sort, CustomerRefundListParams, PurchaseReturnOrderListParams, SalesReturnCaseListParams,
-        SortDir,
-    };
     use erp_returns::entity::returns::{CustomerRefundStatus, PurchaseReturnStatus, SalesReturnCaseStatus};
+
+    use super::{
+        CustomerRefundListParams, PurchaseReturnOrderListParams, SalesReturnCaseListParams, SortDir,
+        normalize_sort,
+    };
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
@@ -599,10 +599,7 @@ mod tests {
             sort_by: None,
             sort_dir: None,
         };
-        assert_eq!(
-            purchase.normalized().unwrap().status,
-            Some(PurchaseReturnStatus::Draft)
-        );
+        assert_eq!(purchase.normalized().unwrap().status, Some(PurchaseReturnStatus::Draft));
 
         let refund = CustomerRefundListParams {
             refund_no: None,

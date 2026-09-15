@@ -17,32 +17,31 @@ pub use dto::supplier::{
     SupplierQualificationView, SupplierRatingView, SupplierSensitiveFieldView, SupplierSensitiveRevealView,
     SupplierView,
 };
-pub use entity::supplier::profile_change;
 pub use entity::supplier::{
-    apply_qualification_input, new_capability, new_qualification, next_supplier_revision_no,
-    plan_commercial_profile_revision, plan_supplier_creation, qualification_identity_key,
-    split_encoded_payment_term_snapshot, validate_profile_selection, CapabilityCode, CapabilityStatus,
-    InvoiceType, NewQualificationParams, PlannedQualificationInput, QualificationAttachmentSensitivity,
-    QualificationStatus, QualificationType, ReconciliationCycle, SettlementMode, SupplierAccount,
-    SupplierAccountData, SupplierAccountId, SupplierAccountStatus, SupplierAccountUpdate, SupplierCapability,
-    SupplierCapabilityData, SupplierCapabilityId, SupplierCapabilityRevision, SupplierCapabilityRevisionData,
-    SupplierCapabilityRevisionId, SupplierCapabilityUpdate, SupplierCommercialProfileRevision,
-    SupplierCommercialProfileRevisionData, SupplierCommercialProfileRevisionId, SupplierCreationIds,
-    SupplierCreationInputs, SupplierCreationPlan, SupplierCreationQualificationIds,
-    SupplierCreationQualificationInput, SupplierCreationRatingInput, SupplierPartySeed, SupplierPaymentTerm,
-    SupplierProfileChangePlan, SupplierProfileCommand, SupplierProfileCommandData,
-    SupplierProfileUpdateViolation, SupplierQualification, SupplierQualificationCapability,
-    SupplierQualificationCapabilityData, SupplierQualificationData, SupplierQualificationId,
-    SupplierQualificationRevision, SupplierQualificationRevisionData, SupplierQualificationSelection,
-    SupplierQualificationUpdate, SupplierRating, SupplierRatingRevision, SupplierRatingRevisionData,
-    SupplierRatingRevisionId,
+    CapabilityCode, CapabilityStatus, InvoiceType, NewQualificationParams, PlannedQualificationInput,
+    QualificationAttachmentSensitivity, QualificationStatus, QualificationType, ReconciliationCycle,
+    SettlementMode, SupplierAccount, SupplierAccountData, SupplierAccountId, SupplierAccountStatus,
+    SupplierAccountUpdate, SupplierCapability, SupplierCapabilityData, SupplierCapabilityId,
+    SupplierCapabilityRevision, SupplierCapabilityRevisionData, SupplierCapabilityRevisionId,
+    SupplierCapabilityUpdate, SupplierCommercialProfileRevision, SupplierCommercialProfileRevisionData,
+    SupplierCommercialProfileRevisionId, SupplierCreationIds, SupplierCreationInputs, SupplierCreationPlan,
+    SupplierCreationQualificationIds, SupplierCreationQualificationInput, SupplierCreationRatingInput,
+    SupplierPartySeed, SupplierPaymentTerm, SupplierProfileChangePlan, SupplierProfileCommand,
+    SupplierProfileCommandData, SupplierProfileUpdateViolation, SupplierQualification,
+    SupplierQualificationCapability, SupplierQualificationCapabilityData, SupplierQualificationData,
+    SupplierQualificationId, SupplierQualificationRevision, SupplierQualificationRevisionData,
+    SupplierQualificationSelection, SupplierQualificationUpdate, SupplierRating, SupplierRatingRevision,
+    SupplierRatingRevisionData, SupplierRatingRevisionId, apply_qualification_input, new_capability,
+    new_qualification, next_supplier_revision_no, plan_commercial_profile_revision, plan_supplier_creation,
+    profile_change, qualification_identity_key, split_encoded_payment_term_snapshot,
+    validate_profile_selection,
 };
-pub use error::{known_duplicate_index_message, Error, Result};
+pub use error::{Error, Result, known_duplicate_index_message};
 pub use ports::{
-    select_current_default, AddressTypeFact, EffectiveRecordStatusFact, EmptyFileAssetFacts, EmptyPartyFacts,
-    EmptySensitiveTokens, FileAssetFact, FileAssetFactsPort, PartyAddressFact, PartyBankAccountFact,
-    PartyContactFact, PartyFactsPort, PartyListFact, PartyRevisionFact, PartyStatusFact, PartyTaxProfileFact,
-    SensitiveFieldKindFact, SensitiveTokenPort,
+    AddressTypeFact, EffectiveRecordStatusFact, EmptyFileAssetFacts, EmptyPartyFacts, EmptySensitiveTokens,
+    FileAssetFact, FileAssetFactsPort, PartyAddressFact, PartyBankAccountFact, PartyContactFact,
+    PartyFactsPort, PartyListFact, PartyRevisionFact, PartyStatusFact, PartyTaxProfileFact,
+    SensitiveFieldKindFact, SensitiveTokenPort, select_current_default,
 };
 pub use repository::{
     SupplierAccountFilter, SupplierAccountRepository, SupplierAccountRow, SupplierCapabilityFilter,
@@ -53,4 +52,4 @@ pub use repository::{
     SupplierRepository,
 };
 pub use service::supplier::eligibility::ensure_capability_qualified;
-pub use service::supplier::{command_view, SupplierService};
+pub use service::supplier::{SupplierService, command_view};

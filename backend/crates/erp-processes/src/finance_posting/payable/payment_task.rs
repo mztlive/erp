@@ -5,6 +5,7 @@
 //! 任务。付款部分核销只更新摘要，开放余额归零自动完成；冲正重新产生余额时按
 //! 当前责任规则创建新任务身份。
 
+use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{PayableAccountId, SupplierAccountId, WorkItemId};
 use erp_finance::entity::payable::{
@@ -12,19 +13,18 @@ use erp_finance::entity::payable::{
 };
 use erp_finance::repository::PayableExt;
 use erp_supplier::SupplierExt;
-use erp_workflow::entity::work_item::{
-    is_purchase_payable, matches_supplier_payment_identity, new_supplier_payment_task, payment_due_at,
-    supplier_payment_impact_summary, FinanceResponsibilityOperation, PayablePurchaseAdmissionFact,
-    PaymentExecutionMergeMember, PaymentExecutionMergeSet, SupplierPaymentTaskReason,
-    SupplierPaymentTaskSpec, WorkItem, WorkItemStatus,
-};
 use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::{
+    FinanceResponsibilityOperation, PayablePurchaseAdmissionFact, PaymentExecutionMergeMember,
+    PaymentExecutionMergeSet, SupplierPaymentTaskReason, SupplierPaymentTaskSpec, WorkItem, WorkItemStatus,
+    is_purchase_payable, matches_supplier_payment_identity, new_supplier_payment_task, payment_due_at,
+    supplier_payment_impact_summary,
+};
 use id_generator::next_id;
 use persistence_core::Executor;
 
 use crate::adapters::workflow::work_item_service;
 use crate::{Error, Result};
-use application_core::AuditActor;
 
 /// 为采购最终通过形成的应付建立唯一开放付款执行任务。
 ///
@@ -64,12 +64,12 @@ pub(crate) async fn ensure_purchase_payment_task(
     let tasks = payment_tasks(db, &account.base.id, executor).await?;
     let open = open_tasks(&tasks);
     match open.as_slice() {
-        [] if tasks.is_empty() => {}
+        [] if tasks.is_empty() => {},
         [] => {
             return Err(Error::BusinessLogicError(
                 "应付子账已存在付款任务历史，不能重复建立初始任务".to_string(),
             ));
-        }
+        },
         [task] => {
             if !matches_supplier_payment_identity(task, &account.base.id) {
                 return Err(Error::BusinessLogicError(
@@ -77,7 +77,7 @@ pub(crate) async fn ensure_purchase_payment_task(
                 ));
             }
             return Ok(());
-        }
+        },
         _ => return Err(duplicate_open_task_error()),
     }
     let owner_organization_id = supplier_organization_id(db, account, executor).await?;
@@ -193,9 +193,7 @@ pub(crate) async fn record_payment_execution(
     )
     .await?;
     if merge.supplier_id() != command.supplier_id.as_ref() {
-        return Err(Error::BusinessLogicError(
-            "付款供应商与当前任务的应付子账不一致".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("付款供应商与当前任务的应付子账不一致".to_string()));
     }
     ensure_allocations_match_merge_set(db, &merge, command.allocations, executor).await?;
     record_merge_set_activity(db, &merge, actor, executor).await
@@ -274,30 +272,20 @@ async fn ensure_allocations_match_merge_set(
     allocations: &[PendingPaymentAllocation],
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let account_ids: Vec<PayableAccountId> = merge
-        .payable_account_ids()
-        .into_iter()
-        .map(PayableAccountId::new)
-        .collect();
-    let entries = db
-        .payable_entries()
-        .find_entries_by_accounts(&account_ids, executor)
-        .await?;
-    let account_by_entry: std::collections::HashMap<&str, &str> = entries
-        .iter()
-        .map(|entry| (entry.base.id.as_str(), entry.payable_account_id.as_ref()))
-        .collect();
+    let account_ids: Vec<PayableAccountId> =
+        merge.payable_account_ids().into_iter().map(PayableAccountId::new).collect();
+    let entries = db.payable_entries().find_entries_by_accounts(&account_ids, executor).await?;
+    let account_by_entry: std::collections::HashMap<&str, &str> =
+        entries.iter().map(|entry| (entry.base.id.as_str(), entry.payable_account_id.as_ref())).collect();
     let mut allocation_accounts = Vec::with_capacity(allocations.len());
     for line in allocations {
-        let account_id = account_by_entry
-            .get(line.payable_entry_id.as_ref())
-            .ok_or_else(|| {
-                Error::BusinessLogicError(if merge.is_merged() {
-                    "一次付款只能核销已勾选付款任务对应应付中的分录".to_string()
-                } else {
-                    "一次付款只能核销当前任务绑定应付子账中的分录".to_string()
-                })
-            })?;
+        let account_id = account_by_entry.get(line.payable_entry_id.as_ref()).ok_or_else(|| {
+            Error::BusinessLogicError(if merge.is_merged() {
+                "一次付款只能核销已勾选付款任务对应应付中的分录".to_string()
+            } else {
+                "一次付款只能核销当前任务绑定应付子账中的分录".to_string()
+            })
+        })?;
         allocation_accounts.push((*account_id).to_string());
     }
     merge
@@ -331,8 +319,7 @@ async fn record_merge_set_activity(
             .find_by_id(&member.work_item_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("供应商付款执行任务不存在".to_string()))?;
-        task.record_activity(actor.id(), occurred_at)
-            .map_err(Error::Logic)?;
+        task.record_activity(actor.id(), occurred_at).map_err(Error::Logic)?;
         db.work_items().update(&mut task, executor).await?;
     }
     Ok(())
@@ -369,9 +356,7 @@ pub(crate) async fn authorize_payment_execution(
         .await?
         .ok_or_else(|| Error::NotFound("供应商付款执行任务不存在".to_string()))?;
     if task.base.version != expected_task_version {
-        return Err(Error::ConflictError(
-            "付款任务版本已变化，请刷新工作台任务后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("付款任务版本已变化，请刷新工作台任务后重试".to_string()));
     }
     if expected_account_id.is_some_and(|id| task.business_object_id != id.as_ref()) {
         return Err(Error::BusinessLogicError(
@@ -389,16 +374,11 @@ pub(crate) async fn authorize_payment_execution(
         ));
     }
     if !task.is_owned_by(actor.id()) {
-        return Err(Error::Forbidden(
-            "当前账号不是开放付款任务的当前责任人".to_string(),
-        ));
+        return Err(Error::Forbidden("当前账号不是开放付款任务的当前责任人".to_string()));
     }
-    work_item_service(
-        db.clone(),
-        crate::adapters::identity::shared_rbac_service(db.clone()),
-    )
-    .ensure_domain_decision_access(actor, &task, executor)
-    .await?;
+    work_item_service(db.clone(), crate::adapters::identity::shared_rbac_service(db.clone()))
+        .ensure_domain_decision_access(actor, &task, executor)
+        .await?;
     Ok((task, account))
 }
 
@@ -456,8 +436,7 @@ async fn complete_open_task(
         ));
     }
     let mut task = task.clone();
-    task.complete_when_payable_settled(Instant::now())
-        .map_err(Error::Logic)?;
+    task.complete_when_payable_settled(Instant::now()).map_err(Error::Logic)?;
     db.work_items().update(&mut task, executor).await?;
     Ok(())
 }
@@ -500,10 +479,7 @@ async fn payment_tasks(
 
 /// 只保留开放任务引用。
 fn open_tasks(tasks: &[WorkItem]) -> Vec<&WorkItem> {
-    tasks
-        .iter()
-        .filter(|task| task.status == WorkItemStatus::Open)
-        .collect()
+    tasks.iter().filter(|task| task.status == WorkItemStatus::Open).collect()
 }
 
 /// 读取供应商往来主体作为付款任务责任组织。
@@ -541,17 +517,14 @@ async fn resolve_payment_responsibility(
     account: &PayableAccount,
     executor: &mut dyn Executor,
 ) -> Result<erp_workflow::service::work_item::ResolvedFinanceResponsibility> {
-    work_item_service(
-        db.clone(),
-        crate::adapters::identity::shared_rbac_service(db.clone()),
-    )
-    .resolve_finance_responsibility(
-        FinanceResponsibilityOperation::SupplierPayment,
-        account.supplier_id.as_ref(),
-        executor,
-    )
-    .await
-    .map_err(Error::from)
+    work_item_service(db.clone(), crate::adapters::identity::shared_rbac_service(db.clone()))
+        .resolve_finance_responsibility(
+            FinanceResponsibilityOperation::SupplierPayment,
+            account.supplier_id.as_ref(),
+            executor,
+        )
+        .await
+        .map_err(Error::from)
 }
 
 /// 返回开放任务重复的稳定业务错误。
@@ -574,10 +547,7 @@ mod tests {
     /// 下沉到 WorkItem 领域契约，原 Service 私有 helper 已删除。
     #[test]
     fn payment_task_rules_live_in_finance_task_contract() {
-        let production = include_str!("payment_task.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("payment_task.rs").split("#[cfg(test)]").next().expect("生产代码");
         for rule in [
             "new_supplier_payment_task",
             "matches_supplier_payment_identity",
@@ -605,10 +575,7 @@ mod tests {
     /// Service 只解释无 increase 错误，不再全量过滤求最早。
     #[test]
     fn earliest_increase_due_date_uses_repository_projection() {
-        let production = include_str!("payment_task.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("payment_task.rs").split("#[cfg(test)]").next().expect("生产代码");
         let body = production
             .split("async fn earliest_increase_due_date")
             .nth(1)

@@ -21,15 +21,12 @@
 //! 追溯与恢复语义。提交/版本/分配是事实或修订类集合，不做软删除。
 
 use futures_util::TryStreamExt;
-
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::PurchaseOrderExt;
-use persistence_core::Result;
 
 /// `purchase_order` 集合名。
 pub(crate) const PURCHASE_ORDERS: &str = <mongodb::Database as PurchaseOrderExt>::PURCHASE_ORDERS;
@@ -70,44 +67,14 @@ pub(crate) const PURCHASE_CHANGE_SUBMISSION_LINES: &str =
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     reconcile_purchase_order_no_index(db).await?;
     create_indexes(db, PURCHASE_ORDERS, purchase_order_indexes()).await?;
-    create_indexes(
-        db,
-        PURCHASE_ORDER_SUBMISSIONS,
-        purchase_order_submission_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        PURCHASE_ORDER_SUBMISSION_LINES,
-        purchase_order_submission_line_indexes(),
-    )
-    .await?;
+    create_indexes(db, PURCHASE_ORDER_SUBMISSIONS, purchase_order_submission_indexes()).await?;
+    create_indexes(db, PURCHASE_ORDER_SUBMISSION_LINES, purchase_order_submission_line_indexes()).await?;
     create_indexes(db, PURCHASE_ORDER_REVISIONS, purchase_order_revision_indexes()).await?;
-    create_indexes(
-        db,
-        PURCHASE_ORDER_REVISION_LINES,
-        purchase_order_revision_line_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        PURCHASE_LINE_SALES_ALLOCATIONS,
-        purchase_line_sales_allocation_indexes(),
-    )
-    .await?;
+    create_indexes(db, PURCHASE_ORDER_REVISION_LINES, purchase_order_revision_line_indexes()).await?;
+    create_indexes(db, PURCHASE_LINE_SALES_ALLOCATIONS, purchase_line_sales_allocation_indexes()).await?;
     create_indexes(db, PURCHASE_CHANGE_ORDERS, purchase_change_order_indexes()).await?;
-    create_indexes(
-        db,
-        PURCHASE_CHANGE_SUBMISSIONS,
-        purchase_change_submission_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        PURCHASE_CHANGE_SUBMISSION_LINES,
-        purchase_change_submission_line_indexes(),
-    )
-    .await?;
+    create_indexes(db, PURCHASE_CHANGE_SUBMISSIONS, purchase_change_submission_indexes()).await?;
+    create_indexes(db, PURCHASE_CHANGE_SUBMISSION_LINES, purchase_change_submission_line_indexes()).await?;
     Ok(())
 }
 
@@ -135,9 +102,7 @@ async fn reconcile_purchase_order_no_index(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -151,21 +116,14 @@ fn purchase_order_indexes() -> Vec<IndexModel> {
     vec![
         IndexModel::builder()
             .keys(doc! { "owner_user_id": 1, "deleted_at": 1, "created_at": -1, "id": -1 })
-            .options(
-                IndexOptions::builder()
-                    .name("idx_purchase_order_owner_created".to_string())
-                    .build(),
-            )
+            .options(IndexOptions::builder().name("idx_purchase_order_owner_created".to_string()).build())
             .build(),
         unique_partial_index(
             "uk_purchase_orders_purchase_no",
             doc! { "purchase_no": 1 },
             formal_purchase_no_filter(),
         ),
-        unique_index(
-            "uk_purchase_orders_creation_basis",
-            doc! { "creation_basis_id": 1 },
-        ),
+        unique_index("uk_purchase_orders_creation_basis", doc! { "creation_basis_id": 1 }),
         named_index(
             "idx_purchase_orders_creation_scope",
             doc! {
@@ -177,14 +135,8 @@ fn purchase_order_indexes() -> Vec<IndexModel> {
                 "status": 1,
             },
         ),
-        named_index(
-            "idx_purchase_orders_supplier_status",
-            doc! { "supplier_id": 1, "status": 1 },
-        ),
-        named_index(
-            "idx_purchase_orders_sales_status",
-            doc! { "sales_order_id": 1, "status": 1 },
-        ),
+        named_index("idx_purchase_orders_supplier_status", doc! { "supplier_id": 1, "status": 1 }),
+        named_index("idx_purchase_orders_sales_status", doc! { "sales_order_id": 1, "status": 1 }),
     ]
 }
 
@@ -271,10 +223,7 @@ fn purchase_line_sales_allocation_indexes() -> Vec<IndexModel> {
 
 /// 返回 `purchase_change_order` 的变更历史查询索引。
 fn purchase_change_order_indexes() -> Vec<IndexModel> {
-    vec![named_index(
-        "idx_purchase_change_orders_order_status",
-        doc! { "purchase_order_id": 1, "status": 1 },
-    )]
+    vec![named_index("idx_purchase_change_orders_order_status", doc! { "purchase_order_id": 1, "status": 1 })]
 }
 
 /// 返回 `purchase_change_submission` 的提交序号唯一约束（§6.6）。
@@ -295,10 +244,7 @@ fn purchase_change_submission_line_indexes() -> Vec<IndexModel> {
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -314,11 +260,7 @@ fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Documen
     IndexModel::builder()
         .keys(keys)
         .options(
-            IndexOptions::builder()
-                .name(name.into())
-                .unique(true)
-                .partial_filter_expression(filter)
-                .build(),
+            IndexOptions::builder().name(name.into()).unique(true).partial_filter_expression(filter).build(),
         )
         .build()
 }
@@ -371,12 +313,8 @@ mod tests {
                     "status": 1,
                 }
         }));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "supplier_id": 1, "status": 1 }));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "sales_order_id": 1, "status": 1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "supplier_id": 1, "status": 1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "sales_order_id": 1, "status": 1 }));
     }
 
     #[test]
@@ -431,13 +369,6 @@ mod tests {
                 == Some("uk_purchase_change_submissions_order_no")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
-        assert_eq!(
-            unique_index("probe", doc! { "a": 1 })
-                .options
-                .as_ref()
-                .unwrap()
-                .unique,
-            Some(true)
-        );
+        assert_eq!(unique_index("probe", doc! { "a": 1 }).options.as_ref().unwrap().unique, Some(true));
     }
 }

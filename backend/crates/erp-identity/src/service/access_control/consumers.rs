@@ -11,71 +11,28 @@ use crate::error::{Error, Result};
 const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     (
         "approval_instance",
-        &[
-            "read",
-            "decide",
-            "resume",
-            "cancel",
-            "cancel_blocked",
-            "upgrade_binding",
-        ],
-        &[
-            ScopeDimension::InternalOrg,
-            ScopeDimension::Warehouse,
-            ScopeDimension::SettlementParty,
-        ],
+        &["read", "decide", "resume", "cancel", "cancel_blocked", "upgrade_binding"],
+        &[ScopeDimension::InternalOrg, ScopeDimension::Warehouse, ScopeDimension::SettlementParty],
     ),
-    (
-        "stock_adjustment",
-        &["list", "detail", "create", "update", "submit"],
-        &[ScopeDimension::Warehouse],
-    ),
+    ("stock_adjustment", &["list", "detail", "create", "update", "submit"], &[ScopeDimension::Warehouse]),
     ("stock_balance", &["list", "detail"], &[ScopeDimension::Warehouse]),
     ("stock_movement", &["list"], &[ScopeDimension::Warehouse]),
     ("stock_reservation", &["list"], &[ScopeDimension::Warehouse]),
     ("customer_refund", &["submit"], &[ScopeDimension::SettlementParty]),
     ("supplier_refund", &["submit"], &[ScopeDimension::SettlementParty]),
-    (
-        "supplier_settlement_statement",
-        &["confirm"],
-        &[ScopeDimension::InternalOrg],
-    ),
+    ("supplier_settlement_statement", &["confirm"], &[ScopeDimension::InternalOrg]),
     ("work_item", &["manage"], &[ScopeDimension::InternalOrg]),
     ("org_unit", &["list", "manage"], &[ScopeDimension::InternalOrg]),
-    (
-        "customer",
-        &["list", "detail", "create", "update", "delete"],
-        &[ScopeDimension::InternalOrg],
-    ),
-    (
-        "contract",
-        &["list", "detail", "create", "update"],
-        &[ScopeDimension::InternalOrg],
-    ),
+    ("customer", &["list", "detail", "create", "update", "delete"], &[ScopeDimension::InternalOrg]),
+    ("contract", &["list", "detail", "create", "update"], &[ScopeDimension::InternalOrg]),
     (
         "sales_order",
-        &[
-            "list",
-            "detail",
-            "create",
-            "update",
-            "delete",
-            "submit",
-            "cancel_approval",
-        ],
+        &["list", "detail", "create", "update", "delete", "submit", "cancel_approval"],
         &[ScopeDimension::InternalOrg],
     ),
     (
         "purchase_order",
-        &[
-            "list",
-            "detail",
-            "create",
-            "update",
-            "delete",
-            "submit",
-            "cancel_approval",
-        ],
+        &["list", "detail", "create", "update", "delete", "submit", "cancel_approval"],
         &[ScopeDimension::InternalOrg],
     ),
     ("cost_entry", &["list", "detail"], &[ScopeDimension::InternalOrg]),
@@ -112,21 +69,13 @@ pub fn registration(resource: &str, action: &str) -> Result<ConsumerRegistration
         .find(|(name, _, _)| *name == resource)
         .ok_or_else(|| Error::ValidationError(format!("{resource}:{action} 尚未接入 DataScope v2")))?;
     if !entry.1.contains(&action) {
-        return Err(Error::ValidationError(format!(
-            "{resource}:{action} 尚未接入 DataScope v2"
-        )));
+        return Err(Error::ValidationError(format!("{resource}:{action} 尚未接入 DataScope v2")));
     }
     Ok(ConsumerRegistration {
         supported_dimensions: entry.2,
-        required_dimensions: if resource == "approval_instance" {
-            &[]
-        } else {
-            entry.2
-        },
-        allows_history: matches!(
-            resource,
-            "customer" | "contract" | "sales_order" | "purchase_order"
-        ) && matches!(action, "list" | "detail"),
+        required_dimensions: if resource == "approval_instance" { &[] } else { entry.2 },
+        allows_history: matches!(resource, "customer" | "contract" | "sales_order" | "purchase_order")
+            && matches!(action, "list" | "detail"),
     })
 }
 

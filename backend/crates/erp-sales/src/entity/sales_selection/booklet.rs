@@ -2,18 +2,18 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use super::limits::LINK_TTL_DAYS;
-use super::pool::PoolSource;
-use super::status::BookletStatus;
-use super::tier::{normalize_tiers, TierRule};
-use super::types::{PrepareKind, SelectionForm, SubmitMode};
 use erp_core::common::state::ensure_transition;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{CustomerAccountId, SalesSelectionBookletId, SalesSelectionProposalId};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use super::limits::LINK_TTL_DAYS;
+use super::pool::PoolSource;
+use super::status::BookletStatus;
+use super::tier::{TierRule, normalize_tiers};
+use super::types::{PrepareKind, SelectionForm, SubmitMode};
 
 /// 选品册创建数据。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -612,11 +612,12 @@ fn add_days(start: Instant, days: i64) -> Instant {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::ids::SkuId;
+
     use super::*;
     use crate::entity::sales_selection::{
         PoolFilterSnapshot, PoolSource, PoolSourceKind, PrepareKind, SelectionForm, SubmitMode,
     };
-    use erp_core::ids::SkuId;
 
     /// 构造单品草稿。
     fn draft() -> SalesSelectionBooklet {
@@ -667,9 +668,7 @@ mod tests {
     #[test]
     fn first_prepare_failure_restores_draft() {
         let mut booklet = draft();
-        booklet
-            .begin_prepare("task-1", PrepareKind::FirstPrepare, "u1")
-            .expect("草稿可首次准备");
+        booklet.begin_prepare("task-1", PrepareKind::FirstPrepare, "u1").expect("草稿可首次准备");
         booklet.fail_prepare("筛选为空", "u1").expect("失败可恢复");
         assert_eq!(booklet.status, BookletStatus::Draft);
         assert_eq!(booklet.last_prepare_failure.as_deref(), Some("筛选为空"));
@@ -679,23 +678,15 @@ mod tests {
     #[test]
     fn single_sku_cannot_regenerate_packages() {
         let mut booklet = draft();
-        assert!(booklet
-            .begin_prepare("task-1", PrepareKind::RegeneratedAll, "u1")
-            .is_err());
+        assert!(booklet.begin_prepare("task-1", PrepareKind::RegeneratedAll, "u1").is_err());
     }
 
     #[test]
     fn expired_link_rejects_public_write() {
         let mut booklet = draft();
-        booklet
-            .begin_prepare("task-1", PrepareKind::FirstPrepare, "u1")
-            .unwrap();
-        booklet
-            .complete_prepare("batch-1", BusinessDate::today(), Instant::now(), "u1")
-            .unwrap();
-        booklet
-            .publish("hash".into(), "cipher".into(), Instant::now(), "u1")
-            .unwrap();
+        booklet.begin_prepare("task-1", PrepareKind::FirstPrepare, "u1").unwrap();
+        booklet.complete_prepare("batch-1", BusinessDate::today(), Instant::now(), "u1").unwrap();
+        booklet.publish("hash".into(), "cipher".into(), Instant::now(), "u1").unwrap();
         booklet.link_expires_at = Some(Instant::from_unix_secs(1));
         assert!(booklet.is_expired(Instant::now()));
         assert!(booklet.ensure_public_write("hash", Instant::now()).is_err());
@@ -704,18 +695,10 @@ mod tests {
     #[test]
     fn submitted_close_is_rejected() {
         let mut booklet = draft();
-        booklet
-            .begin_prepare("task-1", PrepareKind::FirstPrepare, "u1")
-            .unwrap();
-        booklet
-            .complete_prepare("batch-1", BusinessDate::today(), Instant::now(), "u1")
-            .unwrap();
-        booklet
-            .publish("hash".into(), "cipher".into(), Instant::now(), "u1")
-            .unwrap();
-        booklet
-            .mark_submitted(SalesSelectionProposalId::new("p1"), Instant::now())
-            .unwrap();
+        booklet.begin_prepare("task-1", PrepareKind::FirstPrepare, "u1").unwrap();
+        booklet.complete_prepare("batch-1", BusinessDate::today(), Instant::now(), "u1").unwrap();
+        booklet.publish("hash".into(), "cipher".into(), Instant::now(), "u1").unwrap();
+        booklet.mark_submitted(SalesSelectionProposalId::new("p1"), Instant::now()).unwrap();
         assert!(booklet.close(Instant::now(), "u1").is_err());
         assert!(booklet.revoke_access("u1").is_ok());
         assert_eq!(booklet.status, BookletStatus::Submitted);

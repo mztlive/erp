@@ -12,17 +12,17 @@ pub use erp_returns::service::approval::{
 use erp_workflow::entity::approval_integration::{
     ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload,
 };
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::DocumentType;
-
-use crate::{Error, Result};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::business_adapter::{
-    adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
+    AdapterReadScope, ApprovalAdapterSpec, adapter_spec_of, ensure_adapter_spec_complete,
 };
 use erp_workflow::service::approval::policy::{
     ApprovalDomainAction, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource, OwnerOrganizationSource,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
+
+use crate::{Error, Result};
 
 /// 已注册的供应商退款单适配器规格。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,9 +78,7 @@ fn supplier_adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<SupplierRefun
         || spec.owner_role.as_str() != "supplier_refund_approver"
         || spec.owner_organization_source != OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         || spec.read_scope != AdapterReadScope::DocumentOrganizationAndCreator
-        || !spec
-            .subject_snapshot_fields
-            .contains(&ApprovalSubjectSnapshotField::TotalAmount)
+        || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalAmount)
     {
         return Err(Error::Internal("供应商退款单审批适配器登记不完整".to_string()));
     }
@@ -195,14 +193,11 @@ pub fn execute_supplier_refund_domain_action(
     match action {
         ApprovalDomainAction::SupplierRefundPost => {
             ensure_supplier_refund_final_approve_posting(refund).map_err(Error::from)
-        }
+        },
         ApprovalDomainAction::SupplierRefundCancelApproval => {
             cancel_supplier_refund_to_draft(refund).map_err(Error::from)
-        }
-        other => Err(Error::ValidationError(format!(
-            "动作 {} 不属于供应商退款单",
-            other.as_str()
-        ))),
+        },
+        other => Err(Error::ValidationError(format!("动作 {} 不属于供应商退款单", other.as_str()))),
     }
 }
 
@@ -238,9 +233,7 @@ pub fn supplier_refund_object_readable(organization_id: &str, assignee_user_id: 
 /// 往来主体为空时返回校验错误。
 pub fn supplier_refund_responsible_org_id(organization_id: &str) -> Result<String> {
     if organization_id.trim().is_empty() {
-        return Err(Error::ValidationError(
-            "供应商退款单缺少往来主体，无法冻结责任组织".to_string(),
-        ));
+        return Err(Error::ValidationError("供应商退款单缺少往来主体，无法冻结责任组织".to_string()));
     }
     Ok(organization_id.to_string())
 }
@@ -280,10 +273,12 @@ pub fn build_supplier_refund_snapshot(
 
 #[cfg(test)]
 mod supplier_refund_tests {
-    use super::*;
+    use std::str::FromStr;
+
     use erp_core::ids::{SupplierAccountId, SupplierPaymentId, SupplierRefundId};
     use erp_returns::entity::returns::SupplierRefundData;
-    use std::str::FromStr;
+
+    use super::*;
 
     fn draft_refund() -> SupplierRefund {
         SupplierRefund::new(
@@ -314,9 +309,7 @@ mod supplier_refund_tests {
         assert_eq!(adapter.document_type, DocumentType::SupplierRefund);
         assert_eq!(adapter.process_kind.as_str(), "supplier_refund");
         assert_eq!(
-            supplier_refund_subject_ref("srf-1")
-                .expect("主体引用必须可构造")
-                .subject_kind(),
+            supplier_refund_subject_ref("srf-1").expect("主体引用必须可构造").subject_kind(),
             "supplier_refund"
         );
         assert_eq!(adapter.subject_ref_builder, "subject_ref_for(SupplierRefund)");
@@ -325,24 +318,15 @@ mod supplier_refund_tests {
             ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
         );
         assert_eq!(adapter.subject_snapshot_builder, "build_supplier_refund_snapshot");
-        assert_eq!(
-            adapter.on_approval_start,
-            ApprovalDomainAction::SupplierRefundSubmit
-        );
+        assert_eq!(adapter.on_approval_start, ApprovalDomainAction::SupplierRefundSubmit);
         assert_eq!(adapter.on_final_approve, ApprovalDomainAction::SupplierRefundPost);
-        assert_eq!(
-            adapter.cancel_action,
-            ApprovalDomainAction::SupplierRefundCancelApproval
-        );
+        assert_eq!(adapter.cancel_action, ApprovalDomainAction::SupplierRefundCancelApproval);
         assert_eq!(adapter.owner_role, "supplier_refund_approver");
         assert_eq!(
             adapter.owner_organization_snapshot,
             OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         );
-        assert_eq!(
-            adapter.read_scope,
-            AdapterReadScope::DocumentOrganizationAndCreator
-        );
+        assert_eq!(adapter.read_scope, AdapterReadScope::DocumentOrganizationAndCreator);
         assert_ne!(adapter.on_approval_start, adapter.on_final_approve);
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
     }
@@ -431,10 +415,9 @@ mod supplier_refund_tests {
         let mut refund = draft_refund();
         start_supplier_refund_approval(&mut refund).unwrap();
         execute_supplier_refund_domain_action(&mut refund, ApprovalDomainAction::SupplierRefundPost).unwrap();
-        assert!(execute_supplier_refund_domain_action(
-            &mut refund,
-            ApprovalDomainAction::StockAdjustmentSubmit,
-        )
-        .is_err());
+        assert!(
+            execute_supplier_refund_domain_action(&mut refund, ApprovalDomainAction::StockAdjustmentSubmit,)
+                .is_err()
+        );
     }
 }

@@ -1,5 +1,8 @@
 //! 统一节点进入。启动、通过、驳回与恢复必须复用本函数。
 
+use super::event::{BpmEvent, BpmEventKind};
+use super::transition_plan::{CommitRequired, TaskIntent, TransitionPlan};
+use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
 use crate::ids::ApprovalNodeExecutionId;
 use crate::model::types::{
     ApprovalBlockerCode, ApprovalExecutionAssignmentSource, ApprovalProcessInstanceStatus,
@@ -9,10 +12,6 @@ use crate::model::{
     ApprovalNodeDefinition, ApprovalNodeExecution, ApprovalProcessInstance, ApprovalTransitionDefinition,
     NewNodeExecution, ParticipantId, Timestamp,
 };
-
-use super::event::{BpmEvent, BpmEventKind};
-use super::transition_plan::{CommitRequired, TaskIntent, TransitionPlan};
-use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
 
 /// 规划进入指定节点所需的实例、图与责任快照。
 pub(crate) struct EnterNodeInput<'a> {
@@ -67,7 +66,7 @@ pub(crate) fn plan_enter_node(input: EnterNodeInput<'_>) -> EngineResult<Transit
                 input.execution_id,
                 input.now,
             );
-        }
+        },
     };
     build_enter_plan(input, node)
 }
@@ -109,19 +108,10 @@ fn build_enter_plan(
         at: input.now,
     };
     if let Some(code) = input.eligibility.blocked_code() {
-        return blocked_enter(
-            input.instance,
-            execution_input,
-            input.execution_id,
-            node,
-            code,
-            input.now,
-        );
+        return blocked_enter(input.instance, execution_input, input.execution_id, node, code, input.now);
     }
     let execution = ApprovalNodeExecution::new_active(execution_input)?;
-    input
-        .instance
-        .set_current_execution(input.execution_id.clone(), input.now)?;
+    input.instance.set_current_execution(input.execution_id.clone(), input.now)?;
     if input.instance.status == ApprovalProcessInstanceStatus::Blocked {
         input.instance.exit_blocked(input.now)?;
     }
@@ -184,9 +174,7 @@ fn structural_enter_without_node(
     if node_key.trim().is_empty() {
         return Err(EngineError::Uncommittable("缺失节点键，无法形成合法阻塞快照"));
     }
-    Err(EngineError::Uncommittable(
-        "定义图缺少目标节点，无法形成合法阻塞快照",
-    ))
+    Err(EngineError::Uncommittable("定义图缺少目标节点，无法形成合法阻塞快照"))
 }
 
 /// 读取当前节点的通过与驳回连线，必须各恰好一条。
@@ -217,7 +205,7 @@ pub(crate) fn unique_transition<'a>(
         [only] => {
             only.validate_shape()?;
             Ok(*only)
-        }
+        },
         _ => Err(EngineError::GraphCorrupted),
     }
 }

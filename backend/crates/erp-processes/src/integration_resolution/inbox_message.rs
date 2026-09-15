@@ -2,10 +2,6 @@
 //!
 //! 消息层/业务事实层幂等由唯一索引保证，服务层不做「先查后插」重复性判断；
 //! 所有业务写入与审计日志在同一 MongoDB 事务原子提交（模板见 `super::transaction`）。
-use super::creation_writes::{persist_created, CreatedFact};
-use super::producer::error_work_item;
-use super::IntegrationResolutionProcess;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
@@ -17,6 +13,11 @@ use erp_integration::service::validation::ensure_version;
 use erp_support::SourceRegistryExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
+
+use super::IntegrationResolutionProcess;
+use super::creation_writes::{CreatedFact, persist_created};
+use super::producer::error_work_item;
+use crate::{Error, Result};
 
 impl IntegrationResolutionProcess {
     /// 登记入站消息（消息层与业务事实层幂等由唯一索引保证）。
@@ -50,9 +51,7 @@ impl IntegrationResolutionProcess {
         let received_at = Instant::from_unix_secs(req.received_at.unwrap_or_else(now_secs));
         let message = prepare_registered_inbox_message(req, received_at)?;
         let audit =
-            actor
-                .clone()
-                .resource_log("inbox_message.register", "inbox_message", message.base.id.clone())?;
+            actor.clone().resource_log("inbox_message.register", "inbox_message", message.base.id.clone())?;
         let stored = message.clone();
         self.run_audited(move |db, session| {
             Box::pin(async move {
@@ -118,12 +117,8 @@ impl IntegrationResolutionProcess {
                     })
                     .await?;
                 Ok(stored.into())
-            }
-            PreparedWriteBackOutcome::Failed {
-                error_class,
-                attempt_summary,
-                attempt_at,
-            } => {
+            },
+            PreparedWriteBackOutcome::Failed { error_class, attempt_summary, attempt_at } => {
                 apply_failed_outcome(&mut message)?;
                 let task = prepare_failed_message_task(
                     InboxMessageId::new(message.base.id.clone()),
@@ -144,10 +139,7 @@ impl IntegrationResolutionProcess {
                         Box::pin(async move {
                             persist_created(
                                 db,
-                                CreatedFact::FailedMessage {
-                                    task: &task,
-                                    message: &mut stored,
-                                },
+                                CreatedFact::FailedMessage { task: &task, message: &mut stored },
                                 &work_item,
                                 &audit,
                                 session,
@@ -158,7 +150,7 @@ impl IntegrationResolutionProcess {
                     })
                     .await?;
                 Ok(stored.into())
-            }
+            },
         }
     }
 }
@@ -175,10 +167,7 @@ mod tests {
     fn production_source() -> String {
         format!(
             "{}\n{}",
-            include_str!("inbox_message.rs")
-                .split("#[cfg(test)]")
-                .next()
-                .unwrap(),
+            include_str!("inbox_message.rs").split("#[cfg(test)]").next().unwrap(),
             include_str!("../../../erp-integration/src/service/inbox_message.rs")
         )
     }

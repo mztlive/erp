@@ -1,6 +1,5 @@
 //! Characterizing tests: a write-port failure must not produce a completed confirmation/WorkItem.
 
-use crate::{Error, Result};
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_core::ids::{LegacyImportBatchId, LegacyImportConfirmationId, WorkItemId};
@@ -8,6 +7,8 @@ use erp_import::{
     ConfirmationDecision, ConfirmationStatus, LegacyImportConfirmation, LegacyImportConfirmationData,
 };
 use persistence_core::{Executor, NoTransaction};
+
+use crate::{Error, Result};
 
 /// Minimal write port used to prove confirmation/WorkItem do not advance on failure.
 #[async_trait]
@@ -49,8 +50,7 @@ async fn complete_through_port(
         Some("确认".to_string()),
     )?;
     let mut executor = NoTransaction;
-    port.persist_confirmation_and_work_item(&confirmation, true, &mut executor)
-        .await?;
+    port.persist_confirmation_and_work_item(&confirmation, true, &mut executor).await?;
     Ok((confirmation.status, true))
 }
 
@@ -71,17 +71,9 @@ async fn write_port_failure_does_not_return_advanced_confirmation_or_work_item()
     .unwrap();
     assert_eq!(confirmation.status, ConfirmationStatus::Pending);
     let result = complete_through_port(confirmation, &FailingConfirmationWrite).await;
+    assert!(result.is_err(), "write failure must not produce a completed result");
     assert!(
-        result.is_err(),
-        "write failure must not produce a completed result"
-    );
-    assert!(
-        result
-            .as_ref()
-            .err()
-            .map(ToString::to_string)
-            .unwrap()
-            .contains("write failed"),
+        result.as_ref().err().map(ToString::to_string).unwrap().contains("write failed"),
         "caller must observe the write-port error"
     );
 }

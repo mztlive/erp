@@ -1,16 +1,17 @@
 //! Fixed first-formalization posting order within the caller's transaction.
 
-use super::formalize::{persist_procurement_work_items, FormalizedSubmissionWrite};
-#[cfg(test)]
-use crate::Error;
-use crate::Result;
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
 use erp_core::ids::SalesOrderId;
 use erp_finance::entity::receivable::SalesBusinessTypeFact;
-use erp_finance::service::receivable::initial_account::{create_initial_receivable, InitialReceivableInput};
+use erp_finance::service::receivable::initial_account::{InitialReceivableInput, create_initial_receivable};
 use erp_workflow::DocumentRegistryExt;
 use persistence_core::Executor;
+
+use super::formalize::{FormalizedSubmissionWrite, persist_procurement_work_items};
+#[cfg(test)]
+use crate::Error;
+use crate::Result;
 
 /// Each variant is one existing side-effect boundary, in the original order below.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -69,27 +70,20 @@ impl PostingSteps for MongoPosting<'_> {
                     .revalidate_plan(&plan.inputs, &plan.resolution, executor)
                     .await?;
                 }
-            }
+            },
             ProcurementTasks => {
                 if write.procurement.is_some() {
                     persist_procurement_work_items(&write.db, &write.procurement_items, executor).await?;
                 }
-            }
+            },
             RegisterDocument => {
-                if let Some(mut document) = write
-                    .db
-                    .business_documents()
-                    .find_by_id(&write.order_id, executor)
-                    .await?
+                if let Some(mut document) =
+                    write.db.business_documents().find_by_id(&write.order_id, executor).await?
                 {
                     document.formalize(write.now);
-                    write
-                        .db
-                        .business_documents()
-                        .update(&mut document, executor)
-                        .await?;
+                    write.db.business_documents().update(&mut document, executor).await?;
                 }
-            }
+            },
             SalesRevision => {
                 crate::business_ownership::ensure_attribution(&write.db, &write.order, executor).await?;
                 erp_sales::service::sales_order::formalize::persist_revision(
@@ -99,7 +93,7 @@ impl PostingSteps for MongoPosting<'_> {
                     executor,
                 )
                 .await?;
-            }
+            },
             SynchronizeProcurement => {
                 if write.procurement.is_some() {
                     crate::procure_to_pay::sync_procurement_tasks_for_sales_order(
@@ -109,7 +103,7 @@ impl PostingSteps for MongoPosting<'_> {
                     )
                     .await?;
                 }
-            }
+            },
             SalesSubmission => {
                 erp_sales::service::sales_order::formalize::persist_submission(
                     &write.db,
@@ -117,7 +111,7 @@ impl PostingSteps for MongoPosting<'_> {
                     executor,
                 )
                 .await?;
-            }
+            },
             Receivable => {
                 let order = &write.order;
                 create_initial_receivable(
@@ -126,10 +120,10 @@ impl PostingSteps for MongoPosting<'_> {
                         business_type: match order.business_type {
                             erp_sales::entity::sales_order::BusinessType::GoodsService => {
                                 SalesBusinessTypeFact::GoodsService
-                            }
+                            },
                             erp_sales::entity::sales_order::BusinessType::Voucher => {
                                 SalesBusinessTypeFact::Voucher
-                            }
+                            },
                         },
                         sales_order_id: order.base.id.clone().into(),
                         customer_id: order.customer_id.clone(),
@@ -141,10 +135,10 @@ impl PostingSteps for MongoPosting<'_> {
                     executor,
                 )
                 .await?;
-            }
+            },
             Audit => {
                 write.db.audit_logs().create(self.audit, executor).await?;
-            }
+            },
         }
         Ok(())
     }
@@ -216,11 +210,7 @@ mod tests {
     async fn formalization_preserves_all_domain_steps_and_executor() {
         let mut executor = TestExecutor { _identity: 1 };
         let identity = &mut executor as *mut TestExecutor as usize;
-        let mut steps = RecordingSteps {
-            calls: vec![],
-            executor: identity,
-            fail_at: None,
-        };
+        let mut steps = RecordingSteps { calls: vec![], executor: identity, fail_at: None };
         execute(&mut steps, &mut executor).await.unwrap();
         assert_eq!(steps.calls, expected());
     }
@@ -230,11 +220,7 @@ mod tests {
         for (index, step) in expected().into_iter().enumerate() {
             let mut executor = TestExecutor { _identity: 1 };
             let identity = &mut executor as *mut TestExecutor as usize;
-            let mut steps = RecordingSteps {
-                calls: vec![],
-                executor: identity,
-                fail_at: Some(step),
-            };
+            let mut steps = RecordingSteps { calls: vec![], executor: identity, fail_at: Some(step) };
             let error = execute(&mut steps, &mut executor).await.unwrap_err();
             assert!(matches!(error,Error::ConflictError(ref text) if text=="original posting conflict"));
             assert_eq!(steps.calls, expected()[..=index]);

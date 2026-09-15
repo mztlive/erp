@@ -1,23 +1,22 @@
 //! 应收往来子账列表、详情与创建编排。
 
+use std::collections::{HashMap, HashSet};
+
 use erp_core::ids::{ReceivableAccountId, ReceivableEntryId, SalesOrderId};
 use erp_core::money::Amount;
+use erp_finance::dto::receivable::{
+    PageView, ReceivableAccountListParams, ReceivableAccountSummaryView, SortDir,
+};
 use erp_finance::entity::receivable::{EntryDirection, ReceivableEntry};
-use erp_finance::repository::ReceivableExt;
+use erp_finance::repository::{ReceivableAccountFilter, ReceivableExt};
 use erp_sales::repository::SalesOrderExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
-use std::collections::{HashMap, HashSet};
-
-use super::snapshot::{invoice_fact_views, load_receivable_snapshot, receipt_fact_views, zero_amount};
 use super::ReceivableReadService;
+use super::snapshot::{invoice_fact_views, load_receivable_snapshot, receipt_fact_views, zero_amount};
 use crate::finance::dto::ReceivableAccountView;
 use crate::{Error, Result};
-use erp_finance::dto::receivable::{
-    PageView, ReceivableAccountListParams, ReceivableAccountSummaryView, SortDir,
-};
-use erp_finance::repository::ReceivableAccountFilter;
 
 impl ReceivableReadService {
     /// 分页查询应收往来子账列表。
@@ -61,22 +60,13 @@ impl ReceivableReadService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .receivable_accounts()
-            .search_receivable_accounts(&filter, &mut NoTransaction)
-            .await?;
-        let account_ids = page
-            .items
-            .iter()
-            .map(|row| ReceivableAccountId::new(row.id.clone()))
-            .collect::<Vec<_>>();
+        let page =
+            self.db.receivable_accounts().search_receivable_accounts(&filter, &mut NoTransaction).await?;
+        let account_ids =
+            page.items.iter().map(|row| ReceivableAccountId::new(row.id.clone())).collect::<Vec<_>>();
         let mut entries_by_account = HashMap::<String, Vec<ReceivableEntry>>::new();
-        let entries = self
-            .db
-            .receivable_entries()
-            .find_entries_by_accounts(&account_ids, &mut NoTransaction)
-            .await?;
+        let entries =
+            self.db.receivable_entries().find_entries_by_accounts(&account_ids, &mut NoTransaction).await?;
         let decrease_entry_ids = entries
             .iter()
             .filter(|entry| entry.direction == EntryDirection::Decrease)
@@ -89,16 +79,12 @@ impl ReceivableReadService {
             .find_offsets_by_decreases(&decrease_entry_ids, &mut NoTransaction)
             .await?
         {
-            let total = offset_by_increase
-                .entry(offset.increase_entry_id.to_string())
-                .or_insert_with(zero_amount);
+            let total =
+                offset_by_increase.entry(offset.increase_entry_id.to_string()).or_insert_with(zero_amount);
             *total = total.checked_add(offset.offset_amount);
         }
         for entry in entries {
-            entries_by_account
-                .entry(entry.receivable_account_id.to_string())
-                .or_default()
-                .push(entry);
+            entries_by_account.entry(entry.receivable_account_id.to_string()).or_default().push(entry);
         }
         for entries in entries_by_account.values_mut() {
             entries.sort_unstable_by_key(|entry| entry.source_sequence);
@@ -111,11 +97,8 @@ impl ReceivableReadService {
             .collect::<HashSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let sales_orders = self
-            .db
-            .sales_orders()
-            .find_orders_by_ids(&sales_order_ids, &mut NoTransaction)
-            .await?;
+        let sales_orders =
+            self.db.sales_orders().find_orders_by_ids(&sales_order_ids, &mut NoTransaction).await?;
         let revision_ids = sales_orders
             .iter()
             .map(|order| {
@@ -126,15 +109,10 @@ impl ReceivableReadService {
                     .ok_or_else(|| Error::BusinessLogicError("来源销售单缺少当前正式版本".to_string()))
             })
             .collect::<Result<Vec<_>>>()?;
-        let revisions = self
-            .db
-            .sales_order_revisions()
-            .find_revisions_by_ids(&revision_ids, &mut NoTransaction)
-            .await?;
-        let sales_order_by_id = sales_orders
-            .into_iter()
-            .map(|order| (order.base.id.clone(), order))
-            .collect::<HashMap<_, _>>();
+        let revisions =
+            self.db.sales_order_revisions().find_revisions_by_ids(&revision_ids, &mut NoTransaction).await?;
+        let sales_order_by_id =
+            sales_orders.into_iter().map(|order| (order.base.id.clone(), order)).collect::<HashMap<_, _>>();
         let revision_by_id = revisions
             .into_iter()
             .map(|revision| (revision.base.id.clone(), revision))
@@ -158,10 +136,7 @@ impl ReceivableReadService {
                 .unwrap_or_default()
                 .into_iter()
                 .map(|entry| erp_finance::dto::receivable::ReceivableEntryView {
-                    offset_total: offset_by_increase
-                        .get(&entry.base.id)
-                        .copied()
-                        .unwrap_or_else(zero_amount),
+                    offset_total: offset_by_increase.get(&entry.base.id).copied().unwrap_or_else(zero_amount),
                     id: entry.base.id,
                     entry_type: entry.entry_type,
                     direction: entry.direction,
@@ -196,12 +171,7 @@ impl ReceivableReadService {
                 entries,
             });
         }
-        Ok(PageView {
-            items: views,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items: views, total: page.total, page: filter.page, page_size: filter.page_size })
     }
     /// 查询应收往来子账详情（子账 + 分录 + 抵销 + 复核链）。
     ///
@@ -242,11 +212,8 @@ impl ReceivableReadService {
             .map(|entry| entry.base.id.clone().into())
             .collect::<Vec<ReceivableEntryId>>();
         let mut offset_map: std::collections::HashMap<String, Amount> = std::collections::HashMap::new();
-        for offset in self
-            .db
-            .receivable_entry_offsets()
-            .find_offsets_by_decreases(&offsets, &mut NoTransaction)
-            .await?
+        for offset in
+            self.db.receivable_entry_offsets().find_offsets_by_decreases(&offsets, &mut NoTransaction).await?
         {
             let key = offset.increase_entry_id.to_string();
             let total = offset_map.entry(key).or_insert_with(zero_amount);
@@ -256,10 +223,7 @@ impl ReceivableReadService {
             .entries
             .iter()
             .map(|entry| {
-                let offset_total = offset_map
-                    .get(&entry.base.id)
-                    .copied()
-                    .unwrap_or_else(zero_amount);
+                let offset_total = offset_map.get(&entry.base.id).copied().unwrap_or_else(zero_amount);
                 erp_finance::dto::receivable::ReceivableEntryView {
                     id: entry.base.id.clone(),
                     entry_type: entry.entry_type,

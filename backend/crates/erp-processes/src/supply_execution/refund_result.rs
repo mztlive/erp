@@ -1,5 +1,3 @@
-use super::SupplierFulfillmentProcess;
-use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
@@ -14,6 +12,9 @@ use erp_supply::service::supplier_fulfillment::mapping::refund_fact_view;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+
+use super::SupplierFulfillmentProcess;
+use crate::Result;
 
 impl SupplierFulfillmentProcess {
     /// 登记供应商退款成功结果（幂等键 `(connection_id, external_refund_no,
@@ -64,9 +65,7 @@ impl SupplierFulfillmentProcess {
                 .await?;
             return Ok(refund_fact_view(&existing, &allocations));
         }
-        self.domain()
-            .advance_refund_result(id, &mut order, req.refund_amount)
-            .await?;
+        self.domain().advance_refund_result(id, &mut order, req.refund_amount).await?;
         let message = build_refund_message(&order, &req, &connection_id, InboxMessageStatus::Received)?;
         let (fact, allocations) = self.domain().build_refund_fact(
             &order,
@@ -126,10 +125,7 @@ fn build_refund_message(
     connection_id: &erp_core::ids::SupplierApiConnectionId,
     status: InboxMessageStatus,
 ) -> Result<InboxMessage> {
-    let event_key = format!(
-        "refund:{}:{}",
-        req.external_refund_no, req.external_refund_version
-    );
+    let event_key = format!("refund:{}:{}", req.external_refund_no, req.external_refund_version);
     Ok(InboxMessage::new(
         InboxMessageId::new(next_id()),
         InboxMessageData {

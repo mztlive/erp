@@ -1,8 +1,6 @@
 //! 供应商供给的跨域只读列表。查询、当前指针与成本脱敏 wire 保持原合同。
-use super::repository::offering::{
-    SupplierOfferingListQuery as OfferingListQuery, SupplierOfferingReadRepository,
-};
-use crate::Result;
+use std::collections::HashMap;
+
 use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_catalog::{Product, Sku, SkuRevision};
 use erp_party::{Party, PartyRevision};
@@ -10,11 +8,15 @@ use erp_supplier::SupplierAccount;
 use erp_supply::entity::supplier_offering::{SupplierOfferingAvailability, SupplierOfferingRevision};
 use mongodb::Database;
 use persistence_core::NoTransaction;
-use std::collections::HashMap;
 use validator::Validate;
+
+use super::repository::offering::{
+    SupplierOfferingListQuery as OfferingListQuery, SupplierOfferingReadRepository,
+};
+use crate::Result;
 pub mod dto;
+use dto::{OFFERING_SORT_FIELDS, SortDir};
 pub use dto::{PageView, SupplierOfferingListParams, SupplierOfferingView};
-use dto::{SortDir, OFFERING_SORT_FIELDS};
 /// 供给列表只读服务。
 pub struct SupplierOfferingReadService {
     db: Database,
@@ -140,23 +142,14 @@ fn build_view(
         dropship_supply_price_gross: revision
             .as_ref()
             .map(|value| value.dropship_supply_price_gross.to_string()),
-        dropship_supply_price_net: revision
-            .as_ref()
-            .map(|value| value.dropship_supply_price_net.to_string()),
-        bulk_supply_price_gross: revision
-            .as_ref()
-            .map(|value| value.bulk_supply_price_gross.to_string()),
-        bulk_supply_price_net: revision
-            .as_ref()
-            .map(|value| value.bulk_supply_price_net.to_string()),
+        dropship_supply_price_net: revision.as_ref().map(|value| value.dropship_supply_price_net.to_string()),
+        bulk_supply_price_gross: revision.as_ref().map(|value| value.bulk_supply_price_gross.to_string()),
+        bulk_supply_price_net: revision.as_ref().map(|value| value.bulk_supply_price_net.to_string()),
         input_tax_rate: revision.as_ref().map(|value| value.input_tax_rate.to_string()),
         bulk_minimum_order_quantity: revision
             .as_ref()
             .map(|value| value.bulk_minimum_order_quantity.to_string()),
-        supply_region: revision
-            .as_ref()
-            .map(|value| value.supply_region.clone())
-            .unwrap_or_default(),
+        supply_region: revision.as_ref().map(|value| value.supply_region.clone()).unwrap_or_default(),
         product_capabilities: revision
             .as_ref()
             .map(|value| value.product_capabilities.clone())
@@ -169,9 +162,7 @@ fn build_view(
             .as_ref()
             .and_then(|value| value.service_fee_amount.map(|amount| amount.to_string())),
         valid_from: revision.as_ref().map(|value| value.valid_from.to_string()),
-        valid_to: revision
-            .as_ref()
-            .and_then(|value| value.valid_to.map(|date| date.to_string())),
+        valid_to: revision.as_ref().and_then(|value| value.valid_to.map(|date| date.to_string())),
         availability_status: availability.as_ref().map(|value| value.availability_status),
         available_quantity: availability
             .as_ref()
@@ -221,8 +212,5 @@ impl HasId for PartyRevision {
 }
 
 fn by_id<T: HasId>(values: Vec<T>) -> HashMap<String, T> {
-    values
-        .into_iter()
-        .map(|value| (value.id().to_string(), value))
-        .collect()
+    values.into_iter().map(|value| (value.id().to_string(), value)).collect()
 }

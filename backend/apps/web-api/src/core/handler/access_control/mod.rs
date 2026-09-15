@@ -4,10 +4,8 @@
 //! 直接复用 `erp_processes::access_control` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
 use erp_identity::{
     AssignUserRoleRequest, AuditEventListParams, AuditEventView, CreateDataScopeRequest,
     CreatePermissionRequest, DataScopeListParams, DataScopeListView, DataScopeView, PageView,
@@ -16,10 +14,9 @@ use erp_identity::{
 };
 use erp_processes::adapters::scope_configuration;
 
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "权限与审计",
@@ -40,9 +37,7 @@ pub async fn permission_list(
     State(state): State<AppState>,
     Query(params): Query<PermissionListParams>,
 ) -> Result<PageView<PermissionView>> {
-    let page = scope_configuration(state.db(), state.rbac())
-        .permission_list(&params)
-        .await?;
+    let page = scope_configuration(state.db(), state.rbac()).permission_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -68,9 +63,7 @@ pub async fn permission_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePermissionRequest>,
 ) -> Result<PermissionView> {
-    let view = scope_configuration(state.db(), state.rbac())
-        .create_permission(req, &actor)
-        .await?;
+    let view = scope_configuration(state.db(), state.rbac()).create_permission(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -98,9 +91,7 @@ pub async fn permission_update(
     Path(id): Path<String>,
     Json(req): Json<UpdatePermissionRequest>,
 ) -> Result<PermissionView> {
-    let view = scope_configuration(state.db(), state.rbac())
-        .update_permission(&id, req, &actor)
-        .await?;
+    let view = scope_configuration(state.db(), state.rbac()).update_permission(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -126,9 +117,7 @@ pub async fn permission_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    scope_configuration(state.db(), state.rbac())
-        .delete_permission(&id, &actor)
-        .await?;
+    scope_configuration(state.db(), state.rbac()).delete_permission(&id, &actor).await?;
 
     Ok(ApiResponse::ok())
 }
@@ -160,9 +149,7 @@ pub async fn data_scope_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<DataScopeListParams>,
 ) -> Result<DataScopeListView> {
-    let page = scope_configuration(state.db(), state.rbac())
-        .data_scope_list(&actor, &params)
-        .await?;
+    let page = scope_configuration(state.db(), state.rbac()).data_scope_list(&actor, &params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -188,9 +175,7 @@ pub async fn data_scope_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateDataScopeRequest>,
 ) -> Result<DataScopeView> {
-    let view = scope_configuration(state.db(), state.rbac())
-        .create_data_scope(req, &actor)
-        .await?;
+    let view = scope_configuration(state.db(), state.rbac()).create_data_scope(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -216,9 +201,7 @@ pub async fn data_scope_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    scope_configuration(state.db(), state.rbac())
-        .delete_data_scope(&id, &actor)
-        .await?;
+    scope_configuration(state.db(), state.rbac()).delete_data_scope(&id, &actor).await?;
 
     Ok(ApiResponse::ok())
 }
@@ -242,9 +225,7 @@ pub async fn user_role_list(
     State(state): State<AppState>,
     Query(params): Query<UserRoleListParams>,
 ) -> Result<Vec<UserRoleView>> {
-    let items = scope_configuration(state.db(), state.rbac())
-        .user_role_list(&params)
-        .await?;
+    let items = scope_configuration(state.db(), state.rbac()).user_role_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(items))
 }
@@ -270,9 +251,7 @@ pub async fn user_role_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<AssignUserRoleRequest>,
 ) -> Result<UserRoleView> {
-    let view = scope_configuration(state.db(), state.rbac())
-        .assign_user_role(req, &actor)
-        .await?;
+    let view = scope_configuration(state.db(), state.rbac()).assign_user_role(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -300,9 +279,7 @@ pub async fn user_role_revoke(
     Path(id): Path<String>,
     Json(req): Json<RevokeUserRoleRequest>,
 ) -> Result<UserRoleView> {
-    let view = scope_configuration(state.db(), state.rbac())
-        .revoke_user_role(&id, req, &actor)
-        .await?;
+    let view = scope_configuration(state.db(), state.rbac()).revoke_user_role(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -326,9 +303,7 @@ pub async fn audit_event_list(
     State(state): State<AppState>,
     Query(params): Query<AuditEventListParams>,
 ) -> Result<PageView<AuditEventView>> {
-    let page = scope_configuration(state.db(), state.rbac())
-        .audit_event_list(&params)
-        .await?;
+    let page = scope_configuration(state.db(), state.rbac()).audit_event_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }

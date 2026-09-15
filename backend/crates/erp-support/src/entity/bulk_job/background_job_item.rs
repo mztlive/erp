@@ -2,11 +2,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{BackgroundJobId, BackgroundJobItemId};
 use erp_core::validation::normalize_optional_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 对象类型代码最大长度。
 const OBJECT_TYPE_MAX_LEN: usize = 64;
@@ -228,8 +227,9 @@ impl BackgroundJobItem {
 
 #[cfg(test)]
 mod tests {
-    use super::{BackgroundJobItem, BackgroundJobItemData, ItemStatus};
     use erp_core::ids::{BackgroundJobId, BackgroundJobItemId};
+
+    use super::{BackgroundJobItem, BackgroundJobItemData, ItemStatus};
 
     fn data() -> BackgroundJobItemData {
         BackgroundJobItemData {
@@ -267,20 +267,14 @@ mod tests {
     /// 失败路径：关联不一致（对象类型/ID 不成对）被拒。
     #[test]
     fn new_rejects_unpaired_object_type_and_id() {
-        let payload = BackgroundJobItemData {
-            object_id: None,
-            ..data()
-        };
+        let payload = BackgroundJobItemData { object_id: None, ..data() };
         assert!(BackgroundJobItem::new(BackgroundJobItemId::new("ji-1"), payload).is_err());
     }
 
     /// 失败路径：超长列名被拒。
     #[test]
     fn new_rejects_overlong_column_name() {
-        let payload = BackgroundJobItemData {
-            source_column_name: Some("x".repeat(129)),
-            ..data()
-        };
+        let payload = BackgroundJobItemData { source_column_name: Some("x".repeat(129)), ..data() };
         assert!(BackgroundJobItem::new(BackgroundJobItemId::new("ji-1"), payload).is_err());
     }
 
@@ -288,18 +282,10 @@ mod tests {
     #[test]
     fn record_result_enforces_consistency_and_once_only() {
         let mut item = BackgroundJobItem::new(BackgroundJobItemId::new("ji-1"), data()).unwrap();
-        assert!(item
-            .record_result(ItemStatus::Failed, None, None, None, None)
-            .is_err());
+        assert!(item.record_result(ItemStatus::Failed, None, None, None, None).is_err());
         assert!(
-            item.record_result(
-                ItemStatus::Success,
-                None,
-                None,
-                Some("sales_order".to_string()),
-                None
-            )
-            .is_err(),
+            item.record_result(ItemStatus::Success, None, None, Some("sales_order".to_string()), None)
+                .is_err(),
             "结果对象必须成对"
         );
 
@@ -313,11 +299,7 @@ mod tests {
         .unwrap();
         assert_eq!(item.status, Some(ItemStatus::Success));
         assert_eq!(item.result_summary.as_deref(), Some("已创建"));
-        assert!(
-            item.record_result(ItemStatus::Skipped, None, None, None, None)
-                .is_err(),
-            "结果只能记录一次"
-        );
+        assert!(item.record_result(ItemStatus::Skipped, None, None, None, None).is_err(), "结果只能记录一次");
     }
 
     /// 枚举序列化与标签稳定。

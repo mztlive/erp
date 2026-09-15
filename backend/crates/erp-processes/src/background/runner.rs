@@ -26,10 +26,7 @@ impl BackgroundRunner {
     /// # 返回
     /// 返回空适配器的执行器，需继续调用 `register` 装配任务。
     pub fn new(interval: Duration) -> Self {
-        Self {
-            adapters: Vec::new(),
-            interval,
-        }
+        Self { adapters: Vec::new(), interval }
     }
 
     /// 注册任务适配器。
@@ -71,7 +68,7 @@ impl BackgroundRunner {
                         "background task finished"
                     );
                     counts.push((name, count));
-                }
+                },
                 Err(error) => {
                     tracing::error!(
                         task_name = name,
@@ -80,7 +77,7 @@ impl BackgroundRunner {
                         "background task failed"
                     );
                     counts.push((name, 0));
-                }
+                },
             }
         }
         counts
@@ -105,11 +102,12 @@ impl BackgroundRunner {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
+
     use super::BackgroundRunner;
     use crate::background::adapter::BackgroundTaskAdapter;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
-    use std::time::Duration;
 
     /// 计数用测试适配器。
     struct CountingAdapter {
@@ -153,14 +151,8 @@ mod tests {
     async fn run_once_calls_adapters_in_order() {
         let calls = Arc::new(AtomicUsize::new(0));
         let runner = BackgroundRunner::new(Duration::from_secs(2))
-            .register(CountingAdapter {
-                name: "first",
-                calls: Arc::clone(&calls),
-            })
-            .register(CountingAdapter {
-                name: "second",
-                calls: Arc::clone(&calls),
-            });
+            .register(CountingAdapter { name: "first", calls: Arc::clone(&calls) })
+            .register(CountingAdapter { name: "second", calls: Arc::clone(&calls) });
         let counts = runner.run_once().await;
         assert_eq!(counts, vec![("first", 1), ("second", 1)]);
         assert_eq!(calls.load(Ordering::SeqCst), 2);

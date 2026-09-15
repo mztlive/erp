@@ -42,21 +42,21 @@ pub use change_order::{
     PurchaseChangeSubmissionLineData,
 };
 pub use command_receipt::{
-    digest_parts, payload_fingerprint, LegacyReceiptIdScheme, PurchaseCommandReceipt,
-    PurchaseCommandReceiptError, PurchaseCommandReceiptIdentity, PurchaseReceiptWire,
+    LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
+    PurchaseCommandReceiptIdentity, PurchaseReceiptWire, digest_parts, payload_fingerprint,
 };
 pub use coverage::{
-    build_procurement_coverage, ProcurementCoverageFacts, SalesProcurementCoverage,
-    SalesProcurementCoverageLine,
+    ProcurementCoverageFacts, SalesProcurementCoverage, SalesProcurementCoverageLine,
+    build_procurement_coverage,
 };
 pub use coverage_summary::ProcurementCoverageSummary;
 pub use creation_basis::{
-    basis_id_for, basis_scope_key, compose_basis_id, fulfillment_options, maximum_create_quantity,
-    normalize_requested_lines, purchase_type_from_product_kind, stable_line_id, supply_cost, BasisGroup,
-    BasisLine, BasisScope, CreationBasisFacts, LineSupply, RequestedLine,
+    BasisGroup, BasisLine, BasisScope, CreationBasisFacts, LineSupply, RequestedLine, basis_id_for,
+    basis_scope_key, compose_basis_id, fulfillment_options, maximum_create_quantity,
+    normalize_requested_lines, purchase_type_from_product_kind, stable_line_id, supply_cost,
 };
-pub use draft_edit::{validate_draft_line_edits, DraftLineEdit, DraftLineEditViolation};
-pub use line_amounts::{compute_header_totals, LineAmountViolation, PurchaseLineInput};
+pub use draft_edit::{DraftLineEdit, DraftLineEditViolation, validate_draft_line_edits};
+pub use line_amounts::{LineAmountViolation, PurchaseLineInput, compute_header_totals};
 pub use order::{
     ProgressStatus, PurchaseOrder, PurchaseOrderData, PurchaseOrderStatus, PurchaseOrderUpdate,
     PurchaseReviewStatus,
@@ -72,8 +72,9 @@ pub use purchase_submission::{
 };
 pub use snapshot::{PaymentTermSnapshot, SupplierSnapshot};
 pub use sourcing_plan::{
-    stock_basis_id_for, RequestedStockLine, SourcingAssignment, SourcingAssignmentSet, SourcingDraftPlan,
-    SourcingPlan, SourcingPlanError, StockAllocationPlan, StockBasisGroup, StockBasisLine, SupplySourceType,
+    RequestedStockLine, SourcingAssignment, SourcingAssignmentSet, SourcingDraftPlan, SourcingPlan,
+    SourcingPlanError, StockAllocationPlan, StockBasisGroup, StockBasisLine, SupplySourceType,
+    stock_basis_id_for,
 };
 pub use types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
 

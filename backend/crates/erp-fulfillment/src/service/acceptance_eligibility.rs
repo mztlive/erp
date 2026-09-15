@@ -1,12 +1,15 @@
 //! 履约事实按稳定销售行组织及数量资格派生；销售数据仅通过最小事实输入。
+use std::collections::HashMap;
+use std::str::FromStr;
+
+use erp_core::money::Quantity;
+
+use crate::Result;
 use crate::entity::facts::{AcceptanceSalesLineFact, AcceptanceSalesQuantityFact};
 use crate::entity::fulfillment::{
     AcceptanceFactEligibility, AcceptanceFulfillmentAllocation, AcceptanceLineEligibility, DeliveryLine,
     ElectronicDelivery, ServiceFulfillment,
 };
-use crate::Result;
-use erp_core::money::Quantity;
-use std::{collections::HashMap, str::FromStr};
 /// 验收行资格计算使用的本域履约事实与最小销售行数量快照。
 pub struct EligibilitySources<'a> {
     /// 当前销售版本公共行，保留输入顺序。
@@ -89,18 +92,13 @@ pub fn build_line_eligibilities(sources: &EligibilitySources<'_>) -> Result<Vec<
             .goods_service_lines
             .iter()
             .find(|goods| goods.revision_line_id.to_string() == revision_line.id);
-        let required_quantity = goods
-            .map(|goods| goods.quantity)
-            .unwrap_or_else(|| Quantity::from_str("0").unwrap());
+        let required_quantity =
+            goods.map(|goods| goods.quantity).unwrap_or_else(|| Quantity::from_str("0").unwrap());
         if let Some(&index) = line_index.get(&key) {
             line_inputs[index].1 = required_quantity;
         } else {
             line_index.insert(key, line_inputs.len());
-            line_inputs.push((
-                revision_line.sales_order_line_id.to_string(),
-                required_quantity,
-                Vec::new(),
-            ));
+            line_inputs.push((revision_line.sales_order_line_id.to_string(), required_quantity, Vec::new()));
         }
     }
     for (key, facts) in facts_by_line {
@@ -110,25 +108,21 @@ pub fn build_line_eligibilities(sources: &EligibilitySources<'_>) -> Result<Vec<
     }
     let mut lines = Vec::with_capacity(line_inputs.len());
     for (sales_order_line_id, required_quantity, facts) in line_inputs {
-        lines.push(AcceptanceLineEligibility::from_facts(
-            sales_order_line_id,
-            required_quantity,
-            facts,
-        )?);
+        lines.push(AcceptanceLineEligibility::from_facts(sales_order_line_id, required_quantity, facts)?);
     }
     Ok(lines)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{build_line_eligibilities, EligibilitySources};
+    use std::str::FromStr;
+
+    use erp_core::ids::{SalesOrderLineId, SalesOrderRevisionLineId};
+    use erp_core::money::Quantity;
+
+    use super::{EligibilitySources, build_line_eligibilities};
     use crate::entity::facts::{AcceptanceSalesLineFact, AcceptanceSalesQuantityFact};
     use crate::entity::fulfillment::AcceptanceProgress;
-    use erp_core::{
-        ids::{SalesOrderLineId, SalesOrderRevisionLineId},
-        money::Quantity,
-    };
-    use std::str::FromStr;
 
     fn sources<'a>(
         lines: &'a [AcceptanceSalesLineFact],
@@ -149,14 +143,8 @@ mod tests {
     #[test]
     fn duplicate_stable_line_replaces_quantity_without_reordering_first_occurrence() {
         let lines = vec![
-            AcceptanceSalesLineFact {
-                id: "r2".into(),
-                sales_order_line_id: SalesOrderLineId::new("s2"),
-            },
-            AcceptanceSalesLineFact {
-                id: "r1".into(),
-                sales_order_line_id: SalesOrderLineId::new("s1"),
-            },
+            AcceptanceSalesLineFact { id: "r2".into(), sales_order_line_id: SalesOrderLineId::new("s2") },
+            AcceptanceSalesLineFact { id: "r1".into(), sales_order_line_id: SalesOrderLineId::new("s1") },
             AcceptanceSalesLineFact {
                 id: "r2-later".into(),
                 sales_order_line_id: SalesOrderLineId::new("s2"),
@@ -175,17 +163,11 @@ mod tests {
             .collect::<Vec<_>>();
         let result = build_line_eligibilities(&sources(&lines, &quantities)).unwrap();
         assert_eq!(
-            result
-                .iter()
-                .map(|line| line.sales_order_line_id.as_str())
-                .collect::<Vec<_>>(),
+            result.iter().map(|line| line.sales_order_line_id.as_str()).collect::<Vec<_>>(),
             vec!["s2", "s1", "s3"]
         );
         assert_eq!(
-            result
-                .iter()
-                .map(|line| line.required_quantity)
-                .collect::<Vec<_>>(),
+            result.iter().map(|line| line.required_quantity).collect::<Vec<_>>(),
             vec![
                 Quantity::from_str("7").unwrap(),
                 Quantity::from_str("3").unwrap(),

@@ -4,15 +4,14 @@ use std::fmt;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use hmac::{Hmac, KeyInit, Mac};
-use serde::{Deserialize, Serialize};
-use sha2::Sha256;
-
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::FileAssetId;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use hmac::{Hmac, KeyInit, Mac};
+use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 
 /// 对象键最大长度。
 const OBJECT_KEY_MAX_LEN: usize = 512;
@@ -41,11 +40,7 @@ const HMAC_HEX_LEN: usize = 64;
 pub fn content_fingerprint(plain: &str, key: &[u8]) -> String {
     let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC 接受任意长度密钥");
     mac.update(plain.as_bytes());
-    mac.finalize()
-        .into_bytes()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    mac.finalize().into_bytes().iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 /// 内容指纹值对象（keyed HMAC-SHA256 十六进制）。
@@ -341,12 +336,8 @@ impl FileAsset {
             CONTENT_TYPE_MAX_LEN,
             "内容类型过长",
         )?;
-        let created_by = normalize_required_text(
-            data.created_by,
-            "创建人不能为空",
-            CREATED_BY_MAX_LEN,
-            "创建人过长",
-        )?;
+        let created_by =
+            normalize_required_text(data.created_by, "创建人不能为空", CREATED_BY_MAX_LEN, "创建人过长")?;
         if data.retention_class.requires_expiry() && data.expires_at.is_none() {
             return Err(Error::from("非长期保留策略必须提供到期时间"));
         }
@@ -421,15 +412,16 @@ impl FileAsset {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        content_fingerprint, ContentHmac, FileAsset, FileAssetData, RetentionClass, SecurityScanStatus,
-        SensitivityClass,
-    };
     use erp_core::common::state::ensure_transition;
     use erp_core::common::time::Instant;
     use erp_core::ids::FileAssetId;
     use hmac::{Hmac, KeyInit, Mac};
     use sha2::{Digest, Sha256};
+
+    use super::{
+        ContentHmac, FileAsset, FileAssetData, RetentionClass, SecurityScanStatus, SensitivityClass,
+        content_fingerprint,
+    };
 
     fn hmac_value(plain: &str, key: &[u8]) -> ContentHmac {
         ContentHmac::parse(content_fingerprint(plain, key)).unwrap()
@@ -460,26 +452,14 @@ mod tests {
         assert_eq!(asset.security_scan_status, SecurityScanStatus::Pending);
 
         let fingerprint = content_fingerprint("content", b"secret-key");
-        assert_eq!(
-            fingerprint,
-            content_fingerprint("content", b"secret-key"),
-            "指纹稳定"
-        );
-        assert_ne!(
-            fingerprint,
-            content_fingerprint("content", b"other-key"),
-            "不同密钥产生不同指纹"
-        );
+        assert_eq!(fingerprint, content_fingerprint("content", b"secret-key"), "指纹稳定");
+        assert_ne!(fingerprint, content_fingerprint("content", b"other-key"), "不同密钥产生不同指纹");
 
         type HmacSha256 = Hmac<Sha256>;
         let mut mac = HmacSha256::new_from_slice(b"secret-key").unwrap();
         mac.update(b"content");
-        let expected = mac
-            .finalize()
-            .into_bytes()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
+        let expected =
+            mac.finalize().into_bytes().iter().map(|byte| format!("{byte:02x}")).collect::<String>();
         assert_eq!(fingerprint, expected);
     }
 
@@ -500,37 +480,24 @@ mod tests {
     /// 失败路径：必填为空被拒。
     #[test]
     fn new_rejects_empty_file_name() {
-        let payload = FileAssetData {
-            file_name: "  ".to_string(),
-            ..data()
-        };
+        let payload = FileAssetData { file_name: "  ".to_string(), ..data() };
         assert!(FileAsset::new(FileAssetId::new("fa-1"), payload).is_err());
     }
 
     /// 失败路径：超长对象键被拒。
     #[test]
     fn new_rejects_overlong_object_key() {
-        let payload = FileAssetData {
-            storage_object_key: "x".repeat(513),
-            ..data()
-        };
+        let payload = FileAssetData { storage_object_key: "x".repeat(513), ..data() };
         assert!(FileAsset::new(FileAssetId::new("fa-1"), payload).is_err());
     }
 
     /// 失败路径：保留策略不一致（非长期缺少到期时间）被拒。
     #[test]
     fn new_rejects_missing_expiry_for_short_retention() {
-        let payload = FileAssetData {
-            expires_at: None,
-            ..data()
-        };
+        let payload = FileAssetData { expires_at: None, ..data() };
         assert!(FileAsset::new(FileAssetId::new("fa-1"), payload).is_err());
 
-        let payload = FileAssetData {
-            retention_class: RetentionClass::LongTerm,
-            expires_at: None,
-            ..data()
-        };
+        let payload = FileAssetData { retention_class: RetentionClass::LongTerm, expires_at: None, ..data() };
         assert!(FileAsset::new(FileAssetId::new("fa-2"), payload).is_ok());
     }
 
@@ -549,22 +516,14 @@ mod tests {
     fn illegal_scan_transitions_are_rejected() {
         let mut asset = FileAsset::new(FileAssetId::new("fa-1"), data()).unwrap();
         assert!(asset.mark_scan_result(SecurityScanStatus::Quarantined).is_ok());
-        assert!(
-            asset.mark_scan_result(SecurityScanStatus::Pending).is_err(),
-            "不能回退"
-        );
+        assert!(asset.mark_scan_result(SecurityScanStatus::Pending).is_err(), "不能回退");
         asset.mark_scan_result(SecurityScanStatus::Passed).unwrap();
-        assert!(
-            asset.mark_scan_result(SecurityScanStatus::Quarantined).is_err(),
-            "放行后不能再次隔离"
-        );
+        assert!(asset.mark_scan_result(SecurityScanStatus::Quarantined).is_err(), "放行后不能再次隔离");
 
         let mut rejected = FileAsset::new(FileAssetId::new("fa-2"), data()).unwrap();
         rejected.mark_scan_result(SecurityScanStatus::Rejected).unwrap();
         assert!(rejected.mark_scan_result(SecurityScanStatus::Pending).is_err());
-        assert!(rejected
-            .mark_scan_result(SecurityScanStatus::Quarantined)
-            .is_err());
+        assert!(rejected.mark_scan_result(SecurityScanStatus::Quarantined).is_err());
     }
 
     /// 状态机：逐边定向断言（含不可逆终态）。
@@ -590,10 +549,7 @@ mod tests {
         let mut asset = FileAsset::new(FileAssetId::new("fa-1"), data()).unwrap();
         asset.destroy(Instant::from_unix_secs(1_703_000_000)).unwrap();
         assert_eq!(asset.destroyed_at, Some(Instant::from_unix_secs(1_703_000_000)));
-        assert!(
-            asset.destroy(Instant::from_unix_secs(1_703_000_000)).is_err(),
-            "销毁审计只记录一次"
-        );
+        assert!(asset.destroy(Instant::from_unix_secs(1_703_000_000)).is_err(), "销毁审计只记录一次");
     }
 
     /// 裸摘要对比：指纹不等于无密钥 SHA-256，证明使用了带密钥 HMAC。
@@ -601,25 +557,15 @@ mod tests {
     fn fingerprint_differs_from_bare_digest() {
         let mut hasher = Sha256::new();
         hasher.update(b"content");
-        let bare = hasher
-            .finalize()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
+        let bare = hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect::<String>();
         assert_ne!(content_fingerprint("content", b"secret-key"), bare);
     }
 
     /// 枚举序列化与标签稳定。
     #[test]
     fn enums_codes_and_labels_are_stable() {
-        assert_eq!(
-            serde_json::to_string(&SecurityScanStatus::Quarantined).unwrap(),
-            "\"quarantined\""
-        );
-        assert_eq!(
-            serde_json::to_string(&RetentionClass::SevenDays).unwrap(),
-            "\"seven_days\""
-        );
+        assert_eq!(serde_json::to_string(&SecurityScanStatus::Quarantined).unwrap(), "\"quarantined\"");
+        assert_eq!(serde_json::to_string(&RetentionClass::SevenDays).unwrap(), "\"seven_days\"");
         assert_eq!(SensitivityClass::HighlySensitive.as_str(), "highly_sensitive");
         assert_eq!(SecurityScanStatus::Pending.label(), "待扫描");
         assert_eq!(RetentionClass::ThirtyDays.label(), "保留 30 天");

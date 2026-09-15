@@ -2,12 +2,12 @@
 
 use aes_gcm::aead::{Aead, Generate, Nonce};
 use aes_gcm::{Aes256Gcm, KeyInit};
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use erp_core::{Error, Result};
 use sha2::{Digest, Sha256};
 
 use super::limits::LINK_TOKEN_BYTES;
-use erp_core::{Error, Result};
 
 const CIPHERTEXT_VERSION: &str = "v1";
 
@@ -29,9 +29,7 @@ impl LinkTokenCrypto {
     /// # 错误
     /// 无。
     pub fn from_secret(secret: &[u8]) -> Self {
-        Self {
-            key: derive_key(secret, b"erp-sales-selection-link-token-v1"),
-        }
+        Self { key: derive_key(secret, b"erp-sales-selection-link-token-v1") }
     }
 
     /// 生成至少 128 位安全随机令牌、查找哈希与密文。
@@ -66,22 +64,15 @@ impl LinkTokenCrypto {
         let rest = ciphertext
             .strip_prefix(&format!("{CIPHERTEXT_VERSION}."))
             .ok_or_else(|| Error::from("选品链接密文无效"))?;
-        let (nonce_part, body) = rest
-            .split_once('.')
-            .ok_or_else(|| Error::from("选品链接密文无效"))?;
-        let nonce_bytes = URL_SAFE_NO_PAD
-            .decode(nonce_part)
-            .map_err(|_| Error::from("选品链接密文无效"))?;
-        let body_bytes = URL_SAFE_NO_PAD
-            .decode(body)
-            .map_err(|_| Error::from("选品链接密文无效"))?;
+        let (nonce_part, body) = rest.split_once('.').ok_or_else(|| Error::from("选品链接密文无效"))?;
+        let nonce_bytes = URL_SAFE_NO_PAD.decode(nonce_part).map_err(|_| Error::from("选品链接密文无效"))?;
+        let body_bytes = URL_SAFE_NO_PAD.decode(body).map_err(|_| Error::from("选品链接密文无效"))?;
         let cipher =
             Aes256Gcm::new_from_slice(&self.key).map_err(|_| Error::from("选品链接加密初始化失败"))?;
         let nonce = Nonce::<Aes256Gcm>::try_from(nonce_bytes.as_slice())
             .map_err(|_| Error::from("选品链接密文无效"))?;
-        let plain = cipher
-            .decrypt(&nonce, body_bytes.as_ref())
-            .map_err(|_| Error::from("选品链接密文无效"))?;
+        let plain =
+            cipher.decrypt(&nonce, body_bytes.as_ref()).map_err(|_| Error::from("选品链接密文无效"))?;
         String::from_utf8(plain).map_err(|_| Error::from("选品链接密文无效"))
     }
 
@@ -99,9 +90,8 @@ impl LinkTokenCrypto {
         let cipher =
             Aes256Gcm::new_from_slice(&self.key).map_err(|_| Error::from("选品链接加密初始化失败"))?;
         let nonce = Nonce::<Aes256Gcm>::try_generate().map_err(|_| Error::from("选品链接随机数生成失败"))?;
-        let ciphertext = cipher
-            .encrypt(&nonce, token.as_bytes())
-            .map_err(|_| Error::from("选品链接加密失败"))?;
+        let ciphertext =
+            cipher.encrypt(&nonce, token.as_bytes()).map_err(|_| Error::from("选品链接加密失败"))?;
         Ok(format!(
             "{CIPHERTEXT_VERSION}.{}.{}",
             URL_SAFE_NO_PAD.encode(nonce.as_slice()),
@@ -163,7 +153,7 @@ fn random_bytes() -> [u8; LINK_TOKEN_BYTES] {
 
 #[cfg(test)]
 mod tests {
-    use super::{token_hash, LinkTokenCrypto};
+    use super::{LinkTokenCrypto, token_hash};
 
     #[test]
     fn issue_round_trip_and_hash_lookup() {

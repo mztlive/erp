@@ -9,6 +9,21 @@
 //! （纠错用反向事实表达）。筛选/行类型定义在本文件，经 `ReturnsExt` 的关联
 //! 类型对外暴露；调用方也可经公开的 `repository::returns` 路径访问。
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::stable::StableBase;
+use erp_core::common::time::Instant;
+use erp_core::ids::{
+    CustomerAccountId, CustomerReceiptId, PurchaseOrderId, ReceivableEntryId, SalesOrderId, SupplierPaymentId,
+};
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
+use serde::{Deserialize, Serialize};
+
+use super::extensions::ReturnsExt;
 use crate::entity::returns::{
     CaseType, CustomerRefund, CustomerRefundStatus, PaymentReversal, PurchaseReturnLine, PurchaseReturnOrder,
     PurchaseReturnStatus, ReceiptReversal, ReturnMode, ReturnRoute, SalesReturnCase, SalesReturnCaseStatus,
@@ -19,22 +34,6 @@ use crate::repository::owned::{
     PurchaseReturnOrderRepository, ReceiptReversalRepository, SalesReturnCaseRepository,
     SalesReturnLineRepository, SupplierRefundRepository,
 };
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::common::stable::StableBase;
-use erp_core::common::time::Instant;
-use erp_core::ids::{
-    CustomerAccountId, CustomerReceiptId, PurchaseOrderId, ReceivableEntryId, SalesOrderId, SupplierPaymentId,
-};
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use mongodb::Database;
-use serde::{Deserialize, Serialize};
-
-use super::extensions::ReturnsExt;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// `sales_return_line` 集合名（单一来源：`ReturnsExt` 关联常量）。
 const SALES_RETURN_LINES: &str = <mongodb::Database as ReturnsExt>::SALES_RETURN_LINES;
@@ -166,11 +165,7 @@ impl QueryFilter for PurchaseReturnOrderFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        insert_literal_regex_filter(
-            &mut filter,
-            "purchase_return_no",
-            self.purchase_return_no.as_deref(),
-        );
+        insert_literal_regex_filter(&mut filter, "purchase_return_no", self.purchase_return_no.as_deref());
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
         }
@@ -180,22 +175,22 @@ impl QueryFilter for PurchaseReturnOrderFilter {
         ) {
             (Some(purchase_order_id), None) => {
                 filter.insert("purchase_order_id", purchase_order_id);
-            }
+            },
             (Some(purchase_order_id), Some(authorized)) => {
                 if authorized.iter().any(|id| id == &purchase_order_id) {
                     filter.insert("purchase_order_id", purchase_order_id);
                 } else {
                     filter.insert("$expr", false);
                 }
-            }
+            },
             (None, Some(authorized)) => {
                 if authorized.is_empty() {
                     filter.insert("$expr", false);
                 } else {
                     filter.insert("purchase_order_id", doc! { "$in": authorized });
                 }
-            }
-            (None, None) => {}
+            },
+            (None, None) => {},
         }
         filter
     }
@@ -329,10 +324,7 @@ impl<'a> SalesReturnCaseRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -357,8 +349,7 @@ impl<'a> SalesReturnLineRepository<'a> {
             return Ok(Vec::new());
         }
         let case_ids: Vec<String> = case_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "sales_return_case_id": { "$in": case_ids } }, executor)
-            .await
+        self.find_many(doc! { "sales_return_case_id": { "$in": case_ids } }, executor).await
     }
 }
 
@@ -396,10 +387,7 @@ impl<'a> PurchaseReturnOrderRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 装载采购退货查询的有界身份与版本集合，用于跨页一致性校验。
@@ -465,11 +453,7 @@ impl<'a> PurchaseReturnLineRepository<'a> {
             return Ok(Vec::new());
         }
         let order_ids: Vec<String> = order_ids.iter().map(ToString::to_string).collect();
-        self.find_many(
-            doc! { "purchase_return_order_id": { "$in": order_ids } },
-            executor,
-        )
-        .await
+        self.find_many(doc! { "purchase_return_order_id": { "$in": order_ids } }, executor).await
     }
 }
 
@@ -506,10 +490,7 @@ impl<'a> CustomerRefundRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 批量按原事实取回客户退款（`$in`，用于累计冲正校验）。
@@ -580,11 +561,7 @@ impl<'a> ReceiptReversalRepository<'a> {
             return Ok(Vec::new());
         }
         let receipt_ids: Vec<String> = receipt_ids.iter().map(ToString::to_string).collect();
-        self.find_many(
-            doc! { "original_customer_receipt_id": { "$in": receipt_ids } },
-            executor,
-        )
-        .await
+        self.find_many(doc! { "original_customer_receipt_id": { "$in": receipt_ids } }, executor).await
     }
 }
 
@@ -609,11 +586,7 @@ impl<'a> PaymentReversalRepository<'a> {
             return Ok(Vec::new());
         }
         let payment_ids: Vec<String> = payment_ids.iter().map(ToString::to_string).collect();
-        self.find_many(
-            doc! { "original_supplier_payment_id": { "$in": payment_ids } },
-            executor,
-        )
-        .await
+        self.find_many(doc! { "original_supplier_payment_id": { "$in": payment_ids } }, executor).await
     }
 }
 
@@ -660,19 +633,13 @@ impl<'a> ReturnsRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<SalesReturnCase>(<mongodb::Database as ReturnsExt>::SALES_RETURN_CASES),
+            &self.db.collection::<SalesReturnCase>(<mongodb::Database as ReturnsExt>::SALES_RETURN_CASES),
             case_entity,
             executor,
         )
         .await?;
-        mongo_ops::insert_one(
-            &self.db.collection::<SalesReturnLine>(SALES_RETURN_LINES),
-            line,
-            executor,
-        )
-        .await?;
+        mongo_ops::insert_one(&self.db.collection::<SalesReturnLine>(SALES_RETURN_LINES), line, executor)
+            .await?;
         Ok(())
     }
 
@@ -761,9 +728,7 @@ fn supplier_refund_originals_filter(
 /// 返回排序条件文档；`id` 作为次键保证同值稳定排序。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
-    let field = sort_by
-        .filter(|name| allowed.contains(name))
-        .unwrap_or("created_at");
+    let field = sort_by.filter(|name| allowed.contains(name)).unwrap_or("created_at");
     doc! { field: direction, "id": direction }
 }
 
@@ -836,13 +801,14 @@ fn customer_refund_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        customer_refund_projection, sort_doc, CustomerRefundFilter, PurchaseReturnOrderFilter,
-        SalesReturnCaseFilter,
-    };
-    use crate::entity::returns::{CaseType, CustomerRefundStatus, PurchaseReturnStatus};
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
+
+    use super::{
+        CustomerRefundFilter, PurchaseReturnOrderFilter, SalesReturnCaseFilter, customer_refund_projection,
+        sort_doc,
+    };
+    use crate::entity::returns::{CaseType, CustomerRefundStatus, PurchaseReturnStatus};
 
     #[test]
     fn case_filter_applies_optional_fields_and_deleted_filter() {
@@ -908,10 +874,7 @@ mod tests {
             sort_by: None,
             sort_ascending: false,
         };
-        assert_eq!(
-            empty.to_doc(),
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
-        );
+        assert_eq!(empty.to_doc(), doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false });
 
         let out_of_scope = PurchaseReturnOrderFilter {
             purchase_return_no: None,
@@ -923,10 +886,7 @@ mod tests {
             sort_by: None,
             sort_ascending: false,
         };
-        assert_eq!(
-            out_of_scope.to_doc(),
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
-        );
+        assert_eq!(out_of_scope.to_doc(), doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false });
 
         let in_scope = PurchaseReturnOrderFilter {
             purchase_return_no: None,
@@ -969,11 +929,7 @@ mod tests {
     #[test]
     fn sort_doc_appends_id_tiebreaker_for_both_directions() {
         assert_eq!(
-            sort_doc(
-                Some("occurred_at"),
-                true,
-                &["occurred_at", "amount", "created_at"]
-            ),
+            sort_doc(Some("occurred_at"), true, &["occurred_at", "amount", "created_at"]),
             doc! { "occurred_at": 1, "id": 1 }
         );
         assert_eq!(
@@ -1017,9 +973,10 @@ mod tests {
 
 #[cfg(test)]
 mod original_lookup_contract {
-    use super::{customer_refund_originals_filter, supplier_refund_originals_filter};
     use erp_core::ids::{CustomerReceiptId, PayableEntryId, ReceivableEntryId, SupplierPaymentId};
-    use mongodb::bson::{doc, Document};
+    use mongodb::bson::{Document, doc};
+
+    use super::{customer_refund_originals_filter, supplier_refund_originals_filter};
 
     #[test]
     fn customer_refund_sources_keep_and_and_empty_lookup() {

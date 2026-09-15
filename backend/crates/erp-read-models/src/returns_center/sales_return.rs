@@ -1,11 +1,11 @@
 //! SalesReturnCase 详情与分页视图装配。
-use super::dto::SalesReturnCaseView;
-use super::dto::{PageView, SalesReturnCaseListParams, SortDir};
-use super::ReturnsReadService;
-use crate::{Error, Result};
 use erp_returns::repository::ReturnsExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
+
+use super::ReturnsReadService;
+use super::dto::{PageView, SalesReturnCaseListParams, SalesReturnCaseView, SortDir};
+use crate::{Error, Result};
 /// 销售退货处理单列表筛选条件类型（经 `ReturnsExt` 关联类型跨 crate 可达）。
 type SalesReturnCaseFilter = <mongodb::Database as ReturnsExt>::SalesReturnCaseFilter;
 
@@ -34,21 +34,13 @@ impl ReturnsReadService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .sales_return_cases()
-            .search_sales_return_cases(&filter, &mut NoTransaction)
-            .await?;
+        let page =
+            self.db.sales_return_cases().search_sales_return_cases(&filter, &mut NoTransaction).await?;
         let mut views = Vec::with_capacity(page.items.len());
         for row in page.items {
             views.push(self.sales_return_case_view(row.id).await?);
         }
-        Ok(PageView {
-            items: views,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items: views, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 查询销售退货/拒收处理单详情（处理单 + 明细行）。

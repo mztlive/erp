@@ -5,17 +5,16 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as PurchaseOrderExt>::PURCHASE_ORDERS` 等值。
 
+use mongodb::Database;
+
+use super::super::purchase_order::{
+    PurchaseOrderDomainRepository, PurchaseOrderFilter, PurchaseOrderSubmissionFilter,
+};
 use crate::repository::owned::{
     PurchaseChangeOrderRepository, PurchaseChangeSubmissionLineRepository,
     PurchaseChangeSubmissionRepository, PurchaseLineSalesAllocationRepository, PurchaseOrderRepository,
     PurchaseOrderRevisionLineRepository, PurchaseOrderRevisionRepository,
     PurchaseOrderSubmissionLineRepository, PurchaseOrderSubmissionRepository,
-};
-
-use mongodb::Database;
-
-use super::super::purchase_order::{
-    PurchaseOrderDomainRepository, PurchaseOrderFilter, PurchaseOrderSubmissionFilter,
 };
 
 /// 域 D15 仓储访问器。

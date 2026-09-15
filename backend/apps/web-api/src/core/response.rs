@@ -1,10 +1,9 @@
-use axum::{
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
-};
-use serde::Serialize;
 use std::collections::BTreeMap;
+
+use axum::Json;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 pub struct ApiResponse<T> {
@@ -124,8 +123,10 @@ impl<T> ApiResponse<T> {
 
 #[cfg(test)]
 mod tests {
-    use axum::{body::to_bytes, http::StatusCode, response::IntoResponse};
-    use serde_json::{json, Value};
+    use axum::body::to_bytes;
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+    use serde_json::{Value, json};
 
     use super::ApiResponse;
 
@@ -143,10 +144,7 @@ mod tests {
         let cases = [
             (ApiResponse::<()>::unauthorized(), StatusCode::UNAUTHORIZED),
             (ApiResponse::<()>::permission_denied(), StatusCode::FORBIDDEN),
-            (
-                ApiResponse::<()>::system_error(),
-                StatusCode::INTERNAL_SERVER_ERROR,
-            ),
+            (ApiResponse::<()>::system_error(), StatusCode::INTERNAL_SERVER_ERROR),
         ];
 
         for (response, expected_status) in cases {
@@ -157,9 +155,8 @@ mod tests {
     #[tokio::test]
     async fn response_keeps_existing_json_fields() {
         let response = ApiResponse::<()>::permission_denied().into_response();
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("response body should be readable");
+        let body =
+            to_bytes(response.into_body(), usize::MAX).await.expect("response body should be readable");
         let body: Value = serde_json::from_slice(&body).expect("response body should be valid JSON");
 
         assert_eq!(

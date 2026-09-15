@@ -1,5 +1,4 @@
-use crate::entity::inventory::{StockAdjustment, StockAdjustmentLine, StockMovement};
-use crate::repository::InventoryExt;
+use application_core::AuditActor;
 use erp_core::ids::StockAdjustmentId;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -8,10 +7,9 @@ use super::InventoryService;
 use crate::dto::{
     PageView, SortDir, StockAdjustmentLineView, StockAdjustmentListParams, StockAdjustmentView,
 };
+use crate::entity::inventory::{StockAdjustment, StockAdjustmentLine, StockMovement};
 use crate::error::{Error, Result};
-use application_core::AuditActor;
-
-use crate::repository::StockAdjustmentFilter;
+use crate::repository::{InventoryExt, StockAdjustmentFilter};
 
 impl InventoryService {
     /// 分页查询库存调整单列表（W10 调整记录视图）。
@@ -77,11 +75,7 @@ impl InventoryService {
                         sort_by: Some(query.paging.sort_by.to_string()),
                         sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
                     };
-                    Ok::<_, Error>(
-                        db.stock_adjustments()
-                            .search_stock_adjustments(&filter, session)
-                            .await?,
-                    )
+                    Ok::<_, Error>(db.stock_adjustments().search_stock_adjustments(&filter, session).await?)
                 })
             })
             .await?;
@@ -103,12 +97,7 @@ impl InventoryService {
                 created_at: row.created_at,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: page_no,
-            page_size,
-        })
+        Ok(PageView { items, total: page.total, page: page_no, page_size })
     }
 
     /// 在同一快照内加载表头并验证对象读取范围；拒绝结果隐藏资源存在性。
@@ -128,9 +117,7 @@ impl InventoryService {
                         .await?
                         .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
                     if !authorization.actor_is_active()
-                        || !authorization
-                            .read_scope()
-                            .covers(adjustment.warehouse_id.as_ref())
+                        || !authorization.read_scope().covers(adjustment.warehouse_id.as_ref())
                     {
                         return Err(Error::NotFound("库存调整单不存在".to_string()));
                     }
@@ -182,11 +169,7 @@ impl InventoryService {
     /// # 错误
     /// 数据库查询失败时返回仓储错误。
     pub async fn load_movements_for_source_document(&self, document_id: &str) -> Result<Vec<StockMovement>> {
-        Ok(self
-            .db
-            .inventory()
-            .movements_for_source_document(document_id, &mut NoTransaction)
-            .await?)
+        Ok(self.db.inventory().movements_for_source_document(document_id, &mut NoTransaction).await?)
     }
 }
 

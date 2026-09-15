@@ -7,18 +7,19 @@
 //! 密钥管理系统引用，且引用本身不进入任何列表/详情投影（写后不回显），
 //! 响应中的 `credential_reference` 一律省略。
 
+use std::collections::BTreeMap;
+
+use application_core::{normalized_text, page_or_default, page_size_or_default};
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+
+use crate::Result;
 use crate::entity::supplier_api::{
     BusinessCapabilityRequirement, ConnectionEnvironment, HealthCheckResult, RateLimitPolicy,
     SupplierApiCapabilityCode, SupplierApiCapabilityStatus, SupplierApiConnection,
     SupplierApiConnectionStatus, SupplierCommandOutcome, SupplierConnectionAction, SupplierHealthCheckStatus,
     SupplierHealthCheckType,
 };
-use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use validator::Validate;
-
-use crate::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 连接列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub(crate) const SUPPLIER_API_CONNECTION_SORT_FIELDS: &[&str] =
@@ -42,6 +43,14 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+///
+/// `application_core::Page` 只序列化 `items`/`total`（冻结），列表接口按契约在此补齐
+/// `page`/`page_size`，不静默沿用 `{items,total}` 直出。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
+/// 不生效，空 code/name 需要按「空白视为空」拒绝，落入 HTTP 400）。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -55,16 +64,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-///
-/// `application_core::Page` 只序列化 `items`/`total`（冻结），列表接口按契约在此补齐
-/// `page`/`page_size`，不静默沿用 `{items,total}` 直出。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
-/// 不生效，空 code/name 需要按「空白视为空」拒绝，落入 HTTP 400）。
-use application_core::non_blank;
 
 /// 限流策略请求值对象（对应实体 `RateLimitPolicy`）。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Validate)]
@@ -586,21 +585,13 @@ impl From<SupplierApiConnection> for SupplierApiConnectionView {
             last_health_result: connection.last_health_result,
             safe_references: SafeReferencesView {
                 endpoint: SafeReferenceView {
-                    state: if connection.endpoint_reference_bound {
-                        "BOUND"
-                    } else {
-                        "MISSING"
-                    },
+                    state: if connection.endpoint_reference_bound { "BOUND" } else { "MISSING" },
                     alias: None,
                     version: None,
                     visible: false,
                 },
                 credential: SafeReferenceView {
-                    state: if connection.credential_reference_bound {
-                        "BOUND"
-                    } else {
-                        "MISSING"
-                    },
+                    state: if connection.credential_reference_bound { "BOUND" } else { "MISSING" },
                     alias: None,
                     version: None,
                     visible: false,
@@ -630,19 +621,17 @@ impl RateLimitPolicyRequest {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, SortDir, SupplierApiConnectionListParams};
-    use crate::entity::supplier_api::{ConnectionEnvironment, SupplierApiConnectionStatus};
     use serde_json::json;
     use validator::Validate;
 
+    use super::{SortDir, SupplierApiConnectionListParams, normalize_sort};
+    use crate::entity::supplier_api::{ConnectionEnvironment, SupplierApiConnectionStatus};
+
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
-        assert!(normalize_sort(
-            &Some("status".to_string()),
-            &None,
-            &["created_at", "connection_code"]
-        )
-        .is_err());
+        assert!(
+            normalize_sort(&Some("status".to_string()), &None, &["created_at", "connection_code"]).is_err()
+        );
         assert!(normalize_sort(&None, &Some("up".to_string()), &["created_at"]).is_err());
 
         let (field, direction) = normalize_sort(

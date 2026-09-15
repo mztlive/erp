@@ -3,17 +3,15 @@
 //! 运行时从启动密钥派生相互隔离的 AES-256-GCM 加密密钥、查询 HMAC 密钥和
 //! 揭示令牌签名密钥。密钥只驻留在内存中，不进入实体、DTO、日志或 Debug。
 
-use aes_gcm::{
-    aead::{Aead, Generate, Nonce},
-    Aes256Gcm, KeyInit,
-};
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use aes_gcm::aead::{Aead, Generate, Nonce};
+use aes_gcm::{Aes256Gcm, KeyInit};
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::entity::party::{PartyAddress, PartyBankAccount, PartyContact, QueryFingerprint};
-
 use crate::error::{Error, Result};
 
 const CIPHERTEXT_VERSION: &str = "v1";
@@ -183,20 +181,12 @@ impl SensitiveDataCodec {
         supplier_id: impl Into<String>,
         expires_at: u64,
     ) -> Result<String> {
-        let claims = RevealClaims {
-            kind,
-            record_id: record_id.into(),
-            supplier_id: supplier_id.into(),
-            expires_at,
-        };
+        let claims =
+            RevealClaims { kind, record_id: record_id.into(), supplier_id: supplier_id.into(), expires_at };
         let payload =
             serde_json::to_vec(&claims).map_err(|_| Error::Internal("敏感字段令牌序列化失败".to_string()))?;
         let signature = sign(&self.token_key, &payload)?;
-        Ok(format!(
-            "{}.{}",
-            URL_SAFE_NO_PAD.encode(payload),
-            URL_SAFE_NO_PAD.encode(signature)
-        ))
+        Ok(format!("{}.{}", URL_SAFE_NO_PAD.encode(payload), URL_SAFE_NO_PAD.encode(signature)))
     }
 
     /// 验证短时揭示令牌并返回受限访问范围。
@@ -272,8 +262,7 @@ fn verify_signature(key: &[u8], payload: &[u8], signature: &[u8]) -> Result<()> 
     let mut mac = <HmacSha256 as KeyInit>::new_from_slice(key)
         .map_err(|_| Error::Internal("敏感字段令牌验签初始化失败".to_string()))?;
     mac.update(payload);
-    mac.verify_slice(signature)
-        .map_err(|_| Error::ValidationError("敏感字段令牌签名非法".to_string()))
+    mac.verify_slice(signature).map_err(|_| Error::ValidationError("敏感字段令牌签名非法".to_string()))
 }
 
 #[cfg(test)]

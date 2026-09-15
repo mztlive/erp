@@ -1,16 +1,13 @@
 //! 回款冲正草稿创建的注册、绑定和审计根事务。
 
-use super::super::ReturnsProcess;
-use super::context::{load_receipt_reversal_context, persist_bound_receipt_reversal_document};
-use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_identity::SharedRbacService;
 use erp_read_models::returns_center::dto::ReceiptReversalView;
 use erp_returns::dto::CreateReceiptReversalRequest;
 use erp_returns::entity::returns::ReceiptReversal;
-use erp_returns::service::receipt_reversal::build_create;
 use erp_returns::service::ReturnsService;
+use erp_returns::service::receipt_reversal::build_create;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::service::approval::binding::BindPublishedDefinitionCommand;
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
@@ -18,6 +15,10 @@ use erp_workflow::service::document_registry::new_registered_document;
 use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
+
+use super::super::ReturnsProcess;
+use super::context::{load_receipt_reversal_context, persist_bound_receipt_reversal_document};
+use crate::Result;
 
 impl ReturnsProcess {
     /// 登记回款冲正草稿，并在同一事务绑定已发布审批定义。
@@ -50,10 +51,7 @@ impl ReturnsProcess {
             actor.clone(),
         )
         .await?;
-        self.reads()
-            .receipt_reversal_detail(&reversal.base.id)
-            .await
-            .map_err(crate::Error::from)
+        self.reads().receipt_reversal_detail(&reversal.base.id).await.map_err(crate::Error::from)
     }
 }
 

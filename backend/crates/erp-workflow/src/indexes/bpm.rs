@@ -1,13 +1,11 @@
 //! BPM 目标集合索引。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::BpmExt;
-use persistence_core::Result;
 
 const DEFINITIONS: &str = <mongodb::Database as BpmExt>::APPROVAL_PROCESS_DEFINITIONS;
 const NODE_DEFINITIONS: &str = <mongodb::Database as BpmExt>::APPROVAL_NODE_DEFINITIONS;
@@ -37,9 +35,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -131,10 +127,7 @@ fn instance_indexes() -> Vec<IndexModel> {
             "idx_approval_process_instances_started_by",
             doc! { "started_by": 1, "started_at": -1, "id": -1 },
         ),
-        named_index(
-            "idx_approval_process_instances_updated",
-            doc! { "updated_at": -1, "id": -1 },
-        ),
+        named_index("idx_approval_process_instances_updated", doc! { "updated_at": -1, "id": -1 }),
         named_index(
             "idx_approval_process_instances_status_updated",
             doc! { "status": 1, "updated_at": -1, "id": -1 },
@@ -213,10 +206,7 @@ fn active_or_blocked_filter() -> Document {
 }
 
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
@@ -230,11 +220,7 @@ fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Documen
     IndexModel::builder()
         .keys(keys)
         .options(
-            IndexOptions::builder()
-                .name(name.into())
-                .unique(true)
-                .partial_filter_expression(filter)
-                .build(),
+            IndexOptions::builder().name(name.into()).unique(true).partial_filter_expression(filter).build(),
         )
         .build()
 }
@@ -393,10 +379,7 @@ mod tests {
             })
         );
         let history = index_named(&indexes, "idx_approval_node_executions_round_node");
-        assert_ne!(
-            history.options.as_ref().and_then(|options| options.unique),
-            Some(true)
-        );
+        assert_ne!(history.options.as_ref().and_then(|options| options.unique), Some(true));
         assert_eq!(
             history.keys,
             doc! {
@@ -411,11 +394,7 @@ mod tests {
             doc! { "process_instance_id": 1, "execution_no": 1 }
         );
         assert_eq!(
-            index_named(&indexes, "uk_approval_node_executions_instance_no")
-                .options
-                .as_ref()
-                .unwrap()
-                .unique,
+            index_named(&indexes, "uk_approval_node_executions_instance_no").options.as_ref().unwrap().unique,
             Some(true)
         );
         assert_eq!(
@@ -431,11 +410,7 @@ mod tests {
     #[test]
     fn assignee_and_receipt_uniques_match_contract_keys() {
         assert_eq!(
-            index_named(
-                &assignee_indexes(),
-                "uk_approval_instance_assignees_instance_node"
-            )
-            .keys,
+            index_named(&assignee_indexes(), "uk_approval_instance_assignees_instance_node").keys,
             doc! { "process_instance_id": 1, "node_key": 1 }
         );
         assert_eq!(

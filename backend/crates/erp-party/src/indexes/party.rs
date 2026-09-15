@@ -5,14 +5,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::PartyExt;
-use persistence_core::Result;
 
 /// `party` 集合名。
 pub(crate) const PARTIES: &str = <mongodb::Database as PartyExt>::PARTIES;
@@ -56,9 +54,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -103,24 +99,15 @@ fn party_indexes() -> Vec<IndexModel> {
 /// 返回 `party_revision` 的版本唯一约束与名称搜索索引。
 fn party_revision_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_party_revisions_party_revision",
-            doc! { "party_id": 1, "revision_no": 1 },
-        ),
-        named_index(
-            "idx_party_revisions_names",
-            doc! { "legal_name": 1, "short_name": 1 },
-        ),
+        unique_index("uk_party_revisions_party_revision", doc! { "party_id": 1, "revision_no": 1 }),
+        named_index("idx_party_revisions_names", doc! { "legal_name": 1, "short_name": 1 }),
     ]
 }
 
 /// 返回 `party_contact` 的主体/状态列表与手机指纹查询索引。
 fn party_contact_indexes() -> Vec<IndexModel> {
     vec![
-        named_index(
-            "idx_party_contacts_party_status",
-            doc! { "party_id": 1, "status": 1, "is_default": 1 },
-        ),
+        named_index("idx_party_contacts_party_status", doc! { "party_id": 1, "status": 1, "is_default": 1 }),
         named_index("idx_party_contacts_mobile_hmac", doc! { "mobile_query_hmac": 1 }),
     ]
 }
@@ -135,19 +122,13 @@ fn party_address_indexes() -> Vec<IndexModel> {
 
 /// 返回 `party_tax_profile` 的主体列表索引。
 fn party_tax_profile_indexes() -> Vec<IndexModel> {
-    vec![named_index(
-        "idx_party_tax_profiles_party",
-        doc! { "party_id": 1, "status": 1, "is_default": 1 },
-    )]
+    vec![named_index("idx_party_tax_profiles_party", doc! { "party_id": 1, "status": 1, "is_default": 1 })]
 }
 
 /// 返回 `party_bank_account` 的身份约束和列表查询索引。
 fn party_bank_account_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_party_bank_accounts_bank_account_no",
-            doc! { "bank_account_no": 1 },
-        ),
+        unique_index("uk_party_bank_accounts_bank_account_no", doc! { "bank_account_no": 1 }),
         unique_index(
             "uk_party_bank_accounts_party_hmac",
             doc! { "party_id": 1, "account_number_query_hmac": 1 },
@@ -161,10 +142,7 @@ fn party_bank_account_indexes() -> Vec<IndexModel> {
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -191,7 +169,7 @@ fn partial_unique_index(name: impl Into<String>, keys: Document, partial_filter:
 
 #[cfg(test)]
 mod tests {
-    use mongodb::bson::{doc, Bson};
+    use mongodb::bson::{Bson, doc};
 
     use super::{party_bank_account_indexes, party_indexes, party_revision_indexes};
 
@@ -207,12 +185,7 @@ mod tests {
                 })
                 .unwrap();
             assert_eq!(index.options.as_ref().unwrap().unique, Some(true));
-            assert!(index
-                .options
-                .as_ref()
-                .unwrap()
-                .partial_filter_expression
-                .is_none());
+            assert!(index.options.as_ref().unwrap().partial_filter_expression.is_none());
         }
 
         let party_no = indexes
@@ -235,10 +208,7 @@ mod tests {
         let options = credit_code.options.as_ref().unwrap();
         assert_eq!(options.unique, Some(true));
         let partial = options.partial_filter_expression.as_ref().unwrap();
-        assert!(matches!(
-            partial.get("unified_credit_code"),
-            Some(Bson::Document(_))
-        ));
+        assert!(matches!(partial.get("unified_credit_code"), Some(Bson::Document(_))));
     }
 
     #[test]
@@ -250,10 +220,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(index.keys, doc! { "id": 1 });
-        assert_eq!(
-            index.options.as_ref().and_then(|options| options.unique),
-            Some(true)
-        );
+        assert_eq!(index.options.as_ref().and_then(|options| options.unique), Some(true));
     }
 
     #[test]
@@ -265,9 +232,7 @@ mod tests {
                 == Some("uk_party_revisions_party_revision")
                 && index.keys == doc! { "party_id": 1, "revision_no": 1 }
         }));
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "legal_name": 1, "short_name": 1 } }));
+        assert!(indexes.iter().any(|index| { index.keys == doc! { "legal_name": 1, "short_name": 1 } }));
     }
 
     #[test]
@@ -293,10 +258,10 @@ mod tests {
 /// PROC-R10 主体业务主键索引的真实 MongoDB 验收（隔离库，Quality 单独执行）。
 #[cfg(test)]
 mod proc_r10_mongo_tests {
-    use mongodb::bson::{doc, Document};
+    use mongodb::bson::{Document, doc};
     use serde::Deserialize;
 
-    use super::{ensure, PARTIES};
+    use super::{PARTIES, ensure};
 
     /// 按随机库名连接并创建、`Drop` 时清理的本地测试库夹具。
     ///
@@ -326,11 +291,7 @@ mod proc_r10_mongo_tests {
                 .filter(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
                 .take(32)
                 .collect();
-            let prefix = if sanitized.is_empty() {
-                "test".to_string()
-            } else {
-                sanitized
-            };
+            let prefix = if sanitized.is_empty() { "test".to_string() } else { sanitized };
             let name = format!("{prefix}_{}", &mongodb::bson::oid::ObjectId::new().to_hex()[..8]);
             let db = client.database(&name);
             db.create_collection("_fixture").await?;
@@ -357,9 +318,7 @@ mod proc_r10_mongo_tests {
 
     /// `ERP_TEST_MONGO_URI` 已设置且非空时返回 `true`。
     fn mongo_env_present() -> bool {
-        std::env::var("ERP_TEST_MONGO_URI")
-            .map(|uri| !uri.trim().is_empty())
-            .unwrap_or(false)
+        std::env::var("ERP_TEST_MONGO_URI").map(|uri| !uri.trim().is_empty()).unwrap_or(false)
     }
 
     /// 需要真实 MongoDB 的集成测试门控宏。
@@ -450,28 +409,20 @@ mod proc_r10_mongo_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn duplicate_party_ids_are_audited_and_refuse_migration() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_r10_party_id_dup")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_r10_party_id_dup").await.expect("测试数据库创建失败");
             insert_raw_party(fixture.db(), "dup-1", "P-DUP-1").await;
             insert_raw_party(fixture.db(), "dup-1", "P-DUP-2").await;
 
             let duplicates = audit_duplicate_party_ids(fixture.db()).await;
             assert_eq!(
                 duplicates,
-                vec![DuplicatePartyId {
-                    id: "dup-1".to_string(),
-                    count: 2
-                }],
+                vec![DuplicatePartyId { id: "dup-1".to_string(), count: 2 }],
                 "部署前审计必须报出重复 id"
             );
 
             let err = ensure(fixture.db()).await.expect_err("重复 id 必须拒绝建索引");
             let rendered = format!("{err:?}");
-            assert!(
-                rendered.contains("uk_parties_id"),
-                "诊断必须包含冲突索引名：{rendered}"
-            );
+            assert!(rendered.contains("uk_parties_id"), "诊断必须包含冲突索引名：{rendered}");
         });
     }
 
@@ -492,9 +443,7 @@ mod proc_r10_mongo_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn party_id_in_queries_use_unique_id_index() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_r10_party_id_explain")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_r10_party_id_explain").await.expect("测试数据库创建失败");
             ensure(fixture.db()).await.expect("索引创建失败");
             insert_raw_party(fixture.db(), "pty-1", "P-1").await;
 
@@ -511,14 +460,8 @@ mod proc_r10_mongo_tests {
                 .expect("主体 id 查询 explain 失败");
             let rendered = format!("{explain:?}");
             assert!(rendered.contains("IXSCAN"), "explain 未使用 IXSCAN：{rendered}");
-            assert!(
-                rendered.contains("uk_parties_id"),
-                "explain 未命中 uk_parties_id：{rendered}"
-            );
-            assert!(
-                !rendered.contains("COLLSCAN"),
-                "explain 出现 COLLSCAN：{rendered}"
-            );
+            assert!(rendered.contains("uk_parties_id"), "explain 未命中 uk_parties_id：{rendered}");
+            assert!(!rendered.contains("COLLSCAN"), "explain 出现 COLLSCAN：{rendered}");
         });
     }
 }

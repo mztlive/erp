@@ -11,7 +11,6 @@ mod sales_return;
 mod start_approval;
 mod supplier_refund;
 
-use crate::{Error, Result};
 pub use adapter::{
     customer_refund_object_readable, payment_reversal_object_readable, receipt_reversal_object_readable,
     supplier_refund_object_readable,
@@ -27,6 +26,8 @@ pub use payment_posting::PaymentReversalProcess;
 use persistence_core::Executor;
 pub use receipt_reversal::ReceiptReversalProcess;
 
+use crate::{Error, Result};
+
 /// 退货、退款和冲正命令的原事务与审批授权组合。
 pub struct ReturnsProcess {
     db: Database,
@@ -37,11 +38,7 @@ impl ReturnsProcess {
     /// 使用原共享 RBAC 和失败关闭对象读取端口构造命令入口。
     pub fn new(db: Database) -> Self {
         let rbac = crate::adapters::identity::shared_rbac_service(db.clone());
-        Self {
-            db,
-            rbac,
-            object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
-        }
+        Self { db, rbac, object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort) }
     }
     /// 注入组合根已配置的对象读取授权能力。
     pub fn with_object_read(
@@ -96,7 +93,7 @@ pub async fn finalize_approved_return_in_transaction(
                 session,
             )
             .await
-        }
+        },
         DocumentType::SupplierRefund => {
             supplier_refund::apply_supplier_refund_final_post(
                 db,
@@ -106,11 +103,8 @@ pub async fn finalize_approved_return_in_transaction(
                 session,
             )
             .await
-        }
-        other => Err(Error::BusinessLogicError(format!(
-            "单据类型 {} 不属于退款冲正最终动作",
-            other.label()
-        ))),
+        },
+        other => Err(Error::BusinessLogicError(format!("单据类型 {} 不属于退款冲正最终动作", other.label()))),
     }
 }
 
@@ -137,7 +131,7 @@ pub async fn cancel_approval_in_transaction(
             erp_returns::service::ReturnsService::new(db.clone())
                 .persist_customer_refund(&mut refund, executor)
                 .await?;
-        }
+        },
         DocumentType::SupplierRefund => {
             let mut refund = db
                 .supplier_refunds()
@@ -146,7 +140,7 @@ pub async fn cancel_approval_in_transaction(
                 .ok_or_else(|| Error::NotFound("供应商退款单不存在".to_string()))?;
             adapter::execute_supplier_refund_domain_action(&mut refund, action)?;
             erp_returns::service::ReturnsService::persist_supplier_refund(db, &mut refund, executor).await?;
-        }
+        },
         DocumentType::ReceiptReversal => {
             let mut reversal = db
                 .receipt_reversals()
@@ -156,7 +150,7 @@ pub async fn cancel_approval_in_transaction(
             adapter::execute_receipt_reversal_domain_action(&mut reversal, action)?;
             erp_returns::service::ReturnsService::persist_receipt_reversal(db, &mut reversal, executor)
                 .await?;
-        }
+        },
         DocumentType::PaymentReversal => {
             let mut reversal = db
                 .payment_reversals()
@@ -166,18 +160,13 @@ pub async fn cancel_approval_in_transaction(
             adapter::execute_payment_reversal_domain_action(&mut reversal, action)?;
             erp_returns::service::ReturnsService::persist_payment_reversal(db, &mut reversal, executor)
                 .await?;
-        }
+        },
         other => {
-            return Err(Error::ValidationError(format!(
-                "{} 不属于退货退款审批动作端口",
-                other.label()
-            )));
-        }
+            return Err(Error::ValidationError(format!("{} 不属于退货退款审批动作端口", other.label())));
+        },
     }
     let audit =
-        actor
-            .clone()
-            .resource_log("returns.cancel_approval", document_type.as_str(), id.to_string())?;
+        actor.clone().resource_log("returns.cancel_approval", document_type.as_str(), id.to_string())?;
     db.audit_logs().create(&audit, executor).await?;
     Ok(())
 }

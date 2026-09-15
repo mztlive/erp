@@ -1,11 +1,11 @@
-use crate::repository::SupplierSettlementExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
-use super::dto::{SettlementPageView, SupplierSettlementItemListParams, SupplierSettlementItemView};
 use super::SupplierSettlementService;
-use crate::dto::supplier_fulfillment::SortDir;
+use super::dto::{SettlementPageView, SupplierSettlementItemListParams, SupplierSettlementItemView};
 use crate::Result;
+use crate::dto::supplier_fulfillment::SortDir;
+use crate::repository::SupplierSettlementExt;
 
 /// 结算明细列表筛选条件类型。
 type ItemFilter = <mongodb::Database as SupplierSettlementExt>::SupplierSettlementItemFilter;
@@ -63,11 +63,6 @@ impl SupplierSettlementService {
             })
             .collect();
 
-        Ok(SettlementPageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(SettlementPageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 }

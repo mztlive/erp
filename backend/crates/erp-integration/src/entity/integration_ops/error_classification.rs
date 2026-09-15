@@ -14,11 +14,7 @@ pub fn is_result_unknown(class: ErrorClass, code: &str) -> bool {
 
 /// 把符合结果未知信号的分类归一化为正式结果未知分类。
 pub fn normalized_result_unknown_class(class: ErrorClass, code: &str) -> ErrorClass {
-    if is_result_unknown(class, code) {
-        ErrorClass::ResultUnknown
-    } else {
-        class
-    }
+    if is_result_unknown(class, code) { ErrorClass::ResultUnknown } else { class }
 }
 
 #[cfg(test)]
@@ -33,14 +29,8 @@ mod tests {
     #[test]
     fn uppercase_timeout_and_outcome_unknown_are_unknown() {
         assert!(is_result_unknown(ErrorClass::TransientFailure, "MALL_TIMEOUT"));
-        assert!(is_result_unknown(
-            ErrorClass::TransientFailure,
-            "MALL_OUTCOME_UNKNOWN"
-        ));
-        assert!(is_result_unknown(
-            ErrorClass::BusinessRejected,
-            "REMOTE_PRE_TIMEOUT_POST"
-        ));
+        assert!(is_result_unknown(ErrorClass::TransientFailure, "MALL_OUTCOME_UNKNOWN"));
+        assert!(is_result_unknown(ErrorClass::BusinessRejected, "REMOTE_PRE_TIMEOUT_POST"));
     }
 
     #[test]

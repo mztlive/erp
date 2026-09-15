@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     ContractId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
@@ -30,9 +30,7 @@ fn approval_without_attribution_leaves_order_unchanged() {
     let mut order = SalesOrder::new(SalesOrderId::new("missing-attribution"), data(), "admin-1").unwrap();
     order.start_approval_submission("admin-1").unwrap();
     let before = order.clone();
-    assert!(order
-        .approve(Instant::from_unix_secs(1_800_000_000), "approver")
-        .is_err());
+    assert!(order.approve(Instant::from_unix_secs(1_800_000_000), "approver").is_err());
     assert_eq!(order, before);
 }
 
@@ -43,9 +41,7 @@ fn attribution_is_frozen_once_and_effective_time_must_match() {
     crate::entity::sales_order::attribution::freeze_fixture(&mut order);
     let frozen = order.attribution.clone().unwrap();
     assert!(order.freeze_attribution(frozen.clone()).is_err());
-    assert!(order
-        .approve(Instant::from_unix_secs(1_800_000_001), "approver")
-        .is_err());
+    assert!(order.approve(Instant::from_unix_secs(1_800_000_001), "approver").is_err());
     order.approve(frozen.attributed_at, "approver").unwrap();
     order.stable.touch("another-editor");
     assert_eq!(order.attribution, Some(frozen));
@@ -82,10 +78,7 @@ fn entity_rules_cover_versions_relations_and_operability() {
         &CustomerAccountId::new("cust-1"),
         &PartyId::new("party-1"),
     ));
-    assert_eq!(
-        order.sales_change_start_blocker(),
-        Some("只有已生效的销售单才能发起变更")
-    );
+    assert_eq!(order.sales_change_start_blocker(), Some("只有已生效的销售单才能发起变更"));
     assert_eq!(
         order.procurement_creation_blocker(Quantity::from_str("1").unwrap()),
         Some("销售单最终生效后才能分配供给")
@@ -93,16 +86,12 @@ fn entity_rules_cover_versions_relations_and_operability() {
 
     order.start_approval_submission("admin-1").unwrap();
     crate::entity::sales_order::attribution::freeze_fixture(&mut order);
-    order
-        .approve(Instant::from_unix_secs(1_800_000_000), "approver")
-        .unwrap();
+    order.approve(Instant::from_unix_secs(1_800_000_000), "approver").unwrap();
     order.attach_revision("rev-1", "approver");
     assert!(order.is_fully_formalized());
     assert!(order.current_revision_matches(&SalesOrderRevisionId::new("rev-1")));
     assert!(order.sales_change_start_blocker().is_none());
-    assert!(order
-        .procurement_creation_blocker(Quantity::from_str("1").unwrap())
-        .is_none());
+    assert!(order.procurement_creation_blocker(Quantity::from_str("1").unwrap()).is_none());
     assert_eq!(
         order.procurement_creation_blocker(Quantity::from_str("0").unwrap()),
         Some("当前销售单待分配供给已全部覆盖")
@@ -122,18 +111,12 @@ fn progress_derivation_and_refresh_are_entity_owned() {
         CollectionProgress::from_receivable_balances([(fifty, fifty)]),
         CollectionProgress::PartiallyCollected
     );
-    assert_eq!(
-        CollectionProgress::from_receivable_balances([(zero, hundred)]),
-        CollectionProgress::Settled
-    );
+    assert_eq!(CollectionProgress::from_receivable_balances([(zero, hundred)]), CollectionProgress::Settled);
     assert_eq!(
         InvoiceProgress::from_receivable_balances([(fifty, fifty)]),
         InvoiceProgress::PartiallyInvoiced
     );
-    assert_eq!(
-        InvoiceProgress::from_receivable_balances([(zero, hundred)]),
-        InvoiceProgress::Completed
-    );
+    assert_eq!(InvoiceProgress::from_receivable_balances([(zero, hundred)]), InvoiceProgress::Completed);
 
     let mut order = SalesOrder::new(SalesOrderId::new("o-1"), data(), "admin-1").unwrap();
     let closed_at = Instant::from_unix_secs(1_800_000_000);
@@ -177,31 +160,19 @@ fn procurement_guard_advances_monotonically() {
 
 #[test]
 fn new_rejects_blank_and_overlong_order_no() {
-    let blank = SalesOrderData {
-        order_no: "   ".to_string(),
-        ..data()
-    };
+    let blank = SalesOrderData { order_no: "   ".to_string(), ..data() };
     assert!(SalesOrder::new(SalesOrderId::new("o-1"), blank, "admin-1").is_err());
 
-    let overlong = SalesOrderData {
-        order_no: "x".repeat(65),
-        ..data()
-    };
+    let overlong = SalesOrderData { order_no: "x".repeat(65), ..data() };
     assert!(SalesOrder::new(SalesOrderId::new("o-1"), overlong, "admin-1").is_err());
 }
 
 #[test]
 fn new_rejects_overlong_source_fields() {
-    let overlong_identity = SalesOrderData {
-        source_identity_id: Some("x".repeat(257)),
-        ..data()
-    };
+    let overlong_identity = SalesOrderData { source_identity_id: Some("x".repeat(257)), ..data() };
     assert!(SalesOrder::new(SalesOrderId::new("o-1"), overlong_identity, "admin-1").is_err());
 
-    let overlong_code = SalesOrderData {
-        source_status_code: Some("x".repeat(65)),
-        ..data()
-    };
+    let overlong_code = SalesOrderData { source_status_code: Some("x".repeat(65)), ..data() };
     assert!(SalesOrder::new(SalesOrderId::new("o-1"), overlong_code, "admin-1").is_err());
 }
 
@@ -222,11 +193,7 @@ fn update_keeps_identity_fields_and_touches_auditor() {
     assert_eq!(order.customer_id, CustomerAccountId::new("cust-2"));
     assert_eq!(order.source_status_code.as_deref(), Some("PAID"));
     assert_eq!(order.order_no, "SO-2026-0001", "单号不可修改");
-    assert_eq!(
-        order.business_type,
-        BusinessType::GoodsService,
-        "业务性质不可修改"
-    );
+    assert_eq!(order.business_type, BusinessType::GoodsService, "业务性质不可修改");
     assert_eq!(order.origin_system, OriginSystem::Erp, "创建入口不可修改");
     assert_eq!(order.stable.updated_by, "admin-2");
 }
@@ -272,12 +239,8 @@ fn full_approval_flow_and_rejection_flow() {
     order.start_approval_submission("admin-1").unwrap();
     assert_eq!(order.commercial_status, CommercialStatus::PendingReview);
     assert_eq!(order.review_status, ReviewStatus::InApproval);
-    assert!(order
-        .transition_review(ReviewStatus::Rejected, "approver")
-        .is_err());
-    assert!(order
-        .transition_review(ReviewStatus::PendingProcurementConfirmation, "approver")
-        .is_err());
+    assert!(order.transition_review(ReviewStatus::Rejected, "approver").is_err());
+    assert!(order.transition_review(ReviewStatus::PendingProcurementConfirmation, "approver").is_err());
     crate::entity::sales_order::attribution::freeze_fixture(&mut order);
     order
         .transition_review(ReviewStatus::Approved, "approver")
@@ -298,23 +261,14 @@ fn full_approval_flow_and_rejection_flow() {
 
 #[test]
 fn voucher_order_enters_unified_in_approval() {
-    let voucher_data = SalesOrderData {
-        business_type: BusinessType::Voucher,
-        ..data()
-    };
+    let voucher_data = SalesOrderData { business_type: BusinessType::Voucher, ..data() };
     let mut order = SalesOrder::new(SalesOrderId::new("o-3"), voucher_data, "admin-1").unwrap();
     order.start_approval_submission("admin-1").unwrap();
     assert_eq!(order.commercial_status, CommercialStatus::PendingReview);
     assert_eq!(order.review_status, ReviewStatus::InApproval);
-    assert!(order
-        .transition_review(ReviewStatus::Rejected, "approver")
-        .is_err());
-    assert!(order
-        .transition_review(ReviewStatus::PendingSalesLeader, "approver")
-        .is_err());
-    assert!(order
-        .transition_review(ReviewStatus::PendingOperations, "approver")
-        .is_err());
+    assert!(order.transition_review(ReviewStatus::Rejected, "approver").is_err());
+    assert!(order.transition_review(ReviewStatus::PendingSalesLeader, "approver").is_err());
+    assert!(order.transition_review(ReviewStatus::PendingOperations, "approver").is_err());
     crate::entity::sales_order::attribution::freeze_fixture(&mut order);
     order
         .transition_review(ReviewStatus::Approved, "approver")
@@ -325,10 +279,7 @@ fn voucher_order_enters_unified_in_approval() {
 
     let mut withdrawn = SalesOrder::new(
         SalesOrderId::new("o-4"),
-        SalesOrderData {
-            business_type: BusinessType::Voucher,
-            ..data()
-        },
+        SalesOrderData { business_type: BusinessType::Voucher, ..data() },
         "admin-1",
     )
     .unwrap();
@@ -368,12 +319,14 @@ fn line_new_and_remove() {
 
 #[test]
 fn line_rejects_zero_line_no() {
-    assert!(SalesOrderLine::new(
-        SalesOrderLineId::new("l-1"),
-        SalesOrderId::new("o-1"),
-        SalesOrderLineData { line_no: 0 },
-    )
-    .is_err());
+    assert!(
+        SalesOrderLine::new(
+            SalesOrderLineId::new("l-1"),
+            SalesOrderId::new("o-1"),
+            SalesOrderLineData { line_no: 0 },
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -384,10 +337,7 @@ fn progress_enums_expose_labels() {
     assert_eq!(CloseStatus::Closeable.label(), "可关闭");
     assert_eq!(ReviewStatus::PendingLowMarginSuperior.label(), "待低毛利上级确认");
     assert_eq!(CommercialStatus::Effective.label(), "已生效");
-    assert_eq!(
-        serde_json::to_string(&CommercialStatus::PendingReview).unwrap(),
-        "\"PENDING_REVIEW\""
-    );
+    assert_eq!(serde_json::to_string(&CommercialStatus::PendingReview).unwrap(), "\"PENDING_REVIEW\"");
 }
 
 #[test]

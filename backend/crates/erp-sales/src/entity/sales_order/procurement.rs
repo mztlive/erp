@@ -23,10 +23,7 @@ pub fn procurement_responsibility_key(line_ids: &[String]) -> Result<String> {
         digest.update(line_id.as_bytes());
     }
     let digest = digest.finalize();
-    let encoded = digest
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
+    let encoded = digest.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
     Ok(format!("sales-lines:{encoded}"))
 }
 

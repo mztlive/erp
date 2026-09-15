@@ -7,12 +7,10 @@
 //! 存在性、版本锁、事务编排与批量数据面，不再复制字段组合判断与总额
 //! 守恒计算。
 
+use crate::dto::receivable::{CommitInvoiceRequest, CreateInvoiceRequest, SalesInvoiceAllocationLineRequest};
 use crate::entity::receivable::sales_invoice_allocation_plan::SalesInvoiceAllocationLine;
 use crate::entity::receivable::{Invoice, InvoiceDirection};
-
 use crate::{Error, Result};
-
-use crate::dto::receivable::{CommitInvoiceRequest, CreateInvoiceRequest, SalesInvoiceAllocationLineRequest};
 
 /// 校验发票方向为销项（FIN-E08 共享销售专用守卫）。
 ///
@@ -127,11 +125,8 @@ impl CommitInvoiceRequest {
                 if invoice.invoice_direction != InvoiceDirection::Sales {
                     return Err(Error::ValidationError("应收登记命令只接受销项发票".to_string()));
                 }
-                Ok(PreparedInvoiceCommit::New {
-                    invoice: invoice.clone(),
-                    allocations,
-                })
-            }
+                Ok(PreparedInvoiceCommit::New { invoice: invoice.clone(), allocations })
+            },
             (Some(invoice_id), Some(version), None) if version > 0 => Ok(PreparedInvoiceCommit::Existing {
                 invoice_id: invoice_id.clone(),
                 expected_version: version,
@@ -167,11 +162,13 @@ pub fn convert_post_allocations(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
+
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::{PartyId, ReceivableAccountId};
     use erp_core::money::Amount;
-    use std::str::FromStr;
+
+    use super::*;
 
     fn valid_invoice() -> CreateInvoiceRequest {
         CreateInvoiceRequest {
@@ -213,17 +210,14 @@ mod tests {
 
     #[test]
     fn prepare_accepts_new_with_invoice_and_allocations() {
-        let req = CommitInvoiceRequest {
-            invoice: Some(valid_invoice()),
-            ..base_request()
-        };
+        let req = CommitInvoiceRequest { invoice: Some(valid_invoice()), ..base_request() };
         let prepared = req.prepare().expect("new 形态必须通过");
         match prepared {
             PreparedInvoiceCommit::New { invoice, allocations } => {
                 assert_eq!(invoice.invoice_no, "INV-001");
                 assert_eq!(allocations.len(), 1);
                 assert_eq!(allocations[0].allocated_gross_amount.to_string(), "100.00");
-            }
+            },
             _ => panic!("应为 New"),
         }
     }
@@ -238,15 +232,11 @@ mod tests {
         };
         let prepared = req.prepare().expect("existing 形态必须通过");
         match prepared {
-            PreparedInvoiceCommit::Existing {
-                invoice_id,
-                expected_version,
-                allocations,
-            } => {
+            PreparedInvoiceCommit::Existing { invoice_id, expected_version, allocations } => {
                 assert_eq!(invoice_id, "inv-1");
                 assert_eq!(expected_version, 2);
                 assert_eq!(allocations.len(), 1);
-            }
+            },
             _ => panic!("应为 Existing"),
         }
     }
@@ -261,9 +251,10 @@ mod tests {
         };
         let err = req.prepare().unwrap_err();
         assert!(matches!(err, Error::ValidationError(_)));
-        assert!(err
-            .to_string()
-            .contains("新发票必须提交 invoice；已有草稿必须提交 invoice_id 与 expected_version"));
+        assert!(
+            err.to_string()
+                .contains("新发票必须提交 invoice；已有草稿必须提交 invoice_id 与 expected_version")
+        );
     }
 
     #[test]
@@ -288,9 +279,10 @@ mod tests {
         };
         let err = req.prepare().unwrap_err();
         assert!(matches!(err, Error::ValidationError(_)));
-        assert!(err
-            .to_string()
-            .contains("新发票必须提交 invoice；已有草稿必须提交 invoice_id 与 expected_version"));
+        assert!(
+            err.to_string()
+                .contains("新发票必须提交 invoice；已有草稿必须提交 invoice_id 与 expected_version")
+        );
     }
 
     #[test]
@@ -309,10 +301,7 @@ mod tests {
     fn prepare_rejects_non_sales_invoice() {
         let mut invoice = valid_invoice();
         invoice.invoice_direction = InvoiceDirection::Purchase;
-        let req = CommitInvoiceRequest {
-            invoice: Some(invoice),
-            ..base_request()
-        };
+        let req = CommitInvoiceRequest { invoice: Some(invoice), ..base_request() };
         let err = req.prepare().unwrap_err();
         assert!(matches!(err, Error::ValidationError(_)));
         assert!(err.to_string().contains("应收登记命令只接受销项发票"));
@@ -320,11 +309,8 @@ mod tests {
 
     #[test]
     fn prepare_rejects_empty_allocations() {
-        let req = CommitInvoiceRequest {
-            invoice: Some(valid_invoice()),
-            allocations: vec![],
-            ..base_request()
-        };
+        let req =
+            CommitInvoiceRequest { invoice: Some(valid_invoice()), allocations: vec![], ..base_request() };
         let err = req.prepare().unwrap_err();
         assert!(matches!(err, Error::ValidationError(_)));
         assert!(err.to_string().contains("至少提供一条发票分配"));
@@ -340,9 +326,10 @@ mod tests {
             ..base_request()
         };
         let err = req.prepare().unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("新发票必须提交 invoice；已有草稿必须提交 invoice_id 与 expected_version"));
+        assert!(
+            err.to_string()
+                .contains("新发票必须提交 invoice；已有草稿必须提交 invoice_id 与 expected_version")
+        );
     }
 
     #[test]
@@ -359,7 +346,7 @@ mod tests {
             PreparedInvoiceCommit::New { allocations, .. } => {
                 assert_eq!(allocations[0].allocated_gross_amount.to_string(), "60.00");
                 assert_eq!(allocations[1].allocated_gross_amount.to_string(), "40.00");
-            }
+            },
             _ => panic!("should be New"),
         }
     }
@@ -390,26 +377,22 @@ mod tests {
         assert_eq!(converted[1].allocated_gross_amount.to_string(), "20.00");
         // Ensure same as commit conversion
         let via_commit = convert_invoice_allocations(&lines);
-        assert_eq!(
-            via_commit, converted,
-            "两条入口对同一 facts 必须产出完全相同 plan 输入"
-        );
+        assert_eq!(via_commit, converted, "两条入口对同一 facts 必须产出完全相同 plan 输入");
     }
 
     #[test]
     fn two_entries_same_facts_produce_identical_plan() {
-        use crate::entity::receivable::SalesInvoiceAllocationPlan;
         use erp_core::ids::{InvoiceId, SalesInvoiceAllocationId};
+
+        use crate::entity::receivable::SalesInvoiceAllocationPlan;
 
         let lines = vec![alloc("60.00", "52.80", "7.20"), alloc("40.00", "35.20", "4.80")];
         let invoice_id = InvoiceId::new("inv-plan-1");
         let gross = Amount::from_str("100.00").unwrap();
         let net = Amount::from_str("88.00").unwrap();
         let tax = Amount::from_str("12.00").unwrap();
-        let allocation_ids = vec![
-            SalesInvoiceAllocationId::new("alloc-1"),
-            SalesInvoiceAllocationId::new("alloc-2"),
-        ];
+        let allocation_ids =
+            vec![SalesInvoiceAllocationId::new("alloc-1"), SalesInvoiceAllocationId::new("alloc-2")];
         let via_commit = convert_invoice_allocations(&lines);
         let via_post = convert_post_allocations(&lines);
         assert_eq!(via_commit, via_post, "两条入口转换必须产出相同输入行");
@@ -435,21 +418,10 @@ mod tests {
             plan_post.account_invoicing_deltas(),
             "同一 facts 的两条入口必须产出完全相同 account_deltas"
         );
-        let seqs_commit: Vec<u32> = plan_commit
-            .new_allocations()
-            .iter()
-            .map(|a| a.allocation_seq)
-            .collect();
-        let seqs_post: Vec<u32> = plan_post
-            .new_allocations()
-            .iter()
-            .map(|a| a.allocation_seq)
-            .collect();
+        let seqs_commit: Vec<u32> = plan_commit.new_allocations().iter().map(|a| a.allocation_seq).collect();
+        let seqs_post: Vec<u32> = plan_post.new_allocations().iter().map(|a| a.allocation_seq).collect();
         assert_eq!(seqs_commit, vec![1, 2]);
-        assert_eq!(
-            seqs_commit, seqs_post,
-            "序号必须按输入顺序从 1 连续且两条入口一致"
-        );
+        assert_eq!(seqs_commit, seqs_post, "序号必须按输入顺序从 1 连续且两条入口一致");
 
         // swapped input must produce different plan (order sensitivity)
         let swapped = vec![lines[1].clone(), lines[0].clone()];
@@ -473,10 +445,10 @@ mod tests {
 
     #[test]
     fn ensure_sales_invoice_rejects_non_sales() {
-        use crate::entity::receivable::{Invoice, InvoiceData, InvoiceDirection, InvoiceKind};
         use erp_core::common::time::BusinessDate;
-        use erp_core::ids::InvoiceId;
-        use erp_core::ids::PartyId;
+        use erp_core::ids::{InvoiceId, PartyId};
+
+        use crate::entity::receivable::{Invoice, InvoiceData, InvoiceDirection, InvoiceKind};
 
         let purchase_invoice = Invoice::new(
             InvoiceId::new("inv-purchase"),

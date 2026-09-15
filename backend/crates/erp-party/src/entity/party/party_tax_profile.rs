@@ -6,15 +6,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::BusinessDate;
 use erp_core::field_update::FieldUpdate;
+pub use erp_core::ids::{PartyId, PartyTaxProfileId};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::status::EffectiveRecordStatus;
-
-pub use erp_core::ids::{PartyId, PartyTaxProfileId};
 
 /// 税号最大长度。
 const TAX_NO_MAX_LEN: usize = 32;
@@ -198,11 +196,12 @@ fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>)
 
 #[cfg(test)]
 mod tests {
-    use super::{PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileUpdate};
-    use crate::entity::party::status::EffectiveRecordStatus;
     use erp_core::common::time::BusinessDate;
     use erp_core::field_update::FieldUpdate;
     use erp_core::ids::{PartyId, PartyTaxProfileId};
+
+    use super::{PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileUpdate};
+    use crate::entity::party::status::EffectiveRecordStatus;
 
     fn tax_profile_data() -> PartyTaxProfileData {
         PartyTaxProfileData {
@@ -228,22 +227,13 @@ mod tests {
     /// 失败路径：税号为空/超长/含非法字符、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank = PartyTaxProfileData {
-            tax_no: "   ".to_string(),
-            ..tax_profile_data()
-        };
+        let blank = PartyTaxProfileData { tax_no: "   ".to_string(), ..tax_profile_data() };
         assert!(PartyTaxProfile::new(PartyTaxProfileId::new("t"), blank, "admin-1").is_err());
 
-        let overlong = PartyTaxProfileData {
-            tax_no: "x".repeat(33),
-            ..tax_profile_data()
-        };
+        let overlong = PartyTaxProfileData { tax_no: "x".repeat(33), ..tax_profile_data() };
         assert!(PartyTaxProfile::new(PartyTaxProfileId::new("t"), overlong, "admin-1").is_err());
 
-        let illegal = PartyTaxProfileData {
-            tax_no: "91-3100".to_string(),
-            ..tax_profile_data()
-        };
+        let illegal = PartyTaxProfileData { tax_no: "91-3100".to_string(), ..tax_profile_data() };
         assert!(PartyTaxProfile::new(PartyTaxProfileId::new("t"), illegal, "admin-1").is_err());
 
         let reversed = PartyTaxProfileData {
@@ -269,10 +259,7 @@ mod tests {
             )
             .unwrap();
         assert!(!profile.is_active());
-        assert_eq!(
-            profile.valid_to,
-            Some(BusinessDate::from_ymd(2026, 6, 30).unwrap())
-        );
+        assert_eq!(profile.valid_to, Some(BusinessDate::from_ymd(2026, 6, 30).unwrap()));
         assert!(!profile.is_default);
 
         let reversed = PartyTaxProfileUpdate {

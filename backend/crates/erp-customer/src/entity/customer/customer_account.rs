@@ -5,15 +5,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::stable::StableBase;
-use erp_core::common::state::{ensure_transition, DocumentState};
-use erp_core::field_update::FieldUpdate;
-use erp_core::validation::normalize_required_text;
 use erp_core::Result;
-
+use erp_core::common::stable::StableBase;
+use erp_core::common::state::{DocumentState, ensure_transition};
+use erp_core::field_update::FieldUpdate;
 pub use erp_core::ids::{CustomerAccountId, PartyId};
+use erp_core::validation::normalize_required_text;
+use serde::{Deserialize, Serialize};
 
 /// 客户编号最大长度。
 const CUSTOMER_NO_MAX_LEN: usize = 64;
@@ -226,7 +224,7 @@ impl CustomerAccount {
     /// 当引用超长时返回错误。
     fn apply_payment_term(&mut self, update: FieldUpdate<String>) -> Result<()> {
         match update {
-            FieldUpdate::Unchanged => {}
+            FieldUpdate::Unchanged => {},
             FieldUpdate::Clear => self.default_payment_term_id = None,
             FieldUpdate::Set(value) => self.default_payment_term_id = normalize_payment_term_id(Some(value))?,
         }
@@ -280,10 +278,11 @@ fn normalize_payment_term_id(value: Option<String>) -> Result<Option<String>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CustomerAccount, CustomerAccountData, CustomerAccountStatus, CustomerAccountUpdate};
     use erp_core::common::state::assert_adjacency_closed;
     use erp_core::field_update::FieldUpdate;
     use erp_core::ids::{CustomerAccountId, PartyId};
+
+    use super::{CustomerAccount, CustomerAccountData, CustomerAccountStatus, CustomerAccountUpdate};
 
     fn account_data() -> CustomerAccountData {
         CustomerAccountData {
@@ -308,22 +307,14 @@ mod tests {
     /// 失败路径：编号为空/超长、引用超长。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank = CustomerAccountData {
-            customer_no: "   ".to_string(),
-            ..account_data()
-        };
+        let blank = CustomerAccountData { customer_no: "   ".to_string(), ..account_data() };
         assert!(CustomerAccount::new(CustomerAccountId::new("c"), blank, "admin-1").is_err());
 
-        let overlong = CustomerAccountData {
-            customer_no: "x".repeat(65),
-            ..account_data()
-        };
+        let overlong = CustomerAccountData { customer_no: "x".repeat(65), ..account_data() };
         assert!(CustomerAccount::new(CustomerAccountId::new("c"), overlong, "admin-1").is_err());
 
-        let overlong_term = CustomerAccountData {
-            default_payment_term_id: Some("t".repeat(65)),
-            ..account_data()
-        };
+        let overlong_term =
+            CustomerAccountData { default_payment_term_id: Some("t".repeat(65)), ..account_data() };
         assert!(CustomerAccount::new(CustomerAccountId::new("c"), overlong_term, "admin-1").is_err());
     }
 
@@ -370,12 +361,9 @@ mod tests {
     /// 版本校验接受当前版本并拒绝过期版本。
     #[test]
     fn version_check_rejects_stale_expected_version() {
-        let account = CustomerAccount::new(
-            CustomerAccountId::new("customer-version"),
-            account_data(),
-            "admin-1",
-        )
-        .unwrap();
+        let account =
+            CustomerAccount::new(CustomerAccountId::new("customer-version"), account_data(), "admin-1")
+                .unwrap();
         assert!(account.ensure_version(1).is_ok());
         assert!(account.ensure_version(2).is_err());
     }

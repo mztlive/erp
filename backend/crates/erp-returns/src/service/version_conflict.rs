@@ -29,19 +29,21 @@ pub fn conflict_if_stale_version(matched: bool) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{conflict_if_stale_version, STALE_VERSION_MESSAGE};
-    use crate::entity::returns::{
-        CustomerRefund, CustomerRefundData, PaymentReversal, PaymentReversalData, ReceiptReversal,
-        ReceiptReversalData, SupplierRefund, SupplierRefundData,
-    };
-    use crate::Error;
+    use std::str::FromStr;
+
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         CustomerAccountId, CustomerReceiptId, CustomerRefundId, PaymentReversalId, ReceiptReversalId,
         SupplierAccountId, SupplierPaymentId, SupplierRefundId,
     };
     use erp_core::money::Amount;
-    use std::str::FromStr;
+
+    use super::{STALE_VERSION_MESSAGE, conflict_if_stale_version};
+    use crate::Error;
+    use crate::entity::returns::{
+        CustomerRefund, CustomerRefundData, PaymentReversal, PaymentReversalData, ReceiptReversal,
+        ReceiptReversalData, SupplierRefund, SupplierRefundData,
+    };
 
     #[test]
     fn stale_version_returns_conflict_with_stable_retry_message() {

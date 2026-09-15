@@ -1,13 +1,12 @@
 //! 实际盈亏读取的有界销售单事实查询；权限范围在数据库过滤中交集执行。
+use erp_core::common::time::Instant;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, Result, mongo_ops};
+use serde::Deserialize;
+
 use crate::entity::sales_order::{CommercialStatus, FulfillmentProgress, SalesAttribution};
 use crate::repository::owned::SalesOrderRepository;
-use erp_core::common::time::Instant;
-use mongodb::{
-    bson::{doc, Document},
-    options::FindOptions,
-};
-use persistence_core::{mongo_ops, Executor, Result};
-use serde::Deserialize;
 
 /// 报表单次最多读取的销售单数；额外读取一条用于拒绝截断统计。
 pub const PROFIT_LOSS_ORDER_LIMIT: usize = 10_000;
@@ -60,18 +59,10 @@ impl SalesOrderRepository<'_> {
         let options = FindOptions::builder()
             .limit((PROFIT_LOSS_ORDER_LIMIT + 1) as i64)
             .sort(doc! { "effective_at": 1, "id": 1 })
-            .projection(
-                doc! { "id": 1, "order_no": 1, "customer_id": 1, "current_revision_id": 1,
-                "effective_at": 1, "fulfillment_progress": 1, "attribution": 1, "version": 1 },
-            )
+            .projection(doc! { "id": 1, "order_no": 1, "customer_id": 1, "current_revision_id": 1,
+            "effective_at": 1, "fulfillment_progress": 1, "attribution": 1, "version": 1 })
             .build();
-        mongo_ops::find_many(
-            &self.collection().clone_with_type(),
-            filter.document(),
-            options,
-            executor,
-        )
-        .await
+        mongo_ops::find_many(&self.collection().clone_with_type(), filter.document(), options, executor).await
     }
 }
 #[cfg(test)]
@@ -88,10 +79,7 @@ mod tests {
         }
         .document();
         assert_eq!(filter.get_array("$and").unwrap().len(), 2);
-        assert_eq!(
-            filter.get_array("$and").unwrap()[0].as_document().unwrap(),
-            &doc! { "$expr": false }
-        );
+        assert_eq!(filter.get_array("$and").unwrap()[0].as_document().unwrap(), &doc! { "$expr": false });
         assert_eq!(filter.get_str("business_type").unwrap(), "GOODS_SERVICE");
     }
 }

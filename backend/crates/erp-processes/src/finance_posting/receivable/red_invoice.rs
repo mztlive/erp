@@ -1,28 +1,25 @@
 //! 按原蓝票一次开具红票并红冲分配。
 
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::{InvoiceId, ReceivableAccountId};
 use erp_finance::entity::receivable::{
     AllocationAction, Invoice, InvoiceData, InvoiceDirection, InvoiceKind,
 };
-
+use erp_finance::repository::{PayableExt, ReceivableExt};
+use erp_finance::service::receivable::red_invoice_plan::{
+    purchase_red_invoice_allocation_plan, sales_red_invoice_allocation_plan,
+};
+use erp_read_models::finance::receivable::snapshot::zero_amount;
 use id_generator::next_id;
+use persistence_core::Transactional;
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
 use super::dto::{CommitRedInvoiceRequest, InvoiceView};
 use super::invoice::register_created_invoice_document;
-use super::{invoice_task, ReceivableProcess};
+use super::{ReceivableProcess, invoice_task};
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_read_models::finance::receivable::snapshot::zero_amount;
-
-use erp_audit::AuditExt;
-use erp_finance::repository::{PayableExt, ReceivableExt};
-use erp_finance::service::receivable::red_invoice_plan::{
-    purchase_red_invoice_allocation_plan, sales_red_invoice_allocation_plan,
-};
-use persistence_core::Transactional;
 
 impl ReceivableProcess {
     /// 按原蓝票一次开具红票并红冲（§8.3-3 事务不变量）。
@@ -81,9 +78,7 @@ impl ReceivableProcess {
                         .await?
                         .ok_or_else(|| Error::NotFound("原蓝票不存在".to_string()))?;
                     if !original.is_registered() || original.invoice_kind != InvoiceKind::Blue {
-                        return Err(Error::BusinessLogicError(
-                            "只有已登记的蓝票可以被红冲".to_string(),
-                        ));
+                        return Err(Error::BusinessLogicError("只有已登记的蓝票可以被红冲".to_string()));
                     }
                     let allocation_plan = match original.invoice_direction {
                         InvoiceDirection::Sales => {
@@ -104,7 +99,7 @@ impl ReceivableProcess {
                                 .find_allocations_by_accounts(&account_ids, session)
                                 .await?;
                             sales_red_invoice_allocation_plan(&blue, &related, requested_amount)?
-                        }
+                        },
                         InvoiceDirection::Purchase => {
                             let blue = db
                                 .purchase_invoice_allocations()
@@ -126,7 +121,7 @@ impl ReceivableProcess {
                                 .find_allocations_by_accounts(&account_ids, session)
                                 .await?;
                             purchase_red_invoice_allocation_plan(&blue, &related, requested_amount)?
-                        }
+                        },
                     };
                     let (red_gross, red_net, red_tax) = allocation_plan.totals();
 
@@ -236,9 +231,6 @@ impl ReceivableProcess {
             })
             .await?;
 
-        self.finance
-            .invoice_detail(&red_invoice_id)
-            .await
-            .map_err(Error::from)
+        self.finance.invoice_detail(&red_invoice_id).await.map_err(Error::from)
     }
 }

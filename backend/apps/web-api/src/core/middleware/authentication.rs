@@ -1,21 +1,16 @@
 use application_core::AuditActor;
-use axum::{
-    extract::{Request, State},
-    http::{header::AUTHORIZATION, HeaderMap},
-    middleware::Next,
-    response::{IntoResponse, Response},
-};
+use axum::extract::{Request, State};
+use axum::http::HeaderMap;
+use axum::http::header::AUTHORIZATION;
+use axum::middleware::Next;
+use axum::response::{IntoResponse, Response};
 use erp_identity::BackofficeAuthService;
 use tracing::{error, info, warn};
 
-use crate::{
-    app_state::AppState,
-    core::{
-        auth::jwt::TokenPayload,
-        extractor::{Account, UserID},
-        response::ApiResponse,
-    },
-};
+use crate::app_state::AppState;
+use crate::core::auth::jwt::TokenPayload;
+use crate::core::extractor::{Account, UserID};
+use crate::core::response::ApiResponse;
 
 /// 已认证后台账号对应的 Casbin 主体。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -31,7 +26,7 @@ pub async fn authenticate(State(state): State<AppState>, mut request: Request, n
         Err(err) => {
             error!(error = %err, "Failed to get JWT engine");
             return ApiResponse::<()>::system_error().into_response();
-        }
+        },
     };
     let Some(token) = bearer_token(request.headers()) else {
         return ApiResponse::<()>::unauthorized().into_response();
@@ -70,11 +65,11 @@ async fn validate_current_identity(state: &AppState, payload: &TokenPayload) -> 
         Err(erp_identity::Error::Unauthenticated(_)) => {
             warn!("Authorization failed: backoffice account is no longer active");
             Err(ApiResponse::unauthorized())
-        }
+        },
         Err(error) => {
             error!(error = %error, "Failed to validate current backoffice account");
             Err(ApiResponse::system_error())
-        }
+        },
     }
 }
 
@@ -90,20 +85,12 @@ fn bearer_token(headers: &HeaderMap) -> Option<&str> {
 
 /// 校验 token 身份边界并写入后续 Handler 所需的扩展。
 fn attach_identity(request: &mut Request, payload: TokenPayload) -> Result<(), ApiResponse<()>> {
-    let TokenPayload {
-        id: user_id,
-        account,
-        subject_kind,
-        account_kind,
-        ..
-    } = payload;
+    let TokenPayload { id: user_id, account, subject_kind, account_kind, .. } = payload;
     let Some(account_kind) = account_kind else {
         warn!("Authorization failed: missing account kind for backoffice token");
         return Err(ApiResponse::unauthorized());
     };
-    request
-        .extensions_mut()
-        .insert(AuditActor::new(user_id.clone(), account.clone(), account_kind));
+    request.extensions_mut().insert(AuditActor::new(user_id.clone(), account.clone(), account_kind));
     request.extensions_mut().insert(account_kind);
     let rbac_subject = RbacSubject(erp_identity::subject(account_kind, &user_id));
     request.extensions_mut().insert(UserID(user_id));
@@ -119,14 +106,13 @@ mod tests {
     use application_core::AuditActor;
     use axum::body::Body;
     use axum::extract::Request;
-    use axum::http::{header::AUTHORIZATION, HeaderMap, HeaderValue};
+    use axum::http::header::AUTHORIZATION;
+    use axum::http::{HeaderMap, HeaderValue};
     use erp_core::AccountKind;
 
-    use super::{attach_identity, bearer_token, RbacSubject};
-    use crate::core::{
-        auth::jwt::{SubjectKind, TokenPayload},
-        extractor::{Account, UserID},
-    };
+    use super::{RbacSubject, attach_identity, bearer_token};
+    use crate::core::auth::jwt::{SubjectKind, TokenPayload};
+    use crate::core::extractor::{Account, UserID};
 
     #[test]
     fn rbac_subject_should_include_account_kind_and_id() {
@@ -136,52 +122,29 @@ mod tests {
 
     #[test]
     fn attach_identity_inserts_backoffice_context() {
-        let mut request = Request::builder()
-            .uri("/admin/roles")
-            .body(Body::empty())
-            .expect("request should be valid");
+        let mut request =
+            Request::builder().uri("/admin/roles").body(Body::empty()).expect("request should be valid");
         let payload =
             TokenPayload::backoffice("admin-1".to_string(), "alice".to_string(), AccountKind::Admin, 1);
 
         assert!(attach_identity(&mut request, payload).is_ok());
+        assert_eq!(request.extensions().get::<UserID>().map(|value| value.0.as_str()), Some("admin-1"));
+        assert_eq!(request.extensions().get::<Account>().map(|value| value.0.as_str()), Some("alice"));
+        assert_eq!(request.extensions().get::<AccountKind>(), Some(&AccountKind::Admin));
         assert_eq!(
-            request.extensions().get::<UserID>().map(|value| value.0.as_str()),
-            Some("admin-1")
-        );
-        assert_eq!(
-            request
-                .extensions()
-                .get::<Account>()
-                .map(|value| value.0.as_str()),
-            Some("alice")
-        );
-        assert_eq!(
-            request.extensions().get::<AccountKind>(),
-            Some(&AccountKind::Admin)
-        );
-        assert_eq!(
-            request
-                .extensions()
-                .get::<RbacSubject>()
-                .map(|value| value.0.as_str()),
+            request.extensions().get::<RbacSubject>().map(|value| value.0.as_str()),
             Some("user:admin:admin-1")
         );
         assert_eq!(
             request.extensions().get::<AuditActor>(),
-            Some(&AuditActor::new(
-                "admin-1".to_string(),
-                "alice".to_string(),
-                AccountKind::Admin,
-            ))
+            Some(&AuditActor::new("admin-1".to_string(), "alice".to_string(), AccountKind::Admin,))
         );
     }
 
     #[test]
     fn attach_identity_rejects_backoffice_token_without_account_kind() {
-        let mut request = Request::builder()
-            .uri("/admin/roles")
-            .body(Body::empty())
-            .expect("request should be valid");
+        let mut request =
+            Request::builder().uri("/admin/roles").body(Body::empty()).expect("request should be valid");
         let payload = TokenPayload {
             id: "admin-1".to_string(),
             account: "alice".to_string(),

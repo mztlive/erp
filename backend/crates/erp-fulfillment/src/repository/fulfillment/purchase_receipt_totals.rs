@@ -13,19 +13,17 @@
 use std::collections::HashMap;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{PurchaseOrderId, PurchaseOrderRevisionLineId};
+use erp_core::money::Quantity;
 use futures_util::TryStreamExt;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
 use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, Result, mongo_ops};
 use serde::Deserialize;
 
 use crate::entity::fulfillment::PurchaseReceiptState;
-use erp_core::ids::{PurchaseOrderId, PurchaseOrderRevisionLineId};
-use erp_core::money::Quantity;
-
 use crate::repository::extensions::FulfillmentExt;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
 
 /// 已过账入库单 ID 投影行。
 #[derive(Debug, Deserialize)]
@@ -94,7 +92,7 @@ pub(super) async fn load_qualified_received_totals(
                 .stream(session)
                 .try_collect::<Vec<_>>()
                 .await?
-        }
+        },
         None => {
             db.collection::<QualifiedReceivedTotalRow>(super::PURCHASE_RECEIPT_LINES)
                 .aggregate(qualified_received_totals_pipeline(&receipt_ids))
@@ -102,12 +100,9 @@ pub(super) async fn load_qualified_received_totals(
                 .await?
                 .try_collect::<Vec<_>>()
                 .await?
-        }
+        },
     };
-    Ok(rows
-        .into_iter()
-        .map(|row| (row.purchase_order_revision_line_id, row.total))
-        .collect())
+    Ok(rows.into_iter().map(|row| (row.purchase_order_revision_line_id, row.total)).collect())
 }
 
 /// 构造入库行累计合格收货聚合管道。
@@ -156,23 +151,13 @@ mod tests {
             .expect("入库单主键 $in 条件");
         assert_eq!(
             receipt_ids,
-            &[
-                Bson::String("receipt-1".to_string()),
-                Bson::String("receipt-2".to_string())
-            ]
+            &[Bson::String("receipt-1".to_string()), Bson::String("receipt-2".to_string())]
         );
         assert_eq!(match_stage.get_i64("deleted_at").expect("未删除条件"), 0);
         let group_stage = pipeline[1].get_document("$group").expect("分组阶段");
+        assert_eq!(group_stage.get_str("_id").expect("分组键"), "$purchase_order_revision_line_id");
         assert_eq!(
-            group_stage.get_str("_id").expect("分组键"),
-            "$purchase_order_revision_line_id"
-        );
-        assert_eq!(
-            group_stage
-                .get_document("total")
-                .expect("求和字段")
-                .get_str("$sum")
-                .expect("求和表达式"),
+            group_stage.get_document("total").expect("求和字段").get_str("$sum").expect("求和表达式"),
             "$qualified_quantity"
         );
     }
@@ -183,10 +168,7 @@ mod tests {
         let document = doc! { "_id": "po-line-1", "total": { "$numberDecimal": "12.500000" } };
         let row: QualifiedReceivedTotalRow =
             mongodb::bson::deserialize_from_document(document).expect("合法 Decimal128 必须成功");
-        assert_eq!(
-            row.purchase_order_revision_line_id,
-            PurchaseOrderRevisionLineId::new("po-line-1")
-        );
+        assert_eq!(row.purchase_order_revision_line_id, PurchaseOrderRevisionLineId::new("po-line-1"));
         assert_eq!(row.total, Quantity::from_str("12.5").expect("合法数量"));
     }
 

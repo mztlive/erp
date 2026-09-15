@@ -5,13 +5,13 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as WarehouseExt>::WAREHOUSES` 等值。
 
-use crate::repository::owned::{
-    WarehouseRepository, WarehouseRevisionRepository, WarehouseSkuPolicyRepository,
-};
 use mongodb::Database;
 
 use super::super::warehouse::{
     WarehouseDomainRepository, WarehouseFilter, WarehouseRevisionFilter, WarehouseSkuPolicyFilter,
+};
+use crate::repository::owned::{
+    WarehouseRepository, WarehouseRevisionRepository, WarehouseSkuPolicyRepository,
 };
 
 /// 域 D11 仓储访问器。

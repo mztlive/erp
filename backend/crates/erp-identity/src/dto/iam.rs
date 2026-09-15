@@ -1,7 +1,8 @@
-use crate::entity::rbac::Permission;
-use crate::entity::role::Role;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+
+use crate::entity::rbac::Permission;
+use crate::entity::role::Role;
 
 /// 创建角色请求。
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -48,27 +49,21 @@ impl RoleItem {
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::rbac::Permission;
     use validator::Validate;
 
     use super::{RoleItem, UpdateRoleParams};
+    use crate::entity::rbac::Permission;
 
     #[test]
     fn empty_update_is_valid_noop_payload() {
-        let payload = UpdateRoleParams {
-            name: None,
-            permissions: None,
-        };
+        let payload = UpdateRoleParams { name: None, permissions: None };
 
         assert!(payload.validate().is_ok());
     }
 
     #[test]
     fn update_rejects_too_short_role_name() {
-        let payload = UpdateRoleParams {
-            name: Some("a".to_string()),
-            permissions: None,
-        };
+        let payload = UpdateRoleParams { name: Some("a".to_string()), permissions: None };
 
         assert!(payload.validate().is_err());
     }
@@ -77,20 +72,12 @@ mod tests {
     #[test]
     fn role_item_exposes_builtin_protection() {
         use crate::entity::role::{Role, RoleData};
-        for (id, system, protected) in [
-            ("role-custom", false, false),
-            ("role-built-in", true, true),
-            (crate::ROOT_ROLE_ID, false, true),
-        ] {
-            let role = Role::new(
-                id.to_string(),
-                RoleData {
-                    name: "测试角色".into(),
-                    description: None,
-                    system,
-                },
-            )
-            .unwrap();
+        for (id, system, protected) in
+            [("role-custom", false, false), ("role-built-in", true, true), (crate::ROOT_ROLE_ID, false, true)]
+        {
+            let role =
+                Role::new(id.to_string(), RoleData { name: "测试角色".into(), description: None, system })
+                    .unwrap();
             assert_eq!(RoleItem::from_role(role, vec![]).system, protected);
         }
     }

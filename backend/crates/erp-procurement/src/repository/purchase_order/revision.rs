@@ -3,17 +3,16 @@
 //! 采购生效版本是不可变修订（§6.6/§4.4）：财务审核通过时由已通过提交原样复制，
 //! 修订一经形成不得修改内容。版本与版本行**不提供软删除方法**。
 
-use crate::entity::purchase_order::{PurchaseOrderRevision, PurchaseOrderRevisionLine};
-use crate::repository::owned::PurchaseOrderRevisionLineRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{PurchaseOrderId, PurchaseOrderRevisionId};
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, Result, mongo_ops};
 
 use super::common::in_filter;
-use super::{PurchaseOrderDomainRepository, PURCHASE_ORDER_REVISIONS, PURCHASE_ORDER_REVISION_LINES};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
+use super::{PURCHASE_ORDER_REVISION_LINES, PURCHASE_ORDER_REVISIONS, PurchaseOrderDomainRepository};
+use crate::entity::purchase_order::{PurchaseOrderRevision, PurchaseOrderRevisionLine};
+use crate::repository::owned::PurchaseOrderRevisionLineRepository;
 
 impl<'a> PurchaseOrderDomainRepository<'a> {
     /// 按采购单读取全部生效版本，并按版本号升序返回。
@@ -32,13 +31,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         purchase_order_id: &PurchaseOrderId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchaseOrderRevision>> {
-        let options = FindOptions::builder()
-            .sort(doc! { "revision_no": 1, "id": 1 })
-            .build();
+        let options = FindOptions::builder().sort(doc! { "revision_no": 1, "id": 1 }).build();
         mongo_ops::find_many(
-            &self
-                .db
-                .collection::<PurchaseOrderRevision>(PURCHASE_ORDER_REVISIONS),
+            &self.db.collection::<PurchaseOrderRevision>(PURCHASE_ORDER_REVISIONS),
             doc! { "purchase_order_id": purchase_order_id.to_string() },
             options,
             executor,
@@ -67,9 +62,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         }
         let options = FindOptions::builder().sort(doc! { "id": 1 }).build();
         mongo_ops::find_many(
-            &self
-                .db
-                .collection::<PurchaseOrderRevision>(PURCHASE_ORDER_REVISIONS),
+            &self.db.collection::<PurchaseOrderRevision>(PURCHASE_ORDER_REVISIONS),
             in_filter("id", revision_ids.iter().map(ToString::to_string)),
             options,
             executor,
@@ -96,13 +89,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         revision_id: &PurchaseOrderRevisionId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchaseOrderRevisionLine>> {
-        let options = FindOptions::builder()
-            .sort(doc! { "line_no": 1, "id": 1 })
-            .build();
+        let options = FindOptions::builder().sort(doc! { "line_no": 1, "id": 1 }).build();
         mongo_ops::find_many(
-            &self
-                .db
-                .collection::<PurchaseOrderRevisionLine>(PURCHASE_ORDER_REVISION_LINES),
+            &self.db.collection::<PurchaseOrderRevisionLine>(PURCHASE_ORDER_REVISION_LINES),
             revision_lines_filter(revision_id),
             options,
             executor,
@@ -154,10 +143,7 @@ impl<'a> PurchaseOrderRevisionLineRepository<'a> {
             return Ok(Vec::new());
         }
         self.find_many(
-            in_filter(
-                "purchase_order_revision_id",
-                revision_ids.iter().map(|id| id.to_string()),
-            ),
+            in_filter("purchase_order_revision_id", revision_ids.iter().map(|id| id.to_string())),
             executor,
         )
         .await

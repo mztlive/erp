@@ -5,19 +5,17 @@
 //! 形成新的开放任务，历史终态保持不变。
 
 use erp_core::ids::SalesOrderId;
-use erp_identity::AccessControlExt;
-use erp_identity::{Permission, PermissionSet};
+use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
+use erp_sales::entity::sales_order::{BusinessType, SalesOrder};
 use erp_sales::repository::SalesOrderExt;
+use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
     AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
-use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::Executor;
-use {erp_sales::entity::sales_order::BusinessType, erp_sales::entity::sales_order::SalesOrder};
 
 use crate::{Error, Result};
-use erp_identity::SharedRbacService;
 
 const OBJECT_TYPE: &str = "sales_order";
 const OWNER_ROLE: &str = "sales_order_owner";
@@ -53,13 +51,13 @@ pub async fn ensure_customer_acceptance_task(
         [task] => {
             ensure_task_identity(task, &order)?;
             return Ok(task.clone());
-        }
-        [] => {}
+        },
+        [] => {},
         _ => {
             return Err(Error::BusinessLogicError(
                 "当前销售单存在多个开放客户验收任务，请联系管理员处理后重试".to_string(),
             ));
-        }
+        },
     }
 
     create_customer_acceptance_task(db, &order, reason, executor).await
@@ -144,9 +142,7 @@ async fn load_goods_service_order(
         .await?
         .ok_or_else(|| Error::NotFound("销售单不存在，无法形成客户验收责任".to_string()))?;
     if order.business_type != BusinessType::GoodsService {
-        return Err(Error::BusinessLogicError(
-            "卡券销售单不形成客户验收登记任务".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("卡券销售单不形成客户验收登记任务".to_string()));
     }
     Ok(order)
 }
@@ -174,9 +170,7 @@ fn ensure_task_identity(task: &WorkItem, order: &SalesOrder) -> Result<()> {
     if matches {
         return Ok(());
     }
-    Err(Error::BusinessLogicError(
-        "客户验收任务责任身份与销售单不一致，请联系管理员修复后重试".to_string(),
-    ))
+    Err(Error::BusinessLogicError("客户验收任务责任身份与销售单不一致，请联系管理员修复后重试".to_string()))
 }
 
 fn ensure_command_identity(
@@ -185,19 +179,13 @@ fn ensure_command_identity(
     expected_task_version: Option<u64>,
 ) -> Result<()> {
     if work_item_id.is_some() != expected_task_version.is_some() {
-        return Err(Error::ValidationError(
-            "客户验收任务主键和期望版本必须同时提供".to_string(),
-        ));
+        return Err(Error::ValidationError("客户验收任务主键和期望版本必须同时提供".to_string()));
     }
     if work_item_id.is_some_and(|id| id != task.base.id) {
-        return Err(Error::ConflictError(
-            "客户验收任务已变化，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("客户验收任务已变化，请刷新后重试".to_string()));
     }
     if expected_task_version.is_some_and(|version| version != task.base.version) {
-        return Err(Error::ConflictError(
-            "客户验收任务版本已变化，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("客户验收任务版本已变化，请刷新后重试".to_string()));
     }
     Ok(())
 }
@@ -215,11 +203,10 @@ async fn ensure_customer_acceptance_owner_eligible(
     let required_permissions = WorkItemType::CustomerAcceptanceRegistration
         .customer_acceptance_execution_permissions(OBJECT_TYPE)
         .expect("客户验收登记对象权限合同必须存在");
-    let account = db
-        .accounts()
-        .find_work_item_account(owner_user_id, executor)
-        .await?
-        .ok_or_else(|| Error::BusinessLogicError("销售责任人账号不存在，无法形成客户验收任务".to_string()))?;
+    let account =
+        db.accounts().find_work_item_account(owner_user_id, executor).await?.ok_or_else(|| {
+            Error::BusinessLogicError("销售责任人账号不存在，无法形成客户验收任务".to_string())
+        })?;
     AvailableWorkItemAccount::from_account(&crate::adapters::workflow::account_fact(&account))
         .map_err(|_| Error::BusinessLogicError("销售责任人账号不可用，无法形成客户验收任务".to_string()))?;
     let granted = PermissionSet::new(rbac.permissions(account.kind, owner_user_id).await?);
@@ -231,9 +218,7 @@ async fn ensure_customer_acceptance_owner_eligible(
     if granted.covers(&required) {
         return Ok(());
     }
-    Err(Error::BusinessLogicError(
-        "销售责任人缺少客户验收完整操作权限，请先调整角色或责任配置".to_string(),
-    ))
+    Err(Error::BusinessLogicError("销售责任人缺少客户验收完整操作权限，请先调整角色或责任配置".to_string()))
 }
 
 async fn ensure_current_owner_execution_access(

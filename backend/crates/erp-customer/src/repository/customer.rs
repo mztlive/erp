@@ -9,25 +9,24 @@
 //! 集合名常量统一从 `CustomerExt` 关联常量导入（唯一权威来源）；筛选/行类型
 //! 定义在本文件，经 `CustomerExt` 的关联类型对外暴露。
 
-use crate::repository::owned::{
-    CustomerAccountRepository, CustomerAssignmentRepository, CustomerProfileCommandRepository,
-};
 use std::collections::HashMap;
+
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{CustomerAccountId, PartyId};
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
+use serde::{Deserialize, Serialize};
 
 use crate::entity::customer::{
     AssignmentRole, CustomerAccount, CustomerAccountStatus, CustomerAssignment, CustomerProfileCommand,
 };
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::common::time::BusinessDate;
-use erp_core::ids::{CustomerAccountId, PartyId};
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use serde::{Deserialize, Serialize};
-
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::repository::owned::{
+    CustomerAccountRepository, CustomerAssignmentRepository, CustomerProfileCommandRepository,
+};
 
 /// 客户角色列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -154,9 +153,7 @@ impl<'a> CustomerAccountRepository<'a> {
                 "id": { "$in": ids },
                 "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
             },
-            FindOptions::builder()
-                .projection(doc! { "id": 1, "customer_no": 1 })
-                .build(),
+            FindOptions::builder().projection(doc! { "id": 1, "customer_no": 1 }).build(),
             executor,
         )
         .await?;
@@ -229,10 +226,7 @@ impl<'a> CustomerAccountRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按共用企业主体查找客户角色（一个主体至多一个客户角色，由
@@ -252,8 +246,7 @@ impl<'a> CustomerAccountRepository<'a> {
         party_id: &PartyId,
         executor: &mut dyn Executor,
     ) -> Result<Option<CustomerAccount>> {
-        self.find_one(doc! { "party_id": party_id.to_string() }, executor)
-            .await
+        self.find_one(doc! { "party_id": party_id.to_string() }, executor).await
     }
 }
 
@@ -364,10 +357,7 @@ impl<'a> CustomerAssignmentRepository<'a> {
             }
             return Ok(result);
         }
-        let mut cursor = collection
-            .aggregate(pipeline)
-            .with_type::<CustomerAssignment>()
-            .await?;
+        let mut cursor = collection.aggregate(pipeline).with_type::<CustomerAssignment>().await?;
         while cursor.advance().await? {
             result.push(cursor.deserialize_current()?);
         }
@@ -397,11 +387,7 @@ impl<'a> CustomerAssignmentRepository<'a> {
         as_of: BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        self.exists(
-            active_customer_user_assignment_filter(customer_id, user_id, as_of),
-            executor,
-        )
-        .await
+        self.exists(active_customer_user_assignment_filter(customer_id, user_id, as_of), executor).await
     }
 
     /// 按归属 ID 查找未删除客户归属。
@@ -442,8 +428,7 @@ impl<'a> CustomerAssignmentRepository<'a> {
         customer_id: &CustomerAccountId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<CustomerAssignment>> {
-        self.find_many(doc! { "customer_id": customer_id.to_string() }, executor)
-            .await
+        self.find_many(doc! { "customer_id": customer_id.to_string() }, executor).await
     }
 
     /// 按生效开始日与创建时间倒序读取客户归属历史。
@@ -577,10 +562,7 @@ impl<'a> CustomerAssignmentRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 检索某销售人员在指定业务日期生效的归属（「我的客户」查询，§6.2）。
@@ -645,13 +627,9 @@ impl<'a> CustomerAssignmentRepository<'a> {
         as_of: BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
-        let assignments = self
-            .find_active_assignments_for_user(user_id, as_of, executor)
-            .await?;
+        let assignments = self.find_active_assignments_for_user(user_id, as_of, executor).await?;
         Ok(distinct_sorted_customer_ids(
-            assignments
-                .iter()
-                .map(|assignment| assignment.customer_id.to_string()),
+            assignments.iter().map(|assignment| assignment.customer_id.to_string()),
         ))
     }
 }
@@ -715,8 +693,7 @@ impl<'a> CustomerProfileCommandRepository<'a> {
         idempotency_key: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<CustomerProfileCommand>> {
-        self.find_one(doc! { "idempotency_key": idempotency_key }, executor)
-            .await
+        self.find_one(doc! { "idempotency_key": idempotency_key }, executor).await
     }
 }
 
@@ -755,9 +732,7 @@ fn current_owner_pipeline(
 /// 返回排序条件文档。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
-    let field = sort_by
-        .filter(|candidate| allowed.contains(candidate))
-        .unwrap_or("created_at");
+    let field = sort_by.filter(|candidate| allowed.contains(candidate)).unwrap_or("created_at");
     doc! { field: direction, "id": direction }
 }
 
@@ -812,11 +787,7 @@ impl CustomerAccountRepository<'_> {
         if let Some(session) = executor.session() {
             query = query.session(session);
         }
-        Ok(query
-            .await?
-            .into_iter()
-            .filter_map(|id| id.as_str().map(str::to_owned))
-            .collect())
+        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
     }
 }
 
@@ -824,14 +795,15 @@ impl CustomerAccountRepository<'_> {
 mod tests {
     use std::str::FromStr;
 
-    use super::{
-        active_customer_user_assignment_filter, current_owner_pipeline, distinct_sorted_customer_ids,
-        sort_doc, CustomerAccountFilter,
-    };
-    use crate::entity::customer::CustomerAccountStatus;
     use erp_core::common::time::BusinessDate;
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
+
+    use super::{
+        CustomerAccountFilter, active_customer_user_assignment_filter, current_owner_pipeline,
+        distinct_sorted_customer_ids, sort_doc,
+    };
+    use crate::entity::customer::CustomerAccountStatus;
 
     #[test]
     fn current_owners_preserve_empty_scope_and_exclude_deleted_assignments() {
@@ -841,14 +813,8 @@ mod tests {
         assert_eq!(filter.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(filter.get_str("assignment_role").unwrap(), "OWNER");
         assert_eq!(filter.get_document("customer_id").unwrap(), &doc! { "$in": [] });
-        assert_eq!(
-            filter.get_document("user_id").unwrap(),
-            &doc! { "$in": ["user-1"] }
-        );
-        assert_eq!(
-            filter.get_document("valid_from").unwrap(),
-            &doc! { "$lte": "2026-09-13" }
-        );
+        assert_eq!(filter.get_document("user_id").unwrap(), &doc! { "$in": ["user-1"] });
+        assert_eq!(filter.get_document("valid_from").unwrap(), &doc! { "$lte": "2026-09-13" });
         assert_eq!(
             filter.get_array("$or").unwrap()[1],
             mongodb::bson::Bson::Document(doc! { "valid_to": { "$gt": "2026-09-13" } })
@@ -910,37 +876,14 @@ mod tests {
         assert_eq!(filter.get_str("customer_id").unwrap(), "customer-1");
         assert_eq!(filter.get_str("user_id").unwrap(), "user-1");
         assert_eq!(
-            filter
-                .get_document("assignment_role")
-                .unwrap()
-                .get_array("$in")
-                .unwrap(),
+            filter.get_document("assignment_role").unwrap().get_array("$in").unwrap(),
             &vec!["OWNER".into(), "COLLABORATOR".into()]
         );
-        assert_eq!(
-            filter
-                .get_document("valid_from")
-                .unwrap()
-                .get_str("$lte")
-                .unwrap(),
-            "2026-08-31"
-        );
+        assert_eq!(filter.get_document("valid_from").unwrap().get_str("$lte").unwrap(), "2026-08-31");
         let valid_to = filter.get_array("$or").unwrap();
-        assert!(valid_to[0]
-            .as_document()
-            .unwrap()
-            .get("valid_to")
-            .unwrap()
-            .as_null()
-            .is_some());
+        assert!(valid_to[0].as_document().unwrap().get("valid_to").unwrap().as_null().is_some());
         assert_eq!(
-            valid_to[1]
-                .as_document()
-                .unwrap()
-                .get_document("valid_to")
-                .unwrap()
-                .get_str("$gt")
-                .unwrap(),
+            valid_to[1].as_document().unwrap().get_document("valid_to").unwrap().get_str("$gt").unwrap(),
             "2026-08-31"
         );
     }
@@ -961,11 +904,12 @@ mod tests {
 
     #[test]
     fn customer_account_and_assignment_bson_roundtrip() {
+        use erp_core::ids::PartyId;
+
         use crate::entity::customer::{
             AssignmentRole, CustomerAccount, CustomerAccountData, CustomerAccountId, CustomerAccountStatus,
             CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId,
         };
-        use erp_core::ids::PartyId;
 
         let account = CustomerAccount::new(
             CustomerAccountId::new("customer-4"),

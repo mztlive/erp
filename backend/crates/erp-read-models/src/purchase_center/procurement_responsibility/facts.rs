@@ -5,7 +5,6 @@
 use std::collections::HashMap;
 
 use erp_core::ids::{ProductCategoryId, SkuId};
-
 use erp_procurement::entity::procurement_responsibility::ProcurementResponsibilityRule;
 
 /// 规则管理列表展示所需的最小关联事实.
@@ -93,9 +92,8 @@ pub fn collect_rule_list_ids(
 #[cfg(test)]
 mod tests {
     use erp_core::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, SkuId};
-    use erp_procurement::entity::procurement_responsibility::EnableStatus;
     use erp_procurement::entity::procurement_responsibility::{
-        ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
+        EnableStatus, ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
     };
 
     use super::*;
@@ -160,27 +158,9 @@ mod tests {
     #[test]
     fn duplicate_references_are_deduplicated_and_sorted() {
         let rules = vec![
-            test_rule(
-                "r-2",
-                ProcurementResponsibilityRuleType::Sku,
-                Some("sku-b"),
-                None,
-                "owner-b",
-            ),
-            test_rule(
-                "r-1",
-                ProcurementResponsibilityRuleType::Sku,
-                Some("sku-a"),
-                None,
-                "owner-a",
-            ),
-            test_rule(
-                "r-3",
-                ProcurementResponsibilityRuleType::Sku,
-                Some("sku-a"),
-                None,
-                "owner-a",
-            ),
+            test_rule("r-2", ProcurementResponsibilityRuleType::Sku, Some("sku-b"), None, "owner-b"),
+            test_rule("r-1", ProcurementResponsibilityRuleType::Sku, Some("sku-a"), None, "owner-a"),
+            test_rule("r-3", ProcurementResponsibilityRuleType::Sku, Some("sku-a"), None, "owner-a"),
         ];
         let (owners, skus, categories) = collect_rule_list_ids(&rules);
         assert_eq!(owners, vec!["owner-a".to_string(), "owner-b".to_string()]);
@@ -204,26 +184,11 @@ mod tests {
     #[test]
     fn category_references_are_deduplicated_and_sorted() {
         let rules = vec![
-            test_rule(
-                "r-1",
-                ProcurementResponsibilityRuleType::Category,
-                None,
-                Some("cat-b"),
-                "owner-1",
-            ),
-            test_rule(
-                "r-2",
-                ProcurementResponsibilityRuleType::Category,
-                None,
-                Some("cat-a"),
-                "owner-1",
-            ),
+            test_rule("r-1", ProcurementResponsibilityRuleType::Category, None, Some("cat-b"), "owner-1"),
+            test_rule("r-2", ProcurementResponsibilityRuleType::Category, None, Some("cat-a"), "owner-1"),
         ];
         let (_, skus, categories) = collect_rule_list_ids(&rules);
         assert!(skus.is_empty());
-        assert_eq!(
-            categories,
-            vec![ProductCategoryId::new("cat-a"), ProductCategoryId::new("cat-b")]
-        );
+        assert_eq!(categories, vec![ProductCategoryId::new("cat-a"), ProductCategoryId::new("cat-b")]);
     }
 }

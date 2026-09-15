@@ -1,28 +1,22 @@
 //! 应收查询参数、列表/详情视图与分页归一化。
 
-use crate::entity::receivable::{
-    AllocationAction, CustomerReceiptStatus, EntryDirection, InvoiceDirection, InvoiceKind, InvoiceStatus,
-    ReceivableAccountStatus, ReceivableEntryType,
-};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{CustomerAccountId, PartyId, ReceivableAccountId};
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::{normalize_sort, SortDir};
+use super::{SortDir, normalize_sort};
 use crate::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use crate::entity::receivable::{
+    AllocationAction, CustomerReceiptStatus, EntryDirection, InvoiceDirection, InvoiceKind, InvoiceStatus,
+    ReceivableAccountStatus, ReceivableEntryType,
+};
 
 /// 应收往来子账列表允许的排序字段白名单（api-contract §4：Service 层校验）。
-pub(crate) const RECEIVABLE_ACCOUNT_SORT_FIELDS: &[&str] = &[
-    "account_seq",
-    "gross_total",
-    "settled_total",
-    "open_total",
-    "open_invoiceable_total",
-    "created_at",
-];
+pub(crate) const RECEIVABLE_ACCOUNT_SORT_FIELDS: &[&str] =
+    &["account_seq", "gross_total", "settled_total", "open_total", "open_invoiceable_total", "created_at"];
 /// 客户回款单列表允许的排序字段白名单。
 pub(crate) const CUSTOMER_RECEIPT_SORT_FIELDS: &[&str] = &["received_at", "amount", "created_at"];
 /// 发票列表允许的排序字段白名单。

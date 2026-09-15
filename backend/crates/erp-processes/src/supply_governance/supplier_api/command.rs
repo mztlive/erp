@@ -1,6 +1,3 @@
-use super::receipt::{persist_command_receipt, CommandReceiptWrite};
-use super::SupplierApiGovernanceProcess;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supply::dto::supplier_api::*;
@@ -9,17 +6,19 @@ use erp_supply::entity::supplier_api::{
     SupplierCommandOutcome, SupplierConnectionAction,
 };
 use erp_supply::repository::SupplierApiExt;
-use erp_supply::service::supplier_api::{
-    command::{
-        capability_update_fingerprint, confirmation_fingerprint, ensure_audit_fingerprint,
-        map_capability_change_rejection, replay_confirmation, CommandIdentity,
-    },
-    context::{digest, map_command_shape_rejection},
-    SupplierApiService,
+use erp_supply::service::supplier_api::SupplierApiService;
+use erp_supply::service::supplier_api::command::{
+    CommandIdentity, capability_update_fingerprint, confirmation_fingerprint, ensure_audit_fingerprint,
+    map_capability_change_rejection, replay_confirmation,
 };
+use erp_supply::service::supplier_api::context::{digest, map_command_shape_rejection};
 use erp_support::BulkJobExt;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+
+use super::SupplierApiGovernanceProcess;
+use super::receipt::{CommandReceiptWrite, persist_command_receipt};
+use crate::{Error, Result};
 impl SupplierApiGovernanceProcess {
     /// 执行固定连接治理命令并返回可幂等重放的正式回执。
     ///
@@ -62,7 +61,7 @@ impl SupplierApiGovernanceProcess {
                     actor,
                 )
                 .await
-            }
+            },
             PreparedSupplierConnectionCommand::BindEndpointReference {
                 expected_version,
                 payload_reference,
@@ -76,7 +75,7 @@ impl SupplierApiGovernanceProcess {
                     actor,
                 )
                 .await
-            }
+            },
             PreparedSupplierConnectionCommand::BindCredentialReference {
                 expected_version,
                 payload_reference,
@@ -90,14 +89,10 @@ impl SupplierApiGovernanceProcess {
                     actor,
                 )
                 .await
-            }
-            PreparedSupplierConnectionCommand::RunHealthCheck {
-                expected_version,
-                check_type,
-            } => {
-                self.create_health_job(id, check_type, expected_version, identity, actor)
-                    .await
-            }
+            },
+            PreparedSupplierConnectionCommand::RunHealthCheck { expected_version, check_type } => {
+                self.create_health_job(id, check_type, expected_version, identity, actor).await
+            },
             PreparedSupplierConnectionCommand::Enable { expected_version } => {
                 self.execute_status_command(
                     id,
@@ -107,7 +102,7 @@ impl SupplierApiGovernanceProcess {
                     actor,
                 )
                 .await
-            }
+            },
             PreparedSupplierConnectionCommand::Disable { expected_version, .. } => {
                 self.execute_status_command(
                     id,
@@ -117,11 +112,10 @@ impl SupplierApiGovernanceProcess {
                     actor,
                 )
                 .await
-            }
+            },
             PreparedSupplierConnectionCommand::StartCatalogSync { expected_version } => {
-                self.create_catalog_job(id, expected_version, identity, actor)
-                    .await
-            }
+                self.create_catalog_job(id, expected_version, identity, actor).await
+            },
         }
     }
 
@@ -136,8 +130,7 @@ impl SupplierApiGovernanceProcess {
         actor: &AuditActor,
     ) -> Result<ConfirmBusinessCapabilityRequirementResult> {
         command.validate()?;
-        self.ensure_permission(actor, "supplier_api_capability:confirm_requirement")
-            .await?;
+        self.ensure_permission(actor, "supplier_api_capability:confirm_requirement").await?;
         let connection_id = SupplierApiConnectionId::new(id);
         let idempotency_hash = digest(&[actor.id(), id, command.idempotency_key.trim()]);
         let fingerprint = confirmation_fingerprint(id, &command);
@@ -213,8 +206,7 @@ impl SupplierApiGovernanceProcess {
         actor: &AuditActor,
     ) -> Result<UpdateSupplierCapabilitiesResult> {
         command.validate()?;
-        self.ensure_permission(actor, "supplier_api_capability:update")
-            .await?;
+        self.ensure_permission(actor, "supplier_api_capability:update").await?;
         let change_set = CapabilityChangeSet::new(
             command
                 .capability_changes
@@ -229,16 +221,8 @@ impl SupplierApiGovernanceProcess {
         )
         .map_err(map_capability_change_rejection)?;
         let fingerprint = capability_update_fingerprint(id, &command);
-        let audit_id = format!(
-            "w20-cap-audit-{}",
-            digest(&[actor.id(), id, command.idempotency_key.trim()])
-        );
-        if let Some(audit) = self
-            .db
-            .audit_logs()
-            .find_by_id(&audit_id, &mut NoTransaction)
-            .await?
-        {
+        let audit_id = format!("w20-cap-audit-{}", digest(&[actor.id(), id, command.idempotency_key.trim()]));
+        if let Some(audit) = self.db.audit_logs().find_by_id(&audit_id, &mut NoTransaction).await? {
             ensure_audit_fingerprint(audit.message.as_deref(), &fingerprint)?;
             let detail = self.reads().connection_detail_for_actor(id, actor).await?;
             return Ok(UpdateSupplierCapabilitiesResult {
@@ -307,9 +291,8 @@ impl SupplierApiGovernanceProcess {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let domain = SupplierApiService::new(db.clone());
-                    let (mut connection, context) = domain
-                        .prepare_status_target(&connection_id_value, expected_version, session)
-                        .await?;
+                    let (mut connection, context) =
+                        domain.prepare_status_target(&connection_id_value, expected_version, session).await?;
                     let active_sync_jobs = db
                         .background_jobs()
                         .count_active_supplier_catalog_jobs(&connection_id_value, session)
@@ -364,12 +347,9 @@ impl SupplierApiGovernanceProcess {
             return Err(Error::ConflictError("同一幂等键不能提交不同参数".to_string()));
         }
         let job_no = match receipt.job_id.as_deref() {
-            Some(job_id) => self
-                .db
-                .background_jobs()
-                .find_by_id(job_id, &mut NoTransaction)
-                .await?
-                .map(|job| job.job_no),
+            Some(job_id) => {
+                self.db.background_jobs().find_by_id(job_id, &mut NoTransaction).await?.map(|job| job.job_no)
+            },
             None => None,
         };
         Ok(Some(SupplierConnectionCommandResult {

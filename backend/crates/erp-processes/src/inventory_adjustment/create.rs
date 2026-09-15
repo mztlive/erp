@@ -1,34 +1,28 @@
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::{StockAdjustmentId, StockAdjustmentLineId};
-use erp_inventory::InventoryExt;
+use erp_identity::SharedRbacService;
 use erp_inventory::{
-    AdjustmentReasonType, StockAdjustment, StockAdjustmentData, StockAdjustmentLine, StockAdjustmentLineData,
+    AdjustmentReasonType, CreateStockAdjustmentRequest, DocumentApprovalHistoryPageView, InventoryExt,
+    StockAdjustment, StockAdjustmentData, StockAdjustmentDetailView, StockAdjustmentLine,
+    StockAdjustmentLineData, StockAdjustmentLineInput, SubmitStockAdjustmentApprovalTokenView,
 };
 use erp_warehouse::WarehouseExt;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
+use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
 
-use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_identity::SharedRbacService;
-use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
-use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
-use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
-
 use super::adapter::document_approval_view_with_history;
-use super::approval_prepare as start_approval;
-use super::InventoryAdjustmentService;
+use super::{InventoryAdjustmentService, approval_prepare as start_approval};
 use crate::adapters::authorize_inventory;
-use erp_inventory::{
-    CreateStockAdjustmentRequest, DocumentApprovalHistoryPageView, StockAdjustmentDetailView,
-    StockAdjustmentLineInput, SubmitStockAdjustmentApprovalTokenView,
-};
+use crate::{Error, Result};
 
 impl InventoryAdjustmentService {
     /// 创建库存调整单（草稿，跨集合：表头 + 明细 + 绑定 + 审计）。
@@ -50,11 +44,7 @@ impl InventoryAdjustmentService {
     #[tracing::instrument(
         name = "inventory.stock_adjustment_create",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "inventory",
-            operation = "stock_adjustment_create"
-        )
+        fields(layer = "service", domain = "inventory", operation = "stock_adjustment_create")
     )]
     pub async fn create_stock_adjustment(
         &self,
@@ -79,15 +69,10 @@ impl InventoryAdjustmentService {
         )?;
         let lines = build_adjustment_lines(&id, adjustment.reason_type, &req.lines)?;
         let audit =
-            actor
-                .clone()
-                .resource_log("stock_adjustment.create", "stock_adjustment", id.to_string())?;
-        let document = new_registered_document(
-            &id,
-            DocumentType::StockAdjustment,
-            adjustment.adjustment_no.clone(),
-        )
-        .map_err(crate::Error::from)?;
+            actor.clone().resource_log("stock_adjustment.create", "stock_adjustment", id.to_string())?;
+        let document =
+            new_registered_document(&id, DocumentType::StockAdjustment, adjustment.adjustment_no.clone())
+                .map_err(crate::Error::from)?;
         let bind_command = BindPublishedDefinitionCommand {
             document_type: DocumentType::StockAdjustment,
             business_object_id: id.to_string(),
@@ -236,9 +221,7 @@ async fn persist_created_adjustment(
                         Err(Error::Forbidden(_)) => false,
                         Err(error) => return Err(error),
                     };
-                db.inventory()
-                    .create_stock_adjustment_with_lines(&adjustment, &lines, session)
-                    .await?;
+                db.inventory().create_stock_adjustment_with_lines(&adjustment, &lines, session).await?;
                 let binding = persist_bound_document(
                     &db,
                     &rbac,
@@ -279,10 +262,7 @@ fn created_adjustment_detail(
         Some(&binding),
         None,
         Vec::new(),
-        DocumentApprovalHistoryPageView {
-            next_cursor: None,
-            has_more: false,
-        },
+        DocumentApprovalHistoryPageView { next_cursor: None, has_more: false },
         adjustment.status,
         submit_command,
         None,
@@ -319,9 +299,7 @@ async fn persist_bound_document(
     .await?;
     let binding = binding.ok_or_else(|| Error::Internal("库存调整单必须绑定已发布定义".to_string()))?;
     attach_published_binding(document, binding.clone())?;
-    persist_registered_document(db, document, session)
-        .await
-        .map_err(crate::Error::from)?;
+    persist_registered_document(db, document, session).await.map_err(crate::Error::from)?;
     Ok(binding)
 }
 
@@ -363,11 +341,13 @@ fn build_adjustment_lines(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_adjustment_lines, StockAdjustmentLineInput};
+    use std::str::FromStr;
+
     use erp_core::ids::{SkuId, StockAdjustmentId};
     use erp_core::money::Quantity;
     use erp_inventory::{AdjustmentReasonType, MovementDirection};
-    use std::str::FromStr;
+
+    use super::{StockAdjustmentLineInput, build_adjustment_lines};
 
     #[test]
     fn adjustment_lines_are_built_with_entity_validation() {

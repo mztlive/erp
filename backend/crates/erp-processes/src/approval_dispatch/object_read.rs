@@ -129,8 +129,8 @@ fn map_workflow_error(error: crate::Error) -> Error {
 
 #[cfg(test)]
 mod tests {
-    use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
     use erp_workflow::DocumentType;
+    use erp_workflow::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
 
     use super::adapter_object_read_decision;
 

@@ -1,15 +1,16 @@
 //! 销售变更同事务写入合同；生产与纯替身共同执行相同编排函数。
 
-use crate::Result;
 use async_trait::async_trait;
 use erp_audit::AuditExt;
 use erp_core::ids::ReceivableAccountId;
 use erp_finance::service::receivable::sales_change::{
-    prepare_sales_change_receivable, SalesChangeReceivableInput, SalesChangeReceivableWrite,
+    SalesChangeReceivableInput, SalesChangeReceivableWrite, prepare_sales_change_receivable,
 };
 use erp_sales::service::sales_review::EffectiveChangeWrite;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::Result;
 
 /// 销售变更最终生效的最小写入能力；不得在实现内另开事务。
 #[async_trait]
@@ -68,16 +69,7 @@ pub(super) async fn persist_effective_writes(
     audit: &erp_audit::AuditLog,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    post(
-        &mut DatabasePosting {
-            db,
-            write,
-            delta,
-            audit,
-        },
-        executor,
-    )
-    .await
+    post(&mut DatabasePosting { db, write, delta, audit }, executor).await
 }
 
 /// 写入应收差额分录。
@@ -111,10 +103,10 @@ pub(super) async fn prepare_receivable_delta(
     let business_type = match fact.business_type {
         erp_sales::entity::sales_order::BusinessType::GoodsService => {
             erp_finance::entity::receivable::SalesBusinessTypeFact::GoodsService
-        }
+        },
         erp_sales::entity::sales_order::BusinessType::Voucher => {
             erp_finance::entity::receivable::SalesBusinessTypeFact::Voucher
-        }
+        },
     };
     Ok(prepare_sales_change_receivable(
         db,
@@ -134,10 +126,11 @@ pub(super) async fn prepare_receivable_delta(
 
 #[cfg(test)]
 mod tests {
-    use super::{post, SalesChangePostingPort};
-    use crate::{Error, Result};
     use async_trait::async_trait;
     use persistence_core::Executor;
+
+    use super::{SalesChangePostingPort, post};
+    use crate::{Error, Result};
 
     // 非零大小保证执行器地址能够区分不同实例。
     struct TestExecutor {
@@ -159,8 +152,7 @@ mod tests {
     impl RecordingPosting {
         fn record(&mut self, step: &'static str, executor: &mut dyn Executor) -> Result<()> {
             self.events.push(step);
-            self.executors
-                .push(executor as *mut dyn Executor as *mut () as usize);
+            self.executors.push(executor as *mut dyn Executor as *mut () as usize);
             if self.fail == Some(step) {
                 return Err(Error::ConflictError(step.to_string()));
             }
@@ -189,10 +181,7 @@ mod tests {
         let mut executor = TestExecutor { _identity: 1 };
         let expected = &mut executor as *mut TestExecutor as usize;
         post(&mut port, &mut executor).await.unwrap();
-        assert_eq!(
-            port.events,
-            ["revision", "receivable_and_tasks", "change", "audit"]
-        );
+        assert_eq!(port.events, ["revision", "receivable_and_tasks", "change", "audit"]);
         assert_eq!(port.executors, vec![expected; 4]);
     }
 
@@ -200,13 +189,8 @@ mod tests {
     async fn every_failure_keeps_error_category_and_stops_later_writes() {
         let steps = ["revision", "receivable_and_tasks", "change", "audit"];
         for (index, failed_step) in steps.iter().enumerate() {
-            let mut port = RecordingPosting {
-                fail: Some(*failed_step),
-                ..Default::default()
-            };
-            let error = post(&mut port, &mut TestExecutor { _identity: 1 })
-                .await
-                .unwrap_err();
+            let mut port = RecordingPosting { fail: Some(*failed_step), ..Default::default() };
+            let error = post(&mut port, &mut TestExecutor { _identity: 1 }).await.unwrap_err();
             assert!(matches!(error, Error::ConflictError(ref message) if message.as_str() == *failed_step));
             assert_eq!(port.events, steps[..=index]);
         }

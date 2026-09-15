@@ -36,25 +36,24 @@ pub fn ensure_final_approve_formalize(order: &SalesOrder) -> Result<()> {
     if order.commercial_status != CommercialStatus::PendingReview
         || order.review_status != ReviewStatus::InApproval
     {
-        return Err(Error::ConflictError(
-            "只有审批中的销售单可以由最终通过动作形式化".to_string(),
-        ));
+        return Err(Error::ConflictError("只有审批中的销售单可以由最终通过动作形式化".to_string()));
     }
     Ok(())
 }
 
-use super::mapper::{build_working_copy_lines, header_snapshot};
+use application_core::AuditActor;
+use erp_core::common::time::Instant;
+use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
+use persistence_core::{Executor, NoTransaction};
+
 use super::SalesOrderService;
+use super::mapper::{build_working_copy_lines, header_snapshot};
 use crate::dto::sales_order::{CreateSalesOrderRequest, SalesOrderDraftRequest};
 use crate::entity::sales_order::{
     SalesContentHash, SalesOrderData, SalesOrderLine, SalesOrderSubmission, SalesOrderSubmissionLine,
     SalesOrderWorkingCopy, SalesOrderWorkingCopyLine, SalesOrderWorkingCopyUpdate,
 };
 use crate::repository::SalesOrderExt;
-use application_core::AuditActor;
-use erp_core::common::time::Instant;
-use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
-use persistence_core::{Executor, NoTransaction};
 
 /// Sales-owned write plan for replacing or creating the submission's working copy.
 #[derive(Clone)]
@@ -123,15 +122,9 @@ impl SalesOrderService {
         for line in stable {
             self.db.sales_order_lines().create(line, executor).await?;
         }
-        self.db
-            .sales_order_working_copies()
-            .create(copy, executor)
-            .await?;
+        self.db.sales_order_working_copies().create(copy, executor).await?;
         for line in lines {
-            self.db
-                .sales_order_working_copy_lines()
-                .create(line, executor)
-                .await?;
+            self.db.sales_order_working_copy_lines().create(line, executor).await?;
         }
         Ok(())
     }
@@ -143,15 +136,9 @@ impl SalesOrderService {
         lines: &[SalesOrderSubmissionLine],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .sales_order_submissions()
-            .create(submission, executor)
-            .await?;
+        self.db.sales_order_submissions().create(submission, executor).await?;
         for line in lines {
-            self.db
-                .sales_order_submission_lines()
-                .create(line, executor)
-                .await?;
+            self.db.sales_order_submission_lines().create(line, executor).await?;
         }
         Ok(())
     }
@@ -171,21 +158,12 @@ impl SalesOrderService {
             self.db.sales_order_lines().create(line, executor).await?;
         }
         for mut old in old_lines {
-            self.db
-                .sales_order_working_copy_lines()
-                .soft_delete(&mut old, executor)
-                .await?;
+            self.db.sales_order_working_copy_lines().soft_delete(&mut old, executor).await?;
         }
         for line in lines {
-            self.db
-                .sales_order_working_copy_lines()
-                .create(line, executor)
-                .await?;
+            self.db.sales_order_working_copy_lines().create(line, executor).await?;
         }
-        self.db
-            .sales_order_working_copies()
-            .update(copy, executor)
-            .await?;
+        self.db.sales_order_working_copies().update(copy, executor).await?;
         Ok(())
     }
 
@@ -205,36 +183,21 @@ impl SalesOrderService {
             self.db.sales_order_lines().create(line, executor).await?;
         }
         for mut old in plan.old_working_copy_lines {
-            self.db
-                .sales_order_working_copy_lines()
-                .soft_delete(&mut old, executor)
-                .await?;
+            self.db.sales_order_working_copy_lines().soft_delete(&mut old, executor).await?;
         }
         if plan.replace_working_copy_lines {
             for line in &plan.new_working_copy_lines {
-                self.db
-                    .sales_order_working_copy_lines()
-                    .create(line, executor)
-                    .await?;
+                self.db.sales_order_working_copy_lines().create(line, executor).await?;
             }
         }
         if plan.create_working_copy {
-            self.db
-                .sales_order_working_copies()
-                .create(copy, executor)
-                .await?;
+            self.db.sales_order_working_copies().create(copy, executor).await?;
             for line in &plan.new_working_copy_lines {
-                self.db
-                    .sales_order_working_copy_lines()
-                    .create(line, executor)
-                    .await?;
+                self.db.sales_order_working_copy_lines().create(line, executor).await?;
             }
             self.create_submission(submission, lines, executor).await?;
         } else {
-            self.db
-                .sales_order()
-                .submit_working_copy(copy, submission, lines, executor)
-                .await?;
+            self.db.sales_order().submit_working_copy(copy, submission, lines, executor).await?;
         }
         self.db.sales_orders().update(order, executor).await?;
         Ok(())
@@ -249,10 +212,7 @@ impl SalesOrderService {
     ) -> Result<()> {
         self.db.sales_orders().update(order, executor).await?;
         if let Some(copy) = copy {
-            self.db
-                .sales_order_working_copies()
-                .update(copy, executor)
-                .await?;
+            self.db.sales_order_working_copies().update(copy, executor).await?;
         }
         Ok(())
     }
@@ -288,9 +248,7 @@ impl SalesOrderService {
                 project_name: draft.project_name.clone(),
                 business_remark: draft.business_remark.clone(),
                 voucher_category_sku_id: draft.voucher_category_sku_id.clone(),
-                voucher_expiry_at: draft
-                    .voucher_expiry_at
-                    .map(|secs| Instant::from_unix_secs(secs as i64)),
+                voucher_expiry_at: draft.voucher_expiry_at.map(|secs| Instant::from_unix_secs(secs as i64)),
                 receivable_due_date: draft.receivable_due_date,
                 gross_amount: Some(gross),
                 net_amount: Some(net),
@@ -319,18 +277,13 @@ impl SalesOrderService {
         draft: &SalesOrderDraftRequest,
         version: u64,
         actor: &AuditActor,
-    ) -> Result<(
-        SalesOrderWorkingCopy,
-        Vec<SalesOrderWorkingCopyLine>,
-        SalesOrderWorkingCopyPersistPlan,
-    )> {
+    ) -> Result<(SalesOrderWorkingCopy, Vec<SalesOrderWorkingCopyLine>, SalesOrderWorkingCopyPersistPlan)>
+    {
         let order_id = SalesOrderId::new(order.base.id.clone());
         let (working_copy, copy_lines, working_copy_plan) = match active_working_copy {
             Some(mut working_copy) => {
                 if !working_copy.matches_version(version) {
-                    return Err(Error::ConflictError(
-                        "数据已被其他请求修改，请刷新后重试".to_string(),
-                    ));
+                    return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
                 }
                 let copy_id = erp_core::ids::SalesOrderWorkingCopyId::new(working_copy.base.id.clone());
                 let old_lines = self
@@ -376,7 +329,7 @@ impl SalesOrderService {
                     create_working_copy: false,
                 };
                 (working_copy, copy_lines, plan)
-            }
+            },
             None => {
                 let (working_copy, copy_lines) =
                     Self::build_reopened_first_submission_working_copy(order, &stable.all, draft, actor)?;
@@ -388,7 +341,7 @@ impl SalesOrderService {
                     create_working_copy: true,
                 };
                 (working_copy, copy_lines, plan)
-            }
+            },
         };
         Ok((working_copy, copy_lines, working_copy_plan))
     }

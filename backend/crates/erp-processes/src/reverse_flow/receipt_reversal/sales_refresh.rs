@@ -1,9 +1,10 @@
 //! 审计后重新读取核销关联，再依原顺序逐销售单刷新回款进度。
 
-use crate::Result;
 use async_trait::async_trait;
 use erp_core::ids::SalesOrderId;
 use persistence_core::Executor;
+
+use crate::Result;
 
 /// 仅暴露审计后的新读取和单张销售单刷新；生产与替身共用相同 runner。
 #[async_trait]
@@ -28,7 +29,7 @@ pub(super) async fn refresh_affected_sales(
 
 #[cfg(test)]
 mod tests {
-    use super::super::{post, ReceiptReversalPosting};
+    use super::super::{ReceiptReversalPosting, post};
     use super::*;
     use crate::Error;
 
@@ -51,8 +52,7 @@ mod tests {
     impl RecordingPosting {
         fn record(&mut self, step: &str, executor: &mut dyn Executor) -> Result<()> {
             self.events.push(step.to_string());
-            self.executors
-                .push(executor as *mut dyn Executor as *mut () as usize);
+            self.executors.push(executor as *mut dyn Executor as *mut () as usize);
             if self.fail == Some(step) {
                 return Err(Error::ConflictError(step.to_string()));
             }
@@ -70,10 +70,7 @@ mod tests {
         }
         async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
             self.record("audit", executor)?;
-            self.allocations = ["sales-1", "sales-2", "sales-3"]
-                .into_iter()
-                .map(SalesOrderId::new)
-                .collect();
+            self.allocations = ["sales-1", "sales-2", "sales-3"].into_iter().map(SalesOrderId::new).collect();
             Ok(())
         }
         async fn refresh_sales(&mut self, executor: &mut dyn Executor) -> Result<()> {
@@ -94,34 +91,21 @@ mod tests {
 
     #[tokio::test]
     async fn final_post_reloads_after_audit_and_refreshes_each_new_sale_with_same_executor() {
-        let mut port = RecordingPosting {
-            allocations: vec![SalesOrderId::new("stale-sales")],
-            ..Default::default()
-        };
+        let mut port =
+            RecordingPosting { allocations: vec![SalesOrderId::new("stale-sales")], ..Default::default() };
         let mut executor = TestExecutor { _identity: 1 };
         let expected = &mut executor as *mut TestExecutor as usize;
         post(&mut port, &mut executor).await.unwrap();
         assert_eq!(
             port.events,
-            [
-                "finance",
-                "returns",
-                "audit",
-                "load_allocations",
-                "sales-1",
-                "sales-2",
-                "sales-3"
-            ]
+            ["finance", "returns", "audit", "load_allocations", "sales-1", "sales-2", "sales-3"]
         );
         assert_eq!(port.executors, vec![expected; 7]);
     }
 
     #[tokio::test]
     async fn allocation_reload_failure_stops_before_any_sales_refresh() {
-        let mut port = RecordingPosting {
-            fail: Some("load_allocations"),
-            ..Default::default()
-        };
+        let mut port = RecordingPosting { fail: Some("load_allocations"), ..Default::default() };
         let mut executor = TestExecutor { _identity: 1 };
         let error = post(&mut port, &mut executor).await.unwrap_err();
         assert!(matches!(error, Error::ConflictError(message) if message == "load_allocations"));
@@ -130,25 +114,12 @@ mod tests {
 
     #[tokio::test]
     async fn middle_sales_failure_stops_before_later_sales_with_same_executor() {
-        let mut port = RecordingPosting {
-            fail: Some("sales-2"),
-            ..Default::default()
-        };
+        let mut port = RecordingPosting { fail: Some("sales-2"), ..Default::default() };
         let mut executor = TestExecutor { _identity: 1 };
         let expected = &mut executor as *mut TestExecutor as usize;
         let error = post(&mut port, &mut executor).await.unwrap_err();
         assert!(matches!(error, Error::ConflictError(message) if message == "sales-2"));
-        assert_eq!(
-            port.events,
-            [
-                "finance",
-                "returns",
-                "audit",
-                "load_allocations",
-                "sales-1",
-                "sales-2"
-            ]
-        );
+        assert_eq!(port.events, ["finance", "returns", "audit", "load_allocations", "sales-1", "sales-2"]);
         assert_eq!(port.executors, vec![expected; 6]);
     }
 }

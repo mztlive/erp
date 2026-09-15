@@ -64,13 +64,13 @@ impl Error {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::Rbac(_) | Self::RepositoryError(_) => {
                 ErrorClass::Internal
-            }
+            },
             Self::ConflictError(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_) => {
                 ErrorClass::Conflict
-            }
+            },
             Self::BusinessLogicError(_) | Self::ValidationError(_) | Self::NotFound(_) => {
                 ErrorClass::BusinessRule
-            }
+            },
             Self::Forbidden(_) | Self::Unauthenticated(_) => ErrorClass::Forbidden,
             Self::OutcomeUnknown(_) => ErrorClass::Internal,
         }
@@ -86,13 +86,13 @@ impl From<persistence_core::Error> for Error {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
                 Self::ConflictError(duplicate_key_conflict_message(&error))
-            }
+            },
             persistence_core::Error::OptimisticLockingError => {
                 Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            }
+            },
             error @ persistence_core::Error::TransientTransactionConflict(_) => {
                 Self::TransientTransaction(error)
-            }
+            },
             error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
             other => Self::RepositoryError(other),
         }

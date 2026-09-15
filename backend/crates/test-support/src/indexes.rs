@@ -1,6 +1,7 @@
 //! 索引存在性断言辅助。
 
-use mongodb::{bson::Document, Database};
+use mongodb::Database;
+use mongodb::bson::Document;
 
 use crate::{Error, Result};
 
@@ -29,8 +30,5 @@ pub async fn assert_indexes(db: &Database, collection: &str, names: &[&str]) -> 
     if missing.is_empty() {
         return Ok(());
     }
-    Err(Error::IndexMissing {
-        collection: collection.to_string(),
-        missing,
-    })
+    Err(Error::IndexMissing { collection: collection.to_string(), missing })
 }

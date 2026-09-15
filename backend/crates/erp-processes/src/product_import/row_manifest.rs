@@ -9,15 +9,15 @@ use std::collections::HashMap;
 use erp_catalog::entity::catalog::product_import::dispimg_id;
 use erp_core::ids::FileAssetId;
 use erp_support::{
-    content_fingerprint, PendingFileAssetRequest, RegisterFileAssetRequest, RetentionClass, SensitivityClass,
-    PENDING_FILE_REFERENCE_PREFIX,
+    PENDING_FILE_REFERENCE_PREFIX, PendingFileAssetRequest, RegisterFileAssetRequest, RetentionClass,
+    SensitivityClass, content_fingerprint,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use storage::S3Storage;
 
-use super::images::{detect_image, RowMedia};
-use super::parse::{read_xlsx_media, ParsedProductSheet};
+use super::images::{RowMedia, detect_image};
+use super::parse::{ParsedProductSheet, read_xlsx_media};
 use crate::{Error, Result};
 
 /// 行级清单版本号；版本不一致时执行阶段回退到源文件链路。
@@ -148,17 +148,13 @@ pub(super) async fn build_row_manifest(
                 {
                     Ok((reference, registration, object_key)) => {
                         uploaded_object_keys.push(object_key);
-                        entry.carousel.push(ManifestCarouselImage {
-                            reference,
-                            sort_order,
-                            registration,
-                        });
+                        entry.carousel.push(ManifestCarouselImage { reference, sort_order, registration });
                         sort_order += 1;
-                    }
+                    },
                     Err(error) => {
                         entry.media_error = Some(format!("第{}行图片预提失败: {error}", row.row_number));
                         break;
-                    }
+                    },
                 }
                 match put_manifest_image(
                     storage,
@@ -174,15 +170,12 @@ pub(super) async fn build_row_manifest(
                 {
                     Ok((reference, registration, object_key)) => {
                         uploaded_object_keys.push(object_key);
-                        entry.main_image = Some(ManifestImage {
-                            reference,
-                            registration,
-                        });
-                    }
+                        entry.main_image = Some(ManifestImage { reference, registration });
+                    },
                     Err(error) => {
                         entry.media_error = Some(format!("第{}行图片预提失败: {error}", row.row_number));
                         break;
-                    }
+                    },
                 }
                 continue;
             }
@@ -201,27 +194,19 @@ pub(super) async fn build_row_manifest(
             {
                 Ok((reference, registration, object_key)) => {
                     uploaded_object_keys.push(object_key);
-                    entry.carousel.push(ManifestCarouselImage {
-                        reference,
-                        sort_order,
-                        registration,
-                    });
+                    entry.carousel.push(ManifestCarouselImage { reference, sort_order, registration });
                     sort_order += 1;
-                }
+                },
                 Err(error) => {
                     entry.media_error = Some(format!("第{}行图片预提失败: {error}", row.row_number));
                     break;
-                }
+                },
             }
         }
         rows.push(entry);
     }
     Ok(BuiltRowManifest {
-        manifest: RowManifest {
-            version: ROW_MANIFEST_VERSION,
-            request_id: request_id.to_string(),
-            rows,
-        },
+        manifest: RowManifest { version: ROW_MANIFEST_VERSION, request_id: request_id.to_string(), rows },
         uploaded_object_keys,
     })
 }
@@ -260,10 +245,8 @@ pub(super) async fn write_row_manifest(storage: &S3Storage, manifest: &RowManife
 /// 清单缺失、损坏或版本不一致时返回错误（调用方回退，不直接失败任务）。
 pub(super) async fn read_row_manifest(storage: &S3Storage, request_id: &str) -> Result<RowManifest> {
     let key = manifest_object_key(request_id)?;
-    let bytes = storage
-        .read(&key)
-        .await
-        .map_err(|error| Error::Internal(format!("读取行清单失败: {error}")))?;
+    let bytes =
+        storage.read(&key).await.map_err(|error| Error::Internal(format!("读取行清单失败: {error}")))?;
     let manifest: RowManifest =
         serde_json::from_slice(&bytes).map_err(|_| Error::Internal("行清单损坏".to_string()))?;
     if manifest.version != ROW_MANIFEST_VERSION || manifest.request_id != request_id {
@@ -312,9 +295,7 @@ pub(super) fn row_media_from_entry(entry: &RowManifestRow) -> RowMedia {
         });
     }
     for image in &entry.carousel {
-        media
-            .carousel
-            .push((FileAssetId::new(image.reference.clone()), image.sort_order));
+        media.carousel.push((FileAssetId::new(image.reference.clone()), image.sort_order));
         pending.push(PendingFileAssetRequest {
             reference: image.reference.clone(),
             registration: image.registration.clone(),
@@ -328,9 +309,7 @@ pub(super) fn row_media_from_entry(entry: &RowManifestRow) -> RowMedia {
 fn validate_manifest_request_id(request_id: &str) -> Result<()> {
     if request_id.is_empty()
         || request_id.len() > 64
-        || !request_id
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+        || !request_id.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
     {
         return Err(Error::ValidationError("请求身份非法，请重新选择文件".to_string()));
     }
@@ -371,11 +350,12 @@ async fn put_manifest_image(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        manifest_object_key, row_media_from_entry, ManifestCarouselImage, ManifestImage, RowManifest,
-        RowManifestRow, ROW_MANIFEST_VERSION,
-    };
     use erp_support::{RetentionClass, SensitivityClass};
+
+    use super::{
+        ManifestCarouselImage, ManifestImage, ROW_MANIFEST_VERSION, RowManifest, RowManifestRow,
+        manifest_object_key, row_media_from_entry,
+    };
 
     fn sample_registration() -> erp_support::RegisterFileAssetRequest {
         erp_support::RegisterFileAssetRequest {
@@ -392,10 +372,7 @@ mod tests {
 
     #[test]
     fn manifest_key_rejects_unsafe_request_id() {
-        assert_eq!(
-            manifest_object_key("req-1_Aa").unwrap(),
-            "product-import-rows/req-1_Aa.json"
-        );
+        assert_eq!(manifest_object_key("req-1_Aa").unwrap(), "product-import-rows/req-1_Aa.json");
         assert!(manifest_object_key("").is_err());
         assert!(manifest_object_key("../escape").is_err());
         assert!(manifest_object_key("a/b").is_err());
@@ -430,10 +407,7 @@ mod tests {
         assert_eq!(decoded.rows[0].row_number, 2);
         assert_eq!(decoded.rows[0].cells, vec!["a".to_string(), "b".to_string()]);
         assert_eq!(
-            decoded.rows[0]
-                .main_image
-                .as_ref()
-                .map(|image| image.reference.as_str()),
+            decoded.rows[0].main_image.as_ref().map(|image| image.reference.as_str()),
             Some("pending-file:req-1-2-main")
         );
         assert_eq!(decoded.rows[0].carousel.len(), 1);
@@ -454,10 +428,7 @@ mod tests {
             media_error: None,
         };
         let media = row_media_from_entry(&entry);
-        assert_eq!(
-            media.main_image.as_ref().map(|id| id.as_ref()),
-            Some("pending-file:req-1-2-main")
-        );
+        assert_eq!(media.main_image.as_ref().map(|id| id.as_ref()), Some("pending-file:req-1-2-main"));
         assert_eq!(media.pending.len(), 1);
         assert_eq!(
             media.pending[0].registration.storage_object_key,

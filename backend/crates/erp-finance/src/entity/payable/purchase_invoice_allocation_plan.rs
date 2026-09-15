@@ -11,10 +11,11 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use crate::entity::payable::{AllocationAction, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationData};
 use erp_core::ids::{InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId};
 use erp_core::money::Amount;
 use erp_core::{Error, Result};
+
+use crate::entity::payable::{AllocationAction, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationData};
 
 /// 进项发票分配计划输入行（金额三元组由计划统一校验）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,15 +89,15 @@ impl PurchaseInvoiceAllocationPlan {
         if lines.len() != allocation_ids.len() {
             return Err(Error::from("分配 ID 数量必须与分配行数一致"));
         }
-        let gross_total = lines.iter().try_fold(zero_amount(), |sum, line| {
-            checked_add_amount(sum, line.allocated_gross_amount)
-        })?;
-        let net_total = lines.iter().try_fold(zero_amount(), |sum, line| {
-            checked_add_amount(sum, line.allocated_net_amount)
-        })?;
-        let tax_total = lines.iter().try_fold(zero_amount(), |sum, line| {
-            checked_add_amount(sum, line.allocated_tax_amount)
-        })?;
+        let gross_total = lines
+            .iter()
+            .try_fold(zero_amount(), |sum, line| checked_add_amount(sum, line.allocated_gross_amount))?;
+        let net_total = lines
+            .iter()
+            .try_fold(zero_amount(), |sum, line| checked_add_amount(sum, line.allocated_net_amount))?;
+        let tax_total = lines
+            .iter()
+            .try_fold(zero_amount(), |sum, line| checked_add_amount(sum, line.allocated_tax_amount))?;
         if gross_total != invoice_gross {
             return Err(Error::from("发票分配合计必须等于发票金额"));
         }
@@ -128,17 +129,14 @@ impl PurchaseInvoiceAllocationPlan {
                 Some(&delta_index) => {
                     let (_, total) = &mut account_deltas[delta_index];
                     *total = checked_add_amount(*total, line.allocated_gross_amount)?;
-                }
+                },
                 None => {
                     account_delta_index.insert(line.payable_account_id.to_string(), account_deltas.len());
                     account_deltas.push((line.payable_account_id.clone(), line.allocated_gross_amount));
-                }
+                },
             }
         }
-        Ok(Self {
-            allocations,
-            account_deltas,
-        })
+        Ok(Self { allocations, account_deltas })
     }
 
     /// 返回本次构造的进项发票分配。
@@ -208,8 +206,9 @@ fn checked_add_amount(left: Amount, right: Amount) -> Result<Amount> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rust_decimal::Decimal;
+
+    use super::*;
 
     fn line(account: &str, gross: &str, net: &str, tax: &str) -> PurchaseInvoiceAllocationLine {
         PurchaseInvoiceAllocationLine {
@@ -221,9 +220,7 @@ mod tests {
     }
 
     fn ids(count: usize) -> Vec<PurchaseInvoiceAllocationId> {
-        (0..count)
-            .map(|index| PurchaseInvoiceAllocationId::new(format!("alloc-{index}")))
-            .collect()
+        (0..count).map(|index| PurchaseInvoiceAllocationId::new(format!("alloc-{index}"))).collect()
     }
 
     fn build(
@@ -262,8 +259,7 @@ mod tests {
         let lines = [line("acct-1", "100.00", "90.00", "10.00")];
         let err = build("100.00", "94.00", "6.00", &lines).unwrap_err();
         assert!(
-            err.to_string()
-                .contains("发票分配不含税合计必须等于发票不含税金额"),
+            err.to_string().contains("发票分配不含税合计必须等于发票不含税金额"),
             "税额口径漂移必须被计划拒绝，实际错误：{}",
             err
         );
@@ -280,10 +276,7 @@ mod tests {
     fn line_amount_identity_rejected() {
         // 三口径合计与发票一致，但某行 gross != net + tax：由实体构造器拒绝，
         // 计划不产生部分实体
-        let lines = [
-            line("acct-1", "60.00", "50.00", "5.00"),
-            line("acct-2", "40.00", "44.00", "1.00"),
-        ];
+        let lines = [line("acct-1", "60.00", "50.00", "5.00"), line("acct-2", "40.00", "44.00", "1.00")];
         let err = build("100.00", "94.00", "6.00", &lines).unwrap_err();
         assert!(err.to_string().contains("分配含税金额必须等于不含税金额加税额"));
     }
@@ -293,10 +286,7 @@ mod tests {
         let zero = [line("acct-1", "0.00", "0.00", "0.00")];
         assert!(build("0.00", "0.00", "0.00", &zero).is_err(), "零金额必须拒绝");
         let negative = [line("acct-1", "-1.00", "-1.00", "0.00")];
-        assert!(
-            build("-1.00", "-1.00", "0.00", &negative).is_err(),
-            "负金额必须拒绝"
-        );
+        assert!(build("-1.00", "-1.00", "0.00", &negative).is_err(), "负金额必须拒绝");
     }
 
     #[test]
@@ -309,14 +299,8 @@ mod tests {
         let plan = build("100.00", "94.00", "6.00", &lines).unwrap();
         let seqs: Vec<u32> = plan.new_allocations().iter().map(|a| a.allocation_seq).collect();
         assert_eq!(seqs, vec![1, 2, 3]);
-        assert_eq!(
-            plan.new_allocations()[0].allocated_gross_amount,
-            Amount::from_str("50.00").unwrap()
-        );
-        assert_eq!(
-            plan.new_allocations()[2].allocated_gross_amount,
-            Amount::from_str("20.00").unwrap()
-        );
+        assert_eq!(plan.new_allocations()[0].allocated_gross_amount, Amount::from_str("50.00").unwrap());
+        assert_eq!(plan.new_allocations()[2].allocated_gross_amount, Amount::from_str("20.00").unwrap());
     }
 
     #[test]
@@ -330,14 +314,8 @@ mod tests {
         assert_eq!(
             plan.account_invoicing_deltas(),
             &[
-                (
-                    PayableAccountId::new("acct-1"),
-                    Amount::from_str("70.00").unwrap()
-                ),
-                (
-                    PayableAccountId::new("acct-2"),
-                    Amount::from_str("30.00").unwrap()
-                ),
+                (PayableAccountId::new("acct-1"), Amount::from_str("70.00").unwrap()),
+                (PayableAccountId::new("acct-2"), Amount::from_str("30.00").unwrap()),
             ],
             "同一账户只推进聚合值且按首次出现顺序"
         );
@@ -361,10 +339,7 @@ mod tests {
 
     #[test]
     fn input_order_determinism() {
-        let lines = [
-            line("acct-1", "60.00", "56.40", "3.60"),
-            line("acct-2", "40.00", "37.60", "2.40"),
-        ];
+        let lines = [line("acct-1", "60.00", "56.40", "3.60"), line("acct-2", "40.00", "37.60", "2.40")];
         let first = build("100.00", "94.00", "6.00", &lines).unwrap();
         let second = build("100.00", "94.00", "6.00", &lines).unwrap();
         assert_eq!(first, second, "相同输入必须产出相同计划");
@@ -372,10 +347,7 @@ mod tests {
         let swapped_lines = [lines[1].clone(), lines[0].clone()];
         let swapped = build("100.00", "94.00", "6.00", &swapped_lines).unwrap();
         assert_eq!(swapped.new_allocations()[0].allocation_seq, 1);
-        assert_eq!(
-            swapped.new_allocations()[0].allocated_gross_amount,
-            Amount::from_str("40.00").unwrap()
-        );
+        assert_eq!(swapped.new_allocations()[0].allocated_gross_amount, Amount::from_str("40.00").unwrap());
         assert_ne!(first, swapped);
     }
 
@@ -398,18 +370,11 @@ mod tests {
     #[test]
     fn arithmetic_overflow_rejected() {
         let max = Amount::try_from(Decimal::MAX).unwrap();
-        let lines = [
-            line("acct-1", "1.00", "1.00", "0.00"),
-            line("acct-2", "1.00", "1.00", "0.00"),
-        ];
+        let lines = [line("acct-1", "1.00", "1.00", "0.00"), line("acct-2", "1.00", "1.00", "0.00")];
         let mut overflow = vec![lines[0].clone(), lines[1].clone()];
         overflow[0].allocated_gross_amount = max;
         overflow[1].allocated_gross_amount = max;
         let err = build("2.00", "2.00", "0.00", &overflow).unwrap_err();
-        assert!(
-            err.to_string().contains("溢出"),
-            "合计溢出必须失败，实际错误：{}",
-            err
-        );
+        assert!(err.to_string().contains("溢出"), "合计溢出必须失败，实际错误：{}", err);
     }
 }

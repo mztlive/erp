@@ -20,7 +20,7 @@ pub use entity::contract::{
     ContractRevisionId, ContractStatus, ContractUpdate, CustomerSnapshot, InvoiceRequirementSnapshot,
     PaymentTermSnapshot, SettlementPartySnapshot,
 };
-pub use error::{known_duplicate_index_message, Error, Result};
+pub use error::{Error, Result, known_duplicate_index_message};
 pub use ports::{
     AccountNamePort, ContractAssignmentFact, ContractAuditPort, ContractDataScopePort,
     ContractParticipantPort, ContractResolvedClause, ContractResolvedScope, ContractScopeObject,
@@ -35,6 +35,6 @@ pub use repository::{
     ContractRow,
 };
 pub use service::contract::{
-    plan_first_archive, plan_upload_archive, ContractAccess, ContractScopePorts, ContractService,
-    PlannedContractArchive,
+    ContractAccess, ContractScopePorts, ContractService, PlannedContractArchive, plan_first_archive,
+    plan_upload_archive,
 };

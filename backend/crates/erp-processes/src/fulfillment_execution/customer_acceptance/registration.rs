@@ -1,18 +1,19 @@
 //! 客户验收 NO_APPROVAL 单据登记；所有写入使用调用方 Executor。
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
 use erp_identity::SharedRbacService;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::{
-    binding_decision, BindPublishedDefinitionCommand, BindingDecision,
+    BindPublishedDefinitionCommand, BindingDecision, binding_decision,
 };
-use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
-use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
+use erp_workflow::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
+use erp_workflow::service::approval::policy::{DocumentApprovalPolicy, policy_of};
 use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::{Error, Result};
 /// 客户验收创建必须跳过绑定：政策只能是 `NO_APPROVAL`。
 ///
 /// # 返回
@@ -28,10 +29,10 @@ fn customer_acceptance_create_binding_decision() -> Result<BindingDecision> {
                 return Err(Error::Internal("客户验收政策类型不匹配".to_string()));
             }
             Ok(binding_decision(policy.requirement()))
-        }
-        DocumentApprovalPolicy::ProcessRequired(_) => Err(Error::Internal(
-            "客户验收必须是 NO_APPROVAL，不得绑定流程".to_string(),
-        )),
+        },
+        DocumentApprovalPolicy::ProcessRequired(_) => {
+            Err(Error::Internal("客户验收必须是 NO_APPROVAL，不得绑定流程".to_string()))
+        },
     }
 }
 
@@ -71,9 +72,7 @@ fn ensure_customer_acceptance_has_no_adapter() -> Result<()> {
 fn customer_acceptance_binding_organization_id(acceptance: &CustomerAcceptance) -> Result<String> {
     let org = acceptance.sales_order_id.to_string();
     if org.trim().is_empty() {
-        return Err(Error::ValidationError(
-            "客户验收单缺少销售单，无法构造绑定上下文".to_string(),
-        ));
+        return Err(Error::ValidationError("客户验收单缺少销售单，无法构造绑定上下文".to_string()));
     }
     Ok(org)
 }
@@ -121,17 +120,13 @@ fn apply_customer_acceptance_create_binding(
     binding: Option<ApprovalDefinitionBinding>,
 ) -> Result<Option<ApprovalDefinitionBinding>> {
     if binding.is_some() {
-        return Err(Error::Internal(
-            "客户验收为 NO_APPROVAL，不得写入审批绑定".to_string(),
-        ));
+        return Err(Error::Internal("客户验收为 NO_APPROVAL，不得写入审批绑定".to_string()));
     }
     if document.approval_binding.is_some() {
         return Err(Error::Internal("客户验收注册行不得预置审批绑定".to_string()));
     }
     if document.document_type != DocumentType::CustomerAcceptance {
-        return Err(Error::Internal(
-            "客户验收创建只能注册 CustomerAcceptance 单据".to_string(),
-        ));
+        return Err(Error::Internal("客户验收创建只能注册 CustomerAcceptance 单据".to_string()));
     }
     Ok(None)
 }
@@ -163,9 +158,7 @@ async fn persist_unbound_customer_acceptance_document(
     )
     .await?;
     apply_customer_acceptance_create_binding(&mut document, binding)?;
-    persist_registered_document(db, &document, executor)
-        .await
-        .map_err(crate::Error::from)
+    persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
 }
 
 /// 为已构造客户验收登记 `BusinessDocument` 并调用统一绑定端口。
@@ -201,19 +194,20 @@ pub async fn register_created_customer_acceptance_document(
 
 #[cfg(test)]
 mod customer_acceptance_no_approval_tests {
-    use super::{
-        apply_customer_acceptance_create_binding, customer_acceptance_bind_command,
-        customer_acceptance_create_binding_decision, ensure_customer_acceptance_has_no_adapter,
-        ensure_customer_acceptance_skips_approval_binding, policy_of, BindingDecision, CustomerAcceptance,
-        DocumentApprovalPolicy, DocumentType,
-    };
-    use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
+    use bpm::ids::ApprovalProcessDefinitionId;
     use erp_core::common::time::Instant;
     use erp_core::ids::{CustomerAcceptanceId, SalesOrderId};
     use erp_fulfillment::entity::fulfillment::{AcceptanceResult, CustomerAcceptanceData};
     use erp_workflow::service::approval::binding::binding_from_published;
     use erp_workflow::service::document_registry::new_registered_document;
+
+    use super::{
+        BindingDecision, CustomerAcceptance, DocumentApprovalPolicy, DocumentType,
+        apply_customer_acceptance_create_binding, customer_acceptance_bind_command,
+        customer_acceptance_create_binding_decision, ensure_customer_acceptance_has_no_adapter,
+        ensure_customer_acceptance_skips_approval_binding, policy_of,
+    };
 
     fn draft_acceptance() -> CustomerAcceptance {
         CustomerAcceptance::new(
@@ -268,12 +262,9 @@ mod customer_acceptance_no_approval_tests {
         assert!(empty.is_none());
         assert!(document.approval_binding.is_none());
 
-        let forged = binding_from_published(
-            ApprovalProcessDefinitionId::new("def-1"),
-            1,
-            Instant::from_unix_secs(10),
-        )
-        .expect("测试绑定");
+        let forged =
+            binding_from_published(ApprovalProcessDefinitionId::new("def-1"), 1, Instant::from_unix_secs(10))
+                .expect("测试绑定");
         assert!(apply_customer_acceptance_create_binding(&mut document, Some(forged)).is_err());
     }
 
@@ -281,11 +272,7 @@ mod customer_acceptance_no_approval_tests {
     #[test]
     fn create_does_not_query_definition_or_start_instance() {
         let production_sources = [include_str!("create.rs"), include_str!("registration.rs")].join("\n");
-        let production = production_sources
-            .as_str()
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = production_sources.as_str().split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("persist_created_customer_acceptance"));
         assert!(production.contains("register_created_customer_acceptance_document"));
         assert!(production.contains("persist_unbound_customer_acceptance_document"));

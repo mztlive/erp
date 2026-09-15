@@ -1,7 +1,5 @@
 //! Cross-domain invoice posting steps sharing the root transaction executor.
 
-use super::invoice_task::{self, SalesInvoiceTaskChange};
-use crate::Result;
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt};
@@ -11,6 +9,9 @@ use erp_finance::entity::receivable::{Invoice, ReceivableAccount};
 use erp_finance::service::receivable::invoice_posting::persist_sales_invoice_allocations;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use super::invoice_task::{self, SalesInvoiceTaskChange};
+use crate::Result;
 
 /// Immutable posting intent validated by the root invoice command.
 pub(super) struct InvoicePostingInput<'a> {
@@ -32,13 +33,7 @@ pub(super) async fn post_invoice_in_transaction(
     input: InvoicePostingInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let mut steps = MongoInvoicePosting {
-        db,
-        invoice,
-        input,
-        accounts: Vec::new(),
-        account_ids: Vec::new(),
-    };
+    let mut steps = MongoInvoicePosting { db, invoice, input, accounts: Vec::new(), account_ids: Vec::new() };
     execute_posting(&mut steps, executor).await
 }
 
@@ -83,12 +78,8 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
     }
 
     async fn record_execution(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        let account_ids = self
-            .input
-            .plan_lines
-            .iter()
-            .map(|line| line.receivable_account_id.clone())
-            .collect::<Vec<_>>();
+        let account_ids =
+            self.input.plan_lines.iter().map(|line| line.receivable_account_id.clone()).collect::<Vec<_>>();
         let request_id = invoice_task::record_invoice_execution(
             self.db,
             invoice_task::InvoiceExecutionInput {
@@ -147,11 +138,8 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
     }
 
     async fn update_sales_progress(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        let mut sales_order_ids = self
-            .accounts
-            .iter()
-            .map(|account| account.sales_order_id.to_string())
-            .collect::<Vec<_>>();
+        let mut sales_order_ids =
+            self.accounts.iter().map(|account| account.sales_order_id.to_string()).collect::<Vec<_>>();
         sales_order_ids.sort();
         sales_order_ids.dedup();
         for id in sales_order_ids {
@@ -179,7 +167,6 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::Error;
 
     // 非零大小保证执行器地址能够区分不同实例。
@@ -201,8 +188,7 @@ mod tests {
 
     impl RecordedPosting {
         fn record(&mut self, step: &'static str, executor: &mut dyn Executor) -> Result<()> {
-            self.calls
-                .push((step, executor as *mut dyn Executor as *mut () as usize));
+            self.calls.push((step, executor as *mut dyn Executor as *mut () as usize));
             if self.fail_at == Some(step) {
                 return Err(Error::ConflictError(step.to_string()));
             }
@@ -240,11 +226,7 @@ mod tests {
         for command_receipt in [false, true] {
             let mut executor = TestExecutor { _identity: 1 };
             let expected_executor = &mut executor as *mut TestExecutor as usize;
-            let mut steps = RecordedPosting {
-                calls: Vec::new(),
-                fail_at: None,
-                command_receipt,
-            };
+            let mut steps = RecordedPosting { calls: Vec::new(), fail_at: None, command_receipt };
             execute_posting(&mut steps, &mut executor).await.unwrap();
             let mut expected = vec!["execution", "finance", "audit", "tasks", "sales"];
             if command_receipt {
@@ -252,10 +234,7 @@ mod tests {
             }
             assert_eq!(
                 steps.calls,
-                expected
-                    .into_iter()
-                    .map(|step| (step, expected_executor))
-                    .collect::<Vec<_>>()
+                expected.into_iter().map(|step| (step, expected_executor)).collect::<Vec<_>>()
             );
         }
     }
@@ -264,25 +243,14 @@ mod tests {
     async fn invoice_posting_stops_at_each_failure_and_preserves_the_original_error() {
         let sequence = ["execution", "finance", "audit", "tasks", "sales", "receipt"];
         for command_receipt in [false, true] {
-            let count = if command_receipt {
-                sequence.len()
-            } else {
-                sequence.len() - 1
-            };
+            let count = if command_receipt { sequence.len() } else { sequence.len() - 1 };
             for (index, fail_at) in sequence[..count].iter().enumerate() {
-                let mut steps = RecordedPosting {
-                    calls: Vec::new(),
-                    fail_at: Some(fail_at),
-                    command_receipt,
-                };
-                let error = execute_posting(&mut steps, &mut TestExecutor { _identity: 1 })
-                    .await
-                    .unwrap_err();
+                let mut steps =
+                    RecordedPosting { calls: Vec::new(), fail_at: Some(fail_at), command_receipt };
+                let error =
+                    execute_posting(&mut steps, &mut TestExecutor { _identity: 1 }).await.unwrap_err();
                 assert!(matches!(error, Error::ConflictError(message) if message == *fail_at));
-                assert_eq!(
-                    steps.calls.iter().map(|(step, _)| *step).collect::<Vec<_>>(),
-                    sequence[..=index]
-                );
+                assert_eq!(steps.calls.iter().map(|(step, _)| *step).collect::<Vec<_>>(), sequence[..=index]);
             }
         }
     }

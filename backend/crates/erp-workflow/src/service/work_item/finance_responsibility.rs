@@ -4,24 +4,21 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::sync::Arc;
 
-use crate::entity::work_item::EnableStatus;
-use crate::entity::work_item::{
-    AvailableWorkItemAccount, FinanceResponsibilityOperation, FinanceResponsibilityRule,
-    FinanceResponsibilityRuleData, FinanceResponsibilityRuleSet, FinanceResponsibilityScope,
-};
-use crate::repository::WorkItemExt;
-
+use application_core::AuditActor;
 use erp_core::AccountKind;
-
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::WorkItemService;
+use crate::entity::work_item::{
+    AvailableWorkItemAccount, EnableStatus, FinanceResponsibilityOperation, FinanceResponsibilityRule,
+    FinanceResponsibilityRuleData, FinanceResponsibilityRuleSet, FinanceResponsibilityScope,
+};
 use crate::error::{Error, Result};
 use crate::ports::PreparedWorkflowAudit;
-use application_core::AuditActor;
+use crate::repository::WorkItemExt;
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 
@@ -189,12 +186,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         actor: AuditActor,
     ) -> Result<FinanceResponsibilityRuleView> {
         let data = request.into_data();
-        let probe = self
-            .validate_finance_rule_data(&data, true, false, &mut NoTransaction)
-            .await?;
-        let policy_revision = self
-            .authorize_finance_owner_eligibility(probe.operation, &probe.owner_user_id)
-            .await?;
+        let probe = self.validate_finance_rule_data(&data, true, false, &mut NoTransaction).await?;
+        let policy_revision =
+            self.authorize_finance_owner_eligibility(probe.operation, &probe.owner_user_id).await?;
         let rule =
             FinanceResponsibilityRule::new(next_id(), data.clone(), actor.id()).map_err(Error::Logic)?;
         let audit = PreparedWorkflowAudit::resource(
@@ -215,9 +209,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                 let audit = audit.clone();
                 let audit_port = Arc::clone(&audit_port);
                 Box::pin(async move {
-                    service
-                        .validate_finance_rule_data(&data, true, true, session)
-                        .await?;
+                    service.validate_finance_rule_data(&data, true, true, session).await?;
                     db.finance_responsibility_rules().create(&rule, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<FinanceResponsibilityRule, crate::error::Error>(rule)
@@ -238,9 +230,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         actor: AuditActor,
     ) -> Result<FinanceResponsibilityRuleView> {
         let (version, data) = request.into_parts();
-        let probe = self
-            .validate_finance_rule_data(&data, false, false, &mut NoTransaction)
-            .await?;
+        let probe = self.validate_finance_rule_data(&data, false, false, &mut NoTransaction).await?;
         let current = self
             .db
             .finance_responsibility_rules()
@@ -265,8 +255,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         )
         .await?;
         let policy_revision = if owner_must_be_eligible {
-            self.authorize_finance_owner_eligibility(probe.operation, &probe.owner_user_id)
-                .await?
+            self.authorize_finance_owner_eligibility(probe.operation, &probe.owner_user_id).await?
         } else {
             self.auth.current_policy_revision().await?
         };
@@ -299,9 +288,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                     if rule.base.version != version {
                         return Err(Error::ConflictError("财务责任规则版本已变化".to_string()));
                     }
-                    let probe = service
-                        .validate_finance_rule_data(&data, false, false, session)
-                        .await?;
+                    let probe = service.validate_finance_rule_data(&data, false, false, session).await?;
                     let counterparty_must_be_eligible = probe.status.is_active()
                         || probe.operation != rule.operation
                         || probe.scope != rule.scope
@@ -318,9 +305,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                         )
                         .await?;
                     rule.update(data, updated_by).map_err(Error::Logic)?;
-                    db.finance_responsibility_rules()
-                        .update(&mut rule, session)
-                        .await?;
+                    db.finance_responsibility_rules().update(&mut rule, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<FinanceResponsibilityRule, crate::error::Error>(rule)
                 })
@@ -338,25 +323,17 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ) -> Result<Vec<FinanceResponsibilityOwnerOptionView>> {
         let payment = required_finance_permissions(FinanceResponsibilityOperation::SupplierPayment)?;
         let invoice = required_finance_permissions(FinanceResponsibilityOperation::SalesInvoice)?;
-        let accounts = self
-            .auth
-            .list_accounts_by_kind(AccountKind::Admin, &mut NoTransaction)
-            .await?;
+        let accounts = self.auth.list_accounts_by_kind(AccountKind::Admin, &mut NoTransaction).await?;
         let mut options = Vec::new();
         for account in accounts {
             if AvailableWorkItemAccount::from_account_kind(&account, AccountKind::Admin).is_err() {
                 continue;
             }
-            let granted = self
-                .auth
-                .permission_codes(account.kind, account.id.as_str())
-                .await?;
+            let granted = self.auth.permission_codes(account.kind, account.id.as_str()).await?;
             let covers = |required: &[String]| {
-                required.iter().all(|code| {
-                    granted
-                        .iter()
-                        .any(|owned| crate::ports::permission_covers(owned, code))
-                })
+                required
+                    .iter()
+                    .all(|code| granted.iter().any(|owned| crate::ports::permission_covers(owned, code)))
             };
             let supplier_payment_eligible = covers(&payment);
             let sales_invoice_eligible = covers(&invoice);
@@ -372,9 +349,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             });
         }
         options.sort_by(|left, right| {
-            left.display_name
-                .cmp(&right.display_name)
-                .then_with(|| left.user_id.cmp(&right.user_id))
+            left.display_name.cmp(&right.display_name).then_with(|| left.user_id.cmp(&right.user_id))
         });
         Ok(options)
     }
@@ -386,17 +361,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ) -> Result<u64> {
         for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
             let before = self.auth.current_policy_revision().await?;
-            self.ensure_finance_owner_eligible(operation, owner_user_id.to_string())
-                .await?;
+            self.ensure_finance_owner_eligible(operation, owner_user_id.to_string()).await?;
             let after = self.auth.current_policy_revision().await?;
             if before == after {
                 return Ok(before);
             }
         }
-        Err(Error::Rbac(format!(
-            "{}负责人授权策略持续变化，请重试",
-            operation.label()
-        )))
+        Err(Error::Rbac(format!("{}负责人授权策略持续变化，请重试", operation.label())))
     }
 
     /// 在业务事务内按精确往来方、默认规则顺序解析并重验具体负责人。
@@ -409,8 +380,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         counterparty_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<ResolvedFinanceResponsibility> {
-        self.ensure_counterparty(operation, counterparty_id, executor)
-            .await?;
+        self.ensure_counterparty(operation, counterparty_id, executor).await?;
         let rules = self
             .db
             .finance_responsibility_rules()
@@ -419,8 +389,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let rule = FinanceResponsibilityRuleSet::new(&rules)
             .resolve(operation, counterparty_id)
             .map_err(|error| Error::BusinessLogicError(format!("{}，请先维护财务责任配置", error)))?;
-        self.ensure_finance_owner_eligible(operation, rule.owner_user_id.clone())
-            .await?;
+        self.ensure_finance_owner_eligible(operation, rule.owner_user_id.clone()).await?;
         Ok(ResolvedFinanceResponsibility {
             owner_user_id: rule.owner_user_id.clone(),
             responsibility_key: rule.work_item_responsibility_key(),
@@ -438,13 +407,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             FinanceResponsibilityRule::new("validation", data.clone(), "validation").map_err(Error::Logic)?;
         if validate_counterparty {
             if let Some(counterparty_id) = probe.counterparty_id.as_deref() {
-                self.ensure_counterparty(probe.operation, counterparty_id, executor)
-                    .await?;
+                self.ensure_counterparty(probe.operation, counterparty_id, executor).await?;
             }
         }
         if validate_owner {
-            self.ensure_finance_owner_eligible(probe.operation, probe.owner_user_id.clone())
-                .await?;
+            self.ensure_finance_owner_eligible(probe.operation, probe.owner_user_id.clone()).await?;
         }
         Ok(probe)
     }
@@ -457,30 +424,22 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ) -> Result<String> {
         match operation {
             FinanceResponsibilityOperation::SupplierPayment => {
-                if !self
-                    .facts
-                    .counterparty_is_active("supplier", counterparty_id, executor)
-                    .await?
-                {
+                if !self.facts.counterparty_is_active("supplier", counterparty_id, executor).await? {
                     return Err(Error::ValidationError(
                         "付款责任规则引用的供应商不存在或已停用，请重新选择".to_string(),
                     ));
                 }
                 Ok(counterparty_id.to_string())
-            }
+            },
             FinanceResponsibilityOperation::SalesInvoice
             | FinanceResponsibilityOperation::CardFundsReview => {
-                if !self
-                    .facts
-                    .counterparty_is_active("customer", counterparty_id, executor)
-                    .await?
-                {
+                if !self.facts.counterparty_is_active("customer", counterparty_id, executor).await? {
                     return Err(Error::ValidationError(
                         "开票责任规则引用的客户不存在或已停用，请重新选择".to_string(),
                     ));
                 }
                 Ok(counterparty_id.to_string())
-            }
+            },
         }
     }
 
@@ -491,22 +450,18 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ) -> impl Future<Output = Result<()>> + Send + 'static {
         let auth = self.auth.clone();
         async move {
-            let account = auth
-                .load_account(&owner_user_id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| {
-                    Error::BusinessLogicError(format!("{}负责人账号不存在，请重新选择", operation.label()))
-                })?;
+            let account = auth.load_account(&owner_user_id, &mut NoTransaction).await?.ok_or_else(|| {
+                Error::BusinessLogicError(format!("{}负责人账号不存在，请重新选择", operation.label()))
+            })?;
             AvailableWorkItemAccount::from_account_kind(&account, AccountKind::Admin).map_err(|_| {
                 Error::BusinessLogicError(format!("{}负责人账号不可用，请重新选择", operation.label()))
             })?;
             let granted = auth.permission_codes(account.kind, account.id.as_str()).await?;
             let required = required_finance_permissions(operation)?;
-            if required.iter().all(|code| {
-                granted
-                    .iter()
-                    .any(|owned| crate::ports::permission_covers(owned, code))
-            }) {
+            if required
+                .iter()
+                .all(|code| granted.iter().any(|owned| crate::ports::permission_covers(owned, code)))
+            {
                 return Ok(());
             }
             Err(Error::BusinessLogicError(format!(
@@ -521,19 +476,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         rule: FinanceResponsibilityRule,
     ) -> Result<FinanceResponsibilityRuleView> {
         let mut views = self.finance_responsibility_views(vec![rule]).await?;
-        views
-            .pop()
-            .ok_or_else(|| Error::Internal("财务责任规则视图未形成".to_string()))
+        views.pop().ok_or_else(|| Error::Internal("财务责任规则视图未形成".to_string()))
     }
 
     async fn finance_responsibility_views(
         &self,
         rules: Vec<FinanceResponsibilityRule>,
     ) -> Result<Vec<FinanceResponsibilityRuleView>> {
-        let owner_ids = rules
-            .iter()
-            .map(|rule| rule.owner_user_id.clone())
-            .collect::<Vec<_>>();
+        let owner_ids = rules.iter().map(|rule| rule.owner_user_id.clone()).collect::<Vec<_>>();
         let owner_names = self
             .auth
             .load_accounts(&owner_ids, &mut NoTransaction)
@@ -557,28 +507,22 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             })
             .filter_map(|rule| rule.counterparty_id.clone())
             .collect::<Vec<_>>();
-        let supplier_numbers = self
-            .facts
-            .counterparty_numbers("supplier", &supplier_ids, &mut NoTransaction)
-            .await?;
-        let customer_numbers = self
-            .facts
-            .counterparty_numbers("customer", &customer_ids, &mut NoTransaction)
-            .await?;
+        let supplier_numbers =
+            self.facts.counterparty_numbers("supplier", &supplier_ids, &mut NoTransaction).await?;
+        let customer_numbers =
+            self.facts.counterparty_numbers("customer", &customer_ids, &mut NoTransaction).await?;
         let mut views = Vec::with_capacity(rules.len());
         for rule in rules {
             let counterparty_no =
-                rule.counterparty_id
-                    .as_ref()
-                    .and_then(|counterparty_id| match rule.operation {
-                        FinanceResponsibilityOperation::SupplierPayment => {
-                            supplier_numbers.get(counterparty_id).cloned()
-                        }
-                        FinanceResponsibilityOperation::SalesInvoice
-                        | FinanceResponsibilityOperation::CardFundsReview => {
-                            customer_numbers.get(counterparty_id).cloned()
-                        }
-                    });
+                rule.counterparty_id.as_ref().and_then(|counterparty_id| match rule.operation {
+                    FinanceResponsibilityOperation::SupplierPayment => {
+                        supplier_numbers.get(counterparty_id).cloned()
+                    },
+                    FinanceResponsibilityOperation::SalesInvoice
+                    | FinanceResponsibilityOperation::CardFundsReview => {
+                        customer_numbers.get(counterparty_id).cloned()
+                    },
+                });
             let owner_name = owner_names.get(&rule.owner_user_id).cloned();
             let mut view = FinanceResponsibilityRuleView::from(rule);
             view.counterparty_no = counterparty_no;

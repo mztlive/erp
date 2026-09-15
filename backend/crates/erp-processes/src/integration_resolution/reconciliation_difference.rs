@@ -2,16 +2,17 @@
 //!
 //! 差异事实创建后不可修改；决定只由 `task_decision` 追加，不在本模块暴露旧处理或
 //! 解决命令。
-use super::creation_writes::{persist_created, CreatedFact};
-use super::producer::difference_work_item;
-use super::IntegrationResolutionProcess;
-use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_integration::dto::*;
 use erp_integration::entity::integration_ops::ReconciliationDifference;
 use erp_integration::service::reconciliation_difference::prepare_difference;
 use validator::Validate;
+
+use super::IntegrationResolutionProcess;
+use super::creation_writes::{CreatedFact, persist_created};
+use super::producer::difference_work_item;
+use crate::Result;
 
 impl IntegrationResolutionProcess {
     /// 登记不可变对账差异事实。
@@ -27,8 +28,7 @@ impl IntegrationResolutionProcess {
         let owner_user_id = req.owner_user_id.clone();
         let difference = prepare_difference(&req)?;
         let work_item = difference_work_item(&difference, &owner_user_id)?;
-        self.store_difference(difference.clone(), work_item, actor)
-            .await?;
+        self.store_difference(difference.clone(), work_item, actor).await?;
         Ok(difference.into())
     }
 
@@ -45,14 +45,8 @@ impl IntegrationResolutionProcess {
         )?;
         self.run_audited(move |db, session| {
             Box::pin(async move {
-                persist_created(
-                    db,
-                    CreatedFact::Difference(&difference),
-                    &work_item,
-                    &audit,
-                    session,
-                )
-                .await?;
+                persist_created(db, CreatedFact::Difference(&difference), &work_item, &audit, session)
+                    .await?;
                 Ok(())
             })
         })

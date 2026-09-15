@@ -8,10 +8,7 @@
 //! 契约来源：erp-client `features/sales-orders`（W05）；本域接口按后端实体字段
 //! 形状提供，与前端 mock 视图的差异见批次报告「契约变更」。
 
-use crate::entity::sales_order::{
-    BusinessType, CardForm, CommercialStatus, GoodsLineFields, LineStatus, LineType, OriginSystem,
-    VoucherLineDraft, WelfareScenario,
-};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ContractId, CustomerAccountId, SkuId};
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
@@ -19,7 +16,10 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use crate::entity::sales_order::{
+    BusinessType, CardForm, CommercialStatus, GoodsLineFields, LineStatus, LineType, OriginSystem,
+    VoucherLineDraft, WelfareScenario,
+};
 
 /// 销售单列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const SALES_ORDER_SORT_FIELDS: &[&str] = &["created_at", "order_no"];
@@ -40,6 +40,10 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -53,12 +57,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空。
-use application_core::non_blank;
 
 /// 建单意图（W05 M5：保存草稿或直接提交）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -367,9 +365,7 @@ impl SalesOrderListParams {
     pub(crate) fn normalized(&self) -> Result<SalesOrderListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, SALES_ORDER_SORT_FIELDS)?;
         if matches!((self.created_from, self.created_to), (Some(from), Some(to)) if from > to) {
-            return Err(crate::Error::ValidationError(
-                "创建时间下界不能晚于上界".to_string(),
-            ));
+            return Err(crate::Error::ValidationError("创建时间下界不能晚于上界".to_string()));
         }
         if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
             return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
@@ -645,7 +641,7 @@ pub struct RevisionView {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, SortDir};
+    use super::{SortDir, normalize_sort};
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
@@ -664,8 +660,9 @@ mod tests {
 
     #[test]
     fn list_params_normalize_filters_and_paging() {
-        use super::SalesOrderListParams;
         use serde_json::json;
+
+        use super::SalesOrderListParams;
 
         let params: SalesOrderListParams = serde_json::from_value(json!({
             "order_no": " SO-2026 ",
@@ -707,8 +704,9 @@ mod tests {
 
     #[test]
     fn list_params_reject_reversed_created_range() {
-        use super::SalesOrderListParams;
         use serde_json::json;
+
+        use super::SalesOrderListParams;
 
         let params: SalesOrderListParams = serde_json::from_value(json!({
             "created_from": 1800000000,
@@ -721,8 +719,9 @@ mod tests {
 
     #[test]
     fn list_params_reject_descendants_without_org_units() {
-        use super::SalesOrderListParams;
         use serde_json::json;
+
+        use super::SalesOrderListParams;
 
         let params: SalesOrderListParams = serde_json::from_value(json!({
             "include_descendants": true

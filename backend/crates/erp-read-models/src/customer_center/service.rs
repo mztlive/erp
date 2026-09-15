@@ -7,10 +7,10 @@ use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::money::Amount;
 use erp_customer::CustomerExt;
 use erp_finance::repository::ReceivableExt;
+use erp_sales::entity::sales_order::{CloseStatus, CommercialStatus};
 use mongodb::Database;
 use persistence_core::NoTransaction;
 use serde::Serialize;
-use {erp_sales::entity::sales_order::CloseStatus, erp_sales::entity::sales_order::CommercialStatus};
 
 use crate::{Error, Result};
 
@@ -122,13 +122,7 @@ impl CustomerCenterReadService {
     }
 
     async fn ensure_customer_exists(&self, customer_id: &str) -> Result<()> {
-        if self
-            .db
-            .customer_accounts()
-            .find_customer(customer_id, &mut NoTransaction)
-            .await?
-            .is_some()
-        {
+        if self.db.customer_accounts().find_customer(customer_id, &mut NoTransaction).await?.is_some() {
             return Ok(());
         }
         Err(Error::NotFound("客户不存在".to_string()))

@@ -3,22 +3,22 @@
 use std::collections::HashMap;
 
 use application_core::AuditActor;
+use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_core::ids::BackgroundJobId;
-use erp_core::AccountKind;
 use erp_support::{
     BackgroundJob, BackgroundJobItem, BulkJobExt, FileAssetExt, ItemStatus, JobStatus,
     PRODUCT_IMPORT_DOMAIN_JOB_TYPE,
 };
 use persistence_core::{NoTransaction, Transactional};
 
+use super::ProductImportProcess;
 use super::images::RowMediaSource;
-use super::parse::{parse_product_quote_xlsx, ParsedProductSheet};
+use super::parse::{ParsedProductSheet, parse_product_quote_xlsx};
 use super::resolve::ImportDictionaryCache;
 use super::row_manifest::{
-    read_row_manifest, row_entries_by_number, row_media_from_entry, RowManifest, RowManifestRow,
+    RowManifest, RowManifestRow, read_row_manifest, row_entries_by_number, row_media_from_entry,
 };
-use super::ProductImportProcess;
 use crate::{Error, Result};
 
 impl ProductImportProcess {
@@ -78,12 +78,7 @@ impl ProductImportProcess {
         }
         if job.status == JobStatus::Pending {
             job.start(Instant::now())?;
-            if let Err(error) = self
-                .db
-                .background_jobs()
-                .update(&mut job, &mut NoTransaction)
-                .await
-            {
+            if let Err(error) = self.db.background_jobs().update(&mut job, &mut NoTransaction).await {
                 if matches!(error, persistence_core::Error::OptimisticLockingError) {
                     return Ok(());
                 }
@@ -98,11 +93,7 @@ impl ProductImportProcess {
             .background_job_items()
             .list_entities_by_job(&BackgroundJobId::new(job.base.id.clone()), &mut NoTransaction)
             .await?;
-        let actor = AuditActor::new(
-            job.requested_by.clone(),
-            job.requested_by.clone(),
-            AccountKind::Admin,
-        );
+        let actor = AuditActor::new(job.requested_by.clone(), job.requested_by.clone(), AccountKind::Admin);
         let mut cache = ImportDictionaryCache::default();
         let remaining = items.iter().filter(|item| item.status.is_none()).count();
         if remaining == 0 {
@@ -110,10 +101,7 @@ impl ProductImportProcess {
                 && matches!(job.status, JobStatus::Running | JobStatus::PartiallySucceeded)
             {
                 job.record_import_result_batch(0, 0, 0, true, Instant::now())?;
-                self.db
-                    .background_jobs()
-                    .update(&mut job, &mut NoTransaction)
-                    .await?;
+                self.db.background_jobs().update(&mut job, &mut NoTransaction).await?;
             }
             return Ok(());
         }
@@ -124,11 +112,11 @@ impl ProductImportProcess {
             JobRowSource::Manifest(manifest) => {
                 manifest_entries = row_entries_by_number(manifest);
                 (Some(&manifest_entries), None)
-            }
+            },
             JobRowSource::Legacy { bytes, parsed } => {
                 legacy_workbook = (bytes, parsed);
                 (None, Some(&legacy_workbook))
-            }
+            },
         };
         let mut done = 0usize;
         for mut item in items {
@@ -137,10 +125,7 @@ impl ProductImportProcess {
             }
             let row_number = item.source_row_no.unwrap_or(item.item_no);
             let recorded = match (entries, workbook) {
-                (Some(entries), _) => {
-                    self.import_manifest_row(row_number, entries, &actor, &mut cache)
-                        .await
-                }
+                (Some(entries), _) => self.import_manifest_row(row_number, entries, &actor, &mut cache).await,
                 (_, Some((bytes, parsed))) => {
                     let cells = parsed
                         .rows
@@ -148,15 +133,11 @@ impl ProductImportProcess {
                         .find(|row| row.row_number == row_number)
                         .map(|row| row.cells.as_slice())
                         .unwrap_or(&[]);
-                    let media_source = RowMediaSource::Workbook {
-                        xlsx: bytes,
-                        sheet: parsed,
-                    };
+                    let media_source = RowMediaSource::Workbook { xlsx: bytes, sheet: parsed };
                     record_row_outcome(
-                        self.import_row(row_number, cells, &media_source, &actor, &mut cache)
-                            .await,
+                        self.import_row(row_number, cells, &media_source, &actor, &mut cache).await,
                     )
-                }
+                },
                 (None, None) => unreachable!("行来源必为清单或源文件之一"),
             };
             item.record_result(
@@ -205,7 +186,7 @@ impl ProductImportProcess {
                 );
                 let (bytes, parsed) = self.load_source(job).await?;
                 Ok(JobRowSource::Legacy { bytes, parsed })
-            }
+            },
         }
     }
 
@@ -246,10 +227,7 @@ impl ProductImportProcess {
         }
         let media = row_media_from_entry(entry);
         let media_source = RowMediaSource::Manifest(&media);
-        record_row_outcome(
-            self.import_row(row_number, &entry.cells, &media_source, actor, cache)
-                .await,
-        )
+        record_row_outcome(self.import_row(row_number, &entry.cells, &media_source, actor, cache).await)
     }
 
     /// 加载任务源文件并解析报价表（老任务回退链路）。
@@ -366,7 +344,7 @@ fn record_row_outcome(outcome: Result<super::row::RowImportOutcome>) -> Recorded
     match outcome {
         Ok(result) if result.skipped => {
             recorded(ItemStatus::Skipped, None, result.message, result.product_id)
-        }
+        },
         Ok(result) => recorded(ItemStatus::Success, None, result.message, result.product_id),
         Err(error) => recorded(ItemStatus::Failed, Some("import_failed"), error.to_string(), None),
     }
@@ -392,11 +370,5 @@ fn recorded(
         Some(id) => (Some("product".to_string()), Some(id)),
         None => (None, None),
     };
-    RecordedOutcome {
-        status,
-        code: code.map(str::to_string),
-        summary: Some(summary),
-        object_type,
-        object_id,
-    }
+    RecordedOutcome { status, code: code.map(str::to_string), summary: Some(summary), object_type, object_id }
 }

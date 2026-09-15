@@ -3,16 +3,16 @@
 //! 字段名与 HTTP 契约一致（api-contract.md）：分页参数 `page`/`page_size`/
 //! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；本域无金额字段。
 
+use application_core::{normalized_text, page_or_default, page_size_or_default};
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+
 use crate::entity::document_registry::{
     BusinessDocument, BusinessDocumentId, DocumentParticipant, DocumentParticipantData, DocumentRelation,
     DocumentRelationData, DocumentRelationType, DocumentType, ParticipantRole, WorkflowAction,
     WorkflowActionData, WorkflowActionType,
 };
-use serde::{Deserialize, Serialize};
-use validator::Validate;
-
 use crate::error::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 单据注册列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub(crate) const BUSINESS_DOCUMENT_SORT_FIELDS: &[&str] = &["created_at", "updated_at"];
@@ -35,6 +35,11 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
+/// 不生效，空编号需要按「空白视为空」拒绝，落入 HTTP 400）。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -48,13 +53,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
-/// 不生效，空编号需要按「空白视为空」拒绝，落入 HTTP 400）。
-use application_core::non_blank;
 
 /// 单据注册创建请求（HTTP 契约：`{ id?, document_type, document_no }`）。
 ///
@@ -429,13 +427,14 @@ impl From<DocumentParticipant> for DocumentParticipantView {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        normalize_sort, BusinessDocumentListParams, CreateDocumentRelationRequest, DocumentRelationType,
-        SortDir, WorkflowActionListParams,
-    };
-    use crate::entity::document_registry::{BusinessDocumentId, DocumentType};
     use serde_json::json;
     use validator::Validate;
+
+    use super::{
+        BusinessDocumentListParams, CreateDocumentRelationRequest, DocumentRelationType, SortDir,
+        WorkflowActionListParams, normalize_sort,
+    };
+    use crate::entity::document_registry::{BusinessDocumentId, DocumentType};
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {

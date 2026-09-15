@@ -1,15 +1,15 @@
 //! Sales snapshot adapter for finance posting and receivable detail composition.
 
-use crate::{Error, Result};
 use erp_core::ids::ReceivableAccountId;
 use erp_finance::entity::receivable::ReceivableAccount;
+pub use erp_finance::ports::receivable::ReceivableSnapshot;
 use erp_finance::repository::ReceivableExt;
+pub use erp_finance::service::receivable::mapping::{invoice_fact_views, receipt_fact_views, zero_amount};
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::Executor;
 
-pub use erp_finance::ports::receivable::ReceivableSnapshot;
-pub use erp_finance::service::receivable::mapping::{invoice_fact_views, receipt_fact_views, zero_amount};
+use crate::{Error, Result};
 
 /// 读取 当前销售版本、账户分录与票款分配。
 pub async fn load_receivable_snapshot(
@@ -33,10 +33,7 @@ pub async fn load_receivable_snapshot(
         .await?
         .ok_or_else(|| Error::NotFound("来源销售单当前正式版本不存在".to_string()))?;
     let account_id = ReceivableAccountId::new(account.base.id.clone());
-    let facts = db
-        .receivable()
-        .receivable_snapshot_facts(&account_id, executor)
-        .await?;
+    let facts = db.receivable().receivable_snapshot_facts(&account_id, executor).await?;
     if facts.receipts.len() != facts.expected_receipt_count {
         return Err(Error::NotFound("应收账户引用的回款单不存在".to_string()));
     }

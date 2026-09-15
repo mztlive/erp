@@ -1,14 +1,13 @@
-use super::facts::{collect_rule_list_ids, ProcurementRuleListDisplayFacts, ProcurementRuleListPage};
-use erp_core::ids::SkuRevisionId;
-use erp_procurement::entity::procurement_responsibility::ProcurementResponsibilityRule;
-
-use super::ids::unique_ids;
 use erp_catalog::CatalogExt;
+use erp_core::ids::SkuRevisionId;
 use erp_identity::AccessControlExt;
-use erp_procurement::repository::procurement_responsibility::ProcurementResponsibilityRuleFilter;
+use erp_procurement::entity::procurement_responsibility::ProcurementResponsibilityRule;
 use erp_procurement::repository::ProcurementResponsibilityExt;
-use persistence_core::Executor;
-use persistence_core::Result;
+use erp_procurement::repository::procurement_responsibility::ProcurementResponsibilityRuleFilter;
+use persistence_core::{Executor, Result};
+
+use super::facts::{ProcurementRuleListDisplayFacts, ProcurementRuleListPage, collect_rule_list_ids};
+use super::ids::unique_ids;
 
 /// 批量加载规则行展示所需的最小关联事实.
 ///
@@ -38,23 +37,14 @@ pub async fn load_procurement_rule_list_facts(
     let (owner_ids, sku_ids, category_ids) = collect_rule_list_ids(rules);
     let mut facts = ProcurementRuleListDisplayFacts::default();
     if !owner_ids.is_empty() {
-        let owners = db
-            .accounts()
-            .list_procurement_responsibility_owners(&owner_ids, executor)
-            .await?;
-        facts.owner_names = owners
-            .into_iter()
-            .map(|account| (account.base.id, account.name))
-            .collect::<HashMap<_, _>>();
+        let owners = db.accounts().list_procurement_responsibility_owners(&owner_ids, executor).await?;
+        facts.owner_names =
+            owners.into_iter().map(|account| (account.base.id, account.name)).collect::<HashMap<_, _>>();
     }
     if !sku_ids.is_empty() {
-        let skus = db
-            .skus()
-            .list_procurement_responsibility_skus(&sku_ids, executor)
-            .await?;
+        let skus = db.skus().list_procurement_responsibility_skus(&sku_ids, executor).await?;
         let revision_ids: Vec<SkuRevisionId> = unique_ids(
-            skus.iter()
-                .filter_map(|sku| sku.stable.current_revision_id.as_deref().map(SkuRevisionId::new)),
+            skus.iter().filter_map(|sku| sku.stable.current_revision_id.as_deref().map(SkuRevisionId::new)),
         );
         let revision_names = if revision_ids.is_empty() {
             HashMap::new()
@@ -113,11 +103,7 @@ pub async fn load_procurement_rule_list_page(
         .search_procurement_responsibility_rules(filter, executor)
         .await?;
     let facts = load_procurement_rule_list_facts(db, &page.items, executor).await?;
-    Ok(ProcurementRuleListPage {
-        items: page.items,
-        total: page.total,
-        facts,
-    })
+    Ok(ProcurementRuleListPage { items: page.items, total: page.total, facts })
 }
 
 #[cfg(test)]

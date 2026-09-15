@@ -1,13 +1,14 @@
 //! 同一调用方事务中的采购创建草稿读取与提交冻结。
-use crate::entity::purchase_order::{PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine};
-use crate::repository::PurchaseOrderExt;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::entity::purchase_order::{PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine};
+use crate::repository::PurchaseOrderExt;
+use crate::{Error, Result};
 /// 读取刚写入的草稿采购单。
 ///
 /// # 参数
@@ -64,10 +65,8 @@ pub async fn freeze_submission_from_created_draft(
     actor: &AuditActor,
     session: &mut dyn Executor,
 ) -> Result<(PurchaseOrderSubmission, Vec<PurchaseOrderSubmissionLine>)> {
-    let existing = db
-        .purchase_order()
-        .list_submissions_by_order(&order.base.id.clone().into(), session)
-        .await?;
+    let existing =
+        db.purchase_order().list_submissions_by_order(&order.base.id.clone().into(), session).await?;
     let formal = PurchaseOrderSubmission::freeze_from_draft(
         PurchaseOrderSubmissionId::new(next_id()),
         PurchaseOrderSubmission::next_submission_no(&existing)?,

@@ -11,29 +11,25 @@ use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use erp_sales::service::sales_review::SalesChangeSubmissionWrite;
 use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::entity::work_item::DocumentApprovalWorkItemData;
-use erp_workflow::entity::work_item::{WorkItem, WorkItemPriority};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
-use erp_workflow::ApprovalIntegrationExt;
-use erp_workflow::BpmExt;
-use erp_workflow::DocumentRegistryExt;
-use erp_workflow::WorkItemExt;
+use erp_workflow::service::approval::execution::authorization::{AuthorizationFailure, converge_eligibility};
+use erp_workflow::service::approval::execution::idempotency::{
+    ReceiptBranch, StartIdentityParams, normalize_idempotency_key, payload_conflict_error, start_identity,
+    start_scope_candidates,
+};
+use erp_workflow::service::approval::execution::{
+    ExecutionCommandInput, PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
+};
+use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::adapter::sales_change_order_object_readable;
 use crate::{Error, Result};
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
-use erp_workflow::service::approval::execution::idempotency::{
-    normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
-    StartIdentityParams,
-};
-use erp_workflow::service::approval::execution::{
-    map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
-};
-use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
 ///
@@ -66,11 +62,7 @@ pub(super) async fn load_bound_definition_graph(
 /// # 返回
 /// 返回引擎可消费的定义图。
 fn engine_graph(graph: erp_workflow::repository::bpm::DefinitionGraph) -> DefinitionGraph {
-    DefinitionGraph {
-        definition: graph.definition,
-        nodes: graph.nodes,
-        transitions: graph.transitions,
-    }
+    DefinitionGraph { definition: graph.definition, nodes: graph.nodes, transitions: graph.transitions }
 }
 
 /// 读取同载荷启动收据；不存在时返回 `None`。
@@ -173,9 +165,7 @@ pub(super) async fn replay_sales_change_start_with_executor(
         || instance.process_definition_id != binding.approval_process_definition_id
         || instance.definition_version != binding.approval_definition_version
     {
-        return Err(Error::ConflictError(
-            "销售变更启动收据与冻结运行事实不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("销售变更启动收据与冻结运行事实不一致".to_string()));
     }
     Ok(Some(instance.base.id))
 }
@@ -250,18 +240,14 @@ pub(super) fn build_sales_change_start_input(
         now,
     } = input;
     if graph.definition.definition_version != binding.approval_definition_version {
-        return Err(Error::ConflictError(
-            "销售变更单绑定定义版本与已加载定义不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("销售变更单绑定定义版本与已加载定义不一致".to_string()));
     }
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
     let bindings = start_bindings_from_graph(&graph, organization_id)?;
-    let entry = graph
-        .entry_node()
-        .map_err(|_| Error::ConflictError("审批定义缺少入口节点".to_string()))?;
+    let entry = graph.entry_node().map_err(|_| Error::ConflictError("审批定义缺少入口节点".to_string()))?;
     let entry_eligibility = bindings
         .iter()
         .find(|item| item.node_key == entry.node_key)
@@ -319,9 +305,7 @@ fn start_bindings_from_graph(
         });
     }
     if bindings.is_empty() {
-        return Err(Error::ConflictError(
-            "审批定义没有节点，无法启动销售变更审批".to_string(),
-        ));
+        return Err(Error::ConflictError("审批定义没有节点，无法启动销售变更审批".to_string()));
     }
     Ok(bindings)
 }
@@ -432,9 +416,7 @@ pub(super) async fn persist_sales_change_start(
                     )
                     .await?;
                 if guarded.is_none() {
-                    return Err(Error::ConflictError(
-                        "销售变更单审批启动守卫冲突，请刷新后重试".to_string(),
-                    ));
+                    return Err(Error::ConflictError("销售变更单审批启动守卫冲突，请刷新后重试".to_string()));
                 }
                 sales_write.persist(&db, session).await?;
                 db.workflow_actions().create(&workflow_action, session).await?;
@@ -490,9 +472,7 @@ async fn persist_runtime_writes(
         snapshot_payload.clone(),
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
-    db.approval_subject_snapshots()
-        .create_immutable_snapshot(&snapshot, session)
-        .await?;
+    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, session).await?;
     persist_open_tasks(db, writes, owner_role, organization_id, now, session).await
 }
 
@@ -532,12 +512,7 @@ async fn persist_open_tasks(
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
     for intent in &writes.create_tasks {
-        let TaskIntent::HumanTaskRequested {
-            execution_id,
-            assignee,
-            ..
-        } = intent
-        else {
+        let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
             continue;
         };
         let item = WorkItem::new_document_approval(

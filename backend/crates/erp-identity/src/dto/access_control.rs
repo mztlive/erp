@@ -7,16 +7,16 @@
 //! `permission` 目录、`data_scope`、`user_role` 绑定记录与 `audit_event` 查询
 //! （domains.md：D06 只做 data_scope 增补与 audit_log→audit_event 字段对齐）。
 
+use application_core::{normalized_text, page_or_default, page_size_or_default};
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+
 use crate::entity::access_control::{
     AuditEvent, AuditEventResult, DataScope, DataScopeData, DataScopeSubjectType, DataScopeType, Permission,
     PermissionData, PermissionUpdate, UserRole, UserRoleData, UserRoleRevokeData,
 };
 use crate::entity::rbac::RoleId;
-use serde::{Deserialize, Serialize};
-use validator::Validate;
-
 use crate::error::{Error, Result};
-use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 权限定义列表允许的排序字段白名单。
 pub(crate) const PERMISSION_SORT_FIELDS: &[&str] = &["created_at", "updated_at"];
@@ -41,6 +41,10 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -54,12 +58,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空。
-use application_core::non_blank;
 
 /// 权限定义响应视图（W19 权限目录）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -179,11 +177,7 @@ impl UpdatePermissionRequest {
     /// # 返回
     /// 返回实体层更新数据。
     pub fn into_update(self) -> PermissionUpdate {
-        PermissionUpdate {
-            name: self.name,
-            description: self.description,
-            disabled: self.disabled,
-        }
+        PermissionUpdate { name: self.name, description: self.description, disabled: self.disabled }
     }
 }
 
@@ -447,9 +441,7 @@ impl DataScopeListParams {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, DATA_SCOPE_SORT_FIELDS)?;
         let subject_id = normalized_text(self.subject_id.as_deref());
         if subject_id.is_some() && self.subject_type.is_none() {
-            return Err(Error::ValidationError(
-                "按主体查询时必须提供范围主体类型".to_string(),
-            ));
+            return Err(Error::ValidationError("按主体查询时必须提供范围主体类型".to_string()));
         }
         Ok(DataScopeListQuery {
             subject_type: self.subject_type,
@@ -485,13 +477,9 @@ fn registered_identifier(value: Option<&str>, field: &str) -> Result<Option<Stri
     };
     if text.is_empty()
         || text.len() > 128
-        || !text
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+        || !text.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
     {
-        return Err(Error::ValidationError(format!(
-            "{field}必须使用已注册标识，禁止通配符和显示名"
-        )));
+        return Err(Error::ValidationError(format!("{field}必须使用已注册标识，禁止通配符和显示名")));
     }
     Ok(Some(text))
 }
@@ -784,24 +772,21 @@ impl AuditEventListParams {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        normalize_sort, AssignUserRoleRequest, AuditEventListParams, CreateDataScopeRequest,
-        CreatePermissionRequest, DataScopeListMeta, DataScopeListParams, DataScopeListView, PageView,
-        PermissionListParams, SortDir, UpdatePermissionRequest,
-    };
-    use crate::entity::access_control::{AuditEventResult, DataScopeSubjectType, DataScopeType};
     use serde_json::json;
     use validator::Validate;
+
+    use super::{
+        AssignUserRoleRequest, AuditEventListParams, CreateDataScopeRequest, CreatePermissionRequest,
+        DataScopeListMeta, DataScopeListParams, DataScopeListView, PageView, PermissionListParams, SortDir,
+        UpdatePermissionRequest, normalize_sort,
+    };
+    use crate::entity::access_control::{AuditEventResult, DataScopeSubjectType, DataScopeType};
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields() {
         assert!(normalize_sort(&Some("actor_id".to_string()), &None, &["created_at"]).is_err());
-        let (field, direction) = normalize_sort(
-            &Some(" updated_at ".to_string()),
-            &None,
-            &["created_at", "updated_at"],
-        )
-        .unwrap();
+        let (field, direction) =
+            normalize_sort(&Some(" updated_at ".to_string()), &None, &["created_at", "updated_at"]).unwrap();
         assert_eq!(field, "updated_at");
         assert_eq!(direction, SortDir::Desc);
     }
@@ -887,12 +872,7 @@ mod tests {
     #[test]
     fn data_scope_list_envelope_keeps_versions_off_items() {
         let view = DataScopeListView::compose(
-            PageView {
-                items: Vec::new(),
-                total: 0,
-                page: 1,
-                page_size: 20,
-            },
+            PageView { items: Vec::new(), total: 0, page: 1, page_size: 20 },
             DataScopeListMeta {
                 scope_version: "scope-v".into(),
                 policy_version: 3,
@@ -926,12 +906,7 @@ mod tests {
 
     #[test]
     fn permission_update_reports_changed_fields_in_contract_order() {
-        let empty = UpdatePermissionRequest {
-            version: 1,
-            name: None,
-            description: None,
-            disabled: None,
-        };
+        let empty = UpdatePermissionRequest { version: 1, name: None, description: None, disabled: None };
         assert!(empty.changed_field_names().is_empty());
 
         let complete = UpdatePermissionRequest {
@@ -940,10 +915,7 @@ mod tests {
             description: Some(String::new()),
             disabled: Some(false),
         };
-        assert_eq!(
-            complete.changed_field_names(),
-            vec!["name", "description", "disabled"]
-        );
+        assert_eq!(complete.changed_field_names(), vec!["name", "description", "disabled"]);
     }
 
     #[test]
@@ -974,10 +946,7 @@ mod tests {
         let data = request.into_data("admin-1");
         assert_eq!(data.user_id, "user-1");
         assert_eq!(data.assigned_by, "admin-1");
-        assert_eq!(
-            data.effective_from.unix_secs(),
-            erp_core::common::time::Instant::now().unix_secs()
-        );
+        assert_eq!(data.effective_from.unix_secs(), erp_core::common::time::Instant::now().unix_secs());
         assert!(data.effective_to.is_some());
     }
 

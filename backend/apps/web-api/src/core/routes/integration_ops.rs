@@ -4,16 +4,13 @@
 //! `/admin/integration/error-tasks`、`/admin/integration/differences`；人工动作统一使用
 //! `/admin/integration/task-actions` 与 `/admin/integration/task-completions` 强命令。
 
-use axum::{
-    routing::{get, post},
-    Router,
-};
+use axum::Router;
+use axum::routing::{get, post};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::integration_ops, middleware::with_permission},
-};
+use crate::app_state::AppState;
+use crate::core::handler::integration_ops;
+use crate::core::middleware::with_permission;
 
 /// 返回本域管理端路由集合。
 ///

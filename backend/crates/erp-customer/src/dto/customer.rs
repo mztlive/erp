@@ -3,18 +3,18 @@
 //! 字段名与 HTTP 契约一致（api-contract.md）：分页参数 `page`/`page_size`/
 //! `sort_by`/`sort_dir` 扁平传递；业务日期一律 `YYYY-MM-DD`；时间一律秒级时间戳。
 
-use super::party_snapshot::AddressType;
-use crate::entity::customer::{
-    AssignCustomerAssignment, AssignmentRole, CustomerAccount, CustomerAccountStatus, CustomerAssignment,
-    CustomerAssignmentCommand, EndCustomerAssignment,
-};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::PartyId;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::party_snapshot::AddressType;
+use crate::entity::customer::{
+    AssignCustomerAssignment, AssignmentRole, CustomerAccount, CustomerAccountStatus, CustomerAssignment,
+    CustomerAssignmentCommand, EndCustomerAssignment,
+};
 use crate::error::{Error, Result};
-use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 客户角色列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const CUSTOMER_SORT_FIELDS: &[&str] = &["created_at", "updated_at", "customer_no", "status"];
@@ -73,6 +73,10 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -86,12 +90,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空。
-use application_core::non_blank;
 
 /// 客户角色创建请求（HTTP 契约：`{ party_id, customer_no, ... }`）。
 ///
@@ -695,9 +693,10 @@ pub struct CustomerAssignmentListParams {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, AssignmentAction, CustomerListParams, SortDir};
-    use crate::entity::customer::{AssignmentRole, CustomerAssignmentCommand};
     use serde_json::json;
+
+    use super::{AssignmentAction, CustomerListParams, SortDir, normalize_sort};
+    use crate::entity::customer::{AssignmentRole, CustomerAssignmentCommand};
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
@@ -749,22 +748,24 @@ mod tests {
         assert_eq!(params.scope_version.as_deref(), Some("v1"));
         assert_eq!(query.org_unit_ids.unwrap().as_slice(), &["org-1", "org-2"]);
         assert_eq!(query.include_descendants, Some(true));
-        assert!(CustomerListParams {
-            scope_version: None,
-            owner_user_ids: None,
-            org_unit_ids: None,
-            include_descendants: Some(true),
-            keyword: None,
-            party_id: None,
-            status: None,
-            scope: super::CustomerScope::Mine,
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
-        }
-        .normalized()
-        .is_err());
+        assert!(
+            CustomerListParams {
+                scope_version: None,
+                owner_user_ids: None,
+                org_unit_ids: None,
+                include_descendants: Some(true),
+                keyword: None,
+                party_id: None,
+                status: None,
+                scope: super::CustomerScope::Mine,
+                page: None,
+                page_size: None,
+                sort_by: None,
+                sort_dir: None,
+            }
+            .normalized()
+            .is_err()
+        );
     }
 
     #[test]
@@ -816,7 +817,7 @@ mod tests {
             CustomerAssignmentCommand::Assign(command) => {
                 assert_eq!(command.user_id(), "admin-2");
                 assert_eq!(command.assignment_role(), AssignmentRole::Collaborator);
-            }
+            },
             CustomerAssignmentCommand::End(_) => panic!("assign 不得变成 End"),
         }
 
@@ -833,7 +834,7 @@ mod tests {
             CustomerAssignmentCommand::End(command) => {
                 assert_eq!(command.assignment_id(), "asg-1");
                 assert_eq!(command.version(), 3);
-            }
+            },
             CustomerAssignmentCommand::Assign(_) => panic!("end 不得变成 Assign"),
         }
     }
@@ -853,31 +854,22 @@ mod tests {
                 assert_eq!(command.user_id(), "admin-2");
                 assert_eq!(command.assignment_role().as_str(), "OWNER");
                 assert_eq!(command.change_reason(), "换任");
-            }
+            },
             CustomerAssignmentCommand::End(_) => panic!("complete assign 必须成功"),
         }
 
         for field in ["user_id", "assignment_role", "valid_from"] {
             let mut missing = complete.clone();
             missing.as_object_mut().unwrap().remove(field);
-            assert!(
-                parse_assignment(&missing).into_command().is_err(),
-                "{field} 缺失必须失败"
-            );
+            assert!(parse_assignment(&missing).into_command().is_err(), "{field} 缺失必须失败");
         }
 
         let mut with_id = complete.clone();
-        with_id
-            .as_object_mut()
-            .unwrap()
-            .insert("assignment_id".to_string(), json!("asg-1"));
+        with_id.as_object_mut().unwrap().insert("assignment_id".to_string(), json!("asg-1"));
         assert!(parse_assignment(&with_id).into_command().is_err());
 
         let mut with_version = complete;
-        with_version
-            .as_object_mut()
-            .unwrap()
-            .insert("version".to_string(), json!(1));
+        with_version.as_object_mut().unwrap().insert("version".to_string(), json!(1));
         assert!(parse_assignment(&with_version).into_command().is_err());
     }
 
@@ -894,45 +886,30 @@ mod tests {
             CustomerAssignmentCommand::End(command) => {
                 assert_eq!(command.assignment_id(), "asg-9");
                 assert_eq!(command.version(), 2);
-            }
+            },
             CustomerAssignmentCommand::Assign(_) => panic!("complete end 必须成功"),
         }
 
         for field in ["assignment_id", "valid_to", "version"] {
             let mut missing = complete.clone();
             missing.as_object_mut().unwrap().remove(field);
-            assert!(
-                parse_assignment(&missing).into_command().is_err(),
-                "{field} 缺失必须失败"
-            );
+            assert!(parse_assignment(&missing).into_command().is_err(), "{field} 缺失必须失败");
         }
 
         let mut with_user = complete.clone();
-        with_user
-            .as_object_mut()
-            .unwrap()
-            .insert("user_id".to_string(), json!("admin-2"));
+        with_user.as_object_mut().unwrap().insert("user_id".to_string(), json!("admin-2"));
         assert!(parse_assignment(&with_user).into_command().is_err());
 
         let mut with_role = complete.clone();
-        with_role
-            .as_object_mut()
-            .unwrap()
-            .insert("assignment_role".to_string(), json!("COLLABORATOR"));
+        with_role.as_object_mut().unwrap().insert("assignment_role".to_string(), json!("COLLABORATOR"));
         assert!(parse_assignment(&with_role).into_command().is_err());
 
         let mut with_from = complete.clone();
-        with_from
-            .as_object_mut()
-            .unwrap()
-            .insert("valid_from".to_string(), json!("2026-08-08"));
+        with_from.as_object_mut().unwrap().insert("valid_from".to_string(), json!("2026-08-08"));
         assert!(parse_assignment(&with_from).into_command().is_err());
 
         let mut zero_version = complete;
-        zero_version
-            .as_object_mut()
-            .unwrap()
-            .insert("version".to_string(), json!(0));
+        zero_version.as_object_mut().unwrap().insert("version".to_string(), json!(0));
         assert!(parse_assignment(&zero_version).into_command().is_err());
     }
 

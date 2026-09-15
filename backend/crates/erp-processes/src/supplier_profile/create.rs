@@ -1,42 +1,36 @@
 //! 供应商资料创建用例与事务载荷。
 
-use erp_audit::AuditExt;
+use std::sync::Arc;
+
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::{
     PartyAddressId, PartyBankAccountId, PartyContactId, PartyId, PartyRevisionId, PartyTaxProfileId,
     SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId,
     SupplierCommercialProfileRevisionId, SupplierQualificationCapabilityId, SupplierQualificationId,
     SupplierQualificationRevisionId, SupplierRatingRevisionId,
 };
-use erp_party::PartyExt;
 use erp_party::{
     AddressType, EffectiveRecordStatus, Party, PartyAddress, PartyAddressData, PartyBankAccount,
-    PartyBankAccountData, PartyContact, PartyContactData, PartyData, PartyKind, PartyRevision,
+    PartyBankAccountData, PartyContact, PartyContactData, PartyData, PartyExt, PartyKind, PartyRevision,
     PartyRevisionData, PartyStatus, PartyTaxProfile, PartyTaxProfileData,
 };
-use erp_supplier::SupplierExt;
 use erp_supplier::{
-    SupplierAccount, SupplierCapability, SupplierCapabilityRevision, SupplierCommercialProfileRevision,
-    SupplierCreationIds, SupplierCreationInputs, SupplierCreationQualificationIds,
-    SupplierCreationQualificationInput, SupplierCreationRatingInput, SupplierPartySeed,
-    SupplierProfileCommand, SupplierProfileCommandData, SupplierQualification,
-    SupplierQualificationCapability, SupplierQualificationRevision, SupplierRatingRevision,
+    SaveSupplierProfileRequest, SupplierAccount, SupplierCapability, SupplierCapabilityRevision,
+    SupplierCommercialProfileRevision, SupplierCreationIds, SupplierCreationInputs,
+    SupplierCreationQualificationIds, SupplierCreationQualificationInput, SupplierCreationRatingInput,
+    SupplierExt, SupplierPartySeed, SupplierProfileCommand, SupplierProfileCommandData,
+    SupplierProfileMutationView, SupplierQualification, SupplierQualificationCapability,
+    SupplierQualificationRevision, SupplierRatingRevision, command_view,
 };
+use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;
 
-use std::sync::Arc;
-
-use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
-
+use super::validation::resolve_supplier_file_references;
+use super::{SupplierProfileService, SupplierProfileWithAssetsResult};
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-
-use super::{
-    validation::resolve_supplier_file_references, SupplierProfileService, SupplierProfileWithAssetsResult,
-};
-use erp_supplier::{command_view, SaveSupplierProfileRequest, SupplierProfileMutationView};
 
 impl SupplierProfileService {
     /// 创建 Party、Supplier 及其当前资料；全部写入与幂等结果原子提交。
@@ -48,10 +42,7 @@ impl SupplierProfileService {
         req: SaveSupplierProfileRequest,
         actor: &AuditActor,
     ) -> Result<SupplierProfileMutationView> {
-        Ok(self
-            .create_with_assets(req, Arc::new(EmptyPendingAttachments), actor)
-            .await?
-            .view)
+        Ok(self.create_with_assets(req, Arc::new(EmptyPendingAttachments), actor).await?.view)
     }
 
     /// 创建完整供应商资料，并把同一次 multipart 命令携带的资质文件原子登记。
@@ -66,9 +57,7 @@ impl SupplierProfileService {
     ) -> Result<SupplierProfileWithAssetsResult> {
         req.validate_contract()?;
         if req.clear_contact || req.clear_address || req.clear_tax_profile || req.clear_bank_account {
-            return Err(Error::ValidationError(
-                "创建供应商时不能提交清空既有资料的意图".to_string(),
-            ));
+            return Err(Error::ValidationError("创建供应商时不能提交清空既有资料的意图".to_string()));
         }
         let request_fingerprint = req.fingerprint()?;
         if let Some(command) = self.command_record(&req.idempotency_key).await? {
@@ -88,8 +77,7 @@ impl SupplierProfileService {
             SaveSupplierProfileRequest::required_create_identity(req.supplier_no.as_deref(), "供应商编号")?;
         self.ensure_party_active(&req.signing_entity_party_id).await?;
         self.ensure_party_active(&req.payment_entity_party_id).await?;
-        self.ensure_attachment_references(&req.qualifications, &pending_assets)
-            .await?;
+        self.ensure_attachment_references(&req.qualifications, &pending_assets).await?;
         self.ensure_unique_inputs(&req)?;
 
         let idempotency_key = req.idempotency_key.clone();
@@ -327,34 +315,24 @@ impl PreparedCreate {
             db.party_bank_accounts().create(bank_account, session).await?;
         }
         for revision in &self.capability_revisions {
-            db.supplier_capability_revisions()
-                .create(revision, session)
-                .await?;
+            db.supplier_capability_revisions().create(revision, session).await?;
         }
         for capability in &self.capabilities {
             db.supplier_capabilities().create(capability, session).await?;
         }
         for revision in &self.qualification_revisions {
-            db.supplier_qualification_revisions()
-                .create(revision, session)
-                .await?;
+            db.supplier_qualification_revisions().create(revision, session).await?;
         }
         for qualification in &self.qualifications {
-            db.supplier_qualifications()
-                .create(qualification, session)
-                .await?;
+            db.supplier_qualifications().create(qualification, session).await?;
         }
         for link in &self.qualification_links {
-            db.supplier_qualification_capabilities()
-                .create(link, session)
-                .await?;
+            db.supplier_qualification_capabilities().create(link, session).await?;
         }
         if let Some(rating) = &self.rating {
             db.supplier_rating_revisions().create(rating, session).await?;
         }
-        db.supplier_profile_commands()
-            .create(&self.command, session)
-            .await?;
+        db.supplier_profile_commands().create(&self.command, session).await?;
         db.audit_logs().create(&self.audit, session).await?;
         Ok(())
     }
@@ -422,11 +400,7 @@ fn allocate_creation_plan(
         .iter()
         .copied()
         .map(|code| {
-            (
-                code,
-                SupplierCapabilityId::new(next_id()),
-                SupplierCapabilityRevisionId::new(next_id()),
-            )
+            (code, SupplierCapabilityId::new(next_id()), SupplierCapabilityRevisionId::new(next_id()))
         })
         .collect();
     let qualification_ids = req
@@ -442,10 +416,7 @@ fn allocate_creation_plan(
                 .collect(),
         })
         .collect();
-    let rating_id = req
-        .rating
-        .as_ref()
-        .map(|_| SupplierRatingRevisionId::new(next_id()));
+    let rating_id = req.rating.as_ref().map(|_| SupplierRatingRevisionId::new(next_id()));
     let qualifications = req
         .qualifications
         .iter()
@@ -505,12 +476,7 @@ pub(super) fn create_tax_profile(
     party_id: &PartyId,
     actor_id: &str,
 ) -> Result<Option<PartyTaxProfile>> {
-    let Some(tax_no) = req
-        .tax_no
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
+    let Some(tax_no) = req.tax_no.as_deref().map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
     };
     Ok(Some(PartyTaxProfile::new(

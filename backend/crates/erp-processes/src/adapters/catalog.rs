@@ -43,9 +43,7 @@ impl CatalogAuditPort for MongoCatalogAudit {
         resource_type: &str,
         resource_id: String,
     ) -> erp_catalog::Result<PreparedCatalogAudit> {
-        let log = actor
-            .resource_log(action, resource_type, resource_id)
-            .map_err(map_audit_to_catalog)?;
+        let log = actor.resource_log(action, resource_type, resource_id).map_err(map_audit_to_catalog)?;
         Ok(prepared_catalog_audit(&log))
     }
 
@@ -69,11 +67,7 @@ impl CatalogAuditPort for MongoCatalogAudit {
         executor: &mut dyn Executor,
     ) -> erp_catalog::Result<()> {
         let log = audit_log_from_catalog(audit).map_err(map_audit_to_catalog)?;
-        self.db
-            .audit_logs()
-            .create(&log, executor)
-            .await
-            .map_err(erp_catalog::Error::from)?;
+        self.db.audit_logs().create(&log, executor).await.map_err(erp_catalog::Error::from)?;
         Ok(())
     }
 }
@@ -154,10 +148,7 @@ impl PendingAttachmentBatch for CatalogPendingAttachments {
     }
 
     async fn persist(&self, db: &Database, executor: &mut dyn Executor) -> erp_catalog::Result<()> {
-        self.inner
-            .persist(db, executor)
-            .await
-            .map_err(map_support_to_catalog)
+        self.inner.persist(db, executor).await.map_err(map_support_to_catalog)
     }
 
     fn is_empty(&self) -> bool {
@@ -167,11 +158,7 @@ impl PendingAttachmentBatch for CatalogPendingAttachments {
 
 /// Construct a catalog service with audit and file-asset adapters.
 pub fn catalog_service(db: Database) -> CatalogService {
-    CatalogService::new(
-        db.clone(),
-        MongoCatalogAudit::shared(db.clone()),
-        MongoCatalogFileAssets::shared(db),
-    )
+    CatalogService::new(db.clone(), MongoCatalogAudit::shared(db.clone()), MongoCatalogFileAssets::shared(db))
 }
 
 fn prepared_catalog_audit(log: &AuditLog) -> PreparedCatalogAudit {

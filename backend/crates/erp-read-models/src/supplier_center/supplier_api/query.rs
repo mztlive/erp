@@ -1,29 +1,27 @@
 use std::collections::HashMap;
 
+use application_core::AuditActor;
 use erp_core::ids::{PartyId, SupplierAccountId, SupplierApiConnectionId};
 use erp_party::PartyExt;
 use erp_supplier::SupplierExt;
+use erp_supply::dto::supplier_api::{
+    PageView, SafeReferencesView, SupplierActionBlockerView, SupplierApiCapabilitySummaryView,
+    SupplierApiCapabilityView, SupplierApiConnectionDetailView, SupplierApiConnectionListItemView,
+    SupplierApiConnectionListParams, SupplierApiConnectionView, SupplierHealthCheckRunView,
+};
 use erp_supply::entity::supplier_api::{
     SupplierApiConnection, SupplierApiConnectionStatus, SupplierConnectionAction,
     SupplierConnectionGovernance, SupplierHealthCheckRun, SupplierHealthCheckType,
 };
 use erp_supply::repository::SupplierApiExt;
-use persistence_core::NoTransaction;
-
-use crate::Result;
-use application_core::AuditActor;
-
-use super::context::GovernanceContext;
-use super::SupplierApiReadService;
-use erp_supply::dto::supplier_api::PageView;
-use erp_supply::dto::supplier_api::{
-    SafeReferencesView, SupplierActionBlockerView, SupplierApiCapabilitySummaryView,
-    SupplierApiCapabilityView, SupplierApiConnectionDetailView, SupplierApiConnectionListItemView,
-    SupplierApiConnectionListParams, SupplierApiConnectionView, SupplierHealthCheckRunView,
-};
 use erp_supply::service::supplier_api::context::{
     blocker, governance_blocker_view, impact_view, safe_reference,
 };
+use persistence_core::NoTransaction;
+
+use super::SupplierApiReadService;
+use super::context::GovernanceContext;
+use crate::Result;
 
 const CONFIRM_CAPABILITY_ACTION: &str = "CONFIRM_BUSINESS_CAPABILITY_REQUIREMENT";
 const UPDATE_CAPABILITIES_ACTION: &str = "UPDATE_CAPABILITIES";
@@ -41,11 +39,8 @@ impl SupplierApiReadService {
         validator::Validate::validate(params)?;
         let suppliers = crate::supplier_center::keyword_supplier_ids(&self.db, params.q.as_deref()).await?;
         let page = self.domain().connection_list(params, suppliers).await?;
-        let connection_ids = page
-            .items
-            .iter()
-            .map(|item| SupplierApiConnectionId::new(&item.id))
-            .collect::<Vec<_>>();
+        let connection_ids =
+            page.items.iter().map(|item| SupplierApiConnectionId::new(&item.id)).collect::<Vec<_>>();
         let capabilities = self
             .db
             .supplier_api_capabilities()
@@ -54,13 +49,12 @@ impl SupplierApiReadService {
         let capabilities_by_connection = capabilities.into_iter().fold(
             HashMap::<String, Vec<SupplierApiCapabilitySummaryView>>::new(),
             |mut grouped, capability| {
-                grouped
-                    .entry(capability.connection_id.to_string())
-                    .or_default()
-                    .push(SupplierApiCapabilitySummaryView {
+                grouped.entry(capability.connection_id.to_string()).or_default().push(
+                    SupplierApiCapabilitySummaryView {
                         capability_code: capability.capability_code,
                         status: capability.status,
-                    });
+                    },
+                );
                 grouped
             },
         );
@@ -70,43 +64,25 @@ impl SupplierApiReadService {
             .into_iter()
             .map(|connection| SupplierApiConnectionListItemView {
                 supplier_name: supplier_names.get(&connection.supplier_id).cloned(),
-                capabilities: capabilities_by_connection
-                    .get(&connection.id)
-                    .cloned()
-                    .unwrap_or_default(),
+                capabilities: capabilities_by_connection.get(&connection.id).cloned().unwrap_or_default(),
                 connection,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: page.page,
-            page_size: page.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: page.page, page_size: page.page_size })
     }
 
     async fn supplier_names_for_connections(
         &self,
         connections: &[SupplierApiConnectionView],
     ) -> Result<HashMap<String, String>> {
-        let supplier_ids = connections
-            .iter()
-            .map(|item| SupplierAccountId::new(&item.supplier_id))
-            .collect::<Vec<_>>();
-        let accounts = self
-            .db
-            .supplier_accounts()
-            .find_accounts_by_ids(&supplier_ids, &mut NoTransaction)
-            .await?;
-        let party_ids = accounts
-            .iter()
-            .map(|account| PartyId::new(account.party_id.to_string()))
-            .collect::<Vec<_>>();
-        let (parties, revisions) = self
-            .db
-            .party()
-            .list_with_current_revisions(&party_ids, &mut NoTransaction)
-            .await?;
+        let supplier_ids =
+            connections.iter().map(|item| SupplierAccountId::new(&item.supplier_id)).collect::<Vec<_>>();
+        let accounts =
+            self.db.supplier_accounts().find_accounts_by_ids(&supplier_ids, &mut NoTransaction).await?;
+        let party_ids =
+            accounts.iter().map(|account| PartyId::new(account.party_id.to_string())).collect::<Vec<_>>();
+        let (parties, revisions) =
+            self.db.party().list_with_current_revisions(&party_ids, &mut NoTransaction).await?;
         let revisions_by_id = revisions
             .into_iter()
             .map(|revision| (revision.base.id.clone(), revision.legal_name))
@@ -148,9 +124,8 @@ impl SupplierApiReadService {
         context: GovernanceContext,
         actor: &AuditActor,
     ) -> Result<SupplierApiConnectionDetailView> {
-        let reference_visible = self
-            .has_permission(actor, "supplier_api_connection:view_reference_metadata")
-            .await?;
+        let reference_visible =
+            self.has_permission(actor, "supplier_api_connection:view_reference_metadata").await?;
         let governance = SupplierConnectionGovernance {
             connection: &connection,
             capabilities: &context.capabilities,
@@ -158,12 +133,8 @@ impl SupplierApiReadService {
             health_runs: &context.health_runs,
         };
         let latest_success = governance.latest_successful_health_run();
-        let can_confirm = self
-            .has_permission(actor, "supplier_api_capability:confirm_requirement")
-            .await?;
-        let can_update_capability = self
-            .has_permission(actor, "supplier_api_capability:update")
-            .await?;
+        let can_confirm = self.has_permission(actor, "supplier_api_capability:confirm_requirement").await?;
+        let can_update_capability = self.has_permission(actor, "supplier_api_capability:update").await?;
         let mut capabilities = Vec::with_capacity(context.capabilities.len());
         for capability in &context.capabilities {
             let confirmation = governance.latest_confirmation(capability.capability_code);
@@ -205,9 +176,8 @@ impl SupplierApiReadService {
             });
         }
 
-        let (allowed_actions, action_blockers) = self
-            .connection_action_projection(&connection, &context, actor)
-            .await?;
+        let (allowed_actions, action_blockers) =
+            self.connection_action_projection(&connection, &context, actor).await?;
         let mut connection_view: SupplierApiConnectionView = connection.clone().into();
         connection_view.safe_references = SafeReferencesView {
             endpoint: safe_reference(connection.endpoint_reference_bound, reference_visible),
@@ -249,9 +219,7 @@ impl SupplierApiReadService {
             let blockers = governance.blockers(
                 action,
                 context.impact,
-                self.reference_registry
-                    .as_ref()
-                    .is_some_and(|registry| registry.is_available()),
+                self.reference_registry.as_ref().is_some_and(|registry| registry.is_available()),
             );
             if blockers.is_empty() {
                 allowed.push(action.as_str().to_string());

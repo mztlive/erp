@@ -1,23 +1,20 @@
 //! Sales-owned frozen snapshot queries.
-use super::{
-    mapper::{revision_view, working_copy_line_view},
-    SalesOrderService,
-};
+use std::collections::HashMap;
+
+use erp_core::ids::{SalesOrderId, SalesOrderRevisionId};
+use persistence_core::NoTransaction;
+
+use super::SalesOrderService;
+use super::mapper::{revision_view, working_copy_line_view};
+use crate::Result;
 use crate::dto::sales_order::{RevisionView, WorkingCopyView};
 use crate::entity::sales_order::{SalesOrderRevision, SalesOrderRevisionLine, SalesOrderWorkingCopy};
 use crate::repository::SalesOrderExt;
-use crate::Result;
-use erp_core::ids::{SalesOrderId, SalesOrderRevisionId};
-use persistence_core::NoTransaction;
-use std::collections::HashMap;
 /// Group already loaded frozen rows once and retain line-number order within every revision.
 fn group_revision_lines(lines: Vec<SalesOrderRevisionLine>) -> HashMap<String, Vec<SalesOrderRevisionLine>> {
     let mut grouped: HashMap<String, Vec<SalesOrderRevisionLine>> = HashMap::new();
     for line in lines {
-        grouped
-            .entry(line.sales_order_revision_id.to_string())
-            .or_default()
-            .push(line);
+        grouped.entry(line.sales_order_revision_id.to_string()).or_default().push(line);
     }
     for group in grouped.values_mut() {
         group.sort_by_key(|line| line.line_no);
@@ -27,10 +24,8 @@ fn group_revision_lines(lines: Vec<SalesOrderRevisionLine>) -> HashMap<String, V
 
 /// Resolve predecessor numbers solely from the loaded historical revisions, without current-data lookup.
 fn previous_revision_numbers(revisions: &[SalesOrderRevision]) -> HashMap<String, u32> {
-    let by_id: HashMap<&str, u32> = revisions
-        .iter()
-        .map(|row| (row.base.id.as_str(), row.revision.revision_no))
-        .collect();
+    let by_id: HashMap<&str, u32> =
+        revisions.iter().map(|row| (row.base.id.as_str(), row.revision.revision_no)).collect();
     let mut out = HashMap::new();
     for row in revisions {
         let Some(previous_id) = row.previous_revision_id.as_ref() else {
@@ -59,15 +54,9 @@ impl SalesOrderService {
     /// # 关键业务约束
     /// 版本行按版本 ID 一次批量取出，禁止按版本循环查询。
     pub async fn load_revision_views(&self, order_id: &SalesOrderId) -> Result<Vec<RevisionView>> {
-        let revisions = self
-            .db
-            .sales_order_revisions()
-            .list_by_order(order_id, &mut NoTransaction)
-            .await?;
-        let revision_ids = revisions
-            .iter()
-            .map(|row| SalesOrderRevisionId::new(row.base.id.clone()))
-            .collect::<Vec<_>>();
+        let revisions = self.db.sales_order_revisions().list_by_order(order_id, &mut NoTransaction).await?;
+        let revision_ids =
+            revisions.iter().map(|row| SalesOrderRevisionId::new(row.base.id.clone())).collect::<Vec<_>>();
         let lines = self
             .db
             .sales_order_revision_lines()
@@ -192,21 +181,11 @@ impl SalesOrderService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, crate::dto::sales_order::SortDir::Asc),
         };
-        let page = self
-            .db
-            .sales_orders()
-            .search_sales_orders(&filter, scope, executor)
-            .await?;
+        let page = self.db.sales_orders().search_sales_orders(&filter, scope, executor).await?;
 
-        let versions = self
-            .db
-            .sales_orders()
-            .query_versions(&filter, scope, executor)
-            .await?;
+        let versions = self.db.sales_orders().query_versions(&filter, scope, executor).await?;
         if versions.len() > 10_000 {
-            return Err(crate::Error::ValidationError(
-                "销售单查询超过上限，请收窄期间或客户条件".into(),
-            ));
+            return Err(crate::Error::ValidationError("销售单查询超过上限，请收窄期间或客户条件".into()));
         }
         Ok((
             application_core::PageView {

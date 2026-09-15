@@ -42,10 +42,7 @@ pub fn ensure_transition<S: DocumentState + 'static>(from: S, to: S) -> Result<(
     if from.allowed_next().contains(&to) {
         return Ok(());
     }
-    Err(Error::InvalidStateTransition {
-        from: format!("{from:?}"),
-        to: format!("{to:?}"),
-    })
+    Err(Error::InvalidStateTransition { from: format!("{from:?}"), to: format!("{to:?}") })
 }
 
 /// 断言状态机邻接矩阵对称闭合（测试辅助）。
@@ -104,11 +101,8 @@ mod tests {
         }
     }
 
-    const ALL_STATES: &[SourceSystemStatus] = &[
-        SourceSystemStatus::Active,
-        SourceSystemStatus::Disabled,
-        SourceSystemStatus::Maintenance,
-    ];
+    const ALL_STATES: &[SourceSystemStatus] =
+        &[SourceSystemStatus::Active, SourceSystemStatus::Disabled, SourceSystemStatus::Maintenance];
 
     /// 合法迁移（含幂等）全部放行。
     #[test]
@@ -128,7 +122,7 @@ mod tests {
             Error::InvalidStateTransition { from, to } => {
                 assert_eq!(from, "Active");
                 assert_eq!(to, "Maintenance");
-            }
+            },
             other => panic!("期望 InvalidStateTransition，得到 {other:?}"),
         }
     }

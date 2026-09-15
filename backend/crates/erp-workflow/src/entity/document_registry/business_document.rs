@@ -1,15 +1,13 @@
 //! `business_document`：跨域单据稳定注册表（数据模型 §6.1）。
 
+use bpm::ApprovalProcessDefinitionId;
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::Instant;
 use erp_core::ids::BusinessDocumentId;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
-
-use bpm::ApprovalProcessDefinitionId;
+use serde::{Deserialize, Serialize};
 
 /// 单据编号最大长度。
 const DOCUMENT_NO_MAX_LEN: usize = 128;
@@ -516,10 +514,7 @@ impl BusinessDocument {
         input: ApprovalBindingUpgradeInput<'_>,
     ) -> std::result::Result<(), ApprovalBindingUpgradeError> {
         self.ensure_unsubmitted_approval_binding_upgrade(input.expected_binding_version, input.reason)?;
-        let current = self
-            .approval_binding
-            .as_ref()
-            .ok_or(ApprovalBindingUpgradeError::MissingBinding)?;
+        let current = self.approval_binding.as_ref().ok_or(ApprovalBindingUpgradeError::MissingBinding)?;
         self.approval_binding = Some(current.upgrade(
             input.approval_process_definition_id,
             input.approval_definition_version,
@@ -571,14 +566,15 @@ impl BusinessDocument {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        ApprovalBindingUpgradeError, ApprovalBindingUpgradeInput, ApprovalDefinitionBinding,
-        BusinessDocument, BusinessDocumentData, DocumentType,
-    };
     use bpm::ApprovalProcessDefinitionId;
     use erp_core::common::time::Instant;
     use erp_core::ids::BusinessDocumentId;
     use serde_json;
+
+    use super::{
+        ApprovalBindingUpgradeError, ApprovalBindingUpgradeInput, ApprovalDefinitionBinding,
+        BusinessDocument, BusinessDocumentData, DocumentType,
+    };
 
     fn data() -> BusinessDocumentData {
         BusinessDocumentData {
@@ -599,10 +595,7 @@ mod tests {
     /// 草稿允许空编号，正式号只能分配一次。
     #[test]
     fn assign_document_no_is_one_shot() {
-        let payload = BusinessDocumentData {
-            document_no: "   ".to_string(),
-            ..data()
-        };
+        let payload = BusinessDocumentData { document_no: "   ".to_string(), ..data() };
         let mut doc = BusinessDocument::new(BusinessDocumentId::new("bd-1"), payload).unwrap();
         assert!(doc.document_no.is_empty());
         assert!(doc.document_no_assigned_at.is_none());
@@ -610,9 +603,7 @@ mod tests {
         doc.assign_document_no(" SO-1 ", at).unwrap();
         assert_eq!(doc.document_no, "SO-1");
         assert_eq!(doc.document_no_assigned_at, Some(at));
-        assert!(doc
-            .assign_document_no("SO-2", Instant::from_unix_secs(2))
-            .is_err());
+        assert!(doc.assign_document_no("SO-2", Instant::from_unix_secs(2)).is_err());
         assert!(doc.assign_document_no("  ", Instant::from_unix_secs(2)).is_err());
     }
 
@@ -629,8 +620,8 @@ mod tests {
         .unwrap();
         doc.bind_approval_definition(binding).unwrap();
         assert_eq!(doc.approval_binding.as_ref().unwrap().approval_binding_version, 1);
-        assert!(doc
-            .bind_approval_definition(
+        assert!(
+            doc.bind_approval_definition(
                 ApprovalDefinitionBinding::new(
                     ApprovalProcessDefinitionId::new("def-2"),
                     1,
@@ -638,7 +629,8 @@ mod tests {
                 )
                 .unwrap()
             )
-            .is_err());
+            .is_err()
+        );
         doc.upgrade_approval_binding(
             ApprovalProcessDefinitionId::new("def-2"),
             2,
@@ -647,20 +639,23 @@ mod tests {
         )
         .unwrap();
         assert_eq!(doc.approval_binding.as_ref().unwrap().approval_binding_version, 2);
-        assert!(doc
-            .upgrade_approval_binding(
+        assert!(
+            doc.upgrade_approval_binding(
                 ApprovalProcessDefinitionId::new("def-3"),
                 3,
                 1,
                 Instant::from_unix_secs(13),
             )
-            .is_err());
-        assert!(ApprovalDefinitionBinding::new(
-            ApprovalProcessDefinitionId::new("def-0"),
-            0,
-            Instant::from_unix_secs(1),
-        )
-        .is_err());
+            .is_err()
+        );
+        assert!(
+            ApprovalDefinitionBinding::new(
+                ApprovalProcessDefinitionId::new("def-0"),
+                0,
+                Instant::from_unix_secs(1),
+            )
+            .is_err()
+        );
     }
 
     /// 无审批注册要求类型一致且注册行与绑定端口都保持空绑定。
@@ -674,12 +669,8 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(document
-            .ensure_no_approval_registration(DocumentType::ElectronicDelivery, None)
-            .is_ok());
-        assert!(document
-            .ensure_no_approval_registration(DocumentType::Delivery, None)
-            .is_err());
+        assert!(document.ensure_no_approval_registration(DocumentType::ElectronicDelivery, None).is_ok());
+        assert!(document.ensure_no_approval_registration(DocumentType::Delivery, None).is_err());
 
         let binding = ApprovalDefinitionBinding::new(
             ApprovalProcessDefinitionId::new("def-1"),
@@ -687,14 +678,14 @@ mod tests {
             Instant::from_unix_secs(10),
         )
         .unwrap();
-        assert!(document
-            .ensure_no_approval_registration(DocumentType::ElectronicDelivery, Some(&binding),)
-            .is_err());
+        assert!(
+            document
+                .ensure_no_approval_registration(DocumentType::ElectronicDelivery, Some(&binding),)
+                .is_err()
+        );
         let mut prebound = document.clone();
         prebound.bind_approval_definition(binding).unwrap();
-        assert!(prebound
-            .ensure_no_approval_registration(DocumentType::ElectronicDelivery, None)
-            .is_err());
+        assert!(prebound.ensure_no_approval_registration(DocumentType::ElectronicDelivery, None).is_err());
     }
 
     /// 未提交绑定升级由实体统一校验绑定 CAS、提交状态、启动事实与原因。
@@ -720,14 +711,7 @@ mod tests {
                 at: Instant::from_unix_secs(11),
             })
             .unwrap();
-        assert_eq!(
-            document
-                .approval_binding
-                .as_ref()
-                .unwrap()
-                .approval_binding_version,
-            2
-        );
+        assert_eq!(document.approval_binding.as_ref().unwrap().approval_binding_version, 2);
 
         let mut missing = BusinessDocument::new(BusinessDocumentId::new("bd-2"), data()).unwrap();
         assert!(matches!(
@@ -748,9 +732,7 @@ mod tests {
             Err(ApprovalBindingUpgradeError::Formalized)
         ));
         let mut started = document.clone();
-        started
-            .mark_approval_started(Instant::from_unix_secs(12))
-            .unwrap();
+        started.mark_approval_started(Instant::from_unix_secs(12)).unwrap();
         assert!(matches!(
             started.ensure_unsubmitted_approval_binding_upgrade(2, "原因"),
             Err(ApprovalBindingUpgradeError::ApprovalStarted)
@@ -763,19 +745,14 @@ mod tests {
             document.ensure_unsubmitted_approval_binding_upgrade(2, "   "),
             Err(ApprovalBindingUpgradeError::EmptyReason)
         ));
-        started
-            .mark_approval_started(Instant::from_unix_secs(13))
-            .unwrap();
+        started.mark_approval_started(Instant::from_unix_secs(13)).unwrap();
         assert_eq!(started.approval_started_at, Some(Instant::from_unix_secs(12)));
     }
 
     /// 失败路径：超长编号被拒。
     #[test]
     fn new_rejects_overlong_document_no() {
-        let payload = BusinessDocumentData {
-            document_no: "x".repeat(129),
-            ..data()
-        };
+        let payload = BusinessDocumentData { document_no: "x".repeat(129), ..data() };
         assert!(BusinessDocument::new(BusinessDocumentId::new("bd-1"), payload).is_err());
     }
 
@@ -826,19 +803,10 @@ mod tests {
     /// 解析不得裁剪、折叠大小写、接受别名或回落默认类型。
     #[test]
     fn document_type_try_from_code_rejects_non_exact_codes() {
-        for code in [
-            "",
-            "unknown",
-            "Sales_order",
-            "SALES_ORDER",
-            "sales_order ",
-            " sales_order",
-            "sales_order\n",
-        ] {
-            assert!(
-                DocumentType::try_from_code(code).is_err(),
-                "unexpected code: {code:?}"
-            );
+        for code in
+            ["", "unknown", "Sales_order", "SALES_ORDER", "sales_order ", " sales_order", "sales_order\n"]
+        {
+            assert!(DocumentType::try_from_code(code).is_err(), "unexpected code: {code:?}");
         }
     }
 
@@ -847,50 +815,22 @@ mod tests {
     fn document_type_codes_and_labels_are_stable() {
         const ROWS: &[(DocumentType, &str, &str)] = &[
             (DocumentType::SalesOrder, "sales_order", "销售单"),
-            (
-                DocumentType::VoucherSalesOrder,
-                "voucher_sales_order",
-                "卡券销售单",
-            ),
+            (DocumentType::VoucherSalesOrder, "voucher_sales_order", "卡券销售单"),
             (DocumentType::SalesChangeOrder, "sales_change_order", "销售变更单"),
             (DocumentType::PurchaseOrder, "purchase_order", "采购单"),
-            (
-                DocumentType::PurchaseChangeOrder,
-                "purchase_change_order",
-                "采购变更单",
-            ),
+            (DocumentType::PurchaseChangeOrder, "purchase_change_order", "采购变更单"),
             (DocumentType::PurchaseReceipt, "purchase_receipt", "采购收货单"),
             (DocumentType::Delivery, "delivery", "仓发单"),
-            (
-                DocumentType::ElectronicDelivery,
-                "electronic_delivery",
-                "电子交付单",
-            ),
-            (
-                DocumentType::ServiceFulfillment,
-                "service_fulfillment",
-                "服务履约单",
-            ),
-            (
-                DocumentType::CustomerAcceptance,
-                "customer_acceptance",
-                "客户验收单",
-            ),
+            (DocumentType::ElectronicDelivery, "electronic_delivery", "电子交付单"),
+            (DocumentType::ServiceFulfillment, "service_fulfillment", "服务履约单"),
+            (DocumentType::CustomerAcceptance, "customer_acceptance", "客户验收单"),
             (DocumentType::StockAdjustment, "stock_adjustment", "库存调整单"),
             (DocumentType::CustomerReceipt, "customer_receipt", "客户回款单"),
-            (
-                DocumentType::SalesInvoiceRequest,
-                "sales_invoice_request",
-                "销项开票申请",
-            ),
+            (DocumentType::SalesInvoiceRequest, "sales_invoice_request", "销项开票申请"),
             (DocumentType::SupplierPayment, "supplier_payment", "供应商付款单"),
             (DocumentType::Invoice, "invoice", "发票"),
             (DocumentType::SalesReturnCase, "sales_return_case", "销售退货单"),
-            (
-                DocumentType::PurchaseReturnOrder,
-                "purchase_return_order",
-                "采购退货单",
-            ),
+            (DocumentType::PurchaseReturnOrder, "purchase_return_order", "采购退货单"),
             (DocumentType::CustomerRefund, "customer_refund", "客户退款单"),
             (DocumentType::SupplierRefund, "supplier_refund", "供应商退款单"),
             (DocumentType::ReceiptReversal, "receipt_reversal", "回款冲正单"),

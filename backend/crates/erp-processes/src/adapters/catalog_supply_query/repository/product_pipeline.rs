@@ -1,14 +1,12 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Bson, Document};
-
 use erp_catalog::entity::catalog::{EnableStatus, ProductListingStatus, SkuCoverageStatus};
+use erp_catalog::repository::{ProductFilter, sku_is_listed_expr};
 use erp_core::money::Amount;
 use erp_supply::entity::supplier_offering::OfferingStatus;
-
-use super::shared::{sort_doc, PRODUCT_REVISIONS, SKUS, SKU_REVISIONS, SUPPLIER_OFFERINGS};
-use erp_catalog::repository::sku_is_listed_expr;
-use erp_catalog::repository::ProductFilter;
+use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{Pagination, QueryFilter};
+
+use super::shared::{PRODUCT_REVISIONS, SKU_REVISIONS, SKUS, SUPPLIER_OFFERINGS, sort_doc};
 
 /// 构造商品列表的当前修订与 SKU 聚合管道。
 pub(super) fn product_list_pipeline(filter: &ProductFilter) -> Vec<Document> {
@@ -230,12 +228,7 @@ fn append_sales_price_filter(pipeline: &mut Vec<Document>, minimum: Option<Amoun
 
 /// 把查询金额转换为与库内价格一致的 BSON Decimal128。
 fn amount_filter_bson(amount: Amount) -> Bson {
-    Bson::Decimal128(
-        amount
-            .to_string()
-            .parse()
-            .expect("合法 Amount 必须可转换为 MongoDB Decimal128"),
-    )
+    Bson::Decimal128(amount.to_string().parse().expect("合法 Amount 必须可转换为 MongoDB Decimal128"))
 }
 
 /// 追加完整、部分或无覆盖筛选；空 SKU 集合只属于无覆盖。
@@ -310,10 +303,12 @@ fn product_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
+
     use erp_catalog::entity::catalog::{EnableStatus, ProductKind, ProductListingStatus, SkuCoverageStatus};
     use erp_core::money::Amount;
-    use std::str::FromStr;
+
+    use super::*;
 
     /// 商品列表统一搜索必须覆盖商品与 SKU 字段，并在分页前应用聚合筛选。
     #[test]

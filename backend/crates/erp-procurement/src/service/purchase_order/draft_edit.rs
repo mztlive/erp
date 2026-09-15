@@ -1,4 +1,9 @@
 //! 采购草稿校验、读取、替换计划与单域事务内写入。
+use erp_core::ids::PurchaseOrderSubmissionId;
+use erp_core::money::Amount;
+use id_generator::next_id;
+use persistence_core::Executor;
+
 use super::line_input::{build_submission_lines, compute_request_totals, to_line_inputs};
 use crate::dto::purchase_order::SavePurchaseOrderLine;
 use crate::entity::purchase_order::{
@@ -7,10 +12,6 @@ use crate::entity::purchase_order::{
 };
 use crate::repository::PurchaseOrderExt;
 use crate::{Error, Result};
-use erp_core::ids::PurchaseOrderSubmissionId;
-use erp_core::money::Amount;
-use id_generator::next_id;
-use persistence_core::Executor;
 /// 待写入的新采购草稿提交及金额。
 pub struct DraftReplacement {
     /// 新草稿提交头。
@@ -77,14 +78,10 @@ pub fn ensure_save_target(
         return Err(Error::NotFound("采购单不存在或不可编辑".to_string()));
     }
     if current_version != expected_lock_version {
-        return Err(Error::ConflictError(
-            "数据已被其他请求修改，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
     }
     if status != PurchaseOrderStatus::Draft {
-        return Err(Error::BusinessLogicError(
-            "只有草稿状态的采购单可以编辑".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("只有草稿状态的采购单可以编辑".to_string()));
     }
     Ok(())
 }
@@ -167,13 +164,7 @@ pub fn build_draft_replacement(
         },
     )?;
     let lines = build_submission_lines(&submission.base.id.clone().into(), &inputs)?;
-    Ok(DraftReplacement {
-        submission,
-        lines,
-        gross,
-        net,
-        tax,
-    })
+    Ok(DraftReplacement { submission, lines, gross, net, tax })
 }
 /// 把领域草稿编辑校验失败映射为稳定 HTTP 语义。
 ///
@@ -196,11 +187,11 @@ pub fn map_draft_edit_violation(violation: DraftLineEditViolation) -> Error {
         | DraftLineEditViolation::PaymentTermChanged => Error::ValidationError(violation.to_string()),
         DraftLineEditViolation::SourceLineRemoved | DraftLineEditViolation::ExceedsAvailableQuantity => {
             Error::ConflictError(violation.to_string())
-        }
+        },
         DraftLineEditViolation::MissingSalesStableLine
         | DraftLineEditViolation::MissingOriginalAllocatedQuantity => {
             Error::BusinessLogicError(violation.to_string())
-        }
+        },
     }
 }
 /// 在调用方事务内依次替代旧草稿、创建新提交与行、更新采购单；失败停止并保留原错误。
@@ -212,9 +203,7 @@ pub async fn persist_replacement(
     session: &mut dyn Executor,
 ) -> Result<()> {
     db.purchase_order_submissions().update(old_draft, session).await?;
-    db.purchase_order_submissions()
-        .create(&replacement.submission, session)
-        .await?;
+    db.purchase_order_submissions().create(&replacement.submission, session).await?;
     for line in &replacement.lines {
         db.purchase_order_submission_lines().create(line, session).await?;
     }

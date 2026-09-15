@@ -5,13 +5,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::stable::StableBase;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 连接代码最大长度。
 const CODE_MAX_LEN: usize = 64;
@@ -163,10 +162,7 @@ impl RateLimitPolicy {
         if window_secs == 0 {
             return Err(Error::from("限流窗口时长必须大于零"));
         }
-        Ok(Self {
-            max_requests,
-            window_secs,
-        })
+        Ok(Self { max_requests, window_secs })
     }
 
     /// 返回窗口内最大请求数。
@@ -315,23 +311,16 @@ impl SupplierApiConnection {
         data: SupplierApiConnectionData,
         created_by: impl Into<String>,
     ) -> Result<Self> {
-        let connection_code = normalize_required_text(
-            data.connection_code,
-            "连接代码不能为空",
-            CODE_MAX_LEN,
-            "连接代码过长",
-        )?;
+        let connection_code =
+            normalize_required_text(data.connection_code, "连接代码不能为空", CODE_MAX_LEN, "连接代码过长")?;
         let endpoint_reference = normalize_optional_text(
             Some(data.endpoint_reference),
             "地址配置引用",
             ENDPOINT_REFERENCE_MAX_LEN,
         )?
         .unwrap_or_default();
-        let credential_reference = normalize_optional_text(
-            data.credential_reference,
-            "密钥引用",
-            CREDENTIAL_REFERENCE_MAX_LEN,
-        )?;
+        let credential_reference =
+            normalize_optional_text(data.credential_reference, "密钥引用", CREDENTIAL_REFERENCE_MAX_LEN)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -602,10 +591,8 @@ impl SupplierApiConnection {
     }
 
     fn bump_technical_config_version(&mut self) -> Result<()> {
-        self.technical_config_version = self
-            .technical_config_version
-            .checked_add(1)
-            .ok_or_else(|| Error::from("技术配置版本溢出"))?;
+        self.technical_config_version =
+            self.technical_config_version.checked_add(1).ok_or_else(|| Error::from("技术配置版本溢出"))?;
         self.last_healthy_technical_config_version = None;
         Ok(())
     }
@@ -613,12 +600,13 @@ impl SupplierApiConnection {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
+
     use super::{
         ConnectionEnvironment, HealthCheckResult, RateLimitPolicy, SupplierApiConnection,
         SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierApiConnectionUpdate,
     };
-    use erp_core::common::time::Instant;
-    use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
 
     fn connection_data() -> SupplierApiConnectionData {
         SupplierApiConnectionData {
@@ -634,19 +622,13 @@ mod tests {
 
     #[test]
     fn connection_new_trims_and_validates_text_fields() {
-        let connection = SupplierApiConnection::new(
-            SupplierApiConnectionId::new("conn-1"),
-            connection_data(),
-            "admin-1",
-        )
-        .unwrap();
+        let connection =
+            SupplierApiConnection::new(SupplierApiConnectionId::new("conn-1"), connection_data(), "admin-1")
+                .unwrap();
 
         assert_eq!(connection.connection_code, "SUP-CN-001");
         assert_eq!(connection.endpoint_reference, "config://supplier/001");
-        assert_eq!(
-            connection.credential_reference.as_deref(),
-            Some("kms://prod/erp/sup-001")
-        );
+        assert_eq!(connection.credential_reference.as_deref(), Some("kms://prod/erp/sup-001"));
         assert_eq!(connection.supplier_id, SupplierAccountId::new("sup-1"));
         assert_eq!(connection.environment, ConnectionEnvironment::Production);
         assert_eq!(connection.stable.status(), SupplierApiConnectionStatus::Active);
@@ -657,19 +639,15 @@ mod tests {
 
     #[test]
     fn connection_new_rejects_empty_and_overlong_code() {
-        let empty_code = SupplierApiConnectionData {
-            connection_code: "   ".to_string(),
-            ..connection_data()
-        };
+        let empty_code =
+            SupplierApiConnectionData { connection_code: "   ".to_string(), ..connection_data() };
         assert!(
             SupplierApiConnection::new(SupplierApiConnectionId::new("conn-2"), empty_code, "admin-1")
                 .is_err()
         );
 
-        let overlong_code = SupplierApiConnectionData {
-            connection_code: "x".repeat(65),
-            ..connection_data()
-        };
+        let overlong_code =
+            SupplierApiConnectionData { connection_code: "x".repeat(65), ..connection_data() };
         assert!(
             SupplierApiConnection::new(SupplierApiConnectionId::new("conn-3"), overlong_code, "admin-1")
                 .is_err()
@@ -678,36 +656,31 @@ mod tests {
 
     #[test]
     fn connection_new_allows_missing_endpoint_but_rejects_overlong_credential_reference() {
-        let blank_endpoint = SupplierApiConnectionData {
-            endpoint_reference: "  ".to_string(),
-            ..connection_data()
-        };
+        let blank_endpoint =
+            SupplierApiConnectionData { endpoint_reference: "  ".to_string(), ..connection_data() };
         let connection =
             SupplierApiConnection::new(SupplierApiConnectionId::new("conn-4"), blank_endpoint, "admin-1")
                 .unwrap();
         assert!(!connection.endpoint_reference_bound);
         assert!(connection.endpoint_reference.is_empty());
 
-        let overlong_credential = SupplierApiConnectionData {
-            credential_reference: Some("k".repeat(257)),
-            ..connection_data()
-        };
-        assert!(SupplierApiConnection::new(
-            SupplierApiConnectionId::new("conn-5"),
-            overlong_credential,
-            "admin-1"
-        )
-        .is_err());
+        let overlong_credential =
+            SupplierApiConnectionData { credential_reference: Some("k".repeat(257)), ..connection_data() };
+        assert!(
+            SupplierApiConnection::new(
+                SupplierApiConnectionId::new("conn-5"),
+                overlong_credential,
+                "admin-1"
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn connection_update_applies_fields_and_keeps_stable_keys() {
-        let mut connection = SupplierApiConnection::new(
-            SupplierApiConnectionId::new("conn-1"),
-            connection_data(),
-            "admin-1",
-        )
-        .unwrap();
+        let mut connection =
+            SupplierApiConnection::new(SupplierApiConnectionId::new("conn-1"), connection_data(), "admin-1")
+                .unwrap();
 
         connection
             .update(
@@ -735,17 +708,12 @@ mod tests {
 
     #[test]
     fn connection_update_rejects_blank_endpoint_and_half_health_pair() {
-        let mut connection = SupplierApiConnection::new(
-            SupplierApiConnectionId::new("conn-1"),
-            connection_data(),
-            "admin-1",
-        )
-        .unwrap();
+        let mut connection =
+            SupplierApiConnection::new(SupplierApiConnectionId::new("conn-1"), connection_data(), "admin-1")
+                .unwrap();
 
-        let blank_endpoint = SupplierApiConnectionUpdate {
-            endpoint_reference: Some("   ".to_string()),
-            ..Default::default()
-        };
+        let blank_endpoint =
+            SupplierApiConnectionUpdate { endpoint_reference: Some("   ".to_string()), ..Default::default() };
         assert!(connection.update(blank_endpoint, "admin-2").is_err());
 
         let half_health = SupplierApiConnectionUpdate {
@@ -758,12 +726,9 @@ mod tests {
 
     #[test]
     fn connection_record_health_sets_pair_and_status_flags() {
-        let mut connection = SupplierApiConnection::new(
-            SupplierApiConnectionId::new("conn-1"),
-            connection_data(),
-            "admin-1",
-        )
-        .unwrap();
+        let mut connection =
+            SupplierApiConnection::new(SupplierApiConnectionId::new("conn-1"), connection_data(), "admin-1")
+                .unwrap();
 
         connection.record_health(HealthCheckResult::Failed, Instant::from_unix_secs(1_700_000_000));
         assert_eq!(connection.last_health_result, Some(HealthCheckResult::Failed));
@@ -777,18 +742,13 @@ mod tests {
 
     #[test]
     fn binding_reference_invalidates_old_health_evidence() {
-        let mut connection = SupplierApiConnection::new(
-            SupplierApiConnectionId::new("conn-1"),
-            connection_data(),
-            "admin-1",
-        )
-        .unwrap();
+        let mut connection =
+            SupplierApiConnection::new(SupplierApiConnectionId::new("conn-1"), connection_data(), "admin-1")
+                .unwrap();
         connection.record_health(HealthCheckResult::Healthy, Instant::from_unix_secs(1));
         assert!(connection.current_technical_config_is_healthy());
 
-        connection
-            .bind_credential_reference("kms://prod/new".to_string(), "operator-1")
-            .unwrap();
+        connection.bind_credential_reference("kms://prod/new".to_string(), "operator-1").unwrap();
         assert_eq!(connection.technical_config_version, 2);
         assert!(!connection.current_technical_config_is_healthy());
     }
@@ -803,18 +763,9 @@ mod tests {
 
     #[test]
     fn connection_enums_serialize_with_stable_codes_and_expose_labels() {
-        assert_eq!(
-            serde_json::to_string(&ConnectionEnvironment::Testing).unwrap(),
-            "\"testing\""
-        );
-        assert_eq!(
-            serde_json::to_string(&SupplierApiConnectionStatus::Fault).unwrap(),
-            "\"fault\""
-        );
-        assert_eq!(
-            serde_json::to_string(&HealthCheckResult::Healthy).unwrap(),
-            "\"healthy\""
-        );
+        assert_eq!(serde_json::to_string(&ConnectionEnvironment::Testing).unwrap(), "\"testing\"");
+        assert_eq!(serde_json::to_string(&SupplierApiConnectionStatus::Fault).unwrap(), "\"fault\"");
+        assert_eq!(serde_json::to_string(&HealthCheckResult::Healthy).unwrap(), "\"healthy\"");
 
         assert_eq!(ConnectionEnvironment::Production.label(), "生产");
         assert_eq!(SupplierApiConnectionStatus::Disabled.label(), "停用");

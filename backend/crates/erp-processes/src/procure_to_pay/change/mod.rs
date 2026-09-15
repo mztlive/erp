@@ -5,16 +5,15 @@ mod mapping;
 mod posting;
 mod submit;
 
-pub(super) use super::change_adapter;
-
-#[cfg(test)]
-use super::change_adapter::execute_purchase_change_domain_action;
 #[cfg(test)]
 use erp_procurement::service::purchase_order::change::state::start_purchase_change_approval;
 
+pub(super) use super::change_adapter;
+#[cfg(test)]
+use super::change_adapter::execute_purchase_change_domain_action;
+
 #[cfg(test)]
 mod tests {
-    use super::{execute_purchase_change_domain_action, start_purchase_change_approval};
     use erp_core::ids::{
         PurchaseChangeOrderId, PurchaseChangeSubmissionId, PurchaseOrderId, PurchaseOrderRevisionId,
     };
@@ -22,6 +21,8 @@ mod tests {
         PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeOrderStatus,
     };
     use erp_workflow::service::approval::policy::ApprovalDomainAction;
+
+    use super::{execute_purchase_change_domain_action, start_purchase_change_approval};
 
     fn change_source() -> String {
         [
@@ -107,30 +108,20 @@ mod tests {
             .and_then(|rest| rest.split("async fn persist_started_change(").next())
             .expect("必须存在 cancel_change_approval");
 
-        let start_access = start
-            .find(r#"command_access(actor, "update")"#)
-            .expect("发起变更必须先解析 update 动作");
+        let start_access =
+            start.find(r#"command_access(actor, "update")"#).expect("发起变更必须先解析 update 动作");
         let start_current = start.find(".current(").expect("发起变更必须先证明来源采购单");
-        let start_load = start
-            .find("load_changeable_order")
-            .expect("发起变更必须在授权后加载可变更版本");
-        let start_in_progress = start
-            .find("ensure_no_in_progress_change")
-            .expect("进行中校验必须在授权之后");
+        let start_load = start.find("load_changeable_order").expect("发起变更必须在授权后加载可变更版本");
+        let start_in_progress = start.find("ensure_no_in_progress_change").expect("进行中校验必须在授权之后");
         assert!(start_access < start_current);
         assert!(start_current < start_load);
         assert!(start_load < start_in_progress);
 
-        let submit_load = submit
-            .find("load_change(")
-            .expect("提交必须先读取变更单以取得来源单");
-        let submit_access = submit
-            .find(r#"command_access(actor, "submit")"#)
-            .expect("提交必须按来源采购单 submit 动作解析");
+        let submit_load = submit.find("load_change(").expect("提交必须先读取变更单以取得来源单");
+        let submit_access =
+            submit.find(r#"command_access(actor, "submit")"#).expect("提交必须按来源采购单 submit 动作解析");
         let submit_current = submit.find(".current(").expect("提交必须证明来源采购单可见");
-        let submit_lock = submit
-            .find("lock_draft_change(")
-            .expect("草稿与版本校验必须在授权之后");
+        let submit_lock = submit.find("lock_draft_change(").expect("草稿与版本校验必须在授权之后");
         assert!(submit_load < submit_access);
         assert!(submit_access < submit_current);
         assert!(submit_current < submit_lock);
@@ -140,9 +131,7 @@ mod tests {
             .find(r#"command_access(actor, "cancel_approval")"#)
             .expect("撤回必须按来源采购单 cancel_approval 动作解析");
         let cancel_current = cancel.find(".current(").expect("撤回必须证明来源采购单可见");
-        let cancel_version = cancel
-            .find("ensure_expected_version")
-            .expect("版本校验必须在授权之后");
+        let cancel_version = cancel.find("ensure_expected_version").expect("版本校验必须在授权之后");
         assert!(cancel_load < cancel_access);
         assert!(cancel_access < cancel_current);
         assert!(cancel_current < cancel_version);
@@ -153,10 +142,7 @@ mod tests {
             .nth(1)
             .and_then(|rest| rest.split("pub async fn ensure_no_in_progress_change").next())
             .expect("必须存在 load_changeable_order");
-        assert!(
-            !changeable.contains("purchase_orders()"),
-            "可变更加载不得按主键重读未授权采购单"
-        );
+        assert!(!changeable.contains("purchase_orders()"), "可变更加载不得按主键重读未授权采购单");
     }
 
     /// 详情必须返回统一审批结构。
@@ -191,10 +177,7 @@ mod tests {
     #[test]
     fn effect_write_serializes_and_rebuilds_procurement_coverage() {
         let source = change_source();
-        let execute = source
-            .split_once("async fn execute")
-            .expect("必须存在真实生产步骤执行函数")
-            .1;
+        let execute = source.split_once("async fn execute").expect("必须存在真实生产步骤执行函数").1;
         let guard = execute.find("SalesGuard").expect("必须推进销售 guard");
         let prepare = execute.find("PrepareAllocations").expect("必须准备当前分配");
         let revision = execute.find("Revision").expect("必须持久化新版本");
@@ -227,9 +210,8 @@ mod tests {
             .split_once("async fn advance_source_sales_procurement_guard")
             .expect("必须存在来源销售 guard helper")
             .1;
-        let load = helper
-            .find(".find_by_id(&order.sales_order_id, session)")
-            .expect("必须在事务内加载来源销售单");
+        let load =
+            helper.find(".find_by_id(&order.sales_order_id, session)").expect("必须在事务内加载来源销售单");
         let advance = helper
             .find("sales_order.advance_procurement_guard(actor_id)")
             .expect("必须推进 procurement guard");
@@ -286,16 +268,8 @@ mod tests {
         )
         .unwrap();
         assert!(change.submission_id_for_effect(Some("pcs-current")).is_err());
-        change
-            .start_approval(PurchaseChangeSubmissionId::new("pcs-current"), "hash-1", "user-1")
-            .unwrap();
-        assert_eq!(
-            change
-                .submission_id_for_effect(Some("pcs-current"))
-                .unwrap()
-                .as_ref(),
-            "pcs-current"
-        );
+        change.start_approval(PurchaseChangeSubmissionId::new("pcs-current"), "hash-1", "user-1").unwrap();
+        assert_eq!(change.submission_id_for_effect(Some("pcs-current")).unwrap().as_ref(), "pcs-current");
         assert!(change.submission_id_for_effect(Some("pcs-old")).is_err());
     }
 
@@ -312,12 +286,14 @@ mod tests {
             "user-1",
         )
         .expect("草稿必须可构造");
-        assert!(execute_purchase_change_domain_action(
-            &mut change,
-            ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange,
-            "user-1",
-        )
-        .is_err());
+        assert!(
+            execute_purchase_change_domain_action(
+                &mut change,
+                ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange,
+                "user-1",
+            )
+            .is_err()
+        );
         start_purchase_change_approval(
             &mut change,
             PurchaseChangeSubmissionId::new("pcs-1"),

@@ -62,10 +62,10 @@ impl Error {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
             Self::ConflictError(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_) => {
                 ErrorClass::Conflict
-            }
+            },
             Self::BusinessLogicError(_) | Self::ValidationError(_) | Self::NotFound(_) => {
                 ErrorClass::BusinessRule
-            }
+            },
             Self::Forbidden(_) | Self::Unauthenticated(_) => ErrorClass::Forbidden,
             Self::OutcomeUnknown(_) => ErrorClass::Internal,
         }
@@ -81,13 +81,13 @@ impl From<persistence_core::Error> for Error {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
                 Self::ConflictError(duplicate_key_conflict_message(&error))
-            }
+            },
             persistence_core::Error::OptimisticLockingError => {
                 Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            }
+            },
             error @ persistence_core::Error::TransientTransactionConflict(_) => {
                 Self::TransientTransaction(error)
-            }
+            },
             error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
             other => Self::RepositoryError(other),
         }
@@ -103,10 +103,7 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
 ///
 /// 创建依据和责任选择器保留原专用文案，其余唯一索引使用原通用文案。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
-    index_name
-        .and_then(known_duplicate_index_message)
-        .unwrap_or("数据已存在，请勿重复提交")
-        .to_string()
+    index_name.and_then(known_duplicate_index_message).unwrap_or("数据已存在，请勿重复提交").to_string()
 }
 
 /// 返回本域已知唯一索引的固定冲突提示。
@@ -136,16 +133,14 @@ impl From<validator::ValidationErrors> for Error {
 
 #[cfg(test)]
 mod tests {
+    use application_core::ErrorClass;
     use mongodb::error::Error as MongoError;
 
     use super::Error;
-    use application_core::ErrorClass;
 
     #[test]
     fn procurement_unique_conflicts_keep_original_messages() {
-        let generic = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom(
-            "duplicate key",
-        )));
+        let generic = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
         assert_eq!(generic.class(), ErrorClass::Conflict);
         assert_eq!(generic.to_string(), "数据冲突: 数据已存在，请勿重复提交");
         assert_eq!(
@@ -185,22 +180,13 @@ mod tests {
     fn known_duplicate_export_keeps_exact_owned_index_matrix() {
         let cases = [
             ("uk_purchase_orders_creation_basis", "该采购创建依据已生成采购单"),
-            (
-                "uk_procurement_responsibility_active_selector",
-                "同一采购责任选择器只能有一条启用规则",
-            ),
+            ("uk_procurement_responsibility_active_selector", "同一采购责任选择器只能有一条启用规则"),
         ];
         for (index, expected) in cases {
             assert_eq!(super::known_duplicate_index_message(index), Some(expected));
-            assert_eq!(
-                super::known_duplicate_index_message(&format!("{index}_extra")),
-                None
-            );
+            assert_eq!(super::known_duplicate_index_message(&format!("{index}_extra")), None);
             assert_eq!(super::known_duplicate_index_message(&format!(" {index}")), None);
-            assert_eq!(
-                super::known_duplicate_index_message(&index.to_ascii_uppercase()),
-                None
-            );
+            assert_eq!(super::known_duplicate_index_message(&index.to_ascii_uppercase()), None);
         }
         assert_eq!(super::known_duplicate_index_message(""), None);
         assert_eq!(super::known_duplicate_index_message("unknown_index"), None);

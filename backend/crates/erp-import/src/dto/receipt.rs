@@ -5,9 +5,7 @@ pub fn parse_receipt_number<T>(value: &str, field: &str) -> Result<T>
 where
     T: std::str::FromStr,
 {
-    value
-        .parse()
-        .map_err(|_| Error::Internal(format!("导入确认幂等收据{field}非法")))
+    value.parse().map_err(|_| Error::Internal(format!("导入确认幂等收据{field}非法")))
 }
 
 /// 归一化必填文本。
@@ -25,9 +23,7 @@ where
     T: std::str::FromStr + PartialEq + From<u8>,
 {
     let value = required_text(value, &format!("{field}不能为空"))?;
-    let parsed = value
-        .parse::<T>()
-        .map_err(|_| Error::ValidationError(format!("{field}必须是正整数")))?;
+    let parsed = value.parse::<T>().map_err(|_| Error::ValidationError(format!("{field}必须是正整数")))?;
     if parsed == T::from(0) {
         return Err(Error::ValidationError(format!("{field}必须是正整数")));
     }

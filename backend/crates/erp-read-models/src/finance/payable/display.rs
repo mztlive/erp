@@ -8,17 +8,16 @@ use erp_core::ids::{PayableAccountId, PayableEntryId, SupplierPaymentId};
 use erp_finance::entity::payable::{PayableAccount, PayableEntry, PayableSourceType};
 use erp_finance::repository::PayableExt;
 use erp_party::PartyExt;
+use erp_procurement::repository::PurchaseOrderExt;
 use erp_returns::entity::returns::PaymentReversal;
+use erp_returns::repository::ReturnsExt;
 use erp_supplier::SupplierExt;
+use erp_supply::repository::SupplierSettlementExt;
 use mongodb::Database;
 use persistence_core::NoTransaction;
-use {
-    erp_procurement::repository::PurchaseOrderExt, erp_returns::repository::ReturnsExt,
-    erp_supply::repository::SupplierSettlementExt,
-};
 
-use super::dto::{PaymentAllocationView, SupplierPaymentReversalView, SupplierPaymentView};
 use super::PayableReadService;
+use super::dto::{PaymentAllocationView, SupplierPaymentReversalView, SupplierPaymentView};
 use crate::Result;
 
 /// 付款核销目标的可读来源。
@@ -53,11 +52,8 @@ impl PayableReadService {
         if payment_ids.is_empty() {
             return Ok(());
         }
-        let reversals = self
-            .db
-            .payment_reversals()
-            .find_reversals_by_payments(&payment_ids, &mut NoTransaction)
-            .await?;
+        let reversals =
+            self.db.payment_reversals().find_reversals_by_payments(&payment_ids, &mut NoTransaction).await?;
         let mut grouped = group_payment_reversals(reversals);
         for view in views {
             view.related_reversals = grouped.remove(&view.id).unwrap_or_default();
@@ -83,17 +79,11 @@ fn group_payment_reversals(
     let mut grouped = HashMap::<String, Vec<SupplierPaymentReversalView>>::new();
     for reversal in reversals {
         let payment_id = reversal.original_supplier_payment_id.to_string();
-        grouped
-            .entry(payment_id)
-            .or_default()
-            .push(payment_reversal_view(reversal));
+        grouped.entry(payment_id).or_default().push(payment_reversal_view(reversal));
     }
     for items in grouped.values_mut() {
         items.sort_by(|left, right| {
-            right
-                .created_at
-                .cmp(&left.created_at)
-                .then_with(|| right.reversal_no.cmp(&left.reversal_no))
+            right.created_at.cmp(&left.created_at).then_with(|| right.reversal_no.cmp(&left.reversal_no))
         });
     }
     grouped
@@ -107,16 +97,16 @@ fn payment_reversal_view(reversal: PaymentReversal) -> SupplierPaymentReversalVi
         status: match reversal.status {
             erp_returns::entity::returns::PaymentReversalStatus::Draft => {
                 erp_finance::dto::payable::PaymentReversalStatus::Draft
-            }
+            },
             erp_returns::entity::returns::PaymentReversalStatus::InApproval => {
                 erp_finance::dto::payable::PaymentReversalStatus::InApproval
-            }
+            },
             erp_returns::entity::returns::PaymentReversalStatus::Posted => {
                 erp_finance::dto::payable::PaymentReversalStatus::Posted
-            }
+            },
             erp_returns::entity::returns::PaymentReversalStatus::Reversed => {
                 erp_finance::dto::payable::PaymentReversalStatus::Reversed
-            }
+            },
         },
         reason_text: reversal.reason_text,
         amount: reversal.amount,
@@ -221,10 +211,7 @@ async fn load_allocation_sources(
     views: &[PaymentAllocationView],
 ) -> Result<HashMap<String, AllocationSource>> {
     let entry_ids = allocation_entry_ids(views);
-    let entries = db
-        .payable_entries()
-        .find_entries_by_ids(&entry_ids, &mut NoTransaction)
-        .await?;
+    let entries = db.payable_entries().find_entries_by_ids(&entry_ids, &mut NoTransaction).await?;
     let accounts = load_accounts_for_entries(db, &entries).await?;
     let mut document_nos = HashMap::new();
     collect_source_document_nos(db, accounts.values(), &mut document_nos).await?;
@@ -277,14 +264,8 @@ async fn load_accounts_for_entries(
             account_ids.push(PayableAccountId::new(id));
         }
     }
-    let accounts = db
-        .payable_accounts()
-        .find_accounts_by_ids(&account_ids, &mut NoTransaction)
-        .await?;
-    Ok(accounts
-        .into_iter()
-        .map(|account| (account.base.id.clone(), account))
-        .collect())
+    let accounts = db.payable_accounts().find_accounts_by_ids(&account_ids, &mut NoTransaction).await?;
+    Ok(accounts.into_iter().map(|account| (account.base.id.clone(), account)).collect())
 }
 
 /// 按来源类型分组一次批量解析子账来源业务单号并写入缓存（FIN-R03）。
@@ -311,10 +292,8 @@ async fn collect_source_document_nos<'a, I>(
 where
     I: IntoIterator<Item = &'a PayableAccount>,
 {
-    let pending: Vec<&PayableAccount> = accounts
-        .into_iter()
-        .filter(|account| !document_nos.contains_key(&account.base.id))
-        .collect();
+    let pending: Vec<&PayableAccount> =
+        accounts.into_iter().filter(|account| !document_nos.contains_key(&account.base.id)).collect();
     if pending.is_empty() {
         return Ok(());
     }
@@ -325,18 +304,13 @@ where
             PayableSourceType::PurchaseOrder => purchase_ids.push(account.source_document_id.clone()),
             PayableSourceType::SupplierSettlement => {
                 statement_ids.push(account.source_document_id.clone());
-            }
+            },
         }
     }
     let mut executor = NoTransaction;
-    let purchase_map = db
-        .purchase_order()
-        .purchase_nos_by_ids(&purchase_ids, &mut executor)
-        .await?;
-    let statement_map = db
-        .supplier_settlement_statements()
-        .statement_nos_by_ids(&statement_ids, &mut executor)
-        .await?;
+    let purchase_map = db.purchase_order().purchase_nos_by_ids(&purchase_ids, &mut executor).await?;
+    let statement_map =
+        db.supplier_settlement_statements().statement_nos_by_ids(&statement_ids, &mut executor).await?;
     document_nos.extend(merge_source_document_nos(&pending, &purchase_map, &statement_map));
     Ok(())
 }
@@ -417,28 +391,19 @@ pub(super) async fn resolve_supplier_display(
     db: &mongodb::Database,
     supplier_id: &str,
 ) -> Result<(Option<String>, Option<String>)> {
-    let account = db
-        .supplier_accounts()
-        .find_by_id(supplier_id, &mut NoTransaction)
-        .await?;
+    let account = db.supplier_accounts().find_by_id(supplier_id, &mut NoTransaction).await?;
     let Some(account) = account else {
         return Ok((None, None));
     };
     let supplier_no = Some(account.supplier_no.clone());
-    let party = db
-        .parties()
-        .find_by_id(account.party_id.as_ref(), &mut NoTransaction)
-        .await?;
+    let party = db.parties().find_by_id(account.party_id.as_ref(), &mut NoTransaction).await?;
     let Some(party) = party else {
         return Ok((supplier_no, None));
     };
     let Some(revision_id) = party.stable.current_revision_id.clone() else {
         return Ok((supplier_no, None));
     };
-    let revision = db
-        .party_revisions()
-        .find_by_id(&revision_id, &mut NoTransaction)
-        .await?;
+    let revision = db.party_revisions().find_by_id(&revision_id, &mut NoTransaction).await?;
     Ok((supplier_no, revision.map(|value| value.legal_name)))
 }
 
@@ -558,12 +523,10 @@ mod tests {
         let purchase = payable_account_fixture("account-po", "purchase", "po-1");
         let settlement = payable_account_fixture("account-st", "settlement", "st-1");
         let accounts = [&purchase, &settlement];
-        let purchase_map: HashMap<String, String> = [("po-1".to_string(), "PO-2026-001".to_string())]
-            .into_iter()
-            .collect();
-        let statement_map: HashMap<String, String> = [("st-1".to_string(), "ST-2026-001".to_string())]
-            .into_iter()
-            .collect();
+        let purchase_map: HashMap<String, String> =
+            [("po-1".to_string(), "PO-2026-001".to_string())].into_iter().collect();
+        let statement_map: HashMap<String, String> =
+            [("st-1".to_string(), "ST-2026-001".to_string())].into_iter().collect();
         let merged = merge_source_document_nos(&accounts, &purchase_map, &statement_map);
         assert_eq!(merged["account-po"].as_deref(), Some("PO-2026-001"));
         assert_eq!(merged["account-st"].as_deref(), Some("ST-2026-001"));
@@ -587,9 +550,8 @@ mod tests {
         let present = payable_account_fixture("account-present", "purchase", "po-1");
         let missing = payable_account_fixture("account-missing", "purchase", "po-missing");
         let accounts = [&present, &missing];
-        let purchase_map: HashMap<String, String> = [("po-1".to_string(), "PO-2026-001".to_string())]
-            .into_iter()
-            .collect();
+        let purchase_map: HashMap<String, String> =
+            [("po-1".to_string(), "PO-2026-001".to_string())].into_iter().collect();
         let merged = merge_source_document_nos(&accounts, &purchase_map, &HashMap::new());
         assert_eq!(merged["account-present"].as_deref(), Some("PO-2026-001"));
         assert_eq!(merged["account-missing"], None);
@@ -598,10 +560,7 @@ mod tests {
     /// 批量装载后不再逐笔解析来源单号。
     #[test]
     fn allocation_sources_use_grouped_batch_loading() {
-        let production = include_str!("display.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("display.rs").split("#[cfg(test)]").next().expect("生产代码");
         let batch = production
             .split("async fn collect_source_document_nos")
             .nth(1)

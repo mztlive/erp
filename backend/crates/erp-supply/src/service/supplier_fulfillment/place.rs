@@ -1,4 +1,11 @@
 //! 下单事实、能力与派发后本域状态；不触及消息或工作项。
+use std::collections::HashMap;
+
+use erp_core::common::time::Instant;
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction};
+
 use super::SupplierFulfillmentService;
 use crate::dto::supplier_fulfillment::*;
 use crate::entity::failure::SupplierFailureClass;
@@ -7,11 +14,6 @@ use crate::entity::supplier_fulfillment::*;
 use crate::ports::supplier_gateway::DispatchOutcome;
 use crate::repository::{SupplierApiExt, SupplierFulfillmentExt};
 use crate::{Error, Result};
-use erp_core::common::time::Instant;
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
-use std::collections::HashMap;
 /// 本域状态更新后需要的集成消息结果，错误政策由调用方给出。
 pub enum DispatchMessageResult {
     Processed,
@@ -35,10 +37,8 @@ impl SupplierFulfillmentService {
     pub async fn ensure_placeable(
         &self,
         req: &PlaceFulfillmentOrderRequest,
-    ) -> Result<(
-        SupplierApiConnection,
-        HashMap<String, crate::entity::supplier_offering::SupplierOffering>,
-    )> {
+    ) -> Result<(SupplierApiConnection, HashMap<String, crate::entity::supplier_offering::SupplierOffering>)>
+    {
         let connection = self
             .db
             .supplier_api_connections()
@@ -49,9 +49,7 @@ impl SupplierFulfillmentService {
             return Err(Error::BusinessLogicError("供应商连接未启用".to_string()));
         }
         if connection.supplier_id != req.supplier_id {
-            return Err(Error::BusinessLogicError(
-                "供应商连接不属于下单供应商".to_string(),
-            ));
+            return Err(Error::BusinessLogicError("供应商连接不属于下单供应商".to_string()));
         }
         let capabilities = self
             .db
@@ -59,11 +57,8 @@ impl SupplierFulfillmentService {
             .find_capabilities_by_connection(&req.connection_id, &mut NoTransaction)
             .await?;
         ensure_capability(&capabilities, SupplierApiCapabilityCode::Order)?;
-        let mut revision_ids = req
-            .items
-            .iter()
-            .map(|item| item.supplier_offering_revision_id.clone())
-            .collect::<Vec<_>>();
+        let mut revision_ids =
+            req.items.iter().map(|item| item.supplier_offering_revision_id.clone()).collect::<Vec<_>>();
         revision_ids.sort_by(|left, right| left.as_ref().cmp(right.as_ref()));
         revision_ids.dedup_by(|left, right| left.as_ref() == right.as_ref());
         let by_revision = self
@@ -76,9 +71,7 @@ impl SupplierFulfillmentService {
         }
         for offering in by_revision.values() {
             if !offering.belongs_to_ordering_source(&req.supplier_id, &req.connection_id) {
-                return Err(Error::BusinessLogicError(
-                    "供给不属于下单供应商或供应商连接不匹配".to_string(),
-                ));
+                return Err(Error::BusinessLogicError("供给不属于下单供应商或供应商连接不匹配".to_string()));
             }
         }
         Ok((connection, by_revision))
@@ -101,11 +94,7 @@ impl SupplierFulfillmentService {
         &self,
         req: &PlaceFulfillmentOrderRequest,
         offerings: &HashMap<String, crate::entity::supplier_offering::SupplierOffering>,
-    ) -> Result<(
-        SupplierFulfillmentOrder,
-        Vec<SupplierFulfillmentItem>,
-        SupplierOrderAction,
-    )> {
+    ) -> Result<(SupplierFulfillmentOrder, Vec<SupplierFulfillmentItem>, SupplierOrderAction)> {
         let order_id = SupplierFulfillmentOrderId::new(next_id());
         let order = SupplierFulfillmentOrder::new(
             order_id.clone(),
@@ -184,10 +173,7 @@ impl SupplierFulfillmentService {
         can_auto_retry: bool,
     ) -> Result<DispatchMessageResult> {
         match outcome {
-            DispatchOutcome::Succeeded {
-                external_request_id,
-                external_order_no,
-            } => {
+            DispatchOutcome::Succeeded { external_request_id, external_order_no } => {
                 if action.action_type == SupplierOrderActionType::Place {
                     if let Some(order_no) = &external_order_no {
                         order.update(SupplierFulfillmentOrderUpdate {
@@ -203,7 +189,7 @@ impl SupplierFulfillmentService {
                     ..Default::default()
                 })?;
                 Ok(DispatchMessageResult::Processed)
-            }
+            },
             DispatchOutcome::Rejected { summary } => {
                 action.update(SupplierOrderActionUpdate {
                     status: Some(SupplierOrderActionStatus::Failed),
@@ -214,7 +200,7 @@ impl SupplierFulfillmentService {
                     order.advance_fulfillment(FulfillmentStatus::Rejected)?;
                 }
                 Ok(DispatchMessageResult::Processed)
-            }
+            },
             DispatchOutcome::ResultUnknown { summary } => {
                 action.update(SupplierOrderActionUpdate {
                     status: Some(SupplierOrderActionStatus::ResultUnknown),
@@ -225,7 +211,7 @@ impl SupplierFulfillmentService {
                     order.advance_fulfillment(FulfillmentStatus::ResultUnknown)?;
                 }
                 Ok(DispatchMessageResult::Failed(SupplierFailureClass::ResultUnknown))
-            }
+            },
             DispatchOutcome::Failed { error_class, summary } => {
                 if can_auto_retry {
                     action.record_attempt(Some(Instant::now()));
@@ -240,7 +226,7 @@ impl SupplierFulfillmentService {
                     }
                 }
                 Ok(DispatchMessageResult::Failed(error_class))
-            }
+            },
         }
     }
 }
@@ -256,14 +242,10 @@ pub fn ensure_capability(
     capabilities: &[SupplierApiCapability],
     needed: SupplierApiCapabilityCode,
 ) -> Result<()> {
-    let supported = capabilities
-        .iter()
-        .any(|capability| capability.capability_code == needed && capability.is_active());
+    let supported =
+        capabilities.iter().any(|capability| capability.capability_code == needed && capability.is_active());
     if !supported {
-        return Err(Error::BusinessLogicError(format!(
-            "供应商连接缺少能力: {}",
-            needed.as_str()
-        )));
+        return Err(Error::BusinessLogicError(format!("供应商连接缺少能力: {}", needed.as_str())));
     }
     Ok(())
 }

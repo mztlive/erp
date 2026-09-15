@@ -1,21 +1,22 @@
 //! 回款冲正的本域构造、版本守卫、累计额度和事务内持久化。
 
-use super::approval::{ensure_receipt_reversal_final_approve_posting, start_receipt_reversal_approval};
-use super::shared::return_command_no;
-use super::version_conflict::conflict_if_stale_version;
-use super::ReturnsService;
-use crate::dto::{CommitReceiptReversalRequest, CreateReceiptReversalRequest};
-use crate::entity::returns::{
-    CumulativeAmountLimit, ReceiptReversal, ReceiptReversalData, ReceiptReversalStatus,
-};
-use crate::repository::ReturnsExt;
-use crate::{Error, Result};
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerReceiptId, ReceiptReversalId};
 use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
+
+use super::ReturnsService;
+use super::approval::{ensure_receipt_reversal_final_approve_posting, start_receipt_reversal_approval};
+use super::shared::return_command_no;
+use super::version_conflict::conflict_if_stale_version;
+use crate::dto::{CommitReceiptReversalRequest, CreateReceiptReversalRequest};
+use crate::entity::returns::{
+    CumulativeAmountLimit, ReceiptReversal, ReceiptReversalData, ReceiptReversalStatus,
+};
+use crate::repository::ReturnsExt;
+use crate::{Error, Result};
 
 /// 在请求校验后按原时点分配 ID，并由实体规范化创建数据。
 pub fn build_create(req: CreateReceiptReversalRequest, actor_id: &str) -> Result<ReceiptReversal> {
@@ -83,9 +84,7 @@ impl ReturnsService {
     /// # 错误
     /// 恒返回 `ConflictError`。
     pub fn reject_receipt_reversal_client_post() -> Result<std::convert::Infallible> {
-        Err(Error::ConflictError(
-            "回款冲正过账只能由审批最终通过动作执行，客户端不得直接过账".to_string(),
-        ))
+        Err(Error::ConflictError("回款冲正过账只能由审批最终通过动作执行，客户端不得直接过账".to_string()))
     }
 
     /// 按主键读取回款冲正单。
@@ -172,8 +171,9 @@ impl ReturnsService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn commit_request() -> CommitReceiptReversalRequest {
         CommitReceiptReversalRequest {
@@ -188,18 +188,10 @@ mod tests {
     fn commit_uses_source_amount_or_explicit_partial_amount_without_customer_requirement() {
         let source_amount = Amount::from_str("100").unwrap();
         let req = commit_request();
-        let whole = build_commit(
-            &req,
-            CustomerReceiptId::new("original-receipt"),
-            source_amount,
-            "actor",
-        )
-        .unwrap();
+        let whole =
+            build_commit(&req, CustomerReceiptId::new("original-receipt"), source_amount, "actor").unwrap();
         let partial = build_commit(
-            &CommitReceiptReversalRequest {
-                amount: Some(Amount::from_str("25").unwrap()),
-                ..req
-            },
+            &CommitReceiptReversalRequest { amount: Some(Amount::from_str("25").unwrap()), ..req },
             CustomerReceiptId::new("original-receipt"),
             source_amount,
             "actor",
@@ -211,10 +203,7 @@ mod tests {
         assert_eq!(whole.reason_text, "错记回款冲正");
         assert_eq!(whole.handled_by, "actor");
         assert_eq!(whole.reviewed_by, "finance_reviewer");
-        assert_eq!(
-            whole.original_customer_receipt_id,
-            CustomerReceiptId::new("original-receipt")
-        );
+        assert_eq!(whole.original_customer_receipt_id, CustomerReceiptId::new("original-receipt"));
         assert_eq!(whole.status, ReceiptReversalStatus::Draft);
         assert_eq!(whole.approval_subject_version, 0);
     }

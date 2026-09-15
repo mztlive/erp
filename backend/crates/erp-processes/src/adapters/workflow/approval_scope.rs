@@ -1,6 +1,7 @@
 //! 审批动作采用内部业务组织、仓库或结算主体的独立身份维度。
 
-use std::{slice, sync::Arc};
+use std::slice;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_identity::access_control::ScopedObject;
@@ -69,13 +70,7 @@ impl WorkflowScopePredicate for Predicate {
             settlement_party_id: object.settlement_party_id.as_deref(),
             warehouse_id: object.warehouse_id.as_deref(),
         };
-        clause.covers(&target)
-            && self
-                .0
-                .scope
-                .user_limit
-                .as_ref()
-                .is_none_or(|limit| limit.covers(&target))
+        clause.covers(&target) && self.0.scope.user_limit.as_ref().is_none_or(|limit| limit.covers(&target))
     }
 }
 
@@ -86,9 +81,8 @@ pub(super) async fn resolve(
     permission: &str,
     executor: &mut dyn Executor,
 ) -> Result<Option<WorkflowDataScope>> {
-    let (resource, action) = permission
-        .split_once(':')
-        .ok_or_else(|| Error::ValidationError("工作流动作格式不合法".into()))?;
+    let (resource, action) =
+        permission.split_once(':').ok_or_else(|| Error::ValidationError("工作流动作格式不合法".into()))?;
     let scope = match DataScopeService::new(db.clone(), rbac.clone())
         .resolve(actor, resource, action, executor)
         .await
@@ -126,10 +120,12 @@ pub(super) async fn resolve(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::collections::BTreeSet;
+
     use erp_core::common::time::Instant;
     use erp_identity::access_control::{ResolvedScope, ScopeClause};
-    use std::collections::BTreeSet;
+
+    use super::*;
 
     #[test]
     fn approval_identity_dimensions_and_user_cap_do_not_cross_grant() {
@@ -155,43 +151,26 @@ mod tests {
             business_org_unit_id: Some("same-id".into()),
             ..Default::default()
         };
-        let warehouse = WorkflowScopeObject {
-            warehouse_id: Some("same-id".into()),
-            ..Default::default()
-        };
-        let party = WorkflowScopeObject {
-            settlement_party_id: Some("same-id".into()),
-            ..Default::default()
-        };
+        let warehouse = WorkflowScopeObject { warehouse_id: Some("same-id".into()), ..Default::default() };
+        let party = WorkflowScopeObject { settlement_party_id: Some("same-id".into()), ..Default::default() };
         assert!(predicate.allows(&order));
         assert!(!predicate.allows(&warehouse));
         assert!(!predicate.allows(&party));
-        predicate.0.scope.role_clauses[0] = ScopeClause {
-            warehouse_ids: BTreeSet::from(["same-id".into()]),
-            ..Default::default()
-        };
+        predicate.0.scope.role_clauses[0] =
+            ScopeClause { warehouse_ids: BTreeSet::from(["same-id".into()]), ..Default::default() };
         assert!(predicate.allows(&warehouse));
         assert!(!predicate.allows(&order));
         predicate.0.role_scopes.insert(
             "finance".into(),
-            ScopeClause {
-                warehouse_ids: BTreeSet::from(["other".into()]),
-                ..Default::default()
-            },
+            ScopeClause { warehouse_ids: BTreeSet::from(["other".into()]), ..Default::default() },
         );
-        predicate
-            .0
-            .role_scopes
-            .insert("other-role".into(), predicate.0.scope.role_clauses[0].clone());
+        predicate.0.role_scopes.insert("other-role".into(), predicate.0.scope.role_clauses[0].clone());
         assert!(!predicate.allows_role("finance", &warehouse));
         assert!(predicate.allows_role("other-role", &warehouse));
         predicate.0.scope.user_limit = Some(ScopeClause::default());
         assert!(!predicate.allows(&warehouse));
         predicate.0.scope.role_clauses.clear();
-        predicate.0.scope.user_limit = Some(ScopeClause {
-            company: true,
-            ..Default::default()
-        });
+        predicate.0.scope.user_limit = Some(ScopeClause { company: true, ..Default::default() });
         assert!(!predicate.allows(&warehouse));
     }
 }

@@ -1,21 +1,24 @@
 //! 付款冲正、应付冲减、付款工作项与审计的同事务逆向流程。
 
-use super::adapter::execute_payment_reversal_domain_action;
-use crate::Result;
+use std::collections::HashSet;
+
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::PayableAccountId;
 use erp_finance::entity::payable::SupplierPayment;
 use erp_finance::service::payable::payment_reversal::{
-    load_posted_payment_for_reversal, prepare_payment_reversal, PaymentReversalFact, PaymentReversalWrite,
+    PaymentReversalFact, PaymentReversalWrite, load_posted_payment_for_reversal, prepare_payment_reversal,
 };
 use erp_identity::SharedRbacService;
-use erp_read_models::returns_center::{dto::PaymentReversalView, ReturnsReadService};
+use erp_read_models::returns_center::ReturnsReadService;
+use erp_read_models::returns_center::dto::PaymentReversalView;
 use erp_returns::entity::returns::PaymentReversal;
 use erp_returns::service::ReturnsService;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
-use std::collections::HashSet;
+
+use super::adapter::execute_payment_reversal_domain_action;
+use crate::Result;
 
 /// 付款冲正最终通过流程；所有财务与工作项副作用复用调用方事务。
 pub struct PaymentReversalProcess {
@@ -88,16 +91,7 @@ async fn apply_payment_reversal_final_post(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    execute_final_post(
-        &MongoPaymentReversal {
-            db,
-            reversal_id,
-            actor_id,
-            actor,
-        },
-        executor,
-    )
-    .await
+    execute_final_post(&MongoPaymentReversal { db, reversal_id, actor_id, actor }, executor).await
 }
 
 /// 生产与替身共用的最终通过步骤；账户集合保持 HashSet 原迭代顺序。
@@ -167,10 +161,8 @@ impl PaymentReversalPostingPort for MongoPaymentReversal<'_> {
     }
 
     async fn payment(&self, reversal: &Self::Reversal, executor: &mut dyn Executor) -> Result<Self::Payment> {
-        Ok(
-            load_posted_payment_for_reversal(self.db, &reversal.original_supplier_payment_id, executor)
-                .await?,
-        )
+        Ok(load_posted_payment_for_reversal(self.db, &reversal.original_supplier_payment_id, executor)
+            .await?)
     }
 
     async fn limit(
@@ -194,10 +186,7 @@ impl PaymentReversalPostingPort for MongoPaymentReversal<'_> {
         Ok(prepare_payment_reversal(
             self.db,
             payment,
-            PaymentReversalFact {
-                amount: reversal.amount,
-                occurred_at: reversal.occurred_at,
-            },
+            PaymentReversalFact { amount: reversal.amount, occurred_at: reversal.occurred_at },
             self.actor_id,
             executor,
         )
@@ -217,9 +206,7 @@ impl PaymentReversalPostingPort for MongoPaymentReversal<'_> {
     }
 
     async fn post_reversal(&self, reversal: &mut Self::Reversal, executor: &mut dyn Executor) -> Result<()> {
-        ReturnsService::new(self.db.clone())
-            .persist_payment_reversal_post(reversal, executor)
-            .await?;
+        ReturnsService::new(self.db.clone()).persist_payment_reversal_post(reversal, executor).await?;
         Ok(())
     }
 
@@ -236,9 +223,10 @@ impl PaymentReversalPostingPort for MongoPaymentReversal<'_> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use super::*;
     use crate::Error;
-    use std::sync::Mutex;
 
     struct TestExecutor {
         visits: usize,
@@ -288,12 +276,7 @@ mod tests {
             e: &mut dyn Executor,
         ) -> Result<((), HashSet<PayableAccountId>)> {
             self.record("settlements", e)?;
-            Ok((
-                (),
-                [PayableAccountId::new("a1"), PayableAccountId::new("a2")]
-                    .into_iter()
-                    .collect(),
-            ))
+            Ok(((), [PayableAccountId::new("a1"), PayableAccountId::new("a2")].into_iter().collect()))
         }
         async fn task(&self, _: &PayableAccountId, e: &mut dyn Executor) -> Result<()> {
             self.record("payment_task", e)

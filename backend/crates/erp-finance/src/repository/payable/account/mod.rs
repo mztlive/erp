@@ -1,12 +1,12 @@
-use crate::entity::payable::{PayableAccountStatus, PayableSourceType};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::stable::StableBase;
 use erp_core::ids::{PayableAccountId, SupplierAccountId};
 use erp_core::money::Amount;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
+use persistence_core::{Pagination, QueryFilter};
 use serde::{Deserialize, Serialize};
 
-use persistence_core::{Pagination, QueryFilter};
+use crate::entity::payable::{PayableAccountStatus, PayableSourceType};
 
 mod invoicing;
 mod query;
@@ -146,13 +146,7 @@ mod keyword_regression_tests {
         filter.keyword_ids = Some(Vec::new());
         let query = filter.to_doc();
         let clauses = query.get_array("$and").unwrap();
-        let ids = clauses[1]
-            .as_document()
-            .unwrap()
-            .get_document("id")
-            .unwrap()
-            .get_array("$in")
-            .unwrap();
+        let ids = clauses[1].as_document().unwrap().get_document("id").unwrap().get_array("$in").unwrap();
         assert!(ids.is_empty(), "空关键词命中必须保持零结果");
         assert!(clauses[0].as_document().unwrap().contains_key("deleted_at"));
     }

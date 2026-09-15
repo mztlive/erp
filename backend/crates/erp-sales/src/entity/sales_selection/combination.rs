@@ -3,16 +3,17 @@
 use std::collections::{BTreeSet, HashSet};
 use std::time::{Duration, Instant};
 
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
+
 use super::image::{PackageCoverRef, PackageImageGenerator};
 use super::limits::{
     COMBINATION_ALGORITHM_VERSION, PACKAGE_DISPLAY_MAX, SEARCH_STATE_BUDGET, SEARCH_TIME_BUDGET_SECS,
 };
 use super::pricing::{abs_diff, price_in_tier};
-use super::sku_snapshot::{package_price, SkuSnapshot};
+use super::sku_snapshot::{SkuSnapshot, package_price};
 use super::tier::TierRule;
 use super::types::SearchStopReason;
-use erp_core::money::Amount;
-use erp_core::{Error, Result};
 
 /// 一档搜索统计。
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -118,10 +119,7 @@ pub fn search_packages(
         }
         let (tier_packages, report) = search_one_tier(pool, tier, &occupied, generator, seed)?;
         if tier_packages.is_empty() {
-            return Err(Error::from(format!(
-                "档位「{}」未得到可交付套餐，整次准备失败",
-                tier.name
-            )));
+            return Err(Error::from(format!("档位「{}」未得到可交付套餐，整次准备失败", tier.name)));
         }
         for package in &tier_packages {
             occupied.insert(package.combination_key());
@@ -158,23 +156,11 @@ fn search_one_tier(
 ) -> Result<(Vec<GeneratedPackage>, TierSearchReport)> {
     let k = usize::try_from(tier.sku_count).unwrap_or(0);
     let started = Instant::now();
-    let scope = DfsScope {
-        pool,
-        tier,
-        occupied,
-        started,
-    };
-    let mut progress = DfsProgress {
-        expanded: 0,
-        stopped: SearchStopReason::ExhaustedSpace,
-        candidates: Vec::new(),
-    };
+    let scope = DfsScope { pool, tier, occupied, started };
+    let mut progress =
+        DfsProgress { expanded: 0, stopped: SearchStopReason::ExhaustedSpace, candidates: Vec::new() };
     dfs_collect(&scope, &mut progress, k, 0, Amount::zero(), &mut Vec::new())?;
-    let DfsProgress {
-        expanded,
-        mut stopped,
-        mut candidates,
-    } = progress;
+    let DfsProgress { expanded, mut stopped, mut candidates } = progress;
     candidates.sort_by(|left, right| compare_preference(left, right, &[], tier.target_amount, pool));
     let mut accepted = Vec::new();
     let mut image_failures = 0;
@@ -194,14 +180,11 @@ fn search_one_tier(
         match materialize_package(pool, &combo, tier, generator) {
             Ok(package) => {
                 let key = package.combination_key();
-                if accepted
-                    .iter()
-                    .any(|item: &GeneratedPackage| item.combination_key() == key)
-                {
+                if accepted.iter().any(|item: &GeneratedPackage| item.combination_key() == key) {
                     continue;
                 }
                 accepted.push(package);
-            }
+            },
             Err(_) => image_failures += 1,
         }
         if accepted.len() >= usize::try_from(tier.expected_count).unwrap_or(0) {
@@ -316,10 +299,7 @@ fn dfs_collect(
         return Ok(());
     }
     for index in start..scope.pool.len() {
-        if matches!(
-            progress.stopped,
-            SearchStopReason::BudgetStates | SearchStopReason::BudgetTime
-        ) {
+        if matches!(progress.stopped, SearchStopReason::BudgetStates | SearchStopReason::BudgetTime) {
             return Ok(());
         }
         let next_sum = super::pricing::try_add(sum, scope.pool[index].sales_visible_price_gross)?;
@@ -385,10 +365,7 @@ fn can_still_hit_range(
     sum: Amount,
     tier: &TierRule,
 ) -> Result<bool> {
-    let mut rest: Vec<Amount> = pool[start..]
-        .iter()
-        .map(|item| item.sales_visible_price_gross)
-        .collect();
+    let mut rest: Vec<Amount> = pool[start..].iter().map(|item| item.sales_visible_price_gross).collect();
     if rest.len() < remaining {
         return Ok(false);
     }
@@ -435,12 +412,7 @@ fn materialize_package(
     let urls: Vec<Option<String>> = members.iter().map(SkuSnapshot::image_port_url).collect();
     let cover_url = generator.generate(&urls)?;
     let cover = cover_from_port_url(&members, &cover_url, generator.implementation_version())?;
-    Ok(GeneratedPackage {
-        tier_id: tier.tier_id.clone(),
-        members,
-        price,
-        cover,
-    })
+    Ok(GeneratedPackage { tier_id: tier.tier_id.clone(), members, price, cover })
 }
 
 /// 把端口输出 URL 映射回成员快照资产。
@@ -530,10 +502,8 @@ fn duplicate_spu_count(indexes: &[usize], pool: &[SkuSnapshot]) -> u32 {
 /// # 错误
 /// 无。
 fn known_category_count(indexes: &[usize], pool: &[SkuSnapshot]) -> u32 {
-    let set: BTreeSet<&str> = indexes
-        .iter()
-        .filter_map(|index| pool[*index].category_id.as_deref())
-        .collect();
+    let set: BTreeSet<&str> =
+        indexes.iter().filter_map(|index| pool[*index].category_id.as_deref()).collect();
     u32::try_from(set.len()).unwrap_or(0)
 }
 
@@ -589,10 +559,7 @@ fn index_price(indexes: &[usize], pool: &[SkuSnapshot]) -> Amount {
 /// # 错误
 /// 无。
 fn sku_id_seq(indexes: &[usize], pool: &[SkuSnapshot]) -> Vec<String> {
-    let mut ids: Vec<String> = indexes
-        .iter()
-        .map(|index| pool[*index].sku_id_str().to_string())
-        .collect();
+    let mut ids: Vec<String> = indexes.iter().map(|index| pool[*index].sku_id_str().to_string()).collect();
     ids.sort();
     ids
 }
@@ -641,13 +608,7 @@ fn rerank_accepted(
     while selected.len() < limit && !remaining.is_empty() {
         let keys: Vec<String> = selected.iter().map(GeneratedPackage::combination_key).collect();
         remaining.sort_by(|left, right| {
-            compare_preference(
-                &member_indexes(pool, left),
-                &member_indexes(pool, right),
-                &keys,
-                target,
-                pool,
-            )
+            compare_preference(&member_indexes(pool, left), &member_indexes(pool, right), &keys, target, pool)
         });
         selected.push(remaining.remove(0));
     }
@@ -656,14 +617,16 @@ fn rerank_accepted(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+    use std::str::FromStr;
+
+    use erp_core::ids::{ProductId, SkuId, SkuRevisionId};
+    use erp_core::money::Amount;
+
     use super::{combination_key, search_packages};
     use crate::entity::sales_selection::image::FirstNonEmptyMemberImage;
     use crate::entity::sales_selection::sku_snapshot::{ImageAssetSnapshot, SkuSnapshot};
     use crate::entity::sales_selection::tier::TierRule;
-    use erp_core::ids::{ProductId, SkuId, SkuRevisionId};
-    use erp_core::money::Amount;
-    use std::collections::HashSet;
-    use std::str::FromStr;
 
     fn amount(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -733,10 +696,7 @@ mod tests {
         ];
         let (packages, _) =
             search_packages(&pool, &[tier()], &HashSet::new(), &FirstNonEmptyMemberImage, 0).unwrap();
-        assert_eq!(
-            packages.iter().map(|p| p.combination_key()).collect::<Vec<_>>(),
-            vec!["a|b", "c|d"]
-        );
+        assert_eq!(packages.iter().map(|p| p.combination_key()).collect::<Vec<_>>(), vec!["a|b", "c|d"]);
     }
 
     #[test]

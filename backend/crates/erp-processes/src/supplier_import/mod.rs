@@ -3,9 +3,10 @@ mod execute;
 mod failures;
 mod submit;
 
+use std::sync::Arc;
+
 use erp_party::SensitiveDataCodec;
 use mongodb::Database;
-use std::sync::Arc;
 use storage::S3Storage;
 
 /// 供应商资料后台导入流程。

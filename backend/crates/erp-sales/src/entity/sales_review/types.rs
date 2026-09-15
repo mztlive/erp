@@ -9,14 +9,13 @@
 
 use std::collections::HashSet;
 
-use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::Instant;
 use erp_core::ids::{SalesOrderLineId, SkuId, SkuRevisionId};
-use erp_core::money::{line_amounts, round_to_cent, Amount, Quantity, Rate, UnitPrice};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice, line_amounts, round_to_cent};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 
 /// 基础单位代码最大长度。
 const BASE_UNIT_CODE_MAX_LEN: usize = 32;
@@ -426,16 +425,16 @@ pub(crate) fn build_line_groups(
         (LineType::GoodsService, Some(_), None) => {
             let goods = goods.as_ref().expect("已匹配 goods 字段组");
             line_amounts(goods.unit_price_gross, goods.quantity, sales_tax_rate)
-        }
+        },
         (LineType::Voucher, None, Some(voucher)) => {
             let quantity = integer_quantity(voucher.card_count)?;
             line_amounts(voucher.unit_price_gross, quantity, sales_tax_rate)
-        }
+        },
         _ => {
             return Err(Error::from(
                 "行类型与字段组不一致：实物及服务行必须提供商品字段组，卡券行必须提供卡券字段组",
-            ))
-        }
+            ));
+        },
     };
 
     let voucher = match voucher {
@@ -451,7 +450,7 @@ pub(crate) fn build_line_groups(
                 gift_rate,
                 card_form: draft.card_form,
             })
-        }
+        },
         None => None,
     };
 
@@ -470,17 +469,11 @@ pub(crate) fn build_line_groups(
             )?
             .map(|region| region.to_ascii_uppercase());
             Some(fields)
-        }
+        },
         None => None,
     };
 
-    Ok(BuiltLineGroups {
-        goods,
-        voucher,
-        gross_amount,
-        net_amount,
-        tax_amount,
-    })
+    Ok(BuiltLineGroups { goods, voucher, gross_amount, net_amount, tax_amount })
 }
 
 /// 校验草稿卡券字段组与推导金额的一致性（数据模型 §6.4）。
@@ -608,12 +601,12 @@ pub(crate) fn validate_line_list(business_type: BusinessType, lines: &[LineSumma
             if lines.len() != 1 || lines[0].line_type != LineType::Voucher {
                 return Err(Error::from("卡券销售单每个版本必须恰好包含一条卡券明细"));
             }
-        }
+        },
         BusinessType::GoodsService => {
             if lines.iter().any(|line| line.line_type != LineType::GoodsService) {
                 return Err(Error::from("实物及服务销售单只能包含实物及服务行"));
             }
-        }
+        },
     }
     Ok(())
 }
@@ -637,8 +630,9 @@ fn integer_quantity(count: u32) -> Result<Quantity> {
 mod tests {
     use std::str::FromStr;
 
-    use super::*;
     use erp_core::ids::SalesOrderLineId;
+
+    use super::*;
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -663,10 +657,7 @@ mod tests {
             crate::entity::sales_order::BusinessType::GoodsService,
         ];
         for value in business {
-            assert_eq!(
-                crate::entity::sales_order::BusinessType::from(BusinessType::from(value)),
-                value
-            );
+            assert_eq!(crate::entity::sales_order::BusinessType::from(BusinessType::from(value)), value);
         }
 
         let lines = [
@@ -674,10 +665,7 @@ mod tests {
             crate::entity::sales_order::LineType::Voucher,
         ];
         for value in lines {
-            assert_eq!(
-                crate::entity::sales_order::LineType::from(LineType::from(value)),
-                value
-            );
+            assert_eq!(crate::entity::sales_order::LineType::from(LineType::from(value)), value);
         }
 
         let scenarios = [
@@ -699,27 +687,18 @@ mod tests {
             crate::entity::sales_order::CardForm::Physical,
         ];
         for value in cards {
-            assert_eq!(
-                crate::entity::sales_order::CardForm::from(CardForm::from(value)),
-                value
-            );
+            assert_eq!(crate::entity::sales_order::CardForm::from(CardForm::from(value)), value);
         }
     }
 
     #[test]
     fn enums_expose_labels_and_stable_codes() {
         assert_eq!(BusinessType::Voucher.label(), "卡券");
-        assert_eq!(
-            serde_json::to_string(&BusinessType::GoodsService).unwrap(),
-            "\"GOODS_SERVICE\""
-        );
+        assert_eq!(serde_json::to_string(&BusinessType::GoodsService).unwrap(), "\"GOODS_SERVICE\"");
         assert_eq!(LineType::Voucher.as_str(), "VOUCHER");
         assert_eq!(WelfareScenario::MealSubsidy.label(), "餐补");
         assert_eq!(CardForm::Physical.label(), "实体卡");
-        assert_eq!(
-            serde_json::to_string(&CardForm::Electronic).unwrap(),
-            "\"ELECTRONIC\""
-        );
+        assert_eq!(serde_json::to_string(&CardForm::Electronic).unwrap(), "\"ELECTRONIC\"");
     }
 
     #[test]
@@ -728,18 +707,12 @@ mod tests {
             BusinessType::from(crate::entity::sales_order::BusinessType::GoodsService),
             BusinessType::GoodsService
         );
-        assert_eq!(
-            LineType::from(crate::entity::sales_order::LineType::Voucher),
-            LineType::Voucher
-        );
+        assert_eq!(LineType::from(crate::entity::sales_order::LineType::Voucher), LineType::Voucher);
         assert_eq!(
             WelfareScenario::from(crate::entity::sales_order::WelfareScenario::MealSubsidy),
             WelfareScenario::MealSubsidy
         );
-        assert_eq!(
-            CardForm::from(crate::entity::sales_order::CardForm::Electronic),
-            CardForm::Electronic
-        );
+        assert_eq!(CardForm::from(crate::entity::sales_order::CardForm::Electronic), CardForm::Electronic);
     }
 
     #[test]
@@ -758,20 +731,14 @@ mod tests {
         ];
         assert!(validate_line_list(BusinessType::GoodsService, &goods_lines).is_ok());
 
-        let voucher_lines = [LineSummary {
-            line_no: 1,
-            line_id: SalesOrderLineId::new("l-3"),
-            line_type: LineType::Voucher,
-        }];
+        let voucher_lines =
+            [LineSummary { line_no: 1, line_id: SalesOrderLineId::new("l-3"), line_type: LineType::Voucher }];
         assert!(validate_line_list(BusinessType::Voucher, &voucher_lines).is_ok());
     }
 
     #[test]
     fn validate_line_list_rejects_empty_duplicate_and_out_of_range() {
-        assert!(
-            validate_line_list(BusinessType::GoodsService, &[]).is_err(),
-            "空清单"
-        );
+        assert!(validate_line_list(BusinessType::GoodsService, &[]).is_err(), "空清单");
 
         let duplicated_no = [
             LineSummary {
@@ -812,16 +779,8 @@ mod tests {
     #[test]
     fn validate_line_list_rejects_voucher_mis_shaped_lines() {
         let two_voucher_lines = [
-            LineSummary {
-                line_no: 1,
-                line_id: SalesOrderLineId::new("l-1"),
-                line_type: LineType::Voucher,
-            },
-            LineSummary {
-                line_no: 2,
-                line_id: SalesOrderLineId::new("l-2"),
-                line_type: LineType::Voucher,
-            },
+            LineSummary { line_no: 1, line_id: SalesOrderLineId::new("l-1"), line_type: LineType::Voucher },
+            LineSummary { line_no: 2, line_id: SalesOrderLineId::new("l-2"), line_type: LineType::Voucher },
         ];
         assert!(validate_line_list(BusinessType::Voucher, &two_voucher_lines).is_err());
 
@@ -832,11 +791,8 @@ mod tests {
         }];
         assert!(validate_line_list(BusinessType::Voucher, &goods_line_in_voucher_order).is_err());
 
-        let voucher_line_in_goods_order = [LineSummary {
-            line_no: 1,
-            line_id: SalesOrderLineId::new("l-1"),
-            line_type: LineType::Voucher,
-        }];
+        let voucher_line_in_goods_order =
+            [LineSummary { line_no: 1, line_id: SalesOrderLineId::new("l-1"), line_type: LineType::Voucher }];
         assert!(validate_line_list(BusinessType::GoodsService, &voucher_line_in_goods_order).is_err());
     }
 
@@ -870,34 +826,19 @@ mod tests {
 
     #[test]
     fn build_voucher_groups_rejects_inconsistent_amounts() {
-        let bad_total = VoucherLineDraft {
-            face_value_total: amt("301.00"),
-            ..voucher_draft()
-        };
+        let bad_total = VoucherLineDraft { face_value_total: amt("301.00"), ..voucher_draft() };
         assert!(build_line_groups(LineType::Voucher, None, Some(bad_total), rate("0.130000")).is_err());
 
-        let bad_transaction = VoucherLineDraft {
-            transaction_amount: amt("269.00"),
-            ..voucher_draft()
-        };
+        let bad_transaction = VoucherLineDraft { transaction_amount: amt("269.00"), ..voucher_draft() };
         assert!(build_line_groups(LineType::Voucher, None, Some(bad_transaction), rate("0.130000")).is_err());
 
-        let bad_gift = VoucherLineDraft {
-            gift_amount: amt("29.00"),
-            ..voucher_draft()
-        };
+        let bad_gift = VoucherLineDraft { gift_amount: amt("29.00"), ..voucher_draft() };
         assert!(build_line_groups(LineType::Voucher, None, Some(bad_gift), rate("0.130000")).is_err());
 
-        let wrong_rate = VoucherLineDraft {
-            gift_rate: Some(rate("0.120000")),
-            ..voucher_draft()
-        };
+        let wrong_rate = VoucherLineDraft { gift_rate: Some(rate("0.120000")), ..voucher_draft() };
         assert!(build_line_groups(LineType::Voucher, None, Some(wrong_rate), rate("0.130000")).is_err());
 
-        let zero_count = VoucherLineDraft {
-            card_count: 0,
-            ..voucher_draft()
-        };
+        let zero_count = VoucherLineDraft { card_count: 0, ..voucher_draft() };
         assert!(build_line_groups(LineType::Voucher, None, Some(zero_count), rate("0.130000")).is_err());
     }
 
@@ -941,12 +882,8 @@ mod tests {
         };
         assert!(build_line_groups(LineType::GoodsService, None, None, rate("0.130000")).is_err());
         assert!(build_line_groups(LineType::Voucher, Some(goods), None, rate("0.130000")).is_err());
-        assert!(build_line_groups(
-            LineType::GoodsService,
-            None,
-            Some(voucher_draft()),
-            rate("0.130000")
-        )
-        .is_err());
+        assert!(
+            build_line_groups(LineType::GoodsService, None, Some(voucher_draft()), rate("0.130000")).is_err()
+        );
     }
 }

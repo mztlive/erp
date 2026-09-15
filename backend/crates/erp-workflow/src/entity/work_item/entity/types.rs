@@ -1,8 +1,7 @@
 //! 工作项类型、状态、简报关系与责任来源。
 
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::state::DocumentState;
+use serde::{Deserialize, Serialize};
 
 /// 当前代码注册的任务类型。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -393,10 +392,10 @@ impl WorkItemType {
             Self::ProcurementOrderCreation => WorkItemAssignmentSeparationPolicy::RoleAndParticipation,
             Self::FulfillmentOperation | Self::CustomerAcceptanceRegistration => {
                 WorkItemAssignmentSeparationPolicy::RoleAndParticipation
-            }
+            },
             Self::SupplierPaymentExecution | Self::SalesInvoiceExecution => {
                 WorkItemAssignmentSeparationPolicy::RoleAndParticipation
-            }
+            },
             Self::ImportBusinessConfirmation
             | Self::PurchaseOrderReview
             | Self::SalesChangeImpactReview
@@ -407,7 +406,7 @@ impl WorkItemType {
             | Self::SupplierSettlementReview => WorkItemAssignmentSeparationPolicy::DomainActors,
             Self::IntegrationResultUnknown | Self::BusinessException => {
                 WorkItemAssignmentSeparationPolicy::RoleAndParticipation
-            }
+            },
             Self::OwnershipMigrationSalesConfirmation
             | Self::OwnershipMigrationFinanceConfirmation
             | Self::FinanceCorrectionReview => WorkItemAssignmentSeparationPolicy::FailClosed,
@@ -604,9 +603,7 @@ mod tests {
 
     #[test]
     fn brief_relations_and_assignment_policies_are_entity_owned() {
-        let relation = WorkItemType::DocumentApproval
-            .brief_relation("stock_adjustment")
-            .unwrap();
+        let relation = WorkItemType::DocumentApproval.brief_relation("stock_adjustment").unwrap();
         assert_eq!(relation.object_kind, WorkItemBriefObjectKind::StockAdjustment);
         assert_eq!(relation.read_permission, "stock_adjustment:detail");
         assert!(WorkItemType::DocumentApproval.brief_relation("unknown").is_none());
@@ -618,14 +615,10 @@ mod tests {
             WorkItemType::DocumentApproval.assignment_separation_policy(),
             WorkItemAssignmentSeparationPolicy::ApprovalHistory
         );
-        let payable = WorkItemType::SupplierPaymentExecution
-            .brief_relation("payable_account")
-            .unwrap();
+        let payable = WorkItemType::SupplierPaymentExecution.brief_relation("payable_account").unwrap();
         assert_eq!(payable.object_kind, WorkItemBriefObjectKind::PayableAccount);
         assert_eq!(payable.read_permission, "payable_account:detail");
-        let acceptance = WorkItemType::CustomerAcceptanceRegistration
-            .brief_relation("sales_order")
-            .unwrap();
+        let acceptance = WorkItemType::CustomerAcceptanceRegistration.brief_relation("sales_order").unwrap();
         assert_eq!(acceptance.object_kind, WorkItemBriefObjectKind::SalesOrder);
         assert_eq!(acceptance.read_permission, "sales_order:detail");
         assert_eq!(

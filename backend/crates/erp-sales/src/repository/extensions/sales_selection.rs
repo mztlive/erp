@@ -1,5 +1,7 @@
 //! 销售选品集合名与仓储访问器。
 
+use mongodb::Database;
+
 use super::super::owned::sales_selection::{
     SalesSelectionBookletRepository, SalesSelectionDisplayItemRepository,
     SalesSelectionIdempotencyRepository, SalesSelectionPoolMemberRepository,
@@ -7,7 +9,6 @@ use super::super::owned::sales_selection::{
     SalesSelectionProposalRepository, SalesSelectionProposalSkuLineRepository,
     SalesSelectionSessionRepository,
 };
-use mongodb::Database;
 
 /// 销售选品仓储访问器。
 pub trait SalesSelectionExt {

@@ -1,11 +1,10 @@
 //! 准备批次冻结的 SKU 资料。不写入商品池，也不创建正式 SKU。
 
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{ProductId, SkuId, SkuRevisionId};
 use erp_core::money::Amount;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 结构化规格属性快照。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,10 +70,8 @@ impl SkuSnapshot {
         if self.sales_visible_price_gross <= Amount::zero() {
             return Err(Error::from("销售可见含税价必须大于 0"));
         }
-        let category_id = self
-            .category_id
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty());
+        let category_id =
+            self.category_id.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
         Ok(Self {
             sku_id: self.sku_id,
             sku_revision_id: self.sku_revision_id,
@@ -114,9 +111,7 @@ impl SkuSnapshot {
     /// # 错误
     /// 无。
     pub fn image_port_url(&self) -> Option<String> {
-        self.image
-            .as_ref()
-            .map(|image| format!("asset:{}", image.file_asset_id))
+        self.image.as_ref().map(|image| format!("asset:{}", image.file_asset_id))
     }
 }
 

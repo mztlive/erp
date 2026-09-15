@@ -1,11 +1,10 @@
-use crate::entity::integration_ops::{ErrorClass, InboxMessage, InboxMessageStatus, MessageType};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::common::{PageParams, non_blank, normalize_sort};
 use crate::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
-
-use super::common::{non_blank, normalize_sort, PageParams};
+use crate::entity::integration_ops::{ErrorClass, InboxMessage, InboxMessageStatus, MessageType};
 
 /// `inbox_message` 列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub(crate) const INBOX_MESSAGE_SORT_FIELDS: &[&str] = &["created_at", "received_at", "status"];

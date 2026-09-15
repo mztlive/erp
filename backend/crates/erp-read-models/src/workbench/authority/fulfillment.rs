@@ -9,7 +9,7 @@ use erp_fulfillment::repository::FulfillmentExt;
 use erp_workflow::ports::OrderTaskSource;
 use persistence_core::Executor;
 
-use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, WorkItemFactsReader};
+use super::{ObjectFact, ObjectFactMap, ObjectKind, WorkItemFactsReader, object_ids};
 use crate::errors::Result;
 
 impl super::WorkItemFactsReader {
@@ -35,17 +35,10 @@ impl super::WorkItemFactsReader {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let receipt_ids = object_ids(keys, ObjectKind::PurchaseReceipt);
-        let receipts = self
-            .db
-            .purchase_receipts()
-            .list_active_by_ids(&receipt_ids, executor)
-            .await?;
+        let receipts = self.db.purchase_receipts().list_active_by_ids(&receipt_ids, executor).await?;
         let receipt_purchase_nos = purchase_order_numbers(
             self,
-            receipts
-                .iter()
-                .map(|receipt| receipt.purchase_order_id.to_string())
-                .collect(),
+            receipts.iter().map(|receipt| receipt.purchase_order_id.to_string()).collect(),
             executor,
         )
         .await?;
@@ -63,17 +56,10 @@ impl super::WorkItemFactsReader {
         }
 
         let delivery_ids = object_ids(keys, ObjectKind::Delivery);
-        let deliveries = self
-            .db
-            .deliveries()
-            .list_active_by_ids(&delivery_ids, executor)
-            .await?;
+        let deliveries = self.db.deliveries().list_active_by_ids(&delivery_ids, executor).await?;
         let delivery_sales_nos = sales_order_numbers(
             self,
-            deliveries
-                .iter()
-                .map(|delivery| delivery.sales_order_id.to_string())
-                .collect(),
+            deliveries.iter().map(|delivery| delivery.sales_order_id.to_string()).collect(),
             executor,
         )
         .await?;
@@ -95,17 +81,11 @@ impl super::WorkItemFactsReader {
         }
 
         let electronic_ids = object_ids(keys, ObjectKind::ElectronicDelivery);
-        let electronics = self
-            .db
-            .electronic_deliveries()
-            .list_active_by_ids(&electronic_ids, executor)
-            .await?;
+        let electronics =
+            self.db.electronic_deliveries().list_active_by_ids(&electronic_ids, executor).await?;
         let electronic_purchase_nos = purchase_order_numbers(
             self,
-            electronics
-                .iter()
-                .map(|delivery| delivery.purchase_order_id.to_string())
-                .collect(),
+            electronics.iter().map(|delivery| delivery.purchase_order_id.to_string()).collect(),
             executor,
         )
         .await?;
@@ -123,17 +103,10 @@ impl super::WorkItemFactsReader {
         }
 
         let service_ids = object_ids(keys, ObjectKind::ServiceFulfillment);
-        let services = self
-            .db
-            .service_fulfillments()
-            .list_active_by_ids(&service_ids, executor)
-            .await?;
+        let services = self.db.service_fulfillments().list_active_by_ids(&service_ids, executor).await?;
         let service_purchase_nos = purchase_order_numbers(
             self,
-            services
-                .iter()
-                .map(|fulfillment| fulfillment.purchase_order_id.to_string())
-                .collect(),
+            services.iter().map(|fulfillment| fulfillment.purchase_order_id.to_string()).collect(),
             executor,
         )
         .await?;
@@ -146,9 +119,7 @@ impl super::WorkItemFactsReader {
                     fulfillment_source_label("服务履约", "采购单", purchase_no.map(String::as_str)),
                     SYSTEM_OBJECT_OWNER,
                 )
-                .with_order_source(OrderTaskSource::Purchase(
-                    fulfillment.purchase_order_id.to_string(),
-                )),
+                .with_order_source(OrderTaskSource::Purchase(fulfillment.purchase_order_id.to_string())),
             );
         }
         Ok(())
@@ -186,11 +157,7 @@ async fn sales_order_numbers(
         .into_iter()
         .filter_map(|order| {
             let order_no = order.order_no.trim();
-            if order_no.is_empty() {
-                None
-            } else {
-                Some((order.base.id.clone(), order_no.to_string()))
-            }
+            if order_no.is_empty() { None } else { Some((order.base.id.clone(), order_no.to_string())) }
         })
         .collect())
 }
@@ -224,11 +191,7 @@ async fn purchase_order_numbers(
         .into_iter()
         .filter_map(|order| {
             let purchase_no = order.purchase_no.trim();
-            if purchase_no.is_empty() {
-                None
-            } else {
-                Some((order.base.id.clone(), purchase_no.to_string()))
-            }
+            if purchase_no.is_empty() { None } else { Some((order.base.id.clone(), purchase_no.to_string())) }
         })
         .collect())
 }
@@ -269,10 +232,7 @@ mod tests {
             fulfillment_source_label("供应商直发", "销售单", Some("SO20260826-000001")),
             "供应商直发 · 销售单 SO20260826-000001"
         );
-        assert_eq!(
-            fulfillment_source_label("供应商直发", "销售单", Some("  ")),
-            "供应商直发"
-        );
+        assert_eq!(fulfillment_source_label("供应商直发", "销售单", Some("  ")), "供应商直发");
         assert_eq!(fulfillment_source_label("采购入库", "采购单", None), "采购入库");
     }
 }

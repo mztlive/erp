@@ -1,14 +1,14 @@
 //! 客户列表与详情：统一消费 DataScope 快照。
 
 use application_core::AuditActor;
+use validator::Validate;
 
-use super::scope::{
-    ensure_page, ensure_scope_version, ensure_stable_snapshot, CustomerListView, CustomerSnapshot,
-};
 use super::CustomerService;
+use super::scope::{
+    CustomerListView, CustomerSnapshot, ensure_page, ensure_scope_version, ensure_stable_snapshot,
+};
 use crate::dto::customer::{CustomerDetailView, CustomerListParams, CustomerView};
 use crate::error::Result;
-use validator::Validate;
 
 impl CustomerService {
     /// 分页查询客户角色列表。
@@ -85,21 +85,13 @@ impl CustomerService {
     /// 本方法不解释权限，避免仓储按登录人推断范围。
     pub async fn load_customer_detail(&self, id: &str) -> Result<CustomerDetailView> {
         let account = self.load_customer(id).await?;
-        let identity = self
-            .party
-            .identities_by_ids(std::slice::from_ref(&account.party_id))
-            .await?
-            .into_iter()
-            .next();
+        let identity =
+            self.party.identities_by_ids(std::slice::from_ref(&account.party_id)).await?.into_iter().next();
         let party_no = identity.as_ref().map(|fact| fact.party_no.clone());
         let legal_name = identity.as_ref().and_then(|fact| fact.legal_name.clone());
         let owner_user_id = self.current_owner_user_id(&account.base.id).await?;
         let owner_user_name = match owner_user_id.as_deref() {
-            Some(user_id) => self
-                .accounts
-                .names_by_ids(&[user_id.to_string()])
-                .await?
-                .remove(user_id),
+            Some(user_id) => self.accounts.names_by_ids(&[user_id.to_string()]).await?.remove(user_id),
             None => None,
         };
         let mut view: CustomerView = account.into();
@@ -107,12 +99,7 @@ impl CustomerService {
         view.legal_name = legal_name.clone();
         view.owner_user_id = owner_user_id.clone();
         view.owner_user_name = owner_user_name;
-        Ok(CustomerDetailView {
-            account: view,
-            party_no,
-            legal_name,
-            owner_user_id,
-        })
+        Ok(CustomerDetailView { account: view, party_no, legal_name, owner_user_id })
     }
 }
 
@@ -160,19 +147,19 @@ mod tests {
         match ensure_page(3, None) {
             Err(Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED："));
-            }
+            },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
         match ensure_scope_version(Some("scope-a"), "scope-b") {
             Err(Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED："));
-            }
+            },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
         match ensure_stable_snapshot("scope-a", "scope-b") {
             Err(Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED："));
-            }
+            },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
         assert!(ensure_scope_version(Some("scope-a"), "scope-a").is_ok());

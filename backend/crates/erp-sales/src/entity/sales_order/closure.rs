@@ -169,14 +169,15 @@ impl SalesOrderClosureFacts {
 mod tests {
     use std::str::FromStr;
 
+    use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
+    use erp_core::money::Amount;
+
     use super::super::entity::{
         CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress, InvoiceProgress, SalesOrder,
         SalesOrderData,
     };
     use super::super::types::{BusinessType, OriginSystem};
     use super::{SalesOrderClosureFacts, SalesOrderClosureTerminal, SalesOrderFulfillmentBlocker};
-    use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
-    use erp_core::money::Amount;
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -227,10 +228,7 @@ mod tests {
         let mut voided = order(BusinessType::GoodsService);
         voided.commercial_status = CommercialStatus::Voided;
         let voided_assessment = facts(&voided).assess(false, amt("0.00"), amt("0.00"));
-        assert_eq!(
-            voided_assessment.terminal,
-            Some(SalesOrderClosureTerminal::Voided)
-        );
+        assert_eq!(voided_assessment.terminal, Some(SalesOrderClosureTerminal::Voided));
         assert!(!voided_assessment.eligible_to_close);
 
         let draft = order(BusinessType::GoodsService);
@@ -253,10 +251,7 @@ mod tests {
         let mut voucher = order(BusinessType::Voucher);
         voucher.commercial_status = CommercialStatus::Effective;
         let voucher_assessment = facts(&voucher).assess(true, amt("0.00"), amt("100.00"));
-        assert_eq!(
-            voucher_assessment.fulfillment_blocker,
-            Some(SalesOrderFulfillmentBlocker::VoucherExpiry)
-        );
+        assert_eq!(voucher_assessment.fulfillment_blocker, Some(SalesOrderFulfillmentBlocker::VoucherExpiry));
     }
 
     #[test]

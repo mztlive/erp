@@ -7,14 +7,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::CatalogExt;
-use persistence_core::Result;
 
 /// `product_category` 集合名。
 pub(crate) const PRODUCT_CATEGORIES: &str = <mongodb::Database as CatalogExt>::PRODUCT_CATEGORIES;
@@ -66,37 +64,21 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, UNIT_OF_MEASURES, unit_of_measure_indexes()).await?;
     create_indexes(db, SKU_ATTRIBUTES, sku_attribute_indexes()).await?;
     create_indexes(db, SKU_ATTRIBUTE_VALUES, sku_attribute_value_indexes()).await?;
-    create_indexes(
-        db,
-        PRODUCT_CATEGORY_ATTRIBUTES,
-        product_category_attribute_indexes(),
-    )
-    .await?;
+    create_indexes(db, PRODUCT_CATEGORY_ATTRIBUTES, product_category_attribute_indexes()).await?;
     create_indexes(db, PRODUCTS, product_indexes()).await?;
     create_indexes(db, PRODUCT_REVISIONS, product_revision_indexes()).await?;
     create_indexes(db, PRODUCT_REVISION_MEDIAS, product_revision_media_indexes()).await?;
     create_indexes(db, SKUS, sku_indexes()).await?;
     create_indexes(db, SKU_REVISIONS, sku_revision_indexes()).await?;
-    create_indexes(
-        db,
-        SKU_REVISION_ATTRIBUTE_VALUES,
-        sku_revision_attribute_value_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        VOUCHER_CATEGORY_PROFILE_REVISIONS,
-        voucher_category_profile_revision_indexes(),
-    )
-    .await?;
+    create_indexes(db, SKU_REVISION_ATTRIBUTE_VALUES, sku_revision_attribute_value_indexes()).await?;
+    create_indexes(db, VOUCHER_CATEGORY_PROFILE_REVISIONS, voucher_category_profile_revision_indexes())
+        .await?;
     Ok(())
 }
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -110,14 +92,8 @@ fn product_category_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_product_categories_id", doc! { "id": 1 }),
         unique_index("uk_product_categories_category_code", doc! { "category_code": 1 }),
-        named_index(
-            "idx_product_categories_tree",
-            doc! { "parent_category_id": 1, "category_code": 1 },
-        ),
-        named_index(
-            "idx_product_categories_status_tree",
-            doc! { "status": 1, "parent_category_id": 1 },
-        ),
+        named_index("idx_product_categories_tree", doc! { "parent_category_id": 1, "category_code": 1 }),
+        named_index("idx_product_categories_status_tree", doc! { "status": 1, "parent_category_id": 1 }),
     ]
 }
 
@@ -141,24 +117,15 @@ fn unit_of_measure_indexes() -> Vec<IndexModel> {
 fn sku_attribute_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sku_attributes_attribute_code", doc! { "attribute_code": 1 }),
-        named_index(
-            "idx_sku_attributes_status_type",
-            doc! { "status": 1, "value_type": 1 },
-        ),
+        named_index("idx_sku_attributes_status_type", doc! { "status": 1, "value_type": 1 }),
     ]
 }
 
 /// 返回 `sku_attribute_value` 的身份约束与按属性查询索引。
 fn sku_attribute_value_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_sku_attribute_values_attribute_value",
-            doc! { "attribute_id": 1, "value_code": 1 },
-        ),
-        named_index(
-            "idx_sku_attribute_values_attribute_sort",
-            doc! { "attribute_id": 1, "sort_order": 1 },
-        ),
+        unique_index("uk_sku_attribute_values_attribute_value", doc! { "attribute_id": 1, "value_code": 1 }),
+        named_index("idx_sku_attribute_values_attribute_sort", doc! { "attribute_id": 1, "sort_order": 1 }),
     ]
 }
 
@@ -174,10 +141,7 @@ fn product_category_attribute_indexes() -> Vec<IndexModel> {
                 "sort_order": 1,
             },
         ),
-        named_index(
-            "idx_product_category_attributes_category",
-            doc! { "category_id": 1, "sort_order": 1 },
-        ),
+        named_index("idx_product_category_attributes_category", doc! { "category_id": 1, "sort_order": 1 }),
     ]
 }
 
@@ -185,19 +149,13 @@ fn product_category_attribute_indexes() -> Vec<IndexModel> {
 fn product_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_products_product_no", doc! { "product_no": 1 }),
-        named_index(
-            "idx_products_status_kind",
-            doc! { "status": 1, "product_kind": 1 },
-        ),
+        named_index("idx_products_status_kind", doc! { "status": 1, "product_kind": 1 }),
     ]
 }
 
 /// 返回 `product_revision` 的聚合修订唯一约束。
 fn product_revision_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_product_revisions_revision",
-        doc! { "product_id": 1, "revision_no": 1 },
-    )]
+    vec![unique_index("uk_product_revisions_revision", doc! { "product_id": 1, "revision_no": 1 })]
 }
 
 /// 返回 `product_revision_media` 的组合唯一约束与按修订查询索引。
@@ -216,33 +174,21 @@ fn product_revision_media_indexes() -> Vec<IndexModel> {
 fn sku_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_skus_sku_no", doc! { "sku_no": 1 }),
-        named_index(
-            "idx_skus_listing_status",
-            doc! { "listing_status": 1, "status": 1, "product_id": 1 },
-        ),
+        named_index("idx_skus_listing_status", doc! { "listing_status": 1, "status": 1, "product_id": 1 }),
         // (product_id, specification_signature) 在全部生命周期记录上永久唯一：
         // 不得实现为仅约束启用行的 partial unique index（数据模型 §6.3）。
-        unique_index(
-            "uk_skus_product_spec",
-            doc! { "product_id": 1, "specification_signature": 1 },
-        ),
+        unique_index("uk_skus_product_spec", doc! { "product_id": 1, "specification_signature": 1 }),
     ]
 }
 
 /// 返回 `sku_revision` 的聚合修订唯一约束、条码精确查询与搜索索引。
 fn sku_revision_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_sku_revisions_revision",
-            doc! { "sku_id": 1, "revision_no": 1 },
-        ),
+        unique_index("uk_sku_revisions_revision", doc! { "sku_id": 1, "revision_no": 1 }),
         // 非空条码规范化精确查询索引（§6.3）：非唯一——同一条码允许存在多个
         // 在用 SKU 修订，冲突阻断转人工由 Service 判定。
         named_index("idx_sku_revisions_barcode", doc! { "barcode": 1 }),
-        named_index(
-            "idx_sku_revisions_search",
-            doc! { "name": 1, "specification": 1, "status": 1 },
-        ),
+        named_index("idx_sku_revisions_search", doc! { "name": 1, "specification": 1, "status": 1 }),
     ]
 }
 
@@ -275,10 +221,7 @@ fn voucher_category_profile_revision_indexes() -> Vec<IndexModel> {
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -299,10 +242,7 @@ mod tests {
     };
 
     fn names(indexes: &[mongodb::IndexModel]) -> Vec<String> {
-        indexes
-            .iter()
-            .filter_map(|index| index.options.as_ref()?.name.clone())
-            .collect()
+        indexes.iter().filter_map(|index| index.options.as_ref()?.name.clone()).collect()
     }
 
     #[test]
@@ -381,9 +321,9 @@ mod tests {
         assert_eq!(barcode.keys, doc! { "barcode": 1 });
         assert_ne!(barcode.options.as_ref().unwrap().unique, Some(true));
 
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "name": 1, "specification": 1, "status": 1 } }));
+        assert!(
+            indexes.iter().any(|index| { index.keys == doc! { "name": 1, "specification": 1, "status": 1 } })
+        );
     }
 
     #[test]
@@ -400,8 +340,10 @@ mod tests {
             index.options.as_ref().and_then(|options| options.name.as_deref())
                 == Some("uk_sku_revision_attribute_values_relation")
         }));
-        assert!(attribute_rows
-            .iter()
-            .any(|index| { index.keys == doc! { "sku_attribute_value_id": 1, "sku_revision_id": 1 } }));
+        assert!(
+            attribute_rows
+                .iter()
+                .any(|index| { index.keys == doc! { "sku_attribute_value_id": 1, "sku_revision_id": 1 } })
+        );
     }
 }

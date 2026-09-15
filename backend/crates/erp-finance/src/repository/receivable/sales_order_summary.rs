@@ -2,17 +2,16 @@
 //!
 //! `$match` 前缀命中 `uk_receivable_accounts_sales_order`（`sales_order_id + account_seq`）。
 
-use crate::entity::receivable::SalesOrderReceivableAmountSummary;
-use crate::repository::owned::ReceivableAccountRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::SalesOrderId;
 use erp_core::money::Amount;
 use futures_util::TryStreamExt;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, Result};
 use serde::Deserialize;
 
-use persistence_core::Executor;
-use persistence_core::Result;
+use crate::entity::receivable::SalesOrderReceivableAmountSummary;
+use crate::repository::owned::ReceivableAccountRepository;
 
 /// 销售单应收合计聚合行（Decimal128 求和结果）。
 #[derive(Debug, Deserialize)]
@@ -58,7 +57,7 @@ impl<'a> ReceivableAccountRepository<'a> {
                     .stream(session)
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
             None => {
                 self.collection()
                     .aggregate(pipeline)
@@ -66,7 +65,7 @@ impl<'a> ReceivableAccountRepository<'a> {
                     .await?
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
         };
         Ok(summary_from_rows(rows))
     }
@@ -133,17 +132,17 @@ fn summary_from_rows(rows: Vec<SalesOrderAmountSummaryRow>) -> SalesOrderReceiva
 mod tests {
     use std::str::FromStr;
 
-    use mongodb::bson::{doc, Bson};
-
-    use super::{sales_order_amount_summary_pipeline, summary_from_rows, SalesOrderAmountSummaryRow};
-    use crate::entity::receivable::SalesBusinessTypeFact as BusinessType;
-    use crate::entity::receivable::{
-        AccountReviewStatus, ReceivableAccount, ReceivableAccountData, SalesOrderReceivableAmountSummary,
-    };
     use erp_core::ids::{
         CustomerAccountId, PartyId, ReceivableAccountId, SalesOrderId, SalesOrderRevisionId,
     };
     use erp_core::money::Amount;
+    use mongodb::bson::{Bson, doc};
+
+    use super::{SalesOrderAmountSummaryRow, sales_order_amount_summary_pipeline, summary_from_rows};
+    use crate::entity::receivable::{
+        AccountReviewStatus, ReceivableAccount, ReceivableAccountData, SalesBusinessTypeFact as BusinessType,
+        SalesOrderReceivableAmountSummary,
+    };
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -182,30 +181,9 @@ mod tests {
         assert_eq!(matched.get_i64("deleted_at").expect("未删除条件"), 0);
         let group = pipeline[1].get_document("$group").expect("分组阶段");
         assert!(matches!(group.get("_id").expect("分组键"), Bson::Null));
-        assert_eq!(
-            group
-                .get_document("settled_total")
-                .unwrap()
-                .get_str("$sum")
-                .unwrap(),
-            "$settled_total"
-        );
-        assert_eq!(
-            group
-                .get_document("invoiced_total")
-                .unwrap()
-                .get_str("$sum")
-                .unwrap(),
-            "$invoiced_total"
-        );
-        assert_eq!(
-            group
-                .get_document("gross_total")
-                .unwrap()
-                .get_str("$sum")
-                .unwrap(),
-            "$gross_total"
-        );
+        assert_eq!(group.get_document("settled_total").unwrap().get_str("$sum").unwrap(), "$settled_total");
+        assert_eq!(group.get_document("invoiced_total").unwrap().get_str("$sum").unwrap(), "$invoiced_total");
+        assert_eq!(group.get_document("gross_total").unwrap().get_str("$sum").unwrap(), "$gross_total");
     }
 
     #[test]
@@ -228,10 +206,7 @@ mod tests {
         let aggregated = summary_from_rows(vec![row]);
         let one = account("ra-1", 1, "10.01", "1.10", "20.05");
         let two = account("ra-2", 2, "0.02", "0.00", "3.33");
-        assert_eq!(
-            aggregated,
-            SalesOrderReceivableAmountSummary::from_accounts([&one, &two])
-        );
+        assert_eq!(aggregated, SalesOrderReceivableAmountSummary::from_accounts([&one, &two]));
     }
 
     #[test]
@@ -253,15 +228,14 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn sales_order_amount_summary_matches_entity_add_and_hits_identity_index() {
-        use crate::indexes::ensure as ensure_indexes;
-        use crate::repository::extensions::ReceivableExt;
-        use crate::repository::test_fixture::{require_mongo, TestDb};
         use persistence_core::NoTransaction;
 
+        use crate::indexes::ensure as ensure_indexes;
+        use crate::repository::extensions::ReceivableExt;
+        use crate::repository::test_fixture::{TestDb, require_mongo};
+
         require_mongo!(async {
-            let fixture = TestDb::new("recv_so_amount_summary")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("recv_so_amount_summary").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
             let accounts = fixture.db().receivable_accounts();
 
@@ -289,38 +263,23 @@ mod tests {
                 account
             };
             for item in [&one, &two, &single, &zero, &other] {
-                accounts
-                    .create(item, &mut NoTransaction)
-                    .await
-                    .expect("子账写入失败");
+                accounts.create(item, &mut NoTransaction).await.expect("子账写入失败");
             }
             let mut deleted = account("ra-deleted", 4, "50.00", "0.00", "50.00");
-            accounts
-                .create(&deleted, &mut NoTransaction)
-                .await
-                .expect("待删子账写入失败");
-            accounts
-                .soft_delete(&mut deleted, &mut NoTransaction)
-                .await
-                .expect("软删除失败");
+            accounts.create(&deleted, &mut NoTransaction).await.expect("待删子账写入失败");
+            accounts.soft_delete(&mut deleted, &mut NoTransaction).await.expect("软删除失败");
 
             let summary = accounts
                 .sales_order_amount_summary(&SalesOrderId::new("so-1"), &mut NoTransaction)
                 .await
                 .expect("摘要读取失败");
-            assert_eq!(
-                summary,
-                SalesOrderReceivableAmountSummary::from_accounts([&one, &two])
-            );
+            assert_eq!(summary, SalesOrderReceivableAmountSummary::from_accounts([&one, &two]));
 
             let single_summary = accounts
                 .sales_order_amount_summary(&SalesOrderId::new("so-single"), &mut NoTransaction)
                 .await
                 .expect("单子账摘要读取失败");
-            assert_eq!(
-                single_summary,
-                SalesOrderReceivableAmountSummary::from_accounts([&single])
-            );
+            assert_eq!(single_summary, SalesOrderReceivableAmountSummary::from_accounts([&single]));
             assert_eq!(single_summary.account_count, 1);
             assert_eq!(single_summary.settled_total, amt("7.77"));
             assert_eq!(single_summary.invoiced_total, amt("2.22"));
@@ -347,14 +306,8 @@ mod tests {
                 .await
                 .expect("explain 失败");
             let rendered = format!("{explain:?}");
-            assert!(
-                rendered.contains("IXSCAN"),
-                "销售单应收摘要必须 IXSCAN：{rendered}"
-            );
-            assert!(
-                !rendered.contains("COLLSCAN"),
-                "销售单应收摘要不得 COLLSCAN：{rendered}"
-            );
+            assert!(rendered.contains("IXSCAN"), "销售单应收摘要必须 IXSCAN：{rendered}");
+            assert!(!rendered.contains("COLLSCAN"), "销售单应收摘要不得 COLLSCAN：{rendered}");
             assert!(
                 rendered.contains("uk_receivable_accounts_sales_order"),
                 "销售单应收摘要必须命中 sales_order_id + account_seq 索引：{rendered}"

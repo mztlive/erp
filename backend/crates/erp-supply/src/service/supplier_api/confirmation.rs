@@ -1,14 +1,13 @@
 //! 追加业务能力确认；连接版本先于确认事实和审计写入。
-use super::{
-    context::{digest, ensure_version},
-    SupplierApiService,
-};
+use erp_core::common::time::Instant;
+use persistence_core::Executor;
+
+use super::SupplierApiService;
+use super::context::{digest, ensure_version};
 use crate::dto::supplier_api::ConfirmBusinessCapabilityRequirementCommand;
 use crate::entity::supplier_api::*;
 use crate::repository::SupplierApiExt;
 use crate::{Error, Result};
-use erp_core::common::time::Instant;
-use persistence_core::Executor;
 /// 已推进连接版本的本域确认准备结果。
 pub struct PreparedBusinessConfirmation {
     pub connection: SupplierApiConnection,
@@ -31,14 +30,8 @@ impl SupplierApiService {
         input: BusinessConfirmationInput<'_>,
         executor: &mut dyn Executor,
     ) -> Result<PreparedBusinessConfirmation> {
-        let BusinessConfirmationInput {
-            id,
-            command,
-            operation_id,
-            idempotency_hash,
-            fingerprint,
-            actor_id,
-        } = input;
+        let BusinessConfirmationInput { id, command, operation_id, idempotency_hash, fingerprint, actor_id } =
+            input;
         let mut connection = self
             .db
             .supplier_api()
@@ -49,11 +42,7 @@ impl SupplierApiService {
         let capability = self
             .db
             .supplier_api()
-            .connection_capability(
-                &SupplierApiConnectionId::new(&id),
-                command.capability_code,
-                executor,
-            )
+            .connection_capability(&SupplierApiConnectionId::new(&id), command.capability_code, executor)
             .await?
             .ok_or_else(|| Error::NotFound("连接能力不存在".to_string()))?;
         ensure_version(capability.base.version, command.expected_capability_version)?;
@@ -77,15 +66,8 @@ impl SupplierApiService {
             },
         )?;
         connection.touch_business_confirmation(actor_id);
-        self.db
-            .supplier_api_connections()
-            .update(&mut connection, executor)
-            .await?;
-        Ok(PreparedBusinessConfirmation {
-            connection,
-            capability,
-            confirmation,
-        })
+        self.db.supplier_api_connections().update(&mut connection, executor).await?;
+        Ok(PreparedBusinessConfirmation { connection, capability, confirmation })
     }
     /// 写入不可变确认，保留与审计的外层交错位置。
     pub async fn persist_business_confirmation(
@@ -93,10 +75,7 @@ impl SupplierApiService {
         confirmation: &BusinessCapabilityConfirmation,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .supplier_api_business_confirmations()
-            .create(confirmation, executor)
-            .await?;
+        self.db.supplier_api_business_confirmations().create(confirmation, executor).await?;
         Ok(())
     }
 }

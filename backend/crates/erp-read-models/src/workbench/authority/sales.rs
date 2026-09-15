@@ -8,7 +8,7 @@ use erp_workflow::ports::OrderTaskSource;
 use persistence_core::Executor;
 
 use super::amount::non_empty;
-use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
+use super::{ObjectFact, ObjectFactMap, ObjectKind, object_ids};
 use crate::errors::Result;
 
 impl super::WorkItemFactsReader {
@@ -48,10 +48,7 @@ impl super::WorkItemFactsReader {
         orders: &[SalesOrder],
         executor: &mut dyn Executor,
     ) -> Result<Vec<SalesOrderSubmission>> {
-        let order_ids = orders
-            .iter()
-            .map(|order| order.base.id.clone())
-            .collect::<Vec<_>>();
+        let order_ids = orders.iter().map(|order| order.base.id.clone()).collect::<Vec<_>>();
         if order_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -69,10 +66,7 @@ fn insert_sales_order_facts(
     submissions: &[SalesOrderSubmission],
 ) {
     for order in orders {
-        facts.insert(
-            (ObjectKind::SalesOrder, order.base.id.clone()),
-            sales_order_fact(order, submissions),
-        );
+        facts.insert((ObjectKind::SalesOrder, order.base.id.clone()), sales_order_fact(order, submissions));
     }
 }
 
@@ -109,10 +103,8 @@ pub(in crate::workbench) fn preferred_submission<'a>(
     order_id: &str,
     submissions: &'a [SalesOrderSubmission],
 ) -> Option<&'a SalesOrderSubmission> {
-    let mut for_order = submissions
-        .iter()
-        .filter(|item| item.sales_order_id.to_string() == order_id)
-        .collect::<Vec<_>>();
+    let mut for_order =
+        submissions.iter().filter(|item| item.sales_order_id.to_string() == order_id).collect::<Vec<_>>();
     for_order.sort_by_key(|item| item.submission_no);
     for_order
         .iter()

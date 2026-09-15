@@ -1,18 +1,16 @@
 //! `service_fulfillment` 线下服务履约记录仓储：列表投影查询。
 
-use crate::entity::fulfillment::{FulfillmentResult, ServiceFulfillmentState};
-use crate::repository::owned::ServiceFulfillmentRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId};
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::fulfillment::{FulfillmentResult, ServiceFulfillmentState};
+use crate::repository::owned::ServiceFulfillmentRepository;
 
 /// 线下服务履约记录排序白名单（查询与测试共用）。
 const SERVICE_FULFILLMENT_SORT_FIELDS: &[&str] = &["occurred_at", "recorded_at", "created_at"];
@@ -121,11 +119,7 @@ impl<'a> ServiceFulfillmentRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<ServiceFulfillmentRow>> {
         let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                SERVICE_FULFILLMENT_SORT_FIELDS,
-            ))
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, SERVICE_FULFILLMENT_SORT_FIELDS))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(service_fulfillment_projection())
@@ -133,10 +127,7 @@ impl<'a> ServiceFulfillmentRepository<'a> {
         let collection = self.collection().clone_with_type::<ServiceFulfillmentRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -162,8 +153,9 @@ fn service_fulfillment_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{service_fulfillment_projection, sort_doc, SERVICE_FULFILLMENT_SORT_FIELDS};
     use mongodb::bson::doc;
+
+    use super::{SERVICE_FULFILLMENT_SORT_FIELDS, service_fulfillment_projection, sort_doc};
 
     #[test]
     fn projection_includes_allocation_and_excludes_snapshot_location_fields() {
@@ -186,26 +178,17 @@ mod tests {
             ],
             "列表投影必须精确等于 Row 字段集合"
         );
-        assert!(
-            !projection.contains_key("recipient_snapshot"),
-            "交付对象快照不得进入服务履约列表投影"
-        );
+        assert!(!projection.contains_key("recipient_snapshot"), "交付对象快照不得进入服务履约列表投影");
         assert!(
             !projection.contains_key("recipient_snapshot_fingerprint"),
             "快照指纹不得进入服务履约列表投影"
         );
-        assert!(
-            !projection.contains_key("service_location_encrypted"),
-            "服务地点不得进入服务履约列表投影"
-        );
+        assert!(!projection.contains_key("service_location_encrypted"), "服务地点不得进入服务履约列表投影");
         assert!(
             !projection.contains_key("service_location_fingerprint"),
             "服务地点指纹不得进入服务履约列表投影"
         );
-        assert_eq!(
-            projection.get_i32("purchase_line_sales_allocation_id").unwrap(),
-            1
-        );
+        assert_eq!(projection.get_i32("purchase_line_sales_allocation_id").unwrap(), 1);
     }
 
     #[test]

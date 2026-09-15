@@ -5,10 +5,12 @@
 //! 禁止直连数据库。Connector 由启动组合根注入，Handler 不选择实现。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
+use erp_processes::supply_execution::dto::{
+    SupplierOrderInvestigationResultView, SupplierOrderTaskCompletionResultView,
 };
+use erp_read_models::supplier_center::fulfillment_dto::SupplierFulfillmentOrderDetailView;
 use erp_supply::dto::supplier_fulfillment::{
     PageView, PlaceFulfillmentOrderRequest, RecordRefundResultRequest, RecordSupplierRejectRequest,
     SubmitActionResultView, SubmitAfterSalesActionRequest, SupplierFulfillmentOrderDetailParams,
@@ -17,15 +19,9 @@ use erp_supply::dto::supplier_fulfillment::{
     SupplierOrderTaskCompletionCommand, SupplierOrderTaskInvestigationCommand, SupplierRefundFactView,
 };
 
-use erp_processes::supply_execution::dto::{
-    SupplierOrderInvestigationResultView, SupplierOrderTaskCompletionResultView,
-};
-use erp_read_models::supplier_center::fulfillment_dto::SupplierFulfillmentOrderDetailView;
-
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "供应商订单",
@@ -46,10 +42,7 @@ pub async fn supplier_fulfillment_order_list(
     State(state): State<AppState>,
     Query(params): Query<SupplierFulfillmentOrderListParams>,
 ) -> Result<PageView<SupplierFulfillmentOrderView>> {
-    let page = state
-        .supplier_fulfillment_service()
-        .supplier_fulfillment_order_list(&params)
-        .await?;
+    let page = state.supplier_fulfillment_service().supplier_fulfillment_order_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -100,10 +93,7 @@ pub async fn supplier_fulfillment_order_investigation(
     Extension(actor): Extension<AuditActor>,
     Json(command): Json<SupplierOrderObjectInvestigationCommand>,
 ) -> Result<SupplierOrderInvestigationResultView> {
-    let view = state
-        .supplier_fulfillment_process()
-        .investigate_order(command, &actor)
-        .await?;
+    let view = state.supplier_fulfillment_process().investigate_order(command, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -121,10 +111,7 @@ pub async fn supplier_fulfillment_order_task_investigation(
     Extension(actor): Extension<AuditActor>,
     Json(command): Json<SupplierOrderTaskInvestigationCommand>,
 ) -> Result<SupplierOrderInvestigationResultView> {
-    let view = state
-        .supplier_fulfillment_process()
-        .investigate_order_task(command, &actor)
-        .await?;
+    let view = state.supplier_fulfillment_process().investigate_order_task(command, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -142,10 +129,7 @@ pub async fn supplier_fulfillment_order_task_completion(
     Extension(actor): Extension<AuditActor>,
     Json(command): Json<SupplierOrderTaskCompletionCommand>,
 ) -> Result<SupplierOrderTaskCompletionResultView> {
-    let view = state
-        .supplier_fulfillment_process()
-        .complete_order_task(command, &actor)
-        .await?;
+    let view = state.supplier_fulfillment_process().complete_order_task(command, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -171,10 +155,7 @@ pub async fn supplier_fulfillment_order_submit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<PlaceFulfillmentOrderRequest>,
 ) -> Result<SupplierFulfillmentOrderView> {
-    let view = state
-        .supplier_fulfillment_process()
-        .submit_place(req, &actor)
-        .await?;
+    let view = state.supplier_fulfillment_process().submit_place(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -202,10 +183,7 @@ pub async fn supplier_fulfillment_order_cancel(
     Path(id): Path<String>,
     Json(req): Json<SubmitAfterSalesActionRequest>,
 ) -> Result<SubmitActionResultView> {
-    let view = state
-        .supplier_fulfillment_process()
-        .submit_cancel(&id, req, &actor)
-        .await?;
+    let view = state.supplier_fulfillment_process().submit_cancel(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -233,10 +211,7 @@ pub async fn supplier_fulfillment_order_refund(
     Path(id): Path<String>,
     Json(req): Json<SubmitAfterSalesActionRequest>,
 ) -> Result<SubmitActionResultView> {
-    let view = state
-        .supplier_fulfillment_process()
-        .submit_refund(&id, req, &actor)
-        .await?;
+    let view = state.supplier_fulfillment_process().submit_refund(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -264,10 +239,7 @@ pub async fn supplier_fulfillment_order_reject(
     Path(id): Path<String>,
     Json(req): Json<RecordSupplierRejectRequest>,
 ) -> Result<SupplierOrderStatusHistoryView> {
-    let view = state
-        .supplier_fulfillment_process()
-        .record_reject(&id, req, &actor)
-        .await?;
+    let view = state.supplier_fulfillment_process().record_reject(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -296,10 +268,7 @@ pub async fn supplier_refund_fact_post(
     Path(id): Path<String>,
     Json(req): Json<RecordRefundResultRequest>,
 ) -> Result<SupplierRefundFactView> {
-    let view = state
-        .supplier_fulfillment_process()
-        .record_refund_result(&id, req, &actor)
-        .await?;
+    let view = state.supplier_fulfillment_process().record_refund_result(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

@@ -1,6 +1,5 @@
 //! Named warehouse processes that own audited outer transactions.
 
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_catalog::CatalogExt;
@@ -14,6 +13,7 @@ use persistence_core::NoTransaction;
 use validator::Validate;
 
 use crate::audit::run_audited;
+use crate::{Error, Result};
 
 /// Process module name.
 pub fn process_name() -> &'static str {
@@ -51,20 +51,13 @@ pub async fn create_warehouse_sku_policy(
         .warehouse()
         .sku_policies_for_dimensions(&policy.warehouse_id, &policy.sku_id, &mut NoTransaction)
         .await?;
-    policy
-        .ensure_no_overlap(&existing)
-        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-    let audit = actor.clone().resource_log(
-        "warehouse_sku_policy.create",
-        "warehouse_sku_policy",
-        id.to_string(),
-    )?;
+    policy.ensure_no_overlap(&existing).map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+    let audit =
+        actor.clone().resource_log("warehouse_sku_policy.create", "warehouse_sku_policy", id.to_string())?;
     let policy_for_tx = policy.clone();
     run_audited(&db, audit, move |db, session| {
         Box::pin(async move {
-            db.warehouse_sku_policies()
-                .create(&policy_for_tx, session)
-                .await?;
+            db.warehouse_sku_policies().create(&policy_for_tx, session).await?;
             Ok(())
         })
     })

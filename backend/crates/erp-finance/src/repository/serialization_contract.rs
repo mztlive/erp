@@ -1,13 +1,15 @@
 //! In-memory BSON compatibility checks for finance persistence contracts.
 
+use std::str::FromStr;
+
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{CustomerAccountId, CustomerReceiptId, InvoiceId, PartyId};
+use erp_core::money::Amount;
+
 use crate::entity::receivable::{
     CustomerReceipt, CustomerReceiptData, CustomerReceiptUpdate, Invoice, InvoiceData, InvoiceDirection,
     InvoiceKind,
 };
-use erp_core::common::time::{BusinessDate, Instant};
-use erp_core::ids::{CustomerAccountId, CustomerReceiptId, InvoiceId, PartyId};
-use erp_core::money::Amount;
-use std::str::FromStr;
 
 fn receipt_data() -> CustomerReceiptData {
     CustomerReceiptData {
@@ -22,12 +24,8 @@ fn receipt_data() -> CustomerReceiptData {
 
 #[test]
 fn creator_is_normalized_and_legacy_missing_field_defaults_empty() {
-    let mut receipt = CustomerReceipt::new(
-        CustomerReceiptId::new("creator-cr"),
-        receipt_data(),
-        " creator-1 ",
-    )
-    .unwrap();
+    let mut receipt =
+        CustomerReceipt::new(CustomerReceiptId::new("creator-cr"), receipt_data(), " creator-1 ").unwrap();
     receipt.update(CustomerReceiptUpdate::default()).unwrap();
     assert_eq!(receipt.created_by, "creator-1");
     assert!(CustomerReceipt::new(CustomerReceiptId::new("blank-creator-cr"), receipt_data(), "   ").is_err());

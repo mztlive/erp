@@ -23,23 +23,21 @@ mod failed_retry;
 mod supersede_batch;
 
 pub use apply_scope::LegacyImportApplyScope;
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::BusinessDate;
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
+use serde::{Deserialize, Serialize};
 
+use super::extensions::LegacyImportExt;
 use crate::entity::legacy_import::{
     ConfirmationDecision, ConfirmationStatus, ImportStatus, LegacyImportBatch, LegacyImportBatchId,
     LegacyImportBatchStatus, LegacyImportConfirmation, LegacyImportRow, MappingStatus, ParseStatus,
 };
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::common::time::BusinessDate;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use mongodb::Database;
-use serde::{Deserialize, Serialize};
-
-use super::extensions::LegacyImportExt;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
 /// `legacy_import_batch` 集合名（单一来源：`LegacyImportExt` 关联常量）。
 const LEGACY_IMPORT_BATCHES: &str = <mongodb::Database as LegacyImportExt>::LEGACY_IMPORT_BATCHES;
 /// `legacy_import_row` 集合名（单一来源：`LegacyImportExt` 关联常量）。
@@ -116,18 +114,15 @@ impl QueryFilter for LegacyImportBatchFilter {
         }
         match (self.baseline_date_from, self.baseline_date_to) {
             (Some(from), Some(to)) => {
-                filter.insert(
-                    "baseline_date",
-                    doc! { "$gte": from.to_string(), "$lte": to.to_string() },
-                );
-            }
+                filter.insert("baseline_date", doc! { "$gte": from.to_string(), "$lte": to.to_string() });
+            },
             (Some(from), None) => {
                 filter.insert("baseline_date", doc! { "$gte": from.to_string() });
-            }
+            },
             (None, Some(to)) => {
                 filter.insert("baseline_date", doc! { "$lte": to.to_string() });
-            }
-            (None, None) => {}
+            },
+            (None, None) => {},
         }
         filter
     }
@@ -174,10 +169,7 @@ impl<'a> LegacyImportBatchRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按批次号精确查找导入批次。
@@ -325,10 +317,7 @@ impl<'a> LegacyImportRowRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按批次 ID 批量取回导入行（`$in` 一次取回，避免 N+1）。
@@ -472,10 +461,7 @@ impl<'a> LegacyImportConfirmationRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按正式任务查找确认事实。
@@ -558,12 +544,8 @@ impl<'a> LegacyImportConfirmationRepository<'a> {
         batch_id: &LegacyImportBatchId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<LegacyImportConfirmation>> {
-        self.find_many_sorted(
-            doc! { "batch_id": batch_id.to_string() },
-            doc! { "created_at": 1 },
-            executor,
-        )
-        .await
+        self.find_many_sorted(doc! { "batch_id": batch_id.to_string() }, doc! { "created_at": 1 }, executor)
+            .await
     }
 }
 
@@ -716,10 +698,11 @@ fn legacy_import_confirmation_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, LegacyImportBatchFilter};
     use erp_core::common::time::BusinessDate;
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
+
+    use super::{LegacyImportBatchFilter, sort_doc};
 
     #[test]
     fn batch_filter_applies_optional_fields_and_deleted_filter() {
@@ -747,10 +730,7 @@ mod tests {
     #[test]
     fn sort_doc_whitelists_known_fields_and_defaults_otherwise() {
         assert_eq!(sort_doc(Some("baseline_date"), true), doc! { "baseline_date": 1 });
-        assert_eq!(
-            sort_doc(Some("trial_version"), false),
-            doc! { "trial_version": -1 }
-        );
+        assert_eq!(sort_doc(Some("trial_version"), false), doc! { "trial_version": -1 });
         assert_eq!(sort_doc(None, false), doc! { "created_at": -1 });
         assert_eq!(sort_doc(Some("id"), false), doc! { "created_at": -1 });
     }

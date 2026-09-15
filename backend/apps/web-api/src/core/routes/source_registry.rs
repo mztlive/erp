@@ -4,16 +4,13 @@
 //! `/admin/external-identity-maps`；每条路由统一走
 //! JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
 
-use axum::{
-    routing::{get, post, put},
-    Router,
-};
+use axum::Router;
+use axum::routing::{get, post, put};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::source_registry, middleware::with_permission},
-};
+use crate::app_state::AppState;
+use crate::core::handler::source_registry;
+use crate::core::middleware::with_permission;
 
 /// 返回本域管理端路由集合。
 ///

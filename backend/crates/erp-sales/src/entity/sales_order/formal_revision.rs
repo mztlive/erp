@@ -19,7 +19,7 @@ use super::revision::{
 use super::snapshot::HeaderSnapshotData;
 use super::submission::{SalesOrderSubmission, SalesOrderSubmissionLine};
 use super::types::{
-    validate_line_list, BusinessType, GoodsLineFields, LineSummary, LineType, VoucherLineDraft,
+    BusinessType, GoodsLineFields, LineSummary, LineType, VoucherLineDraft, validate_line_list,
 };
 
 /// 调用方注入的正式版本稳定身份。
@@ -69,10 +69,7 @@ impl FormalRevisionIdentities {
         }
         for (identity, line) in self.lines.iter().zip(lines) {
             if !identity.subtype.matches_line_type(line.line_type) {
-                return Err(Error::from(format!(
-                    "第 {} 行的正式版本身份与行类型不一致",
-                    line.line_no
-                )));
+                return Err(Error::from(format!("第 {} 行的正式版本身份与行类型不一致", line.line_no)));
             }
         }
         Ok(())
@@ -104,10 +101,7 @@ impl FormalRevisionLineIdentity {
     /// # 关键业务约束
     /// 子类型必须与对应提交行的 `line_type` 一致。
     pub fn new(revision_line_id: SalesOrderRevisionLineId, subtype: FormalRevisionSubtypeIdentity) -> Self {
-        Self {
-            revision_line_id,
-            subtype,
-        }
+        Self { revision_line_id, subtype }
     }
 }
 
@@ -139,7 +133,7 @@ impl FormalRevisionSubtypeIdentity {
         match line_type {
             LineType::GoodsService => {
                 Self::GoodsService(SalesOrderGoodsServiceLineRevisionId::new(id.into()))
-            }
+            },
             LineType::Voucher => Self::Voucher(SalesOrderVoucherLineRevisionId::new(id.into())),
         }
     }
@@ -205,13 +199,7 @@ impl FormalRevisionContext {
         business_type: BusinessType,
         effective_at: Instant,
     ) -> Self {
-        Self {
-            revision_no,
-            revision_source,
-            previous_revision_id,
-            business_type,
-            effective_at,
-        }
+        Self { revision_no, revision_source, previous_revision_id, business_type, effective_at }
     }
 }
 
@@ -415,12 +403,7 @@ impl SalesOrderRevisionAggregate {
         let revision = build_revision_header(&identities.revision_id, &context, header)?;
         let (revision_lines, goods_lines, voucher_lines) =
             build_revision_children(&identities.revision_id, &identities.lines, lines)?;
-        Ok(Self {
-            revision,
-            lines: revision_lines,
-            goods_lines,
-            voucher_lines,
-        })
+        Ok(Self { revision, lines: revision_lines, goods_lines, voucher_lines })
     }
 }
 
@@ -611,11 +594,11 @@ fn append_subtype_line(
         (FormalRevisionSubtypeIdentity::GoodsService(id), Some(goods), None) => {
             goods_lines.push(build_goods_line(id, &identity.revision_line_id, goods)?);
             Ok(())
-        }
+        },
         (FormalRevisionSubtypeIdentity::Voucher(id), None, Some(voucher)) => {
             voucher_lines.push(build_voucher_line(id, &identity.revision_line_id, voucher)?);
             Ok(())
-        }
+        },
         _ => Err(Error::from(format!("第 {} 行字段组与行类型不一致", line.line_no))),
     }
 }
@@ -692,13 +675,14 @@ fn build_voucher_line(
 mod tests {
     use std::str::FromStr;
 
-    use super::*;
-    use crate::entity::sales_order::submission::SalesOrderSubmissionData;
-    use crate::entity::sales_order::types::{CardForm, WelfareScenario};
     use erp_core::ids::{
         CustomerAccountId, PartyId, SalesOrderSubmissionId, SalesOrderSubmissionLineId, SkuRevisionId,
     };
     use erp_core::money::{Quantity, UnitPrice};
+
+    use super::*;
+    use crate::entity::sales_order::submission::SalesOrderSubmissionData;
+    use crate::entity::sales_order::types::{CardForm, WelfareScenario};
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -863,13 +847,7 @@ mod tests {
     }
 
     fn goods_context() -> FormalRevisionContext {
-        FormalRevisionContext::new(
-            1,
-            RevisionSource::ErpApproval,
-            None,
-            BusinessType::GoodsService,
-            at(),
-        )
+        FormalRevisionContext::new(1, RevisionSource::ErpApproval, None, BusinessType::GoodsService, at())
     }
 
     fn voucher_context() -> FormalRevisionContext {
@@ -896,10 +874,7 @@ mod tests {
 
         assert_eq!(aggregate.revision.revision.revision_no, 1);
         assert_eq!(aggregate.revision.revision_source, RevisionSource::ErpApproval);
-        assert_eq!(
-            aggregate.revision.previous_revision_id,
-            Some(SalesOrderRevisionId::new("rev-prev"))
-        );
+        assert_eq!(aggregate.revision.previous_revision_id, Some(SalesOrderRevisionId::new("rev-prev")));
         assert_eq!(aggregate.revision.content_hash, "sub:s-1");
         assert_eq!(aggregate.revision.customer_snapshot.customer_name, "东方企业");
         assert_eq!(aggregate.revision.project_name.as_deref(), Some("端午福利项目"));
@@ -909,10 +884,7 @@ mod tests {
         assert!(aggregate.voucher_lines.is_empty());
         assert_eq!(aggregate.lines[0].line_no, 1);
         assert_eq!(aggregate.lines[1].line_no, 2);
-        assert_eq!(
-            aggregate.goods_lines[0].welfare_scenario,
-            Some(WelfareScenario::AnnualGiftBag)
-        );
+        assert_eq!(aggregate.goods_lines[0].welfare_scenario, Some(WelfareScenario::AnnualGiftBag));
         assert_eq!(aggregate.goods_lines[0].service_region.as_deref(), Some("EAST"));
     }
 
@@ -932,22 +904,21 @@ mod tests {
         assert_eq!(aggregate.voucher_lines.len(), 1);
         assert_eq!(aggregate.voucher_lines[0].card_count, 3);
         assert_eq!(aggregate.voucher_lines[0].card_form, CardForm::Electronic);
-        assert_eq!(
-            aggregate.revision.voucher_category_sku_id,
-            Some(SkuId::new("vcat-1"))
-        );
+        assert_eq!(aggregate.revision.voucher_category_sku_id, Some(SkuId::new("vcat-1")));
     }
 
     #[test]
     fn factory_rejects_empty_mixed_and_multi_voucher_lines() {
         let (submission, lines) = submission_and_lines(goods_header(vec![goods_line_data(1)]));
-        assert!(SalesOrderRevisionAggregate::from_sales_order_submission(
-            identities_for(&[]),
-            goods_context(),
-            &submission,
-            &[],
-        )
-        .is_err());
+        assert!(
+            SalesOrderRevisionAggregate::from_sales_order_submission(
+                identities_for(&[]),
+                goods_context(),
+                &submission,
+                &[],
+            )
+            .is_err()
+        );
 
         let voucher_line = SalesOrderSubmissionLine::new(
             SalesOrderSubmissionLineId::new("sl-v"),
@@ -955,13 +926,15 @@ mod tests {
             voucher_line_data(2),
         )
         .unwrap();
-        assert!(SalesOrderRevisionAggregate::from_sales_order_submission(
-            identities_for(&[LineType::GoodsService, LineType::Voucher]),
-            goods_context(),
-            &submission,
-            &[lines[0].clone(), voucher_line],
-        )
-        .is_err());
+        assert!(
+            SalesOrderRevisionAggregate::from_sales_order_submission(
+                identities_for(&[LineType::GoodsService, LineType::Voucher]),
+                goods_context(),
+                &submission,
+                &[lines[0].clone(), voucher_line],
+            )
+            .is_err()
+        );
 
         let (voucher_submission, _) = submission_and_lines(voucher_header(vec![voucher_line_data(1)]));
         let first = SalesOrderSubmissionLine::new(
@@ -974,53 +947,63 @@ mod tests {
         second.base.id = "sl-b".to_string();
         second.sales_order_line_id = SalesOrderLineId::new("line-2");
         second.line_no = 2;
-        assert!(SalesOrderRevisionAggregate::from_sales_order_submission(
-            identities_for(&[LineType::Voucher, LineType::Voucher]),
-            voucher_context(),
-            &voucher_submission,
-            &[first, second],
-        )
-        .is_err());
+        assert!(
+            SalesOrderRevisionAggregate::from_sales_order_submission(
+                identities_for(&[LineType::Voucher, LineType::Voucher]),
+                voucher_context(),
+                &voucher_submission,
+                &[first, second],
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn factory_rejects_identity_mismatch_and_business_type_drift() {
         let (submission, lines) = submission_and_lines(goods_header(vec![goods_line_data(1)]));
-        assert!(SalesOrderRevisionAggregate::from_sales_order_submission(
-            identities_for(&[LineType::GoodsService, LineType::GoodsService]),
-            goods_context(),
-            &submission,
-            &lines,
-        )
-        .is_err());
+        assert!(
+            SalesOrderRevisionAggregate::from_sales_order_submission(
+                identities_for(&[LineType::GoodsService, LineType::GoodsService]),
+                goods_context(),
+                &submission,
+                &lines,
+            )
+            .is_err()
+        );
 
-        assert!(SalesOrderRevisionAggregate::from_sales_order_submission(
-            identities_for(&[LineType::Voucher]),
-            goods_context(),
-            &submission,
-            &lines,
-        )
-        .is_err());
+        assert!(
+            SalesOrderRevisionAggregate::from_sales_order_submission(
+                identities_for(&[LineType::Voucher]),
+                goods_context(),
+                &submission,
+                &lines,
+            )
+            .is_err()
+        );
 
-        assert!(SalesOrderRevisionAggregate::from_sales_order_submission(
-            identities_for(&[LineType::GoodsService]),
-            voucher_context(),
-            &submission,
-            &lines,
-        )
-        .is_err());
+        assert!(
+            SalesOrderRevisionAggregate::from_sales_order_submission(
+                identities_for(&[LineType::GoodsService]),
+                voucher_context(),
+                &submission,
+                &lines,
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn factory_rejects_missing_goods_field_group() {
         let (submission, mut lines) = submission_and_lines(goods_header(vec![goods_line_data(1)]));
         lines[0].sku_id = None;
-        assert!(SalesOrderRevisionAggregate::from_sales_order_submission(
-            identities_for(&[LineType::GoodsService]),
-            goods_context(),
-            &submission,
-            &lines,
-        )
-        .is_err());
+        assert!(
+            SalesOrderRevisionAggregate::from_sales_order_submission(
+                identities_for(&[LineType::GoodsService]),
+                goods_context(),
+                &submission,
+                &lines,
+            )
+            .is_err()
+        );
     }
 }

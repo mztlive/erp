@@ -1,14 +1,15 @@
 //! 集成本域查询、实体准备与调用方事务内写入。
-use super::IntegrationOpsService;
-use crate::dto::*;
-use crate::entity::integration_ops::*;
-use crate::repository::IntegrationOpsExt;
-use crate::{Error, Result};
 use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
+
+use super::IntegrationOpsService;
+use crate::dto::*;
+use crate::entity::integration_ops::*;
+use crate::repository::IntegrationOpsExt;
+use crate::{Error, Result};
 /// 入站消息列表筛选条件类型（经 `IntegrationOpsExt` 关联类型跨 crate 可达）。
 type InboxMessageFilter = <Database as IntegrationOpsExt>::InboxMessageFilter;
 impl IntegrationOpsService {
@@ -45,11 +46,7 @@ impl IntegrationOpsService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .inbox_messages()
-            .search_inbox_messages(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.inbox_messages().search_inbox_messages(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -69,12 +66,7 @@ impl IntegrationOpsService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 查询入站消息详情（含规范化内容引用）。
@@ -134,10 +126,7 @@ pub fn apply_processed_outcome(message: &mut InboxMessage, processed_at: Instant
 /// # Errors
 /// 保留原消息状态校验失败。
 pub fn apply_failed_outcome(message: &mut InboxMessage) -> Result<()> {
-    message.update(InboxMessageUpdate {
-        status: Some(InboxMessageStatus::Failed),
-        processed_at: None,
-    })?;
+    message.update(InboxMessageUpdate { status: Some(InboxMessageStatus::Failed), processed_at: None })?;
     Ok(())
 }
 /// 按原责任政策构造失败任务；仅摘要存在时记录尝试。
@@ -198,8 +187,6 @@ pub async fn persist_error_task_with_message_failure(
     message: &mut InboxMessage,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    db.integration_ops()
-        .create_error_task_with_message_failure(task, message, executor)
-        .await?;
+    db.integration_ops().create_error_task_with_message_failure(task, message, executor).await?;
     Ok(())
 }

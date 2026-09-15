@@ -28,20 +28,12 @@ impl OrganizationCoverage {
     /// # 返回
     /// 公司级范围返回 `All`；组织/团队目标返回去重排序的 `Targets`；无组织事实返回 `None`。
     pub fn from_scopes(scopes: &[DataScope]) -> Option<Self> {
-        if scopes
-            .iter()
-            .any(|scope| scope.scope_type == DataScopeType::Company)
-        {
+        if scopes.iter().any(|scope| scope.scope_type == DataScopeType::Company) {
             return Some(Self::All);
         }
         let targets = scopes
             .iter()
-            .filter(|scope| {
-                matches!(
-                    scope.scope_type,
-                    DataScopeType::Organization | DataScopeType::Team
-                )
-            })
+            .filter(|scope| matches!(scope.scope_type, DataScopeType::Organization | DataScopeType::Team))
             .flat_map(|scope| scope.scope_targets.iter().cloned())
             .collect::<BTreeSet<_>>()
             .into_iter()
@@ -69,13 +61,10 @@ impl OrganizationCoverage {
             (Self::All, coverage) | (coverage, Self::All) => Some(coverage.clone()),
             (Self::Targets(left), Self::Targets(right)) => {
                 let right = right.iter().collect::<BTreeSet<_>>();
-                let targets = left
-                    .iter()
-                    .filter(|target| right.contains(target))
-                    .cloned()
-                    .collect::<Vec<_>>();
+                let targets =
+                    left.iter().filter(|target| right.contains(target)).cloned().collect::<Vec<_>>();
                 (!targets.is_empty()).then_some(Self::Targets(targets))
-            }
+            },
         }
     }
 
@@ -83,9 +72,9 @@ impl OrganizationCoverage {
     pub fn covers(&self, organization_id: &str) -> bool {
         match self {
             Self::All => true,
-            Self::Targets(targets) => targets
-                .binary_search_by(|target| target.as_str().cmp(organization_id))
-                .is_ok(),
+            Self::Targets(targets) => {
+                targets.binary_search_by(|target| target.as_str().cmp(organization_id)).is_ok()
+            },
         }
     }
 }
@@ -104,7 +93,7 @@ impl ResponsibilityScopeSet {
             match normalized.entry(role_id) {
                 std::collections::btree_map::Entry::Vacant(entry) => {
                     entry.insert(organization_id.map(|value| BTreeSet::from([value])));
-                }
+                },
                 std::collections::btree_map::Entry::Occupied(mut entry) => {
                     let Some(targets) = entry.get_mut() else {
                         continue;
@@ -112,22 +101,21 @@ impl ResponsibilityScopeSet {
                     match organization_id {
                         Some(value) => {
                             targets.insert(value);
-                        }
+                        },
                         None => {
                             entry.insert(None);
-                        }
+                        },
                     }
-                }
+                },
             }
         }
         Self(
             normalized
                 .into_iter()
                 .flat_map(|(role_id, targets)| match targets {
-                    Some(targets) => targets
-                        .into_iter()
-                        .map(|target| (role_id.clone(), Some(target)))
-                        .collect::<Vec<_>>(),
+                    Some(targets) => {
+                        targets.into_iter().map(|target| (role_id.clone(), Some(target))).collect::<Vec<_>>()
+                    },
                     None => vec![(role_id, None)],
                 })
                 .collect(),
@@ -137,10 +125,7 @@ impl ResponsibilityScopeSet {
     /// 由一个角色和组织覆盖事实形成责任范围集合。
     pub fn for_role(role_id: &str, coverage: &OrganizationCoverage) -> Self {
         Self::new(
-            coverage
-                .targets()
-                .into_iter()
-                .map(|organization_id| (role_id.to_string(), organization_id)),
+            coverage.targets().into_iter().map(|organization_id| (role_id.to_string(), organization_id)),
         )
     }
 
@@ -165,17 +150,12 @@ impl ResponsibilityScopeSet {
             match (left, right) {
                 (Some(None), Some(organizations)) | (Some(organizations), Some(None)) => organizations
                     .map(|targets| {
-                        targets
-                            .into_iter()
-                            .map(|target| (role.clone(), Some(target)))
-                            .collect::<Vec<_>>()
+                        targets.into_iter().map(|target| (role.clone(), Some(target))).collect::<Vec<_>>()
                     })
                     .unwrap_or_else(|| vec![(role.clone(), None)]),
-                (Some(Some(left)), Some(Some(right))) => left
-                    .intersection(&right)
-                    .cloned()
-                    .map(|target| (role.clone(), Some(target)))
-                    .collect(),
+                (Some(Some(left)), Some(Some(right))) => {
+                    left.intersection(&right).cloned().map(|target| (role.clone(), Some(target))).collect()
+                },
                 (None, _) | (_, None) => Vec::new(),
             }
         });
@@ -185,10 +165,7 @@ impl ResponsibilityScopeSet {
     /// 判断集合是否覆盖指定角色与组织。
     pub fn covers(&self, role_id: &str, organization_id: &str) -> bool {
         self.0.iter().any(|(role, organization)| {
-            role == role_id
-                && organization
-                    .as_deref()
-                    .is_none_or(|allowed| allowed == organization_id)
+            role == role_id && organization.as_deref().is_none_or(|allowed| allowed == organization_id)
         })
     }
 
@@ -223,10 +200,7 @@ mod tests {
     fn coverage_intersection_and_covers_are_set_based() {
         let left = OrganizationCoverage::Targets(vec!["a".to_string(), "b".to_string()]);
         let right = OrganizationCoverage::Targets(vec!["b".to_string(), "c".to_string()]);
-        assert_eq!(
-            left.intersect(&right),
-            Some(OrganizationCoverage::Targets(vec!["b".to_string()]))
-        );
+        assert_eq!(left.intersect(&right), Some(OrganizationCoverage::Targets(vec!["b".to_string()])));
         assert!(OrganizationCoverage::All.covers("any"));
         assert!(!left.covers("c"));
     }
@@ -272,9 +246,6 @@ mod tests {
                 ("finance".to_string(), None),
             ]
         );
-        assert!(ResponsibilityScopeSet::default()
-            .intersect(&left)
-            .as_slice()
-            .is_empty());
+        assert!(ResponsibilityScopeSet::default().intersect(&left).as_slice().is_empty());
     }
 }

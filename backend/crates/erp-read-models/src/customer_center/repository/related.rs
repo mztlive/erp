@@ -2,18 +2,15 @@
 //!
 //! 单次聚合返回跨页指标和最近摘要；页面不得逐页拉取合同、销售单后自行计数。
 
-use erp_contract::ContractStatus;
-use futures_util::TryStreamExt;
-use mongodb::bson::{doc, Document};
-use mongodb::Database;
-use serde::Deserialize;
-use {erp_sales::entity::sales_order::CloseStatus, erp_sales::entity::sales_order::CommercialStatus};
-
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_contract::ContractExt;
+use erp_contract::{ContractExt, ContractStatus};
+use erp_sales::entity::sales_order::{CloseStatus, CommercialStatus};
 use erp_sales::repository::SalesOrderExt;
-use persistence_core::Executor;
-use persistence_core::{Error, Result};
+use futures_util::TryStreamExt;
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use persistence_core::{Error, Executor, Result};
+use serde::Deserialize;
 
 const CONTRACTS: &str = <Database as ContractExt>::CONTRACTS;
 const SALES_ORDERS: &str = <Database as SalesOrderExt>::SALES_ORDERS;
@@ -75,8 +72,7 @@ impl<'a> CustomerCenterRepository<'a> {
     /// # 错误
     /// 无。
     fn collection(&self) -> mongodb::Collection<erp_customer::CustomerAccount> {
-        self.db
-            .collection(<Database as erp_customer::CustomerExt>::CUSTOMER_ACCOUNTS)
+        self.db.collection(<Database as erp_customer::CustomerExt>::CUSTOMER_ACCOUNTS)
     }
 
     /// 查询指定客户的关联业务跨页指标与最近摘要。
@@ -113,7 +109,7 @@ impl<'a> CustomerCenterRepository<'a> {
                     .stream(session)
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
             None => {
                 collection
                     .aggregate(pipeline)
@@ -121,7 +117,7 @@ impl<'a> CustomerCenterRepository<'a> {
                     .await?
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
         };
         Ok(rows.into_iter().next())
     }

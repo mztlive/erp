@@ -4,23 +4,23 @@ use std::collections::HashMap;
 
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{PartyAddressId, PartyBankAccountId, PartyContactId, PartyId};
-use erp_party::PartyExt;
+use erp_customer::{
+    CustomerProfileAddressInput, CustomerProfileBankAccountInput, CustomerProfileContactInput,
+    SaveCustomerProfileRequest,
+};
 use erp_party::{
     EffectiveRecordStatus, PartyAddress, PartyAddressContentMatch, PartyAddressData, PartyAddressUpdate,
     PartyBankAccount, PartyBankAccountContentMatch, PartyBankAccountData, PartyBankAccountUpdate,
-    PartyContact, PartyContactContentMatch, PartyContactData, PartyContactUpdate, SensitiveFactReuse,
+    PartyContact, PartyContactContentMatch, PartyContactData, PartyContactUpdate, PartyExt,
+    SensitiveFactReuse,
 };
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
+use super::CustomerProfileService;
+use super::numbering::business_no;
 use crate::{Error, Result};
-
-use super::{numbering::business_no, CustomerProfileService};
-use erp_customer::{
-    CustomerProfileAddressInput, CustomerProfileBankAccountInput, CustomerProfileContactInput,
-    SaveCustomerProfileRequest,
-};
 
 impl CustomerProfileService {
     /// 构造创建场景的全部从属事实并完成敏感值加密。
@@ -51,11 +51,7 @@ impl CustomerProfileService {
             .iter()
             .map(|input| self.new_bank_account(input, party_id, req.effective_from, actor))
             .collect::<Result<Vec<_>>>()?;
-        Ok(PartyFacts {
-            contacts,
-            addresses,
-            bank_accounts,
-        })
+        Ok(PartyFacts { contacts, addresses, bank_accounts })
     }
 
     /// 为显式提交的事实集合计算保留、结束和新增差异。
@@ -195,9 +191,7 @@ impl CustomerProfileService {
         let mut changes = EntityChanges::default();
         for input in inputs {
             let Some(existing_id) = input.existing_id.as_deref() else {
-                changes
-                    .created
-                    .push(self.new_contact(input, party_id, effective_from, actor)?);
+                changes.created.push(self.new_contact(input, party_id, effective_from, actor)?);
                 continue;
             };
             let mut entity = take_existing(&mut current, existing_id, "联系人")?;
@@ -206,18 +200,12 @@ impl CustomerProfileService {
                 continue;
             }
             let mut replacement = input.clone();
-            if replacement
-                .mobile
-                .as_deref()
-                .is_none_or(|value| value.trim().is_empty())
-            {
+            if replacement.mobile.as_deref().is_none_or(|value| value.trim().is_empty()) {
                 replacement.mobile = Some(self.sensitive_data.decrypt(&entity.mobile_ciphertext)?);
             }
             entity.close_at(effective_from, actor)?;
             changes.updated.push(entity);
-            changes
-                .created
-                .push(self.new_contact(&replacement, party_id, effective_from, actor)?);
+            changes.created.push(self.new_contact(&replacement, party_id, effective_from, actor)?);
         }
         close_remaining_contacts(current, effective_from, actor, &mut changes.updated)?;
         Ok(changes)
@@ -263,7 +251,7 @@ impl CustomerProfileService {
         match plaintext {
             Some(value) if !value.trim().is_empty() => {
                 SensitiveFactReuse::from_fingerprint(self.sensitive_data.contact_mobile_fingerprint(value))
-            }
+            },
             _ => SensitiveFactReuse::reuse_original(),
         }
     }
@@ -306,7 +294,7 @@ impl CustomerProfileService {
         match plaintext {
             Some(value) if !value.trim().is_empty() => {
                 SensitiveFactReuse::from_fingerprint(self.sensitive_data.address_fingerprint(value))
-            }
+            },
             _ => SensitiveFactReuse::reuse_original(),
         }
     }
@@ -371,9 +359,7 @@ impl CustomerProfileService {
         let mut changes = EntityChanges::default();
         for input in inputs {
             let Some(existing_id) = input.existing_id.as_deref() else {
-                changes
-                    .created
-                    .push(self.new_address(input, party_id, effective_from, actor)?);
+                changes.created.push(self.new_address(input, party_id, effective_from, actor)?);
                 continue;
             };
             let mut entity = take_existing(&mut current, existing_id, "地址")?;
@@ -382,18 +368,12 @@ impl CustomerProfileService {
                 continue;
             }
             let mut replacement = input.clone();
-            if replacement
-                .address
-                .as_deref()
-                .is_none_or(|value| value.trim().is_empty())
-            {
+            if replacement.address.as_deref().is_none_or(|value| value.trim().is_empty()) {
                 replacement.address = Some(self.sensitive_data.decrypt(&entity.address_ciphertext)?);
             }
             entity.close_at(effective_from, actor)?;
             changes.updated.push(entity);
-            changes
-                .created
-                .push(self.new_address(&replacement, party_id, effective_from, actor)?);
+            changes.created.push(self.new_address(&replacement, party_id, effective_from, actor)?);
         }
         close_remaining_addresses(current, effective_from, actor, &mut changes.updated)?;
         Ok(changes)
@@ -412,9 +392,7 @@ impl CustomerProfileService {
         let mut changes = EntityChanges::default();
         for input in inputs {
             let Some(existing_id) = input.existing_id.as_deref() else {
-                changes
-                    .created
-                    .push(self.new_bank_account(input, party_id, effective_from, actor)?);
+                changes.created.push(self.new_bank_account(input, party_id, effective_from, actor)?);
                 continue;
             };
             let mut entity = take_existing(&mut current, existing_id, "银行账户")?;
@@ -460,10 +438,7 @@ struct EntityChanges<T> {
 
 impl<T> Default for EntityChanges<T> {
     fn default() -> Self {
-        Self {
-            updated: Vec::new(),
-            created: Vec::new(),
-        }
+        Self { updated: Vec::new(), created: Vec::new() }
     }
 }
 
@@ -507,9 +482,7 @@ fn by_id<T>(items: Vec<T>, id: impl Fn(&T) -> String) -> HashMap<String, T> {
 
 /// 从当前集合取出客户端引用的既有事实。
 fn take_existing<T>(current: &mut HashMap<String, T>, id: &str, label: &str) -> Result<T> {
-    current
-        .remove(id)
-        .ok_or_else(|| Error::ConflictError(format!("{label}已变化，请刷新后重试")))
+    current.remove(id).ok_or_else(|| Error::ConflictError(format!("{label}已变化，请刷新后重试")))
 }
 
 /// 仅在默认标记变化时更新联系人事实。
@@ -522,13 +495,7 @@ fn update_contact_default(
     if contact.is_default == is_default {
         return Ok(());
     }
-    contact.update(
-        PartyContactUpdate {
-            is_default: Some(is_default),
-            ..Default::default()
-        },
-        actor,
-    )?;
+    contact.update(PartyContactUpdate { is_default: Some(is_default), ..Default::default() }, actor)?;
     updated.push(contact.clone());
     Ok(())
 }
@@ -543,13 +510,7 @@ fn update_address_default(
     if address.is_default == is_default {
         return Ok(());
     }
-    address.update(
-        PartyAddressUpdate {
-            is_default: Some(is_default),
-            ..Default::default()
-        },
-        actor,
-    )?;
+    address.update(PartyAddressUpdate { is_default: Some(is_default), ..Default::default() }, actor)?;
     updated.push(address.clone());
     Ok(())
 }
@@ -564,13 +525,7 @@ fn update_bank_default(
     if account.is_default == is_default {
         return Ok(());
     }
-    account.update(
-        PartyBankAccountUpdate {
-            is_default: Some(is_default),
-            ..Default::default()
-        },
-        actor,
-    )?;
+    account.update(PartyBankAccountUpdate { is_default: Some(is_default), ..Default::default() }, actor)?;
     updated.push(account.clone());
     Ok(())
 }

@@ -1,19 +1,17 @@
 //! 商品分类祖先链投影：一次 `$graphLookup` 返回 ID/父 ID 与缺失、成环、截断事实。
 
-use crate::repository::owned::ProductCategoryRepository;
 use std::collections::{HashMap, HashSet};
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::ProductCategoryId;
 use futures_util::TryStreamExt;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, Result};
 use serde::Deserialize;
 
-use crate::entity::catalog::ProductCategory;
-use erp_core::ids::ProductCategoryId;
-
 use super::shared::PRODUCT_CATEGORIES;
-use persistence_core::Executor;
-use persistence_core::Result;
+use crate::entity::catalog::ProductCategory;
+use crate::repository::owned::ProductCategoryRepository;
 
 /// 祖先链最大节点数（含起始父节点）。超出即视为异常链并失败关闭。
 const PARENT_CHAIN_MAX_NODES: usize = 32;
@@ -81,13 +79,7 @@ impl CategoryParentChainFact {
         cycle_detected: bool,
         truncated: bool,
     ) -> Self {
-        Self {
-            start_parent_id,
-            links: Vec::new(),
-            missing_parent_id,
-            cycle_detected,
-            truncated,
-        }
+        Self { start_parent_id, links: Vec::new(), missing_parent_id, cycle_detected, truncated }
     }
 
     /// 判断投影链是否包含指定分类 ID。
@@ -116,10 +108,7 @@ impl CategoryParentChainFact {
     /// # 错误
     /// 无。
     pub fn with_link(mut self, id: impl Into<String>, parent_id: Option<String>) -> Self {
-        self.links.push(CategoryParentLink {
-            id: id.into(),
-            parent_id,
-        });
+        self.links.push(CategoryParentLink { id: id.into(), parent_id });
         self
     }
 }
@@ -217,7 +206,7 @@ async fn aggregate_parent_chain(
                 .stream(session)
                 .try_collect::<Vec<_>>()
                 .await?
-        }
+        },
         None => {
             collection
                 .aggregate(pipeline)
@@ -225,7 +214,7 @@ async fn aggregate_parent_chain(
                 .await?
                 .try_collect::<Vec<_>>()
                 .await?
-        }
+        },
     };
     Ok(rows.into_iter().next())
 }
@@ -308,18 +297,11 @@ fn assemble_parent_chain_fact(
     let mut ancestors = row.ancestors;
     ancestors.sort_by_key(|item| item.depth);
     let mut links = Vec::with_capacity(ancestors.len() + 1);
-    links.push(CategoryParentLink {
-        id: row.id,
-        parent_id: row.parent_category_id,
-    });
-    let graph_lookup_saturated = ancestors
-        .iter()
-        .any(|item| item.depth >= PARENT_CHAIN_GRAPH_LOOKUP_MAX_DEPTH);
+    links.push(CategoryParentLink { id: row.id, parent_id: row.parent_category_id });
+    let graph_lookup_saturated =
+        ancestors.iter().any(|item| item.depth >= PARENT_CHAIN_GRAPH_LOOKUP_MAX_DEPTH);
     for ancestor in ancestors {
-        links.push(CategoryParentLink {
-            id: ancestor.id,
-            parent_id: ancestor.parent_category_id,
-        });
+        links.push(CategoryParentLink { id: ancestor.id, parent_id: ancestor.parent_category_id });
     }
     inspect_parent_links(start_parent_id, links, graph_lookup_saturated)
 }
@@ -477,10 +459,8 @@ mod tests {
     /// 中段父节点缺失视为历史断链，失败关闭。
     #[test]
     fn broken_mid_chain_is_missing() {
-        let fact = assemble_parent_chain_fact(
-            "child-parent",
-            Some(row("child-parent", Some("ghost"), Vec::new())),
-        );
+        let fact =
+            assemble_parent_chain_fact("child-parent", Some(row("child-parent", Some("ghost"), Vec::new())));
 
         assert_eq!(fact.missing_parent_id.as_deref(), Some("ghost"));
         assert!(!fact.cycle_detected);
@@ -529,9 +509,8 @@ mod tests {
     /// `$graphLookup` 达到 maxDepth 且末端仍指向未取回父节点时标截断，不得记为缺失。
     #[test]
     fn assemble_max_depth_onward_parent_is_truncated_not_missing() {
-        let mut ids: Vec<String> = (0..=PARENT_CHAIN_GRAPH_LOOKUP_MAX_DEPTH)
-            .map(|depth| format!("n{depth}"))
-            .collect();
+        let mut ids: Vec<String> =
+            (0..=PARENT_CHAIN_GRAPH_LOOKUP_MAX_DEPTH).map(|depth| format!("n{depth}")).collect();
         ids.push("beyond".to_string());
         let mut ancestors = Vec::new();
         for depth in 0..=PARENT_CHAIN_GRAPH_LOOKUP_MAX_DEPTH {

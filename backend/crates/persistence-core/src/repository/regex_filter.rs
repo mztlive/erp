@@ -1,4 +1,4 @@
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 
 /// 写入按字面量匹配且忽略大小写的 MongoDB 正则条件。
 pub fn insert_literal_regex_filter(filter: &mut Document, field: &str, value: Option<&str>) {
@@ -15,7 +15,7 @@ pub fn insert_literal_regex_filter(filter: &mut Document, field: &str, value: Op
 
 #[cfg(test)]
 mod tests {
-    use mongodb::bson::{doc, Document};
+    use mongodb::bson::{Document, doc};
 
     use super::insert_literal_regex_filter;
 

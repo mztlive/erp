@@ -7,20 +7,18 @@
 use erp_fulfillment::entity::fulfillment::{
     Delivery, DeliveryType, ElectronicDelivery, PurchaseReceipt, ServiceFulfillment,
 };
-use erp_identity::AccessControlExt;
-use erp_identity::{Permission, PermissionSet};
-use erp_warehouse::WarehouseExt;
-use erp_warehouse::WarehouseFulfillmentOperation;
+use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
+use erp_procurement::repository::PurchaseOrderExt;
+use erp_sales::repository::SalesOrderExt;
+use erp_warehouse::{WarehouseExt, WarehouseFulfillmentOperation};
+use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
     AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
-use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::Executor;
-use {erp_procurement::repository::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
 use crate::{Error, Result};
-use erp_identity::SharedRbacService;
 
 mod command;
 
@@ -73,7 +71,7 @@ impl FulfillmentTaskObject<'_> {
             Self::PurchaseReceipt(_) => "PURCHASE_RECEIPT_READY",
             Self::Delivery(delivery) if delivery.delivery_type == DeliveryType::WarehouseShip => {
                 "WAREHOUSE_DELIVERY_READY"
-            }
+            },
             Self::Delivery(_) => "SUPPLIER_DIRECT_DELIVERY_READY",
             Self::ElectronicDelivery(_) => "ELECTRONIC_DELIVERY_READY",
             Self::ServiceFulfillment(_) => "SERVICE_FULFILLMENT_READY",
@@ -92,41 +90,29 @@ impl FulfillmentTaskObject<'_> {
     /// 返回由履约对象冻结的责任角色与责任键，不读取当前配置作为回退。
     fn frozen_identity(&self) -> Result<FrozenFulfillmentIdentity> {
         let (owner_role, responsibility_key) = match self {
-            Self::PurchaseReceipt(receipt) => (
-                WAREHOUSE_INBOUND_ROLE,
-                format!("warehouse:{}:receipt", receipt.warehouse_id),
-            ),
+            Self::PurchaseReceipt(receipt) => {
+                (WAREHOUSE_INBOUND_ROLE, format!("warehouse:{}:receipt", receipt.warehouse_id))
+            },
             Self::Delivery(delivery) if delivery.delivery_type == DeliveryType::WarehouseShip => {
                 let warehouse_id = delivery.warehouse_id.as_ref().ok_or_else(|| {
                     Error::BusinessLogicError("仓发单缺少发货仓库，无法校验责任任务".to_string())
                 })?;
-                (
-                    WAREHOUSE_OUTBOUND_ROLE,
-                    format!("warehouse:{warehouse_id}:warehouse_ship"),
-                )
-            }
+                (WAREHOUSE_OUTBOUND_ROLE, format!("warehouse:{warehouse_id}:warehouse_ship"))
+            },
             Self::Delivery(delivery) => {
                 let purchase_order_id = delivery.purchase_order_id.as_ref().ok_or_else(|| {
                     Error::BusinessLogicError("供应商直发单缺少采购单，无法校验责任任务".to_string())
                 })?;
-                (
-                    PURCHASE_ORDER_OWNER_ROLE,
-                    format!("purchase_order:{purchase_order_id}"),
-                )
-            }
-            Self::ElectronicDelivery(delivery) => (
-                PURCHASE_ORDER_OWNER_ROLE,
-                format!("purchase_order:{}", delivery.purchase_order_id),
-            ),
-            Self::ServiceFulfillment(fulfillment) => (
-                PURCHASE_ORDER_OWNER_ROLE,
-                format!("purchase_order:{}", fulfillment.purchase_order_id),
-            ),
+                (PURCHASE_ORDER_OWNER_ROLE, format!("purchase_order:{purchase_order_id}"))
+            },
+            Self::ElectronicDelivery(delivery) => {
+                (PURCHASE_ORDER_OWNER_ROLE, format!("purchase_order:{}", delivery.purchase_order_id))
+            },
+            Self::ServiceFulfillment(fulfillment) => {
+                (PURCHASE_ORDER_OWNER_ROLE, format!("purchase_order:{}", fulfillment.purchase_order_id))
+            },
         };
-        Ok(FrozenFulfillmentIdentity {
-            owner_role,
-            responsibility_key,
-        })
+        Ok(FrozenFulfillmentIdentity { owner_role, responsibility_key })
     }
 }
 
@@ -163,24 +149,20 @@ pub async fn ensure_fulfillment_task(
     object: FulfillmentTaskObject<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let existing = open_fulfillment_tasks(
-        db,
-        object.business_object_type(),
-        object.business_object_id(),
-        executor,
-    )
-    .await?;
+    let existing =
+        open_fulfillment_tasks(db, object.business_object_type(), object.business_object_id(), executor)
+            .await?;
     match existing.as_slice() {
-        [] => {}
+        [] => {},
         [task] => {
             ensure_task_matches_frozen_identity(task, &object)?;
             return Ok(());
-        }
+        },
         _ => {
             return Err(Error::BusinessLogicError(
                 "履约对象存在多个开放执行任务，请联系管理员处理后重试".to_string(),
             ));
-        }
+        },
     }
 
     let owner = resolve_task_owner(db, &object, executor).await?;
@@ -291,9 +273,7 @@ fn ensure_frozen_identity_fields(
     if matches {
         return Ok(());
     }
-    Err(Error::BusinessLogicError(
-        "履约任务责任身份与业务对象不一致，请联系管理员修复后重试".to_string(),
-    ))
+    Err(Error::BusinessLogicError("履约任务责任身份与业务对象不一致，请联系管理员修复后重试".to_string()))
 }
 
 async fn load_single_open_task(
@@ -336,52 +316,38 @@ async fn resolve_task_owner(
 ) -> Result<FulfillmentTaskOwner> {
     match object {
         FulfillmentTaskObject::PurchaseReceipt(receipt) => {
-            let order = db
-                .purchase_orders()
-                .find_by_id(&receipt.purchase_order_id, executor)
-                .await?
-                .ok_or_else(|| {
-                    Error::BusinessLogicError("采购入库单来源采购单不存在，无法形成责任任务".to_string())
-                })?;
+            let order =
+                db.purchase_orders().find_by_id(&receipt.purchase_order_id, executor).await?.ok_or_else(
+                    || Error::BusinessLogicError("采购入库单来源采购单不存在，无法形成责任任务".to_string()),
+                )?;
             if order.target_warehouse_for_receipt()? != &receipt.warehouse_id {
                 return Err(Error::BusinessLogicError(
                     "采购入库仓与采购单目标仓不一致，请修正后重试".to_string(),
                 ));
             }
-            warehouse_owner(
-                db,
-                &receipt.warehouse_id,
-                WarehouseFulfillmentOperation::Receipt,
-                executor,
-            )
-            .await
-        }
+            warehouse_owner(db, &receipt.warehouse_id, WarehouseFulfillmentOperation::Receipt, executor).await
+        },
         FulfillmentTaskObject::Delivery(delivery) => match delivery.delivery_type {
             DeliveryType::WarehouseShip => {
                 let warehouse_id = delivery.warehouse_id.as_ref().ok_or_else(|| {
                     Error::BusinessLogicError("仓发单缺少发货仓库，无法形成责任任务".to_string())
                 })?;
-                warehouse_owner(
-                    db,
-                    warehouse_id,
-                    WarehouseFulfillmentOperation::WarehouseShip,
-                    executor,
-                )
-                .await
-            }
+                warehouse_owner(db, warehouse_id, WarehouseFulfillmentOperation::WarehouseShip, executor)
+                    .await
+            },
             DeliveryType::SupplierDirect => {
                 let purchase_order_id = delivery.purchase_order_id.as_ref().ok_or_else(|| {
                     Error::BusinessLogicError("供应商直发单缺少采购单，无法形成责任任务".to_string())
                 })?;
                 purchase_order_owner(db, purchase_order_id.as_ref(), executor).await
-            }
+            },
         },
         FulfillmentTaskObject::ElectronicDelivery(delivery) => {
             purchase_order_owner(db, delivery.purchase_order_id.as_ref(), executor).await
-        }
+        },
         FulfillmentTaskObject::ServiceFulfillment(fulfillment) => {
             purchase_order_owner(db, fulfillment.purchase_order_id.as_ref(), executor).await
-        }
+        },
     }
 }
 
@@ -416,17 +382,13 @@ async fn purchase_order_owner(
 ) -> Result<FulfillmentTaskOwner> {
     let order = db
         .purchase_orders()
-        .find_by_id(
-            &erp_core::ids::PurchaseOrderId::new(purchase_order_id.to_string()),
-            executor,
-        )
+        .find_by_id(&erp_core::ids::PurchaseOrderId::new(purchase_order_id.to_string()), executor)
         .await?
         .ok_or_else(|| Error::BusinessLogicError("履约来源采购单不存在，无法形成责任任务".to_string()))?;
-    let sales_order = db
-        .sales_orders()
-        .find_by_id(&order.sales_order_id, executor)
-        .await?
-        .ok_or_else(|| Error::BusinessLogicError("采购单来源销售单不存在，无法形成责任任务".to_string()))?;
+    let sales_order =
+        db.sales_orders().find_by_id(&order.sales_order_id, executor).await?.ok_or_else(|| {
+            Error::BusinessLogicError("采购单来源销售单不存在，无法形成责任任务".to_string())
+        })?;
     Ok(FulfillmentTaskOwner {
         owner_user_id: order.current_owner_user_id()?.to_string(),
         owner_role: PURCHASE_ORDER_OWNER_ROLE,
@@ -459,28 +421,20 @@ pub async fn ensure_fulfillment_owner_eligible(
     let required_permissions = WorkItemType::FulfillmentOperation
         .fulfillment_execution_permissions(business_object_type)
         .ok_or_else(|| Error::Internal("履约对象未登记完整执行权限，请联系管理员修复后重试".to_string()))?;
-    let account = db
-        .accounts()
-        .find_work_item_account(owner_user_id, executor)
-        .await?
-        .ok_or_else(|| {
-            Error::BusinessLogicError("履约责任人账号不存在，请先调整采购单或仓库责任配置".to_string())
-        })?;
+    let account = db.accounts().find_work_item_account(owner_user_id, executor).await?.ok_or_else(|| {
+        Error::BusinessLogicError("履约责任人账号不存在，请先调整采购单或仓库责任配置".to_string())
+    })?;
     AvailableWorkItemAccount::from_account(&crate::adapters::workflow::account_fact(&account)).map_err(
         |_| Error::BusinessLogicError("履约责任人账号不可用，请先调整采购单或仓库责任配置".to_string()),
     )?;
     let granted = PermissionSet::new(rbac.permissions(account.kind, owner_user_id).await?);
     let required = PermissionSet::new(
-        required_permissions
-            .iter()
-            .map(|code| Permission::parse(code).expect("固定履约操作权限必须合法")),
+        required_permissions.iter().map(|code| Permission::parse(code).expect("固定履约操作权限必须合法")),
     );
     if granted.covers(&required) {
         return Ok(());
     }
-    Err(Error::BusinessLogicError(
-        "履约责任人缺少完成当前操作所需权限，请先调整角色或责任配置".to_string(),
-    ))
+    Err(Error::BusinessLogicError("履约责任人缺少完成当前操作所需权限，请先调整角色或责任配置".to_string()))
 }
 
 /// 在写入活动或完成事实前重验当前责任人的账号状态与完整执行权限。
@@ -497,9 +451,9 @@ async fn ensure_current_owner_execution_access(
 #[cfg(test)]
 mod tests {
     use erp_core::ids::WorkItemId;
-
-    use super::{ensure_frozen_identity_fields, AssignmentSource, WorkItem, WorkItemData};
     use erp_workflow::entity::work_item::{WorkItemPriority, WorkItemType};
+
+    use super::{AssignmentSource, WorkItem, WorkItemData, ensure_frozen_identity_fields};
 
     fn fulfillment_task() -> WorkItem {
         WorkItem::new_with_responsibility_key(
@@ -526,41 +480,49 @@ mod tests {
     #[test]
     fn formal_command_requires_full_frozen_responsibility_identity() {
         let task = fulfillment_task();
-        assert!(ensure_frozen_identity_fields(
-            &task,
-            "delivery",
-            "delivery-1",
-            "purchase_order_owner",
-            "purchase_order:po-1",
-            "SUPPLIER_DIRECT_DELIVERY_READY",
-        )
-        .is_ok());
-        assert!(ensure_frozen_identity_fields(
-            &task,
-            "delivery",
-            "delivery-1",
-            "warehouse_outbound_handler",
-            "purchase_order:po-1",
-            "SUPPLIER_DIRECT_DELIVERY_READY",
-        )
-        .is_err());
-        assert!(ensure_frozen_identity_fields(
-            &task,
-            "delivery",
-            "delivery-1",
-            "purchase_order_owner",
-            "purchase_order:po-2",
-            "SUPPLIER_DIRECT_DELIVERY_READY",
-        )
-        .is_err());
-        assert!(ensure_frozen_identity_fields(
-            &task,
-            "delivery",
-            "delivery-1",
-            "purchase_order_owner",
-            "purchase_order:po-1",
-            "WAREHOUSE_DELIVERY_READY",
-        )
-        .is_err());
+        assert!(
+            ensure_frozen_identity_fields(
+                &task,
+                "delivery",
+                "delivery-1",
+                "purchase_order_owner",
+                "purchase_order:po-1",
+                "SUPPLIER_DIRECT_DELIVERY_READY",
+            )
+            .is_ok()
+        );
+        assert!(
+            ensure_frozen_identity_fields(
+                &task,
+                "delivery",
+                "delivery-1",
+                "warehouse_outbound_handler",
+                "purchase_order:po-1",
+                "SUPPLIER_DIRECT_DELIVERY_READY",
+            )
+            .is_err()
+        );
+        assert!(
+            ensure_frozen_identity_fields(
+                &task,
+                "delivery",
+                "delivery-1",
+                "purchase_order_owner",
+                "purchase_order:po-2",
+                "SUPPLIER_DIRECT_DELIVERY_READY",
+            )
+            .is_err()
+        );
+        assert!(
+            ensure_frozen_identity_fields(
+                &task,
+                "delivery",
+                "delivery-1",
+                "purchase_order_owner",
+                "purchase_order:po-1",
+                "WAREHOUSE_DELIVERY_READY",
+            )
+            .is_err()
+        );
     }
 }

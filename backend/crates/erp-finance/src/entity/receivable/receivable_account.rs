@@ -2,15 +2,15 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::receivable::SalesBusinessTypeFact as BusinessType;
 use erp_core::common::stable::StableBase;
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerAccountId, PartyId, ReceivableAccountId, SalesOrderId, SalesOrderRevisionId};
 use erp_core::money::Amount;
 use erp_core::validation::normalize_optional_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::receivable::SalesBusinessTypeFact as BusinessType;
 
 /// 复核证据引用最大长度。
 const EVIDENCE_MAX_LEN: usize = 512;
@@ -335,21 +335,13 @@ impl ReceivableAccount {
         let review_status = update.review_status.unwrap_or(self.review_status);
         let gross_total = update.gross_total.unwrap_or(self.gross_total);
         let invoiceable_total = update.invoiceable_total.unwrap_or(self.invoiceable_total);
-        let (open_total, open_invoiceable_total) = validate_totals(
-            gross_total,
-            self.settled_total,
-            invoiceable_total,
-            self.invoiced_total,
-        )?;
+        let (open_total, open_invoiceable_total) =
+            validate_totals(gross_total, self.settled_total, invoiceable_total, self.invoiced_total)?;
         let (reviewed_by, reviewed_at, evidence) = if update.reviewed_by.is_none()
             && update.reviewed_at.is_none()
             && update.review_evidence_reference.is_none()
         {
-            (
-                self.reviewed_by.clone(),
-                self.reviewed_at,
-                self.review_evidence_reference.clone(),
-            )
+            (self.reviewed_by.clone(), self.reviewed_at, self.review_evidence_reference.clone())
         } else {
             Self::validate_review(
                 review_status,
@@ -392,12 +384,8 @@ impl ReceivableAccount {
         invoiced_total: Amount,
         updated_by: impl Into<String>,
     ) -> Result<()> {
-        let (open_total, open_invoiceable) = validate_totals(
-            self.gross_total,
-            settled_total,
-            self.invoiceable_total,
-            invoiced_total,
-        )?;
+        let (open_total, open_invoiceable) =
+            validate_totals(self.gross_total, settled_total, self.invoiceable_total, invoiced_total)?;
         self.settled_total = settled_total;
         self.invoiced_total = invoiced_total;
         self.open_total = open_total;
@@ -447,14 +435,14 @@ impl ReceivableAccount {
         match review_status {
             AccountReviewStatus::Reviewed if !trio_complete || reviewed_at.is_none() => {
                 Err(Error::from("已复核状态必须携带复核人、复核时间与复核证据"))
-            }
+            },
             AccountReviewStatus::NotApplicable
             | AccountReviewStatus::OpeningPending
             | AccountReviewStatus::SyncDeltaPending
                 if trio_complete && reviewed_at.is_some() =>
             {
                 Err(Error::from("未复核状态不得携带复核人、复核时间与复核证据"))
-            }
+            },
             _ => Ok((reviewed_by, reviewed_at, evidence)),
         }
     }
@@ -492,10 +480,7 @@ fn validate_totals(
     if invoiced_total > invoiceable_total {
         return Err(Error::from("净已开金额不得超过可开票总额"));
     }
-    Ok((
-        gross_total.checked_sub(settled_total),
-        invoiceable_total.checked_sub(invoiced_total),
-    ))
+    Ok((gross_total.checked_sub(settled_total), invoiceable_total.checked_sub(invoiced_total)))
 }
 
 /// 由开放余额派生子账状态。
@@ -518,9 +503,11 @@ fn derive_status(open_total: Amount, settled_total: Amount) -> ReceivableAccount
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use erp_core::money::Amount;
     use std::str::FromStr;
+
+    use erp_core::money::Amount;
+
+    use super::*;
 
     fn data() -> ReceivableAccountData {
         ReceivableAccountData {
@@ -545,10 +532,7 @@ mod tests {
         let account = ReceivableAccount::new(ReceivableAccountId::new("ra-1"), data(), "admin-1").unwrap();
 
         assert_eq!(account.open_total, Amount::from_str("1000.00").unwrap());
-        assert_eq!(
-            account.open_invoiceable_total,
-            Amount::from_str("1000.00").unwrap()
-        );
+        assert_eq!(account.open_invoiceable_total, Amount::from_str("1000.00").unwrap());
         assert_eq!(account.stable.status(), ReceivableAccountStatus::Open);
         assert_eq!(account.stable.created_by, "admin-1");
         assert_eq!(account.stable.updated_by, "admin-1");
@@ -556,22 +540,14 @@ mod tests {
 
     #[test]
     fn new_rejects_zero_seq_negative_and_over_settled() {
-        let zero_seq = ReceivableAccountData {
-            account_seq: 0,
-            ..data()
-        };
+        let zero_seq = ReceivableAccountData { account_seq: 0, ..data() };
         assert!(ReceivableAccount::new(ReceivableAccountId::new("ra-2"), zero_seq, "admin").is_err());
 
-        let negative = ReceivableAccountData {
-            settled_total: Amount::from_str("-1.00").unwrap(),
-            ..data()
-        };
+        let negative = ReceivableAccountData { settled_total: Amount::from_str("-1.00").unwrap(), ..data() };
         assert!(ReceivableAccount::new(ReceivableAccountId::new("ra-3"), negative, "admin").is_err());
 
-        let over_settled = ReceivableAccountData {
-            settled_total: Amount::from_str("1001.00").unwrap(),
-            ..data()
-        };
+        let over_settled =
+            ReceivableAccountData { settled_total: Amount::from_str("1001.00").unwrap(), ..data() };
         assert!(ReceivableAccount::new(ReceivableAccountId::new("ra-4"), over_settled, "admin").is_err());
     }
 
@@ -613,34 +589,28 @@ mod tests {
             ReceivableAccount::new(ReceivableAccountId::new("ra-1"), data(), "admin-1").unwrap();
 
         account
-            .sync_totals(
-                Amount::from_str("600.00").unwrap(),
-                Amount::from_str("0.00").unwrap(),
-                "system",
-            )
+            .sync_totals(Amount::from_str("600.00").unwrap(), Amount::from_str("0.00").unwrap(), "system")
             .unwrap();
         assert_eq!(account.stable.status(), ReceivableAccountStatus::PartiallySettled);
         assert_eq!(account.open_total, Amount::from_str("400.00").unwrap());
 
         account
-            .sync_totals(
-                Amount::from_str("1000.00").unwrap(),
-                Amount::from_str("1000.00").unwrap(),
-                "system",
-            )
+            .sync_totals(Amount::from_str("1000.00").unwrap(), Amount::from_str("1000.00").unwrap(), "system")
             .unwrap();
         assert_eq!(account.stable.status(), ReceivableAccountStatus::Settled);
         assert!(account.is_settled());
         assert_eq!(account.open_total, Amount::from_str("0.00").unwrap());
         assert_eq!(account.open_invoiceable_total, Amount::from_str("0.00").unwrap());
 
-        assert!(account
-            .sync_totals(
-                Amount::from_str("1001.00").unwrap(),
-                Amount::from_str("0.00").unwrap(),
-                "system",
-            )
-            .is_err());
+        assert!(
+            account
+                .sync_totals(
+                    Amount::from_str("1001.00").unwrap(),
+                    Amount::from_str("0.00").unwrap(),
+                    "system",
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -667,19 +637,21 @@ mod tests {
         assert_eq!(account.stable.updated_by, "admin-2");
         assert_eq!(account.stable.created_by, "admin-1", "touch 不修改创建人");
 
-        assert!(account
-            .update(
-                ReceivableAccountUpdate {
-                    review_status: Some(AccountReviewStatus::OpeningPending),
-                    reviewed_by: Some("reviewer-3".to_string()),
-                    reviewed_at: Some(Instant::from_unix_secs(1_700_000_200)),
-                    review_evidence_reference: None,
-                    gross_total: None,
-                    invoiceable_total: None,
-                },
-                "admin-3",
-            )
-            .is_err());
+        assert!(
+            account
+                .update(
+                    ReceivableAccountUpdate {
+                        review_status: Some(AccountReviewStatus::OpeningPending),
+                        reviewed_by: Some("reviewer-3".to_string()),
+                        reviewed_at: Some(Instant::from_unix_secs(1_700_000_200)),
+                        review_evidence_reference: None,
+                        gross_total: None,
+                        invoiceable_total: None,
+                    },
+                    "admin-3",
+                )
+                .is_err()
+        );
     }
 
     #[test]

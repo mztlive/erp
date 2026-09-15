@@ -1,11 +1,3 @@
-use crate::entity::facts::{
-    AvailabilityFact as SupplierOfferingAvailability, AvailabilityStatus, CurrentRevisionFact, FactIdentity,
-    OfferingFact as SupplierOffering, OfferingRevisionFact as SupplierOfferingRevision, ProductKind,
-    SalesCustomerSnapshotFact, SalesGoodsLineFact as SalesOrderGoodsServiceLineRevision,
-    SalesLineType as LineType, SalesOrderBasisFact, SalesRevisionFact as SalesOrderRevision,
-    SalesRevisionLineFact as SalesOrderRevisionLine, StockBalanceFact as StockBalance, VersionedFactIdentity,
-};
-use crate::entity::purchase_order::ProcurementCoverageSummary;
 use std::str::FromStr;
 
 use erp_core::common::time::Instant;
@@ -13,24 +5,27 @@ use erp_core::ids::{SalesOrderRevisionLineId, SkuId, SupplierAccountId, Supplier
 use erp_core::money::{Quantity, Rate, UnitPrice};
 
 use super::{
-    stock_basis_id_for, SourcingAssignment, SourcingAssignmentSet, SourcingPlan, SourcingPlanError,
-    StockBasisGroup, StockBasisLine, SupplySourceType,
+    SourcingAssignment, SourcingAssignmentSet, SourcingPlan, SourcingPlanError, StockBasisGroup,
+    StockBasisLine, SupplySourceType, stock_basis_id_for,
+};
+use crate::entity::facts::{
+    AvailabilityFact as SupplierOfferingAvailability, AvailabilityStatus, CurrentRevisionFact, FactIdentity,
+    OfferingFact as SupplierOffering, OfferingRevisionFact as SupplierOfferingRevision, ProductKind,
+    SalesCustomerSnapshotFact, SalesGoodsLineFact as SalesOrderGoodsServiceLineRevision,
+    SalesLineType as LineType, SalesOrderBasisFact, SalesRevisionFact as SalesOrderRevision,
+    SalesRevisionLineFact as SalesOrderRevisionLine, StockBalanceFact as StockBalance, VersionedFactIdentity,
 };
 use crate::entity::purchase_order::coverage::SalesProcurementCoverageLine;
 use crate::entity::purchase_order::creation_basis::{
-    basis_id_for, BasisGroup, BasisLine, BasisScope, LineSupply,
+    BasisGroup, BasisLine, BasisScope, LineSupply, basis_id_for,
 };
-use crate::entity::purchase_order::{FulfillmentResponsibility, PurchaseType};
+use crate::entity::purchase_order::{FulfillmentResponsibility, ProcurementCoverageSummary, PurchaseType};
 
 /// 构造销售当前版本头。
 fn revision(id: &str) -> SalesOrderRevision {
     SalesOrderRevision {
-        base: FactIdentity {
-            id: format!("rev-{id}"),
-        },
-        customer_snapshot: SalesCustomerSnapshotFact {
-            customer_name: "客户".to_string(),
-        },
+        base: FactIdentity { id: format!("rev-{id}") },
+        customer_snapshot: SalesCustomerSnapshotFact { customer_name: "客户".to_string() },
         contract_snapshot: None,
     }
 }
@@ -96,9 +91,7 @@ fn offering(id: &str, supplier_id: &str) -> SupplierOffering {
 /// 构造供给商业条款修订。
 fn offering_revision(offering_id: &str) -> SupplierOfferingRevision {
     SupplierOfferingRevision {
-        base: FactIdentity {
-            id: format!("offrev-{offering_id}"),
-        },
+        base: FactIdentity { id: format!("offrev-{offering_id}") },
         dropship_supply_price_gross: UnitPrice::from_str("6").unwrap(),
         bulk_supply_price_gross: UnitPrice::from_str("5").unwrap(),
         input_tax_rate: Rate::from_str("0.13").unwrap(),
@@ -110,10 +103,7 @@ fn offering_revision(offering_id: &str) -> SupplierOfferingRevision {
 /// 构造供给实时可供投影。
 fn availability(offering_id: &str, quantity: &str) -> SupplierOfferingAvailability {
     SupplierOfferingAvailability {
-        base: VersionedFactIdentity {
-            id: format!("avail-{offering_id}"),
-            version: 1,
-        },
+        base: VersionedFactIdentity { id: format!("avail-{offering_id}"), version: 1 },
         supplier_offering_id: SupplierOfferingId::new(offering_id),
         availability_status: AvailabilityStatus::Available,
         available_quantity: Some(Quantity::from_str(quantity).unwrap()),
@@ -187,10 +177,7 @@ fn stock_basis_group(
     StockBasisGroup {
         revision: revision("1"),
         balance: StockBalance {
-            base: VersionedFactIdentity {
-                id: balance_id.to_string(),
-                version: 1,
-            },
+            base: VersionedFactIdentity { id: balance_id.to_string(), version: 1 },
             warehouse_id: WarehouseId::new(warehouse_id),
             sku_id: SkuId::new("sku-1"),
             available_quantity: available,
@@ -240,15 +227,9 @@ fn parse_trims_and_types_valid_assignment() {
 /// 空白销售行必须拒绝。
 #[test]
 fn parse_rejects_blank_sales_line() {
-    let error = SourcingAssignment::parse(
-        " ",
-        "basis-1",
-        SupplySourceType::Purchase,
-        None,
-        "10",
-        "2026-09-01",
-    )
-    .expect_err("空白销售行必须失败");
+    let error =
+        SourcingAssignment::parse(" ", "basis-1", SupplySourceType::Purchase, None, "10", "2026-09-01")
+            .expect_err("空白销售行必须失败");
     assert_eq!(error.to_string(), "销售行不能为空");
 }
 
@@ -263,30 +244,18 @@ fn parse_rejects_blank_basis() {
 /// 非法数量文本必须拒绝。
 #[test]
 fn parse_rejects_invalid_quantity() {
-    let error = SourcingAssignment::parse(
-        "sol-1",
-        "basis-1",
-        SupplySourceType::Purchase,
-        None,
-        "abc",
-        "2026-09-01",
-    )
-    .expect_err("非法数量必须失败");
+    let error =
+        SourcingAssignment::parse("sol-1", "basis-1", SupplySourceType::Purchase, None, "abc", "2026-09-01")
+            .expect_err("非法数量必须失败");
     assert!(error.to_string().starts_with("本次分配数量非法"));
 }
 
 /// 非法预计交付日必须拒绝。
 #[test]
 fn parse_rejects_invalid_delivery_date() {
-    let error = SourcingAssignment::parse(
-        "sol-1",
-        "basis-1",
-        SupplySourceType::Purchase,
-        None,
-        "10",
-        "not-a-date",
-    )
-    .expect_err("非法日期必须失败");
+    let error =
+        SourcingAssignment::parse("sol-1", "basis-1", SupplySourceType::Purchase, None, "10", "not-a-date")
+            .expect_err("非法日期必须失败");
     assert!(error.to_string().starts_with("预计交付日非法"));
 }
 
@@ -319,10 +288,7 @@ fn parse_rejects_target_warehouse_for_existing_stock() {
         "2026-09-01",
     )
     .expect_err("现有库存指定目标仓必须失败");
-    assert_eq!(
-        error.to_string(),
-        "现有库存由所选库存余额确定仓库，不能另行指定目标仓"
-    );
+    assert_eq!(error.to_string(), "现有库存由所选库存余额确定仓库，不能另行指定目标仓");
 }
 
 /// 现有库存不携带目标仓时解析成功。
@@ -389,10 +355,7 @@ fn normalize_sorts_stably_by_line_then_basis() {
         .iter()
         .map(|line| (line.sales_order_line_id.as_str(), line.basis_id.as_str()))
         .collect::<Vec<_>>();
-    assert_eq!(
-        ids,
-        vec![("sol-1", "basis-a"), ("sol-1", "basis-b"), ("sol-2", "basis-a")]
-    );
+    assert_eq!(ids, vec![("sol-1", "basis-a"), ("sol-1", "basis-b"), ("sol-2", "basis-a")]);
 }
 
 /// 空集合必须归一为空计划。
@@ -423,10 +386,7 @@ fn purchase_assignments_merge_into_one_plan_per_scope_and_warehouse() {
     let plan = SourcingPlan::plan(&order, &[group], &[], "wi-1", &assignments).expect("计划必须成功");
     let drafts = plan.purchase_plans();
     assert_eq!(drafts.len(), 1);
-    assert_eq!(
-        drafts[0].target_warehouse_id.as_ref().map(ToString::to_string),
-        Some("wh-1".to_string())
-    );
+    assert_eq!(drafts[0].target_warehouse_id.as_ref().map(ToString::to_string), Some("wh-1".to_string()));
     assert_eq!(drafts[0].requested_lines.len(), 2);
     assert!(plan.stock_plans().is_empty());
 }
@@ -455,10 +415,7 @@ fn purchase_assignments_split_by_target_warehouse() {
         .iter()
         .map(|plan| plan.target_warehouse_id.as_ref().map(ToString::to_string))
         .collect::<Vec<_>>();
-    assert_eq!(
-        warehouses,
-        vec![Some("wh-1".to_string()), Some("wh-2".to_string())]
-    );
+    assert_eq!(warehouses, vec![Some("wh-1".to_string()), Some("wh-2".to_string())]);
 }
 
 /// 不同付款条件必须拆分为不同采购单。
@@ -539,10 +496,7 @@ fn warehouse_fulfillment_requires_target_warehouse() {
 
     let error =
         SourcingPlan::plan(&order, &[group], &[], "wi-1", &assignments).expect_err("缺少目标仓必须失败");
-    assert_eq!(
-        error,
-        SourcingPlanError::WarehouseContract("仓库履约必须先选择目标收货仓".to_string())
-    );
+    assert_eq!(error, SourcingPlanError::WarehouseContract("仓库履约必须先选择目标收货仓".to_string()));
 }
 
 /// 非仓库履约不能指定目标收货仓。
@@ -568,22 +522,14 @@ fn non_warehouse_fulfillment_rejects_target_warehouse() {
 
     let error = SourcingPlan::plan(&order, &[group], &[], "wi-1", &assignments)
         .expect_err("非仓库履约指定目标仓必须失败");
-    assert_eq!(
-        error,
-        SourcingPlanError::WarehouseContract("非仓库履约不能指定目标收货仓".to_string())
-    );
+    assert_eq!(error, SourcingPlanError::WarehouseContract("非仓库履约不能指定目标收货仓".to_string()));
 }
 
 /// 现有库存按余额归组，同余额的多销售行合并为一次预占。
 #[test]
 fn stock_assignments_group_by_balance() {
     let order = sales_order("so-1");
-    let group = stock_basis_group(
-        "bal-1",
-        "wh-1",
-        "8",
-        &[("sol-1", "10", "2"), ("sol-2", "10", "2")],
-    );
+    let group = stock_basis_group("bal-1", "wh-1", "8", &[("sol-1", "10", "2"), ("sol-2", "10", "2")]);
     let basis_id = stock_basis_id_for(&order, &group, "wi-1");
     let assignments = SourcingAssignmentSet::normalize(&[
         assignment("sol-1", &basis_id, SupplySourceType::ExistingStock, None, "3"),
@@ -702,8 +648,7 @@ fn validate_against_latest_stock_accepts_exact_cap() {
     let plan = SourcingPlan::plan(&order, &[], std::slice::from_ref(&group), "wi-1", &assignments)
         .expect("计划必须成功");
 
-    plan.validate_against_latest_stock(&[group])
-        .expect("恰好等于上限必须成功");
+    plan.validate_against_latest_stock(&[group]).expect("恰好等于上限必须成功");
 }
 
 /// 最新行剩余量下降时重验失败关闭。
@@ -724,9 +669,7 @@ fn validate_against_latest_stock_rejects_line_excess() {
         .expect("计划必须成功");
 
     let shrunken = stock_basis_group("bal-1", "wh-1", "10", &[("sol-1", "10", "3")]);
-    let error = plan
-        .validate_against_latest_stock(&[shrunken])
-        .expect_err("剩余量下降必须失败");
+    let error = plan.validate_against_latest_stock(&[shrunken]).expect_err("剩余量下降必须失败");
     assert_eq!(error, SourcingPlanError::StaleFacts);
 }
 
@@ -748,9 +691,7 @@ fn validate_against_latest_stock_rejects_balance_excess() {
         .expect("计划必须成功");
 
     let shrunken = stock_basis_group("bal-1", "wh-1", "5", &[("sol-1", "10", "2")]);
-    let error = plan
-        .validate_against_latest_stock(&[shrunken])
-        .expect_err("余额可用量下降必须失败");
+    let error = plan.validate_against_latest_stock(&[shrunken]).expect_err("余额可用量下降必须失败");
     assert_eq!(error, SourcingPlanError::StaleFacts);
 }
 
@@ -770,9 +711,7 @@ fn validate_against_latest_stock_missing_group_fails_closed() {
     .expect("合法集合必须成功");
     let plan = SourcingPlan::plan(&order, &[], &[group], "wi-1", &assignments).expect("计划必须成功");
 
-    let error = plan
-        .validate_against_latest_stock(&[])
-        .expect_err("余额失效必须失败");
+    let error = plan.validate_against_latest_stock(&[]).expect_err("余额失效必须失败");
     assert_eq!(error, SourcingPlanError::StaleFacts);
 }
 
@@ -799,8 +738,7 @@ fn validate_against_latest_sourcing_accepts_exact_cap() {
     let plan = SourcingPlan::plan(&order, std::slice::from_ref(&group), &[], "wi-1", &assignments)
         .expect("计划必须成功");
 
-    plan.validate_against_latest_sourcing(&[group])
-        .expect("恰好等于上限必须成功");
+    plan.validate_against_latest_sourcing(&[group]).expect("恰好等于上限必须成功");
 }
 
 /// 最新行剩余量下降时重验失败关闭。
@@ -833,9 +771,7 @@ fn validate_against_latest_sourcing_rejects_line_excess() {
         "8",
         &[("sol-1", "10", "3")],
     );
-    let error = plan
-        .validate_against_latest_sourcing(&[shrunken])
-        .expect_err("剩余量下降必须失败");
+    let error = plan.validate_against_latest_sourcing(&[shrunken]).expect_err("剩余量下降必须失败");
     assert_eq!(error, SourcingPlanError::StaleFacts);
 }
 
@@ -882,9 +818,7 @@ fn validate_against_latest_sourcing_shares_supply_cap_across_plans() {
             &[("sol-2", "10", "0")],
         ),
     ];
-    let error = plan
-        .validate_against_latest_sourcing(&latest)
-        .expect_err("同一供给跨方案累计超量必须失败");
+    let error = plan.validate_against_latest_sourcing(&latest).expect_err("同一供给跨方案累计超量必须失败");
     assert_eq!(error, SourcingPlanError::StaleFacts);
 }
 
@@ -893,10 +827,7 @@ fn validate_against_latest_sourcing_shares_supply_cap_across_plans() {
 fn stock_basis_id_is_deterministic() {
     let order = sales_order("so-1");
     let group = stock_basis_group("bal-1", "wh-1", "8", &[("sol-1", "10", "2")]);
-    assert_eq!(
-        stock_basis_id_for(&order, &group, "wi-1"),
-        stock_basis_id_for(&order, &group, "wi-1")
-    );
+    assert_eq!(stock_basis_id_for(&order, &group, "wi-1"), stock_basis_id_for(&order, &group, "wi-1"));
 }
 
 /// 逐行剩余量变化必须改变库存依据 ID。
@@ -905,10 +836,7 @@ fn stock_basis_id_changes_with_quantity() {
     let order = sales_order("so-1");
     let first = stock_basis_group("bal-1", "wh-1", "8", &[("sol-1", "10", "2")]);
     let second = stock_basis_group("bal-1", "wh-1", "8", &[("sol-1", "10", "3")]);
-    assert_ne!(
-        stock_basis_id_for(&order, &first, "wi-1"),
-        stock_basis_id_for(&order, &second, "wi-1")
-    );
+    assert_ne!(stock_basis_id_for(&order, &first, "wi-1"), stock_basis_id_for(&order, &second, "wi-1"));
 }
 
 /// 余额依据可按稳定销售行查找。
@@ -922,10 +850,7 @@ fn stock_group_line_for_finds_and_misses() {
 /// 计划错误必须保持稳定文案。
 #[test]
 fn sourcing_plan_error_messages_are_stable() {
-    assert_eq!(
-        SourcingPlanError::StaleFacts.to_string(),
-        "可分配供给数量已更新，请刷新后重试"
-    );
+    assert_eq!(SourcingPlanError::StaleFacts.to_string(), "可分配供给数量已更新，请刷新后重试");
     assert_eq!(
         SourcingPlanError::WarehouseContract("仓库履约必须先选择目标收货仓".to_string()).to_string(),
         "仓库履约必须先选择目标收货仓"
@@ -948,10 +873,9 @@ fn sourcing_plan_enforces_unit_precision_for_purchase_and_stock() {
     stock.lines[0].coverage.quantity_scale = Some(0);
     let purchase_id = basis_id_for(&order, &purchase, "wi-1", None);
     let stock_id = stock_basis_id_for(&order, &stock, "wi-1");
-    for (basis_id, source) in [
-        (&purchase_id, SupplySourceType::Purchase),
-        (&stock_id, SupplySourceType::ExistingStock),
-    ] {
+    for (basis_id, source) in
+        [(&purchase_id, SupplySourceType::Purchase), (&stock_id, SupplySourceType::ExistingStock)]
+    {
         let selected =
             SourcingAssignmentSet::normalize(&[assignment("line-1", basis_id, source, None, "0.5")]).unwrap();
         assert!(matches!(

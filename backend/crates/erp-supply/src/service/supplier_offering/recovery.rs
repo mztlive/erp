@@ -1,6 +1,7 @@
 //! 事务失败后的命令结果恢复；不重试写入、不改变错误优先级。
-use super::*;
 use async_trait::async_trait;
+
+use super::*;
 #[async_trait]
 pub(super) trait CommandResultPort: Sync {
     async fn command(
@@ -35,18 +36,17 @@ pub(super) async fn resolve<T: DeserializeOwned, E: From<Error>, P: CommandResul
                 command
                     .ensure_replayable(operation, fingerprint)
                     .map_err(|e| Error::ConflictError(e.to_string()))?;
-                command
-                    .replay_result()
-                    .map_err(|e| Error::Internal(e.to_string()).into())
-            }
+                command.replay_result().map_err(|e| Error::Internal(e.to_string()).into())
+            },
             None => Err(error),
         },
     }
 }
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::sync::Mutex;
+
+    use super::*;
     struct Marker(u64);
     impl Executor for Marker {
         fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
@@ -113,43 +113,24 @@ mod tests {
     }
     #[tokio::test]
     async fn missing_receipt_retains_transaction_error_but_read_error_wins() {
-        let (result, calls) = invoke(
-            Err(Error::Forbidden("original".into())),
-            None,
-            false,
-            CREATE_OFFERING_COMMAND,
-        )
-        .await;
+        let (result, calls) =
+            invoke(Err(Error::Forbidden("original".into())), None, false, CREATE_OFFERING_COMMAND).await;
         assert!(matches!(result,Err(Error::Forbidden(ref e)) if e=="original"));
         assert_eq!(calls, 1);
-        let (result, _) = invoke(
-            Err(Error::Forbidden("original".into())),
-            None,
-            true,
-            CREATE_OFFERING_COMMAND,
-        )
-        .await;
+        let (result, _) =
+            invoke(Err(Error::Forbidden("original".into())), None, true, CREATE_OFFERING_COMMAND).await;
         assert!(matches!(result,Err(Error::NotFound(ref e)) if e=="read failure"));
     }
     #[tokio::test]
     async fn mismatched_operation_and_bad_stored_result_preserve_original_errors() {
-        let (result, _) = invoke(
-            Err(Error::Internal("write".into())),
-            Some(command()),
-            false,
-            REVISE_OFFERING_COMMAND,
-        )
-        .await;
+        let (result, _) =
+            invoke(Err(Error::Internal("write".into())), Some(command()), false, REVISE_OFFERING_COMMAND)
+                .await;
         assert!(matches!(result,Err(Error::ConflictError(ref e)) if e=="幂等键已用于不同的供给命令"));
         let mut bad = command();
         bad.result_json = "{".into();
-        let (result, _) = invoke(
-            Err(Error::Internal("write".into())),
-            Some(bad),
-            false,
-            CREATE_OFFERING_COMMAND,
-        )
-        .await;
+        let (result, _) =
+            invoke(Err(Error::Internal("write".into())), Some(bad), false, CREATE_OFFERING_COMMAND).await;
         assert!(matches!(result,Err(Error::Internal(ref e)) if e=="供给命令结果反序列化失败"));
     }
 }

@@ -1,22 +1,21 @@
 //! 采购责任解析所需的目录事实加载、规则选择与负责人资格校验。
 
 use erp_core::AccountKind;
-use erp_identity::Permission;
+use erp_identity::{Permission, subject};
+use erp_procurement::dto::procurement_responsibility::ProcurementResponsibilityResolutionView;
 use erp_procurement::entity::procurement_responsibility::{
     EligibleProcurementOwner, ProcurementResponsibilityResolutionIdentity,
     ProcurementResponsibilityResolutionLine,
 };
-use persistence_core::{Executor, NoTransaction};
-
-use super::adapter::ResponsibilityFactsAdapter;
-use super::ProcurementResponsibilityProcess;
-use crate::{Error, Result};
-use erp_identity::subject;
-use erp_procurement::dto::procurement_responsibility::ProcurementResponsibilityResolutionView;
 use erp_procurement::ports::procurement_responsibility::ProcurementResponsibilityFactsPort;
 use erp_procurement::service::procurement_responsibility::{
     CandidateResolution, ProcurementResponsibilityService,
 };
+use persistence_core::{Executor, NoTransaction};
+
+use super::ProcurementResponsibilityProcess;
+use super::adapter::ResponsibilityFactsAdapter;
+use crate::{Error, Result};
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 
@@ -170,9 +169,7 @@ impl ProcurementResponsibilityProcess {
                 return Ok(before);
             }
         }
-        Err(Error::Rbac(
-            "采购负责人授权策略持续变化，无法形成稳定快照".to_string(),
-        ))
+        Err(Error::Rbac("采购负责人授权策略持续变化，无法形成稳定快照".to_string()))
     }
 
     /// 由采购领域执行真实候选解析，并显式注入目录与身份事实适配器。
@@ -182,11 +179,7 @@ impl ProcurementResponsibilityProcess {
         executor: &mut dyn Executor,
     ) -> Result<Vec<CandidateResolution>> {
         Ok(ProcurementResponsibilityService::new(self.db.clone())
-            .resolve_candidates(
-                inputs,
-                &ResponsibilityFactsAdapter { db: self.db.clone() },
-                executor,
-            )
+            .resolve_candidates(inputs, &ResponsibilityFactsAdapter { db: self.db.clone() }, executor)
             .await?)
     }
 
@@ -229,10 +222,7 @@ pub(super) fn authorized_line(candidate: CandidateResolution) -> Result<Authoriz
         candidate.rule_type,
     )
     .map_err(Error::Logic)?;
-    Ok(AuthorizedResolutionLine {
-        identity,
-        owner_name: candidate.owner_name,
-    })
+    Ok(AuthorizedResolutionLine { identity, owner_name: candidate.owner_name })
 }
 
 /// 将候选责任集合转换为稳定责任身份集合.
@@ -305,16 +295,10 @@ async fn ensure_purchase_create_permission(
     owner: &EligibleProcurementOwner,
 ) -> Result<()> {
     let permission = purchase_create_permission()?;
-    if rbac
-        .enforce(&subject(AccountKind::Admin, owner.user_id()), &permission)
-        .await?
-    {
+    if rbac.enforce(&subject(AccountKind::Admin, owner.user_id()), &permission).await? {
         return Ok(());
     }
-    Err(Error::ValidationError(format!(
-        "采购负责人 {} 缺少 purchase_order:create 权限",
-        owner.user_id()
-    )))
+    Err(Error::ValidationError(format!("采购负责人 {} 缺少 purchase_order:create 权限", owner.user_id())))
 }
 
 /// 构造采购建单权限值对象.
@@ -335,13 +319,7 @@ mod tests {
     use super::*;
 
     fn test_candidate(line_key: &str, owner: &str, owner_name: &str, rule_id: &str) -> CandidateResolution {
-        test_candidate_with_type(
-            line_key,
-            owner,
-            owner_name,
-            rule_id,
-            ProcurementResponsibilityRuleType::Sku,
-        )
+        test_candidate_with_type(line_key, owner, owner_name, rule_id, ProcurementResponsibilityRuleType::Sku)
     }
 
     /// 构造指定规则类型的测试候选责任.
@@ -397,10 +375,7 @@ mod tests {
         assert_eq!(line.identity.owner_user_id, "owner-1");
         assert_eq!(line.identity.rule_id, "rule-1");
         assert_eq!(line.owner_name, "张三");
-        let plan = AuthorizedResolutionPlan {
-            lines: vec![line],
-            policy_revision: 7,
-        };
+        let plan = AuthorizedResolutionPlan { lines: vec![line], policy_revision: 7 };
         let views = plan.views();
         assert_eq!(views.len(), 1);
         assert_eq!(views[0].owner_name, "张三");
@@ -490,10 +465,8 @@ mod tests {
             plan_identities(std::slice::from_ref(&category)).unwrap(),
             "规则类型变化必须拒绝"
         );
-        let expected = AuthorizedResolutionPlan {
-            lines: vec![authorized_line(sku).unwrap()],
-            policy_revision: 7,
-        };
+        let expected =
+            AuthorizedResolutionPlan { lines: vec![authorized_line(sku).unwrap()], policy_revision: 7 };
         let actual = plan_identities(std::slice::from_ref(&test_candidate_with_type(
             "line-1",
             "owner-1",

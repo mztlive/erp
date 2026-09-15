@@ -1,12 +1,13 @@
 //! Frozen customer receipt approval summaries for read-only display.
 
+use erp_finance::entity::receivable::CustomerReceiptStatus;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::service::approval::policy::ApprovalRequirement;
+
 use crate::finance::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
     DocumentApprovalView,
 };
-use erp_finance::entity::receivable::CustomerReceiptStatus;
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::policy::ApprovalRequirement;
 
 /// 由绑定与可选实例事实构造只读审批结构。
 ///
@@ -33,10 +34,7 @@ pub fn document_approval_view(
         definition: binding.map(definition_view_from_binding),
         instance,
         recent_history: Vec::new(),
-        history_page: DocumentApprovalHistoryPageView {
-            next_cursor: None,
-            has_more: false,
-        },
+        history_page: DocumentApprovalHistoryPageView { next_cursor: None, has_more: false },
         allowed_actions: allowed_document_actions(status),
     }
 }

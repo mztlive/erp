@@ -2,16 +2,15 @@
 //!
 //! 已删除 start-processing / release-to-team / claim。通用写接口拒绝审批任务。
 
-use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    http::HeaderMap,
-    response::{IntoResponse, Response},
-    Extension, Json,
-};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+
+use application_core::AuditActor;
+use axum::extract::{Path, Query, State};
+use axum::http::HeaderMap;
+use axum::response::{IntoResponse, Response};
+use axum::{Extension, Json};
 
 /// Wrap a future so axum can treat it as `Send`.
 ///
@@ -54,14 +53,10 @@ use erp_workflow::service::work_item::{
 };
 use serde::Serialize;
 
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::{Error as HttpError, Result},
-        handler::approval_instance::error::ApprovalHttpError,
-        response::ApiResponse,
-    },
-};
+use crate::app_state::AppState;
+use crate::core::errors::{Error as HttpError, Result};
+use crate::core::handler::approval_instance::error::ApprovalHttpError;
+use crate::core::response::ApiResponse;
 
 pub mod finance_responsibility;
 
@@ -164,7 +159,7 @@ impl IntoResponse for WorkItemActionError {
                     success: false,
                 }
                 .into_response()
-            }
+            },
             Self::ApprovalProtected(error) => error.into_response(),
             Self::Other(error) => error.into_response(),
         }
@@ -203,10 +198,7 @@ fn wrap_view<V: serde::Serialize>(view: V) -> WorkItemHttpView {
         .cloned()
         .and_then(|value| serde_json::from_value(value).ok())
         .expect("任务类型存在");
-    WorkItemHttpView {
-        inner,
-        responsibility_kind: responsibility_kind_of(work_item_type),
-    }
+    WorkItemHttpView { inner, responsibility_kind: responsibility_kind_of(work_item_type) }
 }
 
 /// 包装分页投影。
@@ -257,13 +249,9 @@ async fn work_item_action_response(
             let view = WorkbenchReadService::new(state.db(), workflow_auth(state.db(), state.rbac()))
                 .work_item_detail(work_item_id, actor)
                 .await?;
-            reject_approval_task(
-                view.work_item_type,
-                view.approval_node_execution_id.as_deref(),
-                &headers,
-            )?;
+            reject_approval_task(view.work_item_type, view.approval_node_execution_id.as_deref(), &headers)?;
             Ok(ApiResponse::ok_with_data(wrap_view(view)))
-        }
+        },
         WorkItemMutationOutcome::Conflict(conflict) => {
             let current = match conflict.work_item_id() {
                 Some(id) => WorkbenchReadService::new(state.db(), workflow_auth(state.db(), state.rbac()))
@@ -276,7 +264,7 @@ async fn work_item_action_response(
                 kind: conflict.kind(),
                 current_work_item: current,
             })))
-        }
+        },
     }
 }
 
@@ -398,9 +386,7 @@ pub async fn work_item_reassign_candidates(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<WorkItemReassignCandidateView>> {
-    let candidates = work_item_service(state.db(), state.rbac())
-        .reassign_candidates(id, actor)
-        .await?;
+    let candidates = work_item_service(state.db(), state.rbac()).reassign_candidates(id, actor).await?;
     Ok(ApiResponse::ok_with_data(candidates))
 }
 
@@ -425,9 +411,7 @@ pub fn work_item_reassign(
     Json(req): Json<ReassignWorkItemRequest>,
 ) -> impl Future<Output = WorkItemActionResult> + Send {
     assume_send(async move {
-        let outcome = work_item_service(state.db(), state.rbac())
-            .reassign(id, req, actor.clone())
-            .await?;
+        let outcome = work_item_service(state.db(), state.rbac()).reassign(id, req, actor.clone()).await?;
         work_item_action_response(state, actor, outcome, headers).await
     })
 }
@@ -453,21 +437,21 @@ pub fn work_item_close(
     Json(req): Json<CloseWorkItemRequest>,
 ) -> impl Future<Output = WorkItemActionResult> + Send {
     assume_send(async move {
-        let outcome = work_item_service(state.db(), state.rbac())
-            .close(id, req, actor.clone())
-            .await?;
+        let outcome = work_item_service(state.db(), state.rbac()).close(id, req, actor.clone()).await?;
         work_item_action_response(state, actor, outcome, headers).await
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use axum::{body::to_bytes, http::StatusCode, response::IntoResponse};
+    use axum::body::to_bytes;
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
     use erp_workflow::entity::work_item::WorkItemType;
     use erp_workflow::service::work_item::WorkItemConflictKind;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
-    use super::{responsibility_kind_of, HttpWorkItemConflict, ResponsibilityKind, WorkItemActionError};
+    use super::{HttpWorkItemConflict, ResponsibilityKind, WorkItemActionError, responsibility_kind_of};
 
     #[tokio::test]
     async fn version_conflict_uses_409_stable_code_and_safe_tombstone() {
@@ -478,9 +462,8 @@ mod tests {
         .into_response();
 
         assert_eq!(response.status(), StatusCode::CONFLICT);
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("conflict body should be readable");
+        let body =
+            to_bytes(response.into_body(), usize::MAX).await.expect("conflict body should be readable");
         let body: Value = serde_json::from_slice(&body).expect("conflict body should be JSON");
         assert_eq!(body["code"], "WORK_ITEM_VERSION_CONFLICT");
         assert_eq!(body["data"], json!({ "current_work_item": null }));
@@ -494,9 +477,8 @@ mod tests {
             current_work_item: None,
         }))
         .into_response();
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("conflict body should be readable");
+        let body =
+            to_bytes(response.into_body(), usize::MAX).await.expect("conflict body should be readable");
         let body: Value = serde_json::from_slice(&body).expect("conflict body should be JSON");
 
         assert_eq!(body["code"], "WORK_ITEM_RESPONSIBILITY_CONFLICT");

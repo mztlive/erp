@@ -1,13 +1,15 @@
 //! 采购首次正式化逐行确认成本的财务单域构造与写入。
-use crate::entity::cost::CostEntry;
-use crate::repository::CostExt;
-use crate::Result;
+use std::str::FromStr;
+
 use erp_core::common::time::Instant;
 use erp_core::ids::{CostEntryId, SupplierAccountId};
 use erp_core::money::{Amount, Rate};
 use id_generator::next_id;
 use persistence_core::Executor;
-use std::str::FromStr;
+
+use crate::Result;
+use crate::entity::cost::CostEntry;
+use crate::repository::CostExt;
 /// 财务从采购冻结提交逐行消费的成本事实。
 pub struct PurchaseCostLine {
     /// 原采购提交行身份。
@@ -72,9 +74,7 @@ pub async fn persist(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     for entry in entries {
-        db.cost()
-            .create_cost_entry_with_allocations(entry, Vec::new(), executor)
-            .await?;
+        db.cost().create_cost_entry_with_allocations(entry, Vec::new(), executor).await?;
     }
     Ok(())
 }

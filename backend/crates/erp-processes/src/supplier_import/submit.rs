@@ -1,7 +1,6 @@
 //! 登记加密输入和后台任务；相同请求只能重放同一载荷。
-use super::{SupplierImportProcess, SUPPLIER_IMPORT_DOMAIN};
-use crate::{Error, Result};
-use application_core::{command::CommandFingerprint, AuditActor};
+use application_core::AuditActor;
+use application_core::command::CommandFingerprint;
 use erp_supplier::dto::import_job::SupplierImportJobRequest;
 use erp_support::{
     BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId, BackgroundJobItem,
@@ -10,6 +9,9 @@ use erp_support::{
 };
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
+
+use super::{SUPPLIER_IMPORT_DOMAIN, SupplierImportProcess};
+use crate::{Error, Result};
 
 impl SupplierImportProcess {
     /// 加密保存输入并原子登记任务及行明细，不执行供应商写入。
@@ -50,11 +52,8 @@ impl SupplierImportProcess {
 
     /// 查询原提交并验证操作者与完整内容；旧记录无指纹时拒绝重放。
     async fn replay(&self, proposed: &BackgroundJob) -> Result<Option<BackgroundJob>> {
-        let existing = self
-            .db
-            .background_jobs()
-            .find_by_request_id(&proposed.request_id, &mut NoTransaction)
-            .await?;
+        let existing =
+            self.db.background_jobs().find_by_request_id(&proposed.request_id, &mut NoTransaction).await?;
         if let Some(job) = &existing {
             ensure_replay(job, proposed)?;
         }
@@ -77,14 +76,14 @@ impl SupplierImportProcess {
             Ok(BackgroundJobRegistration::ReplaySame(existing)) => {
                 ensure_replay(&existing, &job)?;
                 Ok(existing.into())
-            }
+            },
             Ok(BackgroundJobRegistration::ConflictDifferentPayload(_)) => Err(conflict()),
             Err(error) => {
                 if let Some(existing) = self.replay(&job).await? {
                     return Ok(existing.into());
                 }
                 Err(error.into())
-            }
+            },
         }
     }
 }
@@ -158,9 +157,10 @@ fn conflict() -> Error {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::*;
     use erp_core::common::time::BusinessDate;
     use erp_supplier::dto::import::SupplierImportRow;
+
+    use super::*;
     pub(crate) fn fixture() -> (BackgroundJob, Vec<BackgroundJobItem>) {
         let request = SupplierImportJobRequest {
             request_id: "req-1".into(),

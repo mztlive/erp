@@ -44,10 +44,7 @@ mod tests {
         ] {
             let mapped = integration_class(class);
             assert_eq!(supplier_class(mapped), class);
-            assert_eq!(
-                serde_json::to_value(class).unwrap(),
-                serde_json::to_value(mapped).unwrap()
-            );
+            assert_eq!(serde_json::to_value(class).unwrap(), serde_json::to_value(mapped).unwrap());
         }
     }
 }

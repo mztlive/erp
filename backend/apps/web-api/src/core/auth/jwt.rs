@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 
 use chrono::{Duration, Utc};
+use erp_core::AccountKind;
 use jwt::{Claims, RegisteredClaims, SignWithKey, VerifyWithKey};
-use jwt_hmac::{digest::InvalidLength, Hmac, Mac};
+use jwt_hmac::digest::InvalidLength;
+use jwt_hmac::{Hmac, Mac};
 use jwt_sha2::Sha256;
 use serde_json::Value;
-
-use erp_core::AccountKind;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -150,17 +150,11 @@ impl TryFrom<BTreeMap<String, Value>> for TokenPayload {
             .map_err(|_| Error::InvalidClaims)?;
 
         match (subject_kind, account_kind, account_version) {
-            (SubjectKind::Backoffice, Some(_), Some(_)) => {}
+            (SubjectKind::Backoffice, Some(_), Some(_)) => {},
             _ => return Err(Error::InvalidClaims),
         }
 
-        Ok(TokenPayload {
-            id,
-            account,
-            subject_kind,
-            account_kind,
-            account_version,
-        })
+        Ok(TokenPayload { id, account, subject_kind, account_kind, account_version })
     }
 }
 
@@ -179,9 +173,7 @@ impl Engine {
         if secret.len() < 32 {
             return Err(Error::InvalidSecret);
         }
-        let out = Self {
-            key: Hmac::new_from_slice(secret.as_bytes())?,
-        };
+        let out = Self { key: Hmac::new_from_slice(secret.as_bytes())? };
 
         Ok(out)
     }
@@ -193,10 +185,8 @@ impl Engine {
     /// This function will return an error if .
     /// * the token can not be created (sign failed)
     pub fn create_token<T: Into<TokenPayload>>(&self, payload: T) -> Result<String, Error> {
-        let expiration = Utc::now()
-            .checked_add_signed(Duration::days(30))
-            .ok_or(Error::TokenCreationFailed)?
-            .timestamp();
+        let expiration =
+            Utc::now().checked_add_signed(Duration::days(30)).ok_or(Error::TokenCreationFailed)?.timestamp();
         let expiration = u64::try_from(expiration).map_err(|_| Error::TokenCreationFailed)?;
         let infomation = payload.into();
 
@@ -231,20 +221,13 @@ impl Engine {
     /// 在指定时间点校验 JWT，便于集中实现时效与主体规则。
     fn verify_token_at(&self, token: &str, now: u64) -> Result<TokenPayload, Error> {
         let claims: Claims = token.verify_with_key(&self.key)?;
-        let subject = claims
-            .registered
-            .subject
-            .filter(|value| !value.trim().is_empty())
-            .ok_or(Error::InvalidClaims)?;
+        let subject =
+            claims.registered.subject.filter(|value| !value.trim().is_empty()).ok_or(Error::InvalidClaims)?;
         let expiration = claims.registered.expiration.ok_or(Error::InvalidClaims)?;
         if expiration <= now {
             return Err(Error::TokenExpired);
         }
-        if claims
-            .registered
-            .not_before
-            .is_some_and(|not_before| not_before > now)
-        {
+        if claims.registered.not_before.is_some_and(|not_before| not_before > now) {
             return Err(Error::InvalidClaims);
         }
 
@@ -283,22 +266,12 @@ mod tests {
     /// 不返回数据，仅表示执行结果。
     #[test]
     fn backoffice_payload_contains_subject_kind_and_account_kind() {
-        let payload = TokenPayload::backoffice(
-            "admin_1".to_string(),
-            "demo_admin".to_string(),
-            AccountKind::Admin,
-            7,
-        );
+        let payload =
+            TokenPayload::backoffice("admin_1".to_string(), "demo_admin".to_string(), AccountKind::Admin, 7);
         let payload_map: BTreeMap<String, Value> = payload.into();
 
-        assert_eq!(
-            payload_map.get("subject_kind"),
-            Some(&Value::String("backoffice".to_string()))
-        );
-        assert_eq!(
-            payload_map.get("account_kind"),
-            Some(&Value::String("admin".to_string()))
-        );
+        assert_eq!(payload_map.get("subject_kind"), Some(&Value::String("backoffice".to_string())));
+        assert_eq!(payload_map.get("account_kind"), Some(&Value::String("admin".to_string())));
         assert_eq!(payload_map.get("account_version"), Some(&Value::from(7)));
     }
 
@@ -308,10 +281,7 @@ mod tests {
         let mut payload_map = BTreeMap::new();
         payload_map.insert("id".to_string(), Value::String("admin_1".to_string()));
         payload_map.insert("account".to_string(), Value::String("demo_admin".to_string()));
-        payload_map.insert(
-            "subject_kind".to_string(),
-            Value::String("backoffice".to_string()),
-        );
+        payload_map.insert("subject_kind".to_string(), Value::String("backoffice".to_string()));
         payload_map.insert("account_kind".to_string(), Value::String("admin".to_string()));
         payload_map.insert("account_version".to_string(), Value::from(1));
 
@@ -326,16 +296,10 @@ mod tests {
         let mut payload_map = BTreeMap::new();
         payload_map.insert("id".to_string(), Value::String("admin_1".to_string()));
         payload_map.insert("account".to_string(), Value::String("demo_admin".to_string()));
-        payload_map.insert(
-            "subject_kind".to_string(),
-            Value::String("backoffice".to_string()),
-        );
+        payload_map.insert("subject_kind".to_string(), Value::String("backoffice".to_string()));
         payload_map.insert("account_kind".to_string(), Value::String("admin".to_string()));
 
-        assert!(matches!(
-            TokenPayload::try_from(payload_map),
-            Err(Error::InvalidClaims)
-        ));
+        assert!(matches!(TokenPayload::try_from(payload_map), Err(Error::InvalidClaims)));
     }
 
     /// 验证空白密钥不会被接受。
@@ -374,18 +338,10 @@ mod tests {
                 expiration: Some(100),
                 ..Default::default()
             },
-            TokenPayload::backoffice(
-                "admin_1".to_string(),
-                "demo_admin".to_string(),
-                AccountKind::Admin,
-                1,
-            ),
+            TokenPayload::backoffice("admin_1".to_string(), "demo_admin".to_string(), AccountKind::Admin, 1),
         );
 
-        assert!(matches!(
-            engine.verify_token_at(&token, 100),
-            Err(Error::TokenExpired)
-        ));
+        assert!(matches!(engine.verify_token_at(&token, 100), Err(Error::TokenExpired)));
     }
 
     /// 验证缺少过期声明的 token 即使签名正确也会被拒绝。
@@ -394,22 +350,11 @@ mod tests {
         let engine = Engine::new(TEST_SECRET.to_string()).expect("engine");
         let token = signed_token(
             &engine,
-            RegisteredClaims {
-                subject: Some("admin_1".to_string()),
-                ..Default::default()
-            },
-            TokenPayload::backoffice(
-                "admin_1".to_string(),
-                "demo_admin".to_string(),
-                AccountKind::Admin,
-                1,
-            ),
+            RegisteredClaims { subject: Some("admin_1".to_string()), ..Default::default() },
+            TokenPayload::backoffice("admin_1".to_string(), "demo_admin".to_string(), AccountKind::Admin, 1),
         );
 
-        assert!(matches!(
-            engine.verify_token_at(&token, 100),
-            Err(Error::InvalidClaims)
-        ));
+        assert!(matches!(engine.verify_token_at(&token, 100), Err(Error::InvalidClaims)));
     }
 
     /// 验证尚未生效的 token 会被拒绝。
@@ -424,18 +369,10 @@ mod tests {
                 not_before: Some(101),
                 ..Default::default()
             },
-            TokenPayload::backoffice(
-                "admin_1".to_string(),
-                "demo_admin".to_string(),
-                AccountKind::Admin,
-                1,
-            ),
+            TokenPayload::backoffice("admin_1".to_string(), "demo_admin".to_string(), AccountKind::Admin, 1),
         );
 
-        assert!(matches!(
-            engine.verify_token_at(&token, 100),
-            Err(Error::InvalidClaims)
-        ));
+        assert!(matches!(engine.verify_token_at(&token, 100), Err(Error::InvalidClaims)));
     }
 
     /// 验证标准主体与私有载荷身份不一致时会被拒绝。
@@ -449,17 +386,9 @@ mod tests {
                 expiration: Some(200),
                 ..Default::default()
             },
-            TokenPayload::backoffice(
-                "admin_1".to_string(),
-                "demo_admin".to_string(),
-                AccountKind::Admin,
-                1,
-            ),
+            TokenPayload::backoffice("admin_1".to_string(), "demo_admin".to_string(), AccountKind::Admin, 1),
         );
 
-        assert!(matches!(
-            engine.verify_token_at(&token, 100),
-            Err(Error::InvalidClaims)
-        ));
+        assert!(matches!(engine.verify_token_at(&token, 100), Err(Error::InvalidClaims)));
     }
 }

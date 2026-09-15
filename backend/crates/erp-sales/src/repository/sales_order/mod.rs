@@ -20,8 +20,8 @@ pub mod scope;
 mod submission;
 mod working_copy;
 
-use mongodb::bson::{doc, Document};
 use mongodb::Database;
+use mongodb::bson::{Document, doc};
 pub use order::{SalesOrderFilter, SalesOrderRow, SalesOrderSearch};
 pub use submission::SubmissionFilter;
 pub use working_copy::WorkingCopyFilter;

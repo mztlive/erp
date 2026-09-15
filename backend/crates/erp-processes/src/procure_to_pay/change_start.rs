@@ -1,6 +1,6 @@
 //! 采购变更提交启动：加载定义图、构造 `prepare_start` 输入并持久化运行事实。
 
-use bpm::engine::{plan_start, DefinitionGraph, StartBindingInput, StartPlanInput, TaskIntent};
+use bpm::engine::{DefinitionGraph, StartBindingInput, StartPlanInput, TaskIntent, plan_start};
 use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
@@ -13,31 +13,27 @@ use erp_procurement::entity::purchase_order::{
 };
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::entity::work_item::DocumentApprovalWorkItemData;
-use erp_workflow::entity::work_item::{WorkItem, WorkItemPriority};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
-use erp_workflow::ApprovalIntegrationExt;
-use erp_workflow::BpmExt;
-use erp_workflow::DocumentRegistryExt;
-use erp_workflow::WorkItemExt;
+use erp_workflow::service::approval::execution::authorization::{AuthorizationFailure, converge_eligibility};
+use erp_workflow::service::approval::execution::idempotency::{
+    ReceiptBranch, StartIdentityParams, normalize_idempotency_key, payload_conflict_error, start_identity,
+    start_scope_candidates,
+};
+use erp_workflow::service::approval::execution::start::map_engine_error;
+use erp_workflow::service::approval::execution::{
+    ExecutionCommandInput, PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
+};
+use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::change_adapter::purchase_change_order_object_readable;
 use crate::{Error, Result};
-use erp_workflow::service::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
-use erp_workflow::service::approval::execution::idempotency::{
-    normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
-    StartIdentityParams,
-};
-use erp_workflow::service::approval::execution::start::map_engine_error;
-use erp_workflow::service::approval::execution::{
-    map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
-};
-use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
 ///
@@ -70,11 +66,7 @@ pub(super) async fn load_bound_definition_graph(
 /// # 返回
 /// 返回引擎可消费的定义图。
 fn engine_graph(graph: erp_workflow::repository::bpm::DefinitionGraph) -> DefinitionGraph {
-    DefinitionGraph {
-        definition: graph.definition,
-        nodes: graph.nodes,
-        transitions: graph.transitions,
-    }
+    DefinitionGraph { definition: graph.definition, nodes: graph.nodes, transitions: graph.transitions }
 }
 
 /// 读取同载荷启动收据；不存在时返回 `None`。
@@ -177,9 +169,7 @@ pub(super) async fn replay_purchase_change_start_with_executor(
         || instance.process_definition_id != binding.approval_process_definition_id
         || instance.definition_version != binding.approval_definition_version
     {
-        return Err(Error::ConflictError(
-            "采购变更启动收据与冻结运行事实不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("采购变更启动收据与冻结运行事实不一致".to_string()));
     }
     Ok(Some(instance.base.id))
 }
@@ -402,13 +392,7 @@ pub(super) async fn persist_purchase_change_start(
         .with_transaction(move |session| {
             Box::pin(async move {
                 crate::adapters::purchase_access(db.clone(), rbac.clone())
-                    .require_object(
-                        &actor,
-                        "submit",
-                        change_order.purchase_order_id.as_ref(),
-                        &[],
-                        session,
-                    )
+                    .require_object(&actor, "submit", change_order.purchase_order_id.as_ref(), &[], session)
                     .await?;
                 db.bpm_workflow()
                     .insert_command_receipt(&writes.receipt, session)
@@ -426,9 +410,7 @@ pub(super) async fn persist_purchase_change_start(
                     )
                     .await?;
                 if guarded.is_none() {
-                    return Err(Error::ConflictError(
-                        "采购变更单审批启动守卫冲突，请刷新后重试".to_string(),
-                    ));
+                    return Err(Error::ConflictError("采购变更单审批启动守卫冲突，请刷新后重试".to_string()));
                 }
                 db.purchase_order()
                     .create_change_submission(&mut change_order, &submission, &submission_lines, session)
@@ -485,9 +467,7 @@ async fn persist_runtime_writes(
         snapshot_payload.clone(),
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
-    db.approval_subject_snapshots()
-        .create_immutable_snapshot(&snapshot, session)
-        .await?;
+    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, session).await?;
     persist_open_tasks(db, writes, owner_role, organization_id, now, session).await
 }
 
@@ -527,12 +507,7 @@ async fn persist_open_tasks(
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
     for intent in &writes.create_tasks {
-        let TaskIntent::HumanTaskRequested {
-            execution_id,
-            assignee,
-            ..
-        } = intent
-        else {
+        let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
             continue;
         };
         let item = WorkItem::new_document_approval(
@@ -557,7 +532,6 @@ async fn persist_open_tasks(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_purchase_change_start_input, PurchaseChangeStartInput};
     use bpm::graph::DefinitionGraph;
     use bpm::ids::{
         ApprovalCommandReceiptId, ApprovalNodeDefinitionId, ApprovalProcessDefinitionId,
@@ -569,13 +543,14 @@ mod tests {
         ProcessKind, Timestamp,
     };
     use erp_core::common::time::Instant;
-    use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
     use erp_workflow::entity::document_registry::DocumentType;
-
-    use crate::Error;
-    use erp_workflow::service::approval::execution::idempotency::{start_identity, StartIdentityParams};
-    use erp_workflow::service::approval::execution::{prepare_start, PreparedExecution};
+    use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+    use erp_workflow::service::approval::execution::idempotency::{StartIdentityParams, start_identity};
+    use erp_workflow::service::approval::execution::{PreparedExecution, prepare_start};
     use erp_workflow::service::approval::process_kind::process_kind_of;
+
+    use super::{PurchaseChangeStartInput, build_purchase_change_start_input};
+    use crate::Error;
 
     fn node(
         id: &str,
@@ -697,10 +672,7 @@ mod tests {
         assert_eq!(built.bindings[0].node_key, "n1");
         assert_eq!(built.bindings[0].participant.as_str(), "u1");
         assert_eq!(built.command.current_eligibility.participant().as_str(), "u1");
-        assert_eq!(
-            built.process_kind,
-            process_kind_of(DocumentType::PurchaseChangeOrder)
-        );
+        assert_eq!(built.process_kind, process_kind_of(DocumentType::PurchaseChangeOrder));
         assert_eq!(built.definition_version, 1);
     }
 
@@ -769,9 +741,6 @@ mod tests {
         let mut built =
             build_purchase_change_start_input(input(two_node_graph(), &binding(1), "org-1")).unwrap();
         built.command.receipt = Some(receipt);
-        assert!(matches!(
-            prepare_start(built).unwrap(),
-            PreparedExecution::Replay { .. }
-        ));
+        assert!(matches!(prepare_start(built).unwrap(), PreparedExecution::Replay { .. }));
     }
 }

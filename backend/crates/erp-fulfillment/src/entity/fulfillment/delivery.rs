@@ -16,9 +16,7 @@ use std::fmt;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     DeliveryId, DeliveryLineId, PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderId,
@@ -27,6 +25,7 @@ use erp_core::ids::{
 use erp_core::money::Quantity;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::fingerprint::{hmac_sha256_hex, validate_fingerprint};
 
@@ -542,7 +541,7 @@ impl DeliveryLine {
                 if data.purchase_line_sales_allocation_id.is_some() {
                     return Err(Error::from("仓发行不得携带采购到销售分配"));
                 }
-            }
+            },
             DeliveryType::SupplierDirect => {
                 if data.purchase_line_sales_allocation_id.is_none() {
                     return Err(Error::from("供应商直发必须引用采购到销售分配"));
@@ -550,7 +549,7 @@ impl DeliveryLine {
                 if data.stock_reservation_id.is_some() {
                     return Err(Error::from("供应商直发行不得携带库存预占"));
                 }
-            }
+            },
         }
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -589,7 +588,7 @@ fn validate_source_ownership(
             if purchase_order_id.is_some() {
                 return Err(Error::from("仓发不得携带供应商直发的采购来源"));
             }
-        }
+        },
         DeliveryType::SupplierDirect => {
             if purchase_order_id.is_none() {
                 return Err(Error::from("供应商直发必填采购来源"));
@@ -597,16 +596,18 @@ fn validate_source_ownership(
             if warehouse_id.is_some() {
                 return Err(Error::from("供应商直发不得携带入库仓"));
             }
-        }
+        },
     }
     Ok(())
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::*;
-    use erp_core::ids::PurchaseLineSalesAllocationId;
     use std::str::FromStr;
+
+    use erp_core::ids::PurchaseLineSalesAllocationId;
+
+    use super::*;
 
     const PLAINTEXT_ADDRESS: &str = "上海市浦东新区世纪大道100号 张三 13800000000";
     const FINGERPRINT_KEY: &[u8] = b"test-fingerprint-key";
@@ -648,9 +649,7 @@ pub(crate) mod tests {
         assert_eq!(delivery.tracking_no.as_deref(), Some("SF-001"));
         assert_eq!(delivery.status, DeliveryState::Draft);
 
-        delivery
-            .mark_shipped(Instant::from_unix_secs(1_700_000_000))
-            .unwrap();
+        delivery.mark_shipped(Instant::from_unix_secs(1_700_000_000)).unwrap();
         assert_eq!(delivery.status, DeliveryState::Shipped);
         delivery.mark_signed().unwrap();
         assert_eq!(delivery.status, DeliveryState::Signed);
@@ -661,22 +660,13 @@ pub(crate) mod tests {
     /// 失败路径：必填空（单号空白）、超长、仓发/直发归属不一致。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank_no = DeliveryData {
-            delivery_no: "   ".to_string(),
-            ..delivery_data()
-        };
+        let blank_no = DeliveryData { delivery_no: "   ".to_string(), ..delivery_data() };
         assert!(Delivery::new(DeliveryId::new("d2"), blank_no).is_err());
 
-        let overlong_tracking = DeliveryData {
-            tracking_no: Some("t".repeat(129)),
-            ..delivery_data()
-        };
+        let overlong_tracking = DeliveryData { tracking_no: Some("t".repeat(129)), ..delivery_data() };
         assert!(Delivery::new(DeliveryId::new("d3"), overlong_tracking).is_err());
 
-        let warehouse_ship_without_warehouse = DeliveryData {
-            warehouse_id: None,
-            ..delivery_data()
-        };
+        let warehouse_ship_without_warehouse = DeliveryData { warehouse_id: None, ..delivery_data() };
         assert!(Delivery::new(DeliveryId::new("d4"), warehouse_ship_without_warehouse).is_err());
 
         let direct_with_warehouse = DeliveryData {
@@ -707,29 +697,19 @@ pub(crate) mod tests {
         let mut delivery = Delivery::new(DeliveryId::new("delivery-2"), delivery_data()).unwrap();
         assert!(delivery.reverse().is_err(), "草稿不能直接冲正");
         assert!(delivery.mark_signed().is_err(), "未发货不能签收");
-        assert!(delivery
-            .update(DeliveryUpdate {
-                carrier: Some(" 京东 ".to_string()),
-                tracking_no: None,
-            })
-            .is_ok());
-
-        delivery
-            .mark_shipped(Instant::from_unix_secs(1_700_000_000))
-            .unwrap();
         assert!(
             delivery
-                .update(DeliveryUpdate {
-                    carrier: None,
-                    tracking_no: None,
-                })
-                .is_err(),
+                .update(DeliveryUpdate { carrier: Some(" 京东 ".to_string()), tracking_no: None })
+                .is_ok()
+        );
+
+        delivery.mark_shipped(Instant::from_unix_secs(1_700_000_000)).unwrap();
+        assert!(
+            delivery.update(DeliveryUpdate { carrier: None, tracking_no: None }).is_err(),
             "已发货不可编辑"
         );
         // from == to 幂等迁移恒合法（state.rs 契约）；SHIPPED 不可编辑由 update 把关。
-        assert!(delivery
-            .mark_shipped(Instant::from_unix_secs(1_700_000_100))
-            .is_ok());
+        assert!(delivery.mark_shipped(Instant::from_unix_secs(1_700_000_100)).is_ok());
         assert!(delivery.reverse().is_ok());
         assert!(delivery.mark_signed().is_err(), "REVERSED 是终态，不能签收");
     }
@@ -744,51 +724,49 @@ pub(crate) mod tests {
             DeliveryType::WarehouseShip,
         )
         .unwrap();
-        assert!(delivery
-            .acceptance_quantity(
-                &line,
-                &SalesOrderId::new("so-1"),
-                &SalesOrderLineId::new("so-line-1"),
-            )
-            .is_err());
-        delivery
-            .mark_shipped(Instant::from_unix_secs(1_700_000_000))
-            .unwrap();
+        assert!(
+            delivery
+                .acceptance_quantity(&line, &SalesOrderId::new("so-1"), &SalesOrderLineId::new("so-line-1"),)
+                .is_err()
+        );
+        delivery.mark_shipped(Instant::from_unix_secs(1_700_000_000)).unwrap();
         assert_eq!(
             delivery
-                .acceptance_quantity(
-                    &line,
-                    &SalesOrderId::new("so-1"),
-                    &SalesOrderLineId::new("so-line-1"),
-                )
+                .acceptance_quantity(&line, &SalesOrderId::new("so-1"), &SalesOrderLineId::new("so-line-1"),)
                 .unwrap(),
             Quantity::from_str("3").unwrap()
         );
-        assert!(delivery
-            .acceptance_quantity(
-                &line,
-                &SalesOrderId::new("other-order"),
-                &SalesOrderLineId::new("so-line-1"),
-            )
-            .is_err());
+        assert!(
+            delivery
+                .acceptance_quantity(
+                    &line,
+                    &SalesOrderId::new("other-order"),
+                    &SalesOrderLineId::new("so-line-1"),
+                )
+                .is_err()
+        );
         let mut foreign_delivery_line = line.clone();
         foreign_delivery_line.delivery_id = DeliveryId::new("other-delivery");
-        assert!(delivery
-            .acceptance_quantity(
-                &foreign_delivery_line,
-                &SalesOrderId::new("so-1"),
-                &SalesOrderLineId::new("so-line-1"),
-            )
-            .is_err());
+        assert!(
+            delivery
+                .acceptance_quantity(
+                    &foreign_delivery_line,
+                    &SalesOrderId::new("so-1"),
+                    &SalesOrderLineId::new("so-line-1"),
+                )
+                .is_err()
+        );
         let mut foreign_sales_line = line.clone();
         foreign_sales_line.sales_order_line_id = SalesOrderLineId::new("other-line");
-        assert!(delivery
-            .acceptance_quantity(
-                &foreign_sales_line,
-                &SalesOrderId::new("so-1"),
-                &SalesOrderLineId::new("so-line-1"),
-            )
-            .is_err());
+        assert!(
+            delivery
+                .acceptance_quantity(
+                    &foreign_sales_line,
+                    &SalesOrderId::new("so-1"),
+                    &SalesOrderLineId::new("so-line-1"),
+                )
+                .is_err()
+        );
         assert_eq!(delivery.registration_context_id().unwrap(), "so-1");
         let mut missing_context = delivery.clone();
         missing_context.sales_order_id = SalesOrderId::new("   ");
@@ -833,16 +811,9 @@ pub(crate) mod tests {
     /// happy path：仓发行创建成功；直发行创建成功。
     #[test]
     fn line_new_succeeds_for_both_types() {
-        let warehouse_line = DeliveryLine::new(
-            DeliveryLineId::new("dl-1"),
-            line_data(),
-            DeliveryType::WarehouseShip,
-        )
-        .unwrap();
-        assert_eq!(
-            warehouse_line.stock_reservation_id.as_ref().unwrap().as_ref(),
-            "rsv-1"
-        );
+        let warehouse_line =
+            DeliveryLine::new(DeliveryLineId::new("dl-1"), line_data(), DeliveryType::WarehouseShip).unwrap();
+        assert_eq!(warehouse_line.stock_reservation_id.as_ref().unwrap().as_ref(), "rsv-1");
 
         let direct_line = DeliveryLine::new(
             DeliveryLineId::new("dl-2"),
@@ -854,63 +825,43 @@ pub(crate) mod tests {
             DeliveryType::SupplierDirect,
         )
         .unwrap();
-        assert_eq!(
-            direct_line
-                .purchase_line_sales_allocation_id
-                .as_ref()
-                .unwrap()
-                .as_ref(),
-            "pla-1"
-        );
+        assert_eq!(direct_line.purchase_line_sales_allocation_id.as_ref().unwrap().as_ref(), "pla-1");
     }
 
     /// 失败路径：行级归属不一致与数量越界。
     #[test]
     fn line_rejects_ownership_and_quantity_violations() {
-        let no_reservation = DeliveryLineData {
-            stock_reservation_id: None,
-            ..line_data()
-        };
-        assert!(DeliveryLine::new(
-            DeliveryLineId::new("dl-3"),
-            no_reservation,
-            DeliveryType::WarehouseShip
-        )
-        .is_err());
+        let no_reservation = DeliveryLineData { stock_reservation_id: None, ..line_data() };
+        assert!(
+            DeliveryLine::new(DeliveryLineId::new("dl-3"), no_reservation, DeliveryType::WarehouseShip)
+                .is_err()
+        );
 
         let direct_with_reservation = DeliveryLineData {
             purchase_line_sales_allocation_id: Some(PurchaseLineSalesAllocationId::new("pla-1")),
             stock_reservation_id: Some(StockReservationId::new("rsv-1")),
             ..line_data()
         };
-        assert!(DeliveryLine::new(
-            DeliveryLineId::new("dl-4"),
-            direct_with_reservation,
-            DeliveryType::SupplierDirect
-        )
-        .is_err());
+        assert!(
+            DeliveryLine::new(
+                DeliveryLineId::new("dl-4"),
+                direct_with_reservation,
+                DeliveryType::SupplierDirect
+            )
+            .is_err()
+        );
 
-        let zero_quantity = DeliveryLineData {
-            quantity: Quantity::from_str("0").unwrap(),
-            ..line_data()
-        };
-        assert!(DeliveryLine::new(
-            DeliveryLineId::new("dl-5"),
-            zero_quantity,
-            DeliveryType::WarehouseShip
-        )
-        .is_err());
+        let zero_quantity = DeliveryLineData { quantity: Quantity::from_str("0").unwrap(), ..line_data() };
+        assert!(
+            DeliveryLine::new(DeliveryLineId::new("dl-5"), zero_quantity, DeliveryType::WarehouseShip)
+                .is_err()
+        );
 
-        let zero_line_no = DeliveryLineData {
-            line_no: 0,
-            ..line_data()
-        };
-        assert!(DeliveryLine::new(
-            DeliveryLineId::new("dl-6"),
-            zero_line_no,
-            DeliveryType::WarehouseShip
-        )
-        .is_err());
+        let zero_line_no = DeliveryLineData { line_no: 0, ..line_data() };
+        assert!(
+            DeliveryLine::new(DeliveryLineId::new("dl-6"), zero_line_no, DeliveryType::WarehouseShip)
+                .is_err()
+        );
     }
 
     /// 发货单无审批约束：不得出现绑定字段或审批状态机。
@@ -928,10 +879,7 @@ pub(crate) mod tests {
         assert_eq!(DeliveryState::Signed.as_str(), "SIGNED");
         assert_eq!(DeliveryState::Reversed.as_str(), "REVERSED");
 
-        let production = include_str!("delivery.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("delivery.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(!production.contains("IN_APPROVAL"));
         assert!(!production.contains("fn start_approval"));
         assert!(!production.contains("approval_subject_version"));

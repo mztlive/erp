@@ -14,8 +14,8 @@ mod inbox_message {
 }
 
 mod integration_error_task {
-    use crate::entity::integration_ops::integration_error_task::tests::task;
     use crate::entity::integration_ops::IntegrationErrorTask;
+    use crate::entity::integration_ops::integration_error_task::tests::task;
 
     #[test]
     fn entity_roundtrip_through_bson() {

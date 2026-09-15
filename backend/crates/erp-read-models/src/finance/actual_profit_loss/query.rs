@@ -1,8 +1,9 @@
 //! 查询规范化：拒绝不支持的口径、分组及排序，不静默忽略筛选。
-use super::dto::ProfitLossQuery;
-use crate::{Error, Result};
 use chrono::{Days, NaiveDate};
 use erp_finance::entity::cost::CostType;
+
+use super::dto::ProfitLossQuery;
+use crate::{Error, Result};
 
 pub const PERIOD_BASIS: &str = "sales_order_effective_date";
 pub const BASIS_LABEL: &str = "销售单生效日（累计实际成本）";
@@ -21,14 +22,8 @@ impl ProfitLossQuery {
         if !["covered", "uncovered", "all"].contains(&self.coverage.as_str()) {
             return invalid("成本覆盖筛选无效");
         }
-        if ![
-            "sales_order",
-            "customer",
-            "scenario",
-            "attribution_user",
-            "attribution_org",
-        ]
-        .contains(&self.dimension.as_str())
+        if !["sales_order", "customer", "scenario", "attribution_user", "attribution_org"]
+            .contains(&self.dimension.as_str())
         {
             return invalid("不支持该盈亏分组");
         }
@@ -38,11 +33,7 @@ impl ProfitLossQuery {
         if self.page > 1 && self.scope_version.as_deref().is_none_or(str::is_empty) {
             return invalid("跨页查询必须携带范围版本，请从第一页刷新");
         }
-        if self
-            .scope_version
-            .as_ref()
-            .is_some_and(|version| version.len() > 128)
-        {
+        if self.scope_version.as_ref().is_some_and(|version| version.len() > 128) {
             return invalid("范围版本无效");
         }
         self.validate_sort()?;
@@ -53,13 +44,9 @@ impl ProfitLossQuery {
         if to < from || (to - from).num_days() > 366 {
             return invalid("查询期间必须按先后排列且不超过 367 天");
         }
-        let next = to
-            .checked_add_days(Days::new(1))
-            .ok_or_else(|| Error::ValidationError("结束日期无效".into()))?;
-        Ok(PeriodBounds {
-            from: midnight(from),
-            until: midnight(next),
-        })
+        let next =
+            to.checked_add_days(Days::new(1)).ok_or_else(|| Error::ValidationError("结束日期无效".into()))?;
+        Ok(PeriodBounds { from: midnight(from), until: midnight(next) })
     }
     /// 下钻仅接受历史人员或组织的精确分组身份；空后缀明确表示未知归属。
     fn validate_attribution_group(&self) -> Result<()> {
@@ -71,9 +58,7 @@ impl ProfitLossQuery {
         };
         if !["attribution_user", "attribution_org"].contains(&dimension)
             || id.len() > 128
-            || !id
-                .bytes()
-                .all(|c| c.is_ascii_alphanumeric() || b"_-".contains(&c))
+            || !id.bytes().all(|c| c.is_ascii_alphanumeric() || b"_-".contains(&c))
         {
             return invalid("历史分组下钻必须使用有效的人员或组织身份");
         }
@@ -103,15 +88,10 @@ impl ProfitLossQuery {
     }
     /// 文本有界，成本类别只接受财务领域已有代码。
     fn validate_text(&self) -> Result<()> {
-        for value in [
-            &self.q,
-            &self.customer_id,
-            &self.sales_order_id,
-            &self.benefit_scenario,
-            &self.cost_types,
-        ]
-        .into_iter()
-        .flatten()
+        for value in
+            [&self.q, &self.customer_id, &self.sales_order_id, &self.benefit_scenario, &self.cost_types]
+                .into_iter()
+                .flatten()
         {
             if value.len() > 512 {
                 return invalid("筛选文本过长");
@@ -126,13 +106,7 @@ impl ProfitLossQuery {
     }
     /// 成本筛选命中销售单后保留整单成本，不能只减所选类别而虚增利润。
     pub fn cost_codes(&self) -> Vec<&str> {
-        self.cost_types
-            .as_deref()
-            .unwrap_or("")
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect()
+        self.cost_types.as_deref().unwrap_or("").split(',').map(str::trim).filter(|s| !s.is_empty()).collect()
     }
 }
 /// 完整费用字典，也用于空结果时仍可修改筛选。
@@ -183,9 +157,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            chrono::DateTime::from_timestamp(q.validate().unwrap().from, 0)
-                .unwrap()
-                .to_rfc3339(),
+            chrono::DateTime::from_timestamp(q.validate().unwrap().from, 0).unwrap().to_rfc3339(),
             "2026-08-31T16:00:00+00:00"
         );
         q.period_basis = "cost_occurred_date".into();

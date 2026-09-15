@@ -5,15 +5,15 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as PartyExt>::PARTIES` 等值。
 
-use crate::repository::owned::{
-    PartyAddressRepository, PartyBankAccountRepository, PartyContactRepository, PartyRepository,
-    PartyRevisionRepository, PartyTaxProfileRepository,
-};
 use mongodb::Database;
 
 use super::super::party::{
     PartyAddressFilter, PartyBankAccountFilter, PartyContactFilter, PartyDomainRepository, PartyFilter,
     PartyRevisionFilter, PartyTaxProfileFilter,
+};
+use crate::repository::owned::{
+    PartyAddressRepository, PartyBankAccountRepository, PartyContactRepository, PartyRepository,
+    PartyRevisionRepository, PartyTaxProfileRepository,
 };
 
 /// 域 D07 仓储访问器。

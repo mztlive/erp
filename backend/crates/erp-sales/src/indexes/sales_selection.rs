@@ -1,13 +1,11 @@
 //! 销售选品集合索引。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::SalesSelectionExt;
-use persistence_core::Result;
 
 /// 创建选品集合索引。
 ///
@@ -20,42 +18,15 @@ use persistence_core::Result;
 /// # 错误
 /// 唯一约束冲突或 MongoDB 失败。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
-    create_indexes(
-        db,
-        <Database as SalesSelectionExt>::SALES_SELECTION_BOOKLETS,
-        booklet_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        <Database as SalesSelectionExt>::SALES_SELECTION_DISPLAY_ITEMS,
-        display_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        <Database as SalesSelectionExt>::SALES_SELECTION_POOL_MEMBERS,
-        pool_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        <Database as SalesSelectionExt>::SALES_SELECTION_PREPARE_TASKS,
-        task_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        <Database as SalesSelectionExt>::SALES_SELECTION_SESSIONS,
-        session_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        <Database as SalesSelectionExt>::SALES_SELECTION_PROPOSALS,
-        proposal_indexes(),
-    )
-    .await?;
+    create_indexes(db, <Database as SalesSelectionExt>::SALES_SELECTION_BOOKLETS, booklet_indexes()).await?;
+    create_indexes(db, <Database as SalesSelectionExt>::SALES_SELECTION_DISPLAY_ITEMS, display_indexes())
+        .await?;
+    create_indexes(db, <Database as SalesSelectionExt>::SALES_SELECTION_POOL_MEMBERS, pool_indexes()).await?;
+    create_indexes(db, <Database as SalesSelectionExt>::SALES_SELECTION_PREPARE_TASKS, task_indexes())
+        .await?;
+    create_indexes(db, <Database as SalesSelectionExt>::SALES_SELECTION_SESSIONS, session_indexes()).await?;
+    create_indexes(db, <Database as SalesSelectionExt>::SALES_SELECTION_PROPOSALS, proposal_indexes())
+        .await?;
     create_indexes(
         db,
         <Database as SalesSelectionExt>::SALES_SELECTION_PROPOSAL_DISPLAY_LINES,
@@ -68,18 +39,9 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
         proposal_sku_indexes(),
     )
     .await?;
-    create_indexes(
-        db,
-        <Database as SalesSelectionExt>::SALES_SELECTION_IDEMPOTENCY,
-        idempotency_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        <Database as SalesSelectionExt>::SALES_SELECTION_RATE_WINDOWS,
-        rate_indexes(),
-    )
-    .await
+    create_indexes(db, <Database as SalesSelectionExt>::SALES_SELECTION_IDEMPOTENCY, idempotency_indexes())
+        .await?;
+    create_indexes(db, <Database as SalesSelectionExt>::SALES_SELECTION_RATE_WINDOWS, rate_indexes()).await
 }
 
 /// 为集合创建索引。
@@ -95,9 +57,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
 /// # 错误
 /// MongoDB 失败。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -144,19 +104,13 @@ fn task_indexes() -> Vec<IndexModel> {
             "idx_sales_selection_prepare_tasks_status_deadline",
             doc! { "status": 1, "deadline_at": 1 },
         ),
-        named_index(
-            "idx_sales_selection_prepare_tasks_booklet",
-            doc! { "booklet_id": 1, "created_at": -1 },
-        ),
+        named_index("idx_sales_selection_prepare_tasks_booklet", doc! { "booklet_id": 1, "created_at": -1 }),
     ]
 }
 
 /// 一册一份会话。
 fn session_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_sales_selection_sessions_booklet",
-        doc! { "booklet_id": 1 },
-    )]
+    vec![unique_index("uk_sales_selection_sessions_booklet", doc! { "booklet_id": 1 })]
 }
 
 /// 方案编号与一册一份方案。
@@ -164,19 +118,13 @@ fn proposal_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_selection_proposals_no", doc! { "proposal_no": 1 }),
         unique_index("uk_sales_selection_proposals_booklet", doc! { "booklet_id": 1 }),
-        named_index(
-            "idx_sales_selection_proposals_customer",
-            doc! { "customer_id": 1, "submitted_at": -1 },
-        ),
+        named_index("idx_sales_selection_proposals_customer", doc! { "customer_id": 1, "submitted_at": -1 }),
     ]
 }
 
 /// 方案陈列行。
 fn proposal_display_indexes() -> Vec<IndexModel> {
-    vec![named_index(
-        "idx_sales_selection_proposal_display_lines_proposal",
-        doc! { "proposal_id": 1 },
-    )]
+    vec![named_index("idx_sales_selection_proposal_display_lines_proposal", doc! { "proposal_id": 1 })]
 }
 
 /// 方案 SKU 行。
@@ -197,23 +145,22 @@ fn idempotency_indexes() -> Vec<IndexModel> {
 
 /// 公开限流窗口。
 fn rate_indexes() -> Vec<IndexModel> {
-    vec![IndexModel::builder()
-        .keys(doc! { "expires_at": 1 })
-        .options(
-            IndexOptions::builder()
-                .name("ttl_sales_selection_rate_windows".to_string())
-                .expire_after(std::time::Duration::ZERO)
-                .build(),
-        )
-        .build()]
+    vec![
+        IndexModel::builder()
+            .keys(doc! { "expires_at": 1 })
+            .options(
+                IndexOptions::builder()
+                    .name("ttl_sales_selection_rate_windows".to_string())
+                    .expire_after(std::time::Duration::ZERO)
+                    .build(),
+            )
+            .build(),
+    ]
 }
 
 /// 命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 命名唯一索引。
@@ -229,11 +176,7 @@ fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Documen
     IndexModel::builder()
         .keys(keys)
         .options(
-            IndexOptions::builder()
-                .name(name.into())
-                .unique(true)
-                .partial_filter_expression(filter)
-                .build(),
+            IndexOptions::builder().name(name.into()).unique(true).partial_filter_expression(filter).build(),
         )
         .build()
 }

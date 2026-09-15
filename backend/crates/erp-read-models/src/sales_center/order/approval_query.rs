@@ -5,21 +5,21 @@
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, SubjectRef};
 use erp_sales::entity::sales_order::{BusinessType, CommercialStatus, ReviewStatus};
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::BpmExt;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::service::approval::execution::{
+    RuntimeHistoryItem, RuntimeHistoryPage, history_item_from_execution, history_page_from,
+    latest_rejection_reason,
+};
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
-use super::adapter::{document_approval_view_with_history, RECENT_HISTORY_LIMIT};
+use super::adapter::{RECENT_HISTORY_LIMIT, document_approval_view_with_history};
 use super::dto::{
     DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
     DocumentApprovalView,
 };
 use crate::Result;
-use erp_workflow::service::approval::execution::{
-    history_item_from_execution, history_page_from, latest_rejection_reason, RuntimeHistoryItem,
-    RuntimeHistoryPage,
-};
 
 /// 加载销售单详情的只读审批结构。
 ///
@@ -41,11 +41,7 @@ use erp_workflow::service::approval::execution::{
 #[tracing::instrument(
     name = "sales_order.load_document_approval",
     skip_all,
-    fields(
-        layer = "service",
-        domain = "sales_order",
-        operation = "load_document_approval"
-    )
+    fields(layer = "service", domain = "sales_order", operation = "load_document_approval")
 )]
 pub(super) async fn load_document_approval(
     db: &Database,
@@ -87,11 +83,7 @@ struct LoadedRuntime {
 /// # 错误
 /// 仓储失败时返回错误。
 async fn load_runtime(db: &Database, subject: &SubjectRef) -> Result<LoadedRuntime> {
-    let Some(instance) = db
-        .bpm_workflow()
-        .find_latest_by_subject(subject, &mut NoTransaction)
-        .await?
-    else {
+    let Some(instance) = db.bpm_workflow().find_latest_by_subject(subject, &mut NoTransaction).await? else {
         return Ok(empty_runtime());
     };
     project_runtime(db, instance).await
@@ -110,17 +102,10 @@ async fn load_runtime(db: &Database, subject: &SubjectRef) -> Result<LoadedRunti
 /// 仓储失败时返回错误。
 async fn project_runtime(db: &Database, instance: ApprovalProcessInstance) -> Result<LoadedRuntime> {
     let instance_id = ApprovalProcessInstanceId::new(instance.base.id.clone());
-    let current = db
-        .bpm_workflow()
-        .find_current_execution(&instance_id, &mut NoTransaction)
-        .await?;
+    let current = db.bpm_workflow().find_current_execution(&instance_id, &mut NoTransaction).await?;
     let page = load_recent_history(db, &instance_id).await?;
     Ok(LoadedRuntime {
-        instance: Some(instance_view(
-            &instance,
-            current.as_ref(),
-            latest_rejection_reason(&page.items),
-        )),
+        instance: Some(instance_view(&instance, current.as_ref(), latest_rejection_reason(&page.items))),
         recent_history: page.items.iter().map(history_item_view).collect(),
         history_page: DocumentApprovalHistoryPageView {
             next_cursor: page.next_cursor,
@@ -167,10 +152,7 @@ fn empty_runtime() -> LoadedRuntime {
     LoadedRuntime {
         instance: None,
         recent_history: Vec::new(),
-        history_page: DocumentApprovalHistoryPageView {
-            next_cursor: None,
-            has_more: false,
-        },
+        history_page: DocumentApprovalHistoryPageView { next_cursor: None, has_more: false },
     }
 }
 
@@ -242,16 +224,11 @@ fn history_item_view(item: &RuntimeHistoryItem) -> DocumentApprovalHistoryItemVi
 /// 无。
 fn optional_text(value: &str) -> Option<String> {
     let text = value.trim();
-    if text.is_empty() {
-        None
-    } else {
-        Some(text.to_string())
-    }
+    if text.is_empty() { None } else { Some(text.to_string()) }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{history_item_view, instance_view, optional_text};
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use bpm::model::types::{ApprovalBlockerCode, ApprovalExecutionAssignmentSource};
     use bpm::model::{
@@ -259,6 +236,8 @@ mod tests {
         ProcessKind, SubjectRef, Timestamp,
     };
     use erp_workflow::service::approval::execution::RuntimeHistoryItem;
+
+    use super::{history_item_view, instance_view, optional_text};
 
     fn running_instance() -> ApprovalProcessInstance {
         ApprovalProcessInstance::start_running(NewProcessInstance {
@@ -294,11 +273,7 @@ mod tests {
     /// 实例摘要读取当前执行的节点名与审批人显示名。
     #[test]
     fn instance_view_uses_current_execution_snapshot() {
-        let view = instance_view(
-            &running_instance(),
-            Some(&current_execution()),
-            Some("价格过高".into()),
-        );
+        let view = instance_view(&running_instance(), Some(&current_execution()), Some("价格过高".into()));
         assert_eq!(view.id, "inst-1");
         assert_eq!(view.status, "RUNNING");
         assert_eq!(view.current_node.as_deref(), Some("procurement_confirm"));

@@ -1,11 +1,12 @@
 //! 按同一角色证明动作后的范围解析；角色授权与个人上限始终分别保留。
 
-use erp_core::common::time::Instant;
 use std::collections::{BTreeMap, BTreeSet};
 
+use erp_core::common::time::Instant;
+
 use super::{DataScope, DataScopeSubjectType, DataScopeType, ScopeDimension, ScopeTargetMode};
-use crate::entity::organization::{OrgManagementAssignment, OrgMembership, OrgTree};
 use crate::Result;
+use crate::entity::organization::{OrgManagementAssignment, OrgMembership, OrgTree};
 
 #[cfg(test)]
 #[path = "resolved_scope_tests.rs"]
@@ -64,21 +65,15 @@ impl ScopeClause {
         }
         let ownership = (self.self_owned && object.owned)
             || (self.collaborative && object.collaborating)
-            || object
-                .org_unit_id
-                .is_some_and(|id| self.org_unit_ids.contains(id));
+            || object.org_unit_id.is_some_and(|id| self.org_unit_ids.contains(id));
         let has_ownership_dimension = self.self_owned || self.collaborative || !self.org_unit_ids.is_empty();
         let has_other_dimension = !self.settlement_party_ids.is_empty() || !self.warehouse_ids.is_empty();
         (!has_ownership_dimension || ownership)
             && (has_ownership_dimension || has_other_dimension)
             && (self.settlement_party_ids.is_empty()
-                || object
-                    .settlement_party_id
-                    .is_some_and(|id| self.settlement_party_ids.contains(id)))
+                || object.settlement_party_id.is_some_and(|id| self.settlement_party_ids.contains(id)))
             && (self.warehouse_ids.is_empty()
-                || object
-                    .warehouse_id
-                    .is_some_and(|id| self.warehouse_ids.contains(id)))
+                || object.warehouse_id.is_some_and(|id| self.warehouse_ids.contains(id)))
     }
 
     /// 校验资源要求的维度均有该角色自己的范围证据。
@@ -87,7 +82,7 @@ impl ScopeClause {
             || dimensions.iter().all(|dimension| match dimension {
                 ScopeDimension::InternalOrg => {
                     self.self_owned || self.collaborative || !self.org_unit_ids.is_empty()
-                }
+                },
                 ScopeDimension::SettlementParty => !self.settlement_party_ids.is_empty(),
                 ScopeDimension::Warehouse => !self.warehouse_ids.is_empty(),
             })
@@ -148,16 +143,8 @@ impl ScopeResolution<'_> {
             }
         }
         let rules = self.rules_for(DataScopeSubjectType::User, self.user_id);
-        let user_limit = (!rules.is_empty())
-            .then(|| self.clause(&rules, None))
-            .transpose()?;
-        Ok((
-            ResolvedScope {
-                role_clauses,
-                user_limit,
-            },
-            role_scopes,
-        ))
+        let user_limit = (!rules.is_empty()).then(|| self.clause(&rules, None)).transpose()?;
+        Ok((ResolvedScope { role_clauses, user_limit }, role_scopes))
     }
 
     /// 只提取当前资源动作、主体、状态均匹配的规则。
@@ -184,7 +171,7 @@ impl ScopeResolution<'_> {
                 DataScopeType::Collaborative => clause.collaborative = true,
                 DataScopeType::Organization | DataScopeType::Team => {
                     self.add_targets(&mut clause, rule, role_id)?
-                }
+                },
             }
         }
         Ok(clause)
@@ -194,9 +181,9 @@ impl ScopeResolution<'_> {
     fn add_targets(&self, clause: &mut ScopeClause, rule: &DataScope, role_id: Option<&str>) -> Result<()> {
         match rule.binding.target_dimension {
             ScopeDimension::InternalOrg => clause.org_unit_ids.extend(self.org_targets(rule, role_id)?),
-            ScopeDimension::SettlementParty => clause
-                .settlement_party_ids
-                .extend(rule.scope_targets.iter().cloned()),
+            ScopeDimension::SettlementParty => {
+                clause.settlement_party_ids.extend(rule.scope_targets.iter().cloned())
+            },
             ScopeDimension::Warehouse => clause.warehouse_ids.extend(rule.scope_targets.iter().cloned()),
         }
         Ok(())
@@ -211,14 +198,14 @@ impl ScopeResolution<'_> {
                 for id in &rule.scope_targets {
                     result.extend(self.tree.expand(id, descendants)?);
                 }
-            }
+            },
             Some(ScopeTargetMode::OwnOrg) => {
                 for membership in self.memberships.iter().filter(|m| {
                     !m.base.is_deleted() && m.user_id == self.user_id && m.validity.contains(self.as_of)
                 }) {
                     result.extend(self.tree.expand(&membership.org_unit_id, descendants)?);
                 }
-            }
+            },
             Some(ScopeTargetMode::ManagedOrgs) => {
                 for grant in self.management.iter().filter(|g| {
                     !g.base.is_deleted() && g.user_id == self.user_id && g.validity.contains(self.as_of)
@@ -229,8 +216,8 @@ impl ScopeResolution<'_> {
                         result.extend(self.tree.expand(&grant.org_unit_id, grant.include_descendants)?);
                     }
                 }
-            }
-            None => {}
+            },
+            None => {},
         }
         Ok(result)
     }

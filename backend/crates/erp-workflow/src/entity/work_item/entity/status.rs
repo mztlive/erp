@@ -1,10 +1,9 @@
 //! 工作项完成、关闭、转派与终态。
 
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::Instant;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::validation::{CLOSE_REASON_MAX_LEN, USER_ID_MAX_LEN};
 use super::{AssignmentSource, WorkItem, WorkItemStatus, WorkItemType};
@@ -273,19 +272,18 @@ impl WorkItem {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{direct_data, AssignmentSource, WorkItem, WorkItemData, WorkItemStatus, WorkItemType};
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
+
+    use super::super::{AssignmentSource, WorkItem, WorkItemData, WorkItemStatus, WorkItemType, direct_data};
 
     #[test]
     fn reassign_and_complete_preserve_first_times() {
         let first = Instant::from_unix_secs(100);
         let mut item = WorkItem::new_at(WorkItemId::new("wi-1"), direct_data(), first).unwrap();
-        item.record_activity("alice", Instant::from_unix_secs(110))
-            .unwrap();
+        item.record_activity("alice", Instant::from_unix_secs(110)).unwrap();
         item.reassign("bob", Instant::from_unix_secs(130)).unwrap();
-        item.complete_by_domain_command("bob", Instant::from_unix_secs(150))
-            .unwrap();
+        item.complete_by_domain_command("bob", Instant::from_unix_secs(150)).unwrap();
         assert_eq!(item.assigned_at, Some(first));
         assert_eq!(item.started_at, Some(Instant::from_unix_secs(110)));
         assert_eq!(item.owner_user_id.as_deref(), Some("bob"));
@@ -302,20 +300,21 @@ mod tests {
             reason_code: Some("PAYABLE_PAYMENT_REQUIRED".to_string()),
             ..direct_data()
         };
-        assert!(WorkItem::new_at(
-            WorkItemId::new("wi-payment-missing-key"),
-            data.clone(),
-            Instant::from_unix_secs(100),
-        )
-        .is_err());
+        assert!(
+            WorkItem::new_at(
+                WorkItemId::new("wi-payment-missing-key"),
+                data.clone(),
+                Instant::from_unix_secs(100),
+            )
+            .is_err()
+        );
         let mut task = WorkItem::new_with_responsibility_key(
             WorkItemId::new("wi-payment"),
             data,
             "finance:SUPPLIER_PAYMENT:rule-1",
         )
         .unwrap();
-        task.complete_when_payable_settled(Instant::from_unix_secs(120))
-            .unwrap();
+        task.complete_when_payable_settled(Instant::from_unix_secs(120)).unwrap();
 
         assert_eq!(task.status, WorkItemStatus::Completed);
         assert_eq!(task.completed_by.as_deref(), Some("__system__"));
@@ -339,12 +338,14 @@ mod tests {
             reason_code: Some("RECEIVABLE_INVOICE_REQUIRED".to_string()),
             ..direct_data()
         };
-        assert!(WorkItem::new_at(
-            WorkItemId::new("wi-invoice-missing-key"),
-            data.clone(),
-            Instant::from_unix_secs(100),
-        )
-        .is_err());
+        assert!(
+            WorkItem::new_at(
+                WorkItemId::new("wi-invoice-missing-key"),
+                data.clone(),
+                Instant::from_unix_secs(100),
+            )
+            .is_err()
+        );
         let mut task = WorkItem::new_with_responsibility_key(
             WorkItemId::new("wi-invoice"),
             data,
@@ -352,8 +353,7 @@ mod tests {
         )
         .unwrap();
 
-        task.complete_when_fully_invoiced(Instant::from_unix_secs(120))
-            .unwrap();
+        task.complete_when_fully_invoiced(Instant::from_unix_secs(120)).unwrap();
 
         assert_eq!(task.status, WorkItemStatus::Completed);
         assert_eq!(task.completed_by.as_deref(), Some("__system__"));

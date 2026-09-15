@@ -1,19 +1,18 @@
 use std::collections::BTreeMap;
 
+use erp_core::common::time::Instant;
+use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
+
+use super::command::{CommandIdentity, apply_validated_changes, map_capability_change_rejection};
+use super::map_command_shape_rejection;
+use crate::Error;
+use crate::dto::supplier_api::SupplierConnectionCommand;
 use crate::entity::supplier_api::{
     BusinessCapabilityConfirmation, BusinessCapabilityConfirmationData, BusinessCapabilityRequirement,
     CapabilityChangeInput, CapabilityChangeSet, CapabilityChangeSetRejection, SupplierApiCapability,
     SupplierApiCapabilityCode, SupplierApiCapabilityData, SupplierApiCapabilityStatus,
     SupplierCommandShapeRejection, SupplierConnectionAction, SupplierHealthCheckType,
 };
-use erp_core::common::time::Instant;
-use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
-
-use crate::dto::supplier_api::SupplierConnectionCommand;
-use crate::Error;
-
-use super::command::{apply_validated_changes, map_capability_change_rejection, CommandIdentity};
-use super::map_command_shape_rejection;
 
 #[test]
 fn command_identity_hashes_raw_idempotency_key() {
@@ -163,9 +162,7 @@ fn apply_validated_changes_rejects_version_conflict_and_missing_confirmation() {
         apply_validated_changes(
             "conn-1",
             &classified,
-            &[covering_confirmation(&existing_capability(
-                SupplierApiCapabilityCode::Order
-            ))],
+            &[covering_confirmation(&existing_capability(SupplierApiCapabilityCode::Order))],
             &capabilities
         ),
         Err(Error::ConflictError(_))

@@ -1,25 +1,25 @@
 //! 草稿物理替换的真实写入端口；沿调用方执行器逐步完成，首错停止。
 
 use async_trait::async_trait;
-use mongodb::{bson::doc, Database};
-use persistence_core::{mongo_ops, Executor, Result};
+use mongodb::Database;
+use mongodb::bson::doc;
+use persistence_core::{Executor, Result, mongo_ops};
 
+use super::super::{
+    SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE, SUPPLIER_SETTLEMENT_DIFFERENCES, SUPPLIER_SETTLEMENT_ITEMS,
+    SUPPLIER_SETTLEMENT_STATEMENTS,
+};
 use crate::entity::supplier_settlement::{
     SupplierSettlementDifference, SupplierSettlementDifferenceEvidence, SupplierSettlementItem,
     SupplierSettlementStatement,
 };
 use crate::repository::owned::SupplierSettlementStatementRepository;
 
-use super::super::{
-    SUPPLIER_SETTLEMENT_DIFFERENCES, SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE, SUPPLIER_SETTLEMENT_ITEMS,
-    SUPPLIER_SETTLEMENT_STATEMENTS,
-};
-
 /// 本域草稿替换的六个数据库步骤，不拥有事务或业务状态校验。
 #[async_trait]
 pub(super) trait DraftSnapshotStore: Send {
     async fn delete_evidence(&mut self, difference_ids: &[String], executor: &mut dyn Executor)
-        -> Result<()>;
+    -> Result<()>;
     async fn delete_differences(&mut self, item_ids: &[String], executor: &mut dyn Executor) -> Result<()>;
     async fn delete_items(&mut self, statement_id: &str, executor: &mut dyn Executor) -> Result<()>;
     async fn update_statement(
@@ -64,9 +64,7 @@ impl DraftSnapshotStore for MongoDraftSnapshotStore<'_> {
 
     async fn delete_differences(&mut self, item_ids: &[String], executor: &mut dyn Executor) -> Result<()> {
         mongo_ops::delete_many(
-            &self
-                .db
-                .collection::<SupplierSettlementDifference>(SUPPLIER_SETTLEMENT_DIFFERENCES),
+            &self.db.collection::<SupplierSettlementDifference>(SUPPLIER_SETTLEMENT_DIFFERENCES),
             doc! { "statement_item_id": { "$in": item_ids } },
             executor,
         )
@@ -76,9 +74,7 @@ impl DraftSnapshotStore for MongoDraftSnapshotStore<'_> {
 
     async fn delete_items(&mut self, statement_id: &str, executor: &mut dyn Executor) -> Result<()> {
         mongo_ops::delete_many(
-            &self
-                .db
-                .collection::<SupplierSettlementItem>(SUPPLIER_SETTLEMENT_ITEMS),
+            &self.db.collection::<SupplierSettlementItem>(SUPPLIER_SETTLEMENT_ITEMS),
             doc! { "statement_id": statement_id },
             executor,
         )
@@ -102,9 +98,7 @@ impl DraftSnapshotStore for MongoDraftSnapshotStore<'_> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<SupplierSettlementItem>(SUPPLIER_SETTLEMENT_ITEMS),
+            &self.db.collection::<SupplierSettlementItem>(SUPPLIER_SETTLEMENT_ITEMS),
             items.to_vec(),
             executor,
         )
@@ -118,9 +112,7 @@ impl DraftSnapshotStore for MongoDraftSnapshotStore<'_> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<SupplierSettlementDifference>(SUPPLIER_SETTLEMENT_DIFFERENCES),
+            &self.db.collection::<SupplierSettlementDifference>(SUPPLIER_SETTLEMENT_DIFFERENCES),
             differences.to_vec(),
             executor,
         )

@@ -1,9 +1,14 @@
 //! W29 本域终态证据验证、错误任务解决与差异决定追加。
+use erp_core::common::time::Instant;
+use mongodb::Database;
+use persistence_core::Executor;
+
 use super::guard::{
     ensure_difference_open, ensure_difference_subject, ensure_error_task_subject, latest_resolution,
     load_difference, load_error_task,
 };
-use super::{append_resolution, DirectFact};
+use super::{DirectFact, append_resolution};
+use crate::Result;
 use crate::dto::{
     ControlledEvidenceKind, DirectReconciliationStatus, IntegrationActionOutcome, IntegrationItemType,
     IntegrationTaskCompletionCommand,
@@ -15,10 +20,6 @@ use crate::service::evidence::{
     difference_evidence_policy, ensure_completion_policy, error_evidence_policy, verified_reference,
     verify_evidence_refs,
 };
-use crate::Result;
-use erp_core::common::time::Instant;
-use mongodb::Database;
-use persistence_core::Executor;
 
 /// 本域已形成的终态；供正式任务完成和回执使用。
 #[derive(Debug)]
@@ -41,10 +42,10 @@ pub async fn complete_domain_item(
     match command.decision.item_type {
         IntegrationItemType::ErrorTask => {
             complete_error_task(db, authority, command, actor_id, executor).await
-        }
+        },
         IntegrationItemType::ReconciliationDifference => {
             complete_difference(db, authority, command, resolution_id, actor_id, executor).await
-        }
+        },
     }
 }
 
@@ -66,35 +67,20 @@ async fn complete_error_task(
         &policy,
     )?;
     let subject = EvidenceSubject::error(&task);
-    let verified = verify_evidence_refs(
-        authority,
-        &subject,
-        &command.decision.evidence_refs,
-        actor_id,
-        executor,
-    )
-    .await?;
+    let verified =
+        verify_evidence_refs(authority, &subject, &command.decision.evidence_refs, actor_id, executor)
+            .await?;
     let reference = verified_reference(&verified)?;
     let resolution = completion_resolution(command, &reference, actor_id);
     let resolution_type = ResolutionType::from_verified_evidence(
-        verified
-            .iter()
-            .any(|evidence| evidence.reference.kind == ControlledEvidenceKind::CompensationResult),
+        verified.iter().any(|evidence| evidence.reference.kind == ControlledEvidenceKind::CompensationResult),
         verified
             .iter()
             .any(|evidence| evidence.reference.kind == ControlledEvidenceKind::BusinessObjectVerification),
     );
-    task.transition(
-        ErrorTaskStatus::Resolved,
-        Some(resolution_type),
-        Some(resolution),
-        Instant::now(),
-    )?;
+    task.transition(ErrorTaskStatus::Resolved, Some(resolution_type), Some(resolution), Instant::now())?;
     db.integration_error_tasks().update(&mut task, executor).await?;
-    Ok(TerminalFact {
-        reference,
-        next_subject_version: task.base.version.to_string(),
-    })
+    Ok(TerminalFact { reference, next_subject_version: task.base.version.to_string() })
 }
 
 async fn complete_difference(
@@ -118,14 +104,9 @@ async fn complete_difference(
         &policy,
     )?;
     let subject = EvidenceSubject::difference(&difference);
-    let verified = verify_evidence_refs(
-        authority,
-        &subject,
-        &command.decision.evidence_refs,
-        actor_id,
-        executor,
-    )
-    .await?;
+    let verified =
+        verify_evidence_refs(authority, &subject, &command.decision.evidence_refs, actor_id, executor)
+            .await?;
     let reference = verified_reference(&verified)?;
     let typed = DirectConclusion::ConfirmValidDifference;
     let fact = DirectFact {
@@ -138,13 +119,8 @@ async fn complete_difference(
     };
     let record = append_resolution(&difference, latest.as_ref(), &fact, resolution_id, actor_id)?;
     let next_subject_version = record.resolution_no.to_string();
-    db.reconciliation_difference_resolutions()
-        .create(&record, executor)
-        .await?;
-    Ok(TerminalFact {
-        reference,
-        next_subject_version,
-    })
+    db.reconciliation_difference_resolutions().create(&record, executor).await?;
+    Ok(TerminalFact { reference, next_subject_version })
 }
 
 fn completion_resolution(

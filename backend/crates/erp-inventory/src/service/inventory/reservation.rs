@@ -1,14 +1,12 @@
-use crate::entity::inventory::StockReservation;
-use crate::repository::InventoryExt;
+use application_core::AuditActor;
 use persistence_core::Transactional;
 use validator::Validate;
 
 use super::InventoryService;
 use crate::dto::{PageView, SortDir, StockReservationListParams, StockReservationView};
+use crate::entity::inventory::StockReservation;
 use crate::error::{Error, Result};
-use application_core::AuditActor;
-
-use crate::repository::StockReservationFilter;
+use crate::repository::{InventoryExt, StockReservationFilter};
 
 impl InventoryService {
     /// 分页查询库存预占列表（W10 销售预占视图）。
@@ -69,11 +67,7 @@ impl InventoryService {
                         sort_by: Some(query.paging.sort_by.to_string()),
                         sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
                     };
-                    Ok::<_, Error>(
-                        db.stock_reservations()
-                            .search_stock_reservations(&filter, session)
-                            .await?,
-                    )
+                    Ok::<_, Error>(db.stock_reservations().search_stock_reservations(&filter, session).await?)
                 })
             })
             .await?;
@@ -92,12 +86,7 @@ impl InventoryService {
                 version: row.version,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: page_no,
-            page_size,
-        })
+        Ok(PageView { items, total: page.total, page: page_no, page_size })
     }
 }
 

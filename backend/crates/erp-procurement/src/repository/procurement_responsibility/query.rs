@@ -1,13 +1,10 @@
-use crate::entity::procurement_responsibility::EnableStatus;
-use crate::entity::procurement_responsibility::ProcurementResponsibilityRule;
-use crate::repository::owned::ProcurementResponsibilityRuleRepository;
 use mongodb::bson::doc;
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 
 use super::ProcurementResponsibilityRuleFilter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::procurement_responsibility::{EnableStatus, ProcurementResponsibilityRule};
+use crate::repository::owned::ProcurementResponsibilityRuleRepository;
 
 impl<'a> ProcurementResponsibilityRuleRepository<'a> {
     /// 分页查询采购责任规则。
@@ -33,10 +30,7 @@ impl<'a> ProcurementResponsibilityRuleRepository<'a> {
             .build();
         let items = mongo_ops::find_many(&self.collection(), filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 读取全部启用采购责任规则。

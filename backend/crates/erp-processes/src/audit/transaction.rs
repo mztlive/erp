@@ -3,10 +3,10 @@
 //! 本模块只统一“业务写入 + 成功审计”的原子提交机械逻辑；领域校验、业务动作
 //! 名称和资源身份仍由各领域 Service 决定。
 
-use std::{future::Future, pin::Pin};
+use std::future::Future;
+use std::pin::Pin;
 
-use erp_audit::AuditExt;
-use erp_audit::AuditLog;
+use erp_audit::{AuditExt, AuditLog};
 use mongodb::{ClientSession, Database};
 use persistence_core::Transactional;
 

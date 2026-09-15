@@ -1,4 +1,4 @@
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 
 use super::{DIFFERENCE_SORT_FIELDS, ITEM_SORT_FIELDS, STATEMENT_SORT_FIELDS};
 
@@ -49,9 +49,7 @@ pub(super) fn difference_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -
 /// 返回排序条件文档。
 pub(super) fn sort_doc(whitelist: &[&str], sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
-    let field = sort_by
-        .filter(|field| whitelist.contains(field))
-        .unwrap_or("created_at");
+    let field = sort_by.filter(|field| whitelist.contains(field)).unwrap_or("created_at");
     doc! { field: direction, "id": direction }
 }
 

@@ -3,11 +3,10 @@
 //! 当前销售版本商品/服务数量是采购目标；草稿/审批提交与生效采购分配形成覆盖量。
 //! 本模块只承载不依赖仓储的数量守恒、剩余数量与进度派生规则。
 
-use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
-
 use erp_core::money::{Quantity, Rate};
 use erp_core::{Error, Result};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 
 /// 销售单当前版本的采购数量覆盖汇总。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -97,9 +96,11 @@ fn coverage_progress(total_quantity: Quantity, covered_quantity: Quantity) -> Re
 
 #[cfg(test)]
 mod tests {
-    use super::ProcurementCoverageSummary;
-    use erp_core::money::{Quantity, Rate};
     use std::str::FromStr;
+
+    use erp_core::money::{Quantity, Rate};
+
+    use super::ProcurementCoverageSummary;
 
     /// 部分覆盖时应精确派生剩余数量与进度。
     #[test]

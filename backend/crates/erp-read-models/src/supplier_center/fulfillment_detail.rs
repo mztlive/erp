@@ -1,6 +1,5 @@
 //! 供应商履约详情的跨域只读装配，包括主体名称与 W26 正式任务授权。
 
-use crate::ports::work_item_authorization::WorkItemAuthorizationReadPort;
 use application_core::AuditActor;
 use erp_supply::dto::supplier_fulfillment::{
     SupplierFulfillmentItemView, SupplierFulfillmentOrderDetailParams, SupplierOrderActionBlockerView,
@@ -13,11 +12,12 @@ use erp_supply::entity::supplier_fulfillment::{
     SupplierOrderActionType,
 };
 use erp_supply::repository::{SupplierApiExt, SupplierFulfillmentExt};
+use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::WorkItemType;
 use erp_workflow::service::work_item::WorkItemAllowedAction;
-use erp_workflow::WorkItemExt;
 use persistence_core::NoTransaction;
 
+use crate::ports::work_item_authorization::WorkItemAuthorizationReadPort;
 use crate::{Error, Result};
 
 /// 组合履约订单、主体名称、调查证据和正式任务授权的详情读取器。
@@ -59,11 +59,8 @@ impl SupplierFulfillmentDetailReadService {
             .supplier_fulfillment_items()
             .find_items_by_order_ids(std::slice::from_ref(&order_id), &mut NoTransaction)
             .await?;
-        let actions = self
-            .db
-            .supplier_order_actions()
-            .list_by_order_newest(&order_id, &mut NoTransaction)
-            .await?;
+        let actions =
+            self.db.supplier_order_actions().list_by_order_newest(&order_id, &mut NoTransaction).await?;
         let histories = self
             .db
             .supplier_order_status_histories()
@@ -94,9 +91,8 @@ impl SupplierFulfillmentDetailReadService {
             "当前 W26 尚未注册可审计的短时地址揭示入口",
         ));
 
-        let target_action = actions
-            .iter()
-            .find(|action| action.action_type != SupplierOrderActionType::Query);
+        let target_action =
+            actions.iter().find(|action| action.action_type != SupplierOrderActionType::Query);
         let latest_investigation = target_action.and_then(|target| {
             actions.iter().find_map(|candidate| {
                 let record = parse_investigation_evidence(candidate).ok()?;
@@ -108,11 +104,7 @@ impl SupplierFulfillmentDetailReadService {
             .as_ref()
             .map(|(evidence, record)| investigation_evidence_view(&order, evidence, record));
 
-        let work_item_id = params
-            .work_item_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
+        let work_item_id = params.work_item_id.as_deref().map(str::trim).filter(|value| !value.is_empty());
         let formal = if let Some(work_item_id) = work_item_id {
             let view = task_auth.authorize(work_item_id, actor).await?;
             if !matches!(
@@ -123,9 +115,7 @@ impl SupplierFulfillmentDetailReadService {
                 || view.subject_version != order.base.version.to_string()
                 || false
             {
-                return Err(Error::BusinessLogicError(
-                    "正式任务与当前供应商履约订单不匹配".to_string(),
-                ));
+                return Err(Error::BusinessLogicError("正式任务与当前供应商履约订单不匹配".to_string()));
             }
             Some(view)
         } else {
@@ -158,10 +148,7 @@ impl SupplierFulfillmentDetailReadService {
                     .find_by_id(work_item_id.expect("formal work item id"), &mut NoTransaction)
                     .await?
                     .ok_or_else(|| Error::NotFound("供应商履约正式任务不存在".to_string()))?;
-                if ensure_task_actor_eligible(&self.db, &raw, actor.id(), &mut NoTransaction)
-                    .await
-                    .is_err()
-                {
+                if ensure_task_actor_eligible(&self.db, &raw, actor.id(), &mut NoTransaction).await.is_err() {
                     block_supplier_order_domain_actions(
                         &mut action_blockers,
                         "ACTOR_INELIGIBLE",
@@ -234,11 +221,8 @@ impl SupplierFulfillmentDetailReadService {
         allowed_actions: &mut Vec<SupplierOrderAllowedAction>,
         action_blockers: &mut Vec<SupplierOrderActionBlockerView>,
     ) -> Result<()> {
-        let connection = self
-            .db
-            .supplier_api_connections()
-            .find_by_id(&order.connection_id, &mut NoTransaction)
-            .await?;
+        let connection =
+            self.db.supplier_api_connections().find_by_id(&order.connection_id, &mut NoTransaction).await?;
         let connection_active = connection.as_ref().is_some_and(SupplierApiConnection::is_active);
         let capabilities = if connection_active {
             self.db
@@ -275,9 +259,7 @@ impl SupplierFulfillmentDetailReadService {
             .is_some_and(|needed| ensure_capability(&capabilities, needed).is_ok());
         if connection_active
             && replay_capability_ready
-            && ensure_replay_safe(&self.db, order, target, &mut NoTransaction)
-                .await
-                .is_ok()
+            && ensure_replay_safe(&self.db, order, target, &mut NoTransaction).await.is_ok()
         {
             allowed_actions.push(SupplierOrderAllowedAction::Replay);
         } else {
@@ -331,15 +313,9 @@ impl SupplierFulfillmentDetailReadService {
         &self,
         order_id: &SupplierFulfillmentOrderId,
     ) -> Result<Vec<SupplierRefundFactView>> {
-        let bundles = self
-            .db
-            .supplier_fulfillment()
-            .refund_fact_bundles_by_order(order_id, &mut NoTransaction)
-            .await?;
-        Ok(bundles
-            .into_iter()
-            .map(|bundle| refund_fact_view(&bundle.fact, &bundle.allocations))
-            .collect())
+        let bundles =
+            self.db.supplier_fulfillment().refund_fact_bundles_by_order(order_id, &mut NoTransaction).await?;
+        Ok(bundles.into_iter().map(|bundle| refund_fact_view(&bundle.fact, &bundle.allocations)).collect())
     }
 }
 
@@ -407,12 +383,13 @@ fn item_view(item: SupplierFulfillmentItem) -> SupplierFulfillmentItemView {
     }
 }
 
-use super::fulfillment_access::ensure_task_actor_eligible;
-use super::fulfillment_dto::SupplierFulfillmentOrderDetailView;
 use erp_supply::service::supplier_fulfillment::investigate::{
-    capability_for_action, ensure_replay_safe, parse_investigation_evidence, verified_terminal_evidence,
-    InvestigationEvidenceRecord,
+    InvestigationEvidenceRecord, capability_for_action, ensure_replay_safe, parse_investigation_evidence,
+    verified_terminal_evidence,
 };
 use erp_supply::service::supplier_fulfillment::mapping::refund_fact_view;
 use erp_supply::service::supplier_fulfillment::place::ensure_capability;
 use erp_supply::service::supplier_fulfillment::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
+
+use super::fulfillment_access::ensure_task_actor_eligible;
+use super::fulfillment_dto::SupplierFulfillmentOrderDetailView;

@@ -1,17 +1,15 @@
-use crate::repository::owned::ProductCategoryRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Bson, Document};
+use erp_core::ids::ProductCategoryId;
+use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::catalog::{EnableStatus, ProductCategory, ProductKind};
-use erp_core::ids::ProductCategoryId;
-
 use super::shared::{in_filter, sort_doc};
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::catalog::{EnableStatus, ProductCategory, ProductKind};
+use crate::repository::owned::ProductCategoryRepository;
 
 /// 商品分类列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -122,8 +120,7 @@ impl<'a> ProductCategoryRepository<'a> {
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     pub async fn has_children(&self, parent_category_id: &str, executor: &mut dyn Executor) -> Result<bool> {
-        self.exists(doc! { "parent_category_id": parent_category_id }, executor)
-            .await
+        self.exists(doc! { "parent_category_id": parent_category_id }, executor).await
     }
 
     /// 按稳定主键批量查询商品分类。
@@ -145,8 +142,7 @@ impl<'a> ProductCategoryRepository<'a> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor)
-            .await
+        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor).await
     }
 
     /// 批量读取采购责任解析或规则展示引用的商品分类。
@@ -212,10 +208,7 @@ impl<'a> ProductCategoryRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<ProductCategoryRow>> {
         let options = FindOptions::builder()
-            .sort(product_category_sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-            ))
+            .sort(product_category_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(product_category_projection())
@@ -224,10 +217,7 @@ impl<'a> ProductCategoryRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 查询指定父分类的直接子节点（投影行，按分类代码升序）。
@@ -246,9 +236,7 @@ impl<'a> ProductCategoryRepository<'a> {
         parent_category_id: Option<&str>,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ProductCategoryRow>> {
-        let parents = parent_category_id
-            .map(|id| vec![id.to_string()])
-            .unwrap_or_default();
+        let parents = parent_category_id.map(|id| vec![id.to_string()]).unwrap_or_default();
         self.find_children_of(&parents, executor).await
     }
 

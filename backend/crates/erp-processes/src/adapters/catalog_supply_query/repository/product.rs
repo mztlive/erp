@@ -1,12 +1,13 @@
 //! 原商品列表聚合及同一 Executor 的 Mongo 执行。
-use super::product_pipeline::product_list_pipeline;
-use super::CatalogSupplyRepository;
 use erp_catalog::entity::catalog::Product;
 use erp_catalog::repository::{CatalogExt, ProductFilter, ProductRow};
 use futures_util::TryStreamExt;
 use mongodb::bson::Document;
 use persistence_core::{Executor, PageResult, Result};
 use serde::Deserialize;
+
+use super::CatalogSupplyRepository;
+use super::product_pipeline::product_list_pipeline;
 
 /// 商品列表聚合分页结果。
 #[derive(Debug, Deserialize)]
@@ -44,13 +45,8 @@ impl CatalogSupplyRepository<'_> {
         filter: &ProductFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<ProductRow>> {
-        let facet = self
-            .aggregate_products(product_list_pipeline(filter), executor)
-            .await?;
-        Ok(PageResult {
-            items: facet.items,
-            total: facet.total.first().map_or(0, |row| row.count),
-        })
+        let facet = self.aggregate_products(product_list_pipeline(filter), executor).await?;
+        Ok(PageResult { items: facet.items, total: facet.total.first().map_or(0, |row| row.count) })
     }
 
     /// 按语义化筛选条件分页查询商品聚合结果。
@@ -78,9 +74,7 @@ impl CatalogSupplyRepository<'_> {
         pipeline: Vec<Document>,
         executor: &mut dyn Executor,
     ) -> Result<ProductFacet> {
-        let collection = self
-            .db
-            .collection::<Product>(<mongodb::Database as CatalogExt>::PRODUCTS);
+        let collection = self.db.collection::<Product>(<mongodb::Database as CatalogExt>::PRODUCTS);
         let rows = match executor.session() {
             Some(session) => {
                 collection
@@ -91,7 +85,7 @@ impl CatalogSupplyRepository<'_> {
                     .stream(session)
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
             None => {
                 collection
                     .aggregate(pipeline)
@@ -99,11 +93,8 @@ impl CatalogSupplyRepository<'_> {
                     .await?
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
         };
-        Ok(rows.into_iter().next().unwrap_or(ProductFacet {
-            items: Vec::new(),
-            total: Vec::new(),
-        }))
+        Ok(rows.into_iter().next().unwrap_or(ProductFacet { items: Vec::new(), total: Vec::new() }))
     }
 }

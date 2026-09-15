@@ -1,13 +1,13 @@
+use persistence_core::NoTransaction;
+
+use super::CatalogService;
 use crate::entity::catalog::product::Product;
 use crate::entity::catalog::product_brand::ProductBrand;
 use crate::entity::catalog::product_category::ProductCategory;
 use crate::entity::catalog::unit_of_measure::UnitOfMeasure;
 use crate::entity::catalog::{ProductBrandId, UnitOfMeasureId};
-use crate::repository::CatalogExt;
-use persistence_core::NoTransaction;
-
-use super::CatalogService;
 use crate::error::{Error, Result};
+use crate::repository::CatalogExt;
 
 impl CatalogService {
     // ---------- 私有加载与写入辅助 ----------
@@ -125,9 +125,7 @@ impl CatalogService {
 /// 不一致时返回 `ConflictError`（HTTP 409）。
 pub(super) fn ensure_version(current: u64, expected: u64) -> Result<()> {
     if current != expected {
-        return Err(Error::ConflictError(
-            "数据已被其他请求修改，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
     }
     Ok(())
 }

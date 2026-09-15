@@ -1,29 +1,28 @@
 //! 采购变更撤回：调用统一 `prepare_cancel`，再执行业务 `cancel_action`。
 
-use bpm::engine::{plan_cancel, CancelPlan, CancelPlanInput, DefinitionGraph};
+use bpm::engine::{CancelPlan, CancelPlanInput, DefinitionGraph, plan_cancel};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp};
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_procurement::entity::purchase_order::PurchaseChangeOrder;
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemCloseData};
 use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
-use erp_workflow::BpmExt;
-use erp_workflow::WorkItemExt;
+use erp_workflow::service::approval::execution::authorization::converge_eligibility;
+use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
+use erp_workflow::service::approval::execution::start::map_engine_error;
+use erp_workflow::service::approval::execution::{
+    CancelExecutionInput, ExecutionCommandInput, PreparedExecution, normalize_document_cancel_reason,
+};
+use erp_workflow::{BpmExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::change_start::load_bound_definition_graph;
 use crate::{Error, Result};
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::execution::authorization::converge_eligibility;
-use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
-use erp_workflow::service::approval::execution::start::map_engine_error;
-use erp_workflow::service::approval::execution::{
-    normalize_document_cancel_reason, CancelExecutionInput, ExecutionCommandInput, PreparedExecution,
-};
 
 /// 已加载的可撤回运行事实。
 pub(super) struct LoadedCancelRuntime {
@@ -69,10 +68,7 @@ pub(super) async fn load_cancel_runtime(
         .ok_or_else(|| Error::ConflictError("没有可撤回的审批实例".to_string()))?;
     let current = db
         .bpm_workflow()
-        .find_current_execution(
-            &ApprovalProcessInstanceId::new(instance.base.id.clone()),
-            &mut NoTransaction,
-        )
+        .find_current_execution(&ApprovalProcessInstanceId::new(instance.base.id.clone()), &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例缺少当前执行".to_string()))?;
     let open_tasks = db
@@ -261,9 +257,7 @@ pub(super) async fn persist_purchase_change_cancel(
                     persist_cancel_runtime(&db, &writes, &open_tasks, &actor_id, &reason, now, session)
                         .await?;
                 }
-                db.purchase_change_orders()
-                    .update(&mut change_order, session)
-                    .await?;
+                db.purchase_change_orders().update(&mut change_order, session).await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::Error>(())
             })
@@ -314,15 +308,11 @@ async fn persist_cancel_runtime(
             .checked_sub(1)
             .ok_or_else(|| Error::Internal("取消后执行版本非法".to_string()))?;
         require_cas_applied(
-            db.bpm_workflow()
-                .end_active_execution(execution, expected, session)
-                .await?,
+            db.bpm_workflow().end_active_execution(execution, expected, session).await?,
             "审批执行",
         )?;
     }
-    db.approval_command_receipts()
-        .create(&writes.receipt, session)
-        .await?;
+    db.approval_command_receipts().create(&writes.receipt, session).await?;
     close_open_tasks(db, open_tasks, actor_id, reason, now, session).await
 }
 
@@ -347,15 +337,11 @@ async fn close_open_tasks(
             .ok_or_else(|| Error::ConflictError("开放审批任务缺少节点执行引用".to_string()))?;
         item.close_by_approval_runtime(
             actor_id,
-            WorkItemCloseData {
-                close_reason: reason.to_string(),
-            },
+            WorkItemCloseData { close_reason: reason.to_string() },
             now,
         )?;
         require_cas_applied(
-            db.work_items()
-                .close_approval_task(&item, expected, &execution_id, session)
-                .await?,
+            db.work_items().close_approval_task(&item, expected, &execution_id, session).await?,
             "审批任务",
         )?;
     }
@@ -391,24 +377,22 @@ fn require_cas_applied<T>(
 ) -> Result<()> {
     match outcome {
         erp_workflow::repository::bpm::CasWriteOutcome::Applied(_) => Ok(()),
-        _ => Err(Error::ConflictError(format!(
-            "{label}已被其他请求修改，请刷新后重试"
-        ))),
+        _ => Err(Error::ConflictError(format!("{label}已被其他请求修改，请刷新后重试"))),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{build_purchase_change_cancel_input, LoadedCancelRuntime};
-    use bpm::engine::{plan_cancel, CancelPlanInput};
+    use bpm::engine::{CancelPlanInput, plan_cancel};
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
     use bpm::model::types::{ApprovalBlockerCode, ApprovalExecutionAssignmentSource};
     use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, ParticipantId};
     use erp_core::common::time::Instant;
-
-    use crate::procure_to_pay::start_approval::tests::{open_task, two_node_graph};
-    use crate::Error;
     use erp_workflow::service::approval::execution::prepare_cancel;
+
+    use super::{LoadedCancelRuntime, build_purchase_change_cancel_input};
+    use crate::Error;
+    use crate::procure_to_pay::start_approval::tests::{open_task, two_node_graph};
 
     fn current_execution() -> ApprovalNodeExecution {
         ApprovalNodeExecution::new_active(NewNodeExecution {
@@ -449,8 +433,7 @@ mod tests {
 
     fn blocked_instance(code: ApprovalBlockerCode) -> ApprovalProcessInstance {
         let mut inst = running_instance();
-        inst.enter_blocked(code, bpm::model::Timestamp::from_unix_secs(12).unwrap())
-            .unwrap();
+        inst.enter_blocked(code, bpm::model::Timestamp::from_unix_secs(12).unwrap()).unwrap();
         inst
     }
 
@@ -465,13 +448,7 @@ mod tests {
             open_task_count: open_tasks.len(),
         })
         .unwrap();
-        LoadedCancelRuntime {
-            graph: two_node_graph(),
-            instance,
-            current,
-            plan,
-            open_tasks,
-        }
+        LoadedCancelRuntime { graph: two_node_graph(), instance, current, plan, open_tasks }
     }
 
     /// 运行中撤回按 BPM 计划关闭唯一开放任务，与采购单行为一致。
@@ -498,10 +475,7 @@ mod tests {
     #[test]
     fn purchase_change_cancel_personnel_blocker_uses_business_port() {
         let input = build_purchase_change_cancel_input(
-            &runtime(
-                blocked_instance(ApprovalBlockerCode::ApproverAccountInactive),
-                vec![],
-            ),
+            &runtime(blocked_instance(ApprovalBlockerCode::ApproverAccountInactive), vec![]),
             "撤销",
             "u1",
             "key-1",
@@ -554,12 +528,9 @@ mod tests {
     fn purchase_change_cancel_running_without_open_task_fails_closed() {
         let current = current_execution();
         let instance = running_instance();
-        let error = plan_cancel(CancelPlanInput {
-            instance: &instance,
-            current: &current,
-            open_task_count: 0,
-        })
-        .unwrap_err();
+        let error =
+            plan_cancel(CancelPlanInput { instance: &instance, current: &current, open_task_count: 0 })
+                .unwrap_err();
         assert!(matches!(
             error,
             bpm::engine::EngineError::Model(bpm::model::types::ModelError::InvalidStatus(message))

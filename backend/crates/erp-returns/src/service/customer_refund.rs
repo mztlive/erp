@@ -1,17 +1,19 @@
 //! 客户退款的本域草稿、资金来源事实校验、累计额度与事务内写入。
-use super::{shared::return_command_no, ReturnsService};
-use crate::dto::{CommitCustomerRefundRequest, CreateCustomerRefundRequest};
-use crate::entity::returns::{
-    CumulativeAmountLimit, CustomerRefund, CustomerRefundData, CustomerRefundStatus,
-};
-use crate::repository::ReturnsExt;
-use crate::{Error, Result};
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerAccountId, CustomerReceiptId, CustomerRefundId};
 use erp_core::money::Amount;
 use id_generator::next_id;
 use persistence_core::Executor;
 use validator::Validate;
+
+use super::ReturnsService;
+use super::shared::return_command_no;
+use crate::dto::{CommitCustomerRefundRequest, CreateCustomerRefundRequest};
+use crate::entity::returns::{
+    CumulativeAmountLimit, CustomerRefund, CustomerRefundData, CustomerRefundStatus,
+};
+use crate::repository::ReturnsExt;
+use crate::{Error, Result};
 /// 客户退款消费的原回款最小事实；读取时点由流程控制。
 pub struct CustomerRefundSourceFact {
     /// 原回款身份。
@@ -169,9 +171,7 @@ impl ReturnsService {
     /// # 错误
     /// 恒返回 `ConflictError`。
     pub fn reject_client_post() -> Result<std::convert::Infallible> {
-        Err(Error::ConflictError(
-            "客户退款过账只能由审批最终通过动作执行，客户端不得直接过账".to_string(),
-        ))
+        Err(Error::ConflictError("客户退款过账只能由审批最终通过动作执行，客户端不得直接过账".to_string()))
     }
 }
 /// 在创建退款的同一事务中复验原资金，版本错误必须早于Posted与缺客户错误。
@@ -183,17 +183,16 @@ pub fn ensure_customer_refund_source(source: &CustomerRefundSourceFact, expected
         "只有已过账的客户回款才能发起退款",
     )?;
     if source.customer_id.is_none() {
-        return Err(Error::BusinessLogicError(
-            "原回款未关联经营客户，不能退款".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("原回款未关联经营客户，不能退款".to_string()));
     }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
     fn amount(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
     }

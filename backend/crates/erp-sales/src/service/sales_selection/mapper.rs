@@ -1,5 +1,6 @@
 //! 选品册与方案视图映射。
 
+use super::SalesSelectionService;
 use crate::dto::sales_selection::{
     DisplayItemView, DisplayMemberView, ProposalDisplayLineView, ProposalSkuLineView, PublicChoiceView,
     PublicDisplayItemView, PublicReceiptView, PublicSelectionPageKind, PublicSelectionPageView,
@@ -7,12 +8,10 @@ use crate::dto::sales_selection::{
     SalesSelectionProposalView, TierReportView,
 };
 use crate::entity::sales_selection::{
-    abs_diff, BookletStatus, DisplayKind, SalesSelectionBooklet, SalesSelectionDisplayItem,
-    SalesSelectionPrepareTask, SalesSelectionProposal, SalesSelectionProposalDisplayLine,
-    SalesSelectionProposalSkuLine, SalesSelectionSession, SkuSnapshot, TierSearchReport,
+    BookletStatus, DisplayKind, SalesSelectionBooklet, SalesSelectionDisplayItem, SalesSelectionPrepareTask,
+    SalesSelectionProposal, SalesSelectionProposalDisplayLine, SalesSelectionProposalSkuLine,
+    SalesSelectionSession, SkuSnapshot, TierSearchReport, abs_diff,
 };
-
-use super::SalesSelectionService;
 
 impl SalesSelectionService {
     /// 映射列表行。
@@ -62,19 +61,12 @@ impl SalesSelectionService {
     ) -> SalesSelectionBookletView {
         let display_count = items.iter().filter(|item| item.is_publishable()).count() as u32;
         let removed_count = items.iter().filter(|item| item.removed).count() as u32;
-        let missing_image_count = items
-            .iter()
-            .filter(|item| item.is_publishable() && item.cover_asset_id().is_none())
-            .count() as u32;
+        let missing_image_count =
+            items.iter().filter(|item| item.is_publishable() && item.cover_asset_id().is_none()).count()
+                as u32;
         SalesSelectionBookletView {
             pool_filter: booklet.pool_source.filter.clone(),
-            sku_ids: booklet
-                .pool_source
-                .sku_ids
-                .iter()
-                .flatten()
-                .map(ToString::to_string)
-                .collect(),
+            sku_ids: booklet.pool_source.sku_ids.iter().flatten().map(ToString::to_string).collect(),
             id: booklet.base.id.clone(),
             book_id: booklet.base.id.clone(),
             version: booklet.base.version,
@@ -99,10 +91,7 @@ impl SalesSelectionService {
             tier_reports: task
                 .map(|item| item.tier_reports.iter().map(tier_report_view).collect())
                 .unwrap_or_default(),
-            items: items
-                .iter()
-                .map(|item| display_item_view(item, booklet))
-                .collect(),
+            items: items.iter().map(|item| display_item_view(item, booklet)).collect(),
             link_expires_at: booklet.link_expires_at,
             link_revoked: booklet.link_revoked,
             proposal_id: booklet.proposal_id.as_ref().map(ToString::to_string),
@@ -283,18 +272,11 @@ fn tier_report_view(report: &TierSearchReport) -> TierReportView {
 /// 无。
 fn display_item_view(item: &SalesSelectionDisplayItem, booklet: &SalesSelectionBooklet) -> DisplayItemView {
     let (name, specification, members, tier_id) = match &item.kind {
-        DisplayKind::SingleSku { sku } => (
-            sku.name.clone(),
-            sku.specification_attributes.clone(),
-            Vec::new(),
-            None,
-        ),
+        DisplayKind::SingleSku { sku } => {
+            (sku.name.clone(), sku.specification_attributes.clone(), Vec::new(), None)
+        },
         DisplayKind::Package { members, tier_id, .. } => (
-            members
-                .iter()
-                .map(|sku| sku.name.as_str())
-                .collect::<Vec<_>>()
-                .join(" / "),
+            members.iter().map(|sku| sku.name.as_str()).collect::<Vec<_>>().join(" / "),
             Vec::new(),
             members.iter().map(member_view).collect(),
             Some(tier_id.clone()),
@@ -321,11 +303,7 @@ fn display_item_view(item: &SalesSelectionDisplayItem, booklet: &SalesSelectionB
         DisplayKind::Package { .. } => None,
     };
     let tier_name = tier_id.as_ref().and_then(|tier_id| {
-        booklet
-            .tiers
-            .iter()
-            .find(|tier| &tier.tier_id == tier_id)
-            .map(|tier| tier.name.clone())
+        booklet.tiers.iter().find(|tier| &tier.tier_id == tier_id).map(|tier| tier.name.clone())
     });
     let cover = item.cover_asset_id().map(ToOwned::to_owned);
     DisplayItemView {
@@ -386,11 +364,7 @@ fn public_item(item: &SalesSelectionDisplayItem, booklet: &SalesSelectionBooklet
     PublicDisplayItemView {
         item_id: view.id,
         tier_name: view.tier_id.as_ref().and_then(|tier_id| {
-            booklet
-                .tiers
-                .iter()
-                .find(|tier| &tier.tier_id == tier_id)
-                .map(|tier| tier.name.clone())
+            booklet.tiers.iter().find(|tier| &tier.tier_id == tier_id).map(|tier| tier.name.clone())
         }),
         name: view.name,
         specification: view.specification,

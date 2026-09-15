@@ -1,20 +1,21 @@
 //! 无正式任务对账的任务关联闸门、事务与回执。
-use super::super::IntegrationResolutionProcess;
-use super::guard::command_identity;
-use super::{store_receipt, DIRECT_DECISION_AUDIT};
-
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_integration::dto::{
     DirectReconciliationCommand, DirectReconciliationResult, DirectReconciliationStatus,
     IntegrationActionOutcome, PreparedDirectDecisionTarget,
 };
 use erp_integration::entity::integration_ops::IntegrationCommandIdentity;
-use erp_integration::service::task_decision::{direct::execute_direct_decision, DirectFact};
+use erp_integration::service::task_decision::DirectFact;
+use erp_integration::service::task_decision::direct::execute_direct_decision;
 use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
+
+use super::super::IntegrationResolutionProcess;
+use super::guard::command_identity;
+use super::{DIRECT_DECISION_AUDIT, store_receipt};
+use crate::{Error, Result};
 
 /// 无任务直接决定的真实 provider；关联闸门属于流程、本域写入属于 integration。
 struct DirectCommand<'a> {
@@ -132,10 +133,7 @@ impl IntegrationResolutionProcess {
         command: &DirectReconciliationCommand,
         actor: &AuditActor,
     ) -> Result<Option<DirectReconciliationResult>> {
-        let Some(message) = self
-            .replay_receipt::<DirectReceiptMessage>(receipt, actor)
-            .await?
-        else {
+        let Some(message) = self.replay_receipt::<DirectReceiptMessage>(receipt, actor).await? else {
             return Ok(None);
         };
         Ok(Some(DirectReconciliationResult {
@@ -151,16 +149,11 @@ impl IntegrationResolutionProcess {
 }
 
 async fn ensure_no_work_item(db: &Database, difference_id: &str, executor: &mut dyn Executor) -> Result<()> {
-    let items = db
-        .work_items()
-        .find_unique_for_reconciliation_difference(difference_id, executor)
-        .await?;
+    let items = db.work_items().find_unique_for_reconciliation_difference(difference_id, executor).await?;
     if items.is_empty() {
         return Ok(());
     }
-    Err(Error::ConflictError(
-        "差异已关联正式任务，必须通过 W29 任务强命令处理".to_string(),
-    ))
+    Err(Error::ConflictError("差异已关联正式任务，必须通过 W29 任务强命令处理".to_string()))
 }
 
 fn direct_result(

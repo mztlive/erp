@@ -2,11 +2,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
+use erp_core::Result;
 use erp_core::ids::{BusinessDocumentId, DocumentParticipantId};
 use erp_core::validation::normalize_required_text;
-use erp_core::Result;
+use serde::{Deserialize, Serialize};
 
 /// 用户 ID 最大长度。
 const USER_ID_MAX_LEN: usize = 128;
@@ -113,12 +112,8 @@ impl DocumentParticipant {
             NAME_MAX_LEN,
             "参与人名称过长",
         )?;
-        let recorded_by = normalize_required_text(
-            data.recorded_by,
-            "记录人不能为空",
-            RECORDED_BY_MAX_LEN,
-            "记录人过长",
-        )?;
+        let recorded_by =
+            normalize_required_text(data.recorded_by, "记录人不能为空", RECORDED_BY_MAX_LEN, "记录人过长")?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             document_id: data.document_id,
@@ -132,8 +127,9 @@ impl DocumentParticipant {
 
 #[cfg(test)]
 mod tests {
-    use super::{DocumentParticipant, DocumentParticipantData, ParticipantRole};
     use erp_core::ids::{BusinessDocumentId, DocumentParticipantId};
+
+    use super::{DocumentParticipant, DocumentParticipantData, ParticipantRole};
 
     fn data() -> DocumentParticipantData {
         DocumentParticipantData {
@@ -159,30 +155,21 @@ mod tests {
     /// 失败路径：必填为空被拒。
     #[test]
     fn new_rejects_empty_user_id() {
-        let payload = DocumentParticipantData {
-            participant_user_id: "   ".to_string(),
-            ..data()
-        };
+        let payload = DocumentParticipantData { participant_user_id: "   ".to_string(), ..data() };
         assert!(DocumentParticipant::new(DocumentParticipantId::new("dp-1"), payload).is_err());
     }
 
     /// 失败路径：超长名称被拒。
     #[test]
     fn new_rejects_overlong_name() {
-        let payload = DocumentParticipantData {
-            participant_name: "名".repeat(129),
-            ..data()
-        };
+        let payload = DocumentParticipantData { participant_name: "名".repeat(129), ..data() };
         assert!(DocumentParticipant::new(DocumentParticipantId::new("dp-1"), payload).is_err());
     }
 
     /// 枚举序列化与标签稳定。
     #[test]
     fn participant_role_codes_and_labels_are_stable() {
-        assert_eq!(
-            serde_json::to_string(&ParticipantRole::CoSales).unwrap(),
-            "\"co_sales\""
-        );
+        assert_eq!(serde_json::to_string(&ParticipantRole::CoSales).unwrap(), "\"co_sales\"");
         assert_eq!(ParticipantRole::OwnerSales.as_str(), "owner_sales");
         assert_eq!(ParticipantRole::OwnerSales.label(), "主负责销售");
         assert_eq!(ParticipantRole::CoSales.label(), "协作销售");

@@ -3,21 +3,24 @@ pub mod create;
 mod mapping;
 mod stock;
 mod submission;
-use super::shared::zero_amount;
 pub use create::{
-    build_submission_line, compute_selected_lines, ensure_expected_delivery_within_sales_due,
-    ensure_request_scope, find_requested_group, parse_basis_sales_order_id, procurement_quantity_changed,
-    validate_requested_quantities, ComputedSelection, SelectedLine,
+    ComputedSelection, SelectedLine, build_submission_line, compute_selected_lines,
+    ensure_expected_delivery_within_sales_due, ensure_request_scope, find_requested_group,
+    parse_basis_sales_order_id, procurement_quantity_changed, validate_requested_quantities,
 };
 pub use mapping::{basis_groups_from_facts, business_date_of, zero_quantity};
 pub use stock::{physical_stock_lines, stock_groups_from_facts};
 pub use submission::build_draft_submission;
 
+use super::shared::zero_amount;
+
 #[cfg(test)]
 mod tests {
-    use super::{business_date_of, ensure_expected_delivery_within_sales_due, parse_basis_sales_order_id};
-    use erp_core::common::time::Instant;
     use std::str::FromStr;
+
+    use erp_core::common::time::Instant;
+
+    use super::{business_date_of, ensure_expected_delivery_within_sales_due, parse_basis_sales_order_id};
     /// 上海零点对应前一日 UTC 时仍还原业务自然日。
     #[test]
     fn business_date_uses_shanghai_timezone() {
@@ -33,12 +36,7 @@ mod tests {
     #[test]
     fn basis_id_parser_rejects_legacy_shape() {
         let digest = crate::entity::purchase_order::digest_parts(["scope".to_string()]);
-        assert_eq!(
-            parse_basis_sales_order_id(&format!("so-1:{digest}"))
-                .unwrap()
-                .to_string(),
-            "so-1"
-        );
+        assert_eq!(parse_basis_sales_order_id(&format!("so-1:{digest}")).unwrap().to_string(), "so-1");
         assert!(parse_basis_sales_order_id("so-1:supplier-1").is_err());
     }
     /// 采购预计交付日可以早于或等于销售承诺期限，但不得晚于该期限。

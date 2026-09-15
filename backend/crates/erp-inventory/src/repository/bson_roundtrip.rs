@@ -1,10 +1,7 @@
 //! Entity BSON round-trip contracts moved out of inventory entity modules.
 
-use crate::entity::inventory::{
-    AdjustmentReasonType, MovementDirection, MovementType, ReservationEntryType, ReservationStatus,
-    StockAdjustment, StockAdjustmentData, StockBalance, StockBalanceData, StockMovement, StockMovementData,
-    StockReservation, StockReservationData, StockReservationSourceType,
-};
+use std::str::FromStr;
+
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
@@ -12,7 +9,12 @@ use erp_core::ids::{
     StockBalanceId, StockMovementId, StockReservationId, WarehouseId,
 };
 use erp_core::money::Quantity;
-use std::str::FromStr;
+
+use crate::entity::inventory::{
+    AdjustmentReasonType, MovementDirection, MovementType, ReservationEntryType, ReservationStatus,
+    StockAdjustment, StockAdjustmentData, StockBalance, StockBalanceData, StockMovement, StockMovementData,
+    StockReservation, StockReservationData, StockReservationSourceType,
+};
 
 fn quantity(value: &str) -> Quantity {
     Quantity::from_str(value).unwrap()

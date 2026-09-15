@@ -12,19 +12,18 @@ use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::repository::ReceivableExt;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
-use erp_workflow::BpmExt;
-use erp_workflow::WorkItemExt;
+use erp_workflow::service::approval::execution::authorization::converge_eligibility;
+use erp_workflow::service::approval::execution::{
+    CancelExecutionInput, ExecutionCommandInput, PreparedExecution,
+    claim_and_persist_document_cancel_runtime, normalize_document_cancel_reason,
+};
+use erp_workflow::{BpmExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::start_approval::load_bound_definition_graph;
 use crate::{Error, Result};
-use erp_workflow::service::approval::execution::authorization::converge_eligibility;
-use erp_workflow::service::approval::execution::{
-    claim_and_persist_document_cancel_runtime, normalize_document_cancel_reason, CancelExecutionInput,
-    ExecutionCommandInput, PreparedExecution,
-};
 
 /// 已加载的可撤回运行事实。
 pub(super) struct LoadedCancelRuntime {
@@ -66,9 +65,8 @@ pub(super) async fn load_cancel_runtime(
         .cancellation_instance_by_subject(subject, subject_version, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::ConflictError("没有可撤回的审批实例".to_string()))?;
-    let task_policy = instance
-        .cancellation_task_policy()
-        .map_err(|error| Error::ConflictError(error.to_string()))?;
+    let task_policy =
+        instance.cancellation_task_policy().map_err(|error| Error::ConflictError(error.to_string()))?;
     let current = db
         .bpm_workflow()
         .current_execution_for_cancellation(
@@ -206,15 +204,8 @@ pub(super) async fn persist_customer_receipt_cancel(
     db: &Database,
     input: CustomerReceiptCancelPersistInput,
 ) -> Result<()> {
-    let CustomerReceiptCancelPersistInput {
-        mut receipt,
-        prepared,
-        open_tasks,
-        actor_id,
-        reason,
-        now,
-        audit,
-    } = input;
+    let CustomerReceiptCancelPersistInput { mut receipt, prepared, open_tasks, actor_id, reason, now, audit } =
+        input;
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(());
     };

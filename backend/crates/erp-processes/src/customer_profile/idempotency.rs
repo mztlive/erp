@@ -1,13 +1,12 @@
 //! 客户资料命令幂等记录、事务恢复与返回视图映射。
 
-use erp_customer::CustomerExt;
-use erp_customer::{CustomerProfileCommand, CustomerProfileReplayContext};
+use erp_customer::{
+    CustomerExt, CustomerProfileCommand, CustomerProfileMutationView, CustomerProfileReplayContext,
+};
 use persistence_core::NoTransaction;
 
-use crate::{Error, Result};
-use erp_customer::CustomerProfileMutationView;
-
 use super::CustomerProfileService;
+use crate::{Error, Result};
 
 impl CustomerProfileService {
     /// 按幂等键查询已成功客户资料命令的稳定结果。

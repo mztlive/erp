@@ -7,11 +7,12 @@ mod scope;
 pub use scope::{SalesListParams, SalesListView};
 mod status;
 
-use crate::{Error, Result};
 use erp_identity::SharedRbacService;
 use erp_sales::entity::sales_order::BusinessType;
 use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
+
+use crate::{Error, Result};
 
 /// 销售单列表与详情的跨域只读组合服务。
 pub struct SalesOrderReadService {
@@ -37,9 +38,7 @@ impl SalesOrderReadService {
     }
     /// 获取采购访问投影使用的授权源；未注入时保持原错误语义并拒绝放行。
     fn require_rbac(&self) -> Result<&SharedRbacService> {
-        self.rbac
-            .as_ref()
-            .ok_or_else(|| Error::Internal("销售单审批绑定需要授权源".into()))
+        self.rbac.as_ref().ok_or_else(|| Error::Internal("销售单审批绑定需要授权源".into()))
     }
 }
 /// 按销售业务性质显式选择审批对象类型，保留实物服务与卡券的独立主体。

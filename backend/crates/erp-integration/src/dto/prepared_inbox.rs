@@ -4,11 +4,11 @@
 //! 一次性完成边界校验与形状收紧，持有 tagged 决定。Service 只消费 tagged
 //! 结果，不再拼装初始状态与 outcome 形状。时间由调用方注入，DTO 不读取时钟。
 
-use crate::entity::integration_ops::ErrorClass;
 use erp_core::common::time::Instant;
 use validator::Validate;
 
 use super::inbox_message::{WriteBackInboxResultRequest, WriteBackOutcome};
+use crate::entity::integration_ops::ErrorClass;
 use crate::{Error, Result};
 
 /// 结果回写的 tagged 规范化决定。
@@ -53,14 +53,12 @@ impl PreparedWriteBackOutcome {
         match request.outcome {
             WriteBackOutcome::Processed => {
                 if request.error_class.is_some() || request.attempt_summary.is_some() {
-                    return Err(Error::ValidationError(
-                        "已处理回写不得携带错误分类或尝试摘要".to_string(),
-                    ));
+                    return Err(Error::ValidationError("已处理回写不得携带错误分类或尝试摘要".to_string()));
                 }
                 Ok(Self::Processed {
                     processed_at: request.processed_at.map(Instant::from_unix_secs).unwrap_or(now),
                 })
-            }
+            },
             WriteBackOutcome::Failed => {
                 let error_class = request
                     .error_class
@@ -70,19 +68,18 @@ impl PreparedWriteBackOutcome {
                     attempt_summary: request.attempt_summary.clone(),
                     attempt_at: request.processed_at.map(Instant::from_unix_secs).unwrap_or(now),
                 })
-            }
+            },
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::time::Instant;
     use serde_json::json;
 
-    use super::PreparedWriteBackOutcome;
-    use super::WriteBackInboxResultRequest;
+    use super::{PreparedWriteBackOutcome, WriteBackInboxResultRequest};
     use crate::entity::integration_ops::ErrorClass;
-    use erp_core::common::time::Instant;
 
     const NOW: i64 = 1_700_000_000;
 
@@ -112,16 +109,20 @@ mod tests {
             PreparedWriteBackOutcome::Processed { processed_at } if processed_at.unix_secs() == NOW
         ));
 
-        assert!(PreparedWriteBackOutcome::prepare(
-            &request(json!({"version": 1, "outcome": "processed", "error_class": "transient_failure"})),
-            Instant::from_unix_secs(NOW),
-        )
-        .is_err());
-        assert!(PreparedWriteBackOutcome::prepare(
-            &request(json!({"version": 1, "outcome": "processed", "attempt_summary": "late"})),
-            Instant::from_unix_secs(NOW),
-        )
-        .is_err());
+        assert!(
+            PreparedWriteBackOutcome::prepare(
+                &request(json!({"version": 1, "outcome": "processed", "error_class": "transient_failure"})),
+                Instant::from_unix_secs(NOW),
+            )
+            .is_err()
+        );
+        assert!(
+            PreparedWriteBackOutcome::prepare(
+                &request(json!({"version": 1, "outcome": "processed", "attempt_summary": "late"})),
+                Instant::from_unix_secs(NOW),
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -137,10 +138,12 @@ mod tests {
             if attempt_at.unix_secs() == NOW
         ));
 
-        assert!(PreparedWriteBackOutcome::prepare(
-            &request(json!({"version": 2, "outcome": "failed"})),
-            Instant::from_unix_secs(NOW),
-        )
-        .is_err());
+        assert!(
+            PreparedWriteBackOutcome::prepare(
+                &request(json!({"version": 2, "outcome": "failed"})),
+                Instant::from_unix_secs(NOW),
+            )
+            .is_err()
+        );
     }
 }

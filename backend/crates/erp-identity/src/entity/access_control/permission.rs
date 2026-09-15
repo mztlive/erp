@@ -2,12 +2,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_core::Result;
+use erp_core::ids::PermissionId;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::rbac;
-use erp_core::ids::PermissionId;
-use erp_core::validation::{normalize_optional_text, normalize_required_text};
-use erp_core::Result;
 
 /// 权限名称最大长度。
 const NAME_MAX_LEN: usize = 64;
@@ -138,8 +138,9 @@ impl Permission {
 
 #[cfg(test)]
 mod tests {
-    use super::{Permission, PermissionData, PermissionUpdate};
     use erp_core::ids::PermissionId;
+
+    use super::{Permission, PermissionData, PermissionUpdate};
 
     fn data() -> PermissionData {
         PermissionData {
@@ -165,26 +166,17 @@ mod tests {
     /// 失败路径：resource:action 非法（缺冒号）被拒。
     #[test]
     fn new_rejects_malformed_resource_action() {
-        let payload = PermissionData {
-            action: "approve:extra".to_string(),
-            ..data()
-        };
+        let payload = PermissionData { action: "approve:extra".to_string(), ..data() };
         assert!(Permission::new(PermissionId::new("perm-1"), payload).is_err());
     }
 
     /// 失败路径：名称为空与超长被拒。
     #[test]
     fn new_rejects_blank_and_overlong_name() {
-        let blank = PermissionData {
-            name: "  ".to_string(),
-            ..data()
-        };
+        let blank = PermissionData { name: "  ".to_string(), ..data() };
         assert!(Permission::new(PermissionId::new("perm-1"), blank).is_err());
 
-        let overlong = PermissionData {
-            name: "名".repeat(65),
-            ..data()
-        };
+        let overlong = PermissionData { name: "名".repeat(65), ..data() };
         assert!(Permission::new(PermissionId::new("perm-2"), overlong).is_err());
     }
 
@@ -204,25 +196,18 @@ mod tests {
         assert_eq!(permission.resource, "salesorder");
         assert_eq!(permission.action, "approve");
 
-        assert!(permission
-            .update(PermissionUpdate {
-                name: Some("  ".to_string()),
-                ..Default::default()
-            })
-            .is_err());
+        assert!(
+            permission
+                .update(PermissionUpdate { name: Some("  ".to_string()), ..Default::default() })
+                .is_err()
+        );
     }
 
     /// 系统权限删除保护。
     #[test]
     fn system_permission_is_not_deletable() {
-        let system = Permission::new(
-            PermissionId::new("perm-2"),
-            PermissionData {
-                system: true,
-                ..data()
-            },
-        )
-        .unwrap();
+        let system =
+            Permission::new(PermissionId::new("perm-2"), PermissionData { system: true, ..data() }).unwrap();
         assert!(system.ensure_deletable().is_err());
         let custom = Permission::new(PermissionId::new("perm-3"), data()).unwrap();
         assert!(custom.ensure_deletable().is_ok());

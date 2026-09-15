@@ -1,13 +1,13 @@
 //! 资金对象的唯一命令权威映射；显示必须基于同一已读实体调用这些函数。
-use super::super::amount::format_yuan;
-use erp_finance::entity::{
-    payable::{PayableAccount, SupplierPayment},
-    receivable::{CustomerReceipt, ReceivableAccount},
-};
+use std::collections::{HashMap, HashSet};
+
+use erp_finance::entity::payable::{PayableAccount, SupplierPayment};
+use erp_finance::entity::receivable::{CustomerReceipt, ReceivableAccount};
 use erp_returns::entity::returns::{CustomerRefund, PaymentReversal, ReceiptReversal, SupplierRefund};
 use erp_sales::entity::sales_order::SalesOrderRevision;
 use erp_workflow::ports::ObjectFact;
-use std::collections::{HashMap, HashSet};
+
+use super::super::amount::format_yuan;
 /// 仅识别原销售修订上的两个卡券标志，不受富显示卡券行扩展影响。
 pub(in crate::workbench) fn voucher_revision_ids(revisions: &[SalesOrderRevision]) -> HashSet<String> {
     revisions
@@ -37,15 +37,10 @@ pub(in crate::workbench) fn payable_account_fact(
     supplier: Option<String>,
     purchase_no: Option<String>,
 ) -> ObjectFact {
-    let label = purchase_no
-        .as_ref()
-        .map(|no| format!("采购应付 {no}"))
-        .unwrap_or_else(|| "采购应付".to_string());
-    let mut fact = ObjectFact::new(
-        account.source_document_id.clone(),
-        label,
-        account.stable.created_by.clone(),
-    );
+    let label =
+        purchase_no.as_ref().map(|no| format!("采购应付 {no}")).unwrap_or_else(|| "采购应付".to_string());
+    let mut fact =
+        ObjectFact::new(account.source_document_id.clone(), label, account.stable.created_by.clone());
     fact.counterparty_label = supplier;
     fact.impact_summary = Some(format!("未付金额 {}", format_yuan(&account.open_total)));
     fact
@@ -88,15 +83,9 @@ pub(in crate::workbench) fn customer_refund_fact(
     origins: &HashMap<String, String>,
     entry_origins: &HashMap<String, String>,
 ) -> ObjectFact {
-    let origin = refund
-        .original_receipt_id
-        .as_ref()
-        .and_then(|id| origins.get(&id.to_string()))
-        .or_else(|| {
-            refund
-                .original_receivable_entry_id
-                .as_ref()
-                .and_then(|id| entry_origins.get(&id.to_string()))
+    let origin =
+        refund.original_receipt_id.as_ref().and_then(|id| origins.get(&id.to_string())).or_else(|| {
+            refund.original_receivable_entry_id.as_ref().and_then(|id| entry_origins.get(&id.to_string()))
         });
     let mut fact = ObjectFact::new(
         refund.base.id.clone(),
@@ -115,15 +104,9 @@ pub(in crate::workbench) fn supplier_refund_fact(
     origins: &HashMap<String, String>,
     entry_origins: &HashMap<String, String>,
 ) -> ObjectFact {
-    let origin = refund
-        .original_payment_id
-        .as_ref()
-        .and_then(|id| origins.get(&id.to_string()))
-        .or_else(|| {
-            refund
-                .original_payable_entry_id
-                .as_ref()
-                .and_then(|id| entry_origins.get(&id.to_string()))
+    let origin =
+        refund.original_payment_id.as_ref().and_then(|id| origins.get(&id.to_string())).or_else(|| {
+            refund.original_payable_entry_id.as_ref().and_then(|id| entry_origins.get(&id.to_string()))
         });
     let mut fact = ObjectFact::new(
         refund.base.id.clone(),
@@ -145,9 +128,7 @@ pub(in crate::workbench) fn receipt_reversal_fact(
         format!("回款冲正 {}", reversal.reversal_no),
         created_by.cloned().unwrap_or_default(),
     );
-    fact.counterparty_label = origins
-        .get(&reversal.original_customer_receipt_id.to_string())
-        .cloned();
+    fact.counterparty_label = origins.get(&reversal.original_customer_receipt_id.to_string()).cloned();
     fact.impact_summary = Some("不审批则回款冲正不能过账".to_string());
     fact
 }
@@ -162,9 +143,7 @@ pub(in crate::workbench) fn payment_reversal_fact(
         format!("付款冲正 {}", reversal.reversal_no),
         created_by.cloned().unwrap_or_default(),
     );
-    fact.counterparty_label = origins
-        .get(&reversal.original_supplier_payment_id.to_string())
-        .cloned();
+    fact.counterparty_label = origins.get(&reversal.original_supplier_payment_id.to_string()).cloned();
     fact.impact_summary = Some("不审批则付款冲正不能过账".to_string());
     fact
 }
@@ -188,9 +167,6 @@ pub(in crate::workbench) fn invoice_request_fact(
         request.created_by.clone(),
     );
     fact.counterparty_label = Some(request.data.invoice_title.clone());
-    fact.impact_summary = Some(format!(
-        "申请开票 {} 元，审批通过后交财务开票",
-        request.data.amount
-    ));
+    fact.impact_summary = Some(format!("申请开票 {} 元，审批通过后交财务开票", request.data.amount));
     fact
 }

@@ -1,14 +1,11 @@
 use chrono::Local;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Bson, Document};
-use mongodb::options::FindOptions;
-use mongodb::Database;
-use serde::{Deserialize, Serialize};
-
 use erp_core::money::Quantity;
-
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
+use mongodb::Database;
+use mongodb::bson::{Bson, Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, Result, mongo_ops};
+use serde::{Deserialize, Serialize};
 
 /// 按主键读取未删除实体。
 ///
@@ -210,28 +207,24 @@ pub(super) fn cross_inc(quantity: Bson, increase_field: &str, decrease_field: &s
 /// 返回排序条件文档。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
-    let field = sort_by
-        .filter(|field| allowed.contains(field))
-        .unwrap_or("created_at");
+    let field = sort_by.filter(|field| allowed.contains(field)).unwrap_or("created_at");
     doc! { field: direction }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ids_to_strings, negate_bson, sort_doc};
-    use mongodb::bson::{doc, Bson};
     use std::str::FromStr;
 
     use erp_core::ids::WarehouseId;
+    use mongodb::bson::{Bson, doc};
+
+    use super::{ids_to_strings, negate_bson, sort_doc};
 
     #[test]
     fn sort_doc_maps_whitelisted_fields_and_defaults_otherwise() {
         let allowed = ["occurred_at", "recorded_at"];
         assert_eq!(sort_doc(None, false, &allowed), doc! { "created_at": -1 });
-        assert_eq!(
-            sort_doc(Some("occurred_at"), true, &allowed),
-            doc! { "occurred_at": 1 }
-        );
+        assert_eq!(sort_doc(Some("occurred_at"), true, &allowed), doc! { "occurred_at": 1 });
         assert_eq!(
             sort_doc(Some("任意字段"), false, &allowed),
             doc! { "created_at": -1 },
@@ -243,10 +236,7 @@ mod tests {
     fn negate_bson_flips_sign_without_touching_magnitude() {
         let positive = Bson::Decimal128(mongodb::bson::Decimal128::from_str("12.345").unwrap());
         let negative = negate_bson(&positive);
-        assert_eq!(
-            negative,
-            Bson::Decimal128(mongodb::bson::Decimal128::from_str("-12.345").unwrap())
-        );
+        assert_eq!(negative, Bson::Decimal128(mongodb::bson::Decimal128::from_str("-12.345").unwrap()));
         assert_eq!(negate_bson(&negative), positive, "两次取反恢复原值");
     }
 

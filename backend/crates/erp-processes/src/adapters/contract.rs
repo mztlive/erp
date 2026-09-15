@@ -51,9 +51,7 @@ impl ContractAuditPort for MongoContractAudit {
         resource_type: &str,
         resource_id: String,
     ) -> erp_contract::Result<PreparedContractAudit> {
-        let log = actor
-            .resource_log(action, resource_type, resource_id)
-            .map_err(map_audit_to_contract)?;
+        let log = actor.resource_log(action, resource_type, resource_id).map_err(map_audit_to_contract)?;
         Ok(prepared_contract_audit(&log))
     }
 
@@ -63,11 +61,7 @@ impl ContractAuditPort for MongoContractAudit {
         executor: &mut dyn Executor,
     ) -> erp_contract::Result<()> {
         let log = audit_log_from_contract(audit).map_err(map_audit_to_contract)?;
-        self.db
-            .audit_logs()
-            .create(&log, executor)
-            .await
-            .map_err(erp_contract::Error::from)?;
+        self.db.audit_logs().create(&log, executor).await.map_err(erp_contract::Error::from)?;
         Ok(())
     }
 }

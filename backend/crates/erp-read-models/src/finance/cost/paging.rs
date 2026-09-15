@@ -1,10 +1,12 @@
 //! 仅对已裁剪的事实排序分页，不使用隐藏金额或其他单据时间决定顺序。
-use super::{page_offset, Error, Result};
+use std::collections::HashMap;
+
 use application_core::PageView;
 use erp_finance::dto::cost::{
     CostAllocationListQuery, CostAllocationView, PageParams, ScopedCostEntryView, SortDir,
 };
-use std::collections::HashMap;
+
+use super::{Error, Result, page_offset};
 
 /// 成本列表金额排序使用可见分配份额，稳定次序以成本身份收尾。
 pub(super) fn costs(mut rows: Vec<ScopedCostEntryView>, paging: PageParams) -> PageView<ScopedCostEntryView> {
@@ -32,10 +34,7 @@ pub(super) fn allocations(
     let mut rows = rows
         .into_iter()
         .filter(|line| {
-            query
-                .sales_order_id
-                .as_ref()
-                .is_none_or(|id| line.sales_order_id.as_deref() == Some(id.as_ref()))
+            query.sales_order_id.as_ref().is_none_or(|id| line.sales_order_id.as_deref() == Some(id.as_ref()))
         })
         .map(|line| {
             let time = created
@@ -69,8 +68,9 @@ fn page<T>(rows: Vec<T>, paging: PageParams) -> PageView<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::money::Amount;
+
+    use super::*;
     fn line(id: &str, order: &str) -> CostAllocationView {
         CostAllocationView {
             id: id.into(),
@@ -89,12 +89,7 @@ mod tests {
         let query = CostAllocationListQuery {
             sales_order_id: Some(erp_core::ids::SalesOrderId::new("sales-a")),
             cost_entry_id: None,
-            paging: PageParams {
-                page: 2,
-                page_size: 1,
-                sort_by: "created_at",
-                sort_dir: SortDir::Asc,
-            },
+            paging: PageParams { page: 2, page_size: 1, sort_by: "created_at", sort_dir: SortDir::Asc },
         };
         let result = allocations(rows.clone(), &times, &query).unwrap();
         assert_eq!(result.total, 2);

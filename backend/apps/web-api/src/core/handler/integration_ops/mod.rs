@@ -6,10 +6,8 @@
 //! 关闭由 W02 责任 API 承担。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
 use erp_integration::dto::{
     CreateDifferenceRequest, CreateErrorTaskRequest, DifferenceDetailView, DifferenceListParams,
     DifferenceView, DirectReconciliationCommand, DirectReconciliationResult, ErrorTaskDetailView,
@@ -19,10 +17,9 @@ use erp_integration::dto::{
 };
 use erp_integration::service::IntegrationOpsService;
 
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "集成治理",
@@ -43,9 +40,7 @@ pub async fn inbox_message_list(
     State(state): State<AppState>,
     Query(params): Query<InboxMessageListParams>,
 ) -> Result<PageView<InboxMessageListView>> {
-    let page = IntegrationOpsService::new(state.db())
-        .inbox_message_list(&params)
-        .await?;
+    let page = IntegrationOpsService::new(state.db()).inbox_message_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -69,9 +64,7 @@ pub async fn inbox_message_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<InboxMessageView> {
-    let view = IntegrationOpsService::new(state.db())
-        .inbox_message_detail(&id)
-        .await?;
+    let view = IntegrationOpsService::new(state.db()).inbox_message_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -97,10 +90,7 @@ pub async fn inbox_message_register(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<RegisterInboxMessageRequest>,
 ) -> Result<InboxMessageView> {
-    let view = state
-        .integration_resolution()
-        .register_inbox_message(req, &actor)
-        .await?;
+    let view = state.integration_resolution().register_inbox_message(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -128,10 +118,7 @@ pub async fn inbox_message_write_back(
     Path(id): Path<String>,
     Json(req): Json<WriteBackInboxResultRequest>,
 ) -> Result<InboxMessageView> {
-    let view = state
-        .integration_resolution()
-        .write_back_inbox_result(&id, req, &actor)
-        .await?;
+    let view = state.integration_resolution().write_back_inbox_result(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -155,9 +142,7 @@ pub async fn error_task_list(
     State(state): State<AppState>,
     Query(params): Query<ErrorTaskListParams>,
 ) -> Result<PageView<ErrorTaskView>> {
-    let page = IntegrationOpsService::new(state.db())
-        .error_task_list(&params)
-        .await?;
+    let page = IntegrationOpsService::new(state.db()).error_task_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -207,10 +192,7 @@ pub async fn error_task_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateErrorTaskRequest>,
 ) -> Result<ErrorTaskView> {
-    let view = state
-        .integration_resolution()
-        .create_error_task(req, &actor)
-        .await?;
+    let view = state.integration_resolution().create_error_task(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -228,10 +210,7 @@ pub async fn integration_task_action(
     Extension(actor): Extension<AuditActor>,
     Json(command): Json<IntegrationTaskActionCommand>,
 ) -> Result<IntegrationTaskActionResult> {
-    let result = state
-        .integration_resolution()
-        .apply_task_action(command, &actor)
-        .await?;
+    let result = state.integration_resolution().apply_task_action(command, &actor).await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 
@@ -248,10 +227,7 @@ pub async fn integration_task_completion(
     Extension(actor): Extension<AuditActor>,
     Json(command): Json<IntegrationTaskCompletionCommand>,
 ) -> Result<IntegrationTaskCompletionResult> {
-    let result = state
-        .integration_resolution()
-        .complete_task(command, &actor)
-        .await?;
+    let result = state.integration_resolution().complete_task(command, &actor).await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 
@@ -274,9 +250,7 @@ pub async fn difference_list(
     State(state): State<AppState>,
     Query(params): Query<DifferenceListParams>,
 ) -> Result<PageView<DifferenceView>> {
-    let page = IntegrationOpsService::new(state.db())
-        .difference_list(&params)
-        .await?;
+    let page = IntegrationOpsService::new(state.db()).difference_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -326,10 +300,7 @@ pub async fn difference_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateDifferenceRequest>,
 ) -> Result<DifferenceView> {
-    let view = state
-        .integration_resolution()
-        .create_difference(req, &actor)
-        .await?;
+    let view = state.integration_resolution().create_difference(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -348,9 +319,6 @@ pub async fn difference_decision(
     Path(id): Path<String>,
     Json(command): Json<DirectReconciliationCommand>,
 ) -> Result<DirectReconciliationResult> {
-    let result = state
-        .integration_resolution()
-        .decide_difference(&id, command, &actor)
-        .await?;
+    let result = state.integration_resolution().decide_difference(&id, command, &actor).await?;
     Ok(ApiResponse::ok_with_data(result))
 }

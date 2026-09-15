@@ -1,13 +1,13 @@
 //! 履约purchase_receipt请求及单域查询 DTO。
-use super::non_blank;
-use super::{normalize_sort, PageParams, PURCHASE_RECEIPT_SORT_FIELDS};
-use crate::entity::fulfillment::PurchaseReceiptState;
-use crate::Result;
 use application_core::{page_or_default, page_size_or_default};
 use erp_core::ids::{PurchaseOrderId, PurchaseOrderRevisionLineId, WarehouseId};
 use erp_core::money::Quantity;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+
+use super::{PURCHASE_RECEIPT_SORT_FIELDS, PageParams, non_blank, normalize_sort};
+use crate::Result;
+use crate::entity::fulfillment::PurchaseReceiptState;
 
 /// 采购入库行输入。
 #[derive(Debug, Clone, Serialize, Deserialize)]

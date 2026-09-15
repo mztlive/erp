@@ -5,10 +5,9 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{ProductCategoryAttributeId, ProductCategoryId, SkuAttributeId};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 分类-属性适用关系创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -118,8 +117,9 @@ fn ensure_non_negative_sort_order(sort_order: i32) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::ids::ProductCategoryId;
+
+    use super::*;
 
     fn data() -> ProductCategoryAttributeData {
         ProductCategoryAttributeData {
@@ -145,10 +145,7 @@ mod tests {
     /// 失败路径：越界（负排序）被拒绝。
     #[test]
     fn new_rejects_negative_sort_order() {
-        let negative = ProductCategoryAttributeData {
-            sort_order: -1,
-            ..data()
-        };
+        let negative = ProductCategoryAttributeData { sort_order: -1, ..data() };
         assert!(ProductCategoryAttribute::new(ProductCategoryAttributeId::new("rel-1"), negative).is_err());
     }
 
@@ -159,21 +156,17 @@ mod tests {
             ProductCategoryAttribute::new(ProductCategoryAttributeId::new("rel-1"), data()).unwrap();
 
         relation
-            .update(ProductCategoryAttributeUpdate {
-                required_flag: Some(false),
-                sort_order: Some(4),
-            })
+            .update(ProductCategoryAttributeUpdate { required_flag: Some(false), sort_order: Some(4) })
             .unwrap();
 
         assert!(!relation.required_flag);
         assert_eq!(relation.sort_order, 4);
         assert_eq!(relation.category_id, ProductCategoryId::new("cat-1"));
 
-        assert!(relation
-            .update(ProductCategoryAttributeUpdate {
-                sort_order: Some(-1),
-                ..Default::default()
-            })
-            .is_err());
+        assert!(
+            relation
+                .update(ProductCategoryAttributeUpdate { sort_order: Some(-1), ..Default::default() })
+                .is_err()
+        );
     }
 }

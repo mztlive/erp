@@ -1,12 +1,13 @@
 //! 同域供给写入的实际Mongo provider与顺序合同；不开启事务。
-use super::{OFFERINGS, OFFERING_AVAILABILITIES, OFFERING_REVISIONS};
+use async_trait::async_trait;
+use mongodb::Database;
+use persistence_core::{Executor, Result, mongo_ops};
+
+use super::{OFFERING_AVAILABILITIES, OFFERING_REVISIONS, OFFERINGS};
 use crate::entity::supplier_offering::{
     SupplierOffering, SupplierOfferingAvailability, SupplierOfferingCommand, SupplierOfferingRevision,
 };
 use crate::repository::SupplierOfferingExt;
-use async_trait::async_trait;
-use mongodb::Database;
-use persistence_core::{mongo_ops, Executor, Result};
 /// 同域持久化步骤，既有复合仓储和命令写入共用唯一实现。
 #[async_trait]
 pub(crate) trait OfferingWritePort: Sync {
@@ -36,12 +37,7 @@ impl<'a> MongoOfferingWrite<'a> {
 #[async_trait]
 impl OfferingWritePort for MongoOfferingWrite<'_> {
     async fn offering(&self, value: &SupplierOffering, executor: &mut dyn Executor) -> Result<()> {
-        mongo_ops::insert_one(
-            &self.db.collection::<SupplierOffering>(OFFERINGS),
-            value,
-            executor,
-        )
-        .await
+        mongo_ops::insert_one(&self.db.collection::<SupplierOffering>(OFFERINGS), value, executor).await
     }
     async fn revision(&self, value: &SupplierOfferingRevision, executor: &mut dyn Executor) -> Result<()> {
         mongo_ops::insert_one(
@@ -57,9 +53,7 @@ impl OfferingWritePort for MongoOfferingWrite<'_> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<SupplierOfferingAvailability>(OFFERING_AVAILABILITIES),
+            &self.db.collection::<SupplierOfferingAvailability>(OFFERING_AVAILABILITIES),
             value,
             executor,
         )
@@ -73,10 +67,7 @@ impl OfferingWritePort for MongoOfferingWrite<'_> {
         value: &mut SupplierOfferingAvailability,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .supplier_offering_availabilities()
-            .update(value, executor)
-            .await
+        self.db.supplier_offering_availabilities().update(value, executor).await
     }
     async fn command(&self, value: &SupplierOfferingCommand, executor: &mut dyn Executor) -> Result<()> {
         self.db.supplier_offering_commands().create(value, executor).await

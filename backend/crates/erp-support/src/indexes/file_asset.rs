@@ -4,14 +4,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::FileAssetExt;
-use persistence_core::Result;
 
 /// `file_asset` 集合名。
 pub(crate) const FILE_ASSETS: &str = <mongodb::Database as FileAssetExt>::FILE_ASSETS;
@@ -48,9 +46,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -70,20 +66,14 @@ fn file_asset_indexes() -> Vec<IndexModel> {
 fn document_attachment_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_document_attachments_id", doc! { "id": 1 }),
-        named_index(
-            "idx_document_attachments_document",
-            doc! { "document_id": 1, "created_at": 1 },
-        ),
+        named_index("idx_document_attachments_document", doc! { "document_id": 1, "created_at": 1 }),
         named_index("idx_document_attachments_asset", doc! { "file_asset_id": 1 }),
     ]
 }
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -113,16 +103,13 @@ mod tests {
             .unwrap();
         assert_eq!(storage_key.keys, doc! { "storage_object_key": 1 });
         assert_eq!(storage_key.options.as_ref().unwrap().unique, Some(true));
-        assert!(storage_key
-            .options
-            .as_ref()
-            .unwrap()
-            .partial_filter_expression
-            .is_none());
+        assert!(storage_key.options.as_ref().unwrap().partial_filter_expression.is_none());
 
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "security_scan_status": 1, "retention_class": 1 } }));
+        assert!(
+            indexes
+                .iter()
+                .any(|index| { index.keys == doc! { "security_scan_status": 1, "retention_class": 1 } })
+        );
         assert!(indexes.iter().any(|index| index.keys == doc! { "expires_at": 1 }));
     }
 
@@ -138,11 +125,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(id_index.options.as_ref().unwrap().unique, Some(true));
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "document_id": 1, "created_at": 1 } }));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "file_asset_id": 1 }));
+        assert!(indexes.iter().any(|index| { index.keys == doc! { "document_id": 1, "created_at": 1 } }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "file_asset_id": 1 }));
     }
 }

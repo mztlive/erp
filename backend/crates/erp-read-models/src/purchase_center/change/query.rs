@@ -1,19 +1,19 @@
-use erp_procurement::repository::purchase_order::PurchaseChangeSearch;
-use erp_procurement::repository::PurchaseOrderExt;
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use persistence_core::NoTransaction;
-use serde::Serialize;
 use std::hash::{Hash, Hasher};
+
+use application_core::{AuditActor, PageView, SortDir, normalize_sort};
+use erp_procurement::dto::purchase_order::PurchaseChangeOrderListParams;
+use erp_procurement::repository::PurchaseOrderExt;
+use erp_procurement::repository::purchase_order::PurchaseChangeSearch;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::service::document_registry::find_approval_binding;
+use persistence_core::{NoTransaction, Transactional};
+use serde::Serialize;
 use validator::Validate;
 
-use super::super::dto::PurchaseChangeOrderView;
 use super::super::PurchaseOrderReadService;
+use super::super::dto::PurchaseChangeOrderView;
 use super::mapping::change_list_view;
 use crate::{Error, Result};
-use application_core::{normalize_sort, AuditActor, PageView, SortDir};
-use erp_procurement::dto::purchase_order::PurchaseChangeOrderListParams;
-use erp_workflow::service::document_registry::find_approval_binding;
-use persistence_core::Transactional;
 
 /// 采购变更列表保持现有分页字段并声明独立的授权时点及版本。
 #[derive(Serialize)]
@@ -59,22 +59,16 @@ impl PurchaseOrderReadService {
     ) -> Result<PurchaseChangeListView> {
         let expected = params.scope_version.as_deref();
         if params.page.unwrap_or(1) > 1 && expected.is_none_or(str::is_empty) {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into(),
-            ));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into()));
         }
         params.validate()?;
         let snapshot = self.change_list_snapshot(params, actor).await?;
         if expected.is_some_and(|value| value != snapshot.scope_version) {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into(),
-            ));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
         }
         let current = self.change_list_snapshot(params, actor).await?;
         if current.scope_version != snapshot.scope_version {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into(),
-            ));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into()));
         }
         Ok(snapshot)
     }
@@ -178,18 +172,10 @@ impl PurchaseOrderReadService {
                     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
                     versions.hash(&mut fingerprint);
                     context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
-                    let views = result
-                        .items
-                        .into_iter()
-                        .map(|change| change_list_view(change, None))
-                        .collect();
+                    let views =
+                        result.items.into_iter().map(|change| change_list_view(change, None)).collect();
                     Ok(PurchaseChangeListView {
-                        page: PageView {
-                            items: views,
-                            total: result.total,
-                            page,
-                            page_size,
-                        },
+                        page: PageView { items: views, total: result.total, page, page_size },
                         scope_version: context.scope_version,
                         policy_version: context.policy_version,
                         organization_version: context.organization_version,
@@ -207,10 +193,7 @@ impl PurchaseOrderReadService {
     /// # 错误
     /// 仓储失败时返回错误。
     async fn load_change_binding(&self, id: &str) -> Result<Option<ApprovalDefinitionBinding>> {
-        match find_approval_binding(&self.db, id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)
-        {
+        match find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from) {
             Ok(binding) => Ok(binding),
             Err(Error::NotFound(_)) => Ok(None),
             Err(error) => Err(error),
@@ -259,14 +242,12 @@ async fn load_authorized_change(
                     .find_authorized(change.purchase_order_id.as_ref(), &scope, executor)
                     .await?
                     .ok_or_else(|| Error::NotFound("采购变更单不存在或无权查看".to_string()))?;
-                let binding = match find_approval_binding(&db, &id, executor)
-                    .await
-                    .map_err(crate::Error::from)
-                {
-                    Ok(binding) => binding,
-                    Err(Error::NotFound(_)) => None,
-                    Err(error) => return Err(error),
-                };
+                let binding =
+                    match find_approval_binding(&db, &id, executor).await.map_err(crate::Error::from) {
+                        Ok(binding) => binding,
+                        Err(Error::NotFound(_)) => None,
+                        Err(error) => return Err(error),
+                    };
                 let approval = super::super::approval_query::load_change_document_approval(
                     &db,
                     &id,
@@ -276,10 +257,7 @@ async fn load_authorized_change(
                 .await?;
                 let mut view = change_list_view(change, binding);
                 view.approval = approval;
-                let version = format!(
-                    "{}:{}:{}",
-                    context.scope_version, order.base.id, order.base.version
-                );
+                let version = format!("{}:{}:{}", context.scope_version, order.base.id, order.base.version);
                 Ok((view, version))
             })
         })
@@ -294,8 +272,5 @@ async fn load_authorized_change(
 /// # 返回
 /// 空白值返回 `None`，否则返回去除首尾空白后的字符串。
 fn normalized_filter(value: Option<&str>) -> Option<String> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
+    value.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string)
 }

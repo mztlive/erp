@@ -1,6 +1,6 @@
-use crate::repository::BpmExt;
+use application_core::AuditActor;
 use bpm::graph::{
-    assignee_ids, copy_nodes_for_definition, CopiedNodeIdentity, DefinitionGraph, NewPopulatedDraftParams,
+    CopiedNodeIdentity, DefinitionGraph, NewPopulatedDraftParams, assignee_ids, copy_nodes_for_definition,
 };
 use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId};
 use bpm::model::ApprovalProcessDefinition;
@@ -8,19 +8,18 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
-use crate::error::{Error, ErrorCode, Result};
-use application_core::AuditActor;
-
 use super::super::definition_dto::{CreateDefinitionDraftRequest, DefinitionDetailView, DraftSource};
-use super::super::policy::{require_process_required, ProcessRequiredApprovalPolicy};
+use super::super::policy::{ProcessRequiredApprovalPolicy, require_process_required};
+use super::ApprovalDefinitionService;
 use super::command::{
+    DefinitionCommandResultRef, DefinitionResultExpectation, PreparedDefinitionIdentity,
     create_draft_identity, ensure_definition_admin_permission, map_model_error, now, parse_idempotency_key,
     participant, replay_prepared_definition_receipt, write_definition_audit, write_receipt,
-    DefinitionCommandResultRef, DefinitionResultExpectation, PreparedDefinitionIdentity,
 };
 use super::mapping::detail_view;
 use super::replace::{next_transition_ids, validate_assignees};
-use super::ApprovalDefinitionService;
+use crate::error::{Error, ErrorCode, Result};
+use crate::repository::BpmExt;
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// 创建定义草稿。
@@ -42,13 +41,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
             ApprovalProcessDefinition::normalize_name(request.name.clone()).map_err(map_model_error)?;
         request.name.clone_from(&name);
         request.idempotency_key = key.as_str().to_string();
-        let identity = create_draft_identity(
-            key,
-            request.document_type,
-            &name,
-            request.draft_source,
-            actor.id(),
-        )?;
+        let identity =
+            create_draft_identity(key, request.document_type, &name, request.draft_source, actor.id())?;
         self.ensure_definition_admin(actor, &policy).await?;
         if let Some(view) = self
             .replay_if_receipt(
@@ -62,8 +56,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         if let Some(view) = self.replay_legacy_if_receipt(&identity).await? {
             return Ok(view);
         }
-        self.commit_create_draft(&policy, &name, request, actor, identity)
-            .await
+        self.commit_create_draft(&policy, &name, request, actor, identity).await
     }
 
     /// 在唯一事务中创建草稿。
@@ -171,14 +164,7 @@ async fn create_draft_tx(
     input: CreateDraftTxInput<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<DefinitionDetailView> {
-    let CreateDraftTxInput {
-        policy,
-        name,
-        request,
-        actor,
-        identity,
-        audit,
-    } = input;
+    let CreateDraftTxInput { policy, name, request, actor, identity, audit } = input;
     ensure_definition_admin_permission(rbac, actor, policy, session).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
@@ -190,25 +176,14 @@ async fn create_draft_tx(
     {
         return Ok(view);
     }
-    let CreateDraftWriteStep::PersistNewDraftAndReceipt = decide_create_draft_write(
-        db.bpm_workflow()
-            .find_active_draft(policy.process_kind, session)
-            .await?,
-    )?;
+    let CreateDraftWriteStep::PersistNewDraftAndReceipt =
+        decide_create_draft_write(db.bpm_workflow().find_active_draft(policy.process_kind, session).await?)?;
     let graph = build_new_draft(db, rbac, policy, name, request.draft_source, actor, session).await?;
     let result_ref = DefinitionCommandResultRef::from_graph(&graph).encode();
     write_receipt(db, &identity.current, &result_ref, session).await?;
     persist_new_draft(db, &graph, session).await?;
-    write_definition_audit(
-        audit,
-        actor,
-        "approval_definition.create_draft",
-        &graph,
-        None,
-        None,
-        session,
-    )
-    .await?;
+    write_definition_audit(audit, actor, "approval_definition.create_draft", &graph, None, None, session)
+        .await?;
     Ok(detail_view(&graph))
 }
 
@@ -227,7 +202,7 @@ async fn build_new_draft(
         DraftSource::Empty => empty_draft(policy, name, version, actor),
         DraftSource::CurrentPublished => {
             copy_published_draft(db, rbac, policy, name, version, actor, session).await
-        }
+        },
     }
 }
 
@@ -248,11 +223,7 @@ fn empty_draft(
         now()?,
     )
     .map_err(map_model_error)?;
-    Ok(DefinitionGraph {
-        definition,
-        nodes: Vec::new(),
-        transitions: Vec::new(),
-    })
+    Ok(DefinitionGraph { definition, nodes: Vec::new(), transitions: Vec::new() })
 }
 
 /// 从当前发布定义复制节点到新草稿。
@@ -284,9 +255,7 @@ async fn copy_published_draft(
     session: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
     let source = require_current_published(
-        db.bpm_workflow()
-            .load_published_definition_graph(policy.process_kind, session)
-            .await?,
+        db.bpm_workflow().load_published_definition_graph(policy.process_kind, session).await?,
     )?;
     source.validate_published_linear().map_err(map_model_error)?;
     let definition_id = ApprovalProcessDefinitionId::new(next_id());
@@ -311,16 +280,12 @@ async fn copy_published_draft(
 
 /// 持久化新建草稿及其图。
 async fn persist_new_draft(db: &Database, graph: &DefinitionGraph, session: &mut dyn Executor) -> Result<()> {
-    db.approval_process_definitions()
-        .create(&graph.definition, session)
-        .await?;
+    db.approval_process_definitions().create(&graph.definition, session).await?;
     for node in &graph.nodes {
         db.approval_node_definitions().create(node, session).await?;
     }
     for transition in &graph.transitions {
-        db.approval_transition_definitions()
-            .create(transition, session)
-            .await?;
+        db.approval_transition_definitions().create(transition, session).await?;
     }
     Ok(())
 }
@@ -367,11 +332,7 @@ async fn next_definition_version(
     process_kind: bpm::ProcessKind,
     session: &mut dyn Executor,
 ) -> Result<u32> {
-    let current = db
-        .bpm_workflow()
-        .latest_definition_version(process_kind, session)
-        .await?
-        .unwrap_or(0);
+    let current = db.bpm_workflow().latest_definition_version(process_kind, session).await?.unwrap_or(0);
     ApprovalProcessDefinition::next_version_after(current).map_err(map_model_error)
 }
 
@@ -422,11 +383,8 @@ mod tests {
             decide_create_draft_write::<&str>(None),
             Ok(CreateDraftWriteStep::PersistNewDraftAndReceipt)
         ));
-        let create_tx = source_fn(
-            production_source(),
-            "async fn create_draft_tx",
-            "async fn replace_nodes_tx",
-        );
+        let create_tx =
+            source_fn(production_source(), "async fn create_draft_tx", "async fn replace_nodes_tx");
         let gate = create_tx.find("decide_create_draft_write").expect("创建闸门");
         let receipt = create_tx.find("write_receipt").expect("receipt");
         assert!(gate < receipt);
@@ -441,11 +399,8 @@ mod tests {
             Err(Error::Coded(ErrorCode::ApprovalDraftSourceNotAvailable))
         ));
         assert_eq!(require_current_published(Some("def-pub")).unwrap(), "def-pub");
-        let copy_src = source_fn(
-            production_source(),
-            "async fn copy_published_draft",
-            "async fn persist_new_draft",
-        );
+        let copy_src =
+            source_fn(production_source(), "async fn copy_published_draft", "async fn persist_new_draft");
         assert!(copy_src.contains("require_current_published"));
         assert!(copy_src.contains("load_published_definition_graph"));
         assert!(!copy_src.contains("load_definition_graph"));

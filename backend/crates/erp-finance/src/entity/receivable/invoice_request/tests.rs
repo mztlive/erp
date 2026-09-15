@@ -1,8 +1,10 @@
 //! 申请额度与审批状态边界，不连接外部数据库。
+use std::str::FromStr;
+
+use erp_core::ids::SalesOrderRevisionId;
+
 use super::*;
 use crate::entity::receivable::{AccountReviewStatus, ReceivableAccount, ReceivableAccountData};
-use erp_core::ids::SalesOrderRevisionId;
-use std::str::FromStr;
 
 fn amount(value: &str) -> Amount {
     Amount::from_str(value).unwrap()
@@ -61,14 +63,10 @@ fn multiple_requests_cannot_reserve_the_same_capacity() {
     first.submit(amount("1000")).unwrap();
     let mut second = request("500");
     let before = second.clone();
-    assert!(second
-        .submit(amount("1000").checked_sub(first.reserved()))
-        .is_err());
+    assert!(second.submit(amount("1000").checked_sub(first.reserved())).is_err());
     assert_eq!(second, before);
     second.data.amount = amount("400");
-    second
-        .submit(amount("1000").checked_sub(first.reserved()))
-        .unwrap();
+    second.submit(amount("1000").checked_sub(first.reserved())).unwrap();
     assert_eq!(first.reserved().checked_add(second.reserved()), amount("1000"));
 }
 #[test]

@@ -1,19 +1,20 @@
 //! 结算单/明细/差异查询参数、列表与详情视图。
 
-use crate::entity::supplier_settlement::{
-    SettlementDifferenceStatus, SettlementDifferenceType, SettlementReviewResult, SettlementStatus,
-    SupplierSettlementStatement,
-};
+use std::str::FromStr;
+
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{SupplierAccountId, SupplierSettlementItemId, SupplierSettlementStatementId};
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use validator::Validate;
 
-use crate::dto::supplier_fulfillment::{normalize_sort, PageParams};
 use crate::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use crate::dto::supplier_fulfillment::{PageParams, normalize_sort};
+use crate::entity::supplier_settlement::{
+    SettlementDifferenceStatus, SettlementDifferenceType, SettlementReviewResult, SettlementStatus,
+    SupplierSettlementStatement,
+};
 
 /// 结算单列表允许的排序字段白名单（Service 层校验，禁止任意字段透传）。
 const STATEMENT_SORT_FIELDS: &[&str] = &["created_at", "period_start", "period_end", "confirmed_at"];
@@ -84,9 +85,7 @@ impl SupplierSettlementStatementListParams {
         let period_from = optional_business_date(self.period_from.as_deref(), "期间开始")?;
         let period_to = optional_business_date(self.period_to.as_deref(), "期间结束")?;
         if period_from.zip(period_to).is_some_and(|(from, to)| from > to) {
-            return Err(crate::Error::ValidationError(
-                "期间开始不得晚于期间结束".to_string(),
-            ));
+            return Err(crate::Error::ValidationError("期间开始不得晚于期间结束".to_string()));
         }
         Ok(StatementListQuery {
             q: normalized_text(self.q.as_deref()),

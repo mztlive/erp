@@ -16,24 +16,25 @@
 //!
 //! 跨域：无（依赖列为空；只经 `AccessControlExt` 访问本域仓储）。
 
+use std::sync::Arc;
+
+use erp_core::common::time::Instant;
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
+use validator::Validate;
+
+use crate::AccessControlExt;
 use crate::access_control::{ScopeDimension, ScopeTargetMode};
 use crate::entity::access_control::{
     AuditEvent, AuditEventData, AuditEventId, AuditEventResult, DataScope, DataScopeId, Permission,
     PermissionId, UserRole, UserRoleId,
 };
 use crate::ports::ScopeTargetPort;
-use crate::AccessControlExt;
-use erp_core::common::time::Instant;
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
-use std::sync::Arc;
-use validator::Validate;
 pub mod consumers;
 mod query;
 pub mod resolve;
 
-use crate::error::{Error, Result};
 use application_core::AuditActor;
 
 pub use crate::dto::{
@@ -42,6 +43,7 @@ pub use crate::dto::{
     PermissionListParams, PermissionView, RevokeUserRoleRequest, UpdatePermissionRequest, UserRoleListParams,
     UserRoleView,
 };
+use crate::error::{Error, Result};
 
 /// 权限定义列表筛选条件类型（经 `AccessControlExt` 关联类型跨 crate 可达）。
 type PermissionFilter = <mongodb::Database as crate::AccessControlExt>::PermissionFilter;
@@ -68,11 +70,7 @@ impl AccessControlService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
-        Self {
-            db,
-            rbac: None,
-            targets: None,
-        }
+        Self { db, rbac: None, targets: None }
     }
 
     /// 装配仓库与结算主体目标的所属领域校验。
@@ -118,11 +116,7 @@ impl AccessControlService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, crate::dto::SortDir::Asc),
         };
-        let page = self
-            .db
-            .permissions()
-            .search_permissions(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.permissions().search_permissions(&filter, &mut NoTransaction).await?;
         // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结，无法命名），
         // 此处按字段映射为响应视图，避免把仓储类型泄漏到接口层。
         let items = page
@@ -141,12 +135,7 @@ impl AccessControlService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 创建权限定义。
@@ -270,13 +259,7 @@ impl AccessControlService {
             .ok_or_else(|| Error::NotFound("权限定义不存在".to_string()))?;
         permission.ensure_deletable()?;
         let event = self
-            .build_audit_event(
-                actor,
-                "permission.delete",
-                "permission",
-                Some(id.to_string()),
-                Vec::new(),
-            )
+            .build_audit_event(actor, "permission.delete", "permission", Some(id.to_string()), Vec::new())
             .await?;
         let db = self.db.clone();
         let client = db.client().clone();
@@ -327,10 +310,7 @@ impl AccessControlService {
         let client = db.client().clone();
         let scope_for_tx = scope.clone();
         let targets = self.targets.clone();
-        let rbac = self
-            .rbac
-            .clone()
-            .ok_or_else(|| Error::Forbidden("未装配范围配置授权".into()))?;
+        let rbac = self.rbac.clone().ok_or_else(|| Error::Forbidden("未装配范围配置授权".into()))?;
         let actor_for_tx = actor.clone();
         client
             .with_transaction(move |session| {
@@ -351,9 +331,7 @@ impl AccessControlService {
                             .await?;
                     }
                     db.data_scopes().create(&scope_for_tx, session).await?;
-                    crate::MongoCasbinAdapter::new(db.clone())
-                        .bump_policy_revision(session)
-                        .await?;
+                    crate::MongoCasbinAdapter::new(db.clone()).bump_policy_revision(session).await?;
                     db.audit_events().create(&event, session).await?;
                     Ok::<(), crate::error::Error>(())
                 })
@@ -382,18 +360,9 @@ impl AccessControlService {
             .await?
             .ok_or_else(|| Error::NotFound("数据范围不存在".to_string()))?;
         let event = self
-            .build_audit_event(
-                actor,
-                "data_scope.delete",
-                "data_scope",
-                Some(id.to_string()),
-                Vec::new(),
-            )
+            .build_audit_event(actor, "data_scope.delete", "data_scope", Some(id.to_string()), Vec::new())
             .await?;
-        let rbac = self
-            .rbac
-            .clone()
-            .ok_or_else(|| Error::Forbidden("未装配范围配置授权".into()))?;
+        let rbac = self.rbac.clone().ok_or_else(|| Error::Forbidden("未装配范围配置授权".into()))?;
         let actor_for_tx = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
@@ -402,9 +371,7 @@ impl AccessControlService {
                 Box::pin(async move {
                     ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope, "delete", session).await?;
                     db.data_scopes().soft_delete(&mut scope, session).await?;
-                    crate::MongoCasbinAdapter::new(db.clone())
-                        .bump_policy_revision(session)
-                        .await?;
+                    crate::MongoCasbinAdapter::new(db.clone()).bump_policy_revision(session).await?;
                     db.audit_events().create(&event, session).await?;
                     Ok::<(), crate::error::Error>(())
                 })
@@ -424,11 +391,7 @@ impl AccessControlService {
     /// * `ValidationError` - 用户 ID 缺失
     pub async fn user_role_list(&self, params: &UserRoleListParams) -> Result<Vec<UserRoleView>> {
         params.validate()?;
-        let items = self
-            .db
-            .user_roles()
-            .list_by_user(&params.user_id, &mut NoTransaction)
-            .await?;
+        let items = self.db.user_roles().list_by_user(&params.user_id, &mut NoTransaction).await?;
         Ok(items.into_iter().map(Into::into).collect())
     }
 
@@ -477,9 +440,7 @@ impl AccessControlService {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    db.access_control()
-                        .assign_user_role_with_audit(&binding_for_tx, &event, session)
-                        .await?;
+                    db.access_control().assign_user_role_with_audit(&binding_for_tx, &event, session).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -575,11 +536,7 @@ impl AccessControlService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, crate::dto::SortDir::Asc),
         };
-        let page = self
-            .db
-            .audit_events()
-            .search_audit_events(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.audit_events().search_audit_events(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -603,12 +560,7 @@ impl AccessControlService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 按 ID 加载权限定义并校验期望版本。
@@ -630,9 +582,7 @@ impl AccessControlService {
             .await?
             .ok_or_else(|| Error::NotFound("权限定义不存在".to_string()))?;
         if permission.base.version != expected_version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         Ok(permission)
     }
@@ -662,14 +612,8 @@ impl AccessControlService {
         object_id: Option<String>,
         changed_field_names: Vec<String>,
     ) -> Result<AuditEvent> {
-        let account = self
-            .db
-            .accounts()
-            .find_by_id(actor.id(), &mut NoTransaction)
-            .await?;
-        let actor_label = account
-            .map(|account| account.name)
-            .unwrap_or_else(|| "系统操作人".to_string());
+        let account = self.db.accounts().find_by_id(actor.id(), &mut NoTransaction).await?;
+        let actor_label = account.map(|account| account.name).unwrap_or_else(|| "系统操作人".to_string());
         AuditEvent::new(
             AuditEventId::new(next_id()),
             AuditEventData {
@@ -710,11 +654,7 @@ async fn ensure_scope_configuration(
         .resolve_permissions(actor, "org_unit", "manage", &permissions, executor)
         .await?;
     if !access.scope.role_clauses.iter().any(|scope| scope.company)
-        || access
-            .scope
-            .user_limit
-            .as_ref()
-            .is_some_and(|limit| !limit.company)
+        || access.scope.user_limit.as_ref().is_some_and(|limit| !limit.company)
     {
         return Err(Error::Forbidden("范围配置要求公司边界的组织配置权限".into()));
     }
@@ -745,22 +685,12 @@ async fn ensure_scope_subject(
 ) -> Result<()> {
     use crate::access_control::DataScopeSubjectType;
     if scope.subject_type == DataScopeSubjectType::User {
-        if db
-            .accounts()
-            .find_by_id(&scope.subject_id, executor)
-            .await?
-            .is_none()
-        {
+        if db.accounts().find_by_id(&scope.subject_id, executor).await?.is_none() {
             return Err(Error::NotFound("范围主体账号不存在".into()));
         }
         return Ok(());
     }
-    if db
-        .roles()
-        .enabled_roles(std::slice::from_ref(&scope.subject_id), executor)
-        .await?
-        .is_empty()
-    {
+    if db.roles().enabled_roles(std::slice::from_ref(&scope.subject_id), executor).await?.is_empty() {
         return Err(Error::ValidationError("范围主体角色不存在或已停用".into()));
     }
     for action in &scope.binding.actions {
@@ -771,9 +701,7 @@ async fn ensure_scope_subject(
             )
             .await?
         {
-            return Err(Error::ValidationError(
-                "目标角色不具备范围绑定的完整动作权限".into(),
-            ));
+            return Err(Error::ValidationError("目标角色不具备范围绑定的完整动作权限".into()));
         }
     }
     Ok(())

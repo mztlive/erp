@@ -1,11 +1,12 @@
 //! W26 的唯一正式任务工厂；绑定供应商订单而非集成错误任务。
-use crate::Result;
 use erp_core::ids::WorkItemId;
 use erp_supply::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use erp_supply::service::supplier_fulfillment::W26_BUSINESS_OBJECT_TYPE;
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
+
+use crate::Result;
 const W26_OWNER_ROLE: &str = "role-procurement";
 const W26_OWNER_ORGANIZATION: &str = "company";
 /// 在原创建分支与时点执行 WorkItem 构造校验；调用方预先生成身份。
@@ -33,20 +34,18 @@ pub(super) fn create(
                 WorkItemType::BusinessException => "SUPPLIER_BUSINESS_EXCEPTION".to_string(),
                 _ => unreachable!("W26 producer only creates registered exception tasks"),
             }),
-            impact_summary: Some(format!(
-                "供应商订单 {} 需要核实原动作结果",
-                order.fulfillment_order_no
-            )),
+            impact_summary: Some(format!("供应商订单 {} 需要核实原动作结果", order.fulfillment_order_no)),
         },
     )?)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::time::Instant;
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
     use erp_supply::entity::supplier_fulfillment::*;
+
+    use super::*;
     fn sample_order() -> SupplierFulfillmentOrder {
         SupplierFulfillmentOrder::new(
             SupplierFulfillmentOrderId::new("order-1"),
@@ -89,20 +88,14 @@ mod tests {
             assert_eq!(task.priority, WorkItemPriority::High);
             assert_eq!(task.due_at, None);
             assert_eq!(task.reason_code.as_deref(), Some(reason));
-            assert_eq!(
-                task.impact_summary.as_deref(),
-                Some("供应商订单 FO-2026-001 需要核实原动作结果")
-            );
+            assert_eq!(task.impact_summary.as_deref(), Some("供应商订单 FO-2026-001 需要核实原动作结果"));
         }
     }
     #[test]
     fn w26_factory_keeps_work_item_validation_for_empty_personal_owner() {
-        assert!(create(
-            WorkItemId::new("formal-1"),
-            &sample_order(),
-            WorkItemType::BusinessException,
-            ""
-        )
-        .is_err());
+        assert!(
+            create(WorkItemId::new("formal-1"), &sample_order(), WorkItemType::BusinessException, "")
+                .is_err()
+        );
     }
 }

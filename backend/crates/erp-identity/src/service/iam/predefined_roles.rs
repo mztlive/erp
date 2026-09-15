@@ -10,9 +10,8 @@
 //! 工作台角色入口（W01 今日工作台）以及二期销售领导审批轨。
 //! `role-root` 由 [`super::ensure_root_role`] 单独维护，不在本清单中。
 
-use crate::entity::{Permission, RoleData};
-
 use super::SharedRbacService;
+use crate::entity::{Permission, RoleData};
 use crate::error::Result;
 
 /// 单条预定义角色的静态定义。
@@ -45,8 +44,7 @@ pub(crate) const PREDEFINED_ROLES: &[PredefinedRoleDef] = &[
     PredefinedRoleDef {
         id: "role-procurement",
         name: "采购",
-        description:
-            "商品与供应商主数据、采购二次确认、采购单、履约、销售变更履约确认、采购退货与供应商结算协同。",
+        description: "商品与供应商主数据、采购二次确认、采购单、履约、销售变更履约确认、采购退货与供应商结算协同。",
         permissions: PROCUREMENT_PERMISSIONS,
     },
     PredefinedRoleDef {
@@ -76,8 +74,7 @@ pub(crate) const PREDEFINED_ROLES: &[PredefinedRoleDef] = &[
     PredefinedRoleDef {
         id: "role-sysadmin",
         name: "系统管理员",
-        description:
-            "同步监控、集成错误、对账差异与来源注册；不替代业务部门改写商业事实，不含账号/角色超级权限。",
+        description: "同步监控、集成错误、对账差异与来源注册；不替代业务部门改写商业事实，不含账号/角色超级权限。",
         permissions: SYSADMIN_PERMISSIONS,
     },
 ];
@@ -659,10 +656,7 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
 async fn ensure_missing_permissions(rbac: &SharedRbacService) -> Result<()> {
     for role in PREDEFINED_ROLES {
         let desired = parse_permissions(role.permissions)?;
-        if rbac
-            .ensure_missing_seeded_role_permissions(role.id, desired)
-            .await?
-        {
+        if rbac.ensure_missing_seeded_role_permissions(role.id, desired).await? {
             tracing::info!(
                 role_id = role.id,
                 role_name = role.name,
@@ -686,19 +680,10 @@ async fn upgrade_supplier_connection_governance_permissions(rbac: &SharedRbacSer
     let procurement_desired = parse_permissions(PROCUREMENT_PERMISSIONS)?;
     let mut procurement_previous = remove_permissions(
         &procurement_desired,
-        &[
-            "supplier_api_connection:update_business_profile",
-            "supplier_api_capability:confirm_requirement",
-        ],
+        &["supplier_api_connection:update_business_profile", "supplier_api_capability:confirm_requirement"],
     );
     procurement_previous.push(Permission::parse("supplier_api_connection:health_check")?);
-    upgrade_exact(
-        rbac,
-        "role-procurement",
-        procurement_previous,
-        procurement_desired,
-    )
-    .await?;
+    upgrade_exact(rbac, "role-procurement", procurement_previous, procurement_desired).await?;
 
     let sysadmin_desired = parse_permissions(SYSADMIN_PERMISSIONS)?;
     let sysadmin_previous = remove_permissions(
@@ -849,11 +834,7 @@ fn sales_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec<Vec<P
     );
     before_customer_boundary.push(Permission::parse("customer:*")?);
     before_customer_boundary.push(Permission::parse("party_bank_account:*")?);
-    Ok(vec![
-        before_selection,
-        before_sellable_pool,
-        before_customer_boundary,
-    ])
+    Ok(vec![before_selection, before_sellable_pool, before_customer_boundary])
 }
 
 /// 仅为仍保持历史默认种子的财务角色补齐往来主体只读权限。
@@ -878,11 +859,7 @@ fn finance_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec<Vec
         remove_permissions(desired, &["sales_change_order:list", "sales_change_order:detail"]),
         remove_permissions(
             desired,
-            &[
-                "party_revision:list",
-                "sales_change_order:list",
-                "sales_change_order:detail",
-            ],
+            &["party_revision:list", "sales_change_order:list", "sales_change_order:detail"],
         ),
         remove_permissions(
             desired,
@@ -939,11 +916,7 @@ fn procurement_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec
     let before_sellable_pool = remove_permissions(&before_duty_gaps, &["sellable_sku:list"]);
     let before_sensitive_reveal = remove_permissions(
         &before_duty_gaps,
-        &[
-            "sellable_sku:list",
-            "file_asset:preview",
-            "supplier_sensitive:reveal",
-        ],
+        &["sellable_sku:list", "file_asset:preview", "supplier_sensitive:reveal"],
     );
     let mut catalog_era = remove_permissions(
         &before_duty_gaps,
@@ -964,12 +937,7 @@ fn procurement_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec
     ] {
         catalog_era.push(Permission::parse(permission)?);
     }
-    Ok(vec![
-        before_sellable_pool,
-        before_sensitive_reveal,
-        catalog_era,
-        before_duty_gaps,
-    ])
+    Ok(vec![before_sellable_pool, before_sensitive_reveal, catalog_era, before_duty_gaps])
 }
 
 /// 仅为仍保持旧默认种子的角色收紧客户范围并补齐字段级权限。
@@ -989,10 +957,9 @@ async fn upgrade_customer_role_boundaries(rbac: &SharedRbacService) -> Result<()
     );
     upgrade_exact(rbac, "role-finance", finance_previous, finance_desired).await?;
 
-    for (role_id, raw) in [
-        ("role-sales-leader", SALES_LEADER_PERMISSIONS),
-        ("role-management", MANAGEMENT_PERMISSIONS),
-    ] {
+    for (role_id, raw) in
+        [("role-sales-leader", SALES_LEADER_PERMISSIONS), ("role-management", MANAGEMENT_PERMISSIONS)]
+    {
         let desired = parse_permissions(raw)?;
         let previous = remove_permissions(&desired, &["customer_scope:detail"]);
         upgrade_exact(rbac, role_id, previous, desired).await?;
@@ -1002,10 +969,9 @@ async fn upgrade_customer_role_boundaries(rbac: &SharedRbacService) -> Result<()
 
 /// 为仍保持旧默认种子的公司商品池读者补齐独立查询权限。
 async fn upgrade_sellable_sku_reader_permissions(rbac: &SharedRbacService) -> Result<()> {
-    for (role_id, raw) in [
-        ("role-operations", OPERATIONS_PERMISSIONS),
-        ("role-warehouse", WAREHOUSE_PERMISSIONS),
-    ] {
+    for (role_id, raw) in
+        [("role-operations", OPERATIONS_PERMISSIONS), ("role-warehouse", WAREHOUSE_PERMISSIONS)]
+    {
         let desired = parse_permissions(raw)?;
         let previous = remove_permissions(&desired, &["sellable_sku:list"]);
         upgrade_exact(rbac, role_id, previous, desired).await?;
@@ -1054,10 +1020,7 @@ async fn upgrade_integration_task_permissions(rbac: &SharedRbacService) -> Resul
 
 /// 从当前目标权限精确移除 W29 两项强命令权限，形成上一版默认种子。
 fn integration_task_legacy_snapshot(desired: &[Permission]) -> Vec<Permission> {
-    remove_permissions(
-        desired,
-        &["integration_task:process", "integration_task:complete"],
-    )
+    remove_permissions(desired, &["integration_task:process", "integration_task:complete"])
 }
 
 /// 从预定义权限集合中移除指定稳定权限代码。
@@ -1085,10 +1048,7 @@ async fn upgrade_exact(
         tracing::info!(role_id, "predefined role permissions upgraded");
         return Ok(());
     }
-    if rbac
-        .upgrade_seeded_role_permissions_if_exact(role_id, previous, desired)
-        .await?
-    {
+    if rbac.upgrade_seeded_role_permissions_if_exact(role_id, previous, desired).await? {
         tracing::info!(role_id, "predefined role permissions upgraded");
     }
     Ok(())
@@ -1131,9 +1091,7 @@ async fn seed_one(rbac: &SharedRbacService, role: &PredefinedRoleDef) -> Result<
 /// # 错误
 /// 任一字符串不符合权限格式时返回错误。
 fn parse_permissions(raw: &[&str]) -> Result<Vec<Permission>> {
-    raw.iter()
-        .map(|permission| Permission::parse(*permission).map_err(Into::into))
-        .collect()
+    raw.iter().map(|permission| Permission::parse(*permission).map_err(Into::into)).collect()
 }
 
 /// 返回预定义角色 ID 列表（测试与文档校验用）。
@@ -1148,11 +1106,11 @@ pub(super) fn predefined_role_ids() -> Vec<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::{
-        approval_http_legacy_snapshot, integration_task_legacy_snapshot, legacy_workflow_permission_snapshot,
+        APPROVAL_HTTP_ACTION_PERMISSIONS, FINANCE_PERMISSIONS, PREDEFINED_ROLES, PROCUREMENT_PERMISSIONS,
+        SALES_LEADER_PERMISSIONS, SALES_PERMISSIONS, approval_http_legacy_snapshot,
+        integration_task_legacy_snapshot, legacy_workflow_permission_snapshot,
         low_margin_confirmation_legacy_snapshot, parse_permissions, predefined_role_ids,
         procurement_legacy_permission_snapshots, sales_legacy_permission_snapshots,
-        APPROVAL_HTTP_ACTION_PERMISSIONS, FINANCE_PERMISSIONS, PREDEFINED_ROLES, PROCUREMENT_PERMISSIONS,
-        SALES_LEADER_PERMISSIONS, SALES_PERMISSIONS,
     };
     use crate::entity::rbac::{Permission, PermissionSet};
 
@@ -1164,10 +1122,7 @@ mod tests {
         for action in ["list", "detail", "create", "update"] {
             let permission = Permission::parse(format!("company:{action}")).unwrap();
             assert!(sysadmin.covers_one(&permission));
-            assert_eq!(
-                procurement.covers_one(&permission),
-                matches!(action, "list" | "detail")
-            );
+            assert_eq!(procurement.covers_one(&permission), matches!(action, "list" | "detail"));
         }
         let mut previous = super::remove_permissions(
             &parse_permissions(PROCUREMENT_PERMISSIONS).unwrap(),
@@ -1190,10 +1145,7 @@ mod tests {
         sorted.dedup();
         assert_eq!(ids.len(), sorted.len(), "预定义角色 ID 必须唯一");
         assert!(ids.iter().all(|id| id.starts_with("role-")));
-        assert!(
-            !ids.contains(&"role-root"),
-            "root 由 ensure_root_role 单独维护，含公司级 DataScope"
-        )
+        assert!(!ids.contains(&"role-root"), "root 由 ensure_root_role 单独维护，含公司级 DataScope")
     }
 
     #[test]
@@ -1211,12 +1163,8 @@ mod tests {
         let mut previous = desired.clone();
         previous.push(Permission::parse("purchase_order:review").unwrap());
 
-        assert!(!desired
-            .iter()
-            .any(|permission| permission.to_string() == "purchase_order:review"));
-        assert!(previous
-            .iter()
-            .any(|permission| permission.to_string() == "purchase_order:review"));
+        assert!(!desired.iter().any(|permission| permission.to_string() == "purchase_order:review"));
+        assert!(previous.iter().any(|permission| permission.to_string() == "purchase_order:review"));
     }
 
     /// 财务选择结算主体需要读取名称，历史默认快照升级不包含主体修改权限。
@@ -1261,24 +1209,12 @@ mod tests {
 
     #[test]
     fn supplier_connection_governance_permissions_follow_fixed_responsibility_roles() {
-        let procurement = PREDEFINED_ROLES
-            .iter()
-            .find(|role| role.id == "role-procurement")
-            .unwrap();
-        assert!(procurement
-            .permissions
-            .contains(&"supplier_api_connection:update_business_profile"));
-        assert!(procurement
-            .permissions
-            .contains(&"supplier_api_capability:confirm_requirement"));
-        assert!(!procurement
-            .permissions
-            .contains(&"supplier_api_connection:health_check"));
+        let procurement = PREDEFINED_ROLES.iter().find(|role| role.id == "role-procurement").unwrap();
+        assert!(procurement.permissions.contains(&"supplier_api_connection:update_business_profile"));
+        assert!(procurement.permissions.contains(&"supplier_api_capability:confirm_requirement"));
+        assert!(!procurement.permissions.contains(&"supplier_api_connection:health_check"));
 
-        let sysadmin = PREDEFINED_ROLES
-            .iter()
-            .find(|role| role.id == "role-sysadmin")
-            .unwrap();
+        let sysadmin = PREDEFINED_ROLES.iter().find(|role| role.id == "role-sysadmin").unwrap();
         for permission in [
             "supplier_api_connection:bind_endpoint_reference",
             "supplier_api_connection:manage_credential_reference",
@@ -1291,14 +1227,9 @@ mod tests {
         ] {
             assert!(sysadmin.permissions.contains(&permission), "缺少 {permission}");
         }
-        assert!(!sysadmin
-            .permissions
-            .contains(&"supplier_api_capability:confirm_requirement"));
+        assert!(!sysadmin.permissions.contains(&"supplier_api_capability:confirm_requirement"));
 
-        let operations = PREDEFINED_ROLES
-            .iter()
-            .find(|role| role.id == "role-operations")
-            .unwrap();
+        let operations = PREDEFINED_ROLES.iter().find(|role| role.id == "role-operations").unwrap();
         for permission in [
             "supplier_api_connection:bind_endpoint_reference",
             "supplier_api_connection:manage_credential_reference",
@@ -1307,22 +1238,14 @@ mod tests {
             "supplier_api_connection:catalog_sync",
             "supplier_api_capability:update",
         ] {
-            assert!(
-                !operations.permissions.contains(&permission),
-                "运营不应取得 {permission}"
-            );
+            assert!(!operations.permissions.contains(&permission), "运营不应取得 {permission}");
         }
     }
 
     #[test]
     fn import_confirmation_permissions_match_fixed_responsibility_roles() {
-        let responsibility_roles = [
-            "role-sales",
-            "role-procurement",
-            "role-operations",
-            "role-warehouse",
-            "role-finance",
-        ];
+        let responsibility_roles =
+            ["role-sales", "role-procurement", "role-operations", "role-warehouse", "role-finance"];
         let required = [
             "legacy_import_confirmation:list",
             "legacy_import_confirmation:detail",
@@ -1343,13 +1266,8 @@ mod tests {
 
     #[test]
     fn integration_task_permissions_match_fixed_w29_roles() {
-        let responsibility_roles = [
-            "role-sales",
-            "role-procurement",
-            "role-operations",
-            "role-finance",
-            "role-sysadmin",
-        ];
+        let responsibility_roles =
+            ["role-sales", "role-procurement", "role-operations", "role-finance", "role-sysadmin"];
         for role in PREDEFINED_ROLES {
             for permission in ["integration_task:process", "integration_task:complete"] {
                 assert_eq!(
@@ -1373,9 +1291,7 @@ mod tests {
             let desired = parse_permissions(role.permissions).unwrap();
             let previous = integration_task_legacy_snapshot(&desired);
             assert_eq!(previous.len() + 2, desired.len());
-            assert!(previous
-                .iter()
-                .all(|permission| permission.resource() != "integration_task"));
+            assert!(previous.iter().all(|permission| permission.resource() != "integration_task"));
         }
     }
 
@@ -1385,12 +1301,7 @@ mod tests {
         // 决定本身走 approval_instance:decide，无需 approve/reject 资源动作。
         // 采购用通配 `purchase_change_order:*` 覆盖，按解析后的覆盖关系断言。
         let required = ["purchase_change_order:list", "purchase_change_order:detail"];
-        let read_roles = [
-            "role-procurement",
-            "role-warehouse",
-            "role-finance",
-            "role-management",
-        ];
+        let read_roles = ["role-procurement", "role-warehouse", "role-finance", "role-management"];
         for role in PREDEFINED_ROLES {
             let permissions = parse_permissions(role.permissions).unwrap();
             for permission in required {
@@ -1444,15 +1355,9 @@ mod tests {
                 role.id
             );
         }
-        let leader = PREDEFINED_ROLES
-            .iter()
-            .find(|role| role.id == "role-sales-leader")
-            .unwrap();
+        let leader = PREDEFINED_ROLES.iter().find(|role| role.id == "role-sales-leader").unwrap();
         for permission in required {
-            assert!(
-                leader.permissions.contains(&permission),
-                "销售领导缺少 {permission}"
-            );
+            assert!(leader.permissions.contains(&permission), "销售领导缺少 {permission}");
         }
 
         let desired = parse_permissions(SALES_LEADER_PERMISSIONS).unwrap();
@@ -1460,9 +1365,7 @@ mod tests {
         assert_eq!(previous.len() + 1, desired.len());
         for permission in required {
             assert!(
-                previous
-                    .iter()
-                    .all(|candidate| candidate.to_string() != permission),
+                previous.iter().all(|candidate| candidate.to_string() != permission),
                 "旧快照仍包含 {permission}"
             );
         }
@@ -1521,10 +1424,7 @@ mod tests {
             "stock_adjustment:create",
         ] {
             let forbidden = Permission::parse(forbidden).unwrap();
-            assert!(
-                !permissions.covers_one(&forbidden),
-                "采购不应默认具备 {forbidden}"
-            );
+            assert!(!permissions.covers_one(&forbidden), "采购不应默认具备 {forbidden}");
         }
     }
 
@@ -1538,41 +1438,30 @@ mod tests {
         assert_eq!(snapshots[1].len(), desired.len() - duty_gap_count - 3);
         assert_eq!(snapshots[2].len(), desired.len() - duty_gap_count);
         assert_eq!(snapshots[3].len(), desired.len() - duty_gap_count);
-        assert!(snapshots[2]
-            .iter()
-            .any(|permission| permission.to_string() == "supplier_catalog_cost:detail"));
-        assert!(!snapshots[2]
-            .iter()
-            .any(|permission| permission.to_string() == "supplier_sensitive:reveal"));
-        assert!(snapshots
-            .iter()
-            .flatten()
-            .all(|permission| super::PROCUREMENT_DUTY_GAP_PERMISSIONS
-                .iter()
-                .all(|gap| permission.to_string() != *gap)));
+        assert!(
+            snapshots[2].iter().any(|permission| permission.to_string() == "supplier_catalog_cost:detail")
+        );
+        assert!(!snapshots[2].iter().any(|permission| permission.to_string() == "supplier_sensitive:reveal"));
+        assert!(snapshots.iter().flatten().all(|permission| {
+            super::PROCUREMENT_DUTY_GAP_PERMISSIONS.iter().all(|gap| permission.to_string() != *gap)
+        }));
     }
 
     #[test]
     fn sales_permissions_include_core_sales_capabilities() {
         let permissions = parse_permissions(SALES_PERMISSIONS).unwrap();
-        assert!(permissions
-            .iter()
-            .any(|p| p.covers(&Permission::parse("sales_order:create").unwrap())));
-        assert!(permissions
-            .iter()
-            .any(|p| p.covers(&Permission::parse("sales_order:cancel_approval").unwrap())));
-        assert!(permissions
-            .iter()
-            .any(|p| p.covers(&Permission::parse("customer:list").unwrap())));
-        assert!(permissions
-            .iter()
-            .any(|p| p.covers(&Permission::parse("contract:create").unwrap())));
-        assert!(permissions
-            .iter()
-            .any(|p| p.covers(&Permission::parse("sellable_sku:list").unwrap())));
-        assert!(permissions
-            .iter()
-            .any(|p| p.covers(&Permission::parse("procurement_responsibility:list").unwrap())));
+        assert!(permissions.iter().any(|p| p.covers(&Permission::parse("sales_order:create").unwrap())));
+        assert!(
+            permissions.iter().any(|p| p.covers(&Permission::parse("sales_order:cancel_approval").unwrap()))
+        );
+        assert!(permissions.iter().any(|p| p.covers(&Permission::parse("customer:list").unwrap())));
+        assert!(permissions.iter().any(|p| p.covers(&Permission::parse("contract:create").unwrap())));
+        assert!(permissions.iter().any(|p| p.covers(&Permission::parse("sellable_sku:list").unwrap())));
+        assert!(
+            permissions
+                .iter()
+                .any(|p| p.covers(&Permission::parse("procurement_responsibility:list").unwrap()))
+        );
         for forbidden in [
             "product:list",
             "product_revision:list",
@@ -1582,16 +1471,12 @@ mod tests {
             "product_brand:list",
             "unit_of_measure:list",
         ] {
-            assert!(!permissions
-                .iter()
-                .any(|p| p.covers(&Permission::parse(forbidden).unwrap())));
+            assert!(!permissions.iter().any(|p| p.covers(&Permission::parse(forbidden).unwrap())));
         }
-        assert!(!permissions
-            .iter()
-            .any(|p| p.covers(&Permission::parse("party_bank_account:detail").unwrap())));
-        assert!(!permissions
-            .iter()
-            .any(|p| p.covers(&Permission::parse("customer_scope:detail").unwrap())));
+        assert!(
+            !permissions.iter().any(|p| p.covers(&Permission::parse("party_bank_account:detail").unwrap()))
+        );
+        assert!(!permissions.iter().any(|p| p.covers(&Permission::parse("customer_scope:detail").unwrap())));
     }
 
     #[test]
@@ -1623,29 +1508,23 @@ mod tests {
         assert_eq!(snapshots[1].len(), desired.len() - 7);
         // 快照[2]为客户边界收紧前：[1] 去掉 5 个客户细分权限并补 customer:* 与 party_bank_account:*。
         assert_eq!(snapshots[2].len(), desired.len() - 10);
-        assert!(snapshots[1]
-            .iter()
-            .any(|permission| permission.to_string() == "sku:list"));
-        assert!(snapshots[2]
-            .iter()
-            .any(|permission| permission.to_string() == "party_bank_account:*"));
+        assert!(snapshots[1].iter().any(|permission| permission.to_string() == "sku:list"));
+        assert!(snapshots[2].iter().any(|permission| permission.to_string() == "party_bank_account:*"));
         // 可售池上线前的快照（[1] 起）不含 sellable_sku:list；[0] 为选品上线前仍保留它。
-        assert!(snapshots[1..]
-            .iter()
-            .flatten()
-            .all(|permission| permission.to_string() != "sellable_sku:list"));
-        assert!(snapshots
-            .iter()
-            .flatten()
-            .all(|permission| { !permission.to_string().starts_with("sales_selection_") }));
+        assert!(
+            snapshots[1..].iter().flatten().all(|permission| permission.to_string() != "sellable_sku:list")
+        );
+        assert!(
+            snapshots
+                .iter()
+                .flatten()
+                .all(|permission| { !permission.to_string().starts_with("sales_selection_") })
+        );
     }
 
     #[test]
     fn management_permissions_are_read_only() {
-        let management = PREDEFINED_ROLES
-            .iter()
-            .find(|role| role.id == "role-management")
-            .unwrap();
+        let management = PREDEFINED_ROLES.iter().find(|role| role.id == "role-management").unwrap();
         for raw in management.permissions {
             let permission = Permission::parse(*raw).unwrap();
             if matches!(
@@ -1671,26 +1550,18 @@ mod tests {
     #[test]
     fn workflow_permissions_are_explicit_and_legacy_snapshots_are_recognizable() {
         for role in PREDEFINED_ROLES {
-            assert!(
-                !role.permissions.contains(&"work_item:*"),
-                "{} 不得继续授予任务通配权限",
-                role.id
-            );
+            assert!(!role.permissions.contains(&"work_item:*"), "{} 不得继续授予任务通配权限", role.id);
             let desired = parse_permissions(role.permissions).unwrap();
             let previous = legacy_workflow_permission_snapshot(role.id, &desired).unwrap();
             if role.id == "role-management" {
-                assert!(previous
-                    .iter()
-                    .all(|permission| permission.to_string() != "work_item:manage"));
+                assert!(previous.iter().all(|permission| permission.to_string() != "work_item:manage"));
             } else {
-                assert!(previous
-                    .iter()
-                    .any(|permission| permission.to_string() == "work_item:*"));
+                assert!(previous.iter().any(|permission| permission.to_string() == "work_item:*"));
             }
             if matches!(role.id, "role-sales-leader" | "role-operations") {
-                assert!(previous
-                    .iter()
-                    .any(|permission| permission.to_string() == "sales_change_order:approve"));
+                assert!(
+                    previous.iter().any(|permission| permission.to_string() == "sales_change_order:approve")
+                );
             }
         }
     }
@@ -1700,11 +1571,7 @@ mod tests {
         assert_eq!(APPROVAL_HTTP_ACTION_PERMISSIONS.len(), 11);
         for role in PREDEFINED_ROLES {
             for forbidden in ["approval_instance:recover", "approval_instance:diagnose"] {
-                assert!(
-                    !role.permissions.contains(&forbidden),
-                    "{} 不得继续授予 {forbidden}",
-                    role.id
-                );
+                assert!(!role.permissions.contains(&forbidden), "{} 不得继续授予 {forbidden}", role.id);
             }
             let desired = parse_permissions(role.permissions).unwrap();
             let previous = approval_http_legacy_snapshot(role.id, &desired).unwrap();
@@ -1726,10 +1593,7 @@ mod tests {
 
     #[test]
     fn sysadmin_does_not_include_account_or_role_admin() {
-        let sysadmin = PREDEFINED_ROLES
-            .iter()
-            .find(|role| role.id == "role-sysadmin")
-            .unwrap();
+        let sysadmin = PREDEFINED_ROLES.iter().find(|role| role.id == "role-sysadmin").unwrap();
         let permissions = parse_permissions(sysadmin.permissions).unwrap();
         for forbidden in [
             "admin:create",
@@ -1753,13 +1617,8 @@ mod tests {
     fn product_detail_is_read_only_split_without_granting_list() {
         // 详情只读拆分：除采购外的新补角色拥有 detail 且不拥有 list；
         // 运营/仓储保留 list 以便走新高效接口；采购靠通配覆盖。
-        let detail_only = [
-            "role-sales",
-            "role-sales-leader",
-            "role-finance",
-            "role-management",
-            "role-sysadmin",
-        ];
+        let detail_only =
+            ["role-sales", "role-sales-leader", "role-finance", "role-management", "role-sysadmin"];
         let detail_with_list = ["role-operations", "role-warehouse"];
         let detail = Permission::parse("product:detail").unwrap();
         let list = Permission::parse("product:list").unwrap();
@@ -1769,10 +1628,7 @@ mod tests {
             let covers_list = permissions.iter().any(|seeded| seeded.covers(&list));
             if role.id == "role-procurement" {
                 assert!(covers_detail, "采购应靠 product:* 覆盖 detail");
-                assert!(
-                    !role.permissions.contains(&"product:detail"),
-                    "采购不得重复添加 product:detail"
-                );
+                assert!(!role.permissions.contains(&"product:detail"), "采购不得重复添加 product:detail");
             } else if detail_only.contains(&role.id) {
                 assert!(covers_detail, "{} 应拥有 product:detail", role.id);
                 assert!(!covers_list, "{} 不应拥有 product:list", role.id);

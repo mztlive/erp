@@ -2,14 +2,14 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_core::common::time::Instant;
+use erp_core::ids::{SalesSelectionBookletId, SalesSelectionPrepareTaskId};
+use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::combination::TierSearchReport;
 use super::limits::PREPARE_TASK_DEADLINE_SECS;
 use super::types::{PrepareKind, PrepareStage, PrepareTaskStatus};
-use erp_core::common::time::Instant;
-use erp_core::ids::{SalesSelectionBookletId, SalesSelectionPrepareTaskId};
-use erp_core::{Error, Result};
 
 /// 准备任务创建数据。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,9 +107,7 @@ impl SalesSelectionPrepareTask {
             request_hash: data.request_hash,
             seed: data.seed,
             deadline_at: Instant::from_unix_secs(
-                data.now
-                    .unix_secs()
-                    .saturating_add(PREPARE_TASK_DEADLINE_SECS as i64),
+                data.now.unix_secs().saturating_add(PREPARE_TASK_DEADLINE_SECS as i64),
             ),
             heartbeat_at: data.now,
             finished_at: None,
@@ -286,8 +284,6 @@ mod tests {
         restored.mark_succeeded("batch".into(), vec![], Instant::from_unix_secs(120));
         assert_eq!(restored.result_batch_id.as_deref(), Some("batch"));
         assert!(!restored.status.is_active());
-        assert!(restored
-            .ensure_writable_run(1, Instant::from_unix_secs(121))
-            .is_err());
+        assert!(restored.ensure_writable_run(1, Instant::from_unix_secs(121)).is_err());
     }
 }

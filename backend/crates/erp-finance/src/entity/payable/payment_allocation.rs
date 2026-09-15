@@ -1,15 +1,14 @@
 //! `payment_allocation` 付款核销分配（数据模型 §6.9，与 `receipt_allocation` 同构）。
 
-use entity_core::BaseModel;
-use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use std::str::FromStr;
 
+use entity_core::BaseModel;
+use entity_macros::Entity;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PayableEntryId, PaymentAllocationId, SupplierPaymentId};
 use erp_core::money::Amount;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 分配动作（数据模型 §6.9：`APPLY` 或 `REVERSE`）。
 ///
@@ -118,11 +117,11 @@ impl PaymentAllocation {
         match data.allocation_action {
             AllocationAction::Apply if data.reverses_allocation_id.is_some() => {
                 return Err(Error::from("APPLY 分配不得引用原分配"));
-            }
+            },
             AllocationAction::Reverse if data.reverses_allocation_id.is_none() => {
                 return Err(Error::from("REVERSE 分配必须引用原 APPLY 分配"));
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         Ok(Self {
@@ -259,15 +258,10 @@ impl PaymentAllocation {
                 }
             }
         }
-        let mut applies: Vec<&PaymentAllocation> = allocations
-            .iter()
-            .filter(|a| a.allocation_action == AllocationAction::Apply)
-            .collect();
-        applies.sort_by(|a, b| {
-            a.allocation_seq
-                .cmp(&b.allocation_seq)
-                .then_with(|| a.base.id.cmp(&b.base.id))
-        });
+        let mut applies: Vec<&PaymentAllocation> =
+            allocations.iter().filter(|a| a.allocation_action == AllocationAction::Apply).collect();
+        applies
+            .sort_by(|a, b| a.allocation_seq.cmp(&b.allocation_seq).then_with(|| a.base.id.cmp(&b.base.id)));
         let mut remaining = amount;
         let mut rows = Vec::new();
         let mut chunks = Vec::new();
@@ -280,11 +274,7 @@ impl PaymentAllocation {
             if effective.to_decimal().is_zero() {
                 continue;
             }
-            let chunk = if effective >= remaining {
-                remaining
-            } else {
-                effective
-            };
+            let chunk = if effective >= remaining { remaining } else { effective };
             if chunk.to_decimal().is_zero() {
                 continue;
             }
@@ -311,8 +301,9 @@ impl PaymentAllocation {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn data() -> PaymentAllocationData {
         PaymentAllocationData {
@@ -335,16 +326,11 @@ mod tests {
 
     #[test]
     fn new_rejects_non_positive_amount_and_zero_seq() {
-        let non_positive = PaymentAllocationData {
-            allocated_amount: Amount::from_str("0.00").unwrap(),
-            ..data()
-        };
+        let non_positive =
+            PaymentAllocationData { allocated_amount: Amount::from_str("0.00").unwrap(), ..data() };
         assert!(PaymentAllocation::new(PaymentAllocationId::new("pa-2"), non_positive).is_err());
 
-        let zero_seq = PaymentAllocationData {
-            allocation_seq: 0,
-            ..data()
-        };
+        let zero_seq = PaymentAllocationData { allocation_seq: 0, ..data() };
         assert!(PaymentAllocation::new(PaymentAllocationId::new("pa-3"), zero_seq).is_err());
     }
 
@@ -430,22 +416,10 @@ mod tests {
     #[test]
     fn payment_plan_deducts_multiple_reverses_and_insufficient_fails() {
         let a1 = payment_allocation_for_plan("pa-1", 1, AllocationAction::Apply, "100.00", "pe-1", None);
-        let r1 = payment_allocation_for_plan(
-            "pa-r1",
-            2,
-            AllocationAction::Reverse,
-            "30.00",
-            "pe-1",
-            Some("pa-1"),
-        );
-        let r2 = payment_allocation_for_plan(
-            "pa-r2",
-            3,
-            AllocationAction::Reverse,
-            "20.00",
-            "pe-1",
-            Some("pa-1"),
-        );
+        let r1 =
+            payment_allocation_for_plan("pa-r1", 2, AllocationAction::Reverse, "30.00", "pe-1", Some("pa-1"));
+        let r2 =
+            payment_allocation_for_plan("pa-r2", 3, AllocationAction::Reverse, "20.00", "pe-1", Some("pa-1"));
         let allocations = vec![a1.clone(), r1, r2];
         let (rows, _) =
             PaymentAllocation::plan_reverse(&allocations, Amount::from_str("50.00").unwrap()).unwrap();
@@ -473,14 +447,8 @@ mod tests {
     #[test]
     fn payment_plan_insufficient_and_skip_fully_reversed() {
         let a1 = payment_allocation_for_plan("pa-1", 1, AllocationAction::Apply, "50.00", "pe-1", None);
-        let r1 = payment_allocation_for_plan(
-            "pa-r1",
-            2,
-            AllocationAction::Reverse,
-            "50.00",
-            "pe-1",
-            Some("pa-1"),
-        );
+        let r1 =
+            payment_allocation_for_plan("pa-r1", 2, AllocationAction::Reverse, "50.00", "pe-1", Some("pa-1"));
         let a2 = payment_allocation_for_plan("pa-2", 3, AllocationAction::Apply, "30.00", "pe-2", None);
         let (rows, _) =
             PaymentAllocation::plan_reverse(&[a1, r1, a2], Amount::from_str("30.00").unwrap()).unwrap();
@@ -496,21 +464,12 @@ mod tests {
         let a3 = payment_allocation_for_plan("pa-3", 5, AllocationAction::Apply, "10.00", "pe-3", None);
         assert_eq!(PaymentAllocation::next_allocation_seq(&[a1, a2, a3]).unwrap(), 6);
         let range = PaymentAllocation::next_allocation_seq_range(
-            &[payment_allocation_for_plan(
-                "pa-1",
-                3,
-                AllocationAction::Apply,
-                "10.00",
-                "pe-1",
-                None,
-            )],
+            &[payment_allocation_for_plan("pa-1", 3, AllocationAction::Apply, "10.00", "pe-1", None)],
             3,
         )
         .unwrap();
         assert_eq!(range, vec![4, 5, 6]);
-        assert!(PaymentAllocation::next_allocation_seq_range(&[], 0)
-            .unwrap()
-            .is_empty());
+        assert!(PaymentAllocation::next_allocation_seq_range(&[], 0).unwrap().is_empty());
     }
 
     #[test]

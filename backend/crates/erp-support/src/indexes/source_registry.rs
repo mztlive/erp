@@ -4,14 +4,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::SourceRegistryExt;
-use persistence_core::Result;
 
 /// `source_system` 集合名。
 pub(crate) const SOURCE_SYSTEMS: &str = <mongodb::Database as SourceRegistryExt>::SOURCE_SYSTEMS;
@@ -43,9 +41,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -53,10 +49,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 fn source_system_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_source_systems_code", doc! { "code": 1 }),
-        named_index(
-            "idx_source_systems_type_status",
-            doc! { "system_type": 1, "status": 1 },
-        ),
+        named_index("idx_source_systems_type_status", doc! { "system_type": 1, "status": 1 }),
     ]
 }
 
@@ -92,19 +85,13 @@ fn external_identity_target_indexes() -> Vec<IndexModel> {
             "idx_external_identity_targets_lineage",
             doc! { "internal_object_type": 1, "internal_object_id": 1, "status": 1 },
         ),
-        named_index(
-            "idx_external_identity_targets_pending_conflict",
-            doc! { "status": 1 },
-        ),
+        named_index("idx_external_identity_targets_pending_conflict", doc! { "status": 1 }),
     ]
 }
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -117,7 +104,7 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
-    use mongodb::bson::{doc, Bson};
+    use mongodb::bson::{Bson, doc};
 
     use super::{external_identity_map_indexes, external_identity_target_indexes, source_system_indexes};
 
@@ -135,9 +122,7 @@ mod tests {
         assert_eq!(code_index.keys, doc! { "code": 1 });
         assert_eq!(code_index.options.as_ref().unwrap().unique, Some(true));
 
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "system_type": 1, "status": 1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "system_type": 1, "status": 1 }));
     }
 
     #[test]
@@ -151,18 +136,12 @@ mod tests {
                     == Some("uk_external_identity_maps_identity")
             })
             .unwrap();
-        assert_eq!(
-            identity.keys,
-            doc! { "source_system_id": 1, "object_type": 1, "external_id_key": 1 }
-        );
+        assert_eq!(identity.keys, doc! { "source_system_id": 1, "object_type": 1, "external_id_key": 1 });
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
 
         // 唯一索引直接建在 external_id_key 字段（Bson 字段路径，不包表达式）。
         assert!(identity.keys.contains_key("external_id_key"));
-        assert!(matches!(
-            identity.keys.get("external_id_key"),
-            Some(Bson::Int32(1))
-        ));
+        assert!(matches!(identity.keys.get("external_id_key"), Some(Bson::Int32(1))));
     }
 
     #[test]

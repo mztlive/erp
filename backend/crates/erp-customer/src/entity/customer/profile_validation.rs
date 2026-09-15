@@ -62,12 +62,8 @@ impl CustomerProfileRequestShape {
         expected_customer_version: Option<u64>,
         owner_user_id_present: bool,
     ) -> Result<Self> {
-        let shape = Self {
-            operation,
-            expected_party_version,
-            expected_customer_version,
-            owner_user_id_present,
-        };
+        let shape =
+            Self { operation, expected_party_version, expected_customer_version, owner_user_id_present };
         shape.validate()?;
         Ok(shape)
     }
@@ -93,14 +89,14 @@ impl CustomerProfileRequestShape {
                 if self.expected_party_version.is_some() || self.expected_customer_version.is_some() {
                     return Err(Error::from("创建客户时不能提交既有版本"));
                 }
-            }
+            },
             CustomerProfileOperation::Update => {
                 if self.owner_user_id_present {
                     return Err(Error::from("负责人变更必须通过客户归属操作提交"));
                 }
                 ensure_positive_version(self.expected_party_version, "主体")?;
                 ensure_positive_version(self.expected_customer_version, "客户")?;
-            }
+            },
         }
         Ok(())
     }
@@ -197,10 +193,7 @@ where
             return Ok(());
         };
         if items.iter().filter(|item| item.is_default()).count() > 1 {
-            return Err(Error::from(format!(
-                "同一时间只能有一个默认{}",
-                self.kind.label()
-            )));
+            return Err(Error::from(format!("同一时间只能有一个默认{}", self.kind.label())));
         }
 
         let mut existing_ids = HashSet::with_capacity(items.len());
@@ -209,15 +202,10 @@ where
                 validate_existing_id(existing_id, operation, self.kind, &mut existing_ids)?;
                 continue;
             }
-            let has_required_value = item
-                .required_value()
-                .map(str::trim)
-                .is_some_and(|value| !value.is_empty());
+            let has_required_value =
+                item.required_value().map(str::trim).is_some_and(|value| !value.is_empty());
             if !has_required_value {
-                return Err(Error::from(format!(
-                    "{}不能为空",
-                    self.kind.required_value_label()
-                )));
+                return Err(Error::from(format!("{}不能为空", self.kind.required_value_label())));
             }
         }
         Ok(())
@@ -310,16 +298,8 @@ mod tests {
     #[test]
     fn fact_set_accepts_single_default_and_existing_without_plaintext() {
         let facts = [
-            Fact {
-                existing_id: Some("contact-1"),
-                is_default: true,
-                required_value: None,
-            },
-            Fact {
-                existing_id: None,
-                is_default: false,
-                required_value: Some("13800138000"),
-            },
+            Fact { existing_id: Some("contact-1"), is_default: true, required_value: None },
+            Fact { existing_id: None, is_default: false, required_value: Some("13800138000") },
         ];
         let set = CustomerProfileFactSet::new(CustomerProfileFactKind::Contact, Some(&facts));
         assert!(set.validate(CustomerProfileOperation::Update).is_ok());
@@ -328,31 +308,15 @@ mod tests {
     #[test]
     fn fact_set_rejects_multiple_defaults_and_duplicate_trimmed_ids() {
         let defaults = [
-            Fact {
-                existing_id: Some("contact-1"),
-                is_default: true,
-                required_value: None,
-            },
-            Fact {
-                existing_id: Some("contact-2"),
-                is_default: true,
-                required_value: None,
-            },
+            Fact { existing_id: Some("contact-1"), is_default: true, required_value: None },
+            Fact { existing_id: Some("contact-2"), is_default: true, required_value: None },
         ];
         let set = CustomerProfileFactSet::new(CustomerProfileFactKind::Contact, Some(&defaults));
         assert!(set.validate(CustomerProfileOperation::Update).is_err());
 
         let duplicates = [
-            Fact {
-                existing_id: Some(" contact-1 "),
-                is_default: false,
-                required_value: None,
-            },
-            Fact {
-                existing_id: Some("contact-1"),
-                is_default: false,
-                required_value: None,
-            },
+            Fact { existing_id: Some(" contact-1 "), is_default: false, required_value: None },
+            Fact { existing_id: Some("contact-1"), is_default: false, required_value: None },
         ];
         let set = CustomerProfileFactSet::new(CustomerProfileFactKind::Contact, Some(&duplicates));
         assert!(set.validate(CustomerProfileOperation::Update).is_err());
@@ -360,19 +324,11 @@ mod tests {
 
     #[test]
     fn fact_set_rejects_create_existing_id_and_missing_new_value() {
-        let existing = [Fact {
-            existing_id: Some("address-1"),
-            is_default: false,
-            required_value: None,
-        }];
+        let existing = [Fact { existing_id: Some("address-1"), is_default: false, required_value: None }];
         let set = CustomerProfileFactSet::new(CustomerProfileFactKind::Address, Some(&existing));
         assert!(set.validate(CustomerProfileOperation::Create).is_err());
 
-        let missing = [Fact {
-            existing_id: None,
-            is_default: false,
-            required_value: Some("   "),
-        }];
+        let missing = [Fact { existing_id: None, is_default: false, required_value: Some("   ") }];
         let set = CustomerProfileFactSet::new(CustomerProfileFactKind::BankAccount, Some(&missing));
         assert!(set.validate(CustomerProfileOperation::Create).is_err());
     }

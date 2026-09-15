@@ -1,17 +1,19 @@
 //! 进程级 tracing subscriber 配置。
 
-use opentelemetry::{global, trace::TracerProvider as _, KeyValue};
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry::{KeyValue, global};
 use opentelemetry_otlp::SpanExporter;
-use opentelemetry_sdk::{propagation::TraceContextPropagator, trace::SdkTracerProvider, Resource};
+use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
+use opentelemetry_sdk::trace::SdkTracerProvider;
 use tracing::info;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing_subscriber::{
-    fmt::{self, format::FmtSpan},
-    layer::SubscriberExt,
-    util::SubscriberInitExt,
-    EnvFilter, Layer,
-};
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::fmt::{self};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer};
 
 /// Web API 的日志输出配置。
 pub struct TracingConfig {
@@ -157,11 +159,7 @@ pub fn init_tracing(config: TracingConfig) -> Result<TracingGuard, Box<dyn std::
         tracing_opentelemetry::layer().with_tracer(tracer)
     });
 
-    tracing_subscriber::registry()
-        .with(env_filter)
-        .with(layers)
-        .with(telemetry_layer)
-        .init();
+    tracing_subscriber::registry().with(env_filter).with(layers).with(telemetry_layer).init();
 
     info!(
         json_format = config.json_format,
@@ -172,10 +170,7 @@ pub fn init_tracing(config: TracingConfig) -> Result<TracingGuard, Box<dyn std::
         "Tracing initialized"
     );
 
-    Ok(TracingGuard {
-        _file_guard: file_guard,
-        tracer_provider,
-    })
+    Ok(TracingGuard { _file_guard: file_guard, tracer_provider })
 }
 
 /// 按配置创建 OTLP tracer provider；禁用时不构建网络 exporter。
@@ -200,10 +195,7 @@ fn build_tracer_provider(
         .with_service_name(config.service_name.clone())
         .with_attribute(KeyValue::new("service.version", env!("CARGO_PKG_VERSION")))
         .build();
-    let provider = SdkTracerProvider::builder()
-        .with_batch_exporter(exporter)
-        .with_resource(resource)
-        .build();
+    let provider = SdkTracerProvider::builder().with_batch_exporter(exporter).with_resource(resource).build();
     global::set_tracer_provider(provider.clone());
 
     Ok(Some(provider))

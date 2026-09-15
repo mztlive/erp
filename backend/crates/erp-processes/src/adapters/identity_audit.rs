@@ -43,9 +43,7 @@ impl IdentityAuditPort for MongoIdentityAudit {
         resource_type: &str,
         resource_id: String,
     ) -> erp_identity::Result<PreparedResourceAudit> {
-        let log = actor
-            .resource_log(action, resource_type, resource_id)
-            .map_err(map_audit_error)?;
+        let log = actor.resource_log(action, resource_type, resource_id).map_err(map_audit_error)?;
         Ok(prepared_from_log(&log))
     }
 
@@ -55,11 +53,7 @@ impl IdentityAuditPort for MongoIdentityAudit {
         executor: &mut dyn Executor,
     ) -> erp_identity::Result<()> {
         let log = audit_log_from_prepared(audit).map_err(map_audit_error)?;
-        self.db
-            .audit_logs()
-            .create(&log, executor)
-            .await
-            .map_err(erp_identity::Error::from)?;
+        self.db.audit_logs().create(&log, executor).await.map_err(erp_identity::Error::from)?;
         Ok(())
     }
 }
@@ -123,8 +117,9 @@ fn map_audit_error(error: erp_audit::Error) -> erp_identity::Error {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::AccountKind;
+
+    use super::*;
 
     #[test]
     fn prepared_audit_preserves_original_metadata_and_all_business_fields() {
@@ -151,10 +146,7 @@ mod tests {
         let mut invalid = prepared;
         invalid.actor_id = " ".into();
         invalid.action = " ".into();
-        assert!(audit_log_from_prepared(&invalid)
-            .unwrap_err()
-            .to_string()
-            .contains("操作人ID不能为空"));
+        assert!(audit_log_from_prepared(&invalid).unwrap_err().to_string().contains("操作人ID不能为空"));
     }
 
     #[test]

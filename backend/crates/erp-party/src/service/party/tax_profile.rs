@@ -4,27 +4,27 @@
 //! 原地更新只允许切换启停状态、结束有效期与调整默认标记；同一主体默认
 //! 税务资料唯一（跨行约束，事务内校验，§6.2）。
 
-use crate::entity::party::{
-    EffectiveRecordStatus, PartyId, PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileId,
-    PartyTaxProfileUpdate,
-};
-use crate::ports::{PartyAuditPort, SupplierRolePort};
-use crate::repository::PartyExt;
+use std::sync::Arc;
+
+use application_core::AuditActor;
 use erp_core::field_update::FieldUpdate;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
-use std::sync::Arc;
 use validator::Validate;
-
-use crate::error::{Error, Result};
-use application_core::AuditActor;
 
 use super::{clear_default_marks, page_or_default, page_size_or_default};
 use crate::dto::party::{
-    normalize_sort, CreatePartyTaxProfileRequest, PageView, PartyTaxProfileListParams, PartyTaxProfileView,
-    SortDir, UpdatePartyTaxProfileRequest, PARTY_TAX_PROFILE_SORT_FIELDS,
+    CreatePartyTaxProfileRequest, PARTY_TAX_PROFILE_SORT_FIELDS, PageView, PartyTaxProfileListParams,
+    PartyTaxProfileView, SortDir, UpdatePartyTaxProfileRequest, normalize_sort,
 };
+use crate::entity::party::{
+    EffectiveRecordStatus, PartyId, PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileId,
+    PartyTaxProfileUpdate,
+};
+use crate::error::{Error, Result};
+use crate::ports::{PartyAuditPort, SupplierRolePort};
+use crate::repository::PartyExt;
 
 /// 税务资料列表筛选条件类型（经 `PartyExt` 关联类型跨 crate 可达）。
 type PartyTaxProfileFilter = <mongodb::Database as PartyExt>::PartyTaxProfileFilter;
@@ -51,11 +51,7 @@ impl PartyTaxProfileService {
         audit: Arc<dyn PartyAuditPort>,
         supplier_roles: Arc<dyn SupplierRolePort>,
     ) -> Self {
-        Self {
-            db,
-            audit,
-            supplier_roles,
-        }
+        Self { db, audit, supplier_roles }
     }
 
     /// 分页查询税务资料列表。
@@ -87,11 +83,8 @@ impl PartyTaxProfileService {
             sort_by: Some(sort_by.to_string()),
             sort_ascending: matches!(sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .party_tax_profiles()
-            .search_party_tax_profiles(&filter, &mut NoTransaction)
-            .await?;
+        let page =
+            self.db.party_tax_profiles().search_party_tax_profiles(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -108,12 +101,7 @@ impl PartyTaxProfileService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 创建税务资料（跨行事务：默认资料唯一 + 新建 + 审计原子写入）。
@@ -206,9 +194,7 @@ impl PartyTaxProfileService {
             .ok_or_else(|| Error::NotFound("税务资料不存在".to_string()))?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &profile.party_id).await?;
         if profile.base.version != req.version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         profile.update(
             PartyTaxProfileUpdate {
@@ -243,9 +229,7 @@ impl PartyTaxProfileService {
                             session
                         );
                     }
-                    db.party_tax_profiles()
-                        .update(&mut profile_for_tx, session)
-                        .await?;
+                    db.party_tax_profiles().update(&mut profile_for_tx, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<PartyTaxProfile, crate::error::Error>(profile_for_tx)
                 })

@@ -1,9 +1,10 @@
 //! 采购变更命令的本域读取；来源采购单范围必须由调用方在本模块校验之前证明。
+use persistence_core::{Executor, NoTransaction};
+
 use crate::entity::purchase_order::{PurchaseChangeOrder, PurchaseOrder, PurchaseOrderRevision};
 use crate::repository::PurchaseOrderExt;
 use crate::service::purchase_order::PurchaseOrderService;
 use crate::{Error, Result};
-use persistence_core::{Executor, NoTransaction};
 
 impl PurchaseOrderService {
     /// 在来源采购单已按写动作证明可见后，加载可发起变更的当前生效版本。
@@ -28,9 +29,8 @@ impl PurchaseOrderService {
         order
             .ensure_expected_version(expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
-        let base_revision_id = order
-            .revision_id_for_change()
-            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+        let base_revision_id =
+            order.revision_id_for_change().map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         let base_revision = self
             .db
             .purchase_order_revisions()
@@ -60,9 +60,7 @@ impl PurchaseOrderService {
             .has_in_progress_change(&purchase_order_id.to_string().into(), &mut NoTransaction)
             .await?;
         if has_in_progress {
-            return Err(Error::ConflictError(
-                "存在进行中的采购变更，不能重复发起".to_string(),
-            ));
+            return Err(Error::ConflictError("存在进行中的采购变更，不能重复发起".to_string()));
         }
         Ok(())
     }
@@ -119,12 +117,13 @@ pub fn lock_draft_change(
 
 #[cfg(test)]
 mod tests {
-    use super::lock_draft_change;
-    use crate::entity::purchase_order::{PurchaseChangeOrder, PurchaseChangeOrderData};
-    use crate::Error;
     use erp_core::ids::{
         PurchaseChangeOrderId, PurchaseChangeSubmissionId, PurchaseOrderId, PurchaseOrderRevisionId,
     };
+
+    use super::lock_draft_change;
+    use crate::Error;
+    use crate::entity::purchase_order::{PurchaseChangeOrder, PurchaseChangeOrderData};
 
     /// 构造测试用草稿变更单。
     ///

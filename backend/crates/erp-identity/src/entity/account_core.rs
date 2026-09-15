@@ -1,14 +1,13 @@
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::auth::{LoginAccount, Secret};
 use erp_core::validation::{
     normalize_optional_email, normalize_optional_email_update, normalize_optional_phone,
     normalize_optional_phone_update, normalize_optional_text, normalize_required_text,
 };
-use erp_core::FieldUpdate;
-use erp_core::{AccountKind, Error, Result};
+use erp_core::{AccountKind, Error, FieldUpdate, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::auth::{LoginAccount, Secret};
 
 /// 账号名称最大长度。
 const NAME_MAX_LEN: usize = 64;
@@ -333,9 +332,10 @@ fn backoffice_login_account(account: impl Into<String>) -> Result<LoginAccount> 
 
 #[cfg(test)]
 mod tests {
+    use erp_core::FieldUpdate;
+
     use super::{AccountCore, AccountCoreData, AccountCoreUpdate, AccountKind, AccountStatus};
     use crate::entity::auth::{LoginAccount, Secret};
-    use erp_core::FieldUpdate;
 
     fn sample_account(kind: AccountKind, status: AccountStatus) -> AccountCore {
         AccountCore::new(
@@ -394,15 +394,9 @@ mod tests {
 
     #[test]
     fn login_eligibility_accepts_active_and_rejects_inactive_states() {
-        assert!(sample_account(AccountKind::Admin, AccountStatus::Active)
-            .ensure_can_login()
-            .is_ok());
-        assert!(sample_account(AccountKind::Admin, AccountStatus::Suspended)
-            .ensure_can_login()
-            .is_err());
-        assert!(sample_account(AccountKind::Admin, AccountStatus::Archived)
-            .ensure_can_login()
-            .is_err());
+        assert!(sample_account(AccountKind::Admin, AccountStatus::Active).ensure_can_login().is_ok());
+        assert!(sample_account(AccountKind::Admin, AccountStatus::Suspended).ensure_can_login().is_err());
+        assert!(sample_account(AccountKind::Admin, AccountStatus::Archived).ensure_can_login().is_err());
     }
 
     #[test]

@@ -1,12 +1,12 @@
 //! 商品池来源快照：筛选条件或勾选身份，准备时冻结。
 
+use erp_core::ids::SkuId;
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::limits::{POOL_SKU_MAX, POOL_SKU_MIN};
 use super::types::PoolSourceKind;
-use erp_core::ids::SkuId;
-use erp_core::money::Amount;
-use erp_core::{Error, Result};
 
 /// 与公司商品池列表对齐的筛选条件；不含分页。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -98,20 +98,12 @@ impl PoolSource {
         match kind {
             PoolSourceKind::Filter => {
                 let filter = filter.unwrap_or_default().normalize()?;
-                Ok(Self {
-                    kind,
-                    filter: Some(filter),
-                    sku_ids: None,
-                })
-            }
+                Ok(Self { kind, filter: Some(filter), sku_ids: None })
+            },
             PoolSourceKind::Selection => {
                 let sku_ids = normalize_selected_sku_ids(sku_ids.unwrap_or_default())?;
-                Ok(Self {
-                    kind,
-                    filter: None,
-                    sku_ids: Some(sku_ids),
-                })
-            }
+                Ok(Self { kind, filter: None, sku_ids: Some(sku_ids) })
+            },
         }
     }
 }
@@ -152,16 +144,15 @@ pub fn normalize_selected_sku_ids(sku_ids: Vec<SkuId>) -> Result<Vec<SkuId>> {
 /// # 错误
 /// 无。
 fn blank_to_none(value: Option<String>) -> Option<String> {
-    value
-        .map(|item| item.trim().to_string())
-        .filter(|item| !item.is_empty())
+    value.map(|item| item.trim().to_string()).filter(|item| !item.is_empty())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_selected_sku_ids, PoolSource};
-    use crate::entity::sales_selection::types::PoolSourceKind;
     use erp_core::ids::SkuId;
+
+    use super::{PoolSource, normalize_selected_sku_ids};
+    use crate::entity::sales_selection::types::PoolSourceKind;
 
     #[test]
     fn selection_dedups_and_sorts() {

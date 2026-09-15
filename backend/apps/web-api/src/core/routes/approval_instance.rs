@@ -3,16 +3,13 @@
 //! 已删除 `POST /approval-instances/{id}/recover`。定义管理路由经 `#[path]` 合并，
 //! P0-B 接线 `routes/mod.rs` 后应改为独立 merge。
 
-use axum::{
-    routing::{get, post},
-    Router,
-};
+use axum::Router;
+use axum::routing::{get, post};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::approval_instance, middleware::with_permission},
-};
+use crate::app_state::AppState;
+use crate::core::handler::approval_instance;
+use crate::core::middleware::with_permission;
 
 /// P0-B 声明 `mod approval_process` 后应删除此 `#[path]`。
 #[path = "approval_process.rs"]

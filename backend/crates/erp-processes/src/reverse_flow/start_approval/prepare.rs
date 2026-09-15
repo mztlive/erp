@@ -1,20 +1,20 @@
+use application_core::AuditActor;
 use bpm::engine::DefinitionGraph;
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::SubjectRef;
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::entity::document_registry::DocumentType;
+use erp_identity::SharedRbacService;
 use erp_workflow::BpmExt;
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::service::approval::execution::idempotency::{
+    ReceiptBranch, StartIdentityParams, normalize_idempotency_key, payload_conflict_error, start_identity,
+    start_scope_candidates,
+};
+use erp_workflow::service::approval::process_kind::process_kind_of;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_identity::SharedRbacService;
-use erp_workflow::service::approval::execution::idempotency::{
-    normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
-    StartIdentityParams,
-};
-use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 在读取具体退款/冲正资源前先重验认证主体仍有效。
 pub async fn ensure_return_start_actor_active(
@@ -54,9 +54,8 @@ pub fn replay_subject_versions(current: u32) -> Result<Vec<u32>> {
     if current > 0 {
         versions.push(current);
     }
-    let next = current
-        .checked_add(1)
-        .ok_or_else(|| Error::ConflictError("审批主题版本已达上限".to_string()))?;
+    let next =
+        current.checked_add(1).ok_or_else(|| Error::ConflictError("审批主题版本已达上限".to_string()))?;
     if !versions.contains(&next) {
         versions.push(next);
     }
@@ -103,11 +102,7 @@ pub async fn load_bound_definition_graph_with_executor(
 /// # 返回
 /// 返回引擎可消费的定义图。
 fn engine_graph(graph: erp_workflow::repository::bpm::DefinitionGraph) -> DefinitionGraph {
-    DefinitionGraph {
-        definition: graph.definition,
-        nodes: graph.nodes,
-        transitions: graph.transitions,
-    }
+    DefinitionGraph { definition: graph.definition, nodes: graph.nodes, transitions: graph.transitions }
 }
 
 /// 按精确单据类型依次读取当前 V3 与已知历史 StartApproval 作用域。
@@ -225,9 +220,7 @@ pub async fn replay_return_start_with_executor(
         || instance.process_definition_id != input.binding.approval_process_definition_id
         || instance.definition_version != input.binding.approval_definition_version
     {
-        return Err(Error::ConflictError(
-            "退款/冲正启动收据与冻结运行事实不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("退款/冲正启动收据与冻结运行事实不一致".to_string()));
     }
     Ok(Some(instance.base.id))
 }

@@ -1,16 +1,15 @@
-use crate::entity::integration_ops::{
-    ReconciliationDifference, ReconciliationDifferenceResolution, ResolutionAction, ResultingStatus,
-};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
-
-use super::common::{non_blank, normalize_sort, PageParams};
+use super::common::{PageParams, non_blank, normalize_sort};
 use super::error_task::ActionBlockerView;
 use super::task_decision::{
     ControlledEvidenceRef, ReconciliationReasonRegistryView, ResolutionEvidencePolicyView,
+};
+use crate::Result;
+use crate::entity::integration_ops::{
+    ReconciliationDifference, ReconciliationDifferenceResolution, ResolutionAction, ResultingStatus,
 };
 
 /// `reconciliation_difference` 列表允许的排序字段白名单（仅差异发现时间）。
@@ -235,8 +234,9 @@ impl From<ReconciliationDifference> for DifferenceView {
 
 #[cfg(test)]
 mod tests {
-    use super::DifferenceListParams;
     use validator::Validate;
+
+    use super::DifferenceListParams;
 
     #[test]
     fn difference_list_params_normalize_and_reject_unbounded_page_size() {

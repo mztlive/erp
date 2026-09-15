@@ -1,11 +1,11 @@
 //! 命令来源只返回存在名称的条目；富显示从同一已读行建立独立投影。
-use crate::errors::Result;
-use erp_finance::entity::{
-    payable::{PayableAccount, PayableEntry, SupplierPayment},
-    receivable::{CustomerReceipt, ReceivableAccount, ReceivableEntry},
-};
-use persistence_core::Executor;
 use std::collections::HashMap;
+
+use erp_finance::entity::payable::{PayableAccount, PayableEntry, SupplierPayment};
+use erp_finance::entity::receivable::{CustomerReceipt, ReceivableAccount, ReceivableEntry};
+use persistence_core::Executor;
+
+use crate::errors::Result;
 impl super::super::WorkItemFactsReader {
     /// Load original receipt counterparties for refunds and reversals.
     pub(in crate::workbench) async fn customer_receipt_origins(
@@ -14,10 +14,8 @@ impl super::super::WorkItemFactsReader {
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
         let receipts = self.read_customer_receipts(receipt_ids, executor).await?;
-        let party_ids = receipts
-            .iter()
-            .map(|receipt| receipt.counterparty_party_id.to_string())
-            .collect::<Vec<_>>();
+        let party_ids =
+            receipts.iter().map(|receipt| receipt.counterparty_party_id.to_string()).collect::<Vec<_>>();
         let party_names = self.party_legal_names(&party_ids, executor).await?;
         Ok(receipt_counterparties(&receipts, &party_names))
     }
@@ -28,24 +26,17 @@ impl super::super::WorkItemFactsReader {
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
         let entries = self.read_receivable_entries(entry_ids, executor).await?;
-        let account_ids = entries
-            .iter()
-            .map(|entry| entry.receivable_account_id.to_string())
-            .collect::<Vec<_>>();
+        let account_ids =
+            entries.iter().map(|entry| entry.receivable_account_id.to_string()).collect::<Vec<_>>();
         let accounts = self.read_receivable_accounts(&account_ids, executor).await?;
         let party_names = self
             .party_legal_names(
-                &accounts
-                    .iter()
-                    .map(|account| account.counterparty_party_id.to_string())
-                    .collect::<Vec<_>>(),
+                &accounts.iter().map(|account| account.counterparty_party_id.to_string()).collect::<Vec<_>>(),
                 executor,
             )
             .await?;
-        let accounts = accounts
-            .into_iter()
-            .map(|account| (account.base.id.clone(), account))
-            .collect::<HashMap<_, _>>();
+        let accounts =
+            accounts.into_iter().map(|account| (account.base.id.clone(), account)).collect::<HashMap<_, _>>();
         Ok(receivable_entry_counterparties(&entries, &accounts, &party_names))
     }
     /// Load original payment counterparties for refunds and reversals.
@@ -57,10 +48,7 @@ impl super::super::WorkItemFactsReader {
         let payments = self.read_supplier_payments(payment_ids, executor).await?;
         let supplier_names = self
             .supplier_display_names(
-                &payments
-                    .iter()
-                    .map(|payment| payment.supplier_id.to_string())
-                    .collect::<Vec<_>>(),
+                &payments.iter().map(|payment| payment.supplier_id.to_string()).collect::<Vec<_>>(),
                 executor,
             )
             .await?;
@@ -73,16 +61,12 @@ impl super::super::WorkItemFactsReader {
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
         let entries = self.read_payable_entries(entry_ids, executor).await?;
-        let account_ids = entries
-            .iter()
-            .map(|entry| entry.payable_account_id.to_string())
-            .collect::<Vec<_>>();
+        let account_ids =
+            entries.iter().map(|entry| entry.payable_account_id.to_string()).collect::<Vec<_>>();
         let accounts = self.read_payable_accounts(&account_ids, executor).await?;
         let supplier_names = self.payable_supplier_names(&accounts, executor).await?;
-        let accounts = accounts
-            .into_iter()
-            .map(|account| (account.base.id.clone(), account))
-            .collect::<HashMap<_, _>>();
+        let accounts =
+            accounts.into_iter().map(|account| (account.base.id.clone(), account)).collect::<HashMap<_, _>>();
         Ok(payable_entry_counterparties(&entries, &accounts, &supplier_names))
     }
 }

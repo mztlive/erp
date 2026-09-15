@@ -1,10 +1,9 @@
 //! SalesReturnCase 无审批登记、业务创建与审计的原子流程。
-use super::ReturnsProcess;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_identity::SharedRbacService;
-use erp_read_models::returns_center::{dto::SalesReturnCaseView, ReturnsReadService};
+use erp_read_models::returns_center::ReturnsReadService;
+use erp_read_models::returns_center::dto::SalesReturnCaseView;
 use erp_returns::dto::CreateSalesReturnCaseRequest;
 use erp_returns::entity::returns::{SalesReturnCase, SalesReturnLine};
 use erp_returns::service::sales_return::{
@@ -13,14 +12,17 @@ use erp_returns::service::sales_return::{
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::{
-    binding_decision, BindPublishedDefinitionCommand, BindingDecision,
+    BindPublishedDefinitionCommand, BindingDecision, binding_decision,
 };
-use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
-use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
+use erp_workflow::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
+use erp_workflow::service::approval::policy::{DocumentApprovalPolicy, policy_of};
 use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
+
+use super::ReturnsProcess;
+use crate::{Error, Result};
 
 impl ReturnsProcess {
     /// 建立销售退货/拒收处理单与明细行（跨集合事务写入）。
@@ -81,10 +83,10 @@ fn sales_return_case_create_binding_decision() -> Result<BindingDecision> {
                 return Err(Error::Internal("销售退货政策类型不匹配".to_string()));
             }
             Ok(binding_decision(policy.requirement()))
-        }
-        DocumentApprovalPolicy::ProcessRequired(_) => Err(Error::Internal(
-            "销售退货必须是 NO_APPROVAL，不得绑定流程".to_string(),
-        )),
+        },
+        DocumentApprovalPolicy::ProcessRequired(_) => {
+            Err(Error::Internal("销售退货必须是 NO_APPROVAL，不得绑定流程".to_string()))
+        },
     }
 }
 
@@ -124,9 +126,7 @@ fn ensure_sales_return_case_has_no_adapter() -> Result<()> {
 fn sales_return_case_binding_organization_id(case: &SalesReturnCase) -> Result<String> {
     let org = case.sales_order_id.to_string();
     if org.trim().is_empty() {
-        return Err(Error::ValidationError(
-            "销售退货缺少原销售单，无法构造绑定上下文".to_string(),
-        ));
+        return Err(Error::ValidationError("销售退货缺少原销售单，无法构造绑定上下文".to_string()));
     }
     Ok(org)
 }
@@ -174,17 +174,13 @@ fn apply_sales_return_case_create_binding(
     binding: Option<ApprovalDefinitionBinding>,
 ) -> Result<Option<ApprovalDefinitionBinding>> {
     if binding.is_some() {
-        return Err(Error::Internal(
-            "销售退货为 NO_APPROVAL，不得写入审批绑定".to_string(),
-        ));
+        return Err(Error::Internal("销售退货为 NO_APPROVAL，不得写入审批绑定".to_string()));
     }
     if document.approval_binding.is_some() {
         return Err(Error::Internal("销售退货注册行不得预置审批绑定".to_string()));
     }
     if document.document_type != DocumentType::SalesReturnCase {
-        return Err(Error::Internal(
-            "销售退货创建只能注册 SalesReturnCase 单据".to_string(),
-        ));
+        return Err(Error::Internal("销售退货创建只能注册 SalesReturnCase 单据".to_string()));
     }
     Ok(None)
 }
@@ -216,9 +212,7 @@ async fn persist_unbound_sales_return_document(
     )
     .await?;
     apply_sales_return_case_create_binding(&mut document, binding)?;
-    persist_registered_document(db, &document, executor)
-        .await
-        .map_err(crate::Error::from)
+    persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
 }
 
 /// 为已构造销售退货登记 `BusinessDocument` 并调用统一绑定端口。
@@ -234,12 +228,9 @@ async fn register_created_sales_return_document(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let bind_command = sales_return_case_bind_command(case, actor.id())?;
-    let document = new_registered_document(
-        &case.base.id,
-        DocumentType::SalesReturnCase,
-        case.return_no.clone(),
-    )
-    .map_err(crate::Error::from)?;
+    let document =
+        new_registered_document(&case.base.id, DocumentType::SalesReturnCase, case.return_no.clone())
+            .map_err(crate::Error::from)?;
     persist_unbound_sales_return_document(db, rbac, object_read, document, &bind_command, actor, executor)
         .await
 }
@@ -256,11 +247,8 @@ async fn persist_created_sales_return_case(
     line: SalesReturnLine,
     actor: AuditActor,
 ) -> Result<()> {
-    let audit = actor.clone().resource_log(
-        "sales_return_case.create",
-        "sales_return_case",
-        case.base.id.clone(),
-    )?;
+    let audit =
+        actor.clone().resource_log("sales_return_case.create", "sales_return_case", case.base.id.clone())?;
     let db = db.clone();
     let rbac = rbac.clone();
     let object_read = object_read.clone();
@@ -333,20 +321,20 @@ impl CreationSteps for MongoCreation<'_> {
 
 #[cfg(test)]
 mod sales_return_case_no_approval_tests {
-    use super::{
-        apply_sales_return_case_create_binding, ensure_sales_return_case_has_no_adapter,
-        ensure_sales_return_case_skips_approval_binding, policy_of, sales_return_case_bind_command,
-        sales_return_case_create_binding_decision, BindingDecision, DocumentApprovalPolicy, DocumentType,
-        SalesReturnCase,
-    };
-    use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
+    use bpm::ids::ApprovalProcessDefinitionId;
     use erp_core::common::time::Instant;
     use erp_core::ids::{SalesOrderId, SalesReturnCaseId};
-    use erp_returns::entity::returns::SalesReturnCaseData;
-    use erp_returns::entity::returns::{CaseType, ReturnRoute};
+    use erp_returns::entity::returns::{CaseType, ReturnRoute, SalesReturnCaseData};
     use erp_workflow::service::approval::binding::binding_from_published;
     use erp_workflow::service::document_registry::new_registered_document;
+
+    use super::{
+        BindingDecision, DocumentApprovalPolicy, DocumentType, SalesReturnCase,
+        apply_sales_return_case_create_binding, ensure_sales_return_case_has_no_adapter,
+        ensure_sales_return_case_skips_approval_binding, policy_of, sales_return_case_bind_command,
+        sales_return_case_create_binding_decision,
+    };
 
     fn draft_case() -> SalesReturnCase {
         SalesReturnCase::new(
@@ -394,33 +382,24 @@ mod sales_return_case_no_approval_tests {
         assert_eq!(command.business_object_id, case.base.id);
         assert_eq!(command.context.organization_id, "so-1");
 
-        let mut document = new_registered_document(
-            &case.base.id,
-            DocumentType::SalesReturnCase,
-            case.return_no.clone(),
-        )
-        .expect("可注册");
+        let mut document =
+            new_registered_document(&case.base.id, DocumentType::SalesReturnCase, case.return_no.clone())
+                .expect("可注册");
         assert!(document.approval_binding.is_none());
         let empty = apply_sales_return_case_create_binding(&mut document, None).expect("空绑定");
         assert!(empty.is_none());
         assert!(document.approval_binding.is_none());
 
-        let forged = binding_from_published(
-            ApprovalProcessDefinitionId::new("def-1"),
-            1,
-            Instant::from_unix_secs(10),
-        )
-        .expect("测试绑定");
+        let forged =
+            binding_from_published(ApprovalProcessDefinitionId::new("def-1"), 1, Instant::from_unix_secs(10))
+                .expect("测试绑定");
         assert!(apply_sales_return_case_create_binding(&mut document, Some(forged)).is_err());
     }
 
     /// 创建路径调用统一绑定端口，不查询发布定义、不启动实例、不建任务。
     #[test]
     fn create_does_not_query_definition_or_start_instance() {
-        let production = include_str!("sales_return.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("sales_return.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("persist_created_sales_return_case"));
         assert!(production.contains("register_created_sales_return_document"));
         assert!(production.contains("persist_unbound_sales_return_document"));
@@ -448,9 +427,10 @@ mod sales_return_case_no_approval_tests {
 
 #[cfg(test)]
 mod creation_sequence_tests {
-    use super::{persist_creation, CreationSteps};
-    use crate::{Error, Result};
     use persistence_core::Executor;
+
+    use super::{CreationSteps, persist_creation};
+    use crate::{Error, Result};
 
     struct TestExecutor {
         _identity: u8,
@@ -469,8 +449,7 @@ mod creation_sequence_tests {
     impl RecordingCreation {
         fn record(&mut self, step: &'static str, executor: &mut dyn Executor) -> Result<()> {
             self.events.push(step);
-            self.executor_ids
-                .push(executor as *mut dyn Executor as *mut () as usize);
+            self.executor_ids.push(executor as *mut dyn Executor as *mut () as usize);
             if self.fail == Some(step) {
                 return Err(Error::ConflictError(step.to_string()));
             }
@@ -503,10 +482,7 @@ mod creation_sequence_tests {
         let all = ["document", "return_head_and_first_line", "audit"];
         for (at, fail) in all.iter().enumerate() {
             let mut executor = TestExecutor { _identity: 1 };
-            let mut steps = RecordingCreation {
-                fail: Some(*fail),
-                ..Default::default()
-            };
+            let mut steps = RecordingCreation { fail: Some(*fail), ..Default::default() };
             let error = persist_creation(&mut steps, &mut executor).await.unwrap_err();
             assert!(matches!(error, Error::ConflictError(message) if message == *fail));
             assert_eq!(steps.events, all[..=at]);

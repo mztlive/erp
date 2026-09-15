@@ -3,11 +3,12 @@
 //! Handler 只做协议适配、成本字段授权与 Service 调用，不定义重复 DTO。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
 use erp_identity::Permission;
+use erp_processes::supply_governance::SupplierOfferingProcess;
+use erp_read_models::supplier_center::SupplierOfferingReadService;
+use erp_read_models::supplier_center::offering::dto::{SupplierOfferingListParams, SupplierOfferingView};
 use erp_supply::dto::supplier_offering::{
     CompleteSupplierSupplyExceptionTaskRequest, CompleteSupplierSupplyExceptionTaskResult,
     CreateSupplierOfferingRequest, CreateSupplierOfferingResult, PageView, ReviseSupplierOfferingRequest,
@@ -15,20 +16,10 @@ use erp_supply::dto::supplier_offering::{
     UpdateSupplierOfferingAvailabilityResult,
 };
 
-use erp_processes::supply_governance::SupplierOfferingProcess;
-use erp_read_models::supplier_center::{
-    offering::dto::{SupplierOfferingListParams, SupplierOfferingView},
-    SupplierOfferingReadService,
-};
-
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::{Error, Result},
-        middleware::RbacSubject,
-        response::ApiResponse,
-    },
-};
+use crate::app_state::AppState;
+use crate::core::errors::{Error, Result};
+use crate::core::middleware::RbacSubject;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "供应商供给",
@@ -81,9 +72,7 @@ pub async fn create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSupplierOfferingRequest>,
 ) -> Result<CreateSupplierOfferingResult> {
-    let result = SupplierOfferingProcess::new(state.db())
-        .create(req, &actor)
-        .await?;
+    let result = SupplierOfferingProcess::new(state.db()).create(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 
@@ -110,9 +99,7 @@ pub async fn revise(
     Path(id): Path<String>,
     Json(req): Json<ReviseSupplierOfferingRequest>,
 ) -> Result<ReviseSupplierOfferingResult> {
-    let result = SupplierOfferingProcess::new(state.db())
-        .revise(&id, req, &actor)
-        .await?;
+    let result = SupplierOfferingProcess::new(state.db()).revise(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 
@@ -139,9 +126,7 @@ pub async fn update_availability(
     Path(id): Path<String>,
     Json(req): Json<UpdateSupplierOfferingAvailabilityRequest>,
 ) -> Result<UpdateSupplierOfferingAvailabilityResult> {
-    let result = SupplierOfferingProcess::new(state.db())
-        .update_availability(&id, req, &actor)
-        .await?;
+    let result = SupplierOfferingProcess::new(state.db()).update_availability(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 
@@ -161,17 +146,12 @@ pub async fn complete_supply_exception_task(
     Path(id): Path<String>,
     Json(req): Json<CompleteSupplierSupplyExceptionTaskRequest>,
 ) -> Result<CompleteSupplierSupplyExceptionTaskResult> {
-    let result = SupplierOfferingProcess::new(state.db())
-        .complete_supply_exception_task(&id, req, &actor)
-        .await?;
+    let result =
+        SupplierOfferingProcess::new(state.db()).complete_supply_exception_task(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 
 async fn can_view_costs(state: &AppState, subject: &RbacSubject) -> std::result::Result<bool, Error> {
     let permission = Permission::parse("supplier_offering_cost:detail")?;
-    state
-        .rbac()
-        .enforce(&subject.0, &permission)
-        .await
-        .map_err(Into::into)
+    state.rbac().enforce(&subject.0, &permission).await.map_err(Into::into)
 }

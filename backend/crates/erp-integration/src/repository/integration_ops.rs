@@ -16,6 +16,17 @@
 //! 筛选/行类型定义在本文件，经 `IntegrationOpsExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::Instant;
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
+use serde::{Deserialize, Serialize};
+
+use super::IntegrationOpsExt;
 use crate::entity::integration_ops::{
     ErrorClass, ErrorTaskStatus, InboxMessage, InboxMessageId, InboxMessageStatus, IntegrationErrorTask,
     MessageType, ReconciliationDifference, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
@@ -25,18 +36,6 @@ use crate::repository::owned::{
     InboxMessageRepository, IntegrationErrorTaskRepository, ReconciliationDifferenceRepository,
     ReconciliationDifferenceResolutionRepository,
 };
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::common::time::Instant;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use mongodb::Database;
-use serde::{Deserialize, Serialize};
-
-use super::IntegrationOpsExt;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
 
 mod difference_resolution_batch;
 
@@ -124,12 +123,7 @@ impl QueryFilter for InboxMessageFilter {
             filter.insert("status", status.as_str());
         }
         insert_literal_regex_filter(&mut filter, "source_event_id", self.source_event_id.as_deref());
-        insert_time_range(
-            &mut filter,
-            "received_at",
-            self.received_at_from,
-            self.received_at_to,
-        );
+        insert_time_range(&mut filter, "received_at", self.received_at_from, self.received_at_to);
         filter
     }
 }
@@ -231,13 +225,7 @@ impl QueryFilter for IntegrationErrorTaskFilter {
         keyword_filter(
             &mut filter,
             self.q.as_deref(),
-            &[
-                "id",
-                "business_object_id",
-                "message_id",
-                "last_attempt_summary",
-                "error_class",
-            ],
+            &["id", "business_object_id", "message_id", "last_attempt_summary", "error_class"],
         );
         error_label_filter(&mut filter, self.q.as_deref());
         filter
@@ -316,12 +304,7 @@ impl QueryFilter for ReconciliationDifferenceFilter {
         if let Some(difference_type) = &self.difference_type {
             filter.insert("difference_type", difference_type);
         }
-        insert_time_range(
-            &mut filter,
-            "created_at",
-            self.created_at_from,
-            self.created_at_to,
-        );
+        insert_time_range(&mut filter, "created_at", self.created_at_from, self.created_at_to);
         keyword_filter(
             &mut filter,
             self.q.as_deref(),
@@ -455,11 +438,7 @@ impl<'a> InboxMessageRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<InboxMessageRow>> {
         let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                INBOX_SORT_FIELDS,
-            ))
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, INBOX_SORT_FIELDS))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(inbox_message_projection())
@@ -468,10 +447,7 @@ impl<'a> InboxMessageRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -520,11 +496,7 @@ impl<'a> IntegrationErrorTaskRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<IntegrationErrorTaskRow>> {
         let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                ERROR_TASK_SORT_FIELDS,
-            ))
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, ERROR_TASK_SORT_FIELDS))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(integration_error_task_projection())
@@ -533,10 +505,7 @@ impl<'a> IntegrationErrorTaskRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -585,11 +554,7 @@ impl<'a> ReconciliationDifferenceRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<ReconciliationDifferenceRow>> {
         let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                DIFFERENCE_SORT_FIELDS,
-            ))
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, DIFFERENCE_SORT_FIELDS))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(reconciliation_difference_projection())
@@ -598,10 +563,7 @@ impl<'a> ReconciliationDifferenceRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -655,10 +617,7 @@ impl<'a> ReconciliationDifferenceResolutionRepository<'a> {
         difference_id: &ReconciliationDifferenceId,
         executor: &mut dyn Executor,
     ) -> Result<Option<ReconciliationDifferenceResolution>> {
-        let options = FindOptions::builder()
-            .sort(doc! { "resolution_no": -1 })
-            .limit(1)
-            .build();
+        let options = FindOptions::builder().sort(doc! { "resolution_no": -1 }).limit(1).build();
         let filter = doc! {
             "reconciliation_difference_id": difference_id.to_string(),
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
@@ -713,16 +672,12 @@ impl<'a> IntegrationOpsRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<IntegrationErrorTask>(INTEGRATION_ERROR_TASKS),
+            &self.db.collection::<IntegrationErrorTask>(INTEGRATION_ERROR_TASKS),
             task,
             executor,
         )
         .await?;
-        InboxMessageRepository::new(self.db, INBOX_MESSAGES)
-            .update(message, executor)
-            .await?;
+        InboxMessageRepository::new(self.db, INBOX_MESSAGES).update(message, executor).await?;
         Ok(())
     }
 }
@@ -738,9 +693,7 @@ impl<'a> IntegrationOpsRepository<'a> {
 /// 返回排序条件文档。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
-    let field = sort_by
-        .filter(|field| allowed.contains(field))
-        .unwrap_or("created_at");
+    let field = sort_by.filter(|field| allowed.contains(field)).unwrap_or("created_at");
     doc! { field: direction, "id": direction }
 }
 
@@ -845,15 +798,15 @@ fn resolution_history_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
     use super::{
-        sort_doc, InboxMessageFilter, IntegrationErrorTaskFilter, ReconciliationDifferenceFilter,
-        DIFFERENCE_SORT_FIELDS, ERROR_TASK_SORT_FIELDS, INBOX_SORT_FIELDS,
+        DIFFERENCE_SORT_FIELDS, ERROR_TASK_SORT_FIELDS, INBOX_SORT_FIELDS, InboxMessageFilter,
+        IntegrationErrorTaskFilter, ReconciliationDifferenceFilter, sort_doc,
     };
     use crate::entity::integration_ops::{
         ErrorClass, ErrorTaskStatus, InboxMessageStatus, MessageType, SourceSystemId,
     };
-    use persistence_core::QueryFilter;
 
     #[test]
     fn inbox_filter_applies_optional_fields_and_time_range() {
@@ -875,14 +828,7 @@ mod tests {
         assert_eq!(document.get_str("source_system_id").unwrap(), "sys-mall-1");
         assert_eq!(document.get_str("message_type").unwrap(), "PAYMENT_SUCCEEDED");
         assert_eq!(document.get_str("status").unwrap(), "received");
-        assert_eq!(
-            document
-                .get_document("source_event_id")
-                .unwrap()
-                .get_str("$regex")
-                .unwrap(),
-            r"SO\-1\."
-        );
+        assert_eq!(document.get_document("source_event_id").unwrap().get_str("$regex").unwrap(), r"SO\-1\.");
         let range = document.get_document("received_at").unwrap();
         assert_eq!(range.get_i64("$gte").unwrap(), 1_700_000_000);
         assert_eq!(range.get_i64("$lte").unwrap(), 1_700_000_100);
@@ -908,14 +854,7 @@ mod tests {
         assert_eq!(document.get_str("error_class").unwrap(), "transient_failure");
         assert_eq!(document.get_str("status").unwrap(), "auto_retrying");
         assert_eq!(document.get_str("owner_role").unwrap(), "ops");
-        assert_eq!(
-            document
-                .get_document("owner_user_id")
-                .unwrap()
-                .get_str("$regex")
-                .unwrap(),
-            r"u\-1"
-        );
+        assert_eq!(document.get_document("owner_user_id").unwrap().get_str("$regex").unwrap(), r"u\-1");
     }
 
     #[test]
@@ -944,10 +883,7 @@ mod tests {
 
     #[test]
     fn sort_doc_defaults_to_created_at_and_rejects_non_whitelisted_fields() {
-        assert_eq!(
-            sort_doc(None, false, INBOX_SORT_FIELDS),
-            doc! { "created_at": -1, "id": -1 }
-        );
+        assert_eq!(sort_doc(None, false, INBOX_SORT_FIELDS), doc! { "created_at": -1, "id": -1 });
         assert_eq!(
             sort_doc(Some("received_at"), true, INBOX_SORT_FIELDS),
             doc! { "received_at": 1, "id": 1 }
@@ -1009,17 +945,11 @@ mod keyword_tests {
         assert!(document.contains_key("deleted_at"));
         assert!(document.contains_key("owner_user_id"));
         let clauses = document.get_array("$or").unwrap();
-        assert!(clauses
-            .iter()
-            .any(|clause| clause.as_document().unwrap().contains_key("last_attempt_summary")));
+        assert!(
+            clauses.iter().any(|clause| clause.as_document().unwrap().contains_key("last_attempt_summary"))
+        );
         assert_eq!(
-            clauses[0]
-                .as_document()
-                .unwrap()
-                .get_document("id")
-                .unwrap()
-                .get_str("$regex")
-                .unwrap(),
+            clauses[0].as_document().unwrap().get_document("id").unwrap().get_str("$regex").unwrap(),
             r"event\.\[x\]"
         );
         assert_eq!(

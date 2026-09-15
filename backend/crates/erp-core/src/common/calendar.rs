@@ -62,9 +62,7 @@ mod tests {
             (CalendarPeriod::Week, (2026, 12, 31), (2027, 1, 3)),
         ] {
             assert_eq!(
-                period
-                    .end(BusinessDate::from_ymd(date.0, date.1, date.2).unwrap())
-                    .unwrap(),
+                period.end(BusinessDate::from_ymd(date.0, date.1, date.2).unwrap()).unwrap(),
                 BusinessDate::from_ymd(expected.0, expected.1, expected.2).unwrap()
             );
         }

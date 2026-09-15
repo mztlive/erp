@@ -61,10 +61,7 @@ fn same_key_different_payload_is_rejected_and_original_result_replays() {
         result: "committed",
     })
     .unwrap();
-    assert_eq!(
-        decode_receipt::<String>(&receipt, "actor", audit(Some(&message))).unwrap(),
-        "committed"
-    );
+    assert_eq!(decode_receipt::<String>(&receipt, "actor", audit(Some(&message))).unwrap(), "committed");
     assert!(
         matches!(decode_receipt::<String>(&changed,"actor",audit(Some(&message))), Err(Error::ConflictError(message)) if message == "幂等键已用于不同命令")
     );

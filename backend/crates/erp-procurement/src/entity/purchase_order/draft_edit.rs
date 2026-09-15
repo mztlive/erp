@@ -9,9 +9,8 @@
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use rust_decimal::Decimal;
-
 use erp_core::money::Quantity;
+use rust_decimal::Decimal;
 
 use super::coverage::SalesProcurementCoverageLine;
 use super::purchase_submission::PurchaseOrderSubmissionLine;
@@ -131,10 +130,8 @@ pub fn validate_draft_line_edits(
         .iter()
         .map(|line| (line.revision_line.sales_order_line_id.to_string(), line))
         .collect::<HashMap<_, _>>();
-    let requested_items = requested
-        .iter()
-        .filter(|line| line.line_type == PurchaseLineType::ItemService)
-        .collect::<Vec<_>>();
+    let requested_items =
+        requested.iter().filter(|line| line.line_type == PurchaseLineType::ItemService).collect::<Vec<_>>();
     if requested_items.len() != existing.len() {
         return Err(DraftLineEditViolation::SourceLineCountChanged);
     }
@@ -145,9 +142,7 @@ pub fn validate_draft_line_edits(
         if !seen.insert(stable_id.clone()) {
             return Err(DraftLineEditViolation::DuplicateSalesLine);
         }
-        let old_line = existing
-            .get(&stable_id)
-            .ok_or(DraftLineEditViolation::RewrittenSalesLine)?;
+        let old_line = existing.get(&stable_id).ok_or(DraftLineEditViolation::RewrittenSalesLine)?;
         old_line.ensure_source_references_unchanged(requested_line)?;
 
         let quantity = parse_required_quantity(
@@ -161,12 +156,9 @@ pub fn validate_draft_line_edits(
         if quantity != allocated {
             return Err(DraftLineEditViolation::QuantityAllocationMismatch);
         }
-        let old_allocated = old_line
-            .allocated_quantity
-            .ok_or(DraftLineEditViolation::MissingOriginalAllocatedQuantity)?;
-        let current = coverage
-            .get(&stable_id)
-            .ok_or(DraftLineEditViolation::SourceLineRemoved)?;
+        let old_allocated =
+            old_line.allocated_quantity.ok_or(DraftLineEditViolation::MissingOriginalAllocatedQuantity)?;
+        let current = coverage.get(&stable_id).ok_or(DraftLineEditViolation::SourceLineRemoved)?;
         let allowed = current.summary.remaining_quantity.to_decimal() + old_allocated.to_decimal();
         if quantity.to_decimal() > allowed {
             return Err(DraftLineEditViolation::ExceedsAvailableQuantity);
@@ -200,10 +192,7 @@ fn normalized_line_id(value: Option<&str>) -> Result<String, DraftLineEditViolat
 /// # 错误
 /// 无。
 pub(super) fn normalized_optional_id(value: Option<&str>) -> Option<String> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
+    value.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string)
 }
 
 /// 解析必填正数量。
@@ -225,28 +214,14 @@ fn parse_required_quantity(
     let quantity = Quantity::from_str(value.trim())
         .map_err(|error| DraftLineEditViolation::InvalidQuantity(format!("数量非法: {error}")))?;
     if quantity.to_decimal() <= Decimal::ZERO {
-        return Err(DraftLineEditViolation::InvalidQuantity(
-            "数量必须大于0".to_string(),
-        ));
+        return Err(DraftLineEditViolation::InvalidQuantity("数量必须大于0".to_string()));
     }
     Ok(quantity)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::facts::{
-        FactIdentity, ProductKind, SalesGoodsLineFact as SalesOrderGoodsServiceLineRevision,
-        SalesLineType as LineType, SalesRevisionLineFact as SalesOrderRevisionLine,
-    };
-    use crate::entity::purchase_order::ProcurementCoverageSummary;
-
     use std::str::FromStr;
-
-    use crate::entity::purchase_order::coverage::SalesProcurementCoverageLine;
-    use crate::entity::purchase_order::purchase_submission::{
-        PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData,
-    };
-    use crate::entity::purchase_order::PurchaseLineType;
 
     use erp_core::common::time::Instant;
     use erp_core::ids::{
@@ -255,7 +230,16 @@ mod tests {
     };
     use erp_core::money::{Quantity, Rate, UnitPrice};
 
-    use super::{validate_draft_line_edits, DraftLineEdit, DraftLineEditViolation};
+    use super::{DraftLineEdit, DraftLineEditViolation, validate_draft_line_edits};
+    use crate::entity::facts::{
+        FactIdentity, ProductKind, SalesGoodsLineFact as SalesOrderGoodsServiceLineRevision,
+        SalesLineType as LineType, SalesRevisionLineFact as SalesOrderRevisionLine,
+    };
+    use crate::entity::purchase_order::coverage::SalesProcurementCoverageLine;
+    use crate::entity::purchase_order::purchase_submission::{
+        PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData,
+    };
+    use crate::entity::purchase_order::{ProcurementCoverageSummary, PurchaseLineType};
 
     /// 构造草稿商品行。
     fn submission_line(
@@ -327,9 +311,7 @@ mod tests {
         SalesProcurementCoverageLine {
             quantity_scale: Some(6),
             revision_line: SalesOrderRevisionLine {
-                base: FactIdentity {
-                    id: format!("sorl-{stable_line_id}"),
-                },
+                base: FactIdentity { id: format!("sorl-{stable_line_id}") },
                 sales_order_line_id: SalesOrderLineId::new(stable_line_id),
                 line_no: 1,
                 line_type: LineType::GoodsService,
@@ -383,14 +365,8 @@ mod tests {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
         let coverage = vec![coverage_line("sol-1", "3")];
         for quantity in ["0.01", "3", "5"] {
-            let requested = vec![edit(
-                "sol-1",
-                Some(quantity),
-                Some(quantity),
-                "sku-1",
-                "sorl-1",
-                Some("sosl-1"),
-            )];
+            let requested =
+                vec![edit("sol-1", Some(quantity), Some(quantity), "sku-1", "sorl-1", Some("sosl-1"))];
             assert!(validate_draft_line_edits(&requested, &existing, &coverage).is_ok());
         }
     }
@@ -400,14 +376,7 @@ mod tests {
     fn exceeding_available_quantity_is_rejected() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
         let coverage = vec![coverage_line("sol-1", "3")];
-        let requested = vec![edit(
-            "sol-1",
-            Some("5.01"),
-            Some("5.01"),
-            "sku-1",
-            "sorl-1",
-            Some("sosl-1"),
-        )];
+        let requested = vec![edit("sol-1", Some("5.01"), Some("5.01"), "sku-1", "sorl-1", Some("sosl-1"))];
         assert_eq!(
             validate_draft_line_edits(&requested, &existing, &coverage),
             Err(DraftLineEditViolation::ExceedsAvailableQuantity)
@@ -434,10 +403,7 @@ mod tests {
     fn source_line_count_changes_are_rejected() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
         let coverage = vec![coverage_line("sol-1", "3")];
-        let requested = vec![
-            valid_edit(),
-            edit("sol-2", Some("1"), Some("1"), "sku-2", "sorl-2", None),
-        ];
+        let requested = vec![valid_edit(), edit("sol-2", Some("1"), Some("1"), "sku-2", "sorl-2", None)];
         assert_eq!(
             validate_draft_line_edits(&requested, &existing, &coverage),
             Err(DraftLineEditViolation::SourceLineCountChanged)
@@ -449,14 +415,7 @@ mod tests {
     fn rewriting_sales_source_line_is_rejected() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
         let coverage = vec![coverage_line("sol-1", "3")];
-        let requested = vec![edit(
-            "sol-9",
-            Some("5"),
-            Some("5"),
-            "sku-1",
-            "sorl-1",
-            Some("sosl-1"),
-        )];
+        let requested = vec![edit("sol-9", Some("5"), Some("5"), "sku-1", "sorl-1", Some("sosl-1"))];
         assert_eq!(
             validate_draft_line_edits(&requested, &existing, &coverage),
             Err(DraftLineEditViolation::RewrittenSalesLine)
@@ -486,14 +445,7 @@ mod tests {
     fn quantity_allocation_mismatch_is_rejected() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
         let coverage = vec![coverage_line("sol-1", "3")];
-        let requested = vec![edit(
-            "sol-1",
-            Some("4"),
-            Some("5"),
-            "sku-1",
-            "sorl-1",
-            Some("sosl-1"),
-        )];
+        let requested = vec![edit("sol-1", Some("4"), Some("5"), "sku-1", "sorl-1", Some("sosl-1"))];
         assert_eq!(
             validate_draft_line_edits(&requested, &existing, &coverage),
             Err(DraftLineEditViolation::QuantityAllocationMismatch)
@@ -535,28 +487,12 @@ mod tests {
     fn invalid_quantities_are_rejected() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
         let coverage = vec![coverage_line("sol-1", "3")];
-        let requested = vec![edit(
-            "sol-1",
-            Some("0"),
-            Some("0"),
-            "sku-1",
-            "sorl-1",
-            Some("sosl-1"),
-        )];
+        let requested = vec![edit("sol-1", Some("0"), Some("0"), "sku-1", "sorl-1", Some("sosl-1"))];
         assert_eq!(
             validate_draft_line_edits(&requested, &existing, &coverage),
-            Err(DraftLineEditViolation::InvalidQuantity(
-                "数量必须大于0".to_string()
-            ))
+            Err(DraftLineEditViolation::InvalidQuantity("数量必须大于0".to_string()))
         );
-        let requested = vec![edit(
-            "sol-1",
-            Some("abc"),
-            Some("abc"),
-            "sku-1",
-            "sorl-1",
-            Some("sosl-1"),
-        )];
+        let requested = vec![edit("sol-1", Some("abc"), Some("abc"), "sku-1", "sorl-1", Some("sosl-1"))];
         let error = validate_draft_line_edits(&requested, &existing, &coverage).unwrap_err();
         assert!(matches!(error, DraftLineEditViolation::InvalidQuantity(_)));
         assert!(error.to_string().contains("数量非法"));

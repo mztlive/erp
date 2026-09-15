@@ -1,9 +1,8 @@
 //! 产品报价表导入的 HTTP DTO；Handler 直接复用本文件类型。
 
+use application_core::{page_or_default, page_size_or_default};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-
-use application_core::{page_or_default, page_size_or_default};
 
 use super::common::PageParams;
 use crate::error::Result;
@@ -259,14 +258,11 @@ pub struct ProductImportDirectUploadCompleteRequest {
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_product_import_headers, PRODUCT_IMPORT_HEADERS};
+    use super::{PRODUCT_IMPORT_HEADERS, ensure_product_import_headers};
 
     #[test]
     fn headers_must_match_internal_sheet() {
-        let headers = PRODUCT_IMPORT_HEADERS
-            .iter()
-            .map(|value| (*value).to_string())
-            .collect::<Vec<_>>();
+        let headers = PRODUCT_IMPORT_HEADERS.iter().map(|value| (*value).to_string()).collect::<Vec<_>>();
         assert!(ensure_product_import_headers(&headers).is_ok());
         let mut wrong = headers.clone();
         wrong[0] = "编码".into();

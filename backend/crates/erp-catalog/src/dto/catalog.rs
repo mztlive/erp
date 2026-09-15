@@ -32,13 +32,12 @@ pub use category::{
 pub(crate) use common::validate_sales_price_range;
 pub use common::{PageView, SortDir};
 pub use import::{
-    ensure_product_import_headers, ProductImportDirectUploadCompleteRequest,
+    MAX_PRODUCT_IMPORT_FILE_BYTES, PRODUCT_IMPORT_DIRECT_PART_BYTES, PRODUCT_IMPORT_DIRECT_PART_URL_TTL_SECS,
+    PRODUCT_IMPORT_HEADERS, PRODUCT_IMPORT_NAME_COLUMN, PRODUCT_IMPORT_SHEET_NAME, PRODUCT_IMPORT_UNIT_CODE,
+    PRODUCT_IMPORT_UNIT_NAME, PRODUCT_IMPORT_XLSX_MIME, ProductImportDirectUploadCompleteRequest,
     ProductImportDirectUploadInitRequest, ProductImportDirectUploadInitView,
     ProductImportDirectUploadPartView, ProductImportDirectUploadedPart, ProductImportItemListParams,
-    ProductImportItemView, ProductImportJobListParams, ProductImportJobView, MAX_PRODUCT_IMPORT_FILE_BYTES,
-    PRODUCT_IMPORT_DIRECT_PART_BYTES, PRODUCT_IMPORT_DIRECT_PART_URL_TTL_SECS, PRODUCT_IMPORT_HEADERS,
-    PRODUCT_IMPORT_NAME_COLUMN, PRODUCT_IMPORT_SHEET_NAME, PRODUCT_IMPORT_UNIT_CODE,
-    PRODUCT_IMPORT_UNIT_NAME, PRODUCT_IMPORT_XLSX_MIME,
+    ProductImportItemView, ProductImportJobListParams, ProductImportJobView, ensure_product_import_headers,
 };
 pub use product::{
     CreateProductRequest, DisableProductRequest, ProductListParams, ProductListingView, ProductMediaInput,
@@ -53,22 +52,20 @@ pub use voucher::{
 
 #[cfg(test)]
 mod tests {
-    use super::common::normalize_sort;
-    use super::SortDir;
-    use crate::entity::catalog::{ListingStatus, ProductKind, ProductListingStatus, SkuCoverageStatus};
     use validator::Validate;
+
+    use super::SortDir;
+    use super::common::normalize_sort;
+    use crate::entity::catalog::{ListingStatus, ProductKind, ProductListingStatus, SkuCoverageStatus};
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
         assert!(normalize_sort(&Some("name".to_string()), &None, &["created_at"]).is_err());
         assert!(normalize_sort(&None, &Some("up".to_string()), &["created_at"]).is_err());
 
-        let (field, direction) = normalize_sort(
-            &Some(" created_at ".to_string()),
-            &Some(" asc ".to_string()),
-            &["created_at"],
-        )
-        .unwrap();
+        let (field, direction) =
+            normalize_sort(&Some(" created_at ".to_string()), &Some(" asc ".to_string()), &["created_at"])
+                .unwrap();
         assert_eq!(field, "created_at");
         assert_eq!(direction, SortDir::Asc);
 
@@ -233,10 +230,7 @@ mod tests {
             "description": "员工福利卡",
         });
         let request: super::CreateVoucherCategoryRequest = serde_json::from_value(value).unwrap();
-        assert!(
-            request.validate().is_ok(),
-            "仅身份字段应通过校验，字典由服务端默认"
-        );
+        assert!(request.validate().is_ok(), "仅身份字段应通过校验，字典由服务端默认");
         assert!(request.category_id.is_none());
         assert!(request.brand_id.is_none());
         assert!(request.sku.is_none());

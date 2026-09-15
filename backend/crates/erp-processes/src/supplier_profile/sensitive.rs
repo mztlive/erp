@@ -1,20 +1,17 @@
 //! 供应商资料敏感字段令牌校验与解密。
 
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::SupplierAccountId;
-use erp_party::PartyExt;
-use erp_supplier::SupplierExt;
+use erp_party::{PartyExt, SensitiveFieldKind};
+use erp_supplier::{RevealSupplierSensitiveRequest, SupplierExt, SupplierSensitiveRevealView};
 use persistence_core::NoTransaction;
 use validator::Validate;
 
+use super::SupplierProfileService;
+use super::validation::ensure_sensitive_party;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_party::SensitiveFieldKind;
-
-use super::{validation::ensure_sensitive_party, SupplierProfileService};
-use erp_supplier::{RevealSupplierSensitiveRequest, SupplierSensitiveRevealView};
 
 impl SupplierProfileService {
     /// 验证短时令牌、归属与权限入口后解密单个敏感字段并记录审计。
@@ -46,7 +43,7 @@ impl SupplierProfileService {
                     .ok_or_else(|| Error::NotFound("联系人不存在".to_string()))?;
                 ensure_sensitive_party(&record.party_id, &supplier.party_id)?;
                 record.mobile_ciphertext
-            }
+            },
             SensitiveFieldKind::Address => {
                 let record = self
                     .db
@@ -56,7 +53,7 @@ impl SupplierProfileService {
                     .ok_or_else(|| Error::NotFound("地址不存在".to_string()))?;
                 ensure_sensitive_party(&record.party_id, &supplier.party_id)?;
                 record.address_ciphertext
-            }
+            },
             SensitiveFieldKind::BankAccountNumber => {
                 let record = self
                     .db
@@ -66,13 +63,11 @@ impl SupplierProfileService {
                     .ok_or_else(|| Error::NotFound("银行账户不存在".to_string()))?;
                 ensure_sensitive_party(&record.party_id, &supplier.party_id)?;
                 record.account_number_ciphertext
-            }
+            },
         };
         let value = self.sensitive_data.decrypt(&ciphertext)?;
         let audit =
-            actor
-                .clone()
-                .resource_log("supplier_sensitive.reveal", "supplier_sensitive", scope.record_id)?;
+            actor.clone().resource_log("supplier_sensitive.reveal", "supplier_sensitive", scope.record_id)?;
         self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
         Ok(SupplierSensitiveRevealView { value })
     }

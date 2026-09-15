@@ -1,24 +1,21 @@
 //! 授权、成本、分配和销售责任事实在同一事务读取，交付前独立事务重验。
+use std::collections::hash_map::DefaultHasher;
+use std::collections::{BTreeSet, HashMap};
+use std::hash::{Hash, Hasher};
+
+use erp_finance::entity::cost::CostAllocation;
+use erp_finance::repository::CostExt;
+use erp_finance::repository::cost::read_scope::{ALLOCATION_LIMIT, ENTRY_LIMIT};
+use erp_finance::repository::cost::{CostEntryFilter, CostEntryRow};
+use erp_finance::service::cost::{cost_entry_filter, cost_entry_row_view};
+use erp_identity::Permission;
+use erp_identity::service::access_control::resolve::AuthorizedDataScope;
+use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::sales_order::scope::SalesReadScope;
+use persistence_core::{Executor, Transactional};
+
 use super::*;
 use crate::sales_center::access::SalesAccess;
-use erp_finance::{
-    entity::cost::CostAllocation,
-    repository::{
-        cost::{
-            read_scope::{ALLOCATION_LIMIT, ENTRY_LIMIT},
-            CostEntryFilter, CostEntryRow,
-        },
-        CostExt,
-    },
-    service::cost::{cost_entry_filter, cost_entry_row_view},
-};
-use erp_identity::{service::access_control::resolve::AuthorizedDataScope, Permission};
-use erp_sales::repository::{sales_order::scope::SalesReadScope, SalesOrderExt};
-use persistence_core::{Executor, Transactional};
-use std::{
-    collections::{hash_map::DefaultHasher, BTreeSet, HashMap},
-    hash::{Hash, Hasher},
-};
 
 pub(super) struct Snapshot {
     pub rows: Vec<ScopedCostEntryView>,
@@ -78,14 +75,10 @@ impl Snapshot {
     ) -> Result<()> {
         let mut grouped = HashMap::<String, Vec<_>>::new();
         for line in allocations {
-            self.allocation_created_at
-                .insert(line.base.id.clone(), line.base.created_at);
+            self.allocation_created_at.insert(line.base.id.clone(), line.base.created_at);
             line.base.id.hash(&mut access.fingerprint);
             line.base.version.hash(&mut access.fingerprint);
-            grouped
-                .entry(line.cost_entry_id.to_string())
-                .or_default()
-                .push(line);
+            grouped.entry(line.cost_entry_id.to_string()).or_default().push(line);
         }
         for row in candidates {
             row.id.hash(&mut access.fingerprint);
@@ -155,31 +148,15 @@ impl CostReadModel {
     ) -> Result<CostAuthorization> {
         let resolver = SalesAccess::new(self.db.clone(), self.rbac.clone());
         let (sales_context, sales) = resolver
-            .resolve(
-                actor,
-                "list",
-                &[Permission::parse(format!("{resource}:{action}"))?],
-                executor,
-            )
+            .resolve(actor, "list", &[Permission::parse(format!("{resource}:{action}"))?], executor)
             .await?;
         let (context, cost) = resolver
-            .resolve_resource(
-                actor,
-                resource,
-                action,
-                &[Permission::parse("sales_order:list")?],
-                executor,
-            )
+            .resolve_resource(actor, resource, action, &[Permission::parse("sales_order:list")?], executor)
             .await?;
         let mut fingerprint = DefaultHasher::new();
         sales_context.scope_version.hash(&mut fingerprint);
         context.scope_version.hash(&mut fingerprint);
-        Ok(CostAuthorization {
-            sales,
-            cost,
-            context,
-            fingerprint,
-        })
+        Ok(CostAuthorization { sales, cost, context, fingerprint })
     }
     /// 隐藏来源条件拒绝，空范围保持空集；完整装载并裁剪后才允许分页。
     async fn load_snapshot(
@@ -192,15 +169,11 @@ impl CostReadModel {
         let mut snapshot = Snapshot::new(&access);
         if !access.empty() {
             if !access.whole() && filter.source_document_id.is_some() {
-                return Err(Error::ValidationError(
-                    "当前只能读取成本分配，不能按整笔来源单据筛选".into(),
-                ));
+                return Err(Error::ValidationError("当前只能读取成本分配，不能按整笔来源单据筛选".into()));
             }
             let candidates = self.cost_candidates(filter, id, executor).await?;
             let allocations = self.candidate_allocations(&candidates, executor).await?;
-            let orders = self
-                .authorized_orders(&allocations, &mut access, executor)
-                .await?;
+            let orders = self.authorized_orders(&allocations, &mut access, executor).await?;
             snapshot.project(candidates, allocations, &orders, &mut access)?;
         }
         snapshot.version = format!("{:x}", access.fingerprint.finish());
@@ -213,15 +186,9 @@ impl CostReadModel {
         id: Option<&str>,
         executor: &mut dyn Executor,
     ) -> Result<Vec<CostEntryRow>> {
-        let candidates = self
-            .db
-            .cost_entries()
-            .scope_candidates(filter, id, executor)
-            .await?;
+        let candidates = self.db.cost_entries().scope_candidates(filter, id, executor).await?;
         if candidates.len() > ENTRY_LIMIT {
-            return Err(Error::ValidationError(
-                "成本查询超过上限，请指定供应商或成本类型".into(),
-            ));
+            return Err(Error::ValidationError("成本查询超过上限，请指定供应商或成本类型".into()));
         }
         Ok(candidates)
     }
@@ -234,16 +201,9 @@ impl CostReadModel {
         let ids = candidates.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
         let mut allocations = Vec::new();
         for chunk in ids.chunks(500) {
-            allocations.extend(
-                self.db
-                    .cost_allocations()
-                    .scope_allocations(chunk, executor)
-                    .await?,
-            );
+            allocations.extend(self.db.cost_allocations().scope_allocations(chunk, executor).await?);
             if allocations.len() > ALLOCATION_LIMIT {
-                return Err(Error::ValidationError(
-                    "成本分配超过查询上限，请收窄业务条件".into(),
-                ));
+                return Err(Error::ValidationError("成本分配超过查询上限，请收窄业务条件".into()));
             }
         }
         Ok(allocations)
@@ -263,11 +223,8 @@ impl CostReadModel {
             .collect::<Vec<_>>();
         let mut orders = BTreeSet::new();
         for chunk in ids.chunks(500) {
-            let mut current = self
-                .db
-                .sales_orders()
-                .scope_orders(chunk, &access.sales, &access.cost, executor)
-                .await?;
+            let mut current =
+                self.db.sales_orders().scope_orders(chunk, &access.sales, &access.cost, executor).await?;
             current.sort_by(|a, b| a.base.id.cmp(&b.base.id));
             for order in current {
                 order.base.id.hash(&mut access.fingerprint);

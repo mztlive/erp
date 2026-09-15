@@ -2,13 +2,11 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::revision::RevisionBase;
-use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::Result;
-
+use erp_core::common::revision::RevisionBase;
 pub use erp_core::ids::{PartyId, PartyRevisionId};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use serde::{Deserialize, Serialize};
 
 /// 法定名称最大长度。
 const LEGAL_NAME_MAX_LEN: usize = 200;
@@ -95,12 +93,8 @@ impl PartyRevision {
     /// # 错误
     /// 当必填字段为空或超长时返回错误。
     pub fn new(id: PartyRevisionId, data: PartyRevisionData) -> Result<Self> {
-        let legal_name = normalize_required_text(
-            data.legal_name,
-            "法定名称不能为空",
-            LEGAL_NAME_MAX_LEN,
-            "法定名称过长",
-        )?;
+        let legal_name =
+            normalize_required_text(data.legal_name, "法定名称不能为空", LEGAL_NAME_MAX_LEN, "法定名称过长")?;
         let short_name = normalize_optional_text(data.short_name, "简称", SHORT_NAME_MAX_LEN)?;
         let change_reason = normalize_required_text(
             data.change_reason,
@@ -122,9 +116,10 @@ impl PartyRevision {
 
 #[cfg(test)]
 mod tests {
-    use super::{PartyRevision, PartyRevisionData};
     use erp_core::common::revision::RevisionBase;
     use erp_core::ids::{PartyId, PartyRevisionId};
+
+    use super::{PartyRevision, PartyRevisionData};
 
     fn revision_data() -> PartyRevisionData {
         PartyRevisionData {
@@ -149,22 +144,13 @@ mod tests {
     /// 失败路径：必填为空、超长。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank_name = PartyRevisionData {
-            legal_name: "   ".to_string(),
-            ..revision_data()
-        };
+        let blank_name = PartyRevisionData { legal_name: "   ".to_string(), ..revision_data() };
         assert!(PartyRevision::new(PartyRevisionId::new("r"), blank_name).is_err());
 
-        let overlong_reason = PartyRevisionData {
-            change_reason: "x".repeat(501),
-            ..revision_data()
-        };
+        let overlong_reason = PartyRevisionData { change_reason: "x".repeat(501), ..revision_data() };
         assert!(PartyRevision::new(PartyRevisionId::new("r"), overlong_reason).is_err());
 
-        let overlong_short = PartyRevisionData {
-            short_name: Some("s".repeat(101)),
-            ..revision_data()
-        };
+        let overlong_short = PartyRevisionData { short_name: Some("s".repeat(101)), ..revision_data() };
         assert!(PartyRevision::new(PartyRevisionId::new("r"), overlong_short).is_err());
     }
 
@@ -175,25 +161,16 @@ mod tests {
         assert_eq!(PartyRevision::next_revision_no(&party_id, &[]).unwrap(), 1);
 
         let revision = PartyRevision::new(PartyRevisionId::new("rev-next"), revision_data()).unwrap();
-        assert_eq!(
-            PartyRevision::next_revision_no(&party_id, std::slice::from_ref(&revision)).unwrap(),
-            2
-        );
+        assert_eq!(PartyRevision::next_revision_no(&party_id, std::slice::from_ref(&revision)).unwrap(), 2);
 
         let foreign = PartyRevision::new(
             PartyRevisionId::new("rev-foreign"),
-            PartyRevisionData {
-                party_id: PartyId::new("party-2"),
-                ..revision_data()
-            },
+            PartyRevisionData { party_id: PartyId::new("party-2"), ..revision_data() },
         )
         .unwrap();
         assert!(PartyRevision::next_revision_no(&party_id, &[foreign]).is_err());
 
-        let overflow = PartyRevision {
-            revision: RevisionBase::new(u32::MAX),
-            ..revision
-        };
+        let overflow = PartyRevision { revision: RevisionBase::new(u32::MAX), ..revision };
         assert!(PartyRevision::next_revision_no(&party_id, &[overflow]).is_err());
     }
 

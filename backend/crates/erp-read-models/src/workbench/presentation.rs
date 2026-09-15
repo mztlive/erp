@@ -23,10 +23,7 @@ pub(crate) const UNRESOLVED_OWNER_DISPLAY_NAME: &str = "处理人待确认";
 /// # 错误
 /// 无。
 pub(crate) fn reason_label(reason_code: Option<&str>, work_item_type: WorkItemType) -> String {
-    let Some(normalized) = reason_code
-        .map(normalize_reason_code)
-        .filter(|code| !code.is_empty())
-    else {
+    let Some(normalized) = reason_code.map(normalize_reason_code).filter(|code| !code.is_empty()) else {
         return default_reason_label(work_item_type).to_string();
     };
     if let Some(label) = mapped_reason_label(&normalized) {
@@ -74,15 +71,15 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
         WorkItemType::FulfillmentOperation => "核对来源、数量和履约信息后，提交本次确认。",
         WorkItemType::CustomerAcceptanceRegistration => {
             "核对客户签收、短少或拒收结果后，登记并提交客户验收。"
-        }
+        },
         WorkItemType::SupplierPaymentExecution => "核对收款账户、应付金额和银行回单后，登记付款并完成核销。",
         WorkItemType::SalesInvoiceExecution => "核对本页待开金额后，登记销项发票并完成分配。",
         WorkItemType::ImportBusinessConfirmation => {
             "进入采购确认页后，逐行确认可供数量；确认通过后销售单才会生效。"
-        }
+        },
         WorkItemType::PurchaseOrderReview => {
             "进入后核对供应商、含税成本、进项税和付款条件，再提交通过或驳回。"
-        }
+        },
         WorkItemType::SalesChangeImpactReview => "进入销售单后，核对本次变更对履约的影响并提交结论。",
         WorkItemType::SalesChangeFinanceReview => "进入销售单后，核对本次变更对金额的影响并提交结论。",
         WorkItemType::CardFundsReview => "该历史复核功能已停用。",
@@ -229,7 +226,7 @@ fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
         WorkItemType::ImportBusinessConfirmation => "不确认则导入范围不能落地",
         WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException => {
             "不处理则异常会继续挡住后续业务"
-        }
+        },
     }
 }
 
@@ -284,10 +281,7 @@ pub(crate) fn format_yuan(amount: &Amount) -> String {
 }
 
 fn group_int(int_part: &str) -> String {
-    let (sign, digits) = int_part
-        .strip_prefix('-')
-        .map(|digits| ("-", digits))
-        .unwrap_or(("", int_part));
+    let (sign, digits) = int_part.strip_prefix('-').map(|digits| ("-", digits)).unwrap_or(("", int_part));
     let mut grouped = String::new();
     for (index, ch) in digits.chars().rev().enumerate() {
         if index > 0 && index % 3 == 0 {
@@ -323,10 +317,7 @@ mod tests {
             "采购已提交，需要核对成本、进项税和付款条件"
         );
         assert_eq!(
-            reason_label(
-                Some("purchase_order_review_resubmitted"),
-                WorkItemType::PurchaseOrderReview
-            ),
+            reason_label(Some("purchase_order_review_resubmitted"), WorkItemType::PurchaseOrderReview),
             "采购已再次提交，需要重新核对成本与付款条件"
         );
         assert_eq!(
@@ -345,10 +336,7 @@ mod tests {
     #[test]
     fn impact_summary_rejects_templates_and_mechanism_words() {
         assert_eq!(
-            usable_impact_summary(
-                Some("导入业务确认：销售提交 1"),
-                WorkItemType::ImportBusinessConfirmation
-            ),
+            usable_impact_summary(Some("导入业务确认：销售提交 1"), WorkItemType::ImportBusinessConfirmation),
             "不确认则导入范围不能落地"
         );
         assert_eq!(
@@ -374,14 +362,8 @@ mod tests {
         names.insert("u1".to_string(), " 周航 ".to_string());
         names.insert("u2".to_string(), "当前处理人".to_string());
         assert_eq!(resolve_owner_display_name("u1", &names), "周航");
-        assert_eq!(
-            resolve_owner_display_name("u2", &names),
-            UNRESOLVED_OWNER_DISPLAY_NAME
-        );
-        assert_eq!(
-            resolve_owner_display_name("missing", &names),
-            UNRESOLVED_OWNER_DISPLAY_NAME
-        );
+        assert_eq!(resolve_owner_display_name("u2", &names), UNRESOLVED_OWNER_DISPLAY_NAME);
+        assert_eq!(resolve_owner_display_name("missing", &names), UNRESOLVED_OWNER_DISPLAY_NAME);
     }
 
     #[test]
@@ -389,10 +371,7 @@ mod tests {
         assert!(next_action_hint(WorkItemType::ImportBusinessConfirmation).contains("逐行确认可供数量"));
         assert!(next_action_hint(WorkItemType::PurchaseOrderReview).contains("核对供应商、含税成本、进项税"));
         assert!(!next_action_hint(WorkItemType::PurchaseOrderReview).contains("打开业务对象"));
-        assert_eq!(
-            next_action_hint(WorkItemType::DocumentApproval),
-            "核对本页事实后，确认通过或驳回。"
-        );
+        assert_eq!(next_action_hint(WorkItemType::DocumentApproval), "核对本页事实后，确认通过或驳回。");
         assert_eq!(
             next_action_hint(WorkItemType::SupplierPaymentExecution),
             "核对收款账户、应付金额和银行回单后，登记付款并完成核销。"
@@ -409,9 +388,6 @@ mod tests {
             next_action_hint(WorkItemType::SalesInvoiceExecution),
             "核对本页待开金额后，登记销项发票并完成分配。"
         );
-        assert_eq!(
-            default_impact_summary(WorkItemType::DocumentApproval),
-            "不审批则单据不能生效"
-        );
+        assert_eq!(default_impact_summary(WorkItemType::DocumentApproval), "不审批则单据不能生效");
     }
 }

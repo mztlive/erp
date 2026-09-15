@@ -1,4 +1,12 @@
 //! 供应商模板逐行导入合同；客户端负责工作簿解码，服务端负责全部业务校验。
+use std::str::FromStr;
+
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::PartyId;
+use erp_core::money::Rate;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
 use super::supplier::{
     SupplierProfileAddressInput, SupplierProfileBankAccountInput, SupplierProfileContactInput,
     SupplierProfileQualificationInput, SupplierProfileRatingInput,
@@ -7,10 +15,6 @@ use crate::entity::supplier::{
     InvoiceType, QualificationType, ReconciliationCycle, SettlementMode, SupplierPaymentTerm, SupplierRating,
 };
 use crate::{Error, Result, SaveSupplierProfileRequest};
-use erp_core::{common::time::BusinessDate, ids::PartyId, money::Rate};
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-use std::str::FromStr;
 
 /// 每次最多 500 行，原文件中空白行不提交。
 #[derive(Debug, Deserialize)]
@@ -62,10 +66,7 @@ impl SupplierImportRow {
             })
             .collect::<String>()
             .to_lowercase();
-        format!(
-            "supplier-import-v1:{}",
-            hex::encode(Sha256::digest(name.as_bytes()))
-        )
+        format!("supplier-import-v1:{}", hex::encode(Sha256::digest(name.as_bytes())))
     }
 
     /// 返回主体互补后的公司名称；两项都缺失时保持空值。
@@ -100,10 +101,9 @@ impl SupplierImportRow {
         if self.company_names().0.is_empty() {
             return invalid("公司签约主体和付款主体均缺失");
         }
-        for (a, b, message) in [
-            (2, 3, "联系人与联系方式必须同时填写"),
-            (4, 5, "银行账号与开户行必须同时填写"),
-        ] {
+        for (a, b, message) in
+            [(2, 3, "联系人与联系方式必须同时填写"), (4, 5, "银行账号与开户行必须同时填写")]
+        {
             if self.cell(a).is_empty() != self.cell(b).is_empty() {
                 return invalid(message);
             }
@@ -170,10 +170,8 @@ impl SupplierImportRow {
         })
     }
     fn address(&self) -> Option<SupplierProfileAddressInput> {
-        optional(self.cell(6)).map(|address| SupplierProfileAddressInput {
-            address,
-            contact_name: optional(self.cell(2)),
-        })
+        optional(self.cell(6))
+            .map(|address| SupplierProfileAddressInput { address, contact_name: optional(self.cell(2)) })
     }
     fn bank_account(&self) -> Option<SupplierProfileBankAccountInput> {
         optional(self.cell(5)).map(|bank_name| SupplierProfileBankAccountInput {
@@ -230,9 +228,7 @@ fn score(raw: &str) -> Result<Option<u8>> {
     if raw.is_empty() {
         return Ok(None);
     }
-    let score = raw
-        .parse::<u8>()
-        .map_err(|_| Error::ValidationError("评分必须是 0–100 的整数".into()))?;
+    let score = raw.parse::<u8>().map_err(|_| Error::ValidationError("评分必须是 0–100 的整数".into()))?;
     if score > 100 {
         return invalid("评分必须是 0–100 的整数");
     }
@@ -245,11 +241,7 @@ pub fn import_tax_rates(raw: &str) -> Result<Vec<Rate>> {
         return Ok(vec![]);
     }
     let mut rates = vec![];
-    for part in raw
-        .split(['、', ',', '，', ';', '；'])
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
+    for part in raw.split(['、', ',', '，', ';', '；']).map(str::trim).filter(|s| !s.is_empty()) {
         let number = part.trim_end_matches(['%', '％']).trim();
         let percent = rust_decimal::Decimal::from_str(number)
             .map_err(|_| Error::ValidationError("发票税点格式无效".into()))?;
@@ -270,41 +262,15 @@ pub fn import_tax_rates(raw: &str) -> Result<Vec<Rate>> {
 /// 受支持模板结算名称；周期条件默认期末后 15 天。
 pub fn import_settlement(raw: &str) -> Result<(SettlementMode, ReconciliationCycle, String)> {
     let (mode, cycle, code) = match raw {
-        "周结" => (
-            SettlementMode::Weekly,
-            ReconciliationCycle::Weekly,
-            "PERIOD_WEEK_15",
-        ),
-        "月结" | "代发月结" => (
-            SettlementMode::Monthly,
-            ReconciliationCycle::Monthly,
-            "PERIOD_MONTH_15",
-        ),
-        "季结" => (
-            SettlementMode::Quarterly,
-            ReconciliationCycle::Quarterly,
-            "PERIOD_QUARTER_15",
-        ),
-        "半年结" => (
-            SettlementMode::HalfYearly,
-            ReconciliationCycle::HalfYearly,
-            "PERIOD_HALF_YEAR_15",
-        ),
-        "年结" => (
-            SettlementMode::Yearly,
-            ReconciliationCycle::Yearly,
-            "PERIOD_YEAR_15",
-        ),
-        "现结" => (
-            SettlementMode::CashSettlement,
-            ReconciliationCycle::None,
-            "CASH_ON_APPROVAL",
-        ),
-        "预付款" => (
-            SettlementMode::Prepayment,
-            ReconciliationCycle::None,
-            "PREPAY_100",
-        ),
+        "周结" => (SettlementMode::Weekly, ReconciliationCycle::Weekly, "PERIOD_WEEK_15"),
+        "月结" | "代发月结" => {
+            (SettlementMode::Monthly, ReconciliationCycle::Monthly, "PERIOD_MONTH_15")
+        },
+        "季结" => (SettlementMode::Quarterly, ReconciliationCycle::Quarterly, "PERIOD_QUARTER_15"),
+        "半年结" => (SettlementMode::HalfYearly, ReconciliationCycle::HalfYearly, "PERIOD_HALF_YEAR_15"),
+        "年结" => (SettlementMode::Yearly, ReconciliationCycle::Yearly, "PERIOD_YEAR_15"),
+        "现结" => (SettlementMode::CashSettlement, ReconciliationCycle::None, "CASH_ON_APPROVAL"),
+        "预付款" => (SettlementMode::Prepayment, ReconciliationCycle::None, "PREPAY_100"),
         _ => return invalid("结算方式无法识别，请使用预付款、现结、周结、月结、季结、半年结或年结"),
     };
     let term = SupplierPaymentTerm::parse(code).map_err(|e| Error::ValidationError(e.to_string()))?;
@@ -327,11 +293,7 @@ mod tests {
     fn taxes_preserve_unknown_and_multiple_rates() {
         assert!(import_tax_rates("").unwrap().is_empty());
         assert_eq!(
-            import_tax_rates("9%，13%,9%")
-                .unwrap()
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>(),
+            import_tax_rates("9%，13%,9%").unwrap().iter().map(ToString::to_string).collect::<Vec<_>>(),
             vec!["0.09", "0.13"]
         );
         assert!(import_tax_rates("错误").is_err());
@@ -344,12 +306,8 @@ mod tests {
     }
     fn complete_row() -> SupplierImportRow {
         let mut cells = vec![String::new(); 23];
-        for (index, value) in [
-            (1, "示例供应商（上海）有限公司"),
-            (7, "示例公司"),
-            (9, "月结"),
-            (18, "专票"),
-        ] {
+        for (index, value) in [(1, "示例供应商（上海）有限公司"), (7, "示例公司"), (9, "月结"), (18, "专票")]
+        {
             cells[index] = value.into();
         }
         SupplierImportRow {
@@ -365,9 +323,7 @@ mod tests {
     fn complete_row_keeps_optional_data_empty_and_complements_company() {
         let row = complete_row();
         assert_eq!(row.company_names(), ("示例公司", "示例公司"));
-        let command = row
-            .command(PartyId::new("signing"), PartyId::new("payment"))
-            .unwrap();
+        let command = row.command(PartyId::new("signing"), PartyId::new("payment")).unwrap();
         assert_eq!(command.supplier_no.as_deref(), Some("SUP-test"));
         assert!(command.invoice_tax_rates.unwrap().is_empty());
         assert!(command.contact.is_none());
@@ -404,16 +360,10 @@ mod tests {
         assert!(row.qualifications()[0].valid_from.is_none());
         assert!(row.qualifications()[0].valid_to.is_none());
         row.cells[12] = "2027-12-31".into();
-        assert_eq!(
-            row.qualifications()[0].valid_to.unwrap().to_string(),
-            "2027-12-31"
-        );
+        assert_eq!(row.qualifications()[0].valid_to.unwrap().to_string(), "2027-12-31");
         row.cells[12] = "2025-12-31".into();
         assert!(row.validate().is_ok());
-        assert_eq!(
-            row.qualifications()[0].valid_to.unwrap().to_string(),
-            "2025-12-31"
-        );
+        assert_eq!(row.qualifications()[0].valid_to.unwrap().to_string(), "2025-12-31");
         row.cells[11].clear();
         assert!(row.validate().is_err());
     }

@@ -1,10 +1,11 @@
 //! Adapt current catalog qualification without importing catalog into sales.
-use crate::adapters::catalog_supply_query::MongoCatalogSupplyQuery;
 use async_trait::async_trait;
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use erp_core::common::time::BusinessDate;
 use erp_sales::ports::sales_order::SellableSkuPort;
 use persistence_core::Executor;
+
+use crate::adapters::catalog_supply_query::MongoCatalogSupplyQuery;
 
 /// Catalog provider for exact SKU revision qualification.
 pub struct CatalogQualificationAdapter {
@@ -13,9 +14,7 @@ pub struct CatalogQualificationAdapter {
 impl CatalogQualificationAdapter {
     /// Bind the repository without loading any current catalog facts.
     pub fn new(db: mongodb::Database) -> Self {
-        Self {
-            query: std::sync::Arc::new(MongoCatalogSupplyQuery::new(db)),
-        }
+        Self { query: std::sync::Arc::new(MongoCatalogSupplyQuery::new(db)) }
     }
 }
 #[async_trait]

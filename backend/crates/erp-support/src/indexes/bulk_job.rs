@@ -4,14 +4,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::BulkJobExt;
-use persistence_core::Result;
 
 /// `bulk_selection_snapshot` 集合名。
 pub(crate) const BULK_SELECTION_SNAPSHOTS: &str = <mongodb::Database as BulkJobExt>::BULK_SELECTION_SNAPSHOTS;
@@ -48,9 +46,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -62,14 +58,8 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 fn bulk_selection_snapshot_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_bulk_selection_snapshots_id", doc! { "id": 1 }),
-        named_index(
-            "idx_bulk_selection_snapshots_created",
-            doc! { "created_by": 1, "created_at": -1 },
-        ),
-        named_index(
-            "idx_bulk_selection_snapshots_status_expires",
-            doc! { "status": 1, "expires_at": 1 },
-        ),
+        named_index("idx_bulk_selection_snapshots_created", doc! { "created_by": 1, "created_at": -1 }),
+        named_index("idx_bulk_selection_snapshots_status_expires", doc! { "status": 1, "expires_at": 1 }),
     ]
 }
 
@@ -96,41 +86,23 @@ fn background_job_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_background_jobs_no", doc! { "job_no": 1 }),
         unique_index("uk_background_jobs_request_id", doc! { "request_id": 1 }),
-        named_index(
-            "idx_background_jobs_status_created",
-            doc! { "status": 1, "created_at": -1 },
-        ),
-        named_index(
-            "idx_background_jobs_domain",
-            doc! { "domain_job_type": 1, "domain_job_id": 1 },
-        ),
-        named_index(
-            "idx_background_jobs_requested_created",
-            doc! { "requested_by": 1, "created_at": -1 },
-        ),
+        named_index("idx_background_jobs_status_created", doc! { "status": 1, "created_at": -1 }),
+        named_index("idx_background_jobs_domain", doc! { "domain_job_type": 1, "domain_job_id": 1 }),
+        named_index("idx_background_jobs_requested_created", doc! { "requested_by": 1, "created_at": -1 }),
     ]
 }
 
 /// 返回 `background_job_item` 的逐项唯一约束与结果筛选索引。
 fn background_job_item_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_background_job_items_no",
-            doc! { "background_job_id": 1, "item_no": 1 },
-        ),
-        named_index(
-            "idx_background_job_items_status",
-            doc! { "background_job_id": 1, "status": 1 },
-        ),
+        unique_index("uk_background_job_items_no", doc! { "background_job_id": 1, "item_no": 1 }),
+        named_index("idx_background_job_items_status", doc! { "background_job_id": 1, "status": 1 }),
     ]
 }
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -162,12 +134,8 @@ mod tests {
             })
             .unwrap();
         assert_eq!(id_index.options.as_ref().unwrap().unique, Some(true));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "created_by": 1, "created_at": -1 }));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "status": 1, "expires_at": 1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "created_by": 1, "created_at": -1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "status": 1, "expires_at": 1 }));
     }
 
     #[test]
@@ -207,12 +175,8 @@ mod tests {
             assert_eq!(options.unique, Some(true));
             assert!(options.partial_filter_expression.is_none());
         }
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "status": 1, "created_at": -1 }));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "domain_job_type": 1, "domain_job_id": 1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "status": 1, "created_at": -1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "domain_job_type": 1, "domain_job_id": 1 }));
     }
 
     #[test]
@@ -224,8 +188,6 @@ mod tests {
                 == Some("uk_background_job_items_no")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "background_job_id": 1, "status": 1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "background_job_id": 1, "status": 1 }));
     }
 }

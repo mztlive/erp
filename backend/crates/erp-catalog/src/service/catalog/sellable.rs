@@ -4,17 +4,16 @@
 //! 有效供给组合为销售只读投影。资格判定由 catalog Repository 的同一条聚合
 //! 管道执行，销售单提交也复用该仓储判定。
 
-use crate::entity::catalog::ProductKind;
-use crate::repository::CatalogExt;
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::PageView;
-use crate::error::{Error, Result};
-
 use crate::dto::validate_sales_price_range;
+use crate::entity::catalog::ProductKind;
+use crate::error::{Error, Result};
+use crate::repository::CatalogExt;
 
 /// 公司商品池列表筛选条件类型。
 type SellableSkuFilter = <mongodb::Database as CatalogExt>::SellableSkuFilter;
@@ -148,10 +147,7 @@ fn specification_attribute_views(signature: &str) -> Vec<SellableSkuSpecificatio
 /// # 错误
 /// 无。
 fn normalized_text(value: Option<&str>) -> Option<String> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
+    value.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string)
 }
 
 /// 构造销售资格失效错误。
@@ -228,18 +224,14 @@ pub fn sellable_sku_page_view(
             eligibility_as_of,
         });
     }
-    Ok(PageView {
-        items,
-        total: rows.total,
-        page,
-        page_size,
-    })
+    Ok(PageView { items, total: rows.total, page, page_size })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{specification_attribute_views, SellableSkuListParams};
     use validator::Validate;
+
+    use super::{SellableSkuListParams, specification_attribute_views};
 
     /// 公司商品池分页上限固定为一百，阻止无界销售查询。
     #[test]

@@ -1,10 +1,8 @@
 //! 进程内请求准入计数。
 
-use std::{
-    collections::{HashMap, VecDeque},
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
@@ -75,10 +73,7 @@ impl RateLimiter {
         max_concurrent: usize,
     ) -> Self {
         assert!(!key_limits.is_empty(), "at least one key limit is required");
-        assert!(
-            key_limits.iter().all(|limit| *limit > 0),
-            "per-key rate limits must be positive"
-        );
+        assert!(key_limits.iter().all(|limit| *limit > 0), "per-key rate limits must be positive");
         assert!(
             key_limits.iter().all(|limit| max_global >= *limit),
             "global rate limit must cover every key"
@@ -89,11 +84,7 @@ impl RateLimiter {
         Self {
             state: Arc::new(Mutex::new(WindowState::default())),
             slots: Arc::new(Semaphore::new(max_concurrent)),
-            policy: Policy {
-                key_limits: Arc::from(key_limits),
-                max_global,
-                window,
-            },
+            policy: Policy { key_limits: Arc::from(key_limits), max_global, window },
         }
     }
 
@@ -136,9 +127,7 @@ impl RateLimiter {
         if !self.keys_match_policy(keys) {
             return Err(Error::Unavailable);
         }
-        let permit = Arc::clone(&self.slots)
-            .try_acquire_owned()
-            .map_err(|_| Error::ConcurrencyExceeded)?;
+        let permit = Arc::clone(&self.slots).try_acquire_owned().map_err(|_| Error::ConcurrencyExceeded)?;
         self.reserve_window(keys, now)?;
         Ok(permit)
     }
@@ -146,10 +135,7 @@ impl RateLimiter {
     /// 检查 key 数量与唯一性是否符合构造时策略。
     fn keys_match_policy(&self, keys: &[&str]) -> bool {
         keys.len() == self.policy.key_limits.len()
-            && !keys
-                .iter()
-                .enumerate()
-                .any(|(index, key)| keys[..index].contains(key))
+            && !keys.iter().enumerate().any(|(index, key)| keys[..index].contains(key))
     }
 
     /// 清理过期计数并同时预留全局与所有层级 key 配额。
@@ -211,7 +197,7 @@ impl Error {
         match self {
             Self::KeyExceeded { retry_after_secs } | Self::GlobalExceeded { retry_after_secs } => {
                 Some(*retry_after_secs)
-            }
+            },
             Self::ConcurrencyExceeded => Some(1),
             Self::Unavailable => None,
         }
@@ -219,10 +205,7 @@ impl Error {
 }
 
 fn remove_expired(requests: &mut VecDeque<Instant>, now: Instant, window: Duration) {
-    while requests
-        .front()
-        .is_some_and(|started_at| now.saturating_duration_since(*started_at) >= window)
-    {
+    while requests.front().is_some_and(|started_at| now.saturating_duration_since(*started_at) >= window) {
         requests.pop_front();
     }
 }
@@ -252,9 +235,7 @@ mod tests {
         let now = Instant::now();
 
         let first = limiter.admit_at("account-a", now).unwrap();
-        let second = limiter
-            .admit_at("account-a", now + Duration::from_secs(1))
-            .unwrap();
+        let second = limiter.admit_at("account-a", now + Duration::from_secs(1)).unwrap();
         drop((first, second));
 
         assert!(matches!(
@@ -268,11 +249,7 @@ mod tests {
         let limiter = RateLimiter::new(2, 2, Duration::from_secs(60), 2);
         let now = Instant::now();
         drop(limiter.admit_at("account-a", now).unwrap());
-        drop(
-            limiter
-                .admit_at("account-b", now + Duration::from_secs(1))
-                .unwrap(),
-        );
+        drop(limiter.admit_at("account-b", now + Duration::from_secs(1)).unwrap());
 
         assert!(matches!(
             limiter.admit_at("account-c", now + Duration::from_secs(2)),
@@ -287,13 +264,8 @@ mod tests {
         let now = Instant::now();
         drop(limiter.admit_at("account-a", now).unwrap());
 
-        assert!(matches!(
-            cloned.admit_at("account-a", now),
-            Err(Error::KeyExceeded { .. })
-        ));
-        assert!(cloned
-            .admit_at("account-a", now + Duration::from_secs(60))
-            .is_ok());
+        assert!(matches!(cloned.admit_at("account-a", now), Err(Error::KeyExceeded { .. })));
+        assert!(cloned.admit_at("account-a", now + Duration::from_secs(60)).is_ok());
     }
 
     #[test]
@@ -302,10 +274,7 @@ mod tests {
         let now = Instant::now();
         let permit = limiter.admit_at("account-a", now).unwrap();
 
-        assert!(matches!(
-            limiter.admit_at("account-b", now),
-            Err(Error::ConcurrencyExceeded)
-        ));
+        assert!(matches!(limiter.admit_at("account-b", now), Err(Error::ConcurrencyExceeded)));
         drop(permit);
 
         assert!(limiter.admit_at("account-b", now).is_ok());
@@ -315,32 +284,24 @@ mod tests {
     fn hierarchy_reserves_all_key_levels_atomically() {
         let limiter = RateLimiter::with_key_limits(&[2, 1], 4, Duration::from_secs(60), 2);
         let now = Instant::now();
-        drop(
-            limiter
-                .admit_hierarchy_at(&["source-a", "source-a|account-a"], now)
-                .unwrap(),
-        );
+        drop(limiter.admit_hierarchy_at(&["source-a", "source-a|account-a"], now).unwrap());
 
         assert!(matches!(
             limiter.admit_hierarchy_at(&["source-a", "source-a|account-a"], now + Duration::from_secs(1)),
             Err(Error::KeyExceeded { .. })
         ));
-        assert!(limiter
-            .admit_hierarchy_at(&["source-a", "source-a|account-b"], now + Duration::from_secs(2))
-            .is_ok());
+        assert!(
+            limiter
+                .admit_hierarchy_at(&["source-a", "source-a|account-b"], now + Duration::from_secs(2))
+                .is_ok()
+        );
     }
 
     #[test]
     fn hierarchy_rejects_mismatched_or_duplicate_keys() {
         let limiter = RateLimiter::with_key_limits(&[2, 1], 4, Duration::from_secs(60), 2);
 
-        assert!(matches!(
-            limiter.admit_hierarchy(&["source-a"]),
-            Err(Error::Unavailable)
-        ));
-        assert!(matches!(
-            limiter.admit_hierarchy(&["source-a", "source-a"]),
-            Err(Error::Unavailable)
-        ));
+        assert!(matches!(limiter.admit_hierarchy(&["source-a"]), Err(Error::Unavailable)));
+        assert!(matches!(limiter.admit_hierarchy(&["source-a", "source-a"]), Err(Error::Unavailable)));
     }
 }

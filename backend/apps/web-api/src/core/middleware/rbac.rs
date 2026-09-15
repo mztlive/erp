@@ -1,24 +1,19 @@
-use std::{
-    future::{poll_fn, Future},
-    pin::Pin,
-    task::{Context, Poll},
-};
+use std::future::{Future, poll_fn};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use async_trait::async_trait;
-use axum::{
-    body::Body,
-    extract::Request,
-    response::{IntoResponse, Response},
-    routing::MethodRouter,
-};
+use axum::body::Body;
+use axum::extract::Request;
+use axum::response::{IntoResponse, Response};
+use axum::routing::MethodRouter;
 use erp_identity::{AuthorizationPort, OrganizationScopeFact, Permission, SharedRbacService};
 use tower::{Layer, Service};
 use tracing::{error, warn};
 
-use crate::{
-    app_state::AppState,
-    core::{middleware::RbacSubject, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::middleware::RbacSubject;
+use crate::core::response::ApiResponse;
 
 /// Composition-root adapter: expose authorization facts without leaking RbacService.
 struct RbacAuthorizationPort(SharedRbacService);
@@ -65,10 +60,7 @@ struct RbacAuthorizeLayer {
 
 impl RbacAuthorizeLayer {
     fn new(authorization: std::sync::Arc<dyn AuthorizationPort>, permission: Permission) -> Self {
-        Self {
-            authorization,
-            permission,
-        }
+        Self { authorization, permission }
     }
 }
 
@@ -120,7 +112,7 @@ where
                 Ok(true) => {
                     poll_fn(|context| inner.poll_ready(context)).await?;
                     inner.call(request).await
-                }
+                },
                 Ok(false) => {
                     warn!(
                         subject = %subject.0,
@@ -128,7 +120,7 @@ where
                         "RBAC denied request"
                     );
                     Ok(ApiResponse::<()>::permission_denied().into_response())
-                }
+                },
                 Err(err) => {
                     error!(
                         subject = %subject.0,
@@ -137,7 +129,7 @@ where
                         "Casbin authorization failed"
                     );
                     Ok(ApiResponse::<()>::system_error().into_response())
-                }
+                },
             }
         })
     }

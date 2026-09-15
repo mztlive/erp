@@ -3,15 +3,14 @@
 //! Handler 不得把 BPM 或数据库错误直接暴露给客户端；只识别服务层结构化稳定码。
 
 use application_core::ErrorClass;
-use axum::{
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
-};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use erp_workflow::ErrorCode;
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::core::{errors::Error as HttpError, response::ApiResponse};
+use crate::core::errors::Error as HttpError;
+use crate::core::response::ApiResponse;
 
 /// 跟踪请求的关联 ID 头。
 const TRACE_ID_HEADER: &str = "X-Trace-Id";
@@ -43,14 +42,7 @@ impl ApprovalHttpError {
         retryable: bool,
         data: Option<Value>,
     ) -> Self {
-        Self(Box::new(ApprovalHttpErrorInner {
-            status,
-            code,
-            message,
-            correlation_id,
-            retryable,
-            data,
-        }))
+        Self(Box::new(ApprovalHttpErrorInner { status, code, message, correlation_id, retryable, data }))
     }
 }
 
@@ -226,19 +218,13 @@ pub fn correlation_id(headers: &HeaderMap) -> String {
 pub fn parse_version(value: &str, _label: &str, headers: &HeaderMap) -> Result<u64, ApprovalHttpError> {
     let bytes = value.as_bytes();
     if bytes.is_empty() || !matches!(bytes[0], b'1'..=b'9') || !bytes[1..].iter().all(u8::is_ascii_digit) {
-        return Err(ApprovalHttpError::bad_request(
-            "页面数据已失效，请刷新后重试",
-            headers,
-        ));
+        return Err(ApprovalHttpError::bad_request("页面数据已失效，请刷新后重试", headers));
     }
     let version = value
         .parse::<u64>()
         .map_err(|_| ApprovalHttpError::bad_request("页面数据已失效，请刷新后重试", headers))?;
     if version == 0 {
-        return Err(ApprovalHttpError::bad_request(
-            "页面数据已失效，请刷新后重试",
-            headers,
-        ));
+        return Err(ApprovalHttpError::bad_request("页面数据已失效，请刷新后重试", headers));
     }
     Ok(version)
 }
@@ -270,13 +256,10 @@ fn conflict_data(status: StatusCode, correlation_id: &str, data: Option<Value>) 
             let mut map = serde_json::Map::new();
             map.insert("payload".to_string(), other);
             map
-        }
+        },
         None => serde_json::Map::new(),
     };
-    object.insert(
-        "correlation_id".to_string(),
-        Value::String(correlation_id.to_string()),
-    );
+    object.insert("correlation_id".to_string(), Value::String(correlation_id.to_string()));
     Some(Value::Object(object))
 }
 
@@ -293,13 +276,13 @@ fn message_of(code: ErrorCode) -> &'static str {
     match code {
         ErrorCode::ApprovalPolicyNotRegistered => {
             "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员"
-        }
+        },
         ErrorCode::ApprovalProcessNotConfigured => {
             "该单据类型尚未配置可用的审批流程，请联系管理员发布流程后重试"
-        }
+        },
         ErrorCode::ApprovalDraftSourceNotAvailable => {
             "当前没有可复制的已发布审批流程，请先发布流程后再创建草稿"
-        }
+        },
         ErrorCode::ApprovalDefinitionNotDraft => "只能修改草稿流程，请复制为新草稿后再修改",
         ErrorCode::ApprovalDefinitionVersionConflict => "审批流程已被他人更新，请刷新后重试",
         ErrorCode::ApprovalDefinitionInvalid => "审批流程内容不符合要求，请修改后重试",
@@ -308,7 +291,7 @@ fn message_of(code: ErrorCode) -> &'static str {
         ErrorCode::ApprovalTaskNotOpen => "审批任务已完成或关闭，请刷新后查看当前状态",
         ErrorCode::ApprovalTaskNotAssignedToActor => {
             "当前账号没有执行此操作的权限，请联系管理员或有权限的同事"
-        }
+        },
         ErrorCode::ApprovalTaskVersionConflict => "审批任务状态已变化，请刷新后重试",
         ErrorCode::ApprovalInstanceVersionConflict => "审批进度已变化，请刷新后重试",
         ErrorCode::ApprovalExecutionVersionConflict => "当前审批步骤已变化，请刷新后重试",
@@ -317,7 +300,7 @@ fn message_of(code: ErrorCode) -> &'static str {
         ErrorCode::ApprovalInstanceBlocked => "当前审批已暂停，请先处理暂停原因",
         ErrorCode::ApprovalResumeNotAllowedForBlocker => {
             "当前暂停原因不允许恢复原审批人，请改用其他可用处理方式"
-        }
+        },
         ErrorCode::ApprovalCurrentApproverNotRecovered => "原审批人仍不具备审批资格，请先恢复全部资格后重试",
         ErrorCode::ApprovalBlockedCancelNotAllowed => "当前暂停原因不允许取消审批，请恢复原审批人后继续审批",
         ErrorCode::ApprovalGenericWorkItemMutationForbidden => "请在审批任务页面处理该任务",
@@ -327,16 +310,13 @@ fn message_of(code: ErrorCode) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use axum::{
-        body::to_bytes,
-        http::{HeaderValue, StatusCode},
-        response::IntoResponse,
-    };
+    use axum::body::to_bytes;
+    use axum::http::{HeaderValue, StatusCode};
+    use axum::response::IntoResponse;
+    use erp_workflow::ErrorCode;
     use serde_json::Value;
 
-    use erp_workflow::ErrorCode;
-
-    use super::{parse_version, status_of, ApprovalHttpError, TRACE_ID_HEADER};
+    use super::{ApprovalHttpError, TRACE_ID_HEADER, parse_version, status_of};
 
     #[test]
     fn version_parser_only_accepts_canonical_positive_decimal_strings() {
@@ -344,18 +324,7 @@ mod tests {
         for value in ["1", "9", "9007199254740993", "18446744073709551615"] {
             assert!(parse_version(value, "版本", &headers).is_ok(), "{value}");
         }
-        for value in [
-            "",
-            "0",
-            "01",
-            "+1",
-            "-1",
-            " 1",
-            "1 ",
-            "1.0",
-            "一",
-            "18446744073709551616",
-        ] {
+        for value in ["", "0", "01", "+1", "-1", " 1", "1 ", "1.0", "一", "18446744073709551616"] {
             assert!(parse_version(value, "版本", &headers).is_err(), "{value:?}");
         }
     }
@@ -411,10 +380,7 @@ mod tests {
         let body = to_bytes(response.into_body(), usize::MAX).await.expect("body");
         let body: Value = serde_json::from_slice(&body).expect("json");
         assert_eq!(body["code"], "APPROVAL_POLICY_NOT_REGISTERED");
-        assert_eq!(
-            body["errorMessage"],
-            "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员"
-        );
+        assert_eq!(body["errorMessage"], "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员");
     }
 
     /// 库存调整更新的越权与不存在必须经实际 Handler 适配器保持不可区分。
@@ -424,9 +390,8 @@ mod tests {
             let response =
                 ApprovalHttpError::from_service(error, &axum::http::HeaderMap::new()).into_response();
             let status = response.status();
-            let body = to_bytes(response.into_body(), usize::MAX)
-                .await
-                .expect("response body should be readable");
+            let body =
+                to_bytes(response.into_body(), usize::MAX).await.expect("response body should be readable");
             let body = serde_json::from_slice(&body).expect("response body should be valid JSON");
             (status, body)
         }
@@ -438,9 +403,6 @@ mod tests {
         assert_eq!(unauthorized.0, StatusCode::NOT_FOUND);
         assert_eq!(unauthorized.1["status"], 404);
         assert_eq!(unauthorized.1["code"], "NOT_FOUND");
-        assert_eq!(
-            unauthorized.1["errorMessage"],
-            "库存调整单不存在，请刷新后重新选择"
-        );
+        assert_eq!(unauthorized.1["errorMessage"], "库存调整单不存在，请刷新后重新选择");
     }
 }

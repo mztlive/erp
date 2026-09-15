@@ -3,9 +3,6 @@
 //! 重复开放任务关闭、CAS 失败回滚、收据同载荷回放/异载荷冲突必须由两种适配器
 //! 使用同一组断言；内存实现不得替代 Mongo 会话路径。
 
-use crate::entity::work_item::{
-    ApprovalRuntimeTaskEnding, DocumentApprovalWorkItemData, WorkItem, WorkItemPriority, WorkItemStatus,
-};
 use bpm::engine::TaskCloseReason;
 use bpm::ids::ApprovalNodeExecutionId;
 use bpm::model::types::ApprovalCommandKind;
@@ -17,8 +14,11 @@ use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 
 use super::store::{
-    close_open_tasks, insert_receipt, persist_ended_tasks, replay_after_duplicate, ApplyError,
-    MemoryRuntimeStore,
+    ApplyError, MemoryRuntimeStore, close_open_tasks, insert_receipt, persist_ended_tasks,
+    replay_after_duplicate,
+};
+use crate::entity::work_item::{
+    ApprovalRuntimeTaskEnding, DocumentApprovalWorkItemData, WorkItem, WorkItemPriority, WorkItemStatus,
 };
 
 /// 契约期望：关闭前 2 条 OPEN，关闭后 0；CAS 失败后仍 2 条 OPEN；收据同/异载荷。
@@ -72,10 +72,7 @@ pub fn assert_runtime_persistence_contract(actual: RuntimePersistenceContract) {
 /// # 关键业务约束
 /// 两条任务必须属于同一 execution，供重复关闭契约使用。
 pub fn duplicate_open_tasks(execution_id: &str, prefix: &str) -> [WorkItem; 2] {
-    [
-        open_task(&format!("{prefix}-1"), execution_id),
-        open_task(&format!("{prefix}-2"), execution_id),
-    ]
+    [open_task(&format!("{prefix}-1"), execution_id), open_task(&format!("{prefix}-2"), execution_id)]
 }
 
 /// 构造契约使用的启动命令收据。
@@ -164,9 +161,7 @@ pub fn run_memory_runtime_persistence_contract() -> RuntimePersistenceContract {
     )
     .expect("内存重复任务关闭");
     let open_after_close = store.open_task_count(&execution_id);
-    assert!(store
-        .work_items()
-        .all(|item| item.status == WorkItemStatus::Closed));
+    assert!(store.work_items().all(|item| item.status == WorkItemStatus::Closed));
 
     let cas_exec = ApprovalNodeExecutionId::new("e-cas");
     let mut cas_store = MemoryRuntimeStore::default();
@@ -196,10 +191,7 @@ pub fn run_memory_runtime_persistence_contract() -> RuntimePersistenceContract {
     let (kind, key, receipt) = contract_receipt("mem-key-1", "mem-r1");
     let mut receipt_store = MemoryRuntimeStore::default();
     insert_receipt(&mut receipt_store, &receipt).unwrap();
-    assert_eq!(
-        insert_receipt(&mut receipt_store, &receipt),
-        Err(ApplyError::DuplicateReceipt)
-    );
+    assert_eq!(insert_receipt(&mut receipt_store, &receipt), Err(ApplyError::DuplicateReceipt));
     let same = replay_after_duplicate(
         &receipt_store,
         kind,

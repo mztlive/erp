@@ -6,10 +6,11 @@
 //! （`_id` 为 `sec\u{1f}ptype\u{1f}values 拼接` 的字符串）。
 
 use erp_identity::{Role, RoleData};
-use mongodb::bson::{doc, Document};
 use mongodb::Database;
+use mongodb::bson::{Document, doc};
 
-use crate::{db::uuid_hex, Result};
+use crate::Result;
+use crate::db::uuid_hex;
 
 /// 账号集合名。
 const ACCOUNTS: &str = "accounts";
@@ -82,11 +83,7 @@ async fn insert_role_and_policies(db: &Database, account_id: &str) -> Result<()>
     let role_id = format!("p0-test-{}", &uuid_hex()[..8]);
     let role = Role::new(
         role_id.clone(),
-        RoleData {
-            name: "P0 测试管理员".to_string(),
-            description: None,
-            system: false,
-        },
+        RoleData { name: "P0 测试管理员".to_string(), description: None, system: false },
     )?;
     db.collection::<Role>(ROLES).insert_one(role).await?;
 
@@ -112,10 +109,7 @@ async fn insert_role_and_policies(db: &Database, account_id: &str) -> Result<()>
 /// # 返回值
 /// 返回可插入 `casbin_rules` 集合的文档。
 fn casbin_rule(sec: &str, ptype: &str, values: &[&str]) -> Document {
-    let values = values
-        .iter()
-        .map(|value| value.to_string())
-        .collect::<Vec<String>>();
+    let values = values.iter().map(|value| value.to_string()).collect::<Vec<String>>();
     let id = format!("{sec}\u{1f}{ptype}\u{1f}{}", values.join("\u{1f}"));
     doc! { "_id": id, "sec": sec, "ptype": ptype, "values": values }
 }

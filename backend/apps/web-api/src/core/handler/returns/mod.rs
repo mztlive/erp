@@ -4,10 +4,8 @@
 //! 直接复用 领域与读模型的 DTO。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
 use erp_processes::adapters::MongoPurchaseDataScope;
 use erp_processes::reverse_flow::ReturnsProcess;
 use erp_read_models::returns_center::dto::{
@@ -28,10 +26,9 @@ use erp_returns::dto::{
 };
 use erp_returns::service::ReturnsService;
 
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "退货退款",
@@ -52,9 +49,7 @@ pub async fn sales_return_case_list(
     State(state): State<AppState>,
     Query(params): Query<SalesReturnCaseListParams>,
 ) -> Result<PageView<SalesReturnCaseView>> {
-    let page = ReturnsReadService::new(state.db())
-        .sales_return_case_list(&params)
-        .await?;
+    let page = ReturnsReadService::new(state.db()).sales_return_case_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -78,9 +73,7 @@ pub async fn sales_return_case_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<SalesReturnCaseView> {
-    let view = ReturnsReadService::new(state.db())
-        .sales_return_case_detail(&id)
-        .await?;
+    let view = ReturnsReadService::new(state.db()).sales_return_case_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -232,9 +225,7 @@ pub async fn customer_refund_list(
     State(state): State<AppState>,
     Query(params): Query<CustomerRefundListParams>,
 ) -> Result<PageView<CustomerRefundView>> {
-    let page = ReturnsReadService::new(state.db())
-        .customer_refund_list(&params)
-        .await?;
+    let page = ReturnsReadService::new(state.db()).customer_refund_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -258,9 +249,7 @@ pub async fn customer_refund_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<CustomerRefundView> {
-    let view = ReturnsReadService::new(state.db())
-        .customer_refund_detail(&id)
-        .await?;
+    let view = ReturnsReadService::new(state.db()).customer_refund_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -424,9 +413,7 @@ pub async fn supplier_refund_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<SupplierRefundView> {
-    let view = ReturnsReadService::new(state.db())
-        .supplier_refund_detail(&id)
-        .await?;
+    let view = ReturnsReadService::new(state.db()).supplier_refund_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -590,9 +577,7 @@ pub async fn receipt_reversal_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<ReceiptReversalView> {
-    let view = ReturnsReadService::new(state.db())
-        .receipt_reversal_detail(&id)
-        .await?;
+    let view = ReturnsReadService::new(state.db()).receipt_reversal_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -756,9 +741,7 @@ pub async fn payment_reversal_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<PaymentReversalView> {
-    let view = ReturnsReadService::new(state.db())
-        .payment_reversal_detail(&id)
-        .await?;
+    let view = ReturnsReadService::new(state.db()).payment_reversal_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -913,10 +896,7 @@ mod tests {
     /// 客户退款 HTTP 只走统一提交、撤回与详情，客户端不得选定义或直接过账。
     #[test]
     fn customer_refund_http_uses_unified_ports() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("submit_customer_refund"));
         assert!(production.contains("cancel_customer_refund_approval"));
         assert!(production.contains("reject_client_post"));
@@ -937,10 +917,7 @@ mod tests {
     /// 供应商退款 HTTP 只走统一提交、撤回与详情，客户端不得选定义或直接过账。
     #[test]
     fn supplier_refund_http_uses_unified_ports() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("submit_supplier_refund"));
         assert!(production.contains("cancel_supplier_refund_approval"));
         assert!(production.contains("reject_supplier_refund_client_post"));
@@ -960,10 +937,7 @@ mod tests {
     /// 回款冲正 HTTP 只走统一提交、撤回与详情，客户端不得选定义或直接过账。
     #[test]
     fn receipt_reversal_http_uses_unified_ports() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("submit_receipt_reversal"));
         assert!(production.contains("cancel_receipt_reversal_approval"));
         assert!(production.contains("reject_receipt_reversal_client_post"));
@@ -983,10 +957,7 @@ mod tests {
     /// 付款冲正 HTTP 只走统一提交、撤回与详情，客户端不得选定义或直接过账。
     #[test]
     fn payment_reversal_http_uses_unified_ports() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("submit_payment_reversal"));
         assert!(production.contains("cancel_payment_reversal_approval"));
         assert!(production.contains("reject_payment_reversal_client_post"));

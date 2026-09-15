@@ -4,30 +4,19 @@
 //! 直接复用 `erp_finance::dto::payable` 的 DTO。
 
 use application_core::AuditActor;
-use axum::{
-    body::Body,
-    extract::{Multipart, Path, Query, State},
-    http::{
-        header::{CACHE_CONTROL, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS},
-        HeaderValue, StatusCode,
-    },
-    response::Response,
-    Extension, Json,
+use axum::body::Body;
+use axum::extract::{Multipart, Path, Query, State};
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
+use axum::http::{HeaderValue, StatusCode};
+use axum::response::Response;
+use axum::{Extension, Json};
+use erp_finance::dto::payable::{
+    CommitSupplierPaymentRequest, CreatePayableAccountRequest, PageView, PayableAccountListParams,
+    PayableAccountSummaryView, PayableAccountView, PaymentRecipientRevealView,
+    PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView,
+    RegisterPurchaseInvoiceRequest, RevealPaymentRecipientRequest, SupplierPaymentListParams,
+    SupplierPaymentView,
 };
-use erp_finance::dto::payable::CommitSupplierPaymentRequest;
-use erp_finance::dto::payable::CreatePayableAccountRequest;
-use erp_finance::dto::payable::PageView;
-use erp_finance::dto::payable::PayableAccountListParams;
-use erp_finance::dto::payable::PayableAccountSummaryView;
-use erp_finance::dto::payable::PayableAccountView;
-use erp_finance::dto::payable::PaymentRecipientRevealView;
-use erp_finance::dto::payable::PurchaseInvoiceAllocationListParams;
-use erp_finance::dto::payable::PurchaseInvoiceAllocationView;
-use erp_finance::dto::payable::PurchaseInvoiceRegisteredView;
-use erp_finance::dto::payable::RegisterPurchaseInvoiceRequest;
-use erp_finance::dto::payable::RevealPaymentRecipientRequest;
-use erp_finance::dto::payable::SupplierPaymentListParams;
-use erp_finance::dto::payable::SupplierPaymentView;
 use erp_finance::dto::payment_merge::{PaymentMergeCandidatesParams, PaymentMergeCandidatesView};
 use erp_finance::service::payable::PayableService as PayableQueryService;
 use erp_processes::finance_posting::payable::PayableService;
@@ -35,17 +24,13 @@ use erp_read_models::finance::payable::PayableReadService;
 use erp_support::{SecurityScanStatus, SensitivityClass};
 use tracing::error;
 
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::{Error, Result},
-        handler::file_asset::{
-            delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
-            store_pending_asset_files, PendingAssetFile,
-        },
-        response::ApiResponse,
-    },
+use crate::app_state::AppState;
+use crate::core::errors::{Error, Result};
+use crate::core::handler::file_asset::{
+    PendingAssetFile, delete_pending_asset_objects, extract_command_with_asset_files,
+    should_compensate_pending_assets, store_pending_asset_files,
 };
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "供应商往来",
@@ -66,9 +51,7 @@ pub async fn payable_account_list(
     State(state): State<AppState>,
     Query(params): Query<PayableAccountListParams>,
 ) -> Result<PageView<PayableAccountSummaryView>> {
-    let page = PayableReadService::new(state.db())
-        .payable_account_list(&params)
-        .await?;
+    let page = PayableReadService::new(state.db()).payable_account_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -92,9 +75,7 @@ pub async fn payable_account_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<PayableAccountView> {
-    let view = PayableReadService::new(state.db())
-        .payable_account_detail(&id)
-        .await?;
+    let view = PayableReadService::new(state.db()).payable_account_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -179,9 +160,7 @@ pub async fn supplier_payment_list(
     State(state): State<AppState>,
     Query(params): Query<SupplierPaymentListParams>,
 ) -> Result<PageView<SupplierPaymentView>> {
-    let page = PayableReadService::new(state.db())
-        .supplier_payment_list(&params)
-        .await?;
+    let page = PayableReadService::new(state.db()).supplier_payment_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -205,9 +184,7 @@ pub async fn supplier_payment_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<SupplierPaymentView> {
-    let view = PayableReadService::new(state.db())
-        .supplier_payment_detail(&id)
-        .await?;
+    let view = PayableReadService::new(state.db()).supplier_payment_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -279,13 +256,13 @@ pub async fn supplier_payment_commit(
                 delete_pending_asset_objects(&state, &pending).await;
             }
             Ok(ApiResponse::ok_with_data(result.view))
-        }
+        },
         Err(service_error) => {
             if should_compensate_pending_assets(&service_error) {
                 delete_pending_asset_objects(&state, &pending).await;
             }
             Err(service_error.into())
-        }
+        },
     }
 }
 
@@ -309,43 +286,29 @@ pub async fn supplier_payment_bank_receipt(
         .with_object_read(state.approval_object_read())
         .supplier_payment_bank_receipt(&id, &actor)
         .await?;
-    if !matches!(
-        view.content_type.as_str(),
-        "image/jpeg" | "image/png" | "image/webp"
-    ) {
+    if !matches!(view.content_type.as_str(), "image/jpeg" | "image/png" | "image/webp") {
         return Err(Error::Unprocessable("当前银行回单类型不支持在线预览".to_string()));
     }
     if view.destroyed_at.is_some()
-        || matches!(
-            view.security_scan_status,
-            SecurityScanStatus::Rejected | SecurityScanStatus::Quarantined
-        )
+        || matches!(view.security_scan_status, SecurityScanStatus::Rejected | SecurityScanStatus::Quarantined)
     {
         return Err(Error::Unprocessable("银行回单不可预览，请联系管理员".to_string()));
     }
-    let content = state
-        .storage()
-        .read(&view.storage_object_key)
-        .await
-        .map_err(|storage_error| {
-            error!(
-                error = %storage_error,
-                supplier_payment_id = %id,
-                "Failed to read supplier payment bank receipt"
-            );
-            Error::Internal("Object storage operation failed".to_string())
-        })?;
+    let content = state.storage().read(&view.storage_object_key).await.map_err(|storage_error| {
+        error!(
+            error = %storage_error,
+            supplier_payment_id = %id,
+            "Failed to read supplier payment bank receipt"
+        );
+        Error::Internal("Object storage operation failed".to_string())
+    })?;
     let content_type = HeaderValue::from_str(&view.content_type)
         .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream"));
     let mut response = Response::new(Body::from(content));
     *response.status_mut() = StatusCode::OK;
     response.headers_mut().insert(CONTENT_TYPE, content_type);
-    response
-        .headers_mut()
-        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
-    response
-        .headers_mut()
-        .insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    response.headers_mut().insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    response.headers_mut().insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
     Ok(response)
 }
 
@@ -363,23 +326,15 @@ fn validate_bank_receipt_upload(
         return Err(Error::BadRequest("银行回单图片与付款命令不匹配".to_string()));
     }
     expected.sort();
-    let mut actual = files
-        .iter()
-        .map(|pending| pending.reference.clone())
-        .collect::<Vec<_>>();
+    let mut actual = files.iter().map(|pending| pending.reference.clone()).collect::<Vec<_>>();
     actual.sort();
     if actual != expected {
         return Err(Error::BadRequest("银行回单图片临时引用无效".to_string()));
     }
     if files.iter().any(|pending| {
-        !matches!(
-            pending.file.content_type.as_str(),
-            "image/jpeg" | "image/png" | "image/webp"
-        )
+        !matches!(pending.file.content_type.as_str(), "image/jpeg" | "image/png" | "image/webp")
     }) {
-        return Err(Error::BadRequest(
-            "银行回单仅支持 JPG、PNG 或 WebP 图片".to_string(),
-        ));
+        return Err(Error::BadRequest("银行回单仅支持 JPG、PNG 或 WebP 图片".to_string()));
     }
     Ok(())
 }
@@ -434,9 +389,7 @@ pub async fn purchase_invoice_allocation_list(
     State(state): State<AppState>,
     Query(params): Query<PurchaseInvoiceAllocationListParams>,
 ) -> Result<PageView<PurchaseInvoiceAllocationView>> {
-    let page = PayableQueryService::new(state.db())
-        .purchase_invoice_allocation_list(&params)
-        .await?;
+    let page = PayableQueryService::new(state.db()).purchase_invoice_allocation_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -451,10 +404,7 @@ mod tests {
     /// 供应商付款 HTTP 只保留任务内原子登记与详情，不暴露付款审批端口。
     #[test]
     fn supplier_payment_http_uses_execution_task_port() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("commit_supplier_payment_with_assets"));
         assert!(production.contains("reveal_payment_recipient"));
         assert!(production.contains("supplier_payment_detail"));

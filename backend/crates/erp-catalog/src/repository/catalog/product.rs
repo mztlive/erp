@@ -1,28 +1,26 @@
-use crate::repository::owned::{
-    ProductRepository, ProductRevisionMediaRepository, ProductRevisionRepository,
-};
 use std::collections::HashMap;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{ProductId, ProductRevisionId};
+use erp_core::money::Amount;
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
+use super::CatalogRepository;
+use super::shared::{PRODUCT_REVISIONS, in_filter, sort_doc};
 use crate::entity::catalog::{
     EnableStatus, Product, ProductKind, ProductListingStatus, ProductRevision, ProductRevisionMedia,
     SkuCoverageStatus,
 };
-use erp_core::common::time::BusinessDate;
-use erp_core::ids::{ProductId, ProductRevisionId};
-use erp_core::money::Amount;
-
-use super::shared::{in_filter, sort_doc, PRODUCT_REVISIONS};
-use super::CatalogRepository;
 use crate::repository::CatalogExt;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::repository::owned::{
+    ProductRepository, ProductRevisionMediaRepository, ProductRevisionRepository,
+};
 
 /// `product_revision_media` 集合名（单一来源：`CatalogExt` 关联常量）。
 const PRODUCT_REVISION_MEDIAS: &str = <mongodb::Database as CatalogExt>::PRODUCT_REVISION_MEDIAS;
@@ -146,8 +144,7 @@ impl<'a> ProductRepository<'a> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor)
-            .await
+        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor).await
     }
 }
 
@@ -263,10 +260,7 @@ impl<'a> ProductRevisionRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<ProductRevisionRow>> {
         let options = FindOptions::builder()
-            .sort(product_revision_sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-            ))
+            .sort(product_revision_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(product_revision_projection())
@@ -275,10 +269,7 @@ impl<'a> ProductRevisionRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按稳定主键批量查询商品修订。
@@ -300,8 +291,7 @@ impl<'a> ProductRevisionRepository<'a> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor)
-            .await
+        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor).await
     }
 
     /// 批量查询一组商品的修订（`$in`，一次取回）。
@@ -326,8 +316,7 @@ impl<'a> ProductRevisionRepository<'a> {
             return Ok(Vec::new());
         }
         let ids: Vec<String> = product_ids.iter().map(|id| id.to_string()).collect();
-        self.find_many(doc! { "product_id": { "$in": ids } }, executor)
-            .await
+        self.find_many(doc! { "product_id": { "$in": ids } }, executor).await
     }
 }
 
@@ -352,10 +341,7 @@ impl<'a> ProductRevisionMediaRepository<'a> {
             return Ok(Vec::new());
         }
         self.find_many(
-            in_filter(
-                "product_revision_id",
-                revision_ids.iter().map(|id| id.to_string()),
-            ),
+            in_filter("product_revision_id", revision_ids.iter().map(|id| id.to_string())),
             executor,
         )
         .await
@@ -379,13 +365,8 @@ impl<'a> CatalogRepository<'a> {
         filter: &ProductRevisionFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<ProductRevisionRow>> {
-        let mut result = self
-            .db
-            .product_revisions()
-            .search_product_revisions(filter, executor)
-            .await?;
-        self.attach_product_revision_media(&mut result.items, executor)
-            .await?;
+        let mut result = self.db.product_revisions().search_product_revisions(filter, executor).await?;
+        self.attach_product_revision_media(&mut result.items, executor).await?;
         Ok(result)
     }
 
@@ -410,10 +391,7 @@ impl<'a> CatalogRepository<'a> {
             .product_revisions()
             .find_by_product_ids(std::slice::from_ref(product_id), executor)
             .await?;
-        Ok(revisions
-            .iter()
-            .map(|revision| revision.revision.revision_no)
-            .max())
+        Ok(revisions.iter().map(|revision| revision.revision.revision_no).max())
     }
 
     /// 读取商品停用事务所需的关系快照。
@@ -435,22 +413,12 @@ impl<'a> CatalogRepository<'a> {
         let Some(product) = self.db.products().find_by_id(product_id, executor).await? else {
             return Ok(None);
         };
-        let revisions = self
-            .db
-            .product_revisions()
-            .find_by_product_ids(&[ProductId::new(product_id)], executor)
-            .await?;
+        let revisions =
+            self.db.product_revisions().find_by_product_ids(&[ProductId::new(product_id)], executor).await?;
         let latest_revision_no = revisions.iter().map(|row| row.revision.revision_no).max();
         let current_revision = select_current_product_revision(&product, &revisions).cloned();
-        let media = self
-            .media_for_current_product_revision(current_revision.as_ref(), executor)
-            .await?;
-        Ok(Some(ProductDisableSnapshot {
-            product,
-            current_revision,
-            media,
-            latest_revision_no,
-        }))
+        let media = self.media_for_current_product_revision(current_revision.as_ref(), executor).await?;
+        Ok(Some(ProductDisableSnapshot { product, current_revision, media, latest_revision_no }))
     }
 
     /// 批量解析一组商品的当前修订。
@@ -471,15 +439,9 @@ impl<'a> CatalogRepository<'a> {
         products: &[Product],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, ProductRevision>> {
-        let product_ids = products
-            .iter()
-            .map(|product| ProductId::new(product.base.id.clone()))
-            .collect::<Vec<_>>();
-        let revisions = self
-            .db
-            .product_revisions()
-            .find_by_product_ids(&product_ids, executor)
-            .await?;
+        let product_ids =
+            products.iter().map(|product| ProductId::new(product.base.id.clone())).collect::<Vec<_>>();
+        let revisions = self.db.product_revisions().find_by_product_ids(&product_ids, executor).await?;
         Ok(select_current_product_revisions(products, revisions))
     }
 
@@ -521,15 +483,9 @@ impl<'a> CatalogRepository<'a> {
         rows: &mut [ProductRevisionRow],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let revision_ids = rows
-            .iter()
-            .map(|row| ProductRevisionId::new(row.id.clone()))
-            .collect::<Vec<_>>();
-        let media = self
-            .db
-            .product_revision_medias()
-            .find_media_by_revision_ids(&revision_ids, executor)
-            .await?;
+        let revision_ids = rows.iter().map(|row| ProductRevisionId::new(row.id.clone())).collect::<Vec<_>>();
+        let media =
+            self.db.product_revision_medias().find_media_by_revision_ids(&revision_ids, executor).await?;
         let mut grouped = group_product_revision_media(media);
         for row in rows {
             row.media = grouped.remove(&row.id).unwrap_or_default();
@@ -583,16 +539,10 @@ impl<'a> CatalogRepository<'a> {
         medias: &[ProductRevisionMedia],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        mongo_ops::insert_one(
-            &self.db.collection::<ProductRevision>(PRODUCT_REVISIONS),
-            revision,
-            executor,
-        )
-        .await?;
+        mongo_ops::insert_one(&self.db.collection::<ProductRevision>(PRODUCT_REVISIONS), revision, executor)
+            .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<ProductRevisionMedia>(PRODUCT_REVISION_MEDIAS),
+            &self.db.collection::<ProductRevisionMedia>(PRODUCT_REVISION_MEDIAS),
             medias.to_vec(),
             executor,
         )
@@ -621,11 +571,7 @@ fn select_current_product_revision<'a>(
         .current_revision_id
         .as_deref()
         .and_then(|current_id| revisions.iter().find(|revision| revision.base.id == current_id))
-        .or_else(|| {
-            revisions
-                .iter()
-                .max_by_key(|revision| revision.revision.revision_no)
-        })
+        .or_else(|| revisions.iter().max_by_key(|revision| revision.revision.revision_no))
 }
 
 /// 批量解析商品当前修订映射。
@@ -645,10 +591,7 @@ fn select_current_product_revisions(
 ) -> HashMap<String, ProductRevision> {
     let mut grouped: HashMap<String, Vec<ProductRevision>> = HashMap::new();
     for revision in revisions {
-        grouped
-            .entry(revision.product_id.to_string())
-            .or_default()
-            .push(revision);
+        grouped.entry(revision.product_id.to_string()).or_default().push(revision);
     }
     products
         .iter()
@@ -676,10 +619,7 @@ fn group_product_revision_media(
 ) -> HashMap<String, Vec<ProductRevisionMedia>> {
     let mut grouped: HashMap<String, Vec<ProductRevisionMedia>> = HashMap::new();
     for row in rows {
-        grouped
-            .entry(row.product_revision_id.to_string())
-            .or_default()
-            .push(row);
+        grouped.entry(row.product_revision_id.to_string()).or_default().push(row);
     }
     for media in grouped.values_mut() {
         media.sort_by_key(|row| row.sort_order);

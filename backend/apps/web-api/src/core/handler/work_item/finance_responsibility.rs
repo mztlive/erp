@@ -1,14 +1,10 @@
 //! 财务责任规则 HTTP 适配层。
 
-use application_core::AuditActor;
-use axum::{
-    extract::{Extension, Path, State},
-    Json,
-};
 use std::future::Future;
 
-use super::assume_send;
-
+use application_core::AuditActor;
+use axum::Json;
+use axum::extract::{Extension, Path, State};
 use erp_processes::adapters::workflow::work_item_service;
 use erp_workflow::service::work_item::{
     CreateFinanceResponsibilityRuleRequest, FinanceResponsibilityOwnerOptionView,
@@ -16,10 +12,10 @@ use erp_workflow::service::work_item::{
 };
 use validator::Validate;
 
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use super::assume_send;
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 /// 查询财务责任规则。
 #[permission_macros::permission(
@@ -32,9 +28,7 @@ use crate::{
 pub async fn finance_responsibility_rule_list(
     State(state): State<AppState>,
 ) -> Result<Vec<FinanceResponsibilityRuleView>> {
-    let views = work_item_service(state.db(), state.rbac())
-        .finance_responsibility_rule_list()
-        .await?;
+    let views = work_item_service(state.db(), state.rbac()).finance_responsibility_rule_list().await?;
     Ok(ApiResponse::ok_with_data(views))
 }
 
@@ -94,8 +88,6 @@ pub fn finance_responsibility_rule_update(
 pub async fn finance_responsibility_owner_options(
     State(state): State<AppState>,
 ) -> Result<Vec<FinanceResponsibilityOwnerOptionView>> {
-    let views = work_item_service(state.db(), state.rbac())
-        .finance_responsibility_owner_options()
-        .await?;
+    let views = work_item_service(state.db(), state.rbac()).finance_responsibility_owner_options().await?;
     Ok(ApiResponse::ok_with_data(views))
 }

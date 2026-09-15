@@ -1,17 +1,18 @@
 //! 集成证据政策、原因注册表与受控引用的唯一校验和投影。
+use persistence_core::Executor;
+
 use crate::dto::{
     ActionBlockerView, ControlledEvidenceKind, ControlledEvidenceRef, DifferenceReasonCode,
     DirectReconciliationConclusion, EvidencePolicyKey, ReconciliationReasonRegistryView,
     RegisteredReconciliationReasonView, ResolutionEvidencePolicyView, ReviewerSeparation,
 };
 use crate::entity::integration_ops::{
-    difference_terminal_policy, error_terminal_policy,
-    reconciliation_reason_registry as domain_reason_registry, DirectConclusion, EvidenceReferenceSet,
-    IntegrationErrorTask, ReconciliationDifference, RequiredEvidenceKind, TerminalEvidencePolicy,
+    DirectConclusion, EvidenceReferenceSet, IntegrationErrorTask, ReconciliationDifference,
+    RequiredEvidenceKind, TerminalEvidencePolicy, difference_terminal_policy, error_terminal_policy,
+    reconciliation_reason_registry as domain_reason_registry,
 };
 use crate::ports::evidence::{EvidenceSubject, IntegrationEvidenceAuthority, VerifiedEvidence};
 use crate::{Error, Result};
-use persistence_core::Executor;
 
 /// 返回错误任务当前固定证据策略视图（规则归领域，此处只做 view 映射）。
 ///
@@ -97,9 +98,7 @@ fn policy_view(policy: &TerminalEvidencePolicy) -> ResolutionEvidencePolicyView 
 /// # 返回
 /// 返回领域证据类型集合（顺序保留提交顺序，不去重）。
 pub fn domain_kinds(refs: &[ControlledEvidenceRef]) -> Vec<RequiredEvidenceKind> {
-    refs.iter()
-        .map(|evidence| RequiredEvidenceKind::from(evidence.kind))
-        .collect()
+    refs.iter().map(|evidence| RequiredEvidenceKind::from(evidence.kind)).collect()
 }
 
 /// 将领域动作阻断映射为响应视图。
@@ -183,9 +182,7 @@ pub fn ensure_completion_policy(
         || submitted_version != expected.evidence_policy_version
         || submitted_key != &expected.key
     {
-        return Err(Error::ConflictError(
-            "终态证据策略已变化，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("终态证据策略已变化，请刷新后重试".to_string()));
     }
     kinds_subset(
         &domain_kinds(submitted_refs),
@@ -210,9 +207,7 @@ pub fn ensure_direct_reason(
 ) -> Result<()> {
     let registry = domain_reason_registry();
     if registry_id != registry.id || registry_version != registry.version {
-        return Err(Error::ConflictError(
-            "对账原因注册表已变化，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("对账原因注册表已变化，请刷新后重试".to_string()));
     }
     if registered_reason_id != reason_code.as_str() {
         return Err(Error::ValidationError("注册原因 ID 与原因代码不一致".to_string()));
@@ -241,9 +236,7 @@ fn kinds_subset(submitted: &[RequiredEvidenceKind], required: &[RequiredEvidence
     if required.iter().all(|kind| submitted.contains(kind)) {
         return Ok(());
     }
-    Err(Error::BusinessLogicError(
-        "终态证据尚未满足固定策略要求".to_string(),
-    ))
+    Err(Error::BusinessLogicError("终态证据尚未满足固定策略要求".to_string()))
 }
 
 /// 逐条调用权威端口重验证据，并返回可持久化的稳定引用。
@@ -259,11 +252,7 @@ pub async fn verify_evidence_refs(
     }
     let mut verified = Vec::with_capacity(refs.len());
     for evidence in refs {
-        verified.push(
-            authority
-                .verify_evidence(subject, evidence, actor_id, executor)
-                .await?,
-        );
+        verified.push(authority.verify_evidence(subject, evidence, actor_id, executor).await?);
     }
     Ok(verified)
 }
@@ -271,9 +260,7 @@ pub async fn verify_evidence_refs(
 /// 从验证结果派生单一稳定证据引用；多条以分号连接。
 pub fn verified_reference(verified: &[VerifiedEvidence]) -> Result<String> {
     evidence_reference_grammar(EvidenceReferenceSet::try_from_canonical(
-        verified
-            .iter()
-            .map(|evidence| evidence.canonical_reference.clone()),
+        verified.iter().map(|evidence| evidence.canonical_reference.clone()),
     ))
     .map(EvidenceReferenceSet::into_wire)
 }
@@ -339,14 +326,16 @@ mod tests {
             &expected,
         )
         .unwrap();
-        assert!(ensure_completion_policy(
-            "stale",
-            expected.evidence_policy_version,
-            &expected.key,
-            &[evidence(ControlledEvidenceKind::ExternalCaseResult)],
-            &expected,
-        )
-        .is_err());
+        assert!(
+            ensure_completion_policy(
+                "stale",
+                expected.evidence_policy_version,
+                &expected.key,
+                &[evidence(ControlledEvidenceKind::ExternalCaseResult)],
+                &expected,
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -366,15 +355,17 @@ mod tests {
             std::slice::from_ref(&evidence),
         )
         .unwrap();
-        assert!(ensure_direct_reason(
-            &registry.reason_registry_id,
-            registry.reason_registry_version,
-            "SOURCE_CORRECTED_AND_REATTRIBUTED",
-            DifferenceReasonCode::SourceCorrectedAndReattributed,
-            DirectReconciliationConclusion::ConfirmNoError,
-            &[evidence],
-        )
-        .is_err());
+        assert!(
+            ensure_direct_reason(
+                &registry.reason_registry_id,
+                registry.reason_registry_version,
+                "SOURCE_CORRECTED_AND_REATTRIBUTED",
+                DifferenceReasonCode::SourceCorrectedAndReattributed,
+                DirectReconciliationConclusion::ConfirmNoError,
+                &[evidence],
+            )
+            .is_err()
+        );
     }
 
     /// 生产代码（测试模块之前部分），供分层守卫断言，避免字面量自匹配。
@@ -382,10 +373,7 @@ mod tests {
     /// # 返回
     /// 返回去掉测试模块后的生产代码全文。
     fn production_source() -> &'static str {
-        include_str!("evidence.rs")
-            .split("mod tests {")
-            .next()
-            .expect("必须存在生产代码")
+        include_str!("evidence.rs").split("mod tests {").next().expect("必须存在生产代码")
     }
 
     /// 分层守卫（INT-E21）：证据策略与原因注册表归领域，服务只做 view 映射。
@@ -411,15 +399,17 @@ mod tests {
 
 #[cfg(test)]
 mod authority_sequence_tests {
+    use std::sync::Mutex;
+
+    use persistence_core::Executor;
+
     use super::verify_evidence_refs;
+    use crate::Error;
     use crate::dto::{ControlledEvidenceKind, ControlledEvidenceRef};
     use crate::entity::integration_ops::CanonicalEvidenceReference;
     use crate::ports::evidence::{
         EvidenceFuture, EvidenceSubject, IntegrationEvidenceAuthority, OriginalResultFact, VerifiedEvidence,
     };
-    use crate::Error;
-    use persistence_core::Executor;
-    use std::sync::Mutex;
 
     struct TestExecutor {
         _identity: u8,
@@ -471,10 +461,10 @@ mod authority_sequence_tests {
             executor: &'a mut dyn Executor,
         ) -> EvidenceFuture<'a, VerifiedEvidence> {
             Box::pin(async move {
-                self.calls.lock().unwrap().push((
-                    evidence.record_id.clone(),
-                    executor as *mut dyn Executor as *mut () as usize,
-                ));
+                self.calls
+                    .lock()
+                    .unwrap()
+                    .push((evidence.record_id.clone(), executor as *mut dyn Executor as *mut () as usize));
                 if self.fail == Some(evidence.record_id.as_str()) {
                     return Err(Error::BusinessLogicError(evidence.record_id.clone()));
                 }
@@ -514,14 +504,10 @@ mod authority_sequence_tests {
         let authority = RecordingAuthority::default();
         let mut executor = TestExecutor { _identity: 1 };
         let id = &mut executor as *mut TestExecutor as usize;
-        let verified = verify_evidence_refs(&authority, &subject(), &refs(), "actor", &mut executor)
-            .await
-            .unwrap();
+        let verified =
+            verify_evidence_refs(&authority, &subject(), &refs(), "actor", &mut executor).await.unwrap();
         assert_eq!(
-            verified
-                .iter()
-                .map(|e| e.reference.record_id.as_str())
-                .collect::<Vec<_>>(),
+            verified.iter().map(|e| e.reference.record_id.as_str()).collect::<Vec<_>>(),
             ["first", "second", "third"]
         );
         assert_eq!(
@@ -531,21 +517,12 @@ mod authority_sequence_tests {
     }
     #[tokio::test]
     async fn evidence_verification_preserves_first_error_and_stops() {
-        let authority = RecordingAuthority {
-            fail: Some("second"),
-            ..Default::default()
-        };
+        let authority = RecordingAuthority { fail: Some("second"), ..Default::default() };
         let mut executor = TestExecutor { _identity: 1 };
         let result = verify_evidence_refs(&authority, &subject(), &refs(), "actor", &mut executor).await;
         assert!(matches!(result,Err(Error::BusinessLogicError(message)) if message=="second"));
         assert_eq!(
-            authority
-                .calls
-                .lock()
-                .unwrap()
-                .iter()
-                .map(|(id, _)| id.as_str())
-                .collect::<Vec<_>>(),
+            authority.calls.lock().unwrap().iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(),
             ["first", "second"]
         );
     }

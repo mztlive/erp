@@ -1,9 +1,11 @@
 //! 成本范围投影所需的有界候选事实；应用层在分页前裁剪全部分配。
-use super::{cost_entry_projection, CostEntryFilter, CostEntryRow};
+use mongodb::bson::doc;
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, QueryFilter, Result, mongo_ops};
+
+use super::{CostEntryFilter, CostEntryRow, cost_entry_projection};
 use crate::entity::cost::CostAllocation;
 use crate::repository::owned::{CostAllocationRepository, CostEntryRepository};
-use mongodb::{bson::doc, options::FindOptions};
-use persistence_core::{mongo_ops, Executor, QueryFilter, Result};
 
 /// 候选成本上限，超限由调用方整体拒绝，禁止截断合计。
 pub const ENTRY_LIMIT: usize = 10_000;
@@ -59,10 +61,7 @@ impl CostAllocationRepository<'_> {
         mongo_ops::find_many(
             &self.collection(),
             doc! { "deleted_at": 0_i64, "cost_entry_id": { "$in": ids } },
-            FindOptions::builder()
-                .limit((ALLOCATION_LIMIT + 1) as i64)
-                .sort(doc! { "id": 1 })
-                .build(),
+            FindOptions::builder().limit((ALLOCATION_LIMIT + 1) as i64).sort(doc! { "id": 1 }).build(),
             executor,
         )
         .await

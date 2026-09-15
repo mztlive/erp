@@ -1,17 +1,16 @@
 //! 业务对象快照。与 BPM 实例一对一，使用有界强类型结构。
 
+use bpm::ApprovalProcessInstanceId;
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::document_registry::DocumentType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, CustomerAccountId, SupplierAccountId, WarehouseId};
 use erp_core::money::{Amount, Quantity};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
-use bpm::ApprovalProcessInstanceId;
+use crate::entity::document_registry::DocumentType;
 
 const DOCUMENT_NO_MAX_LEN: usize = 128;
 const ORG_ID_MAX_LEN: usize = 128;
@@ -174,17 +173,9 @@ fn normalize_payload(
         ORG_ID_MAX_LEN,
         "责任组织过长",
     )?;
-    let submitted_by = normalize_required_text(
-        payload.submitted_by,
-        "提交人不能为空",
-        ACTOR_ID_MAX_LEN,
-        "提交人过长",
-    )?;
-    ensure_required_totals(
-        document_type,
-        payload.total_amount.as_ref(),
-        payload.total_quantity.as_ref(),
-    )?;
+    let submitted_by =
+        normalize_required_text(payload.submitted_by, "提交人不能为空", ACTOR_ID_MAX_LEN, "提交人过长")?;
+    ensure_required_totals(document_type, payload.total_amount.as_ref(), payload.total_quantity.as_ref())?;
     Ok(ApprovalSubjectSnapshotPayload {
         document_no,
         responsible_org_id,
@@ -247,13 +238,15 @@ fn requires_quantity(document_type: DocumentType) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
-    use crate::entity::document_registry::DocumentType;
+    use std::str::FromStr;
+
     use bpm::ApprovalProcessInstanceId;
     use erp_core::common::time::Instant;
     use erp_core::ids::{ApprovalSubjectSnapshotId, WarehouseId};
     use erp_core::money::Quantity;
-    use std::str::FromStr;
+
+    use super::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
+    use crate::entity::document_registry::DocumentType;
 
     fn stock_payload() -> ApprovalSubjectSnapshotPayload {
         ApprovalSubjectSnapshotPayload {
@@ -293,29 +286,33 @@ mod tests {
     fn stock_adjustment_requires_quantity() {
         let mut payload = stock_payload();
         payload.total_quantity = None;
-        assert!(ApprovalSubjectSnapshot::new(
-            ApprovalSubjectSnapshotId::new("snap-1"),
-            ApprovalProcessInstanceId::new("inst-1"),
-            DocumentType::StockAdjustment,
-            "adj-1",
-            1,
-            payload,
-        )
-        .is_err());
+        assert!(
+            ApprovalSubjectSnapshot::new(
+                ApprovalSubjectSnapshotId::new("snap-1"),
+                ApprovalProcessInstanceId::new("inst-1"),
+                DocumentType::StockAdjustment,
+                "adj-1",
+                1,
+                payload,
+            )
+            .is_err()
+        );
     }
 
     /// 回款单缺少金额合计必须失败。
     #[test]
     fn receipt_requires_amount() {
-        assert!(ApprovalSubjectSnapshot::new(
-            ApprovalSubjectSnapshotId::new("snap-1"),
-            ApprovalProcessInstanceId::new("inst-1"),
-            DocumentType::CustomerReceipt,
-            "rcpt-1",
-            1,
-            stock_payload(),
-        )
-        .is_err());
+        assert!(
+            ApprovalSubjectSnapshot::new(
+                ApprovalSubjectSnapshotId::new("snap-1"),
+                ApprovalProcessInstanceId::new("inst-1"),
+                DocumentType::CustomerReceipt,
+                "rcpt-1",
+                1,
+                stock_payload(),
+            )
+            .is_err()
+        );
     }
 
     /// 验证运行时主体的三项精确引用可以匹配冻结快照。
@@ -343,9 +340,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(snapshot
-            .ensure_matches_runtime_subject(DocumentType::StockAdjustment, "adj-1", 1)
-            .is_ok());
+        assert!(snapshot.ensure_matches_runtime_subject(DocumentType::StockAdjustment, "adj-1", 1).is_ok());
     }
 
     /// 验证三项主体不匹配按固定顺序失败且不做规范化。

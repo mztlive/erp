@@ -35,13 +35,19 @@ pub mod unit_of_measure;
 pub mod voucher_category_profile_revision;
 pub mod voucher_defaults;
 
+// 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
+pub use erp_core::ids::{
+    ProductBrandId, ProductCategoryAttributeId, ProductCategoryId, ProductId, ProductRevisionId,
+    ProductRevisionMediaId, SkuAttributeId, SkuAttributeValueId, SkuId, SkuRevisionAttributeValueId,
+    SkuRevisionId, UnitOfMeasureId, VoucherCategoryProfileRevisionId,
+};
 pub use product::Product;
 pub use product_brand::ProductBrand;
 pub use product_category::ProductCategory;
 pub use product_category_attribute::ProductCategoryAttribute;
 pub use product_kind::ProductKind;
 pub use product_revision::ProductRevision;
-pub use product_revision_media::{ensure_unique_media_sort_orders, ProductRevisionMedia};
+pub use product_revision_media::{ProductRevisionMedia, ensure_unique_media_sort_orders};
 pub use revision::next_revision_no;
 pub use sku::Sku;
 pub use sku_attribute::SkuAttribute;
@@ -49,17 +55,10 @@ pub use sku_attribute_value::SkuAttributeValue;
 pub use sku_revision::SkuRevision;
 pub use sku_revision_attribute_value::SkuRevisionAttributeValue;
 pub use specification::{
+    EMPTY_SPEC_SIGNATURE, SpecSignatureEntry, SpecificationSignatureRead, SpecificationSignatureSet,
     compute_specification_signature, parse_specification_signature, read_specification_signature,
-    SpecSignatureEntry, SpecificationSignatureRead, SpecificationSignatureSet, EMPTY_SPEC_SIGNATURE,
 };
 pub use status::{EnableStatus, ListingStatus, ProductListingStatus, SkuCoverageStatus};
 pub use unit_of_measure::UnitOfMeasure;
 pub use voucher_category_profile_revision::VoucherCategoryProfileRevision;
 pub use voucher_defaults::{VoucherCatalogDefaults, VoucherCategorySelection};
-
-// 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
-pub use erp_core::ids::{
-    ProductBrandId, ProductCategoryAttributeId, ProductCategoryId, ProductId, ProductRevisionId,
-    ProductRevisionMediaId, SkuAttributeId, SkuAttributeValueId, SkuId, SkuRevisionAttributeValueId,
-    SkuRevisionId, UnitOfMeasureId, VoucherCategoryProfileRevisionId,
-};

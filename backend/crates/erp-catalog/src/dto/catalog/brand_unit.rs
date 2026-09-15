@@ -1,12 +1,11 @@
-use crate::entity::catalog::{EnableStatus, ProductBrand, UnitOfMeasure};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::ids::FileAssetId;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::common::{PageParams, non_blank, normalize_sort};
+use crate::entity::catalog::{EnableStatus, ProductBrand, UnitOfMeasure};
 use crate::error::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
-
-use super::common::{non_blank, normalize_sort, PageParams};
 
 /// 商品品牌列表允许的排序字段白名单。
 pub(crate) const PRODUCT_BRAND_SORT_FIELDS: &[&str] = &["created_at", "brand_code", "name"];

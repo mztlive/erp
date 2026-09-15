@@ -3,14 +3,12 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::doc;
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, Result, mongo_ops};
 use serde::Deserialize;
 
-use crate::entity::catalog::parse_specification_signature;
-
-use super::shared::SKUS;
 use super::CatalogRepository;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
+use super::shared::SKUS;
+use crate::entity::catalog::parse_specification_signature;
 
 /// 审计投影：只读取稳定主键与规格签名。
 #[derive(Debug, Deserialize)]
@@ -42,9 +40,7 @@ impl<'a> CatalogRepository<'a> {
         let rows = mongo_ops::find_many(
             &self.db.collection::<SpecificationSignatureAuditRow>(SKUS),
             doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
-            FindOptions::builder()
-                .projection(doc! { "id": 1, "specification_signature": 1 })
-                .build(),
+            FindOptions::builder().projection(doc! { "id": 1, "specification_signature": 1 }).build(),
             executor,
         )
         .await?;

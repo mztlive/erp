@@ -1,23 +1,22 @@
 //! 健康检查启动与结果事务；外部调用位于两个事务之间。
-use super::{
-    execution::{execute, ConnectionJobExecutionPort},
-    failure::{persist_health_failure_task, settle_health_failure},
-    SupplierConnectionExecutionProcess,
-};
-use crate::{Error, Result};
+use std::time::Instant as MonotonicInstant;
+
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{HealthCheckResult, SupplierApiConnection, SupplierHealthCheckRun};
+use erp_supply::ports::supplier_api_gateway::ClassifiedError;
 use erp_supply::repository::SupplierApiExt;
-use erp_supply::{
-    ports::supplier_api_gateway::ClassifiedError,
-    service::supplier_api::{context::digest, SupplierApiService},
-};
+use erp_supply::service::supplier_api::SupplierApiService;
+use erp_supply::service::supplier_api::context::digest;
 use erp_support::{BackgroundJob, BulkJobExt, JobStatus};
 use persistence_core::Transactional;
-use std::time::Instant as MonotonicInstant;
+
+use super::SupplierConnectionExecutionProcess;
+use super::execution::{ConnectionJobExecutionPort, execute};
+use super::failure::{persist_health_failure_task, settle_health_failure};
+use crate::{Error, Result};
 
 impl SupplierConnectionExecutionProcess {
     pub(super) async fn process_health_job(&self, job: BackgroundJob, actor: &AuditActor) -> Result<()> {
@@ -55,9 +54,7 @@ impl SupplierConnectionExecutionProcess {
                     job.start(at)?;
                     run.start(at)?;
                     db.background_jobs().update(&mut job, session).await?;
-                    SupplierApiService::new(db.clone())
-                        .persist_health_run(&mut run, session)
-                        .await?;
+                    SupplierApiService::new(db.clone()).persist_health_run(&mut run, session).await?;
                     Ok((connection, job, run))
                 })
             })
@@ -122,9 +119,7 @@ impl SupplierConnectionExecutionProcess {
                             .await?;
                     }
                     db.background_jobs().update(&mut job, session).await?;
-                    SupplierApiService::new(db.clone())
-                        .persist_health_run(&mut run, session)
-                        .await?;
+                    SupplierApiService::new(db.clone()).persist_health_run(&mut run, session).await?;
                     let audit = actor.clone().resource_log_with_id(
                         format!("w20-health-audit-{}", digest(&[&job.base.id])),
                         "supplier_api_connection.health_check.settle",
@@ -156,8 +151,6 @@ impl ConnectionJobExecutionPort for HealthExecution<'_> {
         (outcome, latency_ms)
     }
     async fn finish(&self, started: Self::Started, outcome: Self::Outcome, actor: &AuditActor) -> Result<()> {
-        self.0
-            .finish_health_job(started.1, started.2, outcome.0, outcome.1, actor)
-            .await
+        self.0.finish_health_job(started.1, started.2, outcome.0, outcome.1, actor).await
     }
 }

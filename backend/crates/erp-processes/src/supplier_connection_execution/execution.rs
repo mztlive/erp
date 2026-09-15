@@ -2,8 +2,9 @@
 
 use std::future::Future;
 
-use crate::Result;
 use application_core::AuditActor;
+
+use crate::Result;
 
 /// 启动/结束方法拥有各自根事务；网关方法只消费已提交的事实，不接 Executor。
 pub(super) trait ConnectionJobExecutionPort: Sync {
@@ -36,12 +37,12 @@ pub(super) async fn execute<P: ConnectionJobExecutionPort>(
 mod tests {
     use std::sync::Mutex;
 
-    use crate::Error;
     use erp_core::AccountKind;
     use erp_supply::entity::failure::SupplierFailureClass;
     use erp_supply::ports::supplier_api_gateway::ClassifiedError;
 
     use super::*;
+    use crate::Error;
 
     #[derive(Default)]
     struct Trace {
@@ -118,11 +119,7 @@ mod tests {
         fail_at: Option<&'static str>,
         outcome: std::result::Result<(), ClassifiedError>,
     ) -> RecordingExecution {
-        RecordingExecution {
-            trace: Mutex::new(Trace::default()),
-            fail_at,
-            outcome,
-        }
+        RecordingExecution { trace: Mutex::new(Trace::default()), fail_at, outcome }
     }
 
     #[tokio::test]
@@ -130,16 +127,7 @@ mod tests {
         let port = port(None, Ok(()));
         execute(&port, 41, &actor()).await.unwrap();
         let trace = port.trace.lock().unwrap();
-        assert_eq!(
-            trace.calls,
-            [
-                "start.begin",
-                "start.commit",
-                "gateway",
-                "finish.begin",
-                "finish.commit"
-            ]
-        );
+        assert_eq!(trace.calls, ["start.begin", "start.commit", "gateway", "finish.begin", "finish.commit"]);
         assert_eq!(trace.settled, Some(Ok(())));
         assert!(!trace.transaction_active);
     }
@@ -155,32 +143,14 @@ mod tests {
         execute(&port, 41, &actor()).await.unwrap();
         let trace = port.trace.lock().unwrap();
         assert_eq!(trace.settled, Some(Err(failure)));
-        assert_eq!(
-            trace.calls,
-            [
-                "start.begin",
-                "start.commit",
-                "gateway",
-                "finish.begin",
-                "finish.commit"
-            ]
-        );
+        assert_eq!(trace.calls, ["start.begin", "start.commit", "gateway", "finish.begin", "finish.commit"]);
     }
 
     #[tokio::test]
     async fn execution_preserves_first_transaction_error_without_later_steps() {
         for (failure, expected) in [
             ("start", vec!["start.begin", "start.abort"]),
-            (
-                "finish",
-                vec![
-                    "start.begin",
-                    "start.commit",
-                    "gateway",
-                    "finish.begin",
-                    "finish.abort",
-                ],
-            ),
+            ("finish", vec!["start.begin", "start.commit", "gateway", "finish.begin", "finish.abort"]),
         ] {
             let port = port(Some(failure), Ok(()));
             let error = execute(&port, 41, &actor()).await.unwrap_err();

@@ -24,18 +24,14 @@ impl CatalogSupplyQueryPort for MongoCatalogSupplyQuery {
         filter: &ProductFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<ProductRow>> {
-        CatalogSupplyRepository::new(&self.db)
-            .product_page(filter, executor)
-            .await
+        CatalogSupplyRepository::new(&self.db).product_page(filter, executor).await
     }
     async fn search_sellable_skus(
         &self,
         filter: &SellableSkuFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SellableSkuRow>> {
-        CatalogSupplyRepository::new(&self.db)
-            .search_sellable_skus(filter, executor)
-            .await
+        CatalogSupplyRepository::new(&self.db).search_sellable_skus(filter, executor).await
     }
     async fn find_sellable_sku_refs(
         &self,
@@ -43,9 +39,7 @@ impl CatalogSupplyQueryPort for MongoCatalogSupplyQuery {
         date: BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SellableSkuRow>> {
-        CatalogSupplyRepository::new(&self.db)
-            .find_sellable_sku_refs(refs, date, executor)
-            .await
+        CatalogSupplyRepository::new(&self.db).find_sellable_sku_refs(refs, date, executor).await
     }
     async fn find_sellable_skus_by_ids(
         &self,
@@ -53,8 +47,6 @@ impl CatalogSupplyQueryPort for MongoCatalogSupplyQuery {
         date: BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SellableSkuRow>> {
-        CatalogSupplyRepository::new(&self.db)
-            .find_sellable_skus_by_ids(sku_ids, date, executor)
-            .await
+        CatalogSupplyRepository::new(&self.db).find_sellable_skus_by_ids(sku_ids, date, executor).await
     }
 }

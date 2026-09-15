@@ -1,15 +1,16 @@
 //! 采购领域已形成的精确依据到 HTTP 展示视图的映射。
-use super::super::dto::{CreationBasisLineView, CreationBasisView};
-use crate::Result;
 use erp_core::ids::SupplierAccountId;
-use erp_core::money::{line_amounts, Amount, UnitPrice};
+use erp_core::money::{Amount, UnitPrice, line_amounts};
 use erp_procurement::entity::facts::SalesOrderBasisFact;
 use erp_procurement::entity::purchase_order::{
-    basis_id_for, stable_line_id, stock_basis_id_for, supply_cost, BasisGroup, BasisLine, CreationBasisFacts,
-    FulfillmentResponsibility, PurchaseType, StockBasisGroup, SupplySourceType,
+    BasisGroup, BasisLine, CreationBasisFacts, FulfillmentResponsibility, PurchaseType, StockBasisGroup,
+    SupplySourceType, basis_id_for, stable_line_id, stock_basis_id_for, supply_cost,
 };
 use erp_procurement::service::purchase_order::creation_basis::business_date_of;
 use erp_procurement::service::purchase_order::shared::zero_amount;
+
+use super::super::dto::{CreationBasisLineView, CreationBasisView};
+use crate::Result;
 /// 构造一条精确创建依据视图。
 ///
 /// # 参数
@@ -43,11 +44,7 @@ pub(super) fn build_basis_view(
     let mut lines = Vec::with_capacity(group.lines.len());
     for line in &group.lines {
         let cost = supply_cost(&line.supply.revision, group.scope.fulfillment_responsibility);
-        let (gross, _, _) = line_amounts(
-            cost,
-            line.max_create_quantity,
-            line.supply.revision.input_tax_rate,
-        );
+        let (gross, _, _) = line_amounts(cost, line.max_create_quantity, line.supply.revision.input_tax_rate);
         estimated = estimated.checked_add(gross);
         lines.push(basis_line_view(line, &group.scope.supplier_id, cost, gross)?);
     }
@@ -58,11 +55,7 @@ pub(super) fn build_basis_view(
         sales_order_id: order.base.id.clone(),
         sales_order_no: order.order_no.clone(),
         customer_name: group.revision.customer_snapshot.customer_name.clone(),
-        contract_no: group
-            .revision
-            .contract_snapshot
-            .as_ref()
-            .map(|snapshot| snapshot.contract_no.clone()),
+        contract_no: group.revision.contract_snapshot.as_ref().map(|snapshot| snapshot.contract_no.clone()),
         sales_owner_name,
         sales_order_revision_id: group.revision.base.id.clone(),
         supplier_id: group.scope.supplier_id.to_string(),
@@ -119,11 +112,7 @@ pub(super) fn build_stock_basis_view(
         sales_order_id: order.base.id.clone(),
         sales_order_no: order.order_no.clone(),
         customer_name: group.revision.customer_snapshot.customer_name.clone(),
-        contract_no: group
-            .revision
-            .contract_snapshot
-            .as_ref()
-            .map(|snapshot| snapshot.contract_no.clone()),
+        contract_no: group.revision.contract_snapshot.as_ref().map(|snapshot| snapshot.contract_no.clone()),
         sales_owner_name,
         sales_order_revision_id: group.revision.base.id.clone(),
         supplier_id: String::new(),

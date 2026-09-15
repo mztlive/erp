@@ -1,39 +1,38 @@
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     BusinessDocumentId, SalesOrderId, SalesOrderSubmissionId, SalesOrderWorkingCopyId, WorkflowActionId,
 };
+use erp_sales::dto::sales_order::{SubmissionView, SubmitSalesOrderRequest};
 use erp_sales::entity::sales_order::{
     SalesOrder, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine, WorkingPurpose,
 };
 use erp_sales::repository::SalesOrderExt;
-use erp_workflow::entity::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
-use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
-use validator::Validate;
-
-use super::super::adapter::{
-    build_sales_order_snapshot, execute_sales_order_domain_action, reject_legacy_card_sales_decision,
-    reject_legacy_card_sales_work_item, require_frozen_binding, sales_approval_ports,
-    sales_order_object_readable, sales_order_responsible_org_id, sales_order_start_command,
-    start_approval_command_kind, SalesOrderStartCommand, RECENT_HISTORY_LIMIT,
-};
-use super::super::start_approval::{
-    build_sales_order_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_sales_order_start, replay_sales_order_start_with_executor, ReplaySalesOrderStartInput,
-    SalesOrderStartInput, SalesOrderStartPersistInput, SalesOrderWorkingCopyPersistPlan,
-};
-use super::super::SalesOrderCommandProcess;
-use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_sales::dto::sales_order::{SubmissionView, SubmitSalesOrderRequest};
 use erp_sales::service::sales_order::command::identity::{
     sales_submission_audit_id, sales_submission_fingerprint,
 };
 use erp_sales::service::sales_order::mapper::{build_submission, build_submission_lines, submission_view};
+use erp_workflow::entity::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
 use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_start};
 use erp_workflow::service::document_registry::find_approval_binding;
+use id_generator::next_id;
+use persistence_core::{NoTransaction, Transactional};
+use validator::Validate;
+
+use super::super::SalesOrderCommandProcess;
+use super::super::adapter::{
+    RECENT_HISTORY_LIMIT, SalesOrderStartCommand, build_sales_order_snapshot,
+    execute_sales_order_domain_action, reject_legacy_card_sales_decision, reject_legacy_card_sales_work_item,
+    require_frozen_binding, sales_approval_ports, sales_order_object_readable,
+    sales_order_responsible_org_id, sales_order_start_command, start_approval_command_kind,
+};
+use super::super::start_approval::{
+    ReplaySalesOrderStartInput, SalesOrderStartInput, SalesOrderStartPersistInput,
+    SalesOrderWorkingCopyPersistPlan, build_sales_order_start_input, load_bound_definition_graph,
+    load_start_receipt, persist_sales_order_start, replay_sales_order_start_with_executor,
+};
+use crate::{Error, Result};
 
 /// 销售提交启动恢复入参。
 struct RecoverSalesSubmissionStartInput<'a> {
@@ -150,10 +149,7 @@ impl SalesOrderCommandProcess {
         }
         let audit_id = sales_submission_audit_id(actor.id(), id, &idempotency_key);
         let fingerprint = sales_submission_fingerprint(actor.id(), id, &req)?;
-        if let Some(existing) = self
-            .replay_sales_submission(&audit_id, &fingerprint, id, actor)
-            .await?
-        {
+        if let Some(existing) = self.replay_sales_submission(&audit_id, &fingerprint, id, actor).await? {
             return Ok(existing);
         }
         let (customer_id, settlement_party_id, draft) = self
@@ -164,23 +160,16 @@ impl SalesOrderCommandProcess {
             .ensure_first_submission_working_copy_editable()
             .map_err(|error| Error::ConflictError(error.to_string()))?;
         if !order.matches_contract_context(&req.contract_id, &customer_id, &settlement_party_id) {
-            return Err(Error::ConflictError(
-                "销售单合同归属已变化，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("销售单合同归属已变化，请刷新后重试".to_string()));
         }
-        self.sales()
-            .ensure_sellable_draft_lines(&draft.lines, &self.catalog())
-            .await?;
+        self.sales().ensure_sellable_draft_lines(&draft.lines, &self.catalog()).await?;
         let order_id = SalesOrderId::new(order.base.id.clone());
         let active_working_copy = self
             .db
             .sales_order_working_copies()
             .find_active_by_order_and_purpose(&order_id, WorkingPurpose::FirstSubmission, &mut NoTransaction)
             .await?;
-        let stable = self
-            .sales()
-            .collect_stable_lines_for_draft(&order_id, &draft.lines)
-            .await?;
+        let stable = self.sales().collect_stable_lines_for_draft(&order_id, &draft.lines).await?;
         let (mut working_copy, copy_lines, working_copy_plan) = self
             .sales()
             .prepare_submission_copy(&order, active_working_copy, stable, &draft, req.version, actor)
@@ -203,11 +192,8 @@ impl SalesOrderCommandProcess {
                 .await?;
             return Ok(submission_view(existing, existing_lines));
         }
-        self.sales()
-            .ensure_sellable_working_copy_lines(&copy_lines, &self.catalog())
-            .await?;
-        self.ensure_procurement_responsibility_before_submit(&order, &copy_lines)
-            .await?;
+        self.sales().ensure_sellable_working_copy_lines(&copy_lines, &self.catalog()).await?;
+        self.ensure_procurement_responsibility_before_submit(&order, &copy_lines).await?;
         let latest_submission_no = self
             .db
             .sales_order_submissions()
@@ -277,9 +263,8 @@ impl SalesOrderCommandProcess {
         let ports = sales_approval_ports(order.business_type)?;
         let subject = crate::order_to_cash::subject_ref_for_sales_business(order.business_type, id)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)?;
+        let binding =
+            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         execute_sales_order_domain_action(&mut order, ports.on_approval_start, actor.id())?;
         let now = Instant::now();
@@ -381,7 +366,7 @@ impl SalesOrderCommandProcess {
                     original_error: error,
                 })
                 .await
-            }
+            },
             Err(error) => Err(error),
         }
     }
@@ -394,12 +379,7 @@ impl SalesOrderCommandProcess {
         sales_order_id: &str,
         actor: &AuditActor,
     ) -> Result<Option<SubmissionView>> {
-        let Some(audit) = self
-            .db
-            .audit_logs()
-            .find_by_id(audit_id, &mut NoTransaction)
-            .await?
-        else {
+        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
             return Ok(None);
         };
         if audit.message.as_deref() != Some(&format!("command_sha256={expected_fingerprint}")) {
@@ -512,9 +492,9 @@ impl SalesOrderCommandProcess {
                     {
                         return Ok(view);
                     }
-                }
-                Ok(None) => {}
-                Err(error) if error.command_may_have_committed() => {}
+                },
+                Ok(None) => {},
+                Err(error) if error.command_may_have_committed() => {},
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {

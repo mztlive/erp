@@ -2,24 +2,18 @@
 
 use std::collections::HashMap;
 
-use erp_finance::entity::payable::PayableEntry;
-use erp_finance::entity::payable::PaymentAllocation;
-use erp_finance::entity::payable::{PayableAccount, SupplierPayment};
-use erp_finance::entity::receivable::CustomerReceipt;
-use erp_finance::entity::receivable::PendingReceiptAllocation;
-use erp_finance::entity::receivable::ReceivableAccount;
-use erp_finance::entity::receivable::ReceivableEntry;
-use {
-    erp_sales::entity::sales_order::SalesOrderRevisionLine,
-    erp_sales::entity::sales_order::SalesOrderVoucherLineRevision,
+use erp_finance::entity::payable::{PayableAccount, PayableEntry, PaymentAllocation, SupplierPayment};
+use erp_finance::entity::receivable::{
+    CustomerReceipt, PendingReceiptAllocation, ReceivableAccount, ReceivableEntry,
 };
+use erp_sales::entity::sales_order::{SalesOrderRevisionLine, SalesOrderVoucherLineRevision};
 
+use super::super::WorkbenchObjectFact;
 use super::super::brief::{
-    format_instant_date, join_list_summary, line_title, non_empty, push_section, BriefLine,
-    ObjectBriefSource, BRIEF_LINE_LIMIT,
+    BRIEF_LINE_LIMIT, BriefLine, ObjectBriefSource, format_instant_date, join_list_summary, line_title,
+    non_empty, push_section,
 };
 use super::super::presentation::format_yuan;
-use super::super::WorkbenchObjectFact;
 use super::{FundsOriginBrief, FundsOrigins};
 use crate::workbench::authority::funds::origins::{
     payable_entry_counterparties, payment_counterparties, receipt_counterparties,
@@ -51,18 +45,8 @@ pub(super) fn payable_brief_source(
     let mut sections = Vec::new();
     push_section(&mut sections, "供应商", supplier.as_deref(), false);
     push_section(&mut sections, "采购单", purchase_no.as_deref(), false);
-    push_section(
-        &mut sections,
-        "未付金额",
-        Some(format_yuan(&account.open_total)).as_deref(),
-        true,
-    );
-    push_section(
-        &mut sections,
-        "已付金额",
-        Some(format_yuan(&account.settled_total)).as_deref(),
-        true,
-    );
+    push_section(&mut sections, "未付金额", Some(format_yuan(&account.open_total)).as_deref(), true);
+    push_section(&mut sections, "已付金额", Some(format_yuan(&account.settled_total)).as_deref(), true);
     push_section(&mut sections, "计划付款日", due_date.as_deref(), false);
     ObjectBriefSource {
         customer: supplier.clone(),
@@ -102,24 +86,9 @@ pub(super) fn receipt_brief_source(
     visible.truncate(BRIEF_LINE_LIMIT);
     let mut sections = Vec::new();
     push_section(&mut sections, "往来主体", counterparty, false);
-    push_section(
-        &mut sections,
-        "回款金额",
-        Some(format_yuan(&receipt.amount)).as_deref(),
-        true,
-    );
-    push_section(
-        &mut sections,
-        "到账日",
-        Some(format_instant_date(receipt.received_at)).as_deref(),
-        false,
-    );
-    push_section(
-        &mut sections,
-        "银行流水",
-        receipt.bank_reference.as_deref(),
-        false,
-    );
+    push_section(&mut sections, "回款金额", Some(format_yuan(&receipt.amount)).as_deref(), true);
+    push_section(&mut sections, "到账日", Some(format_instant_date(receipt.received_at)).as_deref(), false);
+    push_section(&mut sections, "银行流水", receipt.bank_reference.as_deref(), false);
     if !visible.is_empty() {
         push_section(
             &mut sections,
@@ -162,11 +131,7 @@ pub(super) fn voucher_account_line(
 ) -> BriefLine {
     BriefLine {
         title: line_title(&line.item_name_snapshot, line.spec_snapshot.as_deref()),
-        quantity: Some(format!(
-            "面值 {} × {} 张",
-            format_yuan(&voucher.face_value),
-            voucher.card_count
-        )),
+        quantity: Some(format!("面值 {} × {} 张", format_yuan(&voucher.face_value), voucher.card_count)),
         due_label: Some(format!(
             "成交 {} · 配赠 {}",
             format_yuan(&voucher.transaction_amount),
@@ -220,9 +185,7 @@ pub(super) fn receipt_brief_lines(
                 .and_then(|account| sales_nos.get(&account.sales_order_id.to_string()))
                 .cloned();
             BriefLine {
-                title: sales_no
-                    .map(|no| format!("销售单 {no}"))
-                    .unwrap_or_else(|| "应收分录".to_string()),
+                title: sales_no.map(|no| format!("销售单 {no}")).unwrap_or_else(|| "应收分录".to_string()),
                 quantity: Some(format_yuan(&allocation.allocated_amount)),
                 due_label: None,
             }
@@ -287,15 +250,9 @@ pub(super) fn append_funds_origin(
     has_evidence: bool,
     impact: &str,
 ) {
-    let original_document = origin
-        .and_then(|item| item.original_document.as_deref())
-        .unwrap_or("原始资金单据业务号待补全");
-    push_section(
-        &mut brief.extra_sections,
-        "原始资金单据",
-        Some(original_document),
-        false,
-    );
+    let original_document =
+        origin.and_then(|item| item.original_document.as_deref()).unwrap_or("原始资金单据业务号待补全");
+    push_section(&mut brief.extra_sections, "原始资金单据", Some(original_document), false);
     push_section(
         &mut brief.extra_sections,
         "原单金额",
@@ -324,10 +281,8 @@ pub(super) fn append_funds_origin(
     let lines = origin.map(|item| item.lines.clone()).unwrap_or_default();
     brief.more_count = lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
     brief.lines = lines.into_iter().take(BRIEF_LINE_LIMIT).collect();
-    brief.list_summary = join_list_summary([
-        Some(brief.list_summary.clone()),
-        Some(original_document.to_string()),
-    ]);
+    brief.list_summary =
+        join_list_summary([Some(brief.list_summary.clone()), Some(original_document.to_string())]);
 }
 
 /// 金额加原因类资金单据的共用简报。
@@ -384,9 +339,7 @@ pub(super) fn receipt_origins_from_rows(
             (
                 id.clone(),
                 FundsOriginBrief {
-                    counterparty: party_names
-                        .get(&receipt.counterparty_party_id.to_string())
-                        .cloned(),
+                    counterparty: party_names.get(&receipt.counterparty_party_id.to_string()).cloned(),
                     original_document: Some(format!("回款单 {}", receipt.receipt_no)),
                     original_amount: Some(format_yuan(&receipt.amount)),
                     bank_reference: receipt.bank_reference,
@@ -396,10 +349,7 @@ pub(super) fn receipt_origins_from_rows(
             )
         })
         .collect();
-    FundsOrigins {
-        counterparties,
-        briefs,
-    }
+    FundsOrigins { counterparties, briefs }
 }
 
 /// 同一来源行分别投影命令名称与富简报；富简报保留名称缺失的原始单据。
@@ -432,10 +382,7 @@ pub(super) fn payment_origins_from_rows(
             )
         })
         .collect();
-    FundsOrigins {
-        counterparties,
-        briefs,
-    }
+    FundsOrigins { counterparties, briefs }
 }
 
 /// 同一来源行分别投影命令名称与富简报；富简报保留名称缺失的原始单据。
@@ -451,14 +398,10 @@ pub(super) fn receivable_origins_from_rows(
         .map(|entry| {
             let account = accounts.get(&entry.receivable_account_id.to_string());
             let sales_no = account.and_then(|account| sales_nos.get(&account.sales_order_id.to_string()));
-            let counterparty = account.and_then(|account| {
-                party_names
-                    .get(&account.counterparty_party_id.to_string())
-                    .cloned()
-            });
-            let title = sales_no
-                .map(|no| format!("销售单 {no}"))
-                .unwrap_or_else(|| "销售单号待补全".to_string());
+            let counterparty = account
+                .and_then(|account| party_names.get(&account.counterparty_party_id.to_string()).cloned());
+            let title =
+                sales_no.map(|no| format!("销售单 {no}")).unwrap_or_else(|| "销售单号待补全".to_string());
             let id = entry.base.id.clone();
             (
                 id,
@@ -477,10 +420,7 @@ pub(super) fn receivable_origins_from_rows(
             )
         })
         .collect();
-    FundsOrigins {
-        counterparties,
-        briefs,
-    }
+    FundsOrigins { counterparties, briefs }
 }
 
 /// 同一来源行分别投影命令名称与富简报；富简报保留名称缺失的原始单据。
@@ -498,9 +438,8 @@ pub(super) fn payable_origins_from_rows(
             let purchase_no = account.and_then(|account| purchase_nos.get(&account.source_document_id));
             let counterparty =
                 account.and_then(|account| supplier_names.get(&account.supplier_id.to_string()).cloned());
-            let title = purchase_no
-                .map(|no| format!("采购单 {no}"))
-                .unwrap_or_else(|| "采购单号待补全".to_string());
+            let title =
+                purchase_no.map(|no| format!("采购单 {no}")).unwrap_or_else(|| "采购单号待补全".to_string());
             let id = entry.base.id.clone();
             (
                 id,
@@ -519,10 +458,7 @@ pub(super) fn payable_origins_from_rows(
             )
         })
         .collect();
-    FundsOrigins {
-        counterparties,
-        briefs,
-    }
+    FundsOrigins { counterparties, briefs }
 }
 /// 富显示明确覆盖往来字段；None 是原结果，不回退 authority 名称。
 pub(super) fn funds_fact_display(
@@ -594,10 +530,7 @@ mod tests {
         );
         assert!(brief.amount_label.is_none());
         let assembled = crate::workbench::brief::assemble_brief(&brief, None);
-        assert!(assembled
-            .sections
-            .iter()
-            .any(|s| s.label == "退款金额" && s.value == "¥500"));
+        assert!(assembled.sections.iter().any(|s| s.label == "退款金额" && s.value == "¥500"));
         assert!(!assembled.sections.iter().any(|s| s.label == "含税金额"));
         assert!(brief.extra_sections.iter().any(|section| section.label == "原因"));
         assert_eq!(brief.list_summary, "¥500 · 重复到账");
@@ -626,31 +559,25 @@ mod tests {
 
         append_funds_origin(&mut brief, Some(&origin), true, "通过后追加反向核销，原事实保留");
 
-        assert!(brief
-            .extra_sections
-            .iter()
-            .any(|section| { section.label == "原始资金单据" && section.value == "回款单 CR-1" }));
-        assert!(brief
-            .extra_sections
-            .iter()
-            .any(|section| section.label == "核销影响"));
-        assert!(brief
-            .extra_sections
-            .iter()
-            .any(|section| section.label == "本单凭证附件" && section.value == "已上传"));
+        assert!(
+            brief.extra_sections.iter().any(|section| {
+                section.label == "原始资金单据" && section.value == "回款单 CR-1"
+            })
+        );
+        assert!(brief.extra_sections.iter().any(|section| section.label == "核销影响"));
+        assert!(
+            brief
+                .extra_sections
+                .iter()
+                .any(|section| section.label == "本单凭证附件" && section.value == "已上传")
+        );
         assert_eq!(brief.lines[0].title, "销售单 SO-1");
     }
 
     #[test]
     fn invoice_tax_profile_label_fails_closed_when_current_profile_is_missing() {
-        assert_eq!(
-            invoice_tax_profile_label(Some("91310000ABC")),
-            "税务资料有效 · 税号 91310000ABC"
-        );
-        assert_eq!(
-            invoice_tax_profile_label(None),
-            "未找到当前有效税务资料；登记开票前必须补齐"
-        );
+        assert_eq!(invoice_tax_profile_label(Some("91310000ABC")), "税务资料有效 · 税号 91310000ABC");
+        assert_eq!(invoice_tax_profile_label(None), "未找到当前有效税务资料；登记开票前必须补齐");
     }
 
     fn original_receipt() -> CustomerReceipt {
@@ -712,10 +639,7 @@ mod tests {
             counterparties: HashMap::from([("entry-1".into(), "分录主体".into())]),
             briefs: HashMap::from([(
                 "entry-1".into(),
-                FundsOriginBrief {
-                    counterparty: Some("分录主体".into()),
-                    ..Default::default()
-                },
+                FundsOriginBrief { counterparty: Some("分录主体".into()), ..Default::default() },
             )]),
         };
         let actor = "audit-actor".to_string();
@@ -780,12 +704,13 @@ mod tests {
 
     #[test]
     fn voucher_display_impact_does_not_replace_command_revision_predicate() {
-        use crate::workbench::authority::funds::mapping::voucher_revision_ids;
         use erp_core::common::time::Instant;
         use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SkuId};
         use erp_sales::entity::sales_order::{
             HeaderSnapshotData, RevisionSource, SalesOrderRevision, SalesOrderRevisionData,
         };
+
+        use crate::workbench::authority::funds::mapping::voucher_revision_ids;
         let mut revision = SalesOrderRevision::new(
             SalesOrderRevisionId::new("revision-1"),
             SalesOrderRevisionData {
@@ -824,10 +749,7 @@ mod tests {
         authority.impact_summary =
             Some(crate::workbench::authority::funds::mapping::receivable_account_impact(command_voucher));
         let fact = receivable_fact_display(authority, true);
-        assert_eq!(
-            fact.authority.impact_summary.as_deref(),
-            Some("不复核则票款与开票事实不能确认")
-        );
+        assert_eq!(fact.authority.impact_summary.as_deref(), Some("不复核则票款与开票事实不能确认"));
         assert_eq!(
             fact.display.impact_summary.as_deref(),
             Some("不复核则卡券票款、开票与兑付前置事实不能确认")

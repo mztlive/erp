@@ -1,20 +1,21 @@
 //! 持久化准备队列：先占用册版本，再后台执行；过期、重启和迟到结果均有持久化边界。
+use std::sync::Arc;
+
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{SalesSelectionBookletId, SalesSelectionPrepareTaskId};
+use persistence_core::{Executor, NoTransaction, Transactional};
+
 use super::{IdempotencyStoreInput, SalesSelectionService};
 use crate::dto::sales_selection::{PrepareSalesSelectionRequest, SalesSelectionBookletView};
 use crate::entity::sales_selection::{
-    normalize_idempotency_key, request_hash, FirstNonEmptyMemberImage, IdempotencyOperation,
-    PackageImageGenerator, PrepareKind, PrepareStage, PrepareTaskStatus, SalesSelectionBooklet,
-    SalesSelectionDisplayItem, SalesSelectionPoolMember, SalesSelectionPrepareTask,
-    SalesSelectionPrepareTaskData, TierSearchReport,
+    FirstNonEmptyMemberImage, IdempotencyOperation, PackageImageGenerator, PrepareKind, PrepareStage,
+    PrepareTaskStatus, SalesSelectionBooklet, SalesSelectionDisplayItem, SalesSelectionPoolMember,
+    SalesSelectionPrepareTask, SalesSelectionPrepareTaskData, TierSearchReport, normalize_idempotency_key,
+    request_hash,
 };
 use crate::ports::sales_selection::{SelectionCatalogPort, SelectionImagePort};
-use crate::{repository::SalesSelectionExt, Error, Result};
-use erp_core::{
-    common::time::{BusinessDate, Instant},
-    ids::{SalesSelectionBookletId, SalesSelectionPrepareTaskId},
-};
-use persistence_core::{Executor, NoTransaction, Transactional};
-use std::sync::Arc;
+use crate::repository::SalesSelectionExt;
+use crate::{Error, Result};
 
 /// 完整计算结果仅在通过任务身份、运行代数、册版本和期限检查后提交。
 struct Prepared {
@@ -72,9 +73,8 @@ impl SalesSelectionService {
         let key = normalize_idempotency_key(&req.idempotency_key)?;
         let json = serde_json::to_string(&req).map_err(|e| Error::Internal(e.to_string()))?;
         let hash = request_hash(&json);
-        if let Some(view) = self
-            .replay_idempotency(IdempotencyOperation::Prepare, actor, &key, &hash, tx)
-            .await?
+        if let Some(view) =
+            self.replay_idempotency(IdempotencyOperation::Prepare, actor, &key, &hash, tx).await?
         {
             return Ok(view);
         }
@@ -124,11 +124,7 @@ impl SalesSelectionService {
         catalog: &dyn SelectionCatalogPort,
         images: &dyn SelectionImagePort,
     ) -> Result<u32> {
-        let mut tasks = self
-            .db
-            .sales_selection_prepare_tasks()
-            .list_active(&mut NoTransaction)
-            .await?;
+        let mut tasks = self.db.sales_selection_prepare_tasks().list_active(&mut NoTransaction).await?;
         tasks.sort_by_key(|task| task.deadline_at);
         let mut count = self.close_expired_published().await?;
         for task in tasks {
@@ -152,12 +148,7 @@ impl SalesSelectionService {
             return Ok(false);
         }
         task.mark_running(Instant::now())?;
-        match self
-            .db
-            .sales_selection_prepare_tasks()
-            .update(&mut task, &mut NoTransaction)
-            .await
-        {
+        match self.db.sales_selection_prepare_tasks().update(&mut task, &mut NoTransaction).await {
             Ok(_) => (),
             Err(persistence_core::Error::OptimisticLockingError) => return Ok(false),
             Err(error) => return Err(error.into()),
@@ -173,11 +164,7 @@ impl SalesSelectionService {
         catalog: &dyn SelectionCatalogPort,
         images: &dyn SelectionImagePort,
     ) -> Result<()> {
-        let remaining = task
-            .deadline_at
-            .unix_secs()
-            .saturating_sub(Instant::now().unix_secs())
-            .max(0) as u64;
+        let remaining = task.deadline_at.unix_secs().saturating_sub(Instant::now().unix_secs()).max(0) as u64;
         let outcome = tokio::time::timeout(
             std::time::Duration::from_secs(remaining),
             self.calculate_task(&task, catalog, images),
@@ -189,7 +176,7 @@ impl SalesSelectionService {
                     tracing::warn!(task_id = %task.base.id, error = %error, "准备结果未能提交");
                     self.fail_task(&task, "准备结果未能保存，请重新准备").await?;
                 }
-            }
+            },
             Ok(Err(error)) => self.fail_task(&task, &error.to_string()).await?,
             Err(_) => self.fail_task(&task, "准备任务已超过时限").await?,
         }
@@ -205,9 +192,7 @@ impl SalesSelectionService {
     ) -> Result<Prepared> {
         let req: PrepareSalesSelectionRequest = serde_json::from_str(&task.request_json)
             .map_err(|_| Error::selection_prepare_failed("准备任务缺少有效命令，请重新准备"))?;
-        let mut book = self
-            .load_booklet(task.booklet_id.as_ref(), &mut NoTransaction)
-            .await?;
+        let mut book = self.load_booklet(task.booklet_id.as_ref(), &mut NoTransaction).await?;
         ensure_task_book(task, &book)?;
         if matches!(req.kind, PrepareKind::FirstPrepare | PrepareKind::RePrepare) {
             super::prepare::apply_reprepare_request(&mut book, &req)?;
@@ -215,24 +200,10 @@ impl SalesSelectionService {
         let batch = self.resolve_batch_id(&book, req.kind);
         let snapshots = self.freeze_pool(&book, &batch, req.kind, catalog, images).await?;
         self.prepare_progress(&book, PrepareStage::Search, 0).await?;
-        let (items, members, reports) = self
-            .build_displays(
-                &book,
-                &batch,
-                &snapshots,
-                &req,
-                Arc::new(FirstNonEmptyMemberImage),
-            )
-            .await?;
-        self.prepare_progress(&book, PrepareStage::Write, reports.len() as u32)
-            .await?;
-        Ok(Prepared {
-            book,
-            batch,
-            items,
-            members,
-            reports,
-        })
+        let (items, members, reports) =
+            self.build_displays(&book, &batch, &snapshots, &req, Arc::new(FirstNonEmptyMemberImage)).await?;
+        self.prepare_progress(&book, PrepareStage::Write, reports.len() as u32).await?;
+        Ok(Prepared { book, batch, items, members, reports })
     }
 
     /// 阶段更新也校验任务仍活动且册版本未漂移。
@@ -255,10 +226,7 @@ impl SalesSelectionService {
         task.ensure_writable_run(task.run_version, Instant::now())?;
         ensure_task_book(&task, book)?;
         task.heartbeat(stage, completed, Instant::now());
-        self.db
-            .sales_selection_prepare_tasks()
-            .update(&mut task, &mut NoTransaction)
-            .await?;
+        self.db.sales_selection_prepare_tasks().update(&mut task, &mut NoTransaction).await?;
         Ok(())
     }
 
@@ -314,11 +282,7 @@ impl SalesSelectionService {
         reason: String,
         tx: &mut dyn Executor,
     ) -> Result<()> {
-        let Some(mut task) = self
-            .db
-            .sales_selection_prepare_tasks()
-            .find_by_id(&run.base.id, tx)
-            .await?
+        let Some(mut task) = self.db.sales_selection_prepare_tasks().find_by_id(&run.base.id, tx).await?
         else {
             return Ok(());
         };
@@ -332,10 +296,7 @@ impl SalesSelectionService {
             self.db.sales_selection_booklets().update(&mut book, tx).await?;
         }
         task.mark_failed(reason, Vec::new(), Instant::now());
-        self.db
-            .sales_selection_prepare_tasks()
-            .update(&mut task, tx)
-            .await?;
+        self.db.sales_selection_prepare_tasks().update(&mut task, tx).await?;
         Ok(())
     }
 }
@@ -344,19 +305,14 @@ impl SalesSelectionService {
 fn validate_prepare_request(book: &SalesSelectionBooklet, req: &PrepareSalesSelectionRequest) -> Result<()> {
     if req.kind == PrepareKind::RegeneratedTiers
         && (req.tier_ids.is_empty()
-            || req
-                .tier_ids
-                .iter()
-                .any(|id| !book.tiers.iter().any(|tier| &tier.tier_id == id)))
+            || req.tier_ids.iter().any(|id| !book.tiers.iter().any(|tier| &tier.tier_id == id)))
     {
         return Err(Error::ValidationError("请选择本册需要重生成的档位".into()));
     }
     if req.kind.reuses_current_batch()
         && (req.pool_filter.is_some() || req.sku_ids.is_some() || !req.tiers.is_empty())
     {
-        return Err(Error::ValidationError(
-            "重生成不能修改商品池或档位规则，请整册重新准备".into(),
-        ));
+        return Err(Error::ValidationError("重生成不能修改商品池或档位规则，请整册重新准备".into()));
     }
     if matches!(req.kind, PrepareKind::FirstPrepare | PrepareKind::RePrepare) {
         super::prepare::apply_reprepare_request(&mut book.clone(), req)?;
@@ -410,29 +366,22 @@ impl Prepared {
             .eligibility_as_of
             .filter(|_| task.kind.reuses_current_batch())
             .unwrap_or_else(BusinessDate::today);
-        let frozen_at = self
-            .book
-            .prepared_at
-            .filter(|_| task.kind.reuses_current_batch())
-            .unwrap_or_else(Instant::now);
-        self.book
-            .complete_prepare(&self.batch, date, frozen_at, &task.actor_id)?;
-        task.mark_succeeded(
-            self.batch.clone(),
-            std::mem::take(&mut self.reports),
-            Instant::now(),
-        );
+        let frozen_at =
+            self.book.prepared_at.filter(|_| task.kind.reuses_current_batch()).unwrap_or_else(Instant::now);
+        self.book.complete_prepare(&self.batch, date, frozen_at, &task.actor_id)?;
+        task.mark_succeeded(self.batch.clone(), std::mem::take(&mut self.reports), Instant::now());
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use erp_core::ids::CustomerAccountId;
+
     use super::*;
     use crate::entity::sales_selection::{
         PoolFilterSnapshot, PoolSource, PoolSourceKind, SalesSelectionBookletData, SelectionForm, SubmitMode,
     };
-    use erp_core::ids::CustomerAccountId;
 
     /// 构造无外部依赖的有效单品册。
     fn book() -> SalesSelectionBooklet {

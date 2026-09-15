@@ -5,16 +5,13 @@
 //! 每条路由统一走 JWT + RBAC（`with_permission`），handler 标注
 //! `#[permission_macros::permission]`。
 
-use axum::{
-    routing::{get, post, put},
-    Router,
-};
+use axum::Router;
+use axum::routing::{get, post, put};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::inventory, middleware::with_permission},
-};
+use crate::app_state::AppState;
+use crate::core::handler::inventory;
+use crate::core::middleware::with_permission;
 
 /// 返回本域管理端路由集合。
 ///
@@ -128,10 +125,7 @@ mod tests {
     /// 库存调整不再暴露人工 approve/reject 路由。
     #[test]
     fn inventory_routes_drop_manual_approve_and_reject() {
-        let production = include_str!("inventory.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产路由必须存在");
+        let production = include_str!("inventory.rs").split("#[cfg(test)]").next().expect("生产路由必须存在");
         assert!(!production.contains("/stock-adjustments/{id}/approve"));
         assert!(!production.contains("/stock-adjustments/{id}/reject"));
         assert!(!production.contains("stock_adjustment_approve"));

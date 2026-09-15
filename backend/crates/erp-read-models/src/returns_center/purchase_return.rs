@@ -1,15 +1,16 @@
 //! PurchaseReturnOrder 详情与分页视图装配。
-use super::dto::PurchaseReturnOrderView;
-use super::dto::{PageView, PurchaseReturnOrderListParams, SortDir};
-use super::ReturnsReadService;
-use crate::{Error, Result};
+use std::hash::{Hash, Hasher};
+
 use application_core::AuditActor;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_returns::repository::ReturnsExt;
 use persistence_core::Transactional;
 use serde::Serialize;
-use std::hash::{Hash, Hasher};
 use validator::Validate;
+
+use super::ReturnsReadService;
+use super::dto::{PageView, PurchaseReturnOrderListParams, PurchaseReturnOrderView, SortDir};
+use crate::{Error, Result};
 
 /// 采购退货单列表筛选条件类型。
 type PurchaseReturnOrderFilter = <mongodb::Database as ReturnsExt>::PurchaseReturnOrderFilter;
@@ -56,22 +57,16 @@ impl ReturnsReadService {
     ) -> Result<PurchaseReturnListView> {
         let expected = params.scope_version.as_deref();
         if params.page.unwrap_or(1) > 1 && expected.is_none_or(str::is_empty) {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into(),
-            ));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into()));
         }
         params.validate()?;
         let snapshot = self.purchase_return_list_snapshot(params, actor).await?;
         if expected.is_some_and(|value| value != snapshot.scope_version) {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into(),
-            ));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
         }
         let current = self.purchase_return_list_snapshot(params, actor).await?;
         if current.scope_version != snapshot.scope_version {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into(),
-            ));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into()));
         }
         Ok(snapshot)
     }
@@ -147,14 +142,10 @@ impl ReturnsReadService {
                         sort_by: Some(query.paging.sort_by.to_string()),
                         sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
                     };
-                    let page = db
-                        .purchase_return_orders()
-                        .search_purchase_return_orders(&filter, executor)
-                        .await?;
-                    let versions = db
-                        .purchase_return_orders()
-                        .query_purchase_return_versions(&filter, executor)
-                        .await?;
+                    let page =
+                        db.purchase_return_orders().search_purchase_return_orders(&filter, executor).await?;
+                    let versions =
+                        db.purchase_return_orders().query_purchase_return_versions(&filter, executor).await?;
                     if versions.len() > 10_000 {
                         return Err(Error::ValidationError(
                             "采购退货查询超过上限，请收窄原采购单条件".into(),
@@ -226,10 +217,8 @@ impl ReturnsReadService {
                         .await?
                         .ok_or_else(|| Error::NotFound("采购退货单不存在或无权查看".to_string()))?;
                     let view = purchase_return_order_view(&db, order.base.id.clone(), executor).await?;
-                    let version = format!(
-                        "{}:{}:{}",
-                        context.scope_version, source.base.id, source.base.version
-                    );
+                    let version =
+                        format!("{}:{}:{}", context.scope_version, source.base.id, source.base.version);
                     Ok((view, version))
                 })
             })

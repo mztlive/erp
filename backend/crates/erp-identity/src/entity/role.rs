@@ -1,10 +1,10 @@
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::rbac::RoleId;
-use erp_core::validation::{normalize_optional_text, normalize_required_text};
-use erp_core::{Error, Result};
 
 const NAME_MAX_LEN: usize = 32;
 const DESCRIPTION_MAX_LEN: usize = 256;
@@ -117,11 +117,7 @@ mod tests {
     fn role_should_normalize_name() {
         let role = Role::new(
             "role-a".to_string(),
-            RoleData {
-                name: " 运营管理员 ".to_string(),
-                description: None,
-                system: false,
-            },
+            RoleData { name: " 运营管理员 ".to_string(), description: None, system: false },
         )
         .unwrap();
         assert_eq!(role.name, "运营管理员");
@@ -131,11 +127,7 @@ mod tests {
     fn role_should_reject_empty_name() {
         let result = Role::new(
             "role-a".to_string(),
-            RoleData {
-                name: " ".to_string(),
-                description: None,
-                system: false,
-            },
+            RoleData { name: " ".to_string(), description: None, system: false },
         );
         assert!(result.is_err());
     }
@@ -144,18 +136,10 @@ mod tests {
     fn role_update_should_change_disabled_state() {
         let mut role = Role::new(
             "role-a".to_string(),
-            RoleData {
-                name: "角色".to_string(),
-                description: None,
-                system: false,
-            },
+            RoleData { name: "角色".to_string(), description: None, system: false },
         )
         .unwrap();
-        role.update(RoleUpdate {
-            disabled: Some(true),
-            ..Default::default()
-        })
-        .unwrap();
+        role.update(RoleUpdate { disabled: Some(true), ..Default::default() }).unwrap();
         assert!(role.disabled);
     }
 
@@ -163,11 +147,7 @@ mod tests {
     fn system_role_should_not_be_deletable() {
         let role = Role::new(
             "role-system".to_string(),
-            RoleData {
-                name: "系统角色".to_string(),
-                description: None,
-                system: true,
-            },
+            RoleData { name: "系统角色".to_string(), description: None, system: true },
         )
         .unwrap();
 
@@ -179,11 +159,7 @@ mod tests {
     fn custom_role_should_be_deletable() {
         let role = Role::new(
             "role-custom".to_string(),
-            RoleData {
-                name: "自定义角色".to_string(),
-                description: None,
-                system: false,
-            },
+            RoleData { name: "自定义角色".to_string(), description: None, system: false },
         )
         .unwrap();
 
@@ -194,29 +170,16 @@ mod tests {
     fn only_enabled_custom_role_should_be_assignable() {
         let custom = Role::new(
             "role-custom".to_string(),
-            RoleData {
-                name: "自定义角色".to_string(),
-                description: None,
-                system: false,
-            },
+            RoleData { name: "自定义角色".to_string(), description: None, system: false },
         )
         .unwrap();
         let system = Role::new(
             "role-system".to_string(),
-            RoleData {
-                name: "系统角色".to_string(),
-                description: None,
-                system: true,
-            },
+            RoleData { name: "系统角色".to_string(), description: None, system: true },
         )
         .unwrap();
         let mut disabled = custom.clone();
-        disabled
-            .update(RoleUpdate {
-                disabled: Some(true),
-                ..Default::default()
-            })
-            .unwrap();
+        disabled.update(RoleUpdate { disabled: Some(true), ..Default::default() }).unwrap();
 
         assert!(custom.ensure_assignable().is_ok());
         assert!(system.ensure_assignable().is_err());

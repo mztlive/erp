@@ -1,9 +1,7 @@
 //! 供给消费的公司SKU和供应商资格端口；实现位于组合层。
 use async_trait::async_trait;
-use erp_core::{
-    common::time::BusinessDate,
-    ids::{SkuId, SupplierAccountId},
-};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{SkuId, SupplierAccountId};
 use persistence_core::Executor;
 /// 保留原catalog/supplier错误类别的资格读取合同。
 #[async_trait]

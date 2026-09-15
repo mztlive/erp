@@ -3,7 +3,6 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
-use crate::adapters::workflow::workflow_auth;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use entity_core::BaseModel;
@@ -22,6 +21,8 @@ use erp_inventory::{
 use erp_warehouse::WarehouseExt;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::adapters::workflow::workflow_auth;
 
 const DETAIL_PERMISSION: &str = "stock_adjustment:detail";
 const ADJUSTMENT_LIST_PERMISSION: &str = "stock_adjustment:list";
@@ -130,10 +131,7 @@ async fn inventory_scope(
         .then(|| Permission::parse(DETAIL_PERMISSION).expect("固定权限合法"))
         .into_iter()
         .collect::<Vec<_>>();
-    let access = match service
-        .resolve_permissions(actor, resource, action, &extra, executor)
-        .await
-    {
+    let access = match service.resolve_permissions(actor, resource, action, &extra, executor).await {
         Ok(access) => access,
         Err(IdentityError::Forbidden(_)) => return Ok(WarehouseScope::empty()),
         Err(error) => return Err(map_svc(error.into())),
@@ -171,12 +169,7 @@ fn warehouse_scope(access: &AuthorizedDataScope) -> erp_inventory::Result<Wareho
             "库存范围超过 20000 个仓库，请缩小配置范围".into(),
         ));
     }
-    Ok(WarehouseScope::from_targets(
-        ids.iter()
-            .filter(|id| allows(Some(id.as_str())))
-            .cloned()
-            .collect(),
-    ))
+    Ok(WarehouseScope::from_targets(ids.iter().filter(|id| allows(Some(id.as_str()))).cloned().collect()))
 }
 
 /// MongoDB adapter that converts inventory audit facts into `erp-audit` writes.
@@ -206,9 +199,7 @@ impl InventoryAuditPort for MongoInventoryAudit {
         resource_type: &str,
         resource_id: String,
     ) -> erp_inventory::Result<PreparedInventoryAudit> {
-        let log = actor
-            .resource_log(action, resource_type, resource_id)
-            .map_err(map_audit_to_inventory)?;
+        let log = actor.resource_log(action, resource_type, resource_id).map_err(map_audit_to_inventory)?;
         Ok(prepared_inventory_audit(&log))
     }
 
@@ -218,11 +209,7 @@ impl InventoryAuditPort for MongoInventoryAudit {
         executor: &mut dyn Executor,
     ) -> erp_inventory::Result<()> {
         let log = audit_log_from_inventory(audit).map_err(map_audit_to_inventory)?;
-        self.db
-            .audit_logs()
-            .create(&log, executor)
-            .await
-            .map_err(erp_inventory::Error::from)?;
+        self.db.audit_logs().create(&log, executor).await.map_err(erp_inventory::Error::from)?;
         Ok(())
     }
 }
@@ -286,13 +273,7 @@ impl MongoInventoryWarehouseFacts {
 #[async_trait]
 impl WarehouseFactsPort for MongoInventoryWarehouseFacts {
     async fn warehouse_exists(&self, id: &str, executor: &mut dyn Executor) -> erp_inventory::Result<bool> {
-        Ok(self
-            .db
-            .warehouses()
-            .find_by_id(id, executor)
-            .await
-            .map_err(erp_inventory::Error::from)?
-            .is_some())
+        Ok(self.db.warehouses().find_by_id(id, executor).await.map_err(erp_inventory::Error::from)?.is_some())
     }
 
     async fn warehouses_by_ids(
@@ -343,10 +324,7 @@ impl WarehouseFactsPort for MongoInventoryWarehouseFacts {
             .map(|revision| {
                 (
                     revision.base.id.clone(),
-                    WarehouseRevisionFact {
-                        id: revision.base.id,
-                        name: revision.name,
-                    },
+                    WarehouseRevisionFact { id: revision.base.id, name: revision.name },
                 )
             })
             .collect())
@@ -378,11 +356,7 @@ impl CatalogFactsPort for MongoInventoryCatalogFacts {
         q: &str,
         executor: &mut dyn Executor,
     ) -> erp_inventory::Result<Vec<SkuId>> {
-        self.db
-            .catalog()
-            .inventory_sku_ids(q, executor)
-            .await
-            .map_err(erp_inventory::Error::from)
+        self.db.catalog().inventory_sku_ids(q, executor).await.map_err(erp_inventory::Error::from)
     }
 
     async fn skus_by_ids(
@@ -391,12 +365,8 @@ impl CatalogFactsPort for MongoInventoryCatalogFacts {
         executor: &mut dyn Executor,
     ) -> erp_inventory::Result<HashMap<String, SkuFact>> {
         let sku_ids = ids.iter().map(|id| SkuId::new(id.clone())).collect::<Vec<_>>();
-        let skus = self
-            .db
-            .skus()
-            .find_by_ids(&sku_ids, executor)
-            .await
-            .map_err(erp_inventory::Error::from)?;
+        let skus =
+            self.db.skus().find_by_ids(&sku_ids, executor).await.map_err(erp_inventory::Error::from)?;
         Ok(skus
             .into_iter()
             .map(|sku| {
@@ -481,10 +451,7 @@ impl FulfillmentFactsPort for MongoInventoryFulfillmentFacts {
             .map(|receipt| {
                 (
                     receipt.base.id.clone(),
-                    ReceiptNoFact {
-                        id: receipt.base.id,
-                        receipt_no: receipt.receipt_no,
-                    },
+                    ReceiptNoFact { id: receipt.base.id, receipt_no: receipt.receipt_no },
                 )
             })
             .collect())
@@ -535,9 +502,10 @@ fn map_svc(error: crate::Error) -> erp_inventory::Error {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::time::Instant;
     use erp_identity::access_control::{ResolvedScope, ScopeClause};
+
+    use super::*;
 
     #[test]
     fn inventory_scope_keeps_dimension_and_user_limit_without_fallback() {
@@ -550,26 +518,18 @@ mod tests {
             policy_version: 1,
             scope_version: "1".into(),
             as_of: Instant::from_unix_secs(1),
-            scope: ResolvedScope {
-                role_clauses: vec![],
-                user_limit: None,
-            },
+            scope: ResolvedScope { role_clauses: vec![], user_limit: None },
         };
         assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::empty());
-        access.scope.role_clauses.push(ScopeClause {
-            org_unit_ids: BTreeSet::from(["same-id".into()]),
-            ..Default::default()
-        });
+        access
+            .scope
+            .role_clauses
+            .push(ScopeClause { org_unit_ids: BTreeSet::from(["same-id".into()]), ..Default::default() });
         assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::empty());
-        access.scope.role_clauses.push(ScopeClause {
-            company: true,
-            ..Default::default()
-        });
+        access.scope.role_clauses.push(ScopeClause { company: true, ..Default::default() });
         assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::company());
-        access.scope.user_limit = Some(ScopeClause {
-            warehouse_ids: BTreeSet::from(["warehouse-a".into()]),
-            ..Default::default()
-        });
+        access.scope.user_limit =
+            Some(ScopeClause { warehouse_ids: BTreeSet::from(["warehouse-a".into()]), ..Default::default() });
         assert_eq!(
             warehouse_scope(&access).unwrap(),
             WarehouseScope::from_targets(vec!["warehouse-a".into()])

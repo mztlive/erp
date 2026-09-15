@@ -1,13 +1,13 @@
 //! 审批运行时与业务领域强类型命令之间的事务内端口。
 
-use std::{future::Future, pin::Pin};
+use std::future::Future;
+use std::pin::Pin;
 
+use application_core::AuditActor;
 use persistence_core::Executor;
 
-use crate::error::{Error, Result};
-use application_core::AuditActor;
-
 use super::policy::ApprovalDomainAction;
+use crate::error::{Error, Result};
 
 /// 强类型领域动作执行所需的冻结审批上下文。
 ///
@@ -155,9 +155,7 @@ impl ApprovalActionContext {
         if let Some(task_id) = params.work_item_id {
             let task_id = task_id.trim();
             if !task_id.is_empty() {
-                return Err(Error::ValidationError(format!(
-                    "受阻取消不得携带审批任务 {task_id}"
-                )));
+                return Err(Error::ValidationError(format!("受阻取消不得携带审批任务 {task_id}")));
             }
             return Err(Error::ValidationError("受阻取消不得携带空审批任务".to_string()));
         }
@@ -416,7 +414,7 @@ fn optional_reason(reason: Option<String>) -> Result<Option<String>> {
                 return Err(Error::ValidationError("决定原因不能为空".to_string()));
             }
             Ok(Some(trimmed.to_string()))
-        }
+        },
     }
 }
 
@@ -533,21 +531,20 @@ mod tests {
                 !context_struct.contains(&format!("pub {field}")),
                 "ApprovalActionContext.{field} 不得公开"
             );
-            assert!(
-                context_struct.contains(field),
-                "ApprovalActionContext 应包含私有字段 {field}"
-            );
+            assert!(context_struct.contains(field), "ApprovalActionContext 应包含私有字段 {field}");
         }
         assert!(!include_str!("execution/runtime_service.rs").contains("ApprovalActionContext {"));
-        assert!(![
-            include_str!("binding/mod.rs"),
-            include_str!("binding/types.rs"),
-            include_str!("binding/bind.rs"),
-            include_str!("binding/upgrade.rs"),
-            include_str!("binding/revalidate.rs"),
-        ]
-        .concat()
-        .contains("ApprovalActionContext {"));
+        assert!(
+            ![
+                include_str!("binding/mod.rs"),
+                include_str!("binding/types.rs"),
+                include_str!("binding/bind.rs"),
+                include_str!("binding/upgrade.rs"),
+                include_str!("binding/revalidate.rs"),
+            ]
+            .concat()
+            .contains("ApprovalActionContext {")
+        );
         assert!(!include_str!("definition.rs").contains("ApprovalActionContext {"));
     }
 
@@ -581,16 +578,9 @@ mod tests {
         assert!(decision("instance-1", "exec-1", "  ", "adj-1", "1", None, "key-1").is_err());
         assert!(decision("instance-1", "exec-1", "wi-1", "", "1", None, "key-1").is_err());
         assert!(decision("instance-1", "exec-1", "wi-1", "adj-1", "v1", None, "key-1").is_err());
-        assert!(decision(
-            "instance-1",
-            "exec-1",
-            "wi-1",
-            "adj-1",
-            "1",
-            Some("  ".to_string()),
-            "key-1",
-        )
-        .is_err());
+        assert!(
+            decision("instance-1", "exec-1", "wi-1", "adj-1", "1", Some("  ".to_string()), "key-1",).is_err()
+        );
         assert!(decision("instance-1", "exec-1", "wi-1", "adj-1", "1", None, " ").is_err());
 
         let carried = ApprovalActionContext::for_blocked_cancel(BlockedCancelActionParams {

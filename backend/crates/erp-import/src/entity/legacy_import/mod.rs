@@ -22,7 +22,7 @@ pub mod legacy_import_confirmation;
 pub mod legacy_import_row;
 
 pub use apply_result_set::{ApplyResultDraft, ApplyResultItem, ApplyResultOutcome, ApplyResultSet};
-pub use import_row_factory::{build_import_rows, ImportRowSpec};
+pub use import_row_factory::{ImportRowSpec, build_import_rows};
 pub use legacy_import_batch::{LegacyImportBatch, LegacyImportBatchData, LegacyImportBatchStatus};
 pub use legacy_import_confirmation::{
     ConfirmationDecision, ConfirmationMatrixDecision, ConfirmationScope, ConfirmationStatus,
@@ -70,10 +70,7 @@ impl LegacyImportCommandIdentity {
             digest.update((part.len() as u64).to_be_bytes());
             digest.update(part.as_bytes());
         }
-        Self {
-            audit_id,
-            fingerprint: encode_digest(digest.finalize()),
-        }
+        Self { audit_id, fingerprint: encode_digest(digest.finalize()) }
     }
 
     /// 返回稳定审计收据 ID。

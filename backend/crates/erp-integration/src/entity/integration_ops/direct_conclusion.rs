@@ -44,14 +44,8 @@ mod tests {
 
     #[test]
     fn both_conclusions_map_to_typed_action_and_terminal_status() {
-        assert_eq!(
-            DirectConclusion::ConfirmNoError.resolution_action(),
-            ResolutionAction::ConfirmNoError
-        );
-        assert_eq!(
-            DirectConclusion::ConfirmNoError.resulting_status(),
-            ResultingStatus::ConfirmedNoError
-        );
+        assert_eq!(DirectConclusion::ConfirmNoError.resolution_action(), ResolutionAction::ConfirmNoError);
+        assert_eq!(DirectConclusion::ConfirmNoError.resulting_status(), ResultingStatus::ConfirmedNoError);
         assert_eq!(
             DirectConclusion::ConfirmValidDifference.resolution_action(),
             ResolutionAction::ConfirmValidDifference
@@ -61,8 +55,6 @@ mod tests {
             ResultingStatus::ConfirmedValidDifference
         );
         assert!(DirectConclusion::ConfirmNoError.resulting_status().is_terminal());
-        assert!(DirectConclusion::ConfirmValidDifference
-            .resulting_status()
-            .is_terminal());
+        assert!(DirectConclusion::ConfirmValidDifference.resulting_status().is_terminal());
     }
 }

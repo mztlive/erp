@@ -1,15 +1,15 @@
 //! 供给列表的唯一跨域批量读取，沿原当前指针装配展示事实。
+use std::collections::HashMap;
+
 use erp_catalog::{CatalogExt, Product, Sku, SkuRevision};
 use erp_party::{Party, PartyExt, PartyRepository, PartyRevision, PartyRevisionRepository};
 use erp_supplier::{SupplierAccount, SupplierAccountRepository, SupplierExt};
 use erp_supply::entity::supplier_offering::SupplierOfferingRevision;
-use erp_supply::repository::{supplier_offering::SupplierOfferingRow, SupplierOfferingExt};
-use mongodb::{
-    bson::{doc, Bson, Document},
-    Database,
-};
+use erp_supply::repository::SupplierOfferingExt;
+use erp_supply::repository::supplier_offering::SupplierOfferingRow;
+use mongodb::Database;
+use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{Executor, Result};
-use std::collections::HashMap;
 
 mod list_filter;
 pub use list_filter::{SupplierOfferingListBundle, SupplierOfferingListQuery};
@@ -31,10 +31,7 @@ impl<'a> SupplierOfferingReadRepository<'a> {
         rows: &[SupplierOfferingRow],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, SupplierOfferingRevision>> {
-        self.db
-            .supplier_offering_repository()
-            .load_current_revisions(rows, executor)
-            .await
+        self.db.supplier_offering_repository().load_current_revisions(rows, executor).await
     }
     /// 批量加载供给列表展示所需的跨域只读实体。
     ///
@@ -56,40 +53,23 @@ impl<'a> SupplierOfferingReadRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<SupplierOfferingDisplayEntities> {
         let sku_ids = unique_strings(rows.iter().map(|row| row.sku_id.to_string()));
-        let skus = self
-            .db
-            .skus()
-            .find_many(in_filter("id", sku_ids), executor)
-            .await?;
-        let sku_revision_ids = unique_strings(
-            skus.iter()
-                .filter_map(|sku| sku.stable.current_revision_id.clone()),
-        );
+        let skus = self.db.skus().find_many(in_filter("id", sku_ids), executor).await?;
+        let sku_revision_ids =
+            unique_strings(skus.iter().filter_map(|sku| sku.stable.current_revision_id.clone()));
         let product_ids = unique_strings(skus.iter().map(|sku| sku.product_id.to_string()));
-        let sku_revisions = self
-            .db
-            .sku_revisions()
-            .find_many(in_filter("id", sku_revision_ids), executor)
-            .await?;
-        let products = self
-            .db
-            .products()
-            .find_many(in_filter("id", product_ids), executor)
-            .await?;
+        let sku_revisions =
+            self.db.sku_revisions().find_many(in_filter("id", sku_revision_ids), executor).await?;
+        let products = self.db.products().find_many(in_filter("id", product_ids), executor).await?;
 
         let supplier_ids = unique_strings(rows.iter().map(|row| row.supplier_id.to_string()));
         let suppliers = SupplierAccountRepository::new(self.db, SUPPLIER_ACCOUNTS)
             .find_many(in_filter("id", supplier_ids), executor)
             .await?;
         let party_ids = unique_strings(suppliers.iter().map(|supplier| supplier.party_id.to_string()));
-        let parties = PartyRepository::new(self.db, PARTIES)
-            .find_many(in_filter("id", party_ids), executor)
-            .await?;
-        let party_revision_ids = unique_strings(
-            parties
-                .iter()
-                .filter_map(|party| party.stable.current_revision_id.clone()),
-        );
+        let parties =
+            PartyRepository::new(self.db, PARTIES).find_many(in_filter("id", party_ids), executor).await?;
+        let party_revision_ids =
+            unique_strings(parties.iter().filter_map(|party| party.stable.current_revision_id.clone()));
         let party_revisions = PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
             .find_many(in_filter("id", party_revision_ids), executor)
             .await?;

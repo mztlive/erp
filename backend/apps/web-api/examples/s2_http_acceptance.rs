@@ -7,16 +7,15 @@ use erp_identity::access_control::{
     DataScopeData, DataScopeSubjectType, DataScopeType, ScopeBinding, ScopeDimension,
 };
 use erp_identity::{LoginAccount, Secret};
-use mongodb::{
-    bson::{doc, Document},
-    Client, Database,
-};
-use serde_json::{json, Value};
+use mongodb::bson::{Document, doc};
+use mongodb::{Client, Database};
+use serde_json::{Value, json};
 use storage::{S3Storage, S3StorageConfig};
 use test_support::seed_admin_account;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use web_api::{app_state::AppState, core::routes};
+use web_api::app_state::AppState;
+use web_api::core::routes;
 
 type Outcome<T = ()> = Result<T, Box<dyn Error>>;
 
@@ -90,10 +89,9 @@ async fn verify(db: &Database, uri: &str, secret: &str) -> Outcome {
             }],
         )
         .await?;
-    for (resource, actions) in [
-        ("sales_order", vec!["detail".to_string()]),
-        ("work_item", vec!["manage".to_string()]),
-    ] {
+    for (resource, actions) in
+        [("sales_order", vec!["detail".to_string()]), ("work_item", vec!["manage".to_string()])]
+    {
         state
             .rbac()
             .seed_data_scope_manifest(
@@ -123,11 +121,7 @@ async fn verify(db: &Database, uri: &str, secret: &str) -> Outcome {
     let address = listener.local_addr()?.to_string();
     let router = routes::create(state);
     let server = tokio::spawn(async move {
-        axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-        )
-        .await
+        axum::serve(listener, router.into_make_service_with_connect_info::<std::net::SocketAddr>()).await
     });
     let result = async {
         let (status, _) = request(&address, "POST", "/login", None, Some(json!({"account":login,"password":"wrong-password","account_kind":"admin"}))).await?;
@@ -163,9 +157,7 @@ async fn requests(address: &str, token: &str) -> Outcome {
     assert_eq!(status, 200, "authenticated first page: {page}");
     assert_eq!(page["data"]["total"], 2);
     assert_eq!(page["data"]["items"].as_array().ok_or("items missing")?.len(), 1);
-    let version = page["data"]["scope_version"]
-        .as_str()
-        .ok_or("scope_version missing")?;
+    let version = page["data"]["scope_version"].as_str().ok_or("scope_version missing")?;
     let (status, error) = request(address, "GET", &format!("{path}&page=2"), Some(token), None).await?;
     assert_eq!(status, 409);
     assert_eq!(error["code"], "DATA_SCOPE_CHANGED");
@@ -173,14 +165,8 @@ async fn requests(address: &str, token: &str) -> Outcome {
     assert_eq!(request(address, "GET", &next, Some(token), None).await?.0, 200);
     let change = json!({"expected_version":0,"idempotency_key":"http_create_department","reason":"S2 isolated HTTP acceptance",
         "change":{"operation":"create_unit","name":"HTTP验收部门","parent_id":null,"kind":"department"}});
-    let (status, result) = request(
-        address,
-        "POST",
-        "/admin/org-units/change",
-        Some(token),
-        Some(change),
-    )
-    .await?;
+    let (status, result) =
+        request(address, "POST", "/admin/org-units/change", Some(token), Some(change)).await?;
     assert_eq!(status, 200, "organization HTTP change: {result}");
     let (status, error) = request(address, "GET", &next, Some(token), None).await?;
     assert_eq!(status, 409, "old queue scope must fail: {error}");
@@ -191,7 +177,9 @@ async fn requests(address: &str, token: &str) -> Outcome {
     println!(
         "PASS real_http_authentication_first_page_missing_anchor_stable_anchor_organization_change_refresh"
     );
-    println!("LIMIT isolated fixture accounts and draft order tasks; existing business accounts and end-to-end approval acceptance remain separate");
+    println!(
+        "LIMIT isolated fixture accounts and draft order tasks; existing business accounts and end-to-end approval acceptance remain separate"
+    );
     Ok(())
 }
 
@@ -203,7 +191,10 @@ async fn request(
     body: Option<Value>,
 ) -> Outcome<(u16, Value)> {
     let body = body.map(|value| value.to_string()).unwrap_or_default();
-    let mut bytes = format!("{method} {path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n", body.len());
+    let mut bytes = format!(
+        "{method} {path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n",
+        body.len()
+    );
     if let Some(token) = token {
         bytes.push_str(&format!("Authorization: Bearer {token}\r\n"));
     }
@@ -215,11 +206,7 @@ async fn request(
     stream.read_to_end(&mut response).await?;
     let response = String::from_utf8(response)?;
     let (headers, body) = response.split_once("\r\n\r\n").ok_or("malformed HTTP response")?;
-    let status = headers
-        .split_whitespace()
-        .nth(1)
-        .ok_or("HTTP status missing")?
-        .parse()?;
+    let status = headers.split_whitespace().nth(1).ok_or("HTTP status missing")?.parse()?;
     Ok((status, serde_json::from_str(body)?))
 }
 
@@ -245,10 +232,8 @@ async fn permissions(db: &Database, user: &str, full: bool) -> Outcome<String> {
     };
     for &(resource, action) in grants {
         db.collection::<Document>("casbin_rules")
-            .insert_one(
-                doc! {"_id":format!("p\u{1f}p\u{1f}{key}\u{1f}{resource}\u{1f}{action}"),
-                "sec":"p","ptype":"p","values":[key,resource,action]},
-            )
+            .insert_one(doc! {"_id":format!("p\u{1f}p\u{1f}{key}\u{1f}{resource}\u{1f}{action}"),
+            "sec":"p","ptype":"p","values":[key,resource,action]})
             .await?;
     }
     Ok(key.strip_prefix("role:").ok_or("invalid role")?.into())
@@ -278,9 +263,7 @@ async fn seed_task_orders(db: &Database, owner: &str) -> Outcome {
             },
             owner,
         )?;
-        db.collection::<SalesOrder>("sales_orders")
-            .insert_one(order)
-            .await?;
+        db.collection::<SalesOrder>("sales_orders").insert_one(order).await?;
         let task = WorkItem::new_with_responsibility_key(
             WorkItemId::new(format!("s2-task-{index}")),
             WorkItemData {
@@ -314,13 +297,12 @@ async fn verify_binding_source(
     use application_core::AuditActor;
     use erp_core::AccountKind;
     use erp_processes::adapters::workflow::WorkflowAuth;
-    use erp_workflow::ports::WorkflowAuthorizationPort;
     use erp_workflow::DocumentType;
+    use erp_workflow::ports::WorkflowAuthorizationPort;
     use persistence_core::NoTransaction;
     let auth = WorkflowAuth::new(db.clone(), rbac);
-    let object = auth
-        .approval_scope_object(DocumentType::SalesOrder, "s2-order-0", &mut NoTransaction)
-        .await?;
+    let object =
+        auth.approval_scope_object(DocumentType::SalesOrder, "s2-order-0", &mut NoTransaction).await?;
     assert_eq!(object.business_org_unit_id.as_deref(), Some("fixture-dept"));
     assert_eq!(object.owner_user_id, owner);
     assert!(object.settlement_party_id.is_none() && object.warehouse_id.is_none());

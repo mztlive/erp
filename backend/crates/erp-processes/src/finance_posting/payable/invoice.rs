@@ -2,24 +2,17 @@
 
 use std::collections::{HashMap, HashSet};
 
-use erp_finance::entity::payable::PayableAccount;
-
-use erp_audit::AuditExt;
+use application_core::{AuditActor, CommandReceipt};
+use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
 use erp_core::ids::{InvoiceId, PayableAccountId, SupplierAccountId};
-use erp_supplier::SupplierAccount;
-use erp_supplier::SupplierExt;
-
+use erp_finance::entity::payable::PayableAccount;
+use erp_supplier::{SupplierAccount, SupplierExt};
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use super::dto::{PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest};
-
 use super::PayableService;
+use super::dto::{PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest};
 use crate::{Error, Result};
-use application_core::AuditActor;
-use application_core::CommandReceipt;
-use erp_audit::AuditActorLogs;
-use erp_audit::CommandReceiptServiceExt as _;
 
 impl PayableService {
     // -----------------------------------------------------------------------
@@ -62,11 +55,9 @@ impl PayableService {
             &req,
         )?;
         if let Some(invoice_id) = command_receipt.committed_resource_id(&self.db).await? {
-            return Ok(
-                erp_finance::service::payable::PayableService::new(self.db.clone())
-                    .purchase_invoice_registered_view(&invoice_id)
-                    .await?,
-            );
+            return Ok(erp_finance::service::payable::PayableService::new(self.db.clone())
+                .purchase_invoice_registered_view(&invoice_id)
+                .await?);
         }
         let supplier = self
             .db
@@ -97,15 +88,10 @@ impl PayableService {
                             session,
                         )
                         .await?;
-                    let account_ids: Vec<PayableAccountId> = plan
-                        .account_invoicing_deltas()
-                        .iter()
-                        .map(|(id, _)| id.clone())
-                        .collect();
-                    let accounts_by_id: HashMap<&str, &PayableAccount> = accounts
-                        .iter()
-                        .map(|account| (account.base.id.as_str(), account))
-                        .collect();
+                    let account_ids: Vec<PayableAccountId> =
+                        plan.account_invoicing_deltas().iter().map(|(id, _)| id.clone()).collect();
+                    let accounts_by_id: HashMap<&str, &PayableAccount> =
+                        accounts.iter().map(|account| (account.base.id.as_str(), account)).collect();
                     let mut supplier_ids: Vec<SupplierAccountId> = Vec::new();
                     let mut seen_suppliers: HashSet<String> = HashSet::new();
                     for account_id in &account_ids {
@@ -116,14 +102,10 @@ impl PayableService {
                             supplier_ids.push(account.supplier_id.clone());
                         }
                     }
-                    let suppliers = db
-                        .supplier_accounts()
-                        .find_accounts_by_ids(&supplier_ids, session)
-                        .await?;
-                    let suppliers_by_id: HashMap<&str, &SupplierAccount> = suppliers
-                        .iter()
-                        .map(|supplier| (supplier.base.id.as_str(), supplier))
-                        .collect();
+                    let suppliers =
+                        db.supplier_accounts().find_accounts_by_ids(&supplier_ids, session).await?;
+                    let suppliers_by_id: HashMap<&str, &SupplierAccount> =
+                        suppliers.iter().map(|supplier| (supplier.base.id.as_str(), supplier)).collect();
                     for account_id in &account_ids {
                         let account = accounts_by_id
                             .get(account_id.as_ref())
@@ -158,18 +140,14 @@ impl PayableService {
             .await;
         if let Err(error) = transaction_result {
             if let Some(invoice_id) = command_receipt.committed_resource_id(&self.db).await? {
-                return Ok(
-                    erp_finance::service::payable::PayableService::new(self.db.clone())
-                        .purchase_invoice_registered_view(&invoice_id)
-                        .await?,
-                );
+                return Ok(erp_finance::service::payable::PayableService::new(self.db.clone())
+                    .purchase_invoice_registered_view(&invoice_id)
+                    .await?);
             }
             return Err(error);
         }
-        Ok(
-            erp_finance::service::payable::PayableService::new(self.db.clone())
-                .purchase_invoice_registered_view(invoice_id.as_ref())
-                .await?,
-        )
+        Ok(erp_finance::service::payable::PayableService::new(self.db.clone())
+            .purchase_invoice_registered_view(invoice_id.as_ref())
+            .await?)
     }
 }

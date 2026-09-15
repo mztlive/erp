@@ -3,9 +3,10 @@
 //! 本模块是 `DocumentType`、`ProcessKind`、销售 `BusinessType` 与 `SubjectRef`
 //! 之间的唯一规则源。BPM 不得反向依赖本 crate。
 
-use crate::entity::document_registry::DocumentType;
 use bpm::{ProcessKind, SubjectRef};
 use erp_core::{Error, Result};
+
+use crate::entity::document_registry::DocumentType;
 
 /// Sales-order business nature snapshot used to pick an independent document type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -174,13 +175,14 @@ pub fn subject_ref_for_sales_business(
 
 #[cfg(test)]
 mod tests {
+    use bpm::ProcessKind;
+
     use super::{
         document_type_from_subject_kind, document_type_of, document_type_of_sales_business, process_kind_of,
         subject_ref_for, subject_ref_for_sales_business,
     };
     use crate::entity::approval_integration::identity::SalesBusinessKind;
     use crate::entity::document_registry::DocumentType;
-    use bpm::ProcessKind;
 
     const PROCESS_KINDS: [ProcessKind; 21] = [
         ProcessKind::SalesOrder,
@@ -216,10 +218,7 @@ mod tests {
             let process_kind = process_kind_of(document_type);
             assert_eq!(document_type_of(process_kind), document_type);
             assert_eq!(process_kind.as_str(), document_type.as_str());
-            assert_eq!(
-                document_type_from_subject_kind(document_type.as_str()).unwrap(),
-                document_type
-            );
+            assert_eq!(document_type_from_subject_kind(document_type.as_str()).unwrap(), document_type);
         }
 
         for process_kind in PROCESS_KINDS {

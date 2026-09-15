@@ -2,16 +2,13 @@
 //!
 //! 已删除 `/work-items/{id}/start-processing`、`release-to-team` 与 `claim`。
 
-use axum::{
-    routing::{get, post, put},
-    Router,
-};
+use axum::Router;
+use axum::routing::{get, post, put};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::work_item, middleware::with_permission},
-};
+use crate::app_state::AppState;
+use crate::core::handler::work_item;
+use crate::core::middleware::with_permission;
 
 /// 返回只暴露稳定责任接口的管理端路由。
 ///
@@ -21,11 +18,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/work-items",
-            with_permission(
-                get(work_item::work_item_list),
-                rbac,
-                work_item::work_item_list_permission_key(),
-            ),
+            with_permission(get(work_item::work_item_list), rbac, work_item::work_item_list_permission_key()),
         )
         .route(
             "/work-items/fulfillment-queue",

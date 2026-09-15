@@ -1,4 +1,3 @@
-use crate::repository::CatalogExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
@@ -8,6 +7,7 @@ use crate::dto::{
     ProductView, SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView, SortDir,
 };
 use crate::error::Result;
+use crate::repository::CatalogExt;
 
 /// 商品列表仓储筛选条件类型。
 type ProductFilter = <mongodb::Database as CatalogExt>::ProductFilter;
@@ -43,11 +43,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .catalog()
-            .product_revision_page(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.catalog().product_revision_page(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -78,12 +74,7 @@ impl CatalogService {
                 version: row.version,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size })
     }
 
     /// 分页查询 SKU 列表。
@@ -111,11 +102,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .catalog()
-            .sku_page(keyword.as_deref(), &filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.catalog().sku_page(keyword.as_deref(), &filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -133,12 +120,7 @@ impl CatalogService {
                 version: row.version,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size })
     }
 
     /// 分页查询 SKU 修订列表。
@@ -167,11 +149,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .catalog()
-            .sku_revision_page(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.catalog().sku_revision_page(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -195,12 +173,7 @@ impl CatalogService {
                 version: row.version,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size })
     }
 }
 
@@ -254,10 +227,5 @@ pub fn product_page_view(
             version: row.version,
         })
         .collect();
-    Ok(PageView {
-        items,
-        total: page.total,
-        page: filter.page,
-        page_size: filter.page_size,
-    })
+    Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
 }

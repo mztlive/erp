@@ -2,12 +2,11 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-
 use erp_core::common::time::BusinessDate;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use super::profile_validation::CustomerProfileOperation;
 
@@ -38,10 +37,7 @@ impl CustomerProfileRequestFingerprint {
     /// VO 只对显式字节计算摘要，不依赖或反向引用 Service DTO；调用方必须用
     /// golden 测试冻结 v1 JSON 字段顺序。
     pub fn from_json_bytes_v1(payload: &[u8]) -> Self {
-        Self(format!(
-            "{REQUEST_FINGERPRINT_V1_PREFIX}{}",
-            hex::encode(Sha256::digest(payload))
-        ))
+        Self(format!("{REQUEST_FINGERPRINT_V1_PREFIX}{}", hex::encode(Sha256::digest(payload))))
     }
 
     /// 解析当前版本或历史裸 SHA-256 指纹。
@@ -63,10 +59,7 @@ impl CustomerProfileRequestFingerprint {
         if digest.len() != SHA256_HEX_LEN || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return Err(Error::from("客户资料请求指纹格式无效"));
         }
-        Ok(Self(format!(
-            "{REQUEST_FINGERPRINT_V1_PREFIX}{}",
-            digest.to_ascii_lowercase()
-        )))
+        Ok(Self(format!("{REQUEST_FINGERPRINT_V1_PREFIX}{}", digest.to_ascii_lowercase())))
     }
 
     /// 返回内存比较与诊断使用的带版本指纹。
@@ -79,9 +72,7 @@ impl CustomerProfileRequestFingerprint {
 
     /// 返回 SHA-256 摘要部分。
     fn digest_hex(&self) -> &str {
-        self.0
-            .strip_prefix(REQUEST_FINGERPRINT_V1_PREFIX)
-            .expect("已验证客户资料指纹必须包含 v1 前缀")
+        self.0.strip_prefix(REQUEST_FINGERPRINT_V1_PREFIX).expect("已验证客户资料指纹必须包含 v1 前缀")
     }
 
     /// 核对持久化的当前或历史指纹是否与本请求相同。
@@ -138,13 +129,7 @@ impl CustomerProfileReplayContext {
             return Err(Error::from("客户资料命令发起人不能为空"));
         }
         let customer_id = replay_customer_id(operation, customer_id)?;
-        Ok(Self {
-            idempotency_key,
-            operation,
-            customer_id,
-            initiated_by,
-            request_fingerprint,
-        })
+        Ok(Self { idempotency_key, operation, customer_id, initiated_by, request_fingerprint })
     }
 
     /// 返回规范化后的幂等键。
@@ -343,10 +328,7 @@ impl CustomerProfileCommand {
         context: &CustomerProfileReplayContext,
         result: CustomerProfileCommandResultData,
     ) -> Result<Self> {
-        if context
-            .customer_id()
-            .is_some_and(|customer_id| customer_id != result.customer_id.as_str())
-        {
+        if context.customer_id().is_some_and(|customer_id| customer_id != result.customer_id.as_str()) {
             return Err(Error::from("客户资料命令结果不属于修订目标客户"));
         }
         Self::new(
@@ -383,12 +365,8 @@ impl CustomerProfileCommand {
     /// # 错误
     /// 任一身份不一致或持久化指纹损坏时返回错误。
     pub fn ensure_replay_matches(&self, context: &CustomerProfileReplayContext) -> Result<()> {
-        let same_customer = context
-            .customer_id()
-            .is_none_or(|customer_id| customer_id == self.customer_id);
-        let same_fingerprint = context
-            .request_fingerprint()
-            .matches_persisted(&self.request_fingerprint);
+        let same_customer = context.customer_id().is_none_or(|customer_id| customer_id == self.customer_id);
+        let same_fingerprint = context.request_fingerprint().matches_persisted(&self.request_fingerprint);
         if self.idempotency_key != context.idempotency_key()
             || self.operation != context.operation().as_str()
             || !same_customer
@@ -409,7 +387,7 @@ fn replay_customer_id(
     match operation {
         CustomerProfileOperation::Create if customer_id.is_some() => {
             Err(Error::from("创建客户资料命令不能携带既有客户 ID"))
-        }
+        },
         CustomerProfileOperation::Create => Ok(None),
         CustomerProfileOperation::Update => {
             let customer_id = customer_id.ok_or_else(|| Error::from("修订客户资料命令缺少客户 ID"))?;
@@ -417,15 +395,14 @@ fn replay_customer_id(
                 return Err(Error::from("修订客户资料命令缺少客户 ID"));
             }
             Ok(Some(customer_id))
-        }
+        },
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use serde::Serialize;
-
     use erp_core::common::time::BusinessDate;
+    use serde::Serialize;
 
     use super::{
         CustomerProfileCommand, CustomerProfileCommandData, CustomerProfileCommandResultData,
@@ -456,9 +433,7 @@ mod tests {
             "sha256-json-v1:88bbb7a6b52992122ef2b8910ab733265e709a0ac511791e03baace7e4780670"
         );
         assert_eq!(
-            CustomerProfileRequestFingerprint::parse_compatible(first.digest_hex())
-                .unwrap()
-                .as_str(),
+            CustomerProfileRequestFingerprint::parse_compatible(first.digest_hex()).unwrap().as_str(),
             first.as_str()
         );
         assert!(CustomerProfileRequestFingerprint::parse_compatible("sha256-json-v2:00").is_err());
@@ -468,92 +443,80 @@ mod tests {
     fn replay_context_enforces_create_and_update_customer_shapes() {
         let create = replay_context(CustomerProfileOperation::Create, None, "admin-1", ZERO_DIGEST);
         assert!(create.is_ok());
-        assert!(replay_context(
-            CustomerProfileOperation::Create,
-            Some("customer-1"),
-            "admin-1",
-            ZERO_DIGEST
-        )
-        .is_err());
+        assert!(
+            replay_context(CustomerProfileOperation::Create, Some("customer-1"), "admin-1", ZERO_DIGEST)
+                .is_err()
+        );
         assert!(replay_context(CustomerProfileOperation::Update, None, "admin-1", ZERO_DIGEST).is_err());
         assert!(replay_context(CustomerProfileOperation::Create, None, " admin-1", ZERO_DIGEST).is_err());
-        assert!(replay_context(
-            CustomerProfileOperation::Update,
-            Some(" "),
-            "admin-1",
-            ZERO_DIGEST
-        )
-        .is_err());
-        assert!(replay_context(
-            CustomerProfileOperation::Update,
-            Some(" customer-1 "),
-            "admin-1",
-            ZERO_DIGEST,
-        )
-        .is_err());
-        let update = replay_context(
-            CustomerProfileOperation::Update,
-            Some("customer-1"),
-            "admin-1",
-            ZERO_DIGEST,
-        )
-        .unwrap();
+        assert!(replay_context(CustomerProfileOperation::Update, Some(" "), "admin-1", ZERO_DIGEST).is_err());
+        assert!(
+            replay_context(CustomerProfileOperation::Update, Some(" customer-1 "), "admin-1", ZERO_DIGEST,)
+                .is_err()
+        );
+        let update =
+            replay_context(CustomerProfileOperation::Update, Some("customer-1"), "admin-1", ZERO_DIGEST)
+                .unwrap();
         assert_eq!(update.customer_id(), Some("customer-1"));
         assert_eq!(update.idempotency_key(), "customer-save-1");
     }
 
     #[test]
     fn command_replay_requires_each_identity_dimension_to_match() {
-        let matching = replay_context(
-            CustomerProfileOperation::Update,
-            Some("customer-1"),
-            "admin-1",
-            ZERO_DIGEST,
-        )
-        .unwrap();
+        let matching =
+            replay_context(CustomerProfileOperation::Update, Some("customer-1"), "admin-1", ZERO_DIGEST)
+                .unwrap();
         let command =
             CustomerProfileCommand::record_success("command-1", &matching, result_data("customer-1"))
                 .unwrap();
 
         assert!(command.ensure_replay_matches(&matching).is_ok());
-        assert!(command
-            .ensure_replay_matches(
-                &replay_context(CustomerProfileOperation::Create, None, "admin-1", ZERO_DIGEST).unwrap()
-            )
-            .is_err());
-        assert!(command
-            .ensure_replay_matches(
-                &replay_context(
-                    CustomerProfileOperation::Update,
-                    Some("customer-2"),
-                    "admin-1",
-                    ZERO_DIGEST,
+        assert!(
+            command
+                .ensure_replay_matches(
+                    &replay_context(CustomerProfileOperation::Create, None, "admin-1", ZERO_DIGEST).unwrap()
                 )
-                .unwrap()
-            )
-            .is_err());
-        assert!(command
-            .ensure_replay_matches(
-                &replay_context(
-                    CustomerProfileOperation::Update,
-                    Some("customer-1"),
-                    "admin-2",
-                    ZERO_DIGEST,
+                .is_err()
+        );
+        assert!(
+            command
+                .ensure_replay_matches(
+                    &replay_context(
+                        CustomerProfileOperation::Update,
+                        Some("customer-2"),
+                        "admin-1",
+                        ZERO_DIGEST,
+                    )
+                    .unwrap()
                 )
-                .unwrap()
-            )
-            .is_err());
-        assert!(command
-            .ensure_replay_matches(
-                &replay_context(
-                    CustomerProfileOperation::Update,
-                    Some("customer-1"),
-                    "admin-1",
-                    ONE_DIGEST,
+                .is_err()
+        );
+        assert!(
+            command
+                .ensure_replay_matches(
+                    &replay_context(
+                        CustomerProfileOperation::Update,
+                        Some("customer-1"),
+                        "admin-2",
+                        ZERO_DIGEST,
+                    )
+                    .unwrap()
                 )
-                .unwrap()
-            )
-            .is_err());
+                .is_err()
+        );
+        assert!(
+            command
+                .ensure_replay_matches(
+                    &replay_context(
+                        CustomerProfileOperation::Update,
+                        Some("customer-1"),
+                        "admin-1",
+                        ONE_DIGEST,
+                    )
+                    .unwrap()
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -600,13 +563,9 @@ mod tests {
             command_data(&format!("{REQUEST_FINGERPRINT_V1_PREFIX}{ZERO_DIGEST}")),
         )
         .unwrap();
-        let context = replay_context(
-            CustomerProfileOperation::Update,
-            Some("customer-1"),
-            "admin-1",
-            ZERO_DIGEST,
-        )
-        .unwrap();
+        let context =
+            replay_context(CustomerProfileOperation::Update, Some("customer-1"), "admin-1", ZERO_DIGEST)
+                .unwrap();
 
         assert_eq!(legacy.request_fingerprint, ZERO_DIGEST);
         assert_eq!(prefixed.request_fingerprint, ZERO_DIGEST);
@@ -619,27 +578,23 @@ mod tests {
 
     #[test]
     fn update_command_result_must_match_target_customer() {
-        let context = replay_context(
-            CustomerProfileOperation::Update,
-            Some("customer-1"),
-            "admin-1",
-            ZERO_DIGEST,
-        )
-        .unwrap();
-        assert!(CustomerProfileCommand::record_success(
-            "command-wrong-customer",
-            &context,
-            result_data("customer-2"),
-        )
-        .is_err());
+        let context =
+            replay_context(CustomerProfileOperation::Update, Some("customer-1"), "admin-1", ZERO_DIGEST)
+                .unwrap();
+        assert!(
+            CustomerProfileCommand::record_success(
+                "command-wrong-customer",
+                &context,
+                result_data("customer-2"),
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn command_rejects_invalid_operation_key_and_fingerprint() {
-        let blank_key = CustomerProfileCommandData {
-            idempotency_key: " ".to_string(),
-            ..command_data(ZERO_DIGEST)
-        };
+        let blank_key =
+            CustomerProfileCommandData { idempotency_key: " ".to_string(), ..command_data(ZERO_DIGEST) };
         assert!(CustomerProfileCommand::new("command-2", blank_key).is_err());
 
         let invalid_fingerprint = CustomerProfileCommandData {
@@ -648,16 +603,12 @@ mod tests {
         };
         assert!(CustomerProfileCommand::new("command-3", invalid_fingerprint).is_err());
 
-        let invalid_operation = CustomerProfileCommandData {
-            operation: "delete".to_string(),
-            ..command_data(ZERO_DIGEST)
-        };
+        let invalid_operation =
+            CustomerProfileCommandData { operation: "delete".to_string(), ..command_data(ZERO_DIGEST) };
         assert!(CustomerProfileCommand::new("command-4", invalid_operation).is_err());
 
-        let padded_operation = CustomerProfileCommandData {
-            operation: " update ".to_string(),
-            ..command_data(ZERO_DIGEST)
-        };
+        let padded_operation =
+            CustomerProfileCommandData { operation: " update ".to_string(), ..command_data(ZERO_DIGEST) };
         assert!(CustomerProfileCommand::new("command-5", padded_operation).is_err());
 
         let padded_fingerprint = CustomerProfileCommandData {
@@ -715,10 +666,6 @@ mod tests {
     }
 
     fn sensitive_request() -> SensitiveRequest<'static> {
-        SensitiveRequest {
-            legal_name: "Acme",
-            mobile: "13800000000",
-            account_number: "6222020000000000",
-        }
+        SensitiveRequest { legal_name: "Acme", mobile: "13800000000", account_number: "6222020000000000" }
     }
 }

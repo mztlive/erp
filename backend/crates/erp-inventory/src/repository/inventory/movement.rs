@@ -1,19 +1,16 @@
-use crate::repository::owned::StockMovementRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::inventory::{MovementDirection, MovementType, StockMovement};
 use erp_core::common::time::Instant;
 use erp_core::ids::{SkuId, WarehouseId};
 use erp_core::money::Quantity;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use serde::{Deserialize, Serialize};
 
 use super::shared::{entities_by_ids, sort_doc};
 use super::{InventoryRepository, STOCK_MOVEMENTS};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::inventory::{MovementDirection, MovementType, StockMovement};
+use crate::repository::owned::StockMovementRepository;
 
 /// 库存流水列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -157,10 +154,7 @@ impl<'a> StockMovementRepository<'a> {
         let collection = self.collection().clone_with_type::<StockMovementRow>();
         let items = mongo_ops::find_many(&collection, query.clone(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), query, executor).await?;
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按唯一来源单据标识查询库存流水（详情查询）。
@@ -181,8 +175,7 @@ impl<'a> StockMovementRepository<'a> {
         source_document_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<StockMovement>> {
-        self.find_many(doc! { "source_document_id": source_document_id }, executor)
-            .await
+        self.find_many(doc! { "source_document_id": source_document_id }, executor).await
     }
 }
 
@@ -279,13 +272,13 @@ fn stock_movement_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{stock_movement_sort, StockMovementFilter};
-    use persistence_core::QueryFilter;
-
-    use crate::entity::inventory::{MovementDirection, MovementType};
     use erp_core::common::time::Instant;
     use erp_core::ids::{SkuId, WarehouseId};
-    use mongodb::bson::{doc, Bson};
+    use mongodb::bson::{Bson, doc};
+    use persistence_core::QueryFilter;
+
+    use super::{StockMovementFilter, stock_movement_sort};
+    use crate::entity::inventory::{MovementDirection, MovementType};
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockMovementFilter {
         StockMovementFilter {
@@ -321,10 +314,7 @@ mod tests {
 
         let document = filter.to_doc();
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
-        assert_eq!(
-            document.get_document("warehouse_id").unwrap(),
-            &doc! { "$in": ["wh-1"] }
-        );
+        assert_eq!(document.get_document("warehouse_id").unwrap(), &doc! { "$in": ["wh-1"] });
         assert_eq!(document.get_str("sku_id").unwrap(), "sku-1");
         assert_eq!(document.get_str("movement_type").unwrap(), "PURCHASE_RECEIPT_IN");
         assert_eq!(document.get_str("direction").unwrap(), "INCREASE");
@@ -343,12 +333,7 @@ mod tests {
             &doc! { "$in": ["warehouse-1"] }
         );
         assert_eq!(
-            filter(Some(Vec::new()))
-                .to_doc()
-                .get_document("warehouse_id")
-                .unwrap()
-                .get_array("$in")
-                .unwrap(),
+            filter(Some(Vec::new())).to_doc().get_document("warehouse_id").unwrap().get_array("$in").unwrap(),
             &Vec::<Bson>::new()
         );
         assert!(!filter(None).to_doc().contains_key("warehouse_id"));

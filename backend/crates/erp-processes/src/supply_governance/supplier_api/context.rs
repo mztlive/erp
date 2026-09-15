@@ -1,9 +1,10 @@
-use super::SupplierApiGovernanceProcess;
-use crate::{Error, Result};
 use application_core::AuditActor;
-use erp_identity::{subject, Permission};
+use erp_identity::{Permission, subject};
 use erp_supply::entity::supplier_api::SupplierConnectionAction;
 use erp_supply::service::supplier_api::context::action_permission;
+
+use super::SupplierApiGovernanceProcess;
+use crate::{Error, Result};
 impl SupplierApiGovernanceProcess {
     pub(super) async fn ensure_action_permission(
         &self,
@@ -24,8 +25,6 @@ impl SupplierApiGovernanceProcess {
             return Ok(false);
         };
         let permission = Permission::parse(permission)?;
-        Ok(rbac
-            .enforce(&subject(actor.kind(), actor.id()), &permission)
-            .await?)
+        Ok(rbac.enforce(&subject(actor.kind(), actor.id()), &permission).await?)
     }
 }

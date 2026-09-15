@@ -1,8 +1,7 @@
 //! 采购提交行、版本行与汇总视图映射。
 
-use crate::entity::purchase_order::PurchaseOrderRevision;
-
 use crate::dto::purchase_order::{PurchaseOrderLineView, TotalsView};
+use crate::entity::purchase_order::PurchaseOrderRevision;
 
 /// 从实体构造采购版本行的视图。
 ///
@@ -35,10 +34,7 @@ pub fn revision_line_to_view(
         tax_amount: line.tax_amount.to_string(),
         expected_delivery_date: line.expected_delivery_date.map(|d| d.to_string()),
         sales_order_line_id: line.sales_order_line_id.as_ref().map(ToString::to_string),
-        sales_order_revision_line_id: line
-            .sales_order_revision_line_id
-            .as_ref()
-            .map(ToString::to_string),
+        sales_order_revision_line_id: line.sales_order_revision_line_id.as_ref().map(ToString::to_string),
         sales_order_submission_line_id: None,
         allocated_quantity: line.allocated_quantity.map(|q| q.to_string()),
     }
@@ -75,14 +71,8 @@ pub fn submission_line_to_view(
         tax_amount: line.tax_amount.to_string(),
         expected_delivery_date: line.expected_delivery_date.map(|d| d.to_string()),
         sales_order_line_id: line.sales_order_line_id.as_ref().map(ToString::to_string),
-        sales_order_revision_line_id: line
-            .sales_order_revision_line_id
-            .as_ref()
-            .map(ToString::to_string),
-        sales_order_submission_line_id: line
-            .sales_order_submission_line_id
-            .as_ref()
-            .map(ToString::to_string),
+        sales_order_revision_line_id: line.sales_order_revision_line_id.as_ref().map(ToString::to_string),
+        sales_order_submission_line_id: line.sales_order_submission_line_id.as_ref().map(ToString::to_string),
         allocated_quantity: line.allocated_quantity.map(|q| q.to_string()),
     }
 }

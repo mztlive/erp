@@ -1,21 +1,24 @@
+use application_core::AuditActor;
 use bpm::engine::{DefinitionGraph, StartAssigneeBinding, TaskIntent};
 use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
 use bpm::model::{ParticipantId, SubjectRef, Timestamp};
-use erp_audit::AuditExt;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use erp_returns::entity::returns::CustomerRefund;
 use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::entity::work_item::DocumentApprovalWorkItemData;
-use erp_workflow::entity::work_item::{WorkItem, WorkItemPriority};
-use erp_workflow::ApprovalIntegrationExt;
-use erp_workflow::BpmExt;
-use erp_workflow::DocumentRegistryExt;
-use erp_workflow::WorkItemExt;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
+use erp_workflow::service::approval::execution::authorization::{AuthorizationFailure, converge_eligibility};
+use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
+use erp_workflow::service::approval::execution::{
+    ExecutionCommandInput, PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
+};
+use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;
@@ -24,14 +27,6 @@ use super::super::adapter::customer_refund_object_readable;
 use super::mapping::list_projection_from_execution;
 use super::prepare::load_start_receipt_for_document_type;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_workflow::service::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
-use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
-use erp_workflow::service::approval::execution::{
-    map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
-};
-use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 读取同载荷启动收据；不存在时返回 `None`。
 ///
@@ -130,18 +125,14 @@ pub fn build_customer_refund_start_input(input: CustomerRefundStartInput<'_>) ->
         now,
     } = input;
     if graph.definition.definition_version != binding.approval_definition_version {
-        return Err(Error::ConflictError(
-            "客户退款单绑定定义版本与已加载定义不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("客户退款单绑定定义版本与已加载定义不一致".to_string()));
     }
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
     let bindings = start_bindings_from_graph(&graph, organization_id)?;
-    let entry = graph
-        .entry_node()
-        .map_err(|_| Error::ConflictError("审批定义缺少入口节点".to_string()))?;
+    let entry = graph.entry_node().map_err(|_| Error::ConflictError("审批定义缺少入口节点".to_string()))?;
     let entry_eligibility = bindings
         .iter()
         .find(|item| item.node_key == entry.node_key)
@@ -199,9 +190,7 @@ fn start_bindings_from_graph(
         });
     }
     if bindings.is_empty() {
-        return Err(Error::ConflictError(
-            "审批定义没有节点，无法启动客户退款审批".to_string(),
-        ));
+        return Err(Error::ConflictError("审批定义没有节点，无法启动客户退款审批".to_string()));
     }
     Ok(bindings)
 }
@@ -297,9 +286,7 @@ pub async fn persist_customer_refund_start(
                     )
                     .await?;
                 if guarded.is_none() {
-                    return Err(Error::ConflictError(
-                        "客户退款单审批启动守卫冲突，请刷新后重试".to_string(),
-                    ));
+                    return Err(Error::ConflictError("客户退款单审批启动守卫冲突，请刷新后重试".to_string()));
                 }
                 let mut refund = refund;
                 erp_returns::service::ReturnsService::new(db.clone())
@@ -366,9 +353,7 @@ pub async fn persist_runtime_writes(
         )
         .await?,
     );
-    db.approval_subject_snapshots()
-        .create_immutable_snapshot(&snapshot, session)
-        .await?;
+    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, session).await?;
     persist_open_tasks(db, writes, owner_role, organization_id, now, session).await
 }
 
@@ -385,12 +370,7 @@ async fn persist_open_tasks(
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
     for intent in &writes.create_tasks {
-        let TaskIntent::HumanTaskRequested {
-            execution_id,
-            assignee,
-            ..
-        } = intent
-        else {
+        let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
             continue;
         };
         let item = WorkItem::new_document_approval(

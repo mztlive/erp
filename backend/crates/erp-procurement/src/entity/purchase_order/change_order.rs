@@ -6,12 +6,6 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::purchase_order::line_common::{normalize_and_validate_line, PurchaseLineDataRef};
-use crate::entity::purchase_order::purchase_submission::SubmissionStatus;
-use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
-use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
 use erp_core::common::stable::StableBase;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
@@ -23,6 +17,12 @@ use erp_core::ids::{
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::purchase_order::line_common::{PurchaseLineDataRef, normalize_and_validate_line};
+use crate::entity::purchase_order::purchase_submission::SubmissionStatus;
+use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
+use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
 
 /// 变更原因最大长度。
 const REASON_MAX_LEN: usize = 500;
@@ -180,12 +180,8 @@ impl PurchaseChangeOrder {
         data: PurchaseChangeOrderData,
         created_by: impl Into<String>,
     ) -> Result<Self> {
-        let reason = normalize_required_text(
-            data.reason,
-            "采购变化原因不能为空",
-            REASON_MAX_LEN,
-            "采购变化原因过长",
-        )?;
+        let reason =
+            normalize_required_text(data.reason, "采购变化原因不能为空", REASON_MAX_LEN, "采购变化原因过长")?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             stable: StableBase::new(PurchaseChangeOrderStatus::Draft, created_by),
@@ -241,10 +237,7 @@ impl PurchaseChangeOrder {
     /// # 错误
     /// 变更单尚未提交，或请求提交与当前冻结提交不一致时返回领域错误。
     pub fn submission_id_for_effect(&self, requested: Option<&str>) -> Result<PurchaseChangeSubmissionId> {
-        let current = self
-            .current_submission_id
-            .clone()
-            .ok_or_else(|| Error::from("变更单尚未提交审批"))?;
+        let current = self.current_submission_id.clone().ok_or_else(|| Error::from("变更单尚未提交审批"))?;
         if let Some(requested) = requested.map(str::trim).filter(|value| !value.is_empty()) {
             if requested != current.as_ref() {
                 return Err(Error::from("生效提交必须是当前冻结提交，不得使用历史提交"));
@@ -349,10 +342,8 @@ impl PurchaseChangeOrder {
         if self.stable.status != PurchaseChangeOrderStatus::Draft {
             return Err(Error::from("只有草稿状态的采购变更单可以提交审批"));
         }
-        let next = self
-            .approval_subject_version
-            .checked_add(1)
-            .ok_or_else(|| Error::from("审批提交版本溢出"))?;
+        let next =
+            self.approval_subject_version.checked_add(1).ok_or_else(|| Error::from("审批提交版本溢出"))?;
         let target_content_hash = normalize_required_text(
             target_content_hash.into(),
             "目标内容指纹不能为空",
@@ -443,12 +434,7 @@ fn parse_sequence(value: &str, prefix: &str) -> Option<u32> {
 /// # 错误
 /// 序号为空或超长时返回错误。
 fn normalize_submission_no(submission_no: String) -> Result<String> {
-    normalize_required_text(
-        submission_no,
-        "提交序号不能为空",
-        SUBMISSION_NO_MAX_LEN,
-        "提交序号过长",
-    )
+    normalize_required_text(submission_no, "提交序号不能为空", SUBMISSION_NO_MAX_LEN, "提交序号过长")
 }
 
 /// 采购变更提交创建数据（不含系统字段）。
@@ -539,12 +525,7 @@ impl PurchaseChangeSubmission {
     /// 提交序号为空/超长，或表头金额三元组不守恒时返回错误。
     pub fn new(id: PurchaseChangeSubmissionId, data: PurchaseChangeSubmissionData) -> Result<Self> {
         let submission_no = normalize_submission_no(data.submission_no)?;
-        ensure_header_triple(
-            data.gross_amount,
-            data.net_amount,
-            data.tax_amount,
-            &submission_no,
-        )?;
+        ensure_header_triple(data.gross_amount, data.net_amount, data.tax_amount, &submission_no)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             purchase_change_order_id: data.purchase_change_order_id,
@@ -584,9 +565,7 @@ impl PurchaseChangeSubmission {
             .filter_map(|submission| parse_sequence(&submission.submission_no, "CS-"))
             .max()
             .unwrap_or(0);
-        let next = max_no
-            .checked_add(1)
-            .ok_or_else(|| Error::from("采购变更提交序号溢出"))?;
+        let next = max_no.checked_add(1).ok_or_else(|| Error::from("采购变更提交序号溢出"))?;
         Ok(format!("CS-{next:06}"))
     }
 
@@ -800,7 +779,7 @@ impl PurchaseLineDataRef for PurchaseChangeSubmissionLineData {
                 if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
                     return Err(Error::from("商品/服务行分配数量必须为正"));
                 }
-            }
+            },
             PurchaseLineType::LogisticsFee => {
                 if self.sales_order_line_id.is_some()
                     || self.sales_order_revision_line_id.is_some()
@@ -809,7 +788,7 @@ impl PurchaseLineDataRef for PurchaseChangeSubmissionLineData {
                 {
                     return Err(Error::from("物流费用行不得携带销售分配"));
                 }
-            }
+            },
         }
         Ok(())
     }
@@ -901,6 +880,17 @@ fn ensure_header_triple(
 #[cfg(test)]
 mod tests {
 
+    use std::str::FromStr;
+
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{
+        ProcurementConfirmationLineId, PurchaseChangeOrderId, PurchaseChangeSubmissionId,
+        PurchaseChangeSubmissionLineId, PurchaseOrderId, PurchaseOrderRevisionId, SalesOrderLineId,
+        SalesOrderRevisionLineId, SalesOrderSubmissionLineId, SkuId, SupplierAccountId,
+        SupplierCommercialProfileRevisionId,
+    };
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice, line_amounts};
+
     use super::{
         PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeOrderStatus, PurchaseChangeOrderUpdate,
         PurchaseChangeSubmission, PurchaseChangeSubmissionData, PurchaseChangeSubmissionLine,
@@ -909,15 +899,6 @@ mod tests {
     use crate::entity::purchase_order::purchase_submission::SubmissionStatus;
     use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
     use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
-    use erp_core::common::time::{BusinessDate, Instant};
-    use erp_core::ids::{
-        ProcurementConfirmationLineId, PurchaseChangeOrderId, PurchaseChangeSubmissionId,
-        PurchaseChangeSubmissionLineId, PurchaseOrderId, PurchaseOrderRevisionId, SalesOrderLineId,
-        SalesOrderRevisionLineId, SalesOrderSubmissionLineId, SkuId, SupplierAccountId,
-        SupplierCommercialProfileRevisionId,
-    };
-    use erp_core::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
-    use std::str::FromStr;
 
     fn snapshot() -> SupplierSnapshot {
         SupplierSnapshot::new("北京华联供应商".to_string()).unwrap()
@@ -1004,18 +985,11 @@ mod tests {
         let mut order =
             PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-1"), change_data(), "admin-1").unwrap();
         order.ensure_expected_version(order.base.version).unwrap();
-        assert!(order
-            .ensure_expected_version(order.base.version.saturating_add(1))
-            .is_err());
+        assert!(order.ensure_expected_version(order.base.version.saturating_add(1)).is_err());
         order.ensure_draft_for_submission().unwrap();
         assert!(order.submission_id_for_effect(None).is_err());
-        order
-            .start_approval(PurchaseChangeSubmissionId::new("pcs-1"), "hash-1", "admin-1")
-            .unwrap();
-        assert_eq!(
-            order.submission_id_for_effect(Some("pcs-1")).unwrap().as_ref(),
-            "pcs-1"
-        );
+        order.start_approval(PurchaseChangeSubmissionId::new("pcs-1"), "hash-1", "admin-1").unwrap();
+        assert_eq!(order.submission_id_for_effect(Some("pcs-1")).unwrap().as_ref(), "pcs-1");
         assert!(order.submission_id_for_effect(Some("pcs-old")).is_err());
         order.ensure_base_revision_current(Some("por-1")).unwrap();
         assert!(order.ensure_base_revision_current(Some("por-2")).is_err());
@@ -1039,19 +1013,14 @@ mod tests {
         assert_eq!(order.reason, "价格下降");
         assert_eq!(order.stable.updated_by, "admin-2");
 
-        order
-            .start_approval(PurchaseChangeSubmissionId::new("pcs-1"), "hash-1", "admin-2")
-            .unwrap();
+        order.start_approval(PurchaseChangeSubmissionId::new("pcs-1"), "hash-1", "admin-2").unwrap();
         assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::InApproval);
         assert_eq!(order.approval_subject_version, 1);
 
         assert!(
             order
                 .update(
-                    PurchaseChangeOrderUpdate {
-                        reason: Some("再改".to_string()),
-                        ..Default::default()
-                    },
+                    PurchaseChangeOrderUpdate { reason: Some("再改".to_string()), ..Default::default() },
                     "admin-3",
                 )
                 .is_err(),
@@ -1064,9 +1033,8 @@ mod tests {
     fn start_approval_cancel_and_apply_effective() {
         let mut order =
             PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-1"), change_data(), "admin-1").unwrap();
-        let version = order
-            .start_approval(PurchaseChangeSubmissionId::new("pcs-1"), "hash-1", "submitter-1")
-            .unwrap();
+        let version =
+            order.start_approval(PurchaseChangeSubmissionId::new("pcs-1"), "hash-1", "submitter-1").unwrap();
         assert_eq!(version, 1);
         assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::InApproval);
         assert_eq!(order.approval_subject_version, 1);
@@ -1075,31 +1043,17 @@ mod tests {
         order.cancel_approval("admin-2").unwrap();
         assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::Draft);
         assert_eq!(order.approval_subject_version, 1);
-        assert_eq!(
-            order
-                .current_submission_id
-                .as_ref()
-                .map(ToString::to_string)
-                .as_deref(),
-            Some("pcs-1")
-        );
+        assert_eq!(order.current_submission_id.as_ref().map(ToString::to_string).as_deref(), Some("pcs-1"));
 
-        let next = order
-            .start_approval(PurchaseChangeSubmissionId::new("pcs-2"), "hash-2", "submitter-2")
-            .unwrap();
+        let next =
+            order.start_approval(PurchaseChangeSubmissionId::new("pcs-2"), "hash-2", "submitter-2").unwrap();
         assert_eq!(next, 2);
-        order
-            .apply_effective(PurchaseOrderRevisionId::new("por-2"), "approver-1")
-            .unwrap();
+        order.apply_effective(PurchaseOrderRevisionId::new("por-2"), "approver-1").unwrap();
         assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::Effective);
         assert_eq!(order.approval_subject_version, 2);
-        assert!(order
-            .start_approval(PurchaseChangeSubmissionId::new("pcs-3"), "h", "u")
-            .is_err());
+        assert!(order.start_approval(PurchaseChangeSubmissionId::new("pcs-3"), "h", "u").is_err());
         assert!(order.cancel_approval("u").is_err());
-        assert!(order
-            .apply_effective(PurchaseOrderRevisionId::new("por-3"), "u")
-            .is_err());
+        assert!(order.apply_effective(PurchaseOrderRevisionId::new("por-3"), "u").is_err());
     }
 
     /// 内容更新不得改写状态；状态只能经签署邻接方法迁移。
@@ -1109,10 +1063,7 @@ mod tests {
             PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-1"), change_data(), "admin-1").unwrap();
         order
             .update(
-                PurchaseChangeOrderUpdate {
-                    reason: Some("仅改原因".to_string()),
-                    ..Default::default()
-                },
+                PurchaseChangeOrderUpdate { reason: Some("仅改原因".to_string()), ..Default::default() },
                 "admin-2",
             )
             .unwrap();
@@ -1122,10 +1073,7 @@ mod tests {
 
     #[test]
     fn change_order_new_rejects_empty_reason() {
-        let data = PurchaseChangeOrderData {
-            reason: "   ".to_string(),
-            ..change_data()
-        };
+        let data = PurchaseChangeOrderData { reason: "   ".to_string(), ..change_data() };
         assert!(PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-2"), data, "admin-1").is_err());
     }
 
@@ -1147,13 +1095,9 @@ mod tests {
         let mut pending =
             PurchaseChangeSubmission::new(PurchaseChangeSubmissionId::new("pcs-3"), change_submission_data())
                 .unwrap();
-        pending
-            .submit(Instant::from_unix_secs(1_700_000_000), "buyer-1")
-            .unwrap();
+        pending.submit(Instant::from_unix_secs(1_700_000_000), "buyer-1").unwrap();
         assert_eq!(pending.status, SubmissionStatus::Pending);
-        assert!(pending
-            .submit(Instant::from_unix_secs(1_700_000_000), "buyer-1")
-            .is_err());
+        assert!(pending.submit(Instant::from_unix_secs(1_700_000_000), "buyer-1").is_err());
     }
 
     #[test]
@@ -1167,9 +1111,7 @@ mod tests {
             "CS-000010"
         );
         assert!(first.approve().is_err());
-        first
-            .submit(Instant::from_unix_secs(1_700_000_000), "buyer-1")
-            .unwrap();
+        first.submit(Instant::from_unix_secs(1_700_000_000), "buyer-1").unwrap();
         first.approve().unwrap();
         assert_eq!(first.status, SubmissionStatus::Approved);
         assert!(first.approve().is_err());
@@ -1188,21 +1130,22 @@ mod tests {
             gross_amount: Amount::from_str("29.98").unwrap(),
             ..change_line_data()
         };
-        assert!(PurchaseChangeSubmissionLine::new(
-            PurchaseChangeSubmissionLineId::new("pcsl-2"),
-            bad_amounts,
-        )
-        .is_err());
+        assert!(
+            PurchaseChangeSubmissionLine::new(PurchaseChangeSubmissionLineId::new("pcsl-2"), bad_amounts,)
+                .is_err()
+        );
 
         let fee_with_quantity = PurchaseChangeSubmissionLineData {
             line_type: PurchaseLineType::LogisticsFee,
             quantity: Some(Quantity::from_str("3.000000").unwrap()),
             ..change_line_data()
         };
-        assert!(PurchaseChangeSubmissionLine::new(
-            PurchaseChangeSubmissionLineId::new("pcsl-3"),
-            fee_with_quantity,
-        )
-        .is_err());
+        assert!(
+            PurchaseChangeSubmissionLine::new(
+                PurchaseChangeSubmissionLineId::new("pcsl-3"),
+                fee_with_quantity,
+            )
+            .is_err()
+        );
     }
 }

@@ -23,7 +23,8 @@ use std::fmt;
 use std::str::FromStr;
 
 use rust_decimal::Decimal;
-use serde::{de, de::MapAccess, de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
+use serde::de::{MapAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
 use crate::errors::{Error, Result};
 
@@ -67,11 +68,7 @@ macro_rules! decimal_newtype {
             /// 需要舍入请显式使用 [`round_to_cent`]）。
             fn try_from(value: Decimal) -> Result<Self> {
                 if value.normalize().scale() > $scale {
-                    return Err(Error::from(format!(
-                        "{} 有效小数位最多 {} 位",
-                        stringify!($name),
-                        $scale
-                    )));
+                    return Err(Error::from(format!("{} 有效小数位最多 {} 位", stringify!($name), $scale)));
                 }
                 Ok(Self(value))
             }
@@ -287,17 +284,16 @@ impl<'de> de::DeserializeSeed<'de> for D128BytesSeed {
 /// # 返回
 /// 解析成功返回 `Ok(Decimal)`，字节长度非法或解析失败返回 `Err(String)`。
 fn decimal_from_d128_bytes(bytes: Vec<u8>) -> std::result::Result<Decimal, String> {
-    let bytes: [u8; 16] = bytes
-        .try_into()
-        .map_err(|_| "Decimal128 必须为 16 字节".to_string())?;
+    let bytes: [u8; 16] = bytes.try_into().map_err(|_| "Decimal128 必须为 16 字节".to_string())?;
     let decimal128 = bson::Decimal128::from_bytes(bytes);
     Decimal::from_str(&decimal128.to_string()).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde::{Deserialize, Serialize};
+
+    use super::*;
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     struct MoneyDoc {
@@ -358,10 +354,7 @@ mod tests {
         assert_eq!(round_to_cent(Decimal::new(-15, 3)), Decimal::new(-2, 2));
 
         // 大额：9999999999.999 → 10000000000.00
-        assert_eq!(
-            round_to_cent(Decimal::new(9_999_999_999_999, 3)),
-            Decimal::new(1_000_000_000_000, 2)
-        );
+        assert_eq!(round_to_cent(Decimal::new(9_999_999_999_999, 3)), Decimal::new(1_000_000_000_000, 2));
     }
 
     /// 行金额一致性：gross = net + tax 精确成立，各分量均舍入到分。

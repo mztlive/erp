@@ -7,8 +7,6 @@ pub mod owned_task;
 pub mod page;
 pub mod query;
 mod query_ids;
-pub use query_ids::{FilterOption, FilteredPage, QueryIds};
-
 pub use command::{
     CommandFingerprint, CommandIdentity, CommandReceipt, CommandReceiptFact, CommandReceiptMatch,
 };
@@ -17,5 +15,6 @@ pub use error::{Error, ErrorClass, Result};
 pub use owned_task::await_owned;
 pub use page::Page;
 pub use query::{
-    non_blank, normalize_sort, normalized_text, page_or_default, page_size_or_default, PageView, SortDir,
+    PageView, SortDir, non_blank, normalize_sort, normalized_text, page_or_default, page_size_or_default,
 };
+pub use query_ids::{FilterOption, FilteredPage, QueryIds};

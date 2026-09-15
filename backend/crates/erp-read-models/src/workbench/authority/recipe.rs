@@ -1,9 +1,11 @@
 //! 命令读取的固定生产调度；每个步骤失败立即终止，复用原调用方 Executor。
-use crate::errors::Result;
+use std::collections::HashSet;
+
 use async_trait::async_trait;
 use erp_workflow::ports::{ObjectFactKey, ObjectFactMap};
 use persistence_core::Executor;
-use std::collections::HashSet;
+
+use crate::errors::Result;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Step {
     Sales,
@@ -72,9 +74,10 @@ pub(super) async fn load(
 }
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use super::*;
     use crate::errors::Error;
-    use std::sync::Mutex;
     struct TestExecutor {
         calls: usize,
     }

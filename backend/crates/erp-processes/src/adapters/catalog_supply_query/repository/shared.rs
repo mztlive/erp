@@ -1,7 +1,7 @@
 //! 聚合提供方引用各领域的真实集合名与通用排序。
 use erp_catalog::repository::CatalogExt;
 use erp_supply::repository::SupplierOfferingExt;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 
 pub(super) const PRODUCT_REVISIONS: &str = <mongodb::Database as CatalogExt>::PRODUCT_REVISIONS;
 pub(super) const SKUS: &str = <mongodb::Database as CatalogExt>::SKUS;
@@ -36,13 +36,7 @@ mod tests {
 
     #[test]
     fn sort_doc_uses_id_as_stable_tiebreaker() {
-        assert_eq!(
-            super::sort_doc("created_at", false),
-            doc! { "created_at": -1, "id": -1 }
-        );
-        assert_eq!(
-            super::sort_doc("product_no", true),
-            doc! { "product_no": 1, "id": 1 }
-        );
+        assert_eq!(super::sort_doc("created_at", false), doc! { "created_at": -1, "id": -1 });
+        assert_eq!(super::sort_doc("product_no", true), doc! { "product_no": 1, "id": 1 });
     }
 }

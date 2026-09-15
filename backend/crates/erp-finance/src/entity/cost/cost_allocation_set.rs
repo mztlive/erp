@@ -6,11 +6,10 @@
 //! 含税 ≥ 不含税形态不变量。计划不生成 ID、不查询销售订单、不做跨聚合存在性
 //! 判断——销售事实由 Service 确认后传入，实体 ID 由 Service 注入。
 
-use rust_decimal::Decimal;
-
 use erp_core::ids::{SalesOrderId, SalesOrderLineId};
 use erp_core::money::Amount;
 use erp_core::{Error, Result};
+use rust_decimal::Decimal;
 
 /// 成本分配计划输入行（尾差归属尚未解析）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -158,10 +157,12 @@ impl CostAllocationSet {
 
 #[cfg(test)]
 mod tests {
-    use super::{CostAllocationLineInput, CostAllocationSet};
+    use std::str::FromStr;
+
     use erp_core::ids::{SalesOrderId, SalesOrderLineId};
     use erp_core::money::Amount;
-    use std::str::FromStr;
+
+    use super::{CostAllocationLineInput, CostAllocationSet};
 
     fn line(
         id: &str,
@@ -196,10 +197,7 @@ mod tests {
         assert_eq!(lines[0].sales_order_id, SalesOrderId::new("so-1"));
         assert_eq!(lines[1].sales_order_id, SalesOrderId::new("so-2"));
         assert_eq!(lines[2].sales_order_id, SalesOrderId::new("so-3"));
-        assert_eq!(
-            lines[2].allocated_gross_amount,
-            Amount::from_str("28.25").unwrap()
-        );
+        assert_eq!(lines[2].allocated_gross_amount, Amount::from_str("28.25").unwrap());
         assert_eq!(lines[2].allocated_net_amount, Amount::from_str("25.00").unwrap());
     }
 
@@ -214,10 +212,7 @@ mod tests {
                 line("so-3", "28.24", "25.00", None),
             ],
         );
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "成本分配合计必须等于成本事实金额"
-        );
+        assert_eq!(result.unwrap_err().to_string(), "成本分配合计必须等于成本事实金额");
     }
 
     #[test]
@@ -225,10 +220,7 @@ mod tests {
         let result = CostAllocationSet::new(
             Amount::from_str("113.00").unwrap(),
             Amount::from_str("100.00").unwrap(),
-            vec![
-                line("so-1", "56.50", "50.00", None),
-                line("so-2", "56.50", "49.99", None),
-            ],
+            vec![line("so-1", "56.50", "50.00", None), line("so-2", "56.50", "49.99", None)],
         );
         assert!(result.is_err());
     }
@@ -246,11 +238,7 @@ mod tests {
         )
         .unwrap();
 
-        let flags = plan
-            .lines()
-            .iter()
-            .map(|line| line.rounding_residual_flag)
-            .collect::<Vec<_>>();
+        let flags = plan.lines().iter().map(|line| line.rounding_residual_flag).collect::<Vec<_>>();
         assert_eq!(flags, vec![false, true, false]);
     }
 
@@ -267,11 +255,7 @@ mod tests {
         )
         .unwrap();
 
-        let flags = plan
-            .lines()
-            .iter()
-            .map(|line| line.rounding_residual_flag)
-            .collect::<Vec<_>>();
+        let flags = plan.lines().iter().map(|line| line.rounding_residual_flag).collect::<Vec<_>>();
         assert_eq!(flags, vec![true, false, false]);
     }
 
@@ -288,11 +272,7 @@ mod tests {
         )
         .unwrap();
 
-        let flags = plan
-            .lines()
-            .iter()
-            .map(|line| line.rounding_residual_flag)
-            .collect::<Vec<_>>();
+        let flags = plan.lines().iter().map(|line| line.rounding_residual_flag).collect::<Vec<_>>();
         assert_eq!(flags, vec![false, false, false]);
     }
 
@@ -338,10 +318,7 @@ mod tests {
         let zero_gross = CostAllocationSet::new(
             Amount::from_str("100.00").unwrap(),
             Amount::from_str("100.00").unwrap(),
-            vec![
-                line("so-1", "100.00", "100.00", None),
-                line("so-2", "0.00", "0.00", None),
-            ],
+            vec![line("so-1", "100.00", "100.00", None), line("so-2", "0.00", "0.00", None)],
         );
         assert_eq!(zero_gross.unwrap_err().to_string(), "分配金额必须为正数");
 
@@ -349,10 +326,7 @@ mod tests {
         let negative_gross = CostAllocationSet::new(
             Amount::from_str("100.00").unwrap(),
             Amount::from_str("100.00").unwrap(),
-            vec![
-                line("so-1", "150.00", "100.00", None),
-                line("so-2", "-50.00", "0.00", None),
-            ],
+            vec![line("so-1", "150.00", "100.00", None), line("so-2", "-50.00", "0.00", None)],
         );
         assert_eq!(negative_gross.unwrap_err().to_string(), "分配金额必须为正数");
 
@@ -360,10 +334,7 @@ mod tests {
         let negative_net = CostAllocationSet::new(
             Amount::from_str("200.00").unwrap(),
             Amount::from_str("100.00").unwrap(),
-            vec![
-                line("so-1", "100.00", "150.00", None),
-                line("so-2", "100.00", "-50.00", None),
-            ],
+            vec![line("so-1", "100.00", "150.00", None), line("so-2", "100.00", "-50.00", None)],
         );
         assert_eq!(negative_net.unwrap_err().to_string(), "分配金额必须为正数");
     }
@@ -378,12 +349,7 @@ mod tests {
             Amount::from_str("79228162514264337593543950335").unwrap(),
             Amount::from_str("79228162514264337593543950335").unwrap(),
             vec![
-                line(
-                    "so-1",
-                    "79228162514264337593543950335",
-                    "79228162514264337593543950335",
-                    None,
-                ),
+                line("so-1", "79228162514264337593543950335", "79228162514264337593543950335", None),
                 line("so-2", "1", "1", None),
             ],
         );

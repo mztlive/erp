@@ -14,8 +14,8 @@ use crate::ports::{
     ContractDataScopePort, ContractParticipantPort, ContractResolvedClause, ContractResolvedScope,
     ContractScopeObject, CustomerAssignmentFactsPort,
 };
-use crate::repository::scope::{ContractReadScope, ContractScopeClause};
 use crate::repository::ContractExt;
+use crate::repository::scope::{ContractReadScope, ContractScopeClause};
 
 /// 合同对象访问范围；列表、详情、附件、导出和写命令复用同一解析。
 #[derive(Clone)]
@@ -49,12 +49,7 @@ impl ContractAccess {
         assignments: Arc<dyn CustomerAssignmentFactsPort>,
         participants: Arc<dyn ContractParticipantPort>,
     ) -> Self {
-        Self {
-            db,
-            scope,
-            assignments,
-            participants,
-        }
+        Self { db, scope, assignments, participants }
     }
 
     /// 在调用方事务内证明资源动作并映射合同责任条件。
@@ -80,10 +75,7 @@ impl ContractAccess {
     ) -> Result<(ContractResolvedScope, ContractReadScope)> {
         let mut access = self.scope.resolve(actor, action, executor).await?;
         let as_of = business_date(access.as_of)?;
-        let assignments = self
-            .assignments
-            .active_assignments_for_user(actor.id(), as_of, executor)
-            .await?;
+        let assignments = self.assignments.active_assignments_for_user(actor.id(), as_of, executor).await?;
         let mut owned = Vec::new();
         let mut collaborating = Vec::new();
         for assignment in assignments {
@@ -101,15 +93,10 @@ impl ContractAccess {
         ensure_limit(collaborating.len(), "协作范围超过查询上限")?;
         let org_owned = self.org_owned_customers(&access, as_of, executor).await?;
         let limit_customers = access.user_limit.as_ref().and_then(|clause| {
-            clause_ids(
-                &map_clause(clause, actor.id(), &collaborating, &org_owned),
-                &owned,
-                &org_owned,
-            )
+            clause_ids(&map_clause(clause, actor.id(), &collaborating, &org_owned), &owned, &org_owned)
         });
         let history = if allows_history(action) {
-            self.historical_contracts(actor.id(), limit_customers.as_deref(), executor)
-                .await?
+            self.historical_contracts(actor.id(), limit_customers.as_deref(), executor).await?
         } else {
             Vec::new()
         };
@@ -181,15 +168,9 @@ impl ContractAccess {
         executor: &mut dyn Executor,
     ) -> Result<ContractResolvedScope> {
         let (access, scope) = self.resolve(&actor, action, executor).await?;
-        let found = self
-            .db
-            .contracts()
-            .find_authorized(contract_id, &scope, executor)
-            .await?;
+        let found = self.db.contracts().find_authorized(contract_id, &scope, executor).await?;
         let contract = found.ok_or_else(|| deny_object(action))?;
-        let mut object = self
-            .object_facts(contract.customer_id.as_ref(), &access, &scope, executor)
-            .await?;
+        let mut object = self.object_facts(contract.customer_id.as_ref(), &access, &scope, executor).await?;
         object.historical_read_participant = scope.historical_contract_ids.iter().any(|id| id == contract_id);
         if !self.scope.allows(&access, &object)? {
             return Err(deny_object(action));
@@ -318,10 +299,7 @@ impl ContractAccess {
                 continue;
             }
             let org_ids = orgs.iter().cloned().collect::<BTreeSet<_>>();
-            let members = self
-                .scope
-                .org_member_ids(&org_ids, access.as_of, executor)
-                .await?;
+            let members = self.scope.org_member_ids(&org_ids, access.as_of, executor).await?;
             ensure_limit(members.len(), "组织成员超过查询上限")?;
             let customers = self.customers_owned_by_members(&members, as_of, executor).await?;
             sets.push((orgs, customers));
@@ -353,10 +331,8 @@ impl ContractAccess {
         if members.is_empty() {
             return Ok(Vec::new());
         }
-        let mut customers = self
-            .assignments
-            .current_owner_customer_ids(None, Some(members), as_of, executor)
-            .await?;
+        let mut customers =
+            self.assignments.current_owner_customer_ids(None, Some(members), as_of, executor).await?;
         customers.sort();
         customers.dedup();
         ensure_limit(customers.len(), "组织主责客户超过查询上限")?;
@@ -430,10 +406,8 @@ pub fn contract_scope(
         .iter()
         .map(|clause| map_clause(clause, user, collaborating, org_owned))
         .collect::<Vec<_>>();
-    let user_limit = access
-        .user_limit
-        .as_ref()
-        .map(|clause| map_clause(clause, user, collaborating, org_owned));
+    let user_limit =
+        access.user_limit.as_ref().map(|clause| map_clause(clause, user, collaborating, org_owned));
     let mut authorized = union_clauses(&roles, owned, org_owned);
     if let Some(limit) = &user_limit {
         authorized = intersect_ids(authorized, clause_ids(limit, owned, org_owned));
@@ -473,11 +447,7 @@ fn map_clause(
     ContractScopeClause {
         company: clause.company,
         owner_user_id: clause.self_owned.then(|| user.into()),
-        collaborative_customer_ids: if clause.collaborative {
-            collaborating.to_vec()
-        } else {
-            Vec::new()
-        },
+        collaborative_customer_ids: if clause.collaborative { collaborating.to_vec() } else { Vec::new() },
         owner_org_unit_ids: clause.org_unit_ids.clone(),
     }
 }
@@ -511,10 +481,7 @@ fn clause_ids(
     }
     ids.extend(clause.collaborative_customer_ids.iter().cloned());
     if !clause.owner_org_unit_ids.is_empty() {
-        if let Some((_, customers)) = org_owned
-            .iter()
-            .find(|(orgs, _)| orgs == &clause.owner_org_unit_ids)
-        {
+        if let Some((_, customers)) = org_owned.iter().find(|(orgs, _)| orgs == &clause.owner_org_unit_ids) {
             ids.extend(customers.iter().cloned());
         }
     }
@@ -576,7 +543,7 @@ fn union_ids(left: Option<Vec<String>>, right: Option<Vec<String>>) -> Option<Ve
             left.sort();
             left.dedup();
             Some(left)
-        }
+        },
     }
 }
 
@@ -600,7 +567,7 @@ pub(super) fn intersect_ids(left: Option<Vec<String>>, right: Option<Vec<String>
         (Some(left), Some(right)) => {
             let right = right.into_iter().collect::<BTreeSet<_>>();
             Some(left.into_iter().filter(|id| right.contains(id)).collect())
-        }
+        },
     }
 }
 
@@ -665,44 +632,29 @@ mod tests {
         let before = chrono::DateTime::parse_from_rfc3339("2026-09-13T15:59:59Z").unwrap();
         let after = chrono::DateTime::parse_from_rfc3339("2026-09-13T16:00:00Z").unwrap();
         assert_eq!(
-            business_date(Instant::from_unix_secs(before.timestamp()))
-                .unwrap()
-                .to_string(),
+            business_date(Instant::from_unix_secs(before.timestamp())).unwrap().to_string(),
             "2026-09-13"
         );
         assert_eq!(
-            business_date(Instant::from_unix_secs(after.timestamp()))
-                .unwrap()
-                .to_string(),
+            business_date(Instant::from_unix_secs(after.timestamp())).unwrap().to_string(),
             "2026-09-14"
         );
     }
 
     #[test]
     fn owner_and_collaborator_ids_are_unioned_per_clause_then_limited() {
-        let owner = ContractScopeClause {
-            owner_user_id: Some("sales-a".into()),
-            ..Default::default()
-        };
-        let collab = ContractScopeClause {
-            collaborative_customer_ids: vec!["c-collab".into()],
-            ..Default::default()
-        };
+        let owner = ContractScopeClause { owner_user_id: Some("sales-a".into()), ..Default::default() };
+        let collab =
+            ContractScopeClause { collaborative_customer_ids: vec!["c-collab".into()], ..Default::default() };
         let owned = vec!["c-own".to_string()];
         assert_eq!(clause_ids(&owner, &owned, &[]).as_deref(), Some(owned.as_slice()));
-        assert_eq!(
-            clause_ids(&collab, &owned, &[]),
-            Some(vec!["c-collab".to_string()])
-        );
+        assert_eq!(clause_ids(&collab, &owned, &[]), Some(vec!["c-collab".to_string()]));
     }
 
     #[test]
     fn missing_role_scope_does_not_become_company() {
         assert_eq!(union_clauses(&[], &[], &[]), Some(Vec::<String>::new()));
-        let company = ContractScopeClause {
-            company: true,
-            ..Default::default()
-        };
+        let company = ContractScopeClause { company: true, ..Default::default() };
         assert!(union_clauses(&[company], &[], &[]).is_none());
     }
 

@@ -1,5 +1,9 @@
 //! 通过与驳回的纯状态计算。
 
+use super::enter_node::{EnterNodeInput, plan_enter_node, require_decision_edges};
+use super::event::{BpmEvent, BpmEventKind};
+use super::transition_plan::{CommitRequired, TaskCloseReason, TaskIntent, TransitionPlan};
+use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
 use crate::ids::ApprovalNodeExecutionId;
 use crate::model::types::{
     ApprovalBlockerCode, ApprovalDecision, ApprovalExecutionAssignmentSource, ApprovalNodeExecutionStatus,
@@ -8,11 +12,6 @@ use crate::model::types::{
 use crate::model::{
     ApprovalNodeExecution, ApprovalProcessInstance, ApprovalTransitionDefinition, ParticipantId, Timestamp,
 };
-
-use super::enter_node::{plan_enter_node, require_decision_edges, EnterNodeInput};
-use super::event::{BpmEvent, BpmEventKind};
-use super::transition_plan::{CommitRequired, TaskCloseReason, TaskIntent, TransitionPlan};
-use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
 
 /// 决定命令。资格结果必须由调用方预先收敛。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,7 +60,7 @@ pub fn decide(
                 ApprovalBlockerCode::DefinitionGraphCorrupted,
                 command.now,
             );
-        }
+        },
         Err(error) => return Err(error),
     };
     match command.decision {
@@ -79,12 +78,8 @@ fn apply_approve(
     command: DecideCommand,
 ) -> EngineResult<TransitionPlan> {
     current.record_approve(command.actor.clone(), command.reason.clone(), command.now)?;
-    let mut plan = completed_current_plan(
-        instance,
-        current,
-        command.actor.clone(),
-        BpmEventKind::NodeApproved,
-    );
+    let mut plan =
+        completed_current_plan(instance, current, command.actor.clone(), BpmEventKind::NodeApproved);
     if approve_edge.terminal_result == Some(ApprovalTerminalResult::Approved) {
         plan.instance.complete_approved(command.now)?;
         plan.commit = CommitRequired::TerminalApproved;
@@ -95,10 +90,7 @@ fn apply_approve(
         ));
         return Ok(plan);
     }
-    let next_key = approve_edge
-        .to_node_key
-        .as_deref()
-        .ok_or(EngineError::GraphCorrupted)?;
+    let next_key = approve_edge.to_node_key.as_deref().ok_or(EngineError::GraphCorrupted)?;
     enter_after_decision(plan, graph, next_key, command, true)
 }
 
@@ -119,12 +111,8 @@ fn apply_reject(
     ensure_reject_to_entry(graph, reject_edge)?;
     current.record_reject(command.actor.clone(), reason, command.now)?;
     instance.next_round(command.now)?;
-    let mut plan = completed_current_plan(
-        instance,
-        current,
-        command.actor.clone(),
-        BpmEventKind::NodeRejected,
-    );
+    let mut plan =
+        completed_current_plan(instance, current, command.actor.clone(), BpmEventKind::NodeRejected);
     plan.events.push(
         BpmEvent::new(
             BpmEventKind::RoundRestarted,
@@ -210,19 +198,13 @@ pub fn block_current(
     let execution_id = execution_id(&current);
     let mut plan = TransitionPlan::for_instance(instance, CommitRequired::Blocked);
     plan.events.push(
-        BpmEvent::new(
-            BpmEventKind::InstanceBlocked,
-            process_id(&plan.instance),
-            current.round_no,
-        )
-        .with_execution(execution_id.clone())
-        .with_node_key(current.node_key.clone())
-        .with_blocker(code),
+        BpmEvent::new(BpmEventKind::InstanceBlocked, process_id(&plan.instance), current.round_no)
+            .with_execution(execution_id.clone())
+            .with_node_key(current.node_key.clone())
+            .with_blocker(code),
     );
-    plan.task_intents.push(TaskIntent::CloseTask {
-        execution_id,
-        reason: TaskCloseReason::ApprovalRuntimeBlocked,
-    });
+    plan.task_intents
+        .push(TaskIntent::CloseTask { execution_id, reason: TaskCloseReason::ApprovalRuntimeBlocked });
     plan.updated_executions.push(current);
     Ok(plan)
 }

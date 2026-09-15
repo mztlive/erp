@@ -1,10 +1,10 @@
-use crate::entity::{AccountCore, AccountCoreUpdate};
-use crate::AccessControlExt;
 use erp_core::AccountKind;
 use persistence_core::NoTransaction;
 
-use super::dto::ResetAdminPasswordParams;
 use super::AdminService;
+use super::dto::ResetAdminPasswordParams;
+use crate::AccessControlExt;
+use crate::entity::{AccountCore, AccountCoreUpdate};
 use crate::error::{Error, Result};
 use crate::service::account_support::{account_of_kind, apply_account_update};
 
@@ -51,22 +51,12 @@ impl AdminService {
         let admin_id = current.base.id.clone();
         let mut updated = apply_account_update(
             current,
-            AccountCoreUpdate {
-                password: Some(password),
-                ..Default::default()
-            },
+            AccountCoreUpdate { password: Some(password), ..Default::default() },
         )
         .await?;
-        self.db
-            .accounts()
-            .update(&mut updated, &mut NoTransaction)
-            .await?;
+        self.db.accounts().update(&mut updated, &mut NoTransaction).await?;
 
-        Ok(ResetAdminPasswordResult {
-            admin_id,
-            account: account.into_string(),
-            active,
-        })
+        Ok(ResetAdminPasswordResult { admin_id, account: account.into_string(), active })
     }
 }
 
@@ -83,9 +73,7 @@ impl AdminService {
 fn existing_admin_for_password_reset(account: Option<AccountCore>) -> Result<AccountCore> {
     let account = account_of_kind(account, AccountKind::Admin, "管理员不存在")?;
     if account.base.is_deleted() {
-        return Err(Error::BusinessLogicError(
-            "账号已删除，请使用 init-admin 修复超级管理员".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("账号已删除，请使用 init-admin 修复超级管理员".to_string()));
     }
 
     Ok(account)
@@ -93,11 +81,11 @@ fn existing_admin_for_password_reset(account: Option<AccountCore>) -> Result<Acc
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::{AccountCore, AccountStatus, LoginAccount, Secret};
     use entity_core::BaseModel;
     use erp_core::AccountKind;
 
     use super::existing_admin_for_password_reset;
+    use crate::entity::{AccountCore, AccountStatus, LoginAccount, Secret};
 
     /// 构造指定删除状态的最小管理员账号。
     fn account(deleted: bool) -> AccountCore {
@@ -120,10 +108,7 @@ mod tests {
 
     #[test]
     fn missing_account_is_not_found() {
-        assert!(matches!(
-            existing_admin_for_password_reset(None),
-            Err(crate::error::Error::NotFound(_))
-        ));
+        assert!(matches!(existing_admin_for_password_reset(None), Err(crate::error::Error::NotFound(_))));
     }
 
     #[test]

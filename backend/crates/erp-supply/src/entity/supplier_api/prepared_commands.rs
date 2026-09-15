@@ -70,24 +70,24 @@ impl std::fmt::Display for SupplierCommandShapeRejection {
         match self {
             Self::TechnicalReferenceOnCreate => {
                 write!(f, "创建连接只建立身份；技术引用必须通过不透明引用绑定命令提交")
-            }
+            },
             Self::MustStartDisabled => write!(f, "新连接必须从停用状态开始"),
             Self::CapabilitiesOnCreate => {
                 write!(f, "初始能力必须通过独立能力配置命令提交")
-            }
+            },
             Self::InvalidExpectedVersion => write!(f, "连接版本必须大于0"),
             Self::MissingField(CommandOptionalField::PayloadReference) => {
                 write!(f, "缺少不透明引用")
-            }
+            },
             Self::MissingField(CommandOptionalField::ReasonCode) => {
                 write!(f, "停用原因不能为空")
-            }
+            },
             Self::MissingField(CommandOptionalField::CheckType) => {
                 write!(f, "健康检查类型不能为空")
-            }
+            },
             Self::ForbiddenField { action, field } => {
                 write!(f, "{} 不接受{}，多余字段必须省略", action.as_str(), field.label())
-            }
+            },
         }
     }
 }
@@ -147,9 +147,7 @@ impl PreparedSupplierConnectionCreate {
         if capability_count > 0 {
             return Err(SupplierCommandShapeRejection::CapabilitiesOnCreate);
         }
-        Ok(Self {
-            status: SupplierApiConnectionStatus::Disabled,
-        })
+        Ok(Self { status: SupplierApiConnectionStatus::Disabled })
     }
 
     /// 返回新连接起始状态（恒为停用）。
@@ -253,7 +251,7 @@ impl PreparedSupplierConnectionCommand {
                 forbid(action, CommandOptionalField::ReasonCode, reason_code)?;
                 forbid(action, CommandOptionalField::CheckType, check_type)?;
                 Ok(prepared)
-            }
+            },
             SupplierConnectionAction::BindEndpointReference => {
                 let prepared = Self::BindEndpointReference {
                     expected_version,
@@ -262,7 +260,7 @@ impl PreparedSupplierConnectionCommand {
                 forbid(action, CommandOptionalField::ReasonCode, reason_code)?;
                 forbid(action, CommandOptionalField::CheckType, check_type)?;
                 Ok(prepared)
-            }
+            },
             SupplierConnectionAction::BindCredentialReference => {
                 let prepared = Self::BindCredentialReference {
                     expected_version,
@@ -271,38 +269,31 @@ impl PreparedSupplierConnectionCommand {
                 forbid(action, CommandOptionalField::ReasonCode, reason_code)?;
                 forbid(action, CommandOptionalField::CheckType, check_type)?;
                 Ok(prepared)
-            }
+            },
             SupplierConnectionAction::RunHealthCheck => {
                 forbid(action, CommandOptionalField::PayloadReference, payload_reference)?;
                 forbid(action, CommandOptionalField::ReasonCode, reason_code)?;
-                let check_type = check_type.ok_or(SupplierCommandShapeRejection::MissingField(
-                    CommandOptionalField::CheckType,
-                ))?;
-                Ok(Self::RunHealthCheck {
-                    expected_version,
-                    check_type,
-                })
-            }
+                let check_type = check_type
+                    .ok_or(SupplierCommandShapeRejection::MissingField(CommandOptionalField::CheckType))?;
+                Ok(Self::RunHealthCheck { expected_version, check_type })
+            },
             SupplierConnectionAction::Enable => {
                 forbid(action, CommandOptionalField::PayloadReference, payload_reference)?;
                 forbid(action, CommandOptionalField::ReasonCode, reason_code)?;
                 forbid(action, CommandOptionalField::CheckType, check_type)?;
                 Ok(Self::Enable { expected_version })
-            }
+            },
             SupplierConnectionAction::Disable => {
                 forbid(action, CommandOptionalField::PayloadReference, payload_reference)?;
                 forbid(action, CommandOptionalField::CheckType, check_type)?;
-                Ok(Self::Disable {
-                    expected_version,
-                    reason_code: require_reason(reason_code)?,
-                })
-            }
+                Ok(Self::Disable { expected_version, reason_code: require_reason(reason_code)? })
+            },
             SupplierConnectionAction::StartCatalogSync => {
                 forbid(action, CommandOptionalField::PayloadReference, payload_reference)?;
                 forbid(action, CommandOptionalField::ReasonCode, reason_code)?;
                 forbid(action, CommandOptionalField::CheckType, check_type)?;
                 Ok(Self::StartCatalogSync { expected_version })
-            }
+            },
         }
     }
 
@@ -354,9 +345,7 @@ fn require_reference(value: Option<&str>) -> Result<String, SupplierCommandShape
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-        .ok_or(SupplierCommandShapeRejection::MissingField(
-            CommandOptionalField::PayloadReference,
-        ))
+        .ok_or(SupplierCommandShapeRejection::MissingField(CommandOptionalField::PayloadReference))
 }
 
 /// 要求停用原因代码存在且去除首尾空白后非空。
@@ -374,9 +363,7 @@ fn require_reason(value: Option<&str>) -> Result<String, SupplierCommandShapeRej
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-        .ok_or(SupplierCommandShapeRejection::MissingField(
-            CommandOptionalField::ReasonCode,
-        ))
+        .ok_or(SupplierCommandShapeRejection::MissingField(CommandOptionalField::ReasonCode))
 }
 
 /// 拒绝指定动作不接受的可选字段（`Some` 即拒绝，`None` 通过）。
@@ -507,27 +494,28 @@ mod tests {
             Some(SupplierHealthCheckType::Authentication),
         )
         .unwrap();
-        assert!(matches!(
-            prepared,
-            PreparedSupplierConnectionCommand::RunHealthCheck { .. }
-        ));
+        assert!(matches!(prepared, PreparedSupplierConnectionCommand::RunHealthCheck { .. }));
 
-        assert!(PreparedSupplierConnectionCommand::try_from_parts(
-            SupplierConnectionAction::RunHealthCheck,
-            2,
-            None,
-            None,
-            None
-        )
-        .is_err());
-        assert!(PreparedSupplierConnectionCommand::try_from_parts(
-            SupplierConnectionAction::RunHealthCheck,
-            2,
-            Some("opaque-ref"),
-            None,
-            Some(SupplierHealthCheckType::Connectivity)
-        )
-        .is_err());
+        assert!(
+            PreparedSupplierConnectionCommand::try_from_parts(
+                SupplierConnectionAction::RunHealthCheck,
+                2,
+                None,
+                None,
+                None
+            )
+            .is_err()
+        );
+        assert!(
+            PreparedSupplierConnectionCommand::try_from_parts(
+                SupplierConnectionAction::RunHealthCheck,
+                2,
+                Some("opaque-ref"),
+                None,
+                Some(SupplierHealthCheckType::Connectivity)
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -541,14 +529,16 @@ mod tests {
         )
         .unwrap();
         assert_eq!(enable.action(), SupplierConnectionAction::Enable);
-        assert!(PreparedSupplierConnectionCommand::try_from_parts(
-            SupplierConnectionAction::Enable,
-            1,
-            None,
-            Some("reason"),
-            None
-        )
-        .is_err());
+        assert!(
+            PreparedSupplierConnectionCommand::try_from_parts(
+                SupplierConnectionAction::Enable,
+                1,
+                None,
+                Some("reason"),
+                None
+            )
+            .is_err()
+        );
 
         let disable = PreparedSupplierConnectionCommand::try_from_parts(
             SupplierConnectionAction::Disable,
@@ -558,18 +548,17 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(matches!(
-            disable,
-            PreparedSupplierConnectionCommand::Disable { .. }
-        ));
-        assert!(PreparedSupplierConnectionCommand::try_from_parts(
-            SupplierConnectionAction::Disable,
-            1,
-            None,
-            Some("   "),
-            None
-        )
-        .is_err());
+        assert!(matches!(disable, PreparedSupplierConnectionCommand::Disable { .. }));
+        assert!(
+            PreparedSupplierConnectionCommand::try_from_parts(
+                SupplierConnectionAction::Disable,
+                1,
+                None,
+                Some("   "),
+                None
+            )
+            .is_err()
+        );
 
         let catalog = PreparedSupplierConnectionCommand::try_from_parts(
             SupplierConnectionAction::StartCatalogSync,
@@ -580,14 +569,16 @@ mod tests {
         )
         .unwrap();
         assert_eq!(catalog.action(), SupplierConnectionAction::StartCatalogSync);
-        assert!(PreparedSupplierConnectionCommand::try_from_parts(
-            SupplierConnectionAction::StartCatalogSync,
-            1,
-            None,
-            None,
-            Some(SupplierHealthCheckType::Connectivity)
-        )
-        .is_err());
+        assert!(
+            PreparedSupplierConnectionCommand::try_from_parts(
+                SupplierConnectionAction::StartCatalogSync,
+                1,
+                None,
+                None,
+                Some(SupplierHealthCheckType::Connectivity)
+            )
+            .is_err()
+        );
     }
 
     #[test]

@@ -5,27 +5,27 @@
 //! 允许切换启停状态、结束有效期与调整默认标记；同一主体默认地址唯一
 //! （跨行约束，事务内校验，§6.2）。
 
-use crate::entity::party::{
-    EffectiveRecordStatus, PartyAddress, PartyAddressData, PartyAddressId, PartyAddressUpdate, PartyId,
-};
-use crate::ports::{PartyAuditPort, SupplierRolePort};
-use crate::repository::PartyExt;
+use std::sync::Arc;
+
+use application_core::AuditActor;
 use erp_core::field_update::FieldUpdate;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
-use std::sync::Arc;
 use validator::Validate;
-
-use crate::error::{Error, Result};
-use application_core::AuditActor;
 
 use super::sensitive::SensitiveDataCodec;
 use super::{clear_default_marks, page_or_default, page_size_or_default};
 use crate::dto::party::{
-    normalize_sort, CreatePartyAddressRequest, PageView, PartyAddressListParams, PartyAddressView, SortDir,
-    UpdatePartyAddressRequest, PARTY_ADDRESS_SORT_FIELDS,
+    CreatePartyAddressRequest, PARTY_ADDRESS_SORT_FIELDS, PageView, PartyAddressListParams, PartyAddressView,
+    SortDir, UpdatePartyAddressRequest, normalize_sort,
 };
+use crate::entity::party::{
+    EffectiveRecordStatus, PartyAddress, PartyAddressData, PartyAddressId, PartyAddressUpdate, PartyId,
+};
+use crate::error::{Error, Result};
+use crate::ports::{PartyAuditPort, SupplierRolePort};
+use crate::repository::PartyExt;
 
 /// 地址列表筛选条件类型（经 `PartyExt` 关联类型跨 crate 可达）。
 type PartyAddressFilter = <mongodb::Database as PartyExt>::PartyAddressFilter;
@@ -55,12 +55,7 @@ impl PartyAddressService {
         audit: Arc<dyn PartyAuditPort>,
         supplier_roles: Arc<dyn SupplierRolePort>,
     ) -> Self {
-        Self {
-            db,
-            sensitive_data,
-            audit,
-            supplier_roles,
-        }
+        Self { db, sensitive_data, audit, supplier_roles }
     }
 
     /// 分页查询地址列表（投影查询，敏感字段不进投影）。
@@ -93,11 +88,7 @@ impl PartyAddressService {
             sort_by: Some(sort_by.to_string()),
             sort_ascending: matches!(sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .party_addresses()
-            .search_party_addresses(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.party_addresses().search_party_addresses(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -115,12 +106,7 @@ impl PartyAddressService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 创建地址（跨行事务：默认地址唯一 + 新建 + 审计原子写入）。
@@ -218,9 +204,7 @@ impl PartyAddressService {
             .ok_or_else(|| Error::NotFound("地址不存在".to_string()))?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &address.party_id).await?;
         if address.base.version != req.version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         address.update(
             PartyAddressUpdate {

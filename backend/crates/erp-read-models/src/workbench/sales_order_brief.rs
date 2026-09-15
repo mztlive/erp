@@ -9,23 +9,19 @@ use erp_core::ids::SalesOrderSubmissionId;
 use erp_core::money::Amount;
 #[cfg(test)]
 use erp_core::money::Quantity;
+use erp_sales::entity::sales_order::{SalesOrder, SalesOrderSubmission, SalesOrderSubmissionLine};
 use erp_sales::repository::SalesOrderExt;
 use persistence_core::Executor;
-use {
-    erp_sales::entity::sales_order::SalesOrder, erp_sales::entity::sales_order::SalesOrderSubmission,
-    erp_sales::entity::sales_order::SalesOrderSubmissionLine,
-};
 
 use super::authority::sales::preferred_submission;
 #[cfg(test)]
 use super::authority::sales::sales_order_impact;
 use super::brief::{
-    format_instant_due_label, format_quantity, join_list_summary, line_title, non_empty, push_section,
-    BriefLine, BriefSection, ObjectBriefSource, BRIEF_LINE_LIMIT,
+    BRIEF_LINE_LIMIT, BriefLine, BriefSection, ObjectBriefSource, format_instant_due_label, format_quantity,
+    join_list_summary, line_title, non_empty, push_section,
 };
 use super::presentation::format_yuan;
-use super::WorkbenchReadService;
-use super::{object_ids, ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap};
+use super::{ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchReadService, object_ids};
 use crate::errors::Result;
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
@@ -57,10 +53,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if orders.is_empty() {
             return Ok(());
         }
-        let submissions = self
-            .facts_reader()
-            .sales_submissions_for_orders(&orders, executor)
-            .await?;
+        let submissions = self.facts_reader().sales_submissions_for_orders(&orders, executor).await?;
         let lines_by_submission = self.sales_submission_brief_lines(&submissions, executor).await?;
         insert_sales_order_facts(facts, &orders, &submissions, &lines_by_submission);
         Ok(())
@@ -96,21 +89,13 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .list_lines_by_submissions(&submission_ids, executor)
             .await?
         {
-            grouped
-                .entry(line.submission_id.to_string())
-                .or_default()
-                .push((line.line_no, line));
+            grouped.entry(line.submission_id.to_string()).or_default().push((line.line_no, line));
         }
         Ok(grouped
             .into_iter()
             .map(|(submission_id, mut rows)| {
                 rows.sort_by_key(|(line_no, _)| *line_no);
-                (
-                    submission_id,
-                    rows.into_iter()
-                        .map(|(_, line)| sales_brief_line(&line))
-                        .collect(),
-                )
+                (submission_id, rows.into_iter().map(|(_, line)| sales_brief_line(&line)).collect())
             })
             .collect())
     }
@@ -162,33 +147,20 @@ fn sales_order_fact(
 ) -> WorkbenchObjectFact {
     let mut fact =
         WorkbenchObjectFact::from_authority(super::authority::sales::sales_order_fact(order, submissions));
-    for submission in submissions
-        .iter()
-        .filter(|row| row.sales_order_id.as_ref() == order.base.id)
-    {
-        let lines = lines_by_submission
-            .get(&submission.base.id)
-            .cloned()
-            .unwrap_or_default();
+    for submission in submissions.iter().filter(|row| row.sales_order_id.as_ref() == order.base.id) {
+        let lines = lines_by_submission.get(&submission.base.id).cloned().unwrap_or_default();
         let brief = super::WorkbenchSubjectDisplay {
             counterparty_label: non_empty(&submission.customer_snapshot.customer_name),
             impact_summary: fact.display.impact_summary.clone(),
             brief_source: Some(sales_order_brief_source(submission, lines)),
         };
-        fact.display
-            .subject_briefs
-            .insert(submission.submission_no.to_string(), brief.clone());
-        fact.display
-            .subject_briefs
-            .insert(submission.base.id.clone(), brief);
+        fact.display.subject_briefs.insert(submission.submission_no.to_string(), brief.clone());
+        fact.display.subject_briefs.insert(submission.base.id.clone(), brief);
     }
     let Some(submission) = preferred_submission(&order.base.id, submissions) else {
         return fact;
     };
-    let lines = lines_by_submission
-        .get(&submission.base.id)
-        .cloned()
-        .unwrap_or_default();
+    let lines = lines_by_submission.get(&submission.base.id).cloned().unwrap_or_default();
     let brief = sales_order_brief_source(submission, lines);
     fact.display.brief_source = Some(brief);
     fact
@@ -240,49 +212,23 @@ fn sales_order_brief_source(submission: &SalesOrderSubmission, lines: Vec<BriefL
 /// 无。
 fn sales_order_sections(submission: &SalesOrderSubmission) -> Vec<BriefSection> {
     let mut sections = Vec::new();
-    push_section(
-        &mut sections,
-        "业务性质",
-        Some(submission.business_type.label()),
-        false,
-    );
+    push_section(&mut sections, "业务性质", Some(submission.business_type.label()), false);
     push_section(
         &mut sections,
         "结算主体",
-        submission
-            .settlement_party_snapshot
-            .as_ref()
-            .map(|item| item.settlement_party_name.as_str()),
+        submission.settlement_party_snapshot.as_ref().map(|item| item.settlement_party_name.as_str()),
         false,
     );
     push_section(
         &mut sections,
         "合同",
-        submission
-            .contract_snapshot
-            .as_ref()
-            .map(|item| item.contract_no.as_str()),
+        submission.contract_snapshot.as_ref().map(|item| item.contract_no.as_str()),
         false,
     );
-    push_section(
-        &mut sections,
-        "含税金额",
-        Some(format_yuan(&submission.gross_amount)).as_deref(),
-        true,
-    );
-    push_section(
-        &mut sections,
-        "不含税金额",
-        Some(format_yuan(&submission.net_amount)).as_deref(),
-        true,
-    );
+    push_section(&mut sections, "含税金额", Some(format_yuan(&submission.gross_amount)).as_deref(), true);
+    push_section(&mut sections, "不含税金额", Some(format_yuan(&submission.net_amount)).as_deref(), true);
     if !submission.tax_amount.to_decimal().is_zero() {
-        push_section(
-            &mut sections,
-            "税额",
-            Some(format_yuan(&submission.tax_amount)).as_deref(),
-            true,
-        );
+        push_section(&mut sections, "税额", Some(format_yuan(&submission.tax_amount)).as_deref(), true);
     }
     push_section(
         &mut sections,
@@ -328,15 +274,9 @@ fn sales_order_list_summary(
     });
     let more = (more_count > 0).then(|| format!("另 {more_count} 行"));
     join_list_summary([
-        customer
-            .map(str::trim)
-            .filter(|text| !text.is_empty())
-            .map(str::to_string),
+        customer.map(str::trim).filter(|text| !text.is_empty()).map(str::to_string),
         Some(amount),
-        payment
-            .map(str::trim)
-            .filter(|text| !text.is_empty())
-            .map(str::to_string),
+        payment.map(str::trim).filter(|text| !text.is_empty()).map(str::to_string),
         first_line,
         more,
     ])
@@ -378,10 +318,7 @@ fn sales_line_quantity(line: &SalesOrderSubmissionLine) -> Option<String> {
     match line.quantity.as_ref() {
         Some(qty) => Some(format!(
             "{} · {amount}",
-            format_quantity(
-                qty,
-                line.unit_snapshot.as_deref().or(line.base_unit_code.as_deref()),
-            )
+            format_quantity(qty, line.unit_snapshot.as_deref().or(line.base_unit_code.as_deref()),)
         )),
         None => Some(amount),
     }
@@ -456,10 +393,7 @@ mod tests {
     #[test]
     fn impact_distinguishes_voucher_and_physical() {
         assert_eq!(sales_order_impact("卡券"), "不审批则卡券销售不能生效");
-        assert_eq!(
-            sales_order_impact("实物及服务"),
-            "不审批则销售单不能生效、不能履约"
-        );
+        assert_eq!(sales_order_impact("实物及服务"), "不审批则销售单不能生效、不能履约");
     }
 
     #[test]
@@ -472,9 +406,6 @@ mod tests {
             sales_line_quantity_parts(None, None, &amount("1000"), Some(10)).as_deref(),
             Some("10 张 · ¥1,000")
         );
-        assert_eq!(
-            sales_line_quantity_parts(None, None, &amount("80"), None).as_deref(),
-            Some("¥80")
-        );
+        assert_eq!(sales_line_quantity_parts(None, None, &amount("80"), None).as_deref(), Some("¥80"));
     }
 }

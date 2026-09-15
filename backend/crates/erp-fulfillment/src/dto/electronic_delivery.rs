@@ -1,13 +1,13 @@
 //! 履约electronic_delivery请求及单域查询 DTO。
-use super::non_blank;
-use super::{normalize_sort, PageParams, ELECTRONIC_DELIVERY_SORT_FIELDS};
-use crate::entity::fulfillment::{ElectronicDeliveryState, FulfillmentResult};
-use crate::Result;
 use application_core::{page_or_default, page_size_or_default};
 use erp_core::ids::{FileAssetId, PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId};
 use erp_core::money::Quantity;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+
+use super::{ELECTRONIC_DELIVERY_SORT_FIELDS, PageParams, non_blank, normalize_sort};
+use crate::Result;
+use crate::entity::fulfillment::{ElectronicDeliveryState, FulfillmentResult};
 
 /// 电子交付记录创建请求（初始状态为草稿，确认后不可覆盖）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]

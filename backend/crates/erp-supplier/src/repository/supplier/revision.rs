@@ -1,21 +1,19 @@
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::SupplierAccountId;
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Error, Executor, Pagination, QueryFilter, Result, mongo_ops};
+use serde::Deserialize;
+
+use super::{
+    SUPPLIER_CAPABILITY_REVISIONS, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS, SUPPLIER_QUALIFICATION_REVISIONS,
+    SUPPLIER_RATING_REVISIONS, SupplierRepository,
+};
 use crate::entity::supplier::{
     CapabilityCode, QualificationType, SupplierCommercialProfileRevision, SupplierRatingRevision,
 };
 use crate::repository::owned::SupplierCommercialProfileRevisionRepository;
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::ids::SupplierAccountId;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use mongodb::Database;
-use serde::Deserialize;
-
-use super::{
-    SupplierRepository, SUPPLIER_CAPABILITY_REVISIONS, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS,
-    SUPPLIER_QUALIFICATION_REVISIONS, SUPPLIER_RATING_REVISIONS,
-};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Error, Result};
-use persistence_core::{Pagination, QueryFilter};
 
 /// 商务结算版本列表筛选条件。
 #[derive(Debug, Clone)]
@@ -114,13 +112,9 @@ async fn next_revision_no(
         .limit(1)
         .projection(doc! { "revision_no": 1, "_id": 0 })
         .build();
-    let rows = mongo_ops::find_many(
-        &db.collection::<RevisionNoRow>(collection_name),
-        filter,
-        options,
-        executor,
-    )
-    .await?;
+    let rows =
+        mongo_ops::find_many(&db.collection::<RevisionNoRow>(collection_name), filter, options, executor)
+            .await?;
     rows.into_iter()
         .next()
         .map(|row| row.revision_no)

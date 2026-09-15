@@ -5,10 +5,8 @@
 //! 履约对象快照查询指纹密钥取 `app.secret` 字节（Service 构造参数）。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Multipart, Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Multipart, Path, Query, State};
+use axum::{Extension, Json};
 use erp_fulfillment::dto::{
     CommitCustomerAcceptanceRequest, ConfirmElectronicDeliveryRequest, ConfirmServiceFulfillmentRequest,
     CreateCustomerAcceptanceRequest, CreateDeliveryRequest, CreateElectronicDeliveryRequest,
@@ -25,17 +23,13 @@ use erp_processes::fulfillment_execution::FulfillmentProcess;
 use erp_read_models::fulfillment_center::dto::{AcceptanceEligibilityView, CommitCustomerAcceptanceView};
 use erp_support::SensitivityClass;
 
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::{Error, Result},
-        handler::file_asset::{
-            delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
-            store_pending_asset_files, PendingAssetFile,
-        },
-        response::ApiResponse,
-    },
+use crate::app_state::AppState;
+use crate::core::errors::{Error, Result};
+use crate::core::handler::file_asset::{
+    PendingAssetFile, delete_pending_asset_objects, extract_command_with_asset_files,
+    should_compensate_pending_assets, store_pending_asset_files,
 };
+use crate::core::response::ApiResponse;
 
 /// 构造本域履约查询服务。
 ///
@@ -444,7 +438,7 @@ pub async fn electronic_delivery_confirm(
                 delete_pending_asset_objects(&state, &pending).await;
             }
             Err(error.into())
-        }
+        },
     }
 }
 
@@ -567,7 +561,7 @@ pub async fn service_fulfillment_confirm(
                 delete_pending_asset_objects(&state, &pending).await;
             }
             Err(service_error.into())
-        }
+        },
     }
 }
 
@@ -599,23 +593,15 @@ fn validate_evidence_upload(reference: &str, files: &[PendingAssetFile]) -> std:
         return Err(Error::BadRequest("现场图片凭证与确认命令不匹配".to_string()));
     }
     expected.sort();
-    let mut actual = files
-        .iter()
-        .map(|pending| pending.reference.clone())
-        .collect::<Vec<_>>();
+    let mut actual = files.iter().map(|pending| pending.reference.clone()).collect::<Vec<_>>();
     actual.sort();
     if actual != expected {
         return Err(Error::BadRequest("现场图片凭证临时引用无效".to_string()));
     }
     if files.iter().any(|pending| {
-        !matches!(
-            pending.file.content_type.as_str(),
-            "image/jpeg" | "image/png" | "image/webp"
-        )
+        !matches!(pending.file.content_type.as_str(), "image/jpeg" | "image/png" | "image/webp")
     }) {
-        return Err(Error::BadRequest(
-            "现场凭证仅支持 JPG、PNG 或 WebP 图片".to_string(),
-        ));
+        return Err(Error::BadRequest("现场凭证仅支持 JPG、PNG 或 WebP 图片".to_string()));
     }
     Ok(())
 }
@@ -689,9 +675,7 @@ pub async fn customer_acceptance_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateCustomerAcceptanceRequest>,
 ) -> Result<CustomerAcceptanceView> {
-    let view = acceptance_process(&state)
-        .create_customer_acceptance(req, &actor)
-        .await?;
+    let view = acceptance_process(&state).create_customer_acceptance(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -717,9 +701,7 @@ pub async fn customer_acceptance_commit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CommitCustomerAcceptanceRequest>,
 ) -> Result<CommitCustomerAcceptanceView> {
-    let view = acceptance_process(&state)
-        .commit_customer_acceptance(req, &actor)
-        .await?;
+    let view = acceptance_process(&state).commit_customer_acceptance(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -747,9 +729,7 @@ pub async fn customer_acceptance_post(
     Path(id): Path<String>,
     Json(req): Json<PostCustomerAcceptanceRequest>,
 ) -> Result<CustomerAcceptanceView> {
-    let view = acceptance_process(&state)
-        .post_customer_acceptance(&id, req, &actor)
-        .await?;
+    let view = acceptance_process(&state).post_customer_acceptance(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -777,9 +757,7 @@ pub async fn customer_acceptance_reverse(
     Path(id): Path<String>,
     Json(req): Json<ReverseCustomerAcceptanceRequest>,
 ) -> Result<CustomerAcceptanceView> {
-    let view = acceptance_process(&state)
-        .reverse_customer_acceptance(&id, req, &actor)
-        .await?;
+    let view = acceptance_process(&state).reverse_customer_acceptance(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -816,18 +794,16 @@ pub async fn customer_acceptance_eligible(
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_service_evidence_upload, PendingAssetFile};
     use erp_fulfillment::dto::{
         ConfirmServiceFulfillmentRequest, CreateDeliveryRequest, CreatePurchaseReceiptRequest,
     };
 
+    use super::{PendingAssetFile, validate_service_evidence_upload};
+
     /// 采购收货 HTTP 只暴露创建/过账，不得提交审批或选择定义。
     #[test]
     fn purchase_receipt_http_proves_no_approval() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("create_purchase_receipt"));
         assert!(production.contains("purchase_receipt_create"));
         assert!(production.contains("purchase_receipt_detail"));
@@ -877,10 +853,7 @@ mod tests {
     /// 发货 HTTP 只暴露创建/过账，不得提交审批或选择定义。
     #[test]
     fn delivery_http_proves_no_approval() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("create_delivery"));
         assert!(production.contains("delivery_create"));
         assert!(production.contains("delivery_detail"));
@@ -944,10 +917,7 @@ mod tests {
     /// 服务履约确认走 multipart 现场图片，不启动审批。
     #[test]
     fn service_fulfillment_confirm_requires_matching_image() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("confirm_service_fulfillment_with_assets"));
         assert!(production.contains("validate_service_evidence_upload"));
         assert!(!production.contains("submit_service_fulfillment"));
@@ -1001,11 +971,13 @@ mod tests {
                 content: vec![1],
             },
         };
-        assert!(super::validate_evidence_upload(
-            request.evidence_attachment_id.as_ref(),
-            std::slice::from_ref(&image)
-        )
-        .is_ok());
+        assert!(
+            super::validate_evidence_upload(
+                request.evidence_attachment_id.as_ref(),
+                std::slice::from_ref(&image)
+            )
+            .is_ok()
+        );
         assert!(super::validate_evidence_upload(request.evidence_attachment_id.as_ref(), &[]).is_err());
         assert!(super::validate_evidence_upload("pending-file:unrelated", &[image]).is_err());
         let mut missing = fields;

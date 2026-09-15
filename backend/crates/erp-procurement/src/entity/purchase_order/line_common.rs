@@ -7,11 +7,12 @@
 //! 逐行金额守恒按 §4.2 铁律 1：`gross = net + tax` 精确成立，只能经
 //! [`erp_core::money::line_amounts`] 或 [`erp_core::money::round_to_cent`] 舍入。
 
-use crate::entity::purchase_order::types::PurchaseLineType;
 use erp_core::ids::{ProcurementConfirmationLineId, SkuId};
-use erp_core::money::{line_amounts, round_to_cent, Amount, Quantity, Rate, UnitPrice};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice, line_amounts, round_to_cent};
 use erp_core::validation::normalize_optional_text;
 use erp_core::{Error, Result};
+
+use crate::entity::purchase_order::types::PurchaseLineType;
 
 /// 商品名称快照最大长度。
 pub(crate) const PRODUCT_NAME_MAX_LEN: usize = 256;
@@ -132,16 +133,10 @@ pub(crate) trait PurchaseLineDataRef {
 pub(crate) fn normalize_and_validate_line<D: PurchaseLineDataRef>(
     data: &D,
 ) -> Result<(Option<String>, Option<String>, Option<String>)> {
-    let product_name = normalize_optional_text(
-        data.product_name_snapshot().clone(),
-        "商品名称快照",
-        PRODUCT_NAME_MAX_LEN,
-    )?;
-    let specification = normalize_optional_text(
-        data.specification_snapshot().clone(),
-        "规格快照",
-        SPECIFICATION_MAX_LEN,
-    )?;
+    let product_name =
+        normalize_optional_text(data.product_name_snapshot().clone(), "商品名称快照", PRODUCT_NAME_MAX_LEN)?;
+    let specification =
+        normalize_optional_text(data.specification_snapshot().clone(), "规格快照", SPECIFICATION_MAX_LEN)?;
     let base_unit_code = normalize_optional_text(data.base_unit_code().clone(), "单位", BASE_UNIT_MAX_LEN)?;
     validate_purchase_line(&PurchaseLineFields {
         line_type: data.line_type(),
@@ -268,9 +263,7 @@ fn ensure_amount_triple(
 ) -> Result<()> {
     if fields.gross_amount != expected.0 || fields.net_amount != expected.1 || fields.tax_amount != expected.2
     {
-        return Err(Error::from(format!(
-            "行金额三元组与含税单价×数量×税率复算不一致（{context}）"
-        )));
+        return Err(Error::from(format!("行金额三元组与含税单价×数量×税率复算不一致（{context}）")));
     }
     Ok(())
 }

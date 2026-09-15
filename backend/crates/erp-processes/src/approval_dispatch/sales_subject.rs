@@ -4,8 +4,8 @@ use bpm::SubjectRef;
 use erp_core::Result;
 use erp_sales::entity::sales_order::BusinessType;
 use erp_workflow::entity::approval_integration::{
-    document_type_of_sales_business as map_kind, subject_ref_for_sales_business as subject_kind,
-    SalesBusinessKind,
+    SalesBusinessKind, document_type_of_sales_business as map_kind,
+    subject_ref_for_sales_business as subject_kind,
 };
 use erp_workflow::entity::document_registry::DocumentType;
 

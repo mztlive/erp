@@ -1,16 +1,16 @@
 //! 当前采购覆盖来源；只读取采购领域拥有的集合。
 
-use crate::entity::purchase_order::{
-    PurchaseLineSalesAllocation, PurchaseLineType, PurchaseOrder, PurchaseOrderRevisionLine,
-    PurchaseOrderStatus, PurchaseOrderSubmissionLine,
-};
-use crate::repository::PurchaseOrderExt;
 use erp_core::ids::{
     PurchaseOrderRevisionId, PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId, SalesOrderId,
 };
 use persistence_core::{Executor, Result};
 
 use super::PurchaseOrderDomainRepository;
+use crate::entity::purchase_order::{
+    PurchaseLineSalesAllocation, PurchaseLineType, PurchaseOrder, PurchaseOrderRevisionLine,
+    PurchaseOrderStatus, PurchaseOrderSubmissionLine,
+};
+use crate::repository::PurchaseOrderExt;
 
 /// 采购单当前指针下的覆盖来源。
 #[derive(Debug, Clone, Default)]
@@ -37,11 +37,8 @@ impl PurchaseOrderDomainRepository<'_> {
         sales_order_id: &SalesOrderId,
         executor: &mut dyn Executor,
     ) -> Result<PurchaseCoverageSources> {
-        let purchase_orders = self
-            .db
-            .purchase_orders()
-            .find_covering_by_sales_order(sales_order_id, executor)
-            .await?;
+        let purchase_orders =
+            self.db.purchase_orders().find_covering_by_sales_order(sales_order_id, executor).await?;
         let submission_ids = current_pointer_ids(&purchase_orders);
         let submission_lines = self
             .db
@@ -86,10 +83,7 @@ fn current_pointer_ids(orders: &[PurchaseOrder]) -> Vec<PurchaseOrderSubmissionI
             )
         })
         .filter_map(|order| {
-            order
-                .current_submission_id
-                .as_ref()
-                .map(|id| PurchaseOrderSubmissionId::new(id.clone()))
+            order.current_submission_id.as_ref().map(|id| PurchaseOrderSubmissionId::new(id.clone()))
         })
         .collect()
 }
@@ -107,11 +101,7 @@ fn current_revision_pointer_ids(orders: &[PurchaseOrder]) -> Vec<PurchaseOrderRe
             )
         })
         .filter_map(|order| {
-            order
-                .stable
-                .current_revision_id
-                .as_ref()
-                .map(|id| PurchaseOrderRevisionId::new(id.clone()))
+            order.stable.current_revision_id.as_ref().map(|id| PurchaseOrderRevisionId::new(id.clone()))
         })
         .collect()
 }

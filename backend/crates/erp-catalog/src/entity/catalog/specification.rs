@@ -127,12 +127,8 @@ pub fn compute_specification_signature(entries: &[SpecSignatureEntry]) -> Result
             CODE_MAX_LEN,
             "规格名过长",
         )?;
-        let value_code = normalize_required_text(
-            entry.value_code.clone(),
-            "规格值不能为空",
-            CODE_MAX_LEN,
-            "规格值过长",
-        )?;
+        let value_code =
+            normalize_required_text(entry.value_code.clone(), "规格值不能为空", CODE_MAX_LEN, "规格值过长")?;
         normalized.push((attribute_code, value_code));
     }
     normalized.sort();
@@ -213,10 +209,7 @@ pub fn parse_specification_signature(signature: &str) -> Result<Vec<SpecSignatur
         let Some((name, value)) = fragment.split_once('=') else {
             return Err(Error::from("规格签名格式非法"));
         };
-        entries.push(SpecSignatureEntry {
-            attribute_code: name.to_string(),
-            value_code: value.to_string(),
-        });
+        entries.push(SpecSignatureEntry { attribute_code: name.to_string(), value_code: value.to_string() });
     }
     let canonical = compute_specification_signature(&entries)?;
     if canonical != signature {
@@ -291,35 +284,21 @@ mod tests {
     use super::*;
 
     fn entry(attribute_code: &str, value_code: &str) -> SpecSignatureEntry {
-        SpecSignatureEntry {
-            attribute_code: attribute_code.to_string(),
-            value_code: value_code.to_string(),
-        }
+        SpecSignatureEntry { attribute_code: attribute_code.to_string(), value_code: value_code.to_string() }
     }
 
     /// 签名按规格名、规格值排序，且与输入顺序无关；空规格返回固定空签名。
     #[test]
     fn compute_signature_is_canonical_and_order_independent() {
-        let unsorted = vec![
-            entry(" color ", " 白色 "),
-            entry("size", "S"),
-            entry("material", "棉"),
-        ];
-        let sorted = vec![
-            entry("size", "S"),
-            entry("material", "棉"),
-            entry("color", "白色"),
-        ];
+        let unsorted = vec![entry(" color ", " 白色 "), entry("size", "S"), entry("material", "棉")];
+        let sorted = vec![entry("size", "S"), entry("material", "棉"), entry("color", "白色")];
 
         let a = compute_specification_signature(&unsorted).unwrap();
         let b = compute_specification_signature(&sorted).unwrap();
         assert_eq!(a, b);
         assert_eq!(a, "color=白色|material=棉|size=S");
 
-        assert_eq!(
-            compute_specification_signature(&[]).unwrap(),
-            EMPTY_SPEC_SIGNATURE
-        );
+        assert_eq!(compute_specification_signature(&[]).unwrap(), EMPTY_SPEC_SIGNATURE);
     }
 
     /// 中文自由规格不依赖预建字典即可形成稳定签名。
@@ -327,24 +306,17 @@ mod tests {
     fn compute_signature_accepts_spu_local_names_and_values() {
         let entries = vec![entry(" 尺码 ", " L "), entry("颜色", " 红色 ")];
 
-        assert_eq!(
-            compute_specification_signature(&entries).unwrap(),
-            "尺码=L|颜色=红色"
-        );
+        assert_eq!(compute_specification_signature(&entries).unwrap(), "尺码=L|颜色=红色");
     }
 
     /// 编辑签名集合登记规范化结果并拒绝重复规格组合。
     #[test]
     fn signature_set_rejects_duplicate_combinations() {
         let mut signatures = SpecificationSignatureSet::new();
-        let first = signatures
-            .register(&[entry("颜色", "红色"), entry("尺码", "L")])
-            .unwrap();
+        let first = signatures.register(&[entry("颜色", "红色"), entry("尺码", "L")]).unwrap();
 
         assert!(signatures.contains(&first));
-        assert!(signatures
-            .register(&[entry("尺码", "L"), entry("颜色", "红色")])
-            .is_err());
+        assert!(signatures.register(&[entry("尺码", "L"), entry("颜色", "红色")]).is_err());
     }
 
     /// 同一属性出现两次（值不同）属于规格数据不一致，拒绝计算。
@@ -388,9 +360,7 @@ mod tests {
     /// 空签名解析为空集合；合法多项保持规范顺序。
     #[test]
     fn parse_signature_accepts_empty_and_canonical_entries() {
-        assert!(parse_specification_signature(EMPTY_SPEC_SIGNATURE)
-            .unwrap()
-            .is_empty());
+        assert!(parse_specification_signature(EMPTY_SPEC_SIGNATURE).unwrap().is_empty());
         let entries = parse_specification_signature("尺码=L|颜色=红色").unwrap();
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].attribute_code, "尺码");
@@ -448,9 +418,6 @@ mod tests {
         let json = serde_json::to_string(&encoded).unwrap();
         assert_eq!(json, "\"尺码=L|颜色=红色\"");
         assert_eq!(EMPTY_SPEC_SIGNATURE, "");
-        assert_eq!(
-            serde_json::to_string(&EMPTY_SPEC_SIGNATURE.to_string()).unwrap(),
-            "\"\""
-        );
+        assert_eq!(serde_json::to_string(&EMPTY_SPEC_SIGNATURE.to_string()).unwrap(), "\"\"");
     }
 }

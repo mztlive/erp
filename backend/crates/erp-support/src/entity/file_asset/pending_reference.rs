@@ -2,9 +2,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::entity::file_asset::SensitivityClass;
 use erp_core::ids::FileAssetId;
 use erp_core::{Error, Result};
+
+use crate::entity::file_asset::SensitivityClass;
 
 /// multipart 业务命令中临时文件引用的稳定前缀。
 pub const PENDING_FILE_REFERENCE_PREFIX: &str = "pending-file:";
@@ -94,10 +95,7 @@ impl PendingFileReferenceSet {
             }
             targets.insert(reference, PendingFileTarget { id });
         }
-        Ok(Self {
-            targets,
-            sensitivity_by_id,
-        })
+        Ok(Self { targets, sensitivity_by_id })
     }
 
     /// 把临时引用替换为正式资产 ID，并登记一次消费。
@@ -115,10 +113,7 @@ impl PendingFileReferenceSet {
         let Some(reference) = PendingFileReference::from_file_asset_id(id)? else {
             return Ok(false);
         };
-        let target = self
-            .targets
-            .get(&reference)
-            .ok_or_else(|| Error::from("业务命令引用了未上传的文件"))?;
+        let target = self.targets.get(&reference).ok_or_else(|| Error::from("业务命令引用了未上传的文件"))?;
         if !used.insert(reference.as_str().to_string()) {
             return Err(Error::from("同一临时文件不能重复消费"));
         }
@@ -132,10 +127,7 @@ impl PendingFileReferenceSet {
     /// 存在未消费引用或调用方传入未知引用时返回领域校验错误。
     pub fn ensure_all_used(&self, used: &HashSet<String>) -> Result<()> {
         if used.len() != self.targets.len()
-            || self
-                .targets
-                .keys()
-                .any(|reference| !used.contains(reference.as_str()))
+            || self.targets.keys().any(|reference| !used.contains(reference.as_str()))
         {
             return Err(Error::from("存在未被业务命令引用的上传文件"));
         }
@@ -157,9 +149,10 @@ impl PendingFileReferenceSet {
 mod tests {
     use std::collections::HashSet;
 
+    use erp_core::ids::FileAssetId;
+
     use super::{PendingFileReference, PendingFileReferenceSet};
     use crate::entity::file_asset::SensitivityClass;
-    use erp_core::ids::FileAssetId;
 
     fn references() -> PendingFileReferenceSet {
         PendingFileReferenceSet::new(vec![
@@ -187,19 +180,13 @@ mod tests {
     #[test]
     fn set_rejects_duplicate_reference() {
         let reference = PendingFileReference::parse("pending-file:one").unwrap();
-        assert!(PendingFileReferenceSet::new(vec![
-            (
-                reference.clone(),
-                FileAssetId::new("asset-1"),
-                SensitivityClass::General
-            ),
-            (
-                reference,
-                FileAssetId::new("asset-2"),
-                SensitivityClass::Sensitive
-            ),
-        ])
-        .is_err());
+        assert!(
+            PendingFileReferenceSet::new(vec![
+                (reference.clone(), FileAssetId::new("asset-1"), SensitivityClass::General),
+                (reference, FileAssetId::new("asset-2"), SensitivityClass::Sensitive),
+            ])
+            .is_err()
+        );
     }
 
     #[test]

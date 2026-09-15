@@ -1,10 +1,9 @@
 //! 工作项到期筛选的统一业务时区窗口。
 
 use chrono::{Datelike, FixedOffset, TimeZone};
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::Instant;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 工作项到期筛选。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -55,22 +54,17 @@ impl WorkItemDueFilter {
         let start = Instant::from_unix_secs(start.timestamp());
         let tomorrow = Instant::from_unix_secs(start.unix_secs() + 86_400);
         Ok(match self {
-            Self::Today => WorkItemDueWindow {
-                from: Some(start),
-                before: tomorrow,
-            },
-            Self::Overdue => WorkItemDueWindow {
-                from: None,
-                before: now,
-            },
+            Self::Today => WorkItemDueWindow { from: Some(start), before: tomorrow },
+            Self::Overdue => WorkItemDueWindow { from: None, before: now },
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::WorkItemDueFilter;
     use erp_core::common::time::Instant;
+
+    use super::WorkItemDueFilter;
 
     #[test]
     fn shanghai_windows_keep_now_exclusive_and_today_overlapping() {

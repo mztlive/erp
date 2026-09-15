@@ -1,35 +1,28 @@
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
-use erp_import::LegacyImportExt;
 use erp_import::{
-    ConfirmationDecision, ConfirmationScope, LegacyImportBatch, LegacyImportBatchStatus,
-    LegacyImportCommandIdentity, LegacyImportConfirmation,
+    CompleteImportBusinessConfirmationCommand, ConfirmationDecision, ConfirmationScope,
+    ImportBusinessConfirmationNextStep, ImportBusinessConfirmationResultStatus, LegacyImportBatch,
+    LegacyImportBatchStatus, LegacyImportCommandIdentity, LegacyImportConfirmation, LegacyImportExt,
+    PreparedConfirmationCompletion, parse_receipt_number,
 };
 use erp_workflow::entity::document_registry::WorkflowActionId;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
-use erp_workflow::DocumentRegistryExt;
-use erp_workflow::WorkItemExt;
+use erp_workflow::{DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
-
-use crate::adapters::workflow::work_item_service;
-use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
 
 use super::confirmation_query::{confirmation_view, work_item_view};
 use super::create_confirmation::{confirmation_next_step, replace_confirmation_in_matrix};
 use super::dto::CompleteImportBusinessConfirmationResult;
 use super::{
-    ImportApplyService, COMMAND_FINGERPRINT_PREFIX, IMPORT_CONFIRMATION_AUDIT_PREFIX,
-    IMPORT_CONFIRMATION_OBJECT_TYPE, IMPORT_CONFIRMATION_ORGANIZATION,
+    COMMAND_FINGERPRINT_PREFIX, IMPORT_CONFIRMATION_AUDIT_PREFIX, IMPORT_CONFIRMATION_OBJECT_TYPE,
+    IMPORT_CONFIRMATION_ORGANIZATION, ImportApplyService,
 };
-use erp_import::parse_receipt_number;
-use erp_import::{
-    CompleteImportBusinessConfirmationCommand, ImportBusinessConfirmationNextStep,
-    ImportBusinessConfirmationResultStatus, PreparedConfirmationCompletion,
-};
+use crate::adapters::workflow::work_item_service;
+use crate::{Error, Result};
 
 impl ImportApplyService {
     /// 执行 `CompleteImportBusinessConfirmation` 强类型命令。
@@ -59,10 +52,7 @@ impl ImportApplyService {
         let identity = confirmation_command_identity(actor.id(), action, &prepared);
         let fingerprint = identity.fingerprint().to_string();
         let audit_id = identity.audit_id().to_string();
-        if let Some(result) = self
-            .replay_confirmation_completion(&audit_id, &fingerprint, &prepared)
-            .await?
-        {
+        if let Some(result) = self.replay_confirmation_completion(&audit_id, &fingerprint, &prepared).await? {
             return Ok(result);
         }
         let decided_at = Instant::now();
@@ -145,9 +135,7 @@ impl ImportApplyService {
                         &confirmation,
                         &actor_id,
                     )?;
-                    db.legacy_import_confirmations()
-                        .update(&mut confirmation, session)
-                        .await?;
+                    db.legacy_import_confirmations().update(&mut confirmation, session).await?;
                     db.legacy_import_batches().update(&mut batch, session).await?;
                     db.work_items().update(&mut work_item, session).await?;
                     db.workflow_actions().create(&workflow_action, session).await?;
@@ -162,30 +150,22 @@ impl ImportApplyService {
                         action,
                         "legacy_import_confirmation",
                         confirmation.base.id.clone(),
-                        Some(confirmation_completion_receipt_message(
-                            &fingerprint_for_tx,
-                            receipt,
-                        )),
+                        Some(confirmation_completion_receipt_message(&fingerprint_for_tx, receipt)),
                     )?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<ConfirmationCompletionTransactionResult, crate::Error>(
-                        ConfirmationCompletionTransactionResult {
-                            confirmation,
-                            work_item,
-                            receipt,
-                        },
+                        ConfirmationCompletionTransactionResult { confirmation, work_item, receipt },
                     )
                 })
             })
             .await;
         let result = match transaction_result {
             Ok(result) => result,
-            Err(error) => match self
-                .replay_confirmation_completion(&audit_id, &fingerprint, &prepared)
-                .await?
-            {
-                Some(result) => return Ok(result),
-                None => return Err(error),
+            Err(error) => {
+                match self.replay_confirmation_completion(&audit_id, &fingerprint, &prepared).await? {
+                    Some(result) => return Ok(result),
+                    None => return Err(error),
+                }
             },
         };
 
@@ -199,12 +179,7 @@ impl ImportApplyService {
         expected_fingerprint: &str,
         prepared: &PreparedConfirmationCompletion,
     ) -> Result<Option<CompleteImportBusinessConfirmationResult>> {
-        let Some(audit) = self
-            .db
-            .audit_logs()
-            .find_by_id(audit_id, &mut NoTransaction)
-            .await?
-        else {
+        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
             return Ok(None);
         };
         let receipt = parse_confirmation_completion_receipt(
@@ -236,11 +211,7 @@ impl ImportApplyService {
             return Err(Error::Internal("导入确认幂等收据对应结果不一致".to_string()));
         }
         Ok(Some(completion_result(
-            ConfirmationCompletionTransactionResult {
-                confirmation,
-                work_item,
-                receipt,
-            },
+            ConfirmationCompletionTransactionResult { confirmation, work_item, receipt },
             audit_id.to_string(),
         )))
     }
@@ -271,9 +242,7 @@ pub(super) fn validate_confirmation_completion(
     if work_item.base.version != command.expected_task_version
         || !batch.has_version(command.expected_batch_version)
     {
-        return Err(Error::ConflictError(
-            "导入确认任务或批次版本已变化，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("导入确认任务或批次版本已变化，请刷新后重试".to_string()));
     }
     let expected_subject = LegacyImportConfirmation::subject_version(
         confirmation.batch_version,
@@ -302,15 +271,11 @@ pub(super) fn validate_confirmation_completion(
         && batch.accepts_confirmation_decision()
         && batch.import_rule_version == confirmation.import_rule_version;
     if !task_matches || !fact_matches {
-        return Err(Error::BusinessLogicError(
-            "导入确认任务、责任范围或批次不匹配".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("导入确认任务、责任范围或批次不匹配".to_string()));
     }
     let command_scope = ConfirmationScope::parse(&command.confirmation_scope)?;
     if !batch.required_confirmation_scopes()?.contains(&command_scope) {
-        return Err(Error::BusinessLogicError(
-            "当前确认范围已不属于批次必要矩阵".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("当前确认范围已不属于批次必要矩阵".to_string()));
     }
     if !work_item.is_owned_by(actor_id) {
         return Err(Error::Forbidden("当前账号不是该导入确认的当前责任人".to_string()));

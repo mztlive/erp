@@ -1,33 +1,30 @@
 //! 人工保存采购草稿。
 
-use erp_audit::AuditExt;
-
-use erp_procurement::entity::purchase_order::{
-    validate_draft_line_edits, LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
-    PurchaseOrder, PurchaseOrderSubmission, SalesProcurementCoverage,
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
+use erp_procurement::dto::purchase_order::{
+    SAVE_ACTION, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,
+    TotalsView,
 };
-
+use erp_procurement::entity::purchase_order::{
+    LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseOrder,
+    PurchaseOrderSubmission, SalesProcurementCoverage, validate_draft_line_edits,
+};
+use erp_procurement::service::purchase_order::draft_edit::{
+    DraftReplacement, build_draft_replacement, ensure_save_target, load_current_draft, load_purchase_order,
+    map_draft_edit_violation, persist_replacement,
+};
+use erp_read_models::purchase_center::repository::load_sales_procurement_coverage;
 use erp_sales::repository::SalesOrderExt;
 use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
-use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::PurchaseOrderProcess;
+use super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
+use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_procurement::dto::purchase_order::{
-    SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine, TotalsView,
-    SAVE_ACTION,
-};
-use erp_procurement::service::purchase_order::draft_edit::{
-    build_draft_replacement, ensure_save_target, load_current_draft, load_purchase_order,
-    map_draft_edit_violation, persist_replacement, DraftReplacement,
-};
-use erp_read_models::purchase_center::repository::load_sales_procurement_coverage;
 
 const SAVE_PERMISSION: &str = "purchase_order:update";
 const SAVE_RECEIPT_PREFIX: &str = "purchase-order-save-draft-command-";
@@ -139,10 +136,7 @@ async fn execute_save_draft_transaction(
     authorization: PurchaseOrderAuthorization,
 ) -> Result<SavePurchaseOrderDraftResult> {
     let db = service.db.clone();
-    let PurchaseOrderAuthorization {
-        rbac,
-        policy_revision,
-    } = authorization;
+    let PurchaseOrderAuthorization { rbac, policy_revision } = authorization;
     let object_scope = service.command_access(actor, "update")?;
     let transaction_order_id = purchase_order_id.to_string();
     let transaction_actor = actor.clone();
@@ -166,15 +160,8 @@ async fn execute_save_draft_transaction(
             })
         })
         .await;
-    recover_saved_draft(
-        transaction_result,
-        &service.db,
-        &receipt_id,
-        &fingerprint,
-        purchase_order_id,
-        actor,
-    )
-    .await
+    recover_saved_draft(transaction_result, &service.db, &receipt_id, &fingerprint, purchase_order_id, actor)
+        .await
 }
 
 /// 在 MongoDB 事务内校验并替换采购草稿提交。
@@ -248,18 +235,12 @@ async fn replace_current_draft(
     let (mut old_draft, old_lines) = load_current_draft(db, order, session).await?;
     let coverage = advance_guard_and_load_coverage(db, order, command.actor.id(), session).await?;
     let requested_lines = command.request.resolve_lines(&old_lines)?;
-    let requested_edits = requested_lines
-        .iter()
-        .map(SavePurchaseOrderLine::to_draft_edit)
-        .collect::<Vec<_>>();
+    let requested_edits =
+        requested_lines.iter().map(SavePurchaseOrderLine::to_draft_edit).collect::<Vec<_>>();
     validate_draft_line_edits(&requested_edits, &old_lines, &coverage.lines)
         .map_err(map_draft_edit_violation)?;
     let replacement = build_draft_replacement(order, &old_draft, &requested_lines)?;
-    order.update(
-        Default::default(),
-        command.actor.id(),
-        super::adapters::payment_term::parse,
-    )?;
+    order.update(Default::default(), command.actor.id(), super::adapters::payment_term::parse)?;
     old_draft.mark_superseded()?;
     order.current_submission_id = Some(replacement.submission.base.id.clone());
     persist_draft_replacement(db, order, &mut old_draft, &replacement, command, session).await
@@ -294,9 +275,7 @@ pub(super) async fn advance_guard_and_load_coverage(
         .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
     sales_order.advance_procurement_guard(actor_id)?;
     db.sales_orders().update(&mut sales_order, session).await?;
-    load_sales_procurement_coverage(db, &sales_order, session)
-        .await
-        .map_err(crate::Error::from)
+    load_sales_procurement_coverage(db, &sales_order, session).await.map_err(crate::Error::from)
 }
 
 /// 持久化草稿替换、同步任务并写入稳定命令收据。
@@ -381,15 +360,13 @@ async fn replay_saved_draft(
         Ok(receipt) => receipt,
         Err(PurchaseCommandReceiptError::IdentityMismatch | PurchaseCommandReceiptError::PayloadConflict) => {
             return Err(Error::ConflictError("幂等键已用于不同采购命令".to_string()));
-        }
+        },
         Err(PurchaseCommandReceiptError::Corrupted(message)) => {
             return Err(Error::Internal(message));
-        }
+        },
     };
     if receipt.payload().purchase_order_id != purchase_order_id {
-        return Err(Error::ConflictError(
-            "采购草稿保存收据与业务资源不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("采购草稿保存收据与业务资源不一致".to_string()));
     }
     let order = load_purchase_order(db, purchase_order_id, executor).await?;
     if order.base.version < receipt.payload().lock_version {
@@ -426,16 +403,11 @@ async fn recover_saved_draft(
 ) -> Result<SavePurchaseOrderDraftResult> {
     match transaction_result {
         Ok(result) => Ok(result),
-        Err(error) => replay_saved_draft(
-            db,
-            receipt_id,
-            fingerprint,
-            purchase_order_id,
-            actor,
-            &mut NoTransaction,
-        )
-        .await?
-        .ok_or(error),
+        Err(error) => {
+            replay_saved_draft(db, receipt_id, fingerprint, purchase_order_id, actor, &mut NoTransaction)
+                .await?
+                .ok_or(error)
+        },
     }
 }
 
@@ -481,11 +453,7 @@ impl SaveDraftReceipt {
     fn into_result(self) -> SavePurchaseOrderDraftResult {
         SavePurchaseOrderDraftResult {
             lock_version: self.lock_version,
-            totals: TotalsView {
-                gross: self.gross,
-                net: self.net,
-                tax: self.tax,
-            },
+            totals: TotalsView { gross: self.gross, net: self.net, tax: self.tax },
             reference: self.reference,
         }
     }
@@ -493,10 +461,9 @@ impl SaveDraftReceipt {
 
 #[cfg(test)]
 mod tests {
+    use erp_procurement::dto::purchase_order::{SavePurchaseOrderDraftRequest, SavePurchaseOrderLine};
     use erp_procurement::entity::purchase_order::PurchaseLineType;
     use validator::Validate;
-
-    use erp_procurement::dto::purchase_order::{SavePurchaseOrderDraftRequest, SavePurchaseOrderLine};
 
     /// 构造最小保存草稿请求。
     ///
@@ -592,10 +559,8 @@ mod tests {
     /// 保存命令缺少稳定授权快照、事务内账号重验或 policy revision CAS 时测试失败。
     #[test]
     fn save_draft_binds_actor_authorization_to_commit() {
-        let production = include_str!("draft_edit.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码必须存在");
+        let production =
+            include_str!("draft_edit.rs").split("#[cfg(test)]").next().expect("生产代码必须存在");
 
         assert!(production.contains("authorize_actor_permission(actor, SAVE_PERMISSION)"));
         assert!(production.contains("ensure_purchase_order_actor_account"));
@@ -614,10 +579,8 @@ mod tests {
     /// 保存路径重新实现补丁合并或来源校验时测试失败。
     #[test]
     fn draft_edit_rules_are_domain_owned() {
-        let production = include_str!("draft_edit.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码必须存在");
+        let production =
+            include_str!("draft_edit.rs").split("#[cfg(test)]").next().expect("生产代码必须存在");
 
         assert!(production.contains("req.ensure_shape()"));
         assert!(production.contains("resolve_lines(&old_lines)"));

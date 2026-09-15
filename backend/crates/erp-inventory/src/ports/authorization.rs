@@ -2,12 +2,12 @@
 
 use std::collections::BTreeSet;
 
+use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::ids::WarehouseId;
 use persistence_core::Executor;
 
 use crate::error::{Error, Result};
-use application_core::AuditActor;
 
 /// Port inventory uses to compute warehouse-scoped authorization from identity facts.
 #[async_trait]
@@ -61,9 +61,9 @@ impl WarehouseCoverage {
     fn covers(&self, warehouse_id: &str) -> bool {
         match self {
             Self::All => true,
-            Self::Targets(targets) => targets
-                .binary_search_by(|target| target.as_str().cmp(warehouse_id))
-                .is_ok(),
+            Self::Targets(targets) => {
+                targets.binary_search_by(|target| target.as_str().cmp(warehouse_id)).is_ok()
+            },
         }
     }
 }
@@ -75,9 +75,7 @@ pub struct WarehouseScope(Option<WarehouseCoverage>);
 impl WarehouseScope {
     /// 判断目标仓库是否落在已证明范围内。
     pub fn covers(&self, warehouse_id: &str) -> bool {
-        self.0
-            .as_ref()
-            .is_some_and(|coverage| coverage.covers(warehouse_id))
+        self.0.as_ref().is_some_and(|coverage| coverage.covers(warehouse_id))
     }
 
     /// 把调用方精确筛选与授权范围求交，形成 Repository 查询过滤。
@@ -90,7 +88,7 @@ impl WarehouseScope {
             (Some(coverage), Some(id)) if coverage.covers(id.as_ref()) => Some(vec![id]),
             (Some(WarehouseCoverage::Targets(allowed)), None) => {
                 Some(allowed.iter().cloned().map(WarehouseId::new).collect())
-            }
+            },
             (Some(WarehouseCoverage::All), Some(id)) => Some(vec![id]),
             (None, _) | (Some(WarehouseCoverage::Targets(_)), Some(_)) => Some(Vec::new()),
         }
@@ -216,8 +214,9 @@ impl InventoryAuthorization {
 
 #[cfg(test)]
 mod tests {
-    use super::{InventoryAuthorization, WarehouseScope};
     use erp_core::ids::WarehouseId;
+
+    use super::{InventoryAuthorization, WarehouseScope};
 
     #[test]
     fn company_and_single_warehouse_scopes_form_repository_filters() {
@@ -229,14 +228,8 @@ mod tests {
         );
 
         let single = WarehouseScope::from_targets(vec!["warehouse-1".to_string()]);
-        assert_eq!(
-            single.repository_warehouse_ids(None),
-            Some(vec![WarehouseId::new("warehouse-1")])
-        );
-        assert_eq!(
-            single.repository_warehouse_ids(Some(WarehouseId::new("warehouse-2"))),
-            Some(Vec::new())
-        );
+        assert_eq!(single.repository_warehouse_ids(None), Some(vec![WarehouseId::new("warehouse-1")]));
+        assert_eq!(single.repository_warehouse_ids(Some(WarehouseId::new("warehouse-2"))), Some(Vec::new()));
     }
 
     #[test]
@@ -272,12 +265,7 @@ mod tests {
         );
 
         assert!(authorization.read_scope().covers("warehouse-1"));
-        assert_eq!(
-            authorization
-                .adjustment_list_scope()
-                .repository_warehouse_ids(None),
-            Some(Vec::new())
-        );
+        assert_eq!(authorization.adjustment_list_scope().repository_warehouse_ids(None), Some(Vec::new()));
     }
 
     #[test]

@@ -1,22 +1,19 @@
-use crate::repository::owned::StockReservationRepository;
 use std::str::FromStr;
 
 use chrono::Local;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use mongodb::Database;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::inventory::{ReservationStatus, StockReservation, StockReservationSourceType};
 use erp_core::ids::{SalesOrderLineId, SkuId, WarehouseId};
 use erp_core::money::Quantity;
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use serde::{Deserialize, Serialize};
 
 use super::shared::{ids_to_strings, negate_bson, sort_doc, to_bson};
 use super::{InventoryRepository, STOCK_RESERVATIONS};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::inventory::{ReservationStatus, StockReservation, StockReservationSourceType};
+use crate::repository::owned::StockReservationRepository;
 
 /// 库存预占列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -142,10 +139,7 @@ impl<'a> StockReservationRepository<'a> {
         let collection = self.collection().clone_with_type::<StockReservationRow>();
         let items = mongo_ops::find_many(&collection, query.clone(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), query, executor).await?;
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// ★原子条件写★：消耗预占（`reserved -= q`、`consumed += q`）。
@@ -185,10 +179,8 @@ impl<'a> StockReservationRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<bool> {
         let quantity = to_bson(quantity)?;
-        let active_statuses = [
-            ReservationStatus::Active.as_str(),
-            ReservationStatus::PartiallyConsumed.as_str(),
-        ];
+        let active_statuses =
+            [ReservationStatus::Active.as_str(), ReservationStatus::PartiallyConsumed.as_str()];
         let filter = doc! {
             "id": id,
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
@@ -266,10 +258,8 @@ impl<'a> StockReservationRepository<'a> {
     ) -> Result<bool> {
         let quantity = to_bson(quantity)?;
         let zero = to_bson(Quantity::from_str("0").expect("字面量 0 必然合法"))?;
-        let active_statuses = [
-            ReservationStatus::Active.as_str(),
-            ReservationStatus::PartiallyConsumed.as_str(),
-        ];
+        let active_statuses =
+            [ReservationStatus::Active.as_str(), ReservationStatus::PartiallyConsumed.as_str()];
         let filter = doc! {
             "id": id,
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
@@ -294,11 +284,7 @@ impl<'a> StockReservationRepository<'a> {
 
 /// 为库存预占分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
 fn stock_reservation_sort(filter: &StockReservationFilter) -> Document {
-    let mut sort = sort_doc(
-        filter.sort_by.as_deref(),
-        filter.sort_ascending,
-        &["created_at", "updated_at"],
-    );
+    let mut sort = sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, &["created_at", "updated_at"]);
     sort.insert("id", if filter.sort_ascending { 1 } else { -1 });
     sort
 }
@@ -471,19 +457,11 @@ async fn reservations_for_dimensions(
     sort: Option<Document>,
     executor: &mut dyn Executor,
 ) -> Result<Vec<StockReservation>> {
-    filter.insert(
-        "status",
-        doc! { "$in": reservation_status_codes(ReservationStatus::operable()) },
-    );
+    filter.insert("status", doc! { "$in": reservation_status_codes(ReservationStatus::operable()) });
     filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
     let options = FindOptions::builder().sort(sort).build();
-    mongo_ops::find_many(
-        &db.collection::<StockReservation>(STOCK_RESERVATIONS),
-        filter,
-        options,
-        executor,
-    )
-    .await
+    mongo_ops::find_many(&db.collection::<StockReservation>(STOCK_RESERVATIONS), filter, options, executor)
+        .await
 }
 
 /// 把预占状态集合转换为持久化代码。
@@ -517,10 +495,11 @@ fn stock_reservation_projection() -> Document {
 
 #[cfg(test)]
 mod filter_tests {
-    use super::{stock_reservation_sort, StockReservationFilter};
     use erp_core::ids::WarehouseId;
-    use mongodb::bson::{doc, Bson};
+    use mongodb::bson::{Bson, doc};
     use persistence_core::QueryFilter;
+
+    use super::{StockReservationFilter, stock_reservation_sort};
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockReservationFilter {
         StockReservationFilter {
@@ -539,22 +518,14 @@ mod filter_tests {
     #[test]
     fn authorized_warehouse_filter_preserves_company_empty_and_exact_scope() {
         assert_eq!(
-            filter(Some(vec![
-                WarehouseId::new("warehouse-1"),
-                WarehouseId::new("warehouse-2"),
-            ]))
-            .to_doc()
-            .get_document("warehouse_id")
-            .unwrap(),
+            filter(Some(vec![WarehouseId::new("warehouse-1"), WarehouseId::new("warehouse-2"),]))
+                .to_doc()
+                .get_document("warehouse_id")
+                .unwrap(),
             &doc! { "$in": ["warehouse-1", "warehouse-2"] }
         );
         assert_eq!(
-            filter(Some(Vec::new()))
-                .to_doc()
-                .get_document("warehouse_id")
-                .unwrap()
-                .get_array("$in")
-                .unwrap(),
+            filter(Some(Vec::new())).to_doc().get_document("warehouse_id").unwrap().get_array("$in").unwrap(),
             &Vec::<Bson>::new()
         );
         assert!(!filter(None).to_doc().contains_key("warehouse_id"));
@@ -567,9 +538,6 @@ mod filter_tests {
         value.sort_ascending = true;
         assert_eq!(stock_reservation_sort(&value), doc! { "created_at": 1, "id": 1 });
         value.sort_ascending = false;
-        assert_eq!(
-            stock_reservation_sort(&value),
-            doc! { "created_at": -1, "id": -1 }
-        );
+        assert_eq!(stock_reservation_sort(&value), doc! { "created_at": -1, "id": -1 });
     }
 }

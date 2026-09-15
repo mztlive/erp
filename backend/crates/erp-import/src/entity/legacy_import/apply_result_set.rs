@@ -94,7 +94,7 @@ impl ApplyResultItem {
         match self {
             Self::Imported { row_id, .. } | Self::Failed { row_id, .. } | Self::Skipped { row_id, .. } => {
                 row_id
-            }
+            },
         }
     }
 
@@ -104,18 +104,9 @@ impl ApplyResultItem {
     /// 待映射行可能携带身份；已映射行可为空。
     pub fn external_identity_map_id(&self) -> Option<&ExternalIdentityMapId> {
         match self {
-            Self::Imported {
-                external_identity_map_id,
-                ..
-            }
-            | Self::Failed {
-                external_identity_map_id,
-                ..
-            }
-            | Self::Skipped {
-                external_identity_map_id,
-                ..
-            } => external_identity_map_id.as_ref(),
+            Self::Imported { external_identity_map_id, .. }
+            | Self::Failed { external_identity_map_id, .. }
+            | Self::Skipped { external_identity_map_id, .. } => external_identity_map_id.as_ref(),
         }
     }
 }
@@ -210,7 +201,7 @@ impl ApplyResultItem {
                     )?,
                     target_object_reference: optional_target(target_object_reference)?,
                 })
-            }
+            },
             ApplyResultOutcome::Failed => {
                 ensure_absent(target_document_id.as_deref(), "失败结果不得携带目标单据 ID")?;
                 ensure_absent(target_object_reference.as_deref(), "失败结果不得携带目标对象引用")?;
@@ -220,7 +211,7 @@ impl ApplyResultItem {
                     error_code: required_error_code(error_code, "失败结果必须提供错误码")?,
                     error_detail: optional_error_detail(error_detail)?,
                 })
-            }
+            },
             ApplyResultOutcome::Skipped => {
                 ensure_absent(target_document_id.as_deref(), "跳过结果不得携带目标单据 ID")?;
                 ensure_absent(target_object_reference.as_deref(), "跳过结果不得携带目标对象引用")?;
@@ -230,7 +221,7 @@ impl ApplyResultItem {
                     error_code: required_error_code(error_code, "跳过结果必须提供原因错误码")?,
                     error_detail: optional_error_detail(error_detail)?,
                 })
-            }
+            },
         }
     }
 }
@@ -287,12 +278,7 @@ fn ensure_absent(value: Option<&str>, message: &str) -> Result<()> {
 /// # 错误
 /// 缺失或超长时返回错误。
 fn required_target(value: Option<String>, empty_message: &str) -> Result<String> {
-    normalize_required_text(
-        value.unwrap_or_default(),
-        empty_message,
-        TARGET_MAX_LEN,
-        "目标单据 ID 过长",
-    )
+    normalize_required_text(value.unwrap_or_default(), empty_message, TARGET_MAX_LEN, "目标单据 ID 过长")
 }
 
 /// 规范化可选目标对象引用。
@@ -315,12 +301,7 @@ fn optional_target(value: Option<String>) -> Result<Option<String>> {
 /// # 错误
 /// 缺失或超长时返回错误。
 fn required_error_code(value: Option<String>, empty_message: &str) -> Result<String> {
-    normalize_required_text(
-        value.unwrap_or_default(),
-        empty_message,
-        ERROR_CODE_MAX_LEN,
-        "错误码过长",
-    )
+    normalize_required_text(value.unwrap_or_default(), empty_message, ERROR_CODE_MAX_LEN, "错误码过长")
 }
 
 /// 规范化可选错误明细。
@@ -336,8 +317,9 @@ fn optional_error_detail(value: Option<String>) -> Result<Option<String>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ApplyResultDraft, ApplyResultItem, ApplyResultOutcome, ApplyResultSet};
     use erp_core::ids::{ExternalIdentityMapId, LegacyImportRowId};
+
+    use super::{ApplyResultDraft, ApplyResultItem, ApplyResultOutcome, ApplyResultSet};
 
     fn draft(id: &str, outcome: ApplyResultOutcome) -> ApplyResultDraft {
         ApplyResultDraft {
@@ -381,31 +363,23 @@ mod tests {
             .unwrap();
         assert_eq!(set.row_ids().len(), 3);
         match &set.items()[0] {
-            ApplyResultItem::Imported {
-                target_document_id,
-                target_object_reference,
-                ..
-            } => {
+            ApplyResultItem::Imported { target_document_id, target_object_reference, .. } => {
                 assert_eq!(target_document_id, "SO-1");
                 assert_eq!(target_object_reference.as_deref(), Some("sales/so-1"));
-            }
+            },
             other => panic!("expected imported, got {other:?}"),
         }
         match &set.items()[1] {
-            ApplyResultItem::Failed {
-                error_code,
-                error_detail,
-                ..
-            } => {
+            ApplyResultItem::Failed { error_code, error_detail, .. } => {
                 assert_eq!(error_code, "TEMPORARY");
                 assert_eq!(error_detail.as_deref(), Some("可重试"));
-            }
+            },
             other => panic!("expected failed, got {other:?}"),
         }
         match &set.items()[2] {
             ApplyResultItem::Skipped { error_code, .. } => {
                 assert_eq!(error_code, "DUPLICATE");
-            }
+            },
             other => panic!("expected skipped, got {other:?}"),
         }
     }
@@ -425,18 +399,10 @@ mod tests {
             ApplyResultSet::try_from_drafts(vec![draft("row-1", ApplyResultOutcome::Imported)]).is_err(),
             "imported 缺失目标单据"
         );
-        let imported_with_error = ApplyResultDraft {
-            error_code: Some("X".to_string()),
-            ..imported("row-1")
-        };
-        assert!(
-            ApplyResultSet::try_from_drafts(vec![imported_with_error]).is_err(),
-            "imported 禁止错误码"
-        );
-        let imported_with_detail = ApplyResultDraft {
-            error_detail: Some("明细".to_string()),
-            ..imported("row-1")
-        };
+        let imported_with_error = ApplyResultDraft { error_code: Some("X".to_string()), ..imported("row-1") };
+        assert!(ApplyResultSet::try_from_drafts(vec![imported_with_error]).is_err(), "imported 禁止错误码");
+        let imported_with_detail =
+            ApplyResultDraft { error_detail: Some("明细".to_string()), ..imported("row-1") };
         assert!(
             ApplyResultSet::try_from_drafts(vec![imported_with_detail]).is_err(),
             "imported 禁止失败明细"
@@ -446,27 +412,17 @@ mod tests {
             ApplyResultSet::try_from_drafts(vec![draft("row-1", ApplyResultOutcome::Failed)]).is_err(),
             "failed 缺失错误码"
         );
-        let failed_with_target = ApplyResultDraft {
-            target_document_id: Some("SO-1".to_string()),
-            ..failed("row-1")
-        };
-        assert!(
-            ApplyResultSet::try_from_drafts(vec![failed_with_target]).is_err(),
-            "failed 禁止目标单据"
-        );
+        let failed_with_target =
+            ApplyResultDraft { target_document_id: Some("SO-1".to_string()), ..failed("row-1") };
+        assert!(ApplyResultSet::try_from_drafts(vec![failed_with_target]).is_err(), "failed 禁止目标单据");
 
         assert!(
             ApplyResultSet::try_from_drafts(vec![draft("row-1", ApplyResultOutcome::Skipped)]).is_err(),
             "skipped 缺失原因码"
         );
-        let skipped_with_target = ApplyResultDraft {
-            target_object_reference: Some("sales/so-1".to_string()),
-            ..skipped("row-1")
-        };
-        assert!(
-            ApplyResultSet::try_from_drafts(vec![skipped_with_target]).is_err(),
-            "skipped 禁止目标引用"
-        );
+        let skipped_with_target =
+            ApplyResultDraft { target_object_reference: Some("sales/so-1".to_string()), ..skipped("row-1") };
+        assert!(ApplyResultSet::try_from_drafts(vec![skipped_with_target]).is_err(), "skipped 禁止目标引用");
     }
 
     #[test]
@@ -476,13 +432,9 @@ mod tests {
 
     #[test]
     fn accepts_max_len_and_rejects_over_limit() {
-        let max = (0..super::APPLY_RESULT_MAX_LEN)
-            .map(|index| imported(&format!("row-{index}")))
-            .collect();
+        let max = (0..super::APPLY_RESULT_MAX_LEN).map(|index| imported(&format!("row-{index}"))).collect();
         assert!(ApplyResultSet::try_from_drafts(max).is_ok());
-        let over = (0..=super::APPLY_RESULT_MAX_LEN)
-            .map(|index| imported(&format!("row-{index}")))
-            .collect();
+        let over = (0..=super::APPLY_RESULT_MAX_LEN).map(|index| imported(&format!("row-{index}"))).collect();
         assert!(ApplyResultSet::try_from_drafts(over).is_err());
     }
 }

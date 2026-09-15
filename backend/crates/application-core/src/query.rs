@@ -17,11 +17,7 @@ pub fn normalize_sort(
     sort_dir: &Option<String>,
     allowed_fields: &'static [&'static str],
 ) -> Result<(&'static str, SortDir)> {
-    let sort_by = match sort_by
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
+    let sort_by = match sort_by.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
         Some(field) => allowed_fields
             .iter()
             .find(|allowed| **allowed == field)
@@ -29,11 +25,7 @@ pub fn normalize_sort(
             .ok_or_else(|| Error::ValidationError(format!("不支持的排序字段: {field}")))?,
         None => "created_at",
     };
-    let sort_dir = match sort_dir
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
+    let sort_dir = match sort_dir.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
         Some("asc") => SortDir::Asc,
         Some("desc") | None => SortDir::Desc,
         Some(other) => return Err(Error::ValidationError(format!("非法排序方向: {other}"))),
@@ -67,10 +59,7 @@ pub fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationEr
 
 /// 归一化可选的文本查询条件。
 pub fn normalized_text(value: Option<&str>) -> Option<String> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
+    value.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string)
 }
 
 /// 返回有效页码；未提供时使用第一页。

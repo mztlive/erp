@@ -6,10 +6,8 @@
 pub mod company;
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
 use erp_party::{
     CreatePartyAddressRequest, CreatePartyBankAccountRequest, CreatePartyContactRequest, CreatePartyRequest,
     CreatePartyTaxProfileRequest, PageView, PartyAddressListParams, PartyAddressView,
@@ -19,10 +17,9 @@ use erp_party::{
     UpdatePartyContactRequest, UpdatePartyRequest, UpdatePartyTaxProfileRequest,
 };
 
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "主体",
@@ -190,10 +187,7 @@ pub async fn party_contact_list(
     Path(id): Path<String>,
     Query(params): Query<PartyContactListParams>,
 ) -> Result<PageView<PartyContactView>> {
-    let page = state
-        .party_contact_service()
-        .party_contact_list(&id, &params)
-        .await?;
+    let page = state.party_contact_service().party_contact_list(&id, &params).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -220,10 +214,7 @@ pub async fn party_contact_create(
     Path(id): Path<String>,
     Json(req): Json<CreatePartyContactRequest>,
 ) -> Result<PartyContactView> {
-    let view = state
-        .party_contact_service()
-        .create_party_contact(&id, req, &actor)
-        .await?;
+    let view = state.party_contact_service().create_party_contact(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -250,10 +241,7 @@ pub async fn party_contact_update(
     Path(id): Path<String>,
     Json(req): Json<UpdatePartyContactRequest>,
 ) -> Result<PartyContactView> {
-    let view = state
-        .party_contact_service()
-        .update_party_contact(&id, req, &actor)
-        .await?;
+    let view = state.party_contact_service().update_party_contact(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -278,10 +266,7 @@ pub async fn party_address_list(
     Path(id): Path<String>,
     Query(params): Query<PartyAddressListParams>,
 ) -> Result<PageView<PartyAddressView>> {
-    let page = state
-        .party_address_service()
-        .party_address_list(&id, &params)
-        .await?;
+    let page = state.party_address_service().party_address_list(&id, &params).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -308,10 +293,7 @@ pub async fn party_address_create(
     Path(id): Path<String>,
     Json(req): Json<CreatePartyAddressRequest>,
 ) -> Result<PartyAddressView> {
-    let view = state
-        .party_address_service()
-        .create_party_address(&id, req, &actor)
-        .await?;
+    let view = state.party_address_service().create_party_address(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -338,10 +320,7 @@ pub async fn party_address_update(
     Path(id): Path<String>,
     Json(req): Json<UpdatePartyAddressRequest>,
 ) -> Result<PartyAddressView> {
-    let view = state
-        .party_address_service()
-        .update_party_address(&id, req, &actor)
-        .await?;
+    let view = state.party_address_service().update_party_address(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -366,10 +345,7 @@ pub async fn party_tax_profile_list(
     Path(id): Path<String>,
     Query(params): Query<PartyTaxProfileListParams>,
 ) -> Result<PageView<PartyTaxProfileView>> {
-    let page = state
-        .party_tax_profile_service()
-        .party_tax_profile_list(&id, &params)
-        .await?;
+    let page = state.party_tax_profile_service().party_tax_profile_list(&id, &params).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -396,10 +372,7 @@ pub async fn party_tax_profile_create(
     Path(id): Path<String>,
     Json(req): Json<CreatePartyTaxProfileRequest>,
 ) -> Result<PartyTaxProfileView> {
-    let view = state
-        .party_tax_profile_service()
-        .create_party_tax_profile(&id, req, &actor)
-        .await?;
+    let view = state.party_tax_profile_service().create_party_tax_profile(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -426,10 +399,7 @@ pub async fn party_tax_profile_update(
     Path(id): Path<String>,
     Json(req): Json<UpdatePartyTaxProfileRequest>,
 ) -> Result<PartyTaxProfileView> {
-    let view = state
-        .party_tax_profile_service()
-        .update_party_tax_profile(&id, req, &actor)
-        .await?;
+    let view = state.party_tax_profile_service().update_party_tax_profile(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -454,10 +424,7 @@ pub async fn party_bank_account_list(
     Path(id): Path<String>,
     Query(params): Query<PartyBankAccountListParams>,
 ) -> Result<PageView<PartyBankAccountView>> {
-    let page = state
-        .party_bank_account_service()
-        .party_bank_account_list(&id, &params)
-        .await?;
+    let page = state.party_bank_account_service().party_bank_account_list(&id, &params).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -484,10 +451,7 @@ pub async fn party_bank_account_create(
     Path(id): Path<String>,
     Json(req): Json<CreatePartyBankAccountRequest>,
 ) -> Result<PartyBankAccountView> {
-    let view = state
-        .party_bank_account_service()
-        .create_party_bank_account(&id, req, &actor)
-        .await?;
+    let view = state.party_bank_account_service().create_party_bank_account(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -514,9 +478,6 @@ pub async fn party_bank_account_update(
     Path(id): Path<String>,
     Json(req): Json<UpdatePartyBankAccountRequest>,
 ) -> Result<PartyBankAccountView> {
-    let view = state
-        .party_bank_account_service()
-        .update_party_bank_account(&id, req, &actor)
-        .await?;
+    let view = state.party_bank_account_service().update_party_bank_account(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }

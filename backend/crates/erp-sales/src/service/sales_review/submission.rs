@@ -1,13 +1,5 @@
 //! 冻结销售变更提交、锁定工作副本，并在调用方事务内写入销售事实。
 
-use super::state::start_sales_change_approval;
-use super::SalesReviewService;
-use crate::entity::sales_order::SalesContentHash;
-use crate::entity::sales_review::{
-    SalesChangeOrder, SalesChangeSubmission, SalesChangeSubmissionData, SalesChangeSubmissionLine,
-};
-use crate::repository::{SalesOrderExt, SalesReviewExt};
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
@@ -15,6 +7,15 @@ use erp_core::ids::{
 };
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction};
+
+use super::SalesReviewService;
+use super::state::start_sales_change_approval;
+use crate::entity::sales_order::SalesContentHash;
+use crate::entity::sales_review::{
+    SalesChangeOrder, SalesChangeSubmission, SalesChangeSubmissionData, SalesChangeSubmissionLine,
+};
+use crate::repository::{SalesOrderExt, SalesReviewExt};
+use crate::{Error, Result};
 
 /// 单次冻结提交的纯销售写入计划。
 pub struct SalesChangeSubmissionWrite {
@@ -42,16 +43,9 @@ impl SalesChangeSubmissionWrite {
     /// 销售集合或 CAS 失败时原样返回；本方法不启动事务。
     pub async fn persist(&mut self, db: &mongodb::Database, executor: &mut dyn Executor) -> Result<()> {
         db.sales_review()
-            .submit_sales_change(
-                &mut self.change_order,
-                &self.submission,
-                &self.submission_lines,
-                executor,
-            )
+            .submit_sales_change(&mut self.change_order, &self.submission, &self.submission_lines, executor)
             .await?;
-        db.sales_order_working_copies()
-            .update(&mut self.working_copy, executor)
-            .await?;
+        db.sales_order_working_copies().update(&mut self.working_copy, executor).await?;
         Ok(())
     }
 }
@@ -76,12 +70,7 @@ impl SalesReviewService {
             SalesContentHash::submission(&submission.base.id)?.into_wire(),
             actor.id(),
         )?;
-        Ok(SalesChangeSubmissionWrite {
-            change_order,
-            working_copy,
-            submission,
-            submission_lines,
-        })
+        Ok(SalesChangeSubmissionWrite { change_order, working_copy, submission, submission_lines })
     }
 }
 
@@ -150,10 +139,8 @@ async fn load_change_working_copy(
         .await?
         .ok_or_else(|| Error::NotFound("变更工作副本不存在".to_string()))?;
     let copy_id = SalesOrderWorkingCopyId::new(working_copy.base.id.clone());
-    let copy_lines = db
-        .sales_order_working_copy_lines()
-        .list_lines_by_working_copy(&copy_id, &mut NoTransaction)
-        .await?;
+    let copy_lines =
+        db.sales_order_working_copy_lines().list_lines_by_working_copy(&copy_id, &mut NoTransaction).await?;
     Ok((working_copy, copy_lines))
 }
 
@@ -169,9 +156,7 @@ async fn load_change_working_copy(
 /// # 错误
 /// 仓储失败或提交序号溢出时返回错误。
 async fn next_change_submission_no(db: &mongodb::Database, change_order_id: &str) -> Result<u32> {
-    Ok(SalesChangeSubmission::next_submission_no(
-        latest_change_submission_no(db, change_order_id).await?,
-    )?)
+    Ok(SalesChangeSubmission::next_submission_no(latest_change_submission_no(db, change_order_id).await?)?)
 }
 
 /// 读取已冻结的最大提交序号；尚无提交时返回 0。

@@ -4,36 +4,23 @@
 //! 直接复用 `erp_finance::dto::receivable` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
+use erp_finance::dto::receivable::{
+    CancelCustomerReceiptApprovalRequest, CommitCustomerReceiptRequest, CommitInvoiceRequest,
+    CommitRedInvoiceRequest, CreateCustomerReceiptRequest, CreateInvoiceRequest,
+    CreateReceivableAccountRequest, CustomerReceiptListParams, InvoiceListParams, InvoiceView, PageView,
+    PostCustomerReceiptRequest, PostInvoiceRequest, ReceivableAccountListParams,
+    ReceivableAccountSummaryView, SubmitCustomerReceiptRequest,
 };
-use erp_finance::dto::receivable::CancelCustomerReceiptApprovalRequest;
-use erp_finance::dto::receivable::CommitCustomerReceiptRequest;
-use erp_finance::dto::receivable::CommitInvoiceRequest;
-use erp_finance::dto::receivable::CommitRedInvoiceRequest;
-use erp_finance::dto::receivable::CreateCustomerReceiptRequest;
-use erp_finance::dto::receivable::CreateInvoiceRequest;
-use erp_finance::dto::receivable::CreateReceivableAccountRequest;
-use erp_finance::dto::receivable::CustomerReceiptListParams;
-use erp_finance::dto::receivable::InvoiceListParams;
-use erp_finance::dto::receivable::InvoiceView;
-use erp_finance::dto::receivable::PageView;
-use erp_finance::dto::receivable::PostCustomerReceiptRequest;
-use erp_finance::dto::receivable::PostInvoiceRequest;
-use erp_finance::dto::receivable::ReceivableAccountListParams;
-use erp_finance::dto::receivable::ReceivableAccountSummaryView;
-use erp_finance::dto::receivable::SubmitCustomerReceiptRequest;
 use erp_finance::service::receivable::ReceivableService;
 use erp_processes::finance_posting::receivable::ReceivableProcess;
-use erp_read_models::finance::dto::CustomerReceiptView;
-use erp_read_models::finance::dto::ReceivableAccountView;
+use erp_read_models::finance::dto::{CustomerReceiptView, ReceivableAccountView};
 use erp_read_models::finance::receivable::ReceivableReadService;
 
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "客户往来",
@@ -54,9 +41,7 @@ pub async fn receivable_account_list(
     State(state): State<AppState>,
     Query(params): Query<ReceivableAccountListParams>,
 ) -> Result<PageView<ReceivableAccountSummaryView>> {
-    let page = ReceivableReadService::new(state.db())
-        .receivable_account_list(&params)
-        .await?;
+    let page = ReceivableReadService::new(state.db()).receivable_account_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -81,9 +66,7 @@ pub async fn receivable_account_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<ReceivableAccountView> {
-    let view = ReceivableReadService::new(state.db())
-        .receivable_account_detail(&id)
-        .await?;
+    let view = ReceivableReadService::new(state.db()).receivable_account_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -136,9 +119,7 @@ pub async fn customer_receipt_list(
     State(state): State<AppState>,
     Query(params): Query<CustomerReceiptListParams>,
 ) -> Result<PageView<CustomerReceiptView>> {
-    let page = ReceivableReadService::new(state.db())
-        .customer_receipt_list(&params)
-        .await?;
+    let page = ReceivableReadService::new(state.db()).customer_receipt_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -162,9 +143,7 @@ pub async fn customer_receipt_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<CustomerReceiptView> {
-    let view = ReceivableReadService::new(state.db())
-        .customer_receipt_detail(&id)
-        .await?;
+    let view = ReceivableReadService::new(state.db()).customer_receipt_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -337,9 +316,7 @@ pub async fn invoice_list(
     State(state): State<AppState>,
     Query(params): Query<InvoiceListParams>,
 ) -> Result<PageView<InvoiceView>> {
-    let page = ReceivableReadService::new(state.db())
-        .invoice_list(&params)
-        .await?;
+    let page = ReceivableReadService::new(state.db()).invoice_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -487,16 +464,12 @@ pub async fn invoice_red_issue(
 
 #[cfg(test)]
 mod tests {
-    use erp_finance::dto::receivable::CreateInvoiceRequest;
-    use erp_finance::dto::receivable::SubmitCustomerReceiptRequest;
+    use erp_finance::dto::receivable::{CreateInvoiceRequest, SubmitCustomerReceiptRequest};
 
     /// 发票 HTTP 只暴露创建/过账/红冲，不得提交审批或选择定义。
     #[test]
     fn invoice_http_proves_no_approval() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("create_invoice"));
         assert!(production.contains("invoice_create"));
         assert!(production.contains("invoice_detail"));
@@ -516,28 +489,27 @@ mod tests {
         assert!(!invoice_create.contains("submit_"));
         assert!(!invoice_create.contains("start_approval"));
         assert!(!invoice_create.contains("definition_id"));
-        assert!(serde_json::from_value::<CreateInvoiceRequest>(serde_json::json!({
-            "invoice_direction": "sales",
-            "invoice_kind": "blue",
-            "party_id": "p-1",
-            "invoice_no": "001",
-            "invoice_date": "2026-08-06",
-            "gross_amount": "100.00",
-            "net_amount": "88.50",
-            "tax_amount": "11.50",
-            "definition_id": "forged",
-            "assignee": "forged"
-        }))
-        .is_err());
+        assert!(
+            serde_json::from_value::<CreateInvoiceRequest>(serde_json::json!({
+                "invoice_direction": "sales",
+                "invoice_kind": "blue",
+                "party_id": "p-1",
+                "invoice_no": "001",
+                "invoice_date": "2026-08-06",
+                "gross_amount": "100.00",
+                "net_amount": "88.50",
+                "tax_amount": "11.50",
+                "definition_id": "forged",
+                "assignee": "forged"
+            }))
+            .is_err()
+        );
     }
 
     /// 客户回款 HTTP 只走统一提交、撤回与详情，客户端不得选定义或直接过账。
     #[test]
     fn customer_receipt_http_uses_unified_ports() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("submit_customer_receipt"));
         assert!(production.contains("cancel_customer_receipt_approval"));
         assert!(production.contains("reject_client_post"));

@@ -5,14 +5,14 @@ use std::future::Future;
 
 use application_core::AuditActor;
 use erp_identity::{Permission, PermissionSet};
-use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use erp_workflow::DocumentRegistryExt;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use persistence_core::{Executor, NoTransaction};
 
-use super::facts::{apply_object_display, object_policy, WorkbenchObjectFact, WorkbenchObjectFactMap};
+use super::facts::{WorkbenchObjectFact, WorkbenchObjectFactMap, apply_object_display, object_policy};
 use super::{
-    dto, ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemFilter, WorkItemScope,
-    WorkbenchReadService,
+    ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemFilter, WorkItemScope,
+    WorkbenchReadService, dto,
 };
 use crate::errors::{Error, Result};
 
@@ -66,10 +66,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         actor_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<ActorAccess> {
-        let role_ids = self
-            .auth
-            .role_ids_with_executor(account_kind, actor_id, executor)
-            .await?;
+        let role_ids = self.auth.role_ids_with_executor(account_kind, actor_id, executor).await?;
         let permissions = self
             .auth
             .permission_codes(account_kind, actor_id)
@@ -85,12 +82,10 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             .into_iter()
             .collect();
         let manage_permission = Permission::parse(MANAGE_PERMISSION).expect("固定权限合法");
-        let has_manage_permission = permissions
-            .iter()
-            .any(|permission| permission.covers(&manage_permission));
-        let manage_role_ids = self
-            .roles_granting_permission(&role_ids, &manage_permission, has_manage_permission)
-            .await?;
+        let has_manage_permission =
+            permissions.iter().any(|permission| permission.covers(&manage_permission));
+        let manage_role_ids =
+            self.roles_granting_permission(&role_ids, &manage_permission, has_manage_permission).await?;
         let managed_owner_ids = self
             .auth
             .managed_task_owners(
@@ -119,11 +114,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         }
         let mut granting_roles = Vec::new();
         for role_id in role_ids {
-            if self
-                .auth
-                .enforce(&format!("role:{role_id}"), &permission.to_string())
-                .await?
-            {
+            if self.auth.enforce(&format!("role:{role_id}"), &permission.to_string()).await? {
                 granting_roles.push(role_id.clone());
             }
         }
@@ -153,13 +144,13 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             WorkItemScope::Managed => {
                 ensure_managed_access(access)?;
                 filter.managed_owner_ids = access.managed_owner_ids.clone();
-            }
+            },
             WorkItemScope::History => {
                 filter.history_actor_id = Some(actor.id().to_string());
                 if access.can_manage && !access.managed_owner_ids.as_ref().is_some_and(Vec::is_empty) {
                     filter.history_managed_owner_ids = Some(access.managed_owner_ids.clone());
                 }
-            }
+            },
         }
         Ok(filter)
     }
@@ -304,21 +295,17 @@ pub(super) fn required_execution_permissions(
     business_object_type: &str,
 ) -> Option<PermissionSet> {
     if work_item_type == WorkItemType::BusinessException && business_object_type == "SUPPLIER_OFFERING" {
-        return Some(PermissionSet::new([Permission::parse(
-            "supplier_offering:resolve_supply_exception",
-        )
-        .expect("业务异常固定权限必须合法")]));
+        return Some(PermissionSet::new([Permission::parse("supplier_offering:resolve_supply_exception")
+            .expect("业务异常固定权限必须合法")]));
     }
-    work_item_type
-        .required_execution_permissions(business_object_type)
-        .map(|codes| {
-            PermissionSet::new(
-                codes
-                    .iter()
-                    .map(|code| Permission::parse(code).expect("完整执行权限必须合法"))
-                    .collect::<Vec<_>>(),
-            )
-        })
+    work_item_type.required_execution_permissions(business_object_type).map(|codes| {
+        PermissionSet::new(
+            codes
+                .iter()
+                .map(|code| Permission::parse(code).expect("完整执行权限必须合法"))
+                .collect::<Vec<_>>(),
+        )
+    })
 }
 
 /// 判断账号是否覆盖执行任务在目标工作面所需的全部权限。
@@ -368,9 +355,7 @@ pub(super) fn has_object_participation(
     fact: &WorkbenchObjectFact,
 ) -> bool {
     fact.authority.created_by == access.actor_id
-        || access
-            .participant_document_ids
-            .contains(&fact.authority.root_document_id)
+        || access.participant_document_ids.contains(&fact.authority.root_document_id)
 }
 
 pub(super) struct ViewAccess {
@@ -505,8 +490,5 @@ pub(super) fn covers_owner(access: &ActorAccess, owner: Option<&str>) -> bool {
 /// # 错误
 /// 无。
 fn is_w29_fields_closable(item: &dto::WorkItemFields) -> bool {
-    item.work_item_type.is_w29_closable(
-        &item.business_object_type,
-        item.approval_node_execution_id.is_some(),
-    )
+    item.work_item_type.is_w29_closable(&item.business_object_type, item.approval_node_execution_id.is_some())
 }

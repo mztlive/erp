@@ -6,14 +6,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::ReceivableExt;
-use persistence_core::Result;
 
 /// `receivable_account` 集合名。
 pub(crate) const RECEIVABLE_ACCOUNTS: &str = <mongodb::Database as ReceivableExt>::RECEIVABLE_ACCOUNTS;
@@ -51,18 +49,9 @@ pub async fn ensure(db: &Database) -> Result<()> {
         <Database as ReceivableExt>::SALES_INVOICE_REQUESTS,
         vec![
             unique_index("uk_invoice_request_no", doc! {"request_no": 1}),
-            named_index(
-                "idx_invoice_request_account_status",
-                doc! {"receivable_account_id": 1, "status": 1},
-            ),
-            named_index(
-                "idx_invoice_request_sales",
-                doc! {"sales_order_id": 1, "created_at": -1, "id": 1},
-            ),
-            named_index(
-                "idx_invoice_request_customer",
-                doc! {"customer_id": 1, "created_at": -1, "id": 1},
-            ),
+            named_index("idx_invoice_request_account_status", doc! {"receivable_account_id": 1, "status": 1}),
+            named_index("idx_invoice_request_sales", doc! {"sales_order_id": 1, "created_at": -1, "id": 1}),
+            named_index("idx_invoice_request_customer", doc! {"customer_id": 1, "created_at": -1, "id": 1}),
             IndexModel::builder()
                 .keys(doc! {"work_item_id": 1})
                 .options(
@@ -88,27 +77,16 @@ pub async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
 /// 返回 `receivable_account` 的身份约束与往来列表索引。
 fn receivable_account_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_receivable_accounts_sales_order",
-            doc! { "sales_order_id": 1, "account_seq": 1 },
-        ),
-        named_index(
-            "idx_receivable_accounts_aging",
-            doc! { "counterparty_party_id": 1, "status": 1 },
-        ),
-        named_index(
-            "idx_receivable_accounts_customer",
-            doc! { "customer_id": 1, "status": 1 },
-        ),
+        unique_index("uk_receivable_accounts_sales_order", doc! { "sales_order_id": 1, "account_seq": 1 }),
+        named_index("idx_receivable_accounts_aging", doc! { "counterparty_party_id": 1, "status": 1 }),
+        named_index("idx_receivable_accounts_customer", doc! { "customer_id": 1, "status": 1 }),
     ]
 }
 
@@ -126,14 +104,8 @@ fn receivable_entry_indexes() -> Vec<IndexModel> {
                 "source_sequence": 1,
             },
         ),
-        named_index(
-            "idx_receivable_entries_account_due",
-            doc! { "receivable_account_id": 1, "due_date": 1 },
-        ),
-        named_index(
-            "idx_receivable_entries_source",
-            doc! { "source_fact_type": 1, "source_document_id": 1 },
-        ),
+        named_index("idx_receivable_entries_account_due", doc! { "receivable_account_id": 1, "due_date": 1 }),
+        named_index("idx_receivable_entries_source", doc! { "source_fact_type": 1, "source_document_id": 1 }),
     ]
 }
 
@@ -144,10 +116,7 @@ fn receivable_entry_offset_indexes() -> Vec<IndexModel> {
             "uk_receivable_entry_offsets_decrease",
             doc! { "decrease_entry_id": 1, "offset_sequence": 1 },
         ),
-        named_index(
-            "idx_receivable_entry_offsets_increase",
-            doc! { "increase_entry_id": 1 },
-        ),
+        named_index("idx_receivable_entry_offsets_increase", doc! { "increase_entry_id": 1 }),
     ]
 }
 
@@ -159,10 +128,7 @@ fn customer_receipt_indexes() -> Vec<IndexModel> {
             "idx_customer_receipts_pending_entry",
             doc! { "pending_allocations.receivable_entry_id": 1, "deleted_at": 1 },
         ),
-        named_index(
-            "idx_customer_receipts_party_status",
-            doc! { "counterparty_party_id": 1, "status": 1 },
-        ),
+        named_index("idx_customer_receipts_party_status", doc! { "counterparty_party_id": 1, "status": 1 }),
     ]
 }
 
@@ -177,10 +143,7 @@ fn receipt_allocation_indexes() -> Vec<IndexModel> {
             "idx_receipt_allocations_entry_time",
             doc! { "receivable_entry_id": 1, "allocated_at": 1 },
         ),
-        named_index(
-            "idx_receipt_allocations_reverse",
-            doc! { "reverses_allocation_id": 1 },
-        ),
+        named_index("idx_receipt_allocations_reverse", doc! { "reverses_allocation_id": 1 }),
     ]
 }
 
@@ -222,23 +185,14 @@ fn sales_invoice_allocation_indexes() -> Vec<IndexModel> {
             "uk_sales_invoice_allocations_invoice_seq",
             doc! { "invoice_id": 1, "allocation_seq": 1 },
         ),
-        named_index(
-            "idx_sales_invoice_allocations_account",
-            doc! { "receivable_account_id": 1 },
-        ),
-        named_index(
-            "idx_sales_invoice_allocations_reverse",
-            doc! { "reverses_allocation_id": 1 },
-        ),
+        named_index("idx_sales_invoice_allocations_account", doc! { "receivable_account_id": 1 }),
+        named_index("idx_sales_invoice_allocations_reverse", doc! { "reverses_allocation_id": 1 }),
     ]
 }
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -251,8 +205,8 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
-    use mongodb::bson::{doc, Bson};
     use mongodb::IndexModel;
+    use mongodb::bson::{Bson, doc};
 
     use super::{
         customer_receipt_indexes, invoice_indexes, receipt_allocation_indexes, receivable_account_indexes,
@@ -268,29 +222,21 @@ mod tests {
     fn receivable_account_identity_is_unique_and_aging_indexes_exist() {
         let indexes = receivable_account_indexes();
 
-        let identity = indexes
-            .iter()
-            .find(|index| name(index) == Some("uk_receivable_accounts_sales_order"))
-            .unwrap();
+        let identity =
+            indexes.iter().find(|index| name(index) == Some("uk_receivable_accounts_sales_order")).unwrap();
         assert_eq!(identity.keys, doc! { "sales_order_id": 1, "account_seq": 1 });
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
 
-        assert!(indexes
-            .iter()
-            .any(|index| name(index) == Some("idx_receivable_accounts_aging")));
-        assert!(indexes
-            .iter()
-            .any(|index| name(index) == Some("idx_receivable_accounts_customer")));
+        assert!(indexes.iter().any(|index| name(index) == Some("idx_receivable_accounts_aging")));
+        assert!(indexes.iter().any(|index| name(index) == Some("idx_receivable_accounts_customer")));
     }
 
     #[test]
     fn receivable_entry_identity_covers_the_full_business_key() {
         let indexes = receivable_entry_indexes();
 
-        let identity = indexes
-            .iter()
-            .find(|index| name(index) == Some("uk_receivable_entries_identity"))
-            .unwrap();
+        let identity =
+            indexes.iter().find(|index| name(index) == Some("uk_receivable_entries_identity")).unwrap();
         assert_eq!(
             identity.keys,
             doc! {
@@ -312,49 +258,43 @@ mod tests {
                 && index.keys == doc! { "pending_allocations.receivable_entry_id": 1, "deleted_at": 1 }
                 && index.options.as_ref().and_then(|options| options.unique) != Some(true)
         }));
-        assert!(receipt_allocation_indexes()
-            .iter()
-            .any(|index| name(index) == Some("uk_receipt_allocations_receipt_seq")));
+        assert!(
+            receipt_allocation_indexes()
+                .iter()
+                .any(|index| name(index) == Some("uk_receipt_allocations_receipt_seq"))
+        );
         assert!(receipt_allocation_indexes().iter().any(|index| {
             name(index) == Some("idx_receipt_allocations_entry_time")
                 && index.keys == doc! { "receivable_entry_id": 1, "allocated_at": 1 }
         }));
-        assert!(receivable_entry_offset_indexes()
-            .iter()
-            .any(|index| name(index) == Some("uk_receivable_entry_offsets_decrease")));
-        assert!(receivable_entry_offset_indexes()
-            .iter()
-            .any(|index| index.keys == doc! { "increase_entry_id": 1 }));
-        assert!(customer_receipt_indexes()
-            .iter()
-            .any(|index| name(index) == Some("uk_customer_receipts_no")));
+        assert!(
+            receivable_entry_offset_indexes()
+                .iter()
+                .any(|index| name(index) == Some("uk_receivable_entry_offsets_decrease"))
+        );
+        assert!(
+            receivable_entry_offset_indexes()
+                .iter()
+                .any(|index| index.keys == doc! { "increase_entry_id": 1 })
+        );
+        assert!(
+            customer_receipt_indexes().iter().any(|index| name(index) == Some("uk_customer_receipts_no"))
+        );
     }
 
     #[test]
     fn invoice_coded_and_partial_uncoded_uniques_coexist() {
         let indexes = invoice_indexes();
 
-        let coded = indexes
-            .iter()
-            .find(|index| name(index) == Some("uk_invoices_coded"))
-            .unwrap();
-        assert_eq!(
-            coded.keys,
-            doc! { "invoice_direction": 1, "normalized_code": 1, "normalized_no": 1 }
-        );
+        let coded = indexes.iter().find(|index| name(index) == Some("uk_invoices_coded")).unwrap();
+        assert_eq!(coded.keys, doc! { "invoice_direction": 1, "normalized_code": 1, "normalized_no": 1 });
         assert_eq!(coded.options.as_ref().unwrap().unique, Some(true));
 
         let uncoded_options = uncoded_index_options();
         assert_eq!(uncoded_options.name.as_deref(), Some("uk_invoices_uncoded"));
         assert_eq!(uncoded_options.unique, Some(true));
-        assert_eq!(
-            uncoded_options.partial_filter_expression,
-            Some(doc! { "normalized_code": null })
-        );
-        let uncoded = indexes
-            .iter()
-            .find(|index| name(index) == Some("uk_invoices_uncoded"))
-            .unwrap();
+        assert_eq!(uncoded_options.partial_filter_expression, Some(doc! { "normalized_code": null }));
+        let uncoded = indexes.iter().find(|index| name(index) == Some("uk_invoices_uncoded")).unwrap();
         assert_eq!(uncoded.keys, doc! { "invoice_direction": 1, "normalized_no": 1 });
     }
 
@@ -367,9 +307,7 @@ mod tests {
                 && index.keys == doc! { "invoice_id": 1, "allocation_seq": 1 }
                 && index.options.as_ref().and_then(|o| o.unique) == Some(true)
         }));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "receivable_account_id": 1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "receivable_account_id": 1 }));
         assert!(matches!(
             indexes
                 .iter()

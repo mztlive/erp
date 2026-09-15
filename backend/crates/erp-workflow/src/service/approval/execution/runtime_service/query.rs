@@ -488,7 +488,7 @@ struct ResumeVersionHints {
 mod runtime_recovery_options_view_tests {
     use serde_json::json;
 
-    use super::{RuntimeRecoveryOptionsView, RuntimeRecoveryAction};
+    use super::{RuntimeRecoveryAction, RuntimeRecoveryOptionsView};
 
     /// 旧恢复选项载荷缺版本提示时须兼容反序列化为空提示。
     #[test]
@@ -518,8 +518,7 @@ mod runtime_recovery_options_view_tests {
             expected_closed_task_version: None,
         };
         let value = serde_json::to_value(&view).expect("序列化");
-        let round_trip: RuntimeRecoveryOptionsView =
-            serde_json::from_value(value).expect("反序列化");
+        let round_trip: RuntimeRecoveryOptionsView = serde_json::from_value(value).expect("反序列化");
         assert_eq!(round_trip, view);
     }
 }

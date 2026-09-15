@@ -8,11 +8,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{SkuAttributeId, SkuAttributeValueId, SkuRevisionAttributeValueId, SkuRevisionId};
 use erp_core::validation::normalize_optional_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 规范文本属性值最大长度。
 const TEXT_VALUE_MAX_LEN: usize = 512;
@@ -70,7 +69,7 @@ impl SkuRevisionAttributeValue {
         match (&data.sku_attribute_value_id, &normalized_text_value) {
             (Some(_), Some(_)) => return Err(Error::from("枚举值与文本值只能使用一种")),
             (None, None) => return Err(Error::from("枚举值与文本值必须提供一种")),
-            _ => {}
+            _ => {},
         }
 
         Ok(Self {
@@ -86,8 +85,9 @@ impl SkuRevisionAttributeValue {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::ids::SkuRevisionId;
+
+    use super::*;
 
     fn data() -> SkuRevisionAttributeValueData {
         SkuRevisionAttributeValueData {
@@ -104,10 +104,7 @@ mod tests {
     fn new_accepts_enum_value() {
         let row = SkuRevisionAttributeValue::new(SkuRevisionAttributeValueId::new("row-1"), data()).unwrap();
 
-        assert_eq!(
-            row.sku_attribute_value_id,
-            Some(SkuAttributeValueId::new("val-1"))
-        );
+        assert_eq!(row.sku_attribute_value_id, Some(SkuAttributeValueId::new("val-1")));
         assert!(row.normalized_text_value.is_none());
         assert_eq!(row.identity_position, 0);
     }

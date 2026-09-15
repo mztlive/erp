@@ -1,18 +1,18 @@
+use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
+use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, NewNodeExecution, ParticipantId, Timestamp};
+use erp_core::common::time::Instant;
+use erp_inventory::{
+    AdjustmentReasonType, ExpectedStockBalanceVersion, MovementDirection, StockAdjustmentLineUpdateInput,
+    SubmitStockAdjustmentRequest,
+};
+use erp_workflow::entity::approval_integration::ApprovalNotificationEventKind;
+use erp_workflow::service::approval::execution::idempotency::{ReceiptBranch, legacy_payload_digest};
+
 use super::mapping::{
     is_supported_start_receipt_identity, list_projection_from_execution, stock_adjustment_start_digest,
     stock_adjustment_start_identity, stock_adjustment_start_scopes,
 };
 use super::persist::validate_start_notification_identities;
-use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
-use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, NewNodeExecution, ParticipantId, Timestamp};
-use erp_core::common::time::Instant;
-use erp_inventory::{AdjustmentReasonType, MovementDirection};
-use erp_workflow::entity::approval_integration::ApprovalNotificationEventKind;
-use erp_workflow::service::approval::execution::idempotency::{legacy_payload_digest, ReceiptBranch};
-
-use erp_inventory::{
-    ExpectedStockBalanceVersion, StockAdjustmentLineUpdateInput, SubmitStockAdjustmentRequest,
-};
 
 fn assert_start_write_order(source: &str, expected_paths: usize, guard_marker: &str) {
     let production = source.split("#[cfg(test)]").next().expect("生产代码必须存在");
@@ -31,10 +31,7 @@ fn assert_start_write_order(source: &str, expected_paths: usize, guard_marker: &
         expected_paths,
         "每条 Fresh 启动路径必须使用 receipt 已仲裁的 BPM 写入口"
     );
-    assert!(
-        !production.contains(".create_bpm_runtime("),
-        "业务启动路径不得回退到 receipt-last 仓储入口"
-    );
+    assert!(!production.contains(".create_bpm_runtime("), "业务启动路径不得回退到 receipt-last 仓储入口");
 
     let mut cursor = 0;
     for _ in 0..expected_paths {
@@ -90,14 +87,8 @@ fn submit_request() -> SubmitStockAdjustmentRequest {
             },
         ],
         balances: vec![
-            ExpectedStockBalanceVersion {
-                balance_id: "balance-b".to_string(),
-                expected_version: 11,
-            },
-            ExpectedStockBalanceVersion {
-                balance_id: "balance-a".to_string(),
-                expected_version: 9,
-            },
+            ExpectedStockBalanceVersion { balance_id: "balance-b".to_string(), expected_version: 11 },
+            ExpectedStockBalanceVersion { balance_id: "balance-a".to_string(), expected_version: 9 },
         ],
         note: " 盘点 NULL\u{1f}备注 ".to_string(),
         occurred_at: 42,
@@ -123,21 +114,13 @@ fn all_process_required_start_paths_are_receipt_first_and_guarded() {
         1,
         ".mark_approval_started(",
     );
-    assert_start_write_order(
-        include_str!("../sales_change/start_approval.rs"),
-        1,
-        ".mark_approval_started(",
-    );
+    assert_start_write_order(include_str!("../sales_change/start_approval.rs"), 1, ".mark_approval_started(");
     assert_start_write_order(
         include_str!("../procure_to_pay/start_approval.rs"),
         1,
         ".mark_loaded_approval_started(",
     );
-    assert_start_write_order(
-        include_str!("../procure_to_pay/change_start.rs"),
-        1,
-        ".mark_approval_started(",
-    );
+    assert_start_write_order(include_str!("../procure_to_pay/change_start.rs"), 1, ".mark_approval_started(");
     assert_start_write_order(
         include_str!("../finance_posting/receivable/start_approval.rs"),
         1,
@@ -259,10 +242,7 @@ fn stock_adjustment_start_digest_covers_all_signed_fields() {
     for value in variants {
         assert_ne!(stock_adjustment_start_digest(&value, "actor").unwrap(), expected);
     }
-    assert_ne!(
-        stock_adjustment_start_digest(&baseline, "other-actor").unwrap(),
-        expected
-    );
+    assert_ne!(stock_adjustment_start_digest(&baseline, "other-actor").unwrap(), expected);
 }
 
 /// V3、库存 V1 与旧 generic 仅允许按各自原 scope/digest 成对回放。
@@ -277,27 +257,18 @@ fn stock_start_identity_accepts_only_exact_generation_pairs() {
         Timestamp::from_unix_secs(10).unwrap(),
     )
     .unwrap();
-    assert!(matches!(
-        identity.classify(Some(&current)),
-        ReceiptBranch::SamePayload(_)
-    ));
+    assert!(matches!(identity.classify(Some(&current)), ReceiptBranch::SamePayload(_)));
 
     let scopes = stock_adjustment_start_scopes("adj-1", req.expected_subject_version).unwrap();
     let mut stock_v1 = current.clone();
     stock_v1.scope_id = scopes[1].clone();
     stock_v1.payload_digest = stock_adjustment_start_digest(&req, "actor").unwrap();
-    assert!(matches!(
-        identity.classify(Some(&stock_v1)),
-        ReceiptBranch::SamePayload(_)
-    ));
+    assert!(matches!(identity.classify(Some(&stock_v1)), ReceiptBranch::SamePayload(_)));
 
     let mut generic = current.clone();
     generic.scope_id = scopes[1].clone();
     generic.payload_digest = legacy_payload_digest("def-1\u{1f}3\u{1f}2\u{1f}actor");
-    assert!(matches!(
-        identity.classify(Some(&generic)),
-        ReceiptBranch::SamePayload(_)
-    ));
+    assert!(matches!(identity.classify(Some(&generic)), ReceiptBranch::SamePayload(_)));
 
     stock_v1.scope_id = scopes[0].clone();
     assert_eq!(identity.classify(Some(&stock_v1)), ReceiptBranch::PayloadConflict);
@@ -310,68 +281,33 @@ fn stock_start_identity_accepts_only_exact_generation_pairs() {
 fn submit_result_receipt_digest_shape_is_fail_closed() {
     let digest = "06ca7d6d37aac050a5168f4aa2815e2e40b2c2569530f19ba7e555fd5256683b";
     let scopes = vec!["v3-scope".to_string(), "legacy-scope".to_string()];
-    assert!(is_supported_start_receipt_identity(
-        "v3-scope",
-        &format!("v3:{digest}"),
-        &scopes,
-    ));
-    assert!(is_supported_start_receipt_identity(
-        "legacy-scope",
-        &format!("v1:{digest}"),
-        &scopes,
-    ));
-    assert!(is_supported_start_receipt_identity(
-        "legacy-scope",
-        digest,
-        &scopes,
-    ));
-    assert!(!is_supported_start_receipt_identity(
-        "v3-scope",
-        &format!("v1:{digest}"),
-        &scopes,
-    ));
-    assert!(!is_supported_start_receipt_identity(
-        "legacy-scope",
-        &format!("v3:{digest}"),
-        &scopes,
-    ));
-    assert!(!is_supported_start_receipt_identity(
-        "other-scope",
-        digest,
-        &scopes,
-    ));
-    assert!(!is_supported_start_receipt_identity(
-        "v3-scope",
-        &format!("v3:{}", "G".repeat(64)),
-        &scopes,
-    ));
+    assert!(is_supported_start_receipt_identity("v3-scope", &format!("v3:{digest}"), &scopes,));
+    assert!(is_supported_start_receipt_identity("legacy-scope", &format!("v1:{digest}"), &scopes,));
+    assert!(is_supported_start_receipt_identity("legacy-scope", digest, &scopes,));
+    assert!(!is_supported_start_receipt_identity("v3-scope", &format!("v1:{digest}"), &scopes,));
+    assert!(!is_supported_start_receipt_identity("legacy-scope", &format!("v3:{digest}"), &scopes,));
+    assert!(!is_supported_start_receipt_identity("other-scope", digest, &scopes,));
+    assert!(!is_supported_start_receipt_identity("v3-scope", &format!("v3:{}", "G".repeat(64)), &scopes,));
 }
 
 /// 启动计划只允许精确一条 Started 和一条 Entered 通知。
 #[test]
 fn start_notifications_reject_missing_duplicate_or_extra_intents() {
     let valid = vec![
-        (
-            ApprovalNotificationEventKind::Started,
-            "started:instance-1".to_string(),
-        ),
-        (
-            ApprovalNotificationEventKind::Entered,
-            "entered:execution-1".to_string(),
-        ),
+        (ApprovalNotificationEventKind::Started, "started:instance-1".to_string()),
+        (ApprovalNotificationEventKind::Entered, "entered:execution-1".to_string()),
     ];
     assert!(validate_start_notification_identities(&valid, "instance-1", "execution-1").is_ok());
     assert!(validate_start_notification_identities(&valid[..1], "instance-1", "execution-1").is_err());
-    assert!(validate_start_notification_identities(
-        &[valid[0].clone(), valid[0].clone()],
-        "instance-1",
-        "execution-1"
-    )
-    .is_err());
+    assert!(
+        validate_start_notification_identities(
+            &[valid[0].clone(), valid[0].clone()],
+            "instance-1",
+            "execution-1"
+        )
+        .is_err()
+    );
     let mut extra = valid.clone();
-    extra.push((
-        ApprovalNotificationEventKind::Completed,
-        "completed:instance-1".to_string(),
-    ));
+    extra.push((ApprovalNotificationEventKind::Completed, "completed:instance-1".to_string()));
     assert!(validate_start_notification_identities(&extra, "instance-1", "execution-1").is_err());
 }

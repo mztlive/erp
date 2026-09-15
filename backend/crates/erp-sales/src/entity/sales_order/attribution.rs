@@ -37,17 +37,10 @@ impl SalesAttribution {
             .is_some_and(|node| node.id == org && node.name == self.attribution_org_unit_name);
         let valid_names = !self.attribution_user_name.trim().is_empty()
             && !self.attribution_org_unit_name.trim().is_empty()
-            && self
-                .org_path
-                .iter()
-                .all(|node| !node.id.trim().is_empty() && !node.name.trim().is_empty());
-        let unique = self
-            .org_path
-            .iter()
-            .map(|node| &node.id)
-            .collect::<std::collections::BTreeSet<_>>()
-            .len()
-            == self.org_path.len();
+            && self.org_path.iter().all(|node| !node.id.trim().is_empty() && !node.name.trim().is_empty());
+        let unique =
+            self.org_path.iter().map(|node| &node.id).collect::<std::collections::BTreeSet<_>>().len()
+                == self.org_path.len();
         if !identities_match
             || !path_matches
             || !valid_names
@@ -55,9 +48,7 @@ impl SalesAttribution {
             || self.attribution_version != 1
             || self.organization_version == 0
         {
-            return Err(Error::from(
-                "销售首次生效必须具备完整且匹配的人员和业务组织归属快照",
-            ));
+            return Err(Error::from("销售首次生效必须具备完整且匹配的人员和业务组织归属快照"));
         }
         Ok(())
     }

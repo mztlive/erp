@@ -13,14 +13,12 @@
 //! - 行级约束 `(header_id, line_no)` 全局唯一：行不设业务软删除；
 //! - 其余为列表/详情查询索引。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::FulfillmentExt;
-use persistence_core::Result;
 
 /// `purchase_receipt` 集合名。
 pub(crate) const PURCHASE_RECEIPTS: &str = <mongodb::Database as FulfillmentExt>::PURCHASE_RECEIPTS;
@@ -65,9 +63,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -94,29 +90,20 @@ fn purchase_receipt_line_indexes() -> Vec<IndexModel> {
 fn delivery_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_deliveries_delivery_no", doc! { "delivery_no": 1 }),
-        named_index(
-            "idx_deliveries_sales_order_status",
-            doc! { "sales_order_id": 1, "status": 1 },
-        ),
+        named_index("idx_deliveries_sales_order_status", doc! { "sales_order_id": 1, "status": 1 }),
         named_index("idx_deliveries_tracking_no", doc! { "tracking_no": 1 }),
     ]
 }
 
 /// 返回 `delivery_line` 的行级唯一约束（§6.7）。
 fn delivery_line_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_delivery_lines_header_line",
-        doc! { "delivery_id": 1, "line_no": 1 },
-    )]
+    vec![unique_index("uk_delivery_lines_header_line", doc! { "delivery_id": 1, "line_no": 1 })]
 }
 
 /// 返回 `electronic_delivery` 的身份约束和明细履约查询索引（§6.7）。
 fn electronic_delivery_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_electronic_deliveries_fulfillment_no",
-            doc! { "fulfillment_no": 1 },
-        ),
+        unique_index("uk_electronic_deliveries_fulfillment_no", doc! { "fulfillment_no": 1 }),
         named_index(
             "idx_electronic_deliveries_line_occurred",
             doc! { "sales_order_line_id": 1, "occurred_at": 1 },
@@ -127,10 +114,7 @@ fn electronic_delivery_indexes() -> Vec<IndexModel> {
 /// 返回 `service_fulfillment` 的身份约束和明细履约查询索引（§6.7）。
 fn service_fulfillment_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_service_fulfillments_fulfillment_no",
-            doc! { "fulfillment_no": 1 },
-        ),
+        unique_index("uk_service_fulfillments_fulfillment_no", doc! { "fulfillment_no": 1 }),
         named_index(
             "idx_service_fulfillments_line_occurred",
             doc! { "sales_order_line_id": 1, "occurred_at": 1 },
@@ -141,10 +125,7 @@ fn service_fulfillment_indexes() -> Vec<IndexModel> {
 /// 返回 `customer_acceptance` 的身份约束和销售维度查询索引（§6.7）。
 fn customer_acceptance_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_customer_acceptances_acceptance_no",
-            doc! { "acceptance_no": 1 },
-        ),
+        unique_index("uk_customer_acceptances_acceptance_no", doc! { "acceptance_no": 1 }),
         named_index(
             "idx_customer_acceptances_sales_order_accepted",
             doc! { "sales_order_id": 1, "accepted_at": 1 },
@@ -179,10 +160,7 @@ fn allocation_indexes() -> Vec<IndexModel> {
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -214,19 +192,15 @@ mod tests {
     #[test]
     fn purchase_receipt_indexes_cover_identity_and_po_dimension() {
         let indexes = purchase_receipt_indexes();
-        assert_eq!(
-            unique_keys(&indexes, "uk_purchase_receipts_receipt_no"),
-            doc! { "receipt_no": 1 }
+        assert_eq!(unique_keys(&indexes, "uk_purchase_receipts_receipt_no"), doc! { "receipt_no": 1 });
+        assert!(
+            indexes
+                .iter()
+                .any(|index| { index.keys == doc! { "purchase_order_id": 1, "status": 1, "posted_at": 1 } })
         );
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "purchase_order_id": 1, "status": 1, "posted_at": 1 } }));
-        assert!(purchase_receipt_indexes().iter().all(|index| index
-            .options
-            .as_ref()
-            .unwrap()
-            .name
-            .is_some()));
+        assert!(
+            purchase_receipt_indexes().iter().all(|index| index.options.as_ref().unwrap().name.is_some())
+        );
     }
 
     #[test]
@@ -263,29 +237,16 @@ mod tests {
     #[test]
     fn delivery_indexes_cover_sales_order_and_tracking() {
         let indexes = delivery_indexes();
-        assert_eq!(
-            unique_keys(&indexes, "uk_deliveries_delivery_no"),
-            doc! { "delivery_no": 1 }
-        );
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "sales_order_id": 1, "status": 1 } }));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "tracking_no": 1 }));
+        assert_eq!(unique_keys(&indexes, "uk_deliveries_delivery_no"), doc! { "delivery_no": 1 });
+        assert!(indexes.iter().any(|index| { index.keys == doc! { "sales_order_id": 1, "status": 1 } }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "tracking_no": 1 }));
     }
 
     #[test]
     fn fact_indexes_cover_fulfillment_identity_and_line_timeline() {
         let pairs = [
-            (
-                electronic_delivery_indexes(),
-                "uk_electronic_deliveries_fulfillment_no",
-            ),
-            (
-                service_fulfillment_indexes(),
-                "uk_service_fulfillments_fulfillment_no",
-            ),
+            (electronic_delivery_indexes(), "uk_electronic_deliveries_fulfillment_no"),
+            (service_fulfillment_indexes(), "uk_service_fulfillments_fulfillment_no"),
         ];
         for (indexes, name) in pairs {
             let identity = indexes
@@ -295,9 +256,9 @@ mod tests {
                 })
                 .unwrap();
             assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
-            assert!(indexes
-                .iter()
-                .any(|index| index.keys == doc! { "sales_order_line_id": 1, "occurred_at": 1 }));
+            assert!(
+                indexes.iter().any(|index| index.keys == doc! { "sales_order_line_id": 1, "occurred_at": 1 })
+            );
         }
     }
 
@@ -308,16 +269,14 @@ mod tests {
             unique_keys(&indexes, "uk_customer_acceptances_acceptance_no"),
             doc! { "acceptance_no": 1 }
         );
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "sales_order_id": 1, "accepted_at": 1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "sales_order_id": 1, "accepted_at": 1 }));
 
         let allocation = allocation_indexes();
-        assert!(allocation
-            .iter()
-            .any(|index| { index.keys == doc! { "customer_acceptance_line_id": 1 } }));
-        assert!(allocation
-            .iter()
-            .any(|index| { index.keys == doc! { "fulfillment_fact_type": 1, "fulfillment_line_id": 1 } }));
+        assert!(allocation.iter().any(|index| { index.keys == doc! { "customer_acceptance_line_id": 1 } }));
+        assert!(
+            allocation
+                .iter()
+                .any(|index| { index.keys == doc! { "fulfillment_fact_type": 1, "fulfillment_line_id": 1 } })
+        );
     }
 }

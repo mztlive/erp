@@ -1,5 +1,13 @@
 //! 客户退款的财务核销回冲、减少分录和抵销写入；不改变原回款状态。
-use super::receipt_reversal::{load_receivable_offset_facts, OffsetFacts};
+use async_trait::async_trait;
+use erp_core::common::time::Instant;
+use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableEntryId, ReceivableEntryOffsetId};
+use erp_core::money::Amount;
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::Executor;
+
+use super::receipt_reversal::{OffsetFacts, load_receivable_offset_facts};
 use crate::entity::receivable::{
     AllocationAction as ReceivableAllocationAction, CustomerReceipt, CustomerReceiptStatus,
     EntryDirection as ReceivableEntryDirection, ReceiptAllocation, ReceiptAllocationData,
@@ -8,13 +16,6 @@ use crate::entity::receivable::{
 };
 use crate::repository::ReceivableExt;
 use crate::{Error, Result};
-use async_trait::async_trait;
-use erp_core::common::time::Instant;
-use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableEntryId, ReceivableEntryOffsetId};
-use erp_core::money::Amount;
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::Executor;
 /// 客户退款实际消费的财务仓储边界；生产算法保持全部事实构造时点。
 #[async_trait]
 trait RefundStore: Send {
@@ -62,12 +63,8 @@ impl RefundStore for MongoRefundStore<'_> {
         chunks: &[ReceiptReverseChunk],
         ex: &mut dyn Executor,
     ) -> Result<OffsetFacts<ReceivableEntry, ReceivableAccount>> {
-        load_receivable_offset_facts(
-            self.0,
-            chunks.iter().map(|chunk| chunk.increase_entry_id.clone()),
-            ex,
-        )
-        .await
+        load_receivable_offset_facts(self.0, chunks.iter().map(|chunk| chunk.increase_entry_id.clone()), ex)
+            .await
     }
     async fn revert_settlement(
         &mut self,

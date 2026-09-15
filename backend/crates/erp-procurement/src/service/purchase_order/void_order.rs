@@ -1,9 +1,10 @@
 //! 采购草稿作废的目标约束、当前提交校验和状态持久化。
 
+use persistence_core::Executor;
+
 use crate::entity::purchase_order::{PurchaseOrder, PurchaseOrderStatus, SubmissionStatus};
 use crate::repository::PurchaseOrderExt;
 use crate::{Error, Result};
-use persistence_core::Executor;
 
 /// 按 ID 加载待作废采购单。
 ///
@@ -59,19 +60,13 @@ pub fn ensure_void_target(
         return Err(Error::NotFound("采购单不存在或不可作废".to_string()));
     }
     if status == PurchaseOrderStatus::Voided {
-        return Err(Error::ConflictError(
-            "采购单已作废，当前请求没有匹配的作废收据".to_string(),
-        ));
+        return Err(Error::ConflictError("采购单已作废，当前请求没有匹配的作废收据".to_string()));
     }
     if current_version != expected_lock_version {
-        return Err(Error::ConflictError(
-            "数据已被其他请求修改，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
     }
     if status != PurchaseOrderStatus::Draft {
-        return Err(Error::BusinessLogicError(
-            "只有草稿状态且没有下游事实的采购单可以作废".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("只有草稿状态且没有下游事实的采购单可以作废".to_string()));
     }
     Ok(())
 }
@@ -106,9 +101,7 @@ pub async fn ensure_current_submission_is_draft(
         .await?
         .ok_or_else(|| Error::NotFound("采购草稿提交不存在".to_string()))?;
     if submission.status != SubmissionStatus::Draft {
-        return Err(Error::BusinessLogicError(
-            "采购提交已冻结，不能直接作废采购单".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("采购提交已冻结，不能直接作废采购单".to_string()));
     }
     Ok(())
 }
@@ -126,16 +119,14 @@ pub async fn persist_voided_order(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    order
-        .transition(PurchaseOrderStatus::Voided, actor_id)
-        .map_err(Error::Logic)?;
+    order.transition(PurchaseOrderStatus::Voided, actor_id).map_err(Error::Logic)?;
     db.purchase_orders().update(order, executor).await?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_void_target, PurchaseOrderStatus};
+    use super::{PurchaseOrderStatus, ensure_void_target};
     use crate::Error;
 
     /// 验证没有匹配收据的已作废采购单不会被标记为任意请求回放。

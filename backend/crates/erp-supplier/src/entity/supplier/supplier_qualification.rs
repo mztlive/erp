@@ -6,16 +6,14 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::stable::StableBase;
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::BusinessDate;
 use erp_core::field_update::FieldUpdate;
+pub use erp_core::ids::{FileAssetId, SupplierAccountId, SupplierQualificationId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
-
-pub use erp_core::ids::{FileAssetId, SupplierAccountId, SupplierQualificationId};
+use serde::{Deserialize, Serialize};
 
 /// 证书编号最大长度。
 const CERTIFICATE_NO_MAX_LEN: usize = 128;
@@ -311,8 +309,7 @@ impl SupplierQualification {
             "证书编号过长",
         )?;
         let issuer = normalize_optional_text(data.issuer, "发证机构", ISSUER_MAX_LEN)?;
-        data.qualification_type
-            .ensure_validity_window(data.valid_from, data.valid_to)?;
+        data.qualification_type.ensure_validity_window(data.valid_from, data.valid_to)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -375,8 +372,7 @@ impl SupplierQualification {
     ///
     /// 返回合同起止日期是否完整；未知日期不会按登记日补齐。
     pub fn validity_verified(&self) -> bool {
-        self.qualification_type
-            .validity_verified(self.valid_from, self.valid_to)
+        self.qualification_type.validity_verified(self.valid_from, self.valid_to)
     }
 
     /// 按业务日判断资质是否可用。
@@ -462,11 +458,11 @@ impl SupplierQualification {
     /// 当机构名称超长时返回错误。
     fn apply_issuer(&mut self, update: FieldUpdate<String>) -> Result<()> {
         match update {
-            FieldUpdate::Unchanged => {}
+            FieldUpdate::Unchanged => {},
             FieldUpdate::Clear => self.issuer = None,
             FieldUpdate::Set(value) => {
                 self.issuer = normalize_optional_text(Some(value), "发证机构", ISSUER_MAX_LEN)?
-            }
+            },
         }
         Ok(())
     }
@@ -499,8 +495,7 @@ impl SupplierQualification {
             FieldUpdate::Clear => None,
             FieldUpdate::Set(value) => Some(value),
         };
-        self.qualification_type
-            .ensure_validity_window(next_valid_from, next_valid_to)?;
+        self.qualification_type.ensure_validity_window(next_valid_from, next_valid_to)?;
         self.valid_from = next_valid_from;
         self.valid_to = next_valid_to;
         Ok(())
@@ -571,14 +566,15 @@ pub fn qualification_identity_key(qualification_type: QualificationType, certifi
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        QualificationAttachmentSensitivity, QualificationStatus, QualificationType, SupplierQualification,
-        SupplierQualificationData, SupplierQualificationUpdate,
-    };
     use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
     use erp_core::common::time::BusinessDate;
     use erp_core::field_update::FieldUpdate;
     use erp_core::ids::{FileAssetId, SupplierAccountId, SupplierQualificationId};
+
+    use super::{
+        QualificationAttachmentSensitivity, QualificationStatus, QualificationType, SupplierQualification,
+        SupplierQualificationData, SupplierQualificationUpdate,
+    };
 
     fn qualification_data() -> SupplierQualificationData {
         SupplierQualificationData {
@@ -612,16 +608,10 @@ mod tests {
     /// 失败路径：编号为空/超长、机构超长、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank = SupplierQualificationData {
-            certificate_no: "   ".to_string(),
-            ..qualification_data()
-        };
+        let blank = SupplierQualificationData { certificate_no: "   ".to_string(), ..qualification_data() };
         assert!(SupplierQualification::new(SupplierQualificationId::new("q"), blank, "admin-1").is_err());
 
-        let overlong = SupplierQualificationData {
-            certificate_no: "x".repeat(129),
-            ..qualification_data()
-        };
+        let overlong = SupplierQualificationData { certificate_no: "x".repeat(129), ..qualification_data() };
         assert!(SupplierQualification::new(SupplierQualificationId::new("q"), overlong, "admin-1").is_err());
 
         let reversed = SupplierQualificationData {
@@ -646,10 +636,7 @@ mod tests {
             (QualificationStatus::Disabled, QualificationStatus::Expired),
         ];
         for (from, to) in forbidden {
-            assert!(
-                ensure_transition(from, to).is_err(),
-                "{from:?} → {to:?} 应为非法迁移"
-            );
+            assert!(ensure_transition(from, to).is_err(), "{from:?} → {to:?} 应为非法迁移");
         }
     }
 
@@ -737,16 +724,26 @@ mod tests {
     /// 附件敏感级别由资质类型决定，法人身份证要求高敏感。
     #[test]
     fn attachment_sensitivity_is_qualification_specific() {
-        assert!(QualificationType::Contract
-            .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::Sensitive));
-        assert!(QualificationType::Contract
-            .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::HighlySensitive));
-        assert!(!QualificationType::Contract
-            .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::General));
-        assert!(!QualificationType::LegalPersonId
-            .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::Sensitive));
-        assert!(QualificationType::LegalPersonId
-            .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::HighlySensitive));
+        assert!(
+            QualificationType::Contract
+                .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::Sensitive)
+        );
+        assert!(
+            QualificationType::Contract
+                .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::HighlySensitive)
+        );
+        assert!(
+            !QualificationType::Contract
+                .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::General)
+        );
+        assert!(
+            !QualificationType::LegalPersonId
+                .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::Sensitive)
+        );
+        assert!(
+            QualificationType::LegalPersonId
+                .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::HighlySensitive)
+        );
     }
 
     /// 稳定身份与可变字段比较统一执行规范化。
@@ -801,10 +798,7 @@ mod tests {
         )
         .unwrap();
         let rev = qualification
-            .snapshot_revision(
-                erp_core::ids::SupplierQualificationRevisionId::new("qual-rev-snap"),
-                7,
-            )
+            .snapshot_revision(erp_core::ids::SupplierQualificationRevisionId::new("qual-rev-snap"), 7)
             .unwrap();
         assert_eq!(rev.supplier_id, qualification.supplier_id);
         assert_eq!(rev.qualification_type, qualification.qualification_type);
@@ -831,10 +825,7 @@ mod tests {
         let overflow = RevisionBase::next_revision_no(Some(u32::MAX));
         assert!(overflow.is_err());
         let rev = qualification
-            .snapshot_revision(
-                erp_core::ids::SupplierQualificationRevisionId::new("qual-rev-overflow"),
-                1,
-            )
+            .snapshot_revision(erp_core::ids::SupplierQualificationRevisionId::new("qual-rev-overflow"), 1)
             .unwrap();
         assert_eq!(rev.revision.revision_no, 1);
     }
@@ -855,16 +846,10 @@ mod tests {
     #[test]
     fn unknown_contract_dates_are_preserved_and_cannot_qualify_business() {
         let as_of = BusinessDate::from_ymd(2026, 9, 10).unwrap();
-        for (start, end) in [
-            (None, None),
-            (None, Some(BusinessDate::from_ymd(2025, 1, 1).unwrap())),
-            (Some(as_of), None),
-        ] {
-            let data = SupplierQualificationData {
-                valid_from: start,
-                valid_to: end,
-                ..qualification_data()
-            };
+        for (start, end) in
+            [(None, None), (None, Some(BusinessDate::from_ymd(2025, 1, 1).unwrap())), (Some(as_of), None)]
+        {
+            let data = SupplierQualificationData { valid_from: start, valid_to: end, ..qualification_data() };
             let contract =
                 SupplierQualification::new(SupplierQualificationId::new("unknown"), data, "actor").unwrap();
             assert_eq!(contract.valid_from, start);
@@ -906,10 +891,7 @@ mod tests {
         assert!(contract.is_valid_on(on_date));
         contract
             .update(
-                SupplierQualificationUpdate {
-                    valid_from: FieldUpdate::Clear,
-                    ..Default::default()
-                },
+                SupplierQualificationUpdate { valid_from: FieldUpdate::Clear, ..Default::default() },
                 "actor",
             )
             .unwrap();
@@ -931,18 +913,12 @@ mod tests {
     fn linked_contract_gate_uses_verified_current_dates_and_preserves_missing_data_policy() {
         use crate::entity::supplier::eligibility::ensure_linked_contracts_qualified;
         let on_date = BusinessDate::from_ymd(2026, 6, 1).unwrap();
-        let valid = SupplierQualification::new(
-            SupplierQualificationId::new("valid"),
-            qualification_data(),
-            "actor",
-        )
-        .unwrap();
+        let valid =
+            SupplierQualification::new(SupplierQualificationId::new("valid"), qualification_data(), "actor")
+                .unwrap();
         let unknown = SupplierQualification::new(
             SupplierQualificationId::new("unknown"),
-            SupplierQualificationData {
-                valid_from: None,
-                ..qualification_data()
-            },
+            SupplierQualificationData { valid_from: None, ..qualification_data() },
             "actor",
         )
         .unwrap();

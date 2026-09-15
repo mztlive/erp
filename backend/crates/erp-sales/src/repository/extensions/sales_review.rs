@@ -3,12 +3,12 @@
 //! 仅保留销售变更单与变更提交集合。旧采购确认、低毛利确认、卡券审批记录与
 //! 变更复核集合已删除。
 
-use crate::repository::owned::{
-    SalesChangeOrderRepository, SalesChangeSubmissionLineRepository, SalesChangeSubmissionRepository,
-};
 use mongodb::Database;
 
 use super::super::sales_review::{SalesChangeOrderFilter, SalesReviewRepository};
+use crate::repository::owned::{
+    SalesChangeOrderRepository, SalesChangeSubmissionLineRepository, SalesChangeSubmissionRepository,
+};
 
 /// 域 D14 仓储访问器。
 pub trait SalesReviewExt {

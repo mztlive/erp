@@ -5,15 +5,15 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use super::status::EnableStatus;
-use super::warehouse_revision::WarehouseRevision;
 use erp_core::common::stable::StableBase;
 use erp_core::common::state::ensure_transition;
 use erp_core::ids::WarehouseId;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use super::status::EnableStatus;
+use super::warehouse_revision::WarehouseRevision;
 
 /// 仓库代码最大长度。
 const WAREHOUSE_CODE_MAX_LEN: usize = 64;
@@ -210,7 +210,7 @@ impl Warehouse {
                 WarehouseFulfillmentOperation::Receipt => "目标仓库未配置入库经办人，请先完成仓库责任配置",
                 WarehouseFulfillmentOperation::WarehouseShip => {
                     "目标仓库未配置仓发经办人，请先完成仓库责任配置"
-                }
+                },
             })
         })
     }
@@ -223,11 +223,12 @@ fn normalize_handler_user_id(value: Option<String>) -> Result<Option<String>> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::warehouse_revision::{SensitiveText, WarehouseRevisionData};
-    use super::*;
     use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::{WarehouseId, WarehouseRevisionId};
+
+    use super::super::warehouse_revision::{SensitiveText, WarehouseRevisionData};
+    use super::*;
 
     fn data() -> WarehouseData {
         WarehouseData {
@@ -270,16 +271,10 @@ mod tests {
     /// 失败路径：必填空与超长各一条。
     #[test]
     fn new_rejects_empty_and_overlong_code() {
-        let empty = WarehouseData {
-            warehouse_code: "  ".to_string(),
-            ..data()
-        };
+        let empty = WarehouseData { warehouse_code: "  ".to_string(), ..data() };
         assert!(Warehouse::new(WarehouseId::new("wh-1"), empty, "admin-1").is_err());
 
-        let overlong = WarehouseData {
-            warehouse_code: "w".repeat(65),
-            ..data()
-        };
+        let overlong = WarehouseData { warehouse_code: "w".repeat(65), ..data() };
         assert!(Warehouse::new(WarehouseId::new("wh-1"), overlong, "admin-1").is_err());
     }
 
@@ -309,15 +304,11 @@ mod tests {
     fn fulfillment_handlers_are_operation_specific_and_fail_closed() {
         let warehouse = Warehouse::new(WarehouseId::new("wh-1"), data(), "admin-1").unwrap();
         assert_eq!(
-            warehouse
-                .fulfillment_handler(WarehouseFulfillmentOperation::Receipt)
-                .unwrap(),
+            warehouse.fulfillment_handler(WarehouseFulfillmentOperation::Receipt).unwrap(),
             "inbound-1"
         );
         assert_eq!(
-            warehouse
-                .fulfillment_handler(WarehouseFulfillmentOperation::WarehouseShip)
-                .unwrap(),
+            warehouse.fulfillment_handler(WarehouseFulfillmentOperation::WarehouseShip).unwrap(),
             "outbound-1"
         );
 
@@ -331,9 +322,7 @@ mod tests {
             "admin-1",
         )
         .unwrap();
-        assert!(missing
-            .fulfillment_handler(WarehouseFulfillmentOperation::Receipt)
-            .is_err());
+        assert!(missing.fulfillment_handler(WarehouseFulfillmentOperation::Receipt).is_err());
     }
 
     /// 修订归属与乐观锁版本由仓库实体统一匹配。

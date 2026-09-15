@@ -5,15 +5,15 @@
 //! 任务主键、传入当前责任人与时间并
 //! 映射错误，不维护第二份规则。
 
-use super::work_item_factory::{new_difference_work_item, new_error_work_item};
 use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use erp_integration::entity::integration_ops::{
-    difference_owner_role, IntegrationErrorTask, ReconciliationDifference,
+    IntegrationErrorTask, ReconciliationDifference, difference_owner_role,
 };
 use erp_workflow::entity::work_item::WorkItem;
 use id_generator::next_id;
 
+use super::work_item_factory::{new_difference_work_item, new_error_work_item};
 use crate::{Error, Result};
 
 /// 构造指定到人的错误处理任务（主键与时间由服务注入）。
@@ -56,13 +56,8 @@ pub(super) fn difference_work_item(
 ) -> Result<WorkItem> {
     difference_owner_role(&difference.difference_type)
         .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-    new_difference_work_item(
-        WorkItemId::new(next_id()),
-        difference,
-        owner_user_id,
-        Instant::now(),
-    )
-    .map_err(Into::into)
+    new_difference_work_item(WorkItemId::new(next_id()), difference, owner_user_id, Instant::now())
+        .map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -78,10 +73,7 @@ mod tests {
     /// # 返回
     /// 返回去掉测试模块后的生产代码全文。
     fn production_source() -> &'static str {
-        include_str!("producer.rs")
-            .split("mod tests {")
-            .next()
-            .expect("必须存在生产代码")
+        include_str!("producer.rs").split("mod tests {").next().expect("必须存在生产代码")
     }
 
     /// 分层守卫（INT-E19）：责任矩阵与任务装配归领域，服务只注入 ID/时间。

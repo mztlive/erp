@@ -1,9 +1,10 @@
 //! 采购撤回审批后的单据状态持久化。
 
+use persistence_core::Executor;
+
+use crate::Result;
 use crate::entity::purchase_order::PurchaseOrder;
 use crate::repository::PurchaseOrderExt;
-use crate::Result;
-use persistence_core::Executor;
 
 /// 在审批取消运行事实写入后，以同一执行器 CAS 写回已执行撤回动作的采购单。
 ///

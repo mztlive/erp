@@ -7,10 +7,8 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::stable::StableBase;
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     ContractRevisionId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId, SalesOrderSubmissionId,
@@ -19,13 +17,13 @@ use erp_core::ids::{
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
-use super::amount_validation::sum_line_amounts;
-use super::amount_validation::validate_amount_triple;
+use super::amount_validation::{sum_line_amounts, validate_amount_triple};
 use super::snapshot::HeaderSnapshots;
 use super::types::{
-    build_line_groups, validate_line_list, BusinessType, GoodsLineFields, LineSummary, LineType,
-    VoucherLineDraft, WelfareScenario,
+    BusinessType, GoodsLineFields, LineSummary, LineType, VoucherLineDraft, WelfareScenario,
+    build_line_groups, validate_line_list,
 };
 
 /// 提交人标识最大长度。
@@ -284,12 +282,8 @@ impl SalesOrderSubmission {
         if data.working_copy_version == 0 {
             return Err(Error::from("草稿版本必须为正整数"));
         }
-        let submitted_by = normalize_required_text(
-            data.submitted_by,
-            "提交人不能为空",
-            SUBMITTER_MAX_LEN,
-            "提交人过长",
-        )?;
+        let submitted_by =
+            normalize_required_text(data.submitted_by, "提交人不能为空", SUBMITTER_MAX_LEN, "提交人过长")?;
         let snapshots = HeaderSnapshots::build(&data.snapshot)?;
         let project_name = normalize_optional_text(data.project_name, "项目名称", PROJECT_NAME_MAX_LEN)?;
         let business_remark =
@@ -370,9 +364,7 @@ impl SalesOrderSubmission {
     /// # 错误
     /// 当前序号达到 `u32::MAX` 时返回错误。
     pub fn next_submission_no(current_max: u32) -> Result<u32> {
-        current_max
-            .checked_add(1)
-            .ok_or_else(|| Error::from("销售提交序号溢出"))
+        current_max.checked_add(1).ok_or_else(|| Error::from("销售提交序号溢出"))
     }
 
     /// 判断提交是否匹配幂等收据冻结的业务身份。
@@ -463,11 +455,11 @@ impl SalesOrderSubmission {
         match business_type {
             BusinessType::Voucher if !all_present => {
                 return Err(Error::from("卡券提交必须冻结卡券类目、履约期限和应收到期日"));
-            }
+            },
             BusinessType::GoodsService if any_present => {
                 return Err(Error::from("非卡券提交不得携带卡券字段"));
-            }
-            BusinessType::Voucher | BusinessType::GoodsService => {}
+            },
+            BusinessType::Voucher | BusinessType::GoodsService => {},
         }
         let Some(receivable_due_date) = receivable_due_date else {
             return Ok(());
@@ -510,10 +502,7 @@ impl SalesOrderSubmission {
     pub fn header_snapshot_data(&self) -> super::snapshot::HeaderSnapshotData {
         super::snapshot::HeaderSnapshotData {
             customer_name: self.customer_snapshot.customer_name.clone(),
-            contract_no: self
-                .contract_snapshot
-                .as_ref()
-                .map(|snapshot| snapshot.contract_no.clone()),
+            contract_no: self.contract_snapshot.as_ref().map(|snapshot| snapshot.contract_no.clone()),
             settlement_party_name: self
                 .settlement_party_snapshot
                 .as_ref()
@@ -703,9 +692,7 @@ impl SalesOrderSubmissionLine {
             fulfillment_due_at: self
                 .fulfillment_due_at
                 .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", self.line_no)))?,
-            quantity: self
-                .quantity
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少数量", self.line_no)))?,
+            quantity: self.quantity.ok_or_else(|| Error::from(format!("第 {} 行缺少数量", self.line_no)))?,
             base_unit_code: self
                 .base_unit_code
                 .clone()
@@ -764,11 +751,7 @@ impl SalesOrderSubmissionLine {
     /// # 错误
     /// 无；金额值对象负责保持精度和范围。
     pub fn amount_totals(lines: &[Self]) -> (Amount, Amount, Amount) {
-        sum_line_amounts(
-            lines
-                .iter()
-                .map(|line| (line.gross_amount, line.net_amount, line.tax_amount)),
-        )
+        sum_line_amounts(lines.iter().map(|line| (line.gross_amount, line.net_amount, line.tax_amount)))
     }
 }
 
@@ -776,9 +759,10 @@ impl SalesOrderSubmissionLine {
 mod tests {
     use std::str::FromStr;
 
-    use super::*;
     use erp_core::ids::{SalesOrderWorkingCopyId, SkuRevisionId};
     use erp_core::money::Quantity;
+
+    use super::*;
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -903,16 +887,10 @@ mod tests {
 
     #[test]
     fn new_rejects_blank_and_broken_invariants() {
-        let blank_submitter = SalesOrderSubmissionData {
-            submitted_by: "   ".to_string(),
-            ..header_data()
-        };
+        let blank_submitter = SalesOrderSubmissionData { submitted_by: "   ".to_string(), ..header_data() };
         assert!(SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), blank_submitter).is_err());
 
-        let zero_submission_no = SalesOrderSubmissionData {
-            submission_no: 0,
-            ..header_data()
-        };
+        let zero_submission_no = SalesOrderSubmissionData { submission_no: 0, ..header_data() };
         assert!(SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), zero_submission_no).is_err());
 
         let half_voucher = SalesOrderSubmissionData {
@@ -922,16 +900,11 @@ mod tests {
         };
         assert!(SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), half_voucher).is_err());
 
-        let broken_amount = SalesOrderSubmissionData {
-            net_amount: amt("26.08"),
-            ..header_data()
-        };
+        let broken_amount = SalesOrderSubmissionData { net_amount: amt("26.08"), ..header_data() };
         assert!(SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), broken_amount).is_err());
 
-        let duplicated_lines = SalesOrderSubmissionData {
-            lines: vec![line_data(1), line_data(1)],
-            ..header_data()
-        };
+        let duplicated_lines =
+            SalesOrderSubmissionData { lines: vec![line_data(1), line_data(1)], ..header_data() };
         assert!(SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), duplicated_lines).is_err());
     }
 
@@ -943,10 +916,8 @@ mod tests {
         };
         assert!(SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), voucher_data).is_err());
 
-        let goods_line_in_voucher_order = SalesOrderSubmissionData {
-            lines: vec![line_data(1)],
-            ..voucher_header_data()
-        };
+        let goods_line_in_voucher_order =
+            SalesOrderSubmissionData { lines: vec![line_data(1)], ..voucher_header_data() };
         assert!(
             SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), goods_line_in_voucher_order)
                 .is_err()
@@ -959,10 +930,7 @@ mod tests {
             SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-card-1"), voucher_header_data())
                 .unwrap();
 
-        assert_eq!(
-            submission.receivable_due_date,
-            Some(BusinessDate::from_ymd(2026, 10, 31).unwrap())
-        );
+        assert_eq!(submission.receivable_due_date, Some(BusinessDate::from_ymd(2026, 10, 31).unwrap()));
     }
 
     #[test]
@@ -1023,10 +991,7 @@ mod tests {
         submission.reject("reviewer").unwrap();
         assert_eq!(submission.stable.status(), SubmissionStatus::Rejected);
         assert!(submission.approve("reviewer").is_err(), "驳回后不可通过");
-        assert!(
-            submission.mark_superseded("system").is_err(),
-            "驳回后不可标记失效"
-        );
+        assert!(submission.mark_superseded("system").is_err(), "驳回后不可标记失效");
 
         let mut approved =
             SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-2"), header_data()).unwrap();
@@ -1071,16 +1036,15 @@ mod tests {
 
     #[test]
     fn line_new_rejects_zero_no_and_mismatch() {
-        let zero = SalesOrderSubmissionLineData {
-            line_no: 0,
-            ..line_data(1)
-        };
-        assert!(SalesOrderSubmissionLine::new(
-            SalesOrderSubmissionLineId::new("sl-1"),
-            SalesOrderSubmissionId::new("s-1"),
-            zero
-        )
-        .is_err());
+        let zero = SalesOrderSubmissionLineData { line_no: 0, ..line_data(1) };
+        assert!(
+            SalesOrderSubmissionLine::new(
+                SalesOrderSubmissionLineId::new("sl-1"),
+                SalesOrderSubmissionId::new("s-1"),
+                zero
+            )
+            .is_err()
+        );
 
         let mismatch = SalesOrderSubmissionLineData {
             line_type: LineType::Voucher,
@@ -1088,11 +1052,13 @@ mod tests {
             voucher: None,
             ..line_data(1)
         };
-        assert!(SalesOrderSubmissionLine::new(
-            SalesOrderSubmissionLineId::new("sl-1"),
-            SalesOrderSubmissionId::new("s-1"),
-            mismatch
-        )
-        .is_err());
+        assert!(
+            SalesOrderSubmissionLine::new(
+                SalesOrderSubmissionLineId::new("sl-1"),
+                SalesOrderSubmissionId::new("s-1"),
+                mismatch
+            )
+            .is_err()
+        );
     }
 }

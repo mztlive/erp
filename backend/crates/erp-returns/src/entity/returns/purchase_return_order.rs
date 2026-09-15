@@ -5,12 +5,11 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::stable::StableBase;
 use erp_core::ids::{PurchaseOrderId, PurchaseReturnOrderId, SalesReturnCaseId};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 采购退货单号最大长度。
 const RETURN_NO_MAX_LEN: usize = 64;
@@ -265,16 +264,10 @@ mod tests {
 
     #[test]
     fn new_rejects_blank_no() {
-        let blank = PurchaseReturnOrderData {
-            purchase_return_no: "   ".to_string(),
-            ..data()
-        };
+        let blank = PurchaseReturnOrderData { purchase_return_no: "   ".to_string(), ..data() };
         assert!(PurchaseReturnOrder::new(PurchaseReturnOrderId::new("pro-2"), blank, "admin").is_err());
 
-        let overlong = PurchaseReturnOrderData {
-            purchase_return_no: "x".repeat(65),
-            ..data()
-        };
+        let overlong = PurchaseReturnOrderData { purchase_return_no: "x".repeat(65), ..data() };
         assert!(PurchaseReturnOrder::new(PurchaseReturnOrderId::new("pro-3"), overlong, "admin").is_err());
     }
 
@@ -307,23 +300,22 @@ mod tests {
             )
             .unwrap();
         assert!(order.is_completed());
-        assert!(order
-            .update(
-                PurchaseReturnOrderUpdate {
-                    status: Some(PurchaseReturnStatus::PendingExecution),
-                    ..Default::default()
-                },
-                "admin-3",
-            )
-            .is_err());
+        assert!(
+            order
+                .update(
+                    PurchaseReturnOrderUpdate {
+                        status: Some(PurchaseReturnStatus::PendingExecution),
+                        ..Default::default()
+                    },
+                    "admin-3",
+                )
+                .is_err()
+        );
     }
 
     #[test]
     fn enums_serialize_with_stable_codes_and_labels() {
-        assert_eq!(
-            serde_json::to_string(&ReturnMode::DirectToSupplier).unwrap(),
-            "\"direct_to_supplier\""
-        );
+        assert_eq!(serde_json::to_string(&ReturnMode::DirectToSupplier).unwrap(), "\"direct_to_supplier\"");
         assert_eq!(
             serde_json::to_string(&PurchaseReturnStatus::PendingExecution).unwrap(),
             "\"pending_execution\""
@@ -345,18 +337,13 @@ mod tests {
         assert!(!object.contains_key("pending_allocations"));
         assert_eq!(order.stable.status(), PurchaseReturnStatus::Draft);
         assert_eq!(PurchaseReturnStatus::Draft.as_str(), "draft");
-        assert_eq!(
-            PurchaseReturnStatus::PendingExecution.as_str(),
-            "pending_execution"
-        );
+        assert_eq!(PurchaseReturnStatus::PendingExecution.as_str(), "pending_execution");
         assert_eq!(PurchaseReturnStatus::Returned.as_str(), "returned");
         assert_eq!(PurchaseReturnStatus::Completed.as_str(), "completed");
         assert_eq!(PurchaseReturnStatus::Voided.as_str(), "voided");
 
-        let production = include_str!("purchase_return_order.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production =
+            include_str!("purchase_return_order.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(!production.contains("IN_APPROVAL"));
         assert!(!production.contains("fn start_approval"));
         assert!(!production.contains("approval_subject_version"));

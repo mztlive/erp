@@ -1,6 +1,6 @@
 //! 供给列表查询与跨域展示的唯一响应类型。
 pub use application_core::PageView;
-pub(crate) use application_core::{normalize_sort, SortDir};
+pub(crate) use application_core::{SortDir, normalize_sort};
 use erp_core::ids::{SkuId, SupplierAccountId};
 use erp_supply::entity::supplier_offering::{AvailabilityStatus, OfferingSourceType, OfferingStatus};
 use serde::{Deserialize, Serialize};
@@ -176,10 +176,7 @@ impl SupplierOfferingListParams {
 /// # 约束
 /// 纯内存转换，不触碰 I/O、时钟或密钥。
 fn typed_id<T>(value: Option<&str>, constructor: impl Fn(String) -> T) -> Option<T> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| constructor(value.to_string()))
+    value.map(str::trim).filter(|value| !value.is_empty()).map(|value| constructor(value.to_string()))
 }
 
 #[cfg(test)]
@@ -188,12 +185,8 @@ mod tests {
     #[test]
     fn sort_contract_rejects_unknown_fields() {
         assert_eq!(
-            normalize_sort(
-                &Some("status".to_string()),
-                &Some("asc".to_string()),
-                OFFERING_SORT_FIELDS
-            )
-            .unwrap(),
+            normalize_sort(&Some("status".to_string()), &Some("asc".to_string()), OFFERING_SORT_FIELDS)
+                .unwrap(),
             ("status", SortDir::Asc)
         );
         assert!(normalize_sort(&Some("unsafe".to_string()), &None, OFFERING_SORT_FIELDS).is_err());

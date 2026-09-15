@@ -65,9 +65,6 @@ mod tests {
                 "BPM ID 类型名必须唯一: index={index} name={name}"
             );
         }
-        assert_ne!(
-            ApprovalProcessDefinitionId::new(value),
-            ApprovalProcessDefinitionId::new("other")
-        );
+        assert_ne!(ApprovalProcessDefinitionId::new(value), ApprovalProcessDefinitionId::new("other"));
     }
 }

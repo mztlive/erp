@@ -1,7 +1,8 @@
 //! ERP 审批集成仓储访问器。
 
-use crate::repository::owned::{ApprovalNotificationOutboxRepository, ApprovalSubjectSnapshotRepository};
 use mongodb::Database;
+
+use crate::repository::owned::{ApprovalNotificationOutboxRepository, ApprovalSubjectSnapshotRepository};
 
 /// 审批集成仓储访问器。只暴露业务对象快照与通知 outbox。
 pub trait ApprovalIntegrationExt {
@@ -41,25 +42,10 @@ mod tests {
 
     #[test]
     fn integration_collection_names_match_target_runtime() {
-        assert_eq!(
-            mongodb::Database::APPROVAL_SUBJECT_SNAPSHOTS,
-            "approval_subject_snapshots"
-        );
-        assert_eq!(
-            mongodb::Database::APPROVAL_NOTIFICATION_OUTBOX,
-            "approval_notification_outbox"
-        );
-        assert_eq!(
-            mongodb::Database::APPROVAL_COMMAND_RECEIPTS,
-            "approval_command_receipts"
-        );
-        assert_ne!(
-            mongodb::Database::APPROVAL_SUBJECT_SNAPSHOTS,
-            "approval_definitions"
-        );
-        assert_ne!(
-            mongodb::Database::APPROVAL_NOTIFICATION_OUTBOX,
-            "approval_step_instances"
-        );
+        assert_eq!(mongodb::Database::APPROVAL_SUBJECT_SNAPSHOTS, "approval_subject_snapshots");
+        assert_eq!(mongodb::Database::APPROVAL_NOTIFICATION_OUTBOX, "approval_notification_outbox");
+        assert_eq!(mongodb::Database::APPROVAL_COMMAND_RECEIPTS, "approval_command_receipts");
+        assert_ne!(mongodb::Database::APPROVAL_SUBJECT_SNAPSHOTS, "approval_definitions");
+        assert_ne!(mongodb::Database::APPROVAL_NOTIFICATION_OUTBOX, "approval_step_instances");
     }
 }

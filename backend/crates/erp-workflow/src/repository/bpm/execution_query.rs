@@ -2,11 +2,10 @@ use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::ApprovalNodeExecutionStatus;
 use bpm::model::{ApprovalInstanceAssignee, ApprovalNodeExecution};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, Result, mongo_ops};
 
-use super::{clamp_limit, find_limited, BpmWorkflowRepository, ASSIGNEES, EXECUTIONS, MAX_EXECUTION_HISTORY};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
+use super::{ASSIGNEES, BpmWorkflowRepository, EXECUTIONS, MAX_EXECUTION_HISTORY, clamp_limit, find_limited};
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 按主键读取审批节点执行。
@@ -28,9 +27,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         execution_id: &ApprovalNodeExecutionId,
         executor: &mut dyn Executor,
     ) -> Result<Option<ApprovalNodeExecution>> {
-        self.executions()
-            .find_by_id(execution_id.as_ref(), executor)
-            .await
+        self.executions().find_by_id(execution_id.as_ref(), executor).await
     }
 
     /// 按主键批量读取审批节点执行。
@@ -56,9 +53,7 @@ impl<'a> BpmWorkflowRepository<'a> {
             return Ok(Vec::new());
         }
         let ids = execution_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
-        self.executions()
-            .find_many(doc! { "id": { "$in": ids } }, executor)
-            .await
+        self.executions().find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 
     /// 查询实例指定节点的当前审批人绑定。
@@ -103,9 +98,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         instance_id: &ApprovalProcessInstanceId,
         executor: &mut dyn Executor,
     ) -> Result<Option<ApprovalNodeExecution>> {
-        self.executions()
-            .find_one(current_execution_filter(instance_id), executor)
-            .await
+        self.executions().find_one(current_execution_filter(instance_id), executor).await
     }
 
     /// 读取取消用例所需的当前活动或受阻执行。
@@ -124,9 +117,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         instance_id: &ApprovalProcessInstanceId,
         executor: &mut dyn Executor,
     ) -> Result<Option<ApprovalNodeExecution>> {
-        self.executions()
-            .find_one(current_execution_filter(instance_id), executor)
-            .await
+        self.executions().find_one(current_execution_filter(instance_id), executor).await
     }
 
     /// 按执行序号稳定游标读取实例历史，单次不超过上限。

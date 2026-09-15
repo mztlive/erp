@@ -6,16 +6,16 @@
 
 use std::collections::HashMap;
 
+use erp_core::ids::PurchaseLineSalesAllocationId;
+use id_generator::next_id;
+use persistence_core::Executor;
+
 use crate::entity::purchase_order::{
     CurrentSalesAllocationPlan, CurrentSalesAllocationPlanError, PurchaseLineSalesAllocation,
     PurchaseLineType, PurchaseOrder, PurchaseOrderRevisionLine,
 };
 use crate::ports::purchase_order::SalesAllocationPort;
 use crate::repository::PurchaseOrderExt;
-use erp_core::ids::PurchaseLineSalesAllocationId;
-use id_generator::next_id;
-use persistence_core::Executor;
-
 use crate::{Error, Result};
 
 /// 待写入的当前采购版本销售分配。
@@ -84,7 +84,7 @@ fn translate_current_sales_allocation_plan_error(error: CurrentSalesAllocationPl
         CurrentSalesAllocationPlanError::InvalidAllocation(source) => Error::Logic(source),
         error @ CurrentSalesAllocationPlanError::AllocationIdCountMismatch => {
             Error::Internal(error.to_string())
-        }
+        },
         rule_error => Error::BusinessLogicError(rule_error.to_string()),
     }
 }
@@ -110,9 +110,7 @@ pub async fn persist_current_sales_allocations(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     for allocation in &prepared.allocations {
-        db.purchase_line_sales_allocations()
-            .create(allocation, executor)
-            .await?;
+        db.purchase_line_sales_allocations().create(allocation, executor).await?;
     }
     Ok(())
 }

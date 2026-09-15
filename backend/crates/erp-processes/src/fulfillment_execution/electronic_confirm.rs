@@ -1,23 +1,24 @@
 //! 电子交付事实、图片凭证和任务完成在调用方同一事务中确认。
-use super::{
-    purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate},
-    FulfillmentProcess,
-};
-use crate::{Error, Result};
+use std::collections::HashSet;
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
-use erp_core::{common::time::Instant, ids::ElectronicDeliveryId};
-use erp_fulfillment::{
-    dto::{ConfirmElectronicDeliveryRequest, ElectronicDeliveryView},
-    entity::fulfillment::{ElectronicDelivery, ElectronicDeliveryData, FulfillmentResult},
-    service::FulfillmentService,
-};
-use erp_procurement::{entity::purchase_order::PurchaseOrder, repository::PurchaseOrderExt};
+use erp_core::common::time::Instant;
+use erp_core::ids::ElectronicDeliveryId;
+use erp_fulfillment::dto::{ConfirmElectronicDeliveryRequest, ElectronicDeliveryView};
+use erp_fulfillment::entity::fulfillment::{ElectronicDelivery, ElectronicDeliveryData, FulfillmentResult};
+use erp_fulfillment::service::FulfillmentService;
+use erp_procurement::entity::purchase_order::PurchaseOrder;
+use erp_procurement::repository::PurchaseOrderExt;
 use erp_support::PendingAttachmentBatch;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
-use std::{collections::HashSet, sync::Arc};
 use validator::Validate;
+
+use super::FulfillmentProcess;
+use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
+use crate::{Error, Result};
 
 struct Confirmation {
     request: ConfirmElectronicDeliveryRequest,
@@ -58,14 +59,8 @@ impl FulfillmentProcess {
             ),
             request: req,
         };
-        persist(
-            &self.db,
-            ElectronicDeliveryId::new(id.to_string()),
-            confirmation,
-            pending,
-            actor.clone(),
-        )
-        .await
+        persist(&self.db, ElectronicDeliveryId::new(id.to_string()), confirmation, pending, actor.clone())
+            .await
     }
 }
 
@@ -99,9 +94,7 @@ async fn confirm_in_transaction(
     let domain = FulfillmentService::new(db.clone());
     let mut record = domain.prepare_electronic_confirmation(id, executor).await?;
     if record.base.version != confirmation.request.version {
-        return Err(Error::ConflictError(
-            "电子交付草稿版本已变化，请刷新后重试".into(),
-        ));
+        return Err(Error::ConflictError("电子交付草稿版本已变化，请刷新后重试".into()));
     }
     let order = purchase_context(db, &record, executor).await?;
     super::service_confirm::ensure_service_evidence_asset_in_transaction(
@@ -113,9 +106,7 @@ async fn confirm_in_transaction(
     .await?;
     record.apply_confirmation(confirmation.data(&record, actor))?;
     pending.persist(db, executor).await?;
-    domain
-        .persist_electronic_confirmation(&mut record, executor)
-        .await?;
+    domain.persist_electronic_confirmation(&mut record, executor).await?;
     finish(db, &record, &order, actor, executor).await?;
     Ok(record)
 }

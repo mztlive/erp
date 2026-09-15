@@ -10,14 +10,14 @@ pub mod service;
 
 pub use application_core::PageView;
 pub use dto::{
-    customer_status_blockers, AddressType, AssignmentAction, CreateCustomerRequest,
-    CustomerActionBlockerView, CustomerAssignmentListParams, CustomerAssignmentRequest,
-    CustomerAssignmentView, CustomerDetailView, CustomerListParams, CustomerProfileAddressInput,
-    CustomerProfileBankAccountInput, CustomerProfileContactInput, CustomerProfileDetailView,
-    CustomerProfileMutationView, CustomerScope, CustomerSensitiveFieldView, CustomerSensitiveRevealView,
-    CustomerView, EffectiveRecordStatus, PartyAddressView, PartyBankAccountView, PartyContactView,
-    PartyRevisionView, PartyStatus, PartyTaxProfileView, RevealCustomerSensitiveRequest,
-    SaveCustomerProfileRequest, SensitiveFieldKind, UpdateCustomerRequest,
+    AddressType, AssignmentAction, CreateCustomerRequest, CustomerActionBlockerView,
+    CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView, CustomerDetailView,
+    CustomerListParams, CustomerProfileAddressInput, CustomerProfileBankAccountInput,
+    CustomerProfileContactInput, CustomerProfileDetailView, CustomerProfileMutationView, CustomerScope,
+    CustomerSensitiveFieldView, CustomerSensitiveRevealView, CustomerView, EffectiveRecordStatus,
+    PartyAddressView, PartyBankAccountView, PartyContactView, PartyRevisionView, PartyStatus,
+    PartyTaxProfileView, RevealCustomerSensitiveRequest, SaveCustomerProfileRequest, SensitiveFieldKind,
+    UpdateCustomerRequest, customer_status_blockers,
 };
 pub use entity::{
     AssignCustomerAssignment, AssignmentRole, CustomerAccount, CustomerAccountData, CustomerAccountId,
@@ -27,7 +27,7 @@ pub use entity::{
     CustomerProfileFactKind, CustomerProfileFactSet, CustomerProfileOperation, CustomerProfileReplayContext,
     CustomerProfileRequestFingerprint, CustomerProfileRequestShape, EndCustomerAssignment,
 };
-pub use error::{known_duplicate_index_message, Error, Result};
+pub use error::{Error, Result, known_duplicate_index_message};
 pub use ports::{
     AccountFactPort, CustomerAuditPort, CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope,
     CustomerScopeObject, FailClosedAccountFactPort, FailClosedAuditPort, FailClosedCustomerDataScopePort,

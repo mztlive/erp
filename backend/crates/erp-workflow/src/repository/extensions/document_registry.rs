@@ -5,13 +5,13 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as DocumentRegistryExt>::BUSINESS_DOCUMENTS` 等值。
 
+use mongodb::Database;
+
+use super::super::document_registry::{BusinessDocumentFilter, WorkflowActionFilter};
 use crate::repository::owned::{
     BusinessDocumentRepository, DocumentParticipantRepository, DocumentRelationRepository,
     WorkflowActionRepository,
 };
-use mongodb::Database;
-
-use super::super::document_registry::{BusinessDocumentFilter, WorkflowActionFilter};
 
 /// 域 D02 仓储访问器。
 pub trait DocumentRegistryExt {

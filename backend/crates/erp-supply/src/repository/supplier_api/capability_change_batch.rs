@@ -5,13 +5,12 @@
 //! primitive：已更新实体逐个 CAS 写回（保持乐观锁），新增实体一次有序批量插入；
 //! 空输入不访问数据库。版本决策、采购确认覆盖与事务仍归 Service。
 
-use crate::entity::supplier_api::SupplierApiCapability;
-use crate::repository::owned::SupplierApiCapabilityRepository;
+use persistence_core::{Executor, Result};
 use serde::Serialize;
 
-use super::{SupplierApiRepository, SUPPLIER_API_CAPABILITIES};
-use persistence_core::Executor;
-use persistence_core::Result;
+use super::{SUPPLIER_API_CAPABILITIES, SupplierApiRepository};
+use crate::entity::supplier_api::SupplierApiCapability;
+use crate::repository::owned::SupplierApiCapabilityRepository;
 
 /// 会话感知的有序批量插入（确定性写入）。
 ///
@@ -45,15 +44,11 @@ where
     }
     match executor.session() {
         Some(session) => {
-            collection
-                .insert_many(documents)
-                .ordered(true)
-                .session(session)
-                .await?;
-        }
+            collection.insert_many(documents).ordered(true).session(session).await?;
+        },
         None => {
             collection.insert_many(documents).ordered(true).await?;
-        }
+        },
     }
     Ok(())
 }
@@ -96,9 +91,7 @@ impl<'a> SupplierApiRepository<'a> {
             capabilities.update(capability, executor).await?;
         }
         insert_many_ordered(
-            &self
-                .db
-                .collection::<SupplierApiCapability>(SUPPLIER_API_CAPABILITIES),
+            &self.db.collection::<SupplierApiCapability>(SUPPLIER_API_CAPABILITIES),
             creates.to_vec(),
             executor,
         )
@@ -108,8 +101,9 @@ impl<'a> SupplierApiRepository<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::SupplierApiRepository;
     use persistence_core::NoTransaction;
+
+    use super::SupplierApiRepository;
 
     /// 空输入直接成功且不访问数据库（INT-R32）。
     ///
@@ -118,16 +112,11 @@ mod tests {
     /// 任一失败整体回滚由调用方事务保证（见方法约束）。
     #[tokio::test]
     async fn empty_capability_changes_succeed_without_touching_database() {
-        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
-            .await
-            .unwrap();
+        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap();
         let database = client.database("repository_supplier_api_empty_capability_changes");
         let repository = SupplierApiRepository::new(&database);
 
-        repository
-            .persist_capability_changes(&mut [], &[], &mut NoTransaction)
-            .await
-            .unwrap();
+        repository.persist_capability_changes(&mut [], &[], &mut NoTransaction).await.unwrap();
     }
 
     /// 生产代码（测试模块之前部分），供分层守卫断言，避免字面量自匹配。
@@ -135,10 +124,7 @@ mod tests {
     /// # 返回
     /// 返回去掉测试模块后的生产代码全文。
     fn production_source() -> &'static str {
-        include_str!("capability_change_batch.rs")
-            .split("mod tests {")
-            .next()
-            .expect("必须存在生产代码")
+        include_str!("capability_change_batch.rs").split("mod tests {").next().expect("必须存在生产代码")
     }
 
     /// 显式有序写入守卫：新增批量必须经显式 `ordered(true)` 写入。
@@ -148,10 +134,7 @@ mod tests {
     #[test]
     fn capability_create_batch_declares_ordered_insert_explicitly() {
         let source = production_source();
-        assert!(
-            source.contains(".ordered(true)"),
-            "新增批量必须显式声明 ordered(true)，不得依赖驱动默认"
-        );
+        assert!(source.contains(".ordered(true)"), "新增批量必须显式声明 ordered(true)，不得依赖驱动默认");
         assert!(
             source.contains("capabilities.update(capability, executor)"),
             "已更新实体必须保持逐文档 CAS 写回"

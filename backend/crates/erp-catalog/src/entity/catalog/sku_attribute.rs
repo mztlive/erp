@@ -2,13 +2,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::catalog::status::EnableStatus;
+use erp_core::Result;
 use erp_core::common::stable::StableBase;
 use erp_core::ids::SkuAttributeId;
 use erp_core::validation::normalize_required_text;
-use erp_core::Result;
+use serde::{Deserialize, Serialize};
+
+use crate::entity::catalog::status::EnableStatus;
 
 /// 属性代码最大长度。
 const CODE_MAX_LEN: usize = 64;
@@ -123,12 +123,8 @@ impl SkuAttribute {
     /// # 错误
     /// 当 attribute_code/name 为空或超长时返回错误。
     pub fn new(id: SkuAttributeId, data: SkuAttributeData, created_by: impl Into<String>) -> Result<Self> {
-        let attribute_code = normalize_required_text(
-            data.attribute_code,
-            "属性代码不能为空",
-            CODE_MAX_LEN,
-            "属性代码过长",
-        )?;
+        let attribute_code =
+            normalize_required_text(data.attribute_code, "属性代码不能为空", CODE_MAX_LEN, "属性代码过长")?;
         let name = normalize_required_text(data.name, "属性名称不能为空", NAME_MAX_LEN, "属性名称过长")?;
 
         Ok(Self {
@@ -178,9 +174,10 @@ impl SkuAttribute {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
     use erp_core::ids::SkuAttributeId;
+
+    use super::*;
 
     fn data() -> SkuAttributeData {
         SkuAttributeData {
@@ -205,16 +202,10 @@ mod tests {
     /// 失败路径：必填空与超长各一条。
     #[test]
     fn new_rejects_empty_and_overlong_fields() {
-        let empty_code = SkuAttributeData {
-            attribute_code: "  ".to_string(),
-            ..data()
-        };
+        let empty_code = SkuAttributeData { attribute_code: "  ".to_string(), ..data() };
         assert!(SkuAttribute::new(SkuAttributeId::new("attr-1"), empty_code, "admin-1").is_err());
 
-        let overlong_name = SkuAttributeData {
-            name: "n".repeat(129),
-            ..data()
-        };
+        let overlong_name = SkuAttributeData { name: "n".repeat(129), ..data() };
         assert!(SkuAttribute::new(SkuAttributeId::new("attr-1"), overlong_name, "admin-1").is_err());
     }
 
@@ -244,10 +235,7 @@ mod tests {
     /// 值类型 serde 形态与中文标签。
     #[test]
     fn value_type_exposes_labels_and_codes() {
-        assert_eq!(
-            serde_json::to_string(&AttributeValueType::Enum).unwrap(),
-            "\"enum\""
-        );
+        assert_eq!(serde_json::to_string(&AttributeValueType::Enum).unwrap(), "\"enum\"");
         assert_eq!(AttributeValueType::Text.label(), "规范文本");
         assert_eq!(AttributeValueType::Enum.as_str(), "enum");
     }

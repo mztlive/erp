@@ -1,12 +1,11 @@
 //! 批量取消候选查询：MongoDB 条件与执行器只在仓储层解释。
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, Result, mongo_ops};
+
 use super::owned::BackgroundJobRepository;
 use crate::{BackgroundJob, JobStatus, JobType};
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::{
-    bson::{doc, Document},
-    options::FindOptions,
-};
-use persistence_core::{mongo_ops, Executor, Result};
 
 impl BackgroundJobRepository<'_> {
     /// 查询未删除且可能被批量取消的后台任务。
@@ -57,10 +56,7 @@ mod tests {
         let filter = cancellation_filter(None);
         assert_eq!(filter.get_i64("deleted_at").unwrap(), NOT_DELETED_TIMESTAMP_BSON);
         let states = filter.get_document("status").unwrap().get_array("$in").unwrap();
-        assert_eq!(
-            states,
-            &vec!["pending".into(), "running".into(), "partially_succeeded".into()]
-        );
+        assert_eq!(states, &vec!["pending".into(), "running".into(), "partially_succeeded".into()]);
         assert!(!filter.contains_key("job_type"));
         // 已完成的部分成功交给服务层计为跳过，而非从候选清单中消失。
         assert!(!filter.contains_key("finished_at"));

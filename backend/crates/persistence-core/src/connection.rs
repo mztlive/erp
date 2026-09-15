@@ -1,8 +1,7 @@
+use mongodb::bson::{Bson, Document, doc};
+use mongodb::{Client, Database};
+
 use crate::{Error, Result};
-use mongodb::{
-    bson::{doc, Bson, Document},
-    Client, Database,
-};
 
 const MIN_REPLICA_SET_TRANSACTION_WIRE_VERSION: i64 = 7;
 const MIN_SHARDED_TRANSACTION_WIRE_VERSION: i64 = 8;
@@ -37,27 +36,19 @@ pub async fn ensure_transaction_support(database: &Database) -> Result<()> {
         return Ok(());
     }
 
-    Err(Error::UnsupportedDeployment(
-        "a replica set or transaction-capable sharded cluster is required",
-    ))
+    Err(Error::UnsupportedDeployment("a replica set or transaction-capable sharded cluster is required"))
 }
 
 /// 判断 `hello` 响应描述的拓扑是否具备事务所需的会话和 wire version。
 fn topology_supports_transactions(hello: &Document) -> bool {
-    if !hello
-        .get("logicalSessionTimeoutMinutes")
-        .and_then(bson_integer)
-        .is_some_and(|minutes| minutes >= 0)
-    {
+    if !hello.get("logicalSessionTimeoutMinutes").and_then(bson_integer).is_some_and(|minutes| minutes >= 0) {
         return false;
     }
     let Some(max_wire_version) = hello.get("maxWireVersion").and_then(bson_integer) else {
         return false;
     };
     let is_sharded = hello.get_str("msg").is_ok_and(|value| value == "isdbgrid");
-    let is_replica_set = hello
-        .get_str("setName")
-        .is_ok_and(|value| !value.trim().is_empty());
+    let is_replica_set = hello.get_str("setName").is_ok_and(|value| !value.trim().is_empty());
 
     (is_replica_set && max_wire_version >= MIN_REPLICA_SET_TRANSACTION_WIRE_VERSION)
         || (is_sharded && max_wire_version >= MIN_SHARDED_TRANSACTION_WIRE_VERSION)

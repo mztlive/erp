@@ -27,19 +27,16 @@ pub mod scope;
 mod submission;
 
 pub use coverage_sources::PurchaseCoverageSources;
+use mongodb::Database;
 pub use order::{PurchaseOrderFilter, PurchaseOrderRow};
+use persistence_core::{Executor, Result, mongo_ops};
 pub use submission::PurchaseOrderSubmissionFilter;
 
+use super::extensions::PurchaseOrderExt;
 use crate::entity::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionLine, PurchaseOrder,
     PurchaseOrderRevision, PurchaseOrderRevisionLine, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
-use mongodb::Database;
-
-use super::extensions::PurchaseOrderExt;
-use persistence_core::mongo_ops;
-use persistence_core::Executor;
-use persistence_core::Result;
 
 /// `purchase_order` 集合名（单一来源：`PurchaseOrderExt` 关联常量）。
 const PURCHASE_ORDERS: &str = <mongodb::Database as PurchaseOrderExt>::PURCHASE_ORDERS;
@@ -108,24 +105,18 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<PurchaseOrderSubmission>(PURCHASE_ORDER_SUBMISSIONS),
+            &self.db.collection::<PurchaseOrderSubmission>(PURCHASE_ORDER_SUBMISSIONS),
             submission,
             executor,
         )
         .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<PurchaseOrderSubmissionLine>(PURCHASE_ORDER_SUBMISSION_LINES),
+            &self.db.collection::<PurchaseOrderSubmissionLine>(PURCHASE_ORDER_SUBMISSION_LINES),
             lines.to_vec(),
             executor,
         )
         .await?;
-        PurchaseOrderRepository::new(self.db, PURCHASE_ORDERS)
-            .update(order, executor)
-            .await?;
+        PurchaseOrderRepository::new(self.db, PURCHASE_ORDERS).update(order, executor).await?;
         Ok(())
     }
 
@@ -151,17 +142,13 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<PurchaseOrderRevision>(PURCHASE_ORDER_REVISIONS),
+            &self.db.collection::<PurchaseOrderRevision>(PURCHASE_ORDER_REVISIONS),
             revision,
             executor,
         )
         .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<PurchaseOrderRevisionLine>(PURCHASE_ORDER_REVISION_LINES),
+            &self.db.collection::<PurchaseOrderRevisionLine>(PURCHASE_ORDER_REVISION_LINES),
             lines.to_vec(),
             executor,
         )
@@ -195,17 +182,13 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<PurchaseChangeSubmission>(PURCHASE_CHANGE_SUBMISSIONS),
+            &self.db.collection::<PurchaseChangeSubmission>(PURCHASE_CHANGE_SUBMISSIONS),
             submission,
             executor,
         )
         .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<PurchaseChangeSubmissionLine>(PURCHASE_CHANGE_SUBMISSION_LINES),
+            &self.db.collection::<PurchaseChangeSubmissionLine>(PURCHASE_CHANGE_SUBMISSION_LINES),
             lines.to_vec(),
             executor,
         )

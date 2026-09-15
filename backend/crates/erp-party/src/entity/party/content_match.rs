@@ -4,10 +4,11 @@
 //! 沿用原事实；银行账户稳定内容变化由 [`PartyBankAccount::ensure_unmodified`]
 //! 拒绝原地修改。
 
+use erp_core::{Error, Result};
+
 use super::party_address::{AddressType, PartyAddress};
 use super::party_bank_account::PartyBankAccount;
 use super::party_contact::PartyContact;
-use erp_core::{Error, Result};
 
 /// 调用方预计算的查询指纹（HMAC 十六进制结果）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -186,11 +187,7 @@ impl PartyAddressContentMatch {
     /// # 关键业务约束
     /// 不接收密钥或敏感明文。
     pub fn new(address_type: AddressType, contact_name: Option<String>, address: SensitiveFactReuse) -> Self {
-        Self {
-            address_type,
-            contact_name: canonicalize_optional(contact_name),
-            address,
-        }
+        Self { address_type, contact_name: canonicalize_optional(contact_name), address }
     }
 }
 
@@ -323,9 +320,7 @@ impl PartyBankAccount {
         if self.matches_content(candidate) {
             return Ok(());
         }
-        Err(Error::from(
-            "既有银行账户内容不可原地修改，请结束旧账户后新增账户",
-        ))
+        Err(Error::from("既有银行账户内容不可原地修改，请结束旧账户后新增账户"))
     }
 }
 
@@ -333,11 +328,7 @@ impl PartyBankAccount {
 fn canonicalize_optional(value: Option<String>) -> Option<String> {
     value.and_then(|value| {
         let trimmed = value.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
+        if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
     })
 }
 
@@ -348,6 +339,9 @@ fn optional_eq(stored: &Option<String>, expected: &Option<String>) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{PartyAddressId, PartyBankAccountId, PartyContactId, PartyId};
+
     use super::{
         PartyAddressContentMatch, PartyBankAccountContentMatch, PartyContactContentMatch, QueryFingerprint,
         SensitiveFactReuse,
@@ -356,8 +350,6 @@ mod tests {
     use crate::entity::party::party_bank_account::{PartyBankAccount, PartyBankAccountData};
     use crate::entity::party::party_contact::{PartyContact, PartyContactData};
     use crate::entity::party::status::EffectiveRecordStatus;
-    use erp_core::common::time::BusinessDate;
-    use erp_core::ids::{PartyAddressId, PartyBankAccountId, PartyContactId, PartyId};
 
     const KEY: &[u8] = b"content-match-test-key";
 
@@ -616,10 +608,7 @@ mod tests {
             SensitiveFactReuse::reuse_original(),
         );
         let error = account.ensure_unmodified(&changed_name).unwrap_err();
-        assert_eq!(
-            error.to_string(),
-            "既有银行账户内容不可原地修改，请结束旧账户后新增账户"
-        );
+        assert_eq!(error.to_string(), "既有银行账户内容不可原地修改，请结束旧账户后新增账户");
 
         let changed_bank = PartyBankAccountContentMatch::new(
             "上海示例科技有限公司",

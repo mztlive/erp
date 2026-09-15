@@ -5,9 +5,8 @@
 
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
-
 use erp_core::money::Amount;
+use serde::{Deserialize, Serialize};
 
 use super::receivable_account::ReceivableAccount;
 
@@ -94,15 +93,16 @@ fn zero_amount() -> Amount {
 mod tests {
     use std::str::FromStr;
 
-    use super::SalesOrderReceivableAmountSummary;
-    use crate::entity::receivable::receivable_account::{
-        AccountReviewStatus, ReceivableAccount, ReceivableAccountData,
-    };
-    use crate::entity::receivable::SalesBusinessTypeFact as BusinessType;
     use erp_core::ids::{
         CustomerAccountId, PartyId, ReceivableAccountId, SalesOrderId, SalesOrderRevisionId,
     };
     use erp_core::money::Amount;
+
+    use super::SalesOrderReceivableAmountSummary;
+    use crate::entity::receivable::SalesBusinessTypeFact as BusinessType;
+    use crate::entity::receivable::receivable_account::{
+        AccountReviewStatus, ReceivableAccount, ReceivableAccountData,
+    };
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -157,14 +157,8 @@ mod tests {
         let two = account("ra-2", 2, "0.02", "0.00", "3.33");
         let many = SalesOrderReceivableAmountSummary::from_accounts([&one, &two]);
         assert_eq!(many.account_count, 2);
-        assert_eq!(
-            many.settled_total,
-            one.settled_total.checked_add(two.settled_total)
-        );
-        assert_eq!(
-            many.invoiced_total,
-            one.invoiced_total.checked_add(two.invoiced_total)
-        );
+        assert_eq!(many.settled_total, one.settled_total.checked_add(two.settled_total));
+        assert_eq!(many.invoiced_total, one.invoiced_total.checked_add(two.invoiced_total));
         assert_eq!(many.gross_total, one.gross_total.checked_add(two.gross_total));
         assert_eq!(many.settled_total, amt("10.03"));
         assert_eq!(many.gross_total, amt("23.38"));

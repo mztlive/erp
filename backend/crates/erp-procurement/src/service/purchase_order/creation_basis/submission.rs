@@ -1,13 +1,14 @@
 //! 按事务内供应商事实构造采购草稿快照。
+use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId};
+use erp_core::money::Amount;
+use id_generator::next_id;
+use persistence_core::Executor;
+
 use crate::entity::purchase_order::{
     BasisScope, PurchaseOrderSubmission, PurchaseOrderSubmissionData, SupplierSnapshot,
 };
 use crate::ports::creation_basis::CreationBasisSupplierPort;
 use crate::{Error, Result};
-use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId};
-use erp_core::money::Amount;
-use id_generator::next_id;
-use persistence_core::Executor;
 /// 构造采购草稿提交头。
 ///
 /// # 参数
@@ -70,12 +71,14 @@ pub async fn build_draft_submission(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
+    use async_trait::async_trait;
+    use erp_core::ids::{SupplierAccountId, SupplierCommercialProfileRevisionId};
+
     use super::*;
     use crate::entity::facts::{PaymentTermFact, SupplierRoleFact};
     use crate::entity::purchase_order::{FulfillmentResponsibility, PurchaseType};
-    use async_trait::async_trait;
-    use erp_core::ids::{SupplierAccountId, SupplierCommercialProfileRevisionId};
-    use std::sync::Mutex;
 
     struct RecordingExecutor {
         marker: u64,
@@ -113,17 +116,14 @@ mod tests {
             id: &SupplierAccountId,
             executor: &mut dyn Executor,
         ) -> crate::Result<Option<SupplierRoleFact>> {
-            assert_eq!(
-                executor as *mut dyn Executor as *mut () as usize,
-                self.expected_executor
-            );
+            assert_eq!(executor as *mut dyn Executor as *mut () as usize, self.expected_executor);
             self.calls.lock().unwrap().push(format!("supplier:{id}"));
             match self.outcome {
                 SupplierOutcome::Failure => Err(Error::Internal("supplier read failed".to_string())),
                 SupplierOutcome::Missing => Ok(None),
-                SupplierOutcome::NoRevision => Ok(Some(SupplierRoleFact {
-                    current_commercial_profile_revision_id: None,
-                })),
+                SupplierOutcome::NoRevision => {
+                    Ok(Some(SupplierRoleFact { current_commercial_profile_revision_id: None }))
+                },
                 SupplierOutcome::Ready => Ok(Some(SupplierRoleFact {
                     current_commercial_profile_revision_id: Some(SupplierCommercialProfileRevisionId::new(
                         "profile-1",
@@ -181,16 +181,10 @@ mod tests {
     async fn draft_supplier_port_preserves_executor_and_read_then_parse_order() {
         let (result, calls) = invoke(SupplierOutcome::Ready, "NET-30").await;
         let submission = result.unwrap();
-        assert_eq!(
-            calls,
-            vec!["supplier:supplier-1", "payment:NET-30", "payment:POSTPAY_NET30"]
-        );
+        assert_eq!(calls, vec!["supplier:supplier-1", "payment:NET-30", "payment:POSTPAY_NET30"]);
         assert_eq!(submission.supplier_revision_id.as_ref(), "profile-1");
         assert_eq!(submission.supplier_snapshot.supplier_name, "供应商名称");
-        assert_eq!(
-            submission.payment_term_snapshot.payment_term_code,
-            "POSTPAY_NET30"
-        );
+        assert_eq!(submission.payment_term_snapshot.payment_term_code, "POSTPAY_NET30");
     }
     /// 供应商缺失在任何付款解析或草稿构造前返回原首错。
     #[tokio::test]

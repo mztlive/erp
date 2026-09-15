@@ -1,16 +1,18 @@
 //! 真实草稿替换 runner 的调用顺序与错误前缀，不连接 MongoDB。
-use super::*;
-use crate::entity::supplier_settlement::{
-    SettlementDifferenceStatus, SettlementDifferenceType, SettlementStatus, SupplierSettlementDifferenceData,
-    SupplierSettlementItemData, SupplierSettlementStatementData,
-};
+use std::str::FromStr;
+
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierSettlementDifferenceId,
     SupplierSettlementItemId, SupplierSettlementStatementId,
 };
 use erp_core::money::{Amount, Quantity};
-use std::str::FromStr;
+
+use super::*;
+use crate::entity::supplier_settlement::{
+    SettlementDifferenceStatus, SettlementDifferenceType, SettlementStatus, SupplierSettlementDifferenceData,
+    SupplierSettlementItemData, SupplierSettlementStatementData,
+};
 
 struct TestExecutor {
     _identity: u8,
@@ -46,16 +48,11 @@ struct Store {
 
 impl Store {
     fn new(fail: Option<Step>) -> Self {
-        Self {
-            fail,
-            calls: Vec::new(),
-            executors: Vec::new(),
-        }
+        Self { fail, calls: Vec::new(), executors: Vec::new() }
     }
     fn record(&mut self, step: Step, ids: Vec<String>, executor: &mut dyn Executor) -> Result<()> {
         self.calls.push(Call { step, ids });
-        self.executors
-            .push(executor as *mut dyn Executor as *mut () as usize);
+        self.executors.push(executor as *mut dyn Executor as *mut () as usize);
         if self.fail == Some(step) {
             return Err(persistence_core::Error::OptimisticLockingError);
         }
@@ -88,11 +85,7 @@ impl DraftSnapshotStore for Store {
         items: &[SupplierSettlementItem],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.record(
-            Step::InsertItems,
-            items.iter().map(|item| item.base.id.clone()).collect(),
-            executor,
-        )
+        self.record(Step::InsertItems, items.iter().map(|item| item.base.id.clone()).collect(), executor)
     }
     async fn insert_differences(
         &mut self,
@@ -101,20 +94,14 @@ impl DraftSnapshotStore for Store {
     ) -> Result<()> {
         self.record(
             Step::InsertDifferences,
-            differences
-                .iter()
-                .map(|difference| difference.base.id.clone())
-                .collect(),
+            differences.iter().map(|difference| difference.base.id.clone()).collect(),
             executor,
         )
     }
 }
 
 fn call(step: Step, ids: &[&str]) -> Call {
-    Call {
-        step,
-        ids: ids.iter().map(|id| id.to_string()).collect(),
-    }
+    Call { step, ids: ids.iter().map(|id| id.to_string()).collect() }
 }
 
 fn full_trace() -> Vec<Call> {
@@ -130,16 +117,8 @@ fn full_trace() -> Vec<Call> {
 
 fn replacement() -> (Vec<SupplierSettlementItem>, Vec<SupplierSettlementDifference>) {
     (
-        vec![
-            item_fixture("new-item-b", "statement-1", 2),
-            item_fixture("new-item-a", "statement-1", 1),
-        ],
-        vec![difference_fixture(
-            "new-difference",
-            "new-item-a",
-            SettlementDifferenceStatus::Pending,
-            1,
-        )],
+        vec![item_fixture("new-item-b", "statement-1", 2), item_fixture("new-item-a", "statement-1", 1)],
+        vec![difference_fixture("new-difference", "new-item-a", SettlementDifferenceStatus::Pending, 1)],
     )
 }
 
@@ -186,10 +165,7 @@ async fn draft_replace_stops_at_every_failed_write_and_keeps_original_error() {
             &mut executor,
         )
         .await;
-        assert!(matches!(
-            result,
-            Err(persistence_core::Error::OptimisticLockingError)
-        ));
+        assert!(matches!(result, Err(persistence_core::Error::OptimisticLockingError)));
         assert_eq!(store.calls, expected[..=index]);
         assert_eq!(store.executors, vec![identity; index + 1]);
     }
@@ -201,16 +177,9 @@ async fn draft_replace_keeps_original_empty_batch_conditions() {
         for has_old_difference in [false, true] {
             for has_new_difference in [false, true] {
                 let mut statement = statement_fixture("statement-1");
-                let old_items = if has_old_item {
-                    vec!["old-item".to_string()]
-                } else {
-                    Vec::new()
-                };
-                let old_differences = if has_old_difference {
-                    vec!["old-difference".to_string()]
-                } else {
-                    Vec::new()
-                };
+                let old_items = if has_old_item { vec!["old-item".to_string()] } else { Vec::new() };
+                let old_differences =
+                    if has_old_difference { vec!["old-difference".to_string()] } else { Vec::new() };
                 let differences = if has_new_difference {
                     vec![difference_fixture(
                         "new-difference",
@@ -273,10 +242,7 @@ async fn draft_store_does_not_add_a_state_guard_before_original_first_write() {
         &mut executor,
     )
     .await;
-    assert!(matches!(
-        result,
-        Err(persistence_core::Error::OptimisticLockingError)
-    ));
+    assert!(matches!(result, Err(persistence_core::Error::OptimisticLockingError)));
     assert_eq!(store.calls, [call(Step::DeleteEvidence, &["old-difference"])]);
 }
 

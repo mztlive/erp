@@ -11,22 +11,21 @@
 
 pub mod profit_loss;
 
-use crate::entity::cost::{CostAllocation, CostBasis, CostEntry, CostScope, CostStage, CostType};
-use crate::repository::owned::{CostAllocationRepository, CostEntryRepository};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_core::ids::{CostEntryId, SalesOrderId, SupplierAccountId};
 use erp_core::money::{Amount, Rate};
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
 use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
 use super::extensions::CostExt;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::cost::{CostAllocation, CostBasis, CostEntry, CostScope, CostStage, CostType};
+use crate::repository::owned::{CostAllocationRepository, CostEntryRepository};
 
 /// `cost_allocation` 集合名（单一来源：`CostExt` 关联常量）。
 const COST_ALLOCATIONS: &str = <mongodb::Database as CostExt>::COST_ALLOCATIONS;
@@ -114,11 +113,7 @@ impl QueryFilter for CostEntryFilter {
         if let Some(supplier_id) = &self.supplier_id {
             filter.insert("supplier_id", supplier_id.to_string());
         }
-        insert_literal_regex_filter(
-            &mut filter,
-            "source_document_id",
-            self.source_document_id.as_deref(),
-        );
+        insert_literal_regex_filter(&mut filter, "source_document_id", self.source_document_id.as_deref());
         filter
     }
 }
@@ -234,10 +229,7 @@ impl<'a> CostEntryRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -274,10 +266,7 @@ impl<'a> CostAllocationRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 批量按成本事实集合取回分配（`$in` 一次取回，禁止 N+1）。
@@ -302,8 +291,7 @@ impl<'a> CostAllocationRepository<'a> {
             return Ok(Vec::new());
         }
         let entry_ids: Vec<String> = entry_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "cost_entry_id": { "$in": entry_ids } }, executor)
-            .await
+        self.find_many(doc! { "cost_entry_id": { "$in": entry_ids } }, executor).await
     }
 }
 
@@ -350,9 +338,7 @@ impl<'a> CostRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<CostEntry>(<mongodb::Database as CostExt>::COST_ENTRIES),
+            &self.db.collection::<CostEntry>(<mongodb::Database as CostExt>::COST_ENTRIES),
             entry,
             executor,
         )
@@ -378,9 +364,7 @@ impl<'a> CostRepository<'a> {
 /// 返回排序条件文档。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
-    let field = sort_by
-        .filter(|name| allowed.contains(name))
-        .unwrap_or("created_at");
+    let field = sort_by.filter(|name| allowed.contains(name)).unwrap_or("created_at");
     doc! { field: direction }
 }
 
@@ -431,11 +415,12 @@ fn cost_allocation_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{cost_entry_projection, sort_doc, CostAllocationFilter, CostEntryFilter};
-    use crate::entity::cost::{CostScope, CostStage, CostType};
     use erp_core::ids::SupplierAccountId;
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
+
+    use super::{CostAllocationFilter, CostEntryFilter, cost_entry_projection, sort_doc};
+    use crate::entity::cost::{CostScope, CostStage, CostType};
 
     #[test]
     fn entry_filter_applies_optional_fields_and_deleted_filter() {

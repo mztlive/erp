@@ -116,16 +116,9 @@ pub fn difference_terminal_policy(difference: &ReconciliationDifference) -> Term
         policy_id: DIFFERENCE_POLICY_ID,
         version: EVIDENCE_POLICY_VERSION,
         error_type: difference.difference_type.clone(),
-        funds_impact: if financial {
-            FundsImpact::Potential
-        } else {
-            FundsImpact::None
-        },
+        funds_impact: if financial { FundsImpact::Potential } else { FundsImpact::None },
         required: if financial {
-            &[
-                RequiredEvidenceKind::CompensationResult,
-                RequiredEvidenceKind::FinancialReconciliation,
-            ]
+            &[RequiredEvidenceKind::CompensationResult, RequiredEvidenceKind::FinancialReconciliation]
         } else {
             &[RequiredEvidenceKind::BusinessObjectVerification]
         },
@@ -307,10 +300,7 @@ pub fn project_error_actions(input: ErrorActionProjection) -> (Vec<DecidedAction
     if input.can_replay {
         actions.push(DecidedAction::ReplayOriginal);
     }
-    if input
-        .present
-        .contains(&RequiredEvidenceKind::BusinessObjectVerification)
-    {
+    if input.present.contains(&RequiredEvidenceKind::BusinessObjectVerification) {
         actions.push(DecidedAction::Reattribute);
     }
     if input.present.contains(&RequiredEvidenceKind::CompensationResult) {
@@ -357,10 +347,7 @@ pub fn project_difference_actions(
         return (Vec::new(), Vec::new());
     }
     let mut actions = vec![DecidedAction::QueryOriginalResult, DecidedAction::AddEvidence];
-    if input
-        .present
-        .contains(&RequiredEvidenceKind::BusinessObjectVerification)
-    {
+    if input.present.contains(&RequiredEvidenceKind::BusinessObjectVerification) {
         actions.push(DecidedAction::Reattribute);
     }
     if input.present.contains(&RequiredEvidenceKind::CompensationResult) {
@@ -429,17 +416,18 @@ pub fn next_actions_after_outcome(
 
 #[cfg(test)]
 mod tests {
+    use erp_core::ids::{InboxMessageId, IntegrationErrorTaskId, ReconciliationDifferenceId};
+
     use super::{
-        difference_terminal_policy, error_terminal_policy, next_actions_after_outcome,
-        project_difference_actions, project_error_actions, reconciliation_reason_registry,
         DifferenceActionProjection, DirectConclusion, ErrorActionProjection, FundsImpact, ProjectionOutcome,
-        ProjectionSubject, RequiredEvidenceKind,
+        ProjectionSubject, RequiredEvidenceKind, difference_terminal_policy, error_terminal_policy,
+        next_actions_after_outcome, project_difference_actions, project_error_actions,
+        reconciliation_reason_registry,
     };
     use crate::entity::integration_ops::{
         ErrorClass, IntegrationErrorTask, IntegrationErrorTaskData, ReconciliationDifference,
         ReconciliationDifferenceData,
     };
-    use erp_core::ids::{InboxMessageId, IntegrationErrorTaskId, ReconciliationDifferenceId};
 
     fn error_task(with_message: bool) -> IntegrationErrorTask {
         IntegrationErrorTask::new(
@@ -479,10 +467,7 @@ mod tests {
         assert_eq!(external.required, &[RequiredEvidenceKind::ExternalCaseResult]);
 
         let repair = error_terminal_policy(&error_task(false));
-        assert_eq!(
-            repair.required,
-            &[RequiredEvidenceKind::BusinessObjectVerification]
-        );
+        assert_eq!(repair.required, &[RequiredEvidenceKind::BusinessObjectVerification]);
     }
 
     #[test]
@@ -491,18 +476,12 @@ mod tests {
         assert_eq!(financial.funds_impact, FundsImpact::Potential);
         assert_eq!(
             financial.required,
-            &[
-                RequiredEvidenceKind::CompensationResult,
-                RequiredEvidenceKind::FinancialReconciliation
-            ]
+            &[RequiredEvidenceKind::CompensationResult, RequiredEvidenceKind::FinancialReconciliation]
         );
 
         let operational = difference_terminal_policy(&difference("status_difference"));
         assert_eq!(operational.funds_impact, FundsImpact::None);
-        assert_eq!(
-            operational.required,
-            &[RequiredEvidenceKind::BusinessObjectVerification]
-        );
+        assert_eq!(operational.required, &[RequiredEvidenceKind::BusinessObjectVerification]);
         assert!(!financial.satisfied_by(&[] as &[RequiredEvidenceKind]));
     }
 
@@ -565,9 +544,7 @@ mod tests {
             policy: policy.clone(),
         });
         assert!(actions.iter().any(|action| action.as_str() == "CONFIRM_NO_ERROR"));
-        assert!(actions
-            .iter()
-            .any(|action| action.as_str() == "CONFIRM_VALID_DIFFERENCE"));
+        assert!(actions.iter().any(|action| action.as_str() == "CONFIRM_VALID_DIFFERENCE"));
         assert!(blockers.is_empty());
 
         let (actions, blockers) = project_difference_actions(DifferenceActionProjection {

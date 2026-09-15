@@ -6,15 +6,14 @@
 //! 一致（决定序号最大者胜出），无决定行的差异不在结果中，由 Service 解释为
 //! 无状态、版本零。
 
-use crate::repository::owned::ReconciliationDifferenceResolutionRepository;
 use std::collections::{HashMap, HashSet};
 
-use crate::entity::integration_ops::ReconciliationDifferenceResolution;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, Result};
 
-use persistence_core::Executor;
-use persistence_core::Result;
+use crate::entity::integration_ops::ReconciliationDifferenceResolution;
+use crate::repository::owned::ReconciliationDifferenceResolutionRepository;
 
 /// 对差异 ID 集合去重并保持首次出现顺序。
 ///
@@ -133,13 +132,13 @@ impl<'a> ReconciliationDifferenceResolutionRepository<'a> {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::time::Instant;
+
+    use super::{dedupe_difference_ids, latest_batch_filter, latest_per_difference};
     use crate::entity::integration_ops::{
         ReconciliationDifferenceId, ReconciliationDifferenceResolution,
         ReconciliationDifferenceResolutionData, ReconciliationDifferenceResolutionId, ResolutionAction,
     };
-    use erp_core::common::time::Instant;
-
-    use super::{dedupe_difference_ids, latest_batch_filter, latest_per_difference};
 
     /// 构造最小决定记录。
     ///
@@ -186,10 +185,7 @@ mod tests {
             .map(|value| value.as_str().unwrap().to_string())
             .collect();
         assert_eq!(ids, vec!["d1".to_string(), "d2".to_string()]);
-        assert_eq!(
-            filter.get_i64("deleted_at").unwrap(),
-            entity_core::NOT_DELETED_TIMESTAMP as i64
-        );
+        assert_eq!(filter.get_i64("deleted_at").unwrap(), entity_core::NOT_DELETED_TIMESTAMP as i64);
     }
 
     #[test]

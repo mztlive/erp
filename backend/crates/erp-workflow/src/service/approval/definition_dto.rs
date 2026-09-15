@@ -2,8 +2,9 @@
 //!
 //! 写请求使用 `deny_unknown_fields`，拒绝客户端提交节点键、类型、用途、连线或处理器。
 
-use crate::entity::document_registry::DocumentType;
 use serde::{Deserialize, Serialize};
+
+use crate::entity::document_registry::DocumentType;
 
 /// 草稿创建来源。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -72,10 +73,7 @@ impl DefinitionNodeRequest {
     /// # 关键业务约束
     /// 本方法只清洗外部文本，不生成节点 ID，也不判断已有节点归属。
     pub fn prepare(mut self) -> bpm::model::types::ModelResult<Self> {
-        self.node_id = self
-            .node_id
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty());
+        self.node_id = self.node_id.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
         self.node_name = bpm::model::ApprovalNodeDefinition::normalize_name(self.node_name)?;
         let assignee = self.assignee_user_id.trim().to_string();
         bpm::ParticipantId::new(assignee.clone()).map_err(|error| match error {
@@ -277,18 +275,22 @@ mod tests {
             r#"{"document_type":"stock_adjustment","name":"库存","draft_source":"EMPTY","idempotency_key":"k1","extra":true}"#
         )
         .is_err());
-        assert!(serde_json::from_str::<DefinitionNodeRequest>(
-            r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","node_key":"client"}"#
-        )
-        .is_err());
+        assert!(
+            serde_json::from_str::<DefinitionNodeRequest>(
+                r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","node_key":"client"}"#
+            )
+            .is_err()
+        );
         assert!(serde_json::from_str::<DefinitionNodeRequest>(
             r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","node_type":"USER_APPROVAL"}"#
         )
         .is_err());
-        assert!(serde_json::from_str::<DefinitionNodeRequest>(
-            r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","node_purpose":"X"}"#
-        )
-        .is_err());
+        assert!(
+            serde_json::from_str::<DefinitionNodeRequest>(
+                r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","node_purpose":"X"}"#
+            )
+            .is_err()
+        );
         let replace = serde_json::from_str::<ReplaceDefinitionNodesRequest>(
             r#"{"definition_id":"d1","expected_definition_lock_version":1,"nodes":[],"idempotency_key":"replace-1"}"#,
         )
@@ -302,34 +304,48 @@ mod tests {
             r#"{"definition_id":"d1","expected_definition_lock_version":1,"nodes":[],"idempotency_key":"k1","resolver":"x"}"#
         )
         .is_err());
-        assert!(serde_json::from_str::<DefinitionNodeRequest>(
-            r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","pool":"yes"}"#
-        )
-        .is_err());
-        assert!(serde_json::from_str::<DefinitionNodeRequest>(
-            r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","handler":"x"}"#
-        )
-        .is_err());
-        assert!(serde_json::from_str::<DefinitionNodeRequest>(
-            r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","resolver":"x"}"#
-        )
-        .is_err());
-        assert!(serde_json::from_str::<DefinitionNodeRequest>(
-            r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","action":"APPROVE"}"#
-        )
-        .is_err());
-        assert!(serde_json::from_str::<DefinitionNodeRequest>(
-            r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","terminal":true}"#
-        )
-        .is_err());
-        assert!(serde_json::from_str::<DefinitionNodeRequest>(
-            r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","role":"approver"}"#
-        )
-        .is_err());
-        assert!(serde_json::from_str::<DefinitionNodeRequest>(
-            r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","candidate_pool":[]}"#
-        )
-        .is_err());
+        assert!(
+            serde_json::from_str::<DefinitionNodeRequest>(
+                r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","pool":"yes"}"#
+            )
+            .is_err()
+        );
+        assert!(
+            serde_json::from_str::<DefinitionNodeRequest>(
+                r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","handler":"x"}"#
+            )
+            .is_err()
+        );
+        assert!(
+            serde_json::from_str::<DefinitionNodeRequest>(
+                r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","resolver":"x"}"#
+            )
+            .is_err()
+        );
+        assert!(
+            serde_json::from_str::<DefinitionNodeRequest>(
+                r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","action":"APPROVE"}"#
+            )
+            .is_err()
+        );
+        assert!(
+            serde_json::from_str::<DefinitionNodeRequest>(
+                r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","terminal":true}"#
+            )
+            .is_err()
+        );
+        assert!(
+            serde_json::from_str::<DefinitionNodeRequest>(
+                r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","role":"approver"}"#
+            )
+            .is_err()
+        );
+        assert!(
+            serde_json::from_str::<DefinitionNodeRequest>(
+                r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","candidate_pool":[]}"#
+            )
+            .is_err()
+        );
         assert!(serde_json::from_str::<PublishDefinitionRequest>(
             r#"{"definition_id":"d1","expected_definition_lock_version":1,"idempotency_key":"k1","extra":true}"#
         )
@@ -379,21 +395,25 @@ mod tests {
         .expect("空白节点 ID 视为新建");
         assert!(blank_id.node_id.is_none());
 
-        assert!(DefinitionNodeRequest {
-            node_id: None,
-            node_name: "   ".to_string(),
-            display_order: 1,
-            assignee_user_id: "u1".to_string(),
-        }
-        .prepare()
-        .is_err());
-        assert!(DefinitionNodeRequest {
-            node_id: None,
-            node_name: "仓储".to_string(),
-            display_order: 1,
-            assignee_user_id: "  ".to_string(),
-        }
-        .prepare()
-        .is_err());
+        assert!(
+            DefinitionNodeRequest {
+                node_id: None,
+                node_name: "   ".to_string(),
+                display_order: 1,
+                assignee_user_id: "u1".to_string(),
+            }
+            .prepare()
+            .is_err()
+        );
+        assert!(
+            DefinitionNodeRequest {
+                node_id: None,
+                node_name: "仓储".to_string(),
+                display_order: 1,
+                assignee_user_id: "  ".to_string(),
+            }
+            .prepare()
+            .is_err()
+        );
     }
 }

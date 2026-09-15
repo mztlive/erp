@@ -8,15 +8,15 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::catalog::status::EnableStatus;
 use erp_core::common::revision::RevisionBase;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{FileAssetId, SkuId, SkuRevisionId};
 use erp_core::money::{Amount, Quantity};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::catalog::status::EnableStatus;
 
 /// SKU 名称最大长度。
 const NAME_MAX_LEN: usize = 128;
@@ -273,11 +273,13 @@ fn ensure_non_negative_amount(value: Option<Amount>, label: &str) -> Result<()> 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
+
     use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
     use erp_core::ids::SkuRevisionId;
-    use erp_core::money::{line_amounts, Rate, UnitPrice};
-    use std::str::FromStr;
+    use erp_core::money::{Rate, UnitPrice, line_amounts};
+
+    use super::*;
 
     fn data() -> SkuRevisionData {
         SkuRevisionData {
@@ -305,15 +307,9 @@ mod tests {
 
         assert_eq!(revision.name, "坚果礼盒 500g");
         assert_eq!(revision.barcode.as_deref(), Some("6901234567890"));
-        assert_eq!(
-            revision.source_main_image_asset_id,
-            Some(FileAssetId::new("asset-main-1"))
-        );
+        assert_eq!(revision.source_main_image_asset_id, Some(FileAssetId::new("asset-main-1")));
         assert_eq!(revision.weight_kg, Some(Quantity::from_str("0.500000").unwrap()));
-        assert_eq!(
-            revision.sales_visible_price_gross,
-            Some(Amount::from_str("99.90").unwrap())
-        );
+        assert_eq!(revision.sales_visible_price_gross, Some(Amount::from_str("99.90").unwrap()));
         assert_eq!(revision.revision.revision_no, 1);
         assert!(revision.is_active());
     }
@@ -321,26 +317,17 @@ mod tests {
     /// 失败路径：必填空与超长各一条。
     #[test]
     fn new_rejects_empty_and_overlong_name() {
-        let empty = SkuRevisionData {
-            name: "  ".to_string(),
-            ..data()
-        };
+        let empty = SkuRevisionData { name: "  ".to_string(), ..data() };
         assert!(SkuRevision::new(SkuRevisionId::new("rev-1"), empty).is_err());
 
-        let overlong = SkuRevisionData {
-            name: "n".repeat(129),
-            ..data()
-        };
+        let overlong = SkuRevisionData { name: "n".repeat(129), ..data() };
         assert!(SkuRevision::new(SkuRevisionId::new("rev-1"), overlong).is_err());
     }
 
     /// 失败路径：越界（修订序号为 0）与关联不一致（生效区间倒挂）各一条。
     #[test]
     fn new_rejects_zero_revision_no_and_reversed_window() {
-        let zero_revision = SkuRevisionData {
-            revision_no: 0,
-            ..data()
-        };
+        let zero_revision = SkuRevisionData { revision_no: 0, ..data() };
         assert!(SkuRevision::new(SkuRevisionId::new("rev-1"), zero_revision).is_err());
 
         let reversed = SkuRevisionData {
@@ -354,22 +341,16 @@ mod tests {
     /// 金额：价格与物流属性为负数时被拒绝（定点类型仍可带负号，需实体校验）。
     #[test]
     fn new_rejects_negative_prices_and_logistics() {
-        let negative_price = SkuRevisionData {
-            sales_visible_price_gross: Some(Amount::from_str("-1.00").unwrap()),
-            ..data()
-        };
+        let negative_price =
+            SkuRevisionData { sales_visible_price_gross: Some(Amount::from_str("-1.00").unwrap()), ..data() };
         assert!(SkuRevision::new(SkuRevisionId::new("rev-1"), negative_price).is_err());
 
-        let negative_market = SkuRevisionData {
-            market_price: Some(Amount::from_str("-0.01").unwrap()),
-            ..data()
-        };
+        let negative_market =
+            SkuRevisionData { market_price: Some(Amount::from_str("-0.01").unwrap()), ..data() };
         assert!(SkuRevision::new(SkuRevisionId::new("rev-1"), negative_market).is_err());
 
-        let negative_weight = SkuRevisionData {
-            weight_kg: Some(Quantity::from_str("-0.100000").unwrap()),
-            ..data()
-        };
+        let negative_weight =
+            SkuRevisionData { weight_kg: Some(Quantity::from_str("-0.100000").unwrap()), ..data() };
         assert!(SkuRevision::new(SkuRevisionId::new("rev-1"), negative_weight).is_err());
     }
 
@@ -392,10 +373,7 @@ mod tests {
         assert_eq!(successor.name, "新 SKU 名称");
         assert_eq!(successor.barcode, current.barcode);
         assert_eq!(successor.weight_kg, current.weight_kg);
-        assert_eq!(
-            successor.sales_visible_price_gross,
-            current.sales_visible_price_gross
-        );
+        assert_eq!(successor.sales_visible_price_gross, current.sales_visible_price_gross);
         assert_eq!(successor.status, current.status);
     }
 

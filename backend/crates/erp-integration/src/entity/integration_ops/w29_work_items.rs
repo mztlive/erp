@@ -71,10 +71,10 @@ pub fn error_priority(error_class: ErrorClass) -> IntegrationResponsibilityPrior
         ErrorClass::AuthSignature | ErrorClass::ResultUnknown => IntegrationResponsibilityPriority::Urgent,
         ErrorClass::RateLimited | ErrorClass::OutOfOrder | ErrorClass::TransientFailure => {
             IntegrationResponsibilityPriority::High
-        }
+        },
         ErrorClass::CapabilityGap | ErrorClass::MappingError | ErrorClass::BusinessRejected => {
             IntegrationResponsibilityPriority::Normal
-        }
+        },
     }
 }
 
@@ -105,7 +105,7 @@ pub fn difference_owner_role(difference_type: &str) -> Result<&'static str> {
         | "cost_mismatch" => Ok(W29_FINANCE_ROLE),
         "supplier_supply_mismatch" | "supplier_order_mismatch" | "supply_mismatch" => {
             Ok(W29_PROCUREMENT_ROLE)
-        }
+        },
         "result_unknown" | "integration_result_unknown" => Ok(W29_SYSADMIN_ROLE),
         _ => Err(erp_core::Error::from("差异类型未注册固定责任规则，禁止创建任务")),
     }
@@ -201,8 +201,8 @@ pub fn difference_responsibility(
 #[cfg(test)]
 mod tests {
     use super::{
-        difference_owner_role, error_owner_role, error_priority, error_work_item_type,
-        IntegrationResponsibilityKind, IntegrationResponsibilityPriority,
+        IntegrationResponsibilityKind, IntegrationResponsibilityPriority, difference_owner_role,
+        error_owner_role, error_priority, error_work_item_type,
     };
     use crate::entity::integration_ops::ErrorClass;
 
@@ -276,29 +276,18 @@ mod tests {
         ] {
             assert_eq!(difference_owner_role(code).unwrap(), "role-operations");
         }
-        for code in [
-            "amount_mismatch",
-            "refund_mismatch",
-            "balance_mismatch",
-            "settlement_mismatch",
-            "cost_mismatch",
-        ] {
+        for code in
+            ["amount_mismatch", "refund_mismatch", "balance_mismatch", "settlement_mismatch", "cost_mismatch"]
+        {
             assert_eq!(difference_owner_role(code).unwrap(), "role-finance");
         }
-        for code in [
-            "supplier_supply_mismatch",
-            "supplier_order_mismatch",
-            "supply_mismatch",
-        ] {
+        for code in ["supplier_supply_mismatch", "supplier_order_mismatch", "supply_mismatch"] {
             assert_eq!(difference_owner_role(code).unwrap(), "role-procurement");
         }
         for code in ["result_unknown", "integration_result_unknown"] {
             assert_eq!(difference_owner_role(code).unwrap(), "role-sysadmin");
         }
-        assert_eq!(
-            difference_owner_role(" Amount_Mismatch ").unwrap(),
-            "role-finance"
-        );
+        assert_eq!(difference_owner_role(" Amount_Mismatch ").unwrap(), "role-finance");
         assert!(difference_owner_role("free_form_type").is_err());
         assert!(difference_owner_role("  ").is_err());
     }
@@ -365,17 +354,10 @@ mod tests {
             crate::entity::integration_ops::reconciliation_difference::tests::difference_data(),
         )
         .unwrap();
-        assert_eq!(
-            super::difference_responsibility(&difference, "   ")
-                .unwrap()
-                .owner_user_id,
-            "   "
-        );
+        assert_eq!(super::difference_responsibility(&difference, "   ").unwrap().owner_user_id, "   ");
         difference.difference_type = "free_form_type".to_string();
         assert_eq!(
-            super::difference_responsibility(&difference, "   ")
-                .unwrap_err()
-                .to_string(),
+            super::difference_responsibility(&difference, "   ").unwrap_err().to_string(),
             erp_core::Error::from("差异类型未注册固定责任规则，禁止创建任务").to_string(),
         );
     }

@@ -1,12 +1,14 @@
 //! S2 业务责任采集与首次生效归属；组织变更不回写业务责任。
 
-use crate::{Error, Result};
 use erp_core::common::time::Instant;
+use erp_identity::AccessControlExt;
 use erp_identity::entity::organization::OrgTree;
-use erp_identity::{repository::OrganizationRepository, AccessControlExt};
+use erp_identity::repository::OrganizationRepository;
 use erp_sales::entity::sales_order::{AttributionOrgNode, SalesAttribution, SalesOrder};
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::{Error, Result};
 
 /// 解析有效后台责任人的唯一主属组织，不默认放入根组织或系统账号。
 ///
@@ -64,13 +66,9 @@ pub async fn sales_attribution(
     let tree = OrgTree::new(&state.units)?;
     let path = tree.path(&order.business_org_unit_id)?;
     if path.iter().any(|node| !node.enabled) {
-        return Err(Error::BusinessLogicError(
-            "单据业务组织已停用，必须先完成交接".into(),
-        ));
+        return Err(Error::BusinessLogicError("单据业务组织已停用，必须先完成交接".into()));
     }
-    let org = path
-        .last()
-        .ok_or_else(|| Error::BusinessLogicError("单据业务组织缺失".into()))?;
+    let org = path.last().ok_or_else(|| Error::BusinessLogicError("单据业务组织缺失".into()))?;
     let snapshot = SalesAttribution {
         attribution_user_id: account.base.id,
         attribution_user_name: account.name,
@@ -81,10 +79,7 @@ pub async fn sales_attribution(
         organization_version: state.version,
         org_path: path
             .iter()
-            .map(|node| AttributionOrgNode {
-                id: node.base.id.clone(),
-                name: node.name.clone(),
-            })
+            .map(|node| AttributionOrgNode { id: node.base.id.clone(), name: node.name.clone() })
             .collect(),
     };
     snapshot.validate(&order.sales_owner_user_id, &order.business_org_unit_id)?;
@@ -100,10 +95,8 @@ pub async fn ensure_attribution(
     order: &SalesOrder,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let frozen = order
-        .attribution
-        .as_ref()
-        .ok_or_else(|| Error::BusinessLogicError("销售生效归属快照缺失".into()))?;
+    let frozen =
+        order.attribution.as_ref().ok_or_else(|| Error::BusinessLogicError("销售生效归属快照缺失".into()))?;
     let current = sales_attribution(db, order, frozen.attributed_at, executor).await?;
     if current != *frozen {
         return Err(Error::ConflictError("销售归属事实已变化，请重新提交生效".into()));

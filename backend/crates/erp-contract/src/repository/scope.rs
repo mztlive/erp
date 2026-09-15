@@ -1,9 +1,8 @@
 //! 合同授权条件；由应用层完成 DataScope 解析后再交给仓储。
 
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, QueryFilter, Result};
+use persistence_core::{Executor, QueryFilter, Result, mongo_ops};
 use serde::Deserialize;
 
 use super::contract::{ContractDomainRepository, ContractFilter};
@@ -157,9 +156,7 @@ impl ContractReadScope {
     /// # 关键业务约束
     /// 不含历史参与合同；写命令必须调用本方法而非 `document`。
     pub fn allows_customer(&self, customer_id: &str) -> bool {
-        self.authorized_customer_ids
-            .as_ref()
-            .is_none_or(|ids| ids.iter().any(|id| id == customer_id))
+        self.authorized_customer_ids.as_ref().is_none_or(|ids| ids.iter().any(|id| id == customer_id))
     }
 
     /// 判断授权是否覆盖全部未删除合同。
@@ -211,10 +208,7 @@ impl ContractReadScope {
     /// # 关键业务约束
     /// MongoDB 不接受空 `$in` 作为全量；空授权必须拒绝匹配。
     pub fn document(&self) -> Document {
-        authorization_document(
-            self.authorized_customer_ids.as_deref(),
-            &self.historical_contract_ids,
-        )
+        authorization_document(self.authorized_customer_ids.as_deref(), &self.historical_contract_ids)
     }
 }
 
@@ -240,13 +234,13 @@ pub fn authorization_document(
         None => doc! {},
         Some(customers) if customers.is_empty() && historical_contract_ids.is_empty() => {
             doc! { "$expr": false }
-        }
+        },
         Some(customers) if historical_contract_ids.is_empty() => {
             doc! { "customer_id": { "$in": customers } }
-        }
+        },
         Some([]) => {
             doc! { "id": { "$in": historical_contract_ids } }
-        }
+        },
         Some(customers) => doc! {
             "$or": [
                 { "customer_id": { "$in": customers } },
@@ -278,8 +272,7 @@ impl ContractRepository<'_> {
         scope: &ContractReadScope,
         executor: &mut dyn Executor,
     ) -> Result<Option<Contract>> {
-        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor)
-            .await
+        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
     }
 
     /// 装载指定合同的身份与所属客户，供历史参与收窄。
@@ -339,9 +332,7 @@ impl ContractDomainRepository<'_> {
         executor: &mut dyn Executor,
     ) -> Result<Vec<ContractVersion>> {
         mongo_ops::find_many(
-            &self
-                .db
-                .collection::<ContractVersion>(<mongodb::Database as ContractExt>::CONTRACTS),
+            &self.db.collection::<ContractVersion>(<mongodb::Database as ContractExt>::CONTRACTS),
             filter.to_doc(),
             FindOptions::builder()
                 .projection(doc! { "id": 1, "version": 1 })
@@ -367,10 +358,7 @@ mod tests {
         assert_eq!(empty.document(), doc! { "$expr": false });
         let company = ContractReadScope {
             authorized_customer_ids: None,
-            roles: vec![ContractScopeClause {
-                company: true,
-                ..Default::default()
-            }],
+            roles: vec![ContractScopeClause { company: true, ..Default::default() }],
             user_limit: None,
             historical_contract_ids: vec![],
             owned_customer_ids: vec![],
@@ -408,10 +396,7 @@ mod tests {
     #[test]
     fn personal_limit_company_is_explicit_none() {
         let limited = ContractReadScope {
-            roles: vec![ContractScopeClause {
-                company: true,
-                ..Default::default()
-            }],
+            roles: vec![ContractScopeClause { company: true, ..Default::default() }],
             user_limit: Some(ContractScopeClause {
                 owner_user_id: Some("sales-a".into()),
                 ..Default::default()

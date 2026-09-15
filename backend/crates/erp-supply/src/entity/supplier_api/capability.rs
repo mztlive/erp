@@ -5,11 +5,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
+use erp_core::Result;
 use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
 use erp_core::validation::normalize_optional_text;
-use erp_core::Result;
+use serde::{Deserialize, Serialize};
 
 /// 能力约束快照最大长度。
 const CONSTRAINT_SNAPSHOT_MAX_LEN: usize = 2000;
@@ -180,11 +179,8 @@ impl SupplierApiCapability {
     /// # 错误
     /// 当能力约束快照超长时返回错误。
     pub fn new(id: SupplierApiCapabilityId, data: SupplierApiCapabilityData) -> Result<Self> {
-        let constraint_snapshot = normalize_optional_text(
-            data.constraint_snapshot,
-            "能力约束快照",
-            CONSTRAINT_SNAPSHOT_MAX_LEN,
-        )?;
+        let constraint_snapshot =
+            normalize_optional_text(data.constraint_snapshot, "能力约束快照", CONSTRAINT_SNAPSHOT_MAX_LEN)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -252,11 +248,12 @@ impl SupplierApiCapability {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
+
     use super::{
         SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiCapabilityData,
         SupplierApiCapabilityStatus, SupplierApiCapabilityUpdate,
     };
-    use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
 
     fn capability_data() -> SupplierApiCapabilityData {
         SupplierApiCapabilityData {
@@ -274,28 +271,20 @@ mod tests {
 
         assert_eq!(capability.connection_id, SupplierApiConnectionId::new("conn-1"));
         assert_eq!(capability.capability_code, SupplierApiCapabilityCode::Order);
-        assert_eq!(
-            capability.constraint_snapshot.as_deref(),
-            Some("单笔下单金额上限 50000 元")
-        );
+        assert_eq!(capability.constraint_snapshot.as_deref(), Some("单笔下单金额上限 50000 元"));
         assert!(capability.is_active());
     }
 
     #[test]
     fn capability_new_rejects_overlong_constraint_snapshot() {
-        let overlong = SupplierApiCapabilityData {
-            constraint_snapshot: Some("c".repeat(2001)),
-            ..capability_data()
-        };
+        let overlong =
+            SupplierApiCapabilityData { constraint_snapshot: Some("c".repeat(2001)), ..capability_data() };
         assert!(SupplierApiCapability::new(SupplierApiCapabilityId::new("cap-2"), overlong).is_err());
     }
 
     #[test]
     fn capability_new_accepts_missing_constraint_snapshot() {
-        let without_snapshot = SupplierApiCapabilityData {
-            constraint_snapshot: None,
-            ..capability_data()
-        };
+        let without_snapshot = SupplierApiCapabilityData { constraint_snapshot: None, ..capability_data() };
         let capability =
             SupplierApiCapability::new(SupplierApiCapabilityId::new("cap-3"), without_snapshot).unwrap();
         assert!(capability.constraint_snapshot.is_none());
@@ -314,10 +303,7 @@ mod tests {
             .unwrap();
 
         assert!(!capability.is_active());
-        assert_eq!(
-            capability.constraint_snapshot.as_deref(),
-            Some("停用期间的额外限制")
-        );
+        assert_eq!(capability.constraint_snapshot.as_deref(), Some("停用期间的额外限制"));
         assert_eq!(capability.capability_code, SupplierApiCapabilityCode::Order);
     }
 
@@ -326,24 +312,20 @@ mod tests {
         let mut capability =
             SupplierApiCapability::new(SupplierApiCapabilityId::new("cap-1"), capability_data()).unwrap();
 
-        assert!(capability
-            .update(SupplierApiCapabilityUpdate {
-                status: None,
-                constraint_snapshot: Some("c".repeat(2001)),
-            })
-            .is_err());
+        assert!(
+            capability
+                .update(SupplierApiCapabilityUpdate {
+                    status: None,
+                    constraint_snapshot: Some("c".repeat(2001)),
+                })
+                .is_err()
+        );
     }
 
     #[test]
     fn capability_enums_serialize_with_stable_codes_and_expose_labels() {
-        assert_eq!(
-            serde_json::to_string(&SupplierApiCapabilityCode::Settlement).unwrap(),
-            "\"settlement\""
-        );
-        assert_eq!(
-            serde_json::to_string(&SupplierApiCapabilityStatus::Disabled).unwrap(),
-            "\"disabled\""
-        );
+        assert_eq!(serde_json::to_string(&SupplierApiCapabilityCode::Settlement).unwrap(), "\"settlement\"");
+        assert_eq!(serde_json::to_string(&SupplierApiCapabilityStatus::Disabled).unwrap(), "\"disabled\"");
         assert_eq!(SupplierApiCapabilityCode::Logistics.label(), "物流");
         assert_eq!(SupplierApiCapabilityCode::Callback.as_str(), "callback");
         assert_eq!(SupplierApiCapabilityStatus::Active.label(), "启用");

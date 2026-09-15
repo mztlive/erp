@@ -7,11 +7,6 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::purchase_order::line_common::{normalize_and_validate_line, PurchaseLineDataRef};
-use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
-use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId,
@@ -21,6 +16,11 @@ use erp_core::ids::{
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::purchase_order::line_common::{PurchaseLineDataRef, normalize_and_validate_line};
+use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
+use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
 
 /// 提交序号最大长度。
 const SUBMISSION_NO_MAX_LEN: usize = 64;
@@ -198,12 +198,7 @@ impl PurchaseOrderSubmission {
             SUBMISSION_NO_MAX_LEN,
             "提交序号过长",
         )?;
-        ensure_header_triple(
-            data.gross_amount,
-            data.net_amount,
-            data.tax_amount,
-            &submission_no,
-        )?;
+        ensure_header_triple(data.gross_amount, data.net_amount, data.tax_amount, &submission_no)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             purchase_order_id: data.purchase_order_id,
@@ -241,14 +236,8 @@ impl PurchaseOrderSubmission {
     /// # 错误
     /// 最大合法序号已经达到 `u32::MAX` 时返回领域错误。
     pub fn next_submission_no(existing: &[Self]) -> Result<String> {
-        let max_no = existing
-            .iter()
-            .filter_map(Self::formal_sequence)
-            .max()
-            .unwrap_or(0);
-        let next = max_no
-            .checked_add(1)
-            .ok_or_else(|| Error::from("采购提交序号溢出"))?;
+        let max_no = existing.iter().filter_map(Self::formal_sequence).max().unwrap_or(0);
+        let next = max_no.checked_add(1).ok_or_else(|| Error::from("采购提交序号溢出"))?;
         Ok(format!("SUB-{next:06}"))
     }
 
@@ -381,12 +370,8 @@ impl PurchaseOrderSubmission {
         if self.status != SubmissionStatus::Pending {
             return Err(Error::from("只有待审核的提交才能记录审核结论"));
         }
-        let reviewed_by = normalize_required_text(
-            reviewed_by.into(),
-            "审核人不能为空",
-            ACTOR_MAX_LEN,
-            "审核人标识过长",
-        )?;
+        let reviewed_by =
+            normalize_required_text(reviewed_by.into(), "审核人不能为空", ACTOR_MAX_LEN, "审核人标识过长")?;
         let (status, reason_code, comment) = match decision {
             PurchaseOrderReviewDecision::Approved { comment } => (
                 SubmissionStatus::Approved,
@@ -442,11 +427,7 @@ impl PurchaseOrderSubmission {
     /// # 返回
     /// 草稿返回 `DRAFT`，其他不可变提交状态返回 `SUBMISSION`。
     pub fn content_source(&self) -> &'static str {
-        if self.status == SubmissionStatus::Draft {
-            "DRAFT"
-        } else {
-            "SUBMISSION"
-        }
+        if self.status == SubmissionStatus::Draft { "DRAFT" } else { "SUBMISSION" }
     }
 
     /// 校验提交表头金额等于冻结明细汇总。
@@ -611,7 +592,7 @@ impl PurchaseLineDataRef for PurchaseOrderSubmissionLineData {
                 if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
                     return Err(Error::from("商品/服务行分配数量必须为正"));
                 }
-            }
+            },
             PurchaseLineType::LogisticsFee => {
                 if self.sales_order_line_id.is_some()
                     || self.sales_order_revision_line_id.is_some()
@@ -620,7 +601,7 @@ impl PurchaseLineDataRef for PurchaseOrderSubmissionLineData {
                 {
                     return Err(Error::from("物流费用行不得携带销售分配"));
                 }
-            }
+            },
         }
         Ok(())
     }
@@ -779,33 +760,21 @@ impl PurchaseOrderSubmissionLine {
         let unchanged = [
             (
                 requested.procurement_confirmation_line_id.as_deref(),
-                self.procurement_confirmation_line_id
-                    .as_ref()
-                    .map(ToString::to_string),
+                self.procurement_confirmation_line_id.as_ref().map(ToString::to_string),
             ),
-            (
-                requested.sku_id.as_deref(),
-                self.sku_id.as_ref().map(ToString::to_string),
-            ),
-            (
-                requested.sku_revision_id.as_deref(),
-                self.sku_revision_id.as_ref().map(ToString::to_string),
-            ),
+            (requested.sku_id.as_deref(), self.sku_id.as_ref().map(ToString::to_string)),
+            (requested.sku_revision_id.as_deref(), self.sku_revision_id.as_ref().map(ToString::to_string)),
             (
                 requested.sales_order_line_id.as_deref(),
                 self.sales_order_line_id.as_ref().map(ToString::to_string),
             ),
             (
                 requested.sales_order_revision_line_id.as_deref(),
-                self.sales_order_revision_line_id
-                    .as_ref()
-                    .map(ToString::to_string),
+                self.sales_order_revision_line_id.as_ref().map(ToString::to_string),
             ),
             (
                 requested.sales_order_submission_line_id.as_deref(),
-                self.sales_order_submission_line_id
-                    .as_ref()
-                    .map(ToString::to_string),
+                self.sales_order_submission_line_id.as_ref().map(ToString::to_string),
             ),
         ]
         .into_iter()
@@ -870,6 +839,16 @@ fn ensure_header_triple(
 #[cfg(test)]
 mod tests {
 
+    use std::str::FromStr;
+
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{
+        ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderSubmissionId,
+        PurchaseOrderSubmissionLineId, SalesOrderLineId, SalesOrderRevisionLineId,
+        SalesOrderSubmissionLineId, SkuId, SupplierAccountId, SupplierCommercialProfileRevisionId,
+    };
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice, line_amounts};
+
     use super::{
         PurchaseOrderReviewDecision, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
         PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, PurchaseOrderSubmissionUpdate,
@@ -877,14 +856,6 @@ mod tests {
     };
     use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
     use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
-    use erp_core::common::time::{BusinessDate, Instant};
-    use erp_core::ids::{
-        ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderSubmissionId,
-        PurchaseOrderSubmissionLineId, SalesOrderLineId, SalesOrderRevisionLineId,
-        SalesOrderSubmissionLineId, SkuId, SupplierAccountId, SupplierCommercialProfileRevisionId,
-    };
-    use erp_core::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
-    use std::str::FromStr;
 
     fn snapshot() -> SupplierSnapshot {
         SupplierSnapshot::new("北京华联供应商".to_string()).unwrap()
@@ -1022,24 +993,15 @@ mod tests {
     fn submission_submit_review_and_supersede_lifecycle() {
         let mut submission =
             PurchaseOrderSubmission::new(PurchaseOrderSubmissionId::new("sub-1"), submission_data()).unwrap();
-        submission
-            .submit(Instant::from_unix_secs(1_700_000_000), " buyer-1 ")
-            .unwrap();
+        submission.submit(Instant::from_unix_secs(1_700_000_000), " buyer-1 ").unwrap();
         assert_eq!(submission.status, SubmissionStatus::Pending);
         assert_eq!(submission.submitted_by.as_deref(), Some("buyer-1"));
 
-        assert!(
-            submission
-                .update(PurchaseOrderSubmissionUpdate::default())
-                .is_err(),
-            "待审核提交冻结"
-        );
+        assert!(submission.update(PurchaseOrderSubmissionUpdate::default()).is_err(), "待审核提交冻结");
 
         submission
             .record_review(
-                PurchaseOrderReviewDecision::Approved {
-                    comment: Some(" 金额核对无误 ".to_string()),
-                },
+                PurchaseOrderReviewDecision::Approved { comment: Some(" 金额核对无误 ".to_string()) },
                 Instant::from_unix_secs(1_700_000_100),
                 "finance-1",
             )
@@ -1052,9 +1014,7 @@ mod tests {
 
         let mut rejected =
             PurchaseOrderSubmission::new(PurchaseOrderSubmissionId::new("sub-2"), submission_data()).unwrap();
-        rejected
-            .submit(Instant::from_unix_secs(1_700_000_000), "buyer-1")
-            .unwrap();
+        rejected.submit(Instant::from_unix_secs(1_700_000_000), "buyer-1").unwrap();
         rejected
             .record_review(
                 PurchaseOrderReviewDecision::Rejected {
@@ -1076,39 +1036,35 @@ mod tests {
     fn rejected_review_requires_structured_reason_and_terminal_review_cannot_repeat() {
         let mut submission =
             PurchaseOrderSubmission::new(PurchaseOrderSubmissionId::new("sub-1"), submission_data()).unwrap();
-        submission
-            .submit(Instant::from_unix_secs(1_700_000_000), "buyer-1")
-            .unwrap();
+        submission.submit(Instant::from_unix_secs(1_700_000_000), "buyer-1").unwrap();
 
-        assert!(submission
-            .record_review(
-                PurchaseOrderReviewDecision::Rejected {
-                    reason_code: "   ".to_string(),
-                    comment: None,
-                },
-                Instant::from_unix_secs(1_700_000_100),
-                "finance-1",
-            )
-            .is_err());
+        assert!(
+            submission
+                .record_review(
+                    PurchaseOrderReviewDecision::Rejected { reason_code: "   ".to_string(), comment: None },
+                    Instant::from_unix_secs(1_700_000_100),
+                    "finance-1",
+                )
+                .is_err()
+        );
         assert_eq!(submission.status, SubmissionStatus::Pending);
 
         submission
             .record_review(
-                PurchaseOrderReviewDecision::Rejected {
-                    reason_code: "OTHER".to_string(),
-                    comment: None,
-                },
+                PurchaseOrderReviewDecision::Rejected { reason_code: "OTHER".to_string(), comment: None },
                 Instant::from_unix_secs(1_700_000_100),
                 "finance-1",
             )
             .unwrap();
-        assert!(submission
-            .record_review(
-                PurchaseOrderReviewDecision::Approved { comment: None },
-                Instant::from_unix_secs(1_700_000_200),
-                "finance-1",
-            )
-            .is_err());
+        assert!(
+            submission
+                .record_review(
+                    PurchaseOrderReviewDecision::Approved { comment: None },
+                    Instant::from_unix_secs(1_700_000_200),
+                    "finance-1",
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -1156,10 +1112,8 @@ mod tests {
     #[test]
     fn submission_line_rejects_failures() {
         // 商品行缺少销售当前版本行
-        let no_allocation = PurchaseOrderSubmissionLineData {
-            sales_order_revision_line_id: None,
-            ..goods_line_data()
-        };
+        let no_allocation =
+            PurchaseOrderSubmissionLineData { sales_order_revision_line_id: None, ..goods_line_data() };
         assert!(
             PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new("sl-3"), no_allocation,)
                 .is_err()
@@ -1187,10 +1141,7 @@ mod tests {
         );
 
         // 行号为零
-        let zero_line = PurchaseOrderSubmissionLineData {
-            line_no: 0,
-            ..goods_line_data()
-        };
+        let zero_line = PurchaseOrderSubmissionLineData { line_no: 0, ..goods_line_data() };
         assert!(
             PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new("sl-6"), zero_line).is_err()
         );

@@ -1,12 +1,15 @@
 //! 内存正式事实回归：覆盖、分组、筛选、分页及导出，不连接 MongoDB。
-use super::{calculation, dto::ProfitLossQuery, projection, source::Sources};
-use erp_core::{
-    common::time::Instant,
-    money::{Amount, Rate},
-};
-use erp_finance::entity::cost::*;
-use erp_sales::{entity::sales_order::*, repository::sales_order::profit_loss::ProfitLossOrder};
 use std::str::FromStr;
+
+use erp_core::common::time::Instant;
+use erp_core::money::{Amount, Rate};
+use erp_finance::entity::cost::*;
+use erp_sales::entity::sales_order::*;
+use erp_sales::repository::sales_order::profit_loss::ProfitLossOrder;
+
+use super::dto::ProfitLossQuery;
+use super::source::Sources;
+use super::{calculation, projection};
 
 /// 固定上海九月生效的单行销售及实际成本事实。
 fn sources() -> Sources {
@@ -75,41 +78,11 @@ fn sources() -> Sources {
         allocations: vec![],
         entries: vec![],
     };
-    cost(
-        &mut result,
-        "purchase",
-        CostStage::Actual,
-        CostType::Product,
-        "60",
-    );
-    cost(
-        &mut result,
-        "delivery",
-        CostStage::Actual,
-        CostType::Delivery,
-        "10",
-    );
-    cost(
-        &mut result,
-        "reduction",
-        CostStage::Reduction,
-        CostType::Product,
-        "5",
-    );
-    cost(
-        &mut result,
-        "expected",
-        CostStage::Expected,
-        CostType::Product,
-        "90",
-    );
-    cost(
-        &mut result,
-        "confirmed",
-        CostStage::Confirmed,
-        CostType::Product,
-        "80",
-    );
+    cost(&mut result, "purchase", CostStage::Actual, CostType::Product, "60");
+    cost(&mut result, "delivery", CostStage::Actual, CostType::Delivery, "10");
+    cost(&mut result, "reduction", CostStage::Reduction, CostType::Product, "5");
+    cost(&mut result, "expected", CostStage::Expected, CostType::Product, "90");
+    cost(&mut result, "confirmed", CostStage::Confirmed, CostType::Product, "80");
     result
 }
 /// 正式金额解析。
@@ -191,18 +164,16 @@ fn missing_cost_unfinished_delivery_and_future_facts_never_create_profit() {
     let result = calculation::calculate(&source, as_of(), false).unwrap();
     assert!(result[0].row.totals.actual_profit_loss_net.is_none());
     assert!(result[0].row.allowed_drilldowns.is_empty());
-    assert!(result[0]
-        .row
-        .coverage_blockers
-        .iter()
-        .any(|b| b.code == "COST_FACT_MISSING"));
+    assert!(result[0].row.coverage_blockers.iter().any(|b| b.code == "COST_FACT_MISSING"));
     let mut source = sources();
     source.orders[0].fulfillment_progress = FulfillmentProgress::PartiallyFulfilled;
-    assert!(calculation::calculate(&source, as_of(), true).unwrap()[0]
-        .row
-        .totals
-        .actual_profit_loss_net
-        .is_none());
+    assert!(
+        calculation::calculate(&source, as_of(), true).unwrap()[0]
+            .row
+            .totals
+            .actual_profit_loss_net
+            .is_none()
+    );
     assert!(
         calculation::calculate(&sources(), as_of() - 20 * 86400, true).unwrap()[0]
             .row
@@ -215,24 +186,22 @@ fn missing_cost_unfinished_delivery_and_future_facts_never_create_profit() {
 fn voucher_scope_and_excess_reduction_do_not_inflate_profit() {
     let mut source = sources();
     source.entries[0].cost_scope = CostScope::CardDirectFulfillment;
-    assert!(calculation::calculate(&source, as_of(), true).unwrap()[0]
-        .row
-        .totals
-        .actual_profit_loss_net
-        .is_none());
-    let mut source = sources();
-    cost(
-        &mut source,
-        "too-much",
-        CostStage::Reduction,
-        CostType::Product,
-        "200",
+    assert!(
+        calculation::calculate(&source, as_of(), true).unwrap()[0]
+            .row
+            .totals
+            .actual_profit_loss_net
+            .is_none()
     );
-    assert!(calculation::calculate(&source, as_of(), true).unwrap()[0]
-        .row
-        .coverage_blockers
-        .iter()
-        .any(|b| b.code == "EXCESS_REDUCTION"));
+    let mut source = sources();
+    cost(&mut source, "too-much", CostStage::Reduction, CostType::Product, "200");
+    assert!(
+        calculation::calculate(&source, as_of(), true).unwrap()[0]
+            .row
+            .coverage_blockers
+            .iter()
+            .any(|b| b.code == "EXCESS_REDUCTION")
+    );
 }
 #[test]
 fn current_revision_must_match_order_and_line_revenue() {
@@ -245,9 +214,7 @@ fn current_revision_must_match_order_and_line_revenue() {
 }
 #[test]
 fn paging_does_not_change_totals_and_export_contains_all_rows() {
-    let template = calculation::calculate(&sources(), as_of(), true)
-        .unwrap()
-        .remove(0);
+    let template = calculation::calculate(&sources(), as_of(), true).unwrap().remove(0);
     let orders: Vec<_> = (0..25)
         .map(|n| {
             let mut o = template.clone();
@@ -291,10 +258,7 @@ fn historical_groups_use_frozen_ids_and_preserve_unknown_contribution() {
         attributed_at: source.orders[0].effective_at.unwrap(),
         attribution_version: 1,
         organization_version: 1,
-        org_path: vec![AttributionOrgNode {
-            id: "org-old".into(),
-            name: "销售一部".into(),
-        }],
+        org_path: vec![AttributionOrgNode { id: "org-old".into(), name: "销售一部".into() }],
     });
     let mut orders = calculation::calculate(&source, as_of(), false).unwrap();
     let mut same_name = orders[0].clone();
@@ -320,10 +284,8 @@ fn attribution_filters_intersect_before_totals_and_keep_full_scope_candidates() 
     let mut orders = calculation::calculate(&sources(), as_of(), false).unwrap();
     orders[0].row.attribution_user_id = Some("sales-a".into());
     orders[0].row.attribution_user_name = Some("同名销售".into());
-    orders[0].attribution_path = vec![AttributionOrgNode {
-        id: "old-parent".into(),
-        name: "原部门".into(),
-    }];
+    orders[0].attribution_path =
+        vec![AttributionOrgNode { id: "old-parent".into(), name: "原部门".into() }];
     let mut other = orders[0].clone();
     other.row.attribution_user_id = Some("sales-b".into());
     other.row.row_id = "other".into();
@@ -336,10 +298,7 @@ fn attribution_filters_intersect_before_totals_and_keep_full_scope_candidates() 
     assert_eq!(view.totals.net_sales_revenue, "100.00");
     assert_eq!(view.totals.actual_profit_loss_net.as_deref(), Some("35.00"));
     assert_eq!(view.attribution_user_options.len(), 2);
-    assert_ne!(
-        view.attribution_user_options[0].label,
-        view.attribution_user_options[1].label
-    );
+    assert_ne!(view.attribution_user_options[0].label, view.attribution_user_options[1].label);
     q.attribution_org_unit_ids = Some(serde_json::from_value(serde_json::json!("current-parent")).unwrap());
     let empty = projection::project(orders, &q, "2026-09-11", true, "测试范围").unwrap();
     assert_eq!(empty.rows.total, 0);
@@ -350,10 +309,7 @@ fn attribution_filters_intersect_before_totals_and_keep_full_scope_candidates() 
 fn stale_scope_version_requires_refresh() {
     assert!(super::ensure_version(None, "new").is_ok());
     assert!(super::ensure_version(Some("new"), "new").is_ok());
-    assert!(matches!(
-        super::ensure_version(Some("old"), "new"),
-        Err(crate::Error::ConflictError(_))
-    ));
+    assert!(matches!(super::ensure_version(Some("old"), "new"), Err(crate::Error::ConflictError(_))));
 }
 
 #[test]
@@ -368,11 +324,7 @@ fn group_drilldown_preserves_exact_partition_including_unknown_attribution() {
     unknown.row.attribution_org_unit_id = None;
     orders.extend([child, unknown]);
     let mut q = query();
-    for group in [
-        "attribution_org:parent",
-        "attribution_org:child",
-        "attribution_org:",
-    ] {
+    for group in ["attribution_org:parent", "attribution_org:child", "attribution_org:"] {
         q.attribution_group = Some(group.into());
         assert!(q.validate().is_ok());
         let view = projection::project(orders.clone(), &q, "2026-09-11", true, "范围").unwrap();
@@ -427,23 +379,14 @@ fn response_shape_preserves_decimal_strings_and_missing_profit() {
     incomplete.row.row_id = "order-missing".into();
     incomplete.row.object_id = Some("order-missing".into());
     incomplete.row.identity_label = "SO-002".into();
-    incomplete
-        .row
-        .coverage_blockers
-        .push(super::dto::CoverageBlocker {
-            code: "SUPPLY_COST_MISSING".into(),
-            message: "部分销售明细缺少实际供货成本".into(),
-        });
+    incomplete.row.coverage_blockers.push(super::dto::CoverageBlocker {
+        code: "SUPPLY_COST_MISSING".into(),
+        message: "部分销售明细缺少实际供货成本".into(),
+    });
     incomplete.finish().unwrap();
     orders.push(incomplete);
-    let view = projection::project(
-        orders,
-        &query(),
-        "2026-09-11T10:00:00+00:00",
-        false,
-        "测试财务范围",
-    )
-    .unwrap();
+    let view =
+        projection::project(orders, &query(), "2026-09-11T10:00:00+00:00", false, "测试财务范围").unwrap();
     let json = serde_json::to_value(&view).unwrap();
     assert_eq!(json["totals"]["actualProfitLossNet"], "35.00");
     assert!(json["rows"]["items"][1].get("actualProfitLossNet").is_none());

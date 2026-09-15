@@ -1,7 +1,5 @@
 //! W29 受控关闭的事务内重读、原领域校验和写入。
 
-use super::map_service;
-use crate::errors::Error;
 use application_core::CommandFingerprint;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
@@ -16,6 +14,9 @@ use erp_workflow::ports::W29CloseFact;
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult, WorkItemExt};
 use mongodb::Database;
 use persistence_core::Executor;
+
+use super::map_service;
+use crate::errors::Error;
 
 pub(super) fn prepare_w29_close(
     reason_code: &str,
@@ -69,11 +70,7 @@ struct MongoW29Close<'a> {
 #[async_trait]
 impl W29ClosePort for MongoW29Close<'_> {
     async fn replacement(&self, id: &str, executor: &mut dyn Executor) -> WorkflowResult<Option<WorkItem>> {
-        self.db
-            .work_items()
-            .find_work_item(id, executor)
-            .await
-            .map_err(WorkflowError::from)
+        self.db.work_items().find_work_item(id, executor).await.map_err(WorkflowError::from)
     }
     async fn error_task(
         &self,
@@ -91,11 +88,7 @@ impl W29ClosePort for MongoW29Close<'_> {
         task: &mut IntegrationErrorTask,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<()> {
-        self.db
-            .integration_error_tasks()
-            .update(task, executor)
-            .await
-            .map_err(WorkflowError::from)?;
+        self.db.integration_error_tasks().update(task, executor).await.map_err(WorkflowError::from)?;
         Ok(())
     }
     async fn difference(&self, id: &str, executor: &mut dyn Executor) -> WorkflowResult<Option<()>> {
@@ -143,14 +136,7 @@ async fn persist(
     input: W29CloseInput<'_>,
     executor: &mut dyn Executor,
 ) -> WorkflowResult<()> {
-    let W29CloseInput {
-        item,
-        decision,
-        evidence_reference,
-        actor_id,
-        receipt_id,
-        closed_at,
-    } = input;
+    let W29CloseInput { item, decision, evidence_reference, actor_id, receipt_id, closed_at } = input;
     if let Some(replacement_work_item_id) = decision.replacement_work_item_id.as_deref() {
         let replacement = port
             .replacement(replacement_work_item_id, executor)
@@ -174,9 +160,7 @@ async fn persist(
                 erp_workflow::WorkItemType::BusinessException
             };
             if item.work_item_type != registered_type {
-                return Err(WorkflowError::ConflictError(
-                    "任务类型与集成异常分类不一致，请刷新".to_string(),
-                ));
+                return Err(WorkflowError::ConflictError("任务类型与集成异常分类不一致，请刷新".to_string()));
             }
             task.transition(
                 ErrorTaskStatus::Closed,
@@ -187,20 +171,15 @@ async fn persist(
             .map_err(|error| map_service(Error::from(error)))?;
             port.persist_task(&mut task, executor).await?;
             Ok(())
-        }
+        },
         "reconciliation_difference" => {
             let difference_id = ReconciliationDifferenceId::new(item.business_object_id.clone());
             port.difference(&item.business_object_id, executor)
                 .await?
                 .ok_or_else(|| WorkflowError::NotFound("对账差异不存在".to_string()))?;
             let latest = port.latest(&difference_id, executor).await?;
-            if latest
-                .as_ref()
-                .is_some_and(|resolution| resolution.resulting_status.is_terminal())
-            {
-                return Err(WorkflowError::ConflictError(
-                    "对账差异已经关闭或形成正式结论".to_string(),
-                ));
+            if latest.as_ref().is_some_and(|resolution| resolution.resulting_status.is_terminal()) {
+                return Err(WorkflowError::ConflictError("对账差异已经关闭或形成正式结论".to_string()));
             }
             let resolution_no = W29CloseDecision::next_resolution_no(
                 latest.as_ref().map(|resolution| resolution.resolution_no),
@@ -227,23 +206,23 @@ async fn persist(
             .map_err(|error| map_service(Error::from(error)))?;
             port.persist_resolution(&resolution, executor).await?;
             Ok(())
-        }
-        _ => Err(WorkflowError::BusinessLogicError(
-            "只有 W29 登记的异常对象允许受控关闭".to_string(),
-        )),
+        },
+        _ => Err(WorkflowError::BusinessLogicError("只有 W29 登记的异常对象允许受控关闭".to_string())),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::sync::Mutex;
+
     use erp_core::ids::{IntegrationErrorTaskId, WorkItemId};
     use erp_integration::entity::integration_ops::{
         IntegrationErrorTaskData, ReconciliationDifferenceResolutionData, ResolutionAction, ResultingStatus,
     };
-    use erp_workflow::entity::work_item::{AssignmentSource, WorkItemData, WorkItemPriority, WorkItemStatus};
     use erp_workflow::WorkItemType;
-    use std::sync::Mutex;
+    use erp_workflow::entity::work_item::{AssignmentSource, WorkItemData, WorkItemPriority, WorkItemStatus};
+
+    use super::*;
 
     struct Marker(u64);
     impl Executor for Marker {
@@ -431,10 +410,7 @@ mod tests {
             assert_eq!(task.status, ErrorTaskStatus::Closed);
             assert_eq!(task.resolution_type, Some(ResolutionType::Close));
             assert_eq!(task.resolved_at, Some(Instant::from_unix_secs(200)));
-            assert_eq!(
-                task.resolution.as_deref(),
-                Some("work_item:work-item-1;audit_log:receipt-1")
-            );
+            assert_eq!(task.resolution.as_deref(), Some("work_item:work-item-1;audit_log:receipt-1"));
             assert_eq!(task.base, port.task.as_ref().unwrap().base);
         }
     }
@@ -470,11 +446,7 @@ mod tests {
             assert_eq!(resolution.resulting_status, ResultingStatus::Closed);
             assert_eq!(
                 resolution.resolution_action,
-                if duplicate {
-                    ResolutionAction::CloseDuplicate
-                } else {
-                    ResolutionAction::CloseMisrouted
-                }
+                if duplicate { ResolutionAction::CloseDuplicate } else { ResolutionAction::CloseMisrouted }
             );
         }
     }
@@ -514,13 +486,8 @@ mod tests {
                 2 => port.task = None,
                 _ => port.task = Some(error_task(ErrorClass::ResultUnknown)),
             }
-            let error = persist(&port, input(&item, &decision), &mut ex)
-                .await
-                .unwrap_err();
-            assert!(matches!(
-                error,
-                WorkflowError::NotFound(_) | WorkflowError::ConflictError(_)
-            ));
+            let error = persist(&port, input(&item, &decision), &mut ex).await.unwrap_err();
+            assert!(matches!(error, WorkflowError::NotFound(_) | WorkflowError::ConflictError(_)));
             assert_eq!(port.calls.lock().unwrap().len(), if case < 2 { 1 } else { 2 });
             assert!(port.written_task.lock().unwrap().is_none());
         }

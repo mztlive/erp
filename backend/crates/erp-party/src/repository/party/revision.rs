@@ -1,16 +1,15 @@
-use crate::entity::party::PartyRevision;
-use crate::repository::owned::PartyRevisionRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PartyId;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
 use super::shared::sort_doc;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::party::PartyRevision;
+use crate::repository::owned::PartyRevisionRepository;
 
 /// 主体修订列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -99,8 +98,7 @@ impl<'a> PartyRevisionRepository<'a> {
         if revision_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(doc! { "id": { "$in": revision_ids } }, executor)
-            .await
+        self.find_many(doc! { "id": { "$in": revision_ids } }, executor).await
     }
 
     /// 按修订 ID 查找主体修订。
@@ -142,11 +140,7 @@ impl<'a> PartyRevisionRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<PartyRevisionRow>> {
         let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                &["created_at", "revision_no"],
-            ))
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, &["created_at", "revision_no"]))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(party_revision_projection())
@@ -155,10 +149,7 @@ impl<'a> PartyRevisionRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 检索某主体的完整修订历史（按 `revision_no` 升序，§6.2 历史查询）。
@@ -177,12 +168,8 @@ impl<'a> PartyRevisionRepository<'a> {
         party_id: &PartyId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyRevision>> {
-        self.find_many_sorted(
-            doc! { "party_id": party_id.to_string() },
-            doc! { "revision_no": 1 },
-            executor,
-        )
-        .await
+        self.find_many_sorted(doc! { "party_id": party_id.to_string() }, doc! { "revision_no": 1 }, executor)
+            .await
     }
 
     /// 按修订 ID 集合批量读取主体修订。
@@ -204,8 +191,7 @@ impl<'a> PartyRevisionRepository<'a> {
         if revision_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(doc! { "id": { "$in": revision_ids } }, executor)
-            .await
+        self.find_many(doc! { "id": { "$in": revision_ids } }, executor).await
     }
 
     /// 按法定名称或简称字面量模糊匹配主体 ID。

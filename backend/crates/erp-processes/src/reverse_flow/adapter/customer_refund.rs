@@ -10,17 +10,17 @@ pub use erp_returns::service::approval::{cancel_customer_refund_to_draft, ensure
 use erp_workflow::entity::approval_integration::{
     ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload,
 };
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::DocumentType;
-
-use crate::{Error, Result};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::business_adapter::{
-    adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
+    AdapterReadScope, ApprovalAdapterSpec, adapter_spec_of, ensure_adapter_spec_complete,
 };
 use erp_workflow::service::approval::policy::{
     ApprovalDomainAction, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource, OwnerOrganizationSource,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
+
+use crate::{Error, Result};
 
 /// 已注册的客户退款单适配器规格。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,9 +76,7 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<CustomerRefundAdapter>
         || spec.owner_role.as_str() != "customer_refund_approver"
         || spec.owner_organization_source != OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         || spec.read_scope != AdapterReadScope::DocumentOrganizationAndCreator
-        || !spec
-            .subject_snapshot_fields
-            .contains(&ApprovalSubjectSnapshotField::TotalAmount)
+        || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalAmount)
     {
         return Err(Error::Internal("客户退款单审批适配器登记不完整".to_string()));
     }
@@ -194,11 +192,8 @@ pub fn execute_customer_refund_domain_action(
         ApprovalDomainAction::CustomerRefundPost => ensure_final_approve_posting(refund).map_err(Error::from),
         ApprovalDomainAction::CustomerRefundCancelApproval => {
             cancel_customer_refund_to_draft(refund).map_err(Error::from)
-        }
-        other => Err(Error::ValidationError(format!(
-            "动作 {} 不属于客户退款单",
-            other.as_str()
-        ))),
+        },
+        other => Err(Error::ValidationError(format!("动作 {} 不属于客户退款单", other.as_str()))),
     }
 }
 
@@ -234,9 +229,7 @@ pub fn customer_refund_object_readable(organization_id: &str, assignee_user_id: 
 /// 往来主体为空时返回校验错误。
 pub fn customer_refund_responsible_org_id(organization_id: &str) -> Result<String> {
     if organization_id.trim().is_empty() {
-        return Err(Error::ValidationError(
-            "客户退款单缺少往来主体，无法冻结责任组织".to_string(),
-        ));
+        return Err(Error::ValidationError("客户退款单缺少往来主体，无法冻结责任组织".to_string()));
     }
     Ok(organization_id.to_string())
 }
@@ -276,10 +269,12 @@ pub fn build_customer_refund_snapshot(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
+
     use erp_core::ids::{CustomerReceiptId, CustomerRefundId};
     use erp_returns::entity::returns::CustomerRefundData;
-    use std::str::FromStr;
+
+    use super::*;
 
     fn draft_refund() -> CustomerRefund {
         CustomerRefund::new(
@@ -310,9 +305,7 @@ mod tests {
         assert_eq!(adapter.document_type, DocumentType::CustomerRefund);
         assert_eq!(adapter.process_kind.as_str(), "customer_refund");
         assert_eq!(
-            customer_refund_subject_ref("crf-1")
-                .expect("主体引用必须可构造")
-                .subject_kind(),
+            customer_refund_subject_ref("crf-1").expect("主体引用必须可构造").subject_kind(),
             "customer_refund"
         );
         assert_eq!(adapter.subject_ref_builder, "subject_ref_for(CustomerRefund)");
@@ -321,24 +314,15 @@ mod tests {
             ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
         );
         assert_eq!(adapter.subject_snapshot_builder, "build_customer_refund_snapshot");
-        assert_eq!(
-            adapter.on_approval_start,
-            ApprovalDomainAction::CustomerRefundSubmit
-        );
+        assert_eq!(adapter.on_approval_start, ApprovalDomainAction::CustomerRefundSubmit);
         assert_eq!(adapter.on_final_approve, ApprovalDomainAction::CustomerRefundPost);
-        assert_eq!(
-            adapter.cancel_action,
-            ApprovalDomainAction::CustomerRefundCancelApproval
-        );
+        assert_eq!(adapter.cancel_action, ApprovalDomainAction::CustomerRefundCancelApproval);
         assert_eq!(adapter.owner_role, "customer_refund_approver");
         assert_eq!(
             adapter.owner_organization_snapshot,
             OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         );
-        assert_eq!(
-            adapter.read_scope,
-            AdapterReadScope::DocumentOrganizationAndCreator
-        );
+        assert_eq!(adapter.read_scope, AdapterReadScope::DocumentOrganizationAndCreator);
         assert_ne!(adapter.on_approval_start, adapter.on_final_approve);
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
     }
@@ -427,10 +411,9 @@ mod tests {
         let mut refund = draft_refund();
         start_customer_refund_approval(&mut refund).unwrap();
         execute_customer_refund_domain_action(&mut refund, ApprovalDomainAction::CustomerRefundPost).unwrap();
-        assert!(execute_customer_refund_domain_action(
-            &mut refund,
-            ApprovalDomainAction::StockAdjustmentSubmit,
-        )
-        .is_err());
+        assert!(
+            execute_customer_refund_domain_action(&mut refund, ApprovalDomainAction::StockAdjustmentSubmit,)
+                .is_err()
+        );
     }
 }

@@ -1,32 +1,26 @@
 //! 客户资料创建用例与事务载荷。
 
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::{PartyId, PartyRevisionId};
-use erp_customer::CustomerExt;
 use erp_customer::{
     AssignmentRole, CustomerAccount, CustomerAccountData, CustomerAccountId, CustomerAccountStatus,
-    CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId, CustomerProfileCommand,
-    CustomerProfileCommandResultData, CustomerProfileOperation, CustomerProfileReplayContext,
+    CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId, CustomerExt, CustomerProfileCommand,
+    CustomerProfileCommandResultData, CustomerProfileMutationView, CustomerProfileOperation,
+    CustomerProfileReplayContext, SaveCustomerProfileRequest,
 };
 use erp_identity::AccessControlExt;
-use erp_party::PartyExt;
-use erp_party::{Party, PartyData, PartyKind, PartyRevision, PartyRevisionData, PartyStatus};
+use erp_party::{Party, PartyData, PartyExt, PartyKind, PartyRevision, PartyRevisionData, PartyStatus};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
+use super::CustomerProfileService;
+use super::facts::PartyFacts;
+use super::idempotency::{checked_command_view, command_view};
+use super::numbering::business_no;
 use crate::adapters::customer_access;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-
-use super::{
-    facts::PartyFacts,
-    idempotency::{checked_command_view, command_view},
-    numbering::business_no,
-    CustomerProfileService,
-};
-use erp_customer::{CustomerProfileMutationView, SaveCustomerProfileRequest};
 
 impl CustomerProfileService {
     /// 原子创建 Party、客户角色、首条 OWNER 与首批资料事实。
@@ -86,9 +80,7 @@ impl CustomerProfileService {
             .clone()
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    customer_access(db.clone(), rbac)
-                        .require_create(&actor, session)
-                        .await?;
+                    customer_access(db.clone(), rbac).require_create(&actor, session).await?;
                     prepared.persist(&db, session).await
                 })
             })
@@ -126,13 +118,7 @@ impl CustomerProfileService {
         let assignment = create_owner(&req, &customer_id, owner_user_id)?;
         let facts = self.create_facts(&req, &party_id, actor.id())?;
         PreparedCreate::new(
-            PreparedCreateParts {
-                party,
-                revision,
-                account,
-                assignment,
-                facts,
-            },
+            PreparedCreateParts { party, revision, account, assignment, facts },
             req,
             replay,
             actor,
@@ -147,9 +133,7 @@ impl CustomerProfileService {
             .find_account(user_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("负责销售账号不存在".to_string()))?;
-        account
-            .ensure_can_login()
-            .map_err(|error| Error::BusinessLogicError(error.to_string()))
+        account.ensure_can_login().map_err(|error| Error::BusinessLogicError(error.to_string()))
     }
 }
 
@@ -182,13 +166,7 @@ impl PreparedCreate {
         replay: CustomerProfileReplayContext,
         actor: &AuditActor,
     ) -> Result<Self> {
-        let PreparedCreateParts {
-            party,
-            revision,
-            account,
-            assignment,
-            facts,
-        } = parts;
+        let PreparedCreateParts { party, revision, account, assignment, facts } = parts;
         let command = CustomerProfileCommand::record_success(
             next_id(),
             &replay,
@@ -210,16 +188,7 @@ impl PreparedCreate {
             "customer_profile",
             account.base.id.clone(),
         )?;
-        Ok(Self {
-            party,
-            revision,
-            account,
-            assignment,
-            facts,
-            command,
-            audit,
-            result,
-        })
+        Ok(Self { party, revision, account, assignment, facts, command, audit, result })
     }
 
     /// 将完整客户资料与幂等结果写入同一事务。
@@ -227,13 +196,9 @@ impl PreparedCreate {
         db.party_revisions().create(&self.revision, session).await?;
         db.parties().create(&self.party, session).await?;
         db.customer_accounts().create(&self.account, session).await?;
-        db.customer_assignments()
-            .create(&self.assignment, session)
-            .await?;
+        db.customer_assignments().create(&self.assignment, session).await?;
         self.facts.persist(db, session).await?;
-        db.customer_profile_commands()
-            .create(&self.command, session)
-            .await?;
+        db.customer_profile_commands().create(&self.command, session).await?;
         db.audit_logs().create(&self.audit, session).await?;
         Ok(())
     }

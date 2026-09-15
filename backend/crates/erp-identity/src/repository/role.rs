@@ -1,9 +1,9 @@
-use crate::entity::Role;
-use crate::repository::owned::RoleRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::doc;
-use persistence_core::Result;
-use persistence_core::{mongo_ops, Executor};
+use persistence_core::{Executor, Result, mongo_ops};
+
+use crate::entity::Role;
+use crate::repository::owned::RoleRepository;
 
 impl<'a> RoleRepository<'a> {
     /// 判断指定角色 ID 是否对应未软删除记录。
@@ -93,9 +93,7 @@ impl<'a> RoleRepository<'a> {
             return Ok(Vec::new());
         }
 
-        let mut roles = self
-            .find_many(doc! { "id": { "$in": role_ids } }, executor)
-            .await?;
+        let mut roles = self.find_many(doc! { "id": { "$in": role_ids } }, executor).await?;
         roles.sort_by(|left, right| left.base.id.cmp(&right.base.id));
         Ok(roles)
     }

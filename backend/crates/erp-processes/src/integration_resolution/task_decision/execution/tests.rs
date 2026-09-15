@@ -1,8 +1,9 @@
 //! 直接执行生产 runner 的替身证据，不连接数据库。
-use super::*;
-use crate::Error;
 use std::cell::RefCell;
 use std::collections::VecDeque;
+
+use super::*;
+use crate::Error;
 
 struct TestExecutor {
     _identity: u8,
@@ -34,18 +35,13 @@ struct TestPort {
 
 impl TestPort {
     fn new(fail: Option<Step>) -> Self {
-        Self {
-            fail,
-            seen: Vec::new(),
-            executors: Vec::new(),
-        }
+        Self { fail, seen: Vec::new(), executors: Vec::new() }
     }
 
     fn step(&mut self, step: Step, executor: Option<&mut dyn Executor>) -> Result<()> {
         self.seen.push(step);
         if let Some(executor) = executor {
-            self.executors
-                .push(executor as *mut dyn Executor as *mut () as usize);
+            self.executors.push(executor as *mut dyn Executor as *mut () as usize);
         }
         if self.fail == Some(step) {
             return Err(Error::ConflictError(format!("stop:{step:?}")));
@@ -211,7 +207,7 @@ async fn any_transaction_error_recovers_once_and_missing_receipt_keeps_original_
             Some(value) => assert_eq!(result.unwrap(), value),
             None => {
                 assert!(matches!(result, Err(Error::Forbidden(message)) if message == "original-auth-error"))
-            }
+            },
         }
     }
 }

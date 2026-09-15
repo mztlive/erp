@@ -1,7 +1,8 @@
 //! 公司主体维护和选择接口合同。
+use serde::{Deserialize, Serialize};
+
 use crate::entity::party::company::CompanyProfile;
 use crate::{Party, PartyStatus, Result};
-use serde::{Deserialize, Serialize};
 
 /// 公司创建或整份资料更新；更新必须携带版本。
 #[derive(Debug, Clone, Deserialize)]
@@ -23,12 +24,8 @@ impl SaveCompanyRequest {
     /// # Errors
     /// 非法名称或别名返回校验失败。
     pub fn profile(&self) -> Result<CompanyProfile> {
-        CompanyProfile::new(
-            self.legal_name.clone(),
-            self.short_name.clone(),
-            self.aliases.clone(),
-        )
-        .map_err(|e| crate::Error::ValidationError(e.to_string()))
+        CompanyProfile::new(self.legal_name.clone(), self.short_name.clone(), self.aliases.clone())
+            .map_err(|e| crate::Error::ValidationError(e.to_string()))
     }
 }
 
@@ -57,9 +54,7 @@ pub struct CompanyView {
 impl TryFrom<Party> for CompanyView {
     type Error = crate::Error;
     fn try_from(party: Party) -> Result<Self> {
-        let company = party
-            .company_profile
-            .ok_or_else(|| crate::Error::NotFound("公司主体不存在".into()))?;
+        let company = party.company_profile.ok_or_else(|| crate::Error::NotFound("公司主体不存在".into()))?;
         Ok(Self {
             id: party.base.id,
             party_no: party.party_no,

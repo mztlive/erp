@@ -73,10 +73,7 @@ mod tests {
         waiter.abort();
         assert!(waiter.await.unwrap_err().is_cancelled());
         let _ = release_tx.send(());
-        tokio::time::timeout(std::time::Duration::from_secs(1), completed_rx)
-            .await
-            .unwrap()
-            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(1), completed_rx).await.unwrap().unwrap();
     }
 
     #[tokio::test]

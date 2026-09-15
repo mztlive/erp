@@ -1,22 +1,23 @@
 //! 读取销售变更事实并组合创建时冻结的审批绑定。
 
+use std::hash::{Hash, Hasher};
+
+use application_core::{
+    AuditActor, PageView, SortDir, normalize_sort, page_or_default, page_size_or_default,
+};
+use erp_sales::dto::sales_review::{SalesChangeOrderListParams, SalesChangeOrderView};
+use erp_sales::entity::sales_review::SalesChangeOrder;
+use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
+use erp_workflow::BpmExt;
+use erp_workflow::service::document_registry::find_approval_binding;
+use persistence_core::Transactional;
+use serde::Serialize;
+use validator::Validate;
+
 use super::projection::document_approval_view;
 use super::{SalesChangeOrderDetailView, SalesChangeReadService};
 use crate::sales_center::access::SalesAccess;
 use crate::{Error, Result};
-use application_core::{
-    normalize_sort, page_or_default, page_size_or_default, AuditActor, PageView, SortDir,
-};
-use erp_sales::dto::sales_review::{SalesChangeOrderListParams, SalesChangeOrderView};
-use erp_sales::entity::sales_review::SalesChangeOrder;
-use erp_sales::repository::SalesOrderExt;
-use erp_sales::repository::SalesReviewExt;
-use erp_workflow::service::document_registry::find_approval_binding;
-use erp_workflow::BpmExt;
-use persistence_core::Transactional;
-use serde::Serialize;
-use std::hash::{Hash, Hasher};
-use validator::Validate;
 
 /// 销售变更列表保持现有分页字段并声明独立的授权时点及版本。
 #[derive(Serialize)]
@@ -62,22 +63,16 @@ impl SalesChangeReadService {
     ) -> Result<SalesChangeListView> {
         let expected = params.scope_version.as_deref();
         if params.page.unwrap_or(1) > 1 && expected.is_none_or(str::is_empty) {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into(),
-            ));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into()));
         }
         params.validate()?;
         let snapshot = self.change_list_snapshot(params, actor).await?;
         if expected.is_some_and(|value| value != snapshot.scope_version) {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into(),
-            ));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
         }
         let current = self.change_list_snapshot(params, actor).await?;
         if current.scope_version != snapshot.scope_version {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into(),
-            ));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into()));
         }
         Ok(snapshot)
     }
@@ -153,14 +148,8 @@ impl SalesChangeReadService {
                         sort_by: Some("created_at".to_string()),
                         sort_ascending: matches!(sort_dir, SortDir::Asc),
                     };
-                    let page = db
-                        .sales_change_orders()
-                        .search_sales_change_orders(&filter, executor)
-                        .await?;
-                    let versions = db
-                        .sales_change_orders()
-                        .query_change_versions(&filter, executor)
-                        .await?;
+                    let page = db.sales_change_orders().search_sales_change_orders(&filter, executor).await?;
+                    let versions = db.sales_change_orders().query_change_versions(&filter, executor).await?;
                     if versions.len() > 10_000 {
                         return Err(Error::ValidationError(
                             "销售变更查询超过上限，请收窄原销售单条件".into(),
@@ -245,14 +234,12 @@ async fn load_authorized_change(
                     .find_authorized(change.sales_order_id.as_ref(), &scope, executor)
                     .await?
                     .ok_or_else(|| Error::NotFound("销售变更单不存在或无权查看".to_string()))?;
-                let binding = match find_approval_binding(&db, &id, executor)
-                    .await
-                    .map_err(crate::Error::from)
-                {
-                    Ok(binding) => binding,
-                    Err(Error::NotFound(_)) => None,
-                    Err(error) => return Err(error),
-                };
+                let binding =
+                    match find_approval_binding(&db, &id, executor).await.map_err(crate::Error::from) {
+                        Ok(binding) => binding,
+                        Err(Error::NotFound(_)) => None,
+                        Err(error) => return Err(error),
+                    };
                 let graph = match binding.as_ref() {
                     Some(binding) => Some(
                         db.bpm_workflow()
@@ -277,10 +264,7 @@ async fn load_authorized_change(
                         })
                         .collect();
                 }
-                let version = format!(
-                    "{}:{}:{}",
-                    context.scope_version, order.base.id, order.base.version
-                );
+                let version = format!("{}:{}:{}", context.scope_version, order.base.id, order.base.version);
                 Ok((view, version))
             })
         })
@@ -306,15 +290,9 @@ fn detail_view(
         change_type: change_order.change_type,
         reason: change_order.reason,
         status: change_order.stable.status(),
-        current_submission_id: change_order
-            .current_submission_id
-            .as_ref()
-            .map(ToString::to_string),
+        current_submission_id: change_order.current_submission_id.as_ref().map(ToString::to_string),
         target_content_hash: change_order.target_content_hash,
-        effective_revision_id: change_order
-            .effective_revision_id
-            .as_ref()
-            .map(ToString::to_string),
+        effective_revision_id: change_order.effective_revision_id.as_ref().map(ToString::to_string),
         version: change_order.base.version,
         created_at: change_order.base.created_at,
         approval: document_approval_view(binding.as_ref(), None, change_order.stable.status()),

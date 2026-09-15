@@ -4,20 +4,18 @@
 //! 引用不可变变更提交。变更提交/明细**不提供软删除方法**；变更单本身是
 //! 可编辑单据草稿（`StableBase`），可软删除与恢复。
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{PurchaseChangeOrderId, PurchaseChangeSubmissionId, PurchaseOrderId};
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Result, mongo_ops};
+
+use super::common::in_filter;
+use super::{PURCHASE_CHANGE_ORDERS, PurchaseOrderDomainRepository};
 use crate::entity::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeOrderStatus, PurchaseChangeSubmission, PurchaseChangeSubmissionLine,
 };
 use crate::repository::owned::{PurchaseChangeSubmissionLineRepository, PurchaseChangeSubmissionRepository};
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::ids::{PurchaseChangeOrderId, PurchaseChangeSubmissionId, PurchaseOrderId};
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-
-use super::common::in_filter;
-use super::{PurchaseOrderDomainRepository, PURCHASE_CHANGE_ORDERS};
-use persistence_core::Executor;
-use persistence_core::PageResult;
-use persistence_core::{mongo_ops, Result};
 
 /// 已归一化的采购变更查询；授权来源条件与业务筛选分别保留。
 #[derive(Debug, Clone, Copy)]
@@ -72,10 +70,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         let collection = self.db.collection::<PurchaseChangeOrder>(PURCHASE_CHANGE_ORDERS);
         let items = mongo_ops::find_many(&collection, filter.clone(), options, executor).await?;
         let total = mongo_ops::count_documents(&collection, filter, executor).await?;
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 判断采购单是否存在草稿或审批中的变更单。
@@ -127,9 +122,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         purchase_order_id: &PurchaseOrderId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchaseChangeOrder>> {
-        let options = FindOptions::builder()
-            .sort(doc! { "created_at": 1, "id": 1 })
-            .build();
+        let options = FindOptions::builder().sort(doc! { "created_at": 1, "id": 1 }).build();
         mongo_ops::find_many(
             &self.db.collection::<PurchaseChangeOrder>(PURCHASE_CHANGE_ORDERS),
             change_order_filter(Some(purchase_order_id.as_ref()), None, None),
@@ -163,9 +156,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<Vec<super::scope::PurchaseVersion>> {
         persistence_core::mongo_ops::find_many(
-            &self
-                .db
-                .collection::<super::scope::PurchaseVersion>(PURCHASE_CHANGE_ORDERS),
+            &self.db.collection::<super::scope::PurchaseVersion>(PURCHASE_CHANGE_ORDERS),
             change_order_filter(purchase_order_id, status, authorized_purchase_order_ids),
             FindOptions::builder()
                 .projection(doc! { "id": 1, "version": 1 })
@@ -193,13 +184,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         change_order_id: &PurchaseChangeOrderId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchaseChangeSubmission>> {
-        let options = FindOptions::builder()
-            .sort(doc! { "submission_no": 1, "id": 1 })
-            .build();
+        let options = FindOptions::builder().sort(doc! { "submission_no": 1, "id": 1 }).build();
         mongo_ops::find_many(
-            &self
-                .db
-                .collection::<PurchaseChangeSubmission>(super::PURCHASE_CHANGE_SUBMISSIONS),
+            &self.db.collection::<PurchaseChangeSubmission>(super::PURCHASE_CHANGE_SUBMISSIONS),
             doc! { "purchase_change_order_id": change_order_id.to_string() },
             options,
             executor,
@@ -223,13 +210,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         submission_id: &PurchaseChangeSubmissionId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchaseChangeSubmissionLine>> {
-        let options = FindOptions::builder()
-            .sort(doc! { "line_no": 1, "id": 1 })
-            .build();
+        let options = FindOptions::builder().sort(doc! { "line_no": 1, "id": 1 }).build();
         mongo_ops::find_many(
-            &self
-                .db
-                .collection::<PurchaseChangeSubmissionLine>(super::PURCHASE_CHANGE_SUBMISSION_LINES),
+            &self.db.collection::<PurchaseChangeSubmissionLine>(super::PURCHASE_CHANGE_SUBMISSION_LINES),
             doc! { "purchase_change_submission_id": submission_id.to_string() },
             options,
             executor,
@@ -255,10 +238,7 @@ impl<'a> PurchaseChangeSubmissionRepository<'a> {
         if change_order_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let ids = change_order_ids
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>();
+        let ids = change_order_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
         self.find_many(
             doc! { "purchase_change_order_id": { "$in": ids }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
             executor,
@@ -324,22 +304,22 @@ fn change_order_filter(
     match (purchase_order_id, authorized_purchase_order_ids) {
         (Some(purchase_order_id), None) => {
             filter.insert("purchase_order_id", purchase_order_id);
-        }
+        },
         (Some(purchase_order_id), Some(authorized)) => {
             if authorized.iter().any(|id| id == purchase_order_id) {
                 filter.insert("purchase_order_id", purchase_order_id);
             } else {
                 filter.insert("$expr", false);
             }
-        }
+        },
         (None, Some(authorized)) => {
             if authorized.is_empty() {
                 filter.insert("$expr", false);
             } else {
                 filter.insert("purchase_order_id", doc! { "$in": authorized });
             }
-        }
-        (None, None) => {}
+        },
+        (None, None) => {},
     }
     filter
 }
@@ -367,10 +347,7 @@ impl<'a> PurchaseChangeSubmissionLineRepository<'a> {
             return Ok(Vec::new());
         }
         self.find_many(
-            in_filter(
-                "purchase_change_submission_id",
-                submission_ids.iter().map(|id| id.to_string()),
-            ),
+            in_filter("purchase_change_submission_id", submission_ids.iter().map(|id| id.to_string())),
             executor,
         )
         .await
@@ -379,8 +356,9 @@ impl<'a> PurchaseChangeSubmissionLineRepository<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::change_order_filter;
     use mongodb::bson::doc;
+
+    use super::change_order_filter;
 
     #[test]
     fn missing_authorized_source_ids_stay_empty() {

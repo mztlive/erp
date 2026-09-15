@@ -2,11 +2,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
+use erp_core::Result;
 use erp_core::ids::{BusinessDocumentId, DocumentAttachmentId, FileAssetId};
 use erp_core::validation::normalize_required_text;
-use erp_core::Result;
+use serde::{Deserialize, Serialize};
 
 /// 创建人标识最大长度。
 const CREATED_BY_MAX_LEN: usize = 128;
@@ -95,12 +94,8 @@ impl DocumentAttachment {
     /// # 错误
     /// 当记录人为空或超长时返回错误。
     pub fn new(id: DocumentAttachmentId, data: DocumentAttachmentData) -> Result<Self> {
-        let created_by = normalize_required_text(
-            data.created_by,
-            "记录人不能为空",
-            CREATED_BY_MAX_LEN,
-            "记录人过长",
-        )?;
+        let created_by =
+            normalize_required_text(data.created_by, "记录人不能为空", CREATED_BY_MAX_LEN, "记录人过长")?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             document_id: data.document_id,
@@ -113,8 +108,9 @@ impl DocumentAttachment {
 
 #[cfg(test)]
 mod tests {
-    use super::{AttachmentUsage, DocumentAttachment, DocumentAttachmentData};
     use erp_core::ids::{BusinessDocumentId, DocumentAttachmentId, FileAssetId};
+
+    use super::{AttachmentUsage, DocumentAttachment, DocumentAttachmentData};
 
     fn data() -> DocumentAttachmentData {
         DocumentAttachmentData {
@@ -138,30 +134,21 @@ mod tests {
     /// 失败路径：必填为空被拒。
     #[test]
     fn new_rejects_empty_creator() {
-        let payload = DocumentAttachmentData {
-            created_by: "  ".to_string(),
-            ..data()
-        };
+        let payload = DocumentAttachmentData { created_by: "  ".to_string(), ..data() };
         assert!(DocumentAttachment::new(DocumentAttachmentId::new("da-1"), payload).is_err());
     }
 
     /// 失败路径：超长记录人被拒。
     #[test]
     fn new_rejects_overlong_creator() {
-        let payload = DocumentAttachmentData {
-            created_by: "x".repeat(129),
-            ..data()
-        };
+        let payload = DocumentAttachmentData { created_by: "x".repeat(129), ..data() };
         assert!(DocumentAttachment::new(DocumentAttachmentId::new("da-1"), payload).is_err());
     }
 
     /// 枚举序列化与标签稳定。
     #[test]
     fn usage_codes_and_labels_are_stable() {
-        assert_eq!(
-            serde_json::to_string(&AttachmentUsage::Manifest).unwrap(),
-            "\"manifest\""
-        );
+        assert_eq!(serde_json::to_string(&AttachmentUsage::Manifest).unwrap(), "\"manifest\"");
         assert_eq!(AttachmentUsage::Image.as_str(), "image");
         assert_eq!(AttachmentUsage::Attachment.label(), "附件");
     }

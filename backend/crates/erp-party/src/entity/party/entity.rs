@@ -2,17 +2,15 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::stable::StableBase;
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::field_update::FieldUpdate;
+pub use erp_core::ids::PartyId;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::{PartyOwned, PartyRevision};
-
-pub use erp_core::ids::PartyId;
 
 /// 主体编号最大长度。
 const PARTY_NO_MAX_LEN: usize = 64;
@@ -181,12 +179,8 @@ impl Party {
     /// # 错误
     /// 当 party_no 为空/超长，或统一社会信用代码非空但不是 18 位字母数字时返回错误。
     pub fn new(id: PartyId, data: PartyData, created_by: impl Into<String>) -> Result<Self> {
-        let party_no = normalize_required_text(
-            data.party_no,
-            "主体编号不能为空",
-            PARTY_NO_MAX_LEN,
-            "主体编号过长",
-        )?;
+        let party_no =
+            normalize_required_text(data.party_no, "主体编号不能为空", PARTY_NO_MAX_LEN, "主体编号过长")?;
         let unified_credit_code = normalize_credit_code(data.unified_credit_code)?;
 
         Ok(Self {
@@ -259,11 +253,8 @@ impl Party {
     /// # 错误
     /// 当前修订指针缺失、目标修订不存在或修订属于其他 Party 时返回错误。
     pub fn current_revision<'a>(&self, revisions: &'a [PartyRevision]) -> Result<&'a PartyRevision> {
-        let revision_id = self
-            .stable
-            .current_revision_id
-            .as_deref()
-            .ok_or_else(|| Error::from("主体缺少当前名称修订"))?;
+        let revision_id =
+            self.stable.current_revision_id.as_deref().ok_or_else(|| Error::from("主体缺少当前名称修订"))?;
         let revision = revisions
             .iter()
             .find(|revision| revision.base.id == revision_id)
@@ -281,7 +272,7 @@ impl Party {
     /// 当代码非空但不是 18 位字母数字时返回错误。
     fn apply_credit_code(&mut self, update: FieldUpdate<String>) -> Result<()> {
         match update {
-            FieldUpdate::Unchanged => {}
+            FieldUpdate::Unchanged => {},
             FieldUpdate::Clear => self.unified_credit_code = None,
             FieldUpdate::Set(value) => self.unified_credit_code = normalize_credit_code(Some(value))?,
         }
@@ -333,11 +324,12 @@ fn normalize_credit_code(value: Option<String>) -> Result<Option<String>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_credit_code, Party, PartyData, PartyKind, PartyStatus, PartyUpdate};
-    use crate::entity::party::{PartyRevision, PartyRevisionData};
     use erp_core::common::state::assert_adjacency_closed;
     use erp_core::field_update::FieldUpdate;
     use erp_core::ids::{PartyId, PartyRevisionId};
+
+    use super::{Party, PartyData, PartyKind, PartyStatus, PartyUpdate, normalize_credit_code};
+    use crate::entity::party::{PartyRevision, PartyRevisionData};
 
     fn party_data() -> PartyData {
         PartyData {
@@ -362,22 +354,13 @@ mod tests {
     /// 失败路径：编号为空/超长，信用代码非法格式。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank_no = PartyData {
-            party_no: "   ".to_string(),
-            ..party_data()
-        };
+        let blank_no = PartyData { party_no: "   ".to_string(), ..party_data() };
         assert!(Party::new(PartyId::new("p"), blank_no, "admin-1").is_err());
 
-        let overlong_no = PartyData {
-            party_no: "x".repeat(65),
-            ..party_data()
-        };
+        let overlong_no = PartyData { party_no: "x".repeat(65), ..party_data() };
         assert!(Party::new(PartyId::new("p"), overlong_no, "admin-1").is_err());
 
-        let bad_code = PartyData {
-            unified_credit_code: Some("12345".to_string()),
-            ..party_data()
-        };
+        let bad_code = PartyData { unified_credit_code: Some("12345".to_string()), ..party_data() };
         assert!(Party::new(PartyId::new("p"), bad_code, "admin-1").is_err());
     }
 
@@ -388,10 +371,7 @@ mod tests {
         assert_eq!(normalize_credit_code(Some("   ".to_string())).unwrap(), None);
         let party = Party::new(
             PartyId::new("party-2"),
-            PartyData {
-                unified_credit_code: None,
-                ..party_data()
-            },
+            PartyData { unified_credit_code: None, ..party_data() },
             "admin-1",
         )
         .unwrap();
@@ -423,13 +403,7 @@ mod tests {
         let mut party = Party::new(PartyId::new("party-4"), party_data(), "admin-1").unwrap();
 
         party
-            .update(
-                PartyUpdate {
-                    unified_credit_code: FieldUpdate::Clear,
-                    status: None,
-                },
-                "admin-2",
-            )
+            .update(PartyUpdate { unified_credit_code: FieldUpdate::Clear, status: None }, "admin-2")
             .unwrap();
         assert_eq!(party.unified_credit_code, None);
 
@@ -444,10 +418,7 @@ mod tests {
             .unwrap();
         assert_eq!(party.unified_credit_code.as_deref(), Some("91310000MA1BL4KW9X"));
 
-        let invalid = PartyUpdate {
-            unified_credit_code: FieldUpdate::Set("bad".to_string()),
-            status: None,
-        };
+        let invalid = PartyUpdate { unified_credit_code: FieldUpdate::Set("bad".to_string()), status: None };
         assert!(party.update(invalid, "admin-4").is_err());
     }
 
@@ -477,14 +448,7 @@ mod tests {
 
         assert!(party.current_revision(std::slice::from_ref(&revision)).is_err());
         party.stable.current_revision_id = Some("revision-1".to_string());
-        assert_eq!(
-            party
-                .current_revision(std::slice::from_ref(&revision))
-                .unwrap()
-                .base
-                .id,
-            "revision-1"
-        );
+        assert_eq!(party.current_revision(std::slice::from_ref(&revision)).unwrap().base.id, "revision-1");
 
         let foreign = PartyRevision::new(
             PartyRevisionId::new("revision-1"),

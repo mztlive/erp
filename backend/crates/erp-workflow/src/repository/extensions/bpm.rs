@@ -120,34 +120,13 @@ mod tests {
 
     #[test]
     fn bpm_collection_names_are_isolated_from_legacy_step_collections() {
-        assert_eq!(
-            mongodb::Database::APPROVAL_PROCESS_DEFINITIONS,
-            "approval_process_definitions"
-        );
-        assert_eq!(
-            mongodb::Database::APPROVAL_NODE_DEFINITIONS,
-            "approval_node_definitions"
-        );
-        assert_eq!(
-            mongodb::Database::APPROVAL_TRANSITION_DEFINITIONS,
-            "approval_transition_definitions"
-        );
-        assert_eq!(
-            mongodb::Database::APPROVAL_PROCESS_INSTANCES,
-            "approval_process_instances"
-        );
-        assert_eq!(
-            mongodb::Database::APPROVAL_NODE_EXECUTIONS,
-            "approval_node_executions"
-        );
-        assert_eq!(
-            mongodb::Database::APPROVAL_INSTANCE_ASSIGNEES,
-            "approval_instance_assignees"
-        );
-        assert_eq!(
-            mongodb::Database::APPROVAL_COMMAND_RECEIPTS,
-            "approval_command_receipts"
-        );
+        assert_eq!(mongodb::Database::APPROVAL_PROCESS_DEFINITIONS, "approval_process_definitions");
+        assert_eq!(mongodb::Database::APPROVAL_NODE_DEFINITIONS, "approval_node_definitions");
+        assert_eq!(mongodb::Database::APPROVAL_TRANSITION_DEFINITIONS, "approval_transition_definitions");
+        assert_eq!(mongodb::Database::APPROVAL_PROCESS_INSTANCES, "approval_process_instances");
+        assert_eq!(mongodb::Database::APPROVAL_NODE_EXECUTIONS, "approval_node_executions");
+        assert_eq!(mongodb::Database::APPROVAL_INSTANCE_ASSIGNEES, "approval_instance_assignees");
+        assert_eq!(mongodb::Database::APPROVAL_COMMAND_RECEIPTS, "approval_command_receipts");
         for name in [
             mongodb::Database::APPROVAL_PROCESS_DEFINITIONS,
             mongodb::Database::APPROVAL_NODE_DEFINITIONS,

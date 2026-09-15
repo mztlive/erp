@@ -20,8 +20,8 @@ pub use owned::{
     ExternalIdentityTargetRepository, FileAssetRepository, SourceSystemRepository,
 };
 pub use source_registry::{
-    external_id_key_bson, ExpireTargetsOutcome, ExternalIdentityMapFilter, ExternalIdentityMapRow,
-    SourceRegistryRepository, SourceSystemFilter, SourceSystemRow,
+    ExpireTargetsOutcome, ExternalIdentityMapFilter, ExternalIdentityMapRow, SourceRegistryRepository,
+    SourceSystemFilter, SourceSystemRow, external_id_key_bson,
 };
 
 pub mod supplier_connection_job;

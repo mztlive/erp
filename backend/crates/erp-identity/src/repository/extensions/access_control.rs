@@ -6,6 +6,8 @@
 //! conventions §4.3「Repository 与索引共用同一常量」），`indexes/` 与
 //! `repository/` 两侧统一取 `<mongodb::Database as AccessControlExt>::` 值。
 
+use mongodb::Database;
+
 use crate::repository::access_control::{
     AccessControlRepository, AuditEventFilter, DataScopeFilter, PermissionFilter,
 };
@@ -13,7 +15,6 @@ use crate::repository::owned::{
     AccountCoreRepository, AuditEventRepository, DataScopeRepository, PermissionRepository, RoleRepository,
     UserRoleRepository,
 };
-use mongodb::Database;
 
 /// 访问控制域仓储访问器。
 pub trait AccessControlExt {

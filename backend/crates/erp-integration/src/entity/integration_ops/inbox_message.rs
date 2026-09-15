@@ -8,11 +8,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::Instant;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::{InboxMessageId, SourceSystemId};
 
@@ -290,11 +289,8 @@ impl InboxMessage {
             SCHEMA_VERSION_MAX_LEN,
             "来源契约版本过长",
         )?;
-        let payload_reference = normalize_optional_text(
-            data.payload_reference,
-            "规范化内容引用",
-            PAYLOAD_REFERENCE_MAX_LEN,
-        )?;
+        let payload_reference =
+            normalize_optional_text(data.payload_reference, "规范化内容引用", PAYLOAD_REFERENCE_MAX_LEN)?;
         if data.status == InboxMessageStatus::Processed && data.processed_at.is_none() {
             return Err(Error::from("消息状态为已处理时必须提供处理完成时间"));
         }
@@ -347,9 +343,10 @@ impl InboxMessage {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::{InboxMessage, InboxMessageData, InboxMessageStatus, InboxMessageUpdate, MessageType};
     use erp_core::common::time::Instant;
     use erp_core::ids::{InboxMessageId, SourceSystemId};
+
+    use super::{InboxMessage, InboxMessageData, InboxMessageStatus, InboxMessageUpdate, MessageType};
 
     const RECEIVED_AT: i64 = 1_700_000_000;
     const SENT_AT: i64 = 1_699_999_900;
@@ -375,15 +372,9 @@ pub(crate) mod tests {
         let message = InboxMessage::new(InboxMessageId::new("msg-1"), message_data()).unwrap();
 
         assert_eq!(message.source_event_id, "evt-1001");
-        assert_eq!(
-            message.business_fact_key,
-            "mall-1|PAYMENT_SUCCEEDED|SO-2026-001|v3"
-        );
+        assert_eq!(message.business_fact_key, "mall-1|PAYMENT_SUCCEEDED|SO-2026-001|v3");
         assert_eq!(message.payload_schema_version, "v1.2");
-        assert_eq!(
-            message.payload_reference.as_deref(),
-            Some("archive://2026/msg-1001")
-        );
+        assert_eq!(message.payload_reference.as_deref(), Some("archive://2026/msg-1001"));
         assert_eq!(message.status, InboxMessageStatus::Received);
         assert_eq!(message.source_system_id, SourceSystemId::new("sys-mall-1"));
         assert_eq!(message.source_sent_at, Some(Instant::from_unix_secs(SENT_AT)));
@@ -393,53 +384,33 @@ pub(crate) mod tests {
 
     #[test]
     fn new_rejects_empty_required_fields() {
-        let empty_event = InboxMessageData {
-            source_event_id: "  ".to_string(),
-            ..message_data()
-        };
+        let empty_event = InboxMessageData { source_event_id: "  ".to_string(), ..message_data() };
         assert!(InboxMessage::new(InboxMessageId::new("msg-2"), empty_event).is_err());
 
-        let empty_key = InboxMessageData {
-            business_fact_key: "  ".to_string(),
-            ..message_data()
-        };
+        let empty_key = InboxMessageData { business_fact_key: "  ".to_string(), ..message_data() };
         assert!(InboxMessage::new(InboxMessageId::new("msg-3"), empty_key).is_err());
 
-        let empty_version = InboxMessageData {
-            payload_schema_version: "  ".to_string(),
-            ..message_data()
-        };
+        let empty_version = InboxMessageData { payload_schema_version: "  ".to_string(), ..message_data() };
         assert!(InboxMessage::new(InboxMessageId::new("msg-4"), empty_version).is_err());
     }
 
     #[test]
     fn new_rejects_overlong_fields() {
-        let overlong_event = InboxMessageData {
-            source_event_id: "e".repeat(257),
-            ..message_data()
-        };
+        let overlong_event = InboxMessageData { source_event_id: "e".repeat(257), ..message_data() };
         assert!(InboxMessage::new(InboxMessageId::new("msg-5"), overlong_event).is_err());
 
-        let overlong_key = InboxMessageData {
-            business_fact_key: "k".repeat(257),
-            ..message_data()
-        };
+        let overlong_key = InboxMessageData { business_fact_key: "k".repeat(257), ..message_data() };
         assert!(InboxMessage::new(InboxMessageId::new("msg-6"), overlong_key).is_err());
 
-        let overlong_reference = InboxMessageData {
-            payload_reference: Some("r".repeat(513)),
-            ..message_data()
-        };
+        let overlong_reference =
+            InboxMessageData { payload_reference: Some("r".repeat(513)), ..message_data() };
         assert!(InboxMessage::new(InboxMessageId::new("msg-7"), overlong_reference).is_err());
     }
 
     #[test]
     fn new_rejects_processed_without_completed_time() {
-        let processed_without_time = InboxMessageData {
-            status: InboxMessageStatus::Processed,
-            processed_at: None,
-            ..message_data()
-        };
+        let processed_without_time =
+            InboxMessageData { status: InboxMessageStatus::Processed, processed_at: None, ..message_data() };
         assert!(InboxMessage::new(InboxMessageId::new("msg-8"), processed_without_time).is_err());
     }
 
@@ -457,29 +428,17 @@ pub(crate) mod tests {
 
         assert_eq!(message.status, InboxMessageStatus::Processed);
         assert_eq!(message.processed_at, Some(Instant::from_unix_secs(PROCESSED_AT)));
-        assert_eq!(
-            message.source_event_id, original_event_id,
-            "消息身份不可被通用更新修改"
-        );
-        assert_eq!(
-            message.source_system_id,
-            SourceSystemId::new("sys-mall-1"),
-            "来源系统不可被通用更新修改"
-        );
-        assert_eq!(
-            message.business_fact_key,
-            "mall-1|PAYMENT_SUCCEEDED|SO-2026-001|v3"
-        );
+        assert_eq!(message.source_event_id, original_event_id, "消息身份不可被通用更新修改");
+        assert_eq!(message.source_system_id, SourceSystemId::new("sys-mall-1"), "来源系统不可被通用更新修改");
+        assert_eq!(message.business_fact_key, "mall-1|PAYMENT_SUCCEEDED|SO-2026-001|v3");
     }
 
     #[test]
     fn update_rejects_inconsistent_status_and_time() {
         let mut message = InboxMessage::new(InboxMessageId::new("msg-10"), message_data()).unwrap();
 
-        let processed_without_time = InboxMessageUpdate {
-            status: Some(InboxMessageStatus::Processed),
-            processed_at: None,
-        };
+        let processed_without_time =
+            InboxMessageUpdate { status: Some(InboxMessageStatus::Processed), processed_at: None };
         assert!(message.update(processed_without_time).is_err());
 
         let time_without_processed = InboxMessageUpdate {
@@ -491,22 +450,13 @@ pub(crate) mod tests {
 
     #[test]
     fn enums_serialize_with_stable_codes_and_expose_labels() {
-        assert_eq!(
-            serde_json::to_string(&MessageType::PaymentSucceeded).unwrap(),
-            "\"PAYMENT_SUCCEEDED\""
-        );
+        assert_eq!(serde_json::to_string(&MessageType::PaymentSucceeded).unwrap(), "\"PAYMENT_SUCCEEDED\"");
         assert_eq!(
             serde_json::to_string(&MessageType::CardBalanceRestored).unwrap(),
             "\"CARD_BALANCE_RESTORED\""
         );
-        assert_eq!(
-            serde_json::to_string(&MessageType::SupplierCallback).unwrap(),
-            "\"SUPPLIER_CALLBACK\""
-        );
-        assert_eq!(
-            serde_json::to_string(&InboxMessageStatus::ToManual).unwrap(),
-            "\"to_manual\""
-        );
+        assert_eq!(serde_json::to_string(&MessageType::SupplierCallback).unwrap(), "\"SUPPLIER_CALLBACK\"");
+        assert_eq!(serde_json::to_string(&InboxMessageStatus::ToManual).unwrap(), "\"to_manual\"");
 
         assert_eq!(MessageType::OrderCanceled.label(), "订单取消");
         assert_eq!(MessageType::MallActionRequest.label(), "商城动作请求");
@@ -554,16 +504,10 @@ pub(crate) mod tests {
             received_at: Instant::from_unix_secs(RECEIVED_AT),
         };
 
-        let blank_event = InboxMessageReceivedData {
-            source_event_id: "  ".to_string(),
-            ..envelope()
-        };
+        let blank_event = InboxMessageReceivedData { source_event_id: "  ".to_string(), ..envelope() };
         assert!(InboxMessage::received(InboxMessageId::new("msg-received-2"), blank_event).is_err());
 
-        let overlong_key = InboxMessageReceivedData {
-            business_fact_key: "k".repeat(257),
-            ..envelope()
-        };
+        let overlong_key = InboxMessageReceivedData { business_fact_key: "k".repeat(257), ..envelope() };
         assert!(InboxMessage::received(InboxMessageId::new("msg-received-3"), overlong_key).is_err());
     }
 }

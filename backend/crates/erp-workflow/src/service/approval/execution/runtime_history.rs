@@ -2,8 +2,8 @@
 //!
 //! HTTP 历史接口与单据详情 `recent_history` 共用同一映射，禁止再复用列表行形状。
 
-use bpm::model::types::ApprovalNodeExecutionStatus;
 use bpm::model::ApprovalNodeExecution;
+use bpm::model::types::ApprovalNodeExecutionStatus;
 use serde::{Deserialize, Serialize};
 
 /// 单条执行历史。字段与前端审批 Tab 合同对齐。
@@ -64,10 +64,7 @@ pub fn history_item_from_execution(execution: &ApprovalNodeExecution) -> Runtime
         node_name: execution.node_name.clone(),
         result: execution.status.as_str().to_string(),
         assignee_name: optional_text(&execution.assignee_name_snapshot),
-        decided_by: execution
-            .decided_by
-            .as_ref()
-            .map(|participant| participant.as_str().to_string()),
+        decided_by: execution.decided_by.as_ref().map(|participant| participant.as_str().to_string()),
         decision_reason: execution.decision_reason.clone(),
         decided_at: execution.decided_at.map(|stamp| stamp.unix_secs()),
     }
@@ -89,14 +86,8 @@ pub fn history_page_from(mut items: Vec<RuntimeHistoryItem>, limit: u32) -> Runt
     if has_more {
         items.truncate(limit as usize);
     }
-    let next_cursor = has_more
-        .then(|| items.last().map(|item| item.execution_no.to_string()))
-        .flatten();
-    RuntimeHistoryPage {
-        items,
-        next_cursor,
-        has_more,
-    }
+    let next_cursor = has_more.then(|| items.last().map(|item| item.execution_no.to_string())).flatten();
+    RuntimeHistoryPage { items, next_cursor, has_more }
 }
 
 /// 从已排序历史中取最近一次驳回原因。
@@ -129,21 +120,18 @@ pub fn latest_rejection_reason(items: &[RuntimeHistoryItem]) -> Option<String> {
 /// 无。
 fn optional_text(value: &str) -> Option<String> {
     let text = value.trim();
-    if text.is_empty() {
-        None
-    } else {
-        Some(text.to_string())
-    }
+    if text.is_empty() { None } else { Some(text.to_string()) }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        history_item_from_execution, history_page_from, latest_rejection_reason, RuntimeHistoryItem,
-    };
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
     use bpm::model::types::ApprovalExecutionAssignmentSource;
     use bpm::model::{ApprovalNodeExecution, NewNodeExecution, ParticipantId, Timestamp};
+
+    use super::{
+        RuntimeHistoryItem, history_item_from_execution, history_page_from, latest_rejection_reason,
+    };
 
     fn active_execution() -> ApprovalNodeExecution {
         ApprovalNodeExecution::new_active(NewNodeExecution {

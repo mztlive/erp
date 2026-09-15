@@ -1,30 +1,23 @@
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::BackgroundJobId;
-use erp_import::LegacyImportExt;
 use erp_import::{
-    LegacyImportBatch, LegacyImportBatchId, LegacyImportBatchStatus, LegacyImportRow, LegacyImportRowId,
+    CreateLegacyImportBatchRequest, LegacyImportBatch, LegacyImportBatchId, LegacyImportBatchStatus,
+    LegacyImportBatchView, LegacyImportExt, LegacyImportRow, LegacyImportRowId,
 };
-use erp_support::BackgroundJob;
-use erp_support::{BulkJobExt, FileAssetExt};
+use erp_support::{BackgroundJob, BulkJobExt, FileAssetExt};
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-
 use super::ImportApplyService;
-use erp_import::{CreateLegacyImportBatchRequest, LegacyImportBatchView};
+use crate::{Error, Result};
 
 impl ImportApplyService {
     /// 构造导入批次详情视图（补充后台任务关联）。
     pub(super) async fn batch_view_of(&self, batch: LegacyImportBatch) -> Result<LegacyImportBatchView> {
-        let background_job = self
-            .db
-            .background_jobs()
-            .find_by_request_id(&batch.batch_no, &mut NoTransaction)
-            .await?;
+        let background_job =
+            self.db.background_jobs().find_by_request_id(&batch.batch_no, &mut NoTransaction).await?;
         let mut view: LegacyImportBatchView = batch.into();
         view.background_job_id = background_job.map(|job| job.base.id);
         Ok(view)
@@ -53,11 +46,8 @@ impl ImportApplyService {
         actor: &AuditActor,
     ) -> Result<LegacyImportBatchView> {
         req.validate()?;
-        if let Some(existing) = self
-            .db
-            .legacy_import_batches()
-            .find_by_batch_no(&req.batch_no, &mut NoTransaction)
-            .await?
+        if let Some(existing) =
+            self.db.legacy_import_batches().find_by_batch_no(&req.batch_no, &mut NoTransaction).await?
         {
             tracing::info!(batch_no = %req.batch_no, "批次已存在，按幂等返回既有批次");
             return self.batch_view_of(existing).await;
@@ -104,9 +94,7 @@ impl ImportApplyService {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    db.legacy_import()
-                        .create_batch_with_rows(&batch_for_tx, &rows_for_tx, session)
-                        .await?;
+                    db.legacy_import().create_batch_with_rows(&batch_for_tx, &rows_for_tx, session).await?;
                     db.background_jobs().create(&job_for_tx, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::Error>(())
@@ -135,18 +123,11 @@ impl ImportApplyService {
             ("成功 manifest", req.success_manifest_file_asset_id.as_ref()),
             ("失败诊断包", req.failure_diagnostic_file_asset_id.as_ref()),
         ];
-        let ids = labeled
-            .iter()
-            .filter_map(|(_, id)| (*id).cloned())
-            .collect::<Vec<_>>();
+        let ids = labeled.iter().filter_map(|(_, id)| (*id).cloned()).collect::<Vec<_>>();
         if ids.is_empty() {
             return Ok(());
         }
-        let missing = self
-            .db
-            .file_assets()
-            .missing_file_asset_ids(&ids, &mut NoTransaction)
-            .await?;
+        let missing = self.db.file_assets().missing_file_asset_ids(&ids, &mut NoTransaction).await?;
         if missing.is_empty() {
             return Ok(());
         }
@@ -233,8 +214,9 @@ fn first_missing_asset_label(
 
 #[cfg(test)]
 mod tests {
-    use super::first_missing_asset_label;
     use erp_core::ids::FileAssetId;
+
+    use super::first_missing_asset_label;
 
     fn asset(id: &str) -> FileAssetId {
         FileAssetId::new(id.to_string())
@@ -242,11 +224,7 @@ mod tests {
 
     #[test]
     fn empty_optional_fields_report_no_missing_label() {
-        let labeled = [
-            ("成功白名单包", None),
-            ("成功 manifest", None),
-            ("失败诊断包", None),
-        ];
+        let labeled = [("成功白名单包", None), ("成功 manifest", None), ("失败诊断包", None)];
         let refs: [(&str, Option<&FileAssetId>); 3] = [
             (labeled[0].0, labeled[0].1.as_ref()),
             (labeled[1].0, labeled[1].1.as_ref()),
@@ -259,11 +237,7 @@ mod tests {
     fn all_present_reports_no_missing_label() {
         let a = asset("a");
         let b = asset("b");
-        let labeled = [
-            ("成功白名单包", Some(&a)),
-            ("成功 manifest", Some(&b)),
-            ("失败诊断包", None),
-        ];
+        let labeled = [("成功白名单包", Some(&a)), ("成功 manifest", Some(&b)), ("失败诊断包", None)];
         assert_eq!(first_missing_asset_label(&labeled, &[]), None);
     }
 
@@ -271,15 +245,8 @@ mod tests {
     fn partial_missing_reports_first_label_in_input_order() {
         let a = asset("a");
         let b = asset("b");
-        let labeled = [
-            ("成功白名单包", Some(&a)),
-            ("成功 manifest", Some(&b)),
-            ("失败诊断包", None),
-        ];
-        assert_eq!(
-            first_missing_asset_label(&labeled, &[asset("b")]),
-            Some("成功 manifest".to_string())
-        );
+        let labeled = [("成功白名单包", Some(&a)), ("成功 manifest", Some(&b)), ("失败诊断包", None)];
+        assert_eq!(first_missing_asset_label(&labeled, &[asset("b")]), Some("成功 manifest".to_string()));
         assert_eq!(
             first_missing_asset_label(&labeled, &[asset("a"), asset("b")]),
             Some("成功白名单包".to_string())
@@ -289,14 +256,7 @@ mod tests {
     #[test]
     fn duplicate_ids_report_first_occurrence_label() {
         let a = asset("a");
-        let labeled = [
-            ("成功白名单包", Some(&a)),
-            ("成功 manifest", Some(&a)),
-            ("失败诊断包", None),
-        ];
-        assert_eq!(
-            first_missing_asset_label(&labeled, &[asset("a")]),
-            Some("成功白名单包".to_string())
-        );
+        let labeled = [("成功白名单包", Some(&a)), ("成功 manifest", Some(&a)), ("失败诊断包", None)];
+        assert_eq!(first_missing_asset_label(&labeled, &[asset("a")]), Some("成功白名单包".to_string()));
     }
 }

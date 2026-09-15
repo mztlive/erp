@@ -4,16 +4,13 @@
 //! `/admin/purchase-change-orders`；每条路由统一走
 //! JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
 
-use axum::{
-    routing::{get, post},
-    Router,
-};
+use axum::Router;
+use axum::routing::{get, post};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::purchase_order, middleware::with_permission},
-};
+use crate::app_state::AppState;
+use crate::core::handler::purchase_order;
+use crate::core::middleware::with_permission;
 
 /// 返回本域管理端路由集合。
 ///
@@ -151,10 +148,7 @@ mod tests {
     /// 采购变更路由必须暴露提交、撤回、生效与详情，不得让客户端选定义。
     #[test]
     fn purchase_change_routes_expose_unified_approval_ports() {
-        let production = include_str!("purchase_order.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("purchase_order.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("/purchase-change-orders/{id}/submit"));
         assert!(production.contains("/purchase-change-orders/{id}/cancel-approval"));
         assert!(production.contains("/purchase-change-orders/{id}/effect"));

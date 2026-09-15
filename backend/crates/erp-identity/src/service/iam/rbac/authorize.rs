@@ -1,22 +1,23 @@
-use std::{collections::HashMap, sync::atomic::Ordering};
+use std::collections::HashMap;
+use std::sync::atomic::Ordering;
 
-use crate::entity::rbac::{Permission, PermissionSet, RoleIdSet};
-use crate::entity::role::Role;
-use crate::AccessControlExt;
+use application_core::AuditActor;
 use casbin::Enforcer;
 use erp_core::AccountKind;
 use persistence_core::{Executor, NoTransaction};
 
-use super::{
-    policy::{
-        implicit_permissions_for_role, permissions_for_account, permissions_for_actor, permissions_for_roles,
-        role_ids_for_account, role_key,
-    },
-    subject, AuthorizedAccountManagement, AuthorizedPermissions, AuthorizedRoleGrant, AuthorizedRoleUpdate,
-    RbacService, ROOT_ROLE_ID,
+use super::policy::{
+    implicit_permissions_for_role, permissions_for_account, permissions_for_actor, permissions_for_roles,
+    role_ids_for_account, role_key,
 };
+use super::{
+    AuthorizedAccountManagement, AuthorizedPermissions, AuthorizedRoleGrant, AuthorizedRoleUpdate,
+    ROOT_ROLE_ID, RbacService, subject,
+};
+use crate::AccessControlExt;
+use crate::entity::rbac::{Permission, PermissionSet, RoleIdSet};
+use crate::entity::role::Role;
 use crate::error::{Error, Result};
-use application_core::AuditActor;
 
 impl RbacService {
     /// 校验操作人是否可以授予目标角色，并捕获当前 policy 版本。
@@ -31,11 +32,7 @@ impl RbacService {
         role_ids: Vec<String>,
     ) -> Result<AuthorizedRoleGrant> {
         let role_ids = RoleIdSet::parse(role_ids)?.to_strings();
-        let roles = self
-            .db
-            .roles()
-            .enabled_roles(&role_ids, &mut NoTransaction)
-            .await?;
+        let roles = self.db.roles().enabled_roles(&role_ids, &mut NoTransaction).await?;
         ensure_all_roles_assignable(role_ids.len(), roles.len())?;
         ensure_roles_delegable(&roles)?;
 
@@ -44,10 +41,7 @@ impl RbacService {
         let required_permissions = permissions_for_roles(&enforcer, &role_ids)?;
         ensure_permission_subset(&actor_permissions, &required_permissions)?;
         let policy_revision = self.loaded_policy_revision.load(Ordering::Acquire);
-        Ok(AuthorizedRoleGrant {
-            role_ids,
-            policy_revision,
-        })
+        Ok(AuthorizedRoleGrant { role_ids, policy_revision })
     }
 
     /// 校验操作人可管理目标账号，并按需校验新的角色集合。
@@ -64,10 +58,8 @@ impl RbacService {
         target_id: &str,
         requested_role_ids: Option<Vec<String>>,
     ) -> Result<AuthorizedAccountManagement> {
-        let requested_role_ids = requested_role_ids
-            .map(RoleIdSet::parse)
-            .transpose()?
-            .map(|role_ids| role_ids.to_strings());
+        let requested_role_ids =
+            requested_role_ids.map(RoleIdSet::parse).transpose()?.map(|role_ids| role_ids.to_strings());
         let enforcer = self.fresh_enforcer().await?.read().await;
         let actor_permissions = permissions_for_actor(&enforcer, actor)?;
         let target_role_ids = role_ids_for_account(&enforcer, target_kind, target_id);
@@ -81,17 +73,12 @@ impl RbacService {
         let policy_revision = self.loaded_policy_revision.load(Ordering::Acquire);
         drop(enforcer);
 
-        let roles = self
-            .load_management_roles(&target_role_ids, requested_role_ids.as_deref())
-            .await?;
+        let roles = self.load_management_roles(&target_role_ids, requested_role_ids.as_deref()).await?;
         ensure_target_roles_manageable(&target_role_ids, &roles)?;
         let role_grant = requested_role_ids
             .map(|role_ids| authorized_role_grant(role_ids, policy_revision, &roles))
             .transpose()?;
-        Ok(AuthorizedAccountManagement {
-            policy_revision,
-            role_grant,
-        })
+        Ok(AuthorizedAccountManagement { policy_revision, role_grant })
     }
 
     /// 校验待写入角色权限不超过操作人当前权限。
@@ -179,10 +166,7 @@ impl RbacService {
     ) -> Result<()> {
         let role_ids = grant.role_ids;
         self.ensure_roles_assignable(&role_ids, executor).await?;
-        let role_keys = role_ids
-            .iter()
-            .map(|role_id| role_key(role_id))
-            .collect::<Vec<_>>();
+        let role_keys = role_ids.iter().map(|role_id| role_key(role_id)).collect::<Vec<_>>();
         self.policy_store
             .replace_subject_roles(&subject(account_kind, account_id), &role_keys, executor)
             .await?;
@@ -214,10 +198,7 @@ impl RbacService {
     ) -> Result<()> {
         let role_ids = RoleIdSet::parse(role_ids)?.to_strings();
         self.ensure_roles_assignable(&role_ids, executor).await?;
-        let role_keys = role_ids
-            .iter()
-            .map(|role_id| role_key(role_id))
-            .collect::<Vec<_>>();
+        let role_keys = role_ids.iter().map(|role_id| role_key(role_id)).collect::<Vec<_>>();
         self.policy_store
             .replace_subject_roles(&subject(account_kind, account_id), &role_keys, executor)
             .await?;
@@ -245,9 +226,7 @@ impl RbacService {
         account_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.policy_store
-            .clear_subject_roles(&subject(account_kind, account_id), executor)
-            .await?;
+        self.policy_store.clear_subject_roles(&subject(account_kind, account_id), executor).await?;
         Ok(())
     }
 
@@ -286,9 +265,7 @@ pub(super) fn ensure_all_roles_assignable(requested_count: usize, existing_count
 pub(super) fn ensure_roles_delegable(roles: &[Role]) -> Result<()> {
     roles.iter().try_for_each(|role| {
         if !role_is_assignable(role) {
-            return Err(Error::Forbidden(
-                "系统角色或已停用角色不能通过普通接口分配".to_string(),
-            ));
+            return Err(Error::Forbidden("系统角色或已停用角色不能通过普通接口分配".to_string()));
         }
         Ok(())
     })
@@ -336,9 +313,7 @@ pub(super) fn ensure_target_roles_manageable(
         .iter()
         .any(|role_id| role_id == ROOT_ROLE_ID || roles.get(role_id).is_none_or(|role| role.system));
     if protected {
-        return Err(Error::Forbidden(
-            "绑定系统角色的账号不能通过普通管理接口修改".to_string(),
-        ));
+        return Err(Error::Forbidden("绑定系统角色的账号不能通过普通管理接口修改".to_string()));
     }
     Ok(())
 }
@@ -348,33 +323,23 @@ fn authorized_role_grant(
     policy_revision: u64,
     roles: &HashMap<String, Role>,
 ) -> Result<AuthorizedRoleGrant> {
-    let requested_roles = role_ids
-        .iter()
-        .filter_map(|role_id| roles.get(role_id))
-        .cloned()
-        .collect::<Vec<_>>();
+    let requested_roles =
+        role_ids.iter().filter_map(|role_id| roles.get(role_id)).cloned().collect::<Vec<_>>();
     ensure_all_roles_assignable(role_ids.len(), requested_roles.len())?;
     ensure_roles_delegable(&requested_roles)?;
-    Ok(AuthorizedRoleGrant {
-        role_ids,
-        policy_revision,
-    })
+    Ok(AuthorizedRoleGrant { role_ids, policy_revision })
 }
 
 pub(super) fn ensure_permission_subset(actor: &PermissionSet, required: &PermissionSet) -> Result<()> {
     if !actor.covers(required) {
-        return Err(Error::Forbidden(
-            "不能授予超出自身权限范围的角色或权限".to_string(),
-        ));
+        return Err(Error::Forbidden("不能授予超出自身权限范围的角色或权限".to_string()));
     }
     Ok(())
 }
 
 pub(super) fn ensure_management_subset(actor: &PermissionSet, target: &PermissionSet) -> Result<()> {
     if !actor.covers(target) {
-        return Err(Error::Forbidden(
-            "不能管理权限范围高于自身的账号或角色".to_string(),
-        ));
+        return Err(Error::Forbidden("不能管理权限范围高于自身的账号或角色".to_string()));
     }
     Ok(())
 }

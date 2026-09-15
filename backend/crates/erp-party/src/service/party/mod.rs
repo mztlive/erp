@@ -8,23 +8,24 @@
 
 pub mod company;
 
-use crate::entity::party::{
-    Party, PartyData, PartyId, PartyKind, PartyRevision, PartyRevisionData, PartyRevisionId, PartyStatus,
-    PartyUpdate,
-};
-use crate::ports::{PartyAuditPort, SupplierRolePort};
-use crate::repository::PartyExt;
+use std::sync::Arc;
+
+use application_core::AuditActor;
 use erp_core::common::revision::RevisionBase;
 use erp_core::field_update::FieldUpdate;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use serde::Serialize;
-use std::sync::Arc;
 use validator::Validate;
 
+use crate::entity::party::{
+    Party, PartyData, PartyId, PartyKind, PartyRevision, PartyRevisionData, PartyRevisionId, PartyStatus,
+    PartyUpdate,
+};
 use crate::error::{Error, Result};
-use application_core::AuditActor;
+use crate::ports::{PartyAuditPort, SupplierRolePort};
+use crate::repository::PartyExt;
 
 pub mod address;
 pub mod bank_account;
@@ -38,6 +39,7 @@ pub use contact::PartyContactService;
 pub use sensitive::{SensitiveDataCodec, SensitiveFieldKind, SensitiveRevealScope};
 pub use tax_profile::PartyTaxProfileService;
 
+use crate::dto::party::SortDir;
 pub use crate::dto::party::{
     CreatePartyAddressRequest, CreatePartyBankAccountRequest, CreatePartyContactRequest, CreatePartyRequest,
     CreatePartyTaxProfileRequest, PageView, PartyAddressListParams, PartyAddressView,
@@ -46,8 +48,6 @@ pub use crate::dto::party::{
     PartyTaxProfileView, PartyView, UpdatePartyAddressRequest, UpdatePartyBankAccountRequest,
     UpdatePartyContactRequest, UpdatePartyRequest, UpdatePartyTaxProfileRequest,
 };
-
-use crate::dto::party::SortDir;
 
 /// 主体列表筛选条件类型（经 `PartyExt` 关联类型跨 crate 可达）。
 type PartyFilter = <mongodb::Database as PartyExt>::PartyFilter;
@@ -88,11 +88,7 @@ impl PartyService {
         audit: Arc<dyn PartyAuditPort>,
         supplier_roles: Arc<dyn SupplierRolePort>,
     ) -> Self {
-        Self {
-            db,
-            audit,
-            supplier_roles,
-        }
+        Self { db, audit, supplier_roles }
     }
 
     /// 创建主体（跨集合事务：party + 首版 party_revision + 审计原子写入）。
@@ -154,9 +150,7 @@ impl PartyService {
             },
         )?;
         party.stable.current_revision_id = Some(revision_id.to_string());
-        let audit = self
-            .audit
-            .resource_log(actor.clone(), "party.create", "party", party_id.to_string())?;
+        let audit = self.audit.resource_log(actor.clone(), "party.create", "party", party_id.to_string())?;
 
         let db = self.db.clone();
         let client = db.client().clone();
@@ -194,11 +188,8 @@ impl PartyService {
         let query = params.normalized()?;
         let matching_name_ids = match query.keyword.as_deref() {
             Some(keyword) => {
-                self.db
-                    .party()
-                    .matching_current_party_ids_by_name(keyword, &mut NoTransaction)
-                    .await?
-            }
+                self.db.party().matching_current_party_ids_by_name(keyword, &mut NoTransaction).await?
+            },
             None => Vec::new(),
         };
         let filter = PartyFilter {
@@ -211,11 +202,7 @@ impl PartyService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .parties()
-            .search_parties(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.parties().search_parties(&filter, &mut NoTransaction).await?;
         // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结，无法命名），
         // 此处按字段映射为响应视图，避免把仓储类型泄漏到接口层。
         let items = page
@@ -233,12 +220,7 @@ impl PartyService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 查询主体详情（主体 + 当前生效修订快照）。
@@ -259,16 +241,9 @@ impl PartyService {
             .await?
             .ok_or_else(|| Error::NotFound("主体不存在".to_string()))?;
         let current_revision = revision.and_then(|revision| {
-            party
-                .current_revision(std::slice::from_ref(&revision))
-                .ok()
-                .cloned()
-                .map(Into::into)
+            party.current_revision(std::slice::from_ref(&revision)).ok().cloned().map(Into::into)
         });
-        Ok(PartyDetailView {
-            party: party.into(),
-            current_revision,
-        })
+        Ok(PartyDetailView { party: party.into(), current_revision })
     }
 
     /// 更新主体（乐观锁 + 追加修订）。
@@ -315,9 +290,7 @@ impl PartyService {
             party.company_profile = company;
         }
         ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(id)).await?;
-        party
-            .ensure_version(req.version)
-            .map_err(|error| Error::ConflictError(error.to_string()))?;
+        party.ensure_version(req.version).map_err(|error| Error::ConflictError(error.to_string()))?;
 
         // 预校验信用代码冲突：与实体规范化规则一致，避免仅依赖唯一索引透出笼统冲突。
         if let Some(raw_code) = req.unified_credit_code.as_ref() {
@@ -338,9 +311,7 @@ impl PartyService {
             .await?;
         }
 
-        let audit = self
-            .audit
-            .resource_log(actor.clone(), "party.update", "party", party.base.id.clone())?;
+        let audit = self.audit.resource_log(actor.clone(), "party.update", "party", party.base.id.clone())?;
         let updated_by = actor.id().to_string();
 
         // 下一修订号必须在写事务快照内读取，避免并发复用序号。
@@ -367,10 +338,7 @@ impl PartyService {
                         .party_revisions()
                         .next_revision_no(&PartyId::new(party_for_tx.base.id.clone()), session)
                         .await?;
-                    let revision = PartyRevision {
-                        revision: RevisionBase::new(next_no),
-                        ..revision_for_tx
-                    };
+                    let revision = PartyRevision { revision: RevisionBase::new(next_no), ..revision_for_tx };
                     party_for_tx.update(
                         PartyUpdate {
                             unified_credit_code: FieldUpdate::from_optional_text(unified_credit_code),
@@ -421,11 +389,7 @@ impl PartyService {
             sort_by: Some(sort_by.to_string()),
             sort_ascending: matches!(sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .party_revisions()
-            .search_party_revisions(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.party_revisions().search_party_revisions(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -440,12 +404,7 @@ impl PartyService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 按 ID 加载未删除主体。
@@ -489,11 +448,8 @@ impl PartyService {
         exclude_party_id: Option<&str>,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if let Some(existing) = self
-            .db
-            .parties()
-            .find_by_party_no_including_deleted(party_no, executor)
-            .await?
+        if let Some(existing) =
+            self.db.parties().find_by_party_no_including_deleted(party_no, executor).await?
         {
             if !exclude_party_id.is_some_and(|id| existing.base.id == id) {
                 return Err(Error::ConflictError(format!("主体编号「{party_no}」已存在")));
@@ -503,16 +459,11 @@ impl PartyService {
         let Some(credit_code) = unified_credit_code else {
             return Ok(());
         };
-        if let Some(existing) = self
-            .db
-            .parties()
-            .find_by_unified_credit_code_including_deleted(credit_code, executor)
-            .await?
+        if let Some(existing) =
+            self.db.parties().find_by_unified_credit_code_including_deleted(credit_code, executor).await?
         {
             if !exclude_party_id.is_some_and(|id| existing.base.id == id) {
-                return Err(Error::ConflictError(format!(
-                    "统一社会信用代码「{credit_code}」已存在"
-                )));
+                return Err(Error::ConflictError(format!("统一社会信用代码「{credit_code}」已存在")));
             }
         }
 
@@ -535,9 +486,7 @@ pub async fn ensure_outside_supplier_profile(
 /// 将仓储查询结果转换为稳定的供应商资料边界错误。
 fn ensure_supplier_profile_boundary(has_supplier_role: bool) -> Result<()> {
     if has_supplier_role {
-        return Err(Error::BusinessLogicError(
-            "供应商主体资料只能通过供应商资料根级接口维护".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("供应商主体资料只能通过供应商资料根级接口维护".to_string()));
     }
     Ok(())
 }
@@ -554,10 +503,7 @@ fn page_size_or_default(page_size: Option<u32>) -> u32 {
 
 /// 文本归一化（与 `crate::query` 对齐，供子模块复用）。
 fn normalized_text(value: Option<&str>) -> Option<String> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
+    value.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string)
 }
 
 /// 清除同一主体其他行的默认标记（跨行约束，§6.2）。

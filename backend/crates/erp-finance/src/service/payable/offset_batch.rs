@@ -4,13 +4,12 @@
 //! 缺任一分录或账户失败关闭。逐账户原子 `revert_settlement`、任务同步和事务
 //! 生命周期仍由 Service 编排。
 
-use crate::entity::payable::PayableAccount;
-use crate::entity::payable::PayableEntry;
-use crate::repository::PayableExt;
 use erp_core::ids::{PayableAccountId, PayableEntryId};
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::entity::payable::{PayableAccount, PayableEntry};
+use crate::repository::PayableExt;
 pub use crate::service::receivable::receipt_reversal::OffsetFacts;
 use crate::service::receivable::receipt_reversal::{
     index_required_by_id, unique_account_ids_for_entries, unique_ids_in_first_seen_order,
@@ -38,15 +37,8 @@ pub async fn load_payable_offset_facts(
     executor: &mut dyn Executor,
 ) -> Result<OffsetFacts<PayableEntry, PayableAccount>> {
     let unique_entry_ids = unique_ids_in_first_seen_order(entry_ids.into_iter().map(|id| id.to_string()));
-    let typed_entry_ids = unique_entry_ids
-        .iter()
-        .cloned()
-        .map(PayableEntryId::new)
-        .collect::<Vec<_>>();
-    let entries = db
-        .payable_entries()
-        .find_entries_by_ids(&typed_entry_ids, executor)
-        .await?;
+    let typed_entry_ids = unique_entry_ids.iter().cloned().map(PayableEntryId::new).collect::<Vec<_>>();
+    let entries = db.payable_entries().find_entries_by_ids(&typed_entry_ids, executor).await?;
     let entries = index_required_by_id(
         entries,
         &unique_entry_ids,
@@ -56,15 +48,8 @@ pub async fn load_payable_offset_facts(
     let unique_account_ids = unique_account_ids_for_entries(&entries, &unique_entry_ids, |entry| {
         entry.payable_account_id.to_string()
     });
-    let typed_account_ids = unique_account_ids
-        .iter()
-        .cloned()
-        .map(PayableAccountId::new)
-        .collect::<Vec<_>>();
-    let accounts = db
-        .payable_accounts()
-        .find_accounts_by_ids(&typed_account_ids, executor)
-        .await?;
+    let typed_account_ids = unique_account_ids.iter().cloned().map(PayableAccountId::new).collect::<Vec<_>>();
+    let accounts = db.payable_accounts().find_accounts_by_ids(&typed_account_ids, executor).await?;
     let accounts = index_required_by_id(
         accounts,
         &unique_account_ids,
@@ -129,25 +114,12 @@ mod tests {
 
     #[test]
     fn unordered_results_are_indexed_by_id() {
-        let chunks = [
-            Chunk {
-                entry_id: "e1".into(),
-            },
-            Chunk {
-                entry_id: "e2".into(),
-            },
-        ];
+        let chunks = [Chunk { entry_id: "e1".into() }, Chunk { entry_id: "e2".into() }];
         let facts = assemble(
             &chunks,
             vec![
-                Entry {
-                    id: "e2".into(),
-                    account_id: "a2".into(),
-                },
-                Entry {
-                    id: "e1".into(),
-                    account_id: "a1".into(),
-                },
+                Entry { id: "e2".into(), account_id: "a2".into() },
+                Entry { id: "e1".into(), account_id: "a1".into() },
             ],
             vec![Account { id: "a2".into() }, Account { id: "a1".into() }],
         )
@@ -160,20 +132,10 @@ mod tests {
 
     #[test]
     fn duplicate_chunk_ids_load_entry_once_and_same_account_once() {
-        let chunks = [
-            Chunk {
-                entry_id: "e1".into(),
-            },
-            Chunk {
-                entry_id: "e1".into(),
-            },
-        ];
+        let chunks = [Chunk { entry_id: "e1".into() }, Chunk { entry_id: "e1".into() }];
         let facts = assemble(
             &chunks,
-            vec![Entry {
-                id: "e1".into(),
-                account_id: "a1".into(),
-            }],
+            vec![Entry { id: "e1".into(), account_id: "a1".into() }],
             vec![Account { id: "a1".into() }],
         )
         .expect("重复分录 ID 必须成功");
@@ -187,25 +149,12 @@ mod tests {
 
     #[test]
     fn same_account_multiple_chunks_share_one_account() {
-        let chunks = [
-            Chunk {
-                entry_id: "e1".into(),
-            },
-            Chunk {
-                entry_id: "e2".into(),
-            },
-        ];
+        let chunks = [Chunk { entry_id: "e1".into() }, Chunk { entry_id: "e2".into() }];
         let facts = assemble(
             &chunks,
             vec![
-                Entry {
-                    id: "e1".into(),
-                    account_id: "a1".into(),
-                },
-                Entry {
-                    id: "e2".into(),
-                    account_id: "a1".into(),
-                },
+                Entry { id: "e1".into(), account_id: "a1".into() },
+                Entry { id: "e2".into(), account_id: "a1".into() },
             ],
             vec![Account { id: "a1".into() }],
         )
@@ -217,25 +166,12 @@ mod tests {
 
     #[test]
     fn cross_account_multiple_chunks_require_each_account() {
-        let chunks = [
-            Chunk {
-                entry_id: "e1".into(),
-            },
-            Chunk {
-                entry_id: "e2".into(),
-            },
-        ];
+        let chunks = [Chunk { entry_id: "e1".into() }, Chunk { entry_id: "e2".into() }];
         let facts = assemble(
             &chunks,
             vec![
-                Entry {
-                    id: "e1".into(),
-                    account_id: "a1".into(),
-                },
-                Entry {
-                    id: "e2".into(),
-                    account_id: "a2".into(),
-                },
+                Entry { id: "e1".into(), account_id: "a1".into() },
+                Entry { id: "e2".into(), account_id: "a2".into() },
             ],
             vec![Account { id: "a1".into() }, Account { id: "a2".into() }],
         )
@@ -247,20 +183,12 @@ mod tests {
 
     #[test]
     fn extra_unordered_entries_do_not_expand_required_accounts() {
-        let chunks = [Chunk {
-            entry_id: "e1".into(),
-        }];
+        let chunks = [Chunk { entry_id: "e1".into() }];
         let facts = assemble(
             &chunks,
             vec![
-                Entry {
-                    id: "e-extra".into(),
-                    account_id: "a-extra".into(),
-                },
-                Entry {
-                    id: "e1".into(),
-                    account_id: "a1".into(),
-                },
+                Entry { id: "e-extra".into(), account_id: "a-extra".into() },
+                Entry { id: "e1".into(), account_id: "a1".into() },
             ],
             vec![Account { id: "a1".into() }],
         )
@@ -273,20 +201,12 @@ mod tests {
 
     #[test]
     fn missing_entry_or_account_fails_closed() {
-        let chunks = [Chunk {
-            entry_id: "e1".into(),
-        }];
+        let chunks = [Chunk { entry_id: "e1".into() }];
         let missing_entry = assemble(&chunks, Vec::new(), vec![Account { id: "a1".into() }]);
         assert!(matches!(missing_entry, Err(Error::NotFound(_))));
 
-        let missing_account = assemble(
-            &chunks,
-            vec![Entry {
-                id: "e1".into(),
-                account_id: "a1".into(),
-            }],
-            Vec::new(),
-        );
+        let missing_account =
+            assemble(&chunks, vec![Entry { id: "e1".into(), account_id: "a1".into() }], Vec::new());
         assert!(matches!(missing_account, Err(Error::NotFound(_))));
     }
 }

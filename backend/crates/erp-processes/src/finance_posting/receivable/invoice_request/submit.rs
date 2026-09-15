@@ -1,6 +1,4 @@
 //! 开票申请原子创建、额度占用、定义绑定与审批启动。
-use super::super::{start_approval, ReceivableProcess};
-use super::*;
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::{AuditExt, CommandReceiptServiceExt};
 use erp_core::common::time::Instant;
@@ -13,12 +11,15 @@ use erp_workflow::entity::approval_integration::{
     ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload,
 };
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
-use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
-use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
-use erp_workflow::service::approval::execution::{prepare_start, PreparedExecution};
+use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
+use erp_workflow::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
+use erp_workflow::service::approval::execution::{PreparedExecution, prepare_start};
 use erp_workflow::service::document_registry::{find_registered_document, new_registered_document};
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use id_generator::next_id;
+
+use super::super::{ReceivableProcess, start_approval};
+use super::*;
 
 impl ReceivableProcess {
     /// 原子创建或重新提交开票申请，冻结资料及额度后启动已发布流程。
@@ -60,9 +61,7 @@ impl ReceivableProcess {
                     let binding = bind(&db, &rbac, object_read.as_ref(), &request, &actor, session).await?;
                     let id = request.base.id.clone();
                     start(&db, &mut request, &binding, &req.idempotency_key, &actor, session).await?;
-                    db.audit_logs()
-                        .create(&command.audit(actor, id.clone())?, session)
-                        .await?;
+                    db.audit_logs().create(&command.audit(actor, id.clone())?, session).await?;
                     Ok::<String, Error>(id)
                 })
             })
@@ -88,8 +87,7 @@ async fn candidate(
         let mut request = load(db, id, executor).await?;
         ensure_expected_version(
             request.base.version,
-            req.expected_version
-                .ok_or_else(|| Error::ValidationError("请刷新申请后重试".into()))?,
+            req.expected_version.ok_or_else(|| Error::ValidationError("请刷新申请后重试".into()))?,
         )?;
         if request.created_by != actor.id() || request.receivable_account_id.as_ref() != account.base.id {
             return Err(Error::Forbidden("只能修改本人申请且不能更换来源销售单".into()));
@@ -206,9 +204,7 @@ async fn start(
     let PreparedExecution::Apply(writes) = prepare_start(input)? else {
         return Err(Error::ConflictError("申请已提交，请刷新查看结果".into()));
     };
-    db.bpm_workflow()
-        .insert_command_receipt(&writes.receipt, session)
-        .await?;
+    db.bpm_workflow().insert_command_receipt(&writes.receipt, session).await?;
     let guarded = db
         .business_documents()
         .mark_approval_started(
@@ -277,10 +273,7 @@ mod first_submit_binding_tests {
     /// 首次提交必须先绑定再注册，不能把未注册单据当成 NotFound。
     #[test]
     fn first_submit_does_not_treat_missing_document_as_not_found() {
-        let production = include_str!("submit.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("submit.rs").split("#[cfg(test)]").next().expect("生产代码");
         let bind_fn = production
             .split("async fn bind(")
             .nth(1)

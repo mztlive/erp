@@ -1,16 +1,15 @@
-use crate::entity::party::{EffectiveRecordStatus, PartyContact};
-use crate::repository::owned::PartyContactRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PartyId;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
 use super::shared::{active_fact_filter, sort_doc};
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::party::{EffectiveRecordStatus, PartyContact};
+use crate::repository::owned::PartyContactRepository;
 
 /// 联系人列表投影行。
 ///
@@ -138,10 +137,7 @@ impl<'a> PartyContactRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按联系人 ID 查找未删除联系人事实。
@@ -177,8 +173,7 @@ impl<'a> PartyContactRepository<'a> {
         as_of: erp_core::common::time::BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyContact>> {
-        self.find_many(active_fact_filter(party_id, as_of), executor)
-            .await
+        self.find_many(active_fact_filter(party_id, as_of), executor).await
     }
 
     /// 按默认标记与创建时间读取指定日期生效的主体联系人。
@@ -227,12 +222,8 @@ impl<'a> PartyContactRepository<'a> {
         exclude_id: Option<&str>,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let rows = self
-            .find_many(
-                doc! { "party_id": party_id.to_string(), "is_default": true },
-                executor,
-            )
-            .await?;
+        let rows =
+            self.find_many(doc! { "party_id": party_id.to_string(), "is_default": true }, executor).await?;
         for mut row in rows {
             if exclude_id.is_some_and(|id| id == row.base.id) {
                 continue;

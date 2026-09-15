@@ -1,6 +1,6 @@
-use crate::entity::auth::{LoginAccount, PasswordVerification, Secret};
 use tokio::sync::Semaphore;
 
+use crate::entity::auth::{LoginAccount, PasswordVerification, Secret};
 use crate::error::{Error, Result};
 
 /// 同时执行的密码哈希任务上限，避免 Argon2 内存成本被无界放大。
@@ -103,10 +103,8 @@ where
     Work: FnOnce() -> erp_core::Result<T> + Send + 'static,
     MapError: FnOnce(erp_core::Error) -> Error,
 {
-    let permit = PASSWORD_WORK_SLOTS
-        .acquire()
-        .await
-        .map_err(|_| Error::Internal("密码处理资源不可用".to_string()))?;
+    let permit =
+        PASSWORD_WORK_SLOTS.acquire().await.map_err(|_| Error::Internal("密码处理资源不可用".to_string()))?;
     let result = tokio::task::spawn_blocking(move || {
         let _permit = permit;
         work()
@@ -128,13 +126,13 @@ fn verify_password_sync(secret: Option<Secret>, password: String) -> erp_core::R
             };
             secret.change_password(password)?;
             Ok(PasswordCheck::Upgraded(secret))
-        }
+        },
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{hash_secret, run_hashing, verify_password, PasswordCheck};
+    use super::{PasswordCheck, hash_secret, run_hashing, verify_password};
     use crate::entity::{LoginAccount, Secret};
     use crate::error::Error;
 
@@ -149,25 +147,18 @@ mod tests {
 
     #[tokio::test]
     async fn password_validation_should_keep_domain_error_semantics() {
-        let error = hash_secret(LoginAccount::new("admin01").unwrap(), String::new())
-            .await
-            .unwrap_err();
+        let error = hash_secret(LoginAccount::new("admin01").unwrap(), String::new()).await.unwrap_err();
 
         assert!(matches!(error, Error::Logic(_)));
     }
 
     #[tokio::test]
     async fn modern_password_should_accept_match_and_reject_mismatch() {
-        let secret = hash_secret(LoginAccount::new("admin01").unwrap(), "password123".to_string())
-            .await
-            .unwrap();
+        let secret =
+            hash_secret(LoginAccount::new("admin01").unwrap(), "password123".to_string()).await.unwrap();
 
-        let matched = verify_password(Some(secret.clone()), "password123".to_string())
-            .await
-            .unwrap();
-        let mismatched = verify_password(Some(secret), "wrong-password".to_string())
-            .await
-            .unwrap();
+        let matched = verify_password(Some(secret.clone()), "password123".to_string()).await.unwrap();
+        let mismatched = verify_password(Some(secret), "wrong-password".to_string()).await.unwrap();
 
         assert!(matches!(matched, PasswordCheck::Current));
         assert!(matches!(mismatched, PasswordCheck::Mismatch));
@@ -188,18 +179,14 @@ mod tests {
         }))
         .unwrap();
 
-        let result = verify_password(Some(secret), "password123".to_string())
-            .await
-            .unwrap();
+        let result = verify_password(Some(secret), "password123".to_string()).await.unwrap();
         let PasswordCheck::Upgraded(secret) = result else {
             panic!("matching legacy credential should be upgraded");
         };
 
         assert!(!secret.is_legacy_password_hash());
         assert!(matches!(
-            verify_password(Some(secret), "password123".to_string())
-                .await
-                .unwrap(),
+            verify_password(Some(secret), "password123".to_string()).await.unwrap(),
             PasswordCheck::Current
         ));
     }

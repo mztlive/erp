@@ -2,9 +2,6 @@
 
 use std::sync::Arc;
 
-use crate::finance_posting::payable::PayableService;
-use crate::finance_posting::payable::SupplierPaymentWithAssetsResult;
-use crate::Result;
 use application_core::AuditActor;
 use erp_finance::dto::payable::CommitSupplierPaymentRequest;
 use erp_support::{BankReceiptEvidencePolicy, PendingFileAssetRequest};
@@ -12,6 +9,8 @@ use erp_workflow::ApprovalObjectReadPort;
 use mongodb::Database;
 
 use super::pending::PendingFileAssets;
+use crate::Result;
+use crate::finance_posting::payable::{PayableService, SupplierPaymentWithAssetsResult};
 
 /// Commit a supplier payment and persist uploaded bank receipts atomically.
 pub async fn commit_supplier_payment_with_assets(

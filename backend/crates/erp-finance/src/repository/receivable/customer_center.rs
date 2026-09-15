@@ -5,21 +5,20 @@
 //! 应收余额、可开票余额、逾期未核销金额和最早逾期日在 MongoDB 内按客户聚合；
 //! 金额始终保持 Decimal128，不经过二进制浮点数。
 
-use crate::repository::owned::ReceivableAccountRepository;
 use std::str::FromStr;
 
-use crate::entity::receivable::EntryDirection;
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
 use futures_util::TryStreamExt;
-use mongodb::bson::{doc, Bson, Decimal128, Document};
 use mongodb::Database;
+use mongodb::bson::{Bson, Decimal128, Document, doc};
+use persistence_core::{Executor, Result};
 use serde::Deserialize;
 
+use crate::entity::receivable::EntryDirection;
 use crate::repository::extensions::ReceivableExt;
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use persistence_core::Executor;
-use persistence_core::Result;
+use crate::repository::owned::ReceivableAccountRepository;
 
 const RECEIVABLE_ENTRIES: &str = <Database as ReceivableExt>::RECEIVABLE_ENTRIES;
 const RECEIVABLE_ENTRY_OFFSETS: &str = <Database as ReceivableExt>::RECEIVABLE_ENTRY_OFFSETS;
@@ -68,7 +67,7 @@ impl<'a> ReceivableAccountRepository<'a> {
                     .stream(session)
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
             None => {
                 collection
                     .aggregate(pipeline)
@@ -76,7 +75,7 @@ impl<'a> ReceivableAccountRepository<'a> {
                     .await?
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
         };
         rows.into_iter().next().map_or_else(zero_summary, Ok)
     }

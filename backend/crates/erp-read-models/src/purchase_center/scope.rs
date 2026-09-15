@@ -1,23 +1,21 @@
 //! 采购列表与候选的一致授权快照；范围与业务版本跨页携带。
 
-use super::dto::PurchaseOrderListItemView;
-use super::repository::{load_purchase_order_list_page, PurchaseOrderListFacts};
-use super::PurchaseOrderReadService;
-use crate::{Error, Result};
+use std::hash::{Hash, Hasher};
+
 use application_core::{AuditActor, FilterOption, FilteredPage};
 use erp_identity::AccessControlExt;
-use erp_procurement::{
-    dto::purchase_order::{PurchaseOrderListParams, SortDir},
-    repository::{
-        purchase_order::{PurchaseOrderFilter, PurchaseOrderRow},
-        PurchaseOrderExt,
-    },
-    PurchaseResolvedScope,
-};
+use erp_procurement::PurchaseResolvedScope;
+use erp_procurement::dto::purchase_order::{PurchaseOrderListParams, SortDir};
+use erp_procurement::repository::PurchaseOrderExt;
+use erp_procurement::repository::purchase_order::{PurchaseOrderFilter, PurchaseOrderRow};
 use persistence_core::Transactional;
 use serde::Serialize;
-use std::hash::{Hash, Hasher};
 use validator::Validate;
+
+use super::PurchaseOrderReadService;
+use super::dto::PurchaseOrderListItemView;
+use super::repository::{PurchaseOrderListFacts, load_purchase_order_list_page};
+use crate::{Error, Result};
 
 /// 查询直接复用领域 DTO，scope_version 与原有数值参数均在 URL 边界解码。
 pub type PurchaseListParams = PurchaseOrderListParams;
@@ -113,10 +111,7 @@ impl PurchaseOrderReadService {
                         sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
                     };
                     let (page, facts) = load_purchase_order_list_page(&db, &filter, &scope, executor).await?;
-                    let versions = db
-                        .purchase_orders()
-                        .query_versions(&filter, &scope, executor)
-                        .await?;
+                    let versions = db.purchase_orders().query_versions(&filter, &scope, executor).await?;
                     if versions.len() > 10_000 {
                         return Err(Error::ValidationError(
                             "采购单查询超过上限，请收窄供应商或负责人条件".into(),

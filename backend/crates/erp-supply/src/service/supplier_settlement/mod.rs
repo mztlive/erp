@@ -8,6 +8,10 @@ pub mod review;
 pub mod shared;
 pub mod source;
 mod void;
+use mongodb::Database;
+use persistence_core::Executor;
+use shared::*;
+
 use crate::dto::supplier_settlement as dto;
 use crate::dto::supplier_settlement::*;
 use crate::entity::supplier_settlement::{
@@ -15,9 +19,6 @@ use crate::entity::supplier_settlement::{
 };
 use crate::repository::SupplierSettlementExt;
 use crate::{Error, Result};
-use mongodb::Database;
-use persistence_core::Executor;
-use shared::*;
 /// 供应商结算本域服务，调用者提供原事务执行器。
 pub struct SupplierSettlementService {
     db: Database,
@@ -76,10 +77,7 @@ impl SupplierSettlementService {
         statement: &mut SupplierSettlementStatement,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .supplier_settlement_statements()
-            .update(statement, executor)
-            .await?;
+        self.db.supplier_settlement_statements().update(statement, executor).await?;
         Ok(())
     }
 }

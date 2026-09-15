@@ -13,10 +13,9 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::Result;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use serde::{Deserialize, Serialize};
 
 use super::ReconciliationDifferenceId;
 
@@ -127,24 +126,17 @@ impl ReconciliationDifference {
     /// 差异分类包含任一固定资金关键词时返回 `true`。
     pub fn has_financial_impact(&self) -> bool {
         let value = self.difference_type.to_ascii_lowercase();
-        [
-            "amount",
-            "fund",
-            "payment",
-            "refund",
-            "balance",
-            "receivable",
-            "payable",
-        ]
-        .iter()
-        .any(|keyword| value.contains(keyword))
+        ["amount", "fund", "payment", "refund", "balance", "receivable", "payable"]
+            .iter()
+            .any(|keyword| value.contains(keyword))
     }
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::{ReconciliationDifference, ReconciliationDifferenceData};
     use erp_core::ids::ReconciliationDifferenceId;
+
+    use super::{ReconciliationDifference, ReconciliationDifferenceData};
 
     pub(crate) fn difference_data() -> ReconciliationDifferenceData {
         ReconciliationDifferenceData {
@@ -165,42 +157,27 @@ pub(crate) mod tests {
         assert_eq!(difference.business_object_type, "mall_order");
         assert_eq!(difference.business_object_id, "MO-2026-001");
         assert_eq!(difference.difference_type, "amount_mismatch");
-        assert_eq!(
-            difference.left_fact_reference.as_deref(),
-            Some("mall_order_fact://f-1001")
-        );
-        assert_eq!(
-            difference.right_fact_reference.as_deref(),
-            Some("invoice://inv-88")
-        );
-        assert!(
-            !difference.base.is_deleted(),
-            "正式差异事实不设业务软删除（§4.5.1）"
-        );
+        assert_eq!(difference.left_fact_reference.as_deref(), Some("mall_order_fact://f-1001"));
+        assert_eq!(difference.right_fact_reference.as_deref(), Some("invoice://inv-88"));
+        assert!(!difference.base.is_deleted(), "正式差异事实不设业务软删除（§4.5.1）");
     }
 
     #[test]
     fn new_rejects_empty_required_fields() {
-        let empty_type = ReconciliationDifferenceData {
-            business_object_type: "  ".to_string(),
-            ..difference_data()
-        };
+        let empty_type =
+            ReconciliationDifferenceData { business_object_type: "  ".to_string(), ..difference_data() };
         assert!(
             ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-2"), empty_type).is_err()
         );
 
-        let empty_object = ReconciliationDifferenceData {
-            business_object_id: "  ".to_string(),
-            ..difference_data()
-        };
+        let empty_object =
+            ReconciliationDifferenceData { business_object_id: "  ".to_string(), ..difference_data() };
         assert!(
             ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-3"), empty_object).is_err()
         );
 
-        let empty_difference = ReconciliationDifferenceData {
-            difference_type: "  ".to_string(),
-            ..difference_data()
-        };
+        let empty_difference =
+            ReconciliationDifferenceData { difference_type: "  ".to_string(), ..difference_data() };
         assert!(
             ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-4"), empty_difference)
                 .is_err()
@@ -209,19 +186,15 @@ pub(crate) mod tests {
 
     #[test]
     fn new_rejects_overlong_fields() {
-        let overlong_object = ReconciliationDifferenceData {
-            business_object_id: "o".repeat(129),
-            ..difference_data()
-        };
+        let overlong_object =
+            ReconciliationDifferenceData { business_object_id: "o".repeat(129), ..difference_data() };
         assert!(
             ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-5"), overlong_object)
                 .is_err()
         );
 
-        let overlong_reference = ReconciliationDifferenceData {
-            left_fact_reference: Some("r".repeat(513)),
-            ..difference_data()
-        };
+        let overlong_reference =
+            ReconciliationDifferenceData { left_fact_reference: Some("r".repeat(513)), ..difference_data() };
         assert!(
             ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-6"), overlong_reference)
                 .is_err()
@@ -261,10 +234,7 @@ pub(crate) mod tests {
             ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-8-right"), right_only)
                 .unwrap();
         assert!(difference.left_fact_reference.is_none());
-        assert_eq!(
-            difference.right_fact_reference.as_deref(),
-            Some("invoice://inv-88")
-        );
+        assert_eq!(difference.right_fact_reference.as_deref(), Some("invoice://inv-88"));
     }
 
     #[test]

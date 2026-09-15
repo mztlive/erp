@@ -1,23 +1,21 @@
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
+use erp_fulfillment::dto::{CreatePurchaseReceiptRequest, PurchaseReceiptView, UpdatePurchaseReceiptRequest};
 use erp_fulfillment::entity::fulfillment::{PurchaseReceipt, PurchaseReceiptLine};
+use erp_identity::SharedRbacService;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_workflow::service::approval::binding::{
+    BindPublishedDefinitionCommand, BindingDecision, binding_decision,
+};
+use erp_workflow::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
+use erp_workflow::service::approval::policy::{DocumentApprovalPolicy, policy_of};
+use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
-use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_identity::SharedRbacService;
-use erp_workflow::service::approval::binding::{
-    binding_decision, BindPublishedDefinitionCommand, BindingDecision,
-};
-use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
-use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
-use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
-
 use super::FulfillmentProcess;
-use erp_fulfillment::dto::{CreatePurchaseReceiptRequest, PurchaseReceiptView, UpdatePurchaseReceiptRequest};
+use crate::{Error, Result};
 impl FulfillmentProcess {
     /// 创建采购入库单（草稿，跨集合：表头 + 行 + 审计）。
     ///
@@ -39,11 +37,7 @@ impl FulfillmentProcess {
     #[tracing::instrument(
         name = "fulfillment.purchase_receipt_create",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "purchase_receipt_create"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "purchase_receipt_create")
     )]
     pub async fn create_purchase_receipt(
         &self,
@@ -79,11 +73,7 @@ impl FulfillmentProcess {
     #[tracing::instrument(
         name = "fulfillment.purchase_receipt_update",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "purchase_receipt_update"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "purchase_receipt_update")
     )]
     pub async fn update_purchase_receipt(
         &self,
@@ -93,9 +83,7 @@ impl FulfillmentProcess {
     ) -> Result<PurchaseReceiptView> {
         let mut receipt = self.domain().prepare_purchase_receipt_update(id, req).await?;
         let audit =
-            actor
-                .clone()
-                .resource_log("purchase_receipt.update", "purchase_receipt", id.to_string())?;
+            actor.clone().resource_log("purchase_receipt.update", "purchase_receipt", id.to_string())?;
         let db = self.db.clone();
         let actor_id = actor.id().to_string();
         let client = db.client().clone();
@@ -135,10 +123,10 @@ fn purchase_receipt_create_binding_decision() -> Result<BindingDecision> {
                 return Err(Error::Internal("采购收货政策类型不匹配".to_string()));
             }
             Ok(binding_decision(policy.requirement()))
-        }
-        DocumentApprovalPolicy::ProcessRequired(_) => Err(Error::Internal(
-            "采购收货必须是 NO_APPROVAL，不得绑定流程".to_string(),
-        )),
+        },
+        DocumentApprovalPolicy::ProcessRequired(_) => {
+            Err(Error::Internal("采购收货必须是 NO_APPROVAL，不得绑定流程".to_string()))
+        },
     }
 }
 
@@ -178,9 +166,7 @@ fn ensure_purchase_receipt_has_no_adapter() -> Result<()> {
 fn purchase_receipt_binding_organization_id(receipt: &PurchaseReceipt) -> Result<String> {
     let org = receipt.warehouse_id.to_string();
     if org.trim().is_empty() {
-        return Err(Error::ValidationError(
-            "采购收货缺少入库仓，无法构造绑定上下文".to_string(),
-        ));
+        return Err(Error::ValidationError("采购收货缺少入库仓，无法构造绑定上下文".to_string()));
     }
     Ok(org)
 }
@@ -228,17 +214,13 @@ fn apply_purchase_receipt_create_binding(
     binding: Option<ApprovalDefinitionBinding>,
 ) -> Result<Option<ApprovalDefinitionBinding>> {
     if binding.is_some() {
-        return Err(Error::Internal(
-            "采购收货为 NO_APPROVAL，不得写入审批绑定".to_string(),
-        ));
+        return Err(Error::Internal("采购收货为 NO_APPROVAL，不得写入审批绑定".to_string()));
     }
     if document.approval_binding.is_some() {
         return Err(Error::Internal("采购收货注册行不得预置审批绑定".to_string()));
     }
     if document.document_type != DocumentType::PurchaseReceipt {
-        return Err(Error::Internal(
-            "采购收货创建只能注册 PurchaseReceipt 单据".to_string(),
-        ));
+        return Err(Error::Internal("采购收货创建只能注册 PurchaseReceipt 单据".to_string()));
     }
     Ok(None)
 }
@@ -270,9 +252,7 @@ async fn persist_unbound_purchase_receipt_document(
     )
     .await?;
     apply_purchase_receipt_create_binding(&mut document, binding)?;
-    persist_registered_document(db, &document, executor)
-        .await
-        .map_err(crate::Error::from)
+    persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
 }
 
 /// 为已构造采购收货登记 `BusinessDocument` 并调用统一绑定端口。
@@ -288,12 +268,9 @@ async fn register_created_purchase_receipt_document(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let bind_command = purchase_receipt_bind_command(receipt, actor.id())?;
-    let document = new_registered_document(
-        &receipt.base.id,
-        DocumentType::PurchaseReceipt,
-        receipt.receipt_no.clone(),
-    )
-    .map_err(crate::Error::from)?;
+    let document =
+        new_registered_document(&receipt.base.id, DocumentType::PurchaseReceipt, receipt.receipt_no.clone())
+            .map_err(crate::Error::from)?;
     persist_unbound_purchase_receipt_document(db, rbac, object_read, document, &bind_command, actor, executor)
         .await
 }
@@ -310,11 +287,8 @@ async fn persist_created_purchase_receipt(
     lines: Vec<PurchaseReceiptLine>,
     actor: AuditActor,
 ) -> Result<()> {
-    let audit = actor.clone().resource_log(
-        "purchase_receipt.create",
-        "purchase_receipt",
-        receipt.base.id.clone(),
-    )?;
+    let audit =
+        actor.clone().resource_log("purchase_receipt.create", "purchase_receipt", receipt.base.id.clone())?;
     let db = db.clone();
     let rbac = rbac.clone();
     let object_read = object_read.clone();
@@ -349,19 +323,20 @@ async fn persist_created_purchase_receipt(
 
 #[cfg(test)]
 mod purchase_receipt_no_approval_tests {
-    use super::{
-        apply_purchase_receipt_create_binding, ensure_purchase_receipt_has_no_adapter,
-        ensure_purchase_receipt_skips_approval_binding, policy_of, purchase_receipt_bind_command,
-        purchase_receipt_create_binding_decision, BindingDecision, DocumentApprovalPolicy, DocumentType,
-        PurchaseReceipt,
-    };
-    use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
+    use bpm::ids::ApprovalProcessDefinitionId;
     use erp_core::common::time::Instant;
     use erp_core::ids::{PurchaseOrderId, PurchaseReceiptId, WarehouseId};
     use erp_fulfillment::entity::fulfillment::PurchaseReceiptData;
     use erp_workflow::service::approval::binding::binding_from_published;
     use erp_workflow::service::document_registry::new_registered_document;
+
+    use super::{
+        BindingDecision, DocumentApprovalPolicy, DocumentType, PurchaseReceipt,
+        apply_purchase_receipt_create_binding, ensure_purchase_receipt_has_no_adapter,
+        ensure_purchase_receipt_skips_approval_binding, policy_of, purchase_receipt_bind_command,
+        purchase_receipt_create_binding_decision,
+    };
 
     fn draft_receipt() -> PurchaseReceipt {
         PurchaseReceipt::new(
@@ -415,12 +390,9 @@ mod purchase_receipt_no_approval_tests {
         assert!(empty.is_none());
         assert!(document.approval_binding.is_none());
 
-        let forged = binding_from_published(
-            ApprovalProcessDefinitionId::new("def-1"),
-            1,
-            Instant::from_unix_secs(10),
-        )
-        .expect("测试绑定");
+        let forged =
+            binding_from_published(ApprovalProcessDefinitionId::new("def-1"), 1, Instant::from_unix_secs(10))
+                .expect("测试绑定");
         assert!(apply_purchase_receipt_create_binding(&mut document, Some(forged)).is_err());
     }
 

@@ -1,19 +1,18 @@
 //! W27 供应商结算草稿的服务端来源快照创建与刷新。
-use super::{
-    command_audit_id, digest_parts, ensure_audit_resource, receipt_result, CreateSettlementStatementRequest,
-    RefreshSettlementStatementRequest, SettlementDraftAction, SettlementDraftCommandResult,
-    SupplierSettlementProcess,
-};
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supply::entity::supplier_settlement::SupplierSettlementStatement;
-use erp_supply::service::supplier_settlement::{
-    draft::{PreparedStatement, StatementPreparation},
-    SupplierSettlementService,
-};
+use erp_supply::service::supplier_settlement::SupplierSettlementService;
+use erp_supply::service::supplier_settlement::draft::{PreparedStatement, StatementPreparation};
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+
+use super::{
+    CreateSettlementStatementRequest, RefreshSettlementStatementRequest, SettlementDraftAction,
+    SettlementDraftCommandResult, SupplierSettlementProcess, command_audit_id, digest_parts,
+    ensure_audit_resource, receipt_result,
+};
+use crate::{Error, Result};
 
 /// 刷新命令的持久化幂等收据。
 struct RefreshReceipt {
@@ -34,28 +33,14 @@ impl SupplierSettlementProcess {
         req: CreateSettlementStatementRequest,
         actor: &AuditActor,
     ) -> Result<SettlementDraftCommandResult> {
-        let prepared = match self
-            .domain()
-            .prepare_statement(&req, actor.id(), &mut NoTransaction)
-            .await?
-        {
+        let prepared = match self.domain().prepare_statement(&req, actor.id(), &mut NoTransaction).await? {
             StatementPreparation::Replay(result) => return Ok(result),
             StatementPreparation::Ready(prepared) => prepared,
         };
-        let PreparedStatement {
-            statement,
-            snapshot,
-            statement_no,
-            period_start,
-            period_end,
-        } = prepared;
+        let PreparedStatement { statement, snapshot, statement_no, period_start, period_end } = prepared;
         let fingerprint = create_fingerprint(&req);
-        let audit_id = command_audit_id(
-            actor.id(),
-            "supplier_settlement.create",
-            &statement_no,
-            &req.idempotency_key,
-        );
+        let audit_id =
+            command_audit_id(actor.id(), "supplier_settlement.create", &statement_no, &req.idempotency_key);
         let audit = actor.clone().resource_log_with_id(
             audit_id,
             "supplier_settlement.create",
@@ -122,27 +107,17 @@ impl SupplierSettlementProcess {
     ) -> Result<SettlementDraftCommandResult> {
         req.validate()?;
         if req.action != SettlementDraftAction::Refresh {
-            return Err(Error::ValidationError(
-                "刷新结算草稿必须使用 REFRESH 动作".to_string(),
-            ));
+            return Err(Error::ValidationError("刷新结算草稿必须使用 REFRESH 动作".to_string()));
         }
         if id != req.statement_id {
             return Err(Error::ValidationError("结算单路径ID与命令载荷不一致".to_string()));
         }
         let fingerprint = refresh_fingerprint(&req);
-        let audit_id = command_audit_id(
-            actor.id(),
-            "supplier_settlement.refresh",
-            id,
-            &req.idempotency_key,
-        );
+        let audit_id = command_audit_id(actor.id(), "supplier_settlement.refresh", id, &req.idempotency_key);
         if let Some(result) = self.replay_refresh(&audit_id, &fingerprint, id).await? {
             return Ok(result);
         }
-        let prepared = self
-            .domain()
-            .prepare_refresh(id, &req, actor.id(), &mut NoTransaction)
-            .await?;
+        let prepared = self.domain().prepare_refresh(id, &req, actor.id(), &mut NoTransaction).await?;
         let erp_supply::service::supplier_settlement::draft::PreparedRefresh {
             statement,
             snapshot,
@@ -161,15 +136,9 @@ impl SupplierSettlementProcess {
                     item_count,
                     difference_count,
                 };
-                self.persist_refresh_audit(audit_id, fingerprint, &statement, &receipt, actor)
-                    .await?;
-                return Ok(refresh_result(
-                    statement,
-                    receipt,
-                    "UNCHANGED",
-                    "当前已是最新权威来源快照",
-                ));
-            }
+                self.persist_refresh_audit(audit_id, fingerprint, &statement, &receipt, actor).await?;
+                return Ok(refresh_result(statement, receipt, "UNCHANGED", "当前已是最新权威来源快照"));
+            },
         };
         let receipt = RefreshReceipt {
             request_id: req.request_id.clone(),
@@ -207,14 +176,9 @@ impl SupplierSettlementProcess {
                     return Ok(result);
                 }
                 return Err(error);
-            }
+            },
         };
-        Ok(refresh_result(
-            statement,
-            receipt,
-            "REFRESHED",
-            "结算试算已刷新为最新权威来源快照",
-        ))
+        Ok(refresh_result(statement, receipt, "REFRESHED", "结算试算已刷新为最新权威来源快照"))
     }
 
     async fn persist_refresh_audit(
@@ -229,16 +193,12 @@ impl SupplierSettlementProcess {
         match self.db.audit_logs().create(&audit, &mut NoTransaction).await {
             Ok(()) => Ok(()),
             Err(error) => {
-                if self
-                    .replay_refresh(&audit.base.id, &fingerprint, &statement.base.id)
-                    .await?
-                    .is_some()
-                {
+                if self.replay_refresh(&audit.base.id, &fingerprint, &statement.base.id).await?.is_some() {
                     Ok(())
                 } else {
                     Err(error.into())
                 }
-            }
+            },
         }
     }
 
@@ -248,31 +208,16 @@ impl SupplierSettlementProcess {
         expected_fingerprint: &str,
         statement_id: &str,
     ) -> Result<Option<SettlementDraftCommandResult>> {
-        let Some(audit) = self
-            .db
-            .audit_logs()
-            .find_by_id(audit_id, &mut NoTransaction)
-            .await?
-        else {
+        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
             return Ok(None);
         };
         ensure_audit_resource(&audit, statement_id)?;
-        let message = audit
-            .message
-            .as_deref()
-            .ok_or_else(|| Error::Internal("刷新幂等收据缺少结果".to_string()))?;
+        let message =
+            audit.message.as_deref().ok_or_else(|| Error::Internal("刷新幂等收据缺少结果".to_string()))?;
         let receipt = parse_refresh_receipt(message, expected_fingerprint)?;
-        let statement = self
-            .domain()
-            .load_statement(statement_id, &mut NoTransaction)
-            .await?;
+        let statement = self.domain().load_statement(statement_id, &mut NoTransaction).await?;
         ensure_refresh_replay(&statement, &receipt)?;
-        Ok(Some(refresh_result(
-            statement,
-            receipt,
-            "REPLAYED",
-            "结算试算刷新结果已恢复",
-        )))
+        Ok(Some(refresh_result(statement, receipt, "REPLAYED", "结算试算刷新结果已恢复")))
     }
 }
 
@@ -323,9 +268,7 @@ fn refresh_audit(
 }
 
 fn parse_refresh_receipt(message: &str, fingerprint: &str) -> Result<RefreshReceipt> {
-    let fields = receipt_result(message, fingerprint, "刷新结算试算")?
-        .split('|')
-        .collect::<Vec<_>>();
+    let fields = receipt_result(message, fingerprint, "刷新结算试算")?.split('|').collect::<Vec<_>>();
     let [request_id, version, source_hash, item_count, difference_count] = fields.as_slice() else {
         return Err(Error::Internal("刷新结算试算幂等收据非法".to_string()));
     };
@@ -355,9 +298,7 @@ fn refresh_result(
 }
 
 fn parse_positive_u64(value: &str, field: &str) -> Result<u64> {
-    let value = value
-        .parse::<u64>()
-        .map_err(|_| Error::Internal(format!("刷新收据{field}非法")))?;
+    let value = value.parse::<u64>().map_err(|_| Error::Internal(format!("刷新收据{field}非法")))?;
     if value == 0 {
         return Err(Error::Internal(format!("刷新收据{field}非法")));
     }
@@ -365,9 +306,7 @@ fn parse_positive_u64(value: &str, field: &str) -> Result<u64> {
 }
 
 fn parse_usize(value: &str, field: &str) -> Result<usize> {
-    value
-        .parse::<usize>()
-        .map_err(|_| Error::Internal(format!("刷新收据{field}非法")))
+    value.parse::<usize>().map_err(|_| Error::Internal(format!("刷新收据{field}非法")))
 }
 
 /// 刷新回执只恢复同一版本与来源快照。
@@ -375,9 +314,7 @@ fn ensure_refresh_replay(statement: &SupplierSettlementStatement, receipt: &Refr
     if statement.base.version != receipt.statement_version
         || statement.source_snapshot_hash != receipt.source_snapshot_hash
     {
-        return Err(Error::ConflictError(
-            "刷新幂等结果已被后续来源快照替代，请读取当前详情".to_string(),
-        ));
+        return Err(Error::ConflictError("刷新幂等结果已被后续来源快照替代，请读取当前详情".to_string()));
     }
     Ok(())
 }

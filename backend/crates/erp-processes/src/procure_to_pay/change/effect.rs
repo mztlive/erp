@@ -1,5 +1,5 @@
 use erp_finance::service::payable::purchase_change::{
-    prepare_purchase_change_payable, PurchaseChangePayableInput, PurchaseChangePayableWrite,
+    PurchaseChangePayableInput, PurchaseChangePayableWrite, prepare_purchase_change_payable,
 };
 use erp_procurement::service::purchase_order::change::EffectiveChangeWrite;
 /// 独立持有采购与财务计划的跨域写组合；采购计划内不持有财务实体。
@@ -7,18 +7,18 @@ pub(super) struct EffectiveChangePosting {
     pub(super) purchase: EffectiveChangeWrite,
     pub(super) payable: Option<PurchaseChangePayableWrite>,
 }
+use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_procurement::dto::purchase_order::{EffectPurchaseChangeRequest, PurchaseChangeEffectResult};
 use erp_procurement::entity::purchase_order::PurchaseChangeOrder;
+use erp_workflow::service::approval::policy::ApprovalDomainAction;
 use mongodb::ClientSession;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use super::super::change_adapter::execute_purchase_change_domain_action;
 use super::super::PurchaseOrderProcess;
+use super::super::change_adapter::execute_purchase_change_domain_action;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_procurement::dto::purchase_order::{EffectPurchaseChangeRequest, PurchaseChangeEffectResult};
-use erp_workflow::service::approval::policy::ApprovalDomainAction;
 
 impl PurchaseOrderProcess {
     /// 最终通过并生效：改写采购单并同步履约影响。
@@ -56,8 +56,7 @@ impl PurchaseOrderProcess {
         let submission_id = change
             .submission_id_for_effect(Some(req.submission_id.as_str()))
             .map_err(|error| Error::ConflictError(error.to_string()))?;
-        self.persist_effective_change(change, submission_id.to_string(), actor)
-            .await
+        self.persist_effective_change(change, submission_id.to_string(), actor).await
     }
 
     /// 在审批运行时持有的事务内生效采购变更。
@@ -76,15 +75,10 @@ impl PurchaseOrderProcess {
             ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange,
             actor.id(),
         )?;
-        let submission_id = change
-            .submission_id_for_effect(None)
-            .map_err(|error| Error::ConflictError(error.to_string()))?;
-        let prepared = self
-            .prepare_effective_change_write(&change, submission_id.as_ref())
-            .await?;
-        write_effective_change_in_transaction(&self.db, prepared.write, actor, session)
-            .await
-            .map(|_| ())
+        let submission_id =
+            change.submission_id_for_effect(None).map_err(|error| Error::ConflictError(error.to_string()))?;
+        let prepared = self.prepare_effective_change_write(&change, submission_id.as_ref()).await?;
+        write_effective_change_in_transaction(&self.db, prepared.write, actor, session).await.map(|_| ())
     }
 
     /// 准备生效修订与应付差额，并在同一事务内推进采购当前版本。
@@ -110,15 +104,8 @@ impl PurchaseOrderProcess {
         submission_id: String,
         actor: &AuditActor,
     ) -> Result<PurchaseChangeEffectResult> {
-        let prepared = self
-            .prepare_effective_change_write(&change, &submission_id)
-            .await?;
-        let PreparedEffectiveChange {
-            write,
-            revision_id,
-            revision_no,
-            payable_delta_entry_id,
-        } = prepared;
+        let prepared = self.prepare_effective_change_write(&change, &submission_id).await?;
+        let PreparedEffectiveChange { write, revision_id, revision_no, payable_delta_entry_id } = prepared;
         let purchase_order_lock_version = write_effective_change(&self.db, write, actor).await?;
         Ok(PurchaseChangeEffectResult {
             change_id: change.base.id.clone(),
@@ -139,10 +126,8 @@ impl PurchaseOrderProcess {
         change: &PurchaseChangeOrder,
         submission_id: &str,
     ) -> Result<PreparedEffectiveChange> {
-        let (write, base_revision) = self
-            .domain()
-            .prepare_purchase_effective_change(change, submission_id)
-            .await?;
+        let (write, base_revision) =
+            self.domain().prepare_purchase_effective_change(change, submission_id).await?;
         let payable = prepare_purchase_change_payable(PurchaseChangePayableInput {
             purchase_order_id: write.order.base.id.clone().into(),
             supplier_id: write.order.supplier_id.clone(),
@@ -154,10 +139,7 @@ impl PurchaseOrderProcess {
             revision_id: write.revision.base.id.clone(),
             revision_no: write.revision.revision.revision_no,
             payable_delta_entry_id: payable.as_ref().map(|value| value.entry_id().to_string()),
-            write: EffectiveChangePosting {
-                purchase: write,
-                payable,
-            },
+            write: EffectiveChangePosting { purchase: write, payable },
         })
     }
 }

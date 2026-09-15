@@ -1,10 +1,8 @@
 //! 产品报价表异步导入。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Json, Multipart, Path, Query, State},
-    Extension,
-};
+use axum::Extension;
+use axum::extract::{Json, Multipart, Path, Query, State};
 use erp_catalog::{
     PageView, ProductImportDirectUploadCompleteRequest, ProductImportDirectUploadInitRequest,
     ProductImportDirectUploadInitView, ProductImportDirectUploadPartView, ProductImportItemListParams,
@@ -13,15 +11,11 @@ use erp_catalog::{
 use erp_support::{RetentionClass, SensitivityClass};
 use serde::Deserialize;
 
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::{Error, Result},
-        handler::file_asset::{delete_pending_asset_objects, store_asset_file, AssetFile},
-        response::ApiResponse,
-        upload,
-    },
-};
+use crate::app_state::AppState;
+use crate::core::errors::{Error, Result};
+use crate::core::handler::file_asset::{AssetFile, delete_pending_asset_objects, store_asset_file};
+use crate::core::response::ApiResponse;
+use crate::core::upload;
 
 #[permission_macros::permission(
     group = "商品与仓库",
@@ -50,23 +44,12 @@ pub async fn product_import_submit(
     mut multipart: Multipart,
 ) -> Result<ProductImportJobView> {
     let extracted = extract_import_form(&mut multipart).await?;
-    let pending = store_asset_file(
-        &state,
-        extracted.file,
-        SensitivityClass::General,
-        RetentionClass::LongTerm,
-        None,
-    )
-    .await?;
+    let pending =
+        store_asset_file(&state, extracted.file, SensitivityClass::General, RetentionClass::LongTerm, None)
+            .await?;
     let result = state
         .product_import_process()
-        .submit(
-            extracted.file_name,
-            extracted.bytes,
-            pending.clone(),
-            extracted.request_id,
-            &actor,
-        )
+        .submit(extracted.file_name, extracted.bytes, pending.clone(), extracted.request_id, &actor)
         .await;
     match result {
         Ok(view) => Ok(ApiResponse::ok_with_data(view)),
@@ -80,7 +63,7 @@ pub async fn product_import_submit(
             )
             .await;
             Err(error.into())
-        }
+        },
     }
 }
 
@@ -157,10 +140,7 @@ pub async fn product_import_job_items(
     Path(id): Path<String>,
     Query(params): Query<ProductImportItemListParams>,
 ) -> Result<PageView<ProductImportItemView>> {
-    let view = state
-        .product_import_process()
-        .job_items(&id, &params, &actor)
-        .await?;
+    let view = state.product_import_process().job_items(&id, &params, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -272,10 +252,7 @@ pub async fn product_import_direct_upload_complete(
     Path(upload_id): Path<String>,
     Json(req): Json<ProductImportDirectUploadCompleteRequest>,
 ) -> Result<ProductImportJobView> {
-    let view = state
-        .product_import_process()
-        .submit_direct_upload(&upload_id, req, &actor)
-        .await?;
+    let view = state.product_import_process().submit_direct_upload(&upload_id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -318,19 +295,12 @@ async fn extract_import_form(multipart: &mut Multipart) -> std::result::Result<E
     let mut file_name = None;
     let mut bytes = None;
     let mut request_id = None;
-    while let Some(mut field) = multipart
-        .next_field()
-        .await
-        .map_err(|_| Error::BadRequest("Multipart 表单无效".into()))?
+    while let Some(mut field) =
+        multipart.next_field().await.map_err(|_| Error::BadRequest("Multipart 表单无效".into()))?
     {
         let name = field.name().unwrap_or_default().to_string();
         if name == "request_id" {
-            request_id = Some(
-                field
-                    .text()
-                    .await
-                    .map_err(|_| Error::BadRequest("请求身份读取失败".into()))?,
-            );
+            request_id = Some(field.text().await.map_err(|_| Error::BadRequest("请求身份读取失败".into()))?);
             continue;
         }
         if field.file_name().is_none() {
@@ -343,10 +313,8 @@ async fn extract_import_form(multipart: &mut Multipart) -> std::result::Result<E
             .ok_or_else(|| Error::BadRequest("请选择产品报价表文件".into()))?
             .to_string();
         let mut content = Vec::new();
-        while let Some(chunk) = field
-            .chunk()
-            .await
-            .map_err(|_| Error::BadRequest("上传文件读取失败".into()))?
+        while let Some(chunk) =
+            field.chunk().await.map_err(|_| Error::BadRequest("上传文件读取失败".into()))?
         {
             if content.len().saturating_add(chunk.len()) > upload::MAX_PRODUCT_IMPORT_XLSX_BYTES {
                 return Err(Error::BadRequest("导入文件不能超过 700 MB".into()));
@@ -365,11 +333,7 @@ async fn extract_import_form(multipart: &mut Multipart) -> std::result::Result<E
         .filter(|value| !value.is_empty())
         .unwrap_or_else(id_generator::next_id);
     Ok(ExtractedImport {
-        file: AssetFile {
-            file_name: file_name.clone(),
-            content_type,
-            content: bytes.clone(),
-        },
+        file: AssetFile { file_name: file_name.clone(), content_type, content: bytes.clone() },
         file_name,
         bytes,
         request_id,

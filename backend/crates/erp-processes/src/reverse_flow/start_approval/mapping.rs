@@ -27,10 +27,11 @@ pub fn list_projection_from_execution(
 
 #[cfg(test)]
 mod tests {
-    use super::list_projection_from_execution;
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
     use bpm::model::{ApprovalNodeExecution, NewNodeExecution, ParticipantId, Timestamp};
     use erp_core::common::time::Instant;
+
+    use super::list_projection_from_execution;
 
     fn execution() -> ApprovalNodeExecution {
         ApprovalNodeExecution::new_active(NewNodeExecution {

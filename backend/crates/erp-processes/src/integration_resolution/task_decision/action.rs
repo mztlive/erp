@@ -1,10 +1,4 @@
 //! 非终结动作的回执、正式任务权限与跨域事务。
-use super::super::IntegrationResolutionProcess;
-use super::guard::{command_identity, load_bound_work_item};
-use super::{store_receipt, TASK_ACTION_AUDIT};
-
-use crate::adapters::workflow::work_item_service;
-use crate::Result;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_integration::dto::{
@@ -14,12 +8,18 @@ use erp_integration::dto::{
 };
 use erp_integration::entity::integration_ops::IntegrationCommandIdentity;
 use erp_integration::service::task_decision::action::{
-    audit_log_reference, execute_task_action, next_allowed_actions, ActionFact,
+    ActionFact, audit_log_reference, execute_task_action, next_allowed_actions,
 };
 use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
+
+use super::super::IntegrationResolutionProcess;
+use super::guard::{command_identity, load_bound_work_item};
+use super::{TASK_ACTION_AUDIT, store_receipt};
+use crate::Result;
+use crate::adapters::workflow::work_item_service;
 
 /// 将非终态命令各步骤接到正式仓储、权限和注入的证据能力。
 struct ActionCommand<'a> {
@@ -39,14 +39,7 @@ impl super::execution::TaskCommandPort for ActionCommand<'_> {
     type Output = IntegrationTaskActionResult;
 
     async fn load_bound(&mut self, executor: &mut dyn Executor) -> Result<Self::Item> {
-        load_bound_work_item(
-            self.db,
-            self.prepared,
-            &self.command.action,
-            self.actor.id(),
-            executor,
-        )
-        .await
+        load_bound_work_item(self.db, self.prepared, &self.command.action, self.actor.id(), executor).await
     }
 
     async fn authorize(&mut self, item: &Self::Item, executor: &mut dyn Executor) -> Result<()> {
@@ -161,10 +154,7 @@ impl IntegrationResolutionProcess {
         command: &IntegrationTaskActionCommand,
         actor: &AuditActor,
     ) -> Result<Option<IntegrationTaskActionResult>> {
-        let Some(message) = self
-            .replay_receipt::<ActionReceiptMessage>(receipt, actor)
-            .await?
-        else {
+        let Some(message) = self.replay_receipt::<ActionReceiptMessage>(receipt, actor).await? else {
             return Ok(None);
         };
         let fact = ActionFact {

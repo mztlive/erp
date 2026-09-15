@@ -1,14 +1,15 @@
 //! 将正式销售行和已归属成本归集为订单经营结果，不把缺少事实当零成本。
-use super::{dto::*, source::Sources};
-use crate::{Error, Result};
-use erp_finance::entity::cost::{
-    profit_loss::ProfitLossAmounts, CostAllocation, CostEntry, CostScope, CostStage, CostType,
-};
-use erp_sales::{
-    entity::sales_order::FulfillmentProgress, repository::sales_order::profit_loss::ProfitLossOrder,
-};
-use rust_decimal::Decimal;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+
+use erp_finance::entity::cost::profit_loss::ProfitLossAmounts;
+use erp_finance::entity::cost::{CostAllocation, CostEntry, CostScope, CostStage, CostType};
+use erp_sales::entity::sales_order::FulfillmentProgress;
+use erp_sales::repository::sales_order::profit_loss::ProfitLossOrder;
+use rust_decimal::Decimal;
+
+use super::dto::*;
+use super::source::Sources;
+use crate::{Error, Result};
 
 /// 一张销售单的可归集经营事实。
 #[derive(Debug, Clone)]
@@ -35,11 +36,7 @@ impl OrderResult {
         self.row.totals = totals(
             self.revenue,
             &self.costs,
-            if complete {
-                Some(self.costs.profit(self.revenue)?)
-            } else {
-                None
-            },
+            if complete { Some(self.costs.profit(self.revenue)?) } else { None },
             self.revenue,
         );
         Ok(())
@@ -47,9 +44,7 @@ impl OrderResult {
 }
 /// 金额严格累计；异常大金额整体失败。
 pub(super) fn add(target: &mut Decimal, amount: Decimal) -> Result<()> {
-    *target = target
-        .checked_add(amount)
-        .ok_or_else(|| Error::ValidationError("统计金额超出范围".into()))?;
+    *target = target.checked_add(amount).ok_or_else(|| Error::ValidationError("统计金额超出范围".into()))?;
     Ok(())
 }
 /// 金额保留分，财务值已由正式行完成舍入。
@@ -101,10 +96,7 @@ impl<'a> SalesIndex<'a> {
         let revisions = source.revisions.iter().map(|r| (r.base.id.as_str(), r)).collect();
         let mut lines: HashMap<&str, Vec<_>> = HashMap::new();
         for line in &source.lines {
-            lines
-                .entry(line.sales_order_revision_id.as_ref())
-                .or_default()
-                .push(line);
+            lines.entry(line.sales_order_revision_id.as_ref()).or_default().push(line);
         }
         let scenarios = source
             .goods
@@ -112,29 +104,18 @@ impl<'a> SalesIndex<'a> {
             .map(|g| {
                 (
                     g.revision_line_id.as_ref(),
-                    g.welfare_scenario
-                        .as_ref()
-                        .map(|s| s.label())
-                        .unwrap_or("未标注")
-                        .to_string(),
+                    g.welfare_scenario.as_ref().map(|s| s.label()).unwrap_or("未标注").to_string(),
                 )
             })
             .collect();
-        Self {
-            revisions,
-            lines,
-            scenarios,
-        }
+        Self { revisions, lines, scenarios }
     }
     /// 使用当前正式版本的明细；缺失时由金额及覆盖校验拒绝可信利润。
     fn lines(
         &self,
         order: &ProfitLossOrder,
     ) -> &[&'a erp_sales::entity::sales_order::SalesOrderRevisionLine] {
-        self.lines
-            .get(order.current_revision_id.as_deref().unwrap_or(""))
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
+        self.lines.get(order.current_revision_id.as_deref().unwrap_or("")).map(Vec::as_slice).unwrap_or(&[])
     }
     /// 当前版本必须属于该销售单；禁止回退到其他订单或草稿。
     fn result(&self, order: &ProfitLossOrder, drill: bool) -> Result<OrderResult> {
@@ -148,30 +129,21 @@ impl<'a> SalesIndex<'a> {
         for line in self.lines(order) {
             add(&mut revenue, line.net_amount.to_decimal())?;
             scenarios.insert(
-                self.scenarios
-                    .get(line.base.id.as_str())
-                    .cloned()
-                    .unwrap_or_else(|| "未标注".into()),
+                self.scenarios.get(line.base.id.as_str()).cloned().unwrap_or_else(|| "未标注".into()),
             );
         }
         if revenue != revision.net_amount.to_decimal() {
             return Err(Error::ConflictError("销售版本表头与明细收入不一致".into()));
         }
-        let date = order
-            .effective_at
-            .ok_or_else(|| Error::ConflictError("销售单缺少生效日期".into()))?
-            .as_utc();
+        let date =
+            order.effective_at.ok_or_else(|| Error::ConflictError("销售单缺少生效日期".into()))?.as_utc();
         Ok(OrderResult {
             row: order_row(order, &revision.customer_snapshot.customer_name, scenarios, drill),
             revenue,
             costs: ProfitLossAmounts::default(),
             composition: BTreeMap::new(),
             month: (date + chrono::Duration::hours(8)).format("%Y-%m").to_string(),
-            attribution_path: order
-                .attribution
-                .as_ref()
-                .map(|a| a.org_path.clone())
-                .unwrap_or_default(),
+            attribution_path: order.attribution.as_ref().map(|a| a.org_path.clone()).unwrap_or_default(),
         })
     }
 }
@@ -190,18 +162,9 @@ fn order_row(
         customer_id: Some(order.customer_id.clone()),
         customer_label: Some(customer.into()),
         attribution_user_id: order.attribution.as_ref().map(|a| a.attribution_user_id.clone()),
-        attribution_user_name: order
-            .attribution
-            .as_ref()
-            .map(|a| a.attribution_user_name.clone()),
-        attribution_org_unit_id: order
-            .attribution
-            .as_ref()
-            .map(|a| a.attribution_org_unit_id.clone()),
-        attribution_org_unit_name: order
-            .attribution
-            .as_ref()
-            .map(|a| a.attribution_org_unit_name.clone()),
+        attribution_user_name: order.attribution.as_ref().map(|a| a.attribution_user_name.clone()),
+        attribution_org_unit_id: order.attribution.as_ref().map(|a| a.attribution_org_unit_id.clone()),
+        attribution_org_unit_name: order.attribution.as_ref().map(|a| a.attribution_org_unit_name.clone()),
         benefit_scenarios: scenarios.into_iter().collect(),
         fulfillment_modes: vec![],
         totals: Totals::default(),
@@ -269,28 +232,12 @@ fn record_actual_cost(
     covered: &mut BTreeSet<String>,
 ) -> Result<()> {
     record_cost_source(&mut result.row, entry);
-    let signed = if entry.cost_stage == CostStage::Reduction {
-        -amount
-    } else {
-        amount
-    };
-    add(
-        result
-            .composition
-            .entry(entry.cost_type.as_str().into())
-            .or_default(),
-        signed,
-    )?;
+    let signed = if entry.cost_stage == CostStage::Reduction { -amount } else { amount };
+    add(result.composition.entry(entry.cost_type.as_str().into()).or_default(), signed)?;
     if entry.cost_stage == CostStage::Actual
         && matches!(entry.cost_type, CostType::Product | CostType::OfflineService)
     {
-        covered.insert(
-            allocation
-                .sales_order_line_id
-                .as_ref()
-                .map(ToString::to_string)
-                .unwrap_or_default(),
-        );
+        covered.insert(allocation.sales_order_line_id.as_ref().map(ToString::to_string).unwrap_or_default());
     }
     Ok(())
 }
@@ -325,9 +272,6 @@ fn check_coverage(
 /// 相同缺口仅展示一次。
 fn blocker(result: &mut OrderResult, code: &str, message: &str) {
     if !result.row.coverage_blockers.iter().any(|b| b.code == code) {
-        result.row.coverage_blockers.push(CoverageBlocker {
-            code: code.into(),
-            message: message.into(),
-        });
+        result.row.coverage_blockers.push(CoverageBlocker { code: code.into(), message: message.into() });
     }
 }

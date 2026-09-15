@@ -54,24 +54,23 @@ impl ApprovalDisplaySnapshot {
         {
             return Err(Error::from("审批展示快照超出允许范围"));
         }
-        let texts = [&self.root_document_id, &self.source.list_summary]
-            .into_iter()
-            .chain(self.counterparty_label.iter())
-            .chain(self.impact_summary.iter())
-            .chain(self.source.customer.iter())
-            .chain(self.source.amount_label.iter())
-            .chain(self.source.submitter_name.iter())
-            .chain(
-                self.source
-                    .extra_sections
-                    .iter()
-                    .flat_map(|s| [&s.label, &s.value].into_iter().chain(s.object_id.iter())),
-            )
-            .chain(self.source.lines.iter().flat_map(|l| {
-                std::iter::once(&l.title)
-                    .chain(l.quantity.iter())
-                    .chain(l.due_label.iter())
-            }));
+        let texts =
+            [&self.root_document_id, &self.source.list_summary]
+                .into_iter()
+                .chain(self.counterparty_label.iter())
+                .chain(self.impact_summary.iter())
+                .chain(self.source.customer.iter())
+                .chain(self.source.amount_label.iter())
+                .chain(self.source.submitter_name.iter())
+                .chain(
+                    self.source
+                        .extra_sections
+                        .iter()
+                        .flat_map(|s| [&s.label, &s.value].into_iter().chain(s.object_id.iter())),
+                )
+                .chain(self.source.lines.iter().flat_map(|l| {
+                    std::iter::once(&l.title).chain(l.quantity.iter()).chain(l.due_label.iter())
+                }));
         if texts.into_iter().any(|s| s.chars().count() > 8192) {
             return Err(Error::from("审批展示快照文本过长"));
         }

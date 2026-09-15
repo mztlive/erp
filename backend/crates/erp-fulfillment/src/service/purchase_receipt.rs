@@ -1,6 +1,11 @@
 //! 采购入库单的查询、草稿准备与调用方事务内本域写入。
-use super::purchase_receipt_lines::receipt_line_specs;
+use erp_core::ids::PurchaseReceiptId;
+use id_generator::next_id;
+use persistence_core::{Executor, NoTransaction};
+use validator::Validate;
+
 use super::FulfillmentService;
+use super::purchase_receipt_lines::receipt_line_specs;
 use crate::dto::{
     CreatePurchaseReceiptRequest, PageView, PurchaseReceiptDetailView, PurchaseReceiptLineView,
     PurchaseReceiptListParams, PurchaseReceiptView, SortDir, UpdatePurchaseReceiptRequest,
@@ -10,10 +15,6 @@ use crate::entity::fulfillment::{
 };
 use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
-use erp_core::ids::PurchaseReceiptId;
-use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
-use validator::Validate;
 /// 采购入库单列表筛选条件类型（经 `FulfillmentExt` 关联类型跨 crate 可达）。
 type PurchaseReceiptFilter = <mongodb::Database as FulfillmentExt>::PurchaseReceiptFilter;
 impl FulfillmentService {
@@ -31,11 +32,7 @@ impl FulfillmentService {
     #[tracing::instrument(
         name = "fulfillment.purchase_receipt_list",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "purchase_receipt_list"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "purchase_receipt_list")
     )]
     pub async fn purchase_receipt_list(
         &self,
@@ -51,11 +48,7 @@ impl FulfillmentService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .purchase_receipts()
-            .search_purchase_receipts(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.purchase_receipts().search_purchase_receipts(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -70,12 +63,7 @@ impl FulfillmentService {
                 created_at: row.created_at,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
     /// 查询采购入库单详情（表头 + 行）。
     ///
@@ -91,11 +79,7 @@ impl FulfillmentService {
     #[tracing::instrument(
         name = "fulfillment.purchase_receipt_detail",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "purchase_receipt_detail"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "purchase_receipt_detail")
     )]
     pub async fn purchase_receipt_detail(&self, id: &str) -> Result<PurchaseReceiptDetailView> {
         let receipt = self
@@ -146,15 +130,9 @@ impl FulfillmentService {
             .await?
             .ok_or_else(|| Error::NotFound("采购入库单不存在".to_string()))?;
         if receipt.base.version != req.version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
-        if req
-            .warehouse_id
-            .as_ref()
-            .is_some_and(|warehouse_id| warehouse_id != &receipt.warehouse_id)
-        {
+        if req.warehouse_id.as_ref().is_some_and(|warehouse_id| warehouse_id != &receipt.warehouse_id) {
             return Err(Error::ValidationError(
                 "采购入库单的目标仓库已冻结，不能在任务生成后变更".to_string(),
             ));
@@ -171,10 +149,7 @@ impl FulfillmentService {
         lines: &[PurchaseReceiptLine],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .fulfillment()
-            .create_purchase_receipt_with_lines(receipt, lines, executor)
-            .await?;
+        self.db.fulfillment().create_purchase_receipt_with_lines(receipt, lines, executor).await?;
         Ok(())
     }
     /// 在调用方事务内按原乐观锁条件写回采购入库单。
@@ -220,12 +195,14 @@ impl From<PurchaseReceiptLine> for PurchaseReceiptLineView {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use erp_core::ids::{PurchaseOrderRevisionLineId, PurchaseReceiptId};
+    use erp_core::money::Quantity;
+
     use super::receipt_line_specs;
     use crate::dto::PurchaseReceiptLineInput;
     use crate::entity::fulfillment::{PurchaseReceiptLineBatch, PurchaseReceiptLineData, QualityResult};
-    use erp_core::ids::{PurchaseOrderRevisionLineId, PurchaseReceiptId};
-    use erp_core::money::Quantity;
-    use std::str::FromStr;
 
     fn passed_line() -> PurchaseReceiptLineInput {
         PurchaseReceiptLineInput {
@@ -286,11 +263,10 @@ mod tests {
             rejected_quantity: Quantity::from_str("1").unwrap(),
             ..passed_line()
         };
-        assert!(PurchaseReceiptLineBatch::build(
-            PurchaseReceiptId::new("r-2"),
-            receipt_line_specs(&[over_sum])
-        )
-        .is_err());
+        assert!(
+            PurchaseReceiptLineBatch::build(PurchaseReceiptId::new("r-2"), receipt_line_specs(&[over_sum]))
+                .is_err()
+        );
         let _ = PurchaseReceiptLineData {
             purchase_receipt_id: PurchaseReceiptId::new("r-1"),
             line_no: 1,
@@ -305,21 +281,9 @@ mod tests {
     /// 创建路径经实体批量工厂派生质量：旧 Service helper 已删除。
     #[test]
     fn receipt_create_uses_entity_batch_factory() {
-        let production = include_str!("purchase_receipt.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
-        assert!(
-            !production.contains("fn build_receipt_lines"),
-            "旧 helper 必须删除"
-        );
-        assert!(
-            production.contains("PurchaseReceiptLineBatch::build"),
-            "创建路径必须调用实体工厂"
-        );
-        assert!(
-            !production.contains("QualityResult::from_quantities"),
-            "质量派生不得留在 Service"
-        );
+        let production = include_str!("purchase_receipt.rs").split("#[cfg(test)]").next().expect("生产代码");
+        assert!(!production.contains("fn build_receipt_lines"), "旧 helper 必须删除");
+        assert!(production.contains("PurchaseReceiptLineBatch::build"), "创建路径必须调用实体工厂");
+        assert!(!production.contains("QualityResult::from_quantities"), "质量派生不得留在 Service");
     }
 }

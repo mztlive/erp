@@ -1,15 +1,16 @@
 //! 跨域写入根的实际provider：领域命令持久化后写同一审计。
-use crate::Result;
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
-use erp_supply::{
-    dto::supplier_offering::{ReviseSupplierOfferingResult, UpdateSupplierOfferingAvailabilityResult},
-    service::supplier_offering::{
-        PreparedAvailability, PreparedCreate, PreparedRevision, SupplierOfferingService,
-    },
+use erp_supply::dto::supplier_offering::{
+    ReviseSupplierOfferingResult, UpdateSupplierOfferingAvailabilityResult,
+};
+use erp_supply::service::supplier_offering::{
+    PreparedAvailability, PreparedCreate, PreparedRevision, SupplierOfferingService,
 };
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::Result;
 #[async_trait]
 trait CommitPort: Send {
     type Output: Send;
@@ -37,11 +38,7 @@ impl CommitPort for MongoCreated<'_> {
             .map_err(Into::into)
     }
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        self.db
-            .audit_logs()
-            .create(self.audit, executor)
-            .await
-            .map_err(Into::into)
+        self.db.audit_logs().create(self.audit, executor).await.map_err(Into::into)
     }
 }
 /// 提交供给单域事实与原审计，复用传入的同一事务执行器。
@@ -68,11 +65,7 @@ impl CommitPort for MongoRevised<'_> {
             .map_err(Into::into)
     }
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        self.db
-            .audit_logs()
-            .create(self.audit, executor)
-            .await
-            .map_err(Into::into)
+        self.db.audit_logs().create(self.audit, executor).await.map_err(Into::into)
     }
 }
 /// 提交供给单域事实与原审计，复用传入的同一事务执行器。
@@ -99,11 +92,7 @@ impl CommitPort for MongoAvailability<'_> {
             .map_err(Into::into)
     }
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        self.db
-            .audit_logs()
-            .create(self.audit, executor)
-            .await
-            .map_err(Into::into)
+        self.db.audit_logs().create(self.audit, executor).await.map_err(Into::into)
     }
 }
 /// 提交供给单域事实与原审计，复用传入的同一事务执行器。
@@ -157,11 +146,7 @@ mod tests {
     async fn domain_and_audit_preserve_executor_result_and_each_error() {
         for fail in [None, Some(0), Some(1)] {
             let mut executor = Marker(164);
-            let mut port = Recorder {
-                pointer: &mut executor as *mut Marker as usize,
-                calls: vec![],
-                fail,
-            };
+            let mut port = Recorder { pointer: &mut executor as *mut Marker as usize, calls: vec![], fail };
             let result = commit(&mut port, &mut executor).await;
             if let Some(i) = fail {
                 assert!(matches!(result,Err(Error::ConflictError(ref e)) if e==&format!("commit {i}")));

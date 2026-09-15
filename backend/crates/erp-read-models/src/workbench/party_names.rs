@@ -11,8 +11,7 @@ use persistence_core::{Executor, NoTransaction};
 
 use super::dto::WorkItemSummarySection;
 use super::presentation::resolve_owner_display_name;
-use super::WorkItemView;
-use super::WorkbenchReadService;
+use super::{WorkItemView, WorkbenchReadService};
 use crate::errors::Result;
 
 /// 简报里提交人段的标签，与 `brief.rs` 写入端保持一致。
@@ -173,25 +172,18 @@ fn submitter_section(sections: &[WorkItemSummarySection]) -> Option<&WorkItemSum
 /// # 错误
 /// 无。
 fn apply_submitter_name(sections: &mut Vec<WorkItemSummarySection>, names: &HashMap<String, String>) {
-    let Some(index) = sections
-        .iter()
-        .position(|section| section.label == SUBMITTER_LABEL)
-    else {
+    let Some(index) = sections.iter().position(|section| section.label == SUBMITTER_LABEL) else {
         return;
     };
     if !is_account_id(&sections[index].value) {
         return;
     }
-    match names
-        .get(&sections[index].value)
-        .map(String::as_str)
-        .map(str::trim)
-        .filter(|name| !name.is_empty())
+    match names.get(&sections[index].value).map(String::as_str).map(str::trim).filter(|name| !name.is_empty())
     {
         Some(name) => sections[index].value = name.to_string(),
         None => {
             sections.remove(index);
-        }
+        },
     }
 }
 
@@ -215,20 +207,13 @@ mod tests {
     use std::collections::HashMap;
 
     use super::super::dto::{ProcessingState, WorkItemPartyView, WorkItemView};
-    use super::{account_ids_for_lookup, apply_submitter_name, is_account_id, WorkItemSummarySection};
+    use super::{WorkItemSummarySection, account_ids_for_lookup, apply_submitter_name, is_account_id};
 
     #[test]
     fn owner_ids_are_unique_and_skip_unassigned() {
-        let items = [
-            dummy_view(Some("u2")),
-            dummy_view(Some("u1")),
-            dummy_view(Some("u2")),
-            dummy_view(None),
-        ];
-        assert_eq!(
-            account_ids_for_lookup(&items),
-            vec!["u1".to_string(), "u2".to_string()]
-        );
+        let items =
+            [dummy_view(Some("u2")), dummy_view(Some("u1")), dummy_view(Some("u2")), dummy_view(None)];
+        assert_eq!(account_ids_for_lookup(&items), vec!["u1".to_string(), "u2".to_string()]);
     }
 
     const SUBMITTER_ID: &str = "7e9e521afce041b79218edb9a246e974";
@@ -237,10 +222,7 @@ mod tests {
     fn submitter_ids_join_the_same_account_lookup() {
         let mut item = dummy_view(Some("u1"));
         item.summary_sections = vec![section("提交人", SUBMITTER_ID)];
-        assert_eq!(
-            account_ids_for_lookup(&[item]),
-            vec![SUBMITTER_ID.to_string(), "u1".to_string()]
-        );
+        assert_eq!(account_ids_for_lookup(&[item]), vec![SUBMITTER_ID.to_string(), "u1".to_string()]);
     }
 
     #[test]
@@ -305,10 +287,10 @@ mod tests {
                 display_name: "责任组织".to_string(),
             },
             owner_user_id: owner_id.map(str::to_string),
-            owner_user: owner_id.map(|id| WorkItemPartyView {
-                id: id.to_string(),
-                display_name: "当前处理人".to_string(),
-            }),
+            owner_user: owner_id
+                .map(|id| WorkItemPartyView {
+                    id: id.to_string(), display_name: "当前处理人".to_string()
+                }),
             processing_state: ProcessingState::Ready,
             processing_blocker: None,
             business_object_type: "procurement_confirmation".to_string(),

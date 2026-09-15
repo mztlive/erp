@@ -1,5 +1,4 @@
 //! 派发结果在同一执行器中依次写回本域、集成信封、正式责任。
-use crate::Result;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt};
@@ -7,10 +6,13 @@ use erp_core::ids::WorkItemId;
 use erp_integration::entity::integration_ops::{ErrorClass, InboxMessage, IntegrationErrorTask};
 use erp_integration::repository::IntegrationOpsExt;
 use erp_supply::entity::supplier_fulfillment::{SupplierFulfillmentOrder, SupplierOrderAction};
-use erp_supply::service::supplier_fulfillment::{place::persist_dispatch_entities, W26_BUSINESS_OBJECT_TYPE};
+use erp_supply::service::supplier_fulfillment::W26_BUSINESS_OBJECT_TYPE;
+use erp_supply::service::supplier_fulfillment::place::persist_dispatch_entities;
 use erp_workflow::{WorkItemExt, WorkItemType};
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::Result;
 #[async_trait]
 trait DispatchWrites: Send {
     async fn domain(&mut self, executor: &mut dyn Executor) -> Result<()>;
@@ -65,9 +67,8 @@ impl DispatchWrites for MongoWrites<'_> {
                 .work_items()
                 .list_active_by_object(W26_BUSINESS_OBJECT_TYPE, &self.order.base.id, executor)
                 .await?;
-            if let Some(mut work_item) = existing
-                .into_iter()
-                .find(|item| item.work_item_type == work_item_type)
+            if let Some(mut work_item) =
+                existing.into_iter().find(|item| item.work_item_type == work_item_type)
             {
                 let current_subject_version = self.order.base.version.to_string();
                 if work_item.subject_version != current_subject_version {
@@ -102,10 +103,11 @@ impl DispatchWrites for MongoWrites<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{execute, DispatchWrites};
-    use crate::{Error, Result};
     use async_trait::async_trait;
     use persistence_core::Executor;
+
+    use super::{DispatchWrites, execute};
+    use crate::{Error, Result};
     struct TestExecutor {
         _identity: u8,
     }
@@ -156,10 +158,7 @@ mod tests {
         let steps = ["order_action", "message_or_error", "w26"];
         for (index, fail) in steps.iter().enumerate() {
             let mut executor = TestExecutor { _identity: 1 };
-            let mut writes = Writes {
-                fail: Some(*fail),
-                ..Default::default()
-            };
+            let mut writes = Writes { fail: Some(*fail), ..Default::default() };
             let result = execute(&mut writes, &mut executor).await;
             assert!(matches!(result,Err(Error::ConflictError(message)) if message==*fail));
             assert_eq!(writes.steps, steps[..=index]);

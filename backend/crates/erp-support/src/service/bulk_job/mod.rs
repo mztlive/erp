@@ -17,23 +17,14 @@ mod cancel_all;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use crate::dto::bulk_job::{self as dto};
-use crate::entity::bulk_job::{
-    BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId,
-    BackgroundJobItemDraft, BulkSelectionItemDraft, BulkSelectionSnapshot, BulkSelectionSnapshotAggregate,
-    BulkSelectionSnapshotAggregateData, BulkSelectionSnapshotId,
-};
-use crate::ports::{is_business_document_type, BusinessDocumentPort, SupportAuditPort};
-use crate::repository::{BackgroundJobRegistration, BulkJobExt};
+use application_core::AuditActor;
 use erp_core::ids::FileAssetId;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::error::{Error, Result};
-use application_core::AuditActor;
-
+use crate::dto::bulk_job::{self as dto};
 pub use crate::dto::bulk_job::{
     BackgroundJobItemView, BackgroundJobListParams, BackgroundJobView, BulkSelectionItemView,
     BulkSelectionSnapshotListParams, BulkSelectionSnapshotView, CancelAllBackgroundJobsRequest,
@@ -41,6 +32,14 @@ pub use crate::dto::bulk_job::{
     CreateBackgroundJobItemRequest, CreateBackgroundJobRequest, CreateBulkSelectionItemRequest,
     CreateBulkSelectionSnapshotRequest, ExpireBulkSelectionSnapshotRequest, PageView,
 };
+use crate::entity::bulk_job::{
+    BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId,
+    BackgroundJobItemDraft, BulkSelectionItemDraft, BulkSelectionSnapshot, BulkSelectionSnapshotAggregate,
+    BulkSelectionSnapshotAggregateData, BulkSelectionSnapshotId,
+};
+use crate::error::{Error, Result};
+use crate::ports::{BusinessDocumentPort, SupportAuditPort, is_business_document_type};
+use crate::repository::{BackgroundJobRegistration, BulkJobExt};
 
 /// 选择快照列表筛选条件类型（经 `BulkJobExt` 关联类型跨 crate 可达）。
 type BulkSelectionSnapshotFilter = <mongodb::Database as BulkJobExt>::BulkSelectionSnapshotFilter;
@@ -100,11 +99,7 @@ impl BulkJobService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, dto::SortDir::Asc),
         };
-        let page = self
-            .db
-            .bulk_selection_snapshots()
-            .search_snapshots(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.bulk_selection_snapshots().search_snapshots(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -121,12 +116,7 @@ impl BulkJobService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 创建选择快照并冻结逐项目标（跨集合事务写入）。
@@ -189,9 +179,7 @@ impl BulkJobService {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    db.bulk_job()
-                        .create_snapshot_with_items(&snapshot_for_tx, items, session)
-                        .await?;
+                    db.bulk_job().create_snapshot_with_items(&snapshot_for_tx, items, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<(), crate::error::Error>(())
                 })
@@ -226,8 +214,7 @@ impl BulkJobService {
         req.validate()?;
         let mut snapshot = self.load_snapshot_with_version(id, req.version).await?;
         snapshot.confirm()?;
-        self.update_snapshot_with_audit(snapshot, "bulk_selection_snapshot.confirm", actor)
-            .await
+        self.update_snapshot_with_audit(snapshot, "bulk_selection_snapshot.confirm", actor).await
     }
 
     /// 标记选择快照失效。
@@ -254,8 +241,7 @@ impl BulkJobService {
         req.validate()?;
         let mut snapshot = self.load_snapshot_with_version(id, req.version).await?;
         snapshot.expire()?;
-        self.update_snapshot_with_audit(snapshot, "bulk_selection_snapshot.expire", actor)
-            .await
+        self.update_snapshot_with_audit(snapshot, "bulk_selection_snapshot.expire", actor).await
     }
 
     /// 分页查询快照逐项结果。
@@ -302,12 +288,7 @@ impl BulkJobService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: result.total,
-            page,
-            page_size,
-        })
+        Ok(PageView { items, total: result.total, page, page_size })
     }
 
     /// 分页查询后台任务列表（任务中心）。
@@ -339,21 +320,13 @@ impl BulkJobService {
             job_type: query.job_type,
             domain_job_type: query.domain_job_type,
             status: query.status,
-            requested_by: if is_admin {
-                query.requested_by
-            } else {
-                Some(actor.id().to_string())
-            },
+            requested_by: if is_admin { query.requested_by } else { Some(actor.id().to_string()) },
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, dto::SortDir::Asc),
         };
-        let page = self
-            .db
-            .background_jobs()
-            .search_background_jobs(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.background_jobs().search_background_jobs(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -384,12 +357,7 @@ impl BulkJobService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 查询后台任务详情。
@@ -489,14 +457,9 @@ impl BulkJobService {
         let registration = client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    let registration = db
-                        .bulk_job()
-                        .create_job_with_items(&job_for_tx, items, session)
-                        .await?;
-                    audit_port
-                        .persist(&audit, session)
-                        .await
-                        .map_err(support_error_as_persistence)?;
+                    let registration =
+                        db.bulk_job().create_job_with_items(&job_for_tx, items, session).await?;
+                    audit_port.persist(&audit, session).await.map_err(support_error_as_persistence)?;
                     Ok::<BackgroundJobRegistration, persistence_core::Error>(registration)
                 })
             })
@@ -505,28 +468,23 @@ impl BulkJobService {
         match registration {
             Ok(BackgroundJobRegistration::Created) => Ok(job.into()),
             Ok(BackgroundJobRegistration::ReplaySame(existing)) => Ok(existing.into()),
-            Ok(BackgroundJobRegistration::ConflictDifferentPayload(_)) => Err(Error::ConflictError(
-                "同一请求身份已用于不同后台任务载荷".to_string(),
-            )),
+            Ok(BackgroundJobRegistration::ConflictDifferentPayload(_)) => {
+                Err(Error::ConflictError("同一请求身份已用于不同后台任务载荷".to_string()))
+            },
             Err(persistence_core::Error::DuplicateKey(_)) => {
-                match self
-                    .db
-                    .bulk_job()
-                    .registration_by_request_id(&job, &mut NoTransaction)
-                    .await?
-                {
+                match self.db.bulk_job().registration_by_request_id(&job, &mut NoTransaction).await? {
                     Some(BackgroundJobRegistration::ReplaySame(existing)) => Ok(existing.into()),
                     Some(BackgroundJobRegistration::ConflictDifferentPayload(_)) => {
                         Err(Error::ConflictError(
                             "同一请求身份已用于不同后台任务载荷；历史无指纹任务须使用新的请求身份"
                                 .to_string(),
                         ))
-                    }
-                    Some(BackgroundJobRegistration::Created) | None => Err(Error::ConflictError(
-                        "后台任务唯一竞争结果已变化，请刷新后重试".to_string(),
-                    )),
+                    },
+                    Some(BackgroundJobRegistration::Created) | None => {
+                        Err(Error::ConflictError("后台任务唯一竞争结果已变化，请刷新后重试".to_string()))
+                    },
                 }
-            }
+            },
             Err(error) => Err(error.into()),
         }
     }
@@ -643,12 +601,7 @@ impl BulkJobService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: result.total,
-            page,
-            page_size,
-        })
+        Ok(PageView { items, total: result.total, page, page_size })
     }
 
     /// 校验批量冻结目标中业务单据类对象已注册（跨域 D02 仓储读取）。
@@ -668,11 +621,8 @@ impl BulkJobService {
             .map(|item| item.object_id.clone())
             .collect::<Vec<_>>();
         let mut seen = HashSet::new();
-        let unique_ids = document_ids
-            .iter()
-            .filter(|id| seen.insert((*id).clone()))
-            .cloned()
-            .collect::<Vec<_>>();
+        let unique_ids =
+            document_ids.iter().filter(|id| seen.insert((*id).clone())).cloned().collect::<Vec<_>>();
         let registered_ids = self
             .documents
             .find_registered_ids(&unique_ids, &mut NoTransaction)
@@ -708,9 +658,7 @@ impl BulkJobService {
             .await?
             .ok_or_else(|| Error::NotFound("选择快照不存在".to_string()))?;
         if snapshot.base.version != expected_version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         Ok(snapshot)
     }
@@ -745,9 +693,7 @@ impl BulkJobService {
         let updated = client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    db.bulk_selection_snapshots()
-                        .update(&mut snapshot, session)
-                        .await?;
+                    db.bulk_selection_snapshots().update(&mut snapshot, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<BulkSelectionSnapshot, crate::error::Error>(snapshot)
                 })
@@ -776,9 +722,7 @@ impl BulkJobService {
             .await?
             .ok_or_else(|| Error::NotFound("后台任务不存在".to_string()))?;
         if job.base.version != expected_version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         Ok(job)
     }
@@ -834,10 +778,7 @@ fn first_unregistered_document_id<'a>(
     document_ids: &'a [String],
     registered_ids: &HashSet<String>,
 ) -> Option<&'a str> {
-    document_ids
-        .iter()
-        .find(|id| !registered_ids.contains(id.as_str()))
-        .map(String::as_str)
+    document_ids.iter().find(|id| !registered_ids.contains(id.as_str())).map(String::as_str)
 }
 
 #[cfg(test)]
@@ -864,10 +805,7 @@ mod tests {
             "missing-later".to_string(),
         ];
         let registered = HashSet::from(["registered".to_string()]);
-        assert_eq!(
-            first_unregistered_document_id(&ids, &registered),
-            Some("missing-first")
-        );
+        assert_eq!(first_unregistered_document_id(&ids, &registered), Some("missing-first"));
 
         let all_registered = HashSet::from([
             "registered".to_string(),

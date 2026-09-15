@@ -15,8 +15,8 @@ pub use dto::approval::{
     ApprovalRecoveryAuthorization, ApprovalResumeCommand, ApprovalStartCommand,
 };
 pub use entity::approval_integration::{
-    document_type_from_subject_kind, document_type_of, process_kind_of, subject_ref_for,
-    ApprovalNotificationOutbox, ApprovalSubjectSnapshot, SalesBusinessKind,
+    ApprovalNotificationOutbox, ApprovalSubjectSnapshot, SalesBusinessKind, document_type_from_subject_kind,
+    document_type_of, process_kind_of, subject_ref_for,
 };
 pub use entity::document_registry::{
     BusinessDocument, DocumentParticipant, DocumentRelation, DocumentType, WorkflowAction,
@@ -25,7 +25,7 @@ pub use entity::work_item::{
     AvailableWorkItemAccount, FinanceResponsibilityOperation, FinanceResponsibilityRule, WorkItem,
     WorkItemData, WorkItemStatus, WorkItemType,
 };
-pub use error::{known_duplicate_index_message, Error, ErrorCode, Result};
+pub use error::{Error, ErrorCode, Result, known_duplicate_index_message};
 pub use ports::{
     ApprovalObjectReadPort, ApprovalUpgradeSubjectFacts, FailClosedObjectReadPort,
     FailClosedWorkflowAuthorizationPort, ObjectFactPort, UpgradeSubjectPort, WorkflowAuthorizationPort,

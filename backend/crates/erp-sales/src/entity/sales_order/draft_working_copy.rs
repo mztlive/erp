@@ -42,12 +42,13 @@ impl SalesOrder {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
+
     use super::super::entity::{CloseStatus, CommercialStatus, SalesOrder, SalesOrderData};
     use super::super::types::{BusinessType, OriginSystem};
     use super::super::working_copy::{SalesOrderWorkingCopy, SalesOrderWorkingCopyData, WorkingPurpose};
     use super::super::working_copy_test_support::{amt, line_data};
-    use erp_core::common::time::Instant;
-    use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
 
     fn order() -> SalesOrder {
         SalesOrder::new(
@@ -126,9 +127,7 @@ mod tests {
         let mut effective = order();
         effective.start_approval_submission("admin-1").unwrap();
         crate::entity::sales_order::attribution::freeze_fixture(&mut effective);
-        effective
-            .approve(Instant::from_unix_secs(1_800_000_000), "approver")
-            .unwrap();
+        effective.approve(Instant::from_unix_secs(1_800_000_000), "approver").unwrap();
         assert_eq!(effective.commercial_status, CommercialStatus::Effective);
         assert!(!effective.allows_first_submission_working_copy());
 
@@ -141,10 +140,7 @@ mod tests {
         closed.close_status = CloseStatus::Closed;
         assert!(!closed.allows_first_submission_working_copy());
         assert_eq!(
-            closed
-                .ensure_first_submission_working_copy_editable()
-                .unwrap_err()
-                .to_string(),
+            closed.ensure_first_submission_working_copy_editable().unwrap_err().to_string(),
             "当前销售单不是草稿，不能保存工作副本"
         );
     }

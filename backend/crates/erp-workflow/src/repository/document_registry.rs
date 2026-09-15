@@ -8,6 +8,18 @@
 //!
 //! 筛选/行类型定义在本文件，经 `DocumentRegistryExt` 的关联类型对外暴露。
 
+use std::collections::HashSet;
+
+use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
+use erp_core::common::time::Instant;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Error, Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
+use serde::{Deserialize, Serialize};
+
+use super::bpm::{AssignDocumentNoOutcome, assign_document_no_filter, classify_assign_document_no_miss};
 use crate::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use crate::entity::document_registry::{
     BusinessDocument, BusinessDocumentId, DocumentParticipant, DocumentRelation, DocumentType,
@@ -17,18 +29,6 @@ use crate::repository::owned::{
     BusinessDocumentRepository, DocumentParticipantRepository, DocumentRelationRepository,
     WorkflowActionRepository,
 };
-use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
-use erp_core::common::time::Instant;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-
-use super::bpm::{assign_document_no_filter, classify_assign_document_no_miss, AssignDocumentNoOutcome};
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Error, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 单据注册列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -232,10 +232,8 @@ impl<'a> BusinessDocumentRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<ApprovalBindingLookup> {
         let collection = self.collection().clone_with_type::<ApprovalBindingRow>();
-        let options = FindOptions::builder()
-            .projection(doc! { "id": 1, "approval_binding": 1 })
-            .limit(1)
-            .build();
+        let options =
+            FindOptions::builder().projection(doc! { "id": 1, "approval_binding": 1 }).limit(1).build();
         let row = mongo_ops::find_many(
             &collection,
             doc! {
@@ -268,8 +266,7 @@ impl<'a> BusinessDocumentRepository<'a> {
         document_id: &BusinessDocumentId,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        self.exists(doc! { "id": document_id.to_string() }, executor)
-            .await
+        self.exists(doc! { "id": document_id.to_string() }, executor).await
     }
 
     /// 批量返回输入 ID 中实际存在且未删除的单据 ID。
@@ -333,8 +330,7 @@ impl<'a> BusinessDocumentRepository<'a> {
         if document_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(doc! { "id": { "$in": document_ids } }, executor)
-            .await
+        self.find_many(doc! { "id": { "$in": document_ids } }, executor).await
     }
 
     /// 幂等注册业务单据。
@@ -376,7 +372,7 @@ impl<'a> BusinessDocumentRepository<'a> {
                 } else {
                     Err(Error::DuplicateKey(duplicate))
                 }
-            }
+            },
             Err(error) => Err(error),
         }
     }
@@ -469,10 +465,7 @@ impl<'a> BusinessDocumentRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -520,9 +513,7 @@ impl<'a> DocumentParticipantRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
         let collection = self.collection().clone_with_type::<ParticipantDocumentIdRow>();
-        let options = FindOptions::builder()
-            .projection(doc! { "document_id": 1 })
-            .build();
+        let options = FindOptions::builder().projection(doc! { "document_id": 1 }).build();
         let mut ids = mongo_ops::find_many(
             &collection,
             doc! {
@@ -557,12 +548,8 @@ impl<'a> DocumentParticipantRepository<'a> {
         user_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<DocumentParticipant>> {
-        self.find_many_sorted(
-            doc! { "participant_user_id": user_id },
-            doc! { "created_at": -1 },
-            executor,
-        )
-        .await
+        self.find_many_sorted(doc! { "participant_user_id": user_id }, doc! { "created_at": -1 }, executor)
+            .await
     }
 }
 
@@ -664,10 +651,7 @@ impl<'a> WorkflowActionRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按单据查询动作历史（`idx_workflow_actions_document_created`）。
@@ -718,25 +702,17 @@ fn same_id_registration<T>(existing: Option<&T>, expected_id: &str, id_of: impl 
 fn classify_approval_binding(row: Option<ApprovalBindingRow>) -> ApprovalBindingLookup {
     match row {
         None => ApprovalBindingLookup::DocumentMissing,
-        Some(ApprovalBindingRow {
-            approval_binding: None,
-            ..
-        }) => ApprovalBindingLookup::Unbound,
-        Some(ApprovalBindingRow {
-            approval_binding: Some(binding),
-            ..
-        }) => ApprovalBindingLookup::Bound(binding),
+        Some(ApprovalBindingRow { approval_binding: None, .. }) => ApprovalBindingLookup::Unbound,
+        Some(ApprovalBindingRow { approval_binding: Some(binding), .. }) => {
+            ApprovalBindingLookup::Bound(binding)
+        },
     }
 }
 
 /// 对批量单据 ID 去重并转换为稳定字符串集合。
 fn distinct_document_ids(document_ids: &[BusinessDocumentId]) -> Vec<String> {
     let mut seen = HashSet::with_capacity(document_ids.len());
-    document_ids
-        .iter()
-        .map(ToString::to_string)
-        .filter(|id| seen.insert(id.clone()))
-        .collect()
+    document_ids.iter().map(ToString::to_string).filter(|id| seen.insert(id.clone())).collect()
 }
 
 /// 构造单据关系双向查询条件。
@@ -826,17 +802,18 @@ fn workflow_action_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        assign_document_no_pipeline, same_id_registration, sort_doc, BusinessDocumentFilter,
-        WorkflowActionFilter,
-    };
-    use crate::entity::document_registry::{BusinessDocumentId, DocumentType, WorkflowActionType};
-    use crate::repository::bpm::{
-        assign_document_no_filter, classify_assign_document_no_miss, AssignDocumentNoOutcome,
-    };
     use erp_core::common::time::Instant;
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
+
+    use super::{
+        BusinessDocumentFilter, WorkflowActionFilter, assign_document_no_pipeline, same_id_registration,
+        sort_doc,
+    };
+    use crate::entity::document_registry::{BusinessDocumentId, DocumentType, WorkflowActionType};
+    use crate::repository::bpm::{
+        AssignDocumentNoOutcome, assign_document_no_filter, classify_assign_document_no_miss,
+    };
 
     #[test]
     fn business_document_filter_applies_type_and_no_regex() {
@@ -888,16 +865,8 @@ mod tests {
 
     #[test]
     fn empty_document_register_same_id_is_idempotent_reread() {
-        assert!(same_id_registration(
-            Some(&"bd-1".to_string()),
-            "bd-1",
-            String::as_str
-        ));
-        assert!(!same_id_registration(
-            Some(&"bd-2".to_string()),
-            "bd-1",
-            String::as_str
-        ));
+        assert!(same_id_registration(Some(&"bd-1".to_string()), "bd-1", String::as_str));
+        assert!(!same_id_registration(Some(&"bd-2".to_string()), "bd-1", String::as_str));
         assert!(!same_id_registration::<String>(None, "bd-1", String::as_str));
     }
 

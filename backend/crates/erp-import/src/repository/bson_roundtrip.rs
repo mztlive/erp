@@ -1,12 +1,13 @@
 //! Entity BSON round-trip contracts moved out of import entity modules.
 
-use crate::entity::legacy_import::{
-    LegacyImportBatch, LegacyImportBatchData, LegacyImportBatchStatus, LegacyImportConfirmation,
-    LegacyImportConfirmationData, LegacyImportRow, LegacyImportRowData, ParseStatus,
-};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     LegacyImportBatchId, LegacyImportConfirmationId, LegacyImportRowId, SourceSystemId, WorkItemId,
+};
+
+use crate::entity::legacy_import::{
+    LegacyImportBatch, LegacyImportBatchData, LegacyImportBatchStatus, LegacyImportConfirmation,
+    LegacyImportConfirmationData, LegacyImportRow, LegacyImportRowData, ParseStatus,
 };
 
 fn batch_data() -> LegacyImportBatchData {

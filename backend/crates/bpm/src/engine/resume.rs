@@ -1,15 +1,14 @@
 //! 原审批人恢复：结束旧受阻执行并在同轮同节点创建新活动执行。
 
+use super::enter_node::{EnterNodeInput, plan_enter_node};
+use super::event::{BpmEvent, BpmEventKind};
+use super::transition_plan::{CommitRequired, TransitionPlan};
+use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
 use crate::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use crate::model::types::{
     ApprovalExecutionAssignmentSource, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus,
 };
 use crate::model::{ApprovalInstanceAssignee, ApprovalNodeExecution, ApprovalProcessInstance, Timestamp};
-
-use super::enter_node::{plan_enter_node, EnterNodeInput};
-use super::event::{BpmEvent, BpmEventKind};
-use super::transition_plan::{CommitRequired, TransitionPlan};
-use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
 
 /// 恢复命令。不接受目标用户或节点。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -134,9 +133,7 @@ fn ensure_assignee_recovery_state(
     if eligibility.participant() != assignee.definition_assignee_participant_id {
         return Err(EngineError::InvalidCommand("资格结果必须属于原审批人"));
     }
-    let node = graph
-        .node(&assignee.node_key)
-        .ok_or(EngineError::GraphCorrupted)?;
+    let node = graph.node(&assignee.node_key).ok_or(EngineError::GraphCorrupted)?;
     if node.assignee_participant_id != assignee.definition_assignee_participant_id {
         return Err(EngineError::GraphCorrupted);
     }

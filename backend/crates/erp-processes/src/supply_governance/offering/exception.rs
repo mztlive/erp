@@ -1,20 +1,20 @@
 //! 核对供应停止来源并完成原正式任务；不恢复供给或发布。
-use super::SupplierOfferingProcess;
-use crate::adapters::workflow::work_item_service;
-use crate::{Error, Result};
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
-use erp_core::{common::time::Instant, ids::SupplierOfferingId};
+use erp_core::common::time::Instant;
+use erp_core::ids::SupplierOfferingId;
 use erp_supply::dto::supplier_offering::{
     CompleteSupplierSupplyExceptionTaskRequest, CompleteSupplierSupplyExceptionTaskResult,
 };
 use erp_supply::repository::SupplierOfferingExt;
-use erp_workflow::{
-    entity::work_item::{WorkItem, WorkItemStatus, WorkItemType},
-    WorkItemExt,
-};
+use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+
+use super::SupplierOfferingProcess;
+use crate::adapters::workflow::work_item_service;
+use crate::{Error, Result};
 const SUPPLY_EXCEPTION_COMPLETE_ACTION: &str = "supplier_offering.supply_exception.complete";
 impl SupplierOfferingProcess {
     /// 核对供应停止来源，并完成其唯一正式后续任务。
@@ -129,9 +129,7 @@ impl SupplierOfferingProcess {
         req: &CompleteSupplierSupplyExceptionTaskRequest,
     ) -> Result<CompleteSupplierSupplyExceptionTaskResult> {
         if committed_work_item_id != req.work_item_id.trim() {
-            return Err(Error::ConflictError(
-                "同一操作号已用于其它供应停止任务".to_string(),
-            ));
+            return Err(Error::ConflictError("同一操作号已用于其它供应停止任务".to_string()));
         }
         let work_item = self
             .db
@@ -158,22 +156,16 @@ fn ensure_supply_exception_work_item(
         || work_item.business_object_id != offering_id
         || work_item.reason_code.as_deref() != Some("SUPPLIER_STOPPED")
     {
-        return Err(Error::BusinessLogicError(
-            "当前任务不是已注册的供应停止核对任务".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("当前任务不是已注册的供应停止核对任务".to_string()));
     }
     if work_item.status != WorkItemStatus::Open {
         return Err(Error::ConflictError("供应停止任务已不再开放".to_string()));
     }
     if work_item.base.version != expected_task_version {
-        return Err(Error::ConflictError(
-            "任务已被其他请求修改，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("任务已被其他请求修改，请刷新后重试".to_string()));
     }
     if work_item.subject_version != expected_subject_version.trim() {
-        return Err(Error::ConflictError(
-            "供应停止来源版本已变化，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("供应停止来源版本已变化，请刷新后重试".to_string()));
     }
     Ok(())
 }
@@ -191,9 +183,10 @@ fn supply_exception_completion_result(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::ids::WorkItemId;
     use erp_workflow::entity::work_item::{AssignmentSource, WorkItemData, WorkItemPriority};
+
+    use super::*;
     #[test]
     fn supply_exception_completion_requires_exact_frozen_task_identity() {
         let task = supply_exception_task();
@@ -244,25 +237,13 @@ struct MongoCompletionWrite<'a> {
 #[async_trait::async_trait]
 impl CompletionWritePort for MongoCompletionWrite<'_> {
     async fn task(&mut self, executor: &mut dyn persistence_core::Executor) -> Result<()> {
-        self.db
-            .work_items()
-            .update(self.work_item, executor)
-            .await
-            .map_err(Into::into)
+        self.db.work_items().update(self.work_item, executor).await.map_err(Into::into)
     }
     async fn decision(&mut self, executor: &mut dyn persistence_core::Executor) -> Result<()> {
-        self.db
-            .audit_logs()
-            .create(self.decision, executor)
-            .await
-            .map_err(Into::into)
+        self.db.audit_logs().create(self.decision, executor).await.map_err(Into::into)
     }
     async fn receipt(&mut self, executor: &mut dyn persistence_core::Executor) -> Result<()> {
-        self.db
-            .audit_logs()
-            .create(self.receipt, executor)
-            .await
-            .map_err(Into::into)
+        self.db.audit_logs().create(self.receipt, executor).await.map_err(Into::into)
     }
 }
 /// 原任务CAS、决定审计、收据审计顺序；任一失败停止后续步骤。
@@ -276,8 +257,9 @@ async fn persist_completion<P: CompletionWritePort>(
 }
 #[cfg(test)]
 mod completion_tests {
-    use super::*;
     use persistence_core::Executor;
+
+    use super::*;
     struct Marker(u64);
     impl Executor for Marker {
         fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
@@ -316,11 +298,7 @@ mod completion_tests {
     async fn completion_preserves_executor_and_stops_each_original_write_failure() {
         for fail in [None, Some(0), Some(1), Some(2)] {
             let mut executor = Marker(165);
-            let mut port = Recorder {
-                pointer: &mut executor as *mut Marker as usize,
-                calls: vec![],
-                fail,
-            };
+            let mut port = Recorder { pointer: &mut executor as *mut Marker as usize, calls: vec![], fail };
             let result = persist_completion(&mut port, &mut executor).await;
             if let Some(i) = fail {
                 assert!(matches!(result,Err(Error::ConflictError(ref e)) if e==&format!("completion {i}")));

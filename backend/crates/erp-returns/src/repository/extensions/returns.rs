@@ -5,15 +5,15 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as ReturnsExt>::SALES_RETURN_CASES` 等值。
 
-use crate::repository::owned::{
-    CustomerRefundRepository, PaymentReversalRepository, PurchaseReturnLineRepository,
-    PurchaseReturnOrderRepository, ReceiptReversalRepository, SalesReturnCaseRepository,
-    SalesReturnLineRepository, SupplierRefundRepository,
-};
 use mongodb::Database;
 
 use super::super::returns::{
     CustomerRefundFilter, PurchaseReturnOrderFilter, ReturnsRepository, SalesReturnCaseFilter,
+};
+use crate::repository::owned::{
+    CustomerRefundRepository, PaymentReversalRepository, PurchaseReturnLineRepository,
+    PurchaseReturnOrderRepository, ReceiptReversalRepository, SalesReturnCaseRepository,
+    SalesReturnLineRepository, SupplierRefundRepository,
 };
 
 /// 域 D21 仓储访问器。

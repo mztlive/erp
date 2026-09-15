@@ -1,17 +1,19 @@
-use super::shared::*;
-use super::SupplierSettlementService;
-use crate::dto::supplier_settlement::*;
-use crate::entity::supplier_settlement::*;
-use crate::repository::SupplierSettlementExt;
-use crate::{Error, Result};
+use std::str::FromStr;
+
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
 };
 use id_generator::next_id;
 use persistence_core::Executor;
-use std::str::FromStr;
 use validator::Validate;
+
+use super::SupplierSettlementService;
+use super::shared::*;
+use crate::dto::supplier_settlement::*;
+use crate::entity::supplier_settlement::*;
+use crate::repository::SupplierSettlementExt;
+use crate::{Error, Result};
 /// 已核验的创建结算单与冻结来源快照。
 pub struct PreparedStatement {
     pub statement: SupplierSettlementStatement,
@@ -44,9 +46,7 @@ impl SupplierSettlementService {
     ) -> Result<StatementPreparation> {
         req.validate()?;
         if req.action != SettlementDraftAction::Create {
-            return Err(Error::ValidationError(
-                "创建结算草稿必须使用 CREATE 动作".to_string(),
-            ));
+            return Err(Error::ValidationError("创建结算草稿必须使用 CREATE 动作".to_string()));
         }
         let period_start = parse_business_date(&req.period_start, "结算期间开始")?;
         let period_end = parse_business_date(&req.period_end, "结算期间结束")?;
@@ -54,11 +54,8 @@ impl SupplierSettlementService {
             return Err(Error::ValidationError("结算期间结束不得早于开始".to_string()));
         }
         let statement_no = deterministic_statement_no(req);
-        if let Some(existing) = self
-            .db
-            .supplier_settlement_statements()
-            .find_by_statement_no(&statement_no, executor)
-            .await?
+        if let Some(existing) =
+            self.db.supplier_settlement_statements().find_by_statement_no(&statement_no, executor).await?
         {
             validate_create_replay(&existing, req, period_start, period_end)?;
             return Ok(StatementPreparation::Replay(
@@ -168,9 +165,7 @@ impl SupplierSettlementService {
             .ensure_version(req.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
         if statement.source_snapshot_hash != req.expected_source_snapshot_hash {
-            return Err(Error::ConflictError(
-                "结算来源快照已变化，请刷新详情后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("结算来源快照已变化，请刷新详情后重试".to_string()));
         }
         let source = self
             .db
@@ -218,14 +213,9 @@ impl SupplierSettlementService {
             has_difference: !snapshot.differences.is_empty(),
         })?;
         statement.update_subject_hash(statement.review_subject_hash(&snapshot.differences))?;
-        let old_item_ids = old_items
-            .iter()
-            .map(|item| item.base.id.clone())
-            .collect::<Vec<_>>();
-        let old_difference_ids = old_differences
-            .iter()
-            .map(|difference| difference.base.id.clone())
-            .collect::<Vec<_>>();
+        let old_item_ids = old_items.iter().map(|item| item.base.id.clone()).collect::<Vec<_>>();
+        let old_difference_ids =
+            old_differences.iter().map(|difference| difference.base.id.clone()).collect::<Vec<_>>();
         Ok(PreparedRefresh {
             statement,
             item_count: snapshot.items.len(),
@@ -244,11 +234,8 @@ impl SupplierSettlementService {
         period_end: BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Option<SettlementDraftCommandResult>> {
-        let Some(existing) = self
-            .db
-            .supplier_settlement_statements()
-            .find_by_statement_no(statement_no, executor)
-            .await?
+        let Some(existing) =
+            self.db.supplier_settlement_statements().find_by_statement_no(statement_no, executor).await?
         else {
             return Ok(None);
         };
@@ -291,9 +278,7 @@ impl SupplierSettlementService {
         if current.base.version != req.expected_lock_version
             || current.source_snapshot_hash != req.expected_source_snapshot_hash
         {
-            return Err(Error::ConflictError(
-                "结算单版本或来源快照已变化，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("结算单版本或来源快照已变化，请刷新后重试".to_string()));
         }
         self.db
             .supplier_settlement()
@@ -315,12 +300,7 @@ fn deterministic_statement_no(req: &CreateSettlementStatementRequest) -> String 
         req.request_id.clone(),
         req.idempotency_key.clone(),
     ]);
-    let month = req
-        .period_end
-        .chars()
-        .filter(char::is_ascii_digit)
-        .take(6)
-        .collect::<String>();
+    let month = req.period_end.chars().filter(char::is_ascii_digit).take(6).collect::<String>();
     format!("ST-{month}-{}", &digest[..16])
 }
 
@@ -334,9 +314,7 @@ fn validate_create_replay(
         || statement.period_start != period_start
         || statement.period_end != period_end
     {
-        return Err(Error::ConflictError(
-            "创建幂等键已用于不同的供应商结算命令".to_string(),
-        ));
+        return Err(Error::ConflictError("创建幂等键已用于不同的供应商结算命令".to_string()));
     }
     Ok(())
 }

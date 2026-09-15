@@ -2,14 +2,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::{FileAssetId, PartyBankAccountId, PayableEntryId, SupplierAccountId, SupplierPaymentId};
 use erp_core::money::Amount;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 付款单号最大长度。
 const PAYMENT_NO_MAX_LEN: usize = 64;
@@ -89,10 +88,7 @@ impl PendingPaymentAllocation {
     /// 金额非正时返回错误。
     pub fn new(payable_entry_id: PayableEntryId, allocated_amount: Amount) -> Result<Self> {
         ensure_positive_amount(&allocated_amount)?;
-        Ok(Self {
-            payable_entry_id,
-            allocated_amount,
-        })
+        Ok(Self { payable_entry_id, allocated_amount })
     }
 }
 
@@ -160,12 +156,8 @@ impl SupplierPayment {
     /// # 错误
     /// 当付款单号为空/超长、银行流水号超长或金额非正时返回错误。
     pub fn new(id: SupplierPaymentId, data: SupplierPaymentData) -> Result<Self> {
-        let payment_no = normalize_required_text(
-            data.payment_no,
-            "付款单号不能为空",
-            PAYMENT_NO_MAX_LEN,
-            "付款单号过长",
-        )?;
+        let payment_no =
+            normalize_required_text(data.payment_no, "付款单号不能为空", PAYMENT_NO_MAX_LEN, "付款单号过长")?;
         let bank_reference =
             normalize_optional_text(data.bank_reference, "银行流水号", BANK_REFERENCE_MAX_LEN)?;
         ensure_positive_amount(&data.amount)?;
@@ -188,9 +180,7 @@ impl SupplierPayment {
     /// # 错误
     /// 数据缺少银行回单时返回错误。
     pub fn require_bank_receipt(&self) -> Result<&FileAssetId> {
-        self.bank_receipt_asset_id
-            .as_ref()
-            .ok_or_else(|| Error::from("请先上传银行回单图片"))
+        self.bank_receipt_asset_id.as_ref().ok_or_else(|| Error::from("请先上传银行回单图片"))
     }
 
     /// 迁移付款单状态。
@@ -266,8 +256,9 @@ fn ensure_execution_allocations(amount: &Amount, allocations: &[PendingPaymentAl
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn data() -> SupplierPaymentData {
         SupplierPaymentData {
@@ -287,15 +278,9 @@ mod tests {
 
         assert_eq!(payment.payment_no, "SP-2026-001");
         assert_eq!(payment.bank_reference.as_deref(), Some("BANK-1"));
-        assert_eq!(
-            payment.bank_receipt_asset_id.as_ref().map(AsRef::as_ref),
-            Some("asset-receipt-1")
-        );
+        assert_eq!(payment.bank_receipt_asset_id.as_ref().map(AsRef::as_ref), Some("asset-receipt-1"));
         assert_eq!(payment.status, SupplierPaymentStatus::Draft);
-        assert_eq!(
-            payment.payee_bank_account_id.as_ref().map(AsRef::as_ref),
-            Some("bank-1")
-        );
+        assert_eq!(payment.payee_bank_account_id.as_ref().map(AsRef::as_ref), Some("bank-1"));
         assert!(!payment.is_posted());
     }
 
@@ -312,22 +297,13 @@ mod tests {
 
     #[test]
     fn new_rejects_blank_no_overlong_reference_and_non_positive() {
-        let blank_no = SupplierPaymentData {
-            payment_no: "   ".to_string(),
-            ..data()
-        };
+        let blank_no = SupplierPaymentData { payment_no: "   ".to_string(), ..data() };
         assert!(SupplierPayment::new(SupplierPaymentId::new("sp-2"), blank_no).is_err());
 
-        let overlong = SupplierPaymentData {
-            bank_reference: Some("b".repeat(257)),
-            ..data()
-        };
+        let overlong = SupplierPaymentData { bank_reference: Some("b".repeat(257)), ..data() };
         assert!(SupplierPayment::new(SupplierPaymentId::new("sp-3"), overlong).is_err());
 
-        let non_positive = SupplierPaymentData {
-            amount: Amount::from_str("0.00").unwrap(),
-            ..data()
-        };
+        let non_positive = SupplierPaymentData { amount: Amount::from_str("0.00").unwrap(), ..data() };
         assert!(SupplierPayment::new(SupplierPaymentId::new("sp-4"), non_positive).is_err());
     }
 
@@ -342,19 +318,21 @@ mod tests {
             .unwrap()])
             .unwrap();
         assert!(payment.is_posted());
-        assert!(payment
-            .post_from_execution(&[PendingPaymentAllocation::new(
-                PayableEntryId::new("pe-1"),
-                Amount::from_str("1000.00").unwrap(),
-            )
-            .unwrap()])
-            .is_err());
+        assert!(
+            payment
+                .post_from_execution(&[PendingPaymentAllocation::new(
+                    PayableEntryId::new("pe-1"),
+                    Amount::from_str("1000.00").unwrap(),
+                )
+                .unwrap()])
+                .is_err()
+        );
     }
 
     #[test]
     fn state_machine_edges_are_directed() {
-        use erp_core::common::state::ensure_transition as tr;
         use SupplierPaymentStatus as S;
+        use erp_core::common::state::ensure_transition as tr;
 
         assert!(tr(S::Draft, S::Posted).is_ok());
         assert!(tr(S::Posted, S::Reversed).is_ok());
@@ -386,28 +364,29 @@ mod tests {
     fn direct_post_rejects_empty_under_or_over_allocated_lines() {
         let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data()).unwrap();
         assert!(payment.post_from_execution(&[]).is_err());
-        assert!(payment
-            .post_from_execution(&[PendingPaymentAllocation::new(
-                PayableEntryId::new("pe-1"),
-                Amount::from_str("999.99").unwrap(),
-            )
-            .unwrap()])
-            .is_err());
-        assert!(payment
-            .post_from_execution(&[PendingPaymentAllocation::new(
-                PayableEntryId::new("pe-1"),
-                Amount::from_str("1000.01").unwrap(),
-            )
-            .unwrap()])
-            .is_err());
+        assert!(
+            payment
+                .post_from_execution(&[PendingPaymentAllocation::new(
+                    PayableEntryId::new("pe-1"),
+                    Amount::from_str("999.99").unwrap(),
+                )
+                .unwrap()])
+                .is_err()
+        );
+        assert!(
+            payment
+                .post_from_execution(&[PendingPaymentAllocation::new(
+                    PayableEntryId::new("pe-1"),
+                    Amount::from_str("1000.01").unwrap(),
+                )
+                .unwrap()])
+                .is_err()
+        );
     }
 
     #[test]
     fn rejected_business_status_is_unreachable() {
-        let production = include_str!("supplier_payment.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("supplier_payment.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(!production.contains("PendingReview"));
         assert!(!production.contains("fn reject"));
         assert!(!production.contains("SupplierPaymentStatus::Rejected"));

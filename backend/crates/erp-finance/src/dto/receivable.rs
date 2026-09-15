@@ -13,6 +13,24 @@ mod facts;
 mod invoice;
 mod query;
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 排序方向。
+pub use application_core::SortDir;
+/// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
+///
+/// # 参数
+/// * `sort_by` - 可选排序字段；空白视为未提供
+/// * `sort_dir` - 可选排序方向；空白视为未提供
+/// * `allowed_fields` - 白名单
+///
+/// # 返回
+/// 返回 `(排序字段, 方向)`；未提供时默认 `("created_at", Desc)`。
+///
+/// # 错误
+/// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
+pub(crate) use application_core::normalize_sort;
+
 pub use self::command::{
     CancelCustomerReceiptApprovalRequest, CommitCustomerReceiptRequest, CreateCustomerReceiptRequest,
     CreateReceivableAccountRequest, PostCustomerReceiptRequest, ReceiptAllocationLineRequest,
@@ -29,39 +47,21 @@ pub use self::query::{
     ReceivableAccountSummaryView, ReceivableEntryView, SalesInvoiceAllocationView,
 };
 
-/// 排序方向。
-pub use application_core::SortDir;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
-///
-/// # 参数
-/// * `sort_by` - 可选排序字段；空白视为未提供
-/// * `sort_dir` - 可选排序方向；空白视为未提供
-/// * `allowed_fields` - 白名单
-///
-/// # 返回
-/// 返回 `(排序字段, 方向)`；未提供时默认 `("created_at", Desc)`。
-///
-/// # 错误
-/// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use application_core::normalize_sort;
-
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use erp_core::common::time::BusinessDate;
+    use erp_core::money::Amount;
+    use validator::Validate;
+
     use super::{
-        normalize_sort, CreateInvoiceRequest, CustomerReceiptListParams, InvoiceListParams, InvoiceView,
-        ReceivableAccountListParams, SortDir,
+        CreateInvoiceRequest, CustomerReceiptListParams, InvoiceListParams, InvoiceView,
+        ReceivableAccountListParams, SortDir, normalize_sort,
     };
     use crate::entity::receivable::{
         CustomerReceiptStatus, InvoiceDirection, InvoiceKind, InvoiceStatus, ReceivableAccountStatus,
     };
-    use erp_core::common::time::BusinessDate;
-    use erp_core::money::Amount;
-    use std::str::FromStr;
-    use validator::Validate;
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {

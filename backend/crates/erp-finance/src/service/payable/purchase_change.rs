@@ -1,11 +1,7 @@
 //! 采购变更差额的唯一应付准备与写入；仅消费冻结金额与稳定来源身份。
 
-use crate::entity::payable::{
-    EntryDirection, PayableAccount, PayableAccountData, PayableEntry, PayableEntryData, PayableEntryType,
-    PayableSourceType,
-};
-use crate::repository::PayableExt;
-use crate::Result;
+use std::str::FromStr;
+
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     PayableAccountId, PayableEntryId, PurchaseOrderId, PurchaseOrderRevisionId, SupplierAccountId,
@@ -14,7 +10,13 @@ use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
-use std::str::FromStr;
+
+use crate::Result;
+use crate::entity::payable::{
+    EntryDirection, PayableAccount, PayableAccountData, PayableEntry, PayableEntryData, PayableEntryType,
+    PayableSourceType,
+};
+use crate::repository::PayableExt;
 
 /// 差额必须来自变更冻结的基准版本及目标版本；不接收采购聚合。
 #[derive(Debug, Clone)]
@@ -48,9 +50,7 @@ impl PurchaseChangePayableWrite {
     /// # 错误
     /// 保留原唯一键、事务与仓储错误，不起独立事务。
     pub async fn persist(&self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
-        db.payable()
-            .create_payable_with_entry(&self.account, &self.entry, executor)
-            .await?;
+        db.payable().create_payable_with_entry(&self.account, &self.entry, executor).await?;
         Ok(())
     }
 }
@@ -119,8 +119,9 @@ fn zero_amount() -> Amount {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::cell::RefCell;
+
+    use super::*;
     fn input(base: &str, new: &str) -> PurchaseChangePayableInput {
         PurchaseChangePayableInput {
             purchase_order_id: PurchaseOrderId::new("po-1"),

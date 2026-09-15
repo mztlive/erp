@@ -1,11 +1,12 @@
 //! ReceiptReversal 详情与分页视图装配。
-use super::approval::receipt_reversal_approval_view;
-use super::dto::ReceiptReversalView;
-use super::ReturnsReadService;
-use crate::{Error, Result};
 use erp_returns::repository::ReturnsExt;
 use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::NoTransaction;
+
+use super::ReturnsReadService;
+use super::approval::receipt_reversal_approval_view;
+use super::dto::ReceiptReversalView;
+use crate::{Error, Result};
 
 impl ReturnsReadService {
     // -----------------------------------------------------------------------

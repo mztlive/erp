@@ -1,9 +1,7 @@
 //! 批量订单任务授权；按来源分别解析详情动作，不复制范围运算。
 
-use std::{
-    collections::{BTreeSet, HashSet},
-    slice,
-};
+use std::collections::{BTreeSet, HashSet};
+use std::slice;
 
 use application_core::AuditActor;
 use erp_identity::access_control::ScopedObject;
@@ -48,9 +46,7 @@ pub(super) async fn approval_readable(
         .filter(|source| source.matches_kind(kind))
         .ok_or_else(|| WorkflowError::Internal("订单审批缺少权威来源".into()))?;
     let sources = BTreeSet::from([source.clone()]);
-    Ok(readable_sources(db, rbac, actor, &sources, executor)
-        .await?
-        .contains(source))
+    Ok(readable_sources(db, rbac, actor, &sources, executor).await?.contains(source))
 }
 
 /// 每种订单解析一次权限并批量加载对象；任务重复引用不引起逐任务查询。
@@ -62,9 +58,7 @@ pub(super) async fn readable_sources(
     executor: &mut dyn Executor,
 ) -> WorkflowResult<BTreeSet<OrderTaskSource>> {
     if sources.len() > 500 {
-        return Err(WorkflowError::ValidationError(
-            "单批任务订单来源超过 500 条".into(),
-        ));
+        return Err(WorkflowError::ValidationError("单批任务订单来源超过 500 条".into()));
     }
     let sales = sources
         .iter()
@@ -81,12 +75,8 @@ pub(super) async fn readable_sources(
         })
         .collect::<Vec<_>>();
     let mut allowed = BTreeSet::new();
-    allowed.extend(read_result(
-        sales_sources(db, rbac, actor, &sales, executor).await,
-    )?);
-    allowed.extend(read_result(
-        purchase_sources(db, rbac, actor, &purchases, executor).await,
-    )?);
+    allowed.extend(read_result(sales_sources(db, rbac, actor, &sales, executor).await)?);
+    allowed.extend(read_result(purchase_sources(db, rbac, actor, &purchases, executor).await)?);
     Ok(allowed)
 }
 
@@ -109,9 +99,8 @@ async fn sales_sources(
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    let (context, scope) = SalesAccess::new(db.clone(), rbac.clone())
-        .resolve(actor, "detail", &[], executor)
-        .await?;
+    let (context, scope) =
+        SalesAccess::new(db.clone(), rbac.clone()).resolve(actor, "detail", &[], executor).await?;
     let mut allowed = Vec::new();
     for order in db.sales_orders().list_active_by_ids(ids, executor).await? {
         if SalesAccess::allows(&context, &scope, &order)? {
@@ -160,12 +149,7 @@ pub(super) async fn binding_readable(
     match source {
         OrderTaskSource::Sales(id) => sales_binding_readable(db, rbac, actor, object, id, executor).await,
         OrderTaskSource::Purchase(id) => {
-            if !db
-                .purchase_orders()
-                .list_active_by_ids(slice::from_ref(id), executor)
-                .await?
-                .is_empty()
-            {
+            if !db.purchase_orders().list_active_by_ids(slice::from_ref(id), executor).await?.is_empty() {
                 return Ok(purchase_sources(db, rbac, actor, slice::from_ref(id), executor)
                     .await?
                     .contains(source));
@@ -189,7 +173,7 @@ pub(super) async fn binding_readable(
                 },
                 true,
             ))
-        }
+        },
     }
 }
 
@@ -237,9 +221,7 @@ mod tests {
 
     #[test]
     fn denied_resource_is_empty_but_configuration_and_version_errors_propagate() {
-        assert!(read_result(Err(Error::Forbidden("revoked".into())))
-            .unwrap()
-            .is_empty());
+        assert!(read_result(Err(Error::Forbidden("revoked".into()))).unwrap().is_empty());
         assert!(read_result(Err(Error::ValidationError("unwired dimension".into()))).is_err());
         assert!(read_result(Err(Error::ConflictError("DATA_SCOPE_CHANGED".into()))).is_err());
         assert_eq!(

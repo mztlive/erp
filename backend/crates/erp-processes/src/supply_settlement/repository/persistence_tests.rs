@@ -1,9 +1,5 @@
 //! 原结算详情仓储 Mongo 门控库测试；保持 ignore，不引入 supply 的 test-support 回边。
 
-use erp_supply::entity::supplier_settlement::{
-    SupplierSettlementDifference, SupplierSettlementDifferenceEvidence, SupplierSettlementStatement,
-};
-use erp_supply::repository::SupplierSettlementExt;
 use std::str::FromStr;
 
 use erp_core::common::time::{BusinessDate, Instant};
@@ -13,13 +9,14 @@ use erp_core::ids::{
 };
 use erp_core::money::{Amount, Quantity};
 use erp_supply::entity::supplier_settlement::{
-    SettlementDifferenceStatus, SettlementDifferenceType, SupplierSettlementDifferenceData,
+    SettlementDifferenceStatus, SettlementDifferenceType, SupplierSettlementDifference,
+    SupplierSettlementDifferenceData, SupplierSettlementDifferenceEvidence,
     SupplierSettlementDifferenceEvidenceData, SupplierSettlementItem, SupplierSettlementItemData,
-    SupplierSettlementStatementData,
+    SupplierSettlementStatement, SupplierSettlementStatementData,
 };
-use test_support::{require_mongo, TestDb};
-
+use erp_supply::repository::SupplierSettlementExt;
 use persistence_core::NoTransaction;
+use test_support::{TestDb, require_mongo};
 
 /// 构造单条补证实体。
 ///
@@ -185,9 +182,7 @@ fn mark_deleted(entity: &mut entity_core::BaseModel) {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn detail_snapshot_missing_statement_returns_none() {
     require_mongo!(async {
-        let fixture = TestDb::new("ful_r07_detail_missing")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("ful_r07_detail_missing").await.expect("测试数据库创建失败");
         let snapshot = fixture
             .db()
             .supplier_settlement()
@@ -203,9 +198,7 @@ async fn detail_snapshot_missing_statement_returns_none() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn detail_snapshot_soft_deleted_statement_returns_none() {
     require_mongo!(async {
-        let fixture = TestDb::new("ful_r07_detail_deleted_statement")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("ful_r07_detail_deleted_statement").await.expect("测试数据库创建失败");
         let db = fixture.db();
         let mut statement = statement_fixture("statement-1");
         mark_deleted(&mut statement.base);
@@ -229,9 +222,7 @@ async fn detail_snapshot_soft_deleted_statement_returns_none() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn detail_snapshot_empty_detail_returns_empty_sets() {
     require_mongo!(async {
-        let fixture = TestDb::new("ful_r07_detail_empty")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("ful_r07_detail_empty").await.expect("测试数据库创建失败");
         let db = fixture.db();
         db.collection::<SupplierSettlementStatement>(
             <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_STATEMENTS,
@@ -256,9 +247,7 @@ async fn detail_snapshot_empty_detail_returns_empty_sets() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn detail_snapshot_excludes_soft_deleted_facts() {
     require_mongo!(async {
-        let fixture = TestDb::new("ful_r07_detail_soft_deleted")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("ful_r07_detail_soft_deleted").await.expect("测试数据库创建失败");
         let db = fixture.db();
         db.collection::<SupplierSettlementStatement>(
             <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_STATEMENTS,
@@ -274,12 +263,8 @@ async fn detail_snapshot_excludes_soft_deleted_facts() {
         .insert_many(vec![item_fixture("item-1", "statement-1", 100), deleted_item])
         .await
         .expect("明细插入失败");
-        let mut deleted_difference = difference_fixture(
-            "difference-deleted",
-            "item-1",
-            SettlementDifferenceStatus::Pending,
-            100,
-        );
+        let mut deleted_difference =
+            difference_fixture("difference-deleted", "item-1", SettlementDifferenceStatus::Pending, 100);
         mark_deleted(&mut deleted_difference.base);
         db.collection::<SupplierSettlementDifference>(
             <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_DIFFERENCES,
@@ -295,10 +280,7 @@ async fn detail_snapshot_excludes_soft_deleted_facts() {
         db.collection::<SupplierSettlementDifferenceEvidence>(
             <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE,
         )
-        .insert_many(vec![
-            sample_evidence("evidence-1", "difference-1", 101),
-            deleted_evidence,
-        ])
+        .insert_many(vec![sample_evidence("evidence-1", "difference-1", 101), deleted_evidence])
         .await
         .expect("补证插入失败");
         let snapshot = db
@@ -311,10 +293,7 @@ async fn detail_snapshot_excludes_soft_deleted_facts() {
         assert_eq!(snapshot.items[0].base.id, "item-1");
         assert_eq!(snapshot.differences.len(), 1, "已软删除差异必须排除");
         assert_eq!(snapshot.differences[0].base.id, "difference-1");
-        let group = snapshot
-            .evidence_by_difference
-            .get("difference-1")
-            .expect("存活补证必须归组");
+        let group = snapshot.evidence_by_difference.get("difference-1").expect("存活补证必须归组");
         assert_eq!(group.len(), 1, "已软删除补证必须排除");
         assert_eq!(group[0].base.id, "evidence-1");
     });
@@ -326,17 +305,12 @@ async fn detail_snapshot_excludes_soft_deleted_facts() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn detail_snapshot_isolates_statement_and_keeps_stable_order() {
     require_mongo!(async {
-        let fixture = TestDb::new("ful_r07_detail_isolation")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("ful_r07_detail_isolation").await.expect("测试数据库创建失败");
         let db = fixture.db();
         db.collection::<SupplierSettlementStatement>(
             <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_STATEMENTS,
         )
-        .insert_many(vec![
-            statement_fixture("statement-1"),
-            statement_fixture("statement-2"),
-        ])
+        .insert_many(vec![statement_fixture("statement-1"), statement_fixture("statement-2")])
         .await
         .expect("结算单插入失败");
         db.collection::<SupplierSettlementItem>(
@@ -382,42 +356,19 @@ async fn detail_snapshot_isolates_statement_and_keeps_stable_order() {
             .await
             .expect("快照查询失败")
             .expect("结算单必须存在");
-        let item_ids = snapshot
-            .items
-            .iter()
-            .map(|item| item.base.id.as_str())
-            .collect::<Vec<_>>();
-        assert_eq!(
-            item_ids,
-            vec!["item-a", "item-b"],
-            "明细按创建时间稳定排序，他单明细不得混入"
-        );
-        let difference_ids = snapshot
-            .differences
-            .iter()
-            .map(|difference| difference.base.id.as_str())
-            .collect::<Vec<_>>();
+        let item_ids = snapshot.items.iter().map(|item| item.base.id.as_str()).collect::<Vec<_>>();
+        assert_eq!(item_ids, vec!["item-a", "item-b"], "明细按创建时间稳定排序，他单明细不得混入");
+        let difference_ids =
+            snapshot.differences.iter().map(|difference| difference.base.id.as_str()).collect::<Vec<_>>();
         assert_eq!(
             difference_ids,
             vec!["difference-a", "difference-b"],
             "差异按创建时间稳定排序，他单差异不得混入"
         );
-        assert!(
-            !snapshot.evidence_by_difference.contains_key("difference-9"),
-            "他单差异的补证不得泄漏"
-        );
-        assert!(
-            !snapshot.evidence_by_difference.contains_key("difference-b"),
-            "无补证的差异不在映射中出现"
-        );
-        let group = snapshot
-            .evidence_by_difference
-            .get("difference-a")
-            .expect("本单补证必须归组");
-        let evidence_ids = group
-            .iter()
-            .map(|evidence| evidence.base.id.as_str())
-            .collect::<Vec<_>>();
+        assert!(!snapshot.evidence_by_difference.contains_key("difference-9"), "他单差异的补证不得泄漏");
+        assert!(!snapshot.evidence_by_difference.contains_key("difference-b"), "无补证的差异不在映射中出现");
+        let group = snapshot.evidence_by_difference.get("difference-a").expect("本单补证必须归组");
+        let evidence_ids = group.iter().map(|evidence| evidence.base.id.as_str()).collect::<Vec<_>>();
         assert_eq!(
             evidence_ids,
             vec!["evidence-1", "evidence-2"],

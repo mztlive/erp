@@ -1,21 +1,5 @@
 //! 销售变更创建、启动、作废及撤回的跨域根流程。
 
-use super::adapter::{
-    build_sales_change_snapshot, execute_sales_change_domain_action, require_frozen_binding,
-    sales_change_order_adapter, sales_change_order_object_readable, sales_change_order_subject_ref,
-    sales_change_responsible_org_id, sales_change_start_command, start_approval_command_kind,
-};
-use super::cancel_approval::{
-    build_sales_change_cancel_input, load_cancel_runtime, persist_sales_change_cancel,
-    SalesChangeCancelPersistInput,
-};
-use super::start_approval::{
-    build_sales_change_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_sales_change_start, replay_sales_change_start_with_executor, SalesChangeStartInput,
-    SalesChangeStartPersistInput,
-};
-use super::SalesChangeProcess;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
@@ -28,21 +12,38 @@ use erp_sales::dto::sales_review::{
 };
 use erp_sales::entity::sales_review::SalesChangeOrder;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
-use erp_sales::service::sales_review::{latest_change_submission_no, CreatedChangeWrite, SalesReviewService};
+use erp_sales::service::sales_review::{CreatedChangeWrite, SalesReviewService, latest_change_submission_no};
+use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::{
     BusinessDocument, WorkflowAction, WorkflowActionData, WorkflowActionId, WorkflowActionType,
 };
 use erp_workflow::ports::OrderTaskSource;
-use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
+use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
-use erp_workflow::DocumentRegistryExt;
 use id_generator::next_id;
 use mongodb::ClientSession;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+
+use super::SalesChangeProcess;
+use super::adapter::{
+    build_sales_change_snapshot, execute_sales_change_domain_action, require_frozen_binding,
+    sales_change_order_adapter, sales_change_order_object_readable, sales_change_order_subject_ref,
+    sales_change_responsible_org_id, sales_change_start_command, start_approval_command_kind,
+};
+use super::cancel_approval::{
+    SalesChangeCancelPersistInput, build_sales_change_cancel_input, load_cancel_runtime,
+    persist_sales_change_cancel,
+};
+use super::start_approval::{
+    SalesChangeStartInput, SalesChangeStartPersistInput, build_sales_change_start_input,
+    load_bound_definition_graph, load_start_receipt, persist_sales_change_start,
+    replay_sales_change_start_with_executor,
+};
+use crate::{Error, Result};
 
 impl SalesChangeProcess {
     /// 创建销售变更单（草稿 + 变更工作副本 + `BusinessDocument` 绑定原子形成）。
@@ -71,9 +72,7 @@ impl SalesChangeProcess {
             .command_access(actor, "update")?
             .current(req.sales_order_id.as_ref(), &mut NoTransaction)
             .await?;
-        let sales_write = SalesReviewService::new(self.db.clone())
-            .prepare_creation(req, actor)
-            .await?;
+        let sales_write = SalesReviewService::new(self.db.clone()).prepare_creation(req, actor).await?;
         let change_id = sales_write.change_id().to_string();
         let bind_command = BindPublishedDefinitionCommand {
             document_type: erp_workflow::entity::document_registry::DocumentType::SalesChangeOrder,
@@ -152,11 +151,9 @@ impl SalesChangeProcess {
         self.command_access(actor, "submit")?
             .current(preview.sales_order_id.as_ref(), &mut NoTransaction)
             .await?;
-        let change_order = SalesReviewService::new(self.db.clone())
-            .load_for_submission(id, req.version)
-            .await?;
-        self.start_change_approval(id, change_order, req.idempotency_key.clone(), actor, adapter)
-            .await
+        let change_order =
+            SalesReviewService::new(self.db.clone()).load_for_submission(id, req.version).await?;
+        self.start_change_approval(id, change_order, req.idempotency_key.clone(), actor, adapter).await
     }
 
     /// 作废销售变更单（仅草稿态）。
@@ -187,13 +184,9 @@ impl SalesChangeProcess {
         self.command_access(actor, "update")?
             .current(preview.sales_order_id.as_ref(), &mut NoTransaction)
             .await?;
-        let mut sales_write = SalesReviewService::new(self.db.clone())
-            .prepare_void(id, req, actor)
-            .await?;
+        let mut sales_write = SalesReviewService::new(self.db.clone()).prepare_void(id, req, actor).await?;
         let audit =
-            actor
-                .clone()
-                .resource_log("sales_change_order.void", "sales_change_order", id.to_string())?;
+            actor.clone().resource_log("sales_change_order.void", "sales_change_order", id.to_string())?;
         let db = self.db.clone();
         let client = db.client().clone();
         let rbac = self.require_rbac()?;
@@ -202,13 +195,7 @@ impl SalesChangeProcess {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac)
-                        .require_object(
-                            &actor_for_tx,
-                            "update",
-                            sales_write.sales_order_id(),
-                            &[],
-                            session,
-                        )
+                        .require_object(&actor_for_tx, "update", sales_write.sales_order_id(), &[], session)
                         .await
                         .map_err(crate::Error::from)?;
                     sales_write.persist(&db, session).await?;
@@ -252,13 +239,11 @@ impl SalesChangeProcess {
         self.command_access(actor, "cancel_approval")?
             .current(preview.sales_order_id.as_ref(), &mut NoTransaction)
             .await?;
-        let mut change_order = SalesReviewService::new(self.db.clone())
-            .load_for_cancellation(id, req.expected_version)
-            .await?;
+        let mut change_order =
+            SalesReviewService::new(self.db.clone()).load_for_cancellation(id, req.expected_version).await?;
         let adapter = sales_change_order_adapter()?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)?;
+        let binding =
+            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let subject = sales_change_order_subject_ref(id)?;
         let subject_version = latest_change_submission_no(&self.db, id).await?;
@@ -314,13 +299,11 @@ impl SalesChangeProcess {
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
         let subject = sales_change_order_subject_ref(id)?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)?;
+        let binding =
+            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
-        let sales_write = SalesReviewService::new(self.db.clone())
-            .prepare_submission(change_order, actor)
-            .await?;
+        let sales_write =
+            SalesReviewService::new(self.db.clone()).prepare_submission(change_order, actor).await?;
         let submission = sales_write.submission();
         let now = Instant::now();
         let snapshot = build_sales_change_snapshot(
@@ -362,9 +345,7 @@ impl SalesChangeProcess {
             },
         )?;
         let audit =
-            actor
-                .clone()
-                .resource_log("sales_change_order.submit", "sales_change_order", id.to_string())?;
+            actor.clone().resource_log("sales_change_order.submit", "sales_change_order", id.to_string())?;
         let recovery_subject_version = submission.submission_no;
         let persisted = persist_sales_change_start(
             &self.db,
@@ -448,8 +429,8 @@ impl SalesChangeProcess {
                 .await;
             match recovered {
                 Ok(Some(instance_id)) => return Ok(instance_id),
-                Ok(None) => {}
-                Err(error) if error.command_may_have_committed() => {}
+                Ok(None) => {},
+                Err(error) if error.command_may_have_committed() => {},
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {
@@ -512,13 +493,7 @@ async fn persist_created_change_order(
     object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     input: CreatedChangeOrderPersistInput,
 ) -> Result<()> {
-    let CreatedChangeOrderPersistInput {
-        sales_write,
-        mut document,
-        bind_command,
-        audit,
-        actor,
-    } = input;
+    let CreatedChangeOrderPersistInput { sales_write, mut document, bind_command, audit, actor } = input;
     let db = db.clone();
     let rbac = rbac.clone();
     let object_read = object_read.clone();
@@ -596,43 +571,24 @@ mod tests {
         assert!(auth.contains("require_object(&self.actor, self.action, id, &[], executor)"));
         assert!(auth.contains("不存在或越权时返回 NotFound，不泄露存在性"));
         assert!(sales_access.contains("销售单不存在或无权操作"));
-        let create = source
-            .split("pub async fn create_sales_change_order")
-            .nth(1)
-            .expect("创建命令");
-        let submit = source
-            .split("pub async fn submit_sales_change")
-            .nth(1)
-            .expect("提交命令");
-        let void = source
-            .split("pub async fn void_sales_change")
-            .nth(1)
-            .expect("作废命令");
-        let cancel = source
-            .split("pub async fn cancel_approval")
-            .nth(1)
-            .expect("撤回命令");
+        let create = source.split("pub async fn create_sales_change_order").nth(1).expect("创建命令");
+        let submit = source.split("pub async fn submit_sales_change").nth(1).expect("提交命令");
+        let void = source.split("pub async fn void_sales_change").nth(1).expect("作废命令");
+        let cancel = source.split("pub async fn cancel_approval").nth(1).expect("撤回命令");
         assert!(
-            create
-                .find(r#"command_access(actor, "update")"#)
-                .expect("创建须先证明原单")
+            create.find(r#"command_access(actor, "update")"#).expect("创建须先证明原单")
                 < create.find("prepare_creation").expect("创建准备")
         );
         assert!(
-            submit
-                .find(r#"command_access(actor, "submit")"#)
-                .expect("提交须先证明原单")
+            submit.find(r#"command_access(actor, "submit")"#).expect("提交须先证明原单")
                 < submit.find("load_for_submission").expect("提交版本校验")
         );
         assert!(
-            void.find(r#"command_access(actor, "update")"#)
-                .expect("作废须先证明原单")
+            void.find(r#"command_access(actor, "update")"#).expect("作废须先证明原单")
                 < void.find("prepare_void").expect("作废准备")
         );
         assert!(
-            cancel
-                .find(r#"command_access(actor, "cancel_approval")"#)
-                .expect("撤回须先证明原单")
+            cancel.find(r#"command_access(actor, "cancel_approval")"#).expect("撤回须先证明原单")
                 < cancel.find("load_for_cancellation").expect("撤回版本校验")
         );
         for body in [create, submit, void, cancel] {

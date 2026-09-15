@@ -39,9 +39,7 @@ impl PartyAuditPort for MongoPartyAudit {
         resource_type: &str,
         resource_id: String,
     ) -> erp_party::Result<PreparedPartyAudit> {
-        let log = actor
-            .resource_log(action, resource_type, resource_id)
-            .map_err(map_audit_to_party)?;
+        let log = actor.resource_log(action, resource_type, resource_id).map_err(map_audit_to_party)?;
         Ok(prepared_party_audit(&log))
     }
 
@@ -51,11 +49,7 @@ impl PartyAuditPort for MongoPartyAudit {
         executor: &mut dyn Executor,
     ) -> erp_party::Result<()> {
         let log = audit_log_from_party(audit).map_err(map_audit_to_party)?;
-        self.db
-            .audit_logs()
-            .create(&log, executor)
-            .await
-            .map_err(erp_party::Error::from)?;
+        self.db.audit_logs().create(&log, executor).await.map_err(erp_party::Error::from)?;
         Ok(())
     }
 }

@@ -11,26 +11,25 @@
 
 use std::sync::Arc;
 
-use crate::dto::source_registry::*;
-use crate::entity::source_registry::{
-    ExternalIdentityMap, ExternalIdentityMapData, ExternalIdentityMapId, ExternalIdentityTarget,
-    ExternalIdentityTargetData, ExternalIdentityTargetId, MappingStatus, SourceSystem, SourceSystemUpdate,
-    TargetStatus,
-};
-use crate::ports::SupportAuditPort;
-use crate::repository::SourceRegistryExt;
+use application_core::AuditActor;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::error::{Error, Result};
-use application_core::AuditActor;
-
+use crate::dto::source_registry::*;
 pub use crate::dto::source_registry::{
     CreateExternalIdentityMapRequest, CreateSourceSystemRequest, ExternalIdentityMapListParams,
     ExternalIdentityMapView, PageView, SourceSystemListParams, SourceSystemView, UpdateSourceSystemRequest,
 };
+use crate::entity::source_registry::{
+    ExternalIdentityMap, ExternalIdentityMapData, ExternalIdentityMapId, ExternalIdentityTarget,
+    ExternalIdentityTargetData, ExternalIdentityTargetId, MappingStatus, SourceSystem, SourceSystemUpdate,
+    TargetStatus,
+};
+use crate::error::{Error, Result};
+use crate::ports::SupportAuditPort;
+use crate::repository::SourceRegistryExt;
 
 /// 来源系统列表筛选条件类型（经 `SourceRegistryExt` 关联类型跨 crate 可达）。
 type SourceSystemFilter = <mongodb::Database as SourceRegistryExt>::SourceSystemFilter;
@@ -86,11 +85,7 @@ impl SourceRegistryService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .source_systems()
-            .search_source_systems(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.source_systems().search_source_systems(&filter, &mut NoTransaction).await?;
         // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结，无法命名），
         // 此处按字段映射为响应视图，避免把仓储类型泄漏到接口层。
         let items = page
@@ -107,12 +102,7 @@ impl SourceRegistryService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 更新来源系统（乐观锁语义）。
@@ -147,17 +137,9 @@ impl SourceRegistryService {
             .await?
             .ok_or_else(|| Error::NotFound("来源系统不存在".to_string()))?;
         if system.base.version != req.version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
-        system.update(
-            SourceSystemUpdate {
-                name: req.name,
-                status: req.status,
-            },
-            actor.id(),
-        )?;
+        system.update(SourceSystemUpdate { name: req.name, status: req.status }, actor.id())?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "source_system.update",
@@ -312,11 +294,6 @@ impl SourceRegistryService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 }

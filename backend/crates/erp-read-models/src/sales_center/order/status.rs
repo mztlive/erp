@@ -36,7 +36,7 @@ pub(super) fn stage_code_label_tone(
         ReviewStatus::PendingProcurementConfirmation => ("awaiting_confirm", "待二次确认", "warning"),
         ReviewStatus::PendingLowMarginSuperior | ReviewStatus::Rejected => {
             ("awaiting_sales", "待销售处理", "warning")
-        }
+        },
         ReviewStatus::PendingSalesLeader => ("awaiting_sales_lead", "待销售领导审批", "warning"),
         ReviewStatus::PendingOperations => ("awaiting_ops", "待运营审批", "warning"),
         ReviewStatus::Approved => ("effective", "已生效", "success"),
@@ -63,18 +63,16 @@ pub(super) fn stage_code_label_tone(
 /// 不得在本函数内比较应收金额或解释终态；无子账零额比较已由实体拒绝。
 pub(super) fn close_eligibility_view(assessment: SalesOrderClosureAssessment) -> dto::CloseEligibilityView {
     let (blockers, note) = match assessment.terminal {
-        Some(SalesOrderClosureTerminal::Closed) => (
-            Vec::new(),
-            "交付与回款都已完成，本单已自动结案。开票是否做完不影响结案。".to_string(),
-        ),
+        Some(SalesOrderClosureTerminal::Closed) => {
+            (Vec::new(), "交付与回款都已完成，本单已自动结案。开票是否做完不影响结案。".to_string())
+        },
         Some(SalesOrderClosureTerminal::Voided) => (
             vec!["本单已作废，不会再结案".to_string()],
             "作废单只保留历史记录，不能结案，也不能恢复。".to_string(),
         ),
-        Some(SalesOrderClosureTerminal::Draft) => (
-            vec!["草稿尚未生效，谈不上结案".to_string()],
-            "草稿还没生效，先完成提交与确认。".to_string(),
-        ),
+        Some(SalesOrderClosureTerminal::Draft) => {
+            (vec!["草稿尚未生效，谈不上结案".to_string()], "草稿还没生效，先完成提交与确认。".to_string())
+        },
         None => {
             let mut blockers = Vec::new();
             if let Some(blocker) = assessment.fulfillment_blocker {
@@ -82,7 +80,7 @@ pub(super) fn close_eligibility_view(assessment: SalesOrderClosureAssessment) ->
                     match blocker {
                         SalesOrderFulfillmentBlocker::VoucherExpiry => {
                             "卡券还没到履约期限（持卡人是否消费完都不提前算交付完成）"
-                        }
+                        },
                         SalesOrderFulfillmentBlocker::CustomerAcceptance => "客户验收还没做完",
                     }
                     .to_string(),
@@ -97,7 +95,7 @@ pub(super) fn close_eligibility_view(assessment: SalesOrderClosureAssessment) ->
                 format!("还不能结案：{}。开票进度不参与是否结案。", blockers.join("；"))
             };
             (blockers, note)
-        }
+        },
     };
     dto::CloseEligibilityView {
         fulfillment_complete: assessment.fulfillment_complete,
@@ -126,25 +124,16 @@ pub(super) fn compute_can_start_sales_change(
         );
     }
     if matches!(stage_code, "draft" | "voided" | "closed") {
-        return (
-            false,
-            Some(format!("当前状态是「{stage_label}」，不能发起改单。")),
-        );
+        return (false, Some(format!("当前状态是「{stage_label}」，不能发起改单。")));
     }
     if matches!(
         stage_code,
         "awaiting_sales" | "awaiting_confirm" | "awaiting_sales_lead" | "awaiting_ops" | "in_approval"
     ) {
-        return (
-            false,
-            Some("本单还在确认/审批中，请先处理完当前待办，再发起改单。".to_string()),
-        );
+        return (false, Some("本单还在确认/审批中，请先处理完当前待办，再发起改单。".to_string()));
     }
     if has_active_change_order {
-        return (
-            false,
-            Some("已有一笔改单在处理中，请等它走完再发起新的。".to_string()),
-        );
+        return (false, Some("已有一笔改单在处理中，请等它走完再发起新的。".to_string()));
     }
     (true, None)
 }
@@ -237,26 +226,11 @@ mod tests {
     #[test]
     fn stage_pending_review_branches() {
         let cases = [
-            (
-                ReviewStatus::PendingProcurementConfirmation,
-                ("awaiting_confirm", "待二次确认", "warning"),
-            ),
-            (
-                ReviewStatus::PendingLowMarginSuperior,
-                ("awaiting_sales", "待销售处理", "warning"),
-            ),
-            (
-                ReviewStatus::Rejected,
-                ("awaiting_sales", "待销售处理", "warning"),
-            ),
-            (
-                ReviewStatus::PendingSalesLeader,
-                ("awaiting_sales_lead", "待销售领导审批", "warning"),
-            ),
-            (
-                ReviewStatus::PendingOperations,
-                ("awaiting_ops", "待运营审批", "warning"),
-            ),
+            (ReviewStatus::PendingProcurementConfirmation, ("awaiting_confirm", "待二次确认", "warning")),
+            (ReviewStatus::PendingLowMarginSuperior, ("awaiting_sales", "待销售处理", "warning")),
+            (ReviewStatus::Rejected, ("awaiting_sales", "待销售处理", "warning")),
+            (ReviewStatus::PendingSalesLeader, ("awaiting_sales_lead", "待销售领导审批", "warning")),
+            (ReviewStatus::PendingOperations, ("awaiting_ops", "待运营审批", "warning")),
             (ReviewStatus::Approved, ("effective", "已生效", "success")),
             (ReviewStatus::NotSubmitted, ("draft", "草稿", "neutral")),
             (ReviewStatus::InApproval, ("in_approval", "审批中", "warning")),
@@ -301,10 +275,7 @@ mod tests {
         let mut voucher = order(BusinessType::Voucher);
         voucher.commercial_status = CommercialStatus::Effective;
         let voucher_view = close_eligibility_view(voucher.closure_facts().assess(true, amt("0"), amt("100")));
-        assert_eq!(
-            voucher_view.blockers[0],
-            "卡券还没到履约期限（持卡人是否消费完都不提前算交付完成）"
-        );
+        assert_eq!(voucher_view.blockers[0], "卡券还没到履约期限（持卡人是否消费完都不提前算交付完成）");
     }
 
     #[test]
@@ -350,13 +321,9 @@ mod tests {
             assert!(!allowed, "stage={code}");
             assert!(reason.is_some());
         }
-        for code in [
-            "awaiting_sales",
-            "awaiting_confirm",
-            "awaiting_sales_lead",
-            "awaiting_ops",
-            "in_approval",
-        ] {
+        for code in
+            ["awaiting_sales", "awaiting_confirm", "awaiting_sales_lead", "awaiting_ops", "in_approval"]
+        {
             let (allowed, _) = compute_can_start_sales_change(OriginSystem::Erp, code, "任意", false);
             assert!(!allowed, "stage={code}");
         }

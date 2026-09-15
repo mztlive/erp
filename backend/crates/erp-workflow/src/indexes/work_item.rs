@@ -1,16 +1,13 @@
 //! 域 D03 `work_item` 的开放唯一性、审批执行关联与统一工作台索引。
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use futures_util::TryStreamExt;
-
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::WorkItemExt;
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use persistence_core::Result;
 
 /// `work_items` 集合名。
 pub const WORK_ITEMS: &str = <mongodb::Database as WorkItemExt>::WORK_ITEMS;
@@ -24,9 +21,7 @@ pub const FINANCE_RESPONSIBILITY_RULES: &str =
 /// 既有数据违反开放唯一性，或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     reconcile_open_object_type_index(db).await?;
-    db.collection::<Document>(WORK_ITEMS)
-        .create_indexes(work_item_indexes())
-        .await?;
+    db.collection::<Document>(WORK_ITEMS).create_indexes(work_item_indexes()).await?;
     db.collection::<Document>(FINANCE_RESPONSIBILITY_RULES)
         .create_indexes(finance_responsibility_indexes())
         .await?;
@@ -100,10 +95,7 @@ fn work_item_indexes() -> Vec<IndexModel> {
         fulfillment_queue_index(),
         document_approval_owner_page_index(),
         document_approval_owner_type_page_index(),
-        named_index(
-            "idx_work_items_mine",
-            doc! { "status": 1, "owner_user_id": 1, "due_at": 1, "id": 1 },
-        ),
+        named_index("idx_work_items_mine", doc! { "status": 1, "owner_user_id": 1, "due_at": 1, "id": 1 }),
         named_index(
             "idx_work_items_pending_approval",
             doc! { "status": 1, "owner_user_id": 1, "assigned_at": -1, "id": -1 },
@@ -135,10 +127,7 @@ fn work_item_indexes() -> Vec<IndexModel> {
             "idx_work_items_completed_history",
             doc! { "status": 1, "completed_by": 1, "completed_at": -1 },
         ),
-        named_index(
-            "idx_work_items_closed_history",
-            doc! { "status": 1, "closed_by": 1, "closed_at": -1 },
-        ),
+        named_index("idx_work_items_closed_history", doc! { "status": 1, "closed_by": 1, "closed_at": -1 }),
     ]
 }
 
@@ -353,10 +342,7 @@ fn unique_approval_execution_index() -> IndexModel {
 }
 
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 #[cfg(test)]
@@ -495,10 +481,7 @@ mod tests {
             doc! { "status": 1, "owner_user_id": 1, "assigned_at": -1, "id": -1 }
         );
         let approval_owner = index_named(&indexes, "idx_work_items_document_approval_owner_page");
-        assert_eq!(
-            approval_owner.keys,
-            doc! { "owner_user_id": 1, "assigned_at": -1, "id": -1 }
-        );
+        assert_eq!(approval_owner.keys, doc! { "owner_user_id": 1, "assigned_at": -1, "id": -1 });
         assert_eq!(
             approval_owner.options.as_ref().unwrap().partial_filter_expression,
             Some(doc! {
@@ -518,11 +501,7 @@ mod tests {
             }
         );
         assert_eq!(
-            approval_owner_type
-                .options
-                .as_ref()
-                .unwrap()
-                .partial_filter_expression,
+            approval_owner_type.options.as_ref().unwrap().partial_filter_expression,
             approval_owner.options.as_ref().unwrap().partial_filter_expression
         );
         assert!(indexes.iter().all(|index| {

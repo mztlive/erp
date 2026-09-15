@@ -2,16 +2,13 @@
 
 use std::sync::Arc;
 
-use crate::entity::work_item::{ApprovalDecisionTaskError, WorkItem, WorkItemStatus};
-use crate::repository::bpm::ApprovalInstanceListProjection;
-use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
+use application_core::AuditActor;
 use bpm::engine::{CommitRequired, TaskCloseReason};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{
     ApprovalDecision, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus, ModelError,
 };
 use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, IdempotencyKey, ParticipantId, Timestamp};
-
 use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
@@ -21,32 +18,34 @@ use super::super::apply_plan::PlannedWrites;
 use super::super::authorization::hidden_forbidden;
 use super::super::decision::prepare_decision;
 use super::super::idempotency::{
-    command_may_have_committed, command_recovery_delay, decision_identity, map_receipt_first_write_error,
-    normalize_idempotency_key, payload_conflict_error, ReceiptBranch,
+    ReceiptBranch, command_may_have_committed, command_recovery_delay, decision_identity,
+    map_receipt_first_write_error, normalize_idempotency_key, payload_conflict_error,
 };
-use super::super::view::{map_command_view, ApprovalCommandView};
+use super::super::view::{ApprovalCommandView, map_command_view};
 use super::super::{DecisionExecutionInput, ExecutionCommandInput, PreparedExecution};
 use super::notifications::{
-    persist_decision_notifications, runtime_admin_notification_recipients, DecisionNotificationFacts,
+    DecisionNotificationFacts, persist_decision_notifications, runtime_admin_notification_recipients,
 };
 use super::query::{first_open_task, list_projection_from_writes};
 use super::read_auth::{
-    process_required_separation_policy, revalidate_decision_approver, task_proves_current_responsibility,
-    RevalidateDecisionApproverInput, RuntimeReadSubject,
+    RevalidateDecisionApproverInput, RuntimeReadSubject, process_required_separation_policy,
+    revalidate_decision_approver, task_proves_current_responsibility,
 };
 use super::tasks::{
-    complete_or_close_tasks, create_open_tasks, CompleteOrCloseTasksInput, CreateOpenTasksInput,
+    CompleteOrCloseTasksInput, CreateOpenTasksInput, complete_or_close_tasks, create_open_tasks,
 };
 use super::{
-    find_receipt_for_identity, hidden_not_found, persisted_command_view_with_executor, require_cas_applied,
-    ApprovalRuntimeService,
+    ApprovalRuntimeService, find_receipt_for_identity, hidden_not_found,
+    persisted_command_view_with_executor, require_cas_applied,
 };
+use crate::entity::work_item::{ApprovalDecisionTaskError, WorkItem, WorkItemStatus};
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::PreparedWorkflowAudit;
+use crate::repository::bpm::ApprovalInstanceListProjection;
+use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::business_adapter::adapter_spec_of;
 use crate::service::approval::process_kind::process_kind_of;
 use crate::service::approval::{ApprovalActionContext, ApprovalDomainActionPort, DecisionActionParams};
-use application_core::AuditActor;
 
 /// 已规范化的审批决定命令；协议字段保持不变，摘要在进入事务前固定。
 #[derive(Debug, Clone)]
@@ -105,15 +104,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             "APPROVE" => ApprovalDecision::Approve,
             "REJECT" => ApprovalDecision::Reject,
             other => {
-                return Err(Error::ValidationError(format!(
-                    "决定必须是 APPROVE 或 REJECT，收到 {other}"
-                )))
-            }
+                return Err(Error::ValidationError(format!("决定必须是 APPROVE 或 REJECT，收到 {other}")));
+            },
         };
-        let reason = reason
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned);
+        let reason = reason.map(str::trim).filter(|value| !value.is_empty()).map(ToOwned::to_owned);
         let key = normalize_idempotency_key(idempotency_key)?;
         let command = RuntimeDecisionCommand {
             work_item_id: work_item_id.to_string(),
@@ -126,9 +120,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let outcome = match outcome {
             Ok(outcome) => outcome,
             Err(error) if command_may_have_committed(&error) => {
-                self.recover_decision_after_competing_commit(actor, command, error)
-                    .await?
-            }
+                self.recover_decision_after_competing_commit(actor, command, error).await?
+            },
             Err(error) => return Err(error),
         };
         if outcome.blocked {
@@ -202,8 +195,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 .await;
             match recovered {
                 Ok(Some(outcome)) => return Ok(outcome),
-                Ok(None) => {}
-                Err(error) if command_may_have_committed(&error) => {}
+                Ok(None) => {},
+                Err(error) if command_may_have_committed(&error) => {},
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {
@@ -266,10 +259,10 @@ async fn replay_decision_in_transaction(
         return Err(decision_terminal_fresh_error());
     }
     match authorize_decision_terminal_replay(db, rbac, object_read, actor, &execution, session).await {
-        Ok(()) => {}
+        Ok(()) => {},
         Err(Error::Forbidden(_)) => {
             return Err(decision_terminal_fresh_error());
-        }
+        },
         Err(error) => return Err(error),
     }
     let identity = decision_identity(
@@ -292,7 +285,7 @@ async fn replay_decision_in_transaction(
         return Err(payload_conflict_error());
     }
     match identity.classify(Some(&receipt)) {
-        ReceiptBranch::SamePayload(_) => {}
+        ReceiptBranch::SamePayload(_) => {},
         ReceiptBranch::Fresh => unreachable!("receipt was loaded"),
         ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
     }
@@ -331,26 +324,18 @@ async fn submit_decision_in_transaction(
         .approval_execution_for_decision(actor.id(), command.expected_task_version)
         .map_err(map_approval_task_error)?
         .clone();
-    let execution = db
-        .bpm_workflow()
-        .find_execution_by_id(&execution_id, session)
-        .await?
-        .ok_or_else(hidden_not_found)?;
+    let execution =
+        db.bpm_workflow().find_execution_by_id(&execution_id, session).await?.ok_or_else(hidden_not_found)?;
     let expected_execution_version = execution.base.version;
     let instance_id = execution.process_instance_id.clone();
-    let instance = db
-        .bpm_workflow()
-        .find_instance_by_id(&instance_id, session)
-        .await?
-        .ok_or_else(hidden_not_found)?;
+    let instance =
+        db.bpm_workflow().find_instance_by_id(&instance_id, session).await?.ok_or_else(hidden_not_found)?;
     let expected_instance_version = instance.base.version;
     let document_type =
         crate::entity::approval_integration::document_type_from_subject_kind(instance.subject.subject_kind())
             .map_err(|error| Error::ValidationError(error.to_string()))?;
     if instance.process_kind != process_kind_of(document_type) {
-        return Err(Error::ConflictError(
-            "审批实例流程种类与单据类型不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("审批实例流程种类与单据类型不一致".to_string()));
     }
     let snapshot = db
         .approval_subject_snapshots()
@@ -374,14 +359,9 @@ async fn submit_decision_in_transaction(
     };
     if !task_proves_current_responsibility(&item, &execution, &subject, actor.id(), spec.owner_role.as_str())
     {
-        return Err(Error::ConflictError(
-            "APPROVAL_RESPONSIBILITY_CONFLICT".to_string(),
-        ));
+        return Err(Error::ConflictError("APPROVAL_RESPONSIBILITY_CONFLICT".to_string()));
     }
-    let open_tasks = db
-        .work_items()
-        .open_approval_tasks_for_execution(&execution_id, session)
-        .await?;
+    let open_tasks = db.work_items().open_approval_tasks_for_execution(&execution_id, session).await?;
     if open_tasks.is_empty() || !open_tasks.iter().any(|task| task.base.id == command.work_item_id) {
         return Err(Error::from_approval_code(ErrorCode::ApprovalTaskNotOpen));
     }
@@ -431,7 +411,7 @@ async fn submit_decision_in_transaction(
                     session,
                 )
                 .await?
-            }
+            },
             None => return Err(Error::ConflictError("审批定义缺少目标节点".to_string())),
         },
         None => current_eligibility.clone(),
@@ -450,10 +430,7 @@ async fn submit_decision_in_transaction(
         current: execution.clone(),
         work_item_id: command.work_item_id.clone(),
         task_owner_id: item.owner_user_id.clone().unwrap_or_default(),
-        instance_assignee_id: instance_assignee
-            .current_assignee_participant_id
-            .as_str()
-            .to_string(),
+        instance_assignee_id: instance_assignee.current_assignee_participant_id.as_str().to_string(),
         decision: command.decision,
         reason: command.reason.clone(),
         expected_task_version: command.expected_task_version,
@@ -519,9 +496,7 @@ async fn submit_decision_in_transaction(
         .await
         .map_err(map_receipt_first_write_error)?;
     if should_finalize {
-        action_port
-            .execute(spec.on_final_approve, &action_context, actor, session)
-            .await?;
+        action_port.execute(spec.on_final_approve, &action_context, actor, session).await?;
     }
     persist_decision_writes(
         db,
@@ -626,20 +601,15 @@ pub(super) fn decision_terminal_actor<'a>(
             let decided_by = execution.decided_by.as_ref()?.as_str();
             let terminal_decision_matches = matches!(
                 (execution.status, execution.decision),
-                (
-                    ApprovalNodeExecutionStatus::Approved,
-                    Some(ApprovalDecision::Approve)
-                ) | (
-                    ApprovalNodeExecutionStatus::Rejected,
-                    Some(ApprovalDecision::Reject)
-                )
+                (ApprovalNodeExecutionStatus::Approved, Some(ApprovalDecision::Approve))
+                    | (ApprovalNodeExecutionStatus::Rejected, Some(ApprovalDecision::Reject))
             );
             (terminal_decision_matches
                 && completed_by == decided_by
                 && execution.decided_at.is_some()
                 && execution.ended_at.is_some())
             .then_some(completed_by)
-        }
+        },
         WorkItemStatus::Closed => {
             let closed_by = item.closed_by.as_deref()?;
             (item.close_reason.as_deref() == Some(TaskCloseReason::ApprovalRuntimeBlocked.as_str())
@@ -649,7 +619,7 @@ pub(super) fn decision_terminal_actor<'a>(
                 && execution.ended_at.is_none()
                 && execution.assignee_participant_id.as_str() == closed_by)
                 .then_some(closed_by)
-        }
+        },
         WorkItemStatus::Open => None,
     }
 }
@@ -771,12 +741,12 @@ pub(super) fn map_approval_task_error(error: ApprovalDecisionTaskError) -> Error
         ApprovalDecisionTaskError::NotCurrentOwner => Error::Forbidden("无权执行该审批动作".to_string()),
         ApprovalDecisionTaskError::VersionConflict => {
             Error::ConflictError("任务版本已变化，请刷新后重试".to_string())
-        }
+        },
         ApprovalDecisionTaskError::NotDocumentApproval
         | ApprovalDecisionTaskError::NotOpen
         | ApprovalDecisionTaskError::MissingExecution => {
             Error::from_approval_code(ErrorCode::ApprovalTaskNotOpen)
-        }
+        },
     }
 }
 
@@ -913,9 +883,7 @@ async fn persist_decision_writes(
                 .ok_or_else(|| Error::Internal("决定后执行版本非法".to_string()))?
         };
         require_cas_applied(
-            db.bpm_workflow()
-                .end_active_execution(execution, expected, session)
-                .await?,
+            db.bpm_workflow().end_active_execution(execution, expected, session).await?,
             "审批执行",
         )?;
     }
@@ -924,9 +892,7 @@ async fn persist_decision_writes(
         db.bpm_workflow().insert_execution(execution, session).await?;
     }
     if !writes.created_assignees.is_empty() {
-        db.bpm_workflow()
-            .insert_assignees(&writes.created_assignees, session)
-            .await?;
+        db.bpm_workflow().insert_assignees(&writes.created_assignees, session).await?;
     }
     // 任务：完成当前、按原因关闭、为下一节点新建。
     complete_or_close_tasks(

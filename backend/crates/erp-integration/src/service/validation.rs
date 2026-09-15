@@ -17,9 +17,7 @@ use crate::{Error, Result};
 /// 版本不一致时返回 `ConflictError`。
 pub fn ensure_version(current_version: u64, expected_version: u64) -> Result<()> {
     if current_version != expected_version {
-        return Err(Error::ConflictError(
-            "数据已被其他请求修改，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
     }
     Ok(())
 }

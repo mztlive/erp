@@ -41,10 +41,7 @@ mod tests {
         for (source, expected) in [
             (SensitivityClass::General, EvidenceSensitivity::General),
             (SensitivityClass::Sensitive, EvidenceSensitivity::Sensitive),
-            (
-                SensitivityClass::HighlySensitive,
-                EvidenceSensitivity::HighlySensitive,
-            ),
+            (SensitivityClass::HighlySensitive, EvidenceSensitivity::HighlySensitive),
         ] {
             assert_eq!(
                 evidence_metadata(source, RetentionClass::LongTerm),

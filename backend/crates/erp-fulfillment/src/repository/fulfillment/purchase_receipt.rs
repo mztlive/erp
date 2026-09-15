@@ -1,18 +1,16 @@
 //! `purchase_receipt` 采购入库单仓储：列表投影查询与按入库单号身份查询。
 
-use crate::entity::fulfillment::{PurchaseReceipt, PurchaseReceiptState};
-use crate::repository::owned::PurchaseReceiptRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseOrderId, WarehouseId};
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::fulfillment::{PurchaseReceipt, PurchaseReceiptState};
+use crate::repository::owned::PurchaseReceiptRepository;
 
 /// 采购入库单排序白名单（查询与测试共用）。
 const PURCHASE_RECEIPT_SORT_FIELDS: &[&str] = &["created_at", "posted_at"];
@@ -114,11 +112,7 @@ impl<'a> PurchaseReceiptRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<PurchaseReceiptRow>> {
         let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                PURCHASE_RECEIPT_SORT_FIELDS,
-            ))
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, PURCHASE_RECEIPT_SORT_FIELDS))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(purchase_receipt_projection())
@@ -126,10 +120,7 @@ impl<'a> PurchaseReceiptRepository<'a> {
         let collection = self.collection().clone_with_type::<PurchaseReceiptRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按采购入库单号查找入库单（唯一单号，详情查询）。
@@ -171,12 +162,12 @@ fn purchase_receipt_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{purchase_receipt_projection, sort_doc, PurchaseReceiptFilter, PURCHASE_RECEIPT_SORT_FIELDS};
+    use erp_core::ids::PurchaseOrderId;
     use mongodb::bson::doc;
     use persistence_core::{Pagination, QueryFilter};
 
+    use super::{PURCHASE_RECEIPT_SORT_FIELDS, PurchaseReceiptFilter, purchase_receipt_projection, sort_doc};
     use crate::entity::fulfillment::PurchaseReceiptState;
-    use erp_core::ids::PurchaseOrderId;
 
     #[test]
     fn receipt_filter_applies_optional_fields_and_deleted_filter() {

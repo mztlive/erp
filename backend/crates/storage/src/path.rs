@@ -12,10 +12,10 @@ pub(super) fn validate_relative_path(path: &Path) -> Result<()> {
     for component in path.components() {
         match component {
             Component::Normal(_) => has_normal_component = true,
-            Component::CurDir => {}
+            Component::CurDir => {},
             Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
                 return Err(Error::PathError("存储路径不能越过基础目录".to_string()));
-            }
+            },
         }
     }
 

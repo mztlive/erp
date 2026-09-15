@@ -12,14 +12,13 @@ use std::str::FromStr;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::{SkuId, StockAdjustmentId, StockAdjustmentLineId, WarehouseId};
 use erp_core::money::Quantity;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::stock_movement::{MovementDirection, MovementType};
 
@@ -295,18 +294,10 @@ impl StockAdjustment {
             ADJUSTMENT_NO_MAX_LEN,
             "调整单号过长",
         )?;
-        let prepared_by = normalize_required_text(
-            data.prepared_by,
-            "仓储经办人不能为空",
-            ACTOR_MAX_LEN,
-            "仓储经办人过长",
-        )?;
-        let created_by = normalize_required_text(
-            created_by.into(),
-            "创建人不能为空",
-            ACTOR_MAX_LEN,
-            "创建人标识过长",
-        )?;
+        let prepared_by =
+            normalize_required_text(data.prepared_by, "仓储经办人不能为空", ACTOR_MAX_LEN, "仓储经办人过长")?;
+        let created_by =
+            normalize_required_text(created_by.into(), "创建人不能为空", ACTOR_MAX_LEN, "创建人标识过长")?;
         let note = match data.note {
             Some(text) => {
                 let text = text.trim().to_string();
@@ -317,7 +308,7 @@ impl StockAdjustment {
                 } else {
                     Some(text)
                 }
-            }
+            },
             None => None,
         };
         Ok(Self {
@@ -405,10 +396,8 @@ impl StockAdjustment {
         if self.status != StockAdjustmentState::Draft {
             return Err(Error::from("只有草稿状态的库存调整单可以提交审批"));
         }
-        let next = self
-            .approval_subject_version
-            .checked_add(1)
-            .ok_or_else(|| Error::from("审批提交版本溢出"))?;
+        let next =
+            self.approval_subject_version.checked_add(1).ok_or_else(|| Error::from("审批提交版本溢出"))?;
         ensure_transition(self.status, StockAdjustmentState::InApproval)?;
         self.approval_subject_version = next;
         self.status = StockAdjustmentState::InApproval;
@@ -627,9 +616,7 @@ impl StockAdjustment {
     /// 待复核/待确认/已过账/已冲正不可编辑时返回错误。
     fn ensure_editable(&self) -> Result<()> {
         if !self.is_editable() {
-            return Err(Error::from(
-                "待复核、待财务确认、已过账或已冲正的库存调整单不可编辑",
-            ));
+            return Err(Error::from("待复核、待财务确认、已过账或已冲正的库存调整单不可编辑"));
         }
         Ok(())
     }
@@ -695,19 +682,11 @@ impl StockAdjustmentLineUpdate {
         quantity: &str,
         direction: Option<MovementDirection>,
     ) -> Result<Self> {
-        let line_id = normalize_required_text(
-            line_id.into(),
-            "明细行主键不能为空",
-            LINE_ID_MAX_LEN,
-            "明细行主键过长",
-        )?;
+        let line_id =
+            normalize_required_text(line_id.into(), "明细行主键不能为空", LINE_ID_MAX_LEN, "明细行主键过长")?;
         let quantity = Quantity::from_str(quantity)?;
         ensure_positive_quantity(quantity)?;
-        Ok(Self {
-            line_id,
-            quantity,
-            direction,
-        })
+        Ok(Self { line_id, quantity, direction })
     }
 }
 
@@ -822,9 +801,11 @@ fn ensure_positive_quantity(quantity: Quantity) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use erp_core::ids::StockAdjustmentId;
     use std::str::FromStr;
+
+    use erp_core::ids::StockAdjustmentId;
+
+    use super::*;
 
     fn data() -> StockAdjustmentData {
         StockAdjustmentData {
@@ -889,29 +870,22 @@ mod tests {
     /// 失败路径：必填空、复核人=经办人、状态不允许的迁移。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank_no = StockAdjustmentData {
-            adjustment_no: "   ".to_string(),
-            ..data()
-        };
+        let blank_no = StockAdjustmentData { adjustment_no: "   ".to_string(), ..data() };
         assert!(StockAdjustment::new(StockAdjustmentId::new("a2"), blank_no, "creator-1").is_err());
 
-        let blank_prepared = StockAdjustmentData {
-            prepared_by: "  ".to_string(),
-            ..data()
-        };
+        let blank_prepared = StockAdjustmentData { prepared_by: "  ".to_string(), ..data() };
         assert!(StockAdjustment::new(StockAdjustmentId::new("a3"), blank_prepared, "creator-1").is_err());
 
         let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("a4"), data(), "creator-1").unwrap();
+        assert!(adjustment.submit_for_warehouse_review("operator-1").is_err(), "复核人不得与经办人相同");
         assert!(
-            adjustment.submit_for_warehouse_review("operator-1").is_err(),
-            "复核人不得与经办人相同"
+            adjustment
+                .update(StockAdjustmentUpdate {
+                    reviewed_by: Some("operator-1".to_string()),
+                    ..StockAdjustmentUpdate::default()
+                })
+                .is_err()
         );
-        assert!(adjustment
-            .update(StockAdjustmentUpdate {
-                reviewed_by: Some("operator-1".to_string()),
-                ..StockAdjustmentUpdate::default()
-            })
-            .is_err());
         assert!(adjustment.mark_posted().is_err(), "未经审核不能过账");
         assert!(adjustment.reverse().is_err(), "草稿不能冲正");
     }
@@ -920,9 +894,7 @@ mod tests {
     #[test]
     fn approval_submit_and_cancel_keep_monotonic_subject_version() {
         let mut adjustment = adjustment_in_state(StockAdjustmentState::Draft, 0);
-        adjustment
-            .ensure_initial_approval_state()
-            .expect("新建草稿是初始未提交状态");
+        adjustment.ensure_initial_approval_state().expect("新建草稿是初始未提交状态");
         assert_eq!(adjustment.start_approval().unwrap(), 1);
         assert_eq!(adjustment.status, StockAdjustmentState::InApproval);
 
@@ -1004,11 +976,7 @@ mod tests {
             let adjustment = adjustment_in_state(status, 3);
             let before = adjustment.clone();
             let result = adjustment.ensure_approval_postable();
-            assert_eq!(
-                result.is_ok(),
-                status == StockAdjustmentState::InApproval,
-                "{status:?}"
-            );
+            assert_eq!(result.is_ok(), status == StockAdjustmentState::InApproval, "{status:?}");
             assert_eq!(adjustment, before, "专用守卫不得修改实体");
         }
     }
@@ -1040,37 +1008,32 @@ mod tests {
     /// 状态机：固定邻接矩阵的合法/非法迁移（含终态与幂等）。
     #[test]
     fn state_machine_transition_matrix() {
-        assert!(ensure_transition(
-            StockAdjustmentState::Draft,
-            StockAdjustmentState::PendingWarehouseReview
-        )
-        .is_ok());
-        assert!(ensure_transition(
-            StockAdjustmentState::PendingWarehouseReview,
-            StockAdjustmentState::PendingFinanceReview
-        )
-        .is_ok());
-        assert!(ensure_transition(
-            StockAdjustmentState::PendingWarehouseReview,
-            StockAdjustmentState::Rejected
-        )
-        .is_ok());
-        assert!(ensure_transition(
-            StockAdjustmentState::PendingFinanceReview,
-            StockAdjustmentState::Posted
-        )
-        .is_ok());
-        assert!(ensure_transition(
-            StockAdjustmentState::PendingFinanceReview,
-            StockAdjustmentState::Rejected
-        )
-        .is_ok());
+        assert!(
+            ensure_transition(StockAdjustmentState::Draft, StockAdjustmentState::PendingWarehouseReview)
+                .is_ok()
+        );
         assert!(
             ensure_transition(
-                StockAdjustmentState::Rejected,
-                StockAdjustmentState::PendingWarehouseReview
+                StockAdjustmentState::PendingWarehouseReview,
+                StockAdjustmentState::PendingFinanceReview
             )
-            .is_ok(),
+            .is_ok()
+        );
+        assert!(
+            ensure_transition(StockAdjustmentState::PendingWarehouseReview, StockAdjustmentState::Rejected)
+                .is_ok()
+        );
+        assert!(
+            ensure_transition(StockAdjustmentState::PendingFinanceReview, StockAdjustmentState::Posted)
+                .is_ok()
+        );
+        assert!(
+            ensure_transition(StockAdjustmentState::PendingFinanceReview, StockAdjustmentState::Rejected)
+                .is_ok()
+        );
+        assert!(
+            ensure_transition(StockAdjustmentState::Rejected, StockAdjustmentState::PendingWarehouseReview)
+                .is_ok(),
             "驳回后可修改并重新提交复核"
         );
         assert!(ensure_transition(StockAdjustmentState::Posted, StockAdjustmentState::Reversed).is_ok());
@@ -1094,36 +1057,21 @@ mod tests {
     /// 失败路径：数量越界（非正）。
     #[test]
     fn line_rejects_quantity_violations() {
-        let zero_quantity = StockAdjustmentLineData {
-            quantity: Quantity::from_str("0").unwrap(),
-            ..line_data()
-        };
+        let zero_quantity =
+            StockAdjustmentLineData { quantity: Quantity::from_str("0").unwrap(), ..line_data() };
         assert!(StockAdjustmentLine::new(StockAdjustmentLineId::new("al-2"), zero_quantity).is_err());
 
-        let negative = StockAdjustmentLineData {
-            quantity: Quantity::from_str("-1").unwrap(),
-            ..line_data()
-        };
+        let negative = StockAdjustmentLineData { quantity: Quantity::from_str("-1").unwrap(), ..line_data() };
         assert!(StockAdjustmentLine::new(StockAdjustmentLineId::new("al-3"), negative).is_err());
     }
 
     /// 原因规则：方向与正式流水类型由原因实体统一决定。
     #[test]
     fn reason_owns_direction_and_movement_type_rules() {
-        assert_eq!(
-            AdjustmentReasonType::StockGain.movement_direction(),
-            MovementDirection::Increase
-        );
-        assert_eq!(
-            AdjustmentReasonType::StockLoss.movement_type(),
-            MovementType::StockLoss
-        );
-        assert!(AdjustmentReasonType::Damage
-            .ensure_direction(MovementDirection::Decrease)
-            .is_ok());
-        assert!(AdjustmentReasonType::Damage
-            .ensure_direction(MovementDirection::Increase)
-            .is_err());
+        assert_eq!(AdjustmentReasonType::StockGain.movement_direction(), MovementDirection::Increase);
+        assert_eq!(AdjustmentReasonType::StockLoss.movement_type(), MovementType::StockLoss);
+        assert!(AdjustmentReasonType::Damage.ensure_direction(MovementDirection::Decrease).is_ok());
+        assert!(AdjustmentReasonType::Damage.ensure_direction(MovementDirection::Increase).is_err());
     }
 
     /// 明细更新：整组校验失败不产生部分修改，完整合法输入一次应用。
@@ -1145,50 +1093,35 @@ mod tests {
             StockAdjustmentLine::new_for_reason(
                 StockAdjustmentLineId::new("al-2"),
                 adjustment.reason_type,
-                StockAdjustmentLineData {
-                    sku_id: SkuId::new("sku-2"),
-                    ..line_data()
-                },
+                StockAdjustmentLineData { sku_id: SkuId::new("sku-2"), ..line_data() },
             )
             .unwrap(),
         ];
         let original = lines.clone();
         let mut gain_adjustment = adjustment.clone();
         gain_adjustment.reason_type = AdjustmentReasonType::StockGain;
-        assert!(gain_adjustment
-            .apply_line_updates(&mut lines, &[], false)
-            .is_err());
+        assert!(gain_adjustment.apply_line_updates(&mut lines, &[], false).is_err());
         assert_eq!(lines, original, "原因变更必须重验全部既有方向");
 
         let gain_updates = vec![
             StockAdjustmentLineUpdate::new("al-1", "3", Some(MovementDirection::Increase)).unwrap(),
             StockAdjustmentLineUpdate::new("al-2", "4", Some(MovementDirection::Increase)).unwrap(),
         ];
-        assert!(gain_adjustment
-            .apply_line_updates(&mut lines, &gain_updates[..1], false)
-            .is_err());
+        assert!(gain_adjustment.apply_line_updates(&mut lines, &gain_updates[..1], false).is_err());
         assert_eq!(lines, original, "未更新行的方向仍须与新原因一致");
-        gain_adjustment
-            .apply_line_updates(&mut lines, &gain_updates, true)
-            .unwrap();
-        assert!(lines
-            .iter()
-            .all(|line| line.direction == MovementDirection::Increase));
+        gain_adjustment.apply_line_updates(&mut lines, &gain_updates, true).unwrap();
+        assert!(lines.iter().all(|line| line.direction == MovementDirection::Increase));
         assert_eq!(lines[0].quantity.to_string(), "3");
         assert_eq!(lines[1].quantity.to_string(), "4");
         lines.clone_from(&original);
 
         let incomplete = vec![StockAdjustmentLineUpdate::new("al-1", "3", None).unwrap()];
-        assert!(adjustment
-            .apply_line_updates(&mut lines, &incomplete, true)
-            .is_err());
+        assert!(adjustment.apply_line_updates(&mut lines, &incomplete, true).is_err());
         assert_eq!(lines, original, "完整性失败不得留下部分更新");
 
         let wrong_direction =
             vec![StockAdjustmentLineUpdate::new("al-1", "3", Some(MovementDirection::Increase)).unwrap()];
-        assert!(adjustment
-            .apply_line_updates(&mut lines, &wrong_direction, false)
-            .is_err());
+        assert!(adjustment.apply_line_updates(&mut lines, &wrong_direction, false).is_err());
         assert_eq!(lines, original, "方向失败不得留下部分更新");
 
         let updates = vec![
@@ -1208,10 +1141,7 @@ mod tests {
             serde_json::to_string(&StockAdjustmentState::PendingFinanceReview).unwrap(),
             "\"PENDING_FINANCE_REVIEW\""
         );
-        assert_eq!(
-            serde_json::to_string(&AdjustmentReasonType::StockGain).unwrap(),
-            "\"STOCK_GAIN\""
-        );
+        assert_eq!(serde_json::to_string(&AdjustmentReasonType::StockGain).unwrap(), "\"STOCK_GAIN\"");
         assert_eq!(AdjustmentReasonType::Damage.label(), "损坏");
         assert_eq!(StockAdjustmentState::Rejected.label(), "驳回");
 

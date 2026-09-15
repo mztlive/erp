@@ -1,13 +1,13 @@
 //! 套餐形态档位规则。
 
+use erp_core::money::Amount;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::limits::{
     PACKAGE_SKU_MAX, PACKAGE_SKU_MIN, TIER_NAME_MAX_LEN, TIER_PACKAGE_MAX, TIER_PACKAGE_MIN,
 };
-use erp_core::money::Amount;
-use erp_core::validation::normalize_required_text;
-use erp_core::{Error, Result};
 
 /// 档位创建数据。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -99,9 +99,11 @@ pub fn normalize_tiers(tiers: Vec<TierRule>) -> Result<Vec<TierRule>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_tiers, TierRule};
-    use erp_core::money::Amount;
     use std::str::FromStr;
+
+    use erp_core::money::Amount;
+
+    use super::{TierRule, normalize_tiers};
 
     fn amount(value: &str) -> Amount {
         Amount::from_str(value).unwrap()

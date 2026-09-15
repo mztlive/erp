@@ -2,11 +2,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{CostAllocationId, CostEntryId, SalesOrderId, SalesOrderLineId};
 use erp_core::money::Amount;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 成本分配创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -129,9 +128,11 @@ fn validate_target(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use erp_core::money::Amount;
     use std::str::FromStr;
+
+    use erp_core::money::Amount;
+
+    use super::*;
 
     fn data() -> CostAllocationData {
         CostAllocationData {
@@ -148,58 +149,41 @@ mod tests {
     fn new_accepts_sales_order_target_and_keeps_amounts() {
         let allocation = CostAllocation::new(CostAllocationId::new("ca-1"), data()).unwrap();
         assert_eq!(allocation.sales_order_id, Some(SalesOrderId::new("so-1")));
-        assert_eq!(
-            allocation.allocated_gross_amount,
-            Amount::from_str("113.00").unwrap()
-        );
+        assert_eq!(allocation.allocated_gross_amount, Amount::from_str("113.00").unwrap());
         assert!(!allocation.rounding_residual_flag);
     }
 
     #[test]
     fn new_rejects_missing_target() {
-        let missing = CostAllocationData {
-            sales_order_id: None,
-            ..data()
-        };
+        let missing = CostAllocationData { sales_order_id: None, ..data() };
         assert!(CostAllocation::new(CostAllocationId::new("ca-3"), missing).is_err());
 
-        let dangling_line = CostAllocationData {
-            sales_order_id: None,
-            ..data()
-        };
+        let dangling_line = CostAllocationData { sales_order_id: None, ..data() };
         assert!(CostAllocation::new(CostAllocationId::new("ca-5"), dangling_line).is_err());
     }
 
     #[test]
     fn new_rejects_non_positive_and_net_over_gross() {
-        let non_positive = CostAllocationData {
-            allocated_gross_amount: Amount::from_str("0.00").unwrap(),
-            ..data()
-        };
+        let non_positive =
+            CostAllocationData { allocated_gross_amount: Amount::from_str("0.00").unwrap(), ..data() };
         assert!(CostAllocation::new(CostAllocationId::new("ca-6"), non_positive).is_err());
 
-        let net_over_gross = CostAllocationData {
-            allocated_net_amount: Amount::from_str("114.00").unwrap(),
-            ..data()
-        };
+        let net_over_gross =
+            CostAllocationData { allocated_net_amount: Amount::from_str("114.00").unwrap(), ..data() };
         assert!(CostAllocation::new(CostAllocationId::new("ca-7"), net_over_gross).is_err());
     }
 
     #[test]
     fn new_rejects_negative_amounts() {
         // 负含税金额走 is_sign_negative 分支，错误文案与零金额一致。
-        let negative_gross = CostAllocationData {
-            allocated_gross_amount: Amount::from_str("-1.00").unwrap(),
-            ..data()
-        };
+        let negative_gross =
+            CostAllocationData { allocated_gross_amount: Amount::from_str("-1.00").unwrap(), ..data() };
         let error = CostAllocation::new(CostAllocationId::new("ca-8"), negative_gross).unwrap_err();
         assert_eq!(error.to_string(), "分配金额必须为正数");
 
         // 负不含税金额同样拒绝。
-        let negative_net = CostAllocationData {
-            allocated_net_amount: Amount::from_str("-1.00").unwrap(),
-            ..data()
-        };
+        let negative_net =
+            CostAllocationData { allocated_net_amount: Amount::from_str("-1.00").unwrap(), ..data() };
         let error = CostAllocation::new(CostAllocationId::new("ca-9"), negative_net).unwrap_err();
         assert_eq!(error.to_string(), "分配金额必须为正数");
     }

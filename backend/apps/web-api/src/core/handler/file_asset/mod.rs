@@ -8,16 +8,12 @@
 //! （TRANSACTIONS.md：事务闭包内禁止文件 I/O）。
 
 use application_core::AuditActor;
-use axum::{
-    body::Body,
-    extract::{Multipart, Path, Query, State},
-    http::{
-        header::{CACHE_CONTROL, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS},
-        HeaderValue, StatusCode,
-    },
-    response::Response,
-    Extension, Json,
-};
+use axum::body::Body;
+use axum::extract::{Multipart, Path, Query, State};
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
+use axum::http::{HeaderValue, StatusCode};
+use axum::response::Response;
+use axum::{Extension, Json};
 use erp_support::{
     AttachToDocumentRequest, DestroyFileAssetRequest, DocumentAttachmentView, FileAssetListItemView,
     FileAssetListParams, FileAssetView, MarkScanResultRequest, PageView, PendingFileAssetRequest,
@@ -26,14 +22,10 @@ use erp_support::{
 use serde::de::DeserializeOwned;
 use tracing::error;
 
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::{Error, Result},
-        response::ApiResponse,
-        upload,
-    },
-};
+use crate::app_state::AppState;
+use crate::core::errors::{Error, Result};
+use crate::core::response::ApiResponse;
+use crate::core::upload;
 
 #[permission_macros::permission(
     group = "文件资产",
@@ -100,10 +92,7 @@ pub async fn file_asset_preview(
     Path(id): Path<String>,
 ) -> std::result::Result<Response, Error> {
     let view = state.file_asset_service().file_asset_preview(&id, &actor).await?;
-    if !matches!(
-        view.content_type.as_str(),
-        "image/jpeg" | "image/png" | "image/webp" | "application/pdf"
-    ) {
+    if !matches!(view.content_type.as_str(), "image/jpeg" | "image/png" | "image/webp" | "application/pdf") {
         return Err(Error::Unprocessable("当前文件类型不支持在线预览".to_string()));
     }
     if matches!(
@@ -112,25 +101,17 @@ pub async fn file_asset_preview(
     ) {
         return Err(Error::Unprocessable("文件未通过安全检查，不能预览".to_string()));
     }
-    let content = state
-        .storage()
-        .read(&view.storage_object_key)
-        .await
-        .map_err(|storage_error| {
-            error!(error = %storage_error, file_asset_id = %id, "Failed to read file asset preview");
-            Error::Internal("Object storage operation failed".to_string())
-        })?;
+    let content = state.storage().read(&view.storage_object_key).await.map_err(|storage_error| {
+        error!(error = %storage_error, file_asset_id = %id, "Failed to read file asset preview");
+        Error::Internal("Object storage operation failed".to_string())
+    })?;
     let content_type = HeaderValue::from_str(&view.content_type)
         .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream"));
     let mut response = Response::new(Body::from(content));
     *response.status_mut() = StatusCode::OK;
     response.headers_mut().insert(CONTENT_TYPE, content_type);
-    response
-        .headers_mut()
-        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
-    response
-        .headers_mut()
-        .insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    response.headers_mut().insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    response.headers_mut().insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
     Ok(response)
 }
 
@@ -162,28 +143,19 @@ pub async fn file_asset_upload(
 ) -> Result<FileAssetView> {
     let file = extract_asset_file(&mut multipart).await?;
     let fields = FileAssetFormFields::from_multipart(&mut multipart).await?;
-    let request = store_asset_file(
-        &state,
-        file,
-        fields.sensitivity_class,
-        fields.retention_class,
-        fields.expires_at,
-    )
-    .await?;
-    let cleanup = [PendingFileAssetRequest {
-        reference: "file-upload".to_string(),
-        registration: request.clone(),
-    }];
+    let request =
+        store_asset_file(&state, file, fields.sensitivity_class, fields.retention_class, fields.expires_at)
+            .await?;
+    let cleanup =
+        [PendingFileAssetRequest { reference: "file-upload".to_string(), registration: request.clone() }];
     let service = state.file_asset_service();
     let result = match fields.document_id {
         Some(document_id) => {
             erp_read_models::sales_center::access::SalesAccess::new(state.db(), state.rbac())
                 .require_attachment(&actor, "update", document_id.as_ref())
                 .await?;
-            service
-                .register_file_asset_with_attachment(request, document_id, fields.usage, &actor)
-                .await
-        }
+            service.register_file_asset_with_attachment(request, document_id, fields.usage, &actor).await
+        },
         None => service.register_file_asset(request, &actor).await,
     };
     let mut asset = match result {
@@ -194,7 +166,7 @@ pub async fn file_asset_upload(
                 delete_pending_asset_objects(&state, &cleanup).await;
             }
             return Err(error.into());
-        }
+        },
     };
     prepare_asset_response(&state, &mut asset);
 
@@ -219,7 +191,7 @@ fn build_public_url(state: &AppState, storage_object_key: &str) -> String {
                 "Failed to build S3 public URL; fallback to object key"
             );
             storage_object_key.to_string()
-        }
+        },
     }
 }
 
@@ -256,10 +228,7 @@ pub async fn file_asset_register(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<RegisterFileAssetRequest>,
 ) -> Result<FileAssetView> {
-    let mut view = state
-        .file_asset_service()
-        .register_file_asset(req, &actor)
-        .await?;
+    let mut view = state.file_asset_service().register_file_asset(req, &actor).await?;
     prepare_asset_response(&state, &mut view);
 
     Ok(ApiResponse::ok_with_data(view))
@@ -361,10 +330,7 @@ pub async fn file_asset_scan_result(
     Path(id): Path<String>,
     Json(req): Json<MarkScanResultRequest>,
 ) -> Result<FileAssetView> {
-    let mut view = state
-        .file_asset_service()
-        .mark_scan_result(&id, req, &actor)
-        .await?;
+    let mut view = state.file_asset_service().mark_scan_result(&id, req, &actor).await?;
     prepare_asset_response(&state, &mut view);
 
     Ok(ApiResponse::ok_with_data(view))
@@ -393,10 +359,7 @@ pub async fn file_asset_destroy(
     Path(id): Path<String>,
     Json(req): Json<DestroyFileAssetRequest>,
 ) -> Result<FileAssetView> {
-    let mut view = state
-        .file_asset_service()
-        .destroy_file_asset(&id, req, &actor)
-        .await?;
+    let mut view = state.file_asset_service().destroy_file_asset(&id, req, &actor).await?;
     prepare_asset_response(&state, &mut view);
 
     Ok(ApiResponse::ok_with_data(view))
@@ -433,10 +396,8 @@ pub(crate) async fn extract_command_with_asset_files<T: DeserializeOwned>(
 
     let mut command = None;
     let mut files = Vec::new();
-    while let Some(mut field) = multipart
-        .next_field()
-        .await
-        .map_err(|_| Error::BadRequest("Multipart 表单无效".to_string()))?
+    while let Some(mut field) =
+        multipart.next_field().await.map_err(|_| Error::BadRequest("Multipart 表单无效".to_string()))?
     {
         let name = field.name().unwrap_or_default().trim().to_string();
         if let Some(file_name) = field.file_name().map(ToString::to_string) {
@@ -451,10 +412,8 @@ pub(crate) async fn extract_command_with_asset_files<T: DeserializeOwned>(
                 .map(ToString::to_string)
                 .ok_or_else(|| Error::BadRequest("缺少文件 MIME 类型".to_string()))?;
             let mut content = Vec::new();
-            while let Some(chunk) = field
-                .chunk()
-                .await
-                .map_err(|_| Error::BadRequest("上传文件读取失败".to_string()))?
+            while let Some(chunk) =
+                field.chunk().await.map_err(|_| Error::BadRequest("上传文件读取失败".to_string()))?
             {
                 if content.len().saturating_add(chunk.len()) > upload::MAX_UPLOAD_FILE_BYTES {
                     return Err(Error::BadRequest("上传文件大小不能超过 5 MiB".to_string()));
@@ -463,11 +422,7 @@ pub(crate) async fn extract_command_with_asset_files<T: DeserializeOwned>(
             }
             files.push(PendingAssetFile {
                 reference: name,
-                file: validate_asset_file(AssetFile {
-                    file_name,
-                    content_type,
-                    content,
-                })?,
+                file: validate_asset_file(AssetFile { file_name, content_type, content })?,
             });
             continue;
         }
@@ -477,10 +432,7 @@ pub(crate) async fn extract_command_with_asset_files<T: DeserializeOwned>(
         if command.is_some() {
             return Err(Error::BadRequest("业务命令不能重复".to_string()));
         }
-        let text = field
-            .text()
-            .await
-            .map_err(|_| Error::BadRequest("业务命令读取失败".to_string()))?;
+        let text = field.text().await.map_err(|_| Error::BadRequest("业务命令读取失败".to_string()))?;
         command = Some(
             serde_json::from_str::<T>(&text)
                 .map_err(|_| Error::BadRequest("业务命令格式无效".to_string()))?,
@@ -513,12 +465,9 @@ pub(crate) async fn store_pending_asset_files(
             Err(error) => {
                 delete_pending_asset_objects(state, &requests).await;
                 return Err(error);
-            }
+            },
         };
-        requests.push(PendingFileAssetRequest {
-            reference: pending.reference,
-            registration: request,
-        });
+        requests.push(PendingFileAssetRequest { reference: pending.reference, registration: request });
     }
     Ok(requests)
 }
@@ -526,11 +475,7 @@ pub(crate) async fn store_pending_asset_files(
 /// 删除一次尚未登记或事务已回滚的上传批次，作为对象存储补偿。
 pub(crate) async fn delete_pending_asset_objects(state: &AppState, requests: &[PendingFileAssetRequest]) {
     for request in requests {
-        if let Err(storage_error) = state
-            .storage()
-            .delete(&request.registration.storage_object_key)
-            .await
-        {
+        if let Err(storage_error) = state.storage().delete(&request.registration.storage_object_key).await {
             error!(
                 error = %storage_error,
                 object_key = %request.registration.storage_object_key,
@@ -578,10 +523,8 @@ pub(crate) async fn extract_asset_file_with_limit(
     max_file_bytes: usize,
 ) -> std::result::Result<AssetFile, Error> {
     let mut selected = None;
-    while let Some(mut field) = multipart
-        .next_field()
-        .await
-        .map_err(|_| Error::BadRequest("Multipart 表单无效".to_string()))?
+    while let Some(mut field) =
+        multipart.next_field().await.map_err(|_| Error::BadRequest("Multipart 表单无效".to_string()))?
     {
         let Some(file_name) = field.file_name().map(ToString::to_string) else {
             continue;
@@ -595,10 +538,8 @@ pub(crate) async fn extract_asset_file_with_limit(
             .map(ToString::to_string)
             .ok_or_else(|| Error::BadRequest("缺少文件 MIME 类型".to_string()))?;
         let mut content = Vec::new();
-        while let Some(chunk) = field
-            .chunk()
-            .await
-            .map_err(|_| Error::BadRequest("上传文件读取失败".to_string()))?
+        while let Some(chunk) =
+            field.chunk().await.map_err(|_| Error::BadRequest("上传文件读取失败".to_string()))?
         {
             if content.len().saturating_add(chunk.len()) > max_file_bytes {
                 return Err(Error::BadRequest(format!(
@@ -608,11 +549,7 @@ pub(crate) async fn extract_asset_file_with_limit(
             }
             content.extend_from_slice(&chunk);
         }
-        selected = Some(validate_asset_file(AssetFile {
-            file_name,
-            content_type,
-            content,
-        })?);
+        selected = Some(validate_asset_file(AssetFile { file_name, content_type, content })?);
         break;
     }
     selected.ok_or_else(|| Error::BadRequest("未上传文件".to_string()))
@@ -719,42 +656,35 @@ impl FileAssetFormFields {
     /// 表单字段解析失败或枚举值非法时返回错误。
     pub(crate) async fn from_multipart(multipart: &mut Multipart) -> std::result::Result<Self, Error> {
         let mut fields = Self::default();
-        while let Some(field) = multipart
-            .next_field()
-            .await
-            .map_err(|_| Error::BadRequest("Multipart 表单无效".to_string()))?
+        while let Some(field) =
+            multipart.next_field().await.map_err(|_| Error::BadRequest("Multipart 表单无效".to_string()))?
         {
             let name = field.name().unwrap_or_default().to_string();
             if field.file_name().is_some() || name.is_empty() {
                 continue;
             }
-            let text = field
-                .text()
-                .await
-                .map_err(|_| Error::BadRequest("Multipart 表单无效".to_string()))?;
+            let text = field.text().await.map_err(|_| Error::BadRequest("Multipart 表单无效".to_string()))?;
             match name.as_str() {
                 "sensitivity_class" => {
                     fields.sensitivity_class = serde_json::from_value(serde_json::Value::String(text))
                         .map_err(|_| Error::BadRequest("敏感级别非法".to_string()))?;
-                }
+                },
                 "retention_class" => {
                     fields.retention_class = serde_json::from_value(serde_json::Value::String(text))
                         .map_err(|_| Error::BadRequest("保留策略非法".to_string()))?;
-                }
+                },
                 "expires_at" => {
-                    fields.expires_at = Some(
-                        text.parse::<u64>()
-                            .map_err(|_| Error::BadRequest("到期时间非法".to_string()))?,
-                    );
-                }
+                    fields.expires_at =
+                        Some(text.parse::<u64>().map_err(|_| Error::BadRequest("到期时间非法".to_string()))?);
+                },
                 "document_id" => {
                     fields.document_id = Some(erp_core::ids::BusinessDocumentId::new(text));
-                }
+                },
                 "usage" => {
                     fields.usage = serde_json::from_value(serde_json::Value::String(text))
                         .map_err(|_| Error::BadRequest("附件用途非法".to_string()))?;
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
         Ok(fields)
@@ -772,11 +702,7 @@ fn sha256_hex(content: &[u8]) -> String {
     use jwt_sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(content);
-    hasher
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 /// 生成对象存储键：对受支持图片追加小写扩展名，便于 CDN 和浏览器识别资源类型。
@@ -802,27 +728,18 @@ fn storage_key_with_extension(id: String, file_name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        should_compensate_pending_assets, storage_key_with_extension, validate_asset_file, AssetFile,
+        AssetFile, should_compensate_pending_assets, storage_key_with_extension, validate_asset_file,
     };
 
     #[test]
     fn supported_image_names_keep_normalized_extension() {
-        assert_eq!(
-            storage_key_with_extension("id-1".to_string(), "photo.JpG"),
-            "id-1.jpg"
-        );
-        assert_eq!(
-            storage_key_with_extension("id-2".to_string(), "photo.png"),
-            "id-2.png"
-        );
+        assert_eq!(storage_key_with_extension("id-1".to_string(), "photo.JpG"), "id-1.jpg");
+        assert_eq!(storage_key_with_extension("id-2".to_string(), "photo.png"), "id-2.png");
     }
 
     #[test]
     fn unsupported_or_extensionless_names_stay_unchanged() {
-        assert_eq!(
-            storage_key_with_extension("id-3".to_string(), "report.pdf"),
-            "id-3"
-        );
+        assert_eq!(storage_key_with_extension("id-3".to_string(), "report.pdf"), "id-3");
         assert_eq!(storage_key_with_extension("id-4".to_string(), "photo"), "id-4");
     }
 

@@ -1,16 +1,14 @@
-use crate::entity::legacy_import::{LegacyImportBatch, LegacyImportBatchId};
-use crate::repository::LegacyImportExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
-
-use crate::error::{Error, Result};
 
 use super::LegacyImportService;
 use crate::dto::legacy_import::{
     LegacyImportBatchListItem, LegacyImportBatchListParams, LegacyImportBatchListQuery,
     LegacyImportBatchView, LegacyImportRowListParams, LegacyImportRowView, PageView, SortDir,
 };
-use crate::repository::{LegacyImportBatchFilter, LegacyImportRowFilter};
+use crate::entity::legacy_import::{LegacyImportBatch, LegacyImportBatchId};
+use crate::error::{Error, Result};
+use crate::repository::{LegacyImportBatchFilter, LegacyImportExt, LegacyImportRowFilter};
 
 impl LegacyImportService {
     /// 分页查询导入批次列表。
@@ -33,11 +31,8 @@ impl LegacyImportService {
         params.validate()?;
         let query = params.normalized()?;
         let filter = self.batch_filter_of(&query);
-        let page = self
-            .db
-            .legacy_import_batches()
-            .search_legacy_import_batches(&filter, &mut NoTransaction)
-            .await?;
+        let page =
+            self.db.legacy_import_batches().search_legacy_import_batches(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -59,12 +54,7 @@ impl LegacyImportService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 查询导入批次详情（含后台任务关联）。
@@ -120,11 +110,8 @@ impl LegacyImportService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .legacy_import_rows()
-            .search_legacy_import_rows(&filter, &mut NoTransaction)
-            .await?;
+        let page =
+            self.db.legacy_import_rows().search_legacy_import_rows(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -144,12 +131,7 @@ impl LegacyImportService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 构造导入批次列表筛选条件。
@@ -184,10 +166,8 @@ impl LegacyImportService {
     /// # 错误
     /// 数据库查询失败时返回错误。
     pub(super) async fn batch_view_of(&self, batch: LegacyImportBatch) -> Result<LegacyImportBatchView> {
-        let background_job_id = self
-            .bulk_jobs
-            .background_job_id_by_request_id(&batch.batch_no, &mut NoTransaction)
-            .await?;
+        let background_job_id =
+            self.bulk_jobs.background_job_id_by_request_id(&batch.batch_no, &mut NoTransaction).await?;
         let mut view: LegacyImportBatchView = batch.into();
         view.background_job_id = background_job_id;
         Ok(view)

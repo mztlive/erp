@@ -30,8 +30,6 @@ impl AdminRuntime {
         persistence_core::ensure_transaction_support(&db).await?;
         crate::indexes::ensure_indexes(&db).await?;
         let rbac = shared_rbac_service(db.clone());
-        Ok(Self {
-            service: AdminService::new(db, rbac),
-        })
+        Ok(Self { service: AdminService::new(db, rbac) })
     }
 }

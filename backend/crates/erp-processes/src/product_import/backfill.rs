@@ -3,14 +3,14 @@
 use std::collections::HashMap;
 
 use application_core::AuditActor;
-use erp_catalog::entity::catalog::{parse_specification_signature, EnableStatus, Product, Sku, SkuRevision};
+use erp_catalog::entity::catalog::{EnableStatus, Product, Sku, SkuRevision, parse_specification_signature};
 use erp_catalog::{CatalogExt, ProductMediaInput, ProductSkuInput, SpecEntryInput, UpdateProductRequest};
 use erp_core::ids::{FileAssetId, ProductId, SkuId, SkuRevisionId};
 use persistence_core::NoTransaction;
 
-use super::images::{resolve_row_media, RowMedia, RowMediaSource};
-use super::row::RowImportOutcome;
 use super::ProductImportProcess;
+use super::images::{RowMedia, RowMediaSource, resolve_row_media};
+use super::row::RowImportOutcome;
 use crate::{Error, Result};
 
 impl ProductImportProcess {
@@ -77,14 +77,8 @@ impl ProductImportProcess {
             .skus()
             .find_by_product_ids(&[ProductId::new(product.base.id.clone())], &mut NoTransaction)
             .await?;
-        let revisions = self
-            .db
-            .catalog()
-            .current_sku_revisions(&skus, &mut NoTransaction)
-            .await?;
-        Ok(revisions
-            .values()
-            .any(|revision| revision.source_main_image_asset_id.is_some()))
+        let revisions = self.db.catalog().current_sku_revisions(&skus, &mut NoTransaction).await?;
+        Ok(revisions.values().any(|revision| revision.source_main_image_asset_id.is_some()))
     }
 
     async fn update_request_with_images(
@@ -106,11 +100,7 @@ impl ProductImportProcess {
             .skus()
             .find_by_product_ids(&[ProductId::new(product.base.id.clone())], &mut NoTransaction)
             .await?;
-        let revisions = self
-            .db
-            .catalog()
-            .current_sku_revisions(&skus, &mut NoTransaction)
-            .await?;
+        let revisions = self.db.catalog().current_sku_revisions(&skus, &mut NoTransaction).await?;
         let sku_inputs = sku_inputs_with_main_image(&skus, &revisions, media.main_image.clone())?;
         Ok(UpdateProductRequest {
             version: product.base.version,
@@ -165,10 +155,7 @@ pub(super) fn sku_inputs_with_main_image(
 ) -> Result<Vec<ProductSkuInput>> {
     let mut inputs = Vec::new();
     let mut assigned_main = false;
-    for sku in skus
-        .iter()
-        .filter(|sku| sku.stable.status == EnableStatus::Active)
-    {
+    for sku in skus.iter().filter(|sku| sku.stable.status == EnableStatus::Active) {
         let Some(revision) = revisions.get(&sku.base.id) else {
             continue;
         };
@@ -184,17 +171,12 @@ pub(super) fn sku_inputs_with_main_image(
             revision.source_main_image_asset_id.clone()
         } else {
             assigned_main = true;
-            main_image
-                .clone()
-                .or_else(|| revision.source_main_image_asset_id.clone())
+            main_image.clone().or_else(|| revision.source_main_image_asset_id.clone())
         };
         inputs.push(ProductSkuInput {
             sku_id: Some(SkuId::new(sku.base.id.clone())),
             expected_sku_revision_id: Some(SkuRevisionId::new(
-                sku.stable
-                    .current_revision_id
-                    .clone()
-                    .unwrap_or_else(|| revision.base.id.clone()),
+                sku.stable.current_revision_id.clone().unwrap_or_else(|| revision.base.id.clone()),
             )),
             reenable: false,
             sku_no: sku.sku_no.clone(),

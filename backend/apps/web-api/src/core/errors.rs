@@ -1,10 +1,11 @@
-use super::response::ApiResponse;
-use axum::{
-    http::{header::RETRY_AFTER, HeaderValue, StatusCode},
-    response::IntoResponse,
-    Json,
-};
 use std::collections::BTreeMap;
+
+use axum::Json;
+use axum::http::header::RETRY_AFTER;
+use axum::http::{HeaderValue, StatusCode};
+use axum::response::IntoResponse;
+
+use super::response::ApiResponse;
 
 const TECHNICAL_MESSAGE_TERMS: &[&str] = &[
     "work_item",
@@ -90,13 +91,13 @@ impl From<persistence_core::Error> for Error {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
                 Self::Conflict(duplicate_index_conflict_message(error.duplicate_index_name()))
-            }
+            },
             persistence_core::Error::OptimisticLockingError => {
                 Self::Conflict("数据已被其他请求修改，请刷新后重试".to_string())
-            }
+            },
             persistence_core::Error::TransientTransactionConflict(_) => {
                 Self::Conflict("并发事务冲突，请重试".to_string())
-            }
+            },
             error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
             other => Self::Internal(format!("数据库错误：{other}")),
         }
@@ -351,10 +352,10 @@ fn historical_index_message(index: &str) -> Option<&'static str> {
         "uk_procurement_confirmation_lines_confirmation_line"
         | "uk_procurement_confirmation_lines_active_confirmation_line" => {
             Some("该采购确认已有相同分行序号，请刷新后重试")
-        }
+        },
         "uk_product_publication_revisions_publication_revision" => {
             Some("该发布修订序号已被占用，请刷新后重试")
-        }
+        },
         _ => None,
     }
 }
@@ -362,10 +363,7 @@ fn historical_index_message(index: &str) -> Option<&'static str> {
 /// 仅三项精确历史 DuplicateKey 从应用 typed 载体进入兼容响应。
 fn historical_http_duplicate(error: &persistence_core::Error) -> bool {
     matches!(error, persistence_core::Error::DuplicateKey(_))
-        && error
-            .duplicate_index_name()
-            .and_then(historical_index_message)
-            .is_some()
+        && error.duplicate_index_name().and_then(historical_index_message).is_some()
 }
 
 /// 按唯一拥有者查询索引提示；未知或无索引名保持原通用提示。
@@ -456,7 +454,7 @@ impl Error {
             Error::NotFound(_) => "NOT_FOUND",
             Error::Conflict(message) if data_scope_changed_user_message(message).is_some() => {
                 "DATA_SCOPE_CHANGED"
-            }
+            },
             Error::Conflict(_) => "CONFLICT",
             Error::Unprocessable(_) | Error::Logic(_) => "BUSINESS_RULE_BLOCKED",
             Error::Forbidden(_) => "PERMISSION_DENIED",
@@ -479,14 +477,14 @@ impl Error {
             Error::Internal(_) => "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string(),
             Error::OutcomeUnknown(_) => {
                 "操作结果暂无法确认，请先查询当前状态，确认未处理后再决定是否重试".to_string()
-            }
+            },
             Error::BadRequest(message) => {
                 user_message_or(message, "提交内容不符合要求，请检查后重试", "请修改后重试")
-            }
+            },
             Error::Validation(_) => "提交内容不符合要求，请根据字段提示修改后重试".to_string(),
             Error::NotFound(message) => {
                 user_message_or(message, "没有找到所需资料，请刷新后重新选择", "请刷新后重新选择")
-            }
+            },
             Error::Conflict(message) => user_message_or(
                 data_scope_changed_user_message(message).unwrap_or(message),
                 "当前资料状态不允许继续操作，请刷新后核对",
@@ -510,21 +508,21 @@ impl Error {
             Error::Unauthorized(_) => "登录状态已失效，请重新登录".to_string(),
             Error::RateLimited(error) if error.retry_after_secs().is_some() => {
                 "请求过于频繁，请稍后重试".to_string()
-            }
+            },
             Error::RateLimited(_) => "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string(),
             Error::Coded(code) => match code.class() {
                 application_core::ErrorClass::Internal => {
                     "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string()
-                }
+                },
                 application_core::ErrorClass::Conflict => {
                     "当前资料状态不允许继续操作，请刷新后核对".to_string()
-                }
+                },
                 application_core::ErrorClass::BusinessRule => {
                     "当前业务条件不允许继续操作，请核对相关资料后重试".to_string()
-                }
+                },
                 application_core::ErrorClass::Forbidden => {
                     "当前账号没有执行此操作的权限，请联系管理员或有权限的同事".to_string()
-                }
+                },
             },
         }
     }
@@ -606,18 +604,12 @@ fn user_message_or(message: &str, fallback: &str, next_step: &str) -> String {
 /// 判断内部错误原因是否符合用户展示合同。
 fn user_message_is_safe(message: &str) -> bool {
     let message = message.trim();
-    if message.is_empty()
-        || !message
-            .chars()
-            .any(|character| ('\u{3400}'..='\u{9fff}').contains(&character))
+    if message.is_empty() || !message.chars().any(|character| ('\u{3400}'..='\u{9fff}').contains(&character))
     {
         return false;
     }
     let normalized = message.to_ascii_lowercase();
-    if TECHNICAL_MESSAGE_TERMS
-        .iter()
-        .any(|term| normalized.contains(&term.to_ascii_lowercase()))
-    {
+    if TECHNICAL_MESSAGE_TERMS.iter().any(|term| normalized.contains(&term.to_ascii_lowercase())) {
         return false;
     }
     !message
@@ -640,11 +632,13 @@ pub type Result<T> = std::result::Result<ApiResponse<T>, Error>;
 
 #[cfg(test)]
 mod tests {
-    use super::{duplicate_index_conflict_message, Error};
     use axum::body::to_bytes;
-    use axum::http::{header::RETRY_AFTER, StatusCode};
+    use axum::http::StatusCode;
+    use axum::http::header::RETRY_AFTER;
     use axum::response::IntoResponse;
     use serde_json::Value;
+
+    use super::{Error, duplicate_index_conflict_message};
 
     #[test]
     fn maps_service_error_with_semantics() {
@@ -703,28 +697,12 @@ mod tests {
     #[test]
     fn maps_http_status_code_correctly() {
         let cases = [
-            (
-                Error::BadRequest("x".into()),
-                StatusCode::BAD_REQUEST,
-                "INVALID_REQUEST",
-            ),
+            (Error::BadRequest("x".into()), StatusCode::BAD_REQUEST, "INVALID_REQUEST"),
             (Error::NotFound("x".into()), StatusCode::NOT_FOUND, "NOT_FOUND"),
             (Error::Conflict("x".into()), StatusCode::CONFLICT, "CONFLICT"),
-            (
-                Error::Unprocessable("x".into()),
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "BUSINESS_RULE_BLOCKED",
-            ),
-            (
-                Error::Forbidden("x".into()),
-                StatusCode::FORBIDDEN,
-                "PERMISSION_DENIED",
-            ),
-            (
-                Error::Unauthorized("x".into()),
-                StatusCode::UNAUTHORIZED,
-                "UNAUTHENTICATED",
-            ),
+            (Error::Unprocessable("x".into()), StatusCode::UNPROCESSABLE_ENTITY, "BUSINESS_RULE_BLOCKED"),
+            (Error::Forbidden("x".into()), StatusCode::FORBIDDEN, "PERMISSION_DENIED"),
+            (Error::Unauthorized("x".into()), StatusCode::UNAUTHORIZED, "UNAUTHENTICATED"),
             (
                 Error::RateLimited(crate::core::rate_limit::Error::ConcurrencyExceeded),
                 StatusCode::TOO_MANY_REQUESTS,
@@ -735,11 +713,7 @@ mod tests {
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "BUSINESS_RULE_BLOCKED",
             ),
-            (
-                Error::Internal("x".into()),
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "INTERNAL_ERROR",
-            ),
+            (Error::Internal("x".into()), StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR"),
             (
                 Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(
                     mongodb::error::Error::custom("unknown"),
@@ -759,16 +733,12 @@ mod tests {
     #[tokio::test]
     async fn internal_error_does_not_expose_underlying_message() {
         let response = Error::Internal("database password leaked".into()).into_response();
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("response body should be readable");
+        let body =
+            to_bytes(response.into_body(), usize::MAX).await.expect("response body should be readable");
         let body: Value = serde_json::from_slice(&body).expect("response body should be valid JSON");
 
         assert_eq!(body["status"], 500);
-        assert_eq!(
-            body["errorMessage"],
-            "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员"
-        );
+        assert_eq!(body["errorMessage"], "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员");
         assert_eq!(body["retryable"], true);
         assert_eq!(body["success"], false);
         assert!(!body.to_string().contains("database password leaked"));
@@ -780,16 +750,12 @@ mod tests {
             mongodb::error::Error::custom("driver details"),
         ))
         .into_response();
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("response body should be readable");
+        let body =
+            to_bytes(response.into_body(), usize::MAX).await.expect("response body should be readable");
         let body: Value = serde_json::from_slice(&body).expect("response body should be valid JSON");
 
         assert_eq!(body["status"], 500);
-        assert_eq!(
-            body["errorMessage"],
-            "操作结果暂无法确认，请先查询当前状态，确认未处理后再决定是否重试"
-        );
+        assert_eq!(body["errorMessage"], "操作结果暂无法确认，请先查询当前状态，确认未处理后再决定是否重试");
         assert_eq!(body["retryable"], false);
         assert!(!body.to_string().contains("driver details"));
     }
@@ -797,9 +763,8 @@ mod tests {
     #[tokio::test]
     async fn business_error_keeps_reason_and_adds_next_step() {
         let response = Error::Conflict("主体编号已存在".into()).into_response();
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("response body should be readable");
+        let body =
+            to_bytes(response.into_body(), usize::MAX).await.expect("response body should be readable");
         let body: Value = serde_json::from_slice(&body).expect("response body should be valid JSON");
 
         assert_eq!(body["errorMessage"], "主体编号已存在，请核对当前资料后再操作");
@@ -820,9 +785,8 @@ mod tests {
             assert_eq!(error.error_code(), "DATA_SCOPE_CHANGED");
             let response = error.into_response();
             assert_eq!(response.status(), StatusCode::CONFLICT);
-            let body = to_bytes(response.into_body(), usize::MAX)
-                .await
-                .expect("response body should be readable");
+            let body =
+                to_bytes(response.into_body(), usize::MAX).await.expect("response body should be readable");
             let body: Value = serde_json::from_slice(&body).expect("response body should be valid JSON");
             assert_eq!(body["status"], 409);
             assert_eq!(body["code"], "DATA_SCOPE_CHANGED");
@@ -836,15 +800,11 @@ mod tests {
     #[tokio::test]
     async fn technical_business_error_uses_safe_fallback() {
         let response = Error::Logic(erp_core::Error::from("同步水位不得回退")).into_response();
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("response body should be readable");
+        let body =
+            to_bytes(response.into_body(), usize::MAX).await.expect("response body should be readable");
         let body: Value = serde_json::from_slice(&body).expect("response body should be valid JSON");
 
-        assert_eq!(
-            body["errorMessage"],
-            "当前业务条件不允许继续操作，请核对相关资料后重试"
-        );
+        assert_eq!(body["errorMessage"], "当前业务条件不允许继续操作，请核对相关资料后重试");
         assert!(!body.to_string().contains("水位"));
     }
 
@@ -852,9 +812,8 @@ mod tests {
     async fn serialized_validation_details_use_safe_fallback() {
         let response = Error::BadRequest("customer_id: Validation error: required [客户不能为空]".into())
             .into_response();
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("response body should be readable");
+        let body =
+            to_bytes(response.into_body(), usize::MAX).await.expect("response body should be readable");
         let body: Value = serde_json::from_slice(&body).expect("response body should be valid JSON");
 
         assert_eq!(body["errorMessage"], "提交内容不符合要求，请检查后重试");
@@ -864,9 +823,8 @@ mod tests {
     #[tokio::test]
     async fn business_abbreviations_remain_readable() {
         let response = Error::Unprocessable("SKU 已停用".into()).into_response();
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("response body should be readable");
+        let body =
+            to_bytes(response.into_body(), usize::MAX).await.expect("response body should be readable");
         let body: Value = serde_json::from_slice(&body).expect("response body should be valid JSON");
 
         assert_eq!(body["errorMessage"], "SKU 已停用，请核对相关业务条件后再操作");

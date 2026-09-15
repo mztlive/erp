@@ -5,9 +5,10 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as ContractExt>::CONTRACTS` 等值。
 
+use mongodb::Database;
+
 use crate::repository::contract::{ContractDomainRepository, ContractFilter};
 use crate::repository::owned::{ContractRepository, ContractRevisionRepository};
-use mongodb::Database;
 
 /// 域 D12 仓储访问器。
 pub trait ContractExt {

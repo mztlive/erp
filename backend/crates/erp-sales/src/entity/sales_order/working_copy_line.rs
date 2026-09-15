@@ -6,16 +6,15 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::Instant;
 use erp_core::ids::{SalesOrderLineId, SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId, SkuId};
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::amount_validation::sum_line_amounts;
-use super::types::{build_line_groups, GoodsLineFields, LineType, VoucherLineDraft, WelfareScenario};
+use super::types::{GoodsLineFields, LineType, VoucherLineDraft, WelfareScenario, build_line_groups};
 
 /// 销售项名称快照最大长度。
 const ITEM_NAME_MAX_LEN: usize = 256;
@@ -198,10 +197,8 @@ impl SalesOrderWorkingCopyLine {
         if self.line_type != LineType::GoodsService {
             return Ok(None);
         }
-        let sku_id = self
-            .sku_id
-            .as_ref()
-            .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU", self.line_no)))?;
+        let sku_id =
+            self.sku_id.as_ref().ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU", self.line_no)))?;
         let revision_id = self
             .sku_revision_id
             .as_ref()
@@ -234,9 +231,7 @@ impl SalesOrderWorkingCopyLine {
             fulfillment_due_at: self
                 .fulfillment_due_at
                 .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", self.line_no)))?,
-            quantity: self
-                .quantity
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少数量", self.line_no)))?,
+            quantity: self.quantity.ok_or_else(|| Error::from(format!("第 {} 行缺少数量", self.line_no)))?,
             base_unit_code: self
                 .base_unit_code
                 .clone()
@@ -295,11 +290,7 @@ impl SalesOrderWorkingCopyLine {
     /// # 错误
     /// 无；金额值对象负责保持精度和范围。
     pub fn amount_totals(lines: &[Self]) -> (Amount, Amount, Amount) {
-        sum_line_amounts(
-            lines
-                .iter()
-                .map(|line| (line.gross_amount, line.net_amount, line.tax_amount)),
-        )
+        sum_line_amounts(lines.iter().map(|line| (line.gross_amount, line.net_amount, line.tax_amount)))
     }
 }
 
@@ -362,16 +353,15 @@ mod tests {
 
     #[test]
     fn line_new_rejects_zero_no_mismatch_and_inconsistent_voucher() {
-        let zero = SalesOrderWorkingCopyLineData {
-            line_no: 0,
-            ..line_data(1)
-        };
-        assert!(SalesOrderWorkingCopyLine::new(
-            SalesOrderWorkingCopyLineId::new("wcl-1"),
-            SalesOrderWorkingCopyId::new("wc-1"),
-            zero
-        )
-        .is_err());
+        let zero = SalesOrderWorkingCopyLineData { line_no: 0, ..line_data(1) };
+        assert!(
+            SalesOrderWorkingCopyLine::new(
+                SalesOrderWorkingCopyLineId::new("wcl-1"),
+                SalesOrderWorkingCopyId::new("wc-1"),
+                zero
+            )
+            .is_err()
+        );
 
         let mismatch = SalesOrderWorkingCopyLineData {
             line_type: LineType::Voucher,
@@ -379,23 +369,25 @@ mod tests {
             voucher: None,
             ..line_data(1)
         };
-        assert!(SalesOrderWorkingCopyLine::new(
-            SalesOrderWorkingCopyLineId::new("wcl-1"),
-            SalesOrderWorkingCopyId::new("wc-1"),
-            mismatch
-        )
-        .is_err());
+        assert!(
+            SalesOrderWorkingCopyLine::new(
+                SalesOrderWorkingCopyLineId::new("wcl-1"),
+                SalesOrderWorkingCopyId::new("wc-1"),
+                mismatch
+            )
+            .is_err()
+        );
 
-        let blank_item = SalesOrderWorkingCopyLineData {
-            item_name_snapshot: "   ".to_string(),
-            ..line_data(1)
-        };
-        assert!(SalesOrderWorkingCopyLine::new(
-            SalesOrderWorkingCopyLineId::new("wcl-1"),
-            SalesOrderWorkingCopyId::new("wc-1"),
-            blank_item
-        )
-        .is_err());
+        let blank_item =
+            SalesOrderWorkingCopyLineData { item_name_snapshot: "   ".to_string(), ..line_data(1) };
+        assert!(
+            SalesOrderWorkingCopyLine::new(
+                SalesOrderWorkingCopyLineId::new("wcl-1"),
+                SalesOrderWorkingCopyId::new("wc-1"),
+                blank_item
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -409,17 +401,11 @@ mod tests {
 
         let mut missing_goods = goods.clone();
         missing_goods.sku_id = None;
-        assert_eq!(
-            missing_goods.goods_fields().unwrap_err().to_string(),
-            "第 1 行缺少商品字段组"
-        );
+        assert_eq!(missing_goods.goods_fields().unwrap_err().to_string(), "第 1 行缺少商品字段组");
 
         let mut missing_voucher = goods;
         missing_voucher.line_type = LineType::Voucher;
-        assert_eq!(
-            missing_voucher.voucher_fields().unwrap_err().to_string(),
-            "第 1 行缺少卡券字段组"
-        );
+        assert_eq!(missing_voucher.voucher_fields().unwrap_err().to_string(), "第 1 行缺少卡券字段组");
     }
 
     #[test]

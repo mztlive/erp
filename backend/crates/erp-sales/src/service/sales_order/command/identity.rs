@@ -1,15 +1,14 @@
 //! Stable sales command receipt identities and payload fingerprints.
+use sha2::{Digest, Sha256};
+
 use crate::dto::sales_order::SubmitSalesOrderRequest;
 use crate::{Error, Result};
-use sha2::{Digest, Sha256};
 
 /// 为销售提交幂等命令生成不泄露原始幂等键的稳定收据 ID。
 pub fn sales_submission_audit_id(actor_id: &str, sales_order_id: &str, idempotency_key: &str) -> String {
     format!(
         "sales-order-submit-{}",
-        hex::encode(Sha256::digest(
-            format!("{actor_id}|{sales_order_id}|{idempotency_key}").as_bytes()
-        ))
+        hex::encode(Sha256::digest(format!("{actor_id}|{sales_order_id}|{idempotency_key}").as_bytes()))
     )
 }
 
@@ -50,8 +49,9 @@ pub fn sales_order_create_fingerprint<T: serde::Serialize>(actor_id: &str, reque
 
 #[cfg(test)]
 mod compile_probe_equivalence_tests {
-    use super::{sales_submission_fingerprint, SubmitSalesOrderRequest};
     use sha2::{Digest, Sha256};
+
+    use super::{SubmitSalesOrderRequest, sales_submission_fingerprint};
 
     #[test]
     fn complete_submission_payload_and_hash_match_frozen_goods_and_voucher_bytes() {

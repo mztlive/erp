@@ -1,12 +1,12 @@
 //! 结算草稿创建、刷新与作废命令。
 
+use application_core::non_blank;
 use erp_core::ids::SupplierAccountId;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::query::SupplierSettlementStatementView;
 use super::safe_command_id;
-use application_core::non_blank;
 
 /// 草稿来源动作。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

@@ -1,12 +1,13 @@
 //! SalesReturnCase 的本域构造与头、首行持久化。
-use crate::dto::CreateSalesReturnCaseRequest;
-use crate::entity::returns::{SalesReturnCase, SalesReturnCaseData, SalesReturnLine, SalesReturnLineData};
-use crate::repository::ReturnsExt;
-use crate::Result;
 use erp_core::ids::{SalesReturnCaseId, SalesReturnLineId};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::Result;
+use crate::dto::CreateSalesReturnCaseRequest;
+use crate::entity::returns::{SalesReturnCase, SalesReturnCaseData, SalesReturnLine, SalesReturnLineData};
+use crate::repository::ReturnsExt;
 
 /// 由创建请求构造处理单与首条明细。
 ///
@@ -63,22 +64,22 @@ pub async fn persist_sales_return_case_with_line(
     line: &SalesReturnLine,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    db.returns()
-        .create_sales_return_with_line(case, line, executor)
-        .await?;
+    db.returns().create_sales_return_with_line(case, line, executor).await?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::build_sales_return_case_and_line;
-    use crate::dto::{CreateSalesReturnCaseRequest, CreateSalesReturnLineRequest};
-    use crate::entity::returns::{CaseType, ReturnRoute};
+    use std::str::FromStr;
+
     use erp_core::common::time::Instant;
     use erp_core::ids::{SalesOrderId, SalesOrderLineId};
     use erp_core::money::Quantity;
-    use std::str::FromStr;
     use validator::Validate;
+
+    use super::build_sales_return_case_and_line;
+    use crate::dto::{CreateSalesReturnCaseRequest, CreateSalesReturnLineRequest};
+    use crate::entity::returns::{CaseType, ReturnRoute};
 
     #[test]
     fn creation_keeps_only_the_first_requested_sales_return_line() {

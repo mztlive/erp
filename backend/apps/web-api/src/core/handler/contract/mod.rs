@@ -4,16 +4,12 @@
 //! 直接复用 `erp_contract` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
-use axum::{
-    body::Body,
-    extract::{Multipart, Path, Query, State},
-    http::{
-        header::{CACHE_CONTROL, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS},
-        HeaderValue, StatusCode,
-    },
-    response::Response,
-    Extension, Json,
-};
+use axum::body::Body;
+use axum::extract::{Multipart, Path, Query, State};
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
+use axum::http::{HeaderValue, StatusCode};
+use axum::response::Response;
+use axum::{Extension, Json};
 use erp_contract::{
     ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractListView, ContractView,
     CreateContractRequest, TerminateContractRequest, UploadContractRequest, UploadContractView,
@@ -24,16 +20,11 @@ use tracing::error;
 use super::file_asset::{
     extract_asset_file_with_limit, prepare_asset_response, should_compensate_pending_assets, store_asset_file,
 };
-
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::{Error, Result},
-        handler::customer::ensure_customer_access,
-        response::ApiResponse,
-        upload,
-    },
-};
+use crate::app_state::AppState;
+use crate::core::errors::{Error, Result};
+use crate::core::handler::customer::ensure_customer_access;
+use crate::core::response::ApiResponse;
+use crate::core::upload;
 
 #[permission_macros::permission(
     group = "合同",
@@ -127,14 +118,8 @@ pub async fn contract_upload(
     let command =
         command.ok_or_else(|| crate::core::errors::Error::BadRequest("缺少合同命令".to_string()))?;
     ensure_customer_access(&state, &actor, "detail", command.customer_id.as_ref()).await?;
-    let asset_request = store_asset_file(
-        &state,
-        file,
-        SensitivityClass::Sensitive,
-        RetentionClass::LongTerm,
-        None,
-    )
-    .await?;
+    let asset_request =
+        store_asset_file(&state, file, SensitivityClass::Sensitive, RetentionClass::LongTerm, None).await?;
     let object_key = asset_request.storage_object_key.clone();
     let result =
         erp_processes::upload_contract(state.db(), state.rbac(), command, asset_request, actor).await;
@@ -145,7 +130,7 @@ pub async fn contract_upload(
                 let _ = state.storage().delete(&object_key).await;
             }
             return Err(error.into());
-        }
+        },
     };
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -198,10 +183,7 @@ pub async fn contract_file(
     Extension(actor): Extension<AuditActor>,
     Path((id, file_id)): Path<(String, String)>,
 ) -> Result<FileAssetView> {
-    state
-        .contract_service()
-        .require_attachment(&actor, &id, &file_id)
-        .await?;
+    state.contract_service().require_attachment(&actor, &id, &file_id).await?;
     let mut view = state.file_asset_service().file_asset_detail(&file_id).await?;
     prepare_asset_response(&state, &mut view);
     Ok(ApiResponse::ok_with_data(view))
@@ -229,36 +211,22 @@ pub async fn contract_file_preview(
     Extension(actor): Extension<AuditActor>,
     Path((id, file_id)): Path<(String, String)>,
 ) -> std::result::Result<Response, Error> {
-    state
-        .contract_service()
-        .require_attachment(&actor, &id, &file_id)
-        .await?;
-    let view = state
-        .file_asset_service()
-        .file_asset_preview(&file_id, &actor)
-        .await?;
+    state.contract_service().require_attachment(&actor, &id, &file_id).await?;
+    let view = state.file_asset_service().file_asset_preview(&file_id, &actor).await?;
     if view.content_type.as_str() != "application/pdf" {
         return Err(Error::Unprocessable("当前文件类型不支持在线预览".to_string()));
     }
-    let content = state
-        .storage()
-        .read(&view.storage_object_key)
-        .await
-        .map_err(|storage_error| {
-            error!(error = %storage_error, file_asset_id = %file_id, "Failed to read contract PDF");
-            Error::Internal("Object storage operation failed".to_string())
-        })?;
+    let content = state.storage().read(&view.storage_object_key).await.map_err(|storage_error| {
+        error!(error = %storage_error, file_asset_id = %file_id, "Failed to read contract PDF");
+        Error::Internal("Object storage operation failed".to_string())
+    })?;
     let content_type = HeaderValue::from_str(&view.content_type)
         .unwrap_or_else(|_| HeaderValue::from_static("application/pdf"));
     let mut response = Response::new(Body::from(content));
     *response.status_mut() = StatusCode::OK;
     response.headers_mut().insert(CONTENT_TYPE, content_type);
-    response
-        .headers_mut()
-        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
-    response
-        .headers_mut()
-        .insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    response.headers_mut().insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    response.headers_mut().insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
     Ok(response)
 }
 
@@ -285,10 +253,7 @@ pub async fn contract_archive_revision(
     Path(id): Path<String>,
     Json(req): Json<ArchiveContractRevisionRequest>,
 ) -> Result<ContractDetailView> {
-    let view = state
-        .contract_service()
-        .archive_contract_revision(&id, req, &actor)
-        .await?;
+    let view = state.contract_service().archive_contract_revision(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -316,10 +281,7 @@ pub async fn contract_terminate(
     Path(id): Path<String>,
     Json(req): Json<TerminateContractRequest>,
 ) -> Result<ContractDetailView> {
-    let view = state
-        .contract_service()
-        .terminate_contract(&id, req, &actor)
-        .await?;
+    let view = state.contract_service().terminate_contract(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -354,9 +316,10 @@ pub(crate) async fn ensure_contract_access(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use axum::extract::Query;
     use axum::http::Uri;
+
+    use super::*;
 
     /// 合同 Query 解码必须消费范围版本与组织筛选，并拒绝旧姓名参数。
     ///

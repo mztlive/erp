@@ -2,15 +2,14 @@
 //!
 //! DTO/预占到领域规格的转换与系统 ID 注入；编号与归属规则归实体批量工厂。
 
-use crate::entity::facts::ReceiptReservationLineFact;
-use crate::entity::fulfillment::DeliveryLineSpec;
 use erp_core::ids::DeliveryLineId;
 use id_generator::next_id;
 
-use crate::Result;
-
 use super::FulfillmentService;
+use crate::Result;
 use crate::dto::DeliveryLineInput;
+use crate::entity::facts::ReceiptReservationLineFact;
+use crate::entity::fulfillment::DeliveryLineSpec;
 
 impl FulfillmentService {
     /// 发货创建指纹算法与密钥版本的 golden 断言锚点。

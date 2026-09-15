@@ -4,19 +4,18 @@
 //! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；业务日期 `baseline_date`
 //! 为 `YYYY-MM-DD` 字符串；本域无金额字段。
 
-use crate::entity::legacy_import::{
-    ConfirmationDecision, ConfirmationScope, ConfirmationStatus, ImportStatus, LegacyImportBatch,
-    LegacyImportBatchStatus, MappingStatus, ParseStatus,
-};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{FileAssetId, LegacyImportBatchId, LegacyImportRowId, SourceSystemId, WorkItemId};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::error::{Error, Result};
-use application_core::{normalized_text, page_or_default, page_size_or_default};
-
 use super::receipt::{optional_text, parse_command_version, required_text};
+use crate::entity::legacy_import::{
+    ConfirmationDecision, ConfirmationScope, ConfirmationStatus, ImportStatus, LegacyImportBatch,
+    LegacyImportBatchStatus, MappingStatus, ParseStatus,
+};
+use crate::error::{Error, Result};
 
 /// Background-job status snapshot; wire code matches support `JobStatus`.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -59,6 +58,10 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串不生效）。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -72,12 +75,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串不生效）。
-use application_core::non_blank;
 
 /// 导入行创建请求（行级来源身份与规范化载荷，数据模型 §6.12）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -644,9 +641,7 @@ impl TryFrom<CompleteImportBusinessConfirmationCommand> for PreparedConfirmation
     /// 范围未注册、版本非法或动作专属原因矩阵非法时返回错误。
     fn try_from(command: CompleteImportBusinessConfirmationCommand) -> Result<Self> {
         let decision = command.decision;
-        let confirmation_scope = ConfirmationScope::parse(&decision.confirmation_scope)?
-            .as_str()
-            .to_string();
+        let confirmation_scope = ConfirmationScope::parse(&decision.confirmation_scope)?.as_str().to_string();
         let reason_code = optional_text(decision.reason_code);
         if decision.action == ConfirmationDecision::ReturnForFix && reason_code.is_none() {
             return Err(Error::ValidationError("退回修复必须提供原因代码".to_string()));
@@ -714,23 +709,17 @@ impl TryFrom<ImportExecutionCommand> for PreparedImportExecution {
             .as_deref()
             .map(|value| parse_command_version(value, "试算版本"))
             .transpose()?;
-        if matches!(
-            command.action,
-            ImportExecutionAction::StartApply | ImportExecutionAction::RetryFailed
-        ) && expected_trial_version.is_none()
+        if matches!(command.action, ImportExecutionAction::StartApply | ImportExecutionAction::RetryFailed)
+            && expected_trial_version.is_none()
         {
-            return Err(Error::ValidationError(
-                "提交应用或重试失败项必须携带试算版本".to_string(),
-            ));
+            return Err(Error::ValidationError("提交应用或重试失败项必须携带试算版本".to_string()));
         }
         let reason_code = optional_text(command.reason_code);
         if command.action == ImportExecutionAction::CancelPending && reason_code.is_none() {
             return Err(Error::ValidationError("取消尚未应用项必须提供原因码".to_string()));
         }
         if command.action == ImportExecutionAction::StartApply && reason_code.is_some() {
-            return Err(Error::ValidationError(
-                "提交应用不得携带取消或重试原因码".to_string(),
-            ));
+            return Err(Error::ValidationError("提交应用不得携带取消或重试原因码".to_string()));
         }
         Ok(Self {
             batch_id: command.batch_id,
@@ -787,11 +776,8 @@ impl LegacyImportConfirmationListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub fn normalized(&self) -> Result<LegacyImportConfirmationListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(
-            &self.sort_by,
-            &self.sort_dir,
-            LEGACY_IMPORT_CONFIRMATION_SORT_FIELDS,
-        )?;
+        let (sort_by, sort_dir) =
+            normalize_sort(&self.sort_by, &self.sort_dir, LEGACY_IMPORT_CONFIRMATION_SORT_FIELDS)?;
         Ok(LegacyImportConfirmationListQuery {
             batch_id: self.batch_id.clone(),
             confirmation_scope: normalized_text(self.confirmation_scope.as_deref()),
@@ -859,10 +845,11 @@ pub const CUSTOMER_NOT_FOUND_ERROR_DETAIL: &str = "目标客户主体不存在�
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, LegacyImportBatchListParams, SortDir};
     use erp_core::common::time::BusinessDate;
     use serde_json::json;
     use validator::Validate;
+
+    use super::{LegacyImportBatchListParams, SortDir, normalize_sort};
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
@@ -981,16 +968,20 @@ mod tests {
                 idempotency_key: " request-1 ".to_string(),
             }
         }
-        assert!(super::PreparedConfirmationCompletion::try_from(command(
-            ConfirmationDecision::ReturnForFix,
-            None
-        ))
-        .is_err());
-        assert!(super::PreparedConfirmationCompletion::try_from(command(
-            ConfirmationDecision::ConfirmScope,
-            Some("REWORK")
-        ))
-        .is_err());
+        assert!(
+            super::PreparedConfirmationCompletion::try_from(command(
+                ConfirmationDecision::ReturnForFix,
+                None
+            ))
+            .is_err()
+        );
+        assert!(
+            super::PreparedConfirmationCompletion::try_from(command(
+                ConfirmationDecision::ConfirmScope,
+                Some("REWORK")
+            ))
+            .is_err()
+        );
         let prepared = super::PreparedConfirmationCompletion::try_from(command(
             ConfirmationDecision::ReturnForFix,
             Some("REWORK"),
@@ -998,11 +989,13 @@ mod tests {
         .unwrap();
         assert_eq!(prepared.confirmation_scope, "SALES");
         assert_eq!(prepared.idempotency_key, "request-1");
-        assert!(super::PreparedConfirmationCompletion::try_from(command(
-            ConfirmationDecision::ConfirmScope,
-            None
-        ))
-        .is_ok());
+        assert!(
+            super::PreparedConfirmationCompletion::try_from(command(
+                ConfirmationDecision::ConfirmScope,
+                None
+            ))
+            .is_ok()
+        );
     }
 
     #[test]
@@ -1022,24 +1015,30 @@ mod tests {
                 request_id: " request-1 ".to_string(),
             }
         }
-        assert!(super::PreparedImportExecution::try_from(command(
-            super::ImportExecutionAction::StartApply,
-            None,
-            None
-        ))
-        .is_err());
-        assert!(super::PreparedImportExecution::try_from(command(
-            super::ImportExecutionAction::CancelPending,
-            None,
-            None
-        ))
-        .is_err());
-        assert!(super::PreparedImportExecution::try_from(command(
-            super::ImportExecutionAction::StartApply,
-            Some("2"),
-            Some("REASON")
-        ))
-        .is_err());
+        assert!(
+            super::PreparedImportExecution::try_from(command(
+                super::ImportExecutionAction::StartApply,
+                None,
+                None
+            ))
+            .is_err()
+        );
+        assert!(
+            super::PreparedImportExecution::try_from(command(
+                super::ImportExecutionAction::CancelPending,
+                None,
+                None
+            ))
+            .is_err()
+        );
+        assert!(
+            super::PreparedImportExecution::try_from(command(
+                super::ImportExecutionAction::StartApply,
+                Some("2"),
+                Some("REASON")
+            ))
+            .is_err()
+        );
         let prepared = super::PreparedImportExecution::try_from(command(
             super::ImportExecutionAction::RetryFailed,
             Some("2"),

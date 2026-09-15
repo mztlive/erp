@@ -1,14 +1,14 @@
 //! 通知 outbox worker：租约、幂等发送、退避与死信。
 
-use crate::entity::approval_integration::{
-    ApprovalNotificationDeliveryStatus, ApprovalNotificationOutbox, MAX_DELIVERY_ATTEMPTS, RETRY_BACKOFF_SECS,
-};
-use crate::repository::ApprovalIntegrationExt;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
+use crate::entity::approval_integration::{
+    ApprovalNotificationDeliveryStatus, ApprovalNotificationOutbox, MAX_DELIVERY_ATTEMPTS, RETRY_BACKOFF_SECS,
+};
 use crate::error::{Error, Result};
+use crate::repository::ApprovalIntegrationExt;
 
 /// 单次 outbox 领取上限。
 const OUTBOX_BATCH_LIMIT: u32 = 20;
@@ -66,9 +66,9 @@ pub fn apply_delivery_attempt(
 ) -> Result<()> {
     match attempt {
         DeliveryAttempt::Delivered => item.mark_delivered().map_err(Error::from),
-        DeliveryAttempt::Retryable | DeliveryAttempt::Fatal => item
-            .mark_failure(error_class(attempt), failed_at)
-            .map_err(Error::from),
+        DeliveryAttempt::Retryable | DeliveryAttempt::Fatal => {
+            item.mark_failure(error_class(attempt), failed_at).map_err(Error::from)
+        },
     }
 }
 
@@ -187,7 +187,7 @@ where
             DeliveryAttempt::Delivered => {
                 store.mark_delivered(&item.base.id, worker_id)?;
                 outcome.delivered = outcome.delivered.saturating_add(1);
-            }
+            },
             DeliveryAttempt::Retryable | DeliveryAttempt::Fatal => {
                 apply_delivery_attempt(&mut item, attempt, now)?;
                 if item.delivery_status
@@ -198,7 +198,7 @@ where
                     outcome.retried = outcome.retried.saturating_add(1);
                 }
                 store.save_after_failure(item, worker_id)?;
-            }
+            },
         }
     }
     Ok(outcome)
@@ -237,10 +237,7 @@ impl ApprovalNotificationOutboxPort {
     /// # 返回
     /// 返回真实仓储端口，发送口未接入时失败关闭。
     pub fn new(db: Database) -> Self {
-        Self {
-            db,
-            sender: FailClosedNotificationSender,
-        }
+        Self { db, sender: FailClosedNotificationSender }
     }
 
     /// 领取并处理一批到期消息。
@@ -330,16 +327,17 @@ impl ApprovalNotificationOutboxPort {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::time::Instant;
+    use erp_core::ids::ApprovalNotificationOutboxId;
+
     use super::{
-        apply_delivery_attempt, retry_backoff_secs, should_dead_letter, DeliveryAttempt,
-        MAX_DELIVERY_ATTEMPTS,
+        DeliveryAttempt, MAX_DELIVERY_ATTEMPTS, apply_delivery_attempt, retry_backoff_secs,
+        should_dead_letter,
     };
     use crate::entity::approval_integration::{
         ApprovalNotificationDeliveryStatus, ApprovalNotificationEventKind, ApprovalNotificationOutbox,
         ApprovalNotificationTemplateParams,
     };
-    use erp_core::common::time::Instant;
-    use erp_core::ids::ApprovalNotificationOutboxId;
 
     /// 未接线发送口必须失败关闭，不得伪造成功。
     #[test]
@@ -366,8 +364,7 @@ mod tests {
     fn execution_worker_lease_success_and_retry() {
         let now = Instant::from_unix_secs(1_700_000_000);
         let mut item = enqueue(now);
-        item.acquire_lease("worker-1", now, Instant::from_unix_secs(1_700_000_030))
-            .unwrap();
+        item.acquire_lease("worker-1", now, Instant::from_unix_secs(1_700_000_030)).unwrap();
         apply_delivery_attempt(&mut item, DeliveryAttempt::Retryable, now).unwrap();
         assert_eq!(item.delivery_status, ApprovalNotificationDeliveryStatus::Pending);
         assert_eq!(item.attempt_count, 1);
@@ -378,10 +375,7 @@ mod tests {
         )
         .unwrap();
         apply_delivery_attempt(&mut item, DeliveryAttempt::Delivered, now).unwrap();
-        assert_eq!(
-            item.delivery_status,
-            ApprovalNotificationDeliveryStatus::Delivered
-        );
+        assert_eq!(item.delivery_status, ApprovalNotificationDeliveryStatus::Delivered);
     }
 
     /// 超过最大次数进入死信。
@@ -391,21 +385,17 @@ mod tests {
         let mut item = enqueue(now);
         for _ in 0..MAX_DELIVERY_ATTEMPTS {
             let at = item.next_attempt_at;
-            item.acquire_lease("worker-1", at, Instant::from_unix_secs(at.unix_secs() + 30))
-                .unwrap();
+            item.acquire_lease("worker-1", at, Instant::from_unix_secs(at.unix_secs() + 30)).unwrap();
             apply_delivery_attempt(&mut item, DeliveryAttempt::Retryable, at).unwrap();
         }
-        assert_eq!(
-            item.delivery_status,
-            ApprovalNotificationDeliveryStatus::DeadLetter
-        );
+        assert_eq!(item.delivery_status, ApprovalNotificationDeliveryStatus::DeadLetter);
         assert_eq!(item.attempt_count, MAX_DELIVERY_ATTEMPTS);
     }
 
     /// 有界租约后按去重键幂等发送，成功 CAS，失败退避。
     #[test]
     fn execution_worker_processes_leased_batch() {
-        use super::{process_outbox_batch, OutboxLeaseStore, WorkerBatchOutcome};
+        use super::{OutboxLeaseStore, WorkerBatchOutcome, process_outbox_batch};
 
         struct AlwaysOk;
         impl super::NotificationSender for AlwaysOk {
@@ -458,11 +448,7 @@ mod tests {
                 if item.lease_owner.as_deref() != Some(worker_id) && item.lease_owner.is_some() {
                     return Err(crate::error::Error::ConflictError("租约已易主".to_string()));
                 }
-                if let Some(slot) = self
-                    .items
-                    .iter_mut()
-                    .find(|current| current.base.id == item.base.id)
-                {
+                if let Some(slot) = self.items.iter_mut().find(|current| current.base.id == item.base.id) {
                     *slot = item;
                 }
                 Ok(())
@@ -470,22 +456,10 @@ mod tests {
         }
 
         let now = Instant::from_unix_secs(1_700_000_000);
-        let mut store = MemoryOutbox {
-            items: vec![enqueue(now)],
-        };
+        let mut store = MemoryOutbox { items: vec![enqueue(now)] };
         let outcome = process_outbox_batch(&mut store, &AlwaysOk, "worker-1", now, 10).unwrap();
-        assert_eq!(
-            outcome,
-            WorkerBatchOutcome {
-                delivered: 1,
-                retried: 0,
-                dead_lettered: 0,
-            }
-        );
-        assert_eq!(
-            store.items[0].delivery_status,
-            ApprovalNotificationDeliveryStatus::Delivered
-        );
+        assert_eq!(outcome, WorkerBatchOutcome { delivered: 1, retried: 0, dead_lettered: 0 });
+        assert_eq!(store.items[0].delivery_status, ApprovalNotificationDeliveryStatus::Delivered);
     }
 
     fn enqueue(at: Instant) -> ApprovalNotificationOutbox {

@@ -1,9 +1,8 @@
 //! 确定性状态迁移计划。只含 BPM 状态与中性任务意图。
 
+use super::event::BpmEvent;
 use crate::ids::ApprovalNodeExecutionId;
 use crate::model::{ApprovalInstanceAssignee, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId};
-
-use super::event::BpmEvent;
 
 /// 计划提交类别。`Blocked` 表示本次决定不被接受，但阻塞事实必须提交。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

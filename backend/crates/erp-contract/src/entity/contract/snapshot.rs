@@ -8,10 +8,9 @@
 //! 各域各自定义（P1 合同 §3 跨域约束），待 `chore/erp-p0-amend-*` 地基修订统一
 //! 下沉到 `entities/src/common/`。
 
-use serde::{Deserialize, Serialize};
-
-use erp_core::validation::normalize_required_text;
 use erp_core::Result;
+use erp_core::validation::normalize_required_text;
+use serde::{Deserialize, Serialize};
 
 /// 客户名称最大长度。
 const CUSTOMER_NAME_MAX_LEN: usize = 128;
@@ -111,9 +110,7 @@ impl SettlementPartySnapshot {
             PARTY_NAME_MAX_LEN,
             "结算主体名称过长",
         )?;
-        Ok(Self {
-            settlement_party_name,
-        })
+        Ok(Self { settlement_party_name })
     }
 }
 
@@ -151,10 +148,7 @@ impl PaymentTermSnapshot {
             PAYMENT_TERM_NAME_MAX_LEN,
             "付款条件名称过长",
         )?;
-        Ok(Self {
-            payment_term_code,
-            payment_term_name,
-        })
+        Ok(Self { payment_term_code, payment_term_name })
     }
 }
 
@@ -188,10 +182,7 @@ impl InvoiceRequirementSnapshot {
         )?;
         let tax_point =
             normalize_required_text(tax_point.into(), "税点不能为空", TAX_POINT_MAX_LEN, "税点过长")?;
-        Ok(Self {
-            invoice_type,
-            tax_point,
-        })
+        Ok(Self { invoice_type, tax_point })
     }
 }
 

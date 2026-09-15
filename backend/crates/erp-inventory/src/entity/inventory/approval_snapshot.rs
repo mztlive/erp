@@ -2,11 +2,12 @@
 //!
 //! 快照责任组织、对手方、数量合计、行数与空行拒绝的唯一规则源。
 
-use crate::entity::inventory::{StockAdjustment, StockAdjustmentLine};
 use erp_core::common::time::Instant;
 use erp_core::ids::WarehouseId;
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+
+use crate::entity::inventory::{StockAdjustment, StockAdjustmentLine};
 
 /// 库存调整本域审批快照事实；不含工作流聚合。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,10 +100,12 @@ fn sum_line_quantity(lines: &[StockAdjustmentLine]) -> Result<Quantity> {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use erp_core::ids::{SkuId, StockAdjustmentId, StockAdjustmentLineId};
+
     use super::*;
     use crate::entity::inventory::{MovementDirection, StockAdjustmentData, StockAdjustmentLineData};
-    use erp_core::ids::{SkuId, StockAdjustmentId, StockAdjustmentLineId};
-    use std::str::FromStr;
 
     fn adjustment() -> StockAdjustment {
         StockAdjustment::new(
@@ -172,12 +175,14 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(StockAdjustmentApprovalSnapshot::build(
-            &adjustment(),
-            &[overflow.clone(), overflow],
-            "user-1",
-            Instant::from_unix_secs(10),
-        )
-        .is_err());
+        assert!(
+            StockAdjustmentApprovalSnapshot::build(
+                &adjustment(),
+                &[overflow.clone(), overflow],
+                "user-1",
+                Instant::from_unix_secs(10),
+            )
+            .is_err()
+        );
     }
 }

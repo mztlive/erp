@@ -1,17 +1,16 @@
+use erp_core::ids::SupplierQualificationId;
+use mongodb::bson::doc;
+use persistence_core::{Executor, Result, mongo_ops};
+
+use super::{
+    SUPPLIER_ACCOUNTS, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS, SUPPLIER_PROFILE_COMMANDS,
+    SUPPLIER_QUALIFICATION_CAPABILITIES, SupplierRepository,
+};
 use crate::entity::supplier::{
     SupplierAccount, SupplierCommercialProfileRevision, SupplierProfileCommand,
     SupplierQualificationCapability,
 };
 use crate::repository::owned::SupplierProfileCommandRepository;
-use erp_core::ids::SupplierQualificationId;
-use mongodb::bson::doc;
-
-use super::{
-    SupplierRepository, SUPPLIER_ACCOUNTS, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS, SUPPLIER_PROFILE_COMMANDS,
-    SUPPLIER_QUALIFICATION_CAPABILITIES,
-};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
 
 impl<'a> SupplierProfileCommandRepository<'a> {
     /// 按客户端幂等键读取已成功命令结果。
@@ -23,8 +22,7 @@ impl<'a> SupplierProfileCommandRepository<'a> {
         idempotency_key: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierProfileCommand>> {
-        self.find_one(doc! { "idempotency_key": idempotency_key }, executor)
-            .await
+        self.find_one(doc! { "idempotency_key": idempotency_key }, executor).await
     }
 }
 
@@ -76,19 +74,13 @@ impl<'a> SupplierRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<SupplierCommercialProfileRevision>(SUPPLIER_COMMERCIAL_PROFILE_REVISIONS),
+            &self.db.collection::<SupplierCommercialProfileRevision>(SUPPLIER_COMMERCIAL_PROFILE_REVISIONS),
             revision,
             executor,
         )
         .await?;
-        mongo_ops::insert_one(
-            &self.db.collection::<SupplierAccount>(SUPPLIER_ACCOUNTS),
-            supplier,
-            executor,
-        )
-        .await
+        mongo_ops::insert_one(&self.db.collection::<SupplierAccount>(SUPPLIER_ACCOUNTS), supplier, executor)
+            .await
     }
 
     /// 在同一事务内整体替换一份资质的适用能力集合。
@@ -104,17 +96,13 @@ impl<'a> SupplierRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::delete_many(
-            &self
-                .db
-                .collection::<SupplierQualificationCapability>(SUPPLIER_QUALIFICATION_CAPABILITIES),
+            &self.db.collection::<SupplierQualificationCapability>(SUPPLIER_QUALIFICATION_CAPABILITIES),
             doc! { "qualification_id": qualification_id.to_string() },
             executor,
         )
         .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<SupplierQualificationCapability>(SUPPLIER_QUALIFICATION_CAPABILITIES),
+            &self.db.collection::<SupplierQualificationCapability>(SUPPLIER_QUALIFICATION_CAPABILITIES),
             links,
             executor,
         )

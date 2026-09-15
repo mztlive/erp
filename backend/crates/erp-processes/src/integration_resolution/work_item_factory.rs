@@ -1,8 +1,10 @@
 //! W29 责任 Spec 到真实 WorkItem 的唯一装配。
-use erp_core::{common::time::Instant, ids::WorkItemId, Result};
+use erp_core::Result;
+use erp_core::common::time::Instant;
+use erp_core::ids::WorkItemId;
 use erp_integration::entity::integration_ops::{
-    difference_responsibility, error_responsibility, IntegrationErrorTask, IntegrationResponsibilityKind,
-    IntegrationResponsibilityPriority, IntegrationResponsibilitySpec, ReconciliationDifference,
+    IntegrationErrorTask, IntegrationResponsibilityKind, IntegrationResponsibilityPriority,
+    IntegrationResponsibilitySpec, ReconciliationDifference, difference_responsibility, error_responsibility,
 };
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
@@ -64,7 +66,7 @@ fn new_work_item(id: WorkItemId, spec: IntegrationResponsibilitySpec, now: Insta
                 IntegrationResponsibilityKind::BusinessException => WorkItemType::BusinessException,
                 IntegrationResponsibilityKind::IntegrationResultUnknown => {
                     WorkItemType::IntegrationResultUnknown
-                }
+                },
             },
             business_object_type: spec.business_object_type,
             business_object_id: spec.business_object_id,
@@ -88,12 +90,13 @@ fn new_work_item(id: WorkItemId, spec: IntegrationResponsibilitySpec, now: Insta
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::ids::{IntegrationErrorTaskId, ReconciliationDifferenceId};
     use erp_integration::entity::integration_ops::{
-        ErrorClass, IntegrationErrorTaskData, ReconciliationDifferenceData, DIFFERENCE_WORK_ITEM_OBJECT_TYPE,
-        ERROR_WORK_ITEM_OBJECT_TYPE, W29_OWNER_ORGANIZATION,
+        DIFFERENCE_WORK_ITEM_OBJECT_TYPE, ERROR_WORK_ITEM_OBJECT_TYPE, ErrorClass, IntegrationErrorTaskData,
+        ReconciliationDifferenceData, W29_OWNER_ORGANIZATION,
     };
+
+    use super::*;
     const NOW: i64 = 1_700_000_000;
     fn error_task(error_class: ErrorClass) -> IntegrationErrorTask {
         IntegrationErrorTask::new(
@@ -143,10 +146,7 @@ mod tests {
         assert_eq!(item.assignment_source, AssignmentSource::SystemRule);
         assert_eq!(item.priority, WorkItemPriority::Urgent);
         assert_eq!(item.reason_code.as_deref(), Some("result_unknown"));
-        assert!(item
-            .impact_summary
-            .as_deref()
-            .is_some_and(|summary| summary.contains("结果未知")));
+        assert!(item.impact_summary.as_deref().is_some_and(|summary| summary.contains("结果未知")));
     }
 
     #[test]
@@ -160,31 +160,27 @@ mod tests {
         .unwrap();
 
         assert_eq!(item.work_item_type, WorkItemType::BusinessException);
-        assert_eq!(
-            item.business_object_type.as_str(),
-            DIFFERENCE_WORK_ITEM_OBJECT_TYPE
-        );
+        assert_eq!(item.business_object_type.as_str(), DIFFERENCE_WORK_ITEM_OBJECT_TYPE);
         assert_eq!(item.business_object_id.as_str(), "diff-1");
         assert_eq!(item.subject_version.as_str(), "0");
         assert_eq!(item.owner_role.as_str(), "role-finance");
         assert_eq!(item.owner_user_id.as_deref(), Some("user-2"));
         assert_eq!(item.priority, WorkItemPriority::High);
         assert_eq!(item.reason_code.as_deref(), Some("amount_mismatch"));
-        assert!(item
-            .impact_summary
-            .as_deref()
-            .is_some_and(|summary| summary.contains("amount_mismatch")));
+        assert!(item.impact_summary.as_deref().is_some_and(|summary| summary.contains("amount_mismatch")));
     }
 
     #[test]
     fn factories_reject_unknown_difference_and_blank_owner() {
-        assert!(new_difference_work_item(
-            WorkItemId::new("wi-3"),
-            &difference("status_difference"),
-            "   ",
-            Instant::from_unix_secs(NOW),
-        )
-        .is_err());
+        assert!(
+            new_difference_work_item(
+                WorkItemId::new("wi-3"),
+                &difference("status_difference"),
+                "   ",
+                Instant::from_unix_secs(NOW),
+            )
+            .is_err()
+        );
 
         let unknown = ReconciliationDifference::new(
             ReconciliationDifferenceId::new("diff-9"),
@@ -197,12 +193,14 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(new_difference_work_item(
-            WorkItemId::new("wi-4"),
-            &unknown,
-            "user-9",
-            Instant::from_unix_secs(NOW),
-        )
-        .is_err());
+        assert!(
+            new_difference_work_item(
+                WorkItemId::new("wi-4"),
+                &unknown,
+                "user-9",
+                Instant::from_unix_secs(NOW),
+            )
+            .is_err()
+        );
     }
 }

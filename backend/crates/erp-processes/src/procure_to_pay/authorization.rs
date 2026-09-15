@@ -1,15 +1,13 @@
 //! 采购单写命令的授权快照与事务内账号、范围重验。
 
-use erp_identity::AccessControlExt;
-use erp_identity::Permission;
-use erp_procurement::entity::purchase_order::PurchaseOrder;
+use application_core::AuditActor;
+use erp_identity::{AccessControlExt, Permission, SharedRbacService, subject};
 use erp_procurement::PurchaseAccess;
+use erp_procurement::entity::purchase_order::PurchaseOrder;
 use persistence_core::{Executor, NoTransaction};
 
 use super::PurchaseOrderProcess;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_identity::{subject, SharedRbacService};
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 
@@ -47,23 +45,15 @@ impl PurchaseOrderProcess {
         for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
             let before = rbac.current_policy_revision().await?;
             ensure_purchase_order_actor_account(&self.db, actor, &mut NoTransaction).await?;
-            if !rbac
-                .enforce(&subject(actor.kind(), actor.id()), &permission)
-                .await?
-            {
+            if !rbac.enforce(&subject(actor.kind(), actor.id()), &permission).await? {
                 return Err(Error::Forbidden(format!("当前账号缺少 {permission_code} 权限")));
             }
             let after = rbac.current_policy_revision().await?;
             if before == after {
-                return Ok(PurchaseOrderAuthorization {
-                    rbac: rbac.clone(),
-                    policy_revision: before,
-                });
+                return Ok(PurchaseOrderAuthorization { rbac: rbac.clone(), policy_revision: before });
             }
         }
-        Err(Error::Rbac(
-            "采购单授权策略持续变化，无法形成稳定快照".to_string(),
-        ))
+        Err(Error::Rbac("采购单授权策略持续变化，无法形成稳定快照".to_string()))
     }
 
     /// 构造写命令范围检查器；缺少身份装配时拒绝，不退回路由级授权。
@@ -149,9 +139,7 @@ impl PurchaseCommandAccess {
     ) -> Result<()> {
         let current = self.current(id, executor).await?;
         if current.base.version != expected {
-            return Err(Error::ConflictError(
-                "采购单责任或版本已变化，请刷新后重试".into(),
-            ));
+            return Err(Error::ConflictError("采购单责任或版本已变化，请刷新后重试".into()));
         }
         Ok(())
     }

@@ -3,13 +3,14 @@
 //! `close_at < valid_from` 必须失败且零 mutation；同日关闭不写零长度
 //! `valid_to`；晚于开始日才写入 `valid_to = close_at`。
 
+use erp_core::common::time::BusinessDate;
+use erp_core::field_update::FieldUpdate;
+use erp_core::{Error, Result};
+
 use super::party_address::{PartyAddress, PartyAddressUpdate};
 use super::party_bank_account::{PartyBankAccount, PartyBankAccountUpdate};
 use super::party_contact::{PartyContact, PartyContactUpdate};
 use super::status::EffectiveRecordStatus;
-use erp_core::common::time::BusinessDate;
-use erp_core::field_update::FieldUpdate;
-use erp_core::{Error, Result};
 
 /// 关闭日期相对生效开始日的生命周期计划。
 enum ClosePlan {
@@ -35,11 +36,7 @@ impl ClosePlan {
         if close_at < valid_from {
             return Err(Error::from("关闭日期不能早于生效开始日期"));
         }
-        if close_at == valid_from {
-            Ok(Self::SameDay)
-        } else {
-            Ok(Self::After { valid_to: close_at })
-        }
+        if close_at == valid_from { Ok(Self::SameDay) } else { Ok(Self::After { valid_to: close_at }) }
     }
 
     /// 转换为实体更新使用的结束日期意图。
@@ -143,14 +140,15 @@ impl PartyBankAccount {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::Error;
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{PartyAddressId, PartyBankAccountId, PartyContactId, PartyId};
+
     use super::{PartyAddress, PartyBankAccount, PartyContact};
     use crate::entity::party::party_address::{AddressType, PartyAddressData};
     use crate::entity::party::party_bank_account::PartyBankAccountData;
     use crate::entity::party::party_contact::PartyContactData;
     use crate::entity::party::status::EffectiveRecordStatus;
-    use erp_core::common::time::BusinessDate;
-    use erp_core::ids::{PartyAddressId, PartyBankAccountId, PartyContactId, PartyId};
-    use erp_core::Error;
 
     const KEY: &[u8] = b"close-at-test-key";
 

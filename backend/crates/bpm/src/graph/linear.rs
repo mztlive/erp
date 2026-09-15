@@ -86,10 +86,7 @@ pub fn build_linear_transitions(
     transition_ids: Vec<ApprovalTransitionDefinitionId>,
     at: Timestamp,
 ) -> ModelResult<Vec<ApprovalTransitionDefinition>> {
-    let keys = super::ordered_nodes(nodes)?
-        .into_iter()
-        .map(|node| node.node_key.clone())
-        .collect::<Vec<_>>();
+    let keys = super::ordered_nodes(nodes)?.into_iter().map(|node| node.node_key.clone()).collect::<Vec<_>>();
     let drafts = generate_linear_transitions(&keys)?;
     if drafts.len() != transition_ids.len() {
         return Err(ModelError::InvalidField("线性连线身份数量不匹配"));
@@ -169,10 +166,12 @@ mod tests {
         assert_eq!(drafts.len(), 4);
         assert_eq!(drafts[0].to_node_key.as_deref(), Some("n2"));
         assert_eq!(drafts[2].terminal_result, Some(ApprovalTerminalResult::Approved));
-        assert!(drafts
-            .iter()
-            .filter(|item| item.event == ApprovalTransitionEvent::Reject)
-            .all(|item| item.to_node_key.as_deref() == Some("n1")));
+        assert!(
+            drafts
+                .iter()
+                .filter(|item| item.event == ApprovalTransitionEvent::Reject)
+                .all(|item| item.to_node_key.as_deref() == Some("n1"))
+        );
     }
 
     /// 空列表与重复键失败关闭。

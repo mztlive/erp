@@ -2,10 +2,9 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{BusinessDocumentId, DocumentRelationId};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 关系类型（数据模型 §6.1：`CHANGES`、`RETURNS`、`REFUNDS`、`REVERSES`、
 /// `RED_OF`、`DERIVED_FROM`；固定枚举，无文档状态机）。
@@ -114,9 +113,10 @@ impl DocumentRelation {
 
 #[cfg(test)]
 mod tests {
-    use super::{DocumentRelation, DocumentRelationData, DocumentRelationType};
-    use erp_core::ids::{BusinessDocumentId, DocumentRelationId};
     use erp_core::Error;
+    use erp_core::ids::{BusinessDocumentId, DocumentRelationId};
+
+    use super::{DocumentRelation, DocumentRelationData, DocumentRelationType};
 
     fn data() -> DocumentRelationData {
         DocumentRelationData {
@@ -138,10 +138,7 @@ mod tests {
     /// 失败路径：同一单据不能与自己建立关系。
     #[test]
     fn new_rejects_self_relation() {
-        let payload = DocumentRelationData {
-            from_document_id: BusinessDocumentId::new("order-1"),
-            ..data()
-        };
+        let payload = DocumentRelationData { from_document_id: BusinessDocumentId::new("order-1"), ..data() };
         let error = DocumentRelation::new(DocumentRelationId::new("rel-1"), payload).unwrap_err();
         match error {
             Error::LogicError(message) => assert!(message.contains("不能与自己")),
@@ -152,10 +149,7 @@ mod tests {
     /// 枚举序列化与标签稳定。
     #[test]
     fn relation_type_codes_and_labels_are_stable() {
-        assert_eq!(
-            serde_json::to_string(&DocumentRelationType::RedOf).unwrap(),
-            "\"RED_OF\""
-        );
+        assert_eq!(serde_json::to_string(&DocumentRelationType::RedOf).unwrap(), "\"RED_OF\"");
         assert_eq!(DocumentRelationType::Refunds.as_str(), "REFUNDS");
         assert_eq!(DocumentRelationType::Reverses.label(), "冲正");
         assert_eq!(DocumentRelationType::DerivedFrom.label(), "派生");

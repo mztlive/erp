@@ -5,14 +5,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::CustomerExt;
-use persistence_core::Result;
 
 /// `customer_account` 集合名。
 pub(crate) const CUSTOMER_ACCOUNTS: &str = <mongodb::Database as CustomerExt>::CUSTOMER_ACCOUNTS;
@@ -47,9 +45,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -74,10 +70,7 @@ fn customer_assignment_indexes() -> Vec<IndexModel> {
                 "valid_from": 1,
             },
         ),
-        named_index(
-            "idx_customer_assignments_user",
-            doc! { "user_id": 1, "valid_to": 1 },
-        ),
+        named_index("idx_customer_assignments_user", doc! { "user_id": 1, "valid_to": 1 }),
         named_index(
             "idx_customer_assignments_customer",
             doc! { "customer_id": 1, "assignment_role": 1, "valid_from": 1 },
@@ -87,18 +80,12 @@ fn customer_assignment_indexes() -> Vec<IndexModel> {
 
 /// 返回客户资料根级保存命令的幂等唯一约束。
 fn customer_profile_command_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_customer_profile_commands_idempotency_key",
-        doc! { "idempotency_key": 1 },
-    )]
+    vec![unique_index("uk_customer_profile_commands_idempotency_key", doc! { "idempotency_key": 1 })]
 }
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -156,9 +143,7 @@ mod tests {
         );
         assert_eq!(window.options.as_ref().unwrap().unique, Some(true));
 
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "user_id": 1, "valid_to": 1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "user_id": 1, "valid_to": 1 }));
     }
 
     #[test]

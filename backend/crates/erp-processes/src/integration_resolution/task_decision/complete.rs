@@ -1,10 +1,4 @@
 //! 任务完成的回执、正式权限与跨域事务。
-use super::super::IntegrationResolutionProcess;
-use super::guard::{command_identity, load_bound_work_item};
-use super::{store_receipt, TASK_COMPLETION_AUDIT};
-
-use crate::adapters::workflow::work_item_service;
-use crate::Result;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_integration::dto::{
@@ -17,6 +11,12 @@ use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
+
+use super::super::IntegrationResolutionProcess;
+use super::guard::{command_identity, load_bound_work_item};
+use super::{TASK_COMPLETION_AUDIT, store_receipt};
+use crate::Result;
+use crate::adapters::workflow::work_item_service;
 
 /// 正式任务完成步骤；本域终态写入先于 WorkItem 完成与回执。
 struct CompletionCommand<'a> {
@@ -71,11 +71,7 @@ impl super::execution::TaskCommandPort for CompletionCommand<'_> {
     }
 
     fn result(&mut self, fact: &Self::Fact) -> Result<Self::Output> {
-        Ok(completion_result(
-            self.command,
-            self.receipt.receipt_id(),
-            fact.reference.clone(),
-        ))
+        Ok(completion_result(self.command, self.receipt.receipt_id(), fact.reference.clone()))
     }
 
     async fn receipt(&mut self, fact: &Self::Fact, executor: &mut dyn Executor) -> Result<()> {
@@ -150,17 +146,10 @@ impl IntegrationResolutionProcess {
         command: &IntegrationTaskCompletionCommand,
         actor: &AuditActor,
     ) -> Result<Option<IntegrationTaskCompletionResult>> {
-        let Some(message) = self
-            .replay_receipt::<CompletionReceiptMessage>(receipt, actor)
-            .await?
-        else {
+        let Some(message) = self.replay_receipt::<CompletionReceiptMessage>(receipt, actor).await? else {
             return Ok(None);
         };
-        Ok(Some(completion_result(
-            command,
-            receipt.receipt_id(),
-            message.terminal_evidence_reference,
-        )))
+        Ok(Some(completion_result(command, receipt.receipt_id(), message.terminal_evidence_reference)))
     }
 }
 
@@ -189,9 +178,7 @@ async fn store_completion_receipt(
         db,
         actor,
         receipt,
-        CompletionReceiptMessage {
-            terminal_evidence_reference: terminal_reference.to_string(),
-        },
+        CompletionReceiptMessage { terminal_evidence_reference: terminal_reference.to_string() },
         executor,
     )
     .await

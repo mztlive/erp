@@ -1,6 +1,6 @@
 //! 现有库存选源的原子预占写入边界。
-use super::{latest_stock_group, procurement_quantity_changed};
-use crate::{Error, Result};
+use std::str::FromStr;
+
 use async_trait::async_trait;
 use erp_core::ids::{SalesOrderId, SalesOrderLineId, StockReservationEntryId, StockReservationId};
 use erp_core::money::Quantity;
@@ -9,11 +9,13 @@ use erp_inventory::{
     StockReservationEntry, StockReservationEntryData, StockReservationSourceType,
 };
 use erp_procurement::dto::purchase_order::ExistingStockReservationResult;
-use erp_procurement::entity::purchase_order::{payload_fingerprint, StockAllocationPlan, StockBasisGroup};
+use erp_procurement::entity::purchase_order::{StockAllocationPlan, StockBasisGroup, payload_fingerprint};
 use id_generator::next_id;
 use mongodb::{ClientSession, Database};
 use persistence_core::Executor;
-use std::str::FromStr;
+
+use super::{latest_stock_group, procurement_quantity_changed};
+use crate::{Error, Result};
 
 /// 已持久化的现有库存分配及其公开结果。
 pub(super) struct PersistedStockAllocation {
@@ -50,11 +52,7 @@ impl StockAllocationPort for StockAllocationAdapter<'_> {
         quantity: Quantity,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        Ok(self
-            .db
-            .stock_balances()
-            .reserve_quantity(id, quantity, executor)
-            .await?)
+        Ok(self.db.stock_balances().reserve_quantity(id, quantity, executor).await?)
     }
     async fn create_reservation(
         &self,
@@ -65,10 +63,7 @@ impl StockAllocationPort for StockAllocationAdapter<'_> {
         Ok(())
     }
     async fn create_entry(&self, entry: &StockReservationEntry, executor: &mut dyn Executor) -> Result<()> {
-        self.db
-            .stock_reservation_entries()
-            .create(entry, executor)
-            .await?;
+        self.db.stock_reservation_entries().create(entry, executor).await?;
         Ok(())
     }
 }
@@ -108,13 +103,9 @@ async fn persist_with_port(
     for plan in plans {
         let latest = latest_stock_group(latest_groups, &plan.group.balance.base.id)?;
         for requested in &plan.requested_lines {
-            let line = latest
-                .line_for(&requested.sales_order_line_id)
-                .ok_or_else(procurement_quantity_changed)?;
-            if !port
-                .reserve_quantity(&latest.balance.base.id, requested.quantity, executor)
-                .await?
-            {
+            let line =
+                latest.line_for(&requested.sales_order_line_id).ok_or_else(procurement_quantity_changed)?;
+            if !port.reserve_quantity(&latest.balance.base.id, requested.quantity, executor).await? {
                 return Err(procurement_quantity_changed());
             }
             let source_allocation_id = payload_fingerprint(
@@ -171,7 +162,8 @@ async fn persist_with_port(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::sync::Mutex;
+
     use erp_core::common::time::Instant;
     use erp_core::ids::{SalesOrderRevisionLineId, SkuId, SkuRevisionId, WarehouseId};
     use erp_procurement::entity::facts::{
@@ -181,7 +173,8 @@ mod tests {
     use erp_procurement::entity::purchase_order::{
         ProcurementCoverageSummary, RequestedStockLine, SalesProcurementCoverageLine, StockBasisLine,
     };
-    use std::sync::Mutex;
+
+    use super::*;
 
     struct RecordingExecutor {
         marker: u64,
@@ -267,9 +260,7 @@ mod tests {
             coverage: SalesProcurementCoverageLine {
                 quantity_scale: Some(6),
                 revision_line: SalesRevisionLineFact {
-                    base: FactIdentity {
-                        id: format!("revision-{id}"),
-                    },
+                    base: FactIdentity { id: format!("revision-{id}") },
                     sales_order_line_id: SalesOrderLineId::new(id),
                     line_no: no,
                     line_type: SalesLineType::GoodsService,
@@ -294,19 +285,12 @@ mod tests {
         StockAllocationPlan {
             group: StockBasisGroup {
                 revision: SalesRevisionFact {
-                    base: FactIdentity {
-                        id: "sales-revision-1".to_string(),
-                    },
-                    customer_snapshot: SalesCustomerSnapshotFact {
-                        customer_name: "客户".to_string(),
-                    },
+                    base: FactIdentity { id: "sales-revision-1".to_string() },
+                    customer_snapshot: SalesCustomerSnapshotFact { customer_name: "客户".to_string() },
                     contract_snapshot: None,
                 },
                 balance: StockBalanceFact {
-                    base: VersionedFactIdentity {
-                        id: "balance-1".to_string(),
-                        version: 7,
-                    },
+                    base: VersionedFactIdentity { id: "balance-1".to_string(), version: 7 },
                     warehouse_id: WarehouseId::new("warehouse-1"),
                     sku_id: SkuId::new("sku-1"),
                     available_quantity: q("10"),
@@ -315,14 +299,8 @@ mod tests {
                 lines: vec![line("line-1", 1), line("line-2", 2)],
             },
             requested_lines: vec![
-                RequestedStockLine {
-                    sales_order_line_id: "line-1".to_string(),
-                    quantity: q("2"),
-                },
-                RequestedStockLine {
-                    sales_order_line_id: "line-2".to_string(),
-                    quantity: q("3"),
-                },
+                RequestedStockLine { sales_order_line_id: "line-1".to_string(), quantity: q("2") },
+                RequestedStockLine { sales_order_line_id: "line-2".to_string(), quantity: q("3") },
             ],
         }
     }
@@ -357,17 +335,7 @@ mod tests {
     async fn stock_posting_uses_same_executor_and_original_write_order() {
         let (result, calls) = invoke(None, false).await;
         let persisted = result.unwrap();
-        assert_eq!(
-            calls,
-            vec![
-                "reserve",
-                "reservation",
-                "entry",
-                "reserve",
-                "reservation",
-                "entry"
-            ]
-        );
+        assert_eq!(calls, vec!["reserve", "reservation", "entry", "reserve", "reservation", "entry"]);
         assert_eq!(persisted.len(), 2);
         assert_eq!(persisted[0].result.sales_order_line_id, "line-1");
         assert_eq!(persisted[0].result.quantity, q("2").to_string());
@@ -377,14 +345,7 @@ mod tests {
     /// 每一写入失败均原样传播，停止剩余步骤和下一条分配。
     #[tokio::test]
     async fn stock_posting_stops_at_each_failed_write() {
-        let sequence = [
-            "reserve",
-            "reservation",
-            "entry",
-            "reserve",
-            "reservation",
-            "entry",
-        ];
+        let sequence = ["reserve", "reservation", "entry", "reserve", "reservation", "entry"];
         for index in 0..sequence.len() {
             let (result, calls) = invoke(Some(index), false).await;
             assert!(

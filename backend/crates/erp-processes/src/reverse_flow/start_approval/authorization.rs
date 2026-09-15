@@ -1,15 +1,16 @@
 //! 退款启动回放的真实授权提供方；主体、动作与对象范围按原顺序读取。
-use crate::{Error, Result};
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_identity::SharedRbacService;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::service::approval::{
-    approval_actor_is_active_with_executor, approval_document_action_scope_with_executor,
-    approval_document_read_scope_with_executor, ApprovalManagementScope,
+    ApprovalManagementScope, approval_actor_is_active_with_executor,
+    approval_document_action_scope_with_executor, approval_document_read_scope_with_executor,
 };
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::{Error, Result};
 
 #[async_trait]
 trait ReplayAuthorizationPort: Send + Sync {
@@ -130,8 +131,9 @@ pub(super) async fn ensure_replay_authorized(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::sync::Mutex;
+
+    use super::*;
     struct SessionMarker(u64);
     impl Executor for SessionMarker {
         fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
@@ -241,13 +243,9 @@ mod tests {
     #[tokio::test]
     async fn replay_authorization_stops_on_each_original_provider_error() {
         for index in 0..3 {
-            let (result, calls) = invoke(
-                true,
-                ApprovalManagementScope::Empty,
-                ApprovalManagementScope::Empty,
-                Some(index),
-            )
-            .await;
+            let (result, calls) =
+                invoke(true, ApprovalManagementScope::Empty, ApprovalManagementScope::Empty, Some(index))
+                    .await;
             assert!(
                 matches!(result,Err(Error::ConflictError(message)) if message==format!("authorization failure {index}"))
             );
@@ -256,13 +254,8 @@ mod tests {
     }
     #[tokio::test]
     async fn disabled_actor_fails_before_action_or_object_scope() {
-        let (result, calls) = invoke(
-            false,
-            ApprovalManagementScope::Empty,
-            ApprovalManagementScope::Empty,
-            None,
-        )
-        .await;
+        let (result, calls) =
+            invoke(false, ApprovalManagementScope::Empty, ApprovalManagementScope::Empty, None).await;
         assert!(matches!(result,Err(Error::Forbidden(message)) if message=="当前账号不可提交该退款或冲正单"));
         assert_eq!(calls, ["actor"]);
     }

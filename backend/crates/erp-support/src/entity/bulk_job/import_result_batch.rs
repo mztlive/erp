@@ -122,10 +122,11 @@ fn next_processed_count(processed: u64, success: u64, skipped: u64, failed: u64)
 
 #[cfg(test)]
 mod tests {
-    use super::BackgroundJob;
-    use crate::entity::bulk_job::background_job::{BackgroundJobData, JobStatus, JobType};
     use erp_core::common::time::Instant;
     use erp_core::ids::BackgroundJobId;
+
+    use super::BackgroundJob;
+    use crate::entity::bulk_job::background_job::{BackgroundJobData, JobStatus, JobType};
 
     fn job() -> BackgroundJob {
         let mut job = BackgroundJob::new(
@@ -151,8 +152,7 @@ mod tests {
     #[test]
     fn only_success_all_terminal_marks_succeeded() {
         let mut job = job();
-        job.record_import_result_batch(4, 0, 0, true, Instant::from_unix_secs(1_700_000_100))
-            .unwrap();
+        job.record_import_result_batch(4, 0, 0, true, Instant::from_unix_secs(1_700_000_100)).unwrap();
         assert_eq!(job.status, JobStatus::Succeeded);
         assert_eq!(job.processed_count, 4);
         assert_eq!(job.success_count, 4);
@@ -163,8 +163,7 @@ mod tests {
     #[test]
     fn only_failed_all_terminal_marks_failed_not_succeeded() {
         let mut job = job();
-        job.record_import_result_batch(0, 0, 4, true, Instant::from_unix_secs(1_700_000_100))
-            .unwrap();
+        job.record_import_result_batch(0, 0, 4, true, Instant::from_unix_secs(1_700_000_100)).unwrap();
         assert_eq!(job.status, JobStatus::Failed);
         assert_eq!(job.failed_count, 4);
         assert_eq!(job.success_count, 0);
@@ -175,8 +174,7 @@ mod tests {
     #[test]
     fn mixed_success_and_failed_all_terminal_is_not_succeeded() {
         let mut job = job();
-        job.record_import_result_batch(2, 1, 1, true, Instant::from_unix_secs(1_700_000_100))
-            .unwrap();
+        job.record_import_result_batch(2, 1, 1, true, Instant::from_unix_secs(1_700_000_100)).unwrap();
         assert_eq!(job.status, JobStatus::PartiallySucceeded);
         assert_eq!(job.processed_count, 4);
         assert_eq!(job.success_count, 2);
@@ -186,28 +184,24 @@ mod tests {
         assert_ne!(job.status, JobStatus::Succeeded);
         assert!(job.is_terminal());
         let snapshot = job.clone();
-        assert!(job
-            .record_import_result_batch(0, 0, 0, true, Instant::from_unix_secs(1_700_000_200))
-            .is_err());
-        assert!(job
-            .record_progress(0, 0, 0, Instant::from_unix_secs(1_700_000_200))
-            .is_err());
+        assert!(
+            job.record_import_result_batch(0, 0, 0, true, Instant::from_unix_secs(1_700_000_200)).is_err()
+        );
+        assert!(job.record_progress(0, 0, 0, Instant::from_unix_secs(1_700_000_200)).is_err());
         assert_eq!(job, snapshot);
     }
 
     #[test]
     fn not_all_terminal_keeps_job_open_and_conserves_counts() {
         let mut job = job();
-        job.record_import_result_batch(1, 0, 1, false, Instant::from_unix_secs(1_700_000_100))
-            .unwrap();
+        job.record_import_result_batch(1, 0, 1, false, Instant::from_unix_secs(1_700_000_100)).unwrap();
         assert_eq!(job.status, JobStatus::PartiallySucceeded);
         assert_eq!(job.processed_count, 2);
         assert_eq!(job.success_count + job.skipped_count + job.failed_count, 2);
         assert!(job.finished_at.is_none());
         assert!(!job.is_terminal());
 
-        job.record_import_result_batch(1, 1, 0, true, Instant::from_unix_secs(1_700_000_200))
-            .unwrap();
+        job.record_import_result_batch(1, 1, 0, true, Instant::from_unix_secs(1_700_000_200)).unwrap();
         assert_eq!(job.processed_count, 4);
         assert_eq!(job.success_count, 2);
         assert_eq!(job.skipped_count, 1);
@@ -221,8 +215,7 @@ mod tests {
     #[test]
     fn zero_delta_not_terminal_does_not_change_counts() {
         let mut job = job();
-        job.record_import_result_batch(0, 0, 0, false, Instant::from_unix_secs(1_700_000_100))
-            .unwrap();
+        job.record_import_result_batch(0, 0, 0, false, Instant::from_unix_secs(1_700_000_100)).unwrap();
         assert_eq!(job.status, JobStatus::Running);
         assert_eq!(job.processed_count, 0);
     }
@@ -287,16 +280,20 @@ mod tests {
         let mut overflow = job();
         overflow.processed_count = u64::MAX;
         let overflow_snapshot = overflow.clone();
-        assert!(overflow
-            .record_import_result_batch(1, 0, 0, false, Instant::from_unix_secs(1_700_000_100))
-            .is_err());
+        assert!(
+            overflow
+                .record_import_result_batch(1, 0, 0, false, Instant::from_unix_secs(1_700_000_100))
+                .is_err()
+        );
         assert_eq!(overflow, overflow_snapshot);
 
         let mut exceed = job();
         let exceed_snapshot = exceed.clone();
-        assert!(exceed
-            .record_import_result_batch(5, 0, 0, false, Instant::from_unix_secs(1_700_000_100))
-            .is_err());
+        assert!(
+            exceed
+                .record_import_result_batch(5, 0, 0, false, Instant::from_unix_secs(1_700_000_100))
+                .is_err()
+        );
         assert_eq!(exceed, exceed_snapshot);
     }
 }

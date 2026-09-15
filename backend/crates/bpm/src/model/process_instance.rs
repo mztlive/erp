@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
 use crate::model::types::{
-    base_model_at, touch_base, ApprovalBlockerCode, ApprovalProcessInstanceStatus, ModelError, ModelResult,
+    ApprovalBlockerCode, ApprovalProcessInstanceStatus, ModelError, ModelResult, base_model_at, touch_base,
 };
 use crate::model::{ParticipantId, ProcessKind, SubjectRef, Timestamp};
 
@@ -173,16 +173,16 @@ impl ApprovalProcessInstance {
         match (self.status, self.current_node_execution_id.is_some()) {
             (ApprovalProcessInstanceStatus::Approved, _) => {
                 Err(ModelError::InvalidStatus("已最终通过的审批实例不得撤回"))
-            }
+            },
             (ApprovalProcessInstanceStatus::Cancelled, _) => {
                 Err(ModelError::InvalidStatus("已取消的审批实例不得重复撤回"))
-            }
+            },
             (ApprovalProcessInstanceStatus::Running | ApprovalProcessInstanceStatus::Blocked, false) => {
                 Err(ModelError::InvalidStatus("可撤回审批实例必须存在当前执行"))
-            }
+            },
             (ApprovalProcessInstanceStatus::Running, true) => {
                 Ok(ApprovalCancellationTaskPolicy::CloseOpenTask)
-            }
+            },
             (ApprovalProcessInstanceStatus::Blocked, true) => Ok(ApprovalCancellationTaskPolicy::NoOpenTask),
         }
     }
@@ -216,10 +216,7 @@ impl ApprovalProcessInstance {
         if self.status != ApprovalProcessInstanceStatus::Running {
             return Err(ModelError::InvalidStatus("只有运行中的实例可以进入下一轮"));
         }
-        self.current_round_no = self
-            .current_round_no
-            .checked_add(1)
-            .ok_or(ModelError::Overflow("轮次"))?;
+        self.current_round_no = self.current_round_no.checked_add(1).ok_or(ModelError::Overflow("轮次"))?;
         self.current_node_execution_id = None;
         touch_base(&mut self.base, at)?;
         Ok(self.current_round_no)
@@ -296,8 +293,7 @@ impl ApprovalProcessInstance {
     /// # 错误
     /// 终态、非受阻或结构性阻塞时返回错误。
     pub fn ensure_assignee_recovery_allowed(&self) -> ModelResult<()> {
-        self.ensure_not_terminal()
-            .map_err(|_| ModelError::InvalidStatus("终态实例不得恢复原审批人"))?;
+        self.ensure_not_terminal().map_err(|_| ModelError::InvalidStatus("终态实例不得恢复原审批人"))?;
         if self.status != ApprovalProcessInstanceStatus::Blocked {
             return Err(ModelError::InvalidStatus("只有受阻实例可以恢复原审批人"));
         }
@@ -367,10 +363,7 @@ mod tests {
             Timestamp::from_unix_secs(11).unwrap(),
         )
         .unwrap();
-        assert_eq!(
-            inst.next_round(Timestamp::from_unix_secs(12).unwrap()).unwrap(),
-            2
-        );
+        assert_eq!(inst.next_round(Timestamp::from_unix_secs(12).unwrap()).unwrap(), 2);
         assert!(inst.current_node_execution_id.is_none());
         inst.enter_blocked(
             ApprovalBlockerCode::ApproverAccountInactive,
@@ -385,15 +378,13 @@ mod tests {
     fn blocker_projection_clears_on_exit_or_terminal() {
         let mut inst = instance();
         let at = Timestamp::from_unix_secs(20).unwrap();
-        inst.enter_blocked(ApprovalBlockerCode::ApproverNotEligible, at)
-            .unwrap();
+        inst.enter_blocked(ApprovalBlockerCode::ApproverNotEligible, at).unwrap();
         assert_eq!(inst.status, ApprovalProcessInstanceStatus::Blocked);
         assert_eq!(inst.blocker_code, Some(ApprovalBlockerCode::ApproverNotEligible));
         inst.exit_blocked(Timestamp::from_unix_secs(21).unwrap()).unwrap();
         assert_eq!(inst.status, ApprovalProcessInstanceStatus::Running);
         assert!(inst.blocker_code.is_none());
-        inst.complete_approved(Timestamp::from_unix_secs(22).unwrap())
-            .unwrap();
+        inst.complete_approved(Timestamp::from_unix_secs(22).unwrap()).unwrap();
         assert_eq!(inst.status, ApprovalProcessInstanceStatus::Approved);
         assert!(inst.current_node_execution_id.is_none());
         assert!(inst.cancel(Timestamp::from_unix_secs(23).unwrap()).is_err());
@@ -431,10 +422,7 @@ mod tests {
     fn blocked_and_terminal_cancellation_facts_fail_closed() {
         let mut blocked = instance();
         blocked
-            .set_current_execution(
-                ApprovalNodeExecutionId::new("e1"),
-                Timestamp::from_unix_secs(26).unwrap(),
-            )
+            .set_current_execution(ApprovalNodeExecutionId::new("e1"), Timestamp::from_unix_secs(26).unwrap())
             .unwrap();
         blocked
             .enter_blocked(
@@ -457,9 +445,7 @@ mod tests {
         );
 
         let mut approved = instance();
-        approved
-            .complete_approved(Timestamp::from_unix_secs(28).unwrap())
-            .unwrap();
+        approved.complete_approved(Timestamp::from_unix_secs(28).unwrap()).unwrap();
         assert_eq!(
             approved.cancellation_task_policy(),
             Err(ModelError::InvalidStatus("已最终通过的审批实例不得撤回"))
@@ -488,8 +474,7 @@ mod tests {
         );
         inst.blocker_code = Some(ApprovalBlockerCode::ApproverAccountInactive);
         assert!(inst.ensure_assignee_recovery_allowed().is_ok());
-        inst.complete_approved(Timestamp::from_unix_secs(31).unwrap())
-            .unwrap();
+        inst.complete_approved(Timestamp::from_unix_secs(31).unwrap()).unwrap();
         assert_eq!(
             inst.ensure_assignee_recovery_allowed(),
             Err(ModelError::InvalidStatus("终态实例不得恢复原审批人"))

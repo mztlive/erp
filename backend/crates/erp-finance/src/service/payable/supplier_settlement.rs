@@ -1,17 +1,19 @@
 //! 供应商结算确认的财务应付构造与原账户/分录写入。
-use crate::entity::payable::{
-    EntryDirection, PayableAccount, PayableAccountData, PayableEntry, PayableEntryData, PayableEntryType,
-    PayableSourceType,
-};
-use crate::repository::PayableExt;
-use crate::Result;
+use std::str::FromStr;
+
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{PayableAccountId, PayableEntryId, SupplierAccountId};
 use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
-use std::str::FromStr;
+
+use crate::Result;
+use crate::entity::payable::{
+    EntryDirection, PayableAccount, PayableAccountData, PayableEntry, PayableEntryData, PayableEntryType,
+    PayableSourceType,
+};
+use crate::repository::PayableExt;
 /// 财务创建结算应付实际消费的来源字段，不依赖供应链实体。
 pub struct SettlementPayableSource {
     pub statement_no: String,
@@ -67,9 +69,7 @@ pub async fn persist_settlement_payable(
     entry: &PayableEntry,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    db.payable()
-        .create_payable_with_entry(account, entry, executor)
-        .await?;
+    db.payable().create_payable_with_entry(account, entry, executor).await?;
     Ok(())
 }
 

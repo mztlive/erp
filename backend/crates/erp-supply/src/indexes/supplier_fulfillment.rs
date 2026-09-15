@@ -6,14 +6,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::SupplierFulfillmentExt;
-use persistence_core::Result;
 
 /// `supplier_fulfillment_order` 集合名。
 pub(crate) const SUPPLIER_FULFILLMENT_ORDERS: &str =
@@ -50,56 +48,26 @@ pub(crate) const SUPPLIER_REFUND_ALLOCATIONS: &str =
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
-    create_indexes(
-        db,
-        SUPPLIER_FULFILLMENT_ORDERS,
-        supplier_fulfillment_order_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        SUPPLIER_FULFILLMENT_ITEMS,
-        supplier_fulfillment_item_indexes(),
-    )
-    .await?;
+    create_indexes(db, SUPPLIER_FULFILLMENT_ORDERS, supplier_fulfillment_order_indexes()).await?;
+    create_indexes(db, SUPPLIER_FULFILLMENT_ITEMS, supplier_fulfillment_item_indexes()).await?;
     create_indexes(db, SUPPLIER_ORDER_ACTIONS, supplier_order_action_indexes()).await?;
-    create_indexes(
-        db,
-        SUPPLIER_ORDER_ACTION_LINES,
-        supplier_order_action_line_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        SUPPLIER_ORDER_STATUS_HISTORIES,
-        supplier_order_status_history_indexes(),
-    )
-    .await?;
+    create_indexes(db, SUPPLIER_ORDER_ACTION_LINES, supplier_order_action_line_indexes()).await?;
+    create_indexes(db, SUPPLIER_ORDER_STATUS_HISTORIES, supplier_order_status_history_indexes()).await?;
     create_indexes(db, SUPPLIER_REFUND_FACTS, supplier_refund_fact_indexes()).await?;
-    create_indexes(
-        db,
-        SUPPLIER_REFUND_ALLOCATIONS,
-        supplier_refund_allocation_indexes(),
-    )
-    .await?;
+    create_indexes(db, SUPPLIER_REFUND_ALLOCATIONS, supplier_refund_allocation_indexes()).await?;
     Ok(())
 }
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
 /// 返回 `supplier_fulfillment_order` 的身份约束和查询索引（§6.19）。
 fn supplier_fulfillment_order_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_supplier_fulfillment_orders_order_no",
-            doc! { "fulfillment_order_no": 1 },
-        ),
+        unique_index("uk_supplier_fulfillment_orders_order_no", doc! { "fulfillment_order_no": 1 }),
         // §6.19「非空 (connection_id, external_order_no) 唯一」：部分唯一索引，
         // external_order_no 为空（下单成功回传前）时多条记录不受约束；
         // 回滚方式：删除本索引后以唯一约束下放到应用层校验。
@@ -112,10 +80,7 @@ fn supplier_fulfillment_order_indexes() -> Vec<IndexModel> {
             "idx_supplier_fulfillment_orders_supplier_status_created",
             doc! { "supplier_id": 1, "fulfillment_status": 1, "created_at": -1 },
         ),
-        named_index(
-            "idx_supplier_fulfillment_orders_external_order_no",
-            doc! { "external_order_no": 1 },
-        ),
+        named_index("idx_supplier_fulfillment_orders_external_order_no", doc! { "external_order_no": 1 }),
         // FUL-R06 结算来源范围：按供应商枚举期间内完成订单（completed_at 区间）
         // 的有界查询索引；回滚方式：删除本索引后查询退化为全表扫描。
         named_index(
@@ -127,23 +92,14 @@ fn supplier_fulfillment_order_indexes() -> Vec<IndexModel> {
 
 /// 返回 `supplier_fulfillment_item` 的身份约束和明细查询索引（§6.19）。
 fn supplier_fulfillment_item_indexes() -> Vec<IndexModel> {
-    vec![named_index(
-        "idx_supplier_fulfillment_items_order",
-        doc! { "supplier_fulfillment_order_id": 1 },
-    )]
+    vec![named_index("idx_supplier_fulfillment_items_order", doc! { "supplier_fulfillment_order_id": 1 })]
 }
 
 /// 返回 `supplier_order_action` 的身份约束与查询索引（§6.19）。
 fn supplier_order_action_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_supplier_order_actions_idempotency_key",
-            doc! { "idempotency_key": 1 },
-        ),
-        named_index(
-            "idx_supplier_order_actions_order",
-            doc! { "supplier_fulfillment_order_id": 1 },
-        ),
+        unique_index("uk_supplier_order_actions_idempotency_key", doc! { "idempotency_key": 1 }),
+        named_index("idx_supplier_order_actions_order", doc! { "supplier_fulfillment_order_id": 1 }),
     ]
 }
 
@@ -175,14 +131,8 @@ fn supplier_refund_fact_indexes() -> Vec<IndexModel> {
             },
         ),
         // §6.19「inbox_message_id 非空且唯一」：必填字段，全局唯一索引。
-        unique_index(
-            "uk_supplier_refund_facts_inbox_message",
-            doc! { "inbox_message_id": 1 },
-        ),
-        named_index(
-            "idx_supplier_refund_facts_order",
-            doc! { "supplier_fulfillment_order_id": 1 },
-        ),
+        unique_index("uk_supplier_refund_facts_inbox_message", doc! { "inbox_message_id": 1 }),
+        named_index("idx_supplier_refund_facts_order", doc! { "supplier_fulfillment_order_id": 1 }),
         // FUL-R06 结算来源范围：按供应商枚举期间内退款事实（refunded_at 区间）
         // 的有界查询索引；回滚方式：删除本索引后查询退化为全表扫描。
         named_index(
@@ -212,10 +162,7 @@ fn supplier_refund_allocation_indexes() -> Vec<IndexModel> {
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -231,11 +178,7 @@ fn partial_unique_index(name: impl Into<String>, keys: Document, filter: Documen
     IndexModel::builder()
         .keys(keys)
         .options(
-            IndexOptions::builder()
-                .name(name.into())
-                .unique(true)
-                .partial_filter_expression(filter)
-                .build(),
+            IndexOptions::builder().name(name.into()).unique(true).partial_filter_expression(filter).build(),
         )
         .build()
 }
@@ -274,9 +217,7 @@ mod tests {
         assert!(indexes.iter().any(|index| {
             index.keys == doc! { "supplier_id": 1, "fulfillment_status": 1, "created_at": -1 }
         }));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "external_order_no": 1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "external_order_no": 1 }));
     }
 
     #[test]

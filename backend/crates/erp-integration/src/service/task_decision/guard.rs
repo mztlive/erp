@@ -1,12 +1,13 @@
 //! W29 本域加载与主题版本校验，不持有正式任务或权限。
+use mongodb::Database;
+use persistence_core::Executor;
+
 use crate::entity::integration_ops::{
     IntegrationErrorTask, ReconciliationDifference, ReconciliationDifferenceId,
     ReconciliationDifferenceResolution, ResolutionVersionCheck,
 };
 use crate::repository::IntegrationOpsExt;
 use crate::{Error, Result};
-use mongodb::Database;
-use persistence_core::Executor;
 
 /// 为正式关联查询原始错误任务；此时不校验终态，保持原首错顺序。
 pub async fn load_error_task_for_association(
@@ -58,7 +59,7 @@ pub(super) fn ensure_difference_subject(
         ResolutionVersionCheck::Current => Ok(()),
         ResolutionVersionCheck::Invalid | ResolutionVersionCheck::Stale => {
             Err(Error::ConflictError("对账差异业务版本已变化".to_string()))
-        }
+        },
     }
 }
 

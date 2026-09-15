@@ -3,8 +3,9 @@ pub(super) use crate::workbench::brief::non_empty;
 pub(super) use crate::workbench::presentation::{format_yuan, purchase_review_impact_summary};
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::money::Amount;
+
+    use super::*;
 
     #[test]
     fn format_yuan_groups_thousands_and_keeps_nonzero_fraction() {

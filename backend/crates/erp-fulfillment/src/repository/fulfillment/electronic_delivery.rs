@@ -1,18 +1,16 @@
 //! `electronic_delivery` 电子交付记录仓储：列表投影查询。
 
-use crate::entity::fulfillment::{ElectronicDeliveryState, FulfillmentResult};
-use crate::repository::owned::ElectronicDeliveryRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId};
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::fulfillment::{ElectronicDeliveryState, FulfillmentResult};
+use crate::repository::owned::ElectronicDeliveryRepository;
 
 /// 电子交付记录排序白名单（查询与测试共用）。
 const ELECTRONIC_DELIVERY_SORT_FIELDS: &[&str] = &["occurred_at", "recorded_at", "created_at"];
@@ -120,11 +118,7 @@ impl<'a> ElectronicDeliveryRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<ElectronicDeliveryRow>> {
         let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                ELECTRONIC_DELIVERY_SORT_FIELDS,
-            ))
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, ELECTRONIC_DELIVERY_SORT_FIELDS))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(electronic_delivery_projection())
@@ -132,10 +126,7 @@ impl<'a> ElectronicDeliveryRepository<'a> {
         let collection = self.collection().clone_with_type::<ElectronicDeliveryRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -161,8 +152,9 @@ fn electronic_delivery_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{electronic_delivery_projection, sort_doc, ELECTRONIC_DELIVERY_SORT_FIELDS};
     use mongodb::bson::doc;
+
+    use super::{ELECTRONIC_DELIVERY_SORT_FIELDS, electronic_delivery_projection, sort_doc};
 
     #[test]
     fn projection_includes_allocation_and_excludes_snapshot_fields() {
@@ -185,18 +177,12 @@ mod tests {
             ],
             "列表投影必须精确等于 Row 字段集合"
         );
-        assert!(
-            !projection.contains_key("recipient_snapshot"),
-            "交付对象快照不得进入电子交付列表投影"
-        );
+        assert!(!projection.contains_key("recipient_snapshot"), "交付对象快照不得进入电子交付列表投影");
         assert!(
             !projection.contains_key("recipient_snapshot_fingerprint"),
             "快照指纹不得进入电子交付列表投影"
         );
-        assert_eq!(
-            projection.get_i32("purchase_line_sales_allocation_id").unwrap(),
-            1
-        );
+        assert_eq!(projection.get_i32("purchase_line_sales_allocation_id").unwrap(), 1);
     }
 
     #[test]

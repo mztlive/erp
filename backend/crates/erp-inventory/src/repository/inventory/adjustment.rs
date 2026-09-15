@@ -1,25 +1,22 @@
-use crate::repository::owned::{StockAdjustmentLineRepository, StockAdjustmentRepository};
 use chrono::Local;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::inventory::{
-    AdjustmentReasonType, MovementDirection, StockAdjustment, StockAdjustmentLine, StockAdjustmentState,
-};
 use erp_core::common::time::Instant;
 use erp_core::ids::{StockAdjustmentId, WarehouseId};
 use erp_core::money::Quantity;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use serde::{Deserialize, Serialize};
 
 use super::shared::{
     active_entity_by_id, entities_by_ids, find_by_field_in, ids_to_strings, sort_doc, to_bson,
 };
-use super::{InventoryRepository, STOCK_ADJUSTMENTS, STOCK_ADJUSTMENT_LINES};
+use super::{InventoryRepository, STOCK_ADJUSTMENT_LINES, STOCK_ADJUSTMENTS};
+use crate::entity::inventory::{
+    AdjustmentReasonType, MovementDirection, StockAdjustment, StockAdjustmentLine, StockAdjustmentState,
+};
 use crate::repository::extensions::InventoryExt;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::repository::owned::{StockAdjustmentLineRepository, StockAdjustmentRepository};
 
 /// 库存调整单列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -140,10 +137,7 @@ impl<'a> StockAdjustmentRepository<'a> {
         let collection = self.collection().clone_with_type::<StockAdjustmentRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按稳定 ID 读取库存调整岗位分离事实。
@@ -196,21 +190,14 @@ impl<'a> StockAdjustmentLineRepository<'a> {
         if adjustment_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(
-            doc! { "stock_adjustment_id": { "$in": adjustment_ids } },
-            executor,
-        )
-        .await
+        self.find_many(doc! { "stock_adjustment_id": { "$in": adjustment_ids } }, executor).await
     }
 }
 
 /// 为调整单分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
 fn stock_adjustment_sort(filter: &StockAdjustmentFilter) -> Document {
-    let mut sort = sort_doc(
-        filter.sort_by.as_deref(),
-        filter.sort_ascending,
-        &["created_at", "adjustment_no"],
-    );
+    let mut sort =
+        sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, &["created_at", "adjustment_no"]);
     sort.insert("id", if filter.sort_ascending { 1 } else { -1 });
     sort
 }
@@ -356,9 +343,7 @@ impl<'a> InventoryRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<StockAdjustment>(<mongodb::Database as InventoryExt>::STOCK_ADJUSTMENTS),
+            &self.db.collection::<StockAdjustment>(<mongodb::Database as InventoryExt>::STOCK_ADJUSTMENTS),
             adjustment,
             executor,
         )
@@ -435,8 +420,7 @@ impl<'a> InventoryRepository<'a> {
         line: &StockAdjustmentLine,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        self.update_adjustment_line(&line.base.id, line.quantity, Some(line.direction), executor)
-            .await
+        self.update_adjustment_line(&line.base.id, line.quantity, Some(line.direction), executor).await
     }
 }
 
@@ -474,10 +458,11 @@ fn stock_adjustment_projection() -> Document {
 
 #[cfg(test)]
 mod filter_tests {
-    use super::{stock_adjustment_sort, StockAdjustmentFilter};
     use erp_core::ids::WarehouseId;
-    use mongodb::bson::{doc, Bson};
+    use mongodb::bson::{Bson, doc};
     use persistence_core::QueryFilter;
+
+    use super::{StockAdjustmentFilter, stock_adjustment_sort};
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockAdjustmentFilter {
         StockAdjustmentFilter {
@@ -501,12 +486,7 @@ mod filter_tests {
             &doc! { "$in": ["warehouse-1"] }
         );
         assert_eq!(
-            filter(Some(Vec::new()))
-                .to_doc()
-                .get_document("warehouse_id")
-                .unwrap()
-                .get_array("$in")
-                .unwrap(),
+            filter(Some(Vec::new())).to_doc().get_document("warehouse_id").unwrap().get_array("$in").unwrap(),
             &Vec::<Bson>::new()
         );
         assert!(!filter(None).to_doc().contains_key("warehouse_id"));

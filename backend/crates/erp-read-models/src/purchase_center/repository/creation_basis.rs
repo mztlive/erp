@@ -9,17 +9,16 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
 use erp_procurement::entity::purchase_order::CreationBasisFacts;
+use erp_supplier::SupplierExt;
 use erp_supply::entity::supplier_offering::OfferingStatus;
-use mongodb::bson::doc;
+use erp_supply::repository::SupplierOfferingExt;
 use mongodb::Database;
+use mongodb::bson::doc;
+use persistence_core::{Executor, Result};
 
 use super::mapping::{
     availability_fact, offering_fact, offering_revision_fact, supplier_commercial_fact, supplier_role_fact,
 };
-use erp_supplier::SupplierExt;
-use erp_supply::repository::SupplierOfferingExt;
-use persistence_core::Executor;
-use persistence_core::Result;
 
 /// 批量加载采购创建依据计算所需的最小持久化事实。
 ///
@@ -66,32 +65,22 @@ pub async fn load_creation_basis_facts(
         .iter()
         .filter_map(|offering| offering.stable.current_revision_id.clone())
         .collect::<Vec<_>>();
-    let revisions = db
-        .supplier_offering_revisions()
-        .list_by_ids(&revision_ids, executor)
-        .await?;
+    let revisions = db.supplier_offering_revisions().list_by_ids(&revision_ids, executor).await?;
     let offering_ids = offerings
         .iter()
         .map(|offering| SupplierOfferingId::new(offering.base.id.clone()))
         .collect::<Vec<_>>();
-    let availabilities = db
-        .supplier_offering_availabilities()
-        .find_by_offering_ids(&offering_ids, executor)
-        .await?;
+    let availabilities =
+        db.supplier_offering_availabilities().find_by_offering_ids(&offering_ids, executor).await?;
     let supplier_ids = unique_supplier_ids(&offerings);
-    let suppliers = db
-        .supplier_accounts()
-        .find_accounts_by_ids(&supplier_ids, executor)
-        .await?;
+    let suppliers = db.supplier_accounts().find_accounts_by_ids(&supplier_ids, executor).await?;
     let profile_revision_ids = suppliers
         .iter()
         .filter_map(|supplier| supplier.current_commercial_profile_revision_id.clone())
         .map(|id| id.to_string())
         .collect::<Vec<_>>();
-    let commercial_profiles = db
-        .supplier()
-        .list_commercial_profiles_by_ids(&profile_revision_ids, executor)
-        .await?;
+    let commercial_profiles =
+        db.supplier().list_commercial_profiles_by_ids(&profile_revision_ids, executor).await?;
     let supplier_names =
         super::supplier_names::current_legal_names_by_account_ids(db, &supplier_ids, executor).await?;
     Ok(CreationBasisFacts {
@@ -102,10 +91,7 @@ pub async fn load_creation_basis_facts(
         availabilities: availabilities
             .into_iter()
             .map(|availability| {
-                (
-                    availability.supplier_offering_id.to_string(),
-                    availability_fact(availability),
-                )
+                (availability.supplier_offering_id.to_string(), availability_fact(availability))
             })
             .collect(),
         suppliers: suppliers
@@ -136,11 +122,7 @@ pub async fn load_creation_basis_facts(
 /// 去重只用于缩小 `$in` 范围，不改变任何业务语义。
 fn unique_sku_ids(sku_ids: &[SkuId]) -> Vec<SkuId> {
     let mut seen = std::collections::HashSet::new();
-    sku_ids
-        .iter()
-        .filter(|sku_id| seen.insert(sku_id.to_string()))
-        .cloned()
-        .collect()
+    sku_ids.iter().filter(|sku_id| seen.insert(sku_id.to_string())).cloned().collect()
 }
 
 /// 提取供给涉及的供应商集合且保持首次出现顺序。
@@ -177,25 +159,23 @@ mod isolation_tests {
         SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId,
     };
     use erp_core::money::{Quantity, Rate, UnitPrice};
-    use erp_party::{Party, PartyData, PartyKind, PartyRevision, PartyRevisionData, PartyStatus};
+    use erp_party::{Party, PartyData, PartyExt, PartyKind, PartyRevision, PartyRevisionData, PartyStatus};
     use erp_supplier::{
         InvoiceType, ReconciliationCycle, SettlementMode, SupplierAccount, SupplierAccountData,
         SupplierAccountStatus, SupplierCommercialProfileRevision, SupplierCommercialProfileRevisionData,
+        SupplierExt,
     };
     use erp_supply::entity::supplier_offering::{
         AvailabilityStatus, FromGrossPricesParams, OfferingSourceType, OfferingStatus, PrefillSourceRefs,
         SupplierOffering, SupplierOfferingAvailability, SupplierOfferingAvailabilityData,
         SupplierOfferingData, SupplierOfferingRevision, SupplierOfferingRevisionData,
     };
-    use test_support::{require_mongo, TestDb};
-
-    use crate::test_indexes::ensure_indexes;
-    use erp_party::PartyExt;
-    use erp_supplier::SupplierExt;
     use erp_supply::repository::SupplierOfferingExt;
     use persistence_core::{NoTransaction, Transactional};
+    use test_support::{TestDb, require_mongo};
 
     use super::load_creation_basis_facts;
+    use crate::test_indexes::ensure_indexes;
 
     /// 构造供给稳定身份。
     fn offering(id: &str, sku_id: &str, supplier_id: &str) -> SupplierOffering {
@@ -332,36 +312,18 @@ mod isolation_tests {
         // SKU-1 → 供应商 A（offering-1）与供应商 B（offering-2）；SKU-2 → 供应商 A（offering-3）。
         let (party_a, party_a_revision) = party("party-a", "partyrev-a");
         let (party_b, party_b_revision) = party("party-b", "partyrev-b");
-        db.parties()
-            .create(&party_a, &mut NoTransaction)
-            .await
-            .expect("主体写入失败");
-        db.party_revisions()
-            .create(&party_a_revision, &mut NoTransaction)
-            .await
-            .expect("主体修订写入失败");
-        db.parties()
-            .create(&party_b, &mut NoTransaction)
-            .await
-            .expect("主体写入失败");
-        db.party_revisions()
-            .create(&party_b_revision, &mut NoTransaction)
-            .await
-            .expect("主体修订写入失败");
+        db.parties().create(&party_a, &mut NoTransaction).await.expect("主体写入失败");
+        db.party_revisions().create(&party_a_revision, &mut NoTransaction).await.expect("主体修订写入失败");
+        db.parties().create(&party_b, &mut NoTransaction).await.expect("主体写入失败");
+        db.party_revisions().create(&party_b_revision, &mut NoTransaction).await.expect("主体修订写入失败");
         let mut supplier_a = supplier("sup-a", "party-a");
         supplier_a.current_commercial_profile_revision_id =
             Some(SupplierCommercialProfileRevisionId::new("profile-a"));
         let mut supplier_b = supplier("sup-b", "party-b");
         supplier_b.current_commercial_profile_revision_id =
             Some(SupplierCommercialProfileRevisionId::new("profile-b"));
-        db.supplier_accounts()
-            .create(&supplier_a, &mut NoTransaction)
-            .await
-            .expect("供应商写入失败");
-        db.supplier_accounts()
-            .create(&supplier_b, &mut NoTransaction)
-            .await
-            .expect("供应商写入失败");
+        db.supplier_accounts().create(&supplier_a, &mut NoTransaction).await.expect("供应商写入失败");
+        db.supplier_accounts().create(&supplier_b, &mut NoTransaction).await.expect("供应商写入失败");
         db.supplier_commercial_profile_revisions()
             .create(&commercial_profile("profile-a", "sup-a"), &mut NoTransaction)
             .await
@@ -377,22 +339,13 @@ mod isolation_tests {
         ] {
             let mut offering = offering(offering_id, sku_id, supplier_id);
             offering.stable.current_revision_id = Some(format!("offrev-{offering_id}"));
-            db.supplier_offerings()
-                .create(&offering, &mut NoTransaction)
-                .await
-                .expect("供给写入失败");
+            db.supplier_offerings().create(&offering, &mut NoTransaction).await.expect("供给写入失败");
             db.supplier_offering_revisions()
-                .create(
-                    &offering_revision(&format!("offrev-{offering_id}"), offering_id),
-                    &mut NoTransaction,
-                )
+                .create(&offering_revision(&format!("offrev-{offering_id}"), offering_id), &mut NoTransaction)
                 .await
                 .expect("供给修订写入失败");
             db.supplier_offering_availabilities()
-                .create(
-                    &availability(&format!("avail-{offering_id}"), offering_id),
-                    &mut NoTransaction,
-                )
+                .create(&availability(&format!("avail-{offering_id}"), offering_id), &mut NoTransaction)
                 .await
                 .expect("可供投影写入失败");
         }
@@ -415,13 +368,10 @@ mod isolation_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn empty_sku_ids_return_empty_facts() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_basis_empty_skus")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_basis_empty_skus").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
-            let facts = load_creation_basis_facts(fixture.db(), &[], &mut NoTransaction)
-                .await
-                .expect("事实加载失败");
+            let facts =
+                load_creation_basis_facts(fixture.db(), &[], &mut NoTransaction).await.expect("事实加载失败");
             assert!(facts.offerings.is_empty());
             assert!(facts.revisions.is_empty());
             assert!(facts.availabilities.is_empty());
@@ -460,16 +410,8 @@ mod isolation_tests {
             .await
             .expect("事实加载失败");
             assert_eq!(facts.offerings.len(), 3, "全部 ACTIVE 供给应被加载");
-            assert_eq!(
-                facts.offerings[0].sku_id.to_string(),
-                "sku-1",
-                "供给应按 SKU 稳定排序"
-            );
-            assert_eq!(
-                facts.offerings[0].supplier_id.to_string(),
-                "sup-a",
-                "同 SKU 内应按供应商稳定排序"
-            );
+            assert_eq!(facts.offerings[0].sku_id.to_string(), "sku-1", "供给应按 SKU 稳定排序");
+            assert_eq!(facts.offerings[0].supplier_id.to_string(), "sup-a", "同 SKU 内应按供应商稳定排序");
             assert_eq!(facts.offerings[1].supplier_id.to_string(), "sup-b");
             assert_eq!(facts.offerings[2].sku_id.to_string(), "sku-2");
             assert_eq!(facts.revisions.len(), 3, "全部当前修订应被加载");
@@ -477,14 +419,9 @@ mod isolation_tests {
             assert_eq!(facts.suppliers.len(), 2, "涉及供应商应被加载");
             assert_eq!(facts.commercial_profiles.len(), 2, "商务资料修订应被加载");
             assert_eq!(facts.supplier_names.len(), 2, "法定名称应被加载");
+            assert_eq!(facts.commercial_profiles["profile-a"].effective_payment_term_code(), "POSTPAY_NET30");
             assert_eq!(
-                facts.commercial_profiles["profile-a"].effective_payment_term_code(),
-                "POSTPAY_NET30"
-            );
-            assert_eq!(
-                facts.commercial_profiles["profile-a"]
-                    .effective_business_category()
-                    .as_deref(),
+                facts.commercial_profiles["profile-a"].effective_business_category().as_deref(),
                 Some("经营类目")
             );
         });
@@ -507,9 +444,7 @@ mod isolation_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn inactive_offerings_are_excluded() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_basis_inactive")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_basis_inactive").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
             seed_creation_basis_fixture(fixture.db()).await;
             let mut inactive = offering("offering-inactive", "sku-1", "sup-a");
@@ -525,10 +460,7 @@ mod isolation_tests {
                 .await
                 .expect("事实加载失败");
             assert_eq!(facts.offerings.len(), 2, "停用供给不得进入事实集合");
-            assert!(facts
-                .offerings
-                .iter()
-                .all(|offering| offering.base.id != "offering-inactive"));
+            assert!(facts.offerings.iter().all(|offering| offering.base.id != "offering-inactive"));
         });
     }
 
@@ -570,10 +502,7 @@ mod isolation_tests {
                             .await?;
                         let facts = load_creation_basis_facts(&db, &[SkuId::new("sku-1")], session).await?;
                         assert!(
-                            facts
-                                .offerings
-                                .iter()
-                                .any(|offering| offering.base.id == "offering-txn"),
+                            facts.offerings.iter().any(|offering| offering.base.id == "offering-txn"),
                             "事务内应能 read-your-writes"
                         );
                         assert!(facts.revisions.contains_key("offrev-txn"));

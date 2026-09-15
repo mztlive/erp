@@ -32,9 +32,7 @@ pub use seed::seed_admin_account;
 /// # 返回值
 /// `ERP_TEST_MONGO_URI` 已设置且非空时返回 `true`。
 pub fn mongo_env_present() -> bool {
-    std::env::var("ERP_TEST_MONGO_URI")
-        .map(|uri| !uri.trim().is_empty())
-        .unwrap_or(false)
+    std::env::var("ERP_TEST_MONGO_URI").map(|uri| !uri.trim().is_empty()).unwrap_or(false)
 }
 
 /// 需要真实 MongoDB 的集成测试门控宏。

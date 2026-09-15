@@ -1,8 +1,8 @@
 //! 选品准备任务适配器：把选品准备流程接入统一后台执行器。
 
 use super::adapter::BackgroundTaskAdapter;
-use crate::sales_selection::SalesSelectionProcess;
 use crate::Result;
+use crate::sales_selection::SalesSelectionProcess;
 
 /// 选品准备任务适配器。
 pub struct SalesSelectionTaskAdapter {

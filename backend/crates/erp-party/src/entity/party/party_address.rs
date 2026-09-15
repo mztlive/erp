@@ -10,17 +10,15 @@ use std::fmt;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::BusinessDate;
 use erp_core::field_update::FieldUpdate;
+pub use erp_core::ids::{PartyAddressId, PartyId};
 use erp_core::validation::normalize_optional_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::sensitive::{hmac_sha256_hex, normalize_address};
 use super::status::EffectiveRecordStatus;
-
-pub use erp_core::ids::{PartyAddressId, PartyId};
 
 /// 联系人（地址联系人）最大长度。
 const CONTACT_NAME_MAX_LEN: usize = 100;
@@ -324,11 +322,12 @@ fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>)
 
 #[cfg(test)]
 mod tests {
-    use super::{AddressType, PartyAddress, PartyAddressData, PartyAddressUpdate};
-    use crate::entity::party::status::EffectiveRecordStatus;
     use erp_core::common::time::BusinessDate;
     use erp_core::field_update::FieldUpdate;
     use erp_core::ids::{PartyAddressId, PartyId};
+
+    use super::{AddressType, PartyAddress, PartyAddressData, PartyAddressUpdate};
+    use crate::entity::party::status::EffectiveRecordStatus;
 
     const KEY: &[u8] = b"test-fingerprint-key";
 
@@ -364,16 +363,10 @@ mod tests {
     /// 失败路径：地址为空/超长、联系人超长、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank = PartyAddressData {
-            address: "   ".to_string(),
-            ..address_data()
-        };
+        let blank = PartyAddressData { address: "   ".to_string(), ..address_data() };
         assert!(PartyAddress::new(PartyAddressId::new("a"), blank, KEY, "admin-1").is_err());
 
-        let overlong = PartyAddressData {
-            address: "x".repeat(513),
-            ..address_data()
-        };
+        let overlong = PartyAddressData { address: "x".repeat(513), ..address_data() };
         assert!(PartyAddress::new(PartyAddressId::new("a"), overlong, KEY, "admin-1").is_err());
 
         let reversed = PartyAddressData {
@@ -410,10 +403,7 @@ mod tests {
             )
             .unwrap();
         assert!(address.is_active());
-        assert_eq!(
-            address.valid_to,
-            Some(BusinessDate::from_ymd(2026, 6, 30).unwrap())
-        );
+        assert_eq!(address.valid_to, Some(BusinessDate::from_ymd(2026, 6, 30).unwrap()));
         assert!(!address.is_default);
     }
 

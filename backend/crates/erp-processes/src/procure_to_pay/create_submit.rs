@@ -1,35 +1,33 @@
 //! 新建采购单后在同一事务内冻结并启动统一审批。
 
-use erp_procurement::service::purchase_order::create_submit::{
-    freeze_submission_from_created_draft, load_created_order,
-};
-
+use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
-
 use erp_procurement::entity::purchase_order::{
     PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_procurement::service::purchase_order::create_submit::{
+    freeze_submission_from_created_draft, load_created_order,
+};
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_workflow::entity::document_registry::BusinessDocument;
-
-use mongodb::{ClientSession, Database};
-
-use super::adapter::{
-    build_purchase_order_snapshot, execute_purchase_order_domain_action, purchase_order_adapter,
-    purchase_order_object_readable, purchase_order_responsible_org_id, purchase_order_start_command,
-    purchase_order_subject_ref, require_frozen_binding, start_approval_command_kind, RECENT_HISTORY_LIMIT,
-};
-use super::start_approval::{
-    build_purchase_order_start_input, load_bound_definition_graph_with_executor,
-    persist_purchase_order_start_with_session, PurchaseOrderStartInput, PurchaseOrderStartPersistInput,
-};
-use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
 use erp_workflow::service::approval::execution::prepare_start;
 use erp_workflow::service::approval::policy::ApprovalDomainAction;
 use erp_workflow::service::document_registry::{find_approval_binding, find_registered_document};
+use mongodb::{ClientSession, Database};
+
+use super::adapter::{
+    RECENT_HISTORY_LIMIT, build_purchase_order_snapshot, execute_purchase_order_domain_action,
+    purchase_order_adapter, purchase_order_object_readable, purchase_order_responsible_org_id,
+    purchase_order_start_command, purchase_order_subject_ref, require_frozen_binding,
+    start_approval_command_kind,
+};
+use super::start_approval::{
+    PurchaseOrderStartInput, PurchaseOrderStartPersistInput, build_purchase_order_start_input,
+    load_bound_definition_graph_with_executor, persist_purchase_order_start_with_session,
+};
+use crate::{Error, Result};
 
 /// 创建并提交后的正式号与乐观锁版本。
 pub(super) struct SubmittedCreatedOrder {
@@ -119,27 +117,18 @@ async fn load_created_draft_bundle(
     session: &mut ClientSession,
 ) -> Result<CreatedDraftBundle> {
     let order = load_created_order(db, order_id, session).await?;
-    let draft_id = order
-        .draft_submission_id()
-        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+    let draft_id =
+        order.draft_submission_id().map_err(|error| Error::BusinessLogicError(error.to_string()))?;
     let draft = db
         .purchase_order_submissions()
         .find_by_id(&draft_id, session)
         .await?
         .ok_or_else(|| Error::NotFound("草稿提交不存在".to_string()))?;
-    let draft_lines = db
-        .purchase_order()
-        .list_submission_lines(&draft_id, session)
-        .await?;
+    let draft_lines = db.purchase_order().list_submission_lines(&draft_id, session).await?;
     let document = find_registered_document(db, order_id, session)
         .await?
         .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))?;
-    Ok(CreatedDraftBundle {
-        order,
-        draft,
-        draft_lines,
-        document,
-    })
+    Ok(CreatedDraftBundle { order, draft, draft_lines, document })
 }
 
 /// 首次提交时分配正式采购单号并同步注册行编号。
@@ -193,12 +182,7 @@ async fn freeze_created_order(
     actor: &AuditActor,
     session: &mut ClientSession,
 ) -> Result<FrozenCreatedDraft> {
-    let CreatedDraftBundle {
-        mut order,
-        draft,
-        draft_lines,
-        document,
-    } = bundle;
+    let CreatedDraftBundle { mut order, draft, draft_lines, document } = bundle;
     let mut superseded_draft = draft.clone();
     superseded_draft.mark_superseded()?;
     let (submission, submission_lines) =
@@ -209,13 +193,7 @@ async fn freeze_created_order(
         &submission.base.id,
         actor.id(),
     )?;
-    Ok(FrozenCreatedDraft {
-        order,
-        document,
-        superseded_draft,
-        submission,
-        submission_lines,
-    })
+    Ok(FrozenCreatedDraft { order, document, superseded_draft, submission, submission_lines })
 }
 
 /// 构造启动计划并与冻结提交同会话写入。
@@ -268,14 +246,7 @@ async fn persist_created_order_start(
     .await?;
     persist_frozen_created_order_start(
         db,
-        PersistFrozenCreatedOrderStartInput {
-            frozen,
-            prepared,
-            snapshot,
-            organization_id,
-            actor,
-            now,
-        },
+        PersistFrozenCreatedOrderStartInput { frozen, prepared, snapshot, organization_id, actor, now },
         session,
     )
     .await
@@ -309,9 +280,7 @@ async fn prepare_created_order_start(
     now: Instant,
     session: &mut ClientSession,
 ) -> Result<erp_workflow::service::approval::execution::PreparedExecution> {
-    let binding = find_approval_binding(db, &order.base.id, session)
-        .await
-        .map_err(crate::Error::from)?;
+    let binding = find_approval_binding(db, &order.base.id, session).await.map_err(crate::Error::from)?;
     let binding = require_frozen_binding(binding.as_ref())?.clone();
     let graph = load_bound_definition_graph_with_executor(db, &binding, session).await?;
     let start = purchase_order_start_command(
@@ -449,10 +418,7 @@ async fn load_submitted_created_order(
         .find_by_id(order_id, session)
         .await?
         .ok_or_else(|| Error::Internal("采购单提交后丢失".to_string()))?;
-    Ok(SubmittedCreatedOrder {
-        purchase_no: order.purchase_no,
-        lock_version: order.base.version,
-    })
+    Ok(SubmittedCreatedOrder { purchase_no: order.purchase_no, lock_version: order.base.version })
 }
 
 #[cfg(test)]
@@ -460,10 +426,8 @@ mod tests {
     /// 创建并提交必须走统一 `start_approval`，不得停在草稿。
     #[test]
     fn create_submit_starts_unified_approval() {
-        let production = include_str!("create_submit.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码必须存在");
+        let production =
+            include_str!("create_submit.rs").split("#[cfg(test)]").next().expect("生产代码必须存在");
         assert!(production.contains("execute_purchase_order_domain_action"));
         assert!(production.contains("ApprovalDomainAction::PurchaseOrderSubmit"));
         assert!(production.contains("persist_purchase_order_start_with_session"));

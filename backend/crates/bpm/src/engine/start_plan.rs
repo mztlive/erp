@@ -3,10 +3,9 @@
 //! 本模块不读取账号、权限或仓储；调用方必须先按自身授权规则收敛每个节点的
 //! [`Eligibility`] 并注入绑定主键，再交给 [`plan_start`] 校验与组装。
 
+use super::{Eligibility, EngineError, EngineResult, StartAssigneeBinding};
 use crate::graph::DefinitionGraph;
 use crate::ids::ApprovalInstanceAssigneeId;
-
-use super::{Eligibility, EngineError, EngineResult, StartAssigneeBinding};
 
 /// 单个节点的启动绑定输入：调用方已收敛授权资格并注入绑定主键。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,11 +58,7 @@ pub struct StartPlan {
 /// 本计划接受 BLOCKED 资格（读取失败收敛结果），是否允许启动由引擎 `start`
 /// 统一拒绝；启动并发单实例继续由调用方命令收据与事务 CAS 保证。
 pub fn plan_start(input: StartPlanInput<'_>) -> EngineResult<StartPlan> {
-    let StartPlanInput {
-        graph,
-        expected_definition_version,
-        bindings,
-    } = input;
+    let StartPlanInput { graph, expected_definition_version, bindings } = input;
     if graph.definition.definition_version != expected_definition_version {
         return Err(EngineError::InvalidCommand("定义版本与冻结绑定不一致"));
     }
@@ -79,10 +74,7 @@ pub fn plan_start(input: StartPlanInput<'_>) -> EngineResult<StartPlan> {
         if binding.eligibility.participant() != node.assignee_participant_id {
             return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
         }
-        if frozen
-            .iter()
-            .any(|prior: &StartAssigneeBinding| prior.id == binding.assignee_id)
-        {
+        if frozen.iter().any(|prior: &StartAssigneeBinding| prior.id == binding.assignee_id) {
             return Err(EngineError::InvalidCommand("实例审批人绑定主键不得重复"));
         }
         frozen.push(StartAssigneeBinding {
@@ -92,19 +84,13 @@ pub fn plan_start(input: StartPlanInput<'_>) -> EngineResult<StartPlan> {
             eligibility: binding.eligibility.clone(),
         });
     }
-    let entry = graph
-        .entry_node()
-        .map_err(|_| EngineError::InvalidCommand("审批定义缺少入口节点"))?;
+    let entry = graph.entry_node().map_err(|_| EngineError::InvalidCommand("审批定义缺少入口节点"))?;
     let entry_eligibility = frozen
         .iter()
         .find(|item| item.node_key == entry.node_key)
         .map(|item| item.eligibility.clone())
         .ok_or(EngineError::InvalidCommand("入口节点缺少审批人绑定"))?;
-    Ok(StartPlan {
-        bindings: frozen,
-        entry_node_key: entry.node_key.clone(),
-        entry_eligibility,
-    })
+    Ok(StartPlan { bindings: frozen, entry_node_key: entry.node_key.clone(), entry_eligibility })
 }
 
 /// 按节点键查找启动绑定输入；缺失或重复时失败关闭。
@@ -118,7 +104,7 @@ fn binding_for<'a>(bindings: &'a [StartBindingInput], node_key: &str) -> EngineR
 
 #[cfg(test)]
 mod tests {
-    use super::{plan_start, StartBindingInput, StartPlanInput};
+    use super::{StartBindingInput, StartPlanInput, plan_start};
     use crate::engine::{Eligibility, EngineError};
     use crate::graph::DefinitionGraph;
     use crate::ids::{
@@ -204,18 +190,11 @@ mod tests {
     }
 
     fn eligible(user: &str, name: &str) -> Eligibility {
-        Eligibility::Eligible {
-            participant: participant(user),
-            assignee_name_snapshot: name.into(),
-        }
+        Eligibility::Eligible { participant: participant(user), assignee_name_snapshot: name.into() }
     }
 
     fn blocked(user: &str, name: &str, code: ApprovalBlockerCode) -> Eligibility {
-        Eligibility::Blocked {
-            participant: participant(user),
-            code,
-            assignee_name_snapshot: name.into(),
-        }
+        Eligibility::Blocked { participant: participant(user), code, assignee_name_snapshot: name.into() }
     }
 
     fn participant(id: &str) -> ParticipantId {
@@ -300,12 +279,9 @@ mod tests {
             nodes: vec![],
             transitions: vec![],
         };
-        let error = plan_start(StartPlanInput {
-            graph: &graph,
-            expected_definition_version: 1,
-            bindings: vec![],
-        })
-        .unwrap_err();
+        let error =
+            plan_start(StartPlanInput { graph: &graph, expected_definition_version: 1, bindings: vec![] })
+                .unwrap_err();
         assert_eq!(error, EngineError::InvalidCommand("审批定义没有节点，无法启动"));
     }
 
@@ -333,10 +309,7 @@ mod tests {
             ],
         })
         .unwrap_err();
-        assert_eq!(
-            duplicated,
-            EngineError::InvalidCommand("节点审批人绑定缺失或重复")
-        );
+        assert_eq!(duplicated, EngineError::InvalidCommand("节点审批人绑定缺失或重复"));
     }
 
     /// 绑定数量与节点数量不一致时失败关闭。
@@ -349,10 +322,7 @@ mod tests {
             bindings: vec![binding("n1", "a1", eligible("u1", "张三"))],
         })
         .unwrap_err();
-        assert_eq!(
-            error,
-            EngineError::InvalidCommand("启动绑定必须与定义节点一一对应")
-        );
+        assert_eq!(error, EngineError::InvalidCommand("启动绑定必须与定义节点一一对应"));
     }
 
     /// 资格主体不得伪装成定义责任人。
@@ -422,11 +392,7 @@ mod tests {
             graph: &graph,
             expected_definition_version: 1,
             bindings: vec![
-                binding(
-                    "n1",
-                    "a1",
-                    blocked("u1", "张三", ApprovalBlockerCode::ApproverCannotReadSubject),
-                ),
+                binding("n1", "a1", blocked("u1", "张三", ApprovalBlockerCode::ApproverCannotReadSubject)),
                 binding("n2", "a2", eligible("u2", "李四")),
             ],
         })

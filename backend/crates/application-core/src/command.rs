@@ -1,9 +1,8 @@
 //! 业务命令共享的版本化稳定指纹基元。
 
+use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-
-use erp_core::{Error, Result};
 
 const V1_PREFIX: &str = "sha256-v1:";
 
@@ -74,16 +73,10 @@ impl CommandIdentity {
         }
         let fingerprint = CommandFingerprint::from_parts(parts);
         let current_id = format!("{prefix}{}", fingerprint.digest_hex());
-        let mut legacy_ids = legacy_ids
-            .into_iter()
-            .filter(|id| id != &current_id)
-            .collect::<Vec<_>>();
+        let mut legacy_ids = legacy_ids.into_iter().filter(|id| id != &current_id).collect::<Vec<_>>();
         legacy_ids.sort();
         legacy_ids.dedup();
-        Ok(Self {
-            current_id,
-            legacy_ids,
-        })
+        Ok(Self { current_id, legacy_ids })
     }
 
     /// 返回新写入使用的 v1 ID。
@@ -93,9 +86,7 @@ impl CommandIdentity {
 
     /// 返回按当前优先、历史其次排列的查询候选 ID。
     pub fn candidates(&self) -> Vec<String> {
-        std::iter::once(self.current_id.clone())
-            .chain(self.legacy_ids.iter().cloned())
-            .collect()
+        std::iter::once(self.current_id.clone()).chain(self.legacy_ids.iter().cloned()).collect()
     }
 }
 
@@ -150,15 +141,11 @@ impl CommandReceipt {
         let canonical_payload = canonical_json(payload)?;
         let legacy_payload = serde_json::to_string(payload)
             .map_err(|error| Error::from(format!("业务命令请求序列化失败: {error}")))?;
-        let legacy_identity = format!(
-            "{prefix}{}",
-            legacy_digest_parts(&[actor_id, action, resource_type, key])
-        );
+        let legacy_identity =
+            format!("{prefix}{}", legacy_digest_parts(&[actor_id, action, resource_type, key]));
         let identity = CommandIdentity::new(
             prefix,
-            [actor_id, action, resource_type, key]
-                .into_iter()
-                .map(str::to_string),
+            [actor_id, action, resource_type, key].into_iter().map(str::to_string),
             [legacy_identity],
         )?;
         let fingerprint = CommandFingerprint::from_parts([
@@ -200,17 +187,13 @@ impl CommandReceipt {
         let fingerprint_parts = fingerprint_parts.into_iter().collect::<Vec<_>>();
         let legacy_identity = format!(
             "{prefix}{}",
-            hex::encode(Sha256::digest(
-                format!("{actor_id}|{action}|{resource_id}|{key}").as_bytes()
-            ))
+            hex::encode(Sha256::digest(format!("{actor_id}|{action}|{resource_id}|{key}").as_bytes()))
         );
         let legacy_fingerprint_parts = fingerprint_parts.iter().map(String::as_str).collect::<Vec<_>>();
         let legacy_fingerprint = legacy_digest_parts(&legacy_fingerprint_parts);
         let identity = CommandIdentity::new(
             prefix,
-            [actor_id, action, resource_type, resource_id, key]
-                .into_iter()
-                .map(str::to_string),
+            [actor_id, action, resource_type, resource_id, key].into_iter().map(str::to_string),
             [legacy_identity],
         )?;
         Ok(Self {
@@ -307,7 +290,7 @@ fn write_canonical_json(value: &serde_json::Value, output: &mut String) -> Resul
                 write_canonical_json(&map[key], output)?;
             }
             output.push('}');
-        }
+        },
         serde_json::Value::Array(values) => {
             output.push('[');
             for (index, value) in values.iter().enumerate() {
@@ -317,10 +300,10 @@ fn write_canonical_json(value: &serde_json::Value, output: &mut String) -> Resul
                 write_canonical_json(value, output)?;
             }
             output.push(']');
-        }
+        },
         value => {
             output.push_str(&serde_json::to_string(value).map_err(|error| Error::from(error.to_string()))?)
-        }
+        },
     }
     Ok(())
 }
@@ -340,7 +323,7 @@ mod tests {
     use sha2::{Digest, Sha256};
 
     use super::{
-        legacy_digest_parts, CommandFingerprint, CommandReceipt, CommandReceiptFact, CommandReceiptMatch,
+        CommandFingerprint, CommandReceipt, CommandReceiptFact, CommandReceiptMatch, legacy_digest_parts,
     };
 
     #[derive(Serialize)]
@@ -361,22 +344,13 @@ mod tests {
     fn wire_format_is_versioned_and_round_trips() {
         let fingerprint = CommandFingerprint::from_parts(["payload".to_string()]);
         assert!(fingerprint.as_str().starts_with("sha256-v1:"));
-        assert_eq!(
-            CommandFingerprint::parse(fingerprint.as_str()).unwrap(),
-            fingerprint
-        );
+        assert_eq!(CommandFingerprint::parse(fingerprint.as_str()).unwrap(), fingerprint);
     }
 
     #[test]
     fn receipt_hides_raw_key_and_rejects_different_payload() {
-        let first = Payload {
-            amount: 100,
-            idempotency_key: "secret-operation-key".to_string(),
-        };
-        let changed = Payload {
-            amount: 200,
-            idempotency_key: first.idempotency_key.clone(),
-        };
+        let first = Payload { amount: 100, idempotency_key: "secret-operation-key".to_string() };
+        let changed = Payload { amount: 200, idempotency_key: first.idempotency_key.clone() };
         let receipt = CommandReceipt::from_payload(
             "receipt-",
             "actor-1",
@@ -397,10 +371,7 @@ mod tests {
             success: true,
             message: Some(receipt.message(None)),
         };
-        assert_eq!(
-            receipt.match_fact(&fact),
-            CommandReceiptMatch::SamePayload("payment-1".to_string())
-        );
+        assert_eq!(receipt.match_fact(&fact), CommandReceiptMatch::SamePayload("payment-1".to_string()));
         let changed_receipt = CommandReceipt::from_payload(
             "receipt-",
             "actor-1",
@@ -410,10 +381,7 @@ mod tests {
             &changed,
         )
         .unwrap();
-        assert_eq!(
-            changed_receipt.match_fact(&fact),
-            CommandReceiptMatch::DifferentPayload
-        );
+        assert_eq!(changed_receipt.match_fact(&fact), CommandReceiptMatch::DifferentPayload);
     }
 
     #[test]
@@ -432,10 +400,7 @@ mod tests {
 
     #[test]
     fn historical_audit_receipt_remains_replayable() {
-        let payload = Payload {
-            amount: 100,
-            idempotency_key: "legacy-key".to_string(),
-        };
+        let payload = Payload { amount: 100, idempotency_key: "legacy-key".to_string() };
         let receipt = CommandReceipt::from_payload(
             "receipt-",
             "actor-1",
@@ -461,10 +426,7 @@ mod tests {
             message: Some(format!("command_sha256={legacy_fingerprint}")),
         };
         assert!(receipt.id_candidates().contains(&legacy_id));
-        assert_eq!(
-            receipt.match_fact(&fact),
-            CommandReceiptMatch::SamePayload("payment-1".to_string())
-        );
+        assert_eq!(receipt.match_fact(&fact), CommandReceiptMatch::SamePayload("payment-1".to_string()));
     }
 
     #[test]
@@ -494,10 +456,7 @@ mod tests {
             message: Some(format!("command_sha256={legacy_fingerprint}; reason=safe")),
         };
         assert!(receipt.id_candidates().contains(&legacy_id));
-        assert_eq!(
-            receipt.match_fact(&fact),
-            CommandReceiptMatch::SamePayload("wi-1".to_string())
-        );
+        assert_eq!(receipt.match_fact(&fact), CommandReceiptMatch::SamePayload("wi-1".to_string()));
         assert_ne!(
             CommandFingerprint::from_parts(["ab".to_string(), "c".to_string()]),
             CommandFingerprint::from_parts(["a".to_string(), "bc".to_string()])

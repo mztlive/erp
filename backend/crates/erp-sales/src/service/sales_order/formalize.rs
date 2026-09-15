@@ -1,4 +1,10 @@
 //! Sales-owned immutable formal revision construction and transaction-local writes.
+use erp_core::common::time::Instant;
+use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::Executor;
+
 use crate::entity::sales_order::{
     FormalRevisionContext, FormalRevisionIdentities, FormalRevisionLineIdentity,
     FormalRevisionSubtypeIdentity, RevisionSource, SalesOrder, SalesOrderRevisionAggregate,
@@ -6,11 +12,6 @@ use crate::entity::sales_order::{
 };
 use crate::repository::SalesOrderExt;
 use crate::{Error, Result};
-use erp_core::common::time::Instant;
-use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::Executor;
 /// 读取该销售单最新提交及其明细。
 ///
 /// # 错误
@@ -27,10 +28,8 @@ pub async fn load_latest_submission(
         .await?
         .ok_or_else(|| Error::ConflictError("销售单没有可形式化的提交".to_string()))?;
     let submission_id = SalesOrderSubmissionId::new(submission.base.id.clone());
-    let lines = db
-        .sales_order_submission_lines()
-        .list_lines_by_submissions(&[submission_id], executor)
-        .await?;
+    let lines =
+        db.sales_order_submission_lines().list_lines_by_submissions(&[submission_id], executor).await?;
     Ok((submission, lines))
 }
 

@@ -2,15 +2,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::stable::StableBase;
-use erp_core::common::state::{ensure_transition, DocumentState};
-use erp_core::field_update::FieldUpdate;
-use erp_core::validation::normalize_required_text;
 use erp_core::Result;
-
+use erp_core::common::stable::StableBase;
+use erp_core::common::state::{DocumentState, ensure_transition};
+use erp_core::field_update::FieldUpdate;
 pub use erp_core::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
+use erp_core::validation::normalize_required_text;
+use serde::{Deserialize, Serialize};
 
 /// 供应商编号最大长度。
 const SUPPLIER_NO_MAX_LEN: usize = 64;
@@ -242,7 +240,7 @@ impl SupplierAccount {
     /// 当引用超长时返回错误。
     fn apply_payment_term(&mut self, update: FieldUpdate<String>) -> Result<()> {
         match update {
-            FieldUpdate::Unchanged => {}
+            FieldUpdate::Unchanged => {},
             FieldUpdate::Clear => self.default_payment_term_id = None,
             FieldUpdate::Set(value) => self.default_payment_term_id = normalize_payment_term_id(Some(value))?,
         }
@@ -304,13 +302,14 @@ fn normalize_payment_term_id(value: Option<String>) -> Result<Option<String>> {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::state::assert_adjacency_closed;
+    use erp_core::field_update::FieldUpdate;
+    use erp_core::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
+
     use super::{
         SupplierAccount, SupplierAccountData, SupplierAccountStatus, SupplierAccountUpdate,
         SupplierProfileUpdateViolation,
     };
-    use erp_core::common::state::assert_adjacency_closed;
-    use erp_core::field_update::FieldUpdate;
-    use erp_core::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
 
     fn account_data() -> SupplierAccountData {
         SupplierAccountData {
@@ -337,22 +336,14 @@ mod tests {
     /// 失败路径：编号为空/超长、引用超长。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank = SupplierAccountData {
-            supplier_no: "   ".to_string(),
-            ..account_data()
-        };
+        let blank = SupplierAccountData { supplier_no: "   ".to_string(), ..account_data() };
         assert!(SupplierAccount::new(SupplierAccountId::new("s"), blank, "admin-1").is_err());
 
-        let overlong = SupplierAccountData {
-            supplier_no: "x".repeat(65),
-            ..account_data()
-        };
+        let overlong = SupplierAccountData { supplier_no: "x".repeat(65), ..account_data() };
         assert!(SupplierAccount::new(SupplierAccountId::new("s"), overlong, "admin-1").is_err());
 
-        let overlong_term = SupplierAccountData {
-            default_payment_term_id: Some("t".repeat(65)),
-            ..account_data()
-        };
+        let overlong_term =
+            SupplierAccountData { default_payment_term_id: Some("t".repeat(65)), ..account_data() };
         assert!(SupplierAccount::new(SupplierAccountId::new("s"), overlong_term, "admin-1").is_err());
     }
 
@@ -377,11 +368,7 @@ mod tests {
             .unwrap();
         assert!(!account.is_active());
         assert_eq!(
-            account
-                .current_commercial_profile_revision_id
-                .as_ref()
-                .map(ToString::to_string)
-                .as_deref(),
+            account.current_commercial_profile_revision_id.as_ref().map(ToString::to_string).as_deref(),
             Some("profile-rev-1")
         );
         assert_eq!(account.stable.updated_by, "admin-2");
@@ -414,10 +401,7 @@ mod tests {
         assert_eq!(account.default_payment_term_id, None);
         assert_eq!(account.supplier_no, "S-2026-001");
         assert_eq!(account.party_id, PartyId::new("party-1"));
-        assert!(
-            account.current_commercial_profile_revision_id.is_some(),
-            "Unchanged 保留原值"
-        );
+        assert!(account.current_commercial_profile_revision_id.is_some(), "Unchanged 保留原值");
     }
 
     /// 资料修订先校验版本，再校验供应商启停状态。

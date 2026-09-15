@@ -5,13 +5,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::catalog::status::EnableStatus;
 use erp_core::common::stable::StableBase;
 use erp_core::ids::UnitOfMeasureId;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::catalog::status::EnableStatus;
 
 /// 单位代码最大长度。
 const CODE_MAX_LEN: usize = 64;
@@ -181,9 +181,10 @@ fn ensure_quantity_scale(scale: u8) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
     use erp_core::ids::UnitOfMeasureId;
+
+    use super::*;
 
     fn data() -> UnitOfMeasureData {
         UnitOfMeasureData {
@@ -210,16 +211,10 @@ mod tests {
     /// 失败路径：必填空、越界（小数位 > 6）各一条。
     #[test]
     fn new_rejects_empty_and_out_of_range_scale() {
-        let empty_code = UnitOfMeasureData {
-            unit_code: "  ".to_string(),
-            ..data()
-        };
+        let empty_code = UnitOfMeasureData { unit_code: "  ".to_string(), ..data() };
         assert!(UnitOfMeasure::new(UnitOfMeasureId::new("uom-1"), empty_code, "admin-1").is_err());
 
-        let over_range = UnitOfMeasureData {
-            quantity_scale: 7,
-            ..data()
-        };
+        let over_range = UnitOfMeasureData { quantity_scale: 7, ..data() };
         assert!(UnitOfMeasure::new(UnitOfMeasureId::new("uom-1"), over_range, "admin-1").is_err());
     }
 
@@ -229,10 +224,7 @@ mod tests {
         for scale in [0, 6] {
             let unit = UnitOfMeasure::new(
                 UnitOfMeasureId::new("uom-1"),
-                UnitOfMeasureData {
-                    quantity_scale: scale,
-                    ..data()
-                },
+                UnitOfMeasureData { quantity_scale: scale, ..data() },
                 "admin-1",
             )
             .unwrap();
@@ -262,10 +254,7 @@ mod tests {
         assert!(!unit.is_active());
         assert_eq!(unit.unit_code, "KG");
 
-        let over_range_update = UnitOfMeasureUpdate {
-            quantity_scale: Some(7),
-            ..Default::default()
-        };
+        let over_range_update = UnitOfMeasureUpdate { quantity_scale: Some(7), ..Default::default() };
         assert!(unit.update(over_range_update, "admin-2").is_err());
     }
 

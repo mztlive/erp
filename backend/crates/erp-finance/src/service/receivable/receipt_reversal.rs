@@ -1,5 +1,14 @@
 //! 回款逆向核销的财务事务内写入与关联销售标识读取；不持有根事务或退货聚合。
 
+use std::collections::{HashMap, HashSet};
+
+use erp_core::common::time::Instant;
+use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableEntryId, SalesOrderId};
+use erp_core::money::Amount;
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::Executor;
+
 use crate::entity::receivable::{
     AllocationAction as ReceivableAllocationAction, CustomerReceipt, CustomerReceiptStatus,
     ReceiptAllocation, ReceiptAllocationData, ReceiptReverseChunk, ReceiptReversePlanRow, ReceivableAccount,
@@ -7,13 +16,6 @@ use crate::entity::receivable::{
 };
 use crate::repository::ReceivableExt;
 use crate::{Error, Result};
-use erp_core::common::time::Instant;
-use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableEntryId, SalesOrderId};
-use erp_core::money::Amount;
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::Executor;
-use std::collections::{HashMap, HashSet};
 
 /// 按标识索引的冲减分录与账户事实；读取方解释具体业务缺项。
 #[derive(Debug, Clone)]
@@ -101,11 +103,7 @@ pub fn unique_account_ids_for_entries<T>(
     entry_ids: &[String],
     account_id_of: impl Fn(&T) -> String,
 ) -> Vec<String> {
-    unique_ids_in_first_seen_order(
-        entry_ids
-            .iter()
-            .filter_map(|id| entries.get(id).map(&account_id_of)),
-    )
+    unique_ids_in_first_seen_order(entry_ids.iter().filter_map(|id| entries.get(id).map(&account_id_of)))
 }
 
 /// 批量读取应收分录及其账户，缺任一项失败关闭。
@@ -129,15 +127,8 @@ pub async fn load_receivable_offset_facts(
     executor: &mut dyn Executor,
 ) -> Result<OffsetFacts<ReceivableEntry, ReceivableAccount>> {
     let unique_entry_ids = unique_ids_in_first_seen_order(entry_ids.into_iter().map(|id| id.to_string()));
-    let typed_entry_ids = unique_entry_ids
-        .iter()
-        .cloned()
-        .map(ReceivableEntryId::new)
-        .collect::<Vec<_>>();
-    let entries = db
-        .receivable_entries()
-        .find_entries_by_ids(&typed_entry_ids, executor)
-        .await?;
+    let typed_entry_ids = unique_entry_ids.iter().cloned().map(ReceivableEntryId::new).collect::<Vec<_>>();
+    let entries = db.receivable_entries().find_entries_by_ids(&typed_entry_ids, executor).await?;
     let entries = index_required_by_id(
         entries,
         &unique_entry_ids,
@@ -147,10 +138,7 @@ pub async fn load_receivable_offset_facts(
     let unique_account_ids = unique_account_ids_for_entries(&entries, &unique_entry_ids, |entry| {
         entry.receivable_account_id.to_string()
     });
-    let accounts = db
-        .receivable_accounts()
-        .find_accounts_by_ids(&unique_account_ids, executor)
-        .await?;
+    let accounts = db.receivable_accounts().find_accounts_by_ids(&unique_account_ids, executor).await?;
     let accounts = index_required_by_id(
         accounts,
         &unique_account_ids,
@@ -232,12 +220,9 @@ async fn revert_receipt_settlements(
     actor_id: &str,
     session: &mut dyn Executor,
 ) -> Result<()> {
-    let facts = load_receivable_offset_facts(
-        db,
-        chunks.iter().map(|chunk| chunk.increase_entry_id.clone()),
-        session,
-    )
-    .await?;
+    let facts =
+        load_receivable_offset_facts(db, chunks.iter().map(|chunk| chunk.increase_entry_id.clone()), session)
+            .await?;
     for chunk in chunks {
         let entry = facts
             .entries
@@ -279,9 +264,7 @@ async fn sales_order_ids_for_receipt_allocations(
 ) -> Result<Vec<String>> {
     let facts = load_receivable_offset_facts(
         db,
-        allocations
-            .iter()
-            .map(|allocation| allocation.receivable_entry_id.clone()),
+        allocations.iter().map(|allocation| allocation.receivable_entry_id.clone()),
         session,
     )
     .await?;

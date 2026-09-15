@@ -3,24 +3,23 @@
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, SubjectRef};
 use erp_procurement::entity::purchase_order::PurchaseOrderStatus;
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::BpmExt;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::service::approval::execution::{
+    RuntimeHistoryItem, RuntimeHistoryPage, history_item_from_execution, history_page_from,
+    latest_rejection_reason,
+};
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
 use super::approval::order::{
-    document_approval_view, document_approval_view_with_definition, RECENT_HISTORY_LIMIT,
+    RECENT_HISTORY_LIMIT, document_approval_view, document_approval_view_with_definition,
 };
 use super::dto::{
     DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
     DocumentApprovalView,
 };
-
 use crate::Result;
-use erp_workflow::service::approval::execution::{
-    history_item_from_execution, history_page_from, latest_rejection_reason, RuntimeHistoryItem,
-    RuntimeHistoryPage,
-};
 
 /// 加载采购单详情的只读审批结构。
 ///
@@ -81,10 +80,7 @@ pub(super) async fn load_change_document_approval(
     let mut view = super::approval::change::document_approval_view(binding, None, status);
     if let Some(binding) = binding {
         let graph = load_bound_definition_graph(db, binding).await?;
-        view.definition = Some(super::approval::order::definition_view_from_binding(
-            binding,
-            Some(&graph),
-        ));
+        view.definition = Some(super::approval::order::definition_view_from_binding(binding, Some(&graph)));
     }
     let subject = erp_workflow::entity::approval_integration::subject_ref_for(
         erp_workflow::entity::document_registry::DocumentType::PurchaseChangeOrder,
@@ -117,11 +113,7 @@ struct LoadedRuntime {
 /// # 错误
 /// 仓储失败时返回错误。
 async fn load_runtime(db: &Database, subject: &SubjectRef) -> Result<LoadedRuntime> {
-    let Some(instance) = db
-        .bpm_workflow()
-        .find_latest_by_subject(subject, &mut NoTransaction)
-        .await?
-    else {
+    let Some(instance) = db.bpm_workflow().find_latest_by_subject(subject, &mut NoTransaction).await? else {
         return Ok(empty_runtime());
     };
     project_runtime(db, instance).await
@@ -140,17 +132,10 @@ async fn load_runtime(db: &Database, subject: &SubjectRef) -> Result<LoadedRunti
 /// 仓储失败时返回错误。
 async fn project_runtime(db: &Database, instance: ApprovalProcessInstance) -> Result<LoadedRuntime> {
     let instance_id = ApprovalProcessInstanceId::new(instance.base.id.clone());
-    let current = db
-        .bpm_workflow()
-        .find_current_execution(&instance_id, &mut NoTransaction)
-        .await?;
+    let current = db.bpm_workflow().find_current_execution(&instance_id, &mut NoTransaction).await?;
     let page = load_recent_history(db, &instance_id).await?;
     Ok(LoadedRuntime {
-        instance: Some(instance_view(
-            &instance,
-            current.as_ref(),
-            latest_rejection_reason(&page.items),
-        )),
+        instance: Some(instance_view(&instance, current.as_ref(), latest_rejection_reason(&page.items))),
         recent_history: page.items.iter().map(history_item_view).collect(),
         history_page: DocumentApprovalHistoryPageView {
             next_cursor: page.next_cursor,
@@ -194,10 +179,7 @@ fn empty_runtime() -> LoadedRuntime {
     LoadedRuntime {
         instance: None,
         recent_history: Vec::new(),
-        history_page: DocumentApprovalHistoryPageView {
-            next_cursor: None,
-            has_more: false,
-        },
+        history_page: DocumentApprovalHistoryPageView { next_cursor: None, has_more: false },
     }
 }
 
@@ -260,11 +242,7 @@ fn history_item_view(item: &RuntimeHistoryItem) -> DocumentApprovalHistoryItemVi
 /// 非空文本；空白返回 `None`。
 fn optional_text(value: &str) -> Option<String> {
     let text = value.trim();
-    if text.is_empty() {
-        None
-    } else {
-        Some(text.to_string())
-    }
+    if text.is_empty() { None } else { Some(text.to_string()) }
 }
 
 /// 查询冻结定义并保持采购缺图错误；不补默认流程。

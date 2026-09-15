@@ -36,6 +36,11 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
+/// 不生效，空单号需要按「空白视为空」拒绝，落入 HTTP 400）。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -49,13 +54,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
-/// 不生效，空单号需要按「空白视为空」拒绝，落入 HTTP 400）。
-use application_core::non_blank;
 
 mod purchase_receipt;
 pub use purchase_receipt::{
@@ -88,13 +86,14 @@ pub use customer_acceptance::{
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        normalize_sort, CreateDeliveryRequest, CreatePurchaseReceiptRequest, DeliveryListParams,
-        DeliveryView, PurchaseReceiptListParams, PurchaseReceiptView, SortDir,
-    };
-    use crate::entity::fulfillment::{DeliveryState, DeliveryType, PurchaseReceiptState};
     use erp_core::ids::SalesOrderId;
     use validator::Validate;
+
+    use super::{
+        CreateDeliveryRequest, CreatePurchaseReceiptRequest, DeliveryListParams, DeliveryView,
+        PurchaseReceiptListParams, PurchaseReceiptView, SortDir, normalize_sort,
+    };
+    use crate::entity::fulfillment::{DeliveryState, DeliveryType, PurchaseReceiptState};
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {

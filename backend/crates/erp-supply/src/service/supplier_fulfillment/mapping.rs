@@ -1,8 +1,7 @@
+use crate::dto::supplier_fulfillment::SupplierOrderResolution;
 use crate::entity::supplier_fulfillment::{
     SupplierOrderActionLine, SupplierRefundAllocation, SupplierRefundFact, VerifiedSupplierOrderResolution,
 };
-
-use crate::dto::supplier_fulfillment::SupplierOrderResolution;
 
 impl From<VerifiedSupplierOrderResolution> for SupplierOrderResolution {
     /// 将实体层已验证业务终态映射为服务契约枚举。

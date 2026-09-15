@@ -420,7 +420,7 @@ impl PartyFactsPort for EmptyPartyFacts {
 
 #[cfg(test)]
 mod tests {
-    use super::{select_current_default, EffectiveRecordStatusFact, PartyContactFact};
+    use super::{EffectiveRecordStatusFact, PartyContactFact, select_current_default};
 
     fn contact(id: &str, is_default: bool, active: bool) -> PartyContactFact {
         PartyContactFact {
@@ -446,11 +446,7 @@ mod tests {
 
     #[test]
     fn select_current_default_prefers_active_default() {
-        let items = vec![
-            contact("c1", false, true),
-            contact("c2", true, true),
-            contact("c3", true, false),
-        ];
+        let items = vec![contact("c1", false, true), contact("c2", true, true), contact("c3", true, false)];
         let selected =
             select_current_default(&items, |item| item.is_default, |item| item.status.is_active()).unwrap();
         assert_eq!(selected.id, "c2");

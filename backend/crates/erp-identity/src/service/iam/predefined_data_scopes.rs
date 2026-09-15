@@ -1,29 +1,16 @@
 //! S2 首次授权清单；范围身份固定，重跑不恢复已撤销记录。
 
 use super::SharedRbacService;
+use crate::Result;
 use crate::access_control::{
     DataScopeData, DataScopeSubjectType, DataScopeType, ScopeBinding, ScopeDimension, ScopeTargetMode,
 };
 use crate::service::access_control::consumers::validate_binding;
-use crate::Result;
 
 /// 已接入 S2 的资源与完整动作目录；不得用通配符初始化范围。
 pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[
-    (
-        "approval_instance",
-        &[
-            "read",
-            "decide",
-            "resume",
-            "cancel",
-            "cancel_blocked",
-            "upgrade_binding",
-        ],
-    ),
-    (
-        "stock_adjustment",
-        &["list", "detail", "create", "update", "submit"],
-    ),
+    ("approval_instance", &["read", "decide", "resume", "cancel", "cancel_blocked", "upgrade_binding"]),
+    ("stock_adjustment", &["list", "detail", "create", "update", "submit"]),
     ("stock_balance", &["list", "detail"]),
     ("stock_movement", &["list"]),
     ("stock_reservation", &["list"]),
@@ -36,30 +23,8 @@ pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[
     ("cost_allocation", &["list"]),
     ("customer", &["list", "detail", "create", "update", "delete"]),
     ("contract", &["list", "detail", "create", "update"]),
-    (
-        "sales_order",
-        &[
-            "list",
-            "detail",
-            "create",
-            "update",
-            "delete",
-            "submit",
-            "cancel_approval",
-        ],
-    ),
-    (
-        "purchase_order",
-        &[
-            "list",
-            "detail",
-            "create",
-            "update",
-            "delete",
-            "submit",
-            "cancel_approval",
-        ],
-    ),
+    ("sales_order", &["list", "detail", "create", "update", "delete", "submit", "cancel_approval"]),
+    ("purchase_order", &["list", "detail", "create", "update", "delete", "submit", "cancel_approval"]),
 ];
 
 /// 首次初始化显式岗位清单；没有条目的岗位不获得兜底范围。
@@ -131,7 +96,7 @@ fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeDat
     let mut scope_types = vec![DataScopeType::Company];
     let mut granted_actions = actions.to_vec();
     match role {
-        "role-root" => {}
+        "role-root" => {},
         "role-finance"
             if matches!(
                 resource,
@@ -142,20 +107,20 @@ fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeDat
                     | "stock_reservation"
                     | "customer_refund"
                     | "supplier_refund"
-            ) => {}
-        "role-finance" | "role-management" if resource == "approval_instance" => {}
-        "role-sysadmin" if matches!(resource, "org_unit" | "work_item") => {}
-        "role-management" if resource == "work_item" => {}
+            ) => {},
+        "role-finance" | "role-management" if resource == "approval_instance" => {},
+        "role-sysadmin" if matches!(resource, "org_unit" | "work_item") => {},
+        "role-management" if resource == "work_item" => {},
         "role-management" | "role-finance" => {
             granted_actions.retain(|action| matches!(*action, "list" | "detail"))
-        }
+        },
         "role-sales-leader" => {
             scope_types = vec![DataScopeType::Team];
             granted_actions.retain(|action| matches!(*action, "list" | "detail"));
-        }
+        },
         "role-sales" if resource != "purchase_order" => {
             scope_types = vec![DataScopeType::SelfOwned, DataScopeType::Collaborative]
-        }
+        },
         "role-procurement" if resource == "purchase_order" => scope_types = vec![DataScopeType::SelfOwned],
         _ => return Vec::new(),
     }
@@ -179,13 +144,11 @@ fn definition(role: &str, resource: &str, actions: &[&str], scope_type: DataScop
             target_dimension: match resource {
                 "stock_adjustment" | "stock_balance" | "stock_movement" | "stock_reservation" => {
                     ScopeDimension::Warehouse
-                }
+                },
                 "customer_refund" | "supplier_refund" => ScopeDimension::SettlementParty,
                 _ => ScopeDimension::InternalOrg,
             },
-            target_mode: scope_type
-                .requires_targets()
-                .then_some(ScopeTargetMode::ManagedOrgs),
+            target_mode: scope_type.requires_targets().then_some(ScopeTargetMode::ManagedOrgs),
             include_descendants: None,
             enabled: true,
         },

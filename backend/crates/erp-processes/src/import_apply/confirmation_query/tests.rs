@@ -1,4 +1,3 @@
-use super::{authorized_work_item_view, read_only_work_item_view, work_item_view};
 use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use erp_import::ConfirmationStatus;
@@ -6,6 +5,8 @@ use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
 use erp_workflow::service::work_item::{AuthorizedWorkItem, ProcessingState, WorkItemAllowedAction};
+
+use super::{authorized_work_item_view, read_only_work_item_view, work_item_view};
 
 fn task(work_item_type: WorkItemType) -> WorkItem {
     WorkItem::new_at(
@@ -37,15 +38,9 @@ fn task(work_item_type: WorkItemType) -> WorkItem {
 #[test]
 fn raw_and_read_only_views_preserve_actual_linked_task_type() {
     for (kind, wire) in [
-        (
-            WorkItemType::ImportBusinessConfirmation,
-            "IMPORT_BUSINESS_CONFIRMATION",
-        ),
+        (WorkItemType::ImportBusinessConfirmation, "IMPORT_BUSINESS_CONFIRMATION"),
         (WorkItemType::BusinessException, "BUSINESS_EXCEPTION"),
-        (
-            WorkItemType::IntegrationResultUnknown,
-            "INTEGRATION_RESULT_UNKNOWN",
-        ),
+        (WorkItemType::IntegrationResultUnknown, "INTEGRATION_RESULT_UNKNOWN"),
     ] {
         let item = task(kind);
         let raw = work_item_view(&item);
@@ -61,10 +56,7 @@ fn raw_and_read_only_views_preserve_actual_linked_task_type() {
         assert_eq!(serde_json::to_value(&read_only).unwrap()["work_item_type"], wire);
         assert_eq!(read_only.owner_user_id, None);
         assert!(read_only.allowed_actions.is_empty());
-        assert_eq!(
-            read_only.action_blockers,
-            ["当前账号不在该责任范围，任务仅可查看。"]
-        );
+        assert_eq!(read_only.action_blockers, ["当前账号不在该责任范围，任务仅可查看。"]);
     }
 }
 
@@ -94,10 +86,7 @@ fn authorized_projection_keeps_actual_type_status_and_existing_action_rules() {
         assert_eq!(view.task_version, "9");
         assert_eq!(view.subject_version, "subject-7");
         assert_eq!(view.owner_user_id.as_deref(), Some("owner-user"));
-        assert_eq!(
-            view.allowed_actions,
-            ["VIEW", "PROCESS", "CONFIRM_SCOPE", "RETURN_FOR_FIX"]
-        );
+        assert_eq!(view.allowed_actions, ["VIEW", "PROCESS", "CONFIRM_SCOPE", "RETURN_FOR_FIX"]);
         assert_eq!(view.action_blockers, ["original blocker"]);
         let wire = serde_json::to_value(view).unwrap();
         assert_eq!(wire["work_item_type"], "BUSINESS_EXCEPTION");
@@ -117,16 +106,8 @@ fn authorized_projection_uses_registered_destinations_and_preserves_route_errors
         action_blockers: Vec::new(),
     };
     for (kind, handler, workspace) in [
-        (
-            WorkItemType::ImportBusinessConfirmation,
-            "import_business_confirmation",
-            "W18",
-        ),
-        (
-            WorkItemType::IntegrationResultUnknown,
-            "integration_unknown",
-            "W29",
-        ),
+        (WorkItemType::ImportBusinessConfirmation, "import_business_confirmation", "W18"),
+        (WorkItemType::IntegrationResultUnknown, "integration_unknown", "W29"),
     ] {
         let view = authorized_work_item_view(authorized(task(kind)), ConfirmationStatus::Pending).unwrap();
         assert_eq!(view.work_item_type, kind);

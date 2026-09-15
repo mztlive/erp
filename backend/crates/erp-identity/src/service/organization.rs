@@ -2,11 +2,12 @@
 
 mod access;
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
-use std::sync::Arc;
 
 use self::access::{prepare_organization_change, visible_state};
 use crate::dto::{OrgPersonView, OrgRoleView, OrganizationStateView};
@@ -93,11 +94,7 @@ impl OrganizationService {
         as_of: Instant,
         executor: &mut dyn Executor,
     ) -> Result<Vec<OrgPersonView>> {
-        let accounts = self
-            .db
-            .accounts()
-            .list_by_kind(erp_core::AccountKind::Admin, executor)
-            .await?;
+        let accounts = self.db.accounts().list_by_kind(erp_core::AccountKind::Admin, executor).await?;
         let mut people = Vec::new();
         for account in accounts {
             if account.base.is_deleted() {
@@ -135,10 +132,7 @@ impl OrganizationService {
         executor: &mut dyn Executor,
     ) -> Result<Vec<OrgRoleView>> {
         let mut roles = self.db.roles().list_enabled(executor).await?;
-        let known = roles
-            .iter()
-            .map(|role| role.base.id.clone())
-            .collect::<std::collections::BTreeSet<_>>();
+        let known = roles.iter().map(|role| role.base.id.clone()).collect::<std::collections::BTreeSet<_>>();
         let extra = visible
             .management
             .iter()
@@ -148,11 +142,7 @@ impl OrganizationService {
         roles.extend(self.db.roles().roles_by_ids(&extra, executor).await?);
         let mut views = roles
             .into_iter()
-            .map(|role| OrgRoleView {
-                id: role.base.id,
-                name: role.name,
-                enabled: !role.disabled,
-            })
+            .map(|role| OrgRoleView { id: role.base.id, name: role.name, enabled: !role.disabled })
             .collect::<Vec<_>>();
         views.sort_by(|left, right| (&left.name, &left.id).cmp(&(&right.name, &right.id)));
         views.dedup_by(|left, right| left.id == right.id);
@@ -265,7 +255,7 @@ impl OrganizationService {
         match change {
             OrganizationOperation::TransferMember { user_id, .. } => {
                 self.ensure_account(user_id, executor).await?;
-            }
+            },
             OrganizationOperation::GrantManagement { user_id, role_id, .. } => {
                 self.ensure_account(user_id, executor).await?;
                 let roles = self.rbac.role_ids(erp_core::AccountKind::Admin, user_id).await?;
@@ -279,11 +269,11 @@ impl OrganizationService {
                 {
                     return Err(Error::ValidationError("接收人必须持有有效的指定角色".into()));
                 }
-            }
+            },
             OrganizationOperation::DisableUnit { org_unit_id } => {
                 self.ensure_no_unsettled(org_unit_id, executor).await?
-            }
-            _ => {}
+            },
+            _ => {},
         }
         Ok(())
     }
@@ -298,13 +288,7 @@ impl OrganizationService {
 
     /// 成员与管理关系只授予有效后台账号。
     async fn ensure_account(&self, user: &str, executor: &mut dyn Executor) -> Result<()> {
-        if self
-            .db
-            .accounts()
-            .find_by_id(user, executor)
-            .await?
-            .is_none_or(|a| !a.is_active_backoffice())
-        {
+        if self.db.accounts().find_by_id(user, executor).await?.is_none_or(|a| !a.is_active_backoffice()) {
             return Err(Error::ValidationError("接收人不是有效后台账号".into()));
         }
         Ok(())

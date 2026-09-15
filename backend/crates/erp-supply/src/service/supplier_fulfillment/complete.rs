@@ -1,9 +1,10 @@
 //! 完成动作的业务终态证据与原确认记录；工作项推进由流程承担。
+use erp_core::ids::SupplierOrderActionId;
+use serde::{Deserialize, Serialize};
+
 use crate::dto::supplier_fulfillment::SupplierOrderResolution;
 use crate::entity::supplier_fulfillment::*;
 use crate::{Error, Result};
-use erp_core::ids::SupplierOrderActionId;
-use serde::{Deserialize, Serialize};
 const COMPLETION_EVIDENCE_SCHEMA: &str = "W26_TASK_COMPLETION_V1";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompletionEvidenceRecord {
@@ -50,9 +51,7 @@ pub fn ensure_current_resolution(
         .ensure_original_for_order(&order.base.id)
         .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
     if order.verified_resolution(target_action).map(Into::into) != Some(resolution) {
-        return Err(Error::ConflictError(
-            "供应商结果已变化，请刷新证据后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("供应商结果已变化，请刷新证据后重试".to_string()));
     }
     Ok(())
 }

@@ -4,11 +4,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-
 use erp_core::ids::{SalesSelectionBookletId, SalesSelectionIdempotencyId};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 /// 幂等操作域。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -199,10 +198,11 @@ pub fn request_hash(payload: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        request_hash, IdempotencyOperation, SalesSelectionIdempotency, SalesSelectionIdempotencyData,
-    };
     use erp_core::ids::SalesSelectionIdempotencyId;
+
+    use super::{
+        IdempotencyOperation, SalesSelectionIdempotency, SalesSelectionIdempotencyData, request_hash,
+    };
 
     fn record() -> SalesSelectionIdempotency {
         SalesSelectionIdempotency::new(

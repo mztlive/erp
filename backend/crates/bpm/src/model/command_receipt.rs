@@ -1,16 +1,15 @@
 //! 命令幂等收据。相同键同载荷回读，不同载荷冲突。
 
+use std::fmt;
+
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{
-    de::{Error as DeserializeError, IgnoredAny, MapAccess, Visitor},
-    Deserialize, Deserializer, Serialize,
-};
-use std::fmt;
+use serde::de::{Error as DeserializeError, IgnoredAny, MapAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::ids::ApprovalCommandReceiptId;
 use crate::model::types::{
-    base_model_at, normalize_required, ApprovalCommandKind, ModelError, ModelResult, SCOPE_MAX_LEN,
+    ApprovalCommandKind, ModelError, ModelResult, SCOPE_MAX_LEN, base_model_at, normalize_required,
 };
 use crate::model::{ApprovalCommandIdentity, IdempotencyKey, Timestamp};
 
@@ -73,13 +72,13 @@ impl<'de> Deserialize<'de> for ApprovalCommandReceipt {
                                 return Err(A::Error::duplicate_field("id"));
                             }
                             id = Some(map.next_value()?);
-                        }
+                        },
                         "version" => {
                             if version.is_some() {
                                 return Err(A::Error::duplicate_field("version"));
                             }
                             version = Some(map.next_value()?);
-                        }
+                        },
                         "created_at" => {
                             created_at_count = created_at_count.saturating_add(1);
                             if created_at_count > 2 {
@@ -91,56 +90,56 @@ impl<'de> Deserialize<'de> for ApprovalCommandReceipt {
                             match created_at {
                                 Some(existing) if existing != value => {
                                     return Err(A::Error::custom("duplicate created_at values do not match"));
-                                }
-                                Some(_) => {}
+                                },
+                                Some(_) => {},
                                 None => created_at = Some(value),
                             }
-                        }
+                        },
                         "updated_at" => {
                             if updated_at.is_some() {
                                 return Err(A::Error::duplicate_field("updated_at"));
                             }
                             updated_at = Some(map.next_value()?);
-                        }
+                        },
                         "deleted_at" => {
                             if deleted_at.is_some() {
                                 return Err(A::Error::duplicate_field("deleted_at"));
                             }
                             deleted_at = Some(map.next_value()?);
-                        }
+                        },
                         "command_kind" => {
                             if command_kind.is_some() {
                                 return Err(A::Error::duplicate_field("command_kind"));
                             }
                             command_kind = Some(map.next_value()?);
-                        }
+                        },
                         "scope_id" => {
                             if scope_id.is_some() {
                                 return Err(A::Error::duplicate_field("scope_id"));
                             }
                             scope_id = Some(map.next_value()?);
-                        }
+                        },
                         "idempotency_key" => {
                             if idempotency_key.is_some() {
                                 return Err(A::Error::duplicate_field("idempotency_key"));
                             }
                             idempotency_key = Some(map.next_value()?);
-                        }
+                        },
                         "payload_digest" => {
                             if payload_digest.is_some() {
                                 return Err(A::Error::duplicate_field("payload_digest"));
                             }
                             payload_digest = Some(map.next_value()?);
-                        }
+                        },
                         "result_ref" => {
                             if result_ref.is_some() {
                                 return Err(A::Error::duplicate_field("result_ref"));
                             }
                             result_ref = Some(map.next_value()?);
-                        }
+                        },
                         _ => {
                             map.next_value::<IgnoredAny>()?;
-                        }
+                        },
                     }
                 }
 
@@ -229,14 +228,15 @@ impl ApprovalCommandReceipt {
 
 #[cfg(test)]
 mod tests {
+    use entity_core::BaseModel;
+    use serde::Serialize;
+
     use super::ApprovalCommandReceipt;
     use crate::ids::ApprovalCommandReceiptId;
     use crate::model::types::{ApprovalCommandKind, ModelError};
     use crate::model::{
         ApprovalCommandIdentity, CanonicalCommandPayload, CommandPayloadField, IdempotencyKey, Timestamp,
     };
-    use entity_core::BaseModel;
-    use serde::Serialize;
 
     #[derive(Serialize)]
     struct LegacyApprovalCommandReceipt {
@@ -287,10 +287,7 @@ mod tests {
         let same = identity("digest-a");
         let changed = identity("digest-b");
         assert!(receipt.reconcile_identity(&same).is_ok());
-        assert_eq!(
-            receipt.reconcile_identity(&changed),
-            Err(ModelError::CommandReceiptConflict)
-        );
+        assert_eq!(receipt.reconcile_identity(&changed), Err(ModelError::CommandReceiptConflict));
     }
 
     /// 收据只使用 BaseModel 的创建时间；BSON 不得出现同名字段反序列化冲突。
@@ -351,9 +348,7 @@ mod tests {
         let error = bson::deserialize_from_slice::<ApprovalCommandReceipt>(raw.as_bytes())
             .expect_err("不一致的历史双 created_at 必须失败关闭");
         assert!(
-            error
-                .to_string()
-                .contains("duplicate created_at values do not match"),
+            error.to_string().contains("duplicate created_at values do not match"),
             "unexpected error: {error}"
         );
     }
@@ -371,19 +366,15 @@ mod tests {
             result_ref: receipt.result_ref,
             created_at: Timestamp::from_unix_secs(1).unwrap(),
         };
-        let corrupt = CorruptApprovalCommandReceipt {
-            legacy,
-            created_at: Timestamp::from_unix_secs(1).unwrap(),
-        };
+        let corrupt =
+            CorruptApprovalCommandReceipt { legacy, created_at: Timestamp::from_unix_secs(1).unwrap() };
         let raw =
             bson::serialize_to_raw_document_buf(&corrupt).expect("三 created_at 损坏 fixture 必须可序列化");
 
         let error = bson::deserialize_from_slice::<ApprovalCommandReceipt>(raw.as_bytes())
             .expect_err("第三个 created_at 必须失败关闭");
         assert!(
-            error
-                .to_string()
-                .contains("created_at may appear at most twice for legacy receipts"),
+            error.to_string().contains("created_at may appear at most twice for legacy receipts"),
             "unexpected error: {error}"
         );
     }

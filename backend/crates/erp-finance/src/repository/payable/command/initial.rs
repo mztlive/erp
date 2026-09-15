@@ -1,9 +1,10 @@
 //! 应付账户及原始分录的生产写入顺序。
-use crate::entity::payable::{PayableAccount, PayableEntry};
-use crate::repository::PayableExt;
 use async_trait::async_trait;
 use mongodb::Database;
-use persistence_core::{mongo_ops, Executor, Result};
+use persistence_core::{Executor, Result, mongo_ops};
+
+use crate::entity::payable::{PayableAccount, PayableEntry};
+use crate::repository::PayableExt;
 #[async_trait]
 trait Store: Send {
     async fn account(&mut self, account: &PayableAccount, ex: &mut dyn Executor) -> Result<()>;
@@ -23,9 +24,7 @@ struct MongoStore<'a>(&'a Database);
 impl Store for MongoStore<'_> {
     async fn account(&mut self, account: &PayableAccount, ex: &mut dyn Executor) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .0
-                .collection::<PayableAccount>(<Database as PayableExt>::PAYABLE_ACCOUNTS),
+            &self.0.collection::<PayableAccount>(<Database as PayableExt>::PAYABLE_ACCOUNTS),
             account,
             ex,
         )
@@ -33,12 +32,8 @@ impl Store for MongoStore<'_> {
         Ok(())
     }
     async fn entry(&mut self, entry: &PayableEntry, ex: &mut dyn Executor) -> Result<()> {
-        mongo_ops::insert_one(
-            &self.0.collection::<PayableEntry>(super::super::PAYABLE_ENTRIES),
-            entry,
-            ex,
-        )
-        .await?;
+        mongo_ops::insert_one(&self.0.collection::<PayableEntry>(super::super::PAYABLE_ENTRIES), entry, ex)
+            .await?;
         Ok(())
     }
 }
@@ -52,14 +47,14 @@ pub(super) async fn create(
 }
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::service::payable::supplier_settlement::{build_settlement_payable, SettlementPayableSource};
-    use erp_core::{
-        common::time::{BusinessDate, Instant},
-        ids::SupplierAccountId,
-        money::Amount,
-    };
     use std::str::FromStr;
+
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::SupplierAccountId;
+    use erp_core::money::Amount;
+
+    use super::*;
+    use crate::service::payable::supplier_settlement::{SettlementPayableSource, build_settlement_payable};
     struct TestExecutor {
         _identity: u8,
     }
@@ -109,27 +104,17 @@ mod tests {
         .unwrap();
         for fail in [None, Some("account"), Some("entry")] {
             let mut ex = TestExecutor { _identity: 1 };
-            let mut store = Recording {
-                calls: vec![],
-                executor: &mut ex as *mut TestExecutor as usize,
-                fail,
-            };
+            let mut store =
+                Recording { calls: vec![], executor: &mut ex as *mut TestExecutor as usize, fail };
             let result = execute(&mut store, &account, &entry, &mut ex).await;
             if fail.is_some() {
-                assert!(matches!(
-                    result,
-                    Err(persistence_core::Error::OptimisticLockingError)
-                ));
+                assert!(matches!(result, Err(persistence_core::Error::OptimisticLockingError)));
             } else {
                 result.unwrap();
             }
             assert_eq!(
                 store.calls,
-                if fail == Some("account") {
-                    vec!["account"]
-                } else {
-                    vec!["account", "entry"]
-                }
+                if fail == Some("account") { vec!["account"] } else { vec!["account", "entry"] }
             );
         }
     }

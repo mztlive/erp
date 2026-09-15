@@ -5,28 +5,26 @@
 
 pub mod purchase_initial;
 
-use crate::entity::cost::{
-    CostAllocation, CostAllocationData, CostAllocationLineInput, CostAllocationSet, CostEntry, CostEntryData,
-    CostScope,
-};
-use crate::repository::CostExt;
+use std::collections::{HashMap, HashSet};
 
 use erp_core::ids::{CostAllocationId, CostEntryId, SalesOrderId};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
-use std::collections::{HashMap, HashSet};
 use validator::Validate;
-
-use crate::{Error, Result};
-
-use crate::dto::cost as dto;
 
 use self::dto::SortDir;
 pub use self::dto::{
     CostAllocationListParams, CostAllocationView, CostEntryListParams, CostEntryView, CreateCostEntryRequest,
     PageView,
 };
+use crate::dto::cost as dto;
+use crate::entity::cost::{
+    CostAllocation, CostAllocationData, CostAllocationLineInput, CostAllocationSet, CostEntry, CostEntryData,
+    CostScope,
+};
+use crate::repository::CostExt;
+use crate::{Error, Result};
 
 /// 成本事实列表筛选条件类型（经 `CostExt` 关联类型跨 crate 可达）。
 type CostEntryFilter = <mongodb::Database as CostExt>::CostEntryFilter;
@@ -69,16 +67,8 @@ impl CostService {
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     pub async fn cost_entry_list(&self, params: &CostEntryListParams) -> Result<PageView<CostEntryView>> {
         let filter = cost_entry_filter(params)?;
-        let page = self
-            .db
-            .cost_entries()
-            .search_cost_entries(&filter, &mut NoTransaction)
-            .await?;
-        let entry_ids = page
-            .items
-            .iter()
-            .map(|row| CostEntryId::new(row.id.clone()))
-            .collect::<Vec<_>>();
+        let page = self.db.cost_entries().search_cost_entries(&filter, &mut NoTransaction).await?;
+        let entry_ids = page.items.iter().map(|row| CostEntryId::new(row.id.clone())).collect::<Vec<_>>();
         let mut allocations_by_entry = self.cost_allocations_by_entry(&entry_ids).await?;
         let items = page
             .items
@@ -88,12 +78,7 @@ impl CostService {
                 cost_entry_row_view(row, allocations)
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 查询成本事实详情（事实 + 分配行）。
@@ -131,11 +116,7 @@ impl CostService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .cost_allocations()
-            .search_cost_allocations(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.cost_allocations().search_cost_allocations(&filter, &mut NoTransaction).await?;
         // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结，无法命名），
         // 此处按字段映射为响应视图，避免把仓储类型泄漏到接口层。
         let items = page
@@ -151,12 +132,7 @@ impl CostService {
                 rounding_residual_flag: row.rounding_residual_flag,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 装配成本事实详情视图。
@@ -220,17 +196,11 @@ impl CostService {
         &self,
         entry_ids: &[CostEntryId],
     ) -> Result<HashMap<String, Vec<CostAllocation>>> {
-        let allocations = self
-            .db
-            .cost_allocations()
-            .find_allocations_by_entries(entry_ids, &mut NoTransaction)
-            .await?;
+        let allocations =
+            self.db.cost_allocations().find_allocations_by_entries(entry_ids, &mut NoTransaction).await?;
         let mut by_entry = HashMap::<String, Vec<CostAllocation>>::new();
         for allocation in allocations {
-            by_entry
-                .entry(allocation.cost_entry_id.to_string())
-                .or_default()
-                .push(allocation);
+            by_entry.entry(allocation.cost_entry_id.to_string()).or_default().push(allocation);
         }
         Ok(by_entry)
     }
@@ -332,10 +302,7 @@ fn cost_allocation_entity_view(allocation: CostAllocation) -> CostAllocationView
 /// 无。
 pub fn dedupe_order_ids(ids: &[SalesOrderId]) -> Vec<SalesOrderId> {
     let mut seen = HashSet::with_capacity(ids.len());
-    ids.iter()
-        .filter(|&id| seen.insert(id.clone()))
-        .cloned()
-        .collect()
+    ids.iter().filter(|&id| seen.insert(id.clone())).cloned().collect()
 }
 
 /// 按输入顺序返回第一个缺失的销售单 ID。
@@ -439,21 +406,21 @@ pub async fn persist_cost_entry_in_transaction(
     prepared: PreparedCostEntry,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    db.cost()
-        .create_cost_entry_with_allocations(&prepared.entry, prepared.allocations, executor)
-        .await?;
+    db.cost().create_cost_entry_with_allocations(&prepared.entry, prepared.allocations, executor).await?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        cost_allocation_entity_view, cost_entry_row_view, CostAllocation, CostAllocationData, CostEntryRow,
-    };
+    use std::str::FromStr;
+
     use erp_core::ids::{CostAllocationId, CostEntryId, SalesOrderId};
     use erp_core::money::Amount;
     use serde_json::json;
-    use std::str::FromStr;
+
+    use super::{
+        CostAllocation, CostAllocationData, CostEntryRow, cost_allocation_entity_view, cost_entry_row_view,
+    };
 
     #[test]
     fn entry_view_copies_zero_amount_scale_and_keeps_missing_allocations_empty() {
@@ -532,16 +499,10 @@ mod tests {
     fn missing_order_id_reports_first_missing_in_input_order() {
         let requested = vec![SalesOrderId::new("so-1"), SalesOrderId::new("so-2")];
         let existing = vec![SalesOrderId::new("so-1")];
-        assert_eq!(
-            super::missing_order_id(&requested, &existing).unwrap(),
-            SalesOrderId::new("so-2")
-        );
+        assert_eq!(super::missing_order_id(&requested, &existing).unwrap(), SalesOrderId::new("so-2"));
 
         let empty_existing = Vec::<SalesOrderId>::new();
-        assert_eq!(
-            super::missing_order_id(&requested, &empty_existing).unwrap(),
-            SalesOrderId::new("so-1")
-        );
+        assert_eq!(super::missing_order_id(&requested, &empty_existing).unwrap(), SalesOrderId::new("so-1"));
     }
 
     #[test]

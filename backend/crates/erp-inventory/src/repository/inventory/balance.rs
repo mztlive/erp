@@ -1,19 +1,16 @@
-use crate::repository::owned::StockBalanceRepository;
 use chrono::Local;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::inventory::StockBalance;
 use erp_core::ids::{SkuId, StockMovementId, WarehouseId};
 use erp_core::money::Quantity;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use serde::{Deserialize, Serialize};
 
 use super::shared::{active_entity_by_id, both_dec, both_inc, cross_inc, ids_to_strings, sort_doc, to_bson};
 use super::{InventoryRepository, STOCK_BALANCES};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::inventory::StockBalance;
+use crate::repository::owned::StockBalanceRepository;
 
 /// 库存余额列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -126,10 +123,7 @@ impl<'a> StockBalanceRepository<'a> {
         let collection = self.collection().clone_with_type::<StockBalanceRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按库存维度查找余额（`(warehouse_id, sku_id)` 全局唯一）。
@@ -382,11 +376,7 @@ impl<'a> StockBalanceRepository<'a> {
 
 /// 为余额分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
 fn stock_balance_sort(filter: &StockBalanceFilter) -> Document {
-    let mut sort = sort_doc(
-        filter.sort_by.as_deref(),
-        filter.sort_ascending,
-        &["sku_id", "created_at"],
-    );
+    let mut sort = sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, &["sku_id", "created_at"]);
     sort.insert("id", if filter.sort_ascending { 1 } else { -1 });
     sort
 }
@@ -474,9 +464,7 @@ impl<'a> InventoryRepository<'a> {
                 "available_quantity": { "$gt": 0 },
                 "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
             },
-            FindOptions::builder()
-                .sort(doc! { "warehouse_id": 1, "sku_id": 1, "id": 1 })
-                .build(),
+            FindOptions::builder().sort(doc! { "warehouse_id": 1, "sku_id": 1, "id": 1 }).build(),
             executor,
         )
         .await
@@ -502,10 +490,11 @@ fn stock_balance_projection() -> Document {
 
 #[cfg(test)]
 mod filter_tests {
-    use super::{stock_balance_sort, StockBalanceFilter};
     use erp_core::ids::WarehouseId;
-    use mongodb::bson::{doc, Bson};
+    use mongodb::bson::{Bson, doc};
     use persistence_core::QueryFilter;
+
+    use super::{StockBalanceFilter, stock_balance_sort};
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockBalanceFilter {
         StockBalanceFilter {
@@ -529,12 +518,7 @@ mod filter_tests {
             &doc! { "$in": ["warehouse-1"] }
         );
         assert_eq!(
-            filter(Some(Vec::new()))
-                .to_doc()
-                .get_document("warehouse_id")
-                .unwrap()
-                .get_array("$in")
-                .unwrap(),
+            filter(Some(Vec::new())).to_doc().get_document("warehouse_id").unwrap().get_array("$in").unwrap(),
             &Vec::<Bson>::new()
         );
         assert!(!filter(None).to_doc().contains_key("warehouse_id"));

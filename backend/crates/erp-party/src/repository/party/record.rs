@@ -1,16 +1,15 @@
-use crate::entity::party::{Party, PartyKind, PartyStatus};
-use crate::repository::owned::PartyRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PartyId;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
 use super::shared::sort_doc;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::party::{Party, PartyKind, PartyStatus};
+use crate::repository::owned::PartyRepository;
 
 /// 主体列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -166,10 +165,7 @@ impl<'a> PartyRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按主体编号查找主体，包含已软删除记录。
@@ -213,12 +209,8 @@ impl<'a> PartyRepository<'a> {
         unified_credit_code: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<Party>> {
-        mongo_ops::find_one(
-            &self.collection(),
-            doc! { "unified_credit_code": unified_credit_code },
-            executor,
-        )
-        .await
+        mongo_ops::find_one(&self.collection(), doc! { "unified_credit_code": unified_credit_code }, executor)
+            .await
     }
 
     /// 按主体 ID 集合批量读取未删除主体。
@@ -263,9 +255,10 @@ fn party_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
+    use persistence_core::QueryFilter;
+
     use super::PartyFilter;
     use crate::entity::party::{PartyKind, PartyStatus};
-    use persistence_core::QueryFilter;
 
     #[test]
     fn party_filter_applies_keyword_regex_and_status() {
@@ -296,13 +289,7 @@ mod tests {
         let clauses = named.get_array("$or").unwrap();
         assert_eq!(clauses.len(), 2);
         assert_eq!(
-            clauses[0]
-                .as_document()
-                .unwrap()
-                .get_document("id")
-                .unwrap()
-                .get_array("$in")
-                .unwrap()[0]
+            clauses[0].as_document().unwrap().get_document("id").unwrap().get_array("$in").unwrap()[0]
                 .as_str(),
             Some("party-name-match")
         );

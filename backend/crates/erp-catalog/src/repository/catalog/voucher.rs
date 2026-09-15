@@ -1,20 +1,17 @@
-use crate::repository::owned::VoucherCategoryProfileRevisionRepository;
 use std::collections::HashMap;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
+use erp_core::ids::{ProductId, SkuId};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::catalog::{EnableStatus, Product, Sku, VoucherCategoryProfileRevision};
-use erp_core::ids::{ProductId, SkuId};
-
-use super::shared::{in_filter, sort_doc};
 use super::CatalogRepository;
+use super::shared::{in_filter, sort_doc};
+use crate::entity::catalog::{EnableStatus, Product, Sku, VoucherCategoryProfileRevision};
 use crate::repository::CatalogExt;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::repository::owned::VoucherCategoryProfileRevisionRepository;
 
 /// 卡券类目扩展修订列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -112,24 +109,16 @@ impl<'a> VoucherCategoryProfileRevisionRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<VoucherCategoryProfileRevisionRow>> {
         let options = FindOptions::builder()
-            .sort(voucher_revision_sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-            ))
+            .sort(voucher_revision_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(voucher_revision_projection())
             .build();
-        let collection = self
-            .collection()
-            .clone_with_type::<VoucherCategoryProfileRevisionRow>();
+        let collection = self.collection().clone_with_type::<VoucherCategoryProfileRevisionRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 查找 SKU 当前启用的卡券类目扩展修订。
@@ -184,8 +173,7 @@ impl<'a> CatalogRepository<'a> {
             .voucher_category_profile_revisions()
             .search_voucher_category_profile_revisions(filter, executor)
             .await?;
-        self.attach_voucher_profile_context(&mut result.items, executor)
-            .await?;
+        self.attach_voucher_profile_context(&mut result.items, executor).await?;
         Ok(result)
     }
 
@@ -243,10 +231,7 @@ impl<'a> CatalogRepository<'a> {
             .voucher_category_profile_revisions()
             .find_many(doc! { "sku_id": sku_id.to_string() }, executor)
             .await?;
-        Ok(revisions
-            .iter()
-            .map(|revision| revision.revision.revision_no)
-            .max())
+        Ok(revisions.iter().map(|revision| revision.revision.revision_no).max())
     }
 
     /// 解析指定卡券类目 SKU 的当前扩展修订。
@@ -296,22 +281,11 @@ impl<'a> CatalogRepository<'a> {
         let products = self.voucher_profile_products(&skus, executor).await?;
         let product_revisions = self.current_product_revisions(&products, executor).await?;
         let sku_revisions = self.current_sku_revisions(&skus, executor).await?;
-        let sku_by_id = skus
-            .into_iter()
-            .map(|sku| (sku.base.id.clone(), sku))
-            .collect::<HashMap<_, _>>();
-        let product_by_id = products
-            .into_iter()
-            .map(|product| (product.base.id.clone(), product))
-            .collect::<HashMap<_, _>>();
+        let sku_by_id = skus.into_iter().map(|sku| (sku.base.id.clone(), sku)).collect::<HashMap<_, _>>();
+        let product_by_id =
+            products.into_iter().map(|product| (product.base.id.clone(), product)).collect::<HashMap<_, _>>();
         for row in rows {
-            attach_voucher_row(
-                row,
-                &sku_by_id,
-                &product_by_id,
-                &product_revisions,
-                &sku_revisions,
-            );
+            attach_voucher_row(row, &sku_by_id, &product_by_id, &product_revisions, &sku_revisions);
         }
         Ok(())
     }
@@ -355,19 +329,14 @@ impl<'a> CatalogRepository<'a> {
         skus: &[Sku],
         executor: &mut dyn Executor,
     ) -> Result<Vec<Product>> {
-        let product_ids = skus
-            .iter()
-            .map(|sku| ProductId::new(sku.product_id.to_string()))
-            .collect::<Vec<_>>();
+        let product_ids =
+            skus.iter().map(|sku| ProductId::new(sku.product_id.to_string())).collect::<Vec<_>>();
         if product_ids.is_empty() {
             return Ok(Vec::new());
         }
         self.db
             .products()
-            .find_many(
-                in_filter("id", product_ids.into_iter().map(|id| id.to_string())),
-                executor,
-            )
+            .find_many(in_filter("id", product_ids.into_iter().map(|id| id.to_string())), executor)
             .await
     }
 }
@@ -398,14 +367,10 @@ fn attach_voucher_row(
     row.product_id = Some(sku.product_id.to_string());
     if let Some(product) = product_by_id.get(sku.product_id.as_ref()) {
         row.product_version = Some(product.base.version);
-        row.name = product_revisions
-            .get(&product.base.id)
-            .map(|revision| revision.name.clone());
+        row.name = product_revisions.get(&product.base.id).map(|revision| revision.name.clone());
     }
     if row.name.is_none() {
-        row.name = sku_revisions
-            .get(&sku.base.id)
-            .map(|revision| revision.name.clone());
+        row.name = sku_revisions.get(&sku.base.id).map(|revision| revision.name.clone());
     }
     if row.name.is_none() {
         row.name = Some(row.description.clone());

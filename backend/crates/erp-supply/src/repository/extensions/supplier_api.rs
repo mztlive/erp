@@ -5,15 +5,15 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as SupplierApiExt>::SUPPLIER_API_CONNECTIONS` 等值。
 
-use crate::repository::owned::{
-    BusinessCapabilityConfirmationRepository, SupplierApiCapabilityRepository,
-    SupplierApiConnectionRepository, SupplierConnectionCommandReceiptRepository,
-    SupplierHealthCheckRunRepository,
-};
 use mongodb::Database;
 
 use super::super::supplier_api::{
     SupplierApiCapabilityFilter, SupplierApiConnectionFilter, SupplierApiRepository,
+};
+use crate::repository::owned::{
+    BusinessCapabilityConfirmationRepository, SupplierApiCapabilityRepository,
+    SupplierApiConnectionRepository, SupplierConnectionCommandReceiptRepository,
+    SupplierHealthCheckRunRepository,
 };
 
 /// 域 D25 仓储访问器。

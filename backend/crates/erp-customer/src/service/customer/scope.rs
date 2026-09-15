@@ -1,12 +1,13 @@
 //! 客户列表与候选的一致授权快照；范围与业务版本跨页携带。
 
+use std::hash::{Hash, Hasher};
+
 use application_core::{AuditActor, FilterOption, FilteredPage};
 use persistence_core::Transactional;
 use serde::Serialize;
-use std::hash::{Hash, Hasher};
 
-use super::access::intersect_ids;
 use super::CustomerService;
+use super::access::intersect_ids;
 use crate::dto::customer::{CustomerListParams, CustomerListQuery, CustomerScope, CustomerView};
 use crate::error::{Error, Result};
 use crate::ports::{CustomerDataScopePort, CustomerResolvedScope};
@@ -94,10 +95,8 @@ impl CustomerService {
                         .customer_assignments()
                         .current_owners(authorized.as_deref(), None, as_of, executor)
                         .await?;
-                    let owner_ids = owners
-                        .iter()
-                        .map(|assignment| assignment.user_id.clone())
-                        .collect::<Vec<_>>();
+                    let owner_ids =
+                        owners.iter().map(|assignment| assignment.user_id.clone()).collect::<Vec<_>>();
                     let owner_options = accounts.filter_options(&owner_ids).await?;
                     let keyword_party_ids = match query.keyword.as_deref() {
                         Some(keyword) => Some(party.matching_ids_by_name(keyword).await?),
@@ -115,10 +114,7 @@ impl CustomerService {
                         sort_by: Some(query.paging.sort_by.to_string()),
                         sort_ascending: matches!(query.paging.sort_dir, crate::dto::customer::SortDir::Asc),
                     };
-                    let page = db
-                        .customer_accounts()
-                        .search_customer_accounts(&filter, executor)
-                        .await?;
+                    let page = db.customer_accounts().search_customer_accounts(&filter, executor).await?;
                     let versions = db.customer_accounts().query_versions(&filter, executor).await?;
                     if versions.len() > 10_000 {
                         return Err(Error::ValidationError(
@@ -306,23 +302,13 @@ async fn apply_org_unit_filter(
         return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
     }
     let expanded = data_scope
-        .expand_org_units(
-            org_ids.as_slice(),
-            query.include_descendants.unwrap_or(false),
-            executor,
-        )
+        .expand_org_units(org_ids.as_slice(), query.include_descendants.unwrap_or(false), executor)
         .await?;
-    let members = data_scope
-        .org_member_ids(&expanded, context.as_of, executor)
-        .await?;
+    let members = data_scope.org_member_ids(&expanded, context.as_of, executor).await?;
     if members.len() > 10_000 {
-        return Err(Error::ValidationError(
-            "组织成员超过查询上限，请收窄组织筛选".into(),
-        ));
+        return Err(Error::ValidationError("组织成员超过查询上限，请收窄组织筛选".into()));
     }
-    Ok(Some(
-        current_owner_customer_ids(db, ids.as_deref(), &members, as_of, executor).await?,
-    ))
+    Ok(Some(current_owner_customer_ids(db, ids.as_deref(), &members, as_of, executor).await?))
 }
 
 /// 读取指定负责人集合的当前主责客户。
@@ -383,7 +369,7 @@ fn assignment_filter(scope: &CustomerReadScope, requested: CustomerScope) -> Opt
             ids.sort();
             ids.dedup();
             Some(ids)
-        }
+        },
     }
 }
 
@@ -408,10 +394,7 @@ fn assignment_filter(scope: &CustomerReadScope, requested: CustomerScope) -> Opt
 /// 范围标签只描述命中原因，不授予额外权限。
 async fn hydrate_rows(
     db: &mongodb::Database,
-    facts: (
-        &dyn crate::ports::PartyFactPort,
-        &dyn crate::ports::AccountFactPort,
-    ),
+    facts: (&dyn crate::ports::PartyFactPort, &dyn crate::ports::AccountFactPort),
     rows: Vec<crate::repository::CustomerAccountRow>,
     actor_user_id: &str,
     requested_scope: CustomerScope,
@@ -422,20 +405,13 @@ async fn hydrate_rows(
     if rows.is_empty() {
         return Ok(Vec::new());
     }
-    let party_ids: Vec<erp_core::ids::PartyId> = rows
-        .iter()
-        .map(|row| erp_core::ids::PartyId::new(row.party_id.clone()))
-        .collect();
+    let party_ids: Vec<erp_core::ids::PartyId> =
+        rows.iter().map(|row| erp_core::ids::PartyId::new(row.party_id.clone())).collect();
     let identities = party.identities_by_ids(&party_ids).await?;
     let customer_ids: Vec<String> = rows.iter().map(|row| row.id.clone()).collect();
-    let assignments = db
-        .customer_assignments()
-        .list_active_for_customers(&customer_ids, as_of, executor)
-        .await?;
-    let account_ids: Vec<String> = assignments
-        .iter()
-        .map(|assignment| assignment.user_id.clone())
-        .collect();
+    let assignments =
+        db.customer_assignments().list_active_for_customers(&customer_ids, as_of, executor).await?;
+    let account_ids: Vec<String> = assignments.iter().map(|assignment| assignment.user_id.clone()).collect();
     let account_names = accounts.names_by_ids(&account_ids).await?;
     Ok(super::assemble_customer_views(
         rows,
@@ -462,10 +438,7 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(query.scope_version.as_deref(), Some("v1"));
-        assert_eq!(
-            query.org_unit_ids.unwrap().as_slice(),
-            &["org-1".to_string(), "org-2".to_string()]
-        );
+        assert_eq!(query.org_unit_ids.unwrap().as_slice(), &["org-1".to_string(), "org-2".to_string()]);
         assert_eq!(query.include_descendants, Some(true));
         assert!(serde_json::from_value::<CustomerListParams>(serde_json::json!({"owner": "张三"})).is_err());
     }
@@ -479,7 +452,7 @@ mod tests {
         match ensure_page(2, None) {
             Err(Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED："));
-            }
+            },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
     }
@@ -491,13 +464,13 @@ mod tests {
         match ensure_scope_version(Some("v1"), "v2") {
             Err(Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED："));
-            }
+            },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
         match ensure_stable_snapshot("v1", "v9") {
             Err(Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED："));
-            }
+            },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
         assert!(ensure_stable_snapshot("v1", "v1").is_ok());
@@ -514,13 +487,7 @@ mod tests {
             authorized_customer_ids: Some(vec!["c-1".into()]),
         };
         assert!(assignment_filter(&scope, CustomerScope::AllAuthorized).is_none());
-        assert_eq!(
-            assignment_filter(&scope, CustomerScope::Mine),
-            Some(vec!["c-own".into()])
-        );
-        assert_eq!(
-            assignment_filter(&scope, CustomerScope::Collaborating),
-            Some(vec!["c-collab".into()])
-        );
+        assert_eq!(assignment_filter(&scope, CustomerScope::Mine), Some(vec!["c-own".into()]));
+        assert_eq!(assignment_filter(&scope, CustomerScope::Collaborating), Some(vec!["c-collab".into()]));
     }
 }

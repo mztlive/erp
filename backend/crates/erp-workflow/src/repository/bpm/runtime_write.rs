@@ -5,14 +5,13 @@ use bpm::model::{
     IdempotencyKey,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, serialize_to_document, Document};
+use mongodb::bson::{Document, doc, serialize_to_document};
+use persistence_core::{Error, Executor, Result, mongo_ops};
 
 use super::{
-    i64_version, merge_documents, ApprovalInstanceListProjection, BpmWorkflowRepository, CasReplaceSpec,
-    CasWriteOutcome, ASSIGNEES, EXECUTIONS, INSTANCES, RECEIPTS,
+    ASSIGNEES, ApprovalInstanceListProjection, BpmWorkflowRepository, CasReplaceSpec, CasWriteOutcome,
+    EXECUTIONS, INSTANCES, RECEIPTS, i64_version, merge_documents,
 };
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Error, Result};
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 只写入 BPM 运行事实：实例、审批人、首个执行和命令收据。
@@ -83,12 +82,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         idempotency_key: &IdempotencyKey,
         executor: &mut dyn Executor,
     ) -> Result<Option<ApprovalCommandReceipt>> {
-        self.receipts()
-            .find_one(
-                receipt_key_filter(command_kind, scope_id, idempotency_key),
-                executor,
-            )
-            .await
+        self.receipts().find_one(receipt_key_filter(command_kind, scope_id, idempotency_key), executor).await
     }
 
     /// 持久化已由引擎形成的取消实例、结束执行和命令收据。
@@ -115,8 +109,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         receipt: &ApprovalCommandReceipt,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.persist_cancelled_runtime_after_receipt(instance, updated_executions, executor)
-            .await?;
+        self.persist_cancelled_runtime_after_receipt(instance, updated_executions, executor).await?;
         self.insert_command_receipt(receipt, executor).await
     }
 
@@ -135,9 +128,8 @@ impl<'a> BpmWorkflowRepository<'a> {
         updated_executions: &[ApprovalNodeExecution],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let current = updated_executions
-            .first()
-            .ok_or(Error::EntityMetadataOutOfRange("cancelled_execution"))?;
+        let current =
+            updated_executions.first().ok_or(Error::EntityMetadataOutOfRange("cancelled_execution"))?;
         let current_id = ApprovalNodeExecutionId::new(current.base.id.clone());
         let expected_instance_version = previous_version(instance.base.version)?;
         require_cas_applied(
@@ -153,8 +145,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         for execution in updated_executions {
             let expected_execution_version = previous_version(execution.base.version)?;
             require_cas_applied(
-                self.end_cancellable_execution(execution, expected_execution_version, executor)
-                    .await?,
+                self.end_cancellable_execution(execution, expected_execution_version, executor).await?,
             )?;
         }
         Ok(())
@@ -415,9 +406,7 @@ pub(super) fn instance_insert_document(
 /// # 错误
 /// 当前版本为零时返回元数据越界错误。
 pub(super) fn previous_version(current_version: u64) -> Result<u64> {
-    current_version
-        .checked_sub(1)
-        .ok_or(Error::EntityMetadataOutOfRange("version"))
+    current_version.checked_sub(1).ok_or(Error::EntityMetadataOutOfRange("version"))
 }
 
 /// 要求语义写入中的 CAS 已成功应用。

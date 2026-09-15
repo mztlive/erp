@@ -1,9 +1,8 @@
 //! 审批定义图的节点顺序、入口、连线形状与完整线性模型校验。
 
+use super::{LinearTransitionDraft, MAX_DEFINITION_NODES, generate_linear_transitions};
 use crate::model::types::{ModelError, ModelResult, NODE_KEY_MAX_LEN};
 use crate::model::{ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition};
-
-use super::{generate_linear_transitions, LinearTransitionDraft, MAX_DEFINITION_NODES};
 
 /// 校验单条连线实体形状。
 ///
@@ -101,10 +100,7 @@ pub fn validate_linear_graph(
     transitions: &[ApprovalTransitionDefinition],
 ) -> ModelResult<()> {
     let ordered = ordered_nodes(nodes)?;
-    let keys = ordered
-        .into_iter()
-        .map(|node| node.node_key.clone())
-        .collect::<Vec<_>>();
+    let keys = ordered.into_iter().map(|node| node.node_key.clone()).collect::<Vec<_>>();
     validate_entry_node(&definition.entry_node_key, &keys)?;
     if definition.entry_node_key.trim() != keys[0] {
         return Err(ModelError::InvalidField("入口必须是顺序第一节点"));
@@ -179,7 +175,7 @@ fn transition_key(
 #[cfg(test)]
 mod tests {
     use super::{ordered_nodes, validate_entry_node, validate_linear_graph, validate_transition};
-    use crate::graph::{build_linear_transitions, DefinitionGraph};
+    use crate::graph::{DefinitionGraph, build_linear_transitions};
     use crate::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
     use crate::model::types::ApprovalTransitionEvent;
     use crate::model::{
@@ -256,9 +252,7 @@ mod tests {
         let transitions = build_linear_transitions(
             &ApprovalProcessDefinitionId::new("def"),
             &nodes,
-            (1..=4)
-                .map(|index| ApprovalTransitionDefinitionId::new(format!("t{index}")))
-                .collect(),
+            (1..=4).map(|index| ApprovalTransitionDefinitionId::new(format!("t{index}"))).collect(),
             Timestamp::from_unix_secs(1).unwrap(),
         )
         .unwrap();
@@ -269,11 +263,7 @@ mod tests {
         assert!(validate_linear_graph(&wrong_entry, &nodes, &transitions).is_err());
         assert!(validate_linear_graph(&definition, &nodes, &transitions[..3]).is_err());
 
-        let graph = DefinitionGraph {
-            definition,
-            nodes,
-            transitions,
-        };
+        let graph = DefinitionGraph { definition, nodes, transitions };
         graph.validate_linear().unwrap();
     }
 }

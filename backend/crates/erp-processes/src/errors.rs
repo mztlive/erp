@@ -142,13 +142,13 @@ impl From<persistence_core::Error> for Error {
                 } else {
                     Self::ConflictError(duplicate_key_conflict_message(&error))
                 }
-            }
+            },
             persistence_core::Error::OptimisticLockingError => {
                 Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            }
+            },
             error @ persistence_core::Error::TransientTransactionConflict(_) => {
                 Self::TransientTransaction(error)
-            }
+            },
             error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
             other => Self::RepositoryError(other),
         }
@@ -201,10 +201,7 @@ impl From<validator::ValidationErrors> for Error {
 impl Error {
     /// Whether a failed transaction may already have committed on the server.
     pub fn command_may_have_committed(&self) -> bool {
-        matches!(
-            self,
-            Self::OutcomeUnknown(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_)
-        )
+        matches!(self, Self::OutcomeUnknown(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_))
     }
     /// 由合同冻结的审批稳定码构造应用错误。
     ///
@@ -236,12 +233,11 @@ impl Error {
 from_domain!(erp_read_models, Rbac, Coded);
 #[cfg(test)]
 mod tests {
-    use mongodb::error::Error as MongoError;
-
-    use super::WorkflowErrorCode;
-    use super::{duplicate_index_conflict_message, Error};
     use application_core::ErrorClass;
     use erp_workflow::ErrorCode;
+    use mongodb::error::Error as MongoError;
+
+    use super::{Error, WorkflowErrorCode, duplicate_index_conflict_message};
 
     fn named_duplicate(index: &str) -> persistence_core::Error {
         use mongodb::error::{ErrorKind, WriteError, WriteFailure};
@@ -252,9 +248,7 @@ mod tests {
             "errInfo": null,
         }))
         .expect("Mongo write error fixture");
-        persistence_core::Error::from(MongoError::from(ErrorKind::Write(WriteFailure::WriteError(
-            write,
-        ))))
+        persistence_core::Error::from(MongoError::from(ErrorKind::Write(WriteFailure::WriteError(write))))
     }
 
     #[test]
@@ -266,9 +260,7 @@ mod tests {
 
     #[test]
     fn duplicate_key_error_maps_to_conflict() {
-        let error = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom(
-            "duplicate key",
-        )));
+        let error = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
 
         assert!(matches!(error, Error::ConflictError(_)));
         assert_eq!(error.to_string(), "数据冲突: 数据已存在，请勿重复提交");
@@ -304,9 +296,9 @@ mod tests {
 
     #[test]
     fn transient_transaction_error_maps_to_conflict() {
-        let error = Error::from(persistence_core::Error::TransientTransactionConflict(
-            MongoError::custom("write conflict"),
-        ));
+        let error = Error::from(persistence_core::Error::TransientTransactionConflict(MongoError::custom(
+            "write conflict",
+        )));
 
         assert!(matches!(&error, Error::TransientTransaction(_)));
         assert_eq!(error.to_string(), "数据冲突: 并发事务冲突，请重试");
@@ -325,24 +317,19 @@ mod tests {
 
     #[test]
     fn other_database_error_remains_repository_error() {
-        let error = Error::from(persistence_core::Error::DatabaseError(MongoError::custom(
-            "connection failed",
-        )));
+        let error =
+            Error::from(persistence_core::Error::DatabaseError(MongoError::custom("connection failed")));
 
         assert!(matches!(error, Error::RepositoryError(_)));
     }
 
     #[test]
     fn unknown_commit_outcome_has_dedicated_service_semantics() {
-        let error = Error::from(persistence_core::Error::CommitOutcomeUnknown(MongoError::custom(
-            "unknown commit",
-        )));
+        let error =
+            Error::from(persistence_core::Error::CommitOutcomeUnknown(MongoError::custom("unknown commit")));
 
         assert!(matches!(&error, Error::OutcomeUnknown(_)));
-        assert_eq!(
-            error.to_string(),
-            "操作结果暂无法确认，请查询当前状态后再决定是否重试"
-        );
+        assert_eq!(error.to_string(), "操作结果暂无法确认，请查询当前状态后再决定是否重试");
     }
 
     #[test]
@@ -354,10 +341,7 @@ mod tests {
 
     #[test]
     fn contract_unprocessable_codes_are_business_logic_not_validation() {
-        for code in [
-            ErrorCode::ApprovalDefinitionInvalid,
-            ErrorCode::ApprovalRejectReasonRequired,
-        ] {
+        for code in [ErrorCode::ApprovalDefinitionInvalid, ErrorCode::ApprovalRejectReasonRequired] {
             let error = Error::from_approval_code(code);
             assert_eq!(code.class(), ErrorClass::BusinessRule, "{code} 必须是 422 语义");
             assert_eq!(error.code(), Some(code));
@@ -367,9 +351,7 @@ mod tests {
     #[test]
     fn approval_stable_codes_are_exhaustive() {
         assert_eq!(ErrorCode::ALL.len(), 21);
-        assert!(ErrorCode::ALL
-            .iter()
-            .all(|code| code.as_str().starts_with("APPROVAL_")));
+        assert!(ErrorCode::ALL.iter().all(|code| code.as_str().starts_with("APPROVAL_")));
     }
     #[test]
     fn historical_indexes_keep_typed_duplicate_for_http() {
@@ -390,10 +372,7 @@ mod tests {
 
     #[test]
     fn unknown_duplicate_and_similar_historical_name_remain_ordinary_conflict() {
-        for index in [
-            "unknown_index",
-            "uk_product_publication_revisions_publication_revision_extra",
-        ] {
+        for index in ["unknown_index", "uk_product_publication_revisions_publication_revision_extra"] {
             let error = Error::from(named_duplicate(index));
             assert!(matches!(&error, Error::ConflictError(message) if message == "数据已存在，请勿重复提交"));
         }
@@ -477,10 +456,7 @@ mod tests {
             (Error::ValidationError("x".to_string()), false),
             (Error::BusinessLogicError("x".to_string()), false),
             (Error::ConflictError("x".to_string()), false),
-            (
-                Error::ReceiptDuplicate(persistence_core::Error::DuplicateKey(MongoError::custom("x"))),
-                true,
-            ),
+            (Error::ReceiptDuplicate(persistence_core::Error::DuplicateKey(MongoError::custom("x"))), true),
             (
                 Error::TransientTransaction(persistence_core::Error::TransientTransactionConflict(
                     MongoError::custom("x"),
@@ -492,19 +468,11 @@ mod tests {
             (Error::Logic(erp_core::Error::from("x")), false),
             (Error::Rbac("x".to_string()), false),
             (
-                Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(MongoError::custom(
-                    "x",
-                ))),
+                Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(MongoError::custom("x"))),
                 true,
             ),
-            (
-                Error::RepositoryError(persistence_core::Error::EntityMetadataOutOfRange("x")),
-                false,
-            ),
-            (
-                Error::Coded(WorkflowErrorCode::ApprovalTaskVersionConflict),
-                false,
-            ),
+            (Error::RepositoryError(persistence_core::Error::EntityMetadataOutOfRange("x")), false),
+            (Error::Coded(WorkflowErrorCode::ApprovalTaskVersionConflict), false),
         ];
         for (error, expected) in cases {
             assert_eq!(error.command_may_have_committed(), expected, "{error:?}");
@@ -513,9 +481,7 @@ mod tests {
 
     #[test]
     fn read_model_bridge_preserves_typed_errors_and_workflow_code() {
-        let error = Error::from(erp_read_models::Error::ReceiptDuplicate(named_duplicate(
-            "receipt-index",
-        )));
+        let error = Error::from(erp_read_models::Error::ReceiptDuplicate(named_duplicate("receipt-index")));
         assert!(
             matches!(&error, Error::ReceiptDuplicate(source) if source.duplicate_index_name() == Some("receipt-index"))
         );

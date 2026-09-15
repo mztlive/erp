@@ -12,23 +12,22 @@
 //! **不提供**软删除/恢复方法；筛选/行类型定义在本文件，经 `AccessControlExt`
 //! 的关联类型对外暴露。
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
+use serde::{Deserialize, Serialize};
+
+use super::extensions::AccessControlExt;
 use crate::entity::access_control::{
     AuditEvent, AuditEventResult, DataScope, DataScopeSubjectType, DataScopeType, UserRole,
 };
 use crate::repository::owned::{
     AuditEventRepository, DataScopeRepository, PermissionRepository, UserRoleRepository,
 };
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use mongodb::Database;
-use serde::{Deserialize, Serialize};
-
-use super::extensions::AccessControlExt;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// `user_role` 集合名（单一来源：`AccessControlExt` 关联常量）。
 const USER_ROLES: &str = <mongodb::Database as AccessControlExt>::USER_ROLES;
@@ -136,10 +135,7 @@ impl<'a> PermissionRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -156,12 +152,7 @@ impl<'a> UserRoleRepository<'a> {
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     pub async fn list_by_user(&self, user_id: &str, executor: &mut dyn Executor) -> Result<Vec<UserRole>> {
-        self.find_many_sorted(
-            doc! { "user_id": user_id },
-            doc! { "effective_from": -1 },
-            executor,
-        )
-        .await
+        self.find_many_sorted(doc! { "user_id": user_id }, doc! { "effective_from": -1 }, executor).await
     }
 }
 
@@ -336,10 +327,7 @@ impl<'a> DataScopeRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 检测未迁移的个人上限；旧个人规则不能因 v2 过滤而丢失收窄效果。
@@ -414,8 +402,7 @@ impl<'a> DataScopeRepository<'a> {
         let Some(filter) = data_scope_subjects_filter(subject_type, subject_ids) else {
             return Ok(Vec::new());
         };
-        self.find_many_sorted(filter, doc! { "subject_id": 1, "created_at": 1 }, executor)
-            .await
+        self.find_many_sorted(filter, doc! { "subject_id": 1, "created_at": 1 }, executor).await
     }
 }
 
@@ -614,10 +601,7 @@ impl<'a> AuditEventRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -748,12 +732,12 @@ fn audit_event_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{data_scope_subjects_filter, sort_doc, AuditEventFilter, DataScopeFilter, PermissionFilter};
+    use mongodb::bson::{Bson, doc};
+    use persistence_core::{NoTransaction, QueryFilter};
+
+    use super::{AuditEventFilter, DataScopeFilter, PermissionFilter, data_scope_subjects_filter, sort_doc};
     use crate::entity::access_control::{AuditEventResult, DataScopeSubjectType, DataScopeType};
     use crate::repository::owned::DataScopeRepository;
-    use mongodb::bson::{doc, Bson};
-    use persistence_core::NoTransaction;
-    use persistence_core::QueryFilter;
 
     #[test]
     fn permission_filter_applies_resource_regex_and_flags() {
@@ -806,15 +790,8 @@ mod tests {
         assert_eq!(filter.get_i32("schema_version").unwrap(), 2);
         assert_eq!(filter.get_str("subject_type").unwrap(), "role");
         assert_eq!(
-            filter
-                .get_document("subject_id")
-                .unwrap()
-                .get_array("$in")
-                .unwrap(),
-            &vec![
-                Bson::String("role-1".to_string()),
-                Bson::String("missing-role".to_string())
-            ]
+            filter.get_document("subject_id").unwrap().get_array("$in").unwrap(),
+            &vec![Bson::String("role-1".to_string()), Bson::String("missing-role".to_string())]
         );
     }
 
@@ -822,16 +799,12 @@ mod tests {
     #[tokio::test]
     async fn data_scope_subjects_empty_input_does_not_touch_database() {
         assert!(data_scope_subjects_filter(DataScopeSubjectType::Role, &[]).is_none());
-        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
-            .await
-            .unwrap();
+        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap();
         let database = client.database("repository_data_scope_empty_subject_ids");
         let repository = DataScopeRepository::new(&database, "data_scopes");
 
-        let scopes = repository
-            .list_by_subjects(DataScopeSubjectType::Role, &[], &mut NoTransaction)
-            .await
-            .unwrap();
+        let scopes =
+            repository.list_by_subjects(DataScopeSubjectType::Role, &[], &mut NoTransaction).await.unwrap();
 
         assert!(scopes.is_empty());
     }
@@ -869,10 +842,7 @@ mod tests {
     #[test]
     fn sort_doc_defaults_to_created_at_and_whitelists_fields() {
         assert_eq!(sort_doc(None, false), doc! { "created_at": -1, "id": -1 });
-        assert_eq!(
-            sort_doc(Some("updated_at"), true),
-            doc! { "updated_at": 1, "id": 1 }
-        );
+        assert_eq!(sort_doc(Some("updated_at"), true), doc! { "updated_at": 1, "id": 1 });
         assert_eq!(
             sort_doc(Some("actor_id"), false),
             doc! { "created_at": -1, "id": -1 },
@@ -912,10 +882,7 @@ mod keyword_regression_tests {
         filter.created_before = Some(20);
         let query = filter.to_doc();
         assert_eq!(query.get_str("id").unwrap(), "event");
-        assert_eq!(
-            query.get_document("created_at").unwrap().get_i64("$lt").unwrap(),
-            20
-        );
+        assert_eq!(query.get_document("created_at").unwrap().get_i64("$lt").unwrap(), 20);
         assert!(query.contains_key("$or"));
         assert!(query.contains_key("$and"));
         let text = format!("{query:?}");

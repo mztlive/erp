@@ -19,9 +19,7 @@ impl<'a> SalesReturnLineRepository<'a> {
     /// # Returns
     /// Owned repository that delegates generic storage to persistence-core.
     pub fn new(db: &'a mongodb::Database, collection_name: &'a str) -> Self {
-        Self {
-            inner: persistence_core::Repository::new(db, collection_name),
-        }
+        Self { inner: persistence_core::Repository::new(db, collection_name) }
     }
 
     /// Returns the MongoDB database handle bound to this repository.

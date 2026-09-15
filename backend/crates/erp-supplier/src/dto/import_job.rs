@@ -1,8 +1,10 @@
 //! 供应商后台导入的提交与失败清单合同。
+use std::collections::HashSet;
+
+use serde::{Deserialize, Serialize};
+
 use super::import::{SupplierImportResult, SupplierImportRow};
 use crate::{Error, Result};
-use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 
 /// 同一请求身份只允许提交同一份文件内容。
 #[derive(Debug, Serialize, Deserialize)]
@@ -20,10 +22,7 @@ impl SupplierImportJobRequest {
     pub fn validate(&self) -> Result<()> {
         if self.request_id.is_empty()
             || self.request_id.len() > 128
-            || !self
-                .request_id
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b))
+            || !self.request_id.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b))
         {
             return Err(Error::ValidationError("导入请求标识无效".into()));
         }
@@ -34,11 +33,7 @@ impl SupplierImportJobRequest {
             return Err(Error::ValidationError("每次导入应为 1–500 行".into()));
         }
         let mut numbers = HashSet::new();
-        if self
-            .rows
-            .iter()
-            .any(|row| row.row_number < 2 || !numbers.insert(row.row_number))
-        {
+        if self.rows.iter().any(|row| row.row_number < 2 || !numbers.insert(row.row_number)) {
             return Err(Error::ValidationError("Excel 行号无效或重复".into()));
         }
         Ok(())
@@ -54,8 +49,9 @@ pub struct SupplierImportFailures {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::time::BusinessDate;
+
+    use super::*;
     fn request() -> SupplierImportJobRequest {
         SupplierImportJobRequest {
             request_id: "req-1".into(),

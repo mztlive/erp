@@ -1,20 +1,19 @@
 use std::collections::{HashMap, HashSet};
 
+use bpm::ProcessKind;
 use bpm::ids::ApprovalProcessDefinitionId;
 use bpm::model::types::ApprovalDefinitionStatus;
 use bpm::model::{ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition};
-use bpm::ProcessKind;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Error, Executor, Result, mongo_ops};
 
 use super::{
-    clamp_limit, find_limited, BpmWorkflowRepository, DefinitionCatalogRow, DefinitionCatalogStatusFact,
-    DefinitionGraph, LatestDefinitionVersionProjection, DEFINITIONS, MAX_CATALOG_STATUS_ROWS,
-    MAX_DEFINITION_GRAPH_DOCS, MAX_DEFINITION_VERSIONS, NODE_DEFINITIONS, TRANSITION_DEFINITIONS,
+    BpmWorkflowRepository, DEFINITIONS, DefinitionCatalogRow, DefinitionCatalogStatusFact, DefinitionGraph,
+    LatestDefinitionVersionProjection, MAX_CATALOG_STATUS_ROWS, MAX_DEFINITION_GRAPH_DOCS,
+    MAX_DEFINITION_VERSIONS, NODE_DEFINITIONS, TRANSITION_DEFINITIONS, clamp_limit, find_limited,
 };
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Error, Result};
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 查询同一流程种类当前唯一已发布定义。
@@ -26,9 +25,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         process_kind: ProcessKind,
         executor: &mut dyn Executor,
     ) -> Result<Option<ApprovalProcessDefinition>> {
-        self.definitions()
-            .find_one(published_kind_filter(process_kind), executor)
-            .await
+        self.definitions().find_one(published_kind_filter(process_kind), executor).await
     }
 
     /// 读取同一流程种类未删除定义的最高持久化业务版本。
@@ -52,9 +49,7 @@ impl<'a> BpmWorkflowRepository<'a> {
     ) -> Result<Option<u32>> {
         let options = latest_definition_version_options();
         let rows = mongo_ops::find_many(
-            &self
-                .db
-                .collection::<LatestDefinitionVersionProjection>(DEFINITIONS),
+            &self.db.collection::<LatestDefinitionVersionProjection>(DEFINITIONS),
             definition_versions_filter(process_kind),
             options,
             executor,
@@ -91,9 +86,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         process_kind: ProcessKind,
         executor: &mut dyn Executor,
     ) -> Result<Option<ApprovalProcessDefinition>> {
-        self.definitions()
-            .find_one(active_draft_filter(process_kind), executor)
-            .await
+        self.definitions().find_one(active_draft_filter(process_kind), executor).await
     }
 
     /// 批量读取定义及其节点、连线，禁止按节点 N+1。
@@ -105,20 +98,12 @@ impl<'a> BpmWorkflowRepository<'a> {
         definition_id: &ApprovalProcessDefinitionId,
         executor: &mut dyn Executor,
     ) -> Result<Option<DefinitionGraph>> {
-        let Some(definition) = self
-            .definitions()
-            .find_by_id(definition_id.as_ref(), executor)
-            .await?
-        else {
+        let Some(definition) = self.definitions().find_by_id(definition_id.as_ref(), executor).await? else {
             return Ok(None);
         };
         let nodes = self.load_definition_nodes(definition_id, executor).await?;
         let transitions = self.load_definition_transitions(definition_id, executor).await?;
-        Ok(Some(DefinitionGraph {
-            definition,
-            nodes,
-            transitions,
-        }))
+        Ok(Some(DefinitionGraph { definition, nodes, transitions }))
     }
 
     /// 按流程种类列表一次读取发布与草稿版本目录投影。
@@ -175,10 +160,8 @@ impl<'a> BpmWorkflowRepository<'a> {
         process_kind: ProcessKind,
         executor: &mut dyn Executor,
     ) -> Result<Option<DefinitionGraph>> {
-        let options = FindOptions::builder()
-            .limit(2)
-            .sort(doc! { "definition_version": -1, "id": 1 })
-            .build();
+        let options =
+            FindOptions::builder().limit(2).sort(doc! { "definition_version": -1, "id": 1 }).build();
         let rows = mongo_ops::find_many(
             &self.db.collection::<ApprovalProcessDefinition>(DEFINITIONS),
             published_kind_docs_filter(process_kind),
@@ -192,11 +175,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         let definition_id = ApprovalProcessDefinitionId::new(definition.base.id.clone());
         let nodes = self.load_definition_nodes(&definition_id, executor).await?;
         let transitions = self.load_definition_transitions(&definition_id, executor).await?;
-        Ok(Some(DefinitionGraph {
-            definition,
-            nodes,
-            transitions,
-        }))
+        Ok(Some(DefinitionGraph { definition, nodes, transitions }))
     }
 
     async fn load_definition_nodes(
@@ -445,30 +424,22 @@ pub(super) fn group_definition_catalog_rows(
                         "duplicate published definition catalog status",
                     ));
                 }
-            }
+            },
             ApprovalDefinitionStatus::Draft => {
                 if slot.1.replace(row.definition_version).is_some() {
-                    return Err(Error::EntityMetadataOutOfRange(
-                        "duplicate draft definition catalog status",
-                    ));
+                    return Err(Error::EntityMetadataOutOfRange("duplicate draft definition catalog status"));
                 }
-            }
+            },
             ApprovalDefinitionStatus::Retired => {
-                return Err(Error::EntityMetadataOutOfRange(
-                    "retired definition in catalog projection",
-                ));
-            }
+                return Err(Error::EntityMetadataOutOfRange("retired definition in catalog projection"));
+            },
         }
     }
     Ok(process_kinds
         .iter()
         .map(|process_kind| {
             let (published_version, draft_version) = by_kind.remove(process_kind).unwrap_or((None, None));
-            DefinitionCatalogStatusFact {
-                process_kind: *process_kind,
-                published_version,
-                draft_version,
-            }
+            DefinitionCatalogStatusFact { process_kind: *process_kind, published_version, draft_version }
         })
         .collect())
 }

@@ -3,15 +3,15 @@
 //! 字段名与 HTTP 契约一致（api-contract.md）：分页参数 `page`/`page_size`/
 //! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；本域无金额字段。
 
+use application_core::{normalized_text, page_or_default, page_size_or_default};
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+
 use crate::entity::source_registry::{
     ExternalIdentityMap, ExternalObjectType, MappingStatus, RelationRole, SourceSystem, SourceSystemData,
     SourceSystemId, SourceSystemStatus, SourceSystemType,
 };
-use serde::{Deserialize, Serialize};
-use validator::Validate;
-
 use crate::error::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 来源系统列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub(crate) const SOURCE_SYSTEM_SORT_FIELDS: &[&str] = &["created_at", "code", "name"];
@@ -34,6 +34,14 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+///
+/// `application_core::Page` 只序列化 `items`/`total`（冻结），列表接口按契约在此补齐
+/// `page`/`page_size`，不静默沿用 `{items,total}` 直出。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
+/// 不生效，空 code/name 需要按「空白视为空」拒绝，落入 HTTP 400）。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。///
 /// # 参数
 /// * `sort_by` - 可选排序字段；空白视为未提供
@@ -46,16 +54,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-///
-/// `application_core::Page` 只序列化 `items`/`total`（冻结），列表接口按契约在此补齐
-/// `page`/`page_size`，不静默沿用 `{items,total}` 直出。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
-/// 不生效，空 code/name 需要按「空白视为空」拒绝，落入 HTTP 400）。
-use application_core::non_blank;
 
 /// 来源系统创建请求.
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -326,24 +324,22 @@ impl ExternalIdentityMapListParams {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, ExternalIdentityMapListParams, SortDir, SourceSystemListParams};
+    use serde_json::json;
+    use validator::Validate;
+
+    use super::{ExternalIdentityMapListParams, SortDir, SourceSystemListParams, normalize_sort};
     use crate::entity::source_registry::{
         MappingStatus, SourceSystemId, SourceSystemStatus, SourceSystemType,
     };
-    use serde_json::json;
-    use validator::Validate;
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
         assert!(normalize_sort(&Some("name".to_string()), &None, &["created_at"]).is_err());
         assert!(normalize_sort(&None, &Some("up".to_string()), &["created_at"]).is_err());
 
-        let (field, direction) = normalize_sort(
-            &Some(" created_at ".to_string()),
-            &Some(" asc ".to_string()),
-            &["created_at"],
-        )
-        .unwrap();
+        let (field, direction) =
+            normalize_sort(&Some(" created_at ".to_string()), &Some(" asc ".to_string()), &["created_at"])
+                .unwrap();
         assert_eq!(field, "created_at");
         assert_eq!(direction, SortDir::Asc);
 

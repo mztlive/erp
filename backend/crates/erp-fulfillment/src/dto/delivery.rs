@@ -1,8 +1,4 @@
 //! 履约delivery请求及单域查询 DTO。
-use super::non_blank;
-use super::{normalize_sort, PageParams, DELIVERY_SORT_FIELDS};
-use crate::entity::fulfillment::{DeliveryState, DeliveryType};
-use crate::Result;
 use application_core::{page_or_default, page_size_or_default};
 use erp_core::ids::{
     PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderId, SalesOrderLineId, StockReservationId,
@@ -11,6 +7,10 @@ use erp_core::ids::{
 use erp_core::money::Quantity;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+
+use super::{DELIVERY_SORT_FIELDS, PageParams, non_blank, normalize_sort};
+use crate::Result;
+use crate::entity::fulfillment::{DeliveryState, DeliveryType};
 
 /// 发货行输入。
 #[derive(Debug, Clone, Serialize, Deserialize)]

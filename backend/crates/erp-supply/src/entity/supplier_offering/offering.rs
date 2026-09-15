@@ -6,17 +6,19 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::supplier_offering::{OfferingRevisionImpact, OfferingSourceType, OfferingStatus};
-use erp_core::common::{revision::RevisionBase, stable::StableBase, time::BusinessDate};
+use erp_core::common::revision::RevisionBase;
+use erp_core::common::stable::StableBase;
+use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierCapabilityRevisionId,
     SupplierCommercialProfileRevisionId, SupplierOfferingId, SupplierOfferingRevisionId,
 };
-use erp_core::money::{round_to_cent, Amount, Quantity, Rate, UnitPrice};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice, round_to_cent};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::supplier_offering::{OfferingRevisionImpact, OfferingSourceType, OfferingStatus};
 
 const SUPPLIER_CODE_MAX_LEN: usize = 128;
 const DROPSHIP_EXPRESS_MAX_LEN: usize = 512;
@@ -107,11 +109,8 @@ impl SupplierOffering {
             SUPPLIER_CODE_MAX_LEN,
             "供应商 SKU 编码过长",
         )?;
-        let supplier_product_code = normalize_optional_text(
-            data.supplier_product_code,
-            "供应商商品编码",
-            SUPPLIER_CODE_MAX_LEN,
-        )?;
+        let supplier_product_code =
+            normalize_optional_text(data.supplier_product_code, "供应商商品编码", SUPPLIER_CODE_MAX_LEN)?;
         ensure_source_connection(data.source_type, data.source_connection_id.is_some())?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -177,9 +176,7 @@ impl SupplierOffering {
         if current_revision_no != expected_revision_no {
             return Err(Error::from("供给修订号不一致"));
         }
-        current_revision_no
-            .checked_add(1)
-            .ok_or_else(|| Error::from("供给修订号已达到上限"))
+        current_revision_no.checked_add(1).ok_or_else(|| Error::from("供给修订号已达到上限"))
     }
 
     /// 返回下一次成功持久化后的实体版本。
@@ -190,10 +187,7 @@ impl SupplierOffering {
     /// # 错误
     /// 当前版本已达到 `u64` 上限时返回领域错误。
     pub fn next_persisted_version(&self) -> Result<u64> {
-        self.base
-            .version
-            .checked_add(1)
-            .ok_or_else(|| Error::from("供给版本已达到上限"))
+        self.base.version.checked_add(1).ok_or_else(|| Error::from("供给版本已达到上限"))
     }
 }
 
@@ -380,12 +374,8 @@ impl SupplierOfferingRevision {
             normalize_optional_text(data.dropship_express, "快递说明", DROPSHIP_EXPRESS_MAX_LEN)?;
         let supply_region =
             normalize_required_list(data.supply_region, REGION_MAX_LEN, MAX_REGIONS, "供给区域")?;
-        let product_capabilities = normalize_list(
-            data.product_capabilities,
-            CAPABILITY_MAX_LEN,
-            MAX_CAPABILITIES,
-            "商品能力",
-        )?;
+        let product_capabilities =
+            normalize_list(data.product_capabilities, CAPABILITY_MAX_LEN, MAX_CAPABILITIES, "商品能力")?;
         let prefill_source_refs = normalize_prefill_refs(data.prefill_source_refs)?;
         ensure_validity_window(data.valid_from, data.valid_to)?;
         Ok(Self {
@@ -436,11 +426,7 @@ impl SupplierOfferingRevision {
             || prior.input_tax_rate != self.input_tax_rate
             || prior.freight_amount != self.freight_amount
             || prior.service_fee_amount != self.service_fee_amount;
-        if cost_changed {
-            OfferingRevisionImpact::CostChanged
-        } else {
-            OfferingRevisionImpact::None
-        }
+        if cost_changed { OfferingRevisionImpact::CostChanged } else { OfferingRevisionImpact::None }
     }
 }
 
@@ -474,12 +460,7 @@ fn ensure_price_pairs(data: &SupplierOfferingRevisionData) -> Result<()> {
         data.input_tax_rate,
         "一件代发",
     )?;
-    ensure_price_pair(
-        data.bulk_supply_price_gross,
-        data.bulk_supply_price_net,
-        data.input_tax_rate,
-        "集采",
-    )
+    ensure_price_pair(data.bulk_supply_price_gross, data.bulk_supply_price_net, data.input_tax_rate, "集采")
 }
 
 fn ensure_price_pair(gross: UnitPrice, net: UnitPrice, rate: Rate, label: &str) -> Result<()> {
@@ -497,16 +478,10 @@ fn ensure_supply_conditions(data: &SupplierOfferingRevisionData) -> Result<()> {
     if data.bulk_minimum_order_quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
         return Err(Error::from("集采起订量必须为正"));
     }
-    if data
-        .freight_amount
-        .is_some_and(|value| value.to_decimal().is_sign_negative())
-    {
+    if data.freight_amount.is_some_and(|value| value.to_decimal().is_sign_negative()) {
         return Err(Error::from("运费不能为负"));
     }
-    if data
-        .service_fee_amount
-        .is_some_and(|value| value.to_decimal().is_sign_negative())
-    {
+    if data.service_fee_amount.is_some_and(|value| value.to_decimal().is_sign_negative()) {
         return Err(Error::from("服务费不能为负"));
     }
     Ok(())
@@ -554,11 +529,8 @@ fn normalize_list(
 
 fn normalize_prefill_refs(refs: PrefillSourceRefs) -> Result<PrefillSourceRefs> {
     let timezone = normalize_optional_text(refs.valid_from_timezone, "预填时区", TIMEZONE_MAX_LEN)?;
-    let calendar_version = normalize_optional_text(
-        refs.valid_from_calendar_version,
-        "预填日历版本",
-        CALENDAR_VERSION_MAX_LEN,
-    )?;
+    let calendar_version =
+        normalize_optional_text(refs.valid_from_calendar_version, "预填日历版本", CALENDAR_VERSION_MAX_LEN)?;
     if (timezone.is_some() || calendar_version.is_some()) && refs.valid_from_date.is_none() {
         return Err(Error::from("预填时区/日历版本必须与预填业务日期同时提供"));
     }
@@ -575,16 +547,17 @@ fn normalize_prefill_refs(refs: PrefillSourceRefs) -> Result<PrefillSourceRefs> 
 mod tests {
     use std::str::FromStr;
 
-    use super::{
-        FromGrossPricesParams, PrefillSourceRefs, SupplierOffering, SupplierOfferingData,
-        SupplierOfferingRevision, SupplierOfferingRevisionData,
-    };
-    use crate::entity::supplier_offering::{OfferingRevisionImpact, OfferingSourceType};
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::{
         SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierOfferingId, SupplierOfferingRevisionId,
     };
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+
+    use super::{
+        FromGrossPricesParams, PrefillSourceRefs, SupplierOffering, SupplierOfferingData,
+        SupplierOfferingRevision, SupplierOfferingRevisionData,
+    };
+    use crate::entity::supplier_offering::{OfferingRevisionImpact, OfferingSourceType};
 
     fn offering_data() -> SupplierOfferingData {
         SupplierOfferingData {
@@ -649,10 +622,7 @@ mod tests {
         ));
         assert_eq!(offering.next_revision_no(1, 1).unwrap(), 2);
         assert!(offering.next_revision_no(2, 1).is_err());
-        assert_eq!(
-            offering.next_persisted_version().unwrap(),
-            offering.base.version + 1
-        );
+        assert_eq!(offering.next_persisted_version().unwrap(), offering.base.version + 1);
     }
 
     #[test]
@@ -723,9 +693,6 @@ mod tests {
         let critical =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("revision-3"), critical_data)
                 .unwrap();
-        assert_eq!(
-            critical.impact_from(&prior),
-            OfferingRevisionImpact::CriticalSupplyChanged
-        );
+        assert_eq!(critical.impact_from(&prior), OfferingRevisionImpact::CriticalSupplyChanged);
     }
 }

@@ -12,17 +12,16 @@ use erp_core::ids::{
 use id_generator::next_id;
 use persistence_core::NoTransaction;
 
+use super::SalesSelectionService;
 use crate::dto::sales_selection::PrepareSalesSelectionRequest;
 use crate::entity::sales_selection::{
-    combination_key, search_packages, sort_by_sku_id, PackageImageGenerator, PoolSource, PoolSourceKind,
-    PrepareKind, PrepareStage, SalesSelectionBooklet, SalesSelectionDisplayItem, SalesSelectionPoolMember,
-    SkuSnapshot, TierRule, POOL_SKU_MAX,
+    POOL_SKU_MAX, PackageImageGenerator, PoolSource, PoolSourceKind, PrepareKind, PrepareStage,
+    SalesSelectionBooklet, SalesSelectionDisplayItem, SalesSelectionPoolMember, SkuSnapshot, TierRule,
+    combination_key, search_packages, sort_by_sku_id,
 };
 use crate::ports::sales_selection::{SelectionCatalogPort, SelectionImagePort, SelectionSkuFact};
 use crate::repository::SalesSelectionExt;
 use crate::{Error, Result};
-
-use super::SalesSelectionService;
 
 impl SalesSelectionService {
     /// 将已到期且未提交的已发布选品册置为已关闭。
@@ -51,10 +50,7 @@ impl SalesSelectionService {
                 continue;
             }
             booklet.close(now, "system")?;
-            self.db
-                .sales_selection_booklets()
-                .update(&mut booklet, &mut executor)
-                .await?;
+            self.db.sales_selection_booklets().update(&mut booklet, &mut executor).await?;
             handled = handled.saturating_add(1);
         }
         Ok(handled)
@@ -107,8 +103,7 @@ impl SalesSelectionService {
         let facts = self.collect_facts(booklet, catalog, as_of).await?;
         ensure_pool_size(&facts)?;
         self.prepare_progress(booklet, PrepareStage::Images, 0).await?;
-        self.snapshot_facts(facts, &booklet.base.id, batch_id, images)
-            .await
+        self.snapshot_facts(facts, &booklet.base.id, batch_id, images).await
     }
 
     /// 读取当前批次已冻结快照。
@@ -125,9 +120,7 @@ impl SalesSelectionService {
         let mut executor = NoTransaction;
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
         let batch = booklet.current_batch_id.clone().unwrap_or_default();
-        let members = domain
-            .list_pool_members(&booklet.base.id, &batch, &mut executor)
-            .await?;
+        let members = domain.list_pool_members(&booklet.base.id, &batch, &mut executor).await?;
         let mut snapshots: Vec<SkuSnapshot> = members.into_iter().map(|item| item.sku).collect();
         sort_by_sku_id(&mut snapshots);
         Ok(snapshots)
@@ -176,13 +169,8 @@ impl SalesSelectionService {
         catalog: &dyn SelectionCatalogPort,
         as_of: BusinessDate,
     ) -> Result<Vec<SelectionSkuFact>> {
-        let requested: Vec<String> = booklet
-            .pool_source
-            .sku_ids
-            .iter()
-            .flatten()
-            .map(ToString::to_string)
-            .collect();
+        let requested: Vec<String> =
+            booklet.pool_source.sku_ids.iter().flatten().map(ToString::to_string).collect();
         let facts = catalog.collect_by_ids(&requested, as_of).await?;
         ensure_picked_coverage(&requested, &facts)?;
         Ok(facts)
@@ -285,9 +273,7 @@ pub(super) fn apply_reprepare_request(
         PoolSource::new(
             booklet.pool_source.kind,
             req.pool_filter.clone(),
-            req.sku_ids
-                .as_ref()
-                .map(|ids| ids.iter().cloned().map(SkuId::new).collect()),
+            req.sku_ids.as_ref().map(|ids| ids.iter().cloned().map(SkuId::new).collect()),
         )?
     } else {
         booklet.pool_source.clone()
@@ -344,18 +330,11 @@ fn ensure_pool_size(facts: &[SelectionSkuFact]) -> Result<()> {
 /// 任一失效整批失败并列明项。
 fn ensure_picked_coverage(requested: &[String], facts: &[SelectionSkuFact]) -> Result<()> {
     let found: HashSet<&str> = facts.iter().map(|fact| fact.sku_id.as_str()).collect();
-    let missing: Vec<&str> = requested
-        .iter()
-        .map(String::as_str)
-        .filter(|id| !found.contains(id))
-        .collect();
+    let missing: Vec<&str> = requested.iter().map(String::as_str).filter(|id| !found.contains(id)).collect();
     if missing.is_empty() {
         return Ok(());
     }
-    Err(Error::ValidationError(format!(
-        "以下勾选已失效: {}",
-        missing.join("、")
-    )))
+    Err(Error::ValidationError(format!("以下勾选已失效: {}", missing.join("、"))))
 }
 
 /// 快照单个 SKU。
@@ -377,9 +356,7 @@ async fn snapshot_one_fact(
     batch_id: &str,
     images: &dyn SelectionImagePort,
 ) -> Result<SkuSnapshot> {
-    let image = images
-        .snapshot_image(fact.main_image_asset_id.as_deref(), booklet_id, batch_id)
-        .await?;
+    let image = images.snapshot_image(fact.main_image_asset_id.as_deref(), booklet_id, batch_id).await?;
     SkuSnapshot {
         sku_id: SkuId::new(fact.sku_id),
         sku_revision_id: erp_core::ids::SkuRevisionId::new(fact.sku_revision_id),
@@ -483,10 +460,7 @@ async fn package_items(
     req: &PrepareSalesSelectionRequest,
     generator: std::sync::Arc<dyn PackageImageGenerator>,
     db: &mongodb::Database,
-) -> Result<(
-    Vec<SalesSelectionDisplayItem>,
-    Vec<crate::entity::sales_selection::TierSearchReport>,
-)> {
+) -> Result<(Vec<SalesSelectionDisplayItem>, Vec<crate::entity::sales_selection::TierSearchReport>)> {
     let scoped = scoped_tiers(booklet, req);
     let mut occupied = current_occupied(db, booklet, batch_id, req).await?;
     let mut packages = Vec::new();
@@ -545,12 +519,7 @@ fn scoped_tiers(
     if req.kind != PrepareKind::RegeneratedTiers || req.tier_ids.is_empty() {
         return booklet.tiers.clone();
     }
-    booklet
-        .tiers
-        .iter()
-        .filter(|tier| req.tier_ids.contains(&tier.tier_id))
-        .cloned()
-        .collect()
+    booklet.tiers.iter().filter(|tier| req.tier_ids.contains(&tier.tier_id)).cloned().collect()
 }
 
 /// 读取未重生成档位的已占用组合。
@@ -577,9 +546,7 @@ async fn current_occupied(
     }
     let mut executor = NoTransaction;
     let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(db);
-    let items = domain
-        .list_effective_items(&booklet.base.id, batch_id, &mut executor)
-        .await?;
+    let items = domain.list_effective_items(&booklet.base.id, batch_id, &mut executor).await?;
     Ok(occupied_of(&items, Some(&req.tier_ids)))
 }
 
@@ -641,19 +608,21 @@ fn item_combo_key(item: &SalesSelectionDisplayItem) -> String {
         crate::entity::sales_selection::DisplayKind::SingleSku { sku } => sku.sku_id.to_string(),
         crate::entity::sales_selection::DisplayKind::Package { members, .. } => {
             combination_key(members.iter().map(|member| member.sku_id.as_ref()))
-        }
+        },
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+    use std::str::FromStr;
+
+    use erp_core::common::time::BusinessDate;
+    use erp_core::money::Amount;
+
     use super::{ensure_picked_coverage, ensure_pool_size, occupied_of};
     use crate::entity::sales_selection::SkuSnapshot;
     use crate::ports::sales_selection::SelectionSkuFact;
-    use erp_core::common::time::BusinessDate;
-    use erp_core::money::Amount;
-    use std::collections::BTreeMap;
-    use std::str::FromStr;
 
     fn fact(id: &str) -> SelectionSkuFact {
         SelectionSkuFact {
@@ -687,9 +656,7 @@ mod tests {
 
     /// 按 SKU 升序校验快照顺序（测试断言用）。
     fn is_sorted_snapshots(snapshots: &[SkuSnapshot]) -> bool {
-        snapshots
-            .windows(2)
-            .all(|pair| pair[0].sku_id.as_ref() <= pair[1].sku_id.as_ref())
+        snapshots.windows(2).all(|pair| pair[0].sku_id.as_ref() <= pair[1].sku_id.as_ref())
     }
 
     /// 统计各 SPU 成员数（测试断言用）。

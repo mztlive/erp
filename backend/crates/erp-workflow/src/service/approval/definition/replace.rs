@@ -1,33 +1,32 @@
 use std::collections::HashMap;
 
-use crate::repository::bpm::CasWriteOutcome;
-use crate::repository::BpmExt;
-use bpm::graph::{assignee_ids, DefinitionGraph, NodeReplacementDraft};
+use application_core::AuditActor;
+use bpm::ParticipantId;
+use bpm::graph::{DefinitionGraph, NodeReplacementDraft, assignee_ids};
 use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
 use bpm::model::{ApprovalNodeDefinition, ApprovalProcessDefinition};
-use bpm::ParticipantId;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
-
-use crate::error::{Error, ErrorCode, Result};
-use application_core::AuditActor;
 
 use super::super::definition_dto::{
     DefinitionDetailView, DefinitionNodeRequest, ReplaceDefinitionNodesRequest,
 };
 use super::super::policy::{
-    ApproverEligibilityPolicy, ProcessRequiredApprovalPolicy, SeparationOfDutiesPolicy,
-    STATIC_APPROVE_PERMISSION,
+    ApproverEligibilityPolicy, ProcessRequiredApprovalPolicy, STATIC_APPROVE_PERMISSION,
+    SeparationOfDutiesPolicy,
 };
+use super::ApprovalDefinitionService;
 use super::command::{
-    applied_definition, definition_not_found, ensure_definition_admin_permission, ensure_lock, map_bpm_error,
-    map_model_error, node_summary, now, parse_idempotency_key, policy_for_definition, replace_nodes_identity,
-    replay_prepared_definition_receipt, write_definition_audit, write_receipt, DefinitionCommandResultRef,
-    DefinitionResultExpectation, PreparedDefinitionIdentity,
+    DefinitionCommandResultRef, DefinitionResultExpectation, PreparedDefinitionIdentity, applied_definition,
+    definition_not_found, ensure_definition_admin_permission, ensure_lock, map_bpm_error, map_model_error,
+    node_summary, now, parse_idempotency_key, policy_for_definition, replace_nodes_identity,
+    replay_prepared_definition_receipt, write_definition_audit, write_receipt,
 };
 use super::mapping::detail_view;
-use super::ApprovalDefinitionService;
+use crate::error::{Error, ErrorCode, Result};
+use crate::repository::BpmExt;
+use crate::repository::bpm::CasWriteOutcome;
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// 整组替换草稿节点。
@@ -66,8 +65,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
             return Ok(view);
         }
         ensure_draft_lock(&graph.definition, request.expected_definition_lock_version)?;
-        self.commit_replace_nodes(graph, policy, request, actor, identity)
-            .await
+        self.commit_replace_nodes(graph, policy, request, actor, identity).await
     }
 
     /// 在唯一事务中替换草稿图。
@@ -111,8 +109,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
                 })
             })
             .await;
-        self.recover_definition_command(outcome, &policy, actor, identity, expectation)
-            .await
+        self.recover_definition_command(outcome, &policy, actor, identity, expectation).await
     }
 }
 
@@ -172,13 +169,7 @@ async fn replace_nodes_tx(
     input: ReplaceNodesTxInput<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<DefinitionDetailView> {
-    let ReplaceNodesTxInput {
-        policy,
-        request,
-        actor,
-        identity,
-        audit,
-    } = input;
+    let ReplaceNodesTxInput { policy, request, actor, identity, audit } = input;
     ensure_definition_admin_permission(rbac, actor, &policy, session).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
@@ -190,13 +181,9 @@ async fn replace_nodes_tx(
     {
         return Ok(view);
     }
-    let reloaded = reload_draft_for_cas(
-        db,
-        &graph.definition,
-        request.expected_definition_lock_version,
-        session,
-    )
-    .await?;
+    let reloaded =
+        reload_draft_for_cas(db, &graph.definition, request.expected_definition_lock_version, session)
+            .await?;
     let prepared = prepare_replacement(db, rbac, &reloaded, &policy, &request.nodes, actor, session).await?;
     let result_ref = DefinitionCommandResultRef::from_graph(&prepared).encode();
     write_receipt(db, &identity.current, &result_ref, session).await?;
@@ -222,10 +209,7 @@ pub(super) async fn reload_draft_for_cas(
 ) -> Result<DefinitionGraph> {
     let graph = db
         .bpm_workflow()
-        .load_definition_graph(
-            &ApprovalProcessDefinitionId::new(original.base.id.clone()),
-            session,
-        )
+        .load_definition_graph(&ApprovalProcessDefinitionId::new(original.base.id.clone()), session)
         .await?
         .ok_or_else(definition_not_found)?;
     let ReplaceNodesWriteStep::PrepareAndReplaceGraph =
@@ -263,9 +247,7 @@ async fn prepare_replacement(
 ) -> Result<DefinitionGraph> {
     let _ = actor;
     let drafts = node_replacement_drafts(requests)?;
-    let planned = graph
-        .plan_replacement_nodes(&drafts, now()?)
-        .map_err(map_model_error)?;
+    let planned = graph.plan_replacement_nodes(&drafts, now()?).map_err(map_model_error)?;
     let assignee_ids = assignee_ids(&planned);
     let snapshots = load_assignee_snapshots(rbac, &assignee_ids, session).await?;
     let ReplaceAssigneesWriteStep::ApplySnapshotsAndReplaceGraph =
@@ -308,13 +290,7 @@ pub(super) async fn replace_graph(
 ) -> Result<DefinitionGraph> {
     let outcome = db
         .bpm_workflow()
-        .replace_draft_graph(
-            &graph.definition,
-            &graph.nodes,
-            &graph.transitions,
-            expected,
-            session,
-        )
+        .replace_draft_graph(&graph.definition, &graph.nodes, &graph.transitions, expected, session)
         .await?;
     Ok(DefinitionGraph {
         definition: allow_apply_replaced_definition(outcome)?,
@@ -410,10 +386,7 @@ pub(super) async fn load_assignee_snapshots(
         return Ok(HashMap::new());
     }
     let accounts = rbac.load_accounts(user_ids, session).await?;
-    Ok(accounts
-        .into_iter()
-        .map(|account| (account.id.clone(), account))
-        .collect())
+    Ok(accounts.into_iter().map(|account| (account.id.clone(), account)).collect())
 }
 
 /// 校验后台有效账号与静态审批权限，不伪造实例 DataScopeFact。
@@ -437,7 +410,7 @@ async fn ensure_static_eligibility(
     account: &crate::entity::work_item::WorkflowAccountFact,
 ) -> Result<()> {
     match policy.approver_eligibility_policy {
-        ApproverEligibilityPolicy::ActiveBackofficeWithDecidePermission => {}
+        ApproverEligibilityPolicy::ActiveBackofficeWithDecidePermission => {},
     }
     require_active_backoffice_assignee(Some(account))?;
     let allowed = rbac
@@ -484,8 +457,7 @@ pub(super) fn apply_snapshots(
             .get(node.assignee_participant_id.as_str())
             .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
         refreshed.push(
-            node.with_assignee_label_snapshot(account.display_name.clone(), at)
-                .map_err(map_model_error)?,
+            node.with_assignee_label_snapshot(account.display_name.clone(), at).map_err(map_model_error)?,
         );
     }
     Ok(refreshed)
@@ -527,9 +499,7 @@ pub(super) fn rebuild_draft_graph(
 /// # 关键业务约束
 /// 只生成身份，不在 Service 推导连线来源、事件或目标。
 pub(super) fn next_transition_ids(node_count: usize) -> Vec<ApprovalTransitionDefinitionId> {
-    (0..node_count.saturating_mul(2))
-        .map(|_| ApprovalTransitionDefinitionId::new(next_id()))
-        .collect()
+    (0..node_count.saturating_mul(2)).map(|_| ApprovalTransitionDefinitionId::new(next_id())).collect()
 }
 
 /// 校验定义仍为草稿且锁版本匹配。
@@ -648,16 +618,15 @@ pub(super) fn ensure_static_decide_permission(has_decide: bool) -> Result<()> {
     if has_decide {
         return Ok(());
     }
-    Err(Error::BusinessLogicError(
-        "指定审批人不具备静态审批权限".to_string(),
-    ))
+    Err(Error::BusinessLogicError("指定审批人不具备静态审批权限".to_string()))
 }
 
 #[cfg(test)]
 mod tests {
+    use bpm::{ProcessKind, Timestamp};
+
     use super::super::test_support::{draft_definition, production_source, source_fn};
     use super::*;
-    use bpm::{ProcessKind, Timestamp};
 
     /// 陈旧锁或 VersionConflict 立即失败，不得继续规划或写图。
     #[test]
@@ -674,11 +643,7 @@ mod tests {
             allow_apply_replaced_definition(CasWriteOutcome::VersionConflict(definition.clone())),
             Err(Error::Coded(ErrorCode::ApprovalDefinitionVersionConflict))
         ));
-        let replace_tx = source_fn(
-            production_source(),
-            "async fn replace_nodes_tx",
-            "async fn publish_tx",
-        );
+        let replace_tx = source_fn(production_source(), "async fn replace_nodes_tx", "async fn publish_tx");
         let lock = replace_tx.find("reload_draft_for_cas").expect("CAS 重载");
         assert!(lock < replace_tx.find("prepare_replacement").expect("规划"));
         assert!(lock < replace_tx.find("apply_draft_graph").expect("写图"));
@@ -691,18 +656,12 @@ mod tests {
     fn published_and_retired_are_immutable() {
         let mut definition = draft_definition(ProcessKind::StockAdjustment, "n1");
         definition
-            .publish(
-                ParticipantId::new("admin").unwrap(),
-                Timestamp::from_unix_secs(2).unwrap(),
-            )
+            .publish(ParticipantId::new("admin").unwrap(), Timestamp::from_unix_secs(2).unwrap())
             .unwrap();
         let error = ensure_draft_lock(&definition, definition.definition_lock_version()).unwrap_err();
         assert_eq!(error.code(), Some(ErrorCode::ApprovalDefinitionNotDraft));
         definition
-            .retire(
-                ParticipantId::new("admin").unwrap(),
-                Timestamp::from_unix_secs(3).unwrap(),
-            )
+            .retire(ParticipantId::new("admin").unwrap(), Timestamp::from_unix_secs(3).unwrap())
             .unwrap();
         assert!(ensure_draft_lock(&definition, 1).is_err());
     }
@@ -724,14 +683,9 @@ mod tests {
             allow_replace_after_assignees(Err(Error::Forbidden("缺少静态审批权限".into()))),
             Err(Error::Forbidden(_))
         ));
-        let prepare = source_fn(
-            production_source(),
-            "async fn prepare_replacement",
-            "async fn prepare_publish_graph",
-        );
-        let gate = prepare
-            .find("allow_replace_after_assignees")
-            .expect("替换账号闸门");
+        let prepare =
+            source_fn(production_source(), "async fn prepare_replacement", "async fn prepare_publish_graph");
+        let gate = prepare.find("allow_replace_after_assignees").expect("替换账号闸门");
         assert!(gate < prepare.find("apply_snapshots").expect("快照"));
         assert!(gate < prepare.find("rebuild_draft_graph").expect("写图规划"));
     }

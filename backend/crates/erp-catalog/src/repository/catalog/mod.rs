@@ -29,14 +29,13 @@ mod voucher;
 pub use attribute::{SkuAttributeFilter, SkuAttributeValueFilter};
 pub use category::{ProductCategoryAttributeFilter, ProductCategoryFilter};
 pub use dictionary::{ProductBrandFilter, UnitOfMeasureFilter};
-pub use listing::{sku_is_listed_expr, ProductListingSummary};
+pub use listing::{ProductListingSummary, sku_is_listed_expr};
+use mongodb::Database;
 pub use parent_chain::CategoryParentChainFact;
 pub use product::{ProductFilter, ProductRevisionFilter, ProductRow};
 pub use sellable::{SellableSkuFilter, SellableSkuRow};
 pub use sku::{SkuFilter, SkuRevisionFilter, SkuRow};
 pub use voucher::VoucherCategoryProfileRevisionFilter;
-
-use mongodb::Database;
 
 /// D10 域专用仓储：跨集合聚合查询与必须位于事务内的多步骤写入。
 ///

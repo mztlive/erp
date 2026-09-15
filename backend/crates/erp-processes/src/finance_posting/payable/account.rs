@@ -1,12 +1,11 @@
 //! 应付往来子账列表、详情与创建编排。
 
-use erp_finance::repository::PayableExt;
-use erp_procurement::repository::PurchaseOrderExt;
-
-use erp_audit::AuditExt;
-
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::{PartyBankAccountId, PayableAccountId};
-
+use erp_finance::repository::PayableExt;
+use erp_party::SensitiveDataCodec;
+use erp_procurement::repository::PurchaseOrderExt;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
@@ -15,12 +14,8 @@ use super::dto::{
     RevealPaymentRecipientRequest,
 };
 use super::mapping::resolve_current_payment_recipient;
-use super::payment_task;
-use super::PayableService;
+use super::{PayableService, payment_task};
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_party::SensitiveDataCodec;
 
 impl PayableService {
     /// 在付款任务责任校验后揭示当前默认收款账号。
@@ -65,9 +60,7 @@ impl PayableService {
             &PartyBankAccountId::new(req.expected_bank_account_id.trim()),
             req.expected_bank_account_version,
         ) {
-            return Err(Error::ConflictError(
-                "供应商收款账户已变化，请刷新付款任务并重新核对".to_string(),
-            ));
+            return Err(Error::ConflictError("供应商收款账户已变化，请刷新付款任务并重新核对".to_string()));
         }
         let account_number = sensitive_data.decrypt(&recipient.account_number_ciphertext)?;
         let audit = actor.clone().resource_log(
@@ -76,10 +69,7 @@ impl PayableService {
             recipient.base.id.clone(),
         )?;
         self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
-        Ok(PaymentRecipientRevealView {
-            bank_account_id: recipient.base.id,
-            account_number,
-        })
+        Ok(PaymentRecipientRevealView { bank_account_id: recipient.base.id, account_number })
     }
     /// 建立应付往来子账与原始应付分录（跨集合事务写入）。
     ///
@@ -123,18 +113,13 @@ impl PayableService {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    db.payable()
-                        .create_payable_with_entry(&account, &entry, session)
-                        .await?;
+                    db.payable().create_payable_with_entry(&account, &entry, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::Error>(())
                 })
             })
             .await?;
 
-        self.read()
-            .payable_account_detail(&account_id)
-            .await
-            .map_err(crate::Error::from)
+        self.read().payable_account_detail(&account_id).await.map_err(crate::Error::from)
     }
 }

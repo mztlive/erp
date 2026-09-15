@@ -8,10 +8,10 @@ use erp_core::common::time::BusinessDate;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 
+use super::CustomerAccountId;
 use super::customer_assignment::{
     AssignmentRole, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId,
 };
-use super::CustomerAccountId;
 
 /// 销售人员标识最大长度（与归属实体一致）。
 const USER_ID_MAX_LEN: usize = 128;
@@ -82,13 +82,7 @@ impl AssignCustomerAssignment {
             "调整原因过长",
         )?;
         ensure_window_valid(valid_from, valid_to)?;
-        Ok(Self {
-            user_id,
-            assignment_role,
-            valid_from,
-            valid_to,
-            change_reason,
-        })
+        Ok(Self { user_id, assignment_role, valid_from, valid_to, change_reason })
     }
 
     /// 返回已规范化的销售人员 ID。
@@ -202,12 +196,7 @@ impl EndCustomerAssignment {
             CHANGE_REASON_MAX_LEN,
             "调整原因过长",
         )?;
-        Ok(Self {
-            assignment_id,
-            valid_to,
-            version,
-            change_reason,
-        })
+        Ok(Self { assignment_id, valid_to, version, change_reason })
     }
 
     /// 返回已规范化的目标归属 ID。
@@ -265,10 +254,11 @@ fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>)
 
 #[cfg(test)]
 mod tests {
-    use super::{AssignCustomerAssignment, AssignmentRole, EndCustomerAssignment};
+    use erp_core::Error;
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::{CustomerAccountId, CustomerAssignmentId};
-    use erp_core::Error;
+
+    use super::{AssignCustomerAssignment, AssignmentRole, EndCustomerAssignment};
 
     fn date(year: i32, month: u32, day: u32) -> BusinessDate {
         BusinessDate::from_ymd(year, month, day).unwrap()
@@ -292,10 +282,7 @@ mod tests {
 
         let assignment = command
             .clone()
-            .into_assignment(
-                CustomerAssignmentId::new("asg-1"),
-                CustomerAccountId::new("customer-1"),
-            )
+            .into_assignment(CustomerAssignmentId::new("asg-1"), CustomerAccountId::new("customer-1"))
             .unwrap();
         assert_eq!(assignment.user_id, "sales-1");
         assert_eq!(assignment.customer_id, CustomerAccountId::new("customer-1"));
@@ -308,25 +295,23 @@ mod tests {
             "换任".to_string(),
         );
         assert!(matches!(reversed, Err(Error::LogicError(_))));
-        assert!(AssignCustomerAssignment::new(
-            "   ".to_string(),
-            AssignmentRole::Owner,
-            date(2026, 8, 8),
-            None,
-            "换任".to_string(),
-        )
-        .is_err());
+        assert!(
+            AssignCustomerAssignment::new(
+                "   ".to_string(),
+                AssignmentRole::Owner,
+                date(2026, 8, 8),
+                None,
+                "换任".to_string(),
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn end_requires_positive_version_and_assignment_id() {
-        let command = EndCustomerAssignment::new(
-            " asg-9 ".to_string(),
-            date(2026, 9, 1),
-            3,
-            " 结束协作 ".to_string(),
-        )
-        .unwrap();
+        let command =
+            EndCustomerAssignment::new(" asg-9 ".to_string(), date(2026, 9, 1), 3, " 结束协作 ".to_string())
+                .unwrap();
         assert_eq!(command.assignment_id(), "asg-9");
         assert_eq!(command.valid_to(), date(2026, 9, 1));
         assert_eq!(command.version(), 3);

@@ -1,11 +1,13 @@
-use super::*;
+use std::sync::Mutex;
+
 use async_trait::async_trait;
 use erp_catalog::repository::{ProductFilter, ProductRow, SellableSkuFilter, SellableSkuRow};
 use erp_catalog::{EnableStatus, ProductKind, ProductListingStatus};
 use erp_core::common::time::BusinessDate;
 use persistence_core::{Executor, PageResult};
 use serde_json::json;
-use std::sync::Mutex;
+
+use super::*;
 
 #[derive(Default)]
 struct RecordingQuery {
@@ -30,10 +32,7 @@ impl CatalogSupplyQueryPort for RecordingQuery {
             assert_eq!((filter.page, filter.page_size), (1, 1));
             assert!(filter.product_no.is_none() && filter.keyword.is_none());
             if ids == ["missing"] {
-                return Ok(PageResult {
-                    items: vec![],
-                    total: 0,
-                });
+                return Ok(PageResult { items: vec![], total: 0 });
             }
             assert_eq!(ids, ["product-1"]);
             return Ok(PageResult {
@@ -94,10 +93,7 @@ impl CatalogSupplyQueryPort for RecordingQuery {
         assert_eq!(filter.supplier_id, None);
         assert_eq!(filter.supply_region.as_deref(), Some("上海"));
         assert_eq!(filter.eligibility_as_of.to_string(), "2026-09-07");
-        Ok(PageResult {
-            items: vec![],
-            total: 9,
-        })
+        Ok(PageResult { items: vec![], total: 9 })
     }
 
     async fn find_sellable_sku_refs(
@@ -123,10 +119,7 @@ async fn invalid_product_page_stops_before_any_query() {
     let query = Arc::new(RecordingQuery::default());
     let service = CatalogCenterReadService::new(query.clone());
     let params = serde_json::from_value(json!({"page": 0})).unwrap();
-    assert!(matches!(
-        service.product_list(&params).await,
-        Err(crate::Error::ValidationError(_))
-    ));
+    assert!(matches!(service.product_list(&params).await, Err(crate::Error::ValidationError(_))));
     assert!(query.calls.lock().unwrap().is_empty());
 }
 
@@ -142,12 +135,7 @@ async fn product_projection_preserves_optional_fields_counts_and_page() {
     assert_eq!(row.name, None);
     assert_eq!(row.current_revision_id, None);
     assert_eq!(
-        (
-            row.listed_sku_count,
-            row.sku_count,
-            row.supplied_sku_count,
-            row.priced_sku_count
-        ),
+        (row.listed_sku_count, row.sku_count, row.supplied_sku_count, row.priced_sku_count),
         (1, 3, 2, 1)
     );
     assert_eq!((row.version, row.created_at), (7, 123));
@@ -156,10 +144,7 @@ async fn product_projection_preserves_optional_fields_counts_and_page() {
 
 #[tokio::test]
 async fn product_repository_failure_keeps_original_catalog_error_mapping() {
-    let query = Arc::new(RecordingQuery {
-        fail: true,
-        ..Default::default()
-    });
+    let query = Arc::new(RecordingQuery { fail: true, ..Default::default() });
     let service = CatalogCenterReadService::new(query.clone());
     let params = serde_json::from_value(json!({})).unwrap();
     assert!(matches!(service.product_list(&params).await,

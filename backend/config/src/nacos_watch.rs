@@ -1,5 +1,6 @@
-use crate::{NacosConfigClient, SafeConfig};
 use tracing::error;
+
+use crate::{NacosConfigClient, SafeConfig};
 
 pub struct NacosConfigWatcher {
     config: SafeConfig,

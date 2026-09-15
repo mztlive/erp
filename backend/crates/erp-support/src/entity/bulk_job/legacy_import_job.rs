@@ -3,8 +3,8 @@
 //! Service 只注入任务 ID、批次事实与发起人，本模块独占任务编号、
 //! 领域任务类型与幂等 `request_id` 合同。无 I/O、时钟或密钥。
 
-use erp_core::ids::BackgroundJobId;
 use erp_core::Result;
+use erp_core::ids::BackgroundJobId;
 
 use super::{BackgroundJob, BackgroundJobData, JobType};
 
@@ -82,18 +82,18 @@ impl BackgroundJob {
 
 #[cfg(test)]
 mod tests {
-    use super::{legacy_import_job_no, LEGACY_IMPORT_DOMAIN_JOB_TYPE};
-    use crate::entity::bulk_job::JobType;
-    use erp_core::ids::BackgroundJobId;
     use std::collections::HashSet;
+
+    use erp_core::ids::BackgroundJobId;
+
+    use super::{LEGACY_IMPORT_DOMAIN_JOB_TYPE, legacy_import_job_no};
+    use crate::entity::bulk_job::JobType;
 
     #[test]
     fn job_no_is_prefixed_and_unique_per_batch() {
         assert_eq!(legacy_import_job_no("IMP-1"), "BJ-IMP-1");
-        let numbers = ["IMP-1", "IMP-2", "IMP-1"]
-            .iter()
-            .map(|batch| legacy_import_job_no(batch))
-            .collect::<Vec<_>>();
+        let numbers =
+            ["IMP-1", "IMP-2", "IMP-1"].iter().map(|batch| legacy_import_job_no(batch)).collect::<Vec<_>>();
         assert_eq!(numbers[0], "BJ-IMP-1");
         assert_eq!(numbers[1], "BJ-IMP-2");
         assert_eq!(numbers[0], numbers[2]);
@@ -111,10 +111,7 @@ mod tests {
         .unwrap();
         assert_eq!(job.job_no, "BJ-IMP-1");
         assert_eq!(job.job_type, JobType::Import);
-        assert_eq!(
-            job.domain_job_type.as_deref(),
-            Some(LEGACY_IMPORT_DOMAIN_JOB_TYPE)
-        );
+        assert_eq!(job.domain_job_type.as_deref(), Some(LEGACY_IMPORT_DOMAIN_JOB_TYPE));
         assert_eq!(job.domain_job_id.as_deref(), Some("batch-1"));
         assert_eq!(job.request_id, "IMP-1");
         assert_eq!(job.requested_by, "admin-1");
@@ -124,13 +121,15 @@ mod tests {
 
     #[test]
     fn factory_rejects_blank_actor_or_batch() {
-        assert!(super::BackgroundJob::for_legacy_import(
-            BackgroundJobId::new("job-1"),
-            "IMP-1",
-            "batch-1",
-            1,
-            "   ",
-        )
-        .is_err());
+        assert!(
+            super::BackgroundJob::for_legacy_import(
+                BackgroundJobId::new("job-1"),
+                "IMP-1",
+                "batch-1",
+                1,
+                "   ",
+            )
+            .is_err()
+        );
     }
 }

@@ -1,5 +1,9 @@
 //! 服务确认的本域地点规范化、密文事实构造和事务内状态写入。
 
+use erp_core::common::time::Instant;
+use erp_core::ids::{FileAssetId, ServiceFulfillmentId};
+use persistence_core::Executor;
+
 use super::FulfillmentService;
 use crate::dto::ConfirmServiceFulfillmentRequest;
 use crate::entity::fulfillment::{
@@ -9,9 +13,6 @@ use crate::entity::fulfillment::{
 use crate::ports::service_crypto::ServiceLocationCryptoPort;
 use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
-use erp_core::common::time::Instant;
-use erp_core::ids::{FileAssetId, ServiceFulfillmentId};
-use persistence_core::Executor;
 
 /// 把确认命令写成已规范化的现场事实。
 ///
@@ -37,22 +38,20 @@ pub fn service_confirmation_from_request<C: ServiceLocationCryptoPort>(
 ) -> std::result::Result<ServiceFulfillmentConfirmation, C::Error> {
     let service_location = ActualServiceLocation::parse(&req.service_location)
         .map_err(|error| Error::ValidationError(error.to_string()))?;
-    Ok(
-        ServiceFulfillmentConfirmation::new(ServiceFulfillmentConfirmationParams {
-            result: req.result,
-            completion_note: req.completion_note.clone(),
-            evidence_attachment_id,
-            service_location_encrypted: sensitive_data.encrypt(service_location.as_str())?,
-            service_location_fingerprint: ServiceFulfillment::service_location_fingerprint(
-                service_location.as_str(),
-                fingerprint_key,
-            ),
-            service_started_at: Instant::from_unix_secs(req.service_started_at),
-            service_ended_at: Instant::from_unix_secs(req.service_ended_at),
-            quantity: req.quantity,
-        })
-        .map_err(Error::from)?,
-    )
+    Ok(ServiceFulfillmentConfirmation::new(ServiceFulfillmentConfirmationParams {
+        result: req.result,
+        completion_note: req.completion_note.clone(),
+        evidence_attachment_id,
+        service_location_encrypted: sensitive_data.encrypt(service_location.as_str())?,
+        service_location_fingerprint: ServiceFulfillment::service_location_fingerprint(
+            service_location.as_str(),
+            fingerprint_key,
+        ),
+        service_started_at: Instant::from_unix_secs(req.service_started_at),
+        service_ended_at: Instant::from_unix_secs(req.service_ended_at),
+        quantity: req.quantity,
+    })
+    .map_err(Error::from)?)
 }
 
 impl FulfillmentService {
@@ -91,11 +90,13 @@ impl FulfillmentService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::entity::fulfillment::FulfillmentResult;
-    use erp_core::money::Quantity;
     use std::cell::RefCell;
     use std::str::FromStr;
+
+    use erp_core::money::Quantity;
+
+    use super::*;
+    use crate::entity::fulfillment::FulfillmentResult;
 
     struct RecordingCrypto {
         plain: RefCell<Vec<String>>,
@@ -126,10 +127,7 @@ mod tests {
 
     #[test]
     fn invalid_location_fails_before_encryption() {
-        let crypto = RecordingCrypto {
-            plain: RefCell::new(Vec::new()),
-            fail: true,
-        };
+        let crypto = RecordingCrypto { plain: RefCell::new(Vec::new()), fail: true };
         let error =
             service_confirmation_from_request(&request("  "), FileAssetId::new("file-1"), b"key", &crypto)
                 .unwrap_err();
@@ -139,10 +137,7 @@ mod tests {
 
     #[test]
     fn encryption_failure_keeps_original_error_before_confirmation_rules() {
-        let crypto = RecordingCrypto {
-            plain: RefCell::new(Vec::new()),
-            fail: true,
-        };
+        let crypto = RecordingCrypto { plain: RefCell::new(Vec::new()), fail: true };
         let mut request = request("  客户现场  ");
         request.service_ended_at = request.service_started_at - 1;
         let error = service_confirmation_from_request(&request, FileAssetId::new("file-1"), b"key", &crypto)

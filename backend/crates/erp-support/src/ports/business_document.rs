@@ -72,7 +72,7 @@ impl BusinessDocumentPort for FailClosedBusinessDocumentPort {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_business_document_type, BUSINESS_DOCUMENT_TYPE_CODES};
+    use super::{BUSINESS_DOCUMENT_TYPE_CODES, is_business_document_type};
 
     #[test]
     fn business_document_type_matching_is_exact_and_fail_closed() {

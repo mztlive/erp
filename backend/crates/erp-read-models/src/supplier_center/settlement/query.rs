@@ -1,24 +1,25 @@
 //! 结算详情的供应链快照与工作流任务组合。
-use super::{dto as view_dto, SupplierSettlementReadService};
-use crate::{Error, Result};
+use std::collections::HashMap;
+
 use application_core::AuditActor;
 use erp_supply::dto::supplier_settlement as dto;
 use erp_supply::entity::supplier_settlement::SupplierSettlementStatement;
 use erp_supply::repository::SupplierSettlementExt;
-use erp_supply::service::supplier_settlement::{
-    difference::settlement_difference_view,
-    evidence::evidence_view,
-    query::{settlement_item_view, settlement_object_actions},
-    review::{
-        review_blocker, settlement_review_access, SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID,
-        SETTLEMENT_REVIEW_OWNER_ROLE,
-    },
-    shared::zero_amount,
+use erp_supply::service::supplier_settlement::difference::settlement_difference_view;
+use erp_supply::service::supplier_settlement::evidence::evidence_view;
+use erp_supply::service::supplier_settlement::query::{settlement_item_view, settlement_object_actions};
+use erp_supply::service::supplier_settlement::review::{
+    SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID, SETTLEMENT_REVIEW_OWNER_ROLE, review_blocker,
+    settlement_review_access,
 };
-use erp_workflow::{entity::work_item::WorkItemType, WorkItemExt};
+use erp_supply::service::supplier_settlement::shared::zero_amount;
+use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::WorkItemType;
 use persistence_core::NoTransaction;
-use std::collections::HashMap;
 use view_dto::SupplierSettlementStatementDetailView;
+
+use super::{SupplierSettlementReadService, dto as view_dto};
+use crate::{Error, Result};
 impl SupplierSettlementReadService {
     /// 查询供应商结算单详情（结算单 + 全部明细 + 全部差异）。
     ///
@@ -50,26 +51,20 @@ impl SupplierSettlementReadService {
             evidence_by_difference.insert(difference_id, values.into_iter().map(evidence_view).collect());
         }
         let evidenced_difference_count = evidence_by_difference.len();
-        let pending_difference_count = differences
-            .iter()
-            .filter(|difference| difference.is_pending())
-            .count();
+        let pending_difference_count =
+            differences.iter().filter(|difference| difference.is_pending()).count();
         let (mut allowed_actions, mut action_blockers, processing_state) =
             settlement_object_actions(&statement, &differences, actor.id());
         let difference_count = differences.len();
         let item_count = items.len();
-        let order_amount = items
-            .iter()
-            .fold(zero_amount(), |total, item| total.checked_add(item.order_amount));
-        let freight_amount = items.iter().fold(zero_amount(), |total, item| {
-            total.checked_add(item.freight_amount)
-        });
-        let service_fee_amount = items.iter().fold(zero_amount(), |total, item| {
-            total.checked_add(item.service_fee_amount)
-        });
-        let refund_amount = items
-            .iter()
-            .fold(zero_amount(), |total, item| total.checked_add(item.refund_amount));
+        let order_amount =
+            items.iter().fold(zero_amount(), |total, item| total.checked_add(item.order_amount));
+        let freight_amount =
+            items.iter().fold(zero_amount(), |total, item| total.checked_add(item.freight_amount));
+        let service_fee_amount =
+            items.iter().fold(zero_amount(), |total, item| total.checked_add(item.service_fee_amount));
+        let refund_amount =
+            items.iter().fold(zero_amount(), |total, item| total.checked_add(item.refund_amount));
         let erp_amount = statement.erp_amount;
         let supplier_amount = statement.supplier_amount;
         let difference_amount = statement.difference_amount;
@@ -87,9 +82,7 @@ impl SupplierSettlementReadService {
         let (review_work_item, review_action_blockers, review_domain_actions) =
             self.settlement_review_work_item_view(&statement, actor).await?;
         allowed_actions.extend(
-            review_domain_actions
-                .into_iter()
-                .filter(|action| action != "CONFIRM" || cost_adjustment_ready),
+            review_domain_actions.into_iter().filter(|action| action != "CONFIRM" || cost_adjustment_ready),
         );
         if !cost_adjustment_ready {
             action_blockers.push(review_blocker(
@@ -149,11 +142,7 @@ impl SupplierSettlementReadService {
         let mut items = self
             .db
             .work_items()
-            .list_active_by_object(
-                "supplier_settlement_statement",
-                &statement.base.id,
-                &mut NoTransaction,
-            )
+            .list_active_by_object("supplier_settlement_statement", &statement.base.id, &mut NoTransaction)
             .await?
             .into_iter()
             .filter(|item| item.work_item_type == WorkItemType::SupplierSettlementReview)
@@ -169,9 +158,7 @@ impl SupplierSettlementReadService {
                 Vec::new(),
             ));
         }
-        let item = items
-            .pop()
-            .ok_or_else(|| Error::Internal("正式结算复核任务读取失败".to_string()))?;
+        let item = items.pop().ok_or_else(|| Error::Internal("正式结算复核任务读取失败".to_string()))?;
         if item.business_object_type != "supplier_settlement_statement"
             || item.business_object_id != statement.base.id
             || item.subject_version != statement.subject_hash
@@ -221,10 +208,8 @@ impl SupplierSettlementReadService {
     ) -> Result<dto::SupplierSettlementStatementListView> {
         validator::Validate::validate(params)?;
         let suppliers = crate::supplier_center::keyword_supplier_ids(&self.db, params.q.as_deref()).await?;
-        Ok(
-            erp_supply::service::supplier_settlement::SupplierSettlementService::new(self.db.clone())
-                .supplier_settlement_statement_list(params, suppliers)
-                .await?,
-        )
+        Ok(erp_supply::service::supplier_settlement::SupplierSettlementService::new(self.db.clone())
+            .supplier_settlement_statement_list(params, suppliers)
+            .await?)
     }
 }

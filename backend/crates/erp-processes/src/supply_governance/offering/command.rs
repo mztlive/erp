@@ -1,11 +1,12 @@
 //! 供给跨域提交：单域准备和写入委派，根事务内最后写原审计。
-use super::SupplierOfferingProcess;
-use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_supply::dto::supplier_offering::*;
 use erp_supply::service::supplier_offering::CommandPreparation;
 use persistence_core::{NoTransaction, Transactional};
+
+use super::SupplierOfferingProcess;
+use crate::Result;
 impl SupplierOfferingProcess {
     /// 新增公司 SKU 的供应商供给。
     ///
@@ -28,9 +29,7 @@ impl SupplierOfferingProcess {
             .prepare_create(&req, actor.id(), self.qualification.as_ref(), &mut NoTransaction)
             .await?;
         let CommandPreparation::Apply(prepared) = prepared else {
-            let CommandPreparation::Replay(result) = prepared else {
-                unreachable!()
-            };
+            let CommandPreparation::Replay(result) = prepared else { unreachable!() };
             return Ok(result);
         };
         let fingerprint = prepared.fingerprint.clone();
@@ -79,18 +78,10 @@ impl SupplierOfferingProcess {
     ) -> Result<ReviseSupplierOfferingResult> {
         let prepared = self
             .domain()
-            .prepare_revise(
-                id,
-                &req,
-                actor.id(),
-                self.qualification.as_ref(),
-                &mut NoTransaction,
-            )
+            .prepare_revise(id, &req, actor.id(), self.qualification.as_ref(), &mut NoTransaction)
             .await?;
         let CommandPreparation::Apply(mut prepared) = prepared else {
-            let CommandPreparation::Replay(result) = prepared else {
-                unreachable!()
-            };
+            let CommandPreparation::Replay(result) = prepared else { unreachable!() };
             return Ok(result);
         };
         let fingerprint = prepared.fingerprint.clone();
@@ -135,14 +126,9 @@ impl SupplierOfferingProcess {
         req: UpdateSupplierOfferingAvailabilityRequest,
         actor: &AuditActor,
     ) -> Result<UpdateSupplierOfferingAvailabilityResult> {
-        let prepared = self
-            .domain()
-            .prepare_availability(id, &req, actor.id(), &mut NoTransaction)
-            .await?;
+        let prepared = self.domain().prepare_availability(id, &req, actor.id(), &mut NoTransaction).await?;
         let CommandPreparation::Apply(mut prepared) = prepared else {
-            let CommandPreparation::Replay(result) = prepared else {
-                unreachable!()
-            };
+            let CommandPreparation::Replay(result) = prepared else { unreachable!() };
             return Ok(result);
         };
         let fingerprint = prepared.fingerprint.clone();

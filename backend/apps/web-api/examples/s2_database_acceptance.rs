@@ -4,16 +4,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
+use erp_identity::SharedRbacService;
 use erp_identity::access_control::{
     DataScopeData, DataScopeSubjectType, DataScopeType, ScopeBinding, ScopeDimension,
 };
 use erp_identity::entity::organization::OrgUnitKind;
 use erp_identity::entity::organization_change::{OrganizationChangeRequest, OrganizationOperation};
 use erp_identity::service::access_control::resolve::DataScopeService;
-use erp_identity::SharedRbacService;
 use erp_processes::adapters::identity::shared_rbac_service;
 use erp_processes::adapters::organization_service;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::{Client, Database};
 use persistence_core::NoTransaction;
 use test_support::seed_admin_account;
@@ -43,70 +43,36 @@ async fn verify(db: &Database) -> Outcome {
         rbac.seed_data_scope_manifest(&role, "org_unit", vec![manifest.clone()])
     );
     assert!(a.is_ok() || b.is_ok(), "至少一个并发初始化必须成功");
-    rbac.seed_data_scope_manifest(&role, "org_unit", vec![manifest])
-        .await?;
+    rbac.seed_data_scope_manifest(&role, "org_unit", vec![manifest]).await?;
     assert_eq!(scope_count(db, &role, "org_unit").await?, 1);
     println!("PASS initialization_concurrency_and_rerun");
 
     let service = organization_service(db.clone(), rbac.clone());
     let left = create_unit("department_a", 0);
     let right = create_unit("department_b", 0);
-    let (a, b) = tokio::join!(
-        service.change(&actor, left.clone()),
-        service.change(&actor, right.clone())
-    );
-    assert_eq!(
-        usize::from(a.is_ok()) + usize::from(b.is_ok()),
-        1,
-        "相同期望版本只允许一个事务成功"
-    );
-    assert_eq!(
-        db.collection::<Document>("org_units")
-            .count_documents(doc! {})
-            .await?,
-        1
-    );
-    assert_eq!(
-        db.collection::<Document>("org_changes")
-            .count_documents(doc! {})
-            .await?,
-        1
-    );
+    let (a, b) = tokio::join!(service.change(&actor, left.clone()), service.change(&actor, right.clone()));
+    assert_eq!(usize::from(a.is_ok()) + usize::from(b.is_ok()), 1, "相同期望版本只允许一个事务成功");
+    assert_eq!(db.collection::<Document>("org_units").count_documents(doc! {}).await?, 1);
+    assert_eq!(db.collection::<Document>("org_changes").count_documents(doc! {}).await?, 1);
     let successful = if a.is_ok() { left } else { right };
     let replay = service.change(&actor, successful).await?;
     assert_eq!(replay.after.version, 1);
-    assert_eq!(
-        db.collection::<Document>("org_changes")
-            .count_documents(doc! {})
-            .await?,
-        1
-    );
+    assert_eq!(db.collection::<Document>("org_changes").count_documents(doc! {}).await?, 1);
     println!("PASS organization_concurrency_atomic_audit_and_idempotent_replay");
 
     let scopes = DataScopeService::new(db.clone(), rbac.clone());
     // 旧角色规则不参与 v2 授权，也不得破坏正常读取；旧个人上限必须阻断。
     let legacy = doc! { "id": "legacy-role-scope", "subject_type": "role", "subject_id": &role, "scope_type": "company", "deleted_at": 0_i64 };
-    db.collection::<Document>("data_scopes")
-        .insert_one(legacy)
-        .await?;
-    let access = scopes
-        .resolve(&actor, "org_unit", "list", &mut NoTransaction)
-        .await?;
+    db.collection::<Document>("data_scopes").insert_one(legacy).await?;
+    let access = scopes.resolve(&actor, "org_unit", "list", &mut NoTransaction).await?;
     assert!(access.scope.has_role_scope());
     assert_eq!(access.organizations.version, 1);
     db.collection::<Document>("data_scopes").insert_one(doc! { "id": "legacy-user-limit", "subject_type": "user", "subject_id": &user, "scope_type": "team", "deleted_at": 0_i64 }).await?;
-    assert!(scopes
-        .resolve(&actor, "org_unit", "list", &mut NoTransaction)
-        .await
-        .is_err());
-    db.collection::<Document>("data_scopes")
-        .delete_one(doc! { "id": "legacy-user-limit" })
-        .await?;
+    assert!(scopes.resolve(&actor, "org_unit", "list", &mut NoTransaction).await.is_err());
+    db.collection::<Document>("data_scopes").delete_one(doc! { "id": "legacy-user-limit" }).await?;
     println!("PASS legacy_role_ignored_and_legacy_user_limit_fails_closed");
     verify_revoked_seed(db, &rbac, &role).await?;
-    let revoked = scopes
-        .resolve(&actor, "org_unit", "list", &mut NoTransaction)
-        .await?;
+    let revoked = scopes.resolve(&actor, "org_unit", "list", &mut NoTransaction).await?;
     assert!(!revoked.scope.has_role_scope());
     assert_ne!(access.scope_version, revoked.scope_version);
     println!("PASS real_resolution_and_revoked_seed_not_restored");
@@ -126,9 +92,7 @@ async fn verify(db: &Database) -> Outcome {
             row
         })
         .collect::<Vec<_>>();
-    db.collection::<Document>("data_scopes")
-        .insert_many(fixtures)
-        .await?;
+    db.collection::<Document>("data_scopes").insert_many(fixtures).await?;
     // 与公共解析器 list_by_subjects 的实际条件一致；不使用 hint 强迫索引。
     let filter =
         doc! { "subject_type": "role", "subject_id": { "$in": ["plan-role-100"] }, "deleted_at": 0_i64 };
@@ -141,10 +105,7 @@ async fn verify(db: &Database) -> Outcome {
     assert_eq!(stats.get_i32("nReturned")?, 1);
     assert!(stats.get_i32("totalDocsExamined")? <= 5);
     let winning = serde_json::to_string(plan.get_document("queryPlanner")?.get_document("winningPlan")?)?;
-    assert!(
-        winning.contains("IXSCAN"),
-        "subject lookup must use an index: {winning}"
-    );
+    assert!(winning.contains("IXSCAN"), "subject lookup must use an index: {winning}");
     println!(
         "INDEX_PLAN {}",
         serde_json::to_string(&doc! {
@@ -154,7 +115,9 @@ async fn verify(db: &Database) -> Outcome {
             "winningPlan": plan.get_document("queryPlanner")?.get_document("winningPlan")?.clone(),
         })?
     );
-    println!("LIMIT 5000 synthetic scope rows; production-volume and existing business-account acceptance remain separate");
+    println!(
+        "LIMIT 5000 synthetic scope rows; production-volume and existing business-account acceptance remain separate"
+    );
     Ok(())
 }
 
@@ -216,12 +179,8 @@ async fn verify_revoked_seed(db: &Database, rbac: &SharedRbacService, role: &str
     db.collection::<Document>("data_scopes")
         .update_many(doc! {"subject_id": role}, doc! {"$set": {"deleted_at": 1_i64}})
         .await?;
-    rbac.seed_data_scope_manifest(
-        role,
-        "org_unit",
-        vec![company(role, "org_unit", &["list", "manage"])],
-    )
-    .await?;
+    rbac.seed_data_scope_manifest(role, "org_unit", vec![company(role, "org_unit", &["list", "manage"])])
+        .await?;
     assert_eq!(scope_count(db, role, "org_unit").await?, 1);
     assert_eq!(
         db.collection::<Document>("data_scopes")

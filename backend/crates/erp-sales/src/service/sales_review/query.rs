@@ -1,12 +1,13 @@
 //! 销售变更列表只读取销售集合，不组合审批或财务事实。
 
-use super::{SalesChangeOrderFilter, SalesReviewService};
-use crate::dto::sales_review::{self as dto, PageView, SalesChangeOrderListParams, SalesChangeOrderView};
-use crate::repository::SalesReviewExt;
-use crate::Result;
 use erp_core::ids::SalesOrderId;
 use persistence_core::NoTransaction;
 use validator::Validate;
+
+use super::{SalesChangeOrderFilter, SalesReviewService};
+use crate::Result;
+use crate::dto::sales_review::{self as dto, PageView, SalesChangeOrderListParams, SalesChangeOrderView};
+use crate::repository::SalesReviewExt;
 
 impl SalesReviewService {
     /// 分页查询销售变更单。
@@ -34,11 +35,8 @@ impl SalesReviewService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, dto::SortDir::Asc),
         };
-        let page = self
-            .db
-            .sales_change_orders()
-            .search_sales_change_orders(&filter, &mut NoTransaction)
-            .await?;
+        let page =
+            self.db.sales_change_orders().search_sales_change_orders(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -54,11 +52,6 @@ impl SalesReviewService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 }

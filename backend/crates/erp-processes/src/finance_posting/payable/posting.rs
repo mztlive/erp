@@ -1,15 +1,16 @@
 //! 付款过账跨域步骤；统一传递调用方 Executor 并在首个失败处停止。
-use super::payment_task;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_finance::entity::payable::{PendingPaymentAllocation, SupplierPayment};
 use erp_finance::service::payable::{
-    finish_supplier_payment_in_transaction, settle_supplier_payment_in_transaction, PaymentSettlement,
+    PaymentSettlement, finish_supplier_payment_in_transaction, settle_supplier_payment_in_transaction,
 };
 use mongodb::Database;
 use persistence_core::Executor;
+
+use super::payment_task;
+use crate::{Error, Result};
 /// 付款过账授权来源。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum PaymentPostSource {
@@ -34,14 +35,7 @@ pub(super) async fn post_supplier_payment_in_transaction(
     actor: &AuditActor,
     session: &mut dyn Executor,
 ) -> Result<()> {
-    let mut steps = MongoPaymentPosting {
-        db,
-        payment,
-        pending,
-        source,
-        actor,
-        settlement: None,
-    };
+    let mut steps = MongoPaymentPosting { db, payment, pending, source, actor, settlement: None };
     execute_posting(&mut steps, session).await
 }
 
@@ -73,9 +67,7 @@ struct MongoPaymentPosting<'a> {
 
 impl MongoPaymentPosting<'_> {
     fn settlement(&self) -> Result<&PaymentSettlement> {
-        self.settlement
-            .as_ref()
-            .ok_or_else(|| Error::Internal("付款过账缺少应付核销结果".to_string()))
+        self.settlement.as_ref().ok_or_else(|| Error::Internal("付款过账缺少应付核销结果".to_string()))
     }
 }
 
@@ -117,7 +109,7 @@ impl PaymentPostingSteps for MongoPaymentPosting<'_> {
                     executor,
                 )
                 .await?
-            }
+            },
         }
         Ok(())
     }
@@ -155,8 +147,7 @@ mod tests {
 
     impl RecordedPosting {
         fn record(&mut self, step: &'static str, executor: &mut dyn Executor) -> Result<()> {
-            self.calls
-                .push((step, executor as *mut dyn Executor as *mut () as usize));
+            self.calls.push((step, executor as *mut dyn Executor as *mut () as usize));
             if self.fail_at == Some(step) {
                 return Err(Error::ConflictError(step.to_string()));
             }
@@ -184,10 +175,7 @@ mod tests {
     async fn posting_keeps_original_order_and_the_same_executor() {
         let mut executor = TestExecutor { _identity: 1 };
         let expected_executor = &mut executor as *mut TestExecutor as usize;
-        let mut steps = RecordedPosting {
-            calls: Vec::new(),
-            fail_at: None,
-        };
+        let mut steps = RecordedPosting { calls: Vec::new(), fail_at: None };
         execute_posting(&mut steps, &mut executor).await.unwrap();
         assert_eq!(
             steps.calls,
@@ -204,18 +192,10 @@ mod tests {
     async fn posting_stops_at_each_failure_and_preserves_the_original_error() {
         let sequence = ["settle", "tasks", "payment", "audit"];
         for (index, fail_at) in sequence.iter().enumerate() {
-            let mut steps = RecordedPosting {
-                calls: Vec::new(),
-                fail_at: Some(fail_at),
-            };
-            let error = execute_posting(&mut steps, &mut TestExecutor { _identity: 1 })
-                .await
-                .unwrap_err();
+            let mut steps = RecordedPosting { calls: Vec::new(), fail_at: Some(fail_at) };
+            let error = execute_posting(&mut steps, &mut TestExecutor { _identity: 1 }).await.unwrap_err();
             assert!(matches!(error, Error::ConflictError(message) if message == *fail_at));
-            assert_eq!(
-                steps.calls.iter().map(|(step, _)| *step).collect::<Vec<_>>(),
-                sequence[..=index]
-            );
+            assert_eq!(steps.calls.iter().map(|(step, _)| *step).collect::<Vec<_>>(), sequence[..=index]);
         }
     }
 }

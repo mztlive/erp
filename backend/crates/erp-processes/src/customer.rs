@@ -1,12 +1,12 @@
 //! Named customer processes that own audited outer transactions.
 
-use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_customer::CustomerExt;
 use erp_identity::SharedRbacService;
 use mongodb::Database;
 
+use crate::Result;
 use crate::adapters::{customer_access, customer_service};
 use crate::audit::run_audited;
 
@@ -38,9 +38,7 @@ pub async fn delete_customer(
     actor: AuditActor,
 ) -> Result<()> {
     let mut account = customer_service(db.clone()).load_customer(&id).await?;
-    let audit = actor
-        .clone()
-        .resource_log("customer.delete", "customer", account.base.id.clone())?;
+    let audit = actor.clone().resource_log("customer.delete", "customer", account.base.id.clone())?;
     let actor_for_tx = actor.clone();
     let customer_id = id.clone();
     run_audited(&db, audit, move |db, session| {

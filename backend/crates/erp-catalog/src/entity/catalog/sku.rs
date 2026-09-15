@@ -6,15 +6,15 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_core::Result;
+use erp_core::common::stable::StableBase;
+use erp_core::ids::{ProductId, SkuId, SkuRevisionId, UnitOfMeasureId};
+use erp_core::validation::normalize_required_text;
 use serde::{Deserialize, Serialize};
 
 use crate::entity::catalog::sku_revision::SkuRevision;
 use crate::entity::catalog::specification::validate_specification_signature;
 use crate::entity::catalog::status::{EnableStatus, ListingStatus};
-use erp_core::common::stable::StableBase;
-use erp_core::ids::{ProductId, SkuId, SkuRevisionId, UnitOfMeasureId};
-use erp_core::validation::normalize_required_text;
-use erp_core::Result;
 
 /// SKU 编号最大长度。
 const SKU_NO_MAX_LEN: usize = 64;
@@ -305,12 +305,7 @@ impl Sku {
         if revision.sku_id.as_ref() != self.base.id.as_str() {
             return Err("SKU 修订不属于目标 SKU".into());
         }
-        self.update(
-            SkuUpdate {
-                status: Some(revision.status),
-            },
-            updated_by,
-        )?;
+        self.update(SkuUpdate { status: Some(revision.status) }, updated_by)?;
         self.stable.current_revision_id = Some(revision.base.id.clone());
         Ok(())
     }
@@ -326,12 +321,7 @@ impl Sku {
     /// # 错误
     /// 当前更新规则失败时返回领域错误。
     pub fn disable(&mut self, updated_by: impl Into<String>) -> Result<()> {
-        self.update(
-            SkuUpdate {
-                status: Some(EnableStatus::Disabled),
-            },
-            updated_by,
-        )
+        self.update(SkuUpdate { status: Some(EnableStatus::Disabled) }, updated_by)
     }
 
     /// 重新启用历史停用 SKU，保持下架状态等待显式上架。
@@ -348,12 +338,7 @@ impl Sku {
         if self.is_active() {
             return Err("当前 SKU 已经启用".into());
         }
-        self.update(
-            SkuUpdate {
-                status: Some(EnableStatus::Active),
-            },
-            updated_by,
-        )
+        self.update(SkuUpdate { status: Some(EnableStatus::Active) }, updated_by)
     }
 
     /// 判断是否为无规格 SKU。
@@ -367,10 +352,11 @@ impl Sku {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::entity::catalog::specification::EMPTY_SPEC_SIGNATURE;
     use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
     use erp_core::ids::SkuId;
+
+    use super::*;
+    use crate::entity::catalog::specification::EMPTY_SPEC_SIGNATURE;
 
     fn data() -> SkuData {
         SkuData {
@@ -400,17 +386,11 @@ mod tests {
     /// happy path：无规格 SKU 使用固定空规格签名，空白输入规范化为空签名。
     #[test]
     fn new_accepts_empty_spec_signature() {
-        let no_spec = SkuData {
-            specification_signature: EMPTY_SPEC_SIGNATURE.to_string(),
-            ..data()
-        };
+        let no_spec = SkuData { specification_signature: EMPTY_SPEC_SIGNATURE.to_string(), ..data() };
         let sku = Sku::new(SkuId::new("sku-1"), no_spec, "admin-1").unwrap();
         assert!(sku.is_no_spec());
 
-        let blank = SkuData {
-            specification_signature: "   ".to_string(),
-            ..data()
-        };
+        let blank = SkuData { specification_signature: "   ".to_string(), ..data() };
         let sku = Sku::new(SkuId::new("sku-2"), blank, "admin-1").unwrap();
         assert!(sku.is_no_spec());
     }
@@ -418,26 +398,18 @@ mod tests {
     /// 失败路径：必填空与超长各一条。
     #[test]
     fn new_rejects_empty_and_overlong_sku_no() {
-        let empty = SkuData {
-            sku_no: "  ".to_string(),
-            ..data()
-        };
+        let empty = SkuData { sku_no: "  ".to_string(), ..data() };
         assert!(Sku::new(SkuId::new("sku-1"), empty, "admin-1").is_err());
 
-        let overlong = SkuData {
-            sku_no: "s".repeat(65),
-            ..data()
-        };
+        let overlong = SkuData { sku_no: "s".repeat(65), ..data() };
         assert!(Sku::new(SkuId::new("sku-1"), overlong, "admin-1").is_err());
     }
 
     /// 失败路径：签名超长被拒绝。
     #[test]
     fn new_rejects_overlong_signature() {
-        let overlong_signature = SkuData {
-            specification_signature: format!("{}={}", "a".repeat(100), "b".repeat(500)),
-            ..data()
-        };
+        let overlong_signature =
+            SkuData { specification_signature: format!("{}={}", "a".repeat(100), "b".repeat(500)), ..data() };
         assert!(Sku::new(SkuId::new("sku-1"), overlong_signature, "admin-1").is_err());
     }
 
@@ -446,13 +418,7 @@ mod tests {
     fn update_only_changes_status_and_preserves_identity() {
         let mut sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
 
-        sku.update(
-            SkuUpdate {
-                status: Some(EnableStatus::Disabled),
-            },
-            "admin-2",
-        )
-        .unwrap();
+        sku.update(SkuUpdate { status: Some(EnableStatus::Disabled) }, "admin-2").unwrap();
 
         assert!(!sku.is_active());
         assert_eq!(sku.listing_status, ListingStatus::Unlisted);
@@ -480,13 +446,7 @@ mod tests {
     fn disabled_sku_is_unlisted_and_cannot_be_listed() {
         let mut sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
         sku.set_listing_status(ListingStatus::Listed, "admin-2").unwrap();
-        sku.update(
-            SkuUpdate {
-                status: Some(EnableStatus::Disabled),
-            },
-            "admin-3",
-        )
-        .unwrap();
+        sku.update(SkuUpdate { status: Some(EnableStatus::Disabled) }, "admin-3").unwrap();
 
         assert_eq!(sku.listing_status, ListingStatus::Unlisted);
         assert!(sku.set_listing_status(ListingStatus::Listed, "admin-4").is_err());
@@ -495,11 +455,8 @@ mod tests {
     /// 构造阶段拒绝“停用但已上架”的非法组合。
     #[test]
     fn new_rejects_disabled_but_listed_sku() {
-        let invalid = SkuData {
-            status: EnableStatus::Disabled,
-            listing_status: ListingStatus::Listed,
-            ..data()
-        };
+        let invalid =
+            SkuData { status: EnableStatus::Disabled, listing_status: ListingStatus::Listed, ..data() };
 
         assert!(Sku::new(SkuId::new("sku-1"), invalid, "admin-1").is_err());
     }
@@ -535,24 +492,14 @@ mod tests {
 
         assert_eq!(sku.classify_edit(&identity).unwrap(), SkuEditAction::Keep);
         assert!(identity.ensure_new().is_err());
-        let new_identity = SkuEditIdentity {
-            sku_id: None,
-            expected_revision_id: None,
-            reenable: false,
-            ..identity
-        };
+        let new_identity =
+            SkuEditIdentity { sku_id: None, expected_revision_id: None, reenable: false, ..identity };
         assert!(new_identity.ensure_new().is_ok());
 
         sku.disable("admin-2").unwrap();
-        let reactivation = SkuEditIdentity {
-            reenable: true,
-            change_reason: Some(" 恢复销售 "),
-            ..identity
-        };
-        assert_eq!(
-            sku.classify_edit(&reactivation).unwrap(),
-            SkuEditAction::Reactivate
-        );
+        let reactivation =
+            SkuEditIdentity { reenable: true, change_reason: Some(" 恢复销售 "), ..identity };
+        assert_eq!(sku.classify_edit(&reactivation).unwrap(), SkuEditAction::Reactivate);
     }
 
     /// 既有 SKU 修订冲突与缺失重新启用原因均被拒绝。
@@ -572,10 +519,7 @@ mod tests {
             reenable: false,
             change_reason: None,
         };
-        assert_eq!(
-            sku.classify_edit(&stale).unwrap_err(),
-            SkuEditIdentityError::RevisionConflict
-        );
+        assert_eq!(sku.classify_edit(&stale).unwrap_err(), SkuEditIdentityError::RevisionConflict);
 
         sku.disable("admin-2").unwrap();
         let current_revision = SkuRevisionId::new("rev-2");

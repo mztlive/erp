@@ -1,20 +1,17 @@
 use std::sync::Arc;
 
-use crate::entity::rbac::{Permission, PermissionSet};
-use crate::entity::role::{Role, RoleData, RoleUpdate};
-use crate::ports::PreparedResourceAudit;
-use crate::AccessControlExt;
+use application_core::AuditActor;
 use persistence_core::NoTransaction;
 
-use super::{
-    authorize::{ensure_role_deletable, ensure_role_mutable},
-    policy::{permission_pairs, permissions_for_role, role_key, role_or_not_found},
-    AuthorizedRoleUpdate, RbacService,
-};
-
+use super::authorize::{ensure_role_deletable, ensure_role_mutable};
+use super::policy::{permission_pairs, permissions_for_role, role_key, role_or_not_found};
+use super::{AuthorizedRoleUpdate, RbacService};
+use crate::AccessControlExt;
 use crate::dto::{CreateRoleParams, UpdateRoleParams};
+use crate::entity::rbac::{Permission, PermissionSet};
+use crate::entity::role::{Role, RoleData, RoleUpdate};
 use crate::error::{Error, Result};
-use application_core::AuditActor;
+use crate::ports::PreparedResourceAudit;
 
 impl RbacService {
     /// 创建角色并写入 Casbin 权限策略。
@@ -31,16 +28,10 @@ impl RbacService {
     pub async fn create_role(self: &Arc<Self>, params: CreateRoleParams, actor: AuditActor) -> Result<Role> {
         let authorized = self.authorize_permissions(&actor, params.permissions).await?;
         let id = id_generator::next_id();
-        let audit = self
-            .audit
-            .resource_log(actor, "role.create", "role", id.clone())?;
+        let audit = self.audit.resource_log(actor, "role.create", "role", id.clone())?;
         self.create_role_with_id(
             id,
-            RoleData {
-                name: params.name,
-                description: None,
-                system: false,
-            },
+            RoleData { name: params.name, description: None, system: false },
             authorized.permissions.into_vec(),
             Some(audit),
             Some(authorized.policy_revision),
@@ -68,16 +59,10 @@ impl RbacService {
     ) -> Result<Role> {
         let role = role_or_not_found(self.db.roles().find_by_id(id, &mut NoTransaction).await?)?;
         ensure_role_mutable(&role)?;
-        let authorized = self
-            .authorize_role_update(&actor, role.base.id.as_str(), params.permissions)
-            .await?;
-        let audit = self
-            .audit
-            .resource_log(actor, "role.update", "role", role.base.id.clone())?;
-        let AuthorizedRoleUpdate {
-            permissions,
-            policy_revision,
-        } = authorized;
+        let authorized =
+            self.authorize_role_update(&actor, role.base.id.as_str(), params.permissions).await?;
+        let audit = self.audit.resource_log(actor, "role.update", "role", role.base.id.clone())?;
+        let AuthorizedRoleUpdate { permissions, policy_revision } = authorized;
 
         match (params.name, permissions) {
             (None, None) => self.audit_role_update(role, audit, policy_revision).await,
@@ -90,11 +75,10 @@ impl RbacService {
                     Some(policy_revision),
                 )
                 .await
-            }
+            },
             (Some(name), Some(permissions)) => {
-                self.update_role_with_permissions(role, name, permissions, policy_revision, audit)
-                    .await
-            }
+                self.update_role_with_permissions(role, name, permissions, policy_revision, audit).await
+            },
         }
     }
 
@@ -112,15 +96,10 @@ impl RbacService {
     pub async fn delete_role(self: &Arc<Self>, id: &str, actor: AuditActor) -> Result<()> {
         let role = role_or_not_found(self.db.roles().find_by_id(id, &mut NoTransaction).await?)?;
         ensure_role_deletable(&role)?;
-        let authorized = self
-            .authorize_role_update(&actor, role.base.id.as_str(), None)
-            .await?;
-        let audit = self
-            .audit
-            .resource_log(actor, "role.delete", "role", role.base.id.clone())?;
+        let authorized = self.authorize_role_update(&actor, role.base.id.as_str(), None).await?;
+        let audit = self.audit.resource_log(actor, "role.delete", "role", role.base.id.clone())?;
 
-        self.delete_role_with_policy(role, audit, authorized.policy_revision)
-            .await
+        self.delete_role_with_policy(role, audit, authorized.policy_revision).await
     }
 
     /// 为成功的无字段变更请求写入审计日志。
@@ -144,10 +123,7 @@ impl RbacService {
         audit: PreparedResourceAudit,
         policy_revision: u64,
     ) -> Result<Role> {
-        role.update(RoleUpdate {
-            name: Some(name),
-            ..Default::default()
-        })?;
+        role.update(RoleUpdate { name: Some(name), ..Default::default() })?;
         let db = self.db.clone();
         self.run_authorized_audited_policy_transaction(policy_revision, audit, move |session| {
             Box::pin(async move {
@@ -179,9 +155,7 @@ impl RbacService {
             Box::pin(async move {
                 let mut role = role_or_not_found(db.roles().find_by_id(&role_id, session).await?)?;
                 db.roles().update(&mut role, session).await?;
-                policy_store
-                    .replace_role_permissions(&role_key, &permissions, session)
-                    .await?;
+                policy_store.replace_role_permissions(&role_key, &permissions, session).await?;
                 if let Some(audit) = audit {
                     audit_port.persist(&audit, session).await?;
                 }
@@ -211,9 +185,7 @@ impl RbacService {
         self.run_policy_transaction_at_revision(expected_revision, move |session| {
             Box::pin(async move {
                 db.roles().create(&role, session).await?;
-                policy_store
-                    .replace_role_permissions(&role_key, &permissions, session)
-                    .await?;
+                policy_store.replace_role_permissions(&role_key, &permissions, session).await?;
                 if let Some(audit) = audit {
                     audit_port.persist(&audit, session).await?;
                 }
@@ -238,10 +210,7 @@ impl RbacService {
         policy_revision: u64,
         audit: PreparedResourceAudit,
     ) -> Result<Role> {
-        role.update(RoleUpdate {
-            name: Some(name),
-            ..Default::default()
-        })?;
+        role.update(RoleUpdate { name: Some(name), ..Default::default() })?;
         let db = self.db.clone();
         let policy_store = self.policy_store.clone();
         let role_key = role_key(role.base.id.as_str());
@@ -249,9 +218,7 @@ impl RbacService {
         self.run_authorized_audited_policy_transaction(policy_revision, audit, move |session| {
             Box::pin(async move {
                 db.roles().update(&mut role, session).await?;
-                policy_store
-                    .replace_role_permissions(&role_key, &permissions, session)
-                    .await?;
+                policy_store.replace_role_permissions(&role_key, &permissions, session).await?;
                 Ok::<Role, Error>(role)
             })
         })
@@ -276,9 +243,7 @@ impl RbacService {
                     db.roles().restore(&mut role, session).await?;
                 }
                 db.roles().update(&mut role, session).await?;
-                policy_store
-                    .replace_role_permissions(&role_key, &permissions, session)
-                    .await?;
+                policy_store.replace_role_permissions(&role_key, &permissions, session).await?;
                 Ok(role)
             })
         })

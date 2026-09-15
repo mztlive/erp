@@ -3,17 +3,15 @@
 //! 提交快照是冻结审批对象（事实类），形成后不可修改，**不提供软删除方法**；
 //! 被驳回的提交永久保留但不进入经营台账（数据模型 §6.5）。
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, Pagination, QueryFilter, Result};
+
 use crate::entity::sales_order::{
     SalesOrderId, SalesOrderSubmission, SalesOrderSubmissionId, SalesOrderSubmissionLine,
     SalesOrderWorkingCopyId, SubmissionStatus,
 };
 use crate::repository::owned::{SalesOrderSubmissionLineRepository, SalesOrderSubmissionRepository};
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-
-use persistence_core::Executor;
-use persistence_core::Result;
-use persistence_core::{Pagination, QueryFilter};
 
 /// 提交历史筛选条件。
 #[derive(Debug, Clone)]
@@ -76,8 +74,7 @@ impl<'a> SalesOrderSubmissionRepository<'a> {
         working_copy_id: &SalesOrderWorkingCopyId,
         executor: &mut dyn Executor,
     ) -> Result<Option<SalesOrderSubmission>> {
-        self.find_one(doc! { "working_copy_id": working_copy_id.to_string() }, executor)
-            .await
+        self.find_one(doc! { "working_copy_id": working_copy_id.to_string() }, executor).await
     }
 
     /// 列出销售单提交历史，新提交在前。
@@ -131,11 +128,7 @@ impl<'a> SalesOrderSubmissionRepository<'a> {
         sales_order_id: &SalesOrderId,
         executor: &mut dyn Executor,
     ) -> Result<Option<SalesOrderSubmission>> {
-        Ok(self
-            .list_by_order_newest_first(sales_order_id, executor)
-            .await?
-            .into_iter()
-            .next())
+        Ok(self.list_by_order_newest_first(sales_order_id, executor).await?.into_iter().next())
     }
 
     /// 按销售单与提交序号查找提交快照。
@@ -193,8 +186,7 @@ impl<'a> SalesOrderSubmissionRepository<'a> {
         if order_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(doc! { "sales_order_id": { "$in": order_ids } }, executor)
-            .await
+        self.find_many(doc! { "sales_order_id": { "$in": order_ids } }, executor).await
     }
 }
 
@@ -230,8 +222,7 @@ impl<'a> SalesOrderSubmissionLineRepository<'a> {
             return Ok(Vec::new());
         }
         let ids = submission_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>();
-        self.find_many(doc! { "submission_id": { "$in": ids } }, executor)
-            .await
+        self.find_many(doc! { "submission_id": { "$in": ids } }, executor).await
     }
 }
 

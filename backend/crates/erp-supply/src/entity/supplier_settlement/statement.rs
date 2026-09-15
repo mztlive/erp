@@ -8,15 +8,14 @@ use std::collections::HashMap;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{PayableAccountId, SupplierAccountId, SupplierSettlementStatementId};
 use erp_core::money::Amount;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use super::difference::{SettlementDifferenceStatus, SupplierSettlementDifference};
 use super::item::{SettlementCostDelta, SupplierSettlementItem};
@@ -279,11 +278,8 @@ impl SupplierSettlementStatement {
         )?;
         let external_bill_no =
             normalize_optional_text(data.external_bill_no, "外部账单号", EXTERNAL_BILL_NO_MAX_LEN)?;
-        let external_bill_version = normalize_optional_text(
-            data.external_bill_version,
-            "外部账单版本",
-            EXTERNAL_BILL_NO_MAX_LEN,
-        )?;
+        let external_bill_version =
+            normalize_optional_text(data.external_bill_version, "外部账单版本", EXTERNAL_BILL_NO_MAX_LEN)?;
         if external_bill_no.is_some() != external_bill_version.is_some() {
             return Err(Error::from("外部账单号与版本必须同时提供或同时省略"));
         }
@@ -486,10 +482,7 @@ impl SupplierSettlementStatement {
                 difference.status.as_str().to_string(),
                 difference.resolution.clone().unwrap_or_default(),
                 difference.resolved_by.clone().unwrap_or_default(),
-                difference
-                    .resolved_at
-                    .map(|value| value.unix_secs().to_string())
-                    .unwrap_or_default(),
+                difference.resolved_at.map(|value| value.unix_secs().to_string()).unwrap_or_default(),
             ]);
         }
         digest_parts(&parts)
@@ -506,10 +499,7 @@ impl SupplierSettlementStatement {
     /// # 错误
     /// 存在待处理差异或主题摘要过期时返回领域错误。
     pub fn ensure_resolved_subject(&self, differences: &[SupplierSettlementDifference]) -> Result<()> {
-        if differences
-            .iter()
-            .any(|difference| difference.status == SettlementDifferenceStatus::Pending)
-        {
+        if differences.iter().any(|difference| difference.status == SettlementDifferenceStatus::Pending) {
             return Err(Error::from("存在未解决差异，禁止提交或确认结算"));
         }
         if self.subject_hash != self.review_subject_hash(differences) {
@@ -567,9 +557,7 @@ impl SupplierSettlementStatement {
         for (item_id, accepted_gross) in accepted_gross_by_item {
             let delta = item_by_id[item_id].supplier_minus_erp_delta()?;
             if accepted_gross != delta.gross {
-                return Err(Error::from(format!(
-                    "结算明细 {item_id} 的 ERP 接受差异与冻结双方金额不一致"
-                )));
+                return Err(Error::from(format!("结算明细 {item_id} 的 ERP 接受差异与冻结双方金额不一致")));
             }
             total.add_assign(delta);
         }
@@ -663,10 +651,7 @@ impl SupplierSettlementStatement {
     pub fn update(&mut self, update: SupplierSettlementStatementUpdate) -> Result<()> {
         let target_status = update.status.unwrap_or(self.status);
         if target_status != self.status
-            && matches!(
-                target_status,
-                SettlementStatus::PendingReview | SettlementStatus::Confirmed
-            )
+            && matches!(target_status, SettlementStatus::PendingReview | SettlementStatus::Confirmed)
         {
             return Err(Error::from("提交复核与确认必须使用供应商结算强类型领域命令"));
         }
@@ -778,25 +763,15 @@ impl SupplierSettlementStatement {
             return Err(Error::from("经办人与复核人不得相同"));
         }
         let (result, target_status, reason_code, comment, payable_account_id) = match decision {
-            SettlementReviewDecision::Confirm {
-                payable_account_id,
-                comment,
-            } => (
+            SettlementReviewDecision::Confirm { payable_account_id, comment } => (
                 SettlementReviewResult::Confirmed,
                 SettlementStatus::Confirmed,
                 None,
                 normalize_optional_text(comment, "复核说明", REVIEW_COMMENT_MAX_LEN)?,
                 Some(payable_account_id),
             ),
-            SettlementReviewDecision::Reject {
-                return_status,
-                reason_code,
-                comment,
-            } => {
-                if !matches!(
-                    return_status,
-                    SettlementStatus::Draft | SettlementStatus::HasDifference
-                ) {
+            SettlementReviewDecision::Reject { return_status, reason_code, comment } => {
+                if !matches!(return_status, SettlementStatus::Draft | SettlementStatus::HasDifference) {
                     return Err(Error::from("驳回复核只能退回草稿或有差异状态"));
                 }
                 (
@@ -806,7 +781,7 @@ impl SupplierSettlementStatement {
                     normalize_optional_text(comment, "复核说明", REVIEW_COMMENT_MAX_LEN)?,
                     None,
                 )
-            }
+            },
         };
         self.status = target_status;
         self.reviewed_by = Some(reviewed_by);
@@ -867,11 +842,7 @@ fn digest_parts(parts: &[String]) -> String {
         digest.update((part.len() as u64).to_be_bytes());
         digest.update(part.as_bytes());
     }
-    digest
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    digest.finalize().iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 /// 校验金额非负。
@@ -921,18 +892,20 @@ fn ensure_status_move(from: SettlementStatus, to: SettlementStatus) -> Result<()
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::entity::supplier_settlement::{
-        SettlementDifferenceConclusion, SettlementDifferenceConclusionKind, SettlementDifferenceType,
-        SupplierSettlementDifferenceData, SupplierSettlementItemData,
-    };
+    use std::str::FromStr;
+
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::{
         PayableAccountId, SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
         SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
     };
     use erp_core::money::Quantity;
-    use std::str::FromStr;
+
+    use super::*;
+    use crate::entity::supplier_settlement::{
+        SettlementDifferenceConclusion, SettlementDifferenceConclusionKind, SettlementDifferenceType,
+        SupplierSettlementDifferenceData, SupplierSettlementItemData,
+    };
 
     fn sample_data() -> SupplierSettlementStatementData {
         SupplierSettlementStatementData {
@@ -1025,10 +998,7 @@ mod tests {
 
     #[test]
     fn new_rejects_empty_statement_no() {
-        let data = SupplierSettlementStatementData {
-            statement_no: "   ".to_string(),
-            ..sample_data()
-        };
+        let data = SupplierSettlementStatementData { statement_no: "   ".to_string(), ..sample_data() };
         assert!(
             SupplierSettlementStatement::new(SupplierSettlementStatementId::new("statement-8"), data)
                 .is_err()
@@ -1064,14 +1034,8 @@ mod tests {
         assert_eq!(statement.status, SettlementStatus::Confirmed);
         assert_eq!(statement.difference_amount, Amount::from_str("20.00").unwrap());
         assert_eq!(statement.reviewed_by.as_deref(), Some("复核人-b"));
-        assert_eq!(
-            statement.confirmed_at,
-            Some(Instant::from_unix_secs(1_700_000_100))
-        );
-        assert_eq!(
-            statement.payable_account_id,
-            Some(PayableAccountId::new("payable-account-1"))
-        );
+        assert_eq!(statement.confirmed_at, Some(Instant::from_unix_secs(1_700_000_100)));
+        assert_eq!(statement.payable_account_id, Some(PayableAccountId::new("payable-account-1")));
         assert_eq!(statement.statement_no, "ST-2026-001", "关键字段不可修改");
     }
 
@@ -1211,13 +1175,9 @@ mod tests {
             .record_conclusion(&conclusion, "finance-1", Instant::from_unix_secs(1_700_000_100))
             .unwrap();
         let differences = vec![difference];
-        statement
-            .update_subject_hash(statement.review_subject_hash(&differences))
-            .unwrap();
+        statement.update_subject_hash(statement.review_subject_hash(&differences)).unwrap();
 
-        let delta = statement
-            .ensure_confirmable(std::slice::from_ref(&item), &differences)
-            .unwrap();
+        let delta = statement.ensure_confirmable(std::slice::from_ref(&item), &differences).unwrap();
         assert_eq!(delta.gross, Amount::from_str("1.00").unwrap());
         assert_eq!(delta.net, Amount::from_str("0.87").unwrap());
         assert_eq!(delta.tax, Amount::from_str("0.13").unwrap());

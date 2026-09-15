@@ -2,13 +2,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{ReceivableAccountId, ReceivableEntryId};
 use erp_core::money::Amount;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 来源事实类型最大长度。
 const FACT_TYPE_MAX_LEN: usize = 64;
@@ -247,16 +246,12 @@ fn validate_direction_consistency(entry_type: ReceivableEntryType, direction: En
         ReceivableEntryType::Original => Some(EntryDirection::Increase),
         ReceivableEntryType::VoidReduction | ReceivableEntryType::Refund | ReceivableEntryType::Reversal => {
             Some(EntryDirection::Decrease)
-        }
+        },
         ReceivableEntryType::SalesChangeDelta => None,
     };
     if let Some(fixed) = fixed {
         if direction != fixed {
-            return Err(Error::from(format!(
-                "{} 分录方向必须为 {}",
-                entry_type.label(),
-                fixed.label()
-            )));
+            return Err(Error::from(format!("{} 分录方向必须为 {}", entry_type.label(), fixed.label())));
         }
     }
     Ok(())
@@ -264,8 +259,9 @@ fn validate_direction_consistency(entry_type: ReceivableEntryType, direction: En
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn data() -> ReceivableEntryData {
         ReceivableEntryData {
@@ -295,28 +291,16 @@ mod tests {
 
     #[test]
     fn new_rejects_blank_overlong_and_negative() {
-        let blank_doc = ReceivableEntryData {
-            source_document_id: "   ".to_string(),
-            ..data()
-        };
+        let blank_doc = ReceivableEntryData { source_document_id: "   ".to_string(), ..data() };
         assert!(ReceivableEntry::new(ReceivableEntryId::new("re-2"), blank_doc).is_err());
 
-        let overlong = ReceivableEntryData {
-            source_revision_id: "r".repeat(129),
-            ..data()
-        };
+        let overlong = ReceivableEntryData { source_revision_id: "r".repeat(129), ..data() };
         assert!(ReceivableEntry::new(ReceivableEntryId::new("re-3"), overlong).is_err());
 
-        let non_positive = ReceivableEntryData {
-            amount: Amount::from_str("0.00").unwrap(),
-            ..data()
-        };
+        let non_positive = ReceivableEntryData { amount: Amount::from_str("0.00").unwrap(), ..data() };
         assert!(ReceivableEntry::new(ReceivableEntryId::new("re-4"), non_positive).is_err());
 
-        let zero_seq = ReceivableEntryData {
-            source_sequence: 0,
-            ..data()
-        };
+        let zero_seq = ReceivableEntryData { source_sequence: 0, ..data() };
         assert!(ReceivableEntry::new(ReceivableEntryId::new("re-5"), zero_seq).is_err());
     }
 
@@ -352,14 +336,8 @@ mod tests {
 
     #[test]
     fn enums_serialize_with_stable_codes_and_labels() {
-        assert_eq!(
-            serde_json::to_string(&ReceivableEntryType::VoidReduction).unwrap(),
-            "\"void_reduction\""
-        );
-        assert_eq!(
-            serde_json::to_string(&EntryDirection::Increase).unwrap(),
-            "\"increase\""
-        );
+        assert_eq!(serde_json::to_string(&ReceivableEntryType::VoidReduction).unwrap(), "\"void_reduction\"");
+        assert_eq!(serde_json::to_string(&EntryDirection::Increase).unwrap(), "\"increase\"");
         assert_eq!(ReceivableEntryType::SalesChangeDelta.label(), "销售变更差额");
         assert_eq!(EntryDirection::Decrease.label(), "减少");
         assert_eq!(ReceivableEntryType::Reversal.as_str(), "reversal");

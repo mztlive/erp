@@ -1,7 +1,6 @@
 //! 库存调整普通撤回：调用统一取消编排并原子持久化业务与 BPM 事实。
 
-use erp_workflow::ports::WorkflowAuthorizationPort;
-
+use application_core::AuditActor;
 use bpm::engine::DefinitionGraph;
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalCommandKind, ApprovalProcessInstanceStatus};
@@ -9,53 +8,49 @@ use bpm::model::{
     ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
     ParticipantId, Timestamp,
 };
-use erp_audit::AuditExt;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalNotificationOutboxId, StockAdjustmentId};
-use erp_inventory::InventoryExt;
-use erp_inventory::StockAdjustment;
+use erp_identity::SharedRbacService;
+use erp_inventory::{
+    CancelStockAdjustmentApprovalRequest, InventoryExt, StockAdjustment, StockAdjustmentView,
+};
 use erp_workflow::entity::approval_integration::{
     ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
 };
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::{AssignmentSource, WorkItem, WorkItemType};
-use erp_workflow::ApprovalIntegrationExt;
-use erp_workflow::BpmExt;
-use erp_workflow::WorkItemExt;
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
-use validator::Validate;
-
-use super::adapter::{
-    execute_stock_adjustment_domain_action, require_frozen_binding, stock_adjustment_adapter,
-};
-use super::approval_prepare::load_bound_definition_graph;
-use super::approval_query::load_approval_binding;
-use super::InventoryAdjustmentService;
-use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_identity::SharedRbacService;
-use erp_inventory::{CancelStockAdjustmentApprovalRequest, StockAdjustmentView};
+use erp_workflow::ports::WorkflowAuthorizationPort;
 use erp_workflow::service::approval::execution::authorization::{
     converge_eligibility, requires_blocked_cancel,
 };
 use erp_workflow::service::approval::execution::idempotency::{
-    document_cancel_identity, normalize_idempotency_key, payload_conflict_error,
-    DocumentCancelIdentityParams, PreparedCommandIdentity, ReceiptBranch,
+    DocumentCancelIdentityParams, PreparedCommandIdentity, ReceiptBranch, document_cancel_identity,
+    normalize_idempotency_key, payload_conflict_error,
 };
 use erp_workflow::service::approval::execution::{
-    map_receipt_first_write_error, prepare_document_cancel, CancelExecutionInput, ExecutionCommandInput,
-    PlannedWrites, PreparedExecution,
+    CancelExecutionInput, ExecutionCommandInput, PlannedWrites, PreparedExecution,
+    map_receipt_first_write_error, prepare_document_cancel,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::service::approval::{
     approval_actor_is_active_with_executor, approval_cancel_scope_with_executor,
     approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
 };
-use erp_workflow::ApprovalActionContext;
+use erp_workflow::{ApprovalActionContext, ApprovalIntegrationExt, BpmExt, WorkItemExt};
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
+use validator::Validate;
+
+use super::InventoryAdjustmentService;
+use super::adapter::{
+    execute_stock_adjustment_domain_action, require_frozen_binding, stock_adjustment_adapter,
+};
+use super::approval_prepare::load_bound_definition_graph;
+use super::approval_query::load_approval_binding;
+use crate::{Error, Result};
 
 const STOCK_ADJUSTMENT_CANCEL_AUDIT_ACTION: &str = "stock_adjustment.cancel_approval";
 const STOCK_ADJUSTMENT_AUDIT_RESOURCE: &str = "stock_adjustment";
@@ -81,11 +76,7 @@ impl InventoryAdjustmentService {
     #[tracing::instrument(
         name = "inventory.stock_adjustment_cancel_approval",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "inventory",
-            operation = "stock_adjustment_cancel_approval"
-        )
+        fields(layer = "service", domain = "inventory", operation = "stock_adjustment_cancel_approval")
     )]
     pub async fn cancel_stock_adjustment_approval(
         &self,
@@ -106,9 +97,7 @@ impl InventoryAdjustmentService {
         let mut adjustment = self.inventory().load_stock_adjustment(id).await?;
         ensure_expected_version("库存调整单", req.expected_version, adjustment.base.version)?;
         if adjustment.approval_subject_version != req.expected_subject_version {
-            return Err(Error::ConflictError(
-                "库存调整审批主题版本已变化，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("库存调整审批主题版本已变化，请刷新后重试".to_string()));
         }
         let binding = load_approval_binding(&self.db, id, &mut NoTransaction).await?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
@@ -166,7 +155,7 @@ impl InventoryAdjustmentService {
                     return Ok(view);
                 }
                 Err(error)
-            }
+            },
         }
     }
 }
@@ -224,9 +213,8 @@ pub(super) async fn load_cancel_runtime(
     binding: &ApprovalDefinitionBinding,
     instance: ApprovalProcessInstance,
 ) -> Result<LoadedCancelRuntime> {
-    let task_policy = instance
-        .cancellation_task_policy()
-        .map_err(|error| Error::ConflictError(error.to_string()))?;
+    let task_policy =
+        instance.cancellation_task_policy().map_err(|error| Error::ConflictError(error.to_string()))?;
     let current = db
         .bpm_workflow()
         .current_execution_for_cancellation(
@@ -312,9 +300,7 @@ async fn committed_cancel_replay(
                     || receipt.command_kind != ApprovalCommandKind::CancelApproval
                     || receipt.result_ref != instance.base.id
                 {
-                    return Err(Error::ConflictError(
-                        "库存调整撤回收据与终态事实不一致".to_string(),
-                    ));
+                    return Err(Error::ConflictError("库存调整撤回收据与终态事实不一致".to_string()));
                 }
                 if !matches!(identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)) {
                     return Err(payload_conflict_error().into());
@@ -375,9 +361,7 @@ async fn committed_cancel_actor(
         .map(|audit| audit.actor_id)
         .collect::<Vec<_>>();
     let [actor] = actors.as_slice() else {
-        return Err(Error::ConflictError(
-            "库存调整撤回收据缺少唯一原命令操作人审计".to_string(),
-        ));
+        return Err(Error::ConflictError("库存调整撤回收据缺少唯一原命令操作人审计".to_string()));
     };
     Ok(actor.clone())
 }
@@ -430,9 +414,7 @@ pub(super) fn ensure_cancel_instance_subject(
         || instance.subject.subject_id() != adjustment_id
         || instance.subject_version != expected_subject_version
     {
-        return Err(Error::ConflictError(
-            "审批实例与库存调整撤回命令不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("审批实例与库存调整撤回命令不一致".to_string()));
     }
     Ok(())
 }
@@ -446,9 +428,7 @@ pub(super) fn ensure_cancel_instance_binding(
         || instance.process_definition_id != binding.approval_process_definition_id
         || instance.definition_version != binding.approval_definition_version
     {
-        return Err(Error::ConflictError(
-            "库存调整审批实例与冻结定义绑定不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("库存调整审批实例与冻结定义绑定不一致".to_string()));
     }
     Ok(())
 }
@@ -458,15 +438,10 @@ pub(super) fn ensure_cancel_instance_binding(
 /// 人员失效实例仍走普通业务撤回，不得沿用受阻管理员取消的通知种类。
 fn normalize_document_cancel_notification(writes: &mut PlannedWrites) -> Result<()> {
     let [intent] = writes.notifications.as_mut_slice() else {
-        return Err(Error::Internal(
-            "库存调整普通撤回必须产生唯一取消通知意图".to_string(),
-        ));
+        return Err(Error::Internal("库存调整普通撤回必须产生唯一取消通知意图".to_string()));
     };
     intent.event_kind = ApprovalNotificationEventKind::Cancelled;
-    intent.dedup_key = format!(
-        "cancelled:{}:{}",
-        writes.instance.base.id, writes.instance.current_round_no
-    );
+    intent.dedup_key = format!("cancelled:{}:{}", writes.instance.base.id, writes.instance.current_round_no);
     Ok(())
 }
 
@@ -477,16 +452,8 @@ fn ensure_cancel_runtime_versions(
     authorization: &CancelAuthorization,
 ) -> Result<()> {
     ensure_cancel_execution_identity(&runtime.instance, &runtime.current, runtime.task_policy)?;
-    ensure_expected_version(
-        "审批实例",
-        req.expected_instance_version,
-        runtime.instance.base.version,
-    )?;
-    ensure_expected_version(
-        "审批执行",
-        req.expected_execution_version,
-        runtime.current.base.version,
-    )?;
+    ensure_expected_version("审批实例", req.expected_instance_version, runtime.instance.base.version)?;
+    ensure_expected_version("审批执行", req.expected_execution_version, runtime.current.base.version)?;
     match runtime.task_policy {
         ApprovalCancellationTaskPolicy::CloseOpenTask => {
             let expected = req
@@ -495,15 +462,13 @@ fn ensure_cancel_runtime_versions(
             let task = &runtime.open_tasks[0];
             ensure_open_task_matches_runtime(task, runtime, authorization)?;
             ensure_expected_version("审批任务", expected, task.base.version)
-        }
+        },
         ApprovalCancellationTaskPolicy::NoOpenTask => {
             if req.expected_task_version.is_some() {
-                return Err(Error::ConflictError(
-                    "人员失效阻塞审批撤回的任务版本必须为空".to_string(),
-                ));
+                return Err(Error::ConflictError("人员失效阻塞审批撤回的任务版本必须为空".to_string()));
             }
             Ok(())
-        }
+        },
     }
 }
 
@@ -522,23 +487,20 @@ fn ensure_cancel_execution_identity(
                 && current.status == bpm::model::types::ApprovalNodeExecutionStatus::Active
                 && instance.blocker_code.is_none()
                 && current.blocker_code.is_none()
-        }
-        ApprovalCancellationTaskPolicy::NoOpenTask => instance
-            .blocker_code
-            .zip(current.blocker_code)
-            .is_some_and(|(instance_code, execution_code)| {
+        },
+        ApprovalCancellationTaskPolicy::NoOpenTask => {
+            instance.blocker_code.zip(current.blocker_code).is_some_and(|(instance_code, execution_code)| {
                 instance.status == ApprovalProcessInstanceStatus::Blocked
                     && current.status == bpm::model::types::ApprovalNodeExecutionStatus::Blocked
                     && instance_code == execution_code
                     && !requires_blocked_cancel(instance_code)
-            }),
+            })
+        },
     };
     if identity_matches && state_matches {
         return Ok(());
     }
-    Err(Error::ConflictError(
-        "库存调整审批实例与当前执行不一致".to_string(),
-    ))
+    Err(Error::ConflictError("库存调整审批实例与当前执行不一致".to_string()))
 }
 
 /// 校验开放任务与当前实例、执行、对象和责任人完全一致。
@@ -579,9 +541,7 @@ pub(super) fn ensure_stock_adjustment_open_task_identity(
         || task.owner_role != adapter.owner_role
         || task.owner_organization_id != responsible_org_id
     {
-        return Err(Error::ConflictError(
-            "库存调整开放审批任务与当前运行事实不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("库存调整开放审批任务与当前运行事实不一致".to_string()));
     }
     Ok(())
 }
@@ -713,11 +673,7 @@ async fn ensure_cancel_authorized_with_executor(
     )
     .await?;
     let object = crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone())
-        .approval_scope_object(
-            DocumentType::StockAdjustment,
-            &snapshot.business_object_id,
-            executor,
-        )
+        .approval_scope_object(DocumentType::StockAdjustment, &snapshot.business_object_id, executor)
         .await?;
     if !cancel_scope.covers_object(&object) || !read_scope.covers_object(&object) {
         return Err(Error::Forbidden("无权撤回该责任组织的库存调整审批".to_string()));
@@ -735,13 +691,8 @@ async fn ensure_cancel_authorized_with_executor(
         executor,
     )
     .await?;
-    if !visibility
-        .runtime_admin_types()
-        .contains(&DocumentType::StockAdjustment)
-    {
-        return Err(Error::Forbidden(
-            "只有原提交人或库存调整审批运行管理员可以撤回".to_string(),
-        ));
+    if !visibility.runtime_admin_types().contains(&DocumentType::StockAdjustment) {
+        return Err(Error::Forbidden("只有原提交人或库存调整审批运行管理员可以撤回".to_string()));
     }
     Ok(CancelAuthorization {
         authority: CancelAuthority::RuntimeAdmin,
@@ -801,9 +752,7 @@ async fn persist_stock_adjustment_cancel(
                     || persisted_adjustment.approval_subject_version != authorization_instance.subject_version
                     || persisted_adjustment.status != erp_inventory::StockAdjustmentState::InApproval
                 {
-                    return Err(Error::ConflictError(
-                        "库存调整单事务内版本或审批状态已变化".to_string(),
-                    ));
+                    return Err(Error::ConflictError("库存调整单事务内版本或审批状态已变化".to_string()));
                 }
                 let persisted_instance = db
                     .bpm_workflow()
@@ -822,9 +771,7 @@ async fn persist_stock_adjustment_cancel(
                 let persisted_binding = require_frozen_binding(persisted_binding.as_ref())?;
                 ensure_cancel_instance_binding(&persisted_instance, persisted_binding)?;
                 if persisted_binding != &binding || persisted_instance != authorization_instance {
-                    return Err(Error::ConflictError(
-                        "库存调整撤回事务内运行事实已变化".to_string(),
-                    ));
+                    return Err(Error::ConflictError("库存调整撤回事务内运行事实已变化".to_string()));
                 }
                 let authorization =
                     ensure_cancel_authorized_with_executor(&db, &rbac, &persisted_instance, &actor, session)
@@ -858,9 +805,7 @@ async fn persist_stock_adjustment_cancel(
                         session,
                     )
                     .await?;
-                db.work_items()
-                    .persist_cancelled_approval_tasks(&closed_tasks, session)
-                    .await?;
+                db.work_items().persist_cancelled_approval_tasks(&closed_tasks, session).await?;
                 persist_stock_adjustment_cancel_notifications(
                     &db,
                     StockAdjustmentCancelNotificationInput {
@@ -901,9 +846,8 @@ async fn revalidate_cancel_open_tasks(
     authorization: &CancelAuthorization,
     executor: &mut dyn Executor,
 ) -> Result<Vec<WorkItem>> {
-    let policy = instance
-        .cancellation_task_policy()
-        .map_err(|error| Error::ConflictError(error.to_string()))?;
+    let policy =
+        instance.cancellation_task_policy().map_err(|error| Error::ConflictError(error.to_string()))?;
     let execution_id = instance
         .current_node_execution_id
         .as_ref()
@@ -917,13 +861,8 @@ async fn revalidate_cancel_open_tasks(
         return Err(Error::ConflictError("库存调整审批执行已变化".to_string()));
     }
     ensure_cancel_execution_identity(instance, &current_execution, policy)?;
-    let tasks = db
-        .work_items()
-        .open_approval_tasks_for_execution(execution_id, executor)
-        .await?;
-    policy
-        .ensure_open_task_count(tasks.len())
-        .map_err(|error| Error::ConflictError(error.to_string()))?;
+    let tasks = db.work_items().open_approval_tasks_for_execution(execution_id, executor).await?;
+    policy.ensure_open_task_count(tasks.len()).map_err(|error| Error::ConflictError(error.to_string()))?;
     if tasks.len() != expected_tasks.len()
         || tasks.iter().zip(expected_tasks).any(|(current, expected)| {
             current.base.id != expected.base.id || current.base.version != expected.base.version
@@ -981,28 +920,20 @@ async fn persist_stock_adjustment_cancel_notifications(
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
     let [intent] = input.writes.notifications.as_slice() else {
-        return Err(Error::Internal(
-            "库存调整普通撤回必须产生唯一取消通知意图".to_string(),
-        ));
+        return Err(Error::Internal("库存调整普通撤回必须产生唯一取消通知意图".to_string()));
     };
-    let mut recipients = vec![
-        input.current_approver_id.to_string(),
-        input.authorization.submitted_by.clone(),
-    ];
+    let mut recipients =
+        vec![input.current_approver_id.to_string(), input.authorization.submitted_by.clone()];
     if input.authorization.authority == CancelAuthority::RuntimeAdmin {
         recipients.push(input.actor_id.to_string());
     }
     recipients.sort();
     recipients.dedup();
-    let expected_dedup_key = format!(
-        "cancelled:{}:{}",
-        input.writes.instance.base.id, input.writes.instance.current_round_no
-    );
+    let expected_dedup_key =
+        format!("cancelled:{}:{}", input.writes.instance.base.id, input.writes.instance.current_round_no);
     if intent.event_kind != ApprovalNotificationEventKind::Cancelled || intent.dedup_key != expected_dedup_key
     {
-        return Err(Error::Internal(
-            "库存调整普通撤回通知意图与持久化合同不一致".to_string(),
-        ));
+        return Err(Error::Internal("库存调整普通撤回通知意图与持久化合同不一致".to_string()));
     }
     let record = ApprovalNotificationOutbox::enqueue(
         ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
@@ -1133,15 +1064,8 @@ async fn validate_blocked_cancel_runtime_context(
     {
         return Err(Error::ConflictError("库存调整受阻执行上下文已变化".to_string()));
     }
-    if !db
-        .work_items()
-        .open_approval_tasks_for_execution(&execution_id, executor)
-        .await?
-        .is_empty()
-    {
-        return Err(Error::ConflictError(
-            "受阻库存调整执行不得存在开放审批任务".to_string(),
-        ));
+    if !db.work_items().open_approval_tasks_for_execution(&execution_id, executor).await?.is_empty() {
+        return Err(Error::ConflictError("受阻库存调整执行不得存在开放审批任务".to_string()));
     }
     Ok(())
 }
@@ -1157,10 +1081,8 @@ mod tests {
     /// 库存普通撤回必须复用统一 V3/legacy 身份，禁止退回 raw key 或独立摘要。
     #[test]
     fn cancel_replay_uses_typed_identity_and_exact_scope_candidates() {
-        let production = include_str!("cancel_approval.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码必须存在");
+        let production =
+            include_str!("cancel_approval.rs").split("#[cfg(test)]").next().expect("生产代码必须存在");
         assert!(production.contains("document_cancel_identity("));
         assert!(production.contains("identity.scope_candidates()"));
         assert!(production.contains("identity.classify(Some(&receipt))"));

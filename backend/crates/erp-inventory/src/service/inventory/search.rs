@@ -1,10 +1,13 @@
 //! 在库存分页前解析商品关键词，保留显式 SKU 条件的交集。
 
-use crate::repository::InventorySearch;
-use crate::{dto::StockAvailability, error::Result, ports::CatalogFactsPort, repository::InventoryExt};
 use erp_core::ids::SkuId;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::dto::StockAvailability;
+use crate::error::Result;
+use crate::ports::CatalogFactsPort;
+use crate::repository::{InventoryExt, InventorySearch};
 
 /// 关键词无命中必须形成空集合条件，不能退回不筛选。
 pub(super) async fn sku_filter(
@@ -28,10 +31,7 @@ pub(super) async fn balance_filter(
     availability: Option<StockAvailability>,
     executor: &mut dyn Executor,
 ) -> Result<InventorySearch> {
-    Ok(db
-        .inventory()
-        .balance_search(search, id, availability, executor)
-        .await?)
+    Ok(db.inventory().balance_search(search, id, availability, executor).await?)
 }
 
 /// 调整单按全部明细匹配 SKU，不能只检查列表首行。
@@ -46,10 +46,12 @@ pub(super) async fn adjustment_filter(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
+    use async_trait::async_trait;
+
     use super::*;
     use crate::ports::{SkuFact, SkuRevisionFact};
-    use async_trait::async_trait;
-    use std::collections::HashMap;
 
     struct Catalog;
     #[async_trait]
@@ -75,26 +77,15 @@ mod tests {
     async fn keyword_intersects_explicit_sku_without_page_truncation() {
         let mut executor = persistence_core::NoTransaction;
         assert_eq!(
-            sku_filter(&Catalog, Some("杯.[x]"), None, &mut executor)
-                .await
-                .unwrap(),
+            sku_filter(&Catalog, Some("杯.[x]"), None, &mut executor).await.unwrap(),
             InventorySearch::skus(Some(vec![SkuId::new("sku-101")]), None)
         );
         assert_eq!(
-            sku_filter(
-                &Catalog,
-                Some("杯.[x]"),
-                Some(&SkuId::new("other")),
-                &mut executor
-            )
-            .await
-            .unwrap(),
+            sku_filter(&Catalog, Some("杯.[x]"), Some(&SkuId::new("other")), &mut executor).await.unwrap(),
             InventorySearch::skus(Some(vec![]), None)
         );
         assert_eq!(
-            sku_filter(&Catalog, None, Some(&SkuId::new("only")), &mut executor)
-                .await
-                .unwrap(),
+            sku_filter(&Catalog, None, Some(&SkuId::new("only")), &mut executor).await.unwrap(),
             InventorySearch::skus(None, Some(&SkuId::new("only")))
         );
     }

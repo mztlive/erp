@@ -5,12 +5,12 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as CustomerExt>::CUSTOMER_ACCOUNTS` 等值。
 
-use crate::repository::owned::{
-    CustomerAccountRepository, CustomerAssignmentRepository, CustomerProfileCommandRepository,
-};
 use mongodb::Database;
 
 use super::super::customer::{CustomerAccountFilter, CustomerAssignmentFilter};
+use crate::repository::owned::{
+    CustomerAccountRepository, CustomerAssignmentRepository, CustomerProfileCommandRepository,
+};
 
 /// 域 D08 仓储访问器。
 pub trait CustomerExt {

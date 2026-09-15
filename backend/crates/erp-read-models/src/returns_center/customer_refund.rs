@@ -1,18 +1,19 @@
 //! CustomerRefund 详情与分页视图装配。
-use super::dto::CustomerRefundView;
-use super::dto::{CustomerRefundListParams, PageView, SortDir};
-use super::ReturnsReadService;
-use crate::{Error, Result};
 use erp_returns::repository::ReturnsExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
+
+use super::ReturnsReadService;
+use super::dto::{CustomerRefundListParams, CustomerRefundView, PageView, SortDir};
+use crate::{Error, Result};
 /// 客户退款列表筛选条件类型。
 type CustomerRefundFilter = <mongodb::Database as ReturnsExt>::CustomerRefundFilter;
-use super::customer_refund_list::{
-    customer_refund_view_from_facts, map_customer_refund_list_page, CustomerRefundListFacts,
-};
-use erp_workflow::service::document_registry::find_approval_binding;
 use erp_workflow::DocumentRegistryExt;
+use erp_workflow::service::document_registry::find_approval_binding;
+
+use super::customer_refund_list::{
+    CustomerRefundListFacts, customer_refund_view_from_facts, map_customer_refund_list_page,
+};
 
 impl ReturnsReadService {
     // -----------------------------------------------------------------------
@@ -39,17 +40,10 @@ impl ReturnsReadService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .customer_refunds()
-            .search_customer_refunds(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.customer_refunds().search_customer_refunds(&filter, &mut NoTransaction).await?;
         let document_ids = page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
-        let documents = self
-            .db
-            .business_documents()
-            .find_documents_by_ids(&document_ids, &mut NoTransaction)
-            .await?;
+        let documents =
+            self.db.business_documents().find_documents_by_ids(&document_ids, &mut NoTransaction).await?;
         let items = map_customer_refund_list_page(
             page.items
                 .into_iter()
@@ -73,12 +67,7 @@ impl ReturnsReadService {
                 .collect(),
             documents,
         );
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 查询客户退款详情。
@@ -144,10 +133,7 @@ mod tests {
     /// 列表必须批量读取注册行，不得对每个分页行再读详情。
     #[test]
     fn list_batches_document_bindings_and_keeps_missing_registry_rows() {
-        let query = include_str!("customer_refund.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("查询生产代码");
+        let query = include_str!("customer_refund.rs").split("#[cfg(test)]").next().expect("查询生产代码");
         let command = include_str!("../../../erp-processes/src/reverse_flow/customer_refund.rs")
             .split("#[cfg(test)]")
             .next()

@@ -3,8 +3,9 @@
 //! 销售变更单走统一审批启动/撤回/生效。采购二次确认、低毛利确认与卡券专用
 //! 审批运行时已删除，不得回退旧责任动作或旧集合。
 
-use crate::repository::SalesReviewExt;
 use mongodb::Database;
+
+use crate::repository::SalesReviewExt;
 
 mod command_source;
 mod create;
@@ -21,7 +22,7 @@ pub use state::{
     cancel_sales_change_to_draft, ensure_final_approve_effective, persist_cancelled_change,
     start_sales_change_approval,
 };
-pub use submission::{latest_change_submission_no, SalesChangeSubmissionWrite};
+pub use submission::{SalesChangeSubmissionWrite, latest_change_submission_no};
 pub use void::VoidChangeWrite;
 
 /// 销售变更单列表筛选条件类型。

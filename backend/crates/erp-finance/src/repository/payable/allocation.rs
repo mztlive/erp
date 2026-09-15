@@ -1,13 +1,11 @@
-use crate::entity::payable::{PaymentAllocation, PurchaseInvoiceAllocation};
-use crate::repository::owned::{PaymentAllocationRepository, PurchaseInvoiceAllocationRepository};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{PayableAccountId, PayableEntryId};
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::payable::{PaymentAllocation, PurchaseInvoiceAllocation};
+use crate::repository::owned::{PaymentAllocationRepository, PurchaseInvoiceAllocationRepository};
 
 /// 进项发票分配服务端分页筛选条件（FIN-R06）。
 #[derive(Debug, Clone)]
@@ -72,8 +70,7 @@ impl<'a> PaymentAllocationRepository<'a> {
             return Ok(Vec::new());
         }
         let payment_ids: Vec<String> = payment_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "supplier_payment_id": { "$in": payment_ids } }, executor)
-            .await
+        self.find_many(doc! { "supplier_payment_id": { "$in": payment_ids } }, executor).await
     }
 
     /// 批量按应付分录集合取回核销分配（`$in`，用于反向核销锁定）。
@@ -96,8 +93,7 @@ impl<'a> PaymentAllocationRepository<'a> {
             return Ok(Vec::new());
         }
         let entry_ids: Vec<String> = entry_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "payable_entry_id": { "$in": entry_ids } }, executor)
-            .await
+        self.find_many(doc! { "payable_entry_id": { "$in": entry_ids } }, executor).await
     }
 }
 
@@ -122,8 +118,7 @@ impl<'a> PurchaseInvoiceAllocationRepository<'a> {
             return Ok(Vec::new());
         }
         let invoice_ids: Vec<String> = invoice_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "invoice_id": { "$in": invoice_ids } }, executor)
-            .await
+        self.find_many(doc! { "invoice_id": { "$in": invoice_ids } }, executor).await
     }
 
     /// 按账户/发票条件服务端分页检索进项发票分配（FIN-R06）。
@@ -156,10 +151,7 @@ impl<'a> PurchaseInvoiceAllocationRepository<'a> {
             .build();
         let items = mongo_ops::find_many(&self.collection(), filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 批量按应付子账集合取回进项发票分配（`$in`，用于收票进度校验）。
@@ -182,16 +174,16 @@ impl<'a> PurchaseInvoiceAllocationRepository<'a> {
             return Ok(Vec::new());
         }
         let account_ids: Vec<String> = account_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "payable_account_id": { "$in": account_ids } }, executor)
-            .await
+        self.find_many(doc! { "payable_account_id": { "$in": account_ids } }, executor).await
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::PurchaseInvoiceAllocationFilter;
     use erp_core::ids::PayableAccountId;
     use persistence_core::{Pagination, QueryFilter};
+
+    use super::PurchaseInvoiceAllocationFilter;
 
     #[test]
     fn invoice_allocation_filter_applies_account_invoice_and_deleted_filter() {

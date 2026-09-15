@@ -5,15 +5,13 @@ use erp_fulfillment::entity::fulfillment::{
     AcceptanceFulfillmentAllocation, AcceptanceLineEligibility, Delivery, DeliveryLine, ElectronicDelivery,
     FulfillmentFactType, ServiceFulfillment,
 };
+use erp_fulfillment::repository::FulfillmentExt;
+use erp_sales::repository::SalesOrderExt;
 use persistence_core::NoTransaction;
-use {erp_fulfillment::repository::FulfillmentExt, erp_sales::repository::SalesOrderExt};
 
+use super::FulfillmentReadService;
+use super::dto::{AcceptanceEligibilityView, AcceptanceSalesLineGroupView, EligibleFulfillmentFactView};
 use crate::{Error, Result};
-
-use super::{
-    dto::{AcceptanceEligibilityView, AcceptanceSalesLineGroupView, EligibleFulfillmentFactView},
-    FulfillmentReadService,
-};
 
 impl FulfillmentReadService {
     /// 查询客户验收工作台（W06：销售行 + 可验收事实 + 验收历史）。
@@ -36,11 +34,7 @@ impl FulfillmentReadService {
     #[tracing::instrument(
         name = "fulfillment.acceptance_eligibility",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "acceptance_eligibility"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "acceptance_eligibility")
     )]
     pub async fn acceptance_eligibility(&self, sales_order_id: &str) -> Result<AcceptanceEligibilityView> {
         let so_id = SalesOrderId::new(sales_order_id.to_string());
@@ -66,29 +60,19 @@ impl FulfillmentReadService {
             .sales_order_revision_lines()
             .list_lines_by_revision(&revision.base.id.clone().into(), &mut NoTransaction)
             .await?;
-        let revision_line_ids: Vec<SalesOrderRevisionLineId> = revision_lines
-            .iter()
-            .map(|line| line.base.id.clone().into())
-            .collect();
+        let revision_line_ids: Vec<SalesOrderRevisionLineId> =
+            revision_lines.iter().map(|line| line.base.id.clone().into()).collect();
         let goods_service_lines = self
             .db
             .sales_order_goods_service_line_revisions()
             .list_by_revision_line_ids(&revision_line_ids, &mut NoTransaction)
             .await?;
-        let deliveries = self
-            .db
-            .fulfillment()
-            .list_acceptance_eligible_deliveries(&so_id, &mut NoTransaction)
-            .await?;
-        let delivery_ids: Vec<DeliveryId> = deliveries
-            .iter()
-            .map(|delivery| delivery.base.id.clone().into())
-            .collect();
-        let delivery_lines = self
-            .db
-            .fulfillment()
-            .delivery_lines_by_delivery_ids(&delivery_ids, &mut NoTransaction)
-            .await?;
+        let deliveries =
+            self.db.fulfillment().list_acceptance_eligible_deliveries(&so_id, &mut NoTransaction).await?;
+        let delivery_ids: Vec<DeliveryId> =
+            deliveries.iter().map(|delivery| delivery.base.id.clone().into()).collect();
+        let delivery_lines =
+            self.db.fulfillment().delivery_lines_by_delivery_ids(&delivery_ids, &mut NoTransaction).await?;
         let sales_order_line_ids = so_line_ids(&revision_lines);
         let electronic = self
             .db
@@ -134,11 +118,8 @@ impl FulfillmentReadService {
                 &mut NoTransaction,
             )
             .await?;
-        let history = self
-            .db
-            .fulfillment()
-            .list_customer_acceptance_history(&so_id, &mut NoTransaction)
-            .await?;
+        let history =
+            self.db.fulfillment().list_customer_acceptance_history(&so_id, &mut NoTransaction).await?;
         let sources = EligibilityGroupSources {
             revision_lines: &revision_lines,
             goods_service_lines: &goods_service_lines,
@@ -170,10 +151,7 @@ impl FulfillmentReadService {
 pub(crate) fn so_line_ids(
     revision_lines: &[erp_sales::entity::sales_order::SalesOrderRevisionLine],
 ) -> Vec<SalesOrderLineId> {
-    revision_lines
-        .iter()
-        .map(|line| line.sales_order_line_id.clone())
-        .collect()
+    revision_lines.iter().map(|line| line.sales_order_line_id.clone()).collect()
 }
 
 /// 验收工作台分组的销售行、履约事实与分配集合。
@@ -236,18 +214,16 @@ pub(crate) fn build_line_eligibilities(
             quantity: line.quantity,
         })
         .collect::<Vec<_>>();
-    Ok(acceptance_eligibility::build_line_eligibilities(
-        &EligibilitySources {
-            revision_lines: &revision_lines,
-            goods_service_lines: &goods_service_lines,
-            delivery_lines: sources.delivery_lines,
-            electronic: sources.electronic,
-            service: sources.service,
-            delivery_allocations: sources.delivery_allocations,
-            electronic_allocations: sources.electronic_allocations,
-            service_allocations: sources.service_allocations,
-        },
-    )?)
+    Ok(acceptance_eligibility::build_line_eligibilities(&EligibilitySources {
+        revision_lines: &revision_lines,
+        goods_service_lines: &goods_service_lines,
+        delivery_lines: sources.delivery_lines,
+        electronic: sources.electronic,
+        service: sources.service,
+        delivery_allocations: sources.delivery_allocations,
+        electronic_allocations: sources.electronic_allocations,
+        service_allocations: sources.service_allocations,
+    })?)
 }
 
 /// 把销售行资格投影映射为验收工作台分组视图。
@@ -281,32 +257,18 @@ fn build_eligibility_views(
             ),
         );
     }
-    let delivery_line_by_id: HashMap<&str, &DeliveryLine> = sources
-        .delivery_lines
-        .iter()
-        .map(|line| (line.base.id.as_str(), line))
-        .collect();
-    let delivery_by_id: HashMap<&str, &Delivery> = sources
-        .deliveries
-        .iter()
-        .map(|delivery| (delivery.base.id.as_str(), delivery))
-        .collect();
-    let electronic_by_id: HashMap<&str, &ElectronicDelivery> = sources
-        .electronic
-        .iter()
-        .map(|record| (record.base.id.as_str(), record))
-        .collect();
-    let service_by_id: HashMap<&str, &ServiceFulfillment> = sources
-        .service
-        .iter()
-        .map(|record| (record.base.id.as_str(), record))
-        .collect();
+    let delivery_line_by_id: HashMap<&str, &DeliveryLine> =
+        sources.delivery_lines.iter().map(|line| (line.base.id.as_str(), line)).collect();
+    let delivery_by_id: HashMap<&str, &Delivery> =
+        sources.deliveries.iter().map(|delivery| (delivery.base.id.as_str(), delivery)).collect();
+    let electronic_by_id: HashMap<&str, &ElectronicDelivery> =
+        sources.electronic.iter().map(|record| (record.base.id.as_str(), record)).collect();
+    let service_by_id: HashMap<&str, &ServiceFulfillment> =
+        sources.service.iter().map(|record| (record.base.id.as_str(), record)).collect();
     let mut groups: Vec<AcceptanceSalesLineGroupView> = Vec::with_capacity(lines.len());
     for line in lines {
-        let (line_no, item_snapshot, unit_code) = meta_by_line
-            .get(&line.sales_order_line_id)
-            .cloned()
-            .unwrap_or_default();
+        let (line_no, item_snapshot, unit_code) =
+            meta_by_line.get(&line.sales_order_line_id).cloned().unwrap_or_default();
         let mut fact_views = Vec::with_capacity(line.facts.len());
         for fact in &line.facts {
             if let Some(delivery_line) = delivery_line_by_id.get(fact.fulfillment_line_id.as_str()) {
@@ -315,9 +277,7 @@ fn build_eligibility_views(
                     fulfillment_line_id: fact.fulfillment_line_id.clone(),
                     fulfillment_fact_type: FulfillmentFactType::Delivery,
                     delivery_type: delivery.map(|delivery| delivery.delivery_type),
-                    fulfillment_no: delivery
-                        .map(|delivery| delivery.delivery_no.clone())
-                        .unwrap_or_default(),
+                    fulfillment_no: delivery.map(|delivery| delivery.delivery_no.clone()).unwrap_or_default(),
                     sales_order_line_id: line.sales_order_line_id.clone(),
                     line_no: delivery_line.line_no,
                     item_snapshot: item_snapshot.clone(),
@@ -387,10 +347,8 @@ mod customer_acceptance_eligibility_no_approval_tests {
     /// 验收工作台不得查询定义、启动审批或创建任务。
     #[test]
     fn eligibility_does_not_start_approval_or_create_tasks() {
-        let production = include_str!("acceptance_eligibility.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production =
+            include_str!("acceptance_eligibility.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("pub async fn acceptance_eligibility"));
         assert!(!production.contains("start_approval"));
         assert!(!production.contains("prepare_start"));
@@ -425,6 +383,7 @@ mod acceptance_eligibility_rule_source_tests {
         WarehouseId,
     };
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+    use erp_fulfillment::entity::facts::AcceptanceFulfillmentProgress as FulfillmentProgress;
     use erp_fulfillment::entity::fulfillment::{
         AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AcceptanceProgress,
         AllocationAction, Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryState,
@@ -432,16 +391,12 @@ mod acceptance_eligibility_rule_source_tests {
         FulfillmentFactType, FulfillmentResult, ServiceFulfillment, ServiceFulfillmentData,
         ServiceFulfillmentState,
     };
-    use {
-        erp_fulfillment::entity::facts::AcceptanceFulfillmentProgress as FulfillmentProgress,
-        erp_sales::entity::sales_order::LineType,
-        erp_sales::entity::sales_order::SalesOrderGoodsServiceLineRevision,
-        erp_sales::entity::sales_order::SalesOrderGoodsServiceLineRevisionData,
-        erp_sales::entity::sales_order::SalesOrderRevisionLine,
-        erp_sales::entity::sales_order::SalesOrderRevisionLineData,
+    use erp_sales::entity::sales_order::{
+        LineType, SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData,
+        SalesOrderRevisionLine, SalesOrderRevisionLineData,
     };
 
-    use super::{build_eligibility_views, build_line_eligibilities, EligibilityGroupSources};
+    use super::{EligibilityGroupSources, build_eligibility_views, build_line_eligibilities};
 
     /// 构造销售版本公共行（实物服务行）。
     fn revision_line(id: &str, line_no: u32, sales_order_line_id: &str) -> SalesOrderRevisionLine {
@@ -640,32 +595,19 @@ mod acceptance_eligibility_rule_source_tests {
     #[test]
     fn three_fact_types_group_per_stable_line_with_stable_sort_and_display_fields() {
         // 版本行故意乱序传入：行号 2 在前、行号 1 在后，视图必须按行号稳定排序。
-        let revision_lines = vec![
-            revision_line("rl-2", 2, "so-line-2"),
-            revision_line("rl-1", 1, "so-line-1"),
-        ];
+        let revision_lines =
+            vec![revision_line("rl-2", 2, "so-line-2"), revision_line("rl-1", 1, "so-line-1")];
         let goods_service_lines = vec![goods_line("rl-1", "5", "箱"), goods_line("rl-2", "3", "次")];
         let deliveries = vec![delivery("dlv-1", "DLV-2026-001")];
         let delivery_lines = vec![delivery_line("dl-1", "dlv-1", 1, "so-line-1", "5")];
         let electronic = vec![electronic_delivery("ed-1", "ED-2026-001", "so-line-2", "1")];
-        let service = vec![service_fulfillment(
-            "sf-1",
-            "SF-2026-001",
-            "so-line-2",
-            "2",
-            FulfillmentResult::Success,
-        )];
+        let service =
+            vec![service_fulfillment("sf-1", "SF-2026-001", "so-line-2", "2", FulfillmentResult::Success)];
         let delivery_allocations = vec![apply_allocation(FulfillmentFactType::Delivery, "dl-1", "4")];
-        let electronic_allocations = vec![apply_allocation(
-            FulfillmentFactType::ElectronicDelivery,
-            "ed-1",
-            "0.5",
-        )];
-        let service_allocations = vec![apply_allocation(
-            FulfillmentFactType::ServiceFulfillment,
-            "sf-1",
-            "1.5",
-        )];
+        let electronic_allocations =
+            vec![apply_allocation(FulfillmentFactType::ElectronicDelivery, "ed-1", "0.5")];
+        let service_allocations =
+            vec![apply_allocation(FulfillmentFactType::ServiceFulfillment, "sf-1", "1.5")];
         let sources = EligibilityGroupSources {
             revision_lines: &revision_lines,
             goods_service_lines: &goods_service_lines,
@@ -679,28 +621,16 @@ mod acceptance_eligibility_rule_source_tests {
         };
 
         let lines = build_line_eligibilities(&sources).unwrap();
-        let line_1 = lines
-            .iter()
-            .find(|line| line.sales_order_line_id == "so-line-1")
-            .unwrap();
+        let line_1 = lines.iter().find(|line| line.sales_order_line_id == "so-line-1").unwrap();
         assert_eq!(line_1.required_quantity, Quantity::from_str("5").unwrap());
         assert_eq!(line_1.net_accepted_quantity, Quantity::from_str("4").unwrap());
-        assert_eq!(
-            line_1.remaining_eligible_quantity,
-            Quantity::from_str("1").unwrap()
-        );
+        assert_eq!(line_1.remaining_eligible_quantity, Quantity::from_str("1").unwrap());
         assert_eq!(line_1.facts.len(), 1);
         assert_eq!(line_1.facts[0].fulfillment_line_id, "dl-1");
-        let line_2 = lines
-            .iter()
-            .find(|line| line.sales_order_line_id == "so-line-2")
-            .unwrap();
+        let line_2 = lines.iter().find(|line| line.sales_order_line_id == "so-line-2").unwrap();
         assert_eq!(line_2.required_quantity, Quantity::from_str("3").unwrap());
         assert_eq!(line_2.net_accepted_quantity, Quantity::from_str("2").unwrap());
-        assert_eq!(
-            line_2.remaining_eligible_quantity,
-            Quantity::from_str("1").unwrap()
-        );
+        assert_eq!(line_2.remaining_eligible_quantity, Quantity::from_str("1").unwrap());
         assert_eq!(line_2.facts.len(), 2);
         assert_eq!(line_2.facts[0].fulfillment_line_id, "ed-1");
         assert_eq!(line_2.facts[1].fulfillment_line_id, "sf-1");
@@ -721,14 +651,8 @@ mod acceptance_eligibility_rule_source_tests {
         assert_eq!(delivery_fact.item_snapshot, "商品-so-line-1");
         assert_eq!(delivery_fact.unit_code.as_deref(), Some("箱"));
         assert_eq!(delivery_fact.occurred_at, 1_700_100_000);
-        assert_eq!(
-            delivery_fact.net_successful_quantity,
-            Quantity::from_str("5").unwrap()
-        );
-        assert_eq!(
-            delivery_fact.net_accepted_allocated_quantity,
-            Quantity::from_str("4").unwrap()
-        );
+        assert_eq!(delivery_fact.net_successful_quantity, Quantity::from_str("5").unwrap());
+        assert_eq!(delivery_fact.net_accepted_allocated_quantity, Quantity::from_str("4").unwrap());
         assert_eq!(delivery_fact.eligible_quantity, Quantity::from_str("1").unwrap());
         assert_eq!(delivery_fact.carrier.as_deref(), Some("顺丰"));
         assert_eq!(delivery_fact.tracking_no.as_deref(), Some("SF123456"));
@@ -738,41 +662,20 @@ mod acceptance_eligibility_rule_source_tests {
         assert_eq!(groups[1].unit_code.as_deref(), Some("次"));
         assert_eq!(groups[1].fulfillment_facts.len(), 2);
         let electronic_fact = &groups[1].fulfillment_facts[0];
-        assert_eq!(
-            electronic_fact.fulfillment_fact_type,
-            FulfillmentFactType::ElectronicDelivery
-        );
+        assert_eq!(electronic_fact.fulfillment_fact_type, FulfillmentFactType::ElectronicDelivery);
         assert_eq!(electronic_fact.fulfillment_no, "ED-2026-001");
         assert_eq!(electronic_fact.line_no, 2);
-        assert_eq!(
-            electronic_fact.net_successful_quantity,
-            Quantity::from_str("1").unwrap()
-        );
-        assert_eq!(
-            electronic_fact.net_accepted_allocated_quantity,
-            Quantity::from_str("0.5").unwrap()
-        );
-        assert_eq!(
-            electronic_fact.eligible_quantity,
-            Quantity::from_str("0.5").unwrap()
-        );
+        assert_eq!(electronic_fact.net_successful_quantity, Quantity::from_str("1").unwrap());
+        assert_eq!(electronic_fact.net_accepted_allocated_quantity, Quantity::from_str("0.5").unwrap());
+        assert_eq!(electronic_fact.eligible_quantity, Quantity::from_str("0.5").unwrap());
         assert_eq!(electronic_fact.delivery_type, None);
         assert_eq!(electronic_fact.carrier, None);
         let service_fact = &groups[1].fulfillment_facts[1];
-        assert_eq!(
-            service_fact.fulfillment_fact_type,
-            FulfillmentFactType::ServiceFulfillment
-        );
+        assert_eq!(service_fact.fulfillment_fact_type, FulfillmentFactType::ServiceFulfillment);
         assert_eq!(service_fact.fulfillment_no, "SF-2026-001");
         assert_eq!(service_fact.line_no, 2);
-        assert_eq!(
-            service_fact.net_successful_quantity,
-            Quantity::from_str("2").unwrap()
-        );
-        assert_eq!(
-            service_fact.net_accepted_allocated_quantity,
-            Quantity::from_str("1.5").unwrap()
-        );
+        assert_eq!(service_fact.net_successful_quantity, Quantity::from_str("2").unwrap());
+        assert_eq!(service_fact.net_accepted_allocated_quantity, Quantity::from_str("1.5").unwrap());
         assert_eq!(service_fact.eligible_quantity, Quantity::from_str("0.5").unwrap());
 
         let progress = AcceptanceProgress::derive(&lines).unwrap();
@@ -789,13 +692,8 @@ mod acceptance_eligibility_rule_source_tests {
         let goods_service_lines = vec![goods_line("rl-1", "2", "箱")];
         let deliveries = vec![delivery("dlv-1", "DLV-2026-001")];
         let delivery_lines = vec![delivery_line("dl-1", "dlv-1", 1, "so-line-1", "2")];
-        let failed_service = service_fulfillment(
-            "sf-failed",
-            "SF-2026-FAIL",
-            "so-line-1",
-            "2",
-            FulfillmentResult::Failure,
-        );
+        let failed_service =
+            service_fulfillment("sf-failed", "SF-2026-FAIL", "so-line-1", "2", FulfillmentResult::Failure);
         assert_eq!(failed_service.status, ServiceFulfillmentState::Confirmed);
         assert!(!failed_service.is_acceptance_eligible());
         let delivery_allocations = vec![apply_allocation(FulfillmentFactType::Delivery, "dl-1", "2")];
@@ -949,10 +847,8 @@ mod acceptance_eligibility_rule_source_tests {
     /// 用 `AcceptanceProgress::derive` 派生进度并以返回值驱动任务关闭。
     #[test]
     fn workbench_and_posting_feed_identical_service_fact_sets() {
-        let workbench = include_str!("acceptance_eligibility.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let workbench =
+            include_str!("acceptance_eligibility.rs").split("#[cfg(test)]").next().expect("生产代码");
         let eligibility = workbench
             .split("pub async fn acceptance_eligibility")
             .nth(1)
@@ -966,10 +862,7 @@ mod acceptance_eligibility_rule_source_tests {
                 < eligibility.find("build_line_eligibilities")
         );
 
-        let posting = include_str!("repository.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let posting = include_str!("repository.rs").split("#[cfg(test)]").next().expect("生产代码");
         let progress_update = posting
             .split("pub async fn load_customer_acceptance_progress")
             .nth(1)

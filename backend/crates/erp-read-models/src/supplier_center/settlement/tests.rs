@@ -1,36 +1,34 @@
-use super::*;
-use crate::Error;
-use erp_core::money::Amount;
-use erp_supply::entity::supplier_settlement::{
-    SupplierSettlementDifference, SupplierSettlementItem, SupplierSettlementStatement,
-};
-use erp_supply::service::supplier_settlement::{
-    review::{
-        settlement_review_access, SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID, SETTLEMENT_REVIEW_OWNER_ROLE,
-    },
-    shared::{REVIEW_CUTOFF_POLICY_ID, REVIEW_CUTOFF_POLICY_VERSION},
-};
 use std::str::FromStr;
 
 use application_core::AuditActor;
+use erp_core::AccountKind;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierSettlementDifferenceId,
     SupplierSettlementItemId, SupplierSettlementStatementId, WorkItemId,
 };
-use erp_core::money::Quantity;
-use erp_core::AccountKind;
+use erp_core::money::{Amount, Quantity};
 use erp_supply::entity::supplier_settlement::{
-    SettlementDifferenceStatus, SettlementDifferenceType, SupplierSettlementDifferenceData,
-    SupplierSettlementDifferenceEvidence, SupplierSettlementDifferenceEvidenceData,
-    SupplierSettlementItemData, SupplierSettlementStatementData,
+    SettlementDifferenceStatus, SettlementDifferenceType, SupplierSettlementDifference,
+    SupplierSettlementDifferenceData, SupplierSettlementDifferenceEvidence,
+    SupplierSettlementDifferenceEvidenceData, SupplierSettlementItem, SupplierSettlementItemData,
+    SupplierSettlementStatement, SupplierSettlementStatementData,
 };
 use erp_supply::repository::SupplierSettlementExt;
+use erp_supply::service::supplier_settlement::review::{
+    SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID, SETTLEMENT_REVIEW_OWNER_ROLE, settlement_review_access,
+};
+use erp_supply::service::supplier_settlement::shared::{
+    REVIEW_CUTOFF_POLICY_ID, REVIEW_CUTOFF_POLICY_VERSION,
+};
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
 use persistence_core::NoTransaction;
-use test_support::{require_mongo, TestDb};
+use test_support::{TestDb, require_mongo};
+
+use super::*;
+use crate::Error;
 
 fn sample_statement() -> SupplierSettlementStatement {
     let mut statement = SupplierSettlementStatement::new(
@@ -57,9 +55,7 @@ fn sample_statement() -> SupplierSettlementStatement {
         },
     )
     .unwrap();
-    statement
-        .update_subject_hash(statement.review_subject_hash(&[]))
-        .unwrap();
+    statement.update_subject_hash(statement.review_subject_hash(&[])).unwrap();
     statement
 }
 
@@ -155,19 +151,14 @@ fn detail_difference(
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn detail_missing_statement_maps_to_not_found() {
     require_mongo!(async {
-        let fixture = TestDb::new("ful_r07_service_detail_missing")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("ful_r07_service_detail_missing").await.expect("测试数据库创建失败");
         let service = SupplierSettlementReadService::new(fixture.db().clone());
         let actor = AuditActor::new("viewer-1".to_string(), "viewer".to_string(), AccountKind::Admin);
         let error = service
             .supplier_settlement_statement_detail("statement-missing", &actor)
             .await
             .expect_err("缺失结算单必须失败");
-        assert!(
-            matches!(error, Error::NotFound(_)),
-            "缺失结算单必须映射为 NotFound"
-        );
+        assert!(matches!(error, Error::NotFound(_)), "缺失结算单必须映射为 NotFound");
     });
 }
 
@@ -176,19 +167,13 @@ async fn detail_missing_statement_maps_to_not_found() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn detail_attaches_evidence_and_reports_counts() {
     require_mongo!(async {
-        let fixture = TestDb::new("ful_r07_service_detail_counts")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("ful_r07_service_detail_counts").await.expect("测试数据库创建失败");
         let db = fixture.db();
         let statement = sample_statement();
         let items = vec![detail_item("item-1"), detail_item("item-2")];
         let differences = vec![
             detail_difference("difference-1", "item-1", SettlementDifferenceStatus::Pending),
-            detail_difference(
-                "difference-2",
-                "item-2",
-                SettlementDifferenceStatus::SupplierAcknowledged,
-            ),
+            detail_difference("difference-2", "item-2", SettlementDifferenceStatus::SupplierAcknowledged),
         ];
         db.supplier_settlement()
             .create_statement_with_items(&statement, &items, &differences, &mut NoTransaction)
@@ -215,10 +200,8 @@ async fn detail_attaches_evidence_and_reports_counts() {
             .expect("补证插入失败");
         let service = SupplierSettlementReadService::new(db.clone());
         let actor = AuditActor::new("viewer-1".to_string(), "viewer".to_string(), AccountKind::Admin);
-        let view = service
-            .supplier_settlement_statement_detail("statement-1", &actor)
-            .await
-            .expect("详情查询失败");
+        let view =
+            service.supplier_settlement_statement_detail("statement-1", &actor).await.expect("详情查询失败");
         assert_eq!(view.stats.item_count, 2, "明细计数必须为 2");
         assert_eq!(view.stats.difference_count, 2, "差异计数必须为 2");
         assert_eq!(view.stats.pending_difference_count, 1, "待处理计数必须为 1");

@@ -6,15 +6,6 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::purchase_order::change_order::{PurchaseChangeSubmission, PurchaseChangeSubmissionLine};
-use crate::entity::purchase_order::line_common::{normalize_and_validate_line, PurchaseLineDataRef};
-use crate::entity::purchase_order::purchase_submission::{
-    PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
-};
-use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
-use crate::entity::purchase_order::types::PurchaseLineType;
 use erp_core::common::revision::RevisionBase;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
@@ -23,6 +14,15 @@ use erp_core::ids::{
 };
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::purchase_order::change_order::{PurchaseChangeSubmission, PurchaseChangeSubmissionLine};
+use crate::entity::purchase_order::line_common::{PurchaseLineDataRef, normalize_and_validate_line};
+use crate::entity::purchase_order::purchase_submission::{
+    PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
+};
+use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
+use crate::entity::purchase_order::types::PurchaseLineType;
 
 /// 采购版本创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -89,12 +89,7 @@ impl PurchaseOrderRevision {
     /// 版本号为零或表头金额三元组不守恒时返回错误。
     pub fn new(id: PurchaseOrderRevisionId, data: PurchaseOrderRevisionData) -> Result<Self> {
         ensure_revision_no(data.revision_no)?;
-        ensure_header_triple(
-            data.gross_amount,
-            data.net_amount,
-            data.tax_amount,
-            &data.purchase_order_id,
-        )?;
+        ensure_header_triple(data.gross_amount, data.net_amount, data.tax_amount, &data.purchase_order_id)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             revision: RevisionBase::new(data.revision_no),
@@ -352,7 +347,7 @@ impl PurchaseLineDataRef for PurchaseOrderRevisionLineData {
                 if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
                     return Err(Error::from("商品/服务版本行分配数量必须为正"));
                 }
-            }
+            },
             PurchaseLineType::LogisticsFee => {
                 if self.sales_order_line_id.is_some()
                     || self.sales_order_revision_line_id.is_some()
@@ -360,7 +355,7 @@ impl PurchaseLineDataRef for PurchaseOrderRevisionLineData {
                 {
                     return Err(Error::from("物流费用版本行不得携带销售分配"));
                 }
-            }
+            },
         }
         Ok(())
     }
@@ -425,10 +420,7 @@ impl PurchaseOrderRevisionLine {
         revision_id: PurchaseOrderRevisionId,
         submission_line: &PurchaseOrderSubmissionLine,
     ) -> Result<Self> {
-        Self::new(
-            id,
-            revision_line_data_from_submission(revision_id, submission_line),
-        )
+        Self::new(id, revision_line_data_from_submission(revision_id, submission_line))
     }
 
     /// 从采购变更提交行派生生效版本行。
@@ -557,15 +549,23 @@ fn ensure_header_triple(
         || net_amount.to_decimal() < rust_decimal::Decimal::ZERO
         || tax_amount.to_decimal() < rust_decimal::Decimal::ZERO
     {
-        return Err(Error::from(format!(
-            "采购版本表头金额三元组不守恒（采购单 {purchase_order_id}）"
-        )));
+        return Err(Error::from(format!("采购版本表头金额三元组不守恒（采购单 {purchase_order_id}）")));
     }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+
+    use std::str::FromStr;
+
+    use erp_core::common::time::{BusinessDate, Instant};
+    use erp_core::ids::{
+        ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderRevisionLineId,
+        PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderLineId, SalesOrderRevisionLineId,
+        SkuId, SupplierAccountId, SupplierCommercialProfileRevisionId,
+    };
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice, line_amounts};
 
     use super::{
         PurchaseOrderRevision, PurchaseOrderRevisionData, PurchaseOrderRevisionLine,
@@ -577,14 +577,6 @@ mod tests {
     };
     use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
     use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
-    use erp_core::common::time::{BusinessDate, Instant};
-    use erp_core::ids::{
-        ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderRevisionLineId,
-        PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderLineId, SalesOrderRevisionLineId,
-        SkuId, SupplierAccountId, SupplierCommercialProfileRevisionId,
-    };
-    use erp_core::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
-    use std::str::FromStr;
 
     fn snapshot() -> SupplierSnapshot {
         SupplierSnapshot::new("北京华联供应商".to_string()).unwrap()
@@ -662,9 +654,7 @@ mod tests {
             },
         )
         .unwrap();
-        submission
-            .submit(Instant::from_unix_secs(1_700_000_000), "buyer-1")
-            .unwrap();
+        submission.submit(Instant::from_unix_secs(1_700_000_000), "buyer-1").unwrap();
         submission
     }
 
@@ -705,16 +695,11 @@ mod tests {
         assert_eq!(revision.revision.revision_no, 1);
         assert_eq!(revision.supplier_snapshot.supplier_name, "北京华联供应商");
 
-        let zero = PurchaseOrderRevisionData {
-            revision_no: 0,
-            ..revision_data()
-        };
+        let zero = PurchaseOrderRevisionData { revision_no: 0, ..revision_data() };
         assert!(PurchaseOrderRevision::new(PurchaseOrderRevisionId::new("por-2"), zero).is_err());
 
-        let inconsistent = PurchaseOrderRevisionData {
-            gross_amount: Amount::from_str("30.00").unwrap(),
-            ..revision_data()
-        };
+        let inconsistent =
+            PurchaseOrderRevisionData { gross_amount: Amount::from_str("30.00").unwrap(), ..revision_data() };
         assert!(PurchaseOrderRevision::new(PurchaseOrderRevisionId::new("por-3"), inconsistent).is_err());
     }
 
@@ -722,10 +707,7 @@ mod tests {
     fn revision_sequence_and_formalization_are_derived_from_pending_submission() {
         let existing =
             PurchaseOrderRevision::new(PurchaseOrderRevisionId::new("por-1"), revision_data()).unwrap();
-        assert_eq!(
-            PurchaseOrderRevision::next_revision_no(std::slice::from_ref(&existing)).unwrap(),
-            2
-        );
+        assert_eq!(PurchaseOrderRevision::next_revision_no(std::slice::from_ref(&existing)).unwrap(), 2);
         let revision = PurchaseOrderRevision::from_submission(
             PurchaseOrderRevisionId::new("por-2"),
             2,
@@ -756,18 +738,13 @@ mod tests {
 
     #[test]
     fn revision_line_rejects_mismatched_amounts_and_zero_line_no() {
-        let bad_amounts = PurchaseOrderRevisionLineData {
-            gross_amount: Amount::from_str("29.98").unwrap(),
-            ..line_data()
-        };
+        let bad_amounts =
+            PurchaseOrderRevisionLineData { gross_amount: Amount::from_str("29.98").unwrap(), ..line_data() };
         assert!(
             PurchaseOrderRevisionLine::new(PurchaseOrderRevisionLineId::new("porl-2"), bad_amounts).is_err()
         );
 
-        let zero_line = PurchaseOrderRevisionLineData {
-            line_no: 0,
-            ..line_data()
-        };
+        let zero_line = PurchaseOrderRevisionLineData { line_no: 0, ..line_data() };
         assert!(
             PurchaseOrderRevisionLine::new(PurchaseOrderRevisionLineId::new("porl-3"), zero_line).is_err()
         );
@@ -777,11 +754,10 @@ mod tests {
             quantity: Some(Quantity::from_str("3.000000").unwrap()),
             ..line_data()
         };
-        assert!(PurchaseOrderRevisionLine::new(
-            PurchaseOrderRevisionLineId::new("porl-4"),
-            fee_with_quantity
-        )
-        .is_err());
+        assert!(
+            PurchaseOrderRevisionLine::new(PurchaseOrderRevisionLineId::new("porl-4"), fee_with_quantity)
+                .is_err()
+        );
     }
 
     #[test]

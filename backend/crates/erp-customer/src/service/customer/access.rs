@@ -14,8 +14,8 @@ use crate::error::{Error, Result};
 use crate::ports::{
     CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope, CustomerScopeObject,
 };
-use crate::repository::scope::{CustomerReadScope, CustomerScopeClause};
 use crate::repository::CustomerExt;
+use crate::repository::scope::{CustomerReadScope, CustomerScopeClause};
 
 /// 客户对象访问范围；列表、详情、导出和写命令复用同一解析。
 #[derive(Clone)]
@@ -159,11 +159,7 @@ impl CustomerAccess {
         executor: &mut dyn Executor,
     ) -> Result<CustomerResolvedScope> {
         let (access, scope) = self.resolve(&actor, action, executor).await?;
-        let found = self
-            .db
-            .customer_accounts()
-            .find_authorized(customer_id, &scope, executor)
-            .await?;
+        let found = self.db.customer_accounts().find_authorized(customer_id, &scope, executor).await?;
         if found.is_none() {
             return Err(deny_object(action));
         }
@@ -224,11 +220,7 @@ impl CustomerAccess {
             .own_org(actor.id(), access.as_of, executor)
             .await?
             .ok_or_else(|| Error::ValidationError("请先维护负责人的有效主属组织".into()))?;
-        let object = CustomerScopeObject {
-            owned: true,
-            org_unit_id: Some(owner_org),
-            ..Default::default()
-        };
+        let object = CustomerScopeObject { owned: true, org_unit_id: Some(owner_org), ..Default::default() };
         if !self.scope.allows(&access, &object)? {
             return Err(Error::Forbidden("当前账号无权在授权范围内创建客户".into()));
         }
@@ -246,12 +238,7 @@ impl CustomerAccess {
         let owners = self
             .db
             .customer_assignments()
-            .current_owners(
-                Some(&[id.to_string()]),
-                None,
-                business_date(access.as_of)?,
-                executor,
-            )
+            .current_owners(Some(&[id.to_string()]), None, business_date(access.as_of)?, executor)
             .await?;
         let mut org_unit_id = None;
         if let Some(owner) = owners.first() {
@@ -325,10 +312,7 @@ impl CustomerAccess {
                 continue;
             }
             let org_ids = orgs.iter().cloned().collect::<BTreeSet<_>>();
-            let members = self
-                .scope
-                .org_member_ids(&org_ids, access.as_of, executor)
-                .await?;
+            let members = self.scope.org_member_ids(&org_ids, access.as_of, executor).await?;
             ensure_limit(members.len(), "组织成员超过查询上限")?;
             let customers = self.customers_owned_by_members(&members, as_of, executor).await?;
             sets.push((orgs, customers));
@@ -441,10 +425,8 @@ pub fn customer_scope(
         .iter()
         .map(|clause| map_clause(clause, user, collaborating, org_owned))
         .collect::<Vec<_>>();
-    let user_limit = access
-        .user_limit
-        .as_ref()
-        .map(|clause| map_clause(clause, user, collaborating, org_owned));
+    let user_limit =
+        access.user_limit.as_ref().map(|clause| map_clause(clause, user, collaborating, org_owned));
     let mut authorized = union_clauses(&roles, owned, org_owned);
     if !history.is_empty() {
         authorized = union_ids(authorized, Some(history.clone()));
@@ -487,11 +469,7 @@ fn map_clause(
     CustomerScopeClause {
         company: clause.company,
         owner_user_id: clause.self_owned.then(|| user.into()),
-        collaborative_customer_ids: if clause.collaborative {
-            collaborating.to_vec()
-        } else {
-            Vec::new()
-        },
+        collaborative_customer_ids: if clause.collaborative { collaborating.to_vec() } else { Vec::new() },
         owner_org_unit_ids: clause.org_unit_ids.clone(),
     }
 }
@@ -525,10 +503,7 @@ fn clause_ids(
     }
     ids.extend(clause.collaborative_customer_ids.iter().cloned());
     if !clause.owner_org_unit_ids.is_empty() {
-        if let Some((_, customers)) = org_owned
-            .iter()
-            .find(|(orgs, _)| orgs == &clause.owner_org_unit_ids)
-        {
+        if let Some((_, customers)) = org_owned.iter().find(|(orgs, _)| orgs == &clause.owner_org_unit_ids) {
             ids.extend(customers.iter().cloned());
         }
     }
@@ -590,7 +565,7 @@ fn union_ids(left: Option<Vec<String>>, right: Option<Vec<String>>) -> Option<Ve
             left.sort();
             left.dedup();
             Some(left)
-        }
+        },
     }
 }
 
@@ -614,7 +589,7 @@ pub(super) fn intersect_ids(left: Option<Vec<String>>, right: Option<Vec<String>
         (Some(left), Some(right)) => {
             let right = right.into_iter().collect::<BTreeSet<_>>();
             Some(left.into_iter().filter(|id| right.contains(id)).collect())
-        }
+        },
     }
 }
 
@@ -679,35 +654,23 @@ mod tests {
         let before = chrono::DateTime::parse_from_rfc3339("2026-09-13T15:59:59Z").unwrap();
         let after = chrono::DateTime::parse_from_rfc3339("2026-09-13T16:00:00Z").unwrap();
         assert_eq!(
-            business_date(Instant::from_unix_secs(before.timestamp()))
-                .unwrap()
-                .to_string(),
+            business_date(Instant::from_unix_secs(before.timestamp())).unwrap().to_string(),
             "2026-09-13"
         );
         assert_eq!(
-            business_date(Instant::from_unix_secs(after.timestamp()))
-                .unwrap()
-                .to_string(),
+            business_date(Instant::from_unix_secs(after.timestamp())).unwrap().to_string(),
             "2026-09-14"
         );
     }
 
     #[test]
     fn owner_and_collaborator_ids_are_unioned_per_clause_then_limited() {
-        let owner = CustomerScopeClause {
-            owner_user_id: Some("sales-a".into()),
-            ..Default::default()
-        };
-        let collab = CustomerScopeClause {
-            collaborative_customer_ids: vec!["c-collab".into()],
-            ..Default::default()
-        };
+        let owner = CustomerScopeClause { owner_user_id: Some("sales-a".into()), ..Default::default() };
+        let collab =
+            CustomerScopeClause { collaborative_customer_ids: vec!["c-collab".into()], ..Default::default() };
         let owned = vec!["c-own".to_string()];
         assert_eq!(clause_ids(&owner, &owned, &[]).as_deref(), Some(owned.as_slice()));
-        assert_eq!(
-            clause_ids(&collab, &owned, &[]),
-            Some(vec!["c-collab".to_string()])
-        );
+        assert_eq!(clause_ids(&collab, &owned, &[]), Some(vec!["c-collab".to_string()]));
         let both = CustomerScopeClause {
             owner_user_id: Some("sales-a".into()),
             collaborative_customer_ids: vec!["c-collab".into()],
@@ -722,10 +685,7 @@ mod tests {
     #[test]
     fn missing_role_scope_does_not_become_company() {
         assert_eq!(union_clauses(&[], &[], &[]), Some(Vec::<String>::new()));
-        let company = CustomerScopeClause {
-            company: true,
-            ..Default::default()
-        };
+        let company = CustomerScopeClause { company: true, ..Default::default() };
         assert!(union_clauses(&[company], &[], &[]).is_none());
     }
 

@@ -1,24 +1,18 @@
 //! 财务构造与结算决定的原准备顺序，保持非零成本失败在状态与任务变更之前。
-use crate::{Error, Result};
-use erp_core::{common::time::Instant, money::Amount};
-use erp_finance::{
-    entity::{
-        cost::CostEntry,
-        payable::{PayableAccount, PayableEntry},
-    },
-    service::{
-        cost::supplier_settlement::{build_settlement_cost_delta, SettlementCostDeltaFact},
-        payable::supplier_settlement::{build_settlement_payable, SettlementPayableSource},
-    },
-};
-use erp_supply::{
-    dto::supplier_settlement as dto,
-    entity::supplier_settlement::{
-        SettlementReviewDecision, SettlementReviewRejectReason, SettlementStatus,
-        SupplierSettlementDifference, SupplierSettlementItem, SupplierSettlementStatement,
-    },
+use erp_core::common::time::Instant;
+use erp_core::money::Amount;
+use erp_finance::entity::cost::CostEntry;
+use erp_finance::entity::payable::{PayableAccount, PayableEntry};
+use erp_finance::service::cost::supplier_settlement::{SettlementCostDeltaFact, build_settlement_cost_delta};
+use erp_finance::service::payable::supplier_settlement::{SettlementPayableSource, build_settlement_payable};
+use erp_supply::dto::supplier_settlement as dto;
+use erp_supply::entity::supplier_settlement::{
+    SettlementReviewDecision, SettlementReviewRejectReason, SettlementStatus, SupplierSettlementDifference,
+    SupplierSettlementItem, SupplierSettlementStatement,
 };
 use erp_workflow::entity::work_item::WorkItem;
+
+use crate::{Error, Result};
 pub(super) struct ReviewInput<'a> {
     pub request: &'a dto::SettlementReviewCommand,
     pub reject_reason: Option<SettlementReviewRejectReason>,
@@ -97,7 +91,7 @@ fn execute(
                     Some(cost_delta.gross),
                     dto::SettlementReviewDecisionStatus::Confirmed,
                 )
-            }
+            },
             dto::SettlementReviewAction::Reject => {
                 let return_status = if differences.is_empty() {
                     SettlementStatus::Draft
@@ -116,24 +110,12 @@ fn execute(
                     input.actor_id,
                     input.at,
                 )?;
-                (
-                    None,
-                    None,
-                    Vec::new(),
-                    None,
-                    dto::SettlementReviewDecisionStatus::Rejected,
-                )
-            }
+                (None, None, Vec::new(), None, dto::SettlementReviewDecisionStatus::Rejected)
+            },
         };
     work_item.record_activity(input.actor_id, input.at)?;
     work_item.complete_by_domain_command(input.actor_id, input.at)?;
-    Ok(PreparedReview {
-        payable,
-        payable_entry,
-        cost_entries,
-        cost_delta,
-        result_status,
-    })
+    Ok(PreparedReview { payable, payable_entry, cost_entries, cost_delta, result_status })
 }
 pub(super) fn prepare(
     statement: &mut SupplierSettlementStatement,
@@ -147,29 +129,25 @@ pub(super) fn prepare(
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::{sample_statement, sample_work_item};
-    use super::*;
-    use erp_core::{
-        ids::{
-            SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierSettlementDifferenceId,
-            SupplierSettlementItemId, SupplierSettlementStatementId,
-        },
-        money::Quantity,
+    use std::str::FromStr;
+
+    use erp_core::ids::{
+        SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierSettlementDifferenceId,
+        SupplierSettlementItemId, SupplierSettlementStatementId,
     };
+    use erp_core::money::Quantity;
     use erp_supply::entity::supplier_settlement::{
         SettlementDifferenceConclusion, SettlementDifferenceConclusionKind, SettlementDifferenceStatus,
         SettlementDifferenceType, SupplierSettlementDifferenceData, SupplierSettlementItemData,
     };
     use erp_workflow::entity::work_item::WorkItemStatus;
-    use std::str::FromStr;
+
+    use super::super::tests::{sample_statement, sample_work_item};
+    use super::*;
     fn fixture(
         nonzero: bool,
-    ) -> (
-        SupplierSettlementStatement,
-        WorkItem,
-        Vec<SupplierSettlementItem>,
-        Vec<SupplierSettlementDifference>,
-    ) {
+    ) -> (SupplierSettlementStatement, WorkItem, Vec<SupplierSettlementItem>, Vec<SupplierSettlementDifference>)
+    {
         let mut statement = sample_statement();
         let item = SupplierSettlementItem::new(
             SupplierSettlementItemId::new("item-1"),
@@ -214,9 +192,7 @@ mod tests {
             .record_conclusion(&conclusion, "finance-1", Instant::from_unix_secs(1_700_000_100))
             .unwrap();
         let differences = if nonzero { vec![difference] } else { Vec::new() };
-        statement
-            .update_subject_hash(statement.review_subject_hash(&differences))
-            .unwrap();
+        statement.update_subject_hash(statement.review_subject_hash(&differences)).unwrap();
         statement.status = SettlementStatus::PendingReview;
         let work_item = sample_work_item(&statement);
         (statement, work_item, vec![item], differences)
@@ -294,22 +270,14 @@ mod tests {
             &mut task,
             &items,
             &differences,
-            ReviewInput {
-                request: &req,
-                reject_reason: None,
-                actor_id: "reviewer-1",
-                at,
-            },
+            ReviewInput { request: &req, reject_reason: None, actor_id: "reviewer-1", at },
         )
         .unwrap();
         assert_eq!(finance.calls, ["payable", "cost"]);
         assert!(result.cost_entries.is_empty());
         assert_eq!(statement.status, SettlementStatus::Confirmed);
         assert_eq!(statement.confirmed_at, Some(at));
-        assert_eq!(
-            statement.payable_account_id.as_ref().map(ToString::to_string),
-            finance.account_id
-        );
+        assert_eq!(statement.payable_account_id.as_ref().map(ToString::to_string), finance.account_id);
         assert_eq!(task.status, WorkItemStatus::Completed);
     }
     #[test]
@@ -336,11 +304,7 @@ mod tests {
             assert!(result.payable.is_none());
             assert_eq!(
                 statement.status,
-                if has_differences {
-                    SettlementStatus::HasDifference
-                } else {
-                    SettlementStatus::Draft
-                }
+                if has_differences { SettlementStatus::HasDifference } else { SettlementStatus::Draft }
             );
             assert_eq!(task.status, WorkItemStatus::Completed);
         }

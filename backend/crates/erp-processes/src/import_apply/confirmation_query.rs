@@ -1,22 +1,21 @@
 use std::collections::HashMap;
 
-use erp_import::LegacyImportExt;
-use erp_import::{ConfirmationStatus, LegacyImportConfirmation};
-use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus};
+use application_core::AuditActor;
+use erp_identity::SharedRbacService;
+use erp_import::{
+    ConfirmationStatus, LegacyImportConfirmation, LegacyImportConfirmationFilter,
+    LegacyImportConfirmationListParams, LegacyImportExt, PageView, SortDir,
+};
 use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus};
+use erp_workflow::service::work_item::{ProcessingState, WorkItemAllowedAction};
 use persistence_core::NoTransaction;
 use validator::Validate;
 
+use super::dto::{ImportBusinessConfirmationWorkItemView, LegacyImportConfirmationView};
+use super::{IMPORT_CONFIRMATION_HANDLER, IMPORT_CONFIRMATION_WORKSPACE, ImportApplyService};
 use crate::adapters::workflow::work_item_service;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_identity::SharedRbacService;
-use erp_workflow::service::work_item::{ProcessingState, WorkItemAllowedAction};
-
-use super::dto::{ImportBusinessConfirmationWorkItemView, LegacyImportConfirmationView};
-use super::{ImportApplyService, IMPORT_CONFIRMATION_HANDLER, IMPORT_CONFIRMATION_WORKSPACE};
-use erp_import::LegacyImportConfirmationFilter;
-use erp_import::{LegacyImportConfirmationListParams, PageView, SortDir};
 
 impl ImportApplyService {
     /// 分页查询导入确认事实列表。
@@ -52,11 +51,7 @@ impl ImportApplyService {
             .legacy_import_confirmations()
             .search_legacy_import_confirmations(&filter, &mut NoTransaction)
             .await?;
-        let work_item_ids = page
-            .items
-            .iter()
-            .map(|row| row.work_item_id.clone())
-            .collect::<Vec<_>>();
+        let work_item_ids = page.items.iter().map(|row| row.work_item_id.clone()).collect::<Vec<_>>();
         let work_items = self
             .db
             .work_items()
@@ -77,7 +72,7 @@ impl ImportApplyService {
                 Ok(view) => Some(authorized_work_item_view(view, row.status)?),
                 Err(Error::Forbidden(_) | Error::NotFound(_)) => {
                     work_items.get(&work_item_id).map(read_only_work_item_view)
-                }
+                },
                 Err(error) => return Err(error),
             };
             items.push(LegacyImportConfirmationView {
@@ -100,12 +95,7 @@ impl ImportApplyService {
             });
         }
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 }
 
@@ -133,8 +123,7 @@ pub(super) fn read_only_work_item_view(item: &WorkItem) -> ImportBusinessConfirm
     let mut view = work_item_view(item);
     view.owner_user_id = None;
     if item.status == WorkItemStatus::Open {
-        view.action_blockers
-            .push("当前账号不在该责任范围，任务仅可查看。".to_string());
+        view.action_blockers.push("当前账号不在该责任范围，任务仅可查看。".to_string());
     }
     view
 }

@@ -10,25 +10,23 @@
 //! 筛选/行类型定义在本文件，经 `WarehouseExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
-use crate::repository::owned::{
-    WarehouseRepository, WarehouseRevisionRepository, WarehouseSkuPolicyRepository,
-};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use mongodb::Database;
-use serde::{Deserialize, Serialize};
-
-use super::extensions::WarehouseExt;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
-
-use crate::entity::warehouse::{EnableStatus, Warehouse, WarehouseRevision, WarehouseSkuPolicy};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{SkuId, WarehouseId};
 use erp_core::money::Quantity;
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
+use serde::{Deserialize, Serialize};
+
+use super::extensions::WarehouseExt;
+use crate::entity::warehouse::{EnableStatus, Warehouse, WarehouseRevision, WarehouseSkuPolicy};
+use crate::repository::owned::{
+    WarehouseRepository, WarehouseRevisionRepository, WarehouseSkuPolicyRepository,
+};
 
 /// `warehouse` 集合名（单一来源：`WarehouseExt` 关联常量）。
 const WAREHOUSES: &str = <mongodb::Database as WarehouseExt>::WAREHOUSES;
@@ -98,10 +96,7 @@ impl QueryFilter for WarehouseFilter {
             filter.insert("id", id);
         }
         if self.require_inbound_handler {
-            filter.insert(
-                "inbound_handler_user_id",
-                doc! { "$type": "string", "$regex": r"\S" },
-            );
+            filter.insert("inbound_handler_user_id", doc! { "$type": "string", "$regex": r"\S" });
         }
         filter
     }
@@ -139,10 +134,7 @@ impl<'a> WarehouseRepository<'a> {
     ) -> Result<PageResult<WarehouseRow>> {
         let query = self.keyword_filter(filter, executor).await?;
         let options = FindOptions::builder()
-            .sort(warehouse_sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-            ))
+            .sort(warehouse_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(warehouse_projection())
@@ -151,10 +143,7 @@ impl<'a> WarehouseRepository<'a> {
         let items = mongo_ops::find_many(&collection, query.clone(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), query, executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -247,10 +236,7 @@ impl<'a> WarehouseRevisionRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<WarehouseRevisionRow>> {
         let options = FindOptions::builder()
-            .sort(warehouse_revision_sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-            ))
+            .sort(warehouse_revision_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(warehouse_revision_projection())
@@ -259,10 +245,7 @@ impl<'a> WarehouseRevisionRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -359,10 +342,7 @@ impl<'a> WarehouseSkuPolicyRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<WarehouseSkuPolicyRow>> {
         let options = FindOptions::builder()
-            .sort(warehouse_sku_policy_sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-            ))
+            .sort(warehouse_sku_policy_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(warehouse_sku_policy_projection())
@@ -371,10 +351,7 @@ impl<'a> WarehouseSkuPolicyRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 批量查询一组 SKU 的仓库预警策略（`$in`，一次取回）。
@@ -475,18 +452,11 @@ impl<'a> WarehouseDomainRepository<'a> {
                 "warehouse_id": warehouse_id,
                 "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
             },
-            FindOptions::builder()
-                .sort(doc! { "revision_no": -1 })
-                .limit(1)
-                .build(),
+            FindOptions::builder().sort(doc! { "revision_no": -1 }).limit(1).build(),
             executor,
         )
         .await?;
-        Ok(revisions
-            .first()
-            .map(|revision| revision.revision.revision_no)
-            .unwrap_or(0)
-            + 1)
+        Ok(revisions.first().map(|revision| revision.revision.revision_no).unwrap_or(0) + 1)
     }
 
     /// 读取同一仓库与 SKU 的全部未删除策略。
@@ -544,12 +514,7 @@ impl<'a> WarehouseDomainRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         warehouse.stable.current_revision_id = Some(revision.base.id.clone());
-        mongo_ops::insert_one(
-            &self.db.collection::<Warehouse>(WAREHOUSES),
-            &*warehouse,
-            executor,
-        )
-        .await?;
+        mongo_ops::insert_one(&self.db.collection::<Warehouse>(WAREHOUSES), &*warehouse, executor).await?;
         mongo_ops::insert_one(
             &self.db.collection::<WarehouseRevision>(WAREHOUSE_REVISIONS),
             revision,
@@ -703,10 +668,11 @@ impl WarehouseRepository<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, WarehouseFilter, WarehouseRevisionFilter};
-    use crate::entity::warehouse::EnableStatus;
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
+
+    use super::{WarehouseFilter, WarehouseRevisionFilter, sort_doc};
+    use crate::entity::warehouse::EnableStatus;
 
     #[test]
     fn warehouse_filter_applies_optional_fields_and_deleted_filter() {
@@ -747,9 +713,6 @@ mod tests {
     #[test]
     fn sort_doc_applies_direction() {
         assert_eq!(sort_doc("created_at", false), doc! { "created_at": -1, "id": -1 });
-        assert_eq!(
-            sort_doc("warehouse_code", true),
-            doc! { "warehouse_code": 1, "id": 1 }
-        );
+        assert_eq!(sort_doc("warehouse_code", true), doc! { "warehouse_code": 1, "id": 1 });
     }
 }

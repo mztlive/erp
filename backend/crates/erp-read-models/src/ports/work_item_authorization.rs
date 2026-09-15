@@ -2,8 +2,8 @@
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_workflow::dto::work_item::WorkItemAllowedAction;
 use erp_workflow::WorkItemType;
+use erp_workflow::dto::work_item::WorkItemAllowedAction;
 
 /// 原工作流授权结果中两条详情实际消费的字段。
 #[derive(Debug, Clone, PartialEq, Eq)]

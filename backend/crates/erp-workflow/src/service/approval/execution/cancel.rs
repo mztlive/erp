@@ -1,8 +1,6 @@
 //! 业务撤回与受阻取消编排。
 
-use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
-use crate::repository::{BpmExt, WorkItemExt};
-use bpm::engine::{cancel, CancelCommand};
+use bpm::engine::{CancelCommand, cancel};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalCommandKind, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{
@@ -12,16 +10,18 @@ use bpm::model::{
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::apply_plan::{apply_plan, DomainActionKind};
+use super::apply_plan::{DomainActionKind, apply_plan};
 use super::authorization::requires_blocked_cancel;
 use super::idempotency::{
-    cancel_blocked_identity, cancel_identity, document_cancel_identity, map_receipt_first_write_error,
-    normalize_idempotency_key, payload_conflict_error, CancelBlockedIdentityParams, CancelIdentityParams,
-    DocumentCancelIdentityParams, PreparedCommandIdentity, ReceiptBranch,
+    CancelBlockedIdentityParams, CancelIdentityParams, DocumentCancelIdentityParams, PreparedCommandIdentity,
+    ReceiptBranch, cancel_blocked_identity, cancel_identity, document_cancel_identity,
+    map_receipt_first_write_error, normalize_idempotency_key, payload_conflict_error,
 };
 use super::start::map_engine_error;
 use super::{ExecutionCommandInput, PlannedWrites, PreparedExecution};
+use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use crate::error::{Error, Result};
+use crate::repository::{BpmExt, WorkItemExt};
 
 const EXECUTION_HISTORY_PAGE_SIZE: u32 = 50;
 const MAX_EXECUTION_HISTORY_PAGES: usize = 32;
@@ -60,14 +60,7 @@ impl DocumentCancelCommand {
         let actor =
             ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("撤回人引用无效".to_string()))?;
         let idempotency_key = normalize_idempotency_key(idempotency_key)?;
-        Ok(Self {
-            subject,
-            subject_version,
-            expected_document_version,
-            reason,
-            actor,
-            idempotency_key,
-        })
+        Ok(Self { subject, subject_version, expected_document_version, reason, actor, idempotency_key })
     }
 
     /// 返回精确业务主体。
@@ -195,16 +188,10 @@ pub async fn replay_committed_document_cancel(
         )
         .await?;
     let expected_task_version = terminal_task_version(&tasks, &instance, &ended_execution, command)?;
-    let expected_instance_version = instance
-        .base
-        .version
-        .checked_sub(1)
-        .ok_or_else(document_cancel_terminal_conflict)?;
-    let expected_execution_version = ended_execution
-        .base
-        .version
-        .checked_sub(1)
-        .ok_or_else(document_cancel_terminal_conflict)?;
+    let expected_instance_version =
+        instance.base.version.checked_sub(1).ok_or_else(document_cancel_terminal_conflict)?;
+    let expected_execution_version =
+        ended_execution.base.version.checked_sub(1).ok_or_else(document_cancel_terminal_conflict)?;
     let identity = document_cancel_identity(DocumentCancelIdentityParams {
         idempotency_key: command.idempotency_key().clone(),
         instance_id: &instance.base.id,
@@ -253,9 +240,7 @@ pub async fn claim_and_persist_document_cancel_runtime(
     db.bpm_workflow()
         .persist_cancelled_runtime_after_receipt(&writes.instance, &writes.updated_executions, executor)
         .await?;
-    db.work_items()
-        .persist_cancelled_approval_tasks(closed_tasks, executor)
-        .await?;
+    db.work_items().persist_cancelled_approval_tasks(closed_tasks, executor).await?;
     Ok(())
 }
 
@@ -270,12 +255,7 @@ async fn cancelled_execution(
     for page_index in 0..MAX_EXECUTION_HISTORY_PAGES {
         let page = db
             .bpm_workflow()
-            .list_execution_history(
-                &instance_id,
-                after_execution_no,
-                EXECUTION_HISTORY_PAGE_SIZE,
-                executor,
-            )
+            .list_execution_history(&instance_id, after_execution_no, EXECUTION_HISTORY_PAGE_SIZE, executor)
             .await?;
         if page.is_empty() {
             break;
@@ -320,7 +300,7 @@ fn terminal_task_version(
                 return Err(document_cancel_terminal_conflict());
             }
             Ok(None)
-        }
+        },
         [task]
             if execution.blocker_code.is_none()
                 && task.work_item_type == WorkItemType::DocumentApproval
@@ -333,12 +313,8 @@ fn terminal_task_version(
                 && task.closed_by.as_deref() == Some(command.actor().as_str())
                 && task.close_reason.as_deref() == Some(command.reason()) =>
         {
-            task.base
-                .version
-                .checked_sub(1)
-                .map(Some)
-                .ok_or_else(document_cancel_terminal_conflict)
-        }
+            task.base.version.checked_sub(1).map(Some).ok_or_else(document_cancel_terminal_conflict)
+        },
         _ => Err(document_cancel_terminal_conflict()),
     }
 }
@@ -401,9 +377,7 @@ pub fn prepare_document_cancel(
     expected_document_version: u64,
 ) -> Result<PreparedExecution> {
     if input.blocked_port {
-        return Err(Error::ValidationError(
-            "业务单据普通撤回不得使用受阻取消端口".to_string(),
-        ));
+        return Err(Error::ValidationError("业务单据普通撤回不得使用受阻取消端口".to_string()));
     }
     prepare_cancel_with_document_version(input, Some(expected_document_version))
 }
@@ -420,9 +394,7 @@ fn prepare_cancel_with_document_version(
             .or(input.current.blocker_code)
             .ok_or_else(|| Error::ValidationError("受阻取消缺少 blocker".to_string()))?;
         if !requires_blocked_cancel(blocker) {
-            return Err(Error::ValidationError(
-                "原审批人可恢复时不得走受阻取消".to_string(),
-            ));
+            return Err(Error::ValidationError("原审批人可恢复时不得走受阻取消".to_string()));
         }
         cancel_blocked_identity(CancelBlockedIdentityParams {
             idempotency_key: input.command.idempotency_key.clone(),
@@ -436,9 +408,7 @@ fn prepare_cancel_with_document_version(
         })
     } else {
         if input.instance.blocker_code.is_some_and(requires_blocked_cancel) {
-            return Err(Error::ValidationError(
-                "不可恢复原审批人的阻塞只能走受阻取消".to_string(),
-            ));
+            return Err(Error::ValidationError("不可恢复原审批人的阻塞只能走受阻取消".to_string()));
         }
         match expected_document_version {
             Some(version) => document_cancel_identity(DocumentCancelIdentityParams {
@@ -467,11 +437,9 @@ fn prepare_cancel_with_document_version(
     match identity.classify(input.command.receipt.as_ref()) {
         ReceiptBranch::PayloadConflict => return Err(super::idempotency::payload_conflict_error()),
         ReceiptBranch::SamePayload(receipt) => {
-            return Ok(PreparedExecution::Replay {
-                receipt: receipt.clone(),
-            });
-        }
-        ReceiptBranch::Fresh => {}
+            return Ok(PreparedExecution::Replay { receipt: receipt.clone() });
+        },
+        ReceiptBranch::Fresh => {},
     }
     let plan = cancel(
         input.instance,
@@ -491,9 +459,5 @@ fn prepare_cancel_with_document_version(
         input.command.now,
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
-    Ok(PreparedExecution::Apply(Box::new(apply_plan(
-        plan,
-        receipt,
-        Some(DomainActionKind::Cancel),
-    ))))
+    Ok(PreparedExecution::Apply(Box::new(apply_plan(plan, receipt, Some(DomainActionKind::Cancel)))))
 }

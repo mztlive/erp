@@ -1,26 +1,21 @@
 use application_core::AuditActor;
-use axum::{
-    extract::{Extension, Path, Query, State},
-    Json,
-};
+use axum::Json;
+use axum::extract::{Extension, Path, Query, State};
 use erp_processes::procure_to_pay::responsibility::ProcurementResponsibilityProcess;
 use erp_procurement::dto::procurement_responsibility::{
     CreateProcurementResponsibilityRuleRequest, ProcurementResponsibilityResolveRequest,
     ProcurementResponsibilityResolveView, UpdateProcurementResponsibilityRuleRequest,
 };
-use erp_read_models::purchase_center::procurement_responsibility::{
-    dto::{
-        ProcurementResponsibilityRuleListParams, ProcurementResponsibilityRulePageView,
-        ProcurementResponsibilityRuleView,
-    },
-    ProcurementResponsibilityReadService,
+use erp_read_models::purchase_center::procurement_responsibility::ProcurementResponsibilityReadService;
+use erp_read_models::purchase_center::procurement_responsibility::dto::{
+    ProcurementResponsibilityRuleListParams, ProcurementResponsibilityRulePageView,
+    ProcurementResponsibilityRuleView,
 };
 use validator::Validate;
 
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 /// 分页查询采购责任规则。
 #[permission_macros::permission(
@@ -35,9 +30,7 @@ pub async fn list_rules(
     Query(params): Query<ProcurementResponsibilityRuleListParams>,
 ) -> Result<ProcurementResponsibilityRulePageView> {
     params.validate()?;
-    let view = ProcurementResponsibilityReadService::new(state.db())
-        .rule_list(params)
-        .await?;
+    let view = ProcurementResponsibilityReadService::new(state.db()).rule_list(params).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -55,9 +48,8 @@ pub async fn create_rule(
     Json(request): Json<CreateProcurementResponsibilityRuleRequest>,
 ) -> Result<ProcurementResponsibilityRuleView> {
     request.validate()?;
-    let view = ProcurementResponsibilityProcess::new(state.db(), state.rbac())
-        .create_rule(request, &actor)
-        .await?;
+    let view =
+        ProcurementResponsibilityProcess::new(state.db(), state.rbac()).create_rule(request, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -95,8 +87,7 @@ pub async fn resolve(
     Json(request): Json<ProcurementResponsibilityResolveRequest>,
 ) -> Result<ProcurementResponsibilityResolveView> {
     request.validate()?;
-    let view = ProcurementResponsibilityProcess::new(state.db(), state.rbac())
-        .resolve_preview(request)
-        .await?;
+    let view =
+        ProcurementResponsibilityProcess::new(state.db(), state.rbac()).resolve_preview(request).await?;
     Ok(ApiResponse::ok_with_data(view))
 }

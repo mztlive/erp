@@ -11,8 +11,9 @@
 //!
 //! 错误信息为固定文案，不携带地点明文或文件敏感元数据。
 
-use crate::entity::facts::{EvidenceRetention as RetentionClass, EvidenceSensitivity as SensitivityClass};
 use erp_core::{Error, Result};
+
+use crate::entity::facts::{EvidenceRetention as RetentionClass, EvidenceSensitivity as SensitivityClass};
 
 /// 采购审核草稿使用的服务地点占位值；确认时必须替换为实际地点。
 pub const SERVICE_LOCATION_PLACEHOLDER: &str = "待填写";
@@ -104,7 +105,7 @@ impl ServiceEvidencePolicy {
 
 #[cfg(test)]
 mod tests {
-    use super::{ActualServiceLocation, ServiceEvidencePolicy, SERVICE_LOCATION_PLACEHOLDER};
+    use super::{ActualServiceLocation, SERVICE_LOCATION_PLACEHOLDER, ServiceEvidencePolicy};
     use crate::entity::facts::{
         EvidenceRetention as RetentionClass, EvidenceSensitivity as SensitivityClass,
     };
@@ -112,20 +113,9 @@ mod tests {
     /// 合法地点去除首尾空白并稳定保留内部字符。
     #[test]
     fn actual_service_location_trims_and_keeps_value() {
-        assert_eq!(
-            ActualServiceLocation::parse(" 客户现场 ").unwrap().as_str(),
-            "客户现场"
-        );
-        assert_eq!(
-            ActualServiceLocation::parse("\t\n 客户现场 1 号 \n")
-                .unwrap()
-                .as_str(),
-            "客户现场 1 号"
-        );
-        assert_eq!(
-            ActualServiceLocation::parse("客户现场").unwrap().as_str(),
-            "客户现场"
-        );
+        assert_eq!(ActualServiceLocation::parse(" 客户现场 ").unwrap().as_str(), "客户现场");
+        assert_eq!(ActualServiceLocation::parse("\t\n 客户现场 1 号 \n").unwrap().as_str(), "客户现场 1 号");
+        assert_eq!(ActualServiceLocation::parse("客户现场").unwrap().as_str(), "客户现场");
     }
 
     /// 空白与采购审核占位值（含带空白变体）必须拒绝，且错误不携带明文。
@@ -187,20 +177,24 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.to_string(), "现场图片凭证必须按敏感文件保存");
-        assert!(ServiceEvidencePolicy::validate(
-            "image/jpeg",
-            SensitivityClass::Sensitive,
-            RetentionClass::LongTerm,
-            false,
-        )
-        .is_ok());
-        assert!(ServiceEvidencePolicy::validate(
-            "image/jpeg",
-            SensitivityClass::HighlySensitive,
-            RetentionClass::LongTerm,
-            false,
-        )
-        .is_ok());
+        assert!(
+            ServiceEvidencePolicy::validate(
+                "image/jpeg",
+                SensitivityClass::Sensitive,
+                RetentionClass::LongTerm,
+                false,
+            )
+            .is_ok()
+        );
+        assert!(
+            ServiceEvidencePolicy::validate(
+                "image/jpeg",
+                SensitivityClass::HighlySensitive,
+                RetentionClass::LongTerm,
+                false,
+            )
+            .is_ok()
+        );
     }
 
     /// 非长期保留策略拒绝（30 天、7 天均失败关闭）。

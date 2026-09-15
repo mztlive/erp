@@ -56,14 +56,8 @@ mod tests {
     /// serde 形态与中文标签。
     #[test]
     fn product_kind_exposes_labels_and_stable_codes() {
-        assert_eq!(
-            serde_json::to_string(&ProductKind::OfflineService).unwrap(),
-            "\"OFFLINE_SERVICE\""
-        );
-        assert_eq!(
-            serde_json::to_string(&ProductKind::Voucher).unwrap(),
-            "\"VOUCHER\""
-        );
+        assert_eq!(serde_json::to_string(&ProductKind::OfflineService).unwrap(), "\"OFFLINE_SERVICE\"");
+        assert_eq!(serde_json::to_string(&ProductKind::Voucher).unwrap(), "\"VOUCHER\"");
         assert_eq!(ProductKind::Physical.label(), "实物");
         assert_eq!(ProductKind::Virtual.label(), "虚拟");
         assert_eq!(ProductKind::OfflineService.label(), "线下服务");

@@ -7,12 +7,11 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::{InboxMessageId, IntegrationErrorTaskId};
 
@@ -165,12 +164,7 @@ impl DocumentState for ErrorTaskStatus {
     /// - 已解决/已关闭是终态，无出边。
     fn allowed_next(self) -> &'static [Self] {
         match self {
-            Self::Pending => &[
-                Self::AutoRetrying,
-                Self::ManualRequired,
-                Self::Resolved,
-                Self::Closed,
-            ],
+            Self::Pending => &[Self::AutoRetrying, Self::ManualRequired, Self::Resolved, Self::Closed],
             Self::AutoRetrying => &[Self::ManualRequired, Self::Resolved, Self::Closed],
             Self::ManualRequired => &[Self::Resolved, Self::Closed],
             Self::Resolved | Self::Closed => &[],
@@ -419,7 +413,7 @@ impl IntegrationErrorTask {
                 if resolution_type.is_some() || resolution.is_some() {
                     return Err(Error::from("非终态迁移不允许携带解决信息"));
                 }
-            }
+            },
         }
         self.status = to;
         Ok(())
@@ -474,10 +468,7 @@ impl IntegrationErrorTask {
     /// 允许自动重试时返回 `true`。
     pub fn can_auto_retry(&self) -> bool {
         self.error_class.can_auto_retry()
-            && matches!(
-                self.status,
-                ErrorTaskStatus::Pending | ErrorTaskStatus::AutoRetrying
-            )
+            && matches!(self.status, ErrorTaskStatus::Pending | ErrorTaskStatus::AutoRetrying)
     }
 
     /// 应用「已解决」终态要求。
@@ -498,7 +489,7 @@ impl IntegrationErrorTask {
         let resolution_type = match resolution_type {
             Some(ResolutionType::Close) => {
                 return Err(Error::from("解决任务不得使用“关闭”解决方式，请走关闭迁移"));
-            }
+            },
             Some(other) => other,
             None => return Err(Error::from("解决任务必须提供解决方式")),
         };
@@ -555,12 +546,13 @@ impl IntegrationErrorTask {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::{
-        ensure_transition, ErrorClass, ErrorTaskStatus, IntegrationErrorTask, IntegrationErrorTaskData,
-        IntegrationErrorTaskUpdate, ResolutionType,
-    };
     use erp_core::common::time::Instant;
     use erp_core::ids::{InboxMessageId, IntegrationErrorTaskId};
+
+    use super::{
+        ErrorClass, ErrorTaskStatus, IntegrationErrorTask, IntegrationErrorTaskData,
+        IntegrationErrorTaskUpdate, ResolutionType, ensure_transition,
+    };
 
     const NOW: i64 = 1_700_000_000;
 
@@ -579,10 +571,7 @@ pub(crate) mod tests {
     }
 
     fn task_with_class(error_class: ErrorClass) -> IntegrationErrorTask {
-        let data = IntegrationErrorTaskData {
-            error_class,
-            ..task_data()
-        };
+        let data = IntegrationErrorTaskData { error_class, ..task_data() };
         IntegrationErrorTask::new(IntegrationErrorTaskId::new("task-2"), data).unwrap()
     }
 
@@ -609,26 +598,17 @@ pub(crate) mod tests {
 
     #[test]
     fn new_rejects_missing_message_and_object() {
-        let data = IntegrationErrorTaskData {
-            message_id: None,
-            business_object_id: None,
-            ..task_data()
-        };
+        let data = IntegrationErrorTaskData { message_id: None, business_object_id: None, ..task_data() };
         assert!(IntegrationErrorTask::new(IntegrationErrorTaskId::new("task-4"), data).is_err());
     }
 
     #[test]
     fn new_rejects_overlong_fields() {
-        let overlong_object = IntegrationErrorTaskData {
-            business_object_id: Some("o".repeat(129)),
-            ..task_data()
-        };
+        let overlong_object =
+            IntegrationErrorTaskData { business_object_id: Some("o".repeat(129)), ..task_data() };
         assert!(IntegrationErrorTask::new(IntegrationErrorTaskId::new("task-5"), overlong_object).is_err());
 
-        let overlong_role = IntegrationErrorTaskData {
-            owner_role: Some("r".repeat(65)),
-            ..task_data()
-        };
+        let overlong_role = IntegrationErrorTaskData { owner_role: Some("r".repeat(65)), ..task_data() };
         assert!(IntegrationErrorTask::new(IntegrationErrorTaskId::new("task-6"), overlong_role).is_err());
     }
 
@@ -644,20 +624,14 @@ pub(crate) mod tests {
 
         assert_eq!(created.owner_role.as_deref(), Some("finance"));
         assert_eq!(created.owner_user_id.as_deref(), Some("u-9"));
-        assert_eq!(
-            created.error_class,
-            ErrorClass::TransientFailure,
-            "错误分类是关键字段"
-        );
+        assert_eq!(created.error_class, ErrorClass::TransientFailure, "错误分类是关键字段");
         assert_eq!(created.message_id, Some(InboxMessageId::new("msg-1")));
     }
 
     #[test]
     fn record_attempt_increments_and_updates_summary() {
         let mut created = task();
-        created
-            .record_attempt(Instant::from_unix_secs(NOW), Some("  超时重试  ".to_string()))
-            .unwrap();
+        created.record_attempt(Instant::from_unix_secs(NOW), Some("  超时重试  ".to_string())).unwrap();
 
         assert_eq!(created.attempt_count, 1);
         assert_eq!(created.last_attempt_at, Some(Instant::from_unix_secs(NOW)));
@@ -675,9 +649,7 @@ pub(crate) mod tests {
                 Instant::from_unix_secs(NOW),
             )
             .unwrap();
-        assert!(created
-            .record_attempt(Instant::from_unix_secs(NOW), Some("retry".to_string()))
-            .is_err());
+        assert!(created.record_attempt(Instant::from_unix_secs(NOW), Some("retry".to_string())).is_err());
     }
 
     #[test]
@@ -694,10 +666,7 @@ pub(crate) mod tests {
             (ErrorTaskStatus::ManualRequired, ErrorTaskStatus::Closed),
         ];
         for (from, to) in cases {
-            assert!(
-                ensure_transition(from, to).is_ok(),
-                "合法迁移被拒：{from:?} → {to:?}"
-            );
+            assert!(ensure_transition(from, to).is_ok(), "合法迁移被拒：{from:?} → {to:?}");
         }
     }
 
@@ -730,12 +699,7 @@ pub(crate) mod tests {
     fn transition_to_manual_required_succeeds_without_resolution() {
         let mut created = task();
         created
-            .transition(
-                ErrorTaskStatus::ManualRequired,
-                None,
-                None,
-                Instant::from_unix_secs(NOW),
-            )
+            .transition(ErrorTaskStatus::ManualRequired, None, None, Instant::from_unix_secs(NOW))
             .unwrap();
         assert_eq!(created.status, ErrorTaskStatus::ManualRequired);
         assert!(created.resolution_type.is_none());
@@ -772,34 +736,40 @@ pub(crate) mod tests {
         assert_eq!(created.resolved_at, Some(Instant::from_unix_secs(NOW)));
 
         let mut no_evidence = task();
-        assert!(no_evidence
-            .transition(
-                ErrorTaskStatus::Resolved,
-                Some(ResolutionType::QueryConfirm),
-                None,
-                Instant::from_unix_secs(NOW),
-            )
-            .is_err());
+        assert!(
+            no_evidence
+                .transition(
+                    ErrorTaskStatus::Resolved,
+                    Some(ResolutionType::QueryConfirm),
+                    None,
+                    Instant::from_unix_secs(NOW),
+                )
+                .is_err()
+        );
 
         let mut no_type = task();
-        assert!(no_type
-            .transition(
-                ErrorTaskStatus::Resolved,
-                None,
-                Some("证据".to_string()),
-                Instant::from_unix_secs(NOW),
-            )
-            .is_err());
+        assert!(
+            no_type
+                .transition(
+                    ErrorTaskStatus::Resolved,
+                    None,
+                    Some("证据".to_string()),
+                    Instant::from_unix_secs(NOW),
+                )
+                .is_err()
+        );
 
         let mut close_as_resolve = task();
-        assert!(close_as_resolve
-            .transition(
-                ErrorTaskStatus::Resolved,
-                Some(ResolutionType::Close),
-                Some("证据".to_string()),
-                Instant::from_unix_secs(NOW),
-            )
-            .is_err());
+        assert!(
+            close_as_resolve
+                .transition(
+                    ErrorTaskStatus::Resolved,
+                    Some(ResolutionType::Close),
+                    Some("证据".to_string()),
+                    Instant::from_unix_secs(NOW),
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -818,24 +788,28 @@ pub(crate) mod tests {
         assert!(created.is_terminal());
 
         let mut no_evidence = task();
-        assert!(no_evidence
-            .transition(
-                ErrorTaskStatus::Closed,
-                Some(ResolutionType::Close),
-                None,
-                Instant::from_unix_secs(NOW)
-            )
-            .is_err());
+        assert!(
+            no_evidence
+                .transition(
+                    ErrorTaskStatus::Closed,
+                    Some(ResolutionType::Close),
+                    None,
+                    Instant::from_unix_secs(NOW)
+                )
+                .is_err()
+        );
 
         let mut wrong_type = task();
-        assert!(wrong_type
-            .transition(
-                ErrorTaskStatus::Closed,
-                Some(ResolutionType::Compensate),
-                Some("证据".to_string()),
-                Instant::from_unix_secs(NOW),
-            )
-            .is_err());
+        assert!(
+            wrong_type
+                .transition(
+                    ErrorTaskStatus::Closed,
+                    Some(ResolutionType::Compensate),
+                    Some("证据".to_string()),
+                    Instant::from_unix_secs(NOW),
+                )
+                .is_err()
+        );
 
         let mut result_unknown = task_with_class(ErrorClass::ResultUnknown);
         result_unknown
@@ -860,14 +834,16 @@ pub(crate) mod tests {
                 Instant::from_unix_secs(NOW),
             )
             .unwrap();
-        assert!(created
-            .transition(
-                ErrorTaskStatus::Resolved,
-                Some(ResolutionType::QueryConfirm),
-                Some("证据".to_string()),
-                Instant::from_unix_secs(NOW),
-            )
-            .is_err());
+        assert!(
+            created
+                .transition(
+                    ErrorTaskStatus::Resolved,
+                    Some(ResolutionType::QueryConfirm),
+                    Some("证据".to_string()),
+                    Instant::from_unix_secs(NOW),
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -887,14 +863,7 @@ pub(crate) mod tests {
 
         assert!(task().can_auto_retry(), "待处理 + 临时故障应允许自动重试");
         let mut manual = task();
-        manual
-            .transition(
-                ErrorTaskStatus::ManualRequired,
-                None,
-                None,
-                Instant::from_unix_secs(NOW),
-            )
-            .unwrap();
+        manual.transition(ErrorTaskStatus::ManualRequired, None, None, Instant::from_unix_secs(NOW)).unwrap();
         assert!(!manual.can_auto_retry(), "转人工后不再自动重试");
         assert!(!task_with_class(ErrorClass::MappingError).can_auto_retry());
     }
@@ -915,34 +884,16 @@ pub(crate) mod tests {
 
     #[test]
     fn resolution_type_is_derived_from_verified_evidence() {
-        assert_eq!(
-            ResolutionType::from_verified_evidence(true, true),
-            ResolutionType::Compensate
-        );
-        assert_eq!(
-            ResolutionType::from_verified_evidence(false, true),
-            ResolutionType::FixMapping
-        );
-        assert_eq!(
-            ResolutionType::from_verified_evidence(false, false),
-            ResolutionType::QueryConfirm
-        );
+        assert_eq!(ResolutionType::from_verified_evidence(true, true), ResolutionType::Compensate);
+        assert_eq!(ResolutionType::from_verified_evidence(false, true), ResolutionType::FixMapping);
+        assert_eq!(ResolutionType::from_verified_evidence(false, false), ResolutionType::QueryConfirm);
     }
 
     #[test]
     fn enums_serialize_with_stable_codes_and_expose_labels() {
-        assert_eq!(
-            serde_json::to_string(&ErrorClass::ResultUnknown).unwrap(),
-            "\"result_unknown\""
-        );
-        assert_eq!(
-            serde_json::to_string(&ErrorTaskStatus::AutoRetrying).unwrap(),
-            "\"auto_retrying\""
-        );
-        assert_eq!(
-            serde_json::to_string(&ResolutionType::FixMapping).unwrap(),
-            "\"fix_mapping\""
-        );
+        assert_eq!(serde_json::to_string(&ErrorClass::ResultUnknown).unwrap(), "\"result_unknown\"");
+        assert_eq!(serde_json::to_string(&ErrorTaskStatus::AutoRetrying).unwrap(), "\"auto_retrying\"");
+        assert_eq!(serde_json::to_string(&ResolutionType::FixMapping).unwrap(), "\"fix_mapping\"");
 
         assert_eq!(ErrorClass::AuthSignature.label(), "鉴权签名");
         assert_eq!(ErrorTaskStatus::ManualRequired.label(), "待人工");

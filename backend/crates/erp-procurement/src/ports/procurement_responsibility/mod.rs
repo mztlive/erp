@@ -1,10 +1,11 @@
 //! 采购责任解析和规则维护实际消费的外域事实合同。
 
-use crate::entity::facts::IdentityOwnerFact;
-use crate::entity::procurement_responsibility::ProcurementCatalogBundle;
 use async_trait::async_trait;
 use erp_core::ids::{ProductCategoryId, SkuId};
 use persistence_core::Executor;
+
+use crate::entity::facts::IdentityOwnerFact;
+use crate::entity::procurement_responsibility::ProcurementCatalogBundle;
 
 /// 目录和身份事实只读端口；实现不得授权，也不得替换事务执行器。
 #[async_trait]

@@ -11,10 +11,10 @@ mod plan;
 mod qualification;
 mod types;
 
-pub use party::{plan_commercial_profile_revision, PlanCommercialProfileRevisionParams};
+pub use party::{PlanCommercialProfileRevisionParams, plan_commercial_profile_revision};
 pub use plan::{CapabilityToggle, PlannedQualificationInput, SupplierProfileChangePlan};
 pub use qualification::{
-    apply_qualification_input, new_capability, new_qualification, NewQualificationParams,
+    NewQualificationParams, apply_qualification_input, new_capability, new_qualification,
 };
 
 #[cfg(test)]

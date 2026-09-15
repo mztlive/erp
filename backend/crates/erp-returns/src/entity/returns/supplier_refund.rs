@@ -2,9 +2,7 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     FileAssetId, PayableEntryId, PurchaseReturnOrderId, SupplierAccountId, SupplierPaymentId,
@@ -13,6 +11,7 @@ use erp_core::ids::{
 use erp_core::money::Amount;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::customer_refund::validate_actor_pair;
 
@@ -191,12 +190,8 @@ impl SupplierRefund {
         data: SupplierRefundData,
         created_by: impl Into<String>,
     ) -> Result<Self> {
-        let refund_no = normalize_required_text(
-            data.refund_no,
-            "退款单号不能为空",
-            REFUND_NO_MAX_LEN,
-            "退款单号过长",
-        )?;
+        let refund_no =
+            normalize_required_text(data.refund_no, "退款单号不能为空", REFUND_NO_MAX_LEN, "退款单号过长")?;
         let reason_text = normalize_required_text(
             data.reason_text,
             "退款原因不能为空",
@@ -318,10 +313,8 @@ impl SupplierRefund {
         if self.status != SupplierRefundStatus::Draft {
             return Err(Error::from("只有草稿状态的供应商退款单可以提交审批"));
         }
-        let next = self
-            .approval_subject_version
-            .checked_add(1)
-            .ok_or_else(|| Error::from("审批提交版本溢出"))?;
+        let next =
+            self.approval_subject_version.checked_add(1).ok_or_else(|| Error::from("审批提交版本溢出"))?;
         self.approval_subject_version = next;
         self.transition(SupplierRefundStatus::InApproval)?;
         Ok(next)
@@ -401,9 +394,11 @@ fn validate_original_target(
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::*;
-    use erp_core::money::Amount;
     use std::str::FromStr;
+
+    use erp_core::money::Amount;
+
+    use super::*;
 
     pub(crate) fn data() -> SupplierRefundData {
         SupplierRefundData {
@@ -443,40 +438,23 @@ pub(crate) mod tests {
 
     #[test]
     fn new_rejects_blank_no_same_actor_and_bad_target() {
-        let blank_no = SupplierRefundData {
-            refund_no: "   ".to_string(),
-            ..data()
-        };
+        let blank_no = SupplierRefundData { refund_no: "   ".to_string(), ..data() };
         assert!(SupplierRefund::new(SupplierRefundId::new("srf-2"), blank_no, "creator-1").is_err());
 
-        let overlong = SupplierRefundData {
-            reason_text: "r".repeat(513),
-            ..data()
-        };
+        let overlong = SupplierRefundData { reason_text: "r".repeat(513), ..data() };
         assert!(SupplierRefund::new(SupplierRefundId::new("srf-3"), overlong, "creator-1").is_err());
 
-        let same_actor = SupplierRefundData {
-            reviewed_by: "handler-1".to_string(),
-            ..data()
-        };
+        let same_actor = SupplierRefundData { reviewed_by: "handler-1".to_string(), ..data() };
         assert!(SupplierRefund::new(SupplierRefundId::new("srf-4"), same_actor, "creator-1").is_err());
 
-        let no_target = SupplierRefundData {
-            original_payment_id: None,
-            ..data()
-        };
+        let no_target = SupplierRefundData { original_payment_id: None, ..data() };
         assert!(SupplierRefund::new(SupplierRefundId::new("srf-5"), no_target, "creator-1").is_err());
 
-        let both_targets = SupplierRefundData {
-            original_payable_entry_id: Some(PayableEntryId::new("pe-1")),
-            ..data()
-        };
+        let both_targets =
+            SupplierRefundData { original_payable_entry_id: Some(PayableEntryId::new("pe-1")), ..data() };
         assert!(SupplierRefund::new(SupplierRefundId::new("srf-6"), both_targets, "creator-1").is_err());
 
-        let non_positive = SupplierRefundData {
-            amount: Amount::from_str("0.00").unwrap(),
-            ..data()
-        };
+        let non_positive = SupplierRefundData { amount: Amount::from_str("0.00").unwrap(), ..data() };
         assert!(SupplierRefund::new(SupplierRefundId::new("srf-7"), non_positive, "creator-1").is_err());
     }
 
@@ -498,18 +476,20 @@ pub(crate) mod tests {
         refund.start_approval().unwrap();
         refund.mark_posted().unwrap();
         assert!(refund.is_posted());
-        assert!(refund
-            .update(SupplierRefundUpdate {
-                amount: Some(Amount::from_str("1.00").unwrap()),
-                ..Default::default()
-            })
-            .is_err());
+        assert!(
+            refund
+                .update(SupplierRefundUpdate {
+                    amount: Some(Amount::from_str("1.00").unwrap()),
+                    ..Default::default()
+                })
+                .is_err()
+        );
     }
 
     #[test]
     fn state_machine_forces_in_approval_before_posting() {
-        use erp_core::common::state::ensure_transition as tr;
         use SupplierRefundStatus as S;
+        use erp_core::common::state::ensure_transition as tr;
 
         assert!(tr(S::Draft, S::InApproval).is_ok());
         assert!(tr(S::InApproval, S::Posted).is_ok());
@@ -533,9 +513,7 @@ pub(crate) mod tests {
     #[test]
     fn start_approval_increments_version_and_cancel_does_not_rollback() {
         let mut refund = SupplierRefund::new(SupplierRefundId::new("srf-1"), data(), "creator-1").unwrap();
-        refund
-            .ensure_initial_approval_state()
-            .expect("新建草稿是初始未提交状态");
+        refund.ensure_initial_approval_state().expect("新建草稿是初始未提交状态");
         assert_eq!(refund.approval_subject_version, 0);
         let version = refund.start_approval().unwrap();
         assert_eq!(version, 1);
@@ -549,17 +527,11 @@ pub(crate) mod tests {
 
     #[test]
     fn status_serializes_with_stable_codes_and_labels() {
-        assert_eq!(
-            serde_json::to_string(&SupplierRefundStatus::InApproval).unwrap(),
-            "\"IN_APPROVAL\""
-        );
+        assert_eq!(serde_json::to_string(&SupplierRefundStatus::InApproval).unwrap(), "\"IN_APPROVAL\"");
         assert_eq!(SupplierRefundStatus::Posted.label(), "已过账");
         assert_eq!(SupplierRefundStatus::Reversed.as_str(), "reversed");
         assert_eq!(SupplierRefundStatus::Draft.as_str(), "draft");
-        let production = include_str!("supplier_refund.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("supplier_refund.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(!production.contains("PendingReview"));
         assert!(!production.contains("pending_review"));
     }

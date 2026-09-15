@@ -1,15 +1,15 @@
 //! 履约customer_acceptance请求及单域查询 DTO。
-use super::non_blank;
-use super::{normalize_sort, PageParams, CUSTOMER_ACCEPTANCE_SORT_FIELDS};
-use crate::entity::fulfillment::{
-    AcceptanceResult, AllocationAction, CustomerAcceptanceState, FulfillmentFactType,
-};
-use crate::Result;
 use application_core::{page_or_default, page_size_or_default};
 use erp_core::ids::{SalesOrderId, SalesOrderLineId};
 use erp_core::money::Quantity;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+
+use super::{CUSTOMER_ACCEPTANCE_SORT_FIELDS, PageParams, non_blank, normalize_sort};
+use crate::Result;
+use crate::entity::fulfillment::{
+    AcceptanceResult, AllocationAction, CustomerAcceptanceState, FulfillmentFactType,
+};
 
 /// 验收履约分配输入（验收行对履约事实的分配）。
 #[derive(Debug, Clone, Serialize, Deserialize)]

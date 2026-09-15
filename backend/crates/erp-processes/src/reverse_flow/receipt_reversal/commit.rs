@@ -1,16 +1,5 @@
 //! 回款冲正一次创建并提交：根命令回执优先，原资金事实在事务内重验。
 
-use super::super::adapter::{
-    build_receipt_reversal_snapshot, receipt_reversal_adapter, receipt_reversal_object_readable,
-    receipt_reversal_subject_ref,
-};
-use super::super::start_approval::{
-    build_receipt_reversal_start_input, load_bound_definition_graph_with_executor,
-    persist_receipt_reversal_runtime, ReceiptReversalStartInput,
-};
-use super::super::ReturnsProcess;
-use super::context::{load_receipt_reversal_context, persist_bound_receipt_reversal_document};
-use crate::{Error, Result};
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
 use erp_core::common::time::Instant;
@@ -19,10 +8,10 @@ use erp_finance::entity::receivable::CustomerReceiptStatus;
 use erp_finance::repository::ReceivableExt;
 use erp_read_models::returns_center::dto::ReceiptReversalView;
 use erp_returns::dto::CommitReceiptReversalRequest;
+use erp_returns::service::ReturnsService;
 use erp_returns::service::approval::start_receipt_reversal_approval;
 use erp_returns::service::receipt_reversal::build_commit;
 use erp_returns::service::shared::ensure_posted_source;
-use erp_returns::service::ReturnsService;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::service::approval::binding::BindPublishedDefinitionCommand;
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
@@ -31,6 +20,18 @@ use erp_workflow::service::document_registry::new_registered_document;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
+
+use super::super::ReturnsProcess;
+use super::super::adapter::{
+    build_receipt_reversal_snapshot, receipt_reversal_adapter, receipt_reversal_object_readable,
+    receipt_reversal_subject_ref,
+};
+use super::super::start_approval::{
+    ReceiptReversalStartInput, build_receipt_reversal_start_input, load_bound_definition_graph_with_executor,
+    persist_receipt_reversal_runtime,
+};
+use super::context::{load_receipt_reversal_context, persist_bound_receipt_reversal_document};
+use crate::{Error, Result};
 
 impl ReturnsProcess {
     /// 按原回款一次创建回款冲正并启动审批。
@@ -52,11 +53,7 @@ impl ReturnsProcess {
             &req,
         )?;
         if let Some(reversal_id) = command_receipt.committed_resource_id(&self.db).await? {
-            return self
-                .reads()
-                .receipt_reversal_detail(&reversal_id)
-                .await
-                .map_err(crate::Error::from);
+            return self.reads().receipt_reversal_detail(&reversal_id).await.map_err(crate::Error::from);
         }
         let receipt = self
             .db
@@ -99,13 +96,9 @@ impl ReturnsProcess {
             new_registered_document(&id, DocumentType::ReceiptReversal, reversal.reversal_no.clone())
                 .map_err(crate::Error::from)?;
         let create_audit =
-            actor
-                .clone()
-                .resource_log("receipt_reversal.create", "receipt_reversal", id.clone())?;
+            actor.clone().resource_log("receipt_reversal.create", "receipt_reversal", id.clone())?;
         let submit_audit =
-            actor
-                .clone()
-                .resource_log("receipt_reversal.submit", "receipt_reversal", id.clone())?;
+            actor.clone().resource_log("receipt_reversal.submit", "receipt_reversal", id.clone())?;
         let command_audit = command_receipt.audit(actor.clone(), id.clone())?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
@@ -169,10 +162,7 @@ impl ReturnsProcess {
                 None => return Err(error),
             },
         };
-        self.reads()
-            .receipt_reversal_detail(&detail_id)
-            .await
-            .map_err(crate::Error::from)
+        self.reads().receipt_reversal_detail(&detail_id).await.map_err(crate::Error::from)
     }
 }
 

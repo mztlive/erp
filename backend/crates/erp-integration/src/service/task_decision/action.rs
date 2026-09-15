@@ -1,25 +1,26 @@
 //! 错误任务动作与差异非终态决定的本域实施。
+use erp_core::common::time::Instant;
+use mongodb::Database;
+use persistence_core::Executor;
+
 use super::guard::{
     ensure_difference_open, ensure_difference_subject, ensure_error_task_subject, latest_resolution,
     load_difference, load_error_task,
 };
-use super::{append_resolution, DirectFact};
+use super::{DirectFact, append_resolution};
 use crate::dto::{
     ControlledEvidenceKind, ControlledEvidenceRef, DirectReconciliationStatus, IntegrationActionOutcome,
     IntegrationItemType, IntegrationNonTerminalTaskAction, IntegrationTaskActionCommand,
     IntegrationTaskActionKind,
 };
 use crate::entity::integration_ops::{
-    next_actions_after_outcome, CompactEvidenceSet, EvidenceRecordRef, IntegrationErrorTask,
-    ProjectionOutcome, ProjectionSubject, ReconciliationDifference, ResolutionAction,
+    CompactEvidenceSet, EvidenceRecordRef, IntegrationErrorTask, ProjectionOutcome, ProjectionSubject,
+    ReconciliationDifference, ResolutionAction, next_actions_after_outcome,
 };
 use crate::ports::evidence::{EvidenceSubject, IntegrationEvidenceAuthority, OriginalResultFact};
 use crate::repository::IntegrationOpsExt;
 use crate::service::evidence::{verified_reference, verify_evidence_refs};
 use crate::{Error, Result};
-use erp_core::common::time::Instant;
-use mongodb::Database;
-use persistence_core::Executor;
 
 /// 本域动作事实；WorkItem 活动与回执仍由流程写入。
 #[derive(Debug, Clone)]
@@ -46,10 +47,10 @@ pub async fn execute_task_action(
     match command.action.item_type {
         IntegrationItemType::ErrorTask => {
             execute_error_task_action(db, authority, command, actor_id, executor).await
-        }
+        },
         IntegrationItemType::ReconciliationDifference => {
             execute_difference_task_action(db, authority, command, receipt_id, actor_id, executor).await
-        }
+        },
     }
 }
 
@@ -81,7 +82,7 @@ async fn error_action_fact(
     match action.kind {
         IntegrationTaskActionKind::QueryOriginalResult => {
             query_action_fact(authority, &subject, executor).await
-        }
+        },
         IntegrationTaskActionKind::AddEvidence => {
             let verified =
                 verify_evidence_refs(authority, &subject, &action.evidence_refs, actor_id, executor).await?;
@@ -91,7 +92,7 @@ async fn error_action_fact(
                 next_subject_version: None,
                 verified_evidence: verified.into_iter().map(|evidence| evidence.reference).collect(),
             })
-        }
+        },
         IntegrationTaskActionKind::ReplayOriginal => {
             if !task.can_replay_original() {
                 return Err(Error::BusinessLogicError(
@@ -105,7 +106,7 @@ async fn error_action_fact(
                 next_subject_version: None,
                 verified_evidence: Vec::new(),
             })
-        }
+        },
         IntegrationTaskActionKind::Reattribute => {
             let reference = authority.verify_reattribution(&subject, executor).await?;
             Ok(ActionFact {
@@ -114,7 +115,7 @@ async fn error_action_fact(
                 next_subject_version: None,
                 verified_evidence: authority.discover_evidence(&subject, executor).await?,
             })
-        }
+        },
         IntegrationTaskActionKind::LinkCompensation => {
             if !action
                 .evidence_refs
@@ -131,7 +132,7 @@ async fn error_action_fact(
                 next_subject_version: None,
                 verified_evidence: verified.into_iter().map(|evidence| evidence.reference).collect(),
             })
-        }
+        },
     }
 }
 
@@ -193,20 +194,12 @@ async fn execute_difference_task_action(
     let latest = latest_resolution(db, &command.action.item_id, executor).await?;
     ensure_difference_subject(latest.as_ref(), &command.expected_subject_version)?;
     ensure_difference_open(latest.as_ref())?;
-    let fact = difference_action_fact(
-        authority,
-        &difference,
-        &command.action,
-        receipt_id,
-        actor_id,
-        executor,
-    )
-    .await?;
+    let fact =
+        difference_action_fact(authority, &difference, &command.action, receipt_id, actor_id, executor)
+            .await?;
     let record = append_resolution(&difference, latest.as_ref(), &fact, receipt_id, actor_id)?;
     let next_subject_version = record.resolution_no.to_string();
-    db.reconciliation_difference_resolutions()
-        .create(&record, executor)
-        .await?;
+    db.reconciliation_difference_resolutions().create(&record, executor).await?;
     Ok(ActionFact {
         outcome: fact.outcome,
         business_result_reference: fact.business_result_reference,
@@ -235,7 +228,7 @@ pub(super) async fn difference_action_fact(
                 business_result_reference: fact.business_result_reference,
                 verified_evidence: fact.verified_evidence,
             })
-        }
+        },
         IntegrationTaskActionKind::AddEvidence => {
             let verified =
                 verify_evidence_refs(authority, &subject, &action.evidence_refs, actor_id, executor).await?;
@@ -248,7 +241,7 @@ pub(super) async fn difference_action_fact(
                 business_result_reference: None,
                 verified_evidence: verified.into_iter().map(|evidence| evidence.reference).collect(),
             })
-        }
+        },
         IntegrationTaskActionKind::ReplayOriginal => {
             let reference = authority.replay_original(&subject, executor).await?;
             Ok(DirectFact {
@@ -259,7 +252,7 @@ pub(super) async fn difference_action_fact(
                 business_result_reference: Some(reference),
                 verified_evidence: Vec::new(),
             })
-        }
+        },
         IntegrationTaskActionKind::Reattribute => {
             let reference = authority.verify_reattribution(&subject, executor).await?;
             Ok(DirectFact {
@@ -270,7 +263,7 @@ pub(super) async fn difference_action_fact(
                 business_result_reference: Some(reference),
                 verified_evidence: authority.discover_evidence(&subject, executor).await?,
             })
-        }
+        },
         IntegrationTaskActionKind::LinkCompensation => {
             if !action
                 .evidence_refs
@@ -290,7 +283,7 @@ pub(super) async fn difference_action_fact(
                 business_result_reference: Some(reference),
                 verified_evidence: verified.into_iter().map(|evidence| evidence.reference).collect(),
             })
-        }
+        },
     }
 }
 
@@ -334,10 +327,7 @@ pub fn next_allowed_actions(
         IntegrationActionOutcome::NoResultConfirmed => ProjectionOutcome::NoResultConfirmed,
         _ => ProjectionOutcome::Other,
     };
-    next_actions_after_outcome(subject, projected)
-        .iter()
-        .map(|action| action.as_str().to_string())
-        .collect()
+    next_actions_after_outcome(subject, projected).iter().map(|action| action.as_str().to_string()).collect()
 }
 
 /// 将动作证据引用规范化为可写入摘要的紧凑集合。
@@ -355,8 +345,7 @@ pub fn next_allowed_actions(
 /// grammar、排序、去重与长度由 [`CompactEvidenceSet`] 独占。
 fn compact_evidence(refs: &[ControlledEvidenceRef]) -> Result<Option<String>> {
     CompactEvidenceSet::try_from_pairs(
-        refs.iter()
-            .map(|evidence| (evidence.kind.as_str(), evidence.record_id.as_str())),
+        refs.iter().map(|evidence| (evidence.kind.as_str(), evidence.record_id.as_str())),
     )
     .map(|set| set.map(CompactEvidenceSet::into_wire))
     .map_err(|error| Error::ValidationError(error.to_string()))

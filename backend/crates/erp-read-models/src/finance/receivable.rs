@@ -39,7 +39,7 @@ impl ReceivableReadService {
             Some(InvoiceDirection::Sales) => {
                 super::search::keyword_ids(&self.db, params.q.as_deref(), FinanceSearchTarget::SalesInvoice)
                     .await?
-            }
+            },
             Some(InvoiceDirection::Purchase) => {
                 super::search::keyword_ids(
                     &self.db,
@@ -47,7 +47,7 @@ impl ReceivableReadService {
                     FinanceSearchTarget::PurchaseInvoice,
                 )
                 .await?
-            }
+            },
             None => {
                 let sales = super::search::keyword_ids(
                     &self.db,
@@ -67,12 +67,10 @@ impl ReceivableReadService {
                     ids.dedup();
                     ids
                 })
-            }
+            },
         };
-        Ok(
-            erp_finance::service::receivable::ReceivableService::new(self.db.clone())
-                .invoice_list(params, ids)
-                .await?,
-        )
+        Ok(erp_finance::service::receivable::ReceivableService::new(self.db.clone())
+            .invoice_list(params, ids)
+            .await?)
     }
 }

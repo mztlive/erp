@@ -4,16 +4,14 @@
 //! `/admin/supplier-profiles` 根级命令维护；列表、详情、停用、幂等查询与敏感
 //! 字段揭示分别使用独立入口。所有路由统一走 JWT + RBAC。
 
-use axum::{
-    routing::{delete, get, post, put},
-    Router,
-};
+use axum::Router;
+use axum::routing::{delete, get, post, put};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::supplier, middleware::with_permission, upload},
-};
+use crate::app_state::AppState;
+use crate::core::handler::supplier;
+use crate::core::middleware::with_permission;
+use crate::core::upload;
 
 /// 返回本域管理端路由集合。
 ///
@@ -105,19 +103,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         )
         .route(
             "/suppliers",
-            with_permission(
-                get(supplier::supplier_list),
-                rbac,
-                supplier::supplier_list_permission_key(),
-            ),
+            with_permission(get(supplier::supplier_list), rbac, supplier::supplier_list_permission_key()),
         )
         .route(
             "/suppliers/{id}",
-            with_permission(
-                get(supplier::supplier_detail),
-                rbac,
-                supplier::supplier_detail_permission_key(),
-            ),
+            with_permission(get(supplier::supplier_detail), rbac, supplier::supplier_detail_permission_key()),
         )
         .route(
             "/suppliers/{id}",

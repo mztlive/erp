@@ -1,29 +1,21 @@
 use std::time::Duration;
 
-use axum::{
-    extract::{DefaultBodyLimit, State},
-    http::{header::HeaderName, StatusCode},
-    middleware,
-    routing::{get, post},
-    Router,
-};
+use axum::extract::{DefaultBodyLimit, State};
+use axum::http::StatusCode;
+use axum::http::header::HeaderName;
+use axum::routing::{get, post};
+use axum::{Router, middleware};
 use tower::ServiceBuilder;
-use tower_http::{
-    cors::{Any, CorsLayer},
-    timeout::TimeoutLayer,
-};
+use tower_http::cors::{Any, CorsLayer};
+use tower_http::timeout::TimeoutLayer;
 
-use crate::{
-    app_state::{AppState, ExternalConnectorReadiness},
-    core::{
-        errors::Result,
-        handler::upload as upload_handler,
-        middleware::authenticate,
-        response::ApiResponse,
-        tracing::trace_middleware,
-        upload::{self, enforce_admission, MAX_MULTIPART_REQUEST_BYTES},
-    },
-};
+use crate::app_state::{AppState, ExternalConnectorReadiness};
+use crate::core::errors::Result;
+use crate::core::handler::upload as upload_handler;
+use crate::core::middleware::authenticate;
+use crate::core::response::ApiResponse;
+use crate::core::tracing::trace_middleware;
+use crate::core::upload::{self, MAX_MULTIPART_REQUEST_BYTES, enforce_admission};
 
 mod account;
 mod admin;
@@ -70,10 +62,8 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(180);
 /// # 返回
 /// 返回 `Router` 实例。
 pub fn create(app_state: AppState) -> Router {
-    let upload = post(upload_handler::upload_file).route_layer(middleware::from_fn_with_state(
-        upload::limiter(),
-        enforce_admission,
-    ));
+    let upload = post(upload_handler::upload_file)
+        .route_layer(middleware::from_fn_with_state(upload::limiter(), enforce_admission));
     let upload_routes = Router::new()
         .route("/upload", upload)
         .route_layer(middleware::from_fn_with_state(app_state.clone(), authenticate))
@@ -90,10 +80,7 @@ pub fn create(app_state: AppState) -> Router {
     Router::new().merge(api_routes).with_state(app_state).layer(
         ServiceBuilder::new()
             .layer(middleware::from_fn(trace_middleware))
-            .layer(TimeoutLayer::with_status_code(
-                StatusCode::REQUEST_TIMEOUT,
-                REQUEST_TIMEOUT,
-            ))
+            .layer(TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, REQUEST_TIMEOUT))
             .layer(
                 CorsLayer::new()
                     .allow_origin(Any)

@@ -1,7 +1,6 @@
+use application_core::non_blank;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-
-use application_core::non_blank;
 
 use super::command::SavePurchaseOrderLine;
 

@@ -1,21 +1,21 @@
 //! 公开会话保存、提交与页面读取。
 
-use crate::dto::sales_selection::{
-    PublicSelectionPageKind, PublicSelectionPageView, SaveSelectionSessionRequest,
-    SubmitSelectionSessionRequest,
-};
-use crate::entity::sales_selection::{
-    build_proposal_lines, normalize_idempotency_key, request_hash, token_hash, IdempotencyOperation,
-    SalesSelectionDisplayItem, SalesSelectionProposal, SalesSelectionProposalData, SessionChoice,
-};
-use crate::repository::SalesSelectionExt;
-use crate::{Error, Result};
 use erp_core::common::time::Instant;
 use erp_core::ids::{SalesSelectionBookletId, SalesSelectionDisplayItemId, SalesSelectionProposalId};
 use persistence_core::Executor;
 
 use super::mapper::{public_kind, public_receipt};
 use super::{IdempotencyStoreInput, SalesSelectionService};
+use crate::dto::sales_selection::{
+    PublicSelectionPageKind, PublicSelectionPageView, SaveSelectionSessionRequest,
+    SubmitSelectionSessionRequest,
+};
+use crate::entity::sales_selection::{
+    IdempotencyOperation, SalesSelectionDisplayItem, SalesSelectionProposal, SalesSelectionProposalData,
+    SessionChoice, build_proposal_lines, normalize_idempotency_key, request_hash, token_hash,
+};
+use crate::repository::SalesSelectionExt;
+use crate::{Error, Result};
 
 impl SalesSelectionService {
     /// 按令牌读取公开页。
@@ -50,11 +50,7 @@ impl SalesSelectionService {
         } else {
             Vec::new()
         };
-        let session = self
-            .db
-            .sales_selection_sessions()
-            .find_by_booklet(&booklet.base.id, executor)
-            .await?;
+        let session = self.db.sales_selection_sessions().find_by_booklet(&booklet.base.id, executor).await?;
         let receipt = if kind == PublicSelectionPageKind::Receipt {
             if let Some(proposal_id) = &booklet.proposal_id {
                 let proposal = self
@@ -79,10 +75,8 @@ impl SalesSelectionService {
         if let (Some(session), crate::entity::sales_selection::SubmitMode::ByQuantity) =
             (session.as_ref(), booklet.submit_mode)
         {
-            let prices: std::collections::BTreeMap<_, _> = items
-                .iter()
-                .map(|item| (item.base.id.clone(), item.price()))
-                .collect();
+            let prices: std::collections::BTreeMap<_, _> =
+                items.iter().map(|item| (item.base.id.clone(), item.price())).collect();
             for choice in &mut page.choices {
                 if let (Some(price), Some(quantity)) = (prices.get(&choice.item_id), choice.quantity) {
                     choice.line_amount = Some(crate::entity::sales_selection::try_mul_u32(*price, quantity)?);
@@ -140,11 +134,7 @@ impl SalesSelectionService {
             .await?
             .ok_or_else(|| Error::NotFound("选品会话不存在".into()))?;
         let items = self
-            .items_of(
-                &booklet.base.id,
-                booklet.current_batch_id.as_deref().unwrap_or(""),
-                executor,
-            )
+            .items_of(&booklet.base.id, booklet.current_batch_id.as_deref().unwrap_or(""), executor)
             .await?;
         let allowed: Vec<_> = items
             .iter()
@@ -162,21 +152,10 @@ impl SalesSelectionService {
         if session.session_version != req.expected_session_version {
             return Err(Error::selection_conflict("选择已在其他设备更新，请核对后重试"));
         }
-        session.save(
-            req.expected_session_version,
-            choices,
-            booklet.submit_mode,
-            &allowed,
-        )?;
+        session.save(req.expected_session_version, choices, booklet.submit_mode, &allowed)?;
         // 乐观更新册文档取得写冲突保护，阻止旧令牌快照迟到写入。
-        self.db
-            .sales_selection_booklets()
-            .update(&mut booklet, executor)
-            .await?;
-        self.db
-            .sales_selection_sessions()
-            .update(&mut session, executor)
-            .await?;
+        self.db.sales_selection_booklets().update(&mut booklet, executor).await?;
+        self.db.sales_selection_sessions().update(&mut session, executor).await?;
         let page = self.public_page_by_token(token, now, executor).await?;
         self.store_idempotency(
             IdempotencyStoreInput {
@@ -248,11 +227,7 @@ impl SalesSelectionService {
         }
         session.freeze_for_submit(req.expected_session_version)?;
         let items = self
-            .items_of(
-                &booklet.base.id,
-                booklet.current_batch_id.as_deref().unwrap_or(""),
-                executor,
-            )
+            .items_of(&booklet.base.id, booklet.current_batch_id.as_deref().unwrap_or(""), executor)
             .await?;
         let proposal_id = SalesSelectionProposalId::new(id_generator::next_id());
         let (display_lines, sku_lines, total) = build_proposal_lines(
@@ -282,30 +257,15 @@ impl SalesSelectionService {
         )?;
         let mut booklet = booklet;
         booklet.mark_submitted(proposal_id, now)?;
-        self.db
-            .sales_selection_proposals()
-            .create(&proposal, executor)
-            .await?;
+        self.db.sales_selection_proposals().create(&proposal, executor).await?;
         for line in &display_lines {
-            self.db
-                .sales_selection_proposal_display_lines()
-                .create(line, executor)
-                .await?;
+            self.db.sales_selection_proposal_display_lines().create(line, executor).await?;
         }
         for line in &sku_lines {
-            self.db
-                .sales_selection_proposal_sku_lines()
-                .create(line, executor)
-                .await?;
+            self.db.sales_selection_proposal_sku_lines().create(line, executor).await?;
         }
-        self.db
-            .sales_selection_sessions()
-            .update(&mut session, executor)
-            .await?;
-        self.db
-            .sales_selection_booklets()
-            .update(&mut booklet, executor)
-            .await?;
+        self.db.sales_selection_sessions().update(&mut session, executor).await?;
+        self.db.sales_selection_booklets().update(&mut booklet, executor).await?;
         let page = self.public_page_by_token(token, now, executor).await?;
         self.store_idempotency(
             IdempotencyStoreInput {
@@ -367,11 +327,7 @@ impl SalesSelectionService {
     pub async fn admin_image_key(&self, booklet_id: &str, asset_id: &str) -> Result<String> {
         let mut tx = persistence_core::NoTransaction;
         self.load_booklet(booklet_id, &mut tx).await?;
-        let items = self
-            .db
-            .sales_selection_display_items()
-            .list_by_booklet(booklet_id, &mut tx)
-            .await?;
+        let items = self.db.sales_selection_display_items().list_by_booklet(booklet_id, &mut tx).await?;
         items
             .iter()
             .find_map(|item| image_key_if_authorized(item, asset_id))
@@ -411,10 +367,7 @@ impl SalesSelectionService {
         executor: &mut dyn Executor,
     ) -> Result<Vec<SalesSelectionDisplayItem>> {
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
-        domain
-            .list_effective_items(booklet_id, batch_id, executor)
-            .await
-            .map_err(Error::from)
+        domain.list_effective_items(booklet_id, batch_id, executor).await.map_err(Error::from)
     }
 
     /// 按令牌哈希加载选品册。
@@ -472,6 +425,6 @@ fn image_key_if_authorized(
                     .filter(|image| image.file_asset_id == asset_id)
                     .map(|image| image.storage_object_key.clone())
             })
-        }
+        },
     }
 }

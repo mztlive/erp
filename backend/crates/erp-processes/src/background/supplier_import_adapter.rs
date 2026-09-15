@@ -1,8 +1,8 @@
 //! 供应商导入任务适配器：把供应商导入流程接入统一后台执行器。
 
 use super::adapter::BackgroundTaskAdapter;
-use crate::supplier_import::SupplierImportProcess;
 use crate::Result;
+use crate::supplier_import::SupplierImportProcess;
 
 /// 供应商导入任务适配器。
 pub struct SupplierImportTaskAdapter {

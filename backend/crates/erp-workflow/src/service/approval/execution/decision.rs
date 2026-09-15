@@ -1,13 +1,13 @@
 //! 决定编排核心：通过、驳回与当前责任人失效阻塞。
 
-use bpm::engine::{block_current, decide, CommitRequired, DecideCommand, TransitionPlan};
+use bpm::engine::{CommitRequired, DecideCommand, TransitionPlan, block_current, decide};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId};
 use bpm::model::types::{ApprovalBlockerCode, ApprovalDecision};
 use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId};
 
-use super::apply_plan::{apply_plan, DomainActionKind};
+use super::apply_plan::{DomainActionKind, apply_plan};
 use super::authorization::ensure_triple_responsibility;
-use super::idempotency::{decision_identity, ReceiptBranch};
+use super::idempotency::{ReceiptBranch, decision_identity};
 use super::start::map_engine_error;
 use super::{ExecutionCommandInput, PreparedExecution};
 use crate::error::{Error, Result};
@@ -65,11 +65,9 @@ pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecuti
     match identity.classify(input.command.receipt.as_ref()) {
         ReceiptBranch::PayloadConflict => return Err(super::idempotency::payload_conflict_error()),
         ReceiptBranch::SamePayload(receipt) => {
-            return Ok(PreparedExecution::Replay {
-                receipt: receipt.clone(),
-            });
-        }
-        ReceiptBranch::Fresh => {}
+            return Ok(PreparedExecution::Replay { receipt: receipt.clone() });
+        },
+        ReceiptBranch::Fresh => {},
     }
     ensure_triple_responsibility(
         input.actor.as_str(),
@@ -99,11 +97,7 @@ pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecuti
     let domain_action =
         (plan.commit == CommitRequired::TerminalApproved).then_some(DomainActionKind::FinalApprove);
     let receipt = receipt_from_plan(input.receipt_id, identity.current(), &plan, input.command.now)?;
-    Ok(PreparedExecution::Apply(Box::new(apply_plan(
-        plan,
-        receipt,
-        domain_action,
-    ))))
+    Ok(PreparedExecution::Apply(Box::new(apply_plan(plan, receipt, domain_action))))
 }
 
 fn receipt_from_plan(
@@ -140,17 +134,10 @@ fn prepare_open_task_conflict(input: DecisionExecutionInput) -> Result<PreparedE
         input.expected_task_version,
         input.actor.as_str(),
     )?;
-    let plan = block_current(
-        input.instance,
-        input.current,
-        ApprovalBlockerCode::OpenTaskConflict,
-        now,
-    )
-    .map_err(map_engine_error)?;
+    let plan = block_current(input.instance, input.current, ApprovalBlockerCode::OpenTaskConflict, now)
+        .map_err(map_engine_error)?;
     let receipt = receipt_from_plan(input.receipt_id, identity.current(), &plan, now)?;
-    Ok(PreparedExecution::Apply(Box::new(apply_plan(
-        plan, receipt, None,
-    ))))
+    Ok(PreparedExecution::Apply(Box::new(apply_plan(plan, receipt, None))))
 }
 
 /// 当前责任人失效的决定必须作为可提交 blocked 结果，不得回滚。

@@ -1,15 +1,16 @@
 //! 审批展示快照的事务内捕获与授权后装载。
-use super::facts::object_policy;
-use super::{ObjectKind, WorkbenchObjectFactMap, WorkbenchReadService, WorkbenchSubjectDisplay};
-use crate::errors::{Error, Result};
-use erp_workflow::entity::approval_integration::{
-    display_snapshot::ApprovalDisplaySnapshot, ApprovalSubjectSnapshot,
-};
+use std::collections::HashSet;
+
+use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
+use erp_workflow::entity::approval_integration::display_snapshot::ApprovalDisplaySnapshot;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::WorkItemType;
 use erp_workflow::{ApprovalIntegrationExt, WorkflowAuthorizationPort};
 use persistence_core::Executor;
-use std::collections::HashSet;
+
+use super::facts::object_policy;
+use super::{ObjectKind, WorkbenchObjectFactMap, WorkbenchReadService, WorkbenchSubjectDisplay};
+use crate::errors::{Error, Result};
 
 /// 在已授权提交的事务内捕获当前业务展示，不读取历史覆盖，也不授予任何权限。
 ///
@@ -30,24 +31,15 @@ pub async fn capture_approval_display(
     let policy = object_policy(WorkItemType::DocumentApproval, document_type.as_str())
         .ok_or_else(|| Error::ValidationError("单据未注册审批摘要".into()))?;
     let key = (policy.object_kind, id.to_owned());
-    let reader = WorkbenchReadService::new(
-        db.clone(),
-        erp_workflow::ports::FailClosedWorkflowAuthorizationPort,
-    );
-    let mut facts = reader
-        .load_live_object_facts(&HashSet::from([key.clone()]), executor)
-        .await?;
-    let fact = facts
-        .remove(&key)
-        .ok_or_else(|| Error::ValidationError("审批单据不存在".into()))?;
+    let reader =
+        WorkbenchReadService::new(db.clone(), erp_workflow::ports::FailClosedWorkflowAuthorizationPort);
+    let mut facts = reader.load_live_object_facts(&HashSet::from([key.clone()]), executor).await?;
+    let fact = facts.remove(&key).ok_or_else(|| Error::ValidationError("审批单据不存在".into()))?;
     let snapshot = ApprovalDisplaySnapshot {
         root_document_id: fact.display.root_document_id,
         counterparty_label: fact.display.counterparty_label,
         impact_summary: fact.display.impact_summary,
-        source: fact
-            .display
-            .brief_source
-            .ok_or_else(|| Error::ValidationError("审批单据摘要缺失".into()))?,
+        source: fact.display.brief_source.ok_or_else(|| Error::ValidationError("审批单据摘要缺失".into()))?,
     };
     snapshot.validate()?;
     Ok(snapshot)
@@ -70,11 +62,8 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
                     .map(move |(_, id)| (*kind, id.clone()))
             })
             .collect::<Vec<_>>();
-        for snapshot in self
-            .db
-            .approval_subject_snapshots()
-            .list_by_business_objects(&objects, executor)
-            .await?
+        for snapshot in
+            self.db.approval_subject_snapshots().list_by_business_objects(&objects, executor).await?
         {
             apply_snapshot(facts, snapshot);
         }
@@ -109,7 +98,7 @@ fn apply_snapshot(facts: &mut WorkbenchObjectFactMap, snapshot: ApprovalSubjectS
 
 /// 旧快照只展示实际保存的金额、数量与提交时间；不得从当前单据补历史字段。
 fn apply_legacy(fact: &mut super::WorkbenchObjectFact, snapshot: &ApprovalSubjectSnapshot) {
-    use super::brief::{format_instant_datetime, format_quantity, push_section, ObjectBriefSource};
+    use super::brief::{ObjectBriefSource, format_instant_datetime, format_quantity, push_section};
     if super::approval_list::document_summary(fact, Some(snapshot.subject_version)).is_some() {
         return;
     }
@@ -136,12 +125,7 @@ fn apply_legacy(fact: &mut super::WorkbenchObjectFact, snapshot: &ApprovalSubjec
         );
     }
     if let Some(quantity) = &snapshot.payload.total_quantity {
-        push_section(
-            &mut source.extra_sections,
-            "数量",
-            Some(&format_quantity(quantity, None)),
-            true,
-        );
+        push_section(&mut source.extra_sections, "数量", Some(&format_quantity(quantity, None)), true);
     }
     push_section(
         &mut source.extra_sections,
@@ -162,10 +146,11 @@ fn apply_legacy(fact: &mut super::WorkbenchObjectFact, snapshot: &ApprovalSubjec
 
 #[cfg(test)]
 mod tests {
-    use super::super::brief::{BriefSection, ObjectBriefSource};
-    use super::*;
     use erp_core::common::time::Instant;
     use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
+
+    use super::super::brief::{BriefSection, ObjectBriefSource};
+    use super::*;
 
     /// 六类原本可被草稿覆盖的单据，都必须优先读取对应版本的冻结字段。
     #[test]
@@ -184,10 +169,8 @@ mod tests {
                 erp_workflow::ports::ObjectFact::new("document", "当前单据", "owner"),
             );
             fact.display.counterparty_label = Some("当前往来方".into());
-            fact.display.brief_source = Some(ObjectBriefSource {
-                list_summary: "当前草稿".into(),
-                ..Default::default()
-            });
+            fact.display.brief_source =
+                Some(ObjectBriefSource { list_summary: "当前草稿".into(), ..Default::default() });
             let mut facts = WorkbenchObjectFactMap::from([((policy.object_kind, "document".into()), fact)]);
             apply_snapshot(&mut facts, snapshot.clone());
             let fact = facts.get_mut(&(policy.object_kind, "document".into())).unwrap();

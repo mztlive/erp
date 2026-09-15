@@ -8,9 +8,17 @@
 
 use std::sync::Arc;
 
+use application_core::{AuditActor, normalize_sort, page_or_default, page_size_or_default};
+use erp_core::ids::CustomerAccountId;
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
+use validator::Validate;
+
+use super::access::CustomerAccess;
 use crate::dto::customer::{
-    CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView, PageView, SortDir,
-    CUSTOMER_ASSIGNMENT_SORT_FIELDS,
+    CUSTOMER_ASSIGNMENT_SORT_FIELDS, CustomerAssignmentListParams, CustomerAssignmentRequest,
+    CustomerAssignmentView, PageView, SortDir,
 };
 use crate::entity::customer::{
     AssignCustomerAssignment, CustomerAssignment, CustomerAssignmentCommand, CustomerAssignmentId,
@@ -19,14 +27,6 @@ use crate::entity::customer::{
 use crate::error::{Error, Result};
 use crate::ports::{AccountFactPort, CustomerAuditPort, CustomerDataScopePort};
 use crate::repository::CustomerExt;
-use application_core::{normalize_sort, page_or_default, page_size_or_default, AuditActor};
-use erp_core::ids::CustomerAccountId;
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
-use validator::Validate;
-
-use super::access::CustomerAccess;
 
 /// 客户归属列表筛选条件类型（经 `CustomerExt` 关联类型跨 crate 可达）。
 type CustomerAssignmentFilter = <mongodb::Database as CustomerExt>::CustomerAssignmentFilter;
@@ -62,12 +62,7 @@ impl CustomerAssignmentService {
         accounts: Arc<dyn AccountFactPort>,
         data_scope: Arc<dyn CustomerDataScopePort>,
     ) -> Self {
-        Self {
-            db,
-            audit,
-            accounts,
-            data_scope,
-        }
+        Self { db, audit, accounts, data_scope }
     }
 
     /// 构造复用本服务授权 Port 的客户访问器。
@@ -120,11 +115,8 @@ impl CustomerAssignmentService {
             sort_by: Some(sort_by.to_string()),
             sort_ascending: matches!(sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .customer_assignments()
-            .search_customer_assignments(&filter, &mut NoTransaction)
-            .await?;
+        let page =
+            self.db.customer_assignments().search_customer_assignments(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -142,12 +134,7 @@ impl CustomerAssignmentService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 应用归属变更（跨行事务：结束旧归属 + 建立新归属 + 审计原子写入）。
@@ -215,10 +202,7 @@ impl CustomerAssignmentService {
         assignment: &mut CustomerAssignment,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .customer_assignments()
-            .update(assignment, executor)
-            .await?;
+        self.db.customer_assignments().update(assignment, executor).await?;
         Ok(())
     }
 
@@ -229,10 +213,8 @@ impl CustomerAssignmentService {
         command: AssignCustomerAssignment,
         actor: &AuditActor,
     ) -> Result<Vec<CustomerAssignmentView>> {
-        let new_assignment = command.into_assignment(
-            CustomerAssignmentId::new(next_id()),
-            CustomerAccountId::new(customer_id),
-        )?;
+        let new_assignment = command
+            .into_assignment(CustomerAssignmentId::new(next_id()), CustomerAccountId::new(customer_id))?;
         self.db
             .customer_accounts()
             .find_customer(customer_id, &mut NoTransaction)
@@ -256,9 +238,7 @@ impl CustomerAssignmentService {
         let changed = client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    access
-                        .require_with(actor_for_tx, "update", &customer_id_for_tx, session)
-                        .await?;
+                    access.require_with(actor_for_tx, "update", &customer_id_for_tx, session).await?;
                     let changed = persist_assign(&db, &customer_id_for_tx, &new_for_tx, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<Vec<CustomerAssignment>, crate::error::Error>(changed)
@@ -308,12 +288,8 @@ impl CustomerAssignmentService {
         let ended = client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    access
-                        .require_with(actor_for_tx, "update", &customer_id_for_tx, session)
-                        .await?;
-                    db.customer_assignments()
-                        .update(&mut assignment_for_tx, session)
-                        .await?;
+                    access.require_with(actor_for_tx, "update", &customer_id_for_tx, session).await?;
+                    db.customer_assignments().update(&mut assignment_for_tx, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<CustomerAssignment, crate::error::Error>(assignment_for_tx)
                 })
@@ -353,10 +329,7 @@ async fn end_overlapping(
     executor: &mut dyn Executor,
 ) -> Result<Vec<CustomerAssignment>> {
     let mut ended = Vec::new();
-    let existing = db
-        .customer_assignments()
-        .list_for_customer(customer_id, executor)
-        .await?;
+    let existing = db.customer_assignments().list_for_customer(customer_id, executor).await?;
     for mut old in existing {
         let changed = old
             .end_for_replacement(new_assignment)

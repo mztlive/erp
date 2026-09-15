@@ -1,10 +1,9 @@
 mod initial;
-use crate::entity::payable::{PayableAccount, PayableEntry, PaymentAllocation, PurchaseInvoiceAllocation};
+use persistence_core::{Executor, Result, mongo_ops};
 
 use super::super::extensions::PayableExt;
 use super::PayableRepository;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
+use crate::entity::payable::{PayableAccount, PayableEntry, PaymentAllocation, PurchaseInvoiceAllocation};
 
 impl<'a> PayableRepository<'a> {
     /// 建立应付往来子账与原始应付分录（跨集合多步骤写入）。
@@ -57,9 +56,7 @@ impl<'a> PayableRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<PaymentAllocation>(<mongodb::Database as PayableExt>::PAYMENT_ALLOCATIONS),
+            &self.db.collection::<PaymentAllocation>(<mongodb::Database as PayableExt>::PAYMENT_ALLOCATIONS),
             allocations.to_vec(),
             executor,
         )
@@ -102,15 +99,15 @@ impl<'a> PayableRepository<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::PayableRepository;
     use persistence_core::NoTransaction;
+
+    use super::PayableRepository;
 
     /// 空输入必须直接成功且不访问数据库。
     #[tokio::test]
     async fn create_purchase_invoice_allocations_many_empty_input_without_db() {
-        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
-            .await
-            .expect("客户端句柄创建失败");
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.expect("客户端句柄创建失败");
         let database = client.database("unused");
         let repository = PayableRepository::new(&database);
         repository

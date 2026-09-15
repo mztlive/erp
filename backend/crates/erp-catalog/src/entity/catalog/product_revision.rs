@@ -6,14 +6,14 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::catalog::status::EnableStatus;
 use erp_core::common::revision::RevisionBase;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ProductBrandId, ProductCategoryId, ProductId, ProductRevisionId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::catalog::status::EnableStatus;
 
 /// 商品名称最大长度。
 const NAME_MAX_LEN: usize = 128;
@@ -239,9 +239,10 @@ fn ensure_effective_window(effective_from: BusinessDate, effective_to: Option<Bu
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
     use erp_core::ids::ProductRevisionId;
+
+    use super::*;
 
     fn data() -> ProductRevisionData {
         ProductRevisionData {
@@ -273,26 +274,17 @@ mod tests {
     /// 失败路径：必填空、超长各一条。
     #[test]
     fn new_rejects_empty_and_overlong_name() {
-        let empty = ProductRevisionData {
-            name: "  ".to_string(),
-            ..data()
-        };
+        let empty = ProductRevisionData { name: "  ".to_string(), ..data() };
         assert!(ProductRevision::new(ProductRevisionId::new("rev-1"), empty).is_err());
 
-        let overlong = ProductRevisionData {
-            name: "n".repeat(129),
-            ..data()
-        };
+        let overlong = ProductRevisionData { name: "n".repeat(129), ..data() };
         assert!(ProductRevision::new(ProductRevisionId::new("rev-1"), overlong).is_err());
     }
 
     /// 失败路径：越界（修订序号为 0）与关联不一致（生效区间倒挂）各一条。
     #[test]
     fn new_rejects_zero_revision_no_and_reversed_window() {
-        let zero_revision = ProductRevisionData {
-            revision_no: 0,
-            ..data()
-        };
+        let zero_revision = ProductRevisionData { revision_no: 0, ..data() };
         assert!(ProductRevision::new(ProductRevisionId::new("rev-1"), zero_revision).is_err());
 
         let reversed = ProductRevisionData {
@@ -302,10 +294,8 @@ mod tests {
         };
         assert!(ProductRevision::new(ProductRevisionId::new("rev-1"), reversed).is_err());
 
-        let equal_window = ProductRevisionData {
-            effective_to: Some(BusinessDate::from_ymd(2026, 1, 1).unwrap()),
-            ..data()
-        };
+        let equal_window =
+            ProductRevisionData { effective_to: Some(BusinessDate::from_ymd(2026, 1, 1).unwrap()), ..data() };
         assert!(ProductRevision::new(ProductRevisionId::new("rev-1"), equal_window).is_err());
     }
 

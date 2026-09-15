@@ -1,14 +1,15 @@
 //! 销售变更作废的销售状态和工作副本写入，不包含审计或根事务。
 
+use application_core::AuditActor;
+use erp_core::ids::SalesChangeOrderId;
+use persistence_core::{Executor, NoTransaction};
+use validator::Validate;
+
 use super::SalesReviewService;
 use crate::dto::sales_review::VoidSalesChangeOrderRequest;
 use crate::entity::sales_review::SalesChangeOrder;
 use crate::repository::{SalesOrderExt, SalesReviewExt};
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_core::ids::SalesChangeOrderId;
-use persistence_core::{Executor, NoTransaction};
-use validator::Validate;
 
 /// 已校验版本并作废的销售事实。
 pub struct VoidChangeWrite {
@@ -38,9 +39,7 @@ impl VoidChangeWrite {
     /// # 错误
     /// 任一步 CAS 失败时交由根事务回滚。
     pub async fn persist(&mut self, db: &mongodb::Database, executor: &mut dyn Executor) -> Result<()> {
-        db.sales_change_orders()
-            .update(&mut self.change_order, executor)
-            .await?;
+        db.sales_change_orders().update(&mut self.change_order, executor).await?;
         if let Some(copy) = &mut self.working_copy {
             db.sales_order_working_copies().update(copy, executor).await?;
         }
@@ -75,9 +74,7 @@ impl SalesReviewService {
             .await?
             .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
         if !change_order.matches_version(req.version) {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         change_order.void(actor.id())?;
         let mut working_copy = self
@@ -88,9 +85,6 @@ impl SalesReviewService {
         if let Some(copy) = &mut working_copy {
             copy.abandon()?;
         }
-        Ok(VoidChangeWrite {
-            change_order,
-            working_copy,
-        })
+        Ok(VoidChangeWrite { change_order, working_copy })
     }
 }

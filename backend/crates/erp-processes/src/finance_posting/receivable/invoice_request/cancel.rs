@@ -1,6 +1,4 @@
 //! 撤回申请与受阻取消共用领域转换，释放占用与关闭审批任务同事务。
-use super::super::{cancel_approval, ReceivableProcess};
-use super::*;
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt};
 use erp_core::common::time::Instant;
@@ -10,10 +8,13 @@ use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::WorkItem;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::{
-    claim_and_persist_document_cancel_runtime, prepare_cancel, PreparedExecution,
+    PreparedExecution, claim_and_persist_document_cancel_runtime, prepare_cancel,
 };
 use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::{NoTransaction, Transactional};
+
+use super::super::{ReceivableProcess, cancel_approval};
+use super::*;
 impl ReceivableProcess {
     /// 原申请人撤回审批；幂等重试返回已提交结果。
     /// # 错误
@@ -88,9 +89,7 @@ impl ReceivableProcess {
                         req.expected_version,
                     )?;
                     cancel_in_transaction(&db, &id, &actor, session).await?;
-                    db.audit_logs()
-                        .create(&command.audit(actor, id.clone())?, session)
-                        .await?;
+                    db.audit_logs().create(&command.audit(actor, id.clone())?, session).await?;
                     Ok::<String, Error>(id)
                 })
             })

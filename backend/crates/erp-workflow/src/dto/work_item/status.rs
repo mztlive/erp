@@ -1,5 +1,6 @@
-use crate::entity::work_item::WorkItemType;
 use serde::{Deserialize, Serialize};
+
+use crate::entity::work_item::WorkItemType;
 
 pub const WORK_ITEM_TYPES: [WorkItemType; 10] = [
     WorkItemType::DocumentApproval,
@@ -62,10 +63,7 @@ impl WorkItemFamily {
     /// # 返回
     /// 返回不可由客户端扩展的任务类型集合。
     pub fn work_item_types(self) -> Vec<WorkItemType> {
-        WORK_ITEM_TYPES
-            .into_iter()
-            .filter(|work_item_type| family_of(*work_item_type) == self)
-            .collect()
+        WORK_ITEM_TYPES.into_iter().filter(|work_item_type| family_of(*work_item_type) == self).collect()
     }
 }
 
@@ -125,10 +123,10 @@ pub fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
         WorkItemType::ProcurementOrderCreation => WorkItemFamily::Procurement,
         WorkItemType::FulfillmentOperation | WorkItemType::CustomerAcceptanceRegistration => {
             WorkItemFamily::Fulfillment
-        }
+        },
         WorkItemType::DocumentApproval | WorkItemType::OwnershipMigrationSalesConfirmation => {
             WorkItemFamily::Approval
-        }
+        },
         WorkItemType::CardFundsReview
         | WorkItemType::CardFundsDeltaReview
         | WorkItemType::SupplierPaymentExecution
@@ -140,7 +138,7 @@ pub fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
         | WorkItemType::SupplierSettlementReview => WorkItemFamily::Finance,
         WorkItemType::SalesChangeImpactReview | WorkItemType::InventoryAdjustmentReview => {
             WorkItemFamily::Fulfillment
-        }
+        },
         WorkItemType::ImportBusinessConfirmation
         | WorkItemType::IntegrationResultUnknown
         | WorkItemType::BusinessException => WorkItemFamily::Exception,

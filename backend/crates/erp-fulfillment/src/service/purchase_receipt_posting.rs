@@ -1,4 +1,11 @@
 //! 采购入库过账的本域读取、状态守卫与事务内写回。
+use std::collections::HashSet;
+
+use erp_core::common::time::Instant;
+use erp_core::ids::{DeliveryId, PurchaseReceiptId, SalesOrderId, WarehouseId};
+use id_generator::next_id;
+use persistence_core::Executor;
+
 use super::FulfillmentService;
 use crate::entity::facts::ReceiptReservationLineFact;
 use crate::entity::fulfillment::{
@@ -6,11 +13,6 @@ use crate::entity::fulfillment::{
 };
 use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
-use erp_core::common::time::Instant;
-use erp_core::ids::{DeliveryId, PurchaseReceiptId, SalesOrderId, WarehouseId};
-use id_generator::next_id;
-use persistence_core::Executor;
-use std::collections::HashSet;
 impl FulfillmentService {
     /// 在调用方事务读取草稿、按原顺序校验状态/版本/冻结仓库，再读取并校验行。
     pub async fn prepare_purchase_receipt_posting(
@@ -29,13 +31,8 @@ impl FulfillmentService {
         receipt
             .ensure_draft_version(expected_version)
             .map_err(|error| Error::ConflictError(error.to_string()))?;
-        if warehouse_id
-            .as_ref()
-            .is_some_and(|requested| requested != &receipt.warehouse_id)
-        {
-            return Err(Error::ValidationError(
-                "采购入库单的目标仓库已冻结，不能在过账时变更".to_string(),
-            ));
+        if warehouse_id.as_ref().is_some_and(|requested| requested != &receipt.warehouse_id) {
+            return Err(Error::ValidationError("采购入库单的目标仓库已冻结，不能在过账时变更".to_string()));
         }
         receipt.update(crate::entity::fulfillment::PurchaseReceiptUpdate {
             warehouse_id: warehouse_id.or(Some(receipt.warehouse_id.clone())),
@@ -45,9 +42,7 @@ impl FulfillmentService {
             .fulfillment()
             .receipt_lines_by_receipt_ids(std::slice::from_ref(receipt_id), session)
             .await?;
-        receipt
-            .ensure_posting_lines(&lines)
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
+        receipt.ensure_posting_lines(&lines).map_err(|error| Error::ValidationError(error.to_string()))?;
         Ok((receipt, lines))
     }
     /// 在逐行库存写入后标记已过账，并以同一执行器持久化状态。
@@ -69,11 +64,7 @@ impl FulfillmentService {
         warehouse_id: &WarehouseId,
         session: &mut dyn Executor,
     ) -> Result<Option<Delivery>> {
-        Ok(self
-            .db
-            .fulfillment()
-            .draft_warehouse_delivery(sales_order_id, warehouse_id, session)
-            .await?)
+        Ok(self.db.fulfillment().draft_warehouse_delivery(sales_order_id, warehouse_id, session).await?)
     }
     /// 按原身份/编号生成顺序创建入库预占对应的仓发草稿及其行。
     pub async fn create_receipt_stock_delivery(
@@ -105,10 +96,7 @@ impl FulfillmentService {
             super::delivery_lines::receipt_reservation_specs(reservations),
         )
         .map_err(Error::Logic)?;
-        self.db
-            .fulfillment()
-            .create_delivery_with_lines(&delivery, &lines, session)
-            .await?;
+        self.db.fulfillment().create_delivery_with_lines(&delivery, &lines, session).await?;
         Ok(delivery)
     }
     /// 向既有仓发草稿追加尚未引用的采购入库预占。

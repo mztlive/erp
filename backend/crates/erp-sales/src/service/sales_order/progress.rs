@@ -1,15 +1,14 @@
 //! 销售单回款/开票进度与关闭状态的派生刷新（§9.3）。
 
 use async_trait::async_trait;
-
-use crate::entity::sales_order::{CollectionProgress, FulfillmentProgress, InvoiceProgress, SalesOrder};
-use crate::ports::sales_order::SalesMoneyProgressPort;
-use crate::repository::SalesOrderExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::SalesOrderId;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::entity::sales_order::{CollectionProgress, FulfillmentProgress, InvoiceProgress, SalesOrder};
+use crate::ports::sales_order::SalesMoneyProgressPort;
+use crate::repository::SalesOrderExt;
 use crate::{Error, Result};
 
 /// 按应收子账事实刷新销售单回款/开票进度与关闭状态。
@@ -98,14 +97,10 @@ async fn refresh_money_progress(
         .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
     let accounts = port.receivable_balances(sales_order_id, executor).await?;
     let collection = CollectionProgress::from_receivable_balances(
-        accounts
-            .iter()
-            .map(|account| (account.open_total, account.settled_total)),
+        accounts.iter().map(|account| (account.open_total, account.settled_total)),
     );
     let invoice = InvoiceProgress::from_receivable_balances(
-        accounts
-            .iter()
-            .map(|account| (account.open_invoiceable_total, account.invoiced_total)),
+        accounts.iter().map(|account| (account.open_invoiceable_total, account.invoiced_total)),
     );
     if !order.refresh_progress(fulfillment, collection, invoice, now(), actor_id) {
         return Ok(());
@@ -295,10 +290,7 @@ mod tests {
         let mut executor = RecordingExecutor::default();
         let expected_executor = executor_address(&mut executor);
         let at = Instant::from_unix_secs(600);
-        fixture
-            .run(&mut executor, Some(FulfillmentProgress::Completed), at)
-            .await
-            .unwrap();
+        fixture.run(&mut executor, Some(FulfillmentProgress::Completed), at).await.unwrap();
 
         fixture.assert_events(&["sales.read", "money.read", "clock", "sales.write"]);
         assert_eq!(fixture.0.lock().unwrap().executors, vec![expected_executor; 3]);
@@ -316,11 +308,7 @@ mod tests {
     async fn missing_sales_order_does_not_call_money_port_or_clock() {
         let fixture = Fixture::new(None, vec![fact("0", "100", "0", "100")]);
         let error = fixture
-            .run(
-                &mut RecordingExecutor::default(),
-                None,
-                Instant::from_unix_secs(600),
-            )
+            .run(&mut RecordingExecutor::default(), None, Instant::from_unix_secs(600))
             .await
             .unwrap_err();
         assert!(matches!(&error, Error::NotFound(message) if message == "销售单不存在"));
@@ -334,11 +322,7 @@ mod tests {
         let fixture = Fixture::new(Some(order()), Vec::new());
         fixture.0.lock().unwrap().failure = Some(Failure::SalesRead);
         let error = fixture
-            .run(
-                &mut RecordingExecutor::default(),
-                None,
-                Instant::from_unix_secs(600),
-            )
+            .run(&mut RecordingExecutor::default(), None, Instant::from_unix_secs(600))
             .await
             .unwrap_err();
         assert!(matches!(error, Error::Internal(message) if message == "销售读取失败"));
@@ -371,11 +355,7 @@ mod tests {
         let fixture = Fixture::new(Some(original.clone()), vec![fact("0", "100", "0", "100")]);
         fixture.0.lock().unwrap().failure = Some(Failure::Write);
         let error = fixture
-            .run(
-                &mut RecordingExecutor::default(),
-                None,
-                Instant::from_unix_secs(600),
-            )
+            .run(&mut RecordingExecutor::default(), None, Instant::from_unix_secs(600))
             .await
             .unwrap_err();
         assert!(matches!(error, Error::ConflictError(message)
@@ -396,14 +376,7 @@ mod tests {
         original.close_status = CloseStatus::Closed;
         original.closed_at = Some(Instant::from_unix_secs(100));
         let fixture = Fixture::new(Some(original.clone()), vec![fact("0", "100", "0", "100")]);
-        fixture
-            .run(
-                &mut RecordingExecutor::default(),
-                None,
-                Instant::from_unix_secs(600),
-            )
-            .await
-            .unwrap();
+        fixture.run(&mut RecordingExecutor::default(), None, Instant::from_unix_secs(600)).await.unwrap();
         fixture.assert_events(&["sales.read", "money.read", "clock"]);
         assert!(fixture.0.lock().unwrap().writes.is_empty());
         assert_eq!(fixture.stored(), original);
@@ -412,16 +385,8 @@ mod tests {
     #[tokio::test]
     async fn balance_matrix_preserves_empty_zero_partial_complete_and_independent_progress() {
         let cases = [
-            (
-                Vec::new(),
-                CollectionProgress::NotCollected,
-                InvoiceProgress::NotInvoiced,
-            ),
-            (
-                vec![fact("0", "0", "0", "0")],
-                CollectionProgress::NotCollected,
-                InvoiceProgress::NotInvoiced,
-            ),
+            (Vec::new(), CollectionProgress::NotCollected, InvoiceProgress::NotInvoiced),
+            (vec![fact("0", "0", "0", "0")], CollectionProgress::NotCollected, InvoiceProgress::NotInvoiced),
             (
                 vec![fact("100", "0", "100", "0")],
                 CollectionProgress::NotCollected,
@@ -461,20 +426,15 @@ mod tests {
             let saved = fixture.stored();
             assert_eq!(saved.collection_progress, collection);
             assert_eq!(saved.invoice_progress, invoice);
-            assert_eq!(
-                saved.fulfillment_progress,
-                FulfillmentProgress::PartiallyFulfilled
-            );
+            assert_eq!(saved.fulfillment_progress, FulfillmentProgress::PartiallyFulfilled);
             assert_ne!(saved.close_status, CloseStatus::Closed);
         }
     }
 
     #[tokio::test]
     async fn settled_account_plus_zero_account_remains_partial_and_cannot_close() {
-        let fixture = Fixture::new(
-            Some(order()),
-            vec![fact("0", "100", "0", "100"), fact("0", "0", "0", "0")],
-        );
+        let fixture =
+            Fixture::new(Some(order()), vec![fact("0", "100", "0", "100"), fact("0", "0", "0", "0")]);
         fixture
             .run(
                 &mut RecordingExecutor::default(),
@@ -496,10 +456,7 @@ mod tests {
         original.fulfillment_progress = FulfillmentProgress::Completed;
         let fixture = Fixture::new(Some(original), vec![fact("0", "100", "100", "0")]);
         let at = Instant::from_unix_secs(600);
-        fixture
-            .run(&mut RecordingExecutor::default(), None, at)
-            .await
-            .unwrap();
+        fixture.run(&mut RecordingExecutor::default(), None, at).await.unwrap();
         let saved = fixture.stored();
         assert_eq!(saved.fulfillment_progress, FulfillmentProgress::Completed);
         assert_eq!(saved.invoice_progress, InvoiceProgress::NotInvoiced);
@@ -513,19 +470,9 @@ mod tests {
         original.fulfillment_progress = FulfillmentProgress::Completed;
         let fixture = Fixture::new(Some(original), vec![fact("0", "100", "100", "0")]);
         let first = Instant::from_unix_secs(600);
-        fixture
-            .run(&mut RecordingExecutor::default(), None, first)
-            .await
-            .unwrap();
+        fixture.run(&mut RecordingExecutor::default(), None, first).await.unwrap();
         fixture.0.lock().unwrap().facts = vec![fact("0", "100", "0", "100")];
-        fixture
-            .run(
-                &mut RecordingExecutor::default(),
-                None,
-                Instant::from_unix_secs(900),
-            )
-            .await
-            .unwrap();
+        fixture.run(&mut RecordingExecutor::default(), None, Instant::from_unix_secs(900)).await.unwrap();
         let saved = fixture.stored();
         assert_eq!(saved.invoice_progress, InvoiceProgress::Completed);
         assert_eq!(saved.closed_at, Some(first));

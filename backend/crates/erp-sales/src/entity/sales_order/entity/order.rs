@@ -1,7 +1,5 @@
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::stable::StableBase;
 use erp_core::common::state::ensure_transition;
 use erp_core::common::time::Instant;
@@ -9,6 +7,7 @@ use erp_core::ids::{ContractId, CustomerAccountId, PartyId, SalesOrderId, SalesO
 use erp_core::money::Quantity;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::super::types::{BusinessType, OriginSystem};
 use super::{
@@ -163,27 +162,16 @@ impl SalesOrder {
     /// # 错误
     /// 当 order_no 为空/超长或可选字段超长时返回错误。
     pub fn new(id: SalesOrderId, data: SalesOrderData, created_by: impl Into<String>) -> Result<Self> {
-        let order_no = normalize_required_text(
-            data.order_no,
-            "销售单号不能为空",
-            ORDER_NO_MAX_LEN,
-            "销售单号过长",
-        )?;
+        let order_no =
+            normalize_required_text(data.order_no, "销售单号不能为空", ORDER_NO_MAX_LEN, "销售单号过长")?;
         let source_identity_id =
             normalize_optional_text(data.source_identity_id, "来源身份引用", SOURCE_IDENTITY_MAX_LEN)?;
-        let source_status_code = normalize_optional_text(
-            data.source_status_code,
-            "来源状态代码",
-            SOURCE_STATUS_CODE_MAX_LEN,
-        )?;
+        let source_status_code =
+            normalize_optional_text(data.source_status_code, "来源状态代码", SOURCE_STATUS_CODE_MAX_LEN)?;
 
         let created_by = created_by.into();
-        let sales_owner_user_id = normalize_required_text(
-            data.sales_owner_user_id,
-            "负责销售不能为空",
-            128,
-            "负责销售 ID 过长",
-        )?;
+        let sales_owner_user_id =
+            normalize_required_text(data.sales_owner_user_id, "负责销售不能为空", 128, "负责销售 ID 过长")?;
         Ok(Self {
             sales_owner_user_id,
             business_org_unit_id: normalize_required_text(
@@ -361,10 +349,8 @@ impl SalesOrder {
     /// # 关键业务约束
     /// 调用方必须在 MongoDB 事务内通过销售单乐观锁写回，再重算采购剩余数量。
     pub fn advance_procurement_guard(&mut self, updated_by: impl Into<String>) -> Result<u64> {
-        self.procurement_guard_version = self
-            .procurement_guard_version
-            .checked_add(1)
-            .ok_or_else(|| Error::from("采购串行化版本溢出"))?;
+        self.procurement_guard_version =
+            self.procurement_guard_version.checked_add(1).ok_or_else(|| Error::from("采购串行化版本溢出"))?;
         self.stable.touch(updated_by);
         Ok(self.procurement_guard_version)
     }
@@ -497,11 +483,7 @@ impl SalesOrder {
     /// 非审核中态或审核轨不允许直接通过时返回
     /// [`Error::InvalidStateTransition`]。
     pub fn approve(&mut self, effective_at: Instant, updated_by: impl Into<String>) -> Result<()> {
-        if self
-            .attribution
-            .as_ref()
-            .is_some_and(|snapshot| snapshot.attributed_at != effective_at)
-        {
+        if self.attribution.as_ref().is_some_and(|snapshot| snapshot.attributed_at != effective_at) {
             return Err(Error::from("归属时点必须与首次生效时点一致"));
         }
         self.attribution
@@ -610,7 +592,7 @@ impl SalesOrder {
             CommercialStatus::Draft | CommercialStatus::PendingReview => Ok(()),
             CommercialStatus::Effective | CommercialStatus::Voided => {
                 Err(Error::from("已生效或已作废的销售单不允许直接编辑"))
-            }
+            },
         }
     }
 }

@@ -4,14 +4,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::LegacyImportExt;
-use persistence_core::Result;
 
 /// 失败诊断保留天数（数据模型 §4.5.7/§6.12：失败合规包与行列诊断明细 30 天清理）。
 const DIAGNOSTIC_RETENTION_SECONDS: i64 = 30 * 24 * 60 * 60;
@@ -42,20 +40,13 @@ pub(crate) const LEGACY_IMPORT_CONFIRMATIONS: &str =
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, LEGACY_IMPORT_BATCHES, legacy_import_batch_indexes()).await?;
     create_indexes(db, LEGACY_IMPORT_ROWS, legacy_import_row_indexes()).await?;
-    create_indexes(
-        db,
-        LEGACY_IMPORT_CONFIRMATIONS,
-        legacy_import_confirmation_indexes(),
-    )
-    .await?;
+    create_indexes(db, LEGACY_IMPORT_CONFIRMATIONS, legacy_import_confirmation_indexes()).await?;
     Ok(())
 }
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -95,10 +86,7 @@ fn legacy_import_row_indexes() -> Vec<IndexModel> {
             "idx_legacy_import_rows_process_queue",
             doc! { "parse_status": 1, "mapping_status": 1, "import_status": 1 },
         ),
-        named_index(
-            "idx_legacy_import_rows_batch_id_created",
-            doc! { "batch_id": 1, "created_at": -1 },
-        ),
+        named_index("idx_legacy_import_rows_batch_id_created", doc! { "batch_id": 1, "created_at": -1 }),
         ttl_index(
             "ttl_legacy_import_rows_diagnostics_30d",
             doc! { "created_at": 1 },
@@ -118,23 +106,14 @@ fn legacy_import_confirmation_indexes() -> Vec<IndexModel> {
                 "trial_version": 1,
             },
         ),
-        unique_index(
-            "uk_legacy_import_confirmations_work_item",
-            doc! { "work_item_id": 1 },
-        ),
-        named_index(
-            "idx_legacy_import_confirmations_batch_status",
-            doc! { "batch_id": 1, "status": 1 },
-        ),
+        unique_index("uk_legacy_import_confirmations_work_item", doc! { "work_item_id": 1 }),
+        named_index("idx_legacy_import_confirmations_batch_status", doc! { "batch_id": 1, "status": 1 }),
     ]
 }
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -163,8 +142,8 @@ mod tests {
     use mongodb::bson::doc;
 
     use super::{
-        legacy_import_batch_indexes, legacy_import_confirmation_indexes, legacy_import_row_indexes,
-        DIAGNOSTIC_RETENTION_SECONDS,
+        DIAGNOSTIC_RETENTION_SECONDS, legacy_import_batch_indexes, legacy_import_confirmation_indexes,
+        legacy_import_row_indexes,
     };
 
     #[test]
@@ -205,10 +184,7 @@ mod tests {
                     == Some("uk_legacy_import_rows_batch_identity")
             })
             .unwrap();
-        assert_eq!(
-            identity.keys,
-            doc! { "batch_id": 1, "source_object_type": 1, "source_row_key": 1 }
-        );
+        assert_eq!(identity.keys, doc! { "batch_id": 1, "source_object_type": 1, "source_row_key": 1 });
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
 
         assert!(indexes.iter().any(|index| {
@@ -244,8 +220,6 @@ mod tests {
                 == Some("uk_legacy_import_confirmations_work_item")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "batch_id": 1, "status": 1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "batch_id": 1, "status": 1 }));
     }
 }

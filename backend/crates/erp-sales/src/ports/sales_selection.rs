@@ -4,10 +4,10 @@ use async_trait::async_trait;
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
 
+use crate::Result;
 use crate::entity::sales_selection::{
     ImageAssetSnapshot, PoolFilterSnapshot, SpecificationAttributeSnapshot,
 };
-use crate::Result;
 
 /// 客户身份与展示名称。
 #[derive(Debug, Clone, PartialEq, Eq)]

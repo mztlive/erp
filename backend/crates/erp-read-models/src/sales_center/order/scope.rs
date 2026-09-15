@@ -1,18 +1,19 @@
 //! 销售列表与候选的一致授权快照；范围与业务版本跨页携带。
-use super::{dto::SalesOrderView, SalesOrderReadService};
-use crate::{sales_center::access::SalesAccess, Error, Result};
+use std::hash::{Hash, Hasher};
+
 use application_core::{AuditActor, FilterOption, FilteredPage, PageView};
-use erp_identity::{service::access_control::resolve::AuthorizedDataScope, AccessControlExt};
-use erp_sales::{
-    dto::sales_order::SalesOrderListParams,
-    repository::{
-        sales_order::{SalesOrderRow, SalesOrderSearch},
-        SalesOrderExt,
-    },
-};
+use erp_identity::AccessControlExt;
+use erp_identity::service::access_control::resolve::AuthorizedDataScope;
+use erp_sales::dto::sales_order::SalesOrderListParams;
+use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::sales_order::{SalesOrderRow, SalesOrderSearch};
 use persistence_core::Transactional;
 use serde::Serialize;
-use std::hash::{Hash, Hasher};
+
+use super::SalesOrderReadService;
+use super::dto::SalesOrderView;
+use crate::sales_center::access::SalesAccess;
+use crate::{Error, Result};
 
 /// 查询直接复用领域 DTO，scope_version 与原有数值参数均在 URL 边界解码。
 pub type SalesListParams = SalesOrderListParams;
@@ -82,12 +83,7 @@ impl SalesOrderReadService {
                     }
                     let owner_options = db.accounts().filter_options(&ids, executor).await?;
                     let no_scope = scope.is_empty();
-                    Ok(SalesSnapshot {
-                        no_scope,
-                        page,
-                        owner_options,
-                        context,
-                    })
+                    Ok(SalesSnapshot { no_scope, page, owner_options, context })
                 })
             })
             .await
@@ -124,11 +120,7 @@ async fn requested_business_org_units(
         return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
     }
     let expanded = access
-        .expand_org_units(
-            org_ids.as_slice(),
-            params.include_descendants.unwrap_or(false),
-            executor,
-        )
+        .expand_org_units(org_ids.as_slice(), params.include_descendants.unwrap_or(false), executor)
         .await?;
     Ok(Some(expanded.into_iter().collect()))
 }
@@ -149,10 +141,7 @@ mod tests {
             "include_descendants": true
         }))
         .unwrap();
-        assert_eq!(
-            org.org_unit_ids.unwrap().as_slice(),
-            &["org-1".to_string(), "org-2".to_string()]
-        );
+        assert_eq!(org.org_unit_ids.unwrap().as_slice(), &["org-1".to_string(), "org-2".to_string()]);
         assert_eq!(org.include_descendants, Some(true));
     }
 }

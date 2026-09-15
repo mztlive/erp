@@ -27,9 +27,7 @@ impl ApprovalUpgradeSubjectFacts {
     /// Reject a stale client-submitted business-object version.
     pub fn ensure_expected_business_object_version(&self, expected: u64) -> crate::error::Result<()> {
         if self.business_object_version != expected {
-            return Err(crate::error::Error::ConflictError(
-                "业务对象版本已变化，请刷新后重试".to_string(),
-            ));
+            return Err(crate::error::Error::ConflictError("业务对象版本已变化，请刷新后重试".to_string()));
         }
         Ok(())
     }
@@ -77,9 +75,7 @@ impl UpgradeSubjectPort for FailClosedUpgradeSubjectPort {
         _document_id: &str,
         _executor: &mut dyn Executor,
     ) -> Result<ApprovalUpgradeSubjectFacts> {
-        Err(crate::error::Error::ValidationError(
-            "审批升级对象读取未接线，已按安全策略拒绝".to_string(),
-        ))
+        Err(crate::error::Error::ValidationError("审批升级对象读取未接线，已按安全策略拒绝".to_string()))
     }
 
     async fn ensure_initial_unsubmitted(
@@ -87,8 +83,6 @@ impl UpgradeSubjectPort for FailClosedUpgradeSubjectPort {
         _facts: &ApprovalUpgradeSubjectFacts,
         _executor: &mut dyn Executor,
     ) -> Result<()> {
-        Err(crate::error::Error::ValidationError(
-            "审批升级对象读取未接线，已按安全策略拒绝".to_string(),
-        ))
+        Err(crate::error::Error::ValidationError("审批升级对象读取未接线，已按安全策略拒绝".to_string()))
     }
 }

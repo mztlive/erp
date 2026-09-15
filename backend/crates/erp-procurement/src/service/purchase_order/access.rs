@@ -12,8 +12,8 @@ use crate::error::{Error, Result};
 use crate::ports::{
     PurchaseDataScopePort, PurchaseResolvedClause, PurchaseResolvedScope, PurchaseScopeObject,
 };
-use crate::repository::purchase_order::scope::{PurchaseReadScope, PurchaseScopeClause};
 use crate::repository::PurchaseOrderExt;
+use crate::repository::purchase_order::scope::{PurchaseReadScope, PurchaseScopeClause};
 
 /// 采购对象访问范围；列表、详情、候选、导出、变更／退货和写命令复用同一解析。
 #[derive(Clone)]
@@ -90,10 +90,7 @@ impl PurchaseAccess {
         permissions: &[String],
         executor: &mut dyn Executor,
     ) -> Result<(PurchaseResolvedScope, PurchaseReadScope)> {
-        let access = self
-            .scope
-            .resolve_permissions(actor, action, permissions, executor)
-            .await?;
+        let access = self.scope.resolve_permissions(actor, action, permissions, executor).await?;
         let scope = purchase_scope(&access, actor.id(), Vec::new());
         Ok((access, scope))
     }
@@ -126,8 +123,7 @@ impl PurchaseAccess {
         let (access, scope) = if permissions.is_empty() {
             self.resolve(actor, action, executor).await?
         } else {
-            self.resolve_permissions(actor, action, permissions, executor)
-                .await?
+            self.resolve_permissions(actor, action, permissions, executor).await?
         };
         let order = self
             .db
@@ -191,12 +187,10 @@ impl PurchaseAccess {
     ) -> Result<()> {
         let submit = "purchase_order:submit".to_string();
         let create = "purchase_order:create".to_string();
-        let (create_access, _) = self
-            .resolve_permissions(actor, "create", std::slice::from_ref(&submit), executor)
-            .await?;
-        let (submit_access, _) = self
-            .resolve_permissions(actor, "submit", std::slice::from_ref(&create), executor)
-            .await?;
+        let (create_access, _) =
+            self.resolve_permissions(actor, "create", std::slice::from_ref(&submit), executor).await?;
+        let (submit_access, _) =
+            self.resolve_permissions(actor, "submit", std::slice::from_ref(&create), executor).await?;
         let object = PurchaseScopeObject {
             owned: order.current_owner_user_id()? == actor.id(),
             org_unit_id: Some(order.business_org_unit_id.clone()),
@@ -233,15 +227,9 @@ impl PurchaseAccess {
         if scope.is_company() {
             return Ok(None);
         }
-        let ids = self
-            .db
-            .purchase_orders()
-            .list_authorized_ids(scope, executor)
-            .await?;
+        let ids = self.db.purchase_orders().list_authorized_ids(scope, executor).await?;
         if ids.len() > 10_000 {
-            return Err(Error::ValidationError(
-                "采购单查询超过上限，请收窄组织或负责人条件".into(),
-            ));
+            return Err(Error::ValidationError("采购单查询超过上限，请收窄组织或负责人条件".into()));
         }
         Ok(Some(ids))
     }
@@ -292,11 +280,7 @@ pub fn purchase_scope(access: &PurchaseResolvedScope, user: &str, history: Vec<S
     PurchaseReadScope {
         required_scopes: vec![],
         historical_order_ids: history,
-        roles: access
-            .role_clauses
-            .iter()
-            .map(|clause| map_clause(clause, user))
-            .collect(),
+        roles: access.role_clauses.iter().map(|clause| map_clause(clause, user)).collect(),
         user_limit: access.user_limit.as_ref().map(|clause| map_clause(clause, user)),
     }
 }
@@ -339,10 +323,7 @@ mod tests {
             "buyer-a",
         );
         assert_eq!(clause.owner_user_id.as_deref(), Some("buyer-a"));
-        assert_eq!(
-            clause.business_org_unit_ids,
-            vec!["org-a".to_string(), "org-b".to_string()]
-        );
+        assert_eq!(clause.business_org_unit_ids, vec!["org-a".to_string(), "org-b".to_string()]);
     }
 
     #[test]

@@ -14,10 +14,10 @@ mod views;
 use std::sync::Arc;
 
 use erp_identity::SharedRbacService;
+use erp_party::SensitiveDataCodec;
 use mongodb::Database;
 
 use crate::{Error, Result};
-use erp_party::SensitiveDataCodec;
 
 /// 完整客户资料的根级服务。
 pub struct CustomerProfileService {
@@ -42,11 +42,7 @@ impl CustomerProfileService {
     /// # 关键业务约束
     /// 写入前必须注入 RBAC，不得在缺授权源时按登录人推断范围。
     pub fn new(db: Database, sensitive_data: Arc<SensitiveDataCodec>) -> Self {
-        Self {
-            db,
-            sensitive_data,
-            rbac: None,
-        }
+        Self { db, sensitive_data, rbac: None }
     }
 
     /// 注入当前 RBAC 快照，供资料写入在事务内重验 DataScope。
@@ -81,9 +77,7 @@ impl CustomerProfileService {
     /// # 关键业务约束
     /// 缺少授权源不得写入客户资料。
     pub(super) fn require_rbac(&self) -> Result<&SharedRbacService> {
-        self.rbac
-            .as_ref()
-            .ok_or_else(|| Error::Internal("客户资料写入需要授权源".into()))
+        self.rbac.as_ref().ok_or_else(|| Error::Internal("客户资料写入需要授权源".into()))
     }
 }
 
@@ -102,9 +96,8 @@ mod tests {
         CustomerProfileReplayContext, CustomerProfileRequestFingerprint,
     };
 
+    use super::{CustomerAccountStatus, checked_command_view, customer_status_blockers};
     use crate::Error;
-
-    use super::{checked_command_view, customer_status_blockers, CustomerAccountStatus};
 
     #[test]
     fn disabled_customer_blocks_new_business_actions() {
@@ -154,9 +147,6 @@ mod tests {
             fingerprint,
         )
         .unwrap();
-        assert!(matches!(
-            checked_command_view(command, &mismatching),
-            Err(Error::ConflictError(_))
-        ));
+        assert!(matches!(checked_command_view(command, &mismatching), Err(Error::ConflictError(_))));
     }
 }

@@ -1,5 +1,5 @@
 mod authentication;
 mod rbac;
 
-pub use authentication::{authenticate, RbacSubject};
+pub use authentication::{RbacSubject, authenticate};
 pub use rbac::with_permission;

@@ -8,14 +8,11 @@ use erp_fulfillment::entity::facts::{
     PrepaymentRequirementFact, PurchaseAllocationFact, PurchaseOrderStatusFact, PurchaseRevisionLineFact,
 };
 use erp_fulfillment::entity::fulfillment::PurchaseFulfillmentEligibility;
+use erp_procurement::entity::purchase_order::{PurchaseOrder, PurchaseOrderRevision};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::Executor;
-use {
-    erp_procurement::entity::purchase_order::PurchaseOrder,
-    erp_procurement::entity::purchase_order::PurchaseOrderRevision,
-};
 
 use crate::{Error, Result};
 
@@ -33,10 +30,10 @@ pub(super) fn ensure_po_fulfillable(po: &PurchaseOrder) -> Result<()> {
     PurchaseFulfillmentEligibility::ensure_order_fulfillable(match po.stable.status {
         erp_procurement::entity::purchase_order::PurchaseOrderStatus::Effective => {
             PurchaseOrderStatusFact::Effective
-        }
+        },
         erp_procurement::entity::purchase_order::PurchaseOrderStatus::PartiallyExecuted => {
             PurchaseOrderStatusFact::PartiallyExecuted
-        }
+        },
         _ => PurchaseOrderStatusFact::Other,
     })
     .map_err(|error| Error::BusinessLogicError(error.to_string()))
@@ -128,27 +125,16 @@ async fn effective_paid_amount(
     session: &mut dyn Executor,
     po_id: &PurchaseOrderId,
 ) -> Result<Amount> {
-    let accounts = db
-        .payable_accounts()
-        .list_payable_accounts_for_purchase_order(po_id, session)
-        .await?;
-    let account_ids: Vec<PayableAccountId> = accounts
-        .iter()
-        .map(|account| account.base.id.clone().into())
-        .collect();
-    let entries = db
-        .payable_entries()
-        .find_entries_by_accounts(&account_ids, session)
-        .await?;
+    let accounts = db.payable_accounts().list_payable_accounts_for_purchase_order(po_id, session).await?;
+    let account_ids: Vec<PayableAccountId> =
+        accounts.iter().map(|account| account.base.id.clone().into()).collect();
+    let entries = db.payable_entries().find_entries_by_accounts(&account_ids, session).await?;
     let entry_ids: Vec<PayableEntryId> = entries
         .iter()
         .filter(|entry| entry.source_document_id == po_id.to_string())
         .map(|entry| entry.base.id.clone().into())
         .collect();
-    let allocations = db
-        .payment_allocations()
-        .find_allocations_by_entries(&entry_ids, session)
-        .await?;
+    let allocations = db.payment_allocations().find_allocations_by_entries(&entry_ids, session).await?;
     let mut net = Amount::from_str("0").map_err(Error::Logic)?;
     for allocation in allocations {
         net = match allocation.allocation_action {
@@ -191,10 +177,8 @@ pub(super) async fn ensure_allocation_valid(
         .purchase_order_revision_lines()
         .find_lines_by_revision_ids(&[revision.base.id.clone().into()], session)
         .await?;
-    let current_purchase_line_ids = revision_lines
-        .iter()
-        .map(|line| line.base.id.clone().into())
-        .collect::<Vec<_>>();
+    let current_purchase_line_ids =
+        revision_lines.iter().map(|line| line.base.id.clone().into()).collect::<Vec<_>>();
     let sales_revision_line = db
         .sales_order_revision_lines()
         .sales_revision_line_for_allocation(
@@ -203,12 +187,8 @@ pub(super) async fn ensure_allocation_valid(
             session,
         )
         .await?;
-    let sales_association = sales_revision_line.map(|line| {
-        (
-            erp_core::ids::SalesOrderRevisionLineId::new(line.base.id),
-            line.sales_order_line_id,
-        )
-    });
+    let sales_association = sales_revision_line
+        .map(|line| (erp_core::ids::SalesOrderRevisionLineId::new(line.base.id), line.sales_order_line_id));
     PurchaseFulfillmentEligibility::ensure_allocation_consistent(
         &PurchaseAllocationFact {
             purchase_order_revision_line_id: allocation.purchase_order_revision_line_id.clone(),
@@ -227,10 +207,7 @@ pub(super) async fn ensure_allocation_valid(
 pub(super) fn revision_line_fact(
     line: &erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine,
 ) -> PurchaseRevisionLineFact {
-    PurchaseRevisionLineFact {
-        id: line.base.id.clone().into(),
-        quantity: line.quantity,
-    }
+    PurchaseRevisionLineFact { id: line.base.id.clone().into(), quantity: line.quantity }
 }
 
 #[cfg(test)]
@@ -249,14 +226,12 @@ mod tests {
         })
     }
 
-    use super::ensure_po_fulfillable;
     use erp_core::ids::{PurchaseOrderId, SalesOrderId, SupplierAccountId};
-    use {
-        erp_procurement::entity::purchase_order::FulfillmentResponsibility,
-        erp_procurement::entity::purchase_order::PurchaseOrder,
-        erp_procurement::entity::purchase_order::PurchaseOrderData,
-        erp_procurement::entity::purchase_order::PurchaseType,
+    use erp_procurement::entity::purchase_order::{
+        FulfillmentResponsibility, PurchaseOrder, PurchaseOrderData, PurchaseType,
     };
+
+    use super::ensure_po_fulfillable;
 
     #[test]
     fn po_fulfillable_guards_status() {

@@ -4,22 +4,21 @@
 //! 更新与 `insert_many`。所有方法接收
 //! 调用方 `&mut dyn Executor`，不开启事务，不返回 services DTO。
 
-use crate::repository::owned::{ReceivableAccountRepository, ReceivableEntryRepository};
 use std::collections::HashSet;
 
-use crate::entity::receivable::{
-    CustomerReceipt, Invoice, ReceiptAllocation, ReceivableEntry, SalesInvoiceAllocation,
-};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{ReceivableAccountId, ReceivableEntryId};
 use erp_core::money::Amount;
-use mongodb::bson::{doc, Bson, Document};
+use mongodb::bson::{Bson, Document, doc};
+use persistence_core::{Executor, Result, mongo_ops};
 
 use super::account::{amount_bson, progress_pipeline};
 use super::{ReceivableRepository, SettlementBatchResult};
+use crate::entity::receivable::{
+    CustomerReceipt, Invoice, ReceiptAllocation, ReceivableEntry, SalesInvoiceAllocation,
+};
 use crate::repository::extensions::ReceivableExt;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
+use crate::repository::owned::{ReceivableAccountRepository, ReceivableEntryRepository};
 
 /// 应收票款快照的有界持久化事实（FIN-R12）。
 ///
@@ -67,47 +66,25 @@ impl<'a> ReceivableRepository<'a> {
         account_id: &ReceivableAccountId,
         executor: &mut dyn Executor,
     ) -> Result<ReceivableSnapshotFacts> {
-        let entries = self
-            .db
-            .receivable_entries()
-            .find_entries_by_account(account_id, executor)
-            .await?;
-        let entry_ids = entries
-            .iter()
-            .map(|entry| ReceivableEntryId::new(entry.base.id.clone()))
-            .collect::<Vec<_>>();
-        let receipt_allocations = self
-            .db
-            .receipt_allocations()
-            .find_allocations_by_entries(&entry_ids, executor)
-            .await?;
+        let entries = self.db.receivable_entries().find_entries_by_account(account_id, executor).await?;
+        let entry_ids =
+            entries.iter().map(|entry| ReceivableEntryId::new(entry.base.id.clone())).collect::<Vec<_>>();
+        let receipt_allocations =
+            self.db.receipt_allocations().find_allocations_by_entries(&entry_ids, executor).await?;
         let invoice_allocations = self
             .db
             .sales_invoice_allocations()
             .find_allocations_by_accounts(std::slice::from_ref(account_id), executor)
             .await?;
         let receipt_ids = unique_ids(
-            receipt_allocations
-                .iter()
-                .map(|allocation| allocation.customer_receipt_id.to_string()),
+            receipt_allocations.iter().map(|allocation| allocation.customer_receipt_id.to_string()),
         );
         let expected_receipt_count = receipt_ids.len();
-        let receipts = self
-            .db
-            .customer_receipts()
-            .find_receipts_by_ids(&receipt_ids, executor)
-            .await?;
-        let invoice_ids = unique_ids(
-            invoice_allocations
-                .iter()
-                .map(|allocation| allocation.invoice_id.to_string()),
-        );
+        let receipts = self.db.customer_receipts().find_receipts_by_ids(&receipt_ids, executor).await?;
+        let invoice_ids =
+            unique_ids(invoice_allocations.iter().map(|allocation| allocation.invoice_id.to_string()));
         let expected_invoice_count = invoice_ids.len();
-        let invoices = self
-            .db
-            .invoices()
-            .find_invoices_by_ids(&invoice_ids, executor)
-            .await?;
+        let invoices = self.db.invoices().find_invoices_by_ids(&invoice_ids, executor).await?;
         Ok(ReceivableSnapshotFacts {
             entries,
             receipt_allocations,
@@ -273,16 +250,18 @@ fn unique_ids(ids: impl IntoIterator<Item = String>) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{settlement_guard, unique_ids, ReceivableSnapshotFacts};
-    use crate::entity::receivable::{ReceivableAccount, ReceivableEntry};
-    use crate::repository::extensions::ReceivableExt;
-    use crate::repository::owned::{ReceivableAccountRepository, ReceivableEntryRepository};
-    use crate::repository::receivable::SettlementBatchResult;
+    use std::str::FromStr;
+
     use erp_core::ids::{ReceivableAccountId, ReceivableEntryId};
     use erp_core::money::Amount;
     use mongodb::bson::Bson;
     use persistence_core::NoTransaction;
-    use std::str::FromStr;
+
+    use super::{ReceivableSnapshotFacts, settlement_guard, unique_ids};
+    use crate::entity::receivable::{ReceivableAccount, ReceivableEntry};
+    use crate::repository::extensions::ReceivableExt;
+    use crate::repository::owned::{ReceivableAccountRepository, ReceivableEntryRepository};
+    use crate::repository::receivable::SettlementBatchResult;
 
     #[test]
     fn settlement_guard_matches_single_apply_filter() {
@@ -315,10 +294,11 @@ mod tests {
     }
 
     fn test_entry(id: &str, sequence: u32) -> ReceivableEntry {
+        use erp_core::common::time::{BusinessDate, Instant};
+
         use crate::entity::receivable::{
             EntryDirection, ReceivableEntry, ReceivableEntryData, ReceivableEntryType,
         };
-        use erp_core::common::time::{BusinessDate, Instant};
         ReceivableEntry::new(
             ReceivableEntryId::new(id),
             ReceivableEntryData {
@@ -341,35 +321,27 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn find_entries_by_ids_dedups_unordered_missing_and_excludes_soft_deleted() {
-        use crate::repository::test_fixture::{require_mongo, TestDb};
         use std::collections::HashSet;
 
+        use crate::repository::test_fixture::{TestDb, require_mongo};
+
         require_mongo!(async {
-            let fixture = TestDb::new("recv_entries_by_ids")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("recv_entries_by_ids").await.expect("测试数据库创建失败");
             crate::indexes::ensure(fixture.db()).await.expect("索引创建失败");
             let entries = fixture.db().receivable_entries();
-            assert!(entries
-                .find_entries_by_ids(&[], &mut NoTransaction)
-                .await
-                .expect("空输入必须成功")
-                .is_empty());
+            assert!(
+                entries
+                    .find_entries_by_ids(&[], &mut NoTransaction)
+                    .await
+                    .expect("空输入必须成功")
+                    .is_empty()
+            );
 
-            entries
-                .create(&test_entry("e-1", 1), &mut NoTransaction)
-                .await
-                .expect("分录写入失败");
-            entries
-                .create(&test_entry("e-2", 2), &mut NoTransaction)
-                .await
-                .expect("分录写入失败");
+            entries.create(&test_entry("e-1", 1), &mut NoTransaction).await.expect("分录写入失败");
+            entries.create(&test_entry("e-2", 2), &mut NoTransaction).await.expect("分录写入失败");
             let mut deleted = test_entry("e-del", 3);
             deleted.base.deleted_at = 1;
-            entries
-                .create(&deleted, &mut NoTransaction)
-                .await
-                .expect("软删分录写入失败");
+            entries.create(&deleted, &mut NoTransaction).await.expect("软删分录写入失败");
 
             let duplicated = [
                 ReceivableEntryId::new("e-2"),
@@ -378,10 +350,8 @@ mod tests {
                 ReceivableEntryId::new("missing"),
                 ReceivableEntryId::new("e-del"),
             ];
-            let rows = entries
-                .find_entries_by_ids(&duplicated, &mut NoTransaction)
-                .await
-                .expect("批量读取必须成功");
+            let rows =
+                entries.find_entries_by_ids(&duplicated, &mut NoTransaction).await.expect("批量读取必须成功");
             let ids = rows.iter().map(|row| row.base.id.clone()).collect::<HashSet<_>>();
             assert_eq!(ids.len(), 2, "重复 ID 不得放大结果");
             assert!(ids.contains("e-1"));
@@ -393,9 +363,8 @@ mod tests {
 
     #[tokio::test]
     async fn apply_settlements_many_empty_input_returns_empty_without_db() {
-        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
-            .await
-            .expect("客户端句柄创建失败");
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.expect("客户端句柄创建失败");
         let database = client.database("unused");
         let repository: ReceivableAccountRepository<'_> = ReceivableAccountRepository::new(
             &database,
@@ -405,13 +374,7 @@ mod tests {
             .apply_settlements_many(&[], "tester", &mut NoTransaction)
             .await
             .expect("空输入批量核销必须成功");
-        assert_eq!(
-            result,
-            SettlementBatchResult {
-                applied: Vec::new(),
-                rejected: Vec::new(),
-            }
-        );
+        assert_eq!(result, SettlementBatchResult { applied: Vec::new(), rejected: Vec::new() });
         let _ = ReceivableAccountId::new("acct-1");
     }
 
@@ -432,26 +395,21 @@ mod tests {
 
     #[tokio::test]
     async fn find_entries_by_ids_empty_input_skips_db() {
-        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
-            .await
-            .expect("客户端句柄创建失败");
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.expect("客户端句柄创建失败");
         let database = client.database("unused");
         let repository: ReceivableEntryRepository<'_> = ReceivableEntryRepository::new(
             &database,
             <mongodb::Database as ReceivableExt>::RECEIVABLE_ENTRIES,
         );
-        let rows = repository
-            .find_entries_by_ids(&[], &mut NoTransaction)
-            .await
-            .expect("空输入必须成功");
+        let rows = repository.find_entries_by_ids(&[], &mut NoTransaction).await.expect("空输入必须成功");
         assert!(rows.is_empty());
     }
 
     #[tokio::test]
     async fn create_receipt_allocations_many_empty_input_returns_without_db() {
-        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
-            .await
-            .expect("客户端句柄创建失败");
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.expect("客户端句柄创建失败");
         let database = client.database("unused");
         crate::repository::receivable::ReceivableRepository::new(&database)
             .create_receipt_allocations_many(&[], &mut NoTransaction)
@@ -460,8 +418,9 @@ mod tests {
     }
 
     fn test_account(id: &str, gross: &str, settled: &str) -> ReceivableAccount {
-        use crate::entity::receivable::{AccountReviewStatus, ReceivableAccountData};
         use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId, SalesOrderRevisionId};
+
+        use crate::entity::receivable::{AccountReviewStatus, ReceivableAccountData};
         ReceivableAccount::new(
             ReceivableAccountId::new(id),
             ReceivableAccountData {
@@ -488,12 +447,10 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn batch_settlement_applies_aggregated_deltas_and_reports_rejected() {
-        use crate::repository::test_fixture::{require_mongo, TestDb};
+        use crate::repository::test_fixture::{TestDb, require_mongo};
 
         require_mongo!(async {
-            let fixture = TestDb::new("recv_settle_batch")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("recv_settle_batch").await.expect("测试数据库创建失败");
             crate::indexes::ensure(fixture.db()).await.expect("索引创建失败");
             let accounts = fixture.db().receivable_accounts();
             accounts
@@ -502,20 +459,11 @@ mod tests {
                 .expect("子账写入失败");
             let mut second = test_account("acct-2", "1000.00", "0.00");
             second.account_seq = 2;
-            accounts
-                .create(&second, &mut NoTransaction)
-                .await
-                .expect("子账写入失败");
+            accounts.create(&second, &mut NoTransaction).await.expect("子账写入失败");
 
             let deltas = [
-                (
-                    ReceivableAccountId::new("acct-1"),
-                    Amount::from_str("400.00").unwrap(),
-                ),
-                (
-                    ReceivableAccountId::new("acct-2"),
-                    Amount::from_str("600.00").unwrap(),
-                ),
+                (ReceivableAccountId::new("acct-1"), Amount::from_str("400.00").unwrap()),
+                (ReceivableAccountId::new("acct-2"), Amount::from_str("600.00").unwrap()),
             ];
             let result = accounts
                 .apply_settlements_many(&deltas, "tester", &mut NoTransaction)
@@ -530,10 +478,7 @@ mod tests {
             assert_eq!(one.settled_total, Amount::from_str("400.00").unwrap());
             assert_eq!(one.open_total, Amount::from_str("600.00").unwrap());
 
-            let over = [(
-                ReceivableAccountId::new("acct-1"),
-                Amount::from_str("700.00").unwrap(),
-            )];
+            let over = [(ReceivableAccountId::new("acct-1"), Amount::from_str("700.00").unwrap())];
             let result = accounts
                 .apply_settlements_many(&over, "tester", &mut NoTransaction)
                 .await
@@ -553,20 +498,19 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn snapshot_facts_reports_missing_receipts_before_invoices() {
-        use crate::entity::receivable::{
-            AllocationAction, EntryDirection, ReceiptAllocation, ReceiptAllocationData, ReceivableEntry,
-            ReceivableEntryData, ReceivableEntryType, SalesInvoiceAllocation, SalesInvoiceAllocationData,
-        };
-        use crate::repository::test_fixture::{require_mongo, TestDb};
         use erp_core::common::time::{BusinessDate, Instant};
         use erp_core::ids::{
             CustomerReceiptId, InvoiceId, ReceiptAllocationId, ReceivableEntryId, SalesInvoiceAllocationId,
         };
 
+        use crate::entity::receivable::{
+            AllocationAction, EntryDirection, ReceiptAllocation, ReceiptAllocationData, ReceivableEntry,
+            ReceivableEntryData, ReceivableEntryType, SalesInvoiceAllocation, SalesInvoiceAllocationData,
+        };
+        use crate::repository::test_fixture::{TestDb, require_mongo};
+
         require_mongo!(async {
-            let fixture = TestDb::new("recv_snapshot_missing")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("recv_snapshot_missing").await.expect("测试数据库创建失败");
             crate::indexes::ensure(fixture.db()).await.expect("索引创建失败");
             let db = fixture.db();
             db.receivable_accounts()
@@ -652,18 +596,17 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn snapshot_facts_missing_receipts_only_keeps_invoice_count_ok() {
+        use erp_core::common::time::{BusinessDate, Instant};
+        use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableEntryId};
+
         use crate::entity::receivable::{
             AllocationAction, EntryDirection, ReceiptAllocation, ReceiptAllocationData, ReceivableEntry,
             ReceivableEntryData, ReceivableEntryType,
         };
-        use crate::repository::test_fixture::{require_mongo, TestDb};
-        use erp_core::common::time::{BusinessDate, Instant};
-        use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableEntryId};
+        use crate::repository::test_fixture::{TestDb, require_mongo};
 
         require_mongo!(async {
-            let fixture = TestDb::new("recv_snapshot_receipt_only")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("recv_snapshot_receipt_only").await.expect("测试数据库创建失败");
             crate::indexes::ensure(fixture.db()).await.expect("索引创建失败");
             let db = fixture.db();
             db.receivable_accounts()
@@ -729,9 +672,10 @@ mod tests {
         seq: u32,
         value: &str,
     ) -> crate::entity::receivable::ReceiptAllocation {
-        use crate::entity::receivable::{AllocationAction, ReceiptAllocation, ReceiptAllocationData};
         use erp_core::common::time::Instant;
         use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableEntryId};
+
+        use crate::entity::receivable::{AllocationAction, ReceiptAllocation, ReceiptAllocationData};
         ReceiptAllocation::new(
             ReceiptAllocationId::new(id),
             ReceiptAllocationData {
@@ -750,13 +694,12 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn historical_and_approval_batch_writes_conserve_and_rollback() {
-        use crate::repository::test_fixture::{require_mongo, TestDb};
         use persistence_core::Transactional;
 
+        use crate::repository::test_fixture::{TestDb, require_mongo};
+
         require_mongo!(async {
-            let fixture = TestDb::new("recv_receipt_batch")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("recv_receipt_batch").await.expect("测试数据库创建失败");
             crate::indexes::ensure(fixture.db()).await.expect("索引创建失败");
             let db = fixture.db();
             db.receivable_accounts()
@@ -769,10 +712,7 @@ mod tests {
                 receipt_allocation("h-1", "cr-h", "e-1", 1, "40.00"),
                 receipt_allocation("h-2", "cr-h", "e-2", 2, "60.00"),
             ];
-            let hist_delta = [(
-                ReceivableAccountId::new("acct-1"),
-                Amount::from_str("100.00").unwrap(),
-            )];
+            let hist_delta = [(ReceivableAccountId::new("acct-1"), Amount::from_str("100.00").unwrap())];
             let hist_result = db
                 .receivable_accounts()
                 .apply_settlements_many(&hist_delta, "tester", &mut NoTransaction)
@@ -797,10 +737,7 @@ mod tests {
                 receipt_allocation("a-1", "cr-a", "e-1", 1, "30.00"),
                 receipt_allocation("a-2", "cr-a", "e-1", 2, "20.00"),
             ];
-            let approval_delta = [(
-                ReceivableAccountId::new("acct-1"),
-                Amount::from_str("50.00").unwrap(),
-            )];
+            let approval_delta = [(ReceivableAccountId::new("acct-1"), Amount::from_str("50.00").unwrap())];
             let approval_result = db
                 .receivable_accounts()
                 .apply_settlements_many(&approval_delta, "tester", &mut NoTransaction)
@@ -825,14 +762,9 @@ mod tests {
             let outcome = fixture.client().with_transaction(move |session| {
                 let db_tx = db_tx.clone();
                 Box::pin(async move {
-                    let delta = [(
-                        ReceivableAccountId::new("acct-1"),
-                        Amount::from_str("10.00").unwrap(),
-                    )];
-                    let applied = db_tx
-                        .receivable_accounts()
-                        .apply_settlements_many(&delta, "tester", session)
-                        .await?;
+                    let delta = [(ReceivableAccountId::new("acct-1"), Amount::from_str("10.00").unwrap())];
+                    let applied =
+                        db_tx.receivable_accounts().apply_settlements_many(&delta, "tester", session).await?;
                     if !applied.rejected.is_empty() {
                         return Err(persistence_core::Error::OptimisticLockingError);
                     }
@@ -867,12 +799,10 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn concurrent_settlement_same_account_exactly_one_hits() {
-        use crate::repository::test_fixture::{require_mongo, TestDb};
+        use crate::repository::test_fixture::{TestDb, require_mongo};
 
         require_mongo!(async {
-            let fixture = TestDb::new("recv_settle_concurrent")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("recv_settle_concurrent").await.expect("测试数据库创建失败");
             crate::indexes::ensure(fixture.db()).await.expect("索引创建失败");
             fixture
                 .db()
@@ -880,10 +810,7 @@ mod tests {
                 .create(&test_account("acct-1", "100.00", "0.00"), &mut NoTransaction)
                 .await
                 .expect("子账写入失败");
-            let deltas = vec![(
-                ReceivableAccountId::new("acct-1"),
-                Amount::from_str("80.00").unwrap(),
-            )];
+            let deltas = vec![(ReceivableAccountId::new("acct-1"), Amount::from_str("80.00").unwrap())];
             let db_a = fixture.db().clone();
             let deltas_a = deltas.clone();
             let task_a = tokio::spawn(async move {
@@ -901,11 +828,7 @@ mod tests {
             });
             let result_a = task_a.await.expect("任务 A 失败");
             let result_b = task_b.await.expect("任务 B 失败");
-            assert_eq!(
-                result_a.applied.len() + result_b.applied.len(),
-                1,
-                "80+80 超 100 时恰好一方命中"
-            );
+            assert_eq!(result_a.applied.len() + result_b.applied.len(), 1, "80+80 超 100 时恰好一方命中");
             assert_eq!(result_a.rejected.len() + result_b.rejected.len(), 1);
             let after = fixture
                 .db()

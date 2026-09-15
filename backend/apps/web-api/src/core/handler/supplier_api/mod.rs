@@ -4,10 +4,9 @@
 //! Service 按当前操作人投影的权威动作与阻塞原因。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
+use erp_read_models::supplier_center::supplier_api::dto::SupplierConnectionJobView;
 use erp_supply::dto::supplier_api::{
     ConfirmBusinessCapabilityRequirementCommand, ConfirmBusinessCapabilityRequirementResult,
     CreateSupplierApiConnectionRequest, PageView, SupplierApiCapabilityListParams, SupplierApiCapabilityView,
@@ -16,12 +15,9 @@ use erp_supply::dto::supplier_api::{
     UpdateSupplierCapabilitiesCommand, UpdateSupplierCapabilitiesResult,
 };
 
-use erp_read_models::supplier_center::supplier_api::dto::SupplierConnectionJobView;
-
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "API 供应商连接",
@@ -36,10 +32,7 @@ pub async fn supplier_api_connection_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierApiConnectionListParams>,
 ) -> Result<PageView<SupplierApiConnectionListItemView>> {
-    let page = state
-        .supplier_api_read_service()
-        .connection_list_for_actor(&params, &actor)
-        .await?;
+    let page = state.supplier_api_read_service().connection_list_for_actor(&params, &actor).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -56,10 +49,7 @@ pub async fn supplier_api_connection_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SupplierApiConnectionDetailView> {
-    let view = state
-        .supplier_api_read_service()
-        .connection_detail_for_actor(&id, &actor)
-        .await?;
+    let view = state.supplier_api_read_service().connection_detail_for_actor(&id, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -76,10 +66,7 @@ pub async fn supplier_api_connection_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSupplierApiConnectionRequest>,
 ) -> Result<SupplierApiConnectionView> {
-    let view = state
-        .supplier_api_governance_process()
-        .create_connection(req, &actor)
-        .await?;
+    let view = state.supplier_api_governance_process().create_connection(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -97,19 +84,15 @@ pub async fn supplier_api_connection_command(
     Path(id): Path<String>,
     Json(command): Json<SupplierConnectionCommand>,
 ) -> Result<SupplierConnectionCommandResult> {
-    let result = state
-        .supplier_api_governance_process()
-        .execute_connection_command(&id, command, &actor)
-        .await?;
+    let result =
+        state.supplier_api_governance_process().execute_connection_command(&id, command, &actor).await?;
     if let Some(job_id) = result.job_id.clone() {
         let state = state.clone();
         let actor = actor.clone();
         let connection_id = id.clone();
         tokio::spawn(async move {
-            if let Err(error) = state
-                .supplier_connection_execution_process()
-                .process_connection_job(&job_id, &actor)
-                .await
+            if let Err(error) =
+                state.supplier_connection_execution_process().process_connection_job(&job_id, &actor).await
             {
                 tracing::error!(
                     connection_id,
@@ -158,10 +141,7 @@ pub async fn supplier_api_capabilities_update(
     Path(id): Path<String>,
     Json(command): Json<UpdateSupplierCapabilitiesCommand>,
 ) -> Result<UpdateSupplierCapabilitiesResult> {
-    let result = state
-        .supplier_api_governance_process()
-        .update_capabilities(&id, command, &actor)
-        .await?;
+    let result = state.supplier_api_governance_process().update_capabilities(&id, command, &actor).await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 
@@ -177,10 +157,7 @@ pub async fn supplier_api_connection_job_detail(
     State(state): State<AppState>,
     Path((id, job_id)): Path<(String, String)>,
 ) -> Result<SupplierConnectionJobView> {
-    let result = state
-        .supplier_api_read_service()
-        .connection_job(&id, &job_id)
-        .await?;
+    let result = state.supplier_api_read_service().connection_job(&id, &job_id).await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 

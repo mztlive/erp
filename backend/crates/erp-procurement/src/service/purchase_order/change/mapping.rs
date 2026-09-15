@@ -1,18 +1,17 @@
 //! 采购变更的冻结内容与消费方事实映射规则。
+use erp_core::ids::PurchaseChangeSubmissionId;
+use id_generator::next_id;
+use persistence_core::NoTransaction;
+
 use crate::dto::purchase_order::{SavePurchaseOrderLine, SubmitPurchaseChangeRequest};
 use crate::entity::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionData, PurchaseOrder,
     PurchaseOrderRevision,
 };
 use crate::repository::PurchaseOrderExt;
-use crate::service::purchase_order::{
-    line_input::{compute_request_totals, to_line_inputs},
-    PurchaseOrderService,
-};
+use crate::service::purchase_order::PurchaseOrderService;
+use crate::service::purchase_order::line_input::{compute_request_totals, to_line_inputs};
 use crate::{Error, Result};
-use erp_core::ids::PurchaseChangeSubmissionId;
-use id_generator::next_id;
-use persistence_core::NoTransaction;
 
 /// 已校验的采购提交金额和待解析付款代码；在外域付款解析前计算。
 pub struct ChangeSubmissionHeader {
@@ -39,12 +38,7 @@ pub fn prepare_submission_header(
         .payment_term_code
         .clone()
         .unwrap_or_else(|| base_revision.payment_term_snapshot.payment_term_code.clone());
-    Ok(ChangeSubmissionHeader {
-        gross,
-        net,
-        tax,
-        payment_term_code,
-    })
+    Ok(ChangeSubmissionHeader { gross, net, tax, payment_term_code })
 }
 
 impl PurchaseOrderService {
@@ -65,11 +59,7 @@ impl PurchaseOrderService {
         &self,
         revision_id: &erp_core::ids::PurchaseOrderRevisionId,
     ) -> Result<Vec<SavePurchaseOrderLine>> {
-        let lines = self
-            .db
-            .purchase_order()
-            .list_revision_lines(revision_id, &mut NoTransaction)
-            .await?;
+        let lines = self.db.purchase_order().list_revision_lines(revision_id, &mut NoTransaction).await?;
         if lines.is_empty() {
             return Err(Error::BusinessLogicError("采购变更基准版本缺少明细".to_string()));
         }
@@ -97,11 +87,7 @@ impl PurchaseOrderService {
                         .map(|value| value.to_string()),
                     sales_order_submission_line_id: None,
                     allocated_quantity: line.allocated_quantity.map(|value| value.to_string()),
-                    gross_amount: if is_item {
-                        None
-                    } else {
-                        Some(line.gross_amount.to_string())
-                    },
+                    gross_amount: if is_item { None } else { Some(line.gross_amount.to_string()) },
                 }
             })
             .collect())
@@ -204,10 +190,11 @@ pub fn content_fingerprint(lines: &[SavePurchaseOrderLine]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::entity::purchase_order::PurchaseLineType;
     use crate::ports::change::CurrentSalesRevisionLineFact;
-    use std::collections::HashMap;
 
     fn item() -> SavePurchaseOrderLine {
         SavePurchaseOrderLine {
@@ -234,18 +221,13 @@ mod tests {
     fn current_sales_fact_rebinds_stable_line_and_uses_changed_quantity() {
         let facts = HashMap::from([(
             "stable-1".into(),
-            CurrentSalesRevisionLineFact {
-                revision_line_id: "current-line-1".into(),
-            },
+            CurrentSalesRevisionLineFact { revision_line_id: "current-line-1".into() },
         )]);
         let result = enrich_change_lines(&[item()], &facts).unwrap();
         let line = &result[0];
         assert_eq!(line.procurement_confirmation_line_id.as_deref(), Some("stable-1"));
         assert_eq!(line.sales_order_line_id.as_deref(), Some("stable-1"));
-        assert_eq!(
-            line.sales_order_revision_line_id.as_deref(),
-            Some("current-line-1")
-        );
+        assert_eq!(line.sales_order_revision_line_id.as_deref(), Some("current-line-1"));
         assert_eq!(line.sales_order_submission_line_id, None);
         assert_eq!(line.allocated_quantity.as_deref(), Some("2"));
     }
@@ -255,10 +237,7 @@ mod tests {
         let mut line = item();
         line.line_type = PurchaseLineType::LogisticsFee;
         let result = enrich_change_lines(&[line], &HashMap::new()).unwrap();
-        assert_eq!(
-            result[0].procurement_confirmation_line_id.as_deref(),
-            Some("stable-fallback")
-        );
+        assert_eq!(result[0].procurement_confirmation_line_id.as_deref(), Some("stable-fallback"));
         assert_eq!(result[0].sales_order_line_id, None);
         assert_eq!(result[0].sales_order_revision_line_id, None);
         assert_eq!(result[0].sales_order_submission_line_id, None);
@@ -276,19 +255,14 @@ mod tests {
         );
         let facts = HashMap::from([(
             "stable-fallback".into(),
-            CurrentSalesRevisionLineFact {
-                revision_line_id: "current-fallback".into(),
-            },
+            CurrentSalesRevisionLineFact { revision_line_id: "current-fallback".into() },
         )]);
         let error = enrich_change_lines(&[line.clone()], &facts).unwrap_err();
         assert!(matches!(error, Error::BusinessLogicError(message) if message == "采购变更商品行缺少数量"));
         line.quantity = Some("3".into());
         let result = enrich_change_lines(&[line], &facts).unwrap();
         assert_eq!(result[0].sales_order_line_id.as_deref(), Some("stable-fallback"));
-        assert_eq!(
-            result[0].sales_order_revision_line_id.as_deref(),
-            Some("current-fallback")
-        );
+        assert_eq!(result[0].sales_order_revision_line_id.as_deref(), Some("current-fallback"));
         assert_eq!(result[0].allocated_quantity.as_deref(), Some("3"));
     }
 }

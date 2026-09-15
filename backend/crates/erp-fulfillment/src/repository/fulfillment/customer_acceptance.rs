@@ -1,18 +1,16 @@
 //! `customer_acceptance` 客户验收单仓储：列表投影查询与按验收单号身份查询。
 
-use crate::entity::fulfillment::{AcceptanceResult, CustomerAcceptance, CustomerAcceptanceState};
-use crate::repository::owned::CustomerAcceptanceRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerAcceptanceId, SalesOrderId};
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::fulfillment::{AcceptanceResult, CustomerAcceptance, CustomerAcceptanceState};
+use crate::repository::owned::CustomerAcceptanceRepository;
 
 /// 客户验收单排序白名单（查询与测试共用）。
 const CUSTOMER_ACCEPTANCE_SORT_FIELDS: &[&str] = &["accepted_at", "created_at"];
@@ -101,8 +99,7 @@ impl<'a> CustomerAcceptanceRepository<'a> {
         acceptance_no: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<CustomerAcceptance>> {
-        self.find_one_by_field("acceptance_no", acceptance_no, executor)
-            .await
+        self.find_one_by_field("acceptance_no", acceptance_no, executor).await
     }
 
     /// 分页检索客户验收单列表（投影查询）。
@@ -136,11 +133,7 @@ impl<'a> CustomerAcceptanceRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<CustomerAcceptanceRow>> {
         let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                CUSTOMER_ACCEPTANCE_SORT_FIELDS,
-            ))
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, CUSTOMER_ACCEPTANCE_SORT_FIELDS))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(customer_acceptance_projection())
@@ -148,10 +141,7 @@ impl<'a> CustomerAcceptanceRepository<'a> {
         let collection = self.collection().clone_with_type::<CustomerAcceptanceRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -175,8 +165,9 @@ fn customer_acceptance_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{customer_acceptance_projection, sort_doc, CUSTOMER_ACCEPTANCE_SORT_FIELDS};
     use mongodb::bson::doc;
+
+    use super::{CUSTOMER_ACCEPTANCE_SORT_FIELDS, customer_acceptance_projection, sort_doc};
 
     #[test]
     fn projection_exposes_exact_list_fields() {

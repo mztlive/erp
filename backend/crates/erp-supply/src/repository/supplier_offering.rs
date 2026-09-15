@@ -3,28 +3,27 @@
 //! 本域只持久化供给稳定身份、不可变商业条款修订、实时可供投影和幂等命令。
 //! 公司商品/SKU 由 D10 持有，不建立供应商商品主档或映射集合。
 
-use crate::repository::owned::{
-    SupplierOfferingAvailabilityRepository, SupplierOfferingCommandRepository, SupplierOfferingRepository,
-    SupplierOfferingRevisionRepository,
-};
 use std::collections::HashMap;
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
+use mongodb::Database;
+use mongodb::bson::{Bson, Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
+use serde::{Deserialize, Serialize};
+
+use super::extensions::SupplierOfferingExt;
 use crate::entity::supplier_offering::{
     AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOffering, SupplierOfferingAvailability,
     SupplierOfferingCommand, SupplierOfferingRevision,
 };
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
-use mongodb::bson::{doc, Bson, Document};
-use mongodb::options::FindOptions;
-use mongodb::Database;
-use serde::{Deserialize, Serialize};
-
-use super::extensions::SupplierOfferingExt;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::repository::owned::{
+    SupplierOfferingAvailabilityRepository, SupplierOfferingCommandRepository, SupplierOfferingRepository,
+    SupplierOfferingRevisionRepository,
+};
 
 #[cfg(test)]
 mod command_tests;
@@ -53,8 +52,7 @@ impl<'a> SupplierOfferingCommandRepository<'a> {
         idempotency_key: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierOfferingCommand>> {
-        self.find_one(doc! { "idempotency_key": idempotency_key }, executor)
-            .await
+        self.find_one(doc! { "idempotency_key": idempotency_key }, executor).await
     }
 }
 
@@ -148,14 +146,14 @@ impl QueryFilter for SupplierOfferingFilter {
                     });
                 }
                 filter.insert("$or", or_branches);
-            }
+            },
             (Some(code), None) => {
                 insert_literal_regex_filter(&mut filter, "supplier_sku_code", Some(code));
-            }
+            },
             (None, Some(sku_ids)) => {
                 filter.extend(in_filter("sku_id", sku_ids.iter().map(ToString::to_string)));
-            }
-            (None, None) => {}
+            },
+            (None, None) => {},
         }
         filter
     }
@@ -185,11 +183,7 @@ impl<'a> SupplierOfferingRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SupplierOfferingRow>> {
         let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                OFFERING_SORT_FIELDS,
-                filter.sort_ascending,
-            ))
+            .sort(sort_doc(filter.sort_by.as_deref(), OFFERING_SORT_FIELDS, filter.sort_ascending))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(supplier_offering_projection())
@@ -197,10 +191,7 @@ impl<'a> SupplierOfferingRepository<'a> {
         let collection = self.collection().clone_with_type::<SupplierOfferingRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按供给主键批量取回稳定身份。
@@ -222,11 +213,7 @@ impl<'a> SupplierOfferingRepository<'a> {
         if offering_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(
-            in_filter("id", offering_ids.iter().map(ToString::to_string)),
-            executor,
-        )
-        .await
+        self.find_many(in_filter("id", offering_ids.iter().map(ToString::to_string)), executor).await
     }
 
     /// 按公司 SKU 批量取回供给。
@@ -248,11 +235,7 @@ impl<'a> SupplierOfferingRepository<'a> {
         if sku_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(
-            in_filter("sku_id", sku_ids.iter().map(ToString::to_string)),
-            executor,
-        )
-        .await
+        self.find_many(in_filter("sku_id", sku_ids.iter().map(ToString::to_string)), executor).await
     }
 
     /// 按供应商与供应商 SKU 编码查询唯一供给身份。
@@ -304,8 +287,7 @@ impl<'a> SupplierOfferingRevisionRepository<'a> {
         if revision_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(in_filter("id", revision_ids.iter().cloned()), executor)
-            .await
+        self.find_many(in_filter("id", revision_ids.iter().cloned()), executor).await
     }
 
     /// 读取供给当前最大修订号。
@@ -324,10 +306,7 @@ impl<'a> SupplierOfferingRevisionRepository<'a> {
         offering_id: &SupplierOfferingId,
         executor: &mut dyn Executor,
     ) -> Result<u32> {
-        let options = FindOptions::builder()
-            .sort(doc! { "revision_no": -1, "id": -1 })
-            .limit(1)
-            .build();
+        let options = FindOptions::builder().sort(doc! { "revision_no": -1, "id": -1 }).limit(1).build();
         let mut revisions = mongo_ops::find_many(
             &self.collection(),
             doc! {
@@ -338,9 +317,7 @@ impl<'a> SupplierOfferingRevisionRepository<'a> {
             executor,
         )
         .await?;
-        Ok(revisions
-            .pop()
-            .map_or(0, |revision| revision.revision.revision_no))
+        Ok(revisions.pop().map_or(0, |revision| revision.revision.revision_no))
     }
 
     /// 批量取回多个供给的全部商业条款修订。
@@ -363,10 +340,7 @@ impl<'a> SupplierOfferingRevisionRepository<'a> {
             return Ok(Vec::new());
         }
         self.find_many(
-            in_filter(
-                "supplier_offering_id",
-                offering_ids.iter().map(ToString::to_string),
-            ),
+            in_filter("supplier_offering_id", offering_ids.iter().map(ToString::to_string)),
             executor,
         )
         .await
@@ -390,9 +364,7 @@ impl<'a> SupplierOfferingAvailabilityRepository<'a> {
         status: AvailabilityStatus,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierOfferingId>> {
-        let rows = self
-            .find_many(doc! { "availability_status": status.as_str() }, executor)
-            .await?;
+        let rows = self.find_many(doc! { "availability_status": status.as_str() }, executor).await?;
         Ok(rows.into_iter().map(|row| row.supplier_offering_id).collect())
     }
 
@@ -412,8 +384,7 @@ impl<'a> SupplierOfferingAvailabilityRepository<'a> {
         offering_id: &SupplierOfferingId,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierOfferingAvailability>> {
-        self.find_one(doc! { "supplier_offering_id": offering_id.to_string() }, executor)
-            .await
+        self.find_one(doc! { "supplier_offering_id": offering_id.to_string() }, executor).await
     }
 
     /// 批量取回供给的实时可供投影。
@@ -436,10 +407,7 @@ impl<'a> SupplierOfferingAvailabilityRepository<'a> {
             return Ok(Vec::new());
         }
         self.find_many(
-            in_filter(
-                "supplier_offering_id",
-                offering_ids.iter().map(ToString::to_string),
-            ),
+            in_filter("supplier_offering_id", offering_ids.iter().map(ToString::to_string)),
             executor,
         )
         .await
@@ -485,9 +453,7 @@ impl<'a> SupplierOfferingDomainRepository<'a> {
         let current_by_revision = rows
             .iter()
             .filter_map(|row| {
-                row.current_revision_id
-                    .as_ref()
-                    .map(|revision_id| (revision_id.clone(), row.id.clone()))
+                row.current_revision_id.as_ref().map(|revision_id| (revision_id.clone(), row.id.clone()))
             })
             .collect::<HashMap<_, _>>();
         let revision_ids = current_by_revision.keys().cloned().collect::<Vec<_>>();
@@ -497,10 +463,7 @@ impl<'a> SupplierOfferingDomainRepository<'a> {
         Ok(revisions
             .into_iter()
             .filter_map(|revision| {
-                current_by_revision
-                    .get(&revision.base.id)
-                    .cloned()
-                    .map(|offering_id| (offering_id, revision))
+                current_by_revision.get(&revision.base.id).cloned().map(|offering_id| (offering_id, revision))
             })
             .collect())
     }
@@ -553,20 +516,12 @@ impl<'a> SupplierOfferingDomainRepository<'a> {
         revision: &SupplierOfferingRevision,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        write::append_revision(
-            &write::MongoOfferingWrite::new(self.db),
-            offering,
-            revision,
-            executor,
-        )
-        .await
+        write::append_revision(&write::MongoOfferingWrite::new(self.db), offering, revision, executor).await
     }
 }
 
 fn sort_doc(sort_by: Option<&str>, whitelist: &[&str], sort_ascending: bool) -> Document {
-    let field = sort_by
-        .filter(|field| whitelist.contains(field))
-        .unwrap_or("created_at");
+    let field = sort_by.filter(|field| whitelist.contains(field)).unwrap_or("created_at");
     doc! { field: if sort_ascending { 1 } else { -1 } }
 }
 
@@ -595,9 +550,9 @@ fn supplier_offering_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use mongodb::bson::doc;
-
-    use super::{sort_doc, SupplierOfferingFilter};
     use persistence_core::{Pagination, QueryFilter};
+
+    use super::{SupplierOfferingFilter, sort_doc};
 
     /// 同时给精确SKU和编号候选时，保留原BSON同名字段extend的覆盖行为。
     #[test]
@@ -664,10 +619,7 @@ mod tests {
         }
         .to_doc();
         assert_eq!(filter.get_str("source_type").unwrap(), "EXCEL");
-        assert_eq!(
-            filter.get_document("id").unwrap(),
-            &doc! { "$in": ["offering-1"] }
-        );
+        assert_eq!(filter.get_document("id").unwrap(), &doc! { "$in": ["offering-1"] });
     }
 
     #[test]
@@ -696,10 +648,7 @@ mod tests {
             sort_doc(Some("supplier_sku_code"), &["supplier_sku_code"], true),
             doc! { "supplier_sku_code": 1 }
         );
-        assert_eq!(
-            sort_doc(Some("unsafe"), &["supplier_sku_code"], false),
-            doc! { "created_at": -1 }
-        );
+        assert_eq!(sort_doc(Some("unsafe"), &["supplier_sku_code"], false), doc! { "created_at": -1 });
     }
 
     #[test]
@@ -743,10 +692,7 @@ mod tests {
         .to_doc();
         let branches = filter.get_array("$or").unwrap();
         assert_eq!(branches.len(), 1);
-        assert!(branches[0]
-            .as_document()
-            .unwrap()
-            .contains_key("supplier_sku_code"));
+        assert!(branches[0].as_document().unwrap().contains_key("supplier_sku_code"));
     }
 
     #[test]
@@ -782,21 +728,14 @@ mod tests {
         let current_by_revision = rows
             .iter()
             .filter_map(|row| {
-                row.current_revision_id
-                    .as_ref()
-                    .map(|revision_id| (revision_id.clone(), row.id.clone()))
+                row.current_revision_id.as_ref().map(|revision_id| (revision_id.clone(), row.id.clone()))
             })
             .collect::<std::collections::HashMap<_, _>>();
         assert!(!current_by_revision.contains_key("offering-1"));
-        assert_eq!(
-            current_by_revision.get("missing-revision").map(String::as_str),
-            Some("offering-2")
-        );
+        assert_eq!(current_by_revision.get("missing-revision").map(String::as_str), Some("offering-2"));
         let stored_ids = ["revision-9"];
-        let mapped = stored_ids
-            .iter()
-            .filter_map(|id| current_by_revision.get(*id).cloned())
-            .collect::<Vec<_>>();
+        let mapped =
+            stored_ids.iter().filter_map(|id| current_by_revision.get(*id).cloned()).collect::<Vec<_>>();
         assert!(mapped.is_empty());
     }
 }

@@ -8,17 +8,17 @@
 //! source_registry、D10 catalog 同构；抽取到冻结的 `services/src/query.rs`
 //! 属地基修订候选（见域报告）。
 
-use crate::entity::warehouse::status::EnableStatus;
-use crate::entity::warehouse::warehouse_entity::Warehouse;
-use crate::entity::warehouse::warehouse_sku_policy::WarehouseSkuPolicy;
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{SkuId, WarehouseId};
 use erp_core::money::Quantity;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use crate::entity::warehouse::status::EnableStatus;
+use crate::entity::warehouse::warehouse_entity::Warehouse;
+use crate::entity::warehouse::warehouse_sku_policy::WarehouseSkuPolicy;
 use crate::error::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 仓库列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const WAREHOUSE_SORT_FIELDS: &[&str] = &["created_at", "warehouse_code"];
@@ -43,6 +43,11 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
+/// 不生效，空 code/name 需要按「空白视为空」拒绝，落入 HTTP 400）。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -56,13 +61,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
-/// 不生效，空 code/name 需要按「空白视为空」拒绝，落入 HTTP 400）。
-use application_core::non_blank;
 
 /// 仓库创建请求（仓库稳定身份 + 首个仓库修订快照）。
 ///
@@ -491,9 +489,9 @@ impl WarehouseSkuPolicyListParams {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_sort;
-    use super::SortDir;
     use validator::Validate;
+
+    use super::{SortDir, normalize_sort};
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {

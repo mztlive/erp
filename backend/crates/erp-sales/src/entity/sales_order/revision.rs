@@ -8,8 +8,6 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::revision::RevisionBase;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
@@ -20,6 +18,7 @@ use erp_core::ids::{
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::amount_validation::validate_amount_triple;
 use super::snapshot::HeaderSnapshots;
@@ -264,9 +263,7 @@ impl SalesOrderRevision {
     /// # 错误
     /// 当前版本号达到 `u32::MAX` 时返回错误。
     pub fn next_revision_no(current_max: u32) -> Result<u32> {
-        current_max
-            .checked_add(1)
-            .ok_or_else(|| Error::from("销售版本号溢出"))
+        current_max.checked_add(1).ok_or_else(|| Error::from("销售版本号溢出"))
     }
 
     /// 返回卡券执行投影所需的表头履约期限。
@@ -408,16 +405,10 @@ impl SalesOrderRevisionLine {
         goods: &SalesOrderGoodsServiceLineRevision,
     ) -> Result<SalesOrderWorkingCopyLineData> {
         if self.line_type != LineType::GoodsService {
-            return Err(Error::from(format!(
-                "销售单当前版本第 {} 行不是实物服务行",
-                self.line_no
-            )));
+            return Err(Error::from(format!("销售单当前版本第 {} 行不是实物服务行", self.line_no)));
         }
         if goods.revision_line_id.as_ref() != self.base.id {
-            return Err(Error::from(format!(
-                "销售单当前版本第 {} 行与实物服务快照不匹配",
-                self.line_no
-            )));
+            return Err(Error::from(format!("销售单当前版本第 {} 行与实物服务快照不匹配", self.line_no)));
         }
         Ok(SalesOrderWorkingCopyLineData {
             sales_order_line_id: self.sales_order_line_id.clone(),
@@ -611,8 +602,9 @@ impl SalesOrderVoucherLineRevision {
 mod tests {
     use std::str::FromStr;
 
-    use super::*;
     use erp_core::money::Amount;
+
+    use super::*;
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -660,10 +652,7 @@ mod tests {
         assert_eq!(revision.content_hash, "abc123def456");
         assert_eq!(revision.customer_snapshot.customer_name, "东方企业");
         assert_eq!(revision.contract_snapshot.unwrap().contract_no, "HT-2026-0088");
-        assert_eq!(
-            revision.settlement_party_snapshot.unwrap().settlement_party_name,
-            "集团结算中心"
-        );
+        assert_eq!(revision.settlement_party_snapshot.unwrap().settlement_party_name, "集团结算中心");
         assert_eq!(revision.payment_term_snapshot.payment_term_name, "月结 30 天");
         assert_eq!(revision.invoice_requirement_snapshot.tax_point, "6");
         assert_eq!(revision.project_name.as_deref(), Some("端午福利项目"));
@@ -676,22 +665,14 @@ mod tests {
 
     #[test]
     fn new_rejects_blank_overlong_and_broken_invariants() {
-        let blank_hash = SalesOrderRevisionData {
-            content_hash: "   ".to_string(),
-            ..header_data()
-        };
+        let blank_hash = SalesOrderRevisionData { content_hash: "   ".to_string(), ..header_data() };
         assert!(SalesOrderRevision::new(SalesOrderRevisionId::new("rev-1"), blank_hash).is_err());
 
-        let overlong_remark = SalesOrderRevisionData {
-            business_remark: Some("x".repeat(1025)),
-            ..header_data()
-        };
+        let overlong_remark =
+            SalesOrderRevisionData { business_remark: Some("x".repeat(1025)), ..header_data() };
         assert!(SalesOrderRevision::new(SalesOrderRevisionId::new("rev-1"), overlong_remark).is_err());
 
-        let zero_no = SalesOrderRevisionData {
-            revision_no: 0,
-            ..header_data()
-        };
+        let zero_no = SalesOrderRevisionData { revision_no: 0, ..header_data() };
         assert!(SalesOrderRevision::new(SalesOrderRevisionId::new("rev-1"), zero_no).is_err());
 
         let half_voucher = SalesOrderRevisionData {
@@ -701,10 +682,7 @@ mod tests {
         };
         assert!(SalesOrderRevision::new(SalesOrderRevisionId::new("rev-1"), half_voucher).is_err());
 
-        let broken_amount = SalesOrderRevisionData {
-            gross_amount: amt("29.98"),
-            ..header_data()
-        };
+        let broken_amount = SalesOrderRevisionData { gross_amount: amt("29.98"), ..header_data() };
         assert!(SalesOrderRevision::new(SalesOrderRevisionId::new("rev-1"), broken_amount).is_err());
     }
 
@@ -731,10 +709,7 @@ mod tests {
         let mut missing_category = both.clone();
         missing_category.voucher_category_sku_id = None;
         assert_eq!(
-            missing_category
-                .required_voucher_expiry()
-                .unwrap_err()
-                .to_string(),
+            missing_category.required_voucher_expiry().unwrap_err().to_string(),
             "非卡券销售单无法建立执行投影"
         );
 
@@ -813,16 +788,10 @@ mod tests {
 
     #[test]
     fn revision_line_rejects_zero_no_and_broken_triple() {
-        let zero = SalesOrderRevisionLineData {
-            line_no: 0,
-            ..revision_line_data()
-        };
+        let zero = SalesOrderRevisionLineData { line_no: 0, ..revision_line_data() };
         assert!(SalesOrderRevisionLine::new(SalesOrderRevisionLineId::new("rl-1"), zero).is_err());
 
-        let broken = SalesOrderRevisionLineData {
-            net_amount: amt("26.06"),
-            ..revision_line_data()
-        };
+        let broken = SalesOrderRevisionLineData { net_amount: amt("26.06"), ..revision_line_data() };
         assert!(SalesOrderRevisionLine::new(SalesOrderRevisionLineId::new("rl-1"), broken).is_err());
     }
 
@@ -863,15 +832,15 @@ mod tests {
         assert_eq!(line.base_unit_code, "箱");
         assert_eq!(line.unit_price_gross, price("9.9900"));
 
-        let blank_unit = SalesOrderGoodsServiceLineRevisionData {
-            base_unit_code: "   ".to_string(),
-            ..data()
-        };
-        assert!(SalesOrderGoodsServiceLineRevision::new(
-            SalesOrderGoodsServiceLineRevisionId::new("gs-2"),
-            blank_unit
-        )
-        .is_err());
+        let blank_unit =
+            SalesOrderGoodsServiceLineRevisionData { base_unit_code: "   ".to_string(), ..data() };
+        assert!(
+            SalesOrderGoodsServiceLineRevision::new(
+                SalesOrderGoodsServiceLineRevisionId::new("gs-2"),
+                blank_unit
+            )
+            .is_err()
+        );
     }
 
     fn data() -> SalesOrderGoodsServiceLineRevisionData {
@@ -911,25 +880,19 @@ mod tests {
 
     #[test]
     fn voucher_line_revision_rejects_zero_count_and_zero_transaction() {
-        let zero_count = SalesOrderVoucherLineRevisionData {
-            card_count: 0,
-            ..voucher_data()
-        };
+        let zero_count = SalesOrderVoucherLineRevisionData { card_count: 0, ..voucher_data() };
         assert!(
             SalesOrderVoucherLineRevision::new(SalesOrderVoucherLineRevisionId::new("v-1"), zero_count)
                 .is_err()
         );
 
         // 成交金额为零时拒绝生效，不保存无定义比率（§6.4）。
-        let zero_transaction = SalesOrderVoucherLineRevisionData {
-            unit_price_gross: price("0.0000"),
-            ..voucher_data()
-        };
-        assert!(SalesOrderVoucherLineRevision::new(
-            SalesOrderVoucherLineRevisionId::new("v-1"),
-            zero_transaction
-        )
-        .is_err());
+        let zero_transaction =
+            SalesOrderVoucherLineRevisionData { unit_price_gross: price("0.0000"), ..voucher_data() };
+        assert!(
+            SalesOrderVoucherLineRevision::new(SalesOrderVoucherLineRevisionId::new("v-1"), zero_transaction)
+                .is_err()
+        );
     }
 
     fn voucher_data() -> SalesOrderVoucherLineRevisionData {

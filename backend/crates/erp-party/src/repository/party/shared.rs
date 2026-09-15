@@ -1,6 +1,7 @@
-use crate::entity::party::EffectiveRecordStatus;
 use erp_core::ids::PartyId;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
+
+use crate::entity::party::EffectiveRecordStatus;
 
 /// 构造指定日期生效的 Party 从属事实过滤条件。
 ///
@@ -52,17 +53,16 @@ pub(super) fn active_fact_window_filter(as_of: erp_core::common::time::BusinessD
 /// 返回排序条件文档。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
-    let field = sort_by
-        .filter(|candidate| allowed.contains(candidate))
-        .unwrap_or("created_at");
+    let field = sort_by.filter(|candidate| allowed.contains(candidate)).unwrap_or("created_at");
     doc! { field: direction }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{active_fact_window_filter, sort_doc};
     use erp_core::common::time::BusinessDate;
     use mongodb::bson::doc;
+
+    use super::{active_fact_window_filter, sort_doc};
 
     #[test]
     fn active_fact_window_is_left_closed_and_right_open() {
@@ -83,10 +83,7 @@ mod tests {
             .expect("结束日期分支必须是文档")
             .get_document("valid_to")
             .expect("必须包含结束日期");
-        assert_eq!(
-            valid_to.get_str("$gt").expect("结束日期必须排除当天"),
-            "2026-08-27"
-        );
+        assert_eq!(valid_to.get_str("$gt").expect("结束日期必须排除当天"), "2026-08-27");
     }
 
     #[test]
@@ -95,10 +92,7 @@ mod tests {
             sort_doc(Some("revised_at"), false, &["created_at", "party_no"]),
             doc! { "created_at": -1 }
         );
-        assert_eq!(
-            sort_doc(Some("party_no"), true, &["created_at", "party_no"]),
-            doc! { "party_no": 1 }
-        );
+        assert_eq!(sort_doc(Some("party_no"), true, &["created_at", "party_no"]), doc! { "party_no": 1 });
         assert_eq!(sort_doc(None, false, &["created_at"]), doc! { "created_at": -1 });
     }
 }

@@ -4,14 +4,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::DocumentRegistryExt;
-use persistence_core::Result;
 
 /// `business_document` 集合名。
 pub const BUSINESS_DOCUMENTS: &str = <mongodb::Database as DocumentRegistryExt>::BUSINESS_DOCUMENTS;
@@ -50,9 +48,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -89,10 +85,7 @@ fn document_relation_indexes() -> Vec<IndexModel> {
                 "relation_type": 1,
             },
         ),
-        named_index(
-            "idx_document_relations_reverse",
-            doc! { "to_document_id": 1, "relation_type": 1 },
-        ),
+        named_index("idx_document_relations_reverse", doc! { "to_document_id": 1, "relation_type": 1 }),
     ]
 }
 
@@ -104,10 +97,7 @@ fn document_participant_indexes() -> Vec<IndexModel> {
             "idx_document_participants_document_user",
             doc! { "document_id": 1, "participant_user_id": 1 },
         ),
-        named_index(
-            "idx_document_participants_user",
-            doc! { "participant_user_id": 1, "created_at": -1 },
-        ),
+        named_index("idx_document_participants_user", doc! { "participant_user_id": 1, "created_at": -1 }),
     ]
 }
 
@@ -115,23 +105,14 @@ fn document_participant_indexes() -> Vec<IndexModel> {
 fn workflow_action_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_workflow_actions_id", doc! { "id": 1 }),
-        named_index(
-            "idx_workflow_actions_document_created",
-            doc! { "document_id": 1, "created_at": -1 },
-        ),
-        named_index(
-            "idx_workflow_actions_actor_created",
-            doc! { "actor_id": 1, "created_at": -1 },
-        ),
+        named_index("idx_workflow_actions_document_created", doc! { "document_id": 1, "created_at": -1 }),
+        named_index("idx_workflow_actions_actor_created", doc! { "actor_id": 1, "created_at": -1 }),
     ]
 }
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -147,11 +128,7 @@ fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Documen
     IndexModel::builder()
         .keys(keys)
         .options(
-            IndexOptions::builder()
-                .name(name.into())
-                .unique(true)
-                .partial_filter_expression(filter)
-                .build(),
+            IndexOptions::builder().name(name.into()).unique(true).partial_filter_expression(filter).build(),
         )
         .build()
 }
@@ -160,12 +137,7 @@ fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Documen
 fn named_partial_index(name: impl Into<String>, keys: Document, filter: Document) -> IndexModel {
     IndexModel::builder()
         .keys(keys)
-        .options(
-            IndexOptions::builder()
-                .name(name.into())
-                .partial_filter_expression(filter)
-                .build(),
-        )
+        .options(IndexOptions::builder().name(name.into()).partial_filter_expression(filter).build())
         .build()
 }
 
@@ -192,12 +164,7 @@ mod tests {
             .unwrap();
         assert_eq!(id_unique.keys, doc! { "id": 1 });
         assert_eq!(id_unique.options.as_ref().unwrap().unique, Some(true));
-        assert!(id_unique
-            .options
-            .as_ref()
-            .unwrap()
-            .partial_filter_expression
-            .is_none());
+        assert!(id_unique.options.as_ref().unwrap().partial_filter_expression.is_none());
 
         let identity = indexes
             .iter()
@@ -208,10 +175,7 @@ mod tests {
             .unwrap();
         assert_eq!(identity.keys, doc! { "document_type": 1, "document_no": 1 });
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
-        assert_eq!(
-            identity.options.as_ref().unwrap().partial_filter_expression,
-            Some(non_empty.clone())
-        );
+        assert_eq!(identity.options.as_ref().unwrap().partial_filter_expression, Some(non_empty.clone()));
 
         let search = indexes
             .iter()
@@ -221,10 +185,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(search.keys, doc! { "document_no": 1 });
-        assert_eq!(
-            search.options.as_ref().unwrap().partial_filter_expression,
-            Some(non_empty)
-        );
+        assert_eq!(search.options.as_ref().unwrap().partial_filter_expression, Some(non_empty));
     }
 
     #[test]
@@ -236,9 +197,9 @@ mod tests {
                 == Some("uk_document_relations_link")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "to_document_id": 1, "relation_type": 1 } }));
+        assert!(
+            indexes.iter().any(|index| { index.keys == doc! { "to_document_id": 1, "relation_type": 1 } })
+        );
     }
 
     #[test]
@@ -253,24 +214,18 @@ mod tests {
             })
             .unwrap();
         assert_eq!(id_index.options.as_ref().unwrap().unique, Some(true));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys.contains_key("participant_user_id")));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "document_id": 1, "participant_user_id": 1 }));
+        assert!(indexes.iter().any(|index| index.keys.contains_key("participant_user_id")));
+        assert!(
+            indexes.iter().any(|index| index.keys == doc! { "document_id": 1, "participant_user_id": 1 })
+        );
     }
 
     #[test]
     fn workflow_action_indexes_cover_document_and_actor_history() {
         let indexes = workflow_action_indexes();
 
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "document_id": 1, "created_at": -1 } }));
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "actor_id": 1, "created_at": -1 } }));
+        assert!(indexes.iter().any(|index| { index.keys == doc! { "document_id": 1, "created_at": -1 } }));
+        assert!(indexes.iter().any(|index| { index.keys == doc! { "actor_id": 1, "created_at": -1 } }));
         assert!(indexes.iter().any(|index| {
             index.options.as_ref().and_then(|options| options.name.as_deref())
                 == Some("uk_workflow_actions_id")

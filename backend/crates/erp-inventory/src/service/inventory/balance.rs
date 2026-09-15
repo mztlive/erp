@@ -1,21 +1,19 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::entity::inventory::{StockBalance, StockMovement};
-use crate::ports::{SkuFact, SkuRevisionFact, WarehouseFact, WarehouseRevisionFact};
-use crate::repository::InventoryExt;
+use application_core::AuditActor;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use super::movement::load_movement_source_document_nos;
 use super::InventoryService;
+use super::movement::load_movement_source_document_nos;
 use crate::dto::{
     PageView, SortDir, StockBalanceDetailView, StockBalanceListParams, StockBalanceView, StockMovementView,
 };
+use crate::entity::inventory::{StockBalance, StockMovement};
 use crate::error::{Error, Result};
-use application_core::AuditActor;
-
-use crate::repository::{StockBalanceFilter, StockMovementFilter};
+use crate::ports::{SkuFact, SkuRevisionFact, WarehouseFact, WarehouseRevisionFact};
+use crate::repository::{InventoryExt, StockBalanceFilter, StockMovementFilter};
 
 impl InventoryService {
     /// 分页查询库存余额列表（W10 余额视图）。
@@ -85,28 +83,19 @@ impl InventoryService {
                         sort_by: Some(query.paging.sort_by.to_string()),
                         sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
                     };
-                    let page = db
-                        .stock_balances()
-                        .search_stock_balances(&filter, session)
-                        .await?;
+                    let page = db.stock_balances().search_stock_balances(&filter, session).await?;
                     Ok::<_, Error>((page, authorization))
                 })
             })
             .await?;
-        let warehouse_ids: Vec<String> = page
-            .items
-            .iter()
-            .map(|row| row.warehouse_id.to_string())
-            .collect();
+        let warehouse_ids: Vec<String> = page.items.iter().map(|row| row.warehouse_id.to_string()).collect();
         let sku_ids: Vec<String> = page.items.iter().map(|row| row.sku_id.to_string()).collect();
         let movement_ids: Vec<String> = page
             .items
             .iter()
             .filter_map(|row| row.last_movement_id.as_ref().map(ToString::to_string))
             .collect();
-        let enrichments = self
-            .load_enrichments(&warehouse_ids, &sku_ids, &movement_ids)
-            .await?;
+        let enrichments = self.load_enrichments(&warehouse_ids, &sku_ids, &movement_ids).await?;
         let active_reservation_dims = active_reservation_dims(&self.db, &warehouse_ids, &sku_ids).await?;
         let items = page
             .items
@@ -128,9 +117,7 @@ impl InventoryService {
                     warehouse_name: warehouse_name.unwrap_or_default(),
                     sku_id: row.sku_id.to_string(),
                     sku_code: sku.map(|sku| sku.sku_no.clone()).unwrap_or_default(),
-                    sku_name: sku_revision
-                        .map(|revision| revision.name.clone())
-                        .unwrap_or_default(),
+                    sku_name: sku_revision.map(|revision| revision.name.clone()).unwrap_or_default(),
                     spec_summary: sku_revision.and_then(|revision| revision.specification.clone()),
                     on_hand_quantity: row.on_hand_quantity,
                     reserved_quantity: row.reserved_quantity,
@@ -156,12 +143,7 @@ impl InventoryService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: page_no,
-            page_size,
-        })
+        Ok(PageView { items, total: page.total, page: page_no, page_size })
     }
 
     /// 查询库存余额详情（W10 详情：余额 + 最近流水 + 有效预占 + 未过账调整）。
@@ -218,11 +200,7 @@ impl InventoryService {
             sort_by: Some("occurred_at".to_string()),
             sort_ascending: false,
         };
-        let movements = self
-            .db
-            .stock_movements()
-            .search_stock_movements(&filter, &mut NoTransaction)
-            .await?;
+        let movements = self.db.stock_movements().search_stock_movements(&filter, &mut NoTransaction).await?;
         let reservations = self
             .db
             .inventory()
@@ -237,11 +215,7 @@ impl InventoryService {
             Vec::new()
         };
         let enrichments = self
-            .load_enrichments(
-                &[balance.warehouse_id.to_string()],
-                &[balance.sku_id.to_string()],
-                &[],
-            )
+            .load_enrichments(&[balance.warehouse_id.to_string()], &[balance.sku_id.to_string()], &[])
             .await?;
         let balance_view = build_balance_view(
             &balance,
@@ -301,38 +275,20 @@ impl InventoryService {
         sku_ids: &[String],
         movement_ids: &[String],
     ) -> Result<BalanceEnrichments> {
-        let warehouses = self
-            .warehouse_facts
-            .warehouses_by_ids(warehouse_ids, &mut NoTransaction)
-            .await?;
-        let skus = self
-            .catalog_facts
-            .skus_by_ids(sku_ids, &mut NoTransaction)
-            .await?;
-        let warehouse_revision_ids: Vec<String> = warehouses
-            .values()
-            .filter_map(|warehouse| warehouse.current_revision_id.clone())
-            .collect();
+        let warehouses = self.warehouse_facts.warehouses_by_ids(warehouse_ids, &mut NoTransaction).await?;
+        let skus = self.catalog_facts.skus_by_ids(sku_ids, &mut NoTransaction).await?;
+        let warehouse_revision_ids: Vec<String> =
+            warehouses.values().filter_map(|warehouse| warehouse.current_revision_id.clone()).collect();
         let warehouse_revisions = self
             .warehouse_facts
             .warehouse_revisions_by_ids(&warehouse_revision_ids, &mut NoTransaction)
             .await?;
-        let sku_revision_ids: Vec<String> = skus
-            .values()
-            .filter_map(|sku| sku.current_revision_id.clone())
-            .collect();
-        let sku_revisions = self
-            .catalog_facts
-            .sku_revisions_by_ids(&sku_revision_ids, &mut NoTransaction)
-            .await?;
+        let sku_revision_ids: Vec<String> =
+            skus.values().filter_map(|sku| sku.current_revision_id.clone()).collect();
+        let sku_revisions =
+            self.catalog_facts.sku_revisions_by_ids(&sku_revision_ids, &mut NoTransaction).await?;
         let movements = load_movements_by_ids(&self.db, movement_ids).await?;
-        Ok(BalanceEnrichments {
-            warehouses,
-            warehouse_revisions,
-            skus,
-            sku_revisions,
-            movements,
-        })
+        Ok(BalanceEnrichments { warehouses, warehouse_revisions, skus, sku_revisions, movements })
     }
 }
 
@@ -376,12 +332,7 @@ async fn active_reservation_dims(
         .await?;
     Ok(reservations
         .into_iter()
-        .map(|reservation| {
-            (
-                reservation.warehouse_id.to_string(),
-                reservation.sku_id.to_string(),
-            )
-        })
+        .map(|reservation| (reservation.warehouse_id.to_string(), reservation.sku_id.to_string()))
         .collect())
 }
 
@@ -401,10 +352,7 @@ async fn load_movements_by_ids(db: &Database, ids: &[String]) -> Result<HashMap<
         return Ok(HashMap::new());
     }
     let movements = db.inventory().movements_by_ids(ids, &mut NoTransaction).await?;
-    Ok(movements
-        .into_iter()
-        .map(|movement| (movement.base.id.clone(), movement))
-        .collect())
+    Ok(movements.into_iter().map(|movement| (movement.base.id.clone(), movement)).collect())
 }
 
 fn build_balance_view(
@@ -429,9 +377,7 @@ fn build_balance_view(
         warehouse_name: warehouse_name.unwrap_or_default(),
         sku_id: balance.sku_id.to_string(),
         sku_code: sku.map(|sku| sku.sku_no.clone()).unwrap_or_default(),
-        sku_name: sku_revision
-            .map(|revision| revision.name.clone())
-            .unwrap_or_default(),
+        sku_name: sku_revision.map(|revision| revision.name.clone()).unwrap_or_default(),
         spec_summary: sku_revision.and_then(|revision| revision.specification.clone()),
         on_hand_quantity: balance.on_hand_quantity,
         reserved_quantity: balance.reserved_quantity,
@@ -454,10 +400,7 @@ fn build_balance_view(
 }
 
 fn balance_allowed_actions(can_create_adjustment: bool) -> Vec<String> {
-    can_create_adjustment
-        .then(|| "CREATE_ADJUSTMENT".to_string())
-        .into_iter()
-        .collect()
+    can_create_adjustment.then(|| "CREATE_ADJUSTMENT".to_string()).into_iter().collect()
 }
 
 #[cfg(test)]
@@ -467,9 +410,6 @@ mod tests {
     #[test]
     fn balance_create_action_is_only_emitted_from_server_authorization() {
         assert!(balance_allowed_actions(false).is_empty());
-        assert_eq!(
-            balance_allowed_actions(true),
-            vec!["CREATE_ADJUSTMENT".to_string()]
-        );
+        assert_eq!(balance_allowed_actions(true), vec!["CREATE_ADJUSTMENT".to_string()]);
     }
 }

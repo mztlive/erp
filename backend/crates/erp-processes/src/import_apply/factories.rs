@@ -4,16 +4,15 @@
 //! 任务类型、责任角色、组织、原因与动作映射。通用 BPM 不拥有 W18 与
 //! WorkItem。无 I/O、时钟（时间由调用方注入）或密钥。
 
-use erp_core::ids::WorkItemId;
 use erp_core::Result;
+use erp_core::ids::WorkItemId;
+use erp_import::{ConfirmationDecision, ConfirmationScope, LegacyImportBatchId, LegacyImportConfirmation};
 use erp_workflow::entity::document_registry::{
     BusinessDocumentId, WorkflowAction, WorkflowActionData, WorkflowActionId, WorkflowActionType,
 };
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
-
-use erp_import::{ConfirmationDecision, ConfirmationScope, LegacyImportBatchId, LegacyImportConfirmation};
 
 /// 确认任务业务对象类型（`LEGACY_IMPORT_BATCH`）。
 const CONFIRMATION_OBJECT_TYPE: &str = "LEGACY_IMPORT_BATCH";
@@ -98,14 +97,12 @@ pub fn confirmation_workflow_action(
 ) -> Result<WorkflowAction> {
     let (action_type, to_status, comment) = match confirmation.decision {
         Some(ConfirmationDecision::ConfirmScope) => (WorkflowActionType::Confirm, "CONFIRMED", None),
-        Some(ConfirmationDecision::ReturnForFix) => (
-            WorkflowActionType::Reject,
-            "REJECTED",
-            confirmation.reason_code.clone(),
-        ),
+        Some(ConfirmationDecision::ReturnForFix) => {
+            (WorkflowActionType::Reject, "REJECTED", confirmation.reason_code.clone())
+        },
         None => {
             return Err(erp_core::Error::from("导入确认动作缺少领域决策"));
-        }
+        },
     };
     WorkflowAction::new(
         id,
@@ -123,11 +120,12 @@ pub fn confirmation_workflow_action(
 
 #[cfg(test)]
 mod tests {
-    use super::{confirmation_work_item, confirmation_workflow_action};
     use erp_core::ids::{LegacyImportBatchId, LegacyImportConfirmationId, WorkItemId};
     use erp_import::LegacyImportConfirmationData;
     use erp_workflow::entity::document_registry::WorkflowActionType;
     use erp_workflow::entity::work_item::WorkItemType;
+
+    use super::{confirmation_work_item, confirmation_workflow_action};
 
     fn confirmation(decision: erp_import::ConfirmationDecision) -> erp_import::LegacyImportConfirmation {
         use erp_import::LegacyImportConfirmation;
@@ -155,7 +153,7 @@ mod tests {
                         Some("确认".to_string()),
                     )
                     .unwrap();
-            }
+            },
             erp_import::ConfirmationDecision::ReturnForFix => {
                 confirmation
                     .decide(
@@ -166,7 +164,7 @@ mod tests {
                         None,
                     )
                     .unwrap();
-            }
+            },
         }
         confirmation
     }
@@ -188,22 +186,26 @@ mod tests {
             assert_eq!(item.responsibility_key(), Some(scope));
             assert_eq!(item.owner_organization_id, "company");
         }
-        assert!(confirmation_work_item(
-            WorkItemId::new("work-item-1"),
-            &LegacyImportBatchId::new("batch-1"),
-            "subject-1".to_string(),
-            "UNKNOWN",
-            "user-1",
-        )
-        .is_err());
-        assert!(confirmation_work_item(
-            WorkItemId::new("work-item-1"),
-            &LegacyImportBatchId::new("batch-1"),
-            "subject-1".to_string(),
-            "SALES",
-            "   ",
-        )
-        .is_err());
+        assert!(
+            confirmation_work_item(
+                WorkItemId::new("work-item-1"),
+                &LegacyImportBatchId::new("batch-1"),
+                "subject-1".to_string(),
+                "UNKNOWN",
+                "user-1",
+            )
+            .is_err()
+        );
+        assert!(
+            confirmation_work_item(
+                WorkItemId::new("work-item-1"),
+                &LegacyImportBatchId::new("batch-1"),
+                "subject-1".to_string(),
+                "SALES",
+                "   ",
+            )
+            .is_err()
+        );
     }
 
     #[test]

@@ -4,14 +4,14 @@ use std::collections::{HashMap, HashSet};
 
 use erp_core::common::time::Instant;
 use erp_integration::entity::integration_ops::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
+use erp_workflow::WorkflowAuthorizationPort;
 use erp_workflow::entity::work_item::{WorkItemBriefRelation, WorkItemType};
 pub(crate) use erp_workflow::ports::ObjectKind;
 use erp_workflow::service::work_item::order_access::filter_order_facts;
-use erp_workflow::WorkflowAuthorizationPort;
 use persistence_core::Executor;
 
 pub(crate) use super::authority::object_ids;
-use super::{brief, dto, WorkbenchReadService};
+use super::{WorkbenchReadService, brief, dto};
 use crate::errors::Result;
 
 #[derive(Debug, Clone, Default)]
@@ -84,30 +84,18 @@ fn integration_error_brief_source(task: &IntegrationErrorTask) -> brief::ObjectB
     let attempt_count = format!("{} 次", task.attempt_count);
     let resolved_at = task.resolved_at.map(brief::format_instant_datetime);
     let resolution_type = task.resolution_type.map(|value| value.label().to_string());
-    let reference = task
-        .business_object_id
-        .clone()
-        .or_else(|| task.message_id.as_ref().map(ToString::to_string));
+    let reference =
+        task.business_object_id.clone().or_else(|| task.message_id.as_ref().map(ToString::to_string));
     let mut sections = Vec::new();
     brief::push_section(&mut sections, "错误分类", Some(task.error_class.label()), false);
     brief::push_section(&mut sections, "状态", Some(task.status.label()), false);
-    brief::push_section(
-        &mut sections,
-        "业务对象参考号",
-        task.business_object_id.as_deref(),
-        false,
-    );
+    brief::push_section(&mut sections, "业务对象参考号", task.business_object_id.as_deref(), false);
     let message_id = task.message_id.as_ref().map(ToString::to_string);
     brief::push_section(&mut sections, "关联消息", message_id.as_deref(), false);
     brief::push_section(&mut sections, "发生时间", occurred_at.as_deref(), false);
     brief::push_section(&mut sections, "重试记录", Some(attempt_count.as_str()), false);
     brief::push_section(&mut sections, "最近尝试", last_attempt_at.as_deref(), false);
-    brief::push_section(
-        &mut sections,
-        "错误摘要",
-        task.last_attempt_summary.as_deref(),
-        false,
-    );
+    brief::push_section(&mut sections, "错误摘要", task.last_attempt_summary.as_deref(), false);
     brief::push_section(&mut sections, "责任角色", task.owner_role.as_deref(), false);
     brief::push_section(&mut sections, "责任人", task.owner_user_id.as_deref(), false);
     brief::push_section(
@@ -173,37 +161,17 @@ fn reconciliation_difference_brief_source(difference: &ReconciliationDifference)
         + usize::from(difference.right_fact_reference.is_some());
     let evidence_summary = format!("{evidence_count} 侧证据");
     let mut sections = Vec::new();
-    brief::push_section(
-        &mut sections,
-        "异常对象",
-        Some(difference.business_object_type.as_str()),
-        false,
-    );
+    brief::push_section(&mut sections, "异常对象", Some(difference.business_object_type.as_str()), false);
     brief::push_section(
         &mut sections,
         "外部/业务参考号",
         Some(difference.business_object_id.as_str()),
         false,
     );
-    brief::push_section(
-        &mut sections,
-        "差异类型",
-        Some(difference.difference_type.as_str()),
-        false,
-    );
+    brief::push_section(&mut sections, "差异类型", Some(difference.difference_type.as_str()), false);
     brief::push_section(&mut sections, "发现时间", occurred_at.as_deref(), false);
-    brief::push_section(
-        &mut sections,
-        "左侧证据",
-        difference.left_fact_reference.as_deref(),
-        false,
-    );
-    brief::push_section(
-        &mut sections,
-        "右侧证据",
-        difference.right_fact_reference.as_deref(),
-        false,
-    );
+    brief::push_section(&mut sections, "左侧证据", difference.left_fact_reference.as_deref(), false);
+    brief::push_section(&mut sections, "右侧证据", difference.right_fact_reference.as_deref(), false);
     brief::push_section(
         &mut sections,
         "关闭条件",
@@ -311,10 +279,7 @@ fn apply_subject_display(
         .map(|item| item.counterparty_label.clone())
         .unwrap_or_else(|| fact.display.counterparty_label.clone());
     let preserve_task_impact = fields.work_item_type.uses_explicit_owner_authorization()
-        && fields
-            .impact_summary
-            .as_deref()
-            .is_some_and(|impact| !impact.trim().is_empty());
+        && fields.impact_summary.as_deref().is_some_and(|impact| !impact.trim().is_empty());
     if !preserve_task_impact {
         if let Some(impact) = subject
             .and_then(|item| item.impact_summary.clone())
@@ -323,9 +288,8 @@ fn apply_subject_display(
             fields.impact_summary = Some(impact);
         }
     }
-    fields.brief_source = subject
-        .map(|item| item.brief_source.clone())
-        .unwrap_or_else(|| fact.display.brief_source.clone());
+    fields.brief_source =
+        subject.map(|item| item.brief_source.clone()).unwrap_or_else(|| fact.display.brief_source.clone());
 }
 
 impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
@@ -336,10 +300,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         facts: &mut WorkbenchObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let mut authority = facts
-            .iter()
-            .map(|(key, fact)| (key.clone(), fact.authority.clone()))
-            .collect();
+        let mut authority = facts.iter().map(|(key, fact)| (key.clone(), fact.authority.clone())).collect();
         filter_order_facts(&self.auth, actor_id, &mut authority, executor).await?;
         facts.retain(|key, _| authority.contains_key(key));
         Ok(())
@@ -383,30 +344,18 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         let mut facts = WorkbenchObjectFactMap::new();
         self.load_sales_order_facts(keys, &mut facts, executor).await?;
         self.load_purchase_order_facts(keys, &mut facts, executor).await?;
-        self.load_fulfillment_operation_facts(keys, &mut facts, executor)
-            .await?;
-        self.load_purchase_change_facts(keys, &mut facts, executor)
-            .await?;
-        self.load_sales_change_review_facts(keys, &mut facts, executor)
-            .await?;
-        self.load_receivable_account_facts(keys, &mut facts, executor)
-            .await?;
-        self.load_payable_account_facts(keys, &mut facts, executor)
-            .await?;
-        self.load_customer_receipt_facts(keys, &mut facts, executor)
-            .await?;
-        self.load_customer_refund_facts(keys, &mut facts, executor)
-            .await?;
-        self.load_receipt_reversal_facts(keys, &mut facts, executor)
-            .await?;
-        self.load_supplier_payment_facts(keys, &mut facts, executor)
-            .await?;
-        self.load_supplier_refund_facts(keys, &mut facts, executor)
-            .await?;
-        self.load_payment_reversal_facts(keys, &mut facts, executor)
-            .await?;
-        self.load_independent_object_facts(keys, &mut facts, executor)
-            .await?;
+        self.load_fulfillment_operation_facts(keys, &mut facts, executor).await?;
+        self.load_purchase_change_facts(keys, &mut facts, executor).await?;
+        self.load_sales_change_review_facts(keys, &mut facts, executor).await?;
+        self.load_receivable_account_facts(keys, &mut facts, executor).await?;
+        self.load_payable_account_facts(keys, &mut facts, executor).await?;
+        self.load_customer_receipt_facts(keys, &mut facts, executor).await?;
+        self.load_customer_refund_facts(keys, &mut facts, executor).await?;
+        self.load_receipt_reversal_facts(keys, &mut facts, executor).await?;
+        self.load_supplier_payment_facts(keys, &mut facts, executor).await?;
+        self.load_supplier_refund_facts(keys, &mut facts, executor).await?;
+        self.load_payment_reversal_facts(keys, &mut facts, executor).await?;
+        self.load_independent_object_facts(keys, &mut facts, executor).await?;
         Ok(facts)
     }
 
@@ -431,12 +380,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         self.load_stock_adjustment_facts(keys, facts, executor).await?;
         self.load_supplier_settlement_facts(keys, facts, executor).await?;
         self.load_legacy_import_batch_facts(keys, facts, executor).await?;
-        self.load_integration_error_task_facts(keys, facts, executor)
-            .await?;
-        self.load_reconciliation_difference_facts(keys, facts, executor)
-            .await?;
-        self.load_supplier_fulfillment_order_facts(keys, facts, executor)
-            .await?;
+        self.load_integration_error_task_facts(keys, facts, executor).await?;
+        self.load_reconciliation_difference_facts(keys, facts, executor).await?;
+        self.load_supplier_fulfillment_order_facts(keys, facts, executor).await?;
         self.load_supplier_offering_facts(keys, facts, executor).await?;
         self.load_operational_briefs(keys, facts, executor).await
     }
@@ -448,14 +394,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let mut loaded = erp_workflow::ports::ObjectFactMap::new();
-        self.facts_reader()
-            .load_legacy_import_batch_facts(keys, &mut loaded, executor)
-            .await?;
-        facts.extend(
-            loaded
-                .into_iter()
-                .map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact))),
-        );
+        self.facts_reader().load_legacy_import_batch_facts(keys, &mut loaded, executor).await?;
+        facts.extend(loaded.into_iter().map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact))));
         Ok(())
     }
 
@@ -469,11 +409,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        for task in self
-            .facts_reader()
-            .read_integration_errors(&ids, executor)
-            .await?
-        {
+        for task in self.facts_reader().read_integration_errors(&ids, executor).await? {
             let mut fact =
                 WorkbenchObjectFact::from_authority(super::authority::command::integration_error_fact(&task));
             fact.display.brief_source = Some(integration_error_brief_source(&task));
@@ -492,19 +428,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        for difference in self
-            .facts_reader()
-            .read_reconciliation_differences(&ids, executor)
-            .await?
-        {
+        for difference in self.facts_reader().read_reconciliation_differences(&ids, executor).await? {
             let mut fact = WorkbenchObjectFact::from_authority(
                 super::authority::command::reconciliation_difference_fact(&difference),
             );
             fact.display.brief_source = Some(reconciliation_difference_brief_source(&difference));
-            facts.insert(
-                (ObjectKind::ReconciliationDifference, difference.base.id.clone()),
-                fact,
-            );
+            facts.insert((ObjectKind::ReconciliationDifference, difference.base.id.clone()), fact);
         }
         Ok(())
     }
@@ -517,14 +446,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let mut loaded = erp_workflow::ports::ObjectFactMap::new();
-        self.facts_reader()
-            .load_supplier_fulfillment_order_facts(keys, &mut loaded, executor)
-            .await?;
-        facts.extend(
-            loaded
-                .into_iter()
-                .map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact))),
-        );
+        self.facts_reader().load_supplier_fulfillment_order_facts(keys, &mut loaded, executor).await?;
+        facts.extend(loaded.into_iter().map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact))));
         Ok(())
     }
 
@@ -536,14 +459,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let mut loaded = erp_workflow::ports::ObjectFactMap::new();
-        self.facts_reader()
-            .load_supplier_offering_facts(keys, &mut loaded, executor)
-            .await?;
-        facts.extend(
-            loaded
-                .into_iter()
-                .map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact))),
-        );
+        self.facts_reader().load_supplier_offering_facts(keys, &mut loaded, executor).await?;
+        facts.extend(loaded.into_iter().map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact))));
         Ok(())
     }
 }
@@ -578,14 +495,14 @@ mod integration_brief_tests {
 
         let brief = integration_error_brief_source(&task);
 
-        assert!(brief
-            .extra_sections
-            .iter()
-            .any(|section| { section.label == "业务对象参考号" && section.value == "EXT-2026-001" }));
-        assert!(brief
-            .extra_sections
-            .iter()
-            .any(|section| section.label == "重试记录" && section.value == "2 次"));
+        assert!(
+            brief.extra_sections.iter().any(|section| {
+                section.label == "业务对象参考号" && section.value == "EXT-2026-001"
+            })
+        );
+        assert!(
+            brief.extra_sections.iter().any(|section| section.label == "重试记录" && section.value == "2 次")
+        );
         assert!(brief.list_summary.contains("目标系统超时"));
     }
 
@@ -605,14 +522,8 @@ mod integration_brief_tests {
 
         let brief = reconciliation_difference_brief_source(&difference);
 
-        assert!(brief
-            .extra_sections
-            .iter()
-            .any(|section| section.label == "左侧证据"));
-        assert!(brief
-            .extra_sections
-            .iter()
-            .any(|section| section.label == "右侧证据"));
+        assert!(brief.extra_sections.iter().any(|section| section.label == "左侧证据"));
+        assert!(brief.extra_sections.iter().any(|section| section.label == "右侧证据"));
         assert!(brief.list_summary.contains("2 侧证据"));
     }
 }
@@ -623,7 +534,7 @@ mod authority_display_tests {
     use erp_workflow::entity::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority};
     use erp_workflow::ports::{ObjectFact, SubjectBrief};
 
-    use super::super::access::{has_object_participation, ActorAccess};
+    use super::super::access::{ActorAccess, has_object_participation};
     use super::*;
 
     fn fields() -> dto::WorkItemFields {
@@ -660,10 +571,7 @@ mod authority_display_tests {
         assert_eq!(fields.business_object_label, "display-title");
         assert_eq!(fields.root_business_object_id, "participation-root");
         assert_eq!(fields.counterparty_label, None);
-        assert_eq!(
-            fact.authority.counterparty_label.as_deref(),
-            Some("command-origin-name")
-        );
+        assert_eq!(fact.authority.counterparty_label.as_deref(), Some("command-origin-name"));
     }
 
     #[test]
@@ -691,9 +599,7 @@ mod authority_display_tests {
         assert_eq!(fields.counterparty_label.as_deref(), Some("display-root"));
         assert_eq!(fields.impact_summary.as_deref(), Some("visible-diff-lines"));
         assert_eq!(
-            fact.authority.subject_briefs["submission"]
-                .impact_summary
-                .as_deref(),
+            fact.authority.subject_briefs["submission"].impact_summary.as_deref(),
             Some("all-source-lines")
         );
     }

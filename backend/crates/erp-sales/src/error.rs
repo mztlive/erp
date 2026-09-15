@@ -155,13 +155,13 @@ impl From<persistence_core::Error> for Error {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
                 Self::ConflictError(duplicate_key_conflict_message(&error))
-            }
+            },
             persistence_core::Error::OptimisticLockingError => {
                 Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            }
+            },
             error @ persistence_core::Error::TransientTransactionConflict(_) => {
                 Self::TransientTransaction(error)
-            }
+            },
             error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
             other => Self::RepositoryError(other),
         }
@@ -196,16 +196,14 @@ impl From<validator::ValidationErrors> for Error {
 
 #[cfg(test)]
 mod tests {
+    use application_core::ErrorClass;
     use mongodb::error::Error as MongoError;
 
     use super::Error;
-    use application_core::ErrorClass;
 
     #[test]
     fn sales_unique_conflicts_keep_original_messages() {
-        let generic = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom(
-            "duplicate key",
-        )));
+        let generic = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
         assert_eq!(generic.class(), ErrorClass::Conflict);
         assert_eq!(generic.to_string(), "数据冲突: 数据已存在，请勿重复提交");
         assert_eq!(
@@ -234,10 +232,7 @@ mod tests {
         assert_eq!(Error::selection_conflict("c").class(), ErrorClass::Conflict);
         assert_eq!(Error::selection_ended("e").class(), ErrorClass::BusinessRule);
         assert_eq!(Error::selection_limit("l").class(), ErrorClass::BusinessRule);
-        assert_eq!(
-            Error::selection_prepare_failed("f").class(),
-            ErrorClass::BusinessRule
-        );
+        assert_eq!(Error::selection_prepare_failed("f").class(), ErrorClass::BusinessRule);
         assert_eq!(Error::selection_pending("p").class(), ErrorClass::Internal);
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_sales_selection_proposals_book")),

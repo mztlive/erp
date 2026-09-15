@@ -5,11 +5,11 @@
 //! 发起人与幂等摘要由 Service 显式注入，外部 worker 编排与落库仍归 Service；
 //! 通用 BPM 不拥有 ERP 任务类型。
 
+use erp_core::Result;
+use erp_core::ids::BackgroundJobId;
 use serde::{Deserialize, Serialize};
 
 use super::background_job::{BackgroundJob, BackgroundJobData, JobType};
-use erp_core::ids::BackgroundJobId;
-use erp_core::Result;
 
 /// W20 健康检查任务的领域任务类型代码。
 pub const SUPPLIER_HEALTH_CHECK_JOB_TYPE: &str = "SUPPLIER_HEALTH_CHECK";
@@ -117,12 +117,13 @@ impl BackgroundJob {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::ids::BackgroundJobId;
+
     use super::{
-        SupplierGovernanceJobKind, SupplierGovernanceJobSpec, SUPPLIER_CATALOG_SYNC_JOB_TYPE,
-        SUPPLIER_HEALTH_CHECK_JOB_TYPE,
+        SUPPLIER_CATALOG_SYNC_JOB_TYPE, SUPPLIER_HEALTH_CHECK_JOB_TYPE, SupplierGovernanceJobKind,
+        SupplierGovernanceJobSpec,
     };
     use crate::entity::bulk_job::{BackgroundJob, JobStatus, JobType};
-    use erp_core::ids::BackgroundJobId;
 
     /// 构造 W20 任务规格测试夹具。
     fn job_spec(kind: SupplierGovernanceJobKind, hash: &str) -> SupplierGovernanceJobSpec {
@@ -143,10 +144,7 @@ mod tests {
                 .unwrap();
         assert_eq!(health.job_no, "W20-HC-0123456789abcdef");
         assert_eq!(health.job_type, JobType::Sync);
-        assert_eq!(
-            health.domain_job_type.as_deref(),
-            Some(SUPPLIER_HEALTH_CHECK_JOB_TYPE)
-        );
+        assert_eq!(health.domain_job_type.as_deref(), Some(SUPPLIER_HEALTH_CHECK_JOB_TYPE));
         assert_eq!(health.domain_job_id.as_deref(), Some("conn-1"));
         assert_eq!(health.request_id, format!("w20:{hash}"));
         assert_eq!(health.total_count, 1);
@@ -157,50 +155,39 @@ mod tests {
             BackgroundJob::for_supplier_governance(job_spec(SupplierGovernanceJobKind::CatalogSync, hash))
                 .unwrap();
         assert_eq!(catalog.job_no, "W20-CS-0123456789abcdef");
-        assert_eq!(
-            catalog.domain_job_type.as_deref(),
-            Some(SUPPLIER_CATALOG_SYNC_JOB_TYPE)
-        );
+        assert_eq!(catalog.domain_job_type.as_deref(), Some(SUPPLIER_CATALOG_SYNC_JOB_TYPE));
         assert_eq!(catalog.total_count, 1);
     }
 
     #[test]
     fn governance_job_rejects_short_hash_without_panic() {
-        assert!(BackgroundJob::for_supplier_governance(job_spec(
-            SupplierGovernanceJobKind::HealthCheck,
-            "short"
-        ))
-        .is_err());
-        assert!(BackgroundJob::for_supplier_governance(job_spec(
-            SupplierGovernanceJobKind::HealthCheck,
-            "中文摘要长度不足以派生任务编号"
-        ))
-        .is_err());
+        assert!(
+            BackgroundJob::for_supplier_governance(job_spec(SupplierGovernanceJobKind::HealthCheck, "short"))
+                .is_err()
+        );
+        assert!(
+            BackgroundJob::for_supplier_governance(job_spec(
+                SupplierGovernanceJobKind::HealthCheck,
+                "中文摘要长度不足以派生任务编号"
+            ))
+            .is_err()
+        );
     }
 
     #[test]
     fn governance_job_rejects_empty_connection_and_requester() {
-        let mut spec = job_spec(
-            SupplierGovernanceJobKind::HealthCheck,
-            "0123456789abcdef0123456789abcdef",
-        );
+        let mut spec = job_spec(SupplierGovernanceJobKind::HealthCheck, "0123456789abcdef0123456789abcdef");
         spec.connection_id = "   ".to_string();
         assert!(BackgroundJob::for_supplier_governance(spec).is_err());
 
-        let mut spec = job_spec(
-            SupplierGovernanceJobKind::CatalogSync,
-            "0123456789abcdef0123456789abcdef",
-        );
+        let mut spec = job_spec(SupplierGovernanceJobKind::CatalogSync, "0123456789abcdef0123456789abcdef");
         spec.requested_by = String::new();
         assert!(BackgroundJob::for_supplier_governance(spec).is_err());
     }
 
     #[test]
     fn governance_job_kind_exposes_stable_codes() {
-        assert_eq!(
-            SupplierGovernanceJobKind::HealthCheck.domain_job_type(),
-            "SUPPLIER_HEALTH_CHECK"
-        );
+        assert_eq!(SupplierGovernanceJobKind::HealthCheck.domain_job_type(), "SUPPLIER_HEALTH_CHECK");
         assert_eq!(SupplierGovernanceJobKind::CatalogSync.job_no_prefix(), "W20-CS");
     }
 }

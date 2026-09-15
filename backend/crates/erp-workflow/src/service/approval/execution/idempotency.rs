@@ -1,12 +1,13 @@
 //! 审批运行命令的统一幂等身份、当前 V3 协议与历史精确候选。
 
+use std::time::Duration;
+
 use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{
     ApprovalCommandIdentity, ApprovalCommandReceipt, CanonicalCommandPayload, CommandPayloadField,
     CommandScope, IdempotencyKey,
 };
 use sha2::{Digest, Sha256};
-use std::time::Duration;
 
 use crate::error::{Error, ErrorCode, Result};
 
@@ -40,10 +41,7 @@ pub struct LegacyReceiptIdentity {
 impl LegacyReceiptIdentity {
     /// 创建一个已知历史 writer 的精确身份候选。
     pub fn exact(scope: impl Into<String>, digest: impl Into<String>) -> Self {
-        Self {
-            scope: scope.into(),
-            digest: digest.into(),
-        }
+        Self { scope: scope.into(), digest: digest.into() }
     }
 }
 
@@ -304,12 +302,7 @@ pub fn legacy_standard_start_receipt_identity(
         subject_kind,
         subject_id,
         subject_version,
-        legacy_start_digest(
-            binding_id,
-            definition_version,
-            subject_version,
-            actor_participant_id,
-        ),
+        legacy_start_digest(binding_id, definition_version, subject_version, actor_participant_id),
     )
 }
 
@@ -780,11 +773,7 @@ fn legacy_canonical_payload(fields: &[&str]) -> String {
         .iter()
         .map(|field| {
             let trimmed = field.trim();
-            if trimmed.is_empty() {
-                "NULL"
-            } else {
-                trimmed
-            }
+            if trimmed.is_empty() { "NULL" } else { trimmed }
         })
         .collect::<Vec<_>>()
         .join("\u{1f}")
@@ -796,12 +785,7 @@ fn legacy_start_scope(
     subject_id: &str,
     subject_version: u32,
 ) -> String {
-    legacy_canonical_payload(&[
-        process_kind,
-        subject_kind,
-        subject_id,
-        &subject_version.to_string(),
-    ])
+    legacy_canonical_payload(&[process_kind, subject_kind, subject_id, &subject_version.to_string()])
 }
 
 fn legacy_start_digest(
@@ -842,9 +826,7 @@ fn legacy_cancel_digest(
     reason: &str,
     actor_id: &str,
 ) -> String {
-    let task_version = expected_task_version
-        .map(|value| value.to_string())
-        .unwrap_or_default();
+    let task_version = expected_task_version.map(|value| value.to_string()).unwrap_or_default();
     legacy_payload_digest(&legacy_canonical_payload(&[
         &subject_version.to_string(),
         &expected_instance_version.to_string(),
@@ -875,7 +857,7 @@ fn legacy_document_cancel_digest(
         Some(value) => {
             push_length_prefixed(&mut canonical, "SOME");
             push_length_prefixed(&mut canonical, &value.to_string());
-        }
+        },
         None => push_length_prefixed(&mut canonical, "NONE"),
     }
     push_length_prefixed(&mut canonical, reason.trim());
@@ -896,9 +878,7 @@ fn legacy_resume_digest(
     expected_closed_task_version: Option<u64>,
     actor_id: &str,
 ) -> String {
-    let task_version = expected_closed_task_version
-        .map(|value| value.to_string())
-        .unwrap_or_default();
+    let task_version = expected_closed_task_version.map(|value| value.to_string()).unwrap_or_default();
     legacy_payload_digest(&legacy_canonical_payload(&[
         &expected_instance_version.to_string(),
         &expected_execution_version.to_string(),
@@ -916,9 +896,7 @@ fn legacy_cancel_blocked_digest(
     reason: &str,
     actor_id: &str,
 ) -> String {
-    let task_version = expected_task_version
-        .map(|value| value.to_string())
-        .unwrap_or_default();
+    let task_version = expected_task_version.map(|value| value.to_string()).unwrap_or_default();
     legacy_payload_digest(&legacy_canonical_payload(&[
         blocker,
         &expected_instance_version.to_string(),
@@ -953,31 +931,31 @@ fn legacy_digest_v2(domain: &str, fields: &[LegacyV2Field<'_>]) -> String {
             LegacyV2Field::Text(value) => {
                 hasher.update([1]);
                 update_text(&mut hasher, value);
-            }
+            },
             LegacyV2Field::U64(value) => {
                 hasher.update([2]);
                 hasher.update(value.to_be_bytes());
-            }
+            },
             LegacyV2Field::OptionalText(value) => {
                 hasher.update([3]);
                 match value {
                     Some(value) => {
                         hasher.update([1]);
                         update_text(&mut hasher, value);
-                    }
+                    },
                     None => hasher.update([0]),
                 }
-            }
+            },
             LegacyV2Field::OptionalU64(value) => {
                 hasher.update([4]);
                 match value {
                     Some(value) => {
                         hasher.update([1]);
                         hasher.update(value.to_be_bytes());
-                    }
+                    },
                     None => hasher.update([0]),
                 }
-            }
+            },
         }
     }
     format!("{V2_DIGEST_PREFIX}{}", hex::encode(hasher.finalize()))
@@ -1061,10 +1039,7 @@ pub fn map_receipt_first_write_error(error: persistence_core::Error) -> Error {
 
 /// 判断命令是否只允许在新会话有限回读原结果。
 pub fn command_may_have_committed(error: &Error) -> bool {
-    matches!(
-        error,
-        Error::OutcomeUnknown(_) | Error::ReceiptDuplicate(_) | Error::TransientTransaction(_)
-    )
+    matches!(error, Error::OutcomeUnknown(_) | Error::ReceiptDuplicate(_) | Error::TransientTransaction(_))
 }
 
 /// 返回命令结果有限回读的指数退避，上限为 160ms。
@@ -1075,14 +1050,15 @@ pub fn command_recovery_delay(attempt: usize) -> Duration {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        cancel_blocked_identity, cancel_identity, decision_identity, document_cancel_identity,
-        normalize_idempotency_key, resume_identity, start_identity, start_scope_candidates,
-        upgrade_binding_identity, CancelBlockedIdentityParams, CancelIdentityParams,
-        DocumentCancelIdentityParams, ReceiptBranch, StartIdentityParams,
-    };
     use bpm::ids::ApprovalCommandReceiptId;
     use bpm::model::{ApprovalCommandReceipt, Timestamp};
+
+    use super::{
+        CancelBlockedIdentityParams, CancelIdentityParams, DocumentCancelIdentityParams, ReceiptBranch,
+        StartIdentityParams, cancel_blocked_identity, cancel_identity, decision_identity,
+        document_cancel_identity, normalize_idempotency_key, resume_identity, start_identity,
+        start_scope_candidates, upgrade_binding_identity,
+    };
 
     fn key() -> bpm::model::IdempotencyKey {
         normalize_idempotency_key("  key-1  ").unwrap()
@@ -1102,10 +1078,7 @@ mod tests {
         let mut legacy = receipt(identity);
         legacy.scope_id = scope.to_string();
         legacy.payload_digest = digest;
-        assert!(matches!(
-            identity.classify(Some(&legacy)),
-            ReceiptBranch::SamePayload(_)
-        ));
+        assert!(matches!(identity.classify(Some(&legacy)), ReceiptBranch::SamePayload(_)));
     }
 
     #[test]
@@ -1122,10 +1095,7 @@ mod tests {
             decision_identity(key(), "exec-1", "a\u{1f}b", "APPROVE", Some("c"), 3, "u1").unwrap();
         let separator_right =
             decision_identity(key(), "exec-1", "a", "APPROVE", Some("b\u{1f}c"), 3, "u1").unwrap();
-        assert_ne!(
-            separator_left.current().digest(),
-            separator_right.current().digest()
-        );
+        assert_ne!(separator_left.current().digest(), separator_right.current().digest());
 
         let none = decision_identity(key(), "exec-1", "wi-1", "APPROVE", None, 3, "用户").unwrap();
         let literal_null =
@@ -1163,10 +1133,7 @@ mod tests {
         let mut receipt = receipt(&identity);
         receipt.scope_id = "exec-1".to_string();
         receipt.payload_digest = super::legacy_decision_digest_v2("wi-1", "APPROVE", None, 3, "u1");
-        assert!(matches!(
-            identity.classify(Some(&receipt)),
-            ReceiptBranch::SamePayload(_)
-        ));
+        assert!(matches!(identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)));
 
         receipt.scope_id = identity.current().scope().as_str().to_string();
         assert_eq!(identity.classify(Some(&receipt)), ReceiptBranch::PayloadConflict);
@@ -1280,11 +1247,7 @@ mod tests {
         );
 
         let resume = resume_identity(key(), "inst-1", 11, 13, 17, Some(19), "admin").unwrap();
-        assert_legacy_replay(
-            &resume,
-            "inst-1",
-            super::legacy_resume_digest(11, 13, 17, Some(19), "admin"),
-        );
+        assert_legacy_replay(&resume, "inst-1", super::legacy_resume_digest(11, 13, 17, Some(19), "admin"));
 
         let blocked = cancel_blocked_identity(CancelBlockedIdentityParams {
             idempotency_key: key(),
@@ -1403,24 +1366,14 @@ mod tests {
         let scopes = start_scope_candidates("stock_adjustment", "STOCK_ADJUSTMENT", "adj-1", 3).unwrap();
         assert_eq!(scopes.len(), 2);
         assert!(scopes[0].starts_with("v3:"));
-        assert_eq!(
-            scopes[1],
-            "stock_adjustment\u{1f}STOCK_ADJUSTMENT\u{1f}adj-1\u{1f}3"
-        );
+        assert_eq!(scopes[1], "stock_adjustment\u{1f}STOCK_ADJUSTMENT\u{1f}adj-1\u{1f}3");
     }
 
     #[test]
     fn upgrade_binding_is_v3_only_and_collision_free() {
-        let exact = upgrade_binding_identity(
-            "STOCK_ADJUSTMENT",
-            "adj-1",
-            7,
-            3,
-            "升级\u{1f}定义",
-            "admin",
-            key(),
-        )
-        .unwrap();
+        let exact =
+            upgrade_binding_identity("STOCK_ADJUSTMENT", "adj-1", 7, 3, "升级\u{1f}定义", "admin", key())
+                .unwrap();
         let relocated = upgrade_binding_identity(
             "STOCK_ADJUSTMENT\u{1f}adj-1",
             "7",

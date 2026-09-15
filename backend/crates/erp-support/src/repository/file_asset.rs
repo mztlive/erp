@@ -8,22 +8,21 @@
 //!
 //! 筛选/行类型定义在本文件，经 `FileAssetExt` 的关联类型对外暴露。
 
-use crate::repository::owned::{DocumentAttachmentRepository, FileAssetRepository};
 use std::collections::HashSet;
+
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{BusinessDocumentId, FileAssetId};
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
+use serde::{Deserialize, Serialize};
 
 use crate::entity::file_asset::{
     DocumentAttachment, FileAsset, RetentionClass, SecurityScanStatus, SensitivityClass,
 };
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::ids::{BusinessDocumentId, FileAssetId};
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use serde::{Deserialize, Serialize};
-
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::repository::owned::{DocumentAttachmentRepository, FileAssetRepository};
 
 /// 文件资产列表投影行（列表接口只取必要字段，禁止返回整文档）。
 ///
@@ -177,10 +176,7 @@ impl<'a> FileAssetRepository<'a> {
             return Ok(Vec::new());
         }
         let found = self.find_by_ids(ids, executor).await?;
-        let existing = found
-            .into_iter()
-            .map(|asset| asset.base.id)
-            .collect::<HashSet<_>>();
+        let existing = found.into_iter().map(|asset| asset.base.id).collect::<HashSet<_>>();
         let mut missing = Vec::new();
         let mut seen = HashSet::new();
         for id in ids {
@@ -221,10 +217,7 @@ impl<'a> FileAssetRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -294,12 +287,12 @@ fn file_asset_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, FileAssetFilter};
+    use mongodb::bson::doc;
+    use persistence_core::{NoTransaction, QueryFilter};
+
+    use super::{FileAssetFilter, sort_doc};
     use crate::entity::file_asset::{RetentionClass, SecurityScanStatus, SensitivityClass};
     use crate::repository::owned::FileAssetRepository;
-    use mongodb::bson::doc;
-    use persistence_core::NoTransaction;
-    use persistence_core::QueryFilter;
 
     #[test]
     fn filter_applies_name_regex_and_class_filters() {
@@ -327,18 +320,12 @@ mod tests {
     fn sort_doc_defaults_to_created_at_and_whitelists_fields() {
         assert_eq!(sort_doc(None, false), doc! { "created_at": -1 });
         assert_eq!(sort_doc(Some("updated_at"), true), doc! { "updated_at": 1 });
-        assert_eq!(
-            sort_doc(Some("file_name"), false),
-            doc! { "created_at": -1 },
-            "白名单外字段回落默认排序"
-        );
+        assert_eq!(sort_doc(Some("file_name"), false), doc! { "created_at": -1 }, "白名单外字段回落默认排序");
     }
 
     #[tokio::test]
     async fn find_by_ids_returns_empty_without_touching_database() {
-        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
-            .await
-            .unwrap();
+        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap();
         let database = client.database("repository_file_asset_empty_ids");
         let repository = FileAssetRepository::new(&database, "file_assets");
 
@@ -349,12 +336,13 @@ mod tests {
 
     #[test]
     fn file_asset_and_attachment_roundtrip_through_bson() {
-        use crate::entity::file_asset::{
-            content_fingerprint, AttachmentUsage, ContentHmac, DocumentAttachment, DocumentAttachmentData,
-            FileAsset, FileAssetData, RetentionClass, SensitivityClass,
-        };
         use erp_core::common::time::Instant;
         use erp_core::ids::{BusinessDocumentId, DocumentAttachmentId, FileAssetId};
+
+        use crate::entity::file_asset::{
+            AttachmentUsage, ContentHmac, DocumentAttachment, DocumentAttachmentData, FileAsset,
+            FileAssetData, RetentionClass, SensitivityClass, content_fingerprint,
+        };
 
         let asset = FileAsset::new(
             FileAssetId::new("fa-1"),

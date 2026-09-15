@@ -1,6 +1,5 @@
 //! Named catalog processes that own audited outer transactions.
 
-use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_catalog::entity::catalog::product_category::{ProductCategory, ProductCategoryData};
@@ -19,6 +18,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use validator::Validate;
 
+use crate::Result;
 use crate::adapters::catalog_service;
 use crate::audit::run_audited;
 
@@ -46,9 +46,7 @@ pub async fn create_unit_of_measure(
         },
         actor.id(),
     )?;
-    let audit = actor
-        .clone()
-        .resource_log("unit_of_measure.create", "unit_of_measure", id.to_string())?;
+    let audit = actor.clone().resource_log("unit_of_measure.create", "unit_of_measure", id.to_string())?;
     let unit_for_tx = unit.clone();
     run_audited(&db, audit, move |db, session| {
         Box::pin(async move {
@@ -69,9 +67,7 @@ pub async fn create_product_category(
     req.validate()?;
     let parent_id = req.parent_category_id.clone();
     let id = ProductCategoryId::new(next_id());
-    catalog_service(db.clone())
-        .ensure_parent_chain_ok(id.as_ref(), parent_id.as_ref())
-        .await?;
+    catalog_service(db.clone()).ensure_parent_chain_ok(id.as_ref(), parent_id.as_ref()).await?;
     let category = ProductCategory::new(
         id.clone(),
         ProductCategoryData {
@@ -83,9 +79,7 @@ pub async fn create_product_category(
         },
         actor.id(),
     )?;
-    let audit = actor
-        .clone()
-        .resource_log("product_category.create", "product_category", id.to_string())?;
+    let audit = actor.clone().resource_log("product_category.create", "product_category", id.to_string())?;
     let category_for_tx = category.clone();
     run_audited(&db, audit, move |db, session| {
         Box::pin(async move {
@@ -115,9 +109,7 @@ pub async fn create_sku_attribute(
         },
         actor.id(),
     )?;
-    let audit = actor
-        .clone()
-        .resource_log("sku_attribute.create", "sku_attribute", id.to_string())?;
+    let audit = actor.clone().resource_log("sku_attribute.create", "sku_attribute", id.to_string())?;
     let attribute_for_tx = attribute.clone();
     run_audited(&db, audit, move |db, session| {
         Box::pin(async move {
@@ -136,9 +128,7 @@ pub async fn create_sku_attribute_value(
     actor: AuditActor,
 ) -> Result<SkuAttributeValueView> {
     req.validate()?;
-    catalog_service(db.clone())
-        .load_attribute(req.attribute_id.as_ref())
-        .await?;
+    catalog_service(db.clone()).load_attribute(req.attribute_id.as_ref()).await?;
     let id = SkuAttributeValueId::new(next_id());
     let value = SkuAttributeValue::new(
         id.clone(),
@@ -151,11 +141,8 @@ pub async fn create_sku_attribute_value(
         },
         actor.id(),
     )?;
-    let audit = actor.clone().resource_log(
-        "sku_attribute_value.create",
-        "sku_attribute_value",
-        id.to_string(),
-    )?;
+    let audit =
+        actor.clone().resource_log("sku_attribute_value.create", "sku_attribute_value", id.to_string())?;
     let value_for_tx = value.clone();
     run_audited(&db, audit, move |db, session| {
         Box::pin(async move {

@@ -1,13 +1,12 @@
 //! 逐行创建供应商。每行复用原子根命令，失败不影响其他完整行。
-use super::SupplierProfileService;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_party::PartyExt;
-use erp_supplier::{
-    dto::import::{SupplierImportRequest, SupplierImportResult, SupplierImportRow},
-    SupplierExt,
-};
+use erp_supplier::SupplierExt;
+use erp_supplier::dto::import::{SupplierImportRequest, SupplierImportResult, SupplierImportRow};
 use persistence_core::NoTransaction;
+
+use super::SupplierProfileService;
+use crate::{Error, Result};
 
 impl SupplierProfileService {
     /// 执行有界导入并返回每一行结果；不持久化上传中的明文敏感资料。
@@ -87,7 +86,7 @@ impl SupplierProfileService {
                     ));
                 }
                 Err(error)
-            }
+            },
         }
     }
 
@@ -104,17 +103,10 @@ impl SupplierProfileService {
 
     /// 精确匹配当前法定名称，不将其他企业主体自动转换成供应商。
     async fn existing_import_supplier(&self, name: &str) -> Result<Option<erp_supplier::SupplierAccount>> {
-        let parties = self
-            .db
-            .party()
-            .exact_current_party_ids_by_name(name, &mut NoTransaction)
-            .await?;
+        let parties = self.db.party().exact_current_party_ids_by_name(name, &mut NoTransaction).await?;
         for party in parties {
-            if let Some(supplier) = self
-                .db
-                .supplier_accounts()
-                .find_by_party(&party, &mut NoTransaction)
-                .await?
+            if let Some(supplier) =
+                self.db.supplier_accounts().find_by_party(&party, &mut NoTransaction).await?
             {
                 return Ok(Some(supplier));
             }
@@ -149,10 +141,9 @@ fn failed_row(row: &SupplierImportRow, error: Error) -> SupplierImportResult {
         | Error::ConflictError(message)
         | Error::NotFound(message) => ("failed", message),
         Error::Logic(error) => ("failed", error.to_string()),
-        Error::OutcomeUnknown(_) => (
-            "uncertain",
-            "提交结果暂无法确认，请使用同一文件重试核对，系统会检查已导入记录".into(),
-        ),
+        Error::OutcomeUnknown(_) => {
+            ("uncertain", "提交结果暂无法确认，请使用同一文件重试核对，系统会检查已导入记录".into())
+        },
         _ => ("uncertain", "暂无法确认导入结果，请重试核对".into()),
     };
     row_result(row, status, &message, None, None)

@@ -1,12 +1,11 @@
 //! 供给聚合通用查询：稳定身份按 ID 读取与商业条款修订查询。
 
-use crate::entity::supplier_offering::{SupplierOffering, SupplierOfferingRevision};
-use crate::repository::owned::{SupplierOfferingRepository, SupplierOfferingRevisionRepository};
 use erp_core::ids::{SupplierOfferingId, SupplierOfferingRevisionId};
 use mongodb::bson::doc;
+use persistence_core::{Executor, Result};
 
-use persistence_core::Executor;
-use persistence_core::Result;
+use crate::entity::supplier_offering::{SupplierOffering, SupplierOfferingRevision};
+use crate::repository::owned::{SupplierOfferingRepository, SupplierOfferingRevisionRepository};
 
 impl<'a> SupplierOfferingRepository<'a> {
     /// 按稳定 ID 读取未删除的供给身份。
@@ -84,7 +83,6 @@ impl<'a> SupplierOfferingRevisionRepository<'a> {
         offering_id: &SupplierOfferingId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierOfferingRevision>> {
-        self.find_many(doc! { "supplier_offering_id": offering_id.to_string() }, executor)
-            .await
+        self.find_many(doc! { "supplier_offering_id": offering_id.to_string() }, executor).await
     }
 }

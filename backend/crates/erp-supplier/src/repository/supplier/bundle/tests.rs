@@ -55,15 +55,13 @@ fn supplier_list_candidate_intersection_preserves_order_and_empty() {
 /// 资质约束分支覆盖类型、健康状态与未登记排除路径。
 #[test]
 fn qualification_constraint_kind_covers_all_branches() {
-    use crate::entity::supplier::QualificationType;
     use QualificationConstraintKind::{Excluded, Included, Unconstrained};
+
+    use crate::entity::supplier::QualificationType;
     // 未筛选资质时无约束。
     assert_eq!(qualification_constraint_kind(&[], None), Unconstrained);
     // 仅按类型命中。
-    assert_eq!(
-        qualification_constraint_kind(&[QualificationType::FoodLicense], None),
-        Included
-    );
+    assert_eq!(qualification_constraint_kind(&[QualificationType::FoodLicense], None), Included);
     // 各健康状态均走命中分支。
     for health in [
         SupplierQualificationHealthFilter::Valid,

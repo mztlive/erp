@@ -62,10 +62,10 @@ impl Error {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
             Self::ConflictError(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_) => {
                 ErrorClass::Conflict
-            }
+            },
             Self::BusinessLogicError(_) | Self::ValidationError(_) | Self::NotFound(_) => {
                 ErrorClass::BusinessRule
-            }
+            },
             Self::Forbidden(_) | Self::Unauthenticated(_) => ErrorClass::Forbidden,
             Self::OutcomeUnknown(_) => ErrorClass::Internal,
         }
@@ -81,13 +81,13 @@ impl From<persistence_core::Error> for Error {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
                 Self::ConflictError(duplicate_key_conflict_message(&error))
-            }
+            },
             persistence_core::Error::OptimisticLockingError => {
                 Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            }
+            },
             error @ persistence_core::Error::TransientTransactionConflict(_) => {
                 Self::TransientTransaction(error)
-            }
+            },
             error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
             other => Self::RepositoryError(other),
         }
@@ -103,10 +103,7 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
 ///
 /// 供给重复 SKU 保持原专用提示，其余供应链唯一索引保持通用提示。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
-    index_name
-        .and_then(known_duplicate_index_message)
-        .unwrap_or("数据已存在，请勿重复提交")
-        .to_string()
+    index_name.and_then(known_duplicate_index_message).unwrap_or("数据已存在，请勿重复提交").to_string()
 }
 
 /// 返回供应链领域已知唯一索引的固定冲突提示。
@@ -135,8 +132,9 @@ impl From<validator::ValidationErrors> for Error {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use mongodb::error::Error as MongoError;
+
+    use super::*;
 
     #[test]
     fn supply_unique_conflicts_keep_original_messages() {
@@ -149,14 +147,9 @@ mod tests {
             Some("uk_supplier_offerings_supplier_sku_extra"),
             Some("uk_supplier_connection_command_receipts_command"),
         ] {
-            assert_eq!(
-                duplicate_index_conflict_message(index),
-                "数据已存在，请勿重复提交"
-            );
+            assert_eq!(duplicate_index_conflict_message(index), "数据已存在，请勿重复提交");
         }
-        let error = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom(
-            "duplicate key",
-        )));
+        let error = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
         assert_eq!(error.class(), ErrorClass::Conflict);
         assert_eq!(error.to_string(), "数据冲突: 数据已存在，请勿重复提交");
     }
@@ -166,28 +159,20 @@ mod tests {
         let error = Error::from(persistence_core::Error::OptimisticLockingError);
         assert_eq!(error.to_string(), "数据冲突: 数据已被其他请求修改，请刷新后重试");
         assert_eq!(error.class(), ErrorClass::Conflict);
-        let error = Error::from(persistence_core::Error::TransientTransactionConflict(
-            MongoError::custom("transient"),
-        ));
-        assert!(matches!(error, Error::TransientTransaction(_)));
-        let error = Error::from(persistence_core::Error::CommitOutcomeUnknown(MongoError::custom(
-            "unknown",
+        let error = Error::from(persistence_core::Error::TransientTransactionConflict(MongoError::custom(
+            "transient",
         )));
+        assert!(matches!(error, Error::TransientTransaction(_)));
+        let error = Error::from(persistence_core::Error::CommitOutcomeUnknown(MongoError::custom("unknown")));
         assert!(matches!(error, Error::OutcomeUnknown(_)));
-        assert_eq!(
-            error.to_string(),
-            "操作结果暂无法确认，请查询当前状态后再决定是否重试"
-        );
+        assert_eq!(error.to_string(), "操作结果暂无法确认，请查询当前状态后再决定是否重试");
     }
 
     /// 真实公开查询与私有格式化均保留精确命中及未知、缺失名称的原结果。
     #[test]
     fn known_duplicate_export_preserves_exact_match_and_fallback() {
         let cases = [
-            (
-                Some("uk_supplier_offerings_supplier_sku"),
-                Some("该供应商 SKU 已登记供给"),
-            ),
+            (Some("uk_supplier_offerings_supplier_sku"), Some("该供应商 SKU 已登记供给")),
             (Some(""), None),
             (Some("unknown_index"), None),
             (Some("uk_supplier_offerings_supplier_sku_extra"), None),

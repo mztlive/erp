@@ -1,8 +1,10 @@
 //! 报表按授权销售单批量读取成本分配及对应事实，禁止按供应商成本猜测归属。
+use mongodb::bson::doc;
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, Result, mongo_ops};
+
 use crate::entity::cost::{CostAllocation, CostEntry};
 use crate::repository::owned::{CostAllocationRepository, CostEntryRepository};
-use mongodb::{bson::doc, options::FindOptions};
-use persistence_core::{mongo_ops, Executor, Result};
 
 /// 单次报表的成本分配上限；额外一条用于报错而非静默截断。
 pub const PROFIT_LOSS_ALLOCATION_LIMIT: usize = 100_000;
@@ -16,9 +18,7 @@ impl CostAllocationRepository<'_> {
         if ids.is_empty() {
             return Ok(vec![]);
         }
-        let options = FindOptions::builder()
-            .limit((PROFIT_LOSS_ALLOCATION_LIMIT + 1) as i64)
-            .build();
+        let options = FindOptions::builder().limit((PROFIT_LOSS_ALLOCATION_LIMIT + 1) as i64).build();
         mongo_ops::find_many(
             &self.collection(),
             doc! { "deleted_at": 0_i64, "sales_order_id": { "$in": ids } },

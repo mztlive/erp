@@ -1,14 +1,12 @@
 //! 采购责任规则唯一性与管理查询索引。
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::ProcurementResponsibilityExt;
-use persistence_core::Result;
 
 /// 创建采购责任规则索引。
 ///
@@ -66,10 +64,7 @@ fn indexes() -> Vec<IndexModel> {
 /// # 返回
 /// 返回非唯一索引模型。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 #[cfg(test)]

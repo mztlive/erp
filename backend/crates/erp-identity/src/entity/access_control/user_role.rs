@@ -2,13 +2,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::rbac::RoleId;
 use erp_core::common::time::Instant;
 use erp_core::ids::UserRoleId;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::rbac::RoleId;
 
 /// 用户 ID 最大长度。
 const USER_ID_MAX_LEN: usize = 128;
@@ -88,12 +88,8 @@ impl UserRole {
     /// 当用户 ID/分配人为空或超长、角色 ID 非法或有效期倒挂时返回错误。
     pub fn new(id: UserRoleId, data: UserRoleData) -> Result<Self> {
         let user_id = normalize_required_text(data.user_id, "用户ID不能为空", USER_ID_MAX_LEN, "用户ID过长")?;
-        let assigned_by = normalize_required_text(
-            data.assigned_by,
-            "分配人不能为空",
-            ASSIGNED_BY_MAX_LEN,
-            "分配人过长",
-        )?;
+        let assigned_by =
+            normalize_required_text(data.assigned_by, "分配人不能为空", ASSIGNED_BY_MAX_LEN, "分配人过长")?;
         if let Some(effective_to) = data.effective_to {
             if effective_to <= data.effective_from {
                 return Err(Error::from("到期时间必须晚于生效时间"));
@@ -181,10 +177,11 @@ impl UserRole {
 
 #[cfg(test)]
 mod tests {
-    use super::{UserRole, UserRoleData, UserRoleRevokeData};
-    use crate::entity::rbac::RoleId;
     use erp_core::common::time::Instant;
     use erp_core::ids::UserRoleId;
+
+    use super::{UserRole, UserRoleData, UserRoleRevokeData};
+    use crate::entity::rbac::RoleId;
 
     fn data() -> UserRoleData {
         UserRoleData {
@@ -211,10 +208,7 @@ mod tests {
     /// 失败路径：必填为空被拒。
     #[test]
     fn new_rejects_empty_user_id() {
-        let payload = UserRoleData {
-            user_id: "  ".to_string(),
-            ..data()
-        };
+        let payload = UserRoleData { user_id: "  ".to_string(), ..data() };
         assert!(UserRole::new(UserRoleId::new("ur-1"), payload).is_err());
     }
 
@@ -228,10 +222,7 @@ mod tests {
     /// 失败路径：关联不一致（有效期倒挂）被拒。
     #[test]
     fn new_rejects_reversed_effective_window() {
-        let payload = UserRoleData {
-            effective_to: Some(Instant::from_unix_secs(1_699_913_600)),
-            ..data()
-        };
+        let payload = UserRoleData { effective_to: Some(Instant::from_unix_secs(1_699_913_600)), ..data() };
         assert!(UserRole::new(UserRoleId::new("ur-1"), payload).is_err());
     }
 
@@ -239,16 +230,15 @@ mod tests {
     #[test]
     fn revoke_requires_reason_and_deactivates() {
         let mut binding = UserRole::new(UserRoleId::new("ur-1"), data()).unwrap();
-        assert!(binding
-            .revoke(
-                UserRoleRevokeData {
-                    revoke_reason_code: "  ".to_string(),
-                    revoke_reason_text: None,
-                },
-                "admin-2",
-                Instant::from_unix_secs(1_700_100_000),
-            )
-            .is_err());
+        assert!(
+            binding
+                .revoke(
+                    UserRoleRevokeData { revoke_reason_code: "  ".to_string(), revoke_reason_text: None },
+                    "admin-2",
+                    Instant::from_unix_secs(1_700_100_000),
+                )
+                .is_err()
+        );
 
         binding
             .revoke(

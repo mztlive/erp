@@ -1,9 +1,4 @@
 //! 反向验收的幂等根事务；事实逆转后刷新销售、按剩余事实重开任务并写双审计。
-use super::{
-    completion::{complete_acceptance, CompletionKind},
-    CustomerAcceptanceProcess,
-};
-use crate::Result;
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::CommandReceiptServiceExt;
 use erp_core::ids::CustomerAcceptanceId;
@@ -12,6 +7,10 @@ use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
 use erp_fulfillment::service::FulfillmentService;
 use persistence_core::Transactional;
 use validator::Validate;
+
+use super::CustomerAcceptanceProcess;
+use super::completion::{CompletionKind, complete_acceptance};
+use crate::Result;
 impl CustomerAcceptanceProcess {
     /// 冲正客户验收（已过账 → 已冲正；§8.2 第 5 条反向分配事务）。
     ///
@@ -37,11 +36,7 @@ impl CustomerAcceptanceProcess {
     #[tracing::instrument(
         name = "fulfillment.customer_acceptance_reverse",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "customer_acceptance_reverse"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "customer_acceptance_reverse")
     )]
     pub async fn reverse_customer_acceptance(
         &self,
@@ -60,11 +55,7 @@ impl CustomerAcceptanceProcess {
             [req.expected_version.to_string(), req.reason_text.clone()],
         )?;
         if let Some(reverse_acceptance_id) = command_receipt.committed_resource_id(&self.db).await? {
-            return Ok(self
-                .domain
-                .customer_acceptance_detail(&reverse_acceptance_id)
-                .await?
-                .acceptance);
+            return Ok(self.domain.customer_acceptance_detail(&reverse_acceptance_id).await?.acceptance);
         }
         let original_id = CustomerAcceptanceId::new(id.to_string());
         let actor = actor.clone();
@@ -100,11 +91,9 @@ impl CustomerAcceptanceProcess {
         match transaction_result {
             Ok(reversed) => Ok(reversed.into()),
             Err(error) => match command_receipt.committed_resource_id(&self.db).await? {
-                Some(reverse_acceptance_id) => Ok(self
-                    .domain
-                    .customer_acceptance_detail(&reverse_acceptance_id)
-                    .await?
-                    .acceptance),
+                Some(reverse_acceptance_id) => {
+                    Ok(self.domain.customer_acceptance_detail(&reverse_acceptance_id).await?.acceptance)
+                },
                 None => Err(error),
             },
         }

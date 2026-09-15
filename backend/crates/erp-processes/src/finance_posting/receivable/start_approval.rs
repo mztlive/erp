@@ -1,42 +1,37 @@
 //! 客户回款提交启动：加载定义图、构造 `prepare_start` 输入并持久化运行事实。
 
+use application_core::AuditActor;
 use bpm::engine::{DefinitionGraph, StartAssigneeBinding, TaskIntent};
 use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
-use erp_audit::AuditExt;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::repository::ReceivableExt;
 use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::entity::work_item::DocumentApprovalWorkItemData;
-use erp_workflow::entity::work_item::{WorkItem, WorkItemPriority};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
-use erp_workflow::ApprovalIntegrationExt;
-use erp_workflow::BpmExt;
-use erp_workflow::DocumentRegistryExt;
-use erp_workflow::WorkItemExt;
+use erp_workflow::service::approval::execution::authorization::{AuthorizationFailure, converge_eligibility};
+use erp_workflow::service::approval::execution::idempotency::{
+    ReceiptBranch, StartIdentityParams, normalize_idempotency_key, payload_conflict_error, start_identity,
+    start_scope_candidates,
+};
+use erp_workflow::service::approval::execution::{
+    ExecutionCommandInput, PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
+};
+use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::adapter::customer_receipt_object_readable;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_workflow::service::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
-use erp_workflow::service::approval::execution::idempotency::{
-    normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
-    StartIdentityParams,
-};
-use erp_workflow::service::approval::execution::{
-    map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
-};
-use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
 ///
@@ -89,11 +84,7 @@ pub(super) async fn load_bound_definition_graph_with_executor(
 /// # 返回
 /// 返回引擎可消费的定义图。
 fn engine_graph(graph: erp_workflow::repository::bpm::DefinitionGraph) -> DefinitionGraph {
-    DefinitionGraph {
-        definition: graph.definition,
-        nodes: graph.nodes,
-        transitions: graph.transitions,
-    }
+    DefinitionGraph { definition: graph.definition, nodes: graph.nodes, transitions: graph.transitions }
 }
 
 /// 读取同载荷启动收据；不存在时返回 `None`。
@@ -220,9 +211,7 @@ pub(super) async fn replay_customer_receipt_start_with_executor(
         || instance.process_definition_id != binding.approval_process_definition_id
         || instance.definition_version != binding.approval_definition_version
     {
-        return Err(Error::ConflictError(
-            "客户回款启动收据与冻结运行事实不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("客户回款启动收据与冻结运行事实不一致".to_string()));
     }
     Ok(Some(instance.base.id))
 }
@@ -298,18 +287,14 @@ pub(super) fn build_document_start_input(input: DocumentStartInput<'_>) -> Resul
         now,
     } = input;
     if graph.definition.definition_version != binding.approval_definition_version {
-        return Err(Error::ConflictError(
-            "客户回款单绑定定义版本与已加载定义不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("客户回款单绑定定义版本与已加载定义不一致".to_string()));
     }
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
     let bindings = start_bindings_from_graph(&graph, organization_id)?;
-    let entry = graph
-        .entry_node()
-        .map_err(|_| Error::ConflictError("审批定义缺少入口节点".to_string()))?;
+    let entry = graph.entry_node().map_err(|_| Error::ConflictError("审批定义缺少入口节点".to_string()))?;
     let entry_eligibility = bindings
         .iter()
         .find(|item| item.node_key == entry.node_key)
@@ -367,9 +352,7 @@ fn start_bindings_from_graph(
         });
     }
     if bindings.is_empty() {
-        return Err(Error::ConflictError(
-            "审批定义没有节点，无法启动客户回款审批".to_string(),
-        ));
+        return Err(Error::ConflictError("审批定义没有节点，无法启动客户回款审批".to_string()));
     }
     Ok(bindings)
 }
@@ -491,9 +474,7 @@ pub(super) async fn persist_customer_receipt_start_in_transaction(
         )
         .await?;
     if guarded.is_none() {
-        return Err(Error::ConflictError(
-            "客户回款单审批启动守卫冲突，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("客户回款单审批启动守卫冲突，请刷新后重试".to_string()));
     }
     // 先在同一事务写入提交字段，快照读取才能包含本次核销安排。
     let mut receipt = receipt;
@@ -501,10 +482,7 @@ pub(super) async fn persist_customer_receipt_start_in_transaction(
     persist_runtime_writes(
         db,
         &writes,
-        RuntimeSubject {
-            document_type: DocumentType::CustomerReceipt,
-            snapshot_payload: &snapshot_payload,
-        },
+        RuntimeSubject { document_type: DocumentType::CustomerReceipt, snapshot_payload: &snapshot_payload },
         owner_role,
         &organization_id,
         now,
@@ -534,10 +512,7 @@ pub(super) async fn persist_runtime_writes(
     now: Instant,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
-    let RuntimeSubject {
-        document_type,
-        snapshot_payload,
-    } = subject;
+    let RuntimeSubject { document_type, snapshot_payload } = subject;
     let first = writes
         .created_executions
         .first()
@@ -569,19 +544,8 @@ pub(super) async fn persist_runtime_writes(
         )
         .await?,
     );
-    db.approval_subject_snapshots()
-        .create_immutable_snapshot(&snapshot, session)
-        .await?;
-    persist_open_tasks(
-        db,
-        document_type,
-        writes,
-        owner_role,
-        organization_id,
-        now,
-        session,
-    )
-    .await
+    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, session).await?;
+    persist_open_tasks(db, document_type, writes, owner_role, organization_id, now, session).await
 }
 
 /// 由入口执行构造有界列表投影。
@@ -621,12 +585,7 @@ async fn persist_open_tasks(
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
     for intent in &writes.create_tasks {
-        let TaskIntent::HumanTaskRequested {
-            execution_id,
-            assignee,
-            ..
-        } = intent
-        else {
+        let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
             continue;
         };
         let item = WorkItem::new_document_approval(
@@ -651,10 +610,11 @@ async fn persist_open_tasks(
 
 #[cfg(test)]
 mod tests {
-    use super::list_projection_from_execution;
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
     use bpm::model::{ApprovalNodeExecution, NewNodeExecution, ParticipantId, Timestamp};
     use erp_core::common::time::Instant;
+
+    use super::list_projection_from_execution;
 
     fn execution() -> ApprovalNodeExecution {
         ApprovalNodeExecution::new_active(NewNodeExecution {

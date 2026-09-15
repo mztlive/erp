@@ -1,13 +1,14 @@
-use super::shared::*;
-use super::SupplierSettlementService;
-use crate::dto::supplier_settlement::*;
-use crate::entity::supplier_settlement::*;
-use crate::repository::SupplierSettlementExt;
-use crate::{Error, Result};
 use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierSettlementDifferenceId, SupplierSettlementStatementId};
 use id_generator::next_id;
 use persistence_core::Executor;
+
+use super::SupplierSettlementService;
+use super::shared::*;
+use crate::dto::supplier_settlement::*;
+use crate::entity::supplier_settlement::*;
+use crate::repository::SupplierSettlementExt;
+use crate::{Error, Result};
 impl SupplierSettlementService {
     /// 结算本域prepare_difference_evidence，保持原校验、构造和执行器顺序。
     pub async fn prepare_difference_evidence(
@@ -25,9 +26,7 @@ impl SupplierSettlementService {
                 | SettlementStatus::PendingReconciliation
                 | SettlementStatus::HasDifference
         ) {
-            return Err(Error::BusinessLogicError(
-                "当前结算状态禁止追加差异补证".to_string(),
-            ));
+            return Err(Error::BusinessLogicError("当前结算状态禁止追加差异补证".to_string()));
         }
         let difference = self
             .db
@@ -36,9 +35,7 @@ impl SupplierSettlementService {
             .await?
             .ok_or_else(|| Error::NotFound("供应商结算差异不存在".to_string()))?;
         if difference.base.version != req.expected_difference_version {
-            return Err(Error::ConflictError(
-                "结算差异版本已变化，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("结算差异版本已变化，请刷新后重试".to_string()));
         }
         let item = self
             .db
@@ -47,9 +44,7 @@ impl SupplierSettlementService {
             .await?
             .ok_or_else(|| Error::NotFound("结算差异所属明细不存在".to_string()))?;
         if item.statement_id.as_ref() != req.statement_id {
-            return Err(Error::BusinessLogicError(
-                "差异不属于命令指定的结算单".to_string(),
-            ));
+            return Err(Error::BusinessLogicError("差异不属于命令指定的结算单".to_string()));
         }
         let evidence = SupplierSettlementDifferenceEvidence::new(
             next_id(),

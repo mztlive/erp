@@ -9,10 +9,8 @@ pub mod import;
 pub mod product;
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Multipart, Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Multipart, Path, Query, State};
+use axum::{Extension, Json};
 use erp_catalog::{
     CreateProductBrandRequest, CreateProductCategoryRequest, CreateSkuAttributeRequest,
     CreateSkuAttributeValueRequest, CreateUnitOfMeasureRequest, MoveProductCategoryRequest, PageView,
@@ -23,17 +21,13 @@ use erp_catalog::{
 };
 use erp_support::SensitivityClass;
 
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::Result,
-        handler::file_asset::{
-            delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
-            store_pending_asset_files,
-        },
-        response::ApiResponse,
-    },
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::handler::file_asset::{
+    delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
+    store_pending_asset_files,
 };
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "商品与仓库",
@@ -108,10 +102,7 @@ pub async fn product_category_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateProductCategoryRequest>,
 ) -> Result<ProductCategoryView> {
-    let view = state
-        .catalog_service()
-        .product_category_update(&id, req, &actor)
-        .await?;
+    let view = state.catalog_service().product_category_update(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -139,10 +130,7 @@ pub async fn product_category_move(
     Path(id): Path<String>,
     Json(req): Json<MoveProductCategoryRequest>,
 ) -> Result<ProductCategoryView> {
-    let view = state
-        .catalog_service()
-        .product_category_move(&id, req, &actor)
-        .await?;
+    let view = state.catalog_service().product_category_move(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -168,10 +156,7 @@ pub async fn product_category_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    state
-        .catalog_service()
-        .product_category_delete(&id, &actor)
-        .await?;
+    state.catalog_service().product_category_delete(&id, &actor).await?;
 
     Ok(ApiResponse::ok())
 }
@@ -250,7 +235,7 @@ pub async fn product_brand_create_with_assets(
                 delete_pending_asset_objects(&state, &pending).await;
             }
             Err(error.into())
-        }
+        },
     }
 }
 
@@ -277,10 +262,7 @@ pub async fn product_brand_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateProductBrandRequest>,
 ) -> Result<ProductBrandView> {
-    let view = state
-        .catalog_service()
-        .product_brand_update(&id, req, &actor)
-        .await?;
+    let view = state.catalog_service().product_brand_update(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -310,7 +292,7 @@ pub async fn product_brand_update_with_assets(
                 delete_pending_asset_objects(&state, &pending).await;
             }
             Err(error.into())
-        }
+        },
     }
 }
 
@@ -413,10 +395,7 @@ pub async fn unit_of_measure_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateUnitOfMeasureRequest>,
 ) -> Result<UnitOfMeasureView> {
-    let view = state
-        .catalog_service()
-        .unit_of_measure_update(&id, req, &actor)
-        .await?;
+    let view = state.catalog_service().unit_of_measure_update(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -442,10 +421,7 @@ pub async fn unit_of_measure_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    state
-        .catalog_service()
-        .unit_of_measure_delete(&id, &actor)
-        .await?;
+    state.catalog_service().unit_of_measure_delete(&id, &actor).await?;
 
     Ok(ApiResponse::ok())
 }
@@ -523,10 +499,7 @@ pub async fn sku_attribute_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateSkuAttributeRequest>,
 ) -> Result<SkuAttributeView> {
-    let view = state
-        .catalog_service()
-        .sku_attribute_update(&id, req, &actor)
-        .await?;
+    let view = state.catalog_service().sku_attribute_update(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -630,10 +603,7 @@ pub async fn sku_attribute_value_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateSkuAttributeValueRequest>,
 ) -> Result<SkuAttributeValueView> {
-    let view = state
-        .catalog_service()
-        .sku_attribute_value_update(&id, req, &actor)
-        .await?;
+    let view = state.catalog_service().sku_attribute_value_update(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -659,10 +629,7 @@ pub async fn sku_attribute_value_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    state
-        .catalog_service()
-        .sku_attribute_value_delete(&id, &actor)
-        .await?;
+    state.catalog_service().sku_attribute_value_delete(&id, &actor).await?;
 
     Ok(ApiResponse::ok())
 }

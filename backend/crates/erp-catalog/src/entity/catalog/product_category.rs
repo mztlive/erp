@@ -6,14 +6,14 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::catalog::product_kind::ProductKind;
-use crate::entity::catalog::status::EnableStatus;
 use erp_core::common::stable::StableBase;
 use erp_core::ids::ProductCategoryId;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::catalog::product_kind::ProductKind;
+use crate::entity::catalog::status::EnableStatus;
 
 /// 分类代码最大长度。
 const CODE_MAX_LEN: usize = 64;
@@ -104,12 +104,8 @@ impl ProductCategory {
         data: ProductCategoryData,
         created_by: impl Into<String>,
     ) -> Result<Self> {
-        let category_code = normalize_required_text(
-            data.category_code,
-            "分类代码不能为空",
-            CODE_MAX_LEN,
-            "分类代码过长",
-        )?;
+        let category_code =
+            normalize_required_text(data.category_code, "分类代码不能为空", CODE_MAX_LEN, "分类代码过长")?;
         let name = normalize_required_text(data.name, "分类名称不能为空", NAME_MAX_LEN, "分类名称过长")?;
         if data.parent_category_id.as_ref() == Some(&id) {
             return Err(Error::from("父分类不能是自身"));
@@ -167,10 +163,7 @@ impl ProductCategory {
         parent: Option<ProductCategoryId>,
         updated_by: impl Into<String>,
     ) -> Result<()> {
-        if parent
-            .as_ref()
-            .is_some_and(|parent_id| parent_id.as_ref() == self.base.id.as_str())
-        {
+        if parent.as_ref().is_some_and(|parent_id| parent_id.as_ref() == self.base.id.as_str()) {
             return Err(Error::from("父分类不能是自身"));
         }
         self.parent_category_id = parent;
@@ -221,9 +214,10 @@ impl ProductCategory {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
     use erp_core::ids::ProductCategoryId;
+
+    use super::*;
 
     fn data() -> ProductCategoryData {
         ProductCategoryData {
@@ -252,26 +246,18 @@ mod tests {
     /// 失败路径：必填空、超长各一条。
     #[test]
     fn new_rejects_empty_and_overlong_fields() {
-        let empty_code = ProductCategoryData {
-            category_code: "   ".to_string(),
-            ..data()
-        };
+        let empty_code = ProductCategoryData { category_code: "   ".to_string(), ..data() };
         assert!(ProductCategory::new(ProductCategoryId::new("cat-1"), empty_code, "admin-1").is_err());
 
-        let overlong_name = ProductCategoryData {
-            name: "n".repeat(129),
-            ..data()
-        };
+        let overlong_name = ProductCategoryData { name: "n".repeat(129), ..data() };
         assert!(ProductCategory::new(ProductCategoryId::new("cat-1"), overlong_name, "admin-1").is_err());
     }
 
     /// 失败路径：父分类为自身（单节点可判定的环）被拒绝。
     #[test]
     fn new_rejects_self_parent() {
-        let self_parent = ProductCategoryData {
-            parent_category_id: Some(ProductCategoryId::new("cat-1")),
-            ..data()
-        };
+        let self_parent =
+            ProductCategoryData { parent_category_id: Some(ProductCategoryId::new("cat-1")), ..data() };
         assert!(ProductCategory::new(ProductCategoryId::new("cat-1"), self_parent, "admin-1").is_err());
     }
 

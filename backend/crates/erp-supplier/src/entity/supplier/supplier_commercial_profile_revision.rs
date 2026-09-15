@@ -5,17 +5,16 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_core::common::revision::RevisionBase;
+pub use erp_core::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
+use erp_core::money::Rate;
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::business_category::{normalize_business_category, split_encoded_payment_term_snapshot};
 pub use super::payment_term::SettlementMode;
 use super::payment_term::SupplierPaymentTerm;
-use erp_core::common::revision::RevisionBase;
-use erp_core::money::Rate;
-use erp_core::validation::normalize_required_text;
-use erp_core::{Error, Result};
-
-pub use erp_core::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
 
 /// 付款条件快照最大长度。
 const PAYMENT_TERM_SNAPSHOT_MAX_LEN: usize = 64;
@@ -229,9 +228,7 @@ impl SupplierCommercialProfileRevision {
 
     /// 返回新集合或旧单值，保留明确未登记的空集合。
     pub fn tax_rates(&self) -> Vec<Rate> {
-        self.invoice_tax_rates
-            .clone()
-            .unwrap_or_else(|| self.invoice_tax_rate.into_iter().collect())
+        self.invoice_tax_rates.clone().unwrap_or_else(|| self.invoice_tax_rate.into_iter().collect())
     }
 
     /// 返回不含经营类目编码的付款条件代码。
@@ -249,9 +246,7 @@ impl SupplierCommercialProfileRevision {
     /// 无。
     pub fn effective_payment_term_code(&self) -> String {
         let code = split_encoded_payment_term_snapshot(&self.payment_term_snapshot).payment_term_code;
-        SupplierPaymentTerm::parse(&code)
-            .map(|term| term.code().to_string())
-            .unwrap_or(code)
+        SupplierPaymentTerm::parse(&code).map(|term| term.code().to_string()).unwrap_or(code)
     }
 
     /// 返回经营类目：独立字段优先，否则从历史付款条件快照拆出。
@@ -352,9 +347,7 @@ fn ensure_tax_rate_valid(rate: Rate) -> Result<()> {
 /// # Errors
 /// 超过 32 项、税率非法或单双字段矛盾时返回错误。
 pub fn normalize_invoice_tax_rates(rates: Option<&[Rate]>, legacy: Option<Rate>) -> Result<Vec<Rate>> {
-    let mut values = rates
-        .map(<[Rate]>::to_vec)
-        .unwrap_or_else(|| legacy.into_iter().collect());
+    let mut values = rates.map(<[Rate]>::to_vec).unwrap_or_else(|| legacy.into_iter().collect());
     if values.len() > 32 {
         return Err(Error::from("常用进项税率不能超过 32 项"));
     }
@@ -373,12 +366,13 @@ pub fn normalize_invoice_tax_rates(rates: Option<&[Rate]>, legacy: Option<Rate>)
 mod tests {
     use std::str::FromStr;
 
+    use erp_core::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice, line_amounts};
+
     use super::{
         InvoiceType, ReconciliationCycle, SettlementMode, SupplierCommercialProfileRevision,
         SupplierCommercialProfileRevisionData,
     };
-    use erp_core::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
-    use erp_core::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
 
     fn profile_data() -> SupplierCommercialProfileRevisionData {
         SupplierCommercialProfileRevisionData {
@@ -421,54 +415,59 @@ mod tests {
             payment_term_snapshot: "   ".to_string(),
             ..profile_data()
         };
-        assert!(SupplierCommercialProfileRevision::new(
-            SupplierCommercialProfileRevisionId::new("p"),
-            blank_snapshot,
-        )
-        .is_err());
+        assert!(
+            SupplierCommercialProfileRevision::new(
+                SupplierCommercialProfileRevisionId::new("p"),
+                blank_snapshot,
+            )
+            .is_err()
+        );
 
-        let overlong_reason = SupplierCommercialProfileRevisionData {
-            change_reason: "x".repeat(501),
-            ..profile_data()
-        };
-        assert!(SupplierCommercialProfileRevision::new(
-            SupplierCommercialProfileRevisionId::new("p"),
-            overlong_reason,
-        )
-        .is_err());
+        let overlong_reason =
+            SupplierCommercialProfileRevisionData { change_reason: "x".repeat(501), ..profile_data() };
+        assert!(
+            SupplierCommercialProfileRevision::new(
+                SupplierCommercialProfileRevisionId::new("p"),
+                overlong_reason,
+            )
+            .is_err()
+        );
 
         let bad_rate = SupplierCommercialProfileRevisionData {
             invoice_tax_rate: Some(Rate::from_str("1.05").unwrap()),
             invoice_tax_rates: None,
             ..profile_data()
         };
-        assert!(SupplierCommercialProfileRevision::new(
-            SupplierCommercialProfileRevisionId::new("p"),
-            bad_rate,
-        )
-        .is_err());
+        assert!(
+            SupplierCommercialProfileRevision::new(SupplierCommercialProfileRevisionId::new("p"), bad_rate,)
+                .is_err()
+        );
 
         let ambiguous_payment_term = SupplierCommercialProfileRevisionData {
             settlement_mode: SettlementMode::PayAfterUse,
             payment_term_snapshot: "先用后付".to_string(),
             ..profile_data()
         };
-        assert!(SupplierCommercialProfileRevision::new(
-            SupplierCommercialProfileRevisionId::new("p"),
-            ambiguous_payment_term,
-        )
-        .is_err());
+        assert!(
+            SupplierCommercialProfileRevision::new(
+                SupplierCommercialProfileRevisionId::new("p"),
+                ambiguous_payment_term,
+            )
+            .is_err()
+        );
 
         let mismatched_settlement = SupplierCommercialProfileRevisionData {
             settlement_mode: SettlementMode::PayAfterUse,
             payment_term_snapshot: "PREPAY_30".to_string(),
             ..profile_data()
         };
-        assert!(SupplierCommercialProfileRevision::new(
-            SupplierCommercialProfileRevisionId::new("p"),
-            mismatched_settlement,
-        )
-        .is_err());
+        assert!(
+            SupplierCommercialProfileRevision::new(
+                SupplierCommercialProfileRevisionId::new("p"),
+                mismatched_settlement,
+            )
+            .is_err()
+        );
     }
 
     /// 金额三元组：发票税点参与行金额计算时保持 gross = net + tax。
@@ -565,18 +564,9 @@ mod tests {
     /// 受控代码的稳定序列化形态与中文标签。
     #[test]
     fn enums_serialize_with_stable_codes() {
-        assert_eq!(
-            serde_json::to_string(&SettlementMode::PayAfterUse).unwrap(),
-            "\"pay_after_use\""
-        );
-        assert_eq!(
-            serde_json::to_string(&ReconciliationCycle::Yearly).unwrap(),
-            "\"yearly\""
-        );
-        assert_eq!(
-            serde_json::to_string(&InvoiceType::Electronic).unwrap(),
-            "\"electronic\""
-        );
+        assert_eq!(serde_json::to_string(&SettlementMode::PayAfterUse).unwrap(), "\"pay_after_use\"");
+        assert_eq!(serde_json::to_string(&ReconciliationCycle::Yearly).unwrap(), "\"yearly\"");
+        assert_eq!(serde_json::to_string(&InvoiceType::Electronic).unwrap(), "\"electronic\"");
         assert_eq!(SettlementMode::CashSettlement.label(), "现结");
         assert_eq!(ReconciliationCycle::None.label(), "无需周期对账");
         assert_eq!(InvoiceType::VatSpecial.label(), "增值税专用发票");
@@ -606,11 +596,7 @@ mod tests {
                 .unwrap();
         assert!(profile.invoice_tax_rate.is_none());
         assert_eq!(
-            profile
-                .tax_rates()
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>(),
+            profile.tax_rates().iter().map(ToString::to_string).collect::<Vec<_>>(),
             vec!["0.09", "0.13"]
         );
         let empty = SupplierCommercialProfileRevisionData {
@@ -622,15 +608,12 @@ mod tests {
             SupplierCommercialProfileRevision::new(SupplierCommercialProfileRevisionId::new("p"), empty)
                 .unwrap();
         assert!(empty.tax_rates().is_empty());
-        let conflict = SupplierCommercialProfileRevisionData {
-            invoice_tax_rates: Some(vec![]),
-            ..profile_data()
-        };
-        assert!(SupplierCommercialProfileRevision::new(
-            SupplierCommercialProfileRevisionId::new("p"),
-            conflict
-        )
-        .is_err());
+        let conflict =
+            SupplierCommercialProfileRevisionData { invoice_tax_rates: Some(vec![]), ..profile_data() };
+        assert!(
+            SupplierCommercialProfileRevision::new(SupplierCommercialProfileRevisionId::new("p"), conflict)
+                .is_err()
+        );
     }
     #[test]
     fn periodic_settlement_requires_matching_reconciliation_cycle() {
@@ -640,19 +623,20 @@ mod tests {
             payment_term_snapshot: "PERIOD_MONTH_15".into(),
             ..profile_data()
         };
-        assert!(SupplierCommercialProfileRevision::new(
-            SupplierCommercialProfileRevisionId::new("p"),
-            valid.clone()
-        )
-        .is_ok());
+        assert!(
+            SupplierCommercialProfileRevision::new(
+                SupplierCommercialProfileRevisionId::new("p"),
+                valid.clone()
+            )
+            .is_ok()
+        );
         let invalid = SupplierCommercialProfileRevisionData {
             reconciliation_cycle: ReconciliationCycle::Weekly,
             ..valid
         };
-        assert!(SupplierCommercialProfileRevision::new(
-            SupplierCommercialProfileRevisionId::new("p"),
-            invalid
-        )
-        .is_err());
+        assert!(
+            SupplierCommercialProfileRevision::new(SupplierCommercialProfileRevisionId::new("p"), invalid)
+                .is_err()
+        );
     }
 }

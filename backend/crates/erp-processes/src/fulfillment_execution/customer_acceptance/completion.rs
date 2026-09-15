@@ -1,10 +1,5 @@
 //! 验收事实写入后的销售进度、责任任务与审计顺序；三条入口共用生产编排。
 
-use super::task::{
-    ensure_customer_acceptance_task, persist_customer_acceptance_task_after_posting,
-    CustomerAcceptanceTaskReason,
-};
-use crate::Result;
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt};
@@ -14,19 +9,17 @@ use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::task::{
+    CustomerAcceptanceTaskReason, ensure_customer_acceptance_task,
+    persist_customer_acceptance_task_after_posting,
+};
+use crate::Result;
+
 /// 用例确定任务来源和审计种类，避免给普通 post 新增幂等回放。
 pub(super) enum CompletionKind {
-    Commit {
-        task: WorkItem,
-        receipt: CommandReceipt,
-    },
-    Post {
-        task: WorkItem,
-    },
-    Reverse {
-        original_id: String,
-        receipt: CommandReceipt,
-    },
+    Commit { task: WorkItem, receipt: CommandReceipt },
+    Post { task: WorkItem },
+    Reverse { original_id: String, receipt: CommandReceipt },
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CompletionMode {
@@ -53,12 +46,7 @@ pub(super) async fn complete_acceptance(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let mode = kind.mode();
-    let mut port = DatabaseCompletion {
-        db,
-        acceptance,
-        actor,
-        kind,
-    };
+    let mut port = DatabaseCompletion { db, acceptance, actor, kind };
     finish(&mut port, mode, executor).await
 }
 
@@ -103,11 +91,7 @@ impl AcceptanceCompletion for DatabaseCompletion<'_> {
         )
         .await?;
         apply_projection(
-            &mut SalesProgressWriter {
-                db: self.db,
-                acceptance: self.acceptance,
-                actor: self.actor,
-            },
+            &mut SalesProgressWriter { db: self.db, acceptance: self.acceptance, actor: self.actor },
             progress,
             executor,
         )
@@ -125,7 +109,7 @@ impl AcceptanceCompletion for DatabaseCompletion<'_> {
                     executor,
                 )
                 .await
-            }
+            },
             CompletionKind::Reverse { .. } if remaining => {
                 ensure_customer_acceptance_task(
                     self.db,
@@ -135,7 +119,7 @@ impl AcceptanceCompletion for DatabaseCompletion<'_> {
                 )
                 .await?;
                 Ok(())
-            }
+            },
             CompletionKind::Reverse { .. } => Ok(()),
         }
     }
@@ -144,13 +128,10 @@ impl AcceptanceCompletion for DatabaseCompletion<'_> {
             CompletionKind::Post { .. } => ("customer_acceptance.post", self.acceptance.base.id.clone()),
             CompletionKind::Reverse { original_id, .. } => {
                 ("customer_acceptance.reverse", original_id.clone())
-            }
+            },
             CompletionKind::Commit { .. } => return Ok(()),
         };
-        let audit = self
-            .actor
-            .clone()
-            .resource_log(action, "customer_acceptance", resource_id)?;
+        let audit = self.actor.clone().resource_log(action, "customer_acceptance", resource_id)?;
         self.db.audit_logs().create(&audit, executor).await?;
         Ok(())
     }
@@ -181,13 +162,13 @@ async fn apply_projection(
     let fulfillment = match progress.progress {
         erp_fulfillment::entity::facts::AcceptanceFulfillmentProgress::NotStarted => {
             FulfillmentProgress::NotStarted
-        }
+        },
         erp_fulfillment::entity::facts::AcceptanceFulfillmentProgress::PartiallyFulfilled => {
             FulfillmentProgress::PartiallyFulfilled
-        }
+        },
         erp_fulfillment::entity::facts::AcceptanceFulfillmentProgress::Completed => {
             FulfillmentProgress::Completed
-        }
+        },
     };
     writer.write(fulfillment, executor).await?;
     Ok(progress.has_remaining_eligible)
@@ -213,12 +194,13 @@ impl AcceptanceSalesProgress for SalesProgressWriter<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_projection, finish, AcceptanceCompletion, AcceptanceSalesProgress, CompletionMode};
-    use crate::{Error, Result};
     use async_trait::async_trait;
     use erp_fulfillment::entity::fulfillment::AcceptanceProgress;
     use erp_sales::entity::sales_order::FulfillmentProgress;
     use persistence_core::Executor;
+
+    use super::{AcceptanceCompletion, AcceptanceSalesProgress, CompletionMode, apply_projection, finish};
+    use crate::{Error, Result};
 
     struct TestExecutor {
         _identity: u8,
@@ -239,8 +221,7 @@ mod tests {
     impl RecordingCompletion {
         fn record(&mut self, step: &'static str, executor: &mut dyn Executor) -> Result<()> {
             self.events.push(step);
-            self.executors
-                .push(executor as *mut dyn Executor as *mut () as usize);
+            self.executors.push(executor as *mut dyn Executor as *mut () as usize);
             if self.fail == Some(step) {
                 return Err(Error::ConflictError(step.to_string()));
             }
@@ -266,28 +247,16 @@ mod tests {
     }
     fn cases() -> [(CompletionMode, Vec<&'static str>); 3] {
         [
-            (
-                CompletionMode::Commit,
-                vec!["sales_progress", "task", "command_receipt"],
-            ),
-            (
-                CompletionMode::Post,
-                vec!["sales_progress", "task", "business_audit"],
-            ),
-            (
-                CompletionMode::Reverse,
-                vec!["sales_progress", "task", "business_audit", "command_receipt"],
-            ),
+            (CompletionMode::Commit, vec!["sales_progress", "task", "command_receipt"]),
+            (CompletionMode::Post, vec!["sales_progress", "task", "business_audit"]),
+            (CompletionMode::Reverse, vec!["sales_progress", "task", "business_audit", "command_receipt"]),
         ]
     }
     #[tokio::test]
     async fn three_commands_keep_original_audit_order_and_one_executor() {
         for (mode, steps) in cases() {
             for remaining in [false, true] {
-                let mut port = RecordingCompletion {
-                    remaining,
-                    ..Default::default()
-                };
+                let mut port = RecordingCompletion { remaining, ..Default::default() };
                 let mut executor = TestExecutor { _identity: 1 };
                 let expected = &mut executor as *mut TestExecutor as usize;
                 finish(&mut port, mode, &mut executor).await.unwrap();
@@ -301,10 +270,7 @@ mod tests {
     async fn each_failure_stops_remaining_task_and_audit_operations() {
         for (mode, steps) in cases() {
             for (index, step) in steps.iter().enumerate() {
-                let mut port = RecordingCompletion {
-                    fail: Some(step),
-                    ..Default::default()
-                };
+                let mut port = RecordingCompletion { fail: Some(step), ..Default::default() };
                 let mut executor = TestExecutor { _identity: 1 };
                 let error = finish(&mut port, mode, &mut executor).await.unwrap_err();
                 assert!(matches!(error, Error::ConflictError(message) if message == *step));
@@ -321,8 +287,7 @@ mod tests {
     impl AcceptanceSalesProgress for RecordingSales {
         async fn write(&mut self, progress: FulfillmentProgress, executor: &mut dyn Executor) -> Result<()> {
             self.progress.push(progress);
-            self.executors
-                .push(executor as *mut dyn Executor as *mut () as usize);
+            self.executors.push(executor as *mut dyn Executor as *mut () as usize);
             Ok(())
         }
     }
@@ -338,12 +303,7 @@ mod tests {
                 progress: erp_fulfillment::entity::facts::AcceptanceFulfillmentProgress::PartiallyFulfilled,
                 has_remaining_eligible: remaining,
             };
-            assert_eq!(
-                apply_projection(&mut sales, Some(progress), &mut executor)
-                    .await
-                    .unwrap(),
-                remaining
-            );
+            assert_eq!(apply_projection(&mut sales, Some(progress), &mut executor).await.unwrap(), remaining);
         }
         assert_eq!(sales.progress, vec![FulfillmentProgress::PartiallyFulfilled; 2]);
         assert_eq!(sales.executors, vec![expected; 2]);
@@ -361,13 +321,8 @@ mod tests {
             (Local::Completed, FulfillmentProgress::Completed),
         ];
         for (local, sale) in cases {
-            let projection = AcceptanceProgress {
-                progress: local,
-                has_remaining_eligible: true,
-            };
-            assert!(apply_projection(&mut sales, Some(projection), &mut executor)
-                .await
-                .unwrap());
+            let projection = AcceptanceProgress { progress: local, has_remaining_eligible: true };
+            assert!(apply_projection(&mut sales, Some(projection), &mut executor).await.unwrap());
             assert_eq!(sales.progress.last(), Some(&sale));
         }
         assert_eq!(sales.executors, vec![expected; 3]);

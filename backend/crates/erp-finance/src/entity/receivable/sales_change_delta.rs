@@ -4,13 +4,13 @@
 //! 与绝对金额。零差额表示无需记账，调用方不得产生分录；正差额为应收增加，
 //! 负差额为应收减少。所有金额均为 `Amount`（2 位小数），由领域层保证精度。
 
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
+
 use crate::entity::receivable::receivable_account::{
     AccountReviewStatus, ReceivableAccount, ReceivableAccountUpdate,
 };
-use crate::entity::receivable::EntryDirection;
-use crate::entity::receivable::SalesBusinessTypeFact as BusinessType;
-use erp_core::money::Amount;
-use erp_core::{Error, Result};
+use crate::entity::receivable::{EntryDirection, SalesBusinessTypeFact as BusinessType};
 
 /// 销售变更应收差额 VO。
 ///
@@ -45,21 +45,15 @@ impl ReceivableDelta {
         if delta.is_zero() {
             return Ok(None);
         }
-        let direction = if delta.is_sign_positive() {
-            EntryDirection::Increase
-        } else {
-            EntryDirection::Decrease
-        };
+        let direction =
+            if delta.is_sign_positive() { EntryDirection::Increase } else { EntryDirection::Decrease };
         let absolute = delta.abs();
         let absolute_amount = Amount::try_from(absolute)
             .map_err(|_| Error::from(format!("差额绝对金额超出合法范围：{absolute}")))?;
         if absolute_amount.to_decimal().is_zero() {
             return Err(Error::from("差额绝对金额必须为正数"));
         }
-        Ok(Some(Self {
-            direction,
-            absolute_amount,
-        }))
+        Ok(Some(Self { direction, absolute_amount }))
     }
 
     /// 返回差额方向。
@@ -111,8 +105,9 @@ impl ReceivableAccount {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -126,36 +121,28 @@ mod tests {
 
     #[test]
     fn delta_positive_is_increase() {
-        let delta = ReceivableDelta::try_from_gross(amt("150.00"), amt("100.00"))
-            .unwrap()
-            .unwrap();
+        let delta = ReceivableDelta::try_from_gross(amt("150.00"), amt("100.00")).unwrap().unwrap();
         assert_eq!(delta.direction(), EntryDirection::Increase);
         assert_eq!(delta.absolute_amount(), amt("50.00"));
     }
 
     #[test]
     fn delta_negative_is_decrease() {
-        let delta = ReceivableDelta::try_from_gross(amt("80.00"), amt("100.00"))
-            .unwrap()
-            .unwrap();
+        let delta = ReceivableDelta::try_from_gross(amt("80.00"), amt("100.00")).unwrap().unwrap();
         assert_eq!(delta.direction(), EntryDirection::Decrease);
         assert_eq!(delta.absolute_amount(), amt("20.00"));
     }
 
     #[test]
     fn delta_small_precision_boundary() {
-        let delta = ReceivableDelta::try_from_gross(amt("100.01"), amt("100.00"))
-            .unwrap()
-            .unwrap();
+        let delta = ReceivableDelta::try_from_gross(amt("100.01"), amt("100.00")).unwrap().unwrap();
         assert_eq!(delta.absolute_amount(), amt("0.01"));
         assert_eq!(delta.direction(), EntryDirection::Increase);
     }
 
     #[test]
     fn delta_negative_small_precision() {
-        let delta = ReceivableDelta::try_from_gross(amt("99.99"), amt("100.00"))
-            .unwrap()
-            .unwrap();
+        let delta = ReceivableDelta::try_from_gross(amt("99.99"), amt("100.00")).unwrap().unwrap();
         assert_eq!(delta.absolute_amount(), amt("0.01"));
         assert_eq!(delta.direction(), EntryDirection::Decrease);
     }
@@ -169,9 +156,7 @@ mod tests {
     #[test]
     fn account_delta_update_sets_new_gross() {
         let account = make_account(AccountReviewStatus::Reviewed);
-        let update = account
-            .sales_change_delta_update(BusinessType::Voucher, amt("120.00"))
-            .unwrap();
+        let update = account.sales_change_delta_update(BusinessType::Voucher, amt("120.00")).unwrap();
         assert_eq!(update.gross_total, Some(amt("120.00")));
         assert_eq!(update.invoiceable_total, Some(amt("120.00")));
         assert_eq!(update.review_status, Some(AccountReviewStatus::NotApplicable));
@@ -180,9 +165,7 @@ mod tests {
     #[test]
     fn account_delta_update_goods_service_sets_gross_without_review() {
         let account = make_account(AccountReviewStatus::NotApplicable);
-        let update = account
-            .sales_change_delta_update(BusinessType::GoodsService, amt("200.00"))
-            .unwrap();
+        let update = account.sales_change_delta_update(BusinessType::GoodsService, amt("200.00")).unwrap();
         assert_eq!(update.gross_total, Some(amt("200.00")));
         assert_eq!(update.invoiceable_total, Some(amt("200.00")));
         assert_eq!(update.review_status, Some(AccountReviewStatus::NotApplicable));
@@ -193,21 +176,15 @@ mod tests {
         use erp_core::ids::{
             CustomerAccountId, PartyId, ReceivableAccountId, SalesOrderId, SalesOrderRevisionId,
         };
-        let reviewed = if status == AccountReviewStatus::Reviewed {
-            Some("reviewer-1".to_string())
-        } else {
-            None
-        };
+        let reviewed =
+            if status == AccountReviewStatus::Reviewed { Some("reviewer-1".to_string()) } else { None };
         let reviewed_at = if status == AccountReviewStatus::Reviewed {
             Some(Instant::from_unix_secs(1_700_000_000))
         } else {
             None
         };
-        let evidence = if status == AccountReviewStatus::Reviewed {
-            Some("evid-1".to_string())
-        } else {
-            None
-        };
+        let evidence =
+            if status == AccountReviewStatus::Reviewed { Some("evid-1".to_string()) } else { None };
         ReceivableAccount::new(
             ReceivableAccountId::new("ra-1"),
             crate::entity::receivable::ReceivableAccountData {

@@ -1,18 +1,18 @@
 //! Named contract processes that own file-asset registration and contract writes.
 
-use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_contract::{UploadContractRequest, UploadContractView};
 use erp_core::ids::FileAssetId;
+use erp_identity::SharedRbacService;
 use erp_support::{FileAsset, FileAssetExt, RegisterFileAssetRequest};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
 
+use crate::Result;
 use crate::adapters::scoped_contract_service;
-use erp_identity::SharedRbacService;
 
 /// Process module name.
 pub fn process_name() -> &'static str {
@@ -49,13 +49,9 @@ pub async fn upload_contract(
     let file_asset_id = FileAssetId::new(asset.base.id.clone());
     let planned = service.plan_upload(req, file_asset_id, actor.id()).await?;
     let asset_audit =
-        actor
-            .clone()
-            .resource_log("file_asset.register", "file_asset", asset.base.id.clone())?;
+        actor.clone().resource_log("file_asset.register", "file_asset", asset.base.id.clone())?;
     let contract_audit =
-        actor
-            .clone()
-            .resource_log("contract.create", "contract", planned.contract.base.id.clone())?;
+        actor.clone().resource_log("contract.create", "contract", planned.contract.base.id.clone())?;
 
     let mut contract_for_tx = planned.contract.clone();
     let revision = planned.revision.clone();
@@ -67,13 +63,9 @@ pub async fn upload_contract(
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                service
-                    .require_create(&actor_for_tx, &customer_id, session)
-                    .await?;
+                service.require_create(&actor_for_tx, &customer_id, session).await?;
                 db_for_tx.file_assets().create(&asset_for_tx, session).await?;
-                service
-                    .apply_create_in_transaction(&mut contract_for_tx, &revision, session)
-                    .await?;
+                service.apply_create_in_transaction(&mut contract_for_tx, &revision, session).await?;
                 db_for_tx.audit_logs().create(&asset_audit, session).await?;
                 db_for_tx.audit_logs().create(&contract_audit, session).await?;
                 Ok::<(), crate::Error>(())

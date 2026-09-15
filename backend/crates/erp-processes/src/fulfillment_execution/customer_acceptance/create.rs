@@ -1,6 +1,4 @@
 //! 客户验收草稿创建根事务：注册、履约头行写入、审计。
-use super::{registration::register_created_customer_acceptance_document, CustomerAcceptanceProcess};
-use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::CustomerAcceptanceId;
@@ -12,6 +10,10 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
+
+use super::CustomerAcceptanceProcess;
+use super::registration::register_created_customer_acceptance_document;
+use crate::Result;
 impl CustomerAcceptanceProcess {
     /// 创建客户验收单（草稿，跨集合：表头 + 行 + 审计）。
     ///
@@ -34,11 +36,7 @@ impl CustomerAcceptanceProcess {
     #[tracing::instrument(
         name = "fulfillment.customer_acceptance_create",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "customer_acceptance_create"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "customer_acceptance_create")
     )]
     pub async fn create_customer_acceptance(
         &self,
@@ -100,9 +98,7 @@ async fn persist_created_customer_acceptance(
                     session,
                 )
                 .await?;
-                db.fulfillment()
-                    .create_customer_acceptance_with_lines(&acceptance, &lines, session)
-                    .await?;
+                db.fulfillment().create_customer_acceptance_with_lines(&acceptance, &lines, session).await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::Error>(())
             })

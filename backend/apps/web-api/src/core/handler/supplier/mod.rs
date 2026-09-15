@@ -6,27 +6,21 @@
 pub mod import;
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Multipart, Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Multipart, Path, Query, State};
+use axum::{Extension, Json};
 use erp_supplier::{
     PageView, RevealSupplierSensitiveRequest, SaveSupplierProfileRequest, SupplierDetailView,
     SupplierListParams, SupplierProfileMutationView, SupplierSensitiveRevealView, SupplierView,
 };
 use erp_support::SensitivityClass;
 
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::Result,
-        handler::file_asset::{
-            delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
-            store_pending_asset_files,
-        },
-        response::ApiResponse,
-    },
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::handler::file_asset::{
+    delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
+    store_pending_asset_files,
 };
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "供应商",
@@ -74,13 +68,13 @@ pub async fn supplier_profile_create_with_assets(
                 delete_pending_asset_objects(&state, &pending).await;
             }
             Ok(ApiResponse::ok_with_data(result.view))
-        }
+        },
         Err(error) => {
             if should_compensate_pending_assets(&error) {
                 delete_pending_asset_objects(&state, &pending).await;
             }
             Err(error.into())
-        }
+        },
     }
 }
 
@@ -133,13 +127,13 @@ pub async fn supplier_profile_update_with_assets(
                 delete_pending_asset_objects(&state, &pending).await;
             }
             Ok(ApiResponse::ok_with_data(result.view))
-        }
+        },
         Err(error) => {
             if should_compensate_pending_assets(&error) {
                 delete_pending_asset_objects(&state, &pending).await;
             }
             Err(error.into())
-        }
+        },
     }
 }
 
@@ -164,10 +158,7 @@ pub async fn supplier_profile_command_detail(
     State(state): State<AppState>,
     Path(idempotency_key): Path<String>,
 ) -> Result<Option<SupplierProfileMutationView>> {
-    let view = state
-        .supplier_profile_service()
-        .command_result(&idempotency_key)
-        .await?;
+    let view = state.supplier_profile_service().command_result(&idempotency_key).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -184,10 +175,7 @@ pub async fn supplier_sensitive_reveal(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<RevealSupplierSensitiveRequest>,
 ) -> Result<SupplierSensitiveRevealView> {
-    let view = state
-        .supplier_profile_service()
-        .reveal_sensitive(req, &actor)
-        .await?;
+    let view = state.supplier_profile_service().reveal_sensitive(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 

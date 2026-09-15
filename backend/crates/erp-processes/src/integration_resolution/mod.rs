@@ -19,10 +19,11 @@ mod reconciliation_difference;
 mod task_decision;
 mod transaction;
 mod work_item_factory;
+use std::sync::Arc;
+
 use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
 use erp_integration::service::IntegrationOpsService;
 use mongodb::Database;
-use std::sync::Arc;
 /// 集成七类写入口；原事务和证据能力由组合根提供。
 pub struct IntegrationResolutionProcess {
     pub(super) db: Database,

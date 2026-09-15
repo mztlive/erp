@@ -5,14 +5,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::SalesOrderExt;
-use persistence_core::Result;
 
 /// `sales_order` 集合名。
 pub(crate) const SALES_ORDERS: &str = <mongodb::Database as SalesOrderExt>::SALES_ORDERS;
@@ -78,26 +76,15 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SALES_ORDER_SUBMISSION_LINES, submission_line_indexes()).await?;
     create_indexes(db, SALES_ORDER_REVISIONS, revision_indexes()).await?;
     create_indexes(db, SALES_ORDER_REVISION_LINES, revision_line_indexes()).await?;
-    create_indexes(
-        db,
-        SALES_ORDER_GOODS_SERVICE_LINE_REVISIONS,
-        goods_service_line_revision_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        SALES_ORDER_VOUCHER_LINE_REVISIONS,
-        voucher_line_revision_indexes(),
-    )
-    .await?;
+    create_indexes(db, SALES_ORDER_GOODS_SERVICE_LINE_REVISIONS, goods_service_line_revision_indexes())
+        .await?;
+    create_indexes(db, SALES_ORDER_VOUCHER_LINE_REVISIONS, voucher_line_revision_indexes()).await?;
     Ok(())
 }
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -106,11 +93,7 @@ fn sales_order_indexes() -> Vec<IndexModel> {
     vec![
         IndexModel::builder()
             .keys(doc! { "sales_owner_user_id": 1, "deleted_at": 1, "created_at": -1, "id": -1 })
-            .options(
-                IndexOptions::builder()
-                    .name("idx_sales_order_owner_created".to_string())
-                    .build(),
-            )
+            .options(IndexOptions::builder().name("idx_sales_order_owner_created".to_string()).build())
             .build(),
         unique_index("uk_sales_orders_order_no", doc! { "order_no": 1 }),
         named_index(
@@ -133,23 +116,14 @@ fn sales_order_indexes() -> Vec<IndexModel> {
             "idx_sales_orders_customer_status_created",
             doc! { "customer_id": 1, "commercial_status": 1, "created_at": -1 },
         ),
-        named_index(
-            "idx_sales_orders_review_status_created",
-            doc! { "review_status": 1, "created_at": -1 },
-        ),
-        named_index(
-            "idx_sales_orders_created_by_created",
-            doc! { "created_by": 1, "created_at": -1 },
-        ),
+        named_index("idx_sales_orders_review_status_created", doc! { "review_status": 1, "created_at": -1 }),
+        named_index("idx_sales_orders_created_by_created", doc! { "created_by": 1, "created_at": -1 }),
     ]
 }
 
 /// 返回 `sales_order_line` 的稳定明细唯一约束。
 fn sales_order_line_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_sales_order_lines_order_line",
-        doc! { "sales_order_id": 1, "line_no": 1 },
-    )]
+    vec![unique_index("uk_sales_order_lines_order_line", doc! { "sales_order_id": 1, "line_no": 1 })]
 }
 
 /// 返回 `sales_order_working_copy` 的有效唯一约束与列表查询索引。
@@ -169,10 +143,7 @@ fn working_copy_indexes() -> Vec<IndexModel> {
             "idx_sales_order_working_copies_order_purpose",
             doc! { "sales_order_id": 1, "working_purpose": 1, "updated_at": -1 },
         ),
-        named_index(
-            "idx_sales_order_working_copies_status_updated",
-            doc! { "status": 1, "updated_at": -1 },
-        ),
+        named_index("idx_sales_order_working_copies_status_updated", doc! { "status": 1, "updated_at": -1 }),
     ]
 }
 
@@ -195,10 +166,7 @@ fn submission_indexes() -> Vec<IndexModel> {
             "idx_sales_order_submissions_order_submitted",
             doc! { "sales_order_id": 1, "submitted_at": -1 },
         ),
-        named_index(
-            "idx_sales_order_submissions_status_created",
-            doc! { "status": 1, "created_at": -1 },
-        ),
+        named_index("idx_sales_order_submissions_status_created", doc! { "status": 1, "created_at": -1 }),
     ]
 }
 
@@ -244,26 +212,17 @@ fn revision_line_indexes() -> Vec<IndexModel> {
 
 /// 返回 `sales_order_goods_service_line_revision` 的一对一唯一约束。
 fn goods_service_line_revision_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_sales_order_goods_service_line_revisions_line",
-        doc! { "revision_line_id": 1 },
-    )]
+    vec![unique_index("uk_sales_order_goods_service_line_revisions_line", doc! { "revision_line_id": 1 })]
 }
 
 /// 返回 `sales_order_voucher_line_revision` 的一对一唯一约束。
 fn voucher_line_revision_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_sales_order_voucher_line_revisions_line",
-        doc! { "revision_line_id": 1 },
-    )]
+    vec![unique_index("uk_sales_order_voucher_line_revisions_line", doc! { "revision_line_id": 1 })]
 }
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -279,11 +238,7 @@ fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Documen
     IndexModel::builder()
         .keys(keys)
         .options(
-            IndexOptions::builder()
-                .name(name.into())
-                .unique(true)
-                .partial_filter_expression(filter)
-                .build(),
+            IndexOptions::builder().name(name.into()).unique(true).partial_filter_expression(filter).build(),
         )
         .build()
 }
@@ -310,12 +265,7 @@ mod tests {
             .unwrap();
         assert_eq!(no_index.keys, doc! { "order_no": 1 });
         assert_eq!(no_index.options.as_ref().unwrap().unique, Some(true));
-        assert!(no_index
-            .options
-            .as_ref()
-            .unwrap()
-            .partial_filter_expression
-            .is_none());
+        assert!(no_index.options.as_ref().unwrap().partial_filter_expression.is_none());
 
         assert!(indexes.iter().any(|index| {
             index.keys == doc! { "customer_id": 1, "commercial_status": 1, "created_at": -1 }
@@ -347,9 +297,11 @@ mod tests {
 
     #[test]
     fn line_and_submission_and_revision_uniquenesses_are_compound() {
-        assert!(sales_order_line_indexes()
-            .iter()
-            .any(|index| index.keys == doc! { "sales_order_id": 1, "line_no": 1 }));
+        assert!(
+            sales_order_line_indexes()
+                .iter()
+                .any(|index| index.keys == doc! { "sales_order_id": 1, "line_no": 1 })
+        );
         assert!(submission_indexes().iter().any(|index| {
             index.keys == doc! { "sales_order_id": 1, "submission_no": 1 }
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
@@ -377,11 +329,13 @@ mod tests {
 
     #[test]
     fn subtype_line_revisions_are_unique_by_public_line() {
-        assert!(goods_service_line_revision_indexes()
-            .iter()
-            .any(|index| index.keys == doc! { "revision_line_id": 1 }));
-        assert!(voucher_line_revision_indexes()
-            .iter()
-            .any(|index| index.keys == doc! { "revision_line_id": 1 }));
+        assert!(
+            goods_service_line_revision_indexes()
+                .iter()
+                .any(|index| index.keys == doc! { "revision_line_id": 1 })
+        );
+        assert!(
+            voucher_line_revision_indexes().iter().any(|index| index.keys == doc! { "revision_line_id": 1 })
+        );
     }
 }

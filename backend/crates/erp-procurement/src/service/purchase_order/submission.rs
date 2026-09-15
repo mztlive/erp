@@ -1,17 +1,18 @@
 //! 采购草稿冻结、不可变提交行构造与本域序号读取。
-use super::line_input::{build_submission_lines, compute_request_totals, to_line_inputs};
-use super::PurchaseOrderService;
-use crate::dto::purchase_order::SavePurchaseOrderLine;
-use crate::entity::purchase_order::{
-    PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine,
-};
-use crate::repository::PurchaseOrderExt;
-use crate::Result;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId};
 use id_generator::next_id;
 use persistence_core::NoTransaction;
+
+use super::PurchaseOrderService;
+use super::line_input::{build_submission_lines, compute_request_totals, to_line_inputs};
+use crate::Result;
+use crate::dto::purchase_order::SavePurchaseOrderLine;
+use crate::entity::purchase_order::{
+    PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine,
+};
+use crate::repository::PurchaseOrderExt;
 impl PurchaseOrderService {
     /// 冻结草稿为正式提交（复制明细并重指向正式提交、推进主表指针）。
     pub async fn freeze_submission(

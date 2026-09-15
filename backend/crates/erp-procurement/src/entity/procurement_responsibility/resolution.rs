@@ -1,6 +1,5 @@
 //! 采购责任上下文与确定性规则优先级解析。
 
-use crate::entity::facts::{IdentityOwnerFact as AccountCore, ProductKind};
 use std::collections::HashSet;
 
 use erp_core::ids::{ProductCategoryId, SkuId};
@@ -8,8 +7,9 @@ use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 
 use super::rule::{
-    normalize_service_region, ProcurementResponsibilityRule, ProcurementResponsibilityRuleType,
+    ProcurementResponsibilityRule, ProcurementResponsibilityRuleType, normalize_service_region,
 };
+use crate::entity::facts::{IdentityOwnerFact as AccountCore, ProductKind};
 
 const LINE_KEY_MAX_LEN: usize = 128;
 const RESOLUTION_BATCH_MAX_LINES: usize = 200;
@@ -122,10 +122,7 @@ impl EligibleProcurementOwner {
         if !account.can_login || !account.is_admin {
             return Err(Error::from("采购负责人必须为可登录后台账号"));
         }
-        Ok(Self {
-            user_id: account.id.clone(),
-            name: account.name.clone(),
-        })
+        Ok(Self { user_id: account.id.clone(), name: account.name.clone() })
     }
 
     /// 返回负责人账号 ID。
@@ -257,9 +254,7 @@ impl<'a> ProcurementResponsibilityRuleSet<'a> {
     /// # 错误
     /// 无。
     pub fn new(rules: &'a [ProcurementResponsibilityRule]) -> Self {
-        Self {
-            rules: rules.iter().filter(|rule| rule.is_active()).collect(),
-        }
+        Self { rules: rules.iter().filter(|rule| rule.is_active()).collect() }
     }
 
     /// 按合同优先级解析唯一具体责任规则。
@@ -363,11 +358,8 @@ impl<'a> ProcurementResponsibilityRuleSet<'a> {
     where
         F: Fn(&ProcurementResponsibilityRule) -> bool,
     {
-        let mut matched = self
-            .rules
-            .iter()
-            .copied()
-            .filter(|rule| rule.rule_type == rule_type && predicate(rule));
+        let mut matched =
+            self.rules.iter().copied().filter(|rule| rule.rule_type == rule_type && predicate(rule));
         let first = matched.next();
         if first.is_some() && matched.next().is_some() {
             return Err(Error::from(format!(
@@ -394,10 +386,7 @@ fn ensure_category_chain(category_chain: &[ProductCategoryId]) -> Result<()> {
         return Err(Error::from("采购责任解析缺少商品分类"));
     }
     let mut seen = HashSet::new();
-    if category_chain
-        .iter()
-        .any(|category| !seen.insert(category.as_ref()))
-    {
+    if category_chain.iter().any(|category| !seen.insert(category.as_ref())) {
         return Err(Error::from("采购责任解析发现分类父级环"));
     }
     Ok(())
@@ -405,14 +394,11 @@ fn ensure_category_chain(category_chain: &[ProductCategoryId]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::facts::{IdentityOwnerFact as AccountCore, ProductKind};
-    use crate::entity::procurement_responsibility::EnableStatus;
-
-    use crate::entity::procurement_responsibility::ProcurementResponsibilityRuleData;
-
     use erp_core::ids::ProcurementResponsibilityRuleId;
 
     use super::*;
+    use crate::entity::facts::{IdentityOwnerFact as AccountCore, ProductKind};
+    use crate::entity::procurement_responsibility::{EnableStatus, ProcurementResponsibilityRuleData};
 
     fn rule(
         id: &str,
@@ -442,10 +428,7 @@ mod tests {
     fn context() -> ProcurementResponsibilityContext {
         ProcurementResponsibilityContext::new(
             SkuId::new("sku-1"),
-            vec![
-                ProductCategoryId::new("cat-child"),
-                ProductCategoryId::new("cat-parent"),
-            ],
+            vec![ProductCategoryId::new("cat-child"), ProductCategoryId::new("cat-parent")],
             Some(" north ".to_string()),
             ProductKind::Physical,
         )
@@ -453,12 +436,7 @@ mod tests {
     }
 
     fn owner_account(can_login: bool) -> AccountCore {
-        AccountCore {
-            id: "owner-1".to_string(),
-            name: "采购员".to_string(),
-            can_login,
-            is_admin: true,
-        }
+        AccountCore { id: "owner-1".to_string(), name: "采购员".to_string(), can_login, is_admin: true }
     }
 
     #[test]
@@ -499,13 +477,15 @@ mod tests {
         .unwrap();
         let right = left.clone();
         assert_eq!(left, right);
-        assert!(ProcurementResponsibilityResolutionIdentity::new(
-            "line-1".to_string(),
-            " ".to_string(),
-            "rule-1".to_string(),
-            ProcurementResponsibilityRuleType::Sku,
-        )
-        .is_err());
+        assert!(
+            ProcurementResponsibilityResolutionIdentity::new(
+                "line-1".to_string(),
+                " ".to_string(),
+                "rule-1".to_string(),
+                ProcurementResponsibilityRuleType::Sku,
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -547,47 +527,27 @@ mod tests {
                 None,
                 "region-owner",
             ),
-            rule(
-                "sku",
-                ProcurementResponsibilityRuleType::Sku,
-                Some("sku-1"),
-                None,
-                None,
-                None,
-                "sku-owner",
-            ),
+            rule("sku", ProcurementResponsibilityRuleType::Sku, Some("sku-1"), None, None, None, "sku-owner"),
         ];
         let set = ProcurementResponsibilityRuleSet::new(&rules);
         assert_eq!(set.resolve(&context()).unwrap().owner_user_id, "sku-owner");
 
         let without_sku = ProcurementResponsibilityRuleSet::new(&rules[..4]);
-        assert_eq!(
-            without_sku.resolve(&context()).unwrap().owner_user_id,
-            "region-owner"
-        );
+        assert_eq!(without_sku.resolve(&context()).unwrap().owner_user_id, "region-owner");
 
         let parent_only = vec![rules[0].clone(), rules[1].clone(), rules[2].clone()];
         assert_eq!(
-            ProcurementResponsibilityRuleSet::new(&parent_only)
-                .resolve(&context())
-                .unwrap()
-                .owner_user_id,
+            ProcurementResponsibilityRuleSet::new(&parent_only).resolve(&context()).unwrap().owner_user_id,
             "parent-owner"
         );
 
         let kind_only = vec![rules[0].clone(), rules[1].clone()];
         assert_eq!(
-            ProcurementResponsibilityRuleSet::new(&kind_only)
-                .resolve(&context())
-                .unwrap()
-                .owner_user_id,
+            ProcurementResponsibilityRuleSet::new(&kind_only).resolve(&context()).unwrap().owner_user_id,
             "kind-owner"
         );
         assert_eq!(
-            ProcurementResponsibilityRuleSet::new(&rules[..1])
-                .resolve(&context())
-                .unwrap()
-                .owner_user_id,
+            ProcurementResponsibilityRuleSet::new(&rules[..1]).resolve(&context()).unwrap().owner_user_id,
             "default-owner"
         );
     }
@@ -616,10 +576,7 @@ mod tests {
         ];
 
         assert_eq!(
-            ProcurementResponsibilityRuleSet::new(&rules)
-                .resolve(&context())
-                .unwrap()
-                .owner_user_id,
+            ProcurementResponsibilityRuleSet::new(&rules).resolve(&context()).unwrap().owner_user_id,
             "default-owner"
         );
     }
@@ -646,29 +603,37 @@ mod tests {
                 "buyer-2",
             ),
         ];
-        assert!(ProcurementResponsibilityRuleSet::new(&duplicate_defaults)
-            .resolve(&context())
-            .unwrap_err()
-            .to_string()
-            .contains("多条"));
-        assert!(ProcurementResponsibilityRuleSet::new(&[])
-            .resolve(&context())
-            .unwrap_err()
-            .to_string()
-            .contains("默认调度人"));
-        assert!(ProcurementResponsibilityContext::new(
-            SkuId::new("sku-1"),
-            Vec::new(),
-            None,
-            ProductKind::Physical,
-        )
-        .is_err());
-        assert!(ProcurementResponsibilityContext::new(
-            SkuId::new("sku-1"),
-            vec![ProductCategoryId::new("cat-1"), ProductCategoryId::new("cat-1")],
-            None,
-            ProductKind::Physical,
-        )
-        .is_err());
+        assert!(
+            ProcurementResponsibilityRuleSet::new(&duplicate_defaults)
+                .resolve(&context())
+                .unwrap_err()
+                .to_string()
+                .contains("多条")
+        );
+        assert!(
+            ProcurementResponsibilityRuleSet::new(&[])
+                .resolve(&context())
+                .unwrap_err()
+                .to_string()
+                .contains("默认调度人")
+        );
+        assert!(
+            ProcurementResponsibilityContext::new(
+                SkuId::new("sku-1"),
+                Vec::new(),
+                None,
+                ProductKind::Physical,
+            )
+            .is_err()
+        );
+        assert!(
+            ProcurementResponsibilityContext::new(
+                SkuId::new("sku-1"),
+                vec![ProductCategoryId::new("cat-1"), ProductCategoryId::new("cat-1")],
+                None,
+                ProductKind::Physical,
+            )
+            .is_err()
+        );
     }
 }

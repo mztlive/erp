@@ -1,11 +1,10 @@
 //! 采购责任规则仓储查询。
 
-use crate::entity::procurement_responsibility::EnableStatus;
-use crate::entity::procurement_responsibility::ProcurementResponsibilityRuleType;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-
+use mongodb::bson::{Document, doc};
 use persistence_core::{Pagination, QueryFilter};
+
+use crate::entity::procurement_responsibility::{EnableStatus, ProcurementResponsibilityRuleType};
 
 /// 采购责任规则列表筛选条件。
 #[derive(Debug, Clone)]

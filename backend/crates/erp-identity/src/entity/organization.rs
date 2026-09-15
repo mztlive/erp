@@ -107,9 +107,7 @@ impl<'a> OrgTree<'a> {
     /// # 错误
     /// 重复节点、悬空父节点、自引用或环均拒绝。
     pub fn new(nodes: &'a [OrgUnit]) -> Result<Self> {
-        let tree = Self {
-            nodes: nodes.iter().map(|node| (node.base.id.as_str(), node)).collect(),
-        };
+        let tree = Self { nodes: nodes.iter().map(|node| (node.base.id.as_str(), node)).collect() };
         if tree.nodes.len() != nodes.len() {
             return Err(Error::ValidationError("组织身份重复".into()));
         }
@@ -131,10 +129,7 @@ impl<'a> OrgTree<'a> {
             if !seen.insert(id) {
                 return Err(Error::ValidationError("组织父子关系不得形成环".into()));
             }
-            let node = self
-                .nodes
-                .get(id)
-                .ok_or_else(|| Error::ValidationError("组织节点不存在".into()))?;
+            let node = self.nodes.get(id).ok_or_else(|| Error::ValidationError("组织节点不存在".into()))?;
             path.push(*node);
             current = node.parent_id.as_deref();
         }
@@ -215,51 +210,28 @@ mod tests {
 
     #[test]
     fn descendants_are_explicit_and_disabled_branches_are_excluded() {
-        let mut nodes = vec![
-            unit("a", None),
-            unit("b", Some("a")),
-            unit("c", Some("b")),
-            unit("x", None),
-        ];
+        let mut nodes = vec![unit("a", None), unit("b", Some("a")), unit("c", Some("b")), unit("x", None)];
         let tree = OrgTree::new(&nodes).unwrap();
         assert_eq!(tree.expand("a", false).unwrap(), BTreeSet::from(["a".into()]));
         assert_eq!(tree.expand("a", true).unwrap().len(), 3);
         assert_eq!(
-            tree.path("c")
-                .unwrap()
-                .iter()
-                .map(|n| n.base.id.as_str())
-                .collect::<Vec<_>>(),
+            tree.path("c").unwrap().iter().map(|n| n.base.id.as_str()).collect::<Vec<_>>(),
             ["a", "b", "c"]
         );
         nodes[1].enabled = false;
-        assert_eq!(
-            OrgTree::new(&nodes).unwrap().expand("a", true).unwrap(),
-            BTreeSet::from(["a".into()])
-        );
+        assert_eq!(OrgTree::new(&nodes).unwrap().expand("a", true).unwrap(), BTreeSet::from(["a".into()]));
     }
 
     #[test]
     fn validity_is_half_open_and_adjacent_transfers_do_not_overlap() {
         let at = Instant::from_unix_secs;
-        let before = OrgValidity {
-            valid_from: at(1),
-            valid_to: Some(at(10)),
-        };
-        let after = OrgValidity {
-            valid_from: at(10),
-            valid_to: None,
-        };
+        let before = OrgValidity { valid_from: at(1), valid_to: Some(at(10)) };
+        let after = OrgValidity { valid_from: at(10), valid_to: None };
         assert!(before.contains(at(1)));
         assert!(!before.contains(at(10)));
         assert!(after.contains(at(10)));
         assert!(!before.overlaps(&after));
         assert!(after.overlaps(&after));
-        assert!(OrgValidity {
-            valid_from: at(1),
-            valid_to: Some(at(1))
-        }
-        .validate()
-        .is_err());
+        assert!(OrgValidity { valid_from: at(1), valid_to: Some(at(1)) }.validate().is_err());
     }
 }

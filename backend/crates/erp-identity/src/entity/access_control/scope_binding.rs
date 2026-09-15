@@ -74,9 +74,7 @@ impl ScopeBinding {
 
     /// 校验组织目标模式，动态目标只能使用内部组织。
     fn validate_targets(&self, targets: &[String]) -> Result<()> {
-        let mode = self
-            .target_mode
-            .ok_or_else(|| Error::from("组织范围必须指定目标模式"))?;
+        let mode = self.target_mode.ok_or_else(|| Error::from("组织范围必须指定目标模式"))?;
         if mode != ScopeTargetMode::Explicit && self.target_dimension != ScopeDimension::InternalOrg {
             return Err(Error::from("动态范围仅支持内部组织"));
         }
@@ -86,9 +84,7 @@ impl ScopeBinding {
         let needs_descendants =
             self.target_dimension == ScopeDimension::InternalOrg && mode != ScopeTargetMode::ManagedOrgs;
         if needs_descendants != self.include_descendants.is_some() {
-            return Err(Error::from(
-                "内部组织显式或本人组织模式必须明确是否包含下级，其他模式不得设置",
-            ));
+            return Err(Error::from("内部组织显式或本人组织模式必须明确是否包含下级，其他模式不得设置"));
         }
         Ok(())
     }
@@ -98,9 +94,7 @@ impl ScopeBinding {
 fn identifier(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+        && value.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
 }
 
 /// 在持久化及请求解码边界拒绝不支持的模式版本。
@@ -132,18 +126,16 @@ mod tests {
     fn dynamic_modes_cannot_mix_targets_or_other_identity_dimensions() {
         assert!(binding().validate(DataScopeType::Team, &[]).is_ok());
         assert!(binding().validate(DataScopeType::Team, &["x".into()]).is_err());
-        assert!(ScopeBinding {
-            target_dimension: ScopeDimension::Warehouse,
-            ..binding()
-        }
-        .validate(DataScopeType::Team, &[])
-        .is_err());
-        assert!(ScopeBinding {
-            include_descendants: Some(true),
-            ..binding()
-        }
-        .validate(DataScopeType::Team, &[])
-        .is_err());
+        assert!(
+            ScopeBinding { target_dimension: ScopeDimension::Warehouse, ..binding() }
+                .validate(DataScopeType::Team, &[])
+                .is_err()
+        );
+        assert!(
+            ScopeBinding { include_descendants: Some(true), ..binding() }
+                .validate(DataScopeType::Team, &[])
+                .is_err()
+        );
     }
 
     #[test]
@@ -151,11 +143,7 @@ mod tests {
         assert!(binding().applies("sales_order", "list"));
         assert!(!binding().applies("sales_order", "update"));
         assert!(!binding().applies("purchase_order", "list"));
-        assert!(!ScopeBinding {
-            enabled: false,
-            ..binding()
-        }
-        .applies("sales_order", "list"));
+        assert!(!ScopeBinding { enabled: false, ..binding() }.applies("sales_order", "list"));
     }
 
     #[test]

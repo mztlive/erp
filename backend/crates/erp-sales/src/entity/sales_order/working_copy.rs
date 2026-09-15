@@ -6,8 +6,6 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::stable::StableBase;
 use erp_core::common::state::ensure_transition;
 use erp_core::common::time::{BusinessDate, Instant};
@@ -18,11 +16,11 @@ use erp_core::ids::{
 use erp_core::money::Amount;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::amount_validation::validate_amount_triple;
 use super::snapshot::HeaderSnapshots;
-use super::types::{validate_line_list, BusinessType, LineSummary};
-
+use super::types::{BusinessType, LineSummary, validate_line_list};
 pub use super::working_copy_line::{SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineData};
 pub use super::working_copy_types::{WorkingCopyStatus, WorkingPurpose};
 
@@ -251,12 +249,8 @@ impl SalesOrderWorkingCopy {
             CONTENT_HASH_MAX_LEN,
             "内容指纹过长",
         )?;
-        let editor_user_id = normalize_required_text(
-            data.editor_user_id,
-            "编辑人不能为空",
-            EDITOR_MAX_LEN,
-            "编辑人过长",
-        )?;
+        let editor_user_id =
+            normalize_required_text(data.editor_user_id, "编辑人不能为空", EDITOR_MAX_LEN, "编辑人过长")?;
         let snapshots = HeaderSnapshots::build(&data.snapshot)?;
         let project_name = normalize_optional_text(data.project_name, "项目名称", PROJECT_NAME_MAX_LEN)?;
         let business_remark =
@@ -449,9 +443,8 @@ impl SalesOrderWorkingCopy {
         if !self.business_type.is_voucher() {
             return Ok(None);
         }
-        let receivable_due_date = self
-            .receivable_due_date
-            .ok_or_else(|| Error::from("卡券销售提交前必须填写应收到期日"))?;
+        let receivable_due_date =
+            self.receivable_due_date.ok_or_else(|| Error::from("卡券销售提交前必须填写应收到期日"))?;
         if receivable_due_date < today {
             return Err(Error::from("应收到期日不得早于服务端提交日"));
         }
@@ -508,12 +501,8 @@ impl SalesOrderWorkingCopy {
             CONTENT_HASH_MAX_LEN,
             "内容指纹过长",
         )?;
-        self.editor_user_id = normalize_required_text(
-            editor_user_id.into(),
-            "编辑人不能为空",
-            EDITOR_MAX_LEN,
-            "编辑人过长",
-        )?;
+        self.editor_user_id =
+            normalize_required_text(editor_user_id.into(), "编辑人不能为空", EDITOR_MAX_LEN, "编辑人过长")?;
         self.draft_version += 1;
         self.stable.touch(self.editor_user_id.clone());
         Ok(())
@@ -595,9 +584,7 @@ impl SalesOrderWorkingCopy {
     ) -> Result<()> {
         let is_change = matches!(working_purpose, WorkingPurpose::SalesChange);
         if sales_change_order_id.is_some() != is_change {
-            return Err(Error::from(
-                "销售变更编辑目的必须关联销售变更单，首次提交不得关联",
-            ));
+            return Err(Error::from("销售变更编辑目的必须关联销售变更单，首次提交不得关联"));
         }
         if voucher_category_sku_id.is_some() != voucher_expiry_at.is_some() {
             return Err(Error::from("卡券类目与卡券履约期限必须同时提供或同时省略"));
@@ -608,9 +595,10 @@ impl SalesOrderWorkingCopy {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::state::DocumentState;
+
     use super::super::working_copy_test_support::{amt, line_data};
     use super::*;
-    use erp_core::common::state::DocumentState;
 
     fn header_data() -> SalesOrderWorkingCopyData {
         SalesOrderWorkingCopyData {
@@ -684,20 +672,17 @@ mod tests {
         let mut copy =
             SalesOrderWorkingCopy::new(SalesOrderWorkingCopyId::new("wc-1"), header_data(), "admin-1")
                 .unwrap();
-        assert!(copy
-            .voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap())
-            .unwrap()
-            .is_none());
+        assert!(
+            copy.voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap())
+                .unwrap()
+                .is_none()
+        );
 
         copy.business_type = BusinessType::Voucher;
-        assert!(copy
-            .voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap())
-            .is_err());
+        assert!(copy.voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap()).is_err());
         copy.voucher_category_sku_id = Some(SkuId::new("voucher-1"));
         copy.receivable_due_date = Some(BusinessDate::from_ymd(2026, 8, 24).unwrap());
-        assert!(copy
-            .voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap())
-            .is_err());
+        assert!(copy.voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap()).is_err());
         copy.receivable_due_date = Some(BusinessDate::from_ymd(2026, 8, 25).unwrap());
         let category = copy
             .voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap())
@@ -708,27 +693,18 @@ mod tests {
 
     #[test]
     fn new_rejects_blank_and_overlong_fields() {
-        let blank_hash = SalesOrderWorkingCopyData {
-            content_hash: "   ".to_string(),
-            ..header_data()
-        };
+        let blank_hash = SalesOrderWorkingCopyData { content_hash: "   ".to_string(), ..header_data() };
         assert!(
             SalesOrderWorkingCopy::new(SalesOrderWorkingCopyId::new("wc-1"), blank_hash, "admin-1").is_err()
         );
 
-        let overlong_editor = SalesOrderWorkingCopyData {
-            editor_user_id: "x".repeat(129),
-            ..header_data()
-        };
+        let overlong_editor = SalesOrderWorkingCopyData { editor_user_id: "x".repeat(129), ..header_data() };
         assert!(
             SalesOrderWorkingCopy::new(SalesOrderWorkingCopyId::new("wc-1"), overlong_editor, "admin-1")
                 .is_err()
         );
 
-        let empty_lines = SalesOrderWorkingCopyData {
-            lines: vec![],
-            ..header_data()
-        };
+        let empty_lines = SalesOrderWorkingCopyData { lines: vec![], ..header_data() };
         assert!(
             SalesOrderWorkingCopy::new(SalesOrderWorkingCopyId::new("wc-1"), empty_lines, "admin-1").is_err()
         );
@@ -743,12 +719,10 @@ mod tests {
             base_revision_id: Some(SalesOrderRevisionId::new("rev-1")),
             ..header_data()
         };
-        assert!(SalesOrderWorkingCopy::new(
-            SalesOrderWorkingCopyId::new("wc-1"),
-            change_without_order,
-            "admin-1"
-        )
-        .is_err());
+        assert!(
+            SalesOrderWorkingCopy::new(SalesOrderWorkingCopyId::new("wc-1"), change_without_order, "admin-1")
+                .is_err()
+        );
 
         // 首次提交不得带变更单
         let first_with_order = SalesOrderWorkingCopyData {
@@ -756,12 +730,10 @@ mod tests {
             sales_change_order_id: Some(SalesChangeOrderId::new("co-1")),
             ..header_data()
         };
-        assert!(SalesOrderWorkingCopy::new(
-            SalesOrderWorkingCopyId::new("wc-1"),
-            first_with_order,
-            "admin-1"
-        )
-        .is_err());
+        assert!(
+            SalesOrderWorkingCopy::new(SalesOrderWorkingCopyId::new("wc-1"), first_with_order, "admin-1")
+                .is_err()
+        );
 
         // 卡券类目与履约期限必须成对
         let half_voucher = SalesOrderWorkingCopyData {
@@ -784,10 +756,7 @@ mod tests {
         );
 
         // 金额三元组不一致
-        let broken_amount = SalesOrderWorkingCopyData {
-            tax_amount: amt("3.91"),
-            ..header_data()
-        };
+        let broken_amount = SalesOrderWorkingCopyData { tax_amount: amt("3.91"), ..header_data() };
         assert!(
             SalesOrderWorkingCopy::new(SalesOrderWorkingCopyId::new("wc-1"), broken_amount, "admin-1")
                 .is_err()
@@ -796,10 +765,8 @@ mod tests {
 
     #[test]
     fn new_rejects_duplicate_lines_in_list() {
-        let duplicated = SalesOrderWorkingCopyData {
-            lines: vec![line_data(1), line_data(1)],
-            ..header_data()
-        };
+        let duplicated =
+            SalesOrderWorkingCopyData { lines: vec![line_data(1), line_data(1)], ..header_data() };
         assert!(
             SalesOrderWorkingCopy::new(SalesOrderWorkingCopyId::new("wc-1"), duplicated, "admin-1").is_err()
         );
@@ -834,22 +801,19 @@ mod tests {
             SalesOrderWorkingCopy::new(SalesOrderWorkingCopyId::new("wc-1"), header_data(), "admin-1")
                 .unwrap();
         copy.submit().unwrap();
-        assert!(copy
-            .update(SalesOrderWorkingCopyUpdate::default(), "admin-2")
-            .is_err());
+        assert!(copy.update(SalesOrderWorkingCopyUpdate::default(), "admin-2").is_err());
 
         let mut another =
             SalesOrderWorkingCopy::new(SalesOrderWorkingCopyId::new("wc-2"), header_data(), "admin-1")
                 .unwrap();
-        assert!(another
-            .update(
-                SalesOrderWorkingCopyUpdate {
-                    tax_amount: Some(amt("9.99")),
-                    ..Default::default()
-                },
-                "admin-2",
-            )
-            .is_err());
+        assert!(
+            another
+                .update(
+                    SalesOrderWorkingCopyUpdate { tax_amount: Some(amt("9.99")), ..Default::default() },
+                    "admin-2",
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -880,8 +844,7 @@ mod tests {
         let mut copy =
             SalesOrderWorkingCopy::new(SalesOrderWorkingCopyId::new("wc-1"), header_data(), "admin-1")
                 .unwrap();
-        copy.save_draft(" new-hash ".to_string(), " user-1 ".to_string())
-            .unwrap();
+        copy.save_draft(" new-hash ".to_string(), " user-1 ".to_string()).unwrap();
 
         assert_eq!(copy.draft_version, 2);
         assert_eq!(copy.content_hash, "new-hash");

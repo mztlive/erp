@@ -18,12 +18,11 @@ use super::authority::inventory::{
     stock_adjustment_fact,
 };
 use super::brief::{
-    format_instant_datetime, format_quantity, join_list_summary, non_empty, push_section, BriefLine,
-    ObjectBriefSource, BRIEF_LINE_LIMIT,
+    BRIEF_LINE_LIMIT, BriefLine, ObjectBriefSource, format_instant_datetime, format_quantity,
+    join_list_summary, non_empty, push_section,
 };
 use super::presentation::format_yuan;
-use super::WorkbenchReadService;
-use super::{object_ids, ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap};
+use super::{ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchReadService, object_ids};
 use crate::errors::Result;
 
 #[derive(Default)]
@@ -62,30 +61,18 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if adjustments.is_empty() {
             return Ok(());
         }
-        let warehouse_labels = self
-            .stock_adjustment_warehouse_labels(&adjustments, executor)
-            .await?;
+        let warehouse_labels = self.stock_adjustment_warehouse_labels(&adjustments, executor).await?;
         let lines_by_adjustment = self.stock_adjustment_brief_lines(&ids, executor).await?;
         for adjustment in adjustments {
-            let warehouse = warehouse_labels
-                .get(&adjustment.warehouse_id.to_string())
-                .cloned();
-            let lines = lines_by_adjustment
-                .get(&adjustment.base.id)
-                .cloned()
-                .unwrap_or_default();
+            let warehouse = warehouse_labels.get(&adjustment.warehouse_id.to_string()).cloned();
+            let lines = lines_by_adjustment.get(&adjustment.base.id).cloned().unwrap_or_default();
             let more_count = lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
             let mut visible = lines;
             visible.truncate(BRIEF_LINE_LIMIT);
             let mut fact = WorkbenchObjectFact::from_authority(stock_adjustment_fact(&adjustment));
             let mut sections = Vec::new();
             push_section(&mut sections, "仓库", warehouse.as_deref(), false);
-            push_section(
-                &mut sections,
-                "调整原因",
-                Some(adjustment.reason_type.label()),
-                false,
-            );
+            push_section(&mut sections, "调整原因", Some(adjustment.reason_type.label()), false);
             push_section(&mut sections, "说明", adjustment.note.as_deref(), false);
             if !visible.is_empty() {
                 push_section(
@@ -138,41 +125,19 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let statements = self
-            .facts_reader()
-            .read_settlement_statements(&ids, executor)
-            .await?;
-        let context = self
-            .supplier_settlement_brief_context(&statements, executor)
-            .await?;
+        let statements = self.facts_reader().read_settlement_statements(&ids, executor).await?;
+        let context = self.supplier_settlement_brief_context(&statements, executor).await?;
         for statement in statements {
             let period = format!("{} 至 {}", statement.period_start, statement.period_end);
-            let supplier = context
-                .supplier_names
-                .get(&statement.supplier_id.to_string())
-                .cloned();
-            let items = context
-                .items_by_statement
-                .get(&statement.base.id)
-                .map(Vec::as_slice)
-                .unwrap_or_default();
+            let supplier = context.supplier_names.get(&statement.supplier_id.to_string()).cloned();
+            let items =
+                context.items_by_statement.get(&statement.base.id).map(Vec::as_slice).unwrap_or_default();
             let differences = items
                 .iter()
-                .flat_map(|item| {
-                    context
-                        .differences_by_item
-                        .get(&item.base.id)
-                        .into_iter()
-                        .flatten()
-                })
+                .flat_map(|item| context.differences_by_item.get(&item.base.id).into_iter().flatten())
                 .collect::<Vec<_>>();
-            let pending_count = differences
-                .iter()
-                .filter(|difference| difference.is_pending())
-                .count();
-            let source_evidence = context
-                .source_evidence_by_hash
-                .get(&statement.source_snapshot_hash);
+            let pending_count = differences.iter().filter(|difference| difference.is_pending()).count();
+            let source_evidence = context.source_evidence_by_hash.get(&statement.source_snapshot_hash);
             let all_lines = settlement_brief_lines(items, &differences, &context.evidence_by_difference);
             let more_count = all_lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
             let mut visible_lines = all_lines;
@@ -232,11 +197,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             let supplement_count = differences
                 .iter()
                 .flat_map(|difference| {
-                    context
-                        .evidence_by_difference
-                        .get(&difference.base.id)
-                        .into_iter()
-                        .flatten()
+                    context.evidence_by_difference.get(&difference.base.id).into_iter().flatten()
                 })
                 .map(|evidence| evidence.evidence_reference_ids.len())
                 .sum::<usize>();
@@ -283,35 +244,20 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         statements: &[SupplierSettlementStatement],
         executor: &mut dyn Executor,
     ) -> Result<SettlementBriefContext> {
-        let statement_ids = statements
-            .iter()
-            .map(|statement| statement.base.id.clone())
-            .collect::<Vec<_>>();
-        let items = self
-            .facts_reader()
-            .read_settlement_items(&statement_ids, executor)
-            .await?;
-        let item_ids = items
-            .iter()
-            .map(|item| SupplierSettlementItemId::new(item.base.id.clone()))
-            .collect::<Vec<_>>();
-        let differences = self
-            .facts_reader()
-            .read_settlement_differences(&item_ids, executor)
-            .await?;
-        let difference_ids = differences
-            .iter()
-            .map(|difference| difference.base.id.clone())
-            .collect::<Vec<_>>();
+        let statement_ids = statements.iter().map(|statement| statement.base.id.clone()).collect::<Vec<_>>();
+        let items = self.facts_reader().read_settlement_items(&statement_ids, executor).await?;
+        let item_ids =
+            items.iter().map(|item| SupplierSettlementItemId::new(item.base.id.clone())).collect::<Vec<_>>();
+        let differences = self.facts_reader().read_settlement_differences(&item_ids, executor).await?;
+        let difference_ids =
+            differences.iter().map(|difference| difference.base.id.clone()).collect::<Vec<_>>();
         let difference_evidence = self
             .db
             .supplier_settlement_difference_evidence()
             .find_by_difference_ids(&difference_ids, executor)
             .await?;
-        let source_hashes = statements
-            .iter()
-            .map(|statement| statement.source_snapshot_hash.clone())
-            .collect::<Vec<_>>();
+        let source_hashes =
+            statements.iter().map(|statement| statement.source_snapshot_hash.clone()).collect::<Vec<_>>();
         let source_evidence = self
             .db
             .supplier_settlement_source_evidence()
@@ -320,10 +266,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         let supplier_names = self
             .facts_reader()
             .supplier_display_names(
-                &statements
-                    .iter()
-                    .map(|statement| statement.supplier_id.to_string())
-                    .collect::<Vec<_>>(),
+                &statements.iter().map(|statement| statement.supplier_id.to_string()).collect::<Vec<_>>(),
                 executor,
             )
             .await?;
@@ -391,15 +334,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         adjustments: &[StockAdjustment],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
-        let warehouse_ids = adjustments
-            .iter()
-            .map(|adjustment| adjustment.warehouse_id.to_string())
-            .collect::<Vec<_>>();
-        let warehouses = self
-            .db
-            .warehouses()
-            .list_active_by_ids(&warehouse_ids, executor)
-            .await?;
+        let warehouse_ids =
+            adjustments.iter().map(|adjustment| adjustment.warehouse_id.to_string()).collect::<Vec<_>>();
+        let warehouses = self.db.warehouses().list_active_by_ids(&warehouse_ids, executor).await?;
         let revision_ids = warehouses
             .iter()
             .filter_map(|warehouse| warehouse.stable.current_revision_id.clone())
@@ -415,16 +352,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         Ok(warehouses
             .into_iter()
             .map(|warehouse| {
-                let name = warehouse
-                    .stable
-                    .current_revision_id
-                    .as_ref()
-                    .and_then(|id| revision_names.get(id));
-                let label = match name
-                    .map(String::as_str)
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                {
+                let name =
+                    warehouse.stable.current_revision_id.as_ref().and_then(|id| revision_names.get(id));
+                let label = match name.map(String::as_str).map(str::trim).filter(|value| !value.is_empty()) {
                     Some(name) => format!("{name}（{}）", warehouse.warehouse_code),
                     None => warehouse.warehouse_code,
                 };
@@ -449,15 +379,10 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         lines: &[StockAdjustmentLine],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
-        let sku_ids = lines
-            .iter()
-            .map(|line| line.sku_id.to_string())
-            .collect::<Vec<_>>();
+        let sku_ids = lines.iter().map(|line| line.sku_id.to_string()).collect::<Vec<_>>();
         let skus = self.db.skus().list_active_by_ids(&sku_ids, executor).await?;
-        let revision_ids = skus
-            .iter()
-            .filter_map(|sku| sku.stable.current_revision_id.clone())
-            .collect::<Vec<_>>();
+        let revision_ids =
+            skus.iter().filter_map(|sku| sku.stable.current_revision_id.clone()).collect::<Vec<_>>();
         let revisions = self
             .db
             .sku_revisions()
@@ -469,11 +394,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         Ok(skus
             .into_iter()
             .map(|sku| {
-                let revision = sku
-                    .stable
-                    .current_revision_id
-                    .as_ref()
-                    .and_then(|id| revisions.get(id));
+                let revision = sku.stable.current_revision_id.as_ref().and_then(|id| revisions.get(id));
                 (
                     sku.base.id,
                     sku_brief_title(
@@ -493,10 +414,7 @@ fn group_settlement_evidence(
 ) -> HashMap<String, Vec<SupplierSettlementDifferenceEvidence>> {
     let mut grouped: HashMap<String, Vec<SupplierSettlementDifferenceEvidence>> = HashMap::new();
     for item in evidence {
-        grouped
-            .entry(item.difference_id.to_string())
-            .or_default()
-            .push(item);
+        grouped.entry(item.difference_id.to_string()).or_default().push(item);
     }
     grouped
 }
@@ -507,11 +425,7 @@ fn external_bill_label(statement: &SupplierSettlementStatement) -> Option<String
     if number.is_empty() {
         return None;
     }
-    let version = statement
-        .external_bill_version
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
+    let version = statement.external_bill_version.as_deref().map(str::trim).filter(|value| !value.is_empty());
     Some(match version {
         Some(version) => format!("{number} · 版本 {version}"),
         None => number.to_string(),
@@ -543,10 +457,7 @@ fn settlement_brief_lines(
                 let evidence_count = evidence_by_difference
                     .get(&difference.base.id)
                     .map(|values| {
-                        values
-                            .iter()
-                            .map(|evidence| evidence.evidence_reference_ids.len())
-                            .sum::<usize>()
+                        values.iter().map(|evidence| evidence.evidence_reference_ids.len()).sum::<usize>()
                     })
                     .unwrap_or_default();
                 let evidence_label = if difference.is_pending() {
@@ -607,11 +518,7 @@ fn settlement_brief_lines(
 /// 无。
 fn stock_brief_line(line: &StockAdjustmentLine, sku_label: Option<&str>) -> BriefLine {
     BriefLine {
-        title: format!(
-            "{} · {}",
-            sku_label.unwrap_or("SKU 名称待补全"),
-            line.direction.label()
-        ),
+        title: format!("{} · {}", sku_label.unwrap_or("SKU 名称待补全"), line.direction.label()),
         quantity: Some(format_quantity(&line.quantity, None)),
         due_label: None,
     }
@@ -632,19 +539,14 @@ fn stock_brief_line(line: &StockAdjustmentLine, sku_label: Option<&str>) -> Brie
 fn sku_brief_title(sku_no: &str, name: Option<&str>, specification: Option<&str>) -> String {
     let sku_no = sku_no.trim();
     let name = name.map(str::trim).filter(|value| !value.is_empty());
-    let specification = specification
-        .map(str::trim)
-        .filter(|value| !value.is_empty() && value.chars().count() <= 16);
+    let specification =
+        specification.map(str::trim).filter(|value| !value.is_empty() && value.chars().count() <= 16);
     let description = match (name, specification) {
         (Some(name), Some(specification)) => format!("{name} {specification}"),
         (Some(name), None) => name.to_string(),
         _ => return sku_no.to_string(),
     };
-    if sku_no.is_empty() {
-        description
-    } else {
-        format!("{description} · {sku_no}")
-    }
+    if sku_no.is_empty() { description } else { format!("{description} · {sku_no}") }
 }
 
 #[cfg(test)]
@@ -662,22 +564,13 @@ mod tests {
     fn stock_line_shows_direction_and_quantity() {
         assert_eq!(MovementDirection::Increase.label(), "增加");
         assert_eq!(format_quantity(&qty("3"), None), "×3");
-        assert_eq!(
-            sku_brief_title("SKU-1", Some("福利卡"), Some("100 元")),
-            "福利卡 100 元 · SKU-1"
-        );
+        assert_eq!(sku_brief_title("SKU-1", Some("福利卡"), Some("100 元")), "福利卡 100 元 · SKU-1");
     }
 
     #[test]
     fn settlement_instruction_fails_closed_while_differences_are_pending() {
         assert_eq!(settlement_difference_summary(3, 1), "3 项差异 · 1 项待处理");
-        assert_eq!(
-            settlement_review_instruction(3, 1),
-            "仍有 1 项差异未形成正式结论，不得确认结算"
-        );
-        assert_eq!(
-            settlement_review_instruction(3, 0),
-            "全部差异已有正式结论；复核来源证据后方可确认结算"
-        );
+        assert_eq!(settlement_review_instruction(3, 1), "仍有 1 项差异未形成正式结论，不得确认结算");
+        assert_eq!(settlement_review_instruction(3, 0), "全部差异已有正式结论；复核来源证据后方可确认结算");
     }
 }

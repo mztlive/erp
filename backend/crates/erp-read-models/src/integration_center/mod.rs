@@ -1,9 +1,10 @@
 //! 集成异常与差异详情：组合本域事实、正式责任与权威证据。
 mod error_task;
 mod reconciliation_difference;
+use std::sync::Arc;
+
 use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
 use mongodb::Database;
-use std::sync::Arc;
 /// 只读详情服务；权威证据实现与写入口由组合根共享。
 pub struct IntegrationCenterReadService {
     db: Database,

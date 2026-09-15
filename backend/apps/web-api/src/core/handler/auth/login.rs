@@ -1,11 +1,8 @@
 use std::net::SocketAddr;
 
-use axum::{
-    extract::{ConnectInfo, Extension, State},
-    Json,
-};
-use erp_audit::AuditLogData;
-use erp_audit::AuditLogService;
+use axum::Json;
+use axum::extract::{ConnectInfo, Extension, State};
+use erp_audit::{AuditLogData, AuditLogService};
 use erp_identity::{AuthRequest, AuthResponse, BackofficeAuthResult, BackofficeAuthService};
 use tracing::{info, instrument, warn};
 
@@ -31,27 +28,22 @@ pub(crate) async fn login(
     let _permit = limiter.admit_hierarchy(&[&source_key, &source_account_key])?;
     info!("Backoffice login attempt");
 
-    let authentication = BackofficeAuthService::new(state.db())
-        .authenticate(&request)
-        .await;
+    let authentication = BackofficeAuthService::new(state.db()).authenticate(&request).await;
     let identity = match authentication {
         Ok(identity) => identity,
         Err(erp_identity::Error::Unauthenticated(_)) => {
             return handle_login_failure(&state, &request).await;
-        }
+        },
         Err(erp_identity::Error::ValidationError(message)) => {
             return Err(Error::BadRequest(message));
-        }
+        },
         Err(error) => {
             record_login_audit(&state, &request, None, false, Some("登录处理失败".to_string())).await;
             return Err(Error::from(error));
-        }
+        },
     };
 
-    let jwt_engine = state
-        .jwt_engine()
-        .await
-        .map_err(|error| Error::Internal(error.to_string()))?;
+    let jwt_engine = state.jwt_engine().await.map_err(|error| Error::Internal(error.to_string()))?;
     let token = jwt_engine
         .create_token(token_payload_for_identity(&identity))
         .map_err(|error| Error::Internal(error.to_string()))?;
@@ -112,10 +104,12 @@ async fn record_login_audit(
 
 #[cfg(test)]
 mod tests {
-    use super::token_payload_for_identity;
     use erp_core::AccountKind;
-    use erp_identity::BackofficeAuthResult;
-    use erp_identity::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
+    use erp_identity::{
+        AccountCore, AccountCoreData, AccountStatus, BackofficeAuthResult, LoginAccount, Secret,
+    };
+
+    use super::token_payload_for_identity;
 
     fn identity(kind: AccountKind) -> BackofficeAuthResult {
         let account = AccountCore::new(

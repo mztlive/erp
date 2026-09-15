@@ -12,22 +12,13 @@ mod party;
 mod purchase_data_scope;
 mod supplier;
 mod warehouse;
-pub use organization::organization_service;
+use std::sync::Arc;
 
-pub use catalog::{catalog_service, CatalogPendingAttachments, MongoCatalogAudit, MongoCatalogFileAssets};
+pub use catalog::{CatalogPendingAttachments, MongoCatalogAudit, MongoCatalogFileAssets, catalog_service};
 pub use contract::{contract_access, contract_service, scoped_contract_service};
 pub use contract_data_scope::MongoContractDataScope;
 pub use customer::{MongoCustomerAccountFacts, MongoCustomerAudit, MongoCustomerPartyFacts};
-pub use customer_data_scope::{customer_access, MongoCustomerDataScope};
-pub use import::{import_apply_service, legacy_import_service, MongoImportBulkJobs};
-pub use inventory::{authorize_inventory, inventory_adjustment_service, inventory_service};
-pub use party::{MongoPartyAudit, MongoSupplierRole};
-pub use purchase_data_scope::{purchase_access, MongoPurchaseDataScope};
-pub use supplier::{MongoSupplierFileAssets, MongoSupplierPartyFacts, MongoSupplierSensitiveTokens};
-pub use warehouse::warehouse_service;
-
-use std::sync::Arc;
-
+pub use customer_data_scope::{MongoCustomerDataScope, customer_access};
 use erp_customer::{CustomerAssignmentService, CustomerService, FailClosedCustomerDataScopePort};
 use erp_identity::SharedRbacService;
 use erp_party::{
@@ -35,15 +26,18 @@ use erp_party::{
     SensitiveDataCodec,
 };
 use erp_supplier::SupplierService;
+pub use import::{MongoImportBulkJobs, import_apply_service, legacy_import_service};
+pub use inventory::{authorize_inventory, inventory_adjustment_service, inventory_service};
 use mongodb::Database;
+pub use organization::organization_service;
+pub use party::{MongoPartyAudit, MongoSupplierRole};
+pub use purchase_data_scope::{MongoPurchaseDataScope, purchase_access};
+pub use supplier::{MongoSupplierFileAssets, MongoSupplierPartyFacts, MongoSupplierSensitiveTokens};
+pub use warehouse::warehouse_service;
 
 /// Construct a party service with audit and supplier-role adapters.
 pub fn party_service(db: Database) -> PartyService {
-    PartyService::new(
-        db.clone(),
-        MongoPartyAudit::shared(db.clone()),
-        MongoSupplierRole::shared(db),
-    )
+    PartyService::new(db.clone(), MongoPartyAudit::shared(db.clone()), MongoSupplierRole::shared(db))
 }
 
 /// Construct a party contact service with composition adapters.

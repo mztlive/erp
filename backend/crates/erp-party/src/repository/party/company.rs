@@ -1,10 +1,11 @@
 //! 公司专用查询始终限定我方公司角色。
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Result, mongo_ops};
+
 use crate::dto::company::CompanyListParams;
 use crate::entity::party::company::identity_name;
 use crate::{Party, PartyRepository};
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use persistence_core::{mongo_ops, Executor, PageResult, Result};
 
 /// 构建分页前公司筛选条件，列表和总数共用。
 fn company_filter(params: &CompanyListParams) -> Document {
@@ -14,10 +15,7 @@ fn company_filter(params: &CompanyListParams) -> Document {
     }
     if let Some(keyword) = params.keyword.as_deref().filter(|s| !s.trim().is_empty()) {
         let keyword = regex::escape(&identity_name(keyword));
-        filter.insert(
-            "company_profile.names",
-            doc! { "$regex": keyword, "$options": "i" },
-        );
+        filter.insert("company_profile.names", doc! { "$regex": keyword, "$options": "i" });
     }
     filter
 }
@@ -42,10 +40,7 @@ impl PartyRepository<'_> {
         let items =
             mongo_ops::find_many(&self.collection(), company_filter(params), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), company_filter(params), executor).await?;
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 精确解析公司全称、简称或别名；不使用模糊结果猜测身份。
@@ -53,11 +48,8 @@ impl PartyRepository<'_> {
     /// # Errors
     /// 查询失败返回仓储错误；已停用或无匹配返回空值。
     pub async fn company_by_name(&self, name: &str, executor: &mut dyn Executor) -> Result<Option<Party>> {
-        self.find_one(
-            doc! { "company_profile.names": identity_name(name), "status": "active" },
-            executor,
-        )
-        .await
+        self.find_one(doc! { "company_profile.names": identity_name(name), "status": "active" }, executor)
+            .await
     }
 }
 
@@ -66,17 +58,11 @@ mod tests {
     use super::*;
     #[test]
     fn company_filter_never_includes_other_party_roles() {
-        let filter = company_filter(&CompanyListParams {
-            keyword: Some("公司(甲)".into()),
-            ..Default::default()
-        });
+        let filter =
+            company_filter(&CompanyListParams { keyword: Some("公司(甲)".into()), ..Default::default() });
         assert!(filter.contains_key("company_profile"));
         assert_eq!(
-            filter
-                .get_document("company_profile.names")
-                .unwrap()
-                .get_str("$regex")
-                .unwrap(),
+            filter.get_document("company_profile.names").unwrap().get_str("$regex").unwrap(),
             "公司\\(甲\\)"
         );
     }

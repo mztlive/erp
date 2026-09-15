@@ -116,7 +116,7 @@ fn prompt_once(prompt: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{select_password_source, PasswordSource};
+    use super::{PasswordSource, select_password_source};
 
     #[test]
     fn flag_takes_priority_over_env() {
@@ -135,9 +135,6 @@ mod tests {
     #[test]
     fn missing_values_select_prompt() {
         assert_eq!(select_password_source(None, None), PasswordSource::Prompt);
-        assert_eq!(
-            select_password_source(Some(String::new()), Some(String::new())),
-            PasswordSource::Prompt
-        );
+        assert_eq!(select_password_source(Some(String::new()), Some(String::new())), PasswordSource::Prompt);
     }
 }

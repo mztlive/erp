@@ -2,9 +2,10 @@
 //!
 //! Repository 负责分页、总数、排序、软删除与批量关联事实；本模块只解释持久化事实并映射为 API 视图.
 
+use erp_procurement::entity::procurement_responsibility::ProcurementResponsibilityRule;
+
 use super::dto::ProcurementResponsibilityRuleView;
 use super::facts::ProcurementRuleListDisplayFacts;
-use erp_procurement::entity::procurement_responsibility::ProcurementResponsibilityRule;
 
 /// 将规则分页读模型映射为管理列表视图.
 ///
@@ -67,19 +68,15 @@ mod tests {
     use std::collections::HashMap;
 
     use erp_core::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, SkuId};
-    use erp_procurement::entity::procurement_responsibility::EnableStatus;
     use erp_procurement::entity::procurement_responsibility::{
-        ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
+        EnableStatus, ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
     };
 
     use super::*;
 
     fn sku_rule(id: &str, sku: &str, category: Option<&str>, owner: &str) -> ProcurementResponsibilityRule {
         let (rule_type, category_id) = if let Some(category) = category {
-            (
-                ProcurementResponsibilityRuleType::Category,
-                Some(ProductCategoryId::new(category)),
-            )
+            (ProcurementResponsibilityRuleType::Category, Some(ProductCategoryId::new(category)))
         } else {
             (ProcurementResponsibilityRuleType::Sku, None)
         };
@@ -87,11 +84,7 @@ mod tests {
             ProcurementResponsibilityRuleId::new(id),
             ProcurementResponsibilityRuleData {
                 rule_type,
-                sku_id: if category.is_some() {
-                    None
-                } else {
-                    Some(SkuId::new(sku))
-                },
+                sku_id: if category.is_some() { None } else { Some(SkuId::new(sku)) },
                 category_id,
                 service_region: None,
                 product_kind: None,

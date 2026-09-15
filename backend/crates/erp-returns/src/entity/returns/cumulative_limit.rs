@@ -38,8 +38,9 @@ impl CumulativeAmountLimit {
 mod tests {
     use std::str::FromStr;
 
-    use super::CumulativeAmountLimit;
     use erp_core::money::Amount;
+
+    use super::CumulativeAmountLimit;
 
     /// 把字符串解析为测试金额。
     ///

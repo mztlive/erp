@@ -5,9 +5,9 @@
 //! 不得对版本字符串二次解析。
 
 use super::task_decision::{
-    decimal_version, DirectReconciliationCommand, DirectReconciliationConclusion,
-    IntegrationNonTerminalTaskAction, IntegrationTaskActionCommand, IntegrationTaskActionKind,
-    IntegrationTaskCompletionCommand,
+    DirectReconciliationCommand, DirectReconciliationConclusion, IntegrationNonTerminalTaskAction,
+    IntegrationTaskActionCommand, IntegrationTaskActionKind, IntegrationTaskCompletionCommand,
+    decimal_version,
 };
 use crate::Result;
 
@@ -70,11 +70,7 @@ impl TryFrom<&IntegrationTaskActionCommand> for PreparedWorkItemTarget {
     /// 先执行命令自校验，再单次解析版本；Service 不得二次解析。
     fn try_from(command: &IntegrationTaskActionCommand) -> Result<Self> {
         command.validate()?;
-        Self::parse(
-            &command.work_item_id,
-            &command.expected_task_version,
-            &command.expected_subject_version,
-        )
+        Self::parse(&command.work_item_id, &command.expected_task_version, &command.expected_subject_version)
     }
 }
 
@@ -96,11 +92,7 @@ impl TryFrom<&IntegrationTaskCompletionCommand> for PreparedWorkItemTarget {
     /// 先执行命令自校验，再单次解析版本；Service 不得二次解析。
     fn try_from(command: &IntegrationTaskCompletionCommand) -> Result<Self> {
         command.validate()?;
-        Self::parse(
-            &command.work_item_id,
-            &command.expected_task_version,
-            &command.expected_subject_version,
-        )
+        Self::parse(&command.work_item_id, &command.expected_task_version, &command.expected_subject_version)
     }
 }
 
@@ -135,10 +127,7 @@ impl TryFrom<&DirectReconciliationCommand> for PreparedDirectDecisionTarget {
     fn try_from(command: &DirectReconciliationCommand) -> Result<Self> {
         command.validate()?;
         let difference_version = decimal_version(&command.expected_difference_version, true, "差异版本")?;
-        Ok(Self {
-            difference_id: command.difference_id.trim().to_string(),
-            difference_version,
-        })
+        Ok(Self { difference_id: command.difference_id.trim().to_string(), difference_version })
     }
 }
 
@@ -305,9 +294,6 @@ mod tests {
         let typed = DirectConclusion::from(DirectReconciliationConclusion::ConfirmNoError);
         assert_eq!(typed.resolution_action(), ResolutionAction::ConfirmNoError);
         let typed = DirectConclusion::from(DirectReconciliationConclusion::ConfirmValidDifference);
-        assert_eq!(
-            typed.resolution_action(),
-            ResolutionAction::ConfirmValidDifference
-        );
+        assert_eq!(typed.resolution_action(), ResolutionAction::ConfirmValidDifference);
     }
 }

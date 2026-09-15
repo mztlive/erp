@@ -6,11 +6,11 @@ use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::access::{authorized_fields, ActorAccess, ViewAccess};
-use super::query::{matches_keyword, next_candidate_offset, AUTHORIZED_SCAN_BATCH_SIZE};
+use super::access::{ActorAccess, ViewAccess, authorized_fields};
+use super::query::{AUTHORIZED_SCAN_BATCH_SIZE, matches_keyword, next_candidate_offset};
 use super::{
-    dto, ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView,
-    WorkItemFilter, WorkItemScope, WorkItemStatsParams, WorkItemStatsView, WorkbenchReadService,
+    ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView,
+    WorkItemFilter, WorkItemScope, WorkItemStatsParams, WorkItemStatsView, WorkbenchReadService, dto,
 };
 use crate::errors::{Error, Result};
 
@@ -53,18 +53,13 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ) -> Result<WorkItemStatsView> {
         let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
 
-        let selected = self
-            .stats_fields_for_scope(&query, &actor, &access, executor)
-            .await?;
-        let selected = self
-            .processable_stats_fields(selected, query.scope, &actor, &access, executor)
-            .await?;
-        let assigned = self
-            .stats_fields_for_open_scope(&query, WorkItemScope::Mine, &actor, &access, executor)
-            .await?;
-        let assigned = self
-            .processable_stats_fields(assigned, WorkItemScope::Mine, &actor, &access, executor)
-            .await?;
+        let selected = self.stats_fields_for_scope(&query, &actor, &access, executor).await?;
+        let selected =
+            self.processable_stats_fields(selected, query.scope, &actor, &access, executor).await?;
+        let assigned =
+            self.stats_fields_for_open_scope(&query, WorkItemScope::Mine, &actor, &access, executor).await?;
+        let assigned =
+            self.processable_stats_fields(assigned, WorkItemScope::Mine, &actor, &access, executor).await?;
         let family_items = if all_families {
             assigned.clone()
         } else {
@@ -83,17 +78,11 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             due_today: count_u64(
                 selected
                     .iter()
-                    .filter(|item| {
-                        item.due_at
-                            .is_some_and(|due| due >= today_start && due < tomorrow_start)
-                    })
+                    .filter(|item| item.due_at.is_some_and(|due| due >= today_start && due < tomorrow_start))
                     .count(),
             ),
             overdue: count_u64(
-                selected
-                    .iter()
-                    .filter(|item| item.due_at.is_some_and(|due| due < as_of))
-                    .count(),
+                selected.iter().filter(|item| item.due_at.is_some_and(|due| due < as_of)).count(),
             ),
             exception: count_u64(
                 selected
@@ -178,22 +167,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let mut candidates = filter.clone();
         candidates.query = None;
         loop {
-            let rows = self
-                .candidate_batch(&candidates, candidate_offset, executor)
-                .await?;
+            let rows = self.candidate_batch(&candidates, candidate_offset, executor).await?;
             let candidate_count = rows.len();
             if candidate_count == 0 {
                 break;
             }
             let mut facts = self.object_facts_for_rows(&rows, executor).await?;
-            self.filter_order_access(&access.actor_id, &mut facts, executor)
-                .await?;
+            self.filter_order_access(&access.actor_id, &mut facts, executor).await?;
             let authorized = authorized_fields(rows, access, &facts);
-            fields.extend(
-                authorized
-                    .into_iter()
-                    .filter(|item| matches_keyword(item, filter.query.as_deref())),
-            );
+            fields
+                .extend(authorized.into_iter().filter(|item| matches_keyword(item, filter.query.as_deref())));
             candidate_offset = next_candidate_offset(candidate_offset, candidate_count)?;
             if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {
                 break;
@@ -214,12 +197,10 @@ pub(super) fn counts_as_processable_stat(scope: WorkItemScope, access: &ViewAcce
         return false;
     }
     match scope {
-        WorkItemScope::Mine => access.allowed_actions.iter().any(|action| {
-            matches!(
-                action,
-                WorkItemAllowedAction::Process | WorkItemAllowedAction::Approve
-            )
-        }),
+        WorkItemScope::Mine => access
+            .allowed_actions
+            .iter()
+            .any(|action| matches!(action, WorkItemAllowedAction::Process | WorkItemAllowedAction::Approve)),
         WorkItemScope::Managed | WorkItemScope::History => false,
     }
 }
@@ -228,9 +209,7 @@ pub(super) fn apply_due_filter(filter: &mut WorkItemFilter, due: Option<WorkItem
     let Some(due) = due else {
         return Ok(());
     };
-    let window = due
-        .window_at(Instant::now())
-        .map_err(|error| Error::Internal(error.to_string()))?;
+    let window = due.window_at(Instant::now()).map_err(|error| Error::Internal(error.to_string()))?;
     filter.due_from = window.from;
     filter.due_before = Some(window.before);
     Ok(())
@@ -275,10 +254,10 @@ pub(super) fn family_counts_for_types(
             WorkItemFamily::Approval => counts.approval = counts.approval.saturating_add(1),
             WorkItemFamily::Procurement => {
                 counts.procurement = counts.procurement.saturating_add(1);
-            }
+            },
             WorkItemFamily::Fulfillment => {
                 counts.fulfillment = counts.fulfillment.saturating_add(1);
-            }
+            },
             WorkItemFamily::Finance => counts.finance = counts.finance.saturating_add(1),
             WorkItemFamily::Exception => counts.exception = counts.exception.saturating_add(1),
         }

@@ -1,13 +1,11 @@
 //! ERP 审批集成集合索引。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::ApprovalIntegrationExt;
-use persistence_core::Result;
 
 const SNAPSHOTS: &str = <mongodb::Database as ApprovalIntegrationExt>::APPROVAL_SUBJECT_SNAPSHOTS;
 const OUTBOX: &str = <mongodb::Database as ApprovalIntegrationExt>::APPROVAL_NOTIFICATION_OUTBOX;
@@ -29,19 +27,14 @@ pub async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
 fn snapshot_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_approval_subject_snapshots_id", doc! { "id": 1 }),
-        unique_index(
-            "uk_approval_subject_snapshots_instance",
-            doc! { "approval_process_instance_id": 1 },
-        ),
+        unique_index("uk_approval_subject_snapshots_instance", doc! { "approval_process_instance_id": 1 }),
         named_index(
             "idx_approval_subject_snapshots_object",
             doc! {
@@ -73,10 +66,7 @@ fn outbox_indexes() -> Vec<IndexModel> {
 }
 
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {

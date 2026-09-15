@@ -5,10 +5,10 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as WorkItemExt>::WORK_ITEMS`。
 
-use crate::repository::owned::{FinanceResponsibilityRuleRepository, WorkItemRepository};
 use mongodb::Database;
 
 use super::super::work_item::WorkItemFilter;
+use crate::repository::owned::{FinanceResponsibilityRuleRepository, WorkItemRepository};
 
 /// 域 D03 仓储访问器。
 pub trait WorkItemExt {

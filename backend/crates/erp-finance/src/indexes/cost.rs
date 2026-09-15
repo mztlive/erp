@@ -4,14 +4,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::CostExt;
-use persistence_core::Result;
 
 /// `cost_entry` 集合名。
 pub(crate) const COST_ENTRIES: &str = <mongodb::Database as CostExt>::COST_ENTRIES;
@@ -37,9 +35,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -57,18 +53,9 @@ fn cost_entry_indexes() -> Vec<IndexModel> {
                 "cost_type": 1,
             },
         ),
-        named_index(
-            "idx_cost_entries_profit",
-            doc! { "cost_scope": 1, "cost_stage": 1 },
-        ),
-        named_index(
-            "idx_cost_entries_stage_time",
-            doc! { "cost_stage": 1, "occurred_at": 1 },
-        ),
-        named_index(
-            "idx_cost_entries_supplier",
-            doc! { "supplier_id": 1, "cost_stage": 1 },
-        ),
+        named_index("idx_cost_entries_profit", doc! { "cost_scope": 1, "cost_stage": 1 }),
+        named_index("idx_cost_entries_stage_time", doc! { "cost_stage": 1, "occurred_at": 1 }),
+        named_index("idx_cost_entries_supplier", doc! { "supplier_id": 1, "cost_stage": 1 }),
     ]
 }
 
@@ -85,10 +72,7 @@ fn cost_allocation_indexes() -> Vec<IndexModel> {
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -101,8 +85,8 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
-    use mongodb::bson::doc;
     use mongodb::IndexModel;
+    use mongodb::bson::doc;
 
     use super::{cost_allocation_indexes, cost_entry_indexes};
 
@@ -114,10 +98,7 @@ mod tests {
     fn cost_entry_identity_covers_the_full_business_key() {
         let indexes = cost_entry_indexes();
 
-        let identity = indexes
-            .iter()
-            .find(|index| name(index) == Some("uk_cost_entries_identity"))
-            .unwrap();
+        let identity = indexes.iter().find(|index| name(index) == Some("uk_cost_entries_identity")).unwrap();
         assert_eq!(
             identity.keys,
             doc! {
@@ -131,21 +112,15 @@ mod tests {
         );
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
 
-        assert!(indexes
-            .iter()
-            .any(|index| name(index) == Some("idx_cost_entries_profit")));
-        assert!(indexes
-            .iter()
-            .any(|index| name(index) == Some("idx_cost_entries_stage_time")));
+        assert!(indexes.iter().any(|index| name(index) == Some("idx_cost_entries_profit")));
+        assert!(indexes.iter().any(|index| name(index) == Some("idx_cost_entries_stage_time")));
     }
 
     #[test]
     fn cost_allocation_indexes_cover_ownership_lookups() {
         let indexes = cost_allocation_indexes();
 
-        assert!(indexes
-            .iter()
-            .any(|index| name(index) == Some("idx_cost_allocations_entry")));
+        assert!(indexes.iter().any(|index| name(index) == Some("idx_cost_allocations_entry")));
         assert!(indexes.iter().any(|index| {
             name(index) == Some("idx_cost_allocations_sales_order")
                 && index.keys == doc! { "sales_order_id": 1, "sales_order_line_id": 1 }

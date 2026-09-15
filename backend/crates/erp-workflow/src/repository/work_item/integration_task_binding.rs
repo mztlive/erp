@@ -5,14 +5,13 @@
 //! 稳定排序下至多取两条的有界精确读取，零条由 Service 解释为缺失、一条为唯一
 //! 责任、两条即证明数据损坏。存在性门禁复用同一有界读取，非空即拒绝。
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, Result, mongo_ops};
+
 use crate::entity::work_item::WorkItem;
 use crate::repository::owned::WorkItemRepository;
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
 
 /// 构造集成错误任务唯一责任查询的精确过滤文档。
 ///
@@ -77,10 +76,7 @@ fn reconciliation_difference_unique_filter(difference_id: &str) -> Document {
 /// # 约束
 /// 纯选项构造，不访问数据库；排序键与截断行数固定，调用方不得改写。
 fn unique_read_options() -> FindOptions {
-    FindOptions::builder()
-        .sort(doc! { "created_at": 1, "id": 1 })
-        .limit(2)
-        .build()
+    FindOptions::builder().sort(doc! { "created_at": 1, "id": 1 }).limit(2).build()
 }
 
 impl<'a> WorkItemRepository<'a> {
@@ -163,29 +159,17 @@ mod tests {
     #[test]
     fn error_task_unique_filter_pins_object_type_and_soft_delete() {
         let filter = integration_error_task_unique_filter("task-1");
-        assert_eq!(
-            filter.get_str("business_object_type").unwrap(),
-            "integration_error_task"
-        );
+        assert_eq!(filter.get_str("business_object_type").unwrap(), "integration_error_task");
         assert_eq!(filter.get_str("business_object_id").unwrap(), "task-1");
-        assert_eq!(
-            filter.get_i64("deleted_at").unwrap(),
-            entity_core::NOT_DELETED_TIMESTAMP as i64
-        );
+        assert_eq!(filter.get_i64("deleted_at").unwrap(), entity_core::NOT_DELETED_TIMESTAMP as i64);
     }
 
     #[test]
     fn difference_unique_filter_pins_object_type_and_soft_delete() {
         let filter = reconciliation_difference_unique_filter("diff-1");
-        assert_eq!(
-            filter.get_str("business_object_type").unwrap(),
-            "reconciliation_difference"
-        );
+        assert_eq!(filter.get_str("business_object_type").unwrap(), "reconciliation_difference");
         assert_eq!(filter.get_str("business_object_id").unwrap(), "diff-1");
-        assert_eq!(
-            filter.get_i64("deleted_at").unwrap(),
-            entity_core::NOT_DELETED_TIMESTAMP as i64
-        );
+        assert_eq!(filter.get_i64("deleted_at").unwrap(), entity_core::NOT_DELETED_TIMESTAMP as i64);
     }
 
     #[test]

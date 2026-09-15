@@ -4,24 +4,24 @@ use std::collections::{HashMap, HashSet};
 
 use application_core::{AuditActor, FilteredPage};
 use erp_identity::AccessControlExt;
-use erp_procurement::entity::purchase_order::{PurchaseOrderRevision, PurchaseOrderSubmission};
-use persistence_core::NoTransaction;
-use validator::Validate;
-
-use super::approval_query::load_document_approval;
-use super::dto::{PurchaseOrderCenterView, PurchaseOrderListItemView};
-use super::repository::{load_purchase_order_center_facts, PurchaseOrderListFacts};
-use super::scope::PurchaseListView;
-use super::PurchaseOrderReadService;
-use crate::{Error, Result};
 use erp_procurement::dto::purchase_order::{
     PageView, PurchaseOrderListParams, PurchaseSalesAllocationView, TotalsView,
 };
+use erp_procurement::entity::purchase_order::{PurchaseOrderRevision, PurchaseOrderSubmission};
 use erp_procurement::repository::purchase_order::PurchaseOrderRow;
 use erp_procurement::service::purchase_order::view_mapping::{
     revision_line_to_view, revision_totals, submission_line_to_view,
 };
 use erp_workflow::service::document_registry::find_approval_binding;
+use persistence_core::NoTransaction;
+use validator::Validate;
+
+use super::PurchaseOrderReadService;
+use super::approval_query::load_document_approval;
+use super::dto::{PurchaseOrderCenterView, PurchaseOrderListItemView};
+use super::repository::{PurchaseOrderListFacts, load_purchase_order_center_facts};
+use super::scope::PurchaseListView;
+use crate::{Error, Result};
 
 impl PurchaseOrderReadService {
     /// 分页查询采购单列表。
@@ -51,23 +51,17 @@ impl PurchaseOrderReadService {
     ) -> Result<PurchaseListView> {
         let expected = params.scope_version.as_deref();
         if params.page.unwrap_or(1) > 1 && expected.is_none_or(str::is_empty) {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into(),
-            ));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into()));
         }
         params.validate()?;
         let snapshot = self.list_snapshot(params, actor).await?;
         if expected.is_some_and(|value| value != snapshot.context.scope_version) {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into(),
-            ));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
         }
         let items = map_list_items(&snapshot.page.items, &snapshot.facts)?;
         let current = self.list_snapshot(params, actor).await?;
         if current.context.scope_version != snapshot.context.scope_version {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into(),
-            ));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into()));
         }
         Ok(PurchaseListView {
             scope_version: snapshot.context.scope_version,
@@ -116,9 +110,7 @@ impl PurchaseOrderReadService {
             access_version = Some(version);
         }
         let facts = load_purchase_order_center_facts(&self.db, id, &mut NoTransaction).await?;
-        let order = facts
-            .order
-            .ok_or_else(|| Error::NotFound("采购单不存在或无权查看".to_string()))?;
+        let order = facts.order.ok_or_else(|| Error::NotFound("采购单不存在或无权查看".to_string()))?;
         let supplier_name = supplier_display(
             order.supplier_id.as_ref(),
             &facts
@@ -131,43 +123,23 @@ impl PurchaseOrderReadService {
         let sales_order_id = order.sales_order_id.to_string();
         let sales_order_no = sales_no_for(
             &sales_order_id,
-            &facts
-                .sales_order_no
-                .clone()
-                .map(|no| (sales_order_id.clone(), no))
-                .into_iter()
-                .collect(),
+            &facts.sales_order_no.clone().map(|no| (sales_order_id.clone(), no)).into_iter().collect(),
         )?;
         let owner_user_id = order.current_owner_user_id()?.to_string();
         let (_, owner_name) = owner_display(
             Some(owner_user_id.clone()),
-            &facts
-                .owner_name
-                .clone()
-                .map(|name| (owner_user_id.clone(), name))
-                .into_iter()
-                .collect(),
+            &facts.owner_name.clone().map(|name| (owner_user_id.clone(), name)).into_iter().collect(),
         );
 
         let content_source = center_content_source(
             facts.current_revision.is_some(),
-            facts
-                .current_submission
-                .as_ref()
-                .map(|submission| submission.content_source()),
+            facts.current_submission.as_ref().map(|submission| submission.content_source()),
         );
         let (lines, totals) = if let Some(revision) = &facts.current_revision {
-            (
-                facts.revision_lines.iter().map(revision_line_to_view).collect(),
-                revision_totals(revision),
-            )
+            (facts.revision_lines.iter().map(revision_line_to_view).collect(), revision_totals(revision))
         } else if let Some(submission) = &facts.current_submission {
             (
-                facts
-                    .submission_lines
-                    .iter()
-                    .map(submission_line_to_view)
-                    .collect(),
+                facts.submission_lines.iter().map(submission_line_to_view).collect(),
                 TotalsView {
                     gross: submission.gross_amount.to_string(),
                     net: submission.net_amount.to_string(),
@@ -177,11 +149,7 @@ impl PurchaseOrderReadService {
         } else {
             (
                 Vec::new(),
-                TotalsView {
-                    gross: "0.00".to_string(),
-                    net: "0.00".to_string(),
-                    tax: "0.00".to_string(),
-                },
+                TotalsView { gross: "0.00".to_string(), net: "0.00".to_string(), tax: "0.00".to_string() },
             )
         };
         let allocations = facts
@@ -199,31 +167,23 @@ impl PurchaseOrderReadService {
         let changes = facts
             .changes
             .into_iter()
-            .map(
-                |change| erp_procurement::dto::purchase_order::PurchaseChangeSummaryView {
-                    change_id: change.base.id.clone(),
-                    status: change.stable.status.as_str().to_string(),
-                    base_revision_id: change.base_revision_id.to_string(),
-                    effective_revision_id: change.effective_revision_id.as_ref().map(ToString::to_string),
-                    reason: change.reason,
-                    created_at: change.base.created_at,
-                },
-            )
+            .map(|change| erp_procurement::dto::purchase_order::PurchaseChangeSummaryView {
+                change_id: change.base.id.clone(),
+                status: change.stable.status.as_str().to_string(),
+                base_revision_id: change.base_revision_id.to_string(),
+                effective_revision_id: change.effective_revision_id.as_ref().map(ToString::to_string),
+                reason: change.reason,
+                created_at: change.base.created_at,
+            })
             .collect();
 
-        let revision_no = facts
-            .current_revision
-            .as_ref()
-            .map(|revision| revision.revision.revision_no);
+        let revision_no = facts.current_revision.as_ref().map(|revision| revision.revision.revision_no);
         let payable_summary =
-            facts
-                .payable
-                .as_ref()
-                .map(|account| super::dto::PurchaseOrderPayableSummaryView {
-                    payable_open_amount: account.open_total,
-                    paid_allocated_amount: account.settled_total,
-                    purchase_invoice_allocated_amount: account.invoiced_total,
-                });
+            facts.payable.as_ref().map(|account| super::dto::PurchaseOrderPayableSummaryView {
+                payable_open_amount: account.open_total,
+                paid_allocated_amount: account.settled_total,
+                purchase_invoice_allocated_amount: account.invoiced_total,
+            });
         let binding = match find_approval_binding(&self.db, &order.base.id, &mut NoTransaction)
             .await
             .map_err(crate::Error::from)
@@ -310,15 +270,8 @@ impl PurchaseOrderReadService {
         if unique.is_empty() {
             return Ok(HashMap::new());
         }
-        let accounts = self
-            .db
-            .accounts()
-            .list_by_ids(&unique, &mut NoTransaction)
-            .await?;
-        Ok(accounts
-            .into_iter()
-            .map(|account| (account.base.id, account.name))
-            .collect())
+        let accounts = self.db.accounts().list_by_ids(&unique, &mut NoTransaction).await?;
+        Ok(accounts.into_iter().map(|account| (account.base.id, account.name)).collect())
     }
 }
 
@@ -396,11 +349,8 @@ fn map_list_items(
                 &facts.submissions,
                 &facts.revisions,
             );
-            let raw_owner = row
-                .owner_user_id
-                .as_deref()
-                .filter(|owner| !owner.trim().is_empty())
-                .map(str::to_string);
+            let raw_owner =
+                row.owner_user_id.as_deref().filter(|owner| !owner.trim().is_empty()).map(str::to_string);
             let (owner_user_id, owner_name) = owner_display(raw_owner, &facts.owner_names);
             Ok(PurchaseOrderListItemView {
                 id: row.id.clone(),
@@ -446,10 +396,7 @@ fn map_list_items(
 /// # 约束
 /// 缺失不得报错，由调用方按约定回退展示.
 fn supplier_display(supplier_id: &str, names: &HashMap<String, String>) -> String {
-    names
-        .get(supplier_id)
-        .cloned()
-        .unwrap_or_else(|| supplier_id.to_string())
+    names.get(supplier_id).cloned().unwrap_or_else(|| supplier_id.to_string())
 }
 
 /// 解析来源销售单业务单号.
@@ -467,9 +414,7 @@ fn supplier_display(supplier_id: &str, names: &HashMap<String, String>) -> Strin
 /// # 约束
 /// 缺失不得回退为 ID，必须失败关闭.
 fn sales_no_for(sales_order_id: &str, nos: &HashMap<String, String>) -> Result<String> {
-    nos.get(sales_order_id)
-        .cloned()
-        .ok_or_else(|| Error::Internal("采购单关联的销售单不存在".to_string()))
+    nos.get(sales_order_id).cloned().ok_or_else(|| Error::Internal("采购单关联的销售单不存在".to_string()))
 }
 
 /// 解析负责人展示名.
@@ -527,36 +472,15 @@ mod query_layering_tests {
         fn production_part(source: &str) -> &str {
             source.split("#[cfg(test)]").next().expect("生产代码必须存在")
         }
-        let production = [
-            production_part(include_str!("query.rs")),
-            production_part(include_str!("scope.rs")),
-        ]
-        .concat();
-        assert!(
-            production.contains("load_purchase_order_list_page"),
-            "列表必须使用批量事实加载"
-        );
-        assert!(
-            production.contains("load_purchase_order_center_facts"),
-            "对象中心必须使用批量事实加载"
-        );
-        assert!(
-            !production.contains("fn resolve_sales_order_numbers"),
-            "逐销售单号查询已删除"
-        );
-        assert!(
-            !production.contains("fn resolve_order_totals"),
-            "逐指针金额查询已删除"
-        );
-        assert!(
-            !production.contains("fn resolve_current_content"),
-            "对象中心逐段读取已删除"
-        );
+        let production =
+            [production_part(include_str!("query.rs")), production_part(include_str!("scope.rs"))].concat();
+        assert!(production.contains("load_purchase_order_list_page"), "列表必须使用批量事实加载");
+        assert!(production.contains("load_purchase_order_center_facts"), "对象中心必须使用批量事实加载");
+        assert!(!production.contains("fn resolve_sales_order_numbers"), "逐销售单号查询已删除");
+        assert!(!production.contains("fn resolve_order_totals"), "逐指针金额查询已删除");
+        assert!(!production.contains("fn resolve_current_content"), "对象中心逐段读取已删除");
         assert!(!production.contains("fn resolve_allocations"), "逐分配读取已删除");
-        assert!(
-            !production.contains("resolve_supplier_name"),
-            "逐供应商名称查询已从查询编排删除"
-        );
+        assert!(!production.contains("resolve_supplier_name"), "逐供应商名称查询已从查询编排删除");
         for forbidden in [
             ".supplier_accounts()",
             ".parties()",
@@ -591,24 +515,15 @@ mod query_layering_tests {
         .next()
         .unwrap_or("")
         .to_string();
-        assert!(
-            !shared.contains("fn resolve_supplier_name"),
-            "单点供应商名称 helper 已删除"
-        );
+        assert!(!shared.contains("fn resolve_supplier_name"), "单点供应商名称 helper 已删除");
         assert!(
             !shared.contains(".supplier_accounts()")
                 && !shared.contains(".parties()")
                 && !shared.contains(".party_revisions()"),
             "共享模块不得直查供应商关联集合"
         );
-        assert!(
-            !change.contains("resolve_supplier_name"),
-            "变更编排已改用批量法定名称"
-        );
-        assert!(
-            change.contains("current_legal_names_by_account_ids"),
-            "变更编排必须使用批量法定名称"
-        );
+        assert!(!change.contains("resolve_supplier_name"), "变更编排已改用批量法定名称");
+        assert!(change.contains("current_legal_names_by_account_ids"), "变更编排必须使用批量法定名称");
     }
 }
 
@@ -708,23 +623,14 @@ mod query_mapping_tests {
         );
         let mut names = HashMap::new();
         names.insert("buyer-1".to_string(), "张三".to_string());
-        assert_eq!(
-            owner_display(Some("buyer-1".to_string()), &names).1,
-            "张三".to_string()
-        );
+        assert_eq!(owner_display(Some("buyer-1".to_string()), &names).1, "张三".to_string());
     }
 
     /// 内容来源优先级固定为版本大于提交大于草稿.
     #[test]
     fn content_source_priority_is_revision_over_submission_over_draft() {
-        assert_eq!(
-            center_content_source(true, Some("SUBMISSION")),
-            "REVISION".to_string()
-        );
-        assert_eq!(
-            center_content_source(false, Some("SUBMISSION")),
-            "SUBMISSION".to_string()
-        );
+        assert_eq!(center_content_source(true, Some("SUBMISSION")), "REVISION".to_string());
+        assert_eq!(center_content_source(false, Some("SUBMISSION")), "SUBMISSION".to_string());
         assert_eq!(center_content_source(false, None), "DRAFT".to_string());
     }
 

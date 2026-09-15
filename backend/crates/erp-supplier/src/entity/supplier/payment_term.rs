@@ -1,9 +1,8 @@
 //! 供应商采购付款条件的受控代码与结算方式映射。
 
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::calendar::CalendarPeriod;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 结算方式（§6.2：预付款、先用后付、现结等受控代码）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,9 +103,7 @@ impl SupplierPaymentTerm {
             "CASH_ON_APPROVAL" | "CASH-ON-APPROVAL" | "现结" => Ok(Self::CashOnApproval),
             "POSTPAY_NET15" | "POSTPAY-NET15" | "NET15" | "NET-15" => Ok(Self::PostpayNet15),
             "POSTPAY_NET30" | "POSTPAY-NET30" | "NET30" | "NET-30" => Ok(Self::PostpayNet30),
-            _ => Err(Error::from(
-                "付款条件缺少可计算规则，请在供应商资料中选择具体付款条件",
-            )),
+            _ => Err(Error::from("付款条件缺少可计算规则，请在供应商资料中选择具体付款条件")),
         }
     }
 
@@ -248,14 +245,8 @@ mod tests {
 
     #[test]
     fn payment_terms_normalize_legacy_aliases() {
-        assert_eq!(
-            SupplierPaymentTerm::parse(" NET-30 ").unwrap().code(),
-            "POSTPAY_NET30"
-        );
-        assert_eq!(
-            SupplierPaymentTerm::parse("现结").unwrap().code(),
-            "CASH_ON_APPROVAL"
-        );
+        assert_eq!(SupplierPaymentTerm::parse(" NET-30 ").unwrap().code(), "POSTPAY_NET30");
+        assert_eq!(SupplierPaymentTerm::parse("现结").unwrap().code(), "CASH_ON_APPROVAL");
         assert_eq!(SupplierPaymentTerm::parse("预付款").unwrap().code(), "PREPAY_100");
     }
 
@@ -298,18 +289,11 @@ mod tests {
                 assert_eq!(term.days_after_delivery(), None);
             }
         }
-        for invalid in [
-            "PERIOD_MONTH_",
-            "PERIOD_MONTH_-1",
-            "PERIOD_MONTH_1.5",
-            "PERIOD_MONTH_367",
-            "PERIOD_UNKNOWN_15",
-        ] {
+        for invalid in
+            ["PERIOD_MONTH_", "PERIOD_MONTH_-1", "PERIOD_MONTH_1.5", "PERIOD_MONTH_367", "PERIOD_UNKNOWN_15"]
+        {
             assert!(SupplierPaymentTerm::parse(invalid).is_err());
         }
-        assert!(SupplierPaymentTerm::parse("NET-30")
-            .unwrap()
-            .calendar_due()
-            .is_none());
+        assert!(SupplierPaymentTerm::parse("NET-30").unwrap().calendar_due().is_none());
     }
 }

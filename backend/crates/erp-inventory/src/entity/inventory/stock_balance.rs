@@ -8,11 +8,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{SkuId, StockBalanceId, StockMovementId, WarehouseId};
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::stock_adjustment::{StockAdjustment, StockAdjustmentLine};
 
@@ -187,10 +186,12 @@ fn ensure_quantities_non_negative(on_hand: Quantity, reserved: Quantity, availab
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
+
     use erp_core::ids::{StockAdjustmentId, StockBalanceId};
     use erp_core::money::Quantity;
-    use std::str::FromStr;
+
+    use super::*;
 
     fn data() -> StockBalanceData {
         StockBalanceData {
@@ -214,10 +215,8 @@ mod tests {
     /// 失败路径：三元组不一致与负数量（关联不一致）。
     #[test]
     fn new_rejects_inconsistent_or_negative_quantities() {
-        let inconsistent = StockBalanceData {
-            available_quantity: Quantity::from_str("69").unwrap(),
-            ..data()
-        };
+        let inconsistent =
+            StockBalanceData { available_quantity: Quantity::from_str("69").unwrap(), ..data() };
         assert!(StockBalance::new(StockBalanceId::new("b-2"), inconsistent).is_err());
 
         let negative = StockBalanceData {
@@ -254,11 +253,7 @@ mod tests {
             ..StockBalanceUpdate::default()
         };
         assert!(balance.update(over_reserved).is_err(), "可用量不得为负");
-        assert_eq!(
-            balance.reserved_quantity,
-            Quantity::from_str("30").unwrap(),
-            "失败不改变字段"
-        );
+        assert_eq!(balance.reserved_quantity, Quantity::from_str("30").unwrap(), "失败不改变字段");
     }
 
     /// 版本与调整维度匹配由余额实体统一判定。

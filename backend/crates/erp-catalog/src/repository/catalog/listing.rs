@@ -3,17 +3,15 @@
 use std::collections::{HashMap, HashSet};
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::ProductId;
 use futures_util::TryStreamExt;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::catalog::{EnableStatus, ListingStatus};
-use erp_core::ids::ProductId;
-
-use super::shared::SKUS;
 use super::CatalogRepository;
-use persistence_core::Executor;
-use persistence_core::Result;
+use super::shared::SKUS;
+use crate::entity::catalog::{EnableStatus, ListingStatus};
 
 /// 单个商品的上架计数投影；SPU 继承状态由领域规则 `ProductListingStatus::inherited` 计算。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -40,11 +38,7 @@ impl ProductListingSummary {
     /// # 错误
     /// 无。
     pub fn new(product_id: impl Into<String>, listed_sku_count: u32, sku_count: u32) -> Self {
-        Self {
-            product_id: product_id.into(),
-            listed_sku_count,
-            sku_count,
-        }
+        Self { product_id: product_id.into(), listed_sku_count, sku_count }
     }
 }
 
@@ -190,7 +184,7 @@ async fn aggregate_listing_summaries(
                 .stream(session)
                 .try_collect::<Vec<_>>()
                 .await
-        }
+        },
         None => {
             collection
                 .aggregate(pipeline)
@@ -198,7 +192,7 @@ async fn aggregate_listing_summaries(
                 .await?
                 .try_collect::<Vec<_>>()
                 .await
-        }
+        },
     }
     .map_err(persistence_core::Error::from)
 }
@@ -257,8 +251,9 @@ fn fill_listing_summaries(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::ids::ProductId;
+
+    use super::*;
 
     fn summary(product_id: &str, listed_sku_count: u32, sku_count: u32) -> ProductListingSummary {
         ProductListingSummary::new(product_id, listed_sku_count, sku_count)
@@ -302,11 +297,7 @@ mod tests {
                 "all-unlisted".to_string(),
                 "missing".to_string(),
             ],
-            vec![
-                summary("partial", 1, 2),
-                summary("all-unlisted", 0, 2),
-                summary("all-listed", 2, 2),
-            ],
+            vec![summary("partial", 1, 2), summary("all-unlisted", 0, 2), summary("all-listed", 2, 2)],
         );
 
         assert_eq!(filled[0], summary("all-listed", 2, 2));
@@ -318,14 +309,7 @@ mod tests {
     /// 重复商品 ID 按首次出现去重，缺项仍补零。
     #[test]
     fn unique_product_ids_preserve_first_seen_order() {
-        let ids = [
-            ProductId::new("p-2"),
-            ProductId::new("p-1"),
-            ProductId::new("p-2"),
-        ];
-        assert_eq!(
-            unique_product_ids(&ids),
-            vec!["p-2".to_string(), "p-1".to_string()]
-        );
+        let ids = [ProductId::new("p-2"), ProductId::new("p-1"), ProductId::new("p-2")];
+        assert_eq!(unique_product_ids(&ids), vec!["p-2".to_string(), "p-1".to_string()]);
     }
 }

@@ -4,10 +4,8 @@
 //! 直接复用 `erp_customer` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
 use erp_core::common::time::Instant;
 use erp_customer::{
     CreateCustomerRequest, CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView,
@@ -18,14 +16,10 @@ use erp_customer::{
 use erp_identity::Permission;
 use erp_read_models::{CustomerCenterReadService, CustomerCenterReceivableView, CustomerCenterRelatedView};
 
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::{Error, Result},
-        middleware::RbacSubject,
-        response::ApiResponse,
-    },
-};
+use crate::app_state::AppState;
+use crate::core::errors::{Error, Result};
+use crate::core::middleware::RbacSubject;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "客户",
@@ -50,9 +44,7 @@ pub async fn customer_profile_create(
     if req.bank_accounts.is_some() {
         ensure_permission(&state, &subject, "party_bank_account:create").await?;
     }
-    erp_processes::adapters::customer_access(state.db(), state.rbac())
-        .ensure_create(&actor)
-        .await?;
+    erp_processes::adapters::customer_access(state.db(), state.rbac()).ensure_create(&actor).await?;
     let view = state.customer_profile_service().create(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -190,10 +182,7 @@ pub async fn customer_profile_command_detail(
     Extension(actor): Extension<AuditActor>,
     Path(idempotency_key): Path<String>,
 ) -> Result<Option<CustomerProfileMutationView>> {
-    let view = state
-        .customer_profile_service()
-        .command_result(&idempotency_key)
-        .await?;
+    let view = state.customer_profile_service().command_result(&idempotency_key).await?;
     if let Some(result) = &view {
         if result.initiated_by != actor.id() {
             ensure_customer_access(&state, &actor, "detail", &result.customer_id).await?;
@@ -218,23 +207,18 @@ pub async fn customer_sensitive_reveal(
 ) -> Result<CustomerSensitiveRevealView> {
     let now =
         u64::try_from(Instant::now().unix_secs()).map_err(|_| Error::Internal("系统时间非法".to_string()))?;
-    let scope = state
-        .sensitive_data()
-        .verify_reveal_token(&req.reveal_token, now)?;
+    let scope = state.sensitive_data().verify_reveal_token(&req.reveal_token, now)?;
     let (detail_permission, reveal_permission) = match scope.kind {
         erp_party::SensitiveFieldKind::ContactMobile => ("party_contact:detail", "party_contact:reveal"),
         erp_party::SensitiveFieldKind::Address => ("party_address:detail", "party_address:reveal"),
         erp_party::SensitiveFieldKind::BankAccountNumber => {
             ("party_bank_account:detail", "party_bank_account:reveal")
-        }
+        },
     };
     ensure_customer_access(&state, &actor, "detail", &scope.supplier_id).await?;
     ensure_permission(&state, &subject, detail_permission).await?;
     ensure_permission(&state, &subject, reveal_permission).await?;
-    let view = state
-        .customer_profile_service()
-        .reveal_sensitive(req, &actor)
-        .await?;
+    let view = state.customer_profile_service().reveal_sensitive(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -408,10 +392,7 @@ pub async fn customer_assignment_list(
     Query(params): Query<CustomerAssignmentListParams>,
 ) -> Result<PageView<CustomerAssignmentView>> {
     ensure_customer_access(&state, &actor, "detail", &id).await?;
-    let page = state
-        .customer_assignment_service()
-        .customer_assignment_list(&id, &params)
-        .await?;
+    let page = state.customer_assignment_service().customer_assignment_list(&id, &params).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -439,10 +420,7 @@ pub async fn customer_assignment_apply(
     Json(req): Json<CustomerAssignmentRequest>,
 ) -> Result<Vec<CustomerAssignmentView>> {
     ensure_customer_access(&state, &actor, "update", &id).await?;
-    let views = state
-        .customer_assignment_service()
-        .apply_assignment(&id, req, &actor)
-        .await?;
+    let views = state.customer_assignment_service().apply_assignment(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(views))
 }
 
@@ -458,24 +436,9 @@ async fn allowed_actions(
         ("CREATE_SALES_ORDER", "sales_order:create", None, true),
         ("OPEN_RECEIVABLE", "receivable_account:detail", None, false),
         ("MANAGE_ASSIGNMENTS", "customer_assignment:create", None, false),
-        (
-            "REVEAL_CONTACT",
-            "party_contact:reveal",
-            Some("party_contact:detail"),
-            false,
-        ),
-        (
-            "REVEAL_ADDRESS",
-            "party_address:reveal",
-            Some("party_address:detail"),
-            false,
-        ),
-        (
-            "REVEAL_BANK_ACCOUNT",
-            "party_bank_account:reveal",
-            Some("party_bank_account:detail"),
-            false,
-        ),
+        ("REVEAL_CONTACT", "party_contact:reveal", Some("party_contact:detail"), false),
+        ("REVEAL_ADDRESS", "party_address:reveal", Some("party_address:detail"), false),
+        ("REVEAL_BANK_ACCOUNT", "party_bank_account:reveal", Some("party_bank_account:detail"), false),
     ];
     let mut actions = Vec::new();
     for (action, permission, prerequisite, requires_active) in candidates {
@@ -501,11 +464,7 @@ pub(crate) async fn has_permission(
     permission: &str,
 ) -> std::result::Result<bool, Error> {
     let permission = Permission::parse(permission)?;
-    state
-        .rbac()
-        .enforce(&subject.0, &permission)
-        .await
-        .map_err(Into::into)
+    state.rbac().enforce(&subject.0, &permission).await.map_err(Into::into)
 }
 
 /// 强制当前 RBAC 主体覆盖字段级权限。
@@ -555,9 +514,10 @@ pub(crate) async fn ensure_customer_access(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use axum::extract::Query;
     use axum::http::Uri;
+
+    use super::*;
 
     /// 客户 Query 解码必须消费范围版本与组织筛选，并拒绝旧姓名参数。
     ///

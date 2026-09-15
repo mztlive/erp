@@ -3,7 +3,8 @@
 use entity_core::{BaseModel, HasBaseModel};
 use mongodb::Database;
 use persistence_core::{Executor, Repository, Result};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use crate::entity::organization::*;
 use crate::entity::organization_change::*;
@@ -34,14 +35,8 @@ impl<'a> OrganizationRepository<'a> {
     /// 任一集合读取失败时不返回残缺状态。
     pub async fn state(&self, executor: &mut dyn Executor) -> Result<OrganizationState> {
         Ok(OrganizationState {
-            version: self
-                .revision(executor)
-                .await?
-                .map(|value| value.revision)
-                .unwrap_or(0),
-            units: Repository::<OrgUnit>::new(self.db, ORG_UNITS)
-                .list_all(executor)
-                .await?,
+            version: self.revision(executor).await?.map(|value| value.revision).unwrap_or(0),
+            units: Repository::<OrgUnit>::new(self.db, ORG_UNITS).list_all(executor).await?,
             memberships: Repository::<OrgMembership>::new(self.db, ORG_MEMBERSHIPS)
                 .list_all(executor)
                 .await?,
@@ -56,9 +51,7 @@ impl<'a> OrganizationRepository<'a> {
     /// # 错误
     /// 底层读取失败时返回仓储错误。
     pub async fn revision(&self, executor: &mut dyn Executor) -> Result<Option<OrganizationRevision>> {
-        Repository::new(self.db, ORG_REVISIONS)
-            .find_by_id("organization", executor)
-            .await
+        Repository::new(self.db, ORG_REVISIONS).find_by_id("organization", executor).await
     }
 
     /// 查询幂等命令回执；仅组织管理用例可返回审计详情。
@@ -70,9 +63,7 @@ impl<'a> OrganizationRepository<'a> {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<OrganizationChangeReceipt>> {
-        Repository::new(self.db, ORG_CHANGES)
-            .find_by_id(id, executor)
-            .await
+        Repository::new(self.db, ORG_CHANGES).find_by_id(id, executor).await
     }
 
     /// 保存变更行、全局版本和前后审计；必须传入同一业务事务执行器。
@@ -84,16 +75,8 @@ impl<'a> OrganizationRepository<'a> {
         receipt: &mut OrganizationChangeReceipt,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.advance(receipt.before.version, receipt.after.version, executor)
-            .await?;
-        save_changed(
-            self.db,
-            ORG_UNITS,
-            &receipt.before.units,
-            &mut receipt.after.units,
-            executor,
-        )
-        .await?;
+        self.advance(receipt.before.version, receipt.after.version, executor).await?;
+        save_changed(self.db, ORG_UNITS, &receipt.before.units, &mut receipt.after.units, executor).await?;
         save_changed(
             self.db,
             ORG_MEMBERSHIPS,
@@ -110,9 +93,7 @@ impl<'a> OrganizationRepository<'a> {
             executor,
         )
         .await?;
-        Repository::new(self.db, ORG_CHANGES)
-            .create(receipt, executor)
-            .await
+        Repository::new(self.db, ORG_CHANGES).create(receipt, executor).await
     }
 
     /// 所有组织写入争用同一版本文档，防止并发移动和成员时段写偏差。
@@ -131,10 +112,7 @@ impl<'a> OrganizationRepository<'a> {
         }
         repository
             .create(
-                &OrganizationRevision {
-                    base: BaseModel::new("organization".into()),
-                    revision: next,
-                },
+                &OrganizationRevision { base: BaseModel::new("organization".into()), revision: next },
                 executor,
             )
             .await

@@ -11,17 +11,15 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     CustomerAcceptanceId, CustomerAcceptanceLineId, FileAssetId, SalesOrderId, SalesOrderLineId,
 };
 use erp_core::money::Quantity;
-use erp_core::validation::normalize_optional_text;
-use erp_core::validation::normalize_required_text;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 验收单号最大长度。
 const ACCEPTANCE_NO_MAX_LEN: usize = 64;
@@ -300,10 +298,7 @@ impl CustomerAcceptance {
             return Err(Error::from("客户验收单没有行，无法过账"));
         }
         let acceptance_id = CustomerAcceptanceId::new(self.base.id.clone());
-        if lines
-            .iter()
-            .any(|line| line.customer_acceptance_id != acceptance_id)
-        {
+        if lines.iter().any(|line| line.customer_acceptance_id != acceptance_id) {
             return Err(Error::from("客户验收行与验收单关联不一致"));
         }
         Ok(())
@@ -494,13 +489,11 @@ impl CustomerAcceptanceLine {
         I: IntoIterator<Item = Quantity>,
     {
         let total =
-            allocated_quantities
-                .into_iter()
-                .try_fold(rust_decimal::Decimal::ZERO, |total, quantity| {
-                    Quantity::try_from(total + quantity.to_decimal())
-                        .map(|quantity| quantity.to_decimal())
-                        .map_err(|error| Error::from(error.to_string()))
-                })?;
+            allocated_quantities.into_iter().try_fold(rust_decimal::Decimal::ZERO, |total, quantity| {
+                Quantity::try_from(total + quantity.to_decimal())
+                    .map(|quantity| quantity.to_decimal())
+                    .map_err(|error| Error::from(error.to_string()))
+            })?;
         if total != self.accepted_quantity.to_decimal() {
             return Err(Error::from("验收行分配合计必须等于通过数量"));
         }
@@ -510,9 +503,11 @@ impl CustomerAcceptanceLine {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::*;
-    use erp_core::ids::CustomerAcceptanceId;
     use std::str::FromStr;
+
+    use erp_core::ids::CustomerAcceptanceId;
+
+    use super::*;
 
     pub(crate) fn data() -> CustomerAcceptanceData {
         CustomerAcceptanceData {
@@ -547,60 +542,42 @@ pub(crate) mod tests {
 
         acceptance.mark_posted().unwrap();
         assert_eq!(acceptance.status, CustomerAcceptanceState::Posted);
-        acceptance
-            .reverse(CustomerAcceptanceId::new("acceptance-2"))
-            .unwrap();
+        acceptance.reverse(CustomerAcceptanceId::new("acceptance-2")).unwrap();
         assert_eq!(acceptance.status, CustomerAcceptanceState::Reversed);
-        assert_eq!(
-            acceptance.reversal_of_acceptance_id.unwrap().as_ref(),
-            "acceptance-2"
-        );
+        assert_eq!(acceptance.reversal_of_acceptance_id.unwrap().as_ref(), "acceptance-2");
     }
 
     /// 失败路径：必填空（单号空白）、超长、反向验收引用自身。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank_no = CustomerAcceptanceData {
-            acceptance_no: "  ".to_string(),
-            ..data()
-        };
+        let blank_no = CustomerAcceptanceData { acceptance_no: "  ".to_string(), ..data() };
         assert!(CustomerAcceptance::new(CustomerAcceptanceId::new("a2"), blank_no).is_err());
 
-        let overlong_no = CustomerAcceptanceData {
-            acceptance_no: "x".repeat(65),
-            ..data()
-        };
+        let overlong_no = CustomerAcceptanceData { acceptance_no: "x".repeat(65), ..data() };
         assert!(CustomerAcceptance::new(CustomerAcceptanceId::new("a3"), overlong_no).is_err());
 
         let mut acceptance = CustomerAcceptance::new(CustomerAcceptanceId::new("a4"), data()).unwrap();
-        assert!(
-            acceptance.reverse(CustomerAcceptanceId::new("a4")).is_err(),
-            "不能引用自身"
-        );
-        assert!(
-            acceptance.reverse(CustomerAcceptanceId::new("other")).is_err(),
-            "草稿不能冲正"
-        );
+        assert!(acceptance.reverse(CustomerAcceptanceId::new("a4")).is_err(), "不能引用自身");
+        assert!(acceptance.reverse(CustomerAcceptanceId::new("other")).is_err(), "草稿不能冲正");
     }
 
     /// 状态机：合法/非法/终态定向断言（含幂等迁移）。
     #[test]
     fn state_machine_directed_edges() {
         let mut acceptance = CustomerAcceptance::new(CustomerAcceptanceId::new("a5"), data()).unwrap();
-        assert!(acceptance
-            .update(CustomerAcceptanceUpdate {
-                result: Some(AcceptanceResult::Shortage),
-                ..Default::default()
-            })
-            .is_ok());
+        assert!(
+            acceptance
+                .update(CustomerAcceptanceUpdate {
+                    result: Some(AcceptanceResult::Shortage),
+                    ..Default::default()
+                })
+                .is_ok()
+        );
         assert_eq!(acceptance.result, AcceptanceResult::Shortage);
         acceptance.mark_posted().unwrap();
         // from == to 幂等迁移恒合法（state.rs 契约）；POSTED 不可编辑由 update 把关。
         assert!(acceptance.mark_posted().is_ok());
-        assert!(
-            acceptance.update(CustomerAcceptanceUpdate::default()).is_err(),
-            "已过账不可编辑"
-        );
+        assert!(acceptance.update(CustomerAcceptanceUpdate::default()).is_err(), "已过账不可编辑");
         assert!(acceptance.reverse(CustomerAcceptanceId::new("a6")).is_ok());
         assert!(
             acceptance.reverse(CustomerAcceptanceId::new("a7")).is_ok(),
@@ -639,14 +616,10 @@ pub(crate) mod tests {
         assert!(!acceptance.matches_business_identity(&SalesOrderId::new("other-order"), None));
         assert!(!acceptance.matches_business_identity(&SalesOrderId::new("so-1"), Some("other-no")));
         assert!(acceptance.ensure_draft_version(acceptance.base.version).is_ok());
-        assert!(acceptance
-            .ensure_draft_version(acceptance.base.version + 1)
-            .is_err());
+        assert!(acceptance.ensure_draft_version(acceptance.base.version + 1).is_err());
         assert!(acceptance.ensure_draft().is_ok());
         assert!(acceptance.ensure_posting_lines(&[]).is_err());
-        assert!(acceptance
-            .ensure_posting_lines(std::slice::from_ref(&line))
-            .is_ok());
+        assert!(acceptance.ensure_posting_lines(std::slice::from_ref(&line)).is_ok());
         let foreign_line = CustomerAcceptanceLine::new(
             CustomerAcceptanceLineId::new("foreign-line"),
             CustomerAcceptanceLineData {
@@ -655,15 +628,9 @@ pub(crate) mod tests {
             },
         )
         .unwrap();
-        assert!(acceptance
-            .ensure_posting_lines(std::slice::from_ref(&foreign_line))
-            .is_err());
-        assert!(line
-            .ensure_allocation_conserved([Quantity::from_str("9").unwrap()])
-            .is_ok());
-        assert!(line
-            .ensure_allocation_conserved([Quantity::from_str("8").unwrap()])
-            .is_err());
+        assert!(acceptance.ensure_posting_lines(std::slice::from_ref(&foreign_line)).is_err());
+        assert!(line.ensure_allocation_conserved([Quantity::from_str("9").unwrap()]).is_ok());
+        assert!(line.ensure_allocation_conserved([Quantity::from_str("8").unwrap()]).is_err());
         acceptance.mark_posted().unwrap();
         assert!(acceptance.ensure_draft().is_err());
         assert!(acceptance.ensure_draft_version(acceptance.base.version).is_err());
@@ -673,22 +640,14 @@ pub(crate) mod tests {
 
     #[test]
     fn line_rejects_quantity_violations() {
-        let negative = CustomerAcceptanceLineData {
-            short_quantity: Quantity::from_str("-1").unwrap(),
-            ..line_data()
-        };
+        let negative =
+            CustomerAcceptanceLineData { short_quantity: Quantity::from_str("-1").unwrap(), ..line_data() };
         assert!(CustomerAcceptanceLine::new(CustomerAcceptanceLineId::new("cl-2"), negative).is_err());
 
-        let zero_line_no = CustomerAcceptanceLineData {
-            line_no: 0,
-            ..line_data()
-        };
+        let zero_line_no = CustomerAcceptanceLineData { line_no: 0, ..line_data() };
         assert!(CustomerAcceptanceLine::new(CustomerAcceptanceLineId::new("cl-3"), zero_line_no).is_err());
 
-        let overlong_reason = CustomerAcceptanceLineData {
-            reason: Some("x".repeat(513)),
-            ..line_data()
-        };
+        let overlong_reason = CustomerAcceptanceLineData { reason: Some("x".repeat(513)), ..line_data() };
         assert!(CustomerAcceptanceLine::new(CustomerAcceptanceLineId::new("cl-4"), overlong_reason).is_err());
     }
 
@@ -706,10 +665,8 @@ pub(crate) mod tests {
         assert_eq!(CustomerAcceptanceState::Posted.as_str(), "POSTED");
         assert_eq!(CustomerAcceptanceState::Reversed.as_str(), "REVERSED");
 
-        let production = include_str!("customer_acceptance.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production =
+            include_str!("customer_acceptance.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(!production.contains("IN_APPROVAL"));
         assert!(!production.contains("fn start_approval"));
         assert!(!production.contains("approval_subject_version"));

@@ -1,11 +1,11 @@
-use crate::entity::catalog::{ProductBrandId, ProductCategoryId, UnitOfMeasureId, VoucherCatalogDefaults};
-use crate::repository::CatalogExt;
+use application_core::AuditActor;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::CatalogService;
+use crate::entity::catalog::{ProductBrandId, ProductCategoryId, UnitOfMeasureId, VoucherCatalogDefaults};
 use crate::error::{Error, Result};
-use application_core::AuditActor;
+use crate::repository::CatalogExt;
 
 impl CatalogService {
     /// 确保共用卡券根分类存在。
@@ -22,12 +22,7 @@ impl CatalogService {
     /// # 错误
     /// 默认分类类型漂移、并发冲突后仍不可见或持久化失败时返回错误。
     pub(super) async fn ensure_voucher_root_category(&self, actor: &AuditActor) -> Result<ProductCategoryId> {
-        if let Some(category) = self
-            .db
-            .catalog()
-            .voucher_root_category(&mut NoTransaction)
-            .await?
-        {
+        if let Some(category) = self.db.catalog().voucher_root_category(&mut NoTransaction).await? {
             ensure_voucher_root_compatible(&category)?;
             return Ok(ProductCategoryId::new(category.base.id));
         }
@@ -80,7 +75,7 @@ impl CatalogService {
                     .ok_or_else(|| Error::ConflictError("卡券根分类并发创建冲突，请重试".to_string()))?;
                 ensure_voucher_root_compatible(&category)?;
                 Ok(ProductCategoryId::new(category.base.id))
-            }
+            },
             other => Err(other),
         }
     }
@@ -99,12 +94,7 @@ impl CatalogService {
     /// # 错误
     /// 并发冲突后仍不可见或持久化失败时返回错误。
     pub(super) async fn ensure_voucher_default_brand(&self, actor: &AuditActor) -> Result<ProductBrandId> {
-        if let Some(brand) = self
-            .db
-            .catalog()
-            .voucher_default_brand(&mut NoTransaction)
-            .await?
-        {
+        if let Some(brand) = self.db.catalog().voucher_default_brand(&mut NoTransaction).await? {
             return Ok(ProductBrandId::new(brand.base.id));
         }
 
@@ -216,15 +206,13 @@ impl CatalogService {
     async fn voucher_unit_after_create_error(&self, error: Error) -> Result<UnitOfMeasureId> {
         match error {
             Error::ConflictError(_) => {
-                let unit = self
-                    .db
-                    .catalog()
-                    .voucher_default_unit(&mut NoTransaction)
-                    .await?
-                    .ok_or_else(|| Error::ConflictError("默认单位“张”并发创建冲突，请重试".to_string()))?;
+                let unit =
+                    self.db.catalog().voucher_default_unit(&mut NoTransaction).await?.ok_or_else(|| {
+                        Error::ConflictError("默认单位“张”并发创建冲突，请重试".to_string())
+                    })?;
                 ensure_voucher_default_unit_active(&unit)?;
                 Ok(UnitOfMeasureId::new(unit.base.id))
-            }
+            },
             other => Err(other),
         }
     }

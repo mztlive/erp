@@ -1,8 +1,4 @@
-use crate::entity::catalog::product_revision_media::MediaRole;
-use crate::entity::catalog::{
-    EnableStatus, ListingStatus, ProductKind, ProductListingStatus, ProductRevision, Sku, SkuCoverageStatus,
-    SkuRevision,
-};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     FileAssetId, ProductBrandId, ProductCategoryId, ProductId, SkuId, SkuRevisionId, UnitOfMeasureId,
@@ -11,10 +7,13 @@ use erp_core::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::common::{PageParams, non_blank, normalize_sort, validate_sales_price_range};
+use crate::entity::catalog::product_revision_media::MediaRole;
+use crate::entity::catalog::{
+    EnableStatus, ListingStatus, ProductKind, ProductListingStatus, ProductRevision, Sku, SkuCoverageStatus,
+    SkuRevision,
+};
 use crate::error::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
-
-use super::common::{non_blank, normalize_sort, validate_sales_price_range, PageParams};
 
 /// 商品列表允许的排序字段白名单。
 pub(crate) const PRODUCT_SORT_FIELDS: &[&str] = &["created_at", "product_no"];
@@ -662,10 +661,7 @@ impl From<SkuRevision> for SkuRevisionView {
             description: revision.description,
             specification: revision.specification,
             barcode: revision.barcode,
-            source_main_image_asset_id: revision
-                .source_main_image_asset_id
-                .as_ref()
-                .map(|id| id.to_string()),
+            source_main_image_asset_id: revision.source_main_image_asset_id.as_ref().map(|id| id.to_string()),
             weight_kg: revision.weight_kg,
             volume_m3: revision.volume_m3,
             status: revision.status,

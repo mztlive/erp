@@ -5,8 +5,7 @@ use std::str::FromStr;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{PartyId, SupplierAccountId};
 use erp_core::money::Amount;
-use erp_party::PartyBankAccount;
-use erp_party::PartyExt;
+use erp_party::{PartyBankAccount, PartyExt};
 use erp_supplier::SupplierExt;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -45,11 +44,7 @@ pub async fn resolve_optional_payment_recipient_for_read(
     supplier_id: &SupplierAccountId,
     executor: &mut dyn Executor,
 ) -> Result<Option<PartyBankAccount>> {
-    let Some(supplier) = db
-        .supplier_accounts()
-        .find_by_id(supplier_id.as_ref(), executor)
-        .await?
-    else {
+    let Some(supplier) = db.supplier_accounts().find_by_id(supplier_id.as_ref(), executor).await? else {
         return Ok(None);
     };
     resolve_optional_party_payment_recipient(db, &supplier.party_id, executor).await
@@ -68,10 +63,8 @@ async fn resolve_optional_party_payment_recipient(
     party_id: &PartyId,
     executor: &mut dyn Executor,
 ) -> Result<Option<PartyBankAccount>> {
-    let accounts = db
-        .party_bank_accounts()
-        .list_current_on(party_id, BusinessDate::today(), executor)
-        .await?;
+    let accounts =
+        db.party_bank_accounts().list_current_on(party_id, BusinessDate::today(), executor).await?;
     PartyBankAccount::resolve_current_default(&accounts)
         .map(|account| account.cloned())
         .map_err(|_| Error::BusinessLogicError("供应商存在多个当前默认收款账户，请先修复主数据".to_string()))
@@ -92,11 +85,7 @@ pub fn payment_recipient_view(account: &PartyBankAccount) -> PaymentRecipientVie
 /// 使用账号末四位构造不可恢复的工作台掩码。
 pub fn masked_bank_account_number(last4: &str) -> String {
     let last4 = last4.trim();
-    if last4.is_empty() {
-        "********".to_string()
-    } else {
-        format!("********{last4}")
-    }
+    if last4.is_empty() { "********".to_string() } else { format!("********{last4}") }
 }
 
 /// 返回固定零金额。

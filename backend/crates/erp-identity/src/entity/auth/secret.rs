@@ -1,12 +1,10 @@
 use std::fmt;
 
-use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-    Argon2,
-};
-use serde::{Deserialize, Serialize};
-
+use argon2::Argon2;
+use argon2::password_hash::rand_core::OsRng;
+use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 登录账号最小长度。
 const ACCOUNT_MIN_LEN: usize = 3;
@@ -133,10 +131,7 @@ impl Secret {
     /// # 错误
     /// 当密码为空或密码哈希失败时返回错误。
     pub fn new(account: LoginAccount, password: impl AsRef<str>) -> Result<Self> {
-        Ok(Self {
-            account: account.into_string(),
-            password_hash: hash_password(password.as_ref())?,
-        })
+        Ok(Self { account: account.into_string(), password_hash: hash_password(password.as_ref())? })
     }
 
     /// 返回规范化后的登录账号。
@@ -202,18 +197,14 @@ impl Secret {
                 None => {
                     perform_dummy_argon2(password);
                     PasswordVerification::Mismatch
-                }
+                },
             };
         }
 
         if secret.is_legacy_password_hash() {
             let matches = verify_legacy_md5(password, &secret.password_hash);
             perform_dummy_argon2(password);
-            return if matches {
-                PasswordVerification::Legacy
-            } else {
-                PasswordVerification::Mismatch
-            };
+            return if matches { PasswordVerification::Legacy } else { PasswordVerification::Mismatch };
         }
 
         perform_dummy_argon2(password);
@@ -275,10 +266,7 @@ fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
         return false;
     }
 
-    left.iter()
-        .zip(right)
-        .fold(0_u8, |difference, (left, right)| difference | (left ^ right))
-        == 0
+    left.iter().zip(right).fold(0_u8, |difference, (left, right)| difference | (left ^ right)) == 0
 }
 
 #[cfg(test)]
@@ -364,15 +352,10 @@ mod tests {
 
     #[test]
     fn missing_and_malformed_secret_should_fail_closed() {
-        let malformed = Secret {
-            account: "broken01".to_string(),
-            password_hash: "$argon2id$malformed".to_string(),
-        };
+        let malformed =
+            Secret { account: "broken01".to_string(), password_hash: "$argon2id$malformed".to_string() };
 
-        assert_eq!(
-            Secret::verify_password_or_dummy(None, "password123"),
-            PasswordVerification::Mismatch
-        );
+        assert_eq!(Secret::verify_password_or_dummy(None, "password123"), PasswordVerification::Mismatch);
         assert_eq!(
             Secret::verify_password_or_dummy(Some(&malformed), "password123"),
             PasswordVerification::Mismatch

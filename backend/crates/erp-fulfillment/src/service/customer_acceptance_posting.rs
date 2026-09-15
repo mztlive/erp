@@ -1,4 +1,14 @@
 //! 客户验收单域规则、事务内事实写入和履约投影读取；根事务与销售更新由流程持有。
+use std::collections::HashMap;
+
+use erp_core::common::time::Instant;
+use erp_core::ids::{
+    AcceptanceFulfillmentAllocationId, CustomerAcceptanceId, CustomerAcceptanceLineId, SalesOrderId,
+};
+use erp_core::money::Quantity;
+use id_generator::next_id;
+use mongodb::Database;
+
 use super::customer_acceptance_lines::acceptance_line_specs;
 use crate::dto::{
     AcceptanceAllocationInput, CommitCustomerAcceptanceRequest, PostAcceptanceLineInput,
@@ -11,14 +21,6 @@ use crate::entity::fulfillment::{
 };
 use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
-use erp_core::common::time::Instant;
-use erp_core::ids::{
-    AcceptanceFulfillmentAllocationId, CustomerAcceptanceId, CustomerAcceptanceLineId, SalesOrderId,
-};
-use erp_core::money::Quantity;
-use id_generator::next_id;
-use mongodb::Database;
-use std::collections::HashMap;
 impl super::FulfillmentService {
     /// 校验工作台任务身份必须与期望版本成对提供，保持正式命令入口首错。
     pub fn validate_customer_acceptance_task_context(
@@ -73,7 +75,7 @@ impl super::FulfillmentService {
                     result: Some(req.result),
                 })?;
                 Ok((acceptance, false))
-            }
+            },
             None => {
                 let acceptance_no = generated_acceptance_no
                     .ok_or_else(|| Error::Internal("新建客户验收缺少服务端单号".to_string()))?;
@@ -87,7 +89,7 @@ impl super::FulfillmentService {
                     },
                 )?;
                 Ok((acceptance, true))
-            }
+            },
         }
     }
 
@@ -103,14 +105,10 @@ impl super::FulfillmentService {
     ) -> Result<()> {
         let acceptance_id = CustomerAcceptanceId::new(acceptance.base.id.clone());
         if is_new {
-            db.fulfillment()
-                .create_customer_acceptance_with_lines(acceptance, final_lines, session)
-                .await?;
+            db.fulfillment().create_customer_acceptance_with_lines(acceptance, final_lines, session).await?;
         } else {
             db.customer_acceptances().update(acceptance, session).await?;
-            db.fulfillment()
-                .replace_customer_acceptance_lines(&acceptance_id, final_lines, session)
-                .await?;
+            db.fulfillment().replace_customer_acceptance_lines(&acceptance_id, final_lines, session).await?;
         }
         for line in final_lines {
             let allocations = req
@@ -154,9 +152,7 @@ impl super::FulfillmentService {
             .find_by_id(acceptance_id.as_ref(), session)
             .await?
             .ok_or_else(|| Error::NotFound("客户验收单不存在".to_string()))?;
-        acceptance
-            .ensure_draft()
-            .map_err(|error| Error::ConflictError(error.to_string()))?;
+        acceptance.ensure_draft().map_err(|error| Error::ConflictError(error.to_string()))?;
         Ok(acceptance)
     }
 
@@ -172,9 +168,7 @@ impl super::FulfillmentService {
             .fulfillment()
             .acceptance_lines_by_acceptance_ids(std::slice::from_ref(&acceptance_id), session)
             .await?;
-        acceptance
-            .ensure_posting_lines(&lines)
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
+        acceptance.ensure_posting_lines(&lines).map_err(|error| Error::ValidationError(error.to_string()))?;
         ensure_post_lines_match(&lines, &req.lines)?;
         for line in &lines {
             let allocations = req
@@ -224,14 +218,10 @@ impl super::FulfillmentService {
             .fulfillment()
             .acceptance_lines_by_acceptance_ids(std::slice::from_ref(original_id), session)
             .await?;
-        let original_line_ids: Vec<CustomerAcceptanceLineId> = original_lines
-            .iter()
-            .map(|line| line.base.id.clone().into())
-            .collect();
-        let original_allocations = db
-            .fulfillment()
-            .allocations_by_acceptance_lines(&original_line_ids, session)
-            .await?;
+        let original_line_ids: Vec<CustomerAcceptanceLineId> =
+            original_lines.iter().map(|line| line.base.id.clone().into()).collect();
+        let original_allocations =
+            db.fulfillment().allocations_by_acceptance_lines(&original_line_ids, session).await?;
         AcceptanceFulfillmentAllocation::ensure_reversible_source(&original_allocations)
             .map_err(|error| Error::ConflictError(error.to_string()))?;
         let reverse_acceptance = CustomerAcceptance::new(
@@ -290,15 +280,11 @@ impl super::FulfillmentService {
             .create_customer_acceptance_with_lines(&reverse_acceptance, &reverse_lines, session)
             .await?;
         for allocation in &reverse_allocations {
-            db.acceptance_fulfillment_allocations()
-                .create(allocation, session)
-                .await?;
+            db.acceptance_fulfillment_allocations().create(allocation, session).await?;
         }
         let mut reverse_acceptance = reverse_acceptance;
         reverse_acceptance.mark_posted()?;
-        db.customer_acceptances()
-            .update(&mut reverse_acceptance, session)
-            .await?;
+        db.customer_acceptances().update(&mut reverse_acceptance, session).await?;
         original.reverse(reverse_acceptance.base.id.clone().into())?;
         db.customer_acceptances().update(&mut original, session).await?;
         Ok((original, reverse_acceptance))
@@ -335,9 +321,7 @@ fn ensure_task_context_pair(work_item_id: Option<&str>, expected_task_version: O
     if work_item_id.is_some() == expected_task_version.is_some() {
         return Ok(());
     }
-    Err(Error::ValidationError(
-        "客户验收任务主键和期望版本必须同时提供".to_string(),
-    ))
+    Err(Error::ValidationError("客户验收任务主键和期望版本必须同时提供".to_string()))
 }
 
 /// 校验过账分配与草稿验收行一一对应且数量一致（§8.2 第 5 条「锁定验收行」）。
@@ -431,9 +415,7 @@ async fn write_acceptance_allocation(
             reverses_allocation_id: None,
         },
     )?;
-    db.acceptance_fulfillment_allocations()
-        .create(&record, session)
-        .await?;
+    db.acceptance_fulfillment_allocations().create(&record, session).await?;
     Ok(())
 }
 
@@ -475,7 +457,7 @@ async fn load_fulfillment_fact(
             delivery
                 .acceptance_quantity(&line, sales_order_id, &acceptance_line.sales_order_line_id)
                 .map_err(|error| Error::ValidationError(error.to_string()))
-        }
+        },
         FulfillmentFactType::ElectronicDelivery => {
             let record = db
                 .electronic_deliveries()
@@ -485,7 +467,7 @@ async fn load_fulfillment_fact(
             record
                 .acceptance_quantity(&acceptance_line.sales_order_line_id)
                 .map_err(|error| Error::ValidationError(error.to_string()))
-        }
+        },
         FulfillmentFactType::ServiceFulfillment => {
             let record = db
                 .service_fulfillments()
@@ -495,17 +477,17 @@ async fn load_fulfillment_fact(
             record
                 .acceptance_quantity(&acceptance_line.sales_order_line_id)
                 .map_err(|error| Error::ValidationError(error.to_string()))
-        }
+        },
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::fulfillment::{AcceptanceResult, CustomerAcceptance, CustomerAcceptanceData};
     use erp_core::common::time::Instant;
     use erp_core::ids::{CustomerAcceptanceId, SalesOrderId};
 
     use super::ensure_existing_acceptance_draft;
+    use crate::entity::fulfillment::{AcceptanceResult, CustomerAcceptance, CustomerAcceptanceData};
 
     /// 构造最小客户验收草稿用于提交状态分流测试。
     fn draft_acceptance(id: &str, acceptance_no: &str) -> CustomerAcceptance {
@@ -526,14 +508,16 @@ mod tests {
     fn existing_acceptance_draft_guard_accepts_only_current_draft() {
         let mut posted = draft_acceptance("acceptance-posted", "YS-POSTED");
         posted.mark_posted().expect("测试验收应可过账");
-        assert!(ensure_existing_acceptance_draft(
-            &posted,
-            &SalesOrderId::new("sales-order-1"),
-            Some(posted.base.version),
-        )
-        .expect_err("已过账记录不得作为草稿登记")
-        .to_string()
-        .contains("草稿"));
+        assert!(
+            ensure_existing_acceptance_draft(
+                &posted,
+                &SalesOrderId::new("sales-order-1"),
+                Some(posted.base.version),
+            )
+            .expect_err("已过账记录不得作为草稿登记")
+            .to_string()
+            .contains("草稿")
+        );
 
         let draft = draft_acceptance("acceptance-draft", "YS-DRAFT");
         ensure_existing_acceptance_draft(
@@ -542,28 +526,32 @@ mod tests {
             Some(draft.base.version),
         )
         .expect("正确版本的当前销售单草稿应可继续登记");
-        assert!(ensure_existing_acceptance_draft(
-            &draft,
-            &SalesOrderId::new("sales-order-other"),
-            Some(draft.base.version),
-        )
-        .expect_err("其他销售单不得复用草稿")
-        .to_string()
-        .contains("不属于当前销售单"));
+        assert!(
+            ensure_existing_acceptance_draft(
+                &draft,
+                &SalesOrderId::new("sales-order-other"),
+                Some(draft.base.version),
+            )
+            .expect_err("其他销售单不得复用草稿")
+            .to_string()
+            .contains("不属于当前销售单")
+        );
         assert!(
             ensure_existing_acceptance_draft(&draft, &SalesOrderId::new("sales-order-1"), None)
                 .expect_err("显式草稿缺少版本必须拒绝")
                 .to_string()
                 .contains("缺少期望版本")
         );
-        assert!(ensure_existing_acceptance_draft(
-            &draft,
-            &SalesOrderId::new("sales-order-1"),
-            Some(draft.base.version + 1),
-        )
-        .expect_err("过期草稿版本必须拒绝")
-        .to_string()
-        .contains("草稿已变化"));
+        assert!(
+            ensure_existing_acceptance_draft(
+                &draft,
+                &SalesOrderId::new("sales-order-1"),
+                Some(draft.base.version + 1),
+            )
+            .expect_err("过期草稿版本必须拒绝")
+            .to_string()
+            .contains("草稿已变化")
+        );
     }
 
     /// 已冲正记录不得被当作草稿继续登记。
@@ -571,9 +559,7 @@ mod tests {
     fn existing_acceptance_draft_guard_rejects_reversed_record() {
         let mut reversed = draft_acceptance("acceptance-reversed", "YS-REVERSED");
         reversed.mark_posted().expect("测试验收应可过账");
-        reversed
-            .reverse(CustomerAcceptanceId::new("acceptance-reversal"))
-            .expect("测试验收应可冲正");
+        reversed.reverse(CustomerAcceptanceId::new("acceptance-reversal")).expect("测试验收应可冲正");
 
         let error = ensure_existing_acceptance_draft(
             &reversed,
@@ -587,10 +573,8 @@ mod tests {
     /// 过账与冲正可以同步 W06 责任，但不得启动审批或选择审批定义。
     #[test]
     fn post_does_not_start_approval() {
-        let production = include_str!("customer_acceptance_posting.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production =
+            include_str!("customer_acceptance_posting.rs").split("#[cfg(test)]").next().expect("生产代码");
         let post =
             include_str!("../../../erp-processes/src/fulfillment_execution/customer_acceptance/post.rs");
         let reverse =

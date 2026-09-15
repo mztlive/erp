@@ -4,15 +4,15 @@
 
 use std::str::FromStr;
 
+use erp_core::common::time::Instant;
+use erp_core::money::Amount;
+use id_generator::next_id;
+
 use crate::entity::sales_order::{
     FormalRevisionContext, FormalRevisionIdentities, FormalRevisionLineIdentity,
     FormalRevisionSubtypeIdentity, RevisionSource, SalesOrder, SalesOrderRevisionAggregate,
 };
 use crate::entity::sales_review::{SalesChangeSubmission, SalesChangeSubmissionLine};
-use erp_core::common::time::Instant;
-use erp_core::money::Amount;
-use id_generator::next_id;
-
 use crate::{Error, Result};
 
 /// 销售版本聚合载体（版本头 + 公共行 + 子类型行）。
@@ -30,10 +30,7 @@ pub(super) type RevisionAggregate = SalesOrderRevisionAggregate;
 /// 无行时返回 `ValidationError`。
 pub(super) fn revision_gross(revision: &RevisionAggregate) -> Result<Amount> {
     let zero = Amount::from_str("0.00").expect("静态零值必须合法");
-    Ok(revision
-        .lines
-        .iter()
-        .fold(zero, |acc, line| acc.checked_add(line.gross_amount)))
+    Ok(revision.lines.iter().fold(zero, |acc, line| acc.checked_add(line.gross_amount)))
 }
 
 /// 从变更提交构建正式版本聚合（§8.1.3 变更生效）。

@@ -4,22 +4,20 @@
 //! 有效工作副本」由部分唯一索引 `uk_sales_order_working_copies_active_per_purpose`
 //! 保证（理由与回滚方式见 `indexes::sales_order`）。
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::SalesChangeOrderId;
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, Pagination, QueryFilter, Result, mongo_ops};
+
+use super::{
+    SALES_ORDER_SUBMISSION_LINES, SALES_ORDER_SUBMISSIONS, SALES_ORDER_WORKING_COPIES,
+    SalesOrderDomainRepository,
+};
 use crate::entity::sales_order::{
     SalesOrderId, SalesOrderSubmission, SalesOrderSubmissionLine, SalesOrderWorkingCopy,
     SalesOrderWorkingCopyId, SalesOrderWorkingCopyLine, WorkingCopyStatus, WorkingPurpose,
 };
 use crate::repository::owned::{SalesOrderWorkingCopyLineRepository, SalesOrderWorkingCopyRepository};
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::ids::SalesChangeOrderId;
-use mongodb::bson::{doc, Document};
-
-use super::{
-    SalesOrderDomainRepository, SALES_ORDER_SUBMISSIONS, SALES_ORDER_SUBMISSION_LINES,
-    SALES_ORDER_WORKING_COPIES,
-};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{Pagination, QueryFilter};
 
 /// 工作副本列表筛选条件。
 #[derive(Debug, Clone)]
@@ -172,8 +170,7 @@ impl<'a> SalesOrderWorkingCopyRepository<'a> {
         if active.is_some() {
             return Ok(active);
         }
-        self.find_by_sales_change_order(sales_change_order_id, executor)
-            .await
+        self.find_by_sales_change_order(sales_change_order_id, executor).await
     }
 }
 
@@ -252,17 +249,13 @@ impl<'a> SalesOrderDomainRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<SalesOrderSubmission>(SALES_ORDER_SUBMISSIONS),
+            &self.db.collection::<SalesOrderSubmission>(SALES_ORDER_SUBMISSIONS),
             submission,
             executor,
         )
         .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<SalesOrderSubmissionLine>(SALES_ORDER_SUBMISSION_LINES),
+            &self.db.collection::<SalesOrderSubmissionLine>(SALES_ORDER_SUBMISSION_LINES),
             lines.to_vec(),
             executor,
         )

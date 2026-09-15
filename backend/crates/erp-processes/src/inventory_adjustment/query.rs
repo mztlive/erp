@@ -1,11 +1,11 @@
-use persistence_core::NoTransaction;
-
-use super::adapter::require_frozen_binding;
-use super::approval_query::{self, load_approval_binding};
-use super::InventoryAdjustmentService;
-use crate::Result;
 use application_core::AuditActor;
 use erp_inventory::StockAdjustmentDetailView;
+use persistence_core::NoTransaction;
+
+use super::InventoryAdjustmentService;
+use super::adapter::require_frozen_binding;
+use super::approval_query::{self, load_approval_binding};
+use crate::Result;
 
 impl InventoryAdjustmentService {
     /// 查询库存调整单详情（表头 + 明细 + 过账流水）。
@@ -23,11 +23,7 @@ impl InventoryAdjustmentService {
     #[tracing::instrument(
         name = "inventory.stock_adjustment_detail",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "inventory",
-            operation = "stock_adjustment_detail"
-        )
+        fields(layer = "service", domain = "inventory", operation = "stock_adjustment_detail")
     )]
     pub async fn stock_adjustment_detail(
         &self,
@@ -61,7 +57,7 @@ impl InventoryAdjustmentService {
                     actor,
                 )
                 .await?
-            }
+            },
             None => approval_query::load_document_approval(self, &adjustment, Some(binding), actor).await?,
         };
         Ok(StockAdjustmentDetailView {

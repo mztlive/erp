@@ -41,7 +41,7 @@ pub use customer_acceptance::{
     CustomerAcceptanceLineData, CustomerAcceptanceState, CustomerAcceptanceUpdate,
 };
 pub use customer_acceptance_line_batch::{
-    CustomerAcceptanceLineBatch, CustomerAcceptanceLineSpec, ACCEPTANCE_LINE_BATCH_MAX,
+    ACCEPTANCE_LINE_BATCH_MAX, CustomerAcceptanceLineBatch, CustomerAcceptanceLineSpec,
 };
 pub use delivery::{
     Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryState, DeliveryType, DeliveryUpdate,
@@ -63,7 +63,7 @@ pub use purchase_receipt::{
     PurchaseReceiptLineData, PurchaseReceiptState, PurchaseReceiptUpdate, QualityResult,
 };
 pub use purchase_receipt_line_batch::{PurchaseReceiptLineBatch, PurchaseReceiptLineSpec};
-pub use service_evidence::{ActualServiceLocation, ServiceEvidencePolicy, SERVICE_LOCATION_PLACEHOLDER};
+pub use service_evidence::{ActualServiceLocation, SERVICE_LOCATION_PLACEHOLDER, ServiceEvidencePolicy};
 pub use service_fulfillment::{
     ServiceFulfillment, ServiceFulfillmentConfirmation, ServiceFulfillmentConfirmationParams,
     ServiceFulfillmentData, ServiceFulfillmentState, ServiceFulfillmentUpdate,

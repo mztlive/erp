@@ -1,12 +1,13 @@
 //! 组织停用所需的业务未结事实；不改变任务责任和业务归属。
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use erp_identity::ports::OrganizationBusinessPort;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::Executor;
-use std::sync::Arc;
 
 struct OrganizationBusinessFacts {
     db: Database,
@@ -19,19 +20,10 @@ impl OrganizationBusinessPort for OrganizationBusinessFacts {
         org: &str,
         executor: &mut dyn Executor,
     ) -> erp_identity::Result<bool> {
-        if self
-            .db
-            .sales_orders()
-            .has_unsettled_business_org(org, executor)
-            .await?
-        {
+        if self.db.sales_orders().has_unsettled_business_org(org, executor).await? {
             return Ok(true);
         }
-        Ok(self
-            .db
-            .purchase_orders()
-            .has_unsettled_business_org(org, executor)
-            .await?)
+        Ok(self.db.purchase_orders().has_unsettled_business_org(org, executor).await?)
     }
 }
 

@@ -1,14 +1,13 @@
-use crate::entity::receivable::{ReceivableEntry, ReceivableEntryOffset};
-use crate::repository::owned::{ReceivableEntryOffsetRepository, ReceivableEntryRepository};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ReceivableAccountId, ReceivableEntryId};
 use futures_util::TryStreamExt;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, Result};
 use serde::Deserialize;
 
-use persistence_core::Executor;
-use persistence_core::Result;
+use crate::entity::receivable::{ReceivableEntry, ReceivableEntryOffset};
+use crate::repository::owned::{ReceivableEntryOffsetRepository, ReceivableEntryRepository};
 
 /// 应收账户最早到期日聚合行。
 #[derive(Debug, Deserialize)]
@@ -52,7 +51,7 @@ impl<'a> ReceivableEntryRepository<'a> {
                     .stream(session)
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
             None => {
                 self.collection()
                     .aggregate(pipeline)
@@ -60,12 +59,9 @@ impl<'a> ReceivableEntryRepository<'a> {
                     .await?
                     .try_collect::<Vec<_>>()
                     .await?
-            }
+            },
         };
-        Ok(rows
-            .into_iter()
-            .map(|row| (row.account_id, row.due_date))
-            .collect())
+        Ok(rows.into_iter().map(|row| (row.account_id, row.due_date)).collect())
     }
 
     /// 批量按子账集合取回分录（`$in` 一次取回，禁止 N+1）。
@@ -90,8 +86,7 @@ impl<'a> ReceivableEntryRepository<'a> {
             return Ok(Vec::new());
         }
         let account_ids: Vec<String> = account_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "receivable_account_id": { "$in": account_ids } }, executor)
-            .await
+        self.find_many(doc! { "receivable_account_id": { "$in": account_ids } }, executor).await
     }
 
     /// 按子账取回全部分录（按来源序号升序）。
@@ -159,12 +154,8 @@ impl<'a> ReceivableEntryOffsetRepository<'a> {
         if decrease_entry_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let ids = decrease_entry_ids
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>();
-        self.find_many(doc! { "decrease_entry_id": { "$in": ids } }, executor)
-            .await
+        let ids = decrease_entry_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.find_many(doc! { "decrease_entry_id": { "$in": ids } }, executor).await
     }
 
     /// 按减少分录取回全部抵销（按抵销序号升序）。
@@ -211,18 +202,15 @@ impl<'a> ReceivableEntryOffsetRepository<'a> {
         increase_entry_id: &ReceivableEntryId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ReceivableEntryOffset>> {
-        self.find_many(
-            doc! { "increase_entry_id": increase_entry_id.to_string() },
-            executor,
-        )
-        .await
+        self.find_many(doc! { "increase_entry_id": increase_entry_id.to_string() }, executor).await
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::minimum_due_dates_pipeline;
     use mongodb::bson::doc;
+
+    use super::minimum_due_dates_pipeline;
 
     #[test]
     fn minimum_due_date_pipeline_excludes_decrease_entries() {
@@ -231,9 +219,6 @@ mod tests {
         assert_eq!(matched.get_str("direction").unwrap(), "increase");
         let group = pipeline[1].get_document("$group").unwrap();
         assert_eq!(group.get_str("_id").unwrap(), "$receivable_account_id");
-        assert_eq!(
-            group.get_document("due_date").unwrap(),
-            &doc! { "$min": "$due_date" }
-        );
+        assert_eq!(group.get_document("due_date").unwrap(), &doc! { "$min": "$due_date" });
     }
 }

@@ -2,11 +2,11 @@
 //!
 //! DTO 到领域规格的转换与系统行 ID 注入；编号与质量派生归实体批量工厂。
 
-use crate::entity::fulfillment::PurchaseReceiptLineSpec;
 use erp_core::ids::PurchaseReceiptLineId;
 use id_generator::next_id;
 
 use crate::dto::PurchaseReceiptLineInput;
+use crate::entity::fulfillment::PurchaseReceiptLineSpec;
 
 /// 将创建请求行映射为领域规格（含系统行 ID 注入）。
 ///

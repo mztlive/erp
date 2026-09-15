@@ -1,9 +1,10 @@
+use erp_core::field_update::FieldUpdate;
+use erp_core::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
+
 use crate::entity::supplier::{
     InvoiceType, ReconciliationCycle, SettlementMode, SupplierAccount, SupplierAccountUpdate,
     SupplierCommercialProfileRevision, SupplierCommercialProfileRevisionData,
 };
-use erp_core::field_update::FieldUpdate;
-use erp_core::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
 
 /// 创建商务资料新修订的输入参数。
 #[derive(Debug)]

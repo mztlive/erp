@@ -3,16 +3,15 @@
 //! 固定两次有界读取：`$in` 取请求行，再按批次统计请求外仍待导入行数。
 //! 空 ID 集合不访问数据库。全部使用调用方 executor，不开事务。
 
-use crate::repository::owned::LegacyImportRowRepository;
 use std::collections::{HashMap, HashSet};
 
-use crate::entity::legacy_import::{ImportStatus, LegacyImportRow};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId};
 use mongodb::bson::doc;
+use persistence_core::{Executor, Result, mongo_ops};
 
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
+use crate::entity::legacy_import::{ImportStatus, LegacyImportRow};
+use crate::repository::owned::LegacyImportRowRepository;
 
 /// 一次应用请求对应的导入行持久化范围。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,14 +61,9 @@ impl<'a> LegacyImportRowRepository<'a> {
         }
         let found = self.load_apply_rows(batch_id, &unique_ids, executor).await?;
         let missing_row_ids = missing_row_ids(&unique_ids, &found);
-        let pending_outside_request = self
-            .count_pending_outside_request(batch_id, &unique_ids, executor)
-            .await?;
-        Ok(LegacyImportApplyScope {
-            rows: index_rows(found),
-            missing_row_ids,
-            pending_outside_request,
-        })
+        let pending_outside_request =
+            self.count_pending_outside_request(batch_id, &unique_ids, executor).await?;
+        Ok(LegacyImportApplyScope { rows: index_rows(found), missing_row_ids, pending_outside_request })
     }
 
     /// 按 ID 集合与批次约束装载未删除导入行。
@@ -121,12 +115,8 @@ impl<'a> LegacyImportRowRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<u64> {
         let excluded: Vec<mongodb::bson::Bson> = row_ids.iter().map(|id| id.to_string().into()).collect();
-        mongo_ops::count_documents(
-            &self.collection(),
-            pending_outside_filter(batch_id, excluded),
-            executor,
-        )
-        .await
+        mongo_ops::count_documents(&self.collection(), pending_outside_filter(batch_id, excluded), executor)
+            .await
     }
 }
 
@@ -178,11 +168,7 @@ fn unique_row_ids(row_ids: &[LegacyImportRowId]) -> Vec<LegacyImportRowId> {
 /// 返回缺失 ID 列表；空命中时请求全部视为缺失。
 fn missing_row_ids(requested: &[LegacyImportRowId], found: &[LegacyImportRow]) -> Vec<LegacyImportRowId> {
     let found_ids: HashSet<&str> = found.iter().map(|row| row.base.id.as_str()).collect();
-    requested
-        .iter()
-        .filter(|id| !found_ids.contains(id.as_ref()))
-        .cloned()
-        .collect()
+    requested.iter().filter(|id| !found_ids.contains(id.as_ref())).cloned().collect()
 }
 
 /// 将命中行按 ID 建索引。
@@ -198,10 +184,11 @@ fn index_rows(rows: Vec<LegacyImportRow>) -> HashMap<String, LegacyImportRow> {
 
 #[cfg(test)]
 mod tests {
-    use super::{missing_row_ids, pending_outside_filter, unique_row_ids};
-    use crate::entity::legacy_import::{LegacyImportRow, LegacyImportRowData};
     use entity_core::NOT_DELETED_TIMESTAMP_BSON;
     use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId};
+
+    use super::{missing_row_ids, pending_outside_filter, unique_row_ids};
+    use crate::entity::legacy_import::{LegacyImportRow, LegacyImportRowData};
 
     fn row(id: &str) -> LegacyImportRow {
         LegacyImportRow::new(
@@ -224,10 +211,7 @@ mod tests {
             LegacyImportRowId::new("row-2"),
             LegacyImportRowId::new("row-1"),
         ]);
-        assert_eq!(
-            ids,
-            vec![LegacyImportRowId::new("row-1"), LegacyImportRowId::new("row-2")]
-        );
+        assert_eq!(ids, vec![LegacyImportRowId::new("row-1"), LegacyImportRowId::new("row-2")]);
     }
 
     #[test]
@@ -242,10 +226,7 @@ mod tests {
         let missing = missing_row_ids(&requested, &found);
         assert_eq!(
             missing,
-            vec![
-                LegacyImportRowId::new("row-missing"),
-                LegacyImportRowId::new("row-other-batch"),
-            ]
+            vec![LegacyImportRowId::new("row-missing"), LegacyImportRowId::new("row-other-batch"),]
         );
         assert!(missing_row_ids(&requested, &[]).len() == 4);
     }
@@ -267,18 +248,12 @@ mod tests {
 
     #[tokio::test]
     async fn apply_row_scope_empty_ids_skip_database() {
-        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
-            .await
-            .unwrap();
+        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap();
         let database = client.database("legacy_import_apply_empty");
         let repository =
             crate::repository::owned::LegacyImportRowRepository::new(&database, "legacy_import_rows");
         let scope = repository
-            .apply_row_scope(
-                &LegacyImportBatchId::new("batch-1"),
-                &[],
-                &mut persistence_core::NoTransaction,
-            )
+            .apply_row_scope(&LegacyImportBatchId::new("batch-1"), &[], &mut persistence_core::NoTransaction)
             .await
             .unwrap();
         assert!(scope.rows.is_empty());

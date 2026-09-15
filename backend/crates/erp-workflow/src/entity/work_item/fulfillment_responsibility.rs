@@ -81,10 +81,7 @@ mod tests {
             FulfillmentResponsibilityKey::warehouse_receipt("wh-1").unwrap(),
             FulfillmentResponsibilityKey::warehouse_ship("wh-1").unwrap(),
         ] {
-            assert_eq!(
-                FulfillmentResponsibilityKey::parse(&key.as_persisted()).unwrap(),
-                key
-            );
+            assert_eq!(FulfillmentResponsibilityKey::parse(&key.as_persisted()).unwrap(), key);
         }
     }
 

@@ -9,6 +9,8 @@ pub mod sales_change_submission;
 pub mod snapshot;
 pub mod types;
 
+/// 域内仍保留的 ID newtype 出口。
+pub use erp_core::ids::{SalesChangeOrderId, SalesChangeSubmissionId, SalesChangeSubmissionLineId};
 pub use sales_change_order::{
     SalesChangeOrder, SalesChangeOrderData, SalesChangeOrderStatus, SalesChangeOrderUpdate, SalesChangeType,
 };
@@ -23,6 +25,3 @@ pub use snapshot::{
 pub use types::{
     BusinessType, CardForm, GoodsLineFields, LineType, VoucherLineDraft, VoucherLineFields, WelfareScenario,
 };
-
-/// 域内仍保留的 ID newtype 出口。
-pub use erp_core::ids::{SalesChangeOrderId, SalesChangeSubmissionId, SalesChangeSubmissionLineId};

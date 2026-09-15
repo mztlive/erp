@@ -1,7 +1,5 @@
-use nacos_sdk::api::{
-    config::{ConfigService, ConfigServiceBuilder},
-    props::ClientProps,
-};
+use nacos_sdk::api::config::{ConfigService, ConfigServiceBuilder};
+use nacos_sdk::api::props::ClientProps;
 
 #[derive(Clone)]
 pub struct NacosConfig {
@@ -73,10 +71,7 @@ impl NacosConfigClient {
     /// # 错误
     /// 当验证失败或底层操作失败时返回错误。
     pub async fn fetch(&self) -> crate::Result<String> {
-        let config = self
-            .nacos_cs
-            .get_config(self.config.data_id.clone(), self.config.group.clone())
-            .await?;
+        let config = self.nacos_cs.get_config(self.config.data_id.clone(), self.config.group.clone()).await?;
 
         Ok(config.content().clone())
     }

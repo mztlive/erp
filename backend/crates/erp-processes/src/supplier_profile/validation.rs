@@ -5,18 +5,15 @@ use std::collections::HashSet;
 use erp_core::ids::PartyId;
 use erp_party::PartyExt;
 use erp_supplier::{
-    validate_profile_selection, QualificationAttachmentSensitivity, SupplierQualificationSelection,
+    QualificationAttachmentSensitivity, SaveSupplierProfileRequest, SupplierProfileMutationView,
+    SupplierProfileQualificationInput, SupplierQualificationSelection, command_view,
+    validate_profile_selection,
 };
 use erp_support::{FileAssetExt, PendingAttachmentBatch, SensitivityClass};
 use persistence_core::NoTransaction;
 
-use crate::{Error, Result};
-
 use super::{SupplierProfileService, SupplierProfileWithAssetsResult};
-use erp_supplier::command_view;
-use erp_supplier::{
-    SaveSupplierProfileRequest, SupplierProfileMutationView, SupplierProfileQualificationInput,
-};
+use crate::{Error, Result};
 
 impl SupplierProfileService {
     /// 事务失败时查询同幂等键结果；并发首请求已提交时返回该稳定结果。
@@ -30,10 +27,7 @@ impl SupplierProfileService {
         request_fingerprint: &str,
     ) -> Result<SupplierProfileWithAssetsResult> {
         match transaction_result {
-            Ok(()) => Ok(SupplierProfileWithAssetsResult {
-                view: intended_result,
-                assets_committed: true,
-            }),
+            Ok(()) => Ok(SupplierProfileWithAssetsResult { view: intended_result, assets_committed: true }),
             Err(error) => {
                 let assets_may_be_committed = matches!(&error, Error::OutcomeUnknown(_));
                 match self.command_record(idempotency_key).await? {
@@ -45,10 +39,10 @@ impl SupplierProfileService {
                             view: command_view(command),
                             assets_committed: assets_may_be_committed,
                         })
-                    }
+                    },
                     None => Err(error),
                 }
-            }
+            },
         }
     }
 
@@ -70,9 +64,7 @@ impl SupplierProfileService {
             .await?
             .ok_or_else(|| Error::NotFound("签约或付款主体不存在".to_string()))?;
         if party.company_profile.is_none() {
-            return Err(Error::ValidationError(
-                "签约和付款主体必须是已维护的公司主体".into(),
-            ));
+            return Err(Error::ValidationError("签约和付款主体必须是已维护的公司主体".into()));
         }
         if !party.is_active() {
             return Err(Error::BusinessLogicError("签约或付款主体已停用".to_string()));
@@ -109,20 +101,15 @@ impl SupplierProfileService {
                         .await?
                         .ok_or_else(|| Error::NotFound("资质附件不存在，请先上传文件".to_string()))?
                         .sensitivity_class
-                }
+                },
             };
             let sensitivity = match sensitivity {
                 SensitivityClass::General => QualificationAttachmentSensitivity::General,
                 SensitivityClass::Sensitive => QualificationAttachmentSensitivity::Sensitive,
                 SensitivityClass::HighlySensitive => QualificationAttachmentSensitivity::HighlySensitive,
             };
-            if !qualification
-                .qualification_type
-                .accepts_attachment_sensitivity(sensitivity)
-            {
-                return Err(Error::ValidationError(
-                    "资质附件敏感级别不足，请按敏感资料重新上传".to_string(),
-                ));
+            if !qualification.qualification_type.accepts_attachment_sensitivity(sensitivity) {
+                return Err(Error::ValidationError("资质附件敏感级别不足，请按敏感资料重新上传".to_string()));
             }
         }
         Ok(())

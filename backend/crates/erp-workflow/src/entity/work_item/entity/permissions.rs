@@ -1,7 +1,6 @@
 //! 工作项执行权限与可用账号身份。
 
-use erp_core::AccountKind;
-use erp_core::{Error, Result};
+use erp_core::{AccountKind, Error, Result};
 
 use super::WorkItemType;
 
@@ -23,13 +22,7 @@ pub struct WorkflowAccountFact {
 impl WorkflowAccountFact {
     /// Construct an account fact.
     pub fn new(id: impl Into<String>, kind: AccountKind, can_login: bool) -> Self {
-        Self {
-            id: id.into(),
-            kind,
-            can_login,
-            display_name: String::new(),
-            login_account: String::new(),
-        }
+        Self { id: id.into(), kind, can_login, display_name: String::new(), login_account: String::new() }
     }
 
     /// Attach a display name.
@@ -77,10 +70,7 @@ impl AvailableWorkItemAccount {
         if !account.can_login {
             return Err(Error::from("工作项账号不可登录"));
         }
-        Ok(Self {
-            account_id: account.id.clone(),
-            kind: account.kind,
-        })
+        Ok(Self { account_id: account.id.clone(), kind: account.kind })
     }
 
     /// 从统一账号主数据形成指定类型的可用工作项账号。
@@ -160,12 +150,7 @@ impl WorkItemType {
                 "purchase_receipt:update",
                 "purchase_receipt:post",
             ]),
-            "delivery" => Some(&[
-                "delivery:list",
-                "delivery:detail",
-                "delivery:update",
-                "delivery:post",
-            ]),
+            "delivery" => Some(&["delivery:list", "delivery:detail", "delivery:update", "delivery:post"]),
             "electronic_delivery" => Some(&["electronic_delivery:list", "electronic_delivery:confirm"]),
             "service_fulfillment" => Some(&["service_fulfillment:list", "service_fulfillment:confirm"]),
             _ => None,
@@ -289,9 +274,10 @@ impl WorkItemType {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{direct_data, WorkItem, WorkItemData, WorkItemType};
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
+
+    use super::super::{WorkItem, WorkItemData, WorkItemType, direct_data};
 
     #[test]
     fn fulfillment_task_cannot_bypass_frozen_responsibility_key() {
@@ -302,12 +288,14 @@ mod tests {
             reason_code: Some("WAREHOUSE_DELIVERY_READY".to_string()),
             ..direct_data()
         };
-        assert!(WorkItem::new_at(
-            WorkItemId::new("wi-fulfillment-missing-key"),
-            data.clone(),
-            Instant::from_unix_secs(100),
-        )
-        .is_err());
+        assert!(
+            WorkItem::new_at(
+                WorkItemId::new("wi-fulfillment-missing-key"),
+                data.clone(),
+                Instant::from_unix_secs(100),
+            )
+            .is_err()
+        );
         let item = WorkItem::new_with_responsibility_key(
             WorkItemId::new("wi-fulfillment"),
             data,
@@ -319,12 +307,8 @@ mod tests {
             WorkItemType::FulfillmentOperation.fulfillment_execution_permissions("electronic_delivery"),
             Some(&["electronic_delivery:list", "electronic_delivery:confirm"] as &[&str])
         );
-        assert!(WorkItemType::FulfillmentOperation
-            .fulfillment_execution_permissions("unknown")
-            .is_none());
-        assert!(WorkItemType::DocumentApproval
-            .fulfillment_execution_permissions("delivery")
-            .is_none());
+        assert!(WorkItemType::FulfillmentOperation.fulfillment_execution_permissions("unknown").is_none());
+        assert!(WorkItemType::DocumentApproval.fulfillment_execution_permissions("delivery").is_none());
     }
 
     #[test]
@@ -336,22 +320,21 @@ mod tests {
             reason_code: Some("CUSTOMER_ACCEPTANCE_REQUIRED".to_string()),
             ..direct_data()
         };
-        assert!(WorkItem::new_at(
-            WorkItemId::new("wi-acceptance-missing-key"),
-            data.clone(),
-            Instant::from_unix_secs(100),
-        )
-        .is_err());
+        assert!(
+            WorkItem::new_at(
+                WorkItemId::new("wi-acceptance-missing-key"),
+                data.clone(),
+                Instant::from_unix_secs(100),
+            )
+            .is_err()
+        );
         let item = WorkItem::new_with_responsibility_key(
             WorkItemId::new("wi-acceptance"),
             data,
             "sales_order:so-1:customer_acceptance",
         )
         .unwrap();
-        assert_eq!(
-            item.responsibility_key(),
-            Some("sales_order:so-1:customer_acceptance")
-        );
+        assert_eq!(item.responsibility_key(), Some("sales_order:so-1:customer_acceptance"));
         assert_eq!(
             WorkItemType::CustomerAcceptanceRegistration
                 .customer_acceptance_execution_permissions("sales_order"),
@@ -365,8 +348,10 @@ mod tests {
         );
         assert!(WorkItemType::CustomerAcceptanceRegistration.uses_explicit_owner_authorization());
         assert!(WorkItemType::CustomerAcceptanceRegistration.requires_full_execution_permissions());
-        assert!(WorkItemType::CustomerAcceptanceRegistration
-            .customer_acceptance_execution_permissions("unknown")
-            .is_none());
+        assert!(
+            WorkItemType::CustomerAcceptanceRegistration
+                .customer_acceptance_execution_permissions("unknown")
+                .is_none()
+        );
     }
 }

@@ -1,18 +1,18 @@
-use super::difference::*;
-use super::review::*;
-use super::*;
+use std::str::FromStr;
+
 use application_core::AuditActor;
-use erp_core::{
-    common::time::{BusinessDate, Instant},
-    ids::{SupplierAccountId, SupplierSettlementStatementId, WorkItemId},
-    money::Amount,
-    AccountKind,
-};
+use erp_core::AccountKind;
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{SupplierAccountId, SupplierSettlementStatementId, WorkItemId};
+use erp_core::money::Amount;
 use erp_supply::entity::supplier_settlement::{SupplierSettlementStatement, SupplierSettlementStatementData};
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
-use std::str::FromStr;
+
+use super::difference::*;
+use super::review::*;
+use super::*;
 
 pub(super) fn sample_statement() -> SupplierSettlementStatement {
     let mut statement = SupplierSettlementStatement::new(
@@ -39,9 +39,7 @@ pub(super) fn sample_statement() -> SupplierSettlementStatement {
         },
     )
     .unwrap();
-    statement
-        .update_subject_hash(statement.review_subject_hash(&[]))
-        .unwrap();
+    statement.update_subject_hash(statement.review_subject_hash(&[])).unwrap();
     statement
 }
 
@@ -77,10 +75,7 @@ fn command_receipts_roundtrip_and_reject_fingerprint_reuse() {
         task_version: 1,
     };
     let message = review_submission_receipt_message(&fingerprint, &submission);
-    assert_eq!(
-        parse_review_submission_receipt(&message, &fingerprint).unwrap(),
-        submission
-    );
+    assert_eq!(parse_review_submission_receipt(&message, &fingerprint).unwrap(), submission);
     assert!(parse_review_submission_receipt(&message, &"0".repeat(64)).is_err());
 
     let decision = ReviewDecisionReceipt {
@@ -92,10 +87,7 @@ fn command_receipts_roundtrip_and_reject_fingerprint_reuse() {
         cost_delta: Some(Amount::from_str("1.00").unwrap()),
     };
     let message = review_decision_receipt_message(&fingerprint, &decision);
-    assert_eq!(
-        parse_review_decision_receipt(&message, &fingerprint).unwrap(),
-        decision
-    );
+    assert_eq!(parse_review_decision_receipt(&message, &fingerprint).unwrap(), decision);
 
     let difference = DifferenceDecisionReceipt {
         operation_id: "op-difference".to_string(),
@@ -104,10 +96,7 @@ fn command_receipts_roundtrip_and_reject_fingerprint_reuse() {
         difference_version: 2,
     };
     let message = difference_decision_receipt_message(&fingerprint, &difference);
-    assert_eq!(
-        parse_difference_decision_receipt(&message, &fingerprint).unwrap(),
-        difference
-    );
+    assert_eq!(parse_difference_decision_receipt(&message, &fingerprint).unwrap(), difference);
 }
 
 #[test]
@@ -115,45 +104,43 @@ fn work_item_validation_requires_exact_three_versions_and_current_owner() {
     let mut statement = sample_statement();
     statement.submit_review().unwrap();
     let mut item = sample_work_item(&statement);
-    let actor = AuditActor::new(
-        "reviewer-1".to_string(),
-        "reviewer".to_string(),
-        AccountKind::Admin,
-    );
+    let actor = AuditActor::new("reviewer-1".to_string(), "reviewer".to_string(), AccountKind::Admin);
 
-    assert!(validate_settlement_review_work_item(
-        &item,
-        &statement,
-        item.base.version,
-        &statement.subject_hash,
-        &actor,
-    )
-    .is_ok());
-    assert!(validate_settlement_review_work_item(
-        &item,
-        &statement,
-        item.base.version + 1,
-        &statement.subject_hash,
-        &actor,
-    )
-    .is_err());
-    assert!(validate_settlement_review_work_item(
-        &item,
-        &statement,
-        item.base.version,
-        &"0".repeat(64),
-        &actor,
-    )
-    .is_err());
+    assert!(
+        validate_settlement_review_work_item(
+            &item,
+            &statement,
+            item.base.version,
+            &statement.subject_hash,
+            &actor,
+        )
+        .is_ok()
+    );
+    assert!(
+        validate_settlement_review_work_item(
+            &item,
+            &statement,
+            item.base.version + 1,
+            &statement.subject_hash,
+            &actor,
+        )
+        .is_err()
+    );
+    assert!(
+        validate_settlement_review_work_item(&item, &statement, item.base.version, &"0".repeat(64), &actor,)
+            .is_err()
+    );
     item.owner_user_id = Some("other-reviewer".to_string());
-    assert!(validate_settlement_review_work_item(
-        &item,
-        &statement,
-        item.base.version,
-        &statement.subject_hash,
-        &actor,
-    )
-    .is_err());
+    assert!(
+        validate_settlement_review_work_item(
+            &item,
+            &statement,
+            item.base.version,
+            &statement.subject_hash,
+            &actor,
+        )
+        .is_err()
+    );
 }
 
 #[test]

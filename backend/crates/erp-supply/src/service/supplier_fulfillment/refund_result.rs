@@ -1,15 +1,16 @@
 //! 退款事实与分配、原上限校验和调用方事务内写入。
-use super::SupplierFulfillmentService;
-use crate::dto::supplier_fulfillment::*;
-use crate::entity::supplier_fulfillment::*;
-use crate::repository::SupplierFulfillmentExt;
-use crate::{Error, Result};
 use erp_core::common::time::Instant;
 use erp_core::ids::{InboxMessageId, SupplierRefundAllocationId, SupplierRefundFactId};
 use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
+
+use super::SupplierFulfillmentService;
+use crate::dto::supplier_fulfillment::*;
+use crate::entity::supplier_fulfillment::*;
+use crate::repository::SupplierFulfillmentExt;
+use crate::{Error, Result};
 impl SupplierFulfillmentService {
     /// 构建退款事实头与全部分配行，并校验 APPLY 合计恒等（§6.19）。
     ///
@@ -92,9 +93,7 @@ impl SupplierFulfillmentService {
         let refunded_total = financial.refunded_total;
         let total_after = refunded_total.checked_add(refund_amount);
         if total_after > order_total {
-            return Err(Error::BusinessLogicError(
-                "累计净退款金额不得超过订单成本余额".to_string(),
-            ));
+            return Err(Error::BusinessLogicError("累计净退款金额不得超过订单成本余额".to_string()));
         }
         order.advance_refund(if total_after == order_total {
             RefundStatus::Refunded
@@ -113,8 +112,6 @@ pub async fn persist_refund_result(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     db.supplier_fulfillment_orders().update(order, executor).await?;
-    db.supplier_fulfillment()
-        .create_refund_fact_with_allocations(fact, allocations, executor)
-        .await?;
+    db.supplier_fulfillment().create_refund_fact_with_allocations(fact, allocations, executor).await?;
     Ok(())
 }

@@ -1,11 +1,10 @@
-use crate::entity::purchase_order::{PurchaseLineType, PurchaseOrderStatus, PurchaseReviewStatus};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::{SortDir, normalize_sort};
 use crate::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
-
-use super::{normalize_sort, SortDir};
+use crate::entity::purchase_order::{PurchaseLineType, PurchaseOrderStatus, PurchaseReviewStatus};
 
 /// 采购单列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub const PURCHASE_ORDER_SORT_FIELDS: &[&str] = &["created_at", "purchase_no"];

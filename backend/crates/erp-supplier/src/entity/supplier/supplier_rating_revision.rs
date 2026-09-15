@@ -6,14 +6,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::revision::RevisionBase;
 use erp_core::common::time::BusinessDate;
+pub use erp_core::ids::{SupplierAccountId, SupplierRatingRevisionId};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
-
-pub use erp_core::ids::{SupplierAccountId, SupplierRatingRevisionId};
+use serde::{Deserialize, Serialize};
 
 /// 变更原因最大长度。
 const CHANGE_REASON_MAX_LEN: usize = 500;
@@ -218,9 +216,10 @@ fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>)
 
 #[cfg(test)]
 mod tests {
-    use super::{SupplierRating, SupplierRatingRevision, SupplierRatingRevisionData};
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::{SupplierAccountId, SupplierRatingRevisionId};
+
+    use super::{SupplierRating, SupplierRatingRevision, SupplierRatingRevisionData};
 
     fn rating_data() -> SupplierRatingRevisionData {
         SupplierRatingRevisionData {
@@ -251,28 +250,16 @@ mod tests {
     /// 失败路径：原因为空/超长、评分越界、期初评分出现在非首次版本、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank_reason = SupplierRatingRevisionData {
-            change_reason: "   ".to_string(),
-            ..rating_data()
-        };
+        let blank_reason = SupplierRatingRevisionData { change_reason: "   ".to_string(), ..rating_data() };
         assert!(SupplierRatingRevision::new(SupplierRatingRevisionId::new("r"), blank_reason).is_err());
 
-        let overlong_reason = SupplierRatingRevisionData {
-            change_reason: "x".repeat(501),
-            ..rating_data()
-        };
+        let overlong_reason = SupplierRatingRevisionData { change_reason: "x".repeat(501), ..rating_data() };
         assert!(SupplierRatingRevision::new(SupplierRatingRevisionId::new("r"), overlong_reason).is_err());
 
-        let score_out_of_range = SupplierRatingRevisionData {
-            current_score: 101,
-            ..rating_data()
-        };
+        let score_out_of_range = SupplierRatingRevisionData { current_score: 101, ..rating_data() };
         assert!(SupplierRatingRevision::new(SupplierRatingRevisionId::new("r"), score_out_of_range).is_err());
 
-        let initial_on_later_revision = SupplierRatingRevisionData {
-            revision_no: 2,
-            ..rating_data()
-        };
+        let initial_on_later_revision = SupplierRatingRevisionData { revision_no: 2, ..rating_data() };
         assert!(
             SupplierRatingRevision::new(SupplierRatingRevisionId::new("r"), initial_on_later_revision)
                 .is_err()
@@ -306,19 +293,12 @@ mod tests {
     fn close_before_ends_previous_day() {
         let mut revision = SupplierRatingRevision::new(
             SupplierRatingRevisionId::new("rating-rev-close"),
-            SupplierRatingRevisionData {
-                valid_to: None,
-                ..rating_data()
-            },
+            SupplierRatingRevisionData { valid_to: None, ..rating_data() },
         )
         .unwrap();
-        revision
-            .close_before(BusinessDate::from_ymd(2026, 2, 1).unwrap())
-            .unwrap();
+        revision.close_before(BusinessDate::from_ymd(2026, 2, 1).unwrap()).unwrap();
         assert_eq!(revision.valid_to, BusinessDate::from_ymd(2026, 1, 31));
-        assert!(revision
-            .close_before(BusinessDate::from_ymd(2026, 1, 1).unwrap())
-            .is_err());
+        assert!(revision.close_before(BusinessDate::from_ymd(2026, 1, 1).unwrap()).is_err());
     }
 
     /// 评级稳定代码与中文标签。

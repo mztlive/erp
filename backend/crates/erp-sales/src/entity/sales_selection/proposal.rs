@@ -2,17 +2,17 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use super::display_item::{DisplayKind, SalesSelectionDisplayItem};
-use super::session::SessionChoice;
-use super::types::{ProposalSource, SelectionForm, SubmitMode};
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     CustomerAccountId, SalesSelectionBookletId, SalesSelectionDisplayItemId, SalesSelectionProposalId,
 };
 use erp_core::money::Amount;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use super::display_item::{DisplayKind, SalesSelectionDisplayItem};
+use super::session::SessionChoice;
+use super::types::{ProposalSource, SelectionForm, SubmitMode};
 
 /// 方案陈列项行。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
@@ -175,11 +175,7 @@ pub fn build_proposal_lines<F>(
     choices: &[SessionChoice],
     items: &[SalesSelectionDisplayItem],
     mut next_id: F,
-) -> Result<(
-    Vec<SalesSelectionProposalDisplayLine>,
-    Vec<SalesSelectionProposalSkuLine>,
-    Option<Amount>,
-)>
+) -> Result<(Vec<SalesSelectionProposalDisplayLine>, Vec<SalesSelectionProposalSkuLine>, Option<Amount>)>
 where
     F: FnMut() -> String,
 {
@@ -214,7 +210,7 @@ where
                 return Err(Error::from("陈列项金额与商品金额不一致"));
             }
             Some(display_total)
-        }
+        },
         SubmitMode::MallRedeem => None,
     };
     Ok((display_lines, sku_lines, total))
@@ -240,10 +236,7 @@ fn lines_for_choice<F>(
     choice: &SessionChoice,
     item: &SalesSelectionDisplayItem,
     next_id: &mut F,
-) -> Result<(
-    SalesSelectionProposalDisplayLine,
-    Vec<SalesSelectionProposalSkuLine>,
-)>
+) -> Result<(SalesSelectionProposalDisplayLine, Vec<SalesSelectionProposalSkuLine>)>
 where
     F: FnMut() -> String,
 {
@@ -302,10 +295,7 @@ where
     let mut lines = Vec::with_capacity(members.len());
     for sku in members {
         let line_amount = match quantity {
-            Some(copies) => Some(super::pricing::try_mul_u32(
-                sku.sales_visible_price_gross,
-                copies,
-            )?),
+            Some(copies) => Some(super::pricing::try_mul_u32(sku.sales_visible_price_gross, copies)?),
             None => None,
         };
         lines.push(SalesSelectionProposalSkuLine {
@@ -327,17 +317,19 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::build_proposal_lines;
-    use crate::entity::sales_selection::display_item::SalesSelectionDisplayItem;
-    use crate::entity::sales_selection::session::SessionChoice;
-    use crate::entity::sales_selection::sku_snapshot::SkuSnapshot;
-    use crate::entity::sales_selection::types::SubmitMode;
+    use std::str::FromStr;
+
     use erp_core::ids::{
         ProductId, SalesSelectionBookletId, SalesSelectionDisplayItemId, SalesSelectionProposalId, SkuId,
         SkuRevisionId,
     };
     use erp_core::money::Amount;
-    use std::str::FromStr;
+
+    use super::build_proposal_lines;
+    use crate::entity::sales_selection::display_item::SalesSelectionDisplayItem;
+    use crate::entity::sales_selection::session::SessionChoice;
+    use crate::entity::sales_selection::sku_snapshot::SkuSnapshot;
+    use crate::entity::sales_selection::types::SubmitMode;
 
     fn sku() -> SkuSnapshot {
         SkuSnapshot {

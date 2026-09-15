@@ -1,21 +1,20 @@
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::SupplierOrderActionId;
 use erp_integration::entity::integration_ops::InboxMessageStatus;
 use erp_integration::repository::IntegrationOpsExt;
+use erp_supply::dto::supplier_fulfillment::{SubmitActionResultView, SubmitAfterSalesActionRequest};
 use erp_supply::entity::supplier_api::SupplierApiCapabilityCode;
 use erp_supply::entity::supplier_fulfillment::SupplierOrderActionType;
 use erp_supply::repository::{SupplierApiExt, SupplierFulfillmentExt};
+use erp_supply::service::supplier_fulfillment::mapping::action_line_view;
+use erp_supply::service::supplier_fulfillment::place::ensure_capability;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use super::place::build_action_message;
 use super::SupplierFulfillmentProcess;
+use super::place::build_action_message;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_supply::dto::supplier_fulfillment::{SubmitActionResultView, SubmitAfterSalesActionRequest};
-use erp_supply::service::supplier_fulfillment::mapping::action_line_view;
-use erp_supply::service::supplier_fulfillment::place::ensure_capability;
 
 impl SupplierFulfillmentProcess {
     /// 提交供应商取消（幂等键：「订单号 + CANCEL」，§6.19）。
@@ -41,8 +40,7 @@ impl SupplierFulfillmentProcess {
         req: SubmitAfterSalesActionRequest,
         actor: &AuditActor,
     ) -> Result<SubmitActionResultView> {
-        self.submit_after_sales_action(id, req, SupplierOrderActionType::Cancel, actor)
-            .await
+        self.submit_after_sales_action(id, req, SupplierOrderActionType::Cancel, actor).await
     }
 
     /// 提交供应商取消/退款动作的公共编排。
@@ -111,8 +109,7 @@ impl SupplierFulfillmentProcess {
         ensure_capability(&capabilities, needed)?;
         self.domain().ensure_action_lines(&order, &req).await?;
         let mut action =
-            self.domain()
-                .build_after_sales_action(&order, &req, &idempotency_key, action_type)?;
+            self.domain().build_after_sales_action(&order, &req, &idempotency_key, action_type)?;
         let lines = self.domain().build_action_lines(&action, &req)?;
         self.domain().advance_after_sales(&mut order, action_type)?;
         let mut message = build_action_message(&action, &connection, InboxMessageStatus::Received)?;

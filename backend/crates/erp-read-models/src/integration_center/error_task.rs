@@ -1,14 +1,15 @@
-use super::IntegrationCenterReadService;
-use crate::{Error, Result};
 use erp_integration::dto::*;
 use erp_integration::entity::integration_ops::{
-    error_terminal_policy, project_error_actions, ErrorActionProjection, IntegrationErrorTask,
+    ErrorActionProjection, IntegrationErrorTask, error_terminal_policy, project_error_actions,
 };
 use erp_integration::ports::evidence::EvidenceSubject;
 use erp_integration::repository::IntegrationOpsExt;
 use erp_integration::service::evidence::{blocker_view, domain_kinds, error_evidence_policy};
 use erp_workflow::WorkItemExt;
 use persistence_core::NoTransaction;
+
+use super::IntegrationCenterReadService;
+use crate::{Error, Result};
 
 impl IntegrationCenterReadService {
     /// 查询集成错误任务详情。
@@ -25,10 +26,7 @@ impl IntegrationCenterReadService {
         let resolution = task.resolution.clone();
         let work_item = self.find_task_work_item(&task.base.id).await?;
         let subject = EvidenceSubject::error(&task);
-        let linked_evidence = self
-            .evidence
-            .discover_evidence(&subject, &mut NoTransaction)
-            .await?;
+        let linked_evidence = self.evidence.discover_evidence(&subject, &mut NoTransaction).await?;
         let policy = error_evidence_policy(&task);
         let (allowed_actions, action_blockers) =
             error_action_projection(&task, work_item.is_some(), &linked_evidence);
@@ -47,11 +45,8 @@ impl IntegrationCenterReadService {
         &self,
         task_id: &str,
     ) -> Result<Option<erp_workflow::entity::work_item::WorkItem>> {
-        let mut items = self
-            .db
-            .work_items()
-            .find_unique_for_integration_error_task(task_id, &mut NoTransaction)
-            .await?;
+        let mut items =
+            self.db.work_items().find_unique_for_integration_error_task(task_id, &mut NoTransaction).await?;
         if items.len() > 1 {
             return Err(Error::ConflictError("错误任务存在多个正式责任关联".to_string()));
         }

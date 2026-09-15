@@ -1,20 +1,18 @@
 //! 外部引用解析位于两次本域校验之间；提交事务始终重新读取连接。
-use super::{
-    receipt::{persist_command_receipt, CommandReceiptWrite},
-    SupplierApiGovernanceProcess,
-};
-use crate::{Error, Result};
 use application_core::AuditActor;
-use erp_supply::{
-    dto::supplier_api::SupplierConnectionCommandResult,
-    entity::supplier_api::{ConnectionEnvironment, SupplierCommandOutcome, SupplierConnectionAction},
-    ports::{
-        supplier_api_gateway::ClassifiedError,
-        supplier_reference_registry::{ResolvedSupplierReference, SupplierReferenceKind},
-    },
-    service::supplier_api::{command::CommandIdentity, SupplierApiService},
+use erp_supply::dto::supplier_api::SupplierConnectionCommandResult;
+use erp_supply::entity::supplier_api::{
+    ConnectionEnvironment, SupplierCommandOutcome, SupplierConnectionAction,
 };
+use erp_supply::ports::supplier_api_gateway::ClassifiedError;
+use erp_supply::ports::supplier_reference_registry::{ResolvedSupplierReference, SupplierReferenceKind};
+use erp_supply::service::supplier_api::SupplierApiService;
+use erp_supply::service::supplier_api::command::CommandIdentity;
 use persistence_core::{NoTransaction, Transactional};
+
+use super::SupplierApiGovernanceProcess;
+use super::receipt::{CommandReceiptWrite, persist_command_receipt};
+use crate::{Error, Result};
 impl SupplierApiGovernanceProcess {
     pub(super) async fn execute_reference_command(
         &self,
@@ -153,8 +151,9 @@ impl ReferenceCommandPort for ReferenceCommand<'_> {
 }
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::sync::{Arc, Mutex};
+
+    use super::*;
     struct RecordingReference {
         calls: Arc<Mutex<Vec<&'static str>>>,
         fail_at: Option<usize>,
@@ -192,25 +191,16 @@ mod tests {
     #[tokio::test]
     async fn reference_resolution_stays_between_preflight_and_commit_revalidation() {
         let calls = Arc::new(Mutex::new(Vec::new()));
-        let port = RecordingReference {
-            calls: Arc::clone(&calls),
-            fail_at: None,
-        };
+        let port = RecordingReference { calls: Arc::clone(&calls), fail_at: None };
         assert_eq!(execute_reference(port).await.unwrap(), 33);
-        assert_eq!(
-            *calls.lock().unwrap(),
-            ["preflight", "resolve", "commit_revalidation"]
-        );
+        assert_eq!(*calls.lock().unwrap(), ["preflight", "resolve", "commit_revalidation"]);
     }
     #[tokio::test]
     async fn reference_failures_stop_before_resolve_or_commit_and_preserve_first_error() {
         let expected = ["preflight", "resolve", "commit_revalidation"];
         for fail_at in 0..3 {
             let calls = Arc::new(Mutex::new(Vec::new()));
-            let port = RecordingReference {
-                calls: Arc::clone(&calls),
-                fail_at: Some(fail_at),
-            };
+            let port = RecordingReference { calls: Arc::clone(&calls), fail_at: Some(fail_at) };
             let error = execute_reference(port).await.unwrap_err();
             assert!(
                 matches!(error,Error::ConflictError(message) if message==format!("failed {}",expected[fail_at]))

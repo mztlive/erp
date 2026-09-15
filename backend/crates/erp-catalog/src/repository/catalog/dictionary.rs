@@ -1,23 +1,21 @@
-use crate::repository::owned::{ProductBrandRepository, UnitOfMeasureRepository};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
+use erp_core::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
+use super::CatalogRepository;
+use super::shared::{in_filter, sort_doc};
 use crate::entity::catalog::voucher_defaults::{
     VOUCHER_DEFAULT_BRAND_CODE, VOUCHER_DEFAULT_BRAND_NAME, VOUCHER_DEFAULT_UNIT_CODE,
     VOUCHER_ROOT_CATEGORY_CODE,
 };
 use crate::entity::catalog::{EnableStatus, ProductBrand, ProductCategory, UnitOfMeasure};
-use erp_core::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
-
-use super::shared::{in_filter, sort_doc};
-use super::CatalogRepository;
 use crate::repository::CatalogExt;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::repository::owned::{ProductBrandRepository, UnitOfMeasureRepository};
 
 /// 商品品牌列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -119,10 +117,7 @@ impl<'a> ProductBrandRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<ProductBrandRow>> {
         let options = FindOptions::builder()
-            .sort(product_brand_sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-            ))
+            .sort(product_brand_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(product_brand_projection())
@@ -131,10 +126,7 @@ impl<'a> ProductBrandRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -227,10 +219,7 @@ impl<'a> UnitOfMeasureRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<UnitOfMeasureRow>> {
         let options = FindOptions::builder()
-            .sort(unit_of_measure_sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-            ))
+            .sort(unit_of_measure_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(unit_of_measure_projection())
@@ -239,10 +228,7 @@ impl<'a> UnitOfMeasureRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -280,34 +266,20 @@ impl<'a> CatalogRepository<'a> {
     ) -> Result<CatalogReferenceData> {
         let category = match category_id {
             Some(category_id) => {
-                self.db
-                    .product_categories()
-                    .find_by_id(category_id.as_ref(), executor)
-                    .await?
-            }
+                self.db.product_categories().find_by_id(category_id.as_ref(), executor).await?
+            },
             None => None,
         };
-        let brand = self
-            .db
-            .product_brands()
-            .find_by_id(brand_id.as_ref(), executor)
-            .await?;
+        let brand = self.db.product_brands().find_by_id(brand_id.as_ref(), executor).await?;
         let units = if unit_ids.is_empty() {
             Vec::new()
         } else {
             self.db
                 .unit_of_measures()
-                .find_many(
-                    in_filter("id", unit_ids.iter().map(ToString::to_string)),
-                    executor,
-                )
+                .find_many(in_filter("id", unit_ids.iter().map(ToString::to_string)), executor)
                 .await?
         };
-        Ok(CatalogReferenceData {
-            category,
-            brand,
-            units,
-        })
+        Ok(CatalogReferenceData { category, brand, units })
     }
 
     /// 按卡券默认稳定代码读取共用根分类。
@@ -443,13 +415,7 @@ mod keyword_regression_tests {
         let fields = query.get_array("$or").unwrap();
         assert_eq!(fields.len(), 2);
         assert_eq!(
-            fields[0]
-                .as_document()
-                .unwrap()
-                .get_document("brand_code")
-                .unwrap()
-                .get_str("$regex")
-                .unwrap(),
+            fields[0].as_document().unwrap().get_document("brand_code").unwrap().get_str("$regex").unwrap(),
             r"B\.\[1\]"
         );
     }

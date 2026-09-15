@@ -1,14 +1,15 @@
 //! 调查意图、冻结结果与终态证据的唯一领域规则。
+use erp_core::ids::SupplierOrderActionId;
+use mongodb::Database;
+use persistence_core::Executor;
+use serde::{Deserialize, Serialize};
+
 use crate::dto::supplier_fulfillment::*;
 use crate::entity::supplier_api::SupplierApiCapabilityCode;
 use crate::entity::supplier_fulfillment::*;
 use crate::ports::supplier_gateway::{DispatchOutcome, InvestigationOutcome};
 use crate::repository::SupplierFulfillmentExt;
 use crate::{Error, Result};
-use erp_core::ids::SupplierOrderActionId;
-use mongodb::Database;
-use persistence_core::Executor;
-use serde::{Deserialize, Serialize};
 const INVESTIGATION_EVIDENCE_SCHEMA: &str = "W26_INVESTIGATION_V1";
 const INVESTIGATION_INTENT_SCHEMA: &str = "W26_INVESTIGATION_INTENT_V1";
 const INVESTIGATION_PREPARED_SCHEMA: &str = "W26_INVESTIGATION_PREPARED_V1";
@@ -100,9 +101,9 @@ pub fn capability_for_action(action_type: SupplierOrderActionType) -> Result<Sup
         SupplierOrderActionType::Place => Ok(SupplierApiCapabilityCode::Order),
         SupplierOrderActionType::Cancel => Ok(SupplierApiCapabilityCode::Cancel),
         SupplierOrderActionType::Refund => Ok(SupplierApiCapabilityCode::Refund),
-        SupplierOrderActionType::Query => Err(Error::BusinessLogicError(
-            "查询记录不能作为再次提交的目标".to_string(),
-        )),
+        SupplierOrderActionType::Query => {
+            Err(Error::BusinessLogicError("查询记录不能作为再次提交的目标".to_string()))
+        },
     }
 }
 
@@ -133,9 +134,7 @@ pub async fn ensure_replay_safe(
     if latest.is_some_and(|record| record.outcome == SupplierOrderInvestigationOutcome::VerifiedNoResult) {
         return Ok(());
     }
-    Err(Error::BusinessLogicError(
-        "尚无最新的明确无结果证据，禁止再次提交供应商下单".to_string(),
-    ))
+    Err(Error::BusinessLogicError("尚无最新的明确无结果证据，禁止再次提交供应商下单".to_string()))
 }
 
 fn investigation_intent_record(context: &InvestigationSubject) -> InvestigationIntentRecord {
@@ -153,28 +152,26 @@ pub fn bounded_prepared_investigation(prepared: PreparedInvestigation) -> Prepar
             PreparedInvestigation::Queried(InvestigationOutcome::VerifiedNoResult {
                 summary: bounded_summary(&summary),
             })
-        }
+        },
         PreparedInvestigation::Queried(InvestigationOutcome::ResultUnknown { summary }) => {
             PreparedInvestigation::Queried(InvestigationOutcome::ResultUnknown {
                 summary: bounded_summary(&summary),
             })
-        }
+        },
         PreparedInvestigation::Replayed(DispatchOutcome::Rejected { summary }) => {
-            PreparedInvestigation::Replayed(DispatchOutcome::Rejected {
-                summary: bounded_summary(&summary),
-            })
-        }
+            PreparedInvestigation::Replayed(DispatchOutcome::Rejected { summary: bounded_summary(&summary) })
+        },
         PreparedInvestigation::Replayed(DispatchOutcome::ResultUnknown { summary }) => {
             PreparedInvestigation::Replayed(DispatchOutcome::ResultUnknown {
                 summary: bounded_summary(&summary),
             })
-        }
+        },
         PreparedInvestigation::Replayed(DispatchOutcome::Failed { error_class, summary }) => {
             PreparedInvestigation::Replayed(DispatchOutcome::Failed {
                 error_class,
                 summary: bounded_summary(&summary),
             })
-        }
+        },
         other => other,
     }
 }
@@ -191,10 +188,7 @@ pub fn validate_investigation_intent(
         return Err(Error::ConflictError("调查意图身份与当前命令不一致".to_string()));
     }
     let intent: InvestigationIntentRecord = serde_json::from_str(
-        evidence
-            .request_summary
-            .as_deref()
-            .ok_or_else(|| Error::Internal("调查意图摘要为空".to_string()))?,
+        evidence.request_summary.as_deref().ok_or_else(|| Error::Internal("调查意图摘要为空".to_string()))?,
     )
     .map_err(|_| Error::Internal("调查意图摘要格式无效".to_string()))?;
     if intent != investigation_intent_record(context) {
@@ -219,9 +213,7 @@ pub fn parse_prepared_investigation(
         || durable.target_supplier_action_id != context.target_action_id
         || durable.operation_id != context.operation_id
     {
-        return Err(Error::ConflictError(
-            "已持久化调查结果与当前命令不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("已持久化调查结果与当前命令不一致".to_string()));
     }
     Ok(durable.prepared)
 }
@@ -244,33 +236,31 @@ pub fn apply_prepared_investigation(
     match prepared {
         PreparedInvestigation::PersistedTerminal(resolution) => {
             if order.verified_resolution(target_action).map(Into::into) != Some(*resolution) {
-                return Err(Error::ConflictError(
-                    "供应商业务结果已变化，请刷新后重试".to_string(),
-                ));
+                return Err(Error::ConflictError("供应商业务结果已变化，请刷新后重试".to_string()));
             }
             Ok(InvestigationFinding {
                 outcome: SupplierOrderInvestigationOutcome::VerifiedTerminal,
                 resolution: Some(*resolution),
                 summary: format!("已由当前供应商业务事实核实结果：{}", resolution.label()),
             })
-        }
+        },
         PreparedInvestigation::Queried(InvestigationOutcome::VerifiedNoResult { summary }) => {
             Ok(InvestigationFinding {
                 outcome: SupplierOrderInvestigationOutcome::VerifiedNoResult,
                 resolution: None,
                 summary: summary.clone(),
             })
-        }
+        },
         PreparedInvestigation::Queried(InvestigationOutcome::ResultUnknown { summary }) => {
             Ok(InvestigationFinding {
                 outcome: SupplierOrderInvestigationOutcome::ResultUnknown,
                 resolution: None,
                 summary: summary.clone(),
             })
-        }
+        },
         PreparedInvestigation::Replayed(outcome) => {
             apply_replay_outcome(order, target_action, outcome.clone())
-        }
+        },
     }
 }
 
@@ -280,13 +270,8 @@ pub fn apply_replay_outcome(
     outcome: DispatchOutcome,
 ) -> Result<InvestigationFinding> {
     match outcome {
-        DispatchOutcome::Succeeded {
-            external_request_id,
-            external_order_no: Some(external_order_no),
-        } => {
-            order.update(SupplierFulfillmentOrderUpdate {
-                external_order_no: Some(external_order_no),
-            })?;
+        DispatchOutcome::Succeeded { external_request_id, external_order_no: Some(external_order_no) } => {
+            order.update(SupplierFulfillmentOrderUpdate { external_order_no: Some(external_order_no) })?;
             order.advance_fulfillment(FulfillmentStatus::Accepted)?;
             target_action.update(SupplierOrderActionUpdate {
                 status: Some(SupplierOrderActionStatus::Succeeded),
@@ -300,11 +285,8 @@ pub fn apply_replay_outcome(
                 resolution: Some(SupplierOrderResolution::OrderAccepted),
                 summary: "已按原请求安全再次提交，并取得明确接单结果".to_string(),
             })
-        }
-        DispatchOutcome::Succeeded {
-            external_order_no: None,
-            ..
-        } => {
+        },
+        DispatchOutcome::Succeeded { external_order_no: None, .. } => {
             target_action.update(SupplierOrderActionUpdate {
                 status: Some(SupplierOrderActionStatus::ResultUnknown),
                 response_summary: Some("再次提交的响应缺少供应商订单号，结果仍未知".to_string()),
@@ -315,7 +297,7 @@ pub fn apply_replay_outcome(
                 resolution: None,
                 summary: "再次提交的响应不足以证明供应商业务结果".to_string(),
             })
-        }
+        },
         DispatchOutcome::Rejected { summary } => {
             order.advance_fulfillment(FulfillmentStatus::Rejected)?;
             target_action.update(SupplierOrderActionUpdate {
@@ -328,7 +310,7 @@ pub fn apply_replay_outcome(
                 resolution: Some(SupplierOrderResolution::OrderRejected),
                 summary,
             })
-        }
+        },
         DispatchOutcome::ResultUnknown { summary } => {
             target_action.update(SupplierOrderActionUpdate {
                 status: Some(SupplierOrderActionStatus::ResultUnknown),
@@ -340,7 +322,7 @@ pub fn apply_replay_outcome(
                 resolution: None,
                 summary,
             })
-        }
+        },
         DispatchOutcome::Failed { summary, .. } => {
             target_action.record_attempt(None);
             target_action.update(SupplierOrderActionUpdate {
@@ -353,7 +335,7 @@ pub fn apply_replay_outcome(
                 resolution: None,
                 summary,
             })
-        }
+        },
     }
 }
 
@@ -375,17 +357,13 @@ pub fn verified_terminal_evidence(
         || evidence.action_type != SupplierOrderActionType::Query
         || evidence.status != SupplierOrderActionStatus::Succeeded
     {
-        return Err(Error::BusinessLogicError(
-            "结果证据不属于当前供应商履约订单".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("结果证据不属于当前供应商履约订单".to_string()));
     }
     let record = parse_investigation_evidence(evidence)?;
     if record.outcome != SupplierOrderInvestigationOutcome::VerifiedTerminal
         || record.verified_resolution != Some(expected_resolution)
     {
-        return Err(Error::BusinessLogicError(
-            "供应商证据尚未证明所选业务结果".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("供应商证据尚未证明所选业务结果".to_string()));
     }
     Ok(record)
 }
@@ -509,17 +487,18 @@ pub fn finish_evidence(
 
 #[cfg(test)]
 mod investigation_tests {
+    use erp_core::ids::{SupplierFulfillmentOrderId, SupplierOrderActionId};
+
     use super::{
-        investigation_intent_record, parse_prepared_investigation, validate_investigation_intent,
-        DurablePreparedInvestigation, InvestigationSubject, PreparedInvestigation,
-        INVESTIGATION_PREPARED_SCHEMA,
+        DurablePreparedInvestigation, INVESTIGATION_PREPARED_SCHEMA, InvestigationSubject,
+        PreparedInvestigation, investigation_intent_record, parse_prepared_investigation,
+        validate_investigation_intent,
     };
     use crate::dto::supplier_fulfillment::SupplierOrderInvestigationAction;
     use crate::entity::supplier_fulfillment::{
         SupplierOrderAction, SupplierOrderActionData, SupplierOrderActionStatus, SupplierOrderActionType,
     };
     use crate::ports::supplier_gateway::InvestigationOutcome;
-    use erp_core::ids::{SupplierFulfillmentOrderId, SupplierOrderActionId};
 
     fn context() -> InvestigationSubject {
         InvestigationSubject {
@@ -561,10 +540,7 @@ mod investigation_tests {
         .unwrap();
 
         validate_investigation_intent(&evidence, &context, "stable-key").unwrap();
-        assert_eq!(
-            parse_prepared_investigation(&evidence, &context).unwrap(),
-            prepared
-        );
+        assert_eq!(parse_prepared_investigation(&evidence, &context).unwrap(), prepared);
 
         let mut changed = context;
         changed.operation_id = "operation-2".to_string();

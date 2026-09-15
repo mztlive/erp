@@ -4,16 +4,16 @@ use std::collections::HashSet;
 
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::product_revision_media::MediaRole;
-use erp_catalog::entity::catalog::{compute_specification_signature, Product, Sku, SpecSignatureEntry};
+use erp_catalog::entity::catalog::{Product, Sku, SpecSignatureEntry, compute_specification_signature};
 use erp_catalog::{CatalogExt, ProductMediaInput, ProductSkuInput, UpdateProductRequest};
 use erp_core::ids::ProductId;
 use persistence_core::NoTransaction;
 
-use super::backfill::sku_inputs_with_main_image;
-use super::identity::{next_sku_no, NormalizedImportRow};
-use super::images::{resolve_row_media, RowMedia, RowMediaSource};
-use super::row::RowImportOutcome;
 use super::ProductImportProcess;
+use super::backfill::sku_inputs_with_main_image;
+use super::identity::{NormalizedImportRow, next_sku_no};
+use super::images::{RowMedia, RowMediaSource, resolve_row_media};
+use super::row::RowImportOutcome;
 use crate::{Error, Result};
 
 impl ProductImportProcess {
@@ -45,28 +45,16 @@ impl ProductImportProcess {
             .find_by_product_ids(&[ProductId::new(product.base.id.clone())], &mut NoTransaction)
             .await?;
         let signature = sku_signature(&row)?;
-        let revisions = self
-            .db
-            .catalog()
-            .current_sku_revisions(&skus, &mut NoTransaction)
-            .await?;
+        let revisions = self.db.catalog().current_sku_revisions(&skus, &mut NoTransaction).await?;
         let same_sku = skus.iter().any(|sku| sku.specification_signature == signature)
             || row.barcode.as_ref().is_some_and(|barcode| {
-                revisions
-                    .values()
-                    .any(|revision| revision.barcode.as_ref() == Some(barcode))
+                revisions.values().any(|revision| revision.barcode.as_ref() == Some(barcode))
             });
         if same_sku {
-            return self
-                .import_existing_with_images(product, cells, media_source, actor)
-                .await;
+            return self.import_existing_with_images(product, cells, media_source, actor).await;
         }
         if let Some(barcode) = &row.barcode {
-            let owners = self
-                .db
-                .catalog()
-                .barcode_owner_sku_ids(barcode, &mut NoTransaction)
-                .await?;
+            let owners = self.db.catalog().barcode_owner_sku_ids(barcode, &mut NoTransaction).await?;
             if !owners.is_empty() {
                 return Ok(RowImportOutcome {
                     product_id: Some(product.base.id),
@@ -117,16 +105,9 @@ impl ProductImportProcess {
         let revision = snapshot
             .current_revision
             .ok_or_else(|| Error::BusinessLogicError("商品缺少当前资料，无法新增 SKU".into()))?;
-        let revisions = self
-            .db
-            .catalog()
-            .current_sku_revisions(skus, &mut NoTransaction)
-            .await?;
+        let revisions = self.db.catalog().current_sku_revisions(skus, &mut NoTransaction).await?;
         let mut sku_inputs = sku_inputs_with_main_image(skus, &revisions, None)?;
-        let taken = sku_inputs
-            .iter()
-            .map(|sku| sku.sku_no.clone())
-            .collect::<HashSet<_>>();
+        let taken = sku_inputs.iter().map(|sku| sku.sku_no.clone()).collect::<HashSet<_>>();
         sku_inputs.push(ProductSkuInput {
             sku_id: None,
             expected_sku_revision_id: None,
@@ -155,12 +136,8 @@ impl ProductImportProcess {
                 alt_text: item.alt_text,
             })
             .collect();
-        let mut next_order = carousel_media
-            .iter()
-            .map(|item| item.sort_order)
-            .max()
-            .unwrap_or(-1)
-            .saturating_add(1);
+        let mut next_order =
+            carousel_media.iter().map(|item| item.sort_order).max().unwrap_or(-1).saturating_add(1);
         for (id, _) in media.carousel {
             carousel_media.push(ProductMediaInput {
                 file_asset_id: id,

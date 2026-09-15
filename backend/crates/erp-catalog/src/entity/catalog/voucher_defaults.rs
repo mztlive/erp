@@ -3,13 +3,14 @@
 //! 默认分类、品牌和计量单位是 Catalog 域稳定业务约定；Repository 负责按稳定代码
 //! 查询持久化事实，Service 只编排“查询或创建”。
 
+use erp_core::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
+use erp_core::{Error, Result};
+
 use crate::entity::catalog::product_brand::{ProductBrand, ProductBrandData};
 use crate::entity::catalog::product_category::{ProductCategory, ProductCategoryData};
 use crate::entity::catalog::product_kind::ProductKind;
 use crate::entity::catalog::status::EnableStatus;
 use crate::entity::catalog::unit_of_measure::{UnitOfMeasure, UnitOfMeasureData};
-use erp_core::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
-use erp_core::{Error, Result};
 
 /// 卡券根分类稳定代码。
 pub const VOUCHER_ROOT_CATEGORY_CODE: &str = "VOUCHER";
@@ -195,11 +196,13 @@ mod tests {
     /// 分类来源同时给出已有与新建时被拒绝。
     #[test]
     fn category_selection_rejects_ambiguous_sources() {
-        assert!(VoucherCategorySelection::from_options(
-            Some(ProductCategoryId::new("cat-1")),
-            Some("new".to_string())
-        )
-        .is_err());
+        assert!(
+            VoucherCategorySelection::from_options(
+                Some(ProductCategoryId::new("cat-1")),
+                Some("new".to_string())
+            )
+            .is_err()
+        );
     }
 
     /// 默认字典工厂生成稳定代码、启用状态和固定数量精度。
@@ -238,10 +241,7 @@ mod tests {
 
         let mut unit = VoucherCatalogDefaults::unit(UnitOfMeasureId::new("unit-1"), "tester").unwrap();
         unit.update(
-            UnitOfMeasureUpdate {
-                status: Some(EnableStatus::Disabled),
-                ..Default::default()
-            },
+            UnitOfMeasureUpdate { status: Some(EnableStatus::Disabled), ..Default::default() },
             "tester",
         )
         .unwrap();

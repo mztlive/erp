@@ -1,19 +1,17 @@
-use crate::entity::document_registry::DocumentType;
-use crate::repository::BpmExt;
+use application_core::AuditActor;
 use bpm::ids::ApprovalProcessDefinitionId;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
-use crate::error::Result;
-use application_core::AuditActor;
-
 use super::super::definition_dto::{DefinitionCatalogItem, DefinitionDetailView, DefinitionVersionItem};
-use super::super::policy::{policy_of, require_process_required, DocumentApprovalPolicy, ALL_DOCUMENT_TYPES};
+use super::super::policy::{ALL_DOCUMENT_TYPES, DocumentApprovalPolicy, policy_of, require_process_required};
 use super::super::process_kind::{document_type_of, process_kind_of};
 use super::command::definition_not_found;
 use super::mapping::{catalog_facts_by_kind, catalog_item, detail_view, version_item};
-use super::ApprovalDefinitionService;
-use super::{definition_management_visibility, DefinitionManagementVisibility};
+use super::{ApprovalDefinitionService, DefinitionManagementVisibility, definition_management_visibility};
+use crate::entity::document_registry::DocumentType;
+use crate::error::Result;
+use crate::repository::BpmExt;
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// 返回固定 20 行非敏感目录。
@@ -39,11 +37,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
             }
             policies.push((document_type, policy));
         }
-        let facts = self
-            .db
-            .bpm_workflow()
-            .definition_catalog_facts(&required_kinds, &mut NoTransaction)
-            .await?;
+        let facts =
+            self.db.bpm_workflow().definition_catalog_facts(&required_kinds, &mut NoTransaction).await?;
         let by_kind = catalog_facts_by_kind(facts);
         Ok(policies
             .into_iter()
@@ -115,9 +110,7 @@ async fn enforce_visibility(
     actor: &AuditActor,
     visibility: &DefinitionManagementVisibility,
 ) -> Result<DefinitionManagementVisibility> {
-    Ok(definition_management_visibility(rbac, actor)
-        .await?
-        .intersect(visibility))
+    Ok(definition_management_visibility(rbac, actor).await?.intersect(visibility))
 }
 
 /// 详情读取权。
@@ -159,20 +152,14 @@ mod tests {
         let intersected = visibility.intersect(&claimed);
         assert!(intersected.can_define(DocumentType::StockAdjustment));
         assert!(!intersected.can_define(DocumentType::SalesOrder));
-        assert_eq!(
-            allowed_actions(ApprovalRequirement::ProcessRequired, false, None, None),
-            Vec::new()
-        );
+        assert_eq!(allowed_actions(ApprovalRequirement::ProcessRequired, false, None, None), Vec::new());
         assert_eq!(
             allowed_actions(ApprovalRequirement::ProcessRequired, true, None, None),
             vec![DefinitionAllowedAction::CreateDraft]
         );
         assert_eq!(
             allowed_actions(ApprovalRequirement::ProcessRequired, true, None, Some(1)),
-            vec![
-                DefinitionAllowedAction::ReplaceNodes,
-                DefinitionAllowedAction::Publish
-            ]
+            vec![DefinitionAllowedAction::ReplaceNodes, DefinitionAllowedAction::Publish]
         );
         assert_eq!(
             allowed_actions(ApprovalRequirement::ProcessRequired, true, Some(2), Some(3)),
@@ -184,10 +171,7 @@ mod tests {
         );
         assert_eq!(
             allowed_actions(ApprovalRequirement::ProcessRequired, true, Some(2), None),
-            vec![
-                DefinitionAllowedAction::CreateDraft,
-                DefinitionAllowedAction::Retire
-            ]
+            vec![DefinitionAllowedAction::CreateDraft, DefinitionAllowedAction::Retire]
         );
         assert!(allowed_actions(ApprovalRequirement::NoApproval, true, None, None).is_empty());
     }

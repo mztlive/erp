@@ -1,11 +1,10 @@
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supply::entity::supplier_settlement::SupplierSettlementStatement;
 use persistence_core::Transactional;
 
 use super::{SupplierSettlementProcess, SupplierSettlementStatementView, VoidSettlementRequest};
 use crate::Result;
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
 
 impl SupplierSettlementProcess {
     /// 作废尚未提交复核的结算草稿。
@@ -27,10 +26,8 @@ impl SupplierSettlementProcess {
         req: VoidSettlementRequest,
         actor: &AuditActor,
     ) -> Result<SupplierSettlementStatementView> {
-        let (mut statement, replayed) = self
-            .domain()
-            .prepare_void(id, &req, actor.id(), &mut persistence_core::NoTransaction)
-            .await?;
+        let (mut statement, replayed) =
+            self.domain().prepare_void(id, &req, actor.id(), &mut persistence_core::NoTransaction).await?;
         if replayed {
             return Ok(statement.into());
         }

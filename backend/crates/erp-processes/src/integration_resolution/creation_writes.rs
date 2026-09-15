@@ -1,25 +1,23 @@
 //! 集成事实、正式 WorkItem、审计的原顺序写入；复用外层唯一 Executor。
-use crate::Result;
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
 use erp_integration::entity::integration_ops::{
     InboxMessage, IntegrationErrorTask, ReconciliationDifference,
 };
-use erp_integration::service::{
-    error_task::persist_error_task, inbox_message::persist_error_task_with_message_failure,
-    reconciliation_difference::persist_difference,
-};
-use erp_workflow::{entity::work_item::WorkItem, WorkItemExt};
+use erp_integration::service::error_task::persist_error_task;
+use erp_integration::service::inbox_message::persist_error_task_with_message_failure;
+use erp_integration::service::reconciliation_difference::persist_difference;
+use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::Result;
 
 pub(super) enum CreatedFact<'a> {
     ErrorTask(&'a IntegrationErrorTask),
     Difference(&'a ReconciliationDifference),
-    FailedMessage {
-        task: &'a IntegrationErrorTask,
-        message: &'a mut InboxMessage,
-    },
+    FailedMessage { task: &'a IntegrationErrorTask, message: &'a mut InboxMessage },
 }
 #[async_trait]
 trait CreationWrites: Send {
@@ -46,7 +44,7 @@ impl CreationWrites for MongoWrites<'_> {
             CreatedFact::Difference(difference) => persist_difference(self.db, difference, executor).await?,
             CreatedFact::FailedMessage { task, message } => {
                 persist_error_task_with_message_failure(self.db, task, message, executor).await?
-            }
+            },
         }
         Ok(())
     }
@@ -69,23 +67,15 @@ pub(super) async fn persist_created(
     audit: &AuditLog,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    execute(
-        &mut MongoWrites {
-            db,
-            fact,
-            work_item,
-            audit,
-        },
-        executor,
-    )
-    .await
+    execute(&mut MongoWrites { db, fact, work_item, audit }, executor).await
 }
 #[cfg(test)]
 mod tests {
-    use super::{execute, CreationWrites};
-    use crate::{Error, Result};
     use async_trait::async_trait;
     use persistence_core::Executor;
+
+    use super::{CreationWrites, execute};
+    use crate::{Error, Result};
     struct TestExecutor {
         _identity: u8,
     }
@@ -103,8 +93,7 @@ mod tests {
     impl RecordingWrites {
         fn record(&mut self, step: &'static str, executor: &mut dyn Executor) -> Result<()> {
             self.steps.push(step);
-            self.executors
-                .push(executor as *mut dyn Executor as *mut () as usize);
+            self.executors.push(executor as *mut dyn Executor as *mut () as usize);
             if self.fail == Some(step) {
                 return Err(Error::ConflictError(step.into()));
             }
@@ -137,10 +126,7 @@ mod tests {
         let expected = ["domain", "work_item", "audit"];
         for (at, fail) in expected.iter().enumerate() {
             let mut e = TestExecutor { _identity: 1 };
-            let mut writes = RecordingWrites {
-                fail: Some(*fail),
-                ..Default::default()
-            };
+            let mut writes = RecordingWrites { fail: Some(*fail), ..Default::default() };
             let result = execute(&mut writes, &mut e).await;
             assert!(matches!(result,Err(Error::ConflictError(message)) if message==*fail));
             assert_eq!(writes.steps, expected[..=at]);

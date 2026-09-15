@@ -8,13 +8,13 @@ use async_trait::async_trait;
 use erp_contract::ports::ContractScopeObject;
 use erp_contract::{ContractDataScopePort, ContractResolvedClause, ContractResolvedScope};
 use erp_core::common::time::Instant;
+use erp_identity::SharedRbacService;
 use erp_identity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
 use erp_identity::entity::organization::OrgTree;
 use erp_identity::entity::organization_change::OrganizationState;
 use erp_identity::repository::OrganizationRepository;
 use erp_identity::service::access_control::consumers::registration;
 use erp_identity::service::access_control::resolve::DataScopeService;
-use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -123,10 +123,7 @@ impl ContractDataScopePort for MongoContractDataScope {
         executor: &mut dyn Executor,
     ) -> erp_contract::Result<Option<String>> {
         let state = organization_state(&self.db, executor).await?;
-        Ok(state
-            .own_org(user_id, at)
-            .map_err(map_identity_error)?
-            .map(str::to_string))
+        Ok(state.own_org(user_id, at).map_err(map_identity_error)?.map(str::to_string))
     }
 }
 
@@ -242,9 +239,7 @@ fn map_clauses(clauses: &[ScopeClause]) -> erp_contract::Result<Vec<ContractReso
 /// 必须保留公司、主责、协作和组织维度；不得改变语义。
 fn map_clause(clause: &ScopeClause) -> erp_contract::Result<ContractResolvedClause> {
     if !clause.settlement_party_ids.is_empty() || !clause.warehouse_ids.is_empty() {
-        return Err(erp_contract::Error::ValidationError(
-            "合同范围不支持结算主体或仓库维度".into(),
-        ));
+        return Err(erp_contract::Error::ValidationError("合同范围不支持结算主体或仓库维度".into()));
     }
     Ok(ContractResolvedClause {
         company: clause.company,
@@ -277,7 +272,7 @@ fn map_identity_error(error: erp_identity::Error) -> erp_contract::Error {
         erp_identity::Error::ReceiptDuplicate(payload) => erp_contract::Error::ReceiptDuplicate(payload),
         erp_identity::Error::TransientTransaction(payload) => {
             erp_contract::Error::TransientTransaction(payload)
-        }
+        },
         erp_identity::Error::Forbidden(payload) => erp_contract::Error::Forbidden(payload),
         erp_identity::Error::Unauthenticated(payload) => erp_contract::Error::Unauthenticated(payload),
         erp_identity::Error::Logic(payload) => erp_contract::Error::Logic(payload),
@@ -289,29 +284,25 @@ fn map_identity_error(error: erp_identity::Error) -> erp_contract::Error {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::collections::BTreeSet;
+
+    use super::*;
 
     #[test]
     fn contract_adapter_rejects_unsupported_scope_dimensions() {
-        let warehouse = ScopeClause {
-            warehouse_ids: BTreeSet::from(["wh-1".into()]),
-            ..ScopeClause::default()
-        };
+        let warehouse =
+            ScopeClause { warehouse_ids: BTreeSet::from(["wh-1".into()]), ..ScopeClause::default() };
         match map_clause(&warehouse) {
             Err(erp_contract::Error::ValidationError(message)) => {
                 assert!(message.contains("仓库"));
-            }
+            },
             other => panic!("expected validation error, got {other:?}"),
         }
         let settlement = ScopeClause {
             settlement_party_ids: BTreeSet::from(["party-1".into()]),
             ..ScopeClause::default()
         };
-        assert!(matches!(
-            map_clause(&settlement),
-            Err(erp_contract::Error::ValidationError(_))
-        ));
+        assert!(matches!(map_clause(&settlement), Err(erp_contract::Error::ValidationError(_))));
     }
 
     #[test]
@@ -326,10 +317,7 @@ mod tests {
         let mapped = map_clause(&clause).unwrap();
         assert!(mapped.self_owned);
         assert!(mapped.collaborative);
-        assert_eq!(
-            mapped.org_unit_ids,
-            vec!["org-a".to_string(), "org-b".to_string()]
-        );
+        assert_eq!(mapped.org_unit_ids, vec!["org-a".to_string(), "org-b".to_string()]);
     }
 
     #[test]
@@ -337,7 +325,7 @@ mod tests {
         match map_identity_error(erp_identity::Error::Forbidden("没有该资源动作权限".into())) {
             erp_contract::Error::Forbidden(message) => {
                 assert_eq!(message, "没有该资源动作权限");
-            }
+            },
             other => panic!("expected forbidden, got {other:?}"),
         }
     }
@@ -349,9 +337,7 @@ fn evaluate_object(
     object: &ContractScopeObject,
 ) -> erp_contract::Result<bool> {
     if scope.resource != "contract" {
-        return Err(erp_contract::Error::ValidationError(
-            "范围资源与消费方不一致".into(),
-        ));
+        return Err(erp_contract::Error::ValidationError("范围资源与消费方不一致".into()));
     }
     let consumer = registration(&scope.resource, &scope.action).map_err(map_identity_error)?;
     let resolved = ResolvedScope {
@@ -384,21 +370,18 @@ fn public_clause(clause: &ContractResolvedClause) -> ScopeClause {
 
 #[cfg(test)]
 mod equivalence_tests {
-    use super::*;
     use erp_contract::service::contract::access::contract_scope;
     use serde_json::json;
     use test_support::matches_filter as matches;
+
+    use super::*;
 
     fn clause(mask: u8) -> ContractResolvedClause {
         ContractResolvedClause {
             company: mask & 1 != 0,
             self_owned: mask & 2 != 0,
             collaborative: mask & 4 != 0,
-            org_unit_ids: if mask & 8 != 0 {
-                vec!["org-a".into()]
-            } else {
-                vec![]
-            },
+            org_unit_ids: if mask & 8 != 0 { vec!["org-a".into()] } else { vec![] },
         }
     }
 
@@ -427,11 +410,7 @@ mod equivalence_tests {
     fn public_object_decision_matches_compiled_conditions() {
         let ids = (0..16).map(|i| format!("o-{i}")).collect::<Vec<_>>();
         let selected = |bit| {
-            ids.iter()
-                .enumerate()
-                .filter(|(i, _)| i & bit != 0)
-                .map(|(_, id)| id.clone())
-                .collect::<Vec<_>>()
+            ids.iter().enumerate().filter(|(i, _)| i & bit != 0).map(|(_, id)| id.clone()).collect::<Vec<_>>()
         };
         let owned = selected(1);
         let collaborating = selected(2);
@@ -462,10 +441,7 @@ mod equivalence_tests {
                             let upper =
                                 contract_scope(&upper, "actor", &owned, &collaborating, vec![], &org_owned);
                             history.retain(|id| {
-                                upper
-                                    .authorized_customer_ids
-                                    .as_ref()
-                                    .is_none_or(|ids| ids.contains(id))
+                                upper.authorized_customer_ids.as_ref().is_none_or(|ids| ids.contains(id))
                             });
                         }
                         let compiled =
@@ -480,8 +456,11 @@ mod equivalence_tests {
                             let document = json!({ "id": id, "customer_id": id,
                             "owner_user_id": if object.owned { "actor" } else { "other" },
                             "business_org_unit_id": object.org_unit_id.as_deref().unwrap() });
-                            assert_eq!(evaluate_object(&access, &object).unwrap(), matches(&compiled.document(), &document),
-                                "action={action}, role={role}, second={second}, limit={limit}, object={index}");
+                            assert_eq!(
+                                evaluate_object(&access, &object).unwrap(),
+                                matches(&compiled.document(), &document),
+                                "action={action}, role={role}, second={second}, limit={limit}, object={index}"
+                            );
                         }
                     }
                 }

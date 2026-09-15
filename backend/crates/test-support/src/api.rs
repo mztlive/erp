@@ -1,8 +1,9 @@
 //! HTTP 测试客户端：对已组装的 `axum::Router` 发送真实请求。
 
-use axum::body::{to_bytes, Body};
-use axum::http::{header::AUTHORIZATION, HeaderValue, Method, Request};
 use axum::Router;
+use axum::body::{Body, to_bytes};
+use axum::http::header::AUTHORIZATION;
+use axum::http::{HeaderValue, Method, Request};
 use serde_json::Value;
 use tower::ServiceExt;
 
@@ -79,15 +80,13 @@ impl TestApi {
             Some(value) => {
                 builder = builder.header("content-type", "application/json");
                 Body::from(value.to_string())
-            }
+            },
             None => Body::empty(),
         };
         let request = builder.body(body).expect("HTTP 请求构造失败");
         let response = self.router.clone().oneshot(request).await.expect("路由调用失败");
         let status = response.status().as_u16();
-        let bytes = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("响应体读取失败");
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.expect("响应体读取失败");
         let value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
         (status, value)
     }

@@ -21,18 +21,17 @@ mod query;
 mod sales_order_brief;
 mod stats;
 
-use erp_workflow::WorkItemExt;
-
-pub use dto::{
-    work_item_destination, WorkItemListParams, WorkItemPageView, WorkItemStatsParams, WorkItemStatsView,
-    WorkItemView,
-};
 pub(crate) use dto::{
     ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFamily,
     WorkItemFamilyCountsView, WorkItemScope,
 };
+pub use dto::{
+    WorkItemListParams, WorkItemPageView, WorkItemStatsParams, WorkItemStatsView, WorkItemView,
+    work_item_destination,
+};
+use erp_workflow::WorkItemExt;
 pub(crate) use facts::{
-    object_ids, ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchSubjectDisplay,
+    ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchSubjectDisplay, object_ids,
 };
 pub use fulfillment_queue::{
     FulfillmentQueueGateFilter, FulfillmentQueueGateState, FulfillmentQueueItemView,

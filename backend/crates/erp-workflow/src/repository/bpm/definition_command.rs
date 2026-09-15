@@ -1,10 +1,9 @@
 use bpm::model::types::ApprovalDefinitionStatus;
 use bpm::model::{ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition};
 use mongodb::bson::doc;
+use persistence_core::{Executor, Result, mongo_ops};
 
 use super::{BpmWorkflowRepository, CasWriteOutcome, NODE_DEFINITIONS, TRANSITION_DEFINITIONS};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 以 `id + DRAFT + expected_definition_lock_version` 更新草稿定义字段。
@@ -49,8 +48,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         if !matches!(outcome, CasWriteOutcome::Applied(_)) {
             return Ok(outcome);
         }
-        self.replace_graph_docs(&definition.base.id, nodes, transitions, executor)
-            .await?;
+        self.replace_graph_docs(&definition.base.id, nodes, transitions, executor).await?;
         Ok(outcome)
     }
 
@@ -69,12 +67,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         if let Some(previous) = previous {
             let expected = expected_previous_lock_version.unwrap_or(previous.definition_lock_version());
             let retired = self
-                .cas_write_definition(
-                    previous,
-                    expected,
-                    &[ApprovalDefinitionStatus::Published],
-                    executor,
-                )
+                .cas_write_definition(previous, expected, &[ApprovalDefinitionStatus::Published], executor)
                 .await?;
             if !matches!(retired, CasWriteOutcome::Applied(_)) {
                 return Ok(retired);
@@ -104,19 +97,13 @@ impl<'a> BpmWorkflowRepository<'a> {
         )
         .await?;
         mongo_ops::delete_many(
-            &self
-                .db
-                .collection::<ApprovalTransitionDefinition>(TRANSITION_DEFINITIONS),
+            &self.db.collection::<ApprovalTransitionDefinition>(TRANSITION_DEFINITIONS),
             filter,
             executor,
         )
         .await?;
         mongo_ops::insert_many(&self.db.collection(NODE_DEFINITIONS), nodes.to_vec(), executor).await?;
-        mongo_ops::insert_many(
-            &self.db.collection(TRANSITION_DEFINITIONS),
-            transitions.to_vec(),
-            executor,
-        )
-        .await
+        mongo_ops::insert_many(&self.db.collection(TRANSITION_DEFINITIONS), transitions.to_vec(), executor)
+            .await
     }
 }

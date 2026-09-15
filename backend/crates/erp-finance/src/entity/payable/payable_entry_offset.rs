@@ -2,11 +2,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{PayableEntryId, PayableEntryOffsetId};
 use erp_core::money::Amount;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 应付分录抵销创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -92,8 +91,9 @@ impl PayableEntryOffset {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn data() -> PayableEntryOffsetData {
         PayableEntryOffsetData {
@@ -113,22 +113,14 @@ mod tests {
 
     #[test]
     fn new_rejects_non_positive_and_self_offset() {
-        let non_positive = PayableEntryOffsetData {
-            offset_amount: Amount::from_str("-1.00").unwrap(),
-            ..data()
-        };
+        let non_positive =
+            PayableEntryOffsetData { offset_amount: Amount::from_str("-1.00").unwrap(), ..data() };
         assert!(PayableEntryOffset::new(PayableEntryOffsetId::new("oe-2"), non_positive).is_err());
 
-        let zero_seq = PayableEntryOffsetData {
-            offset_sequence: 0,
-            ..data()
-        };
+        let zero_seq = PayableEntryOffsetData { offset_sequence: 0, ..data() };
         assert!(PayableEntryOffset::new(PayableEntryOffsetId::new("oe-3"), zero_seq).is_err());
 
-        let self_offset = PayableEntryOffsetData {
-            increase_entry_id: PayableEntryId::new("pe-2"),
-            ..data()
-        };
+        let self_offset = PayableEntryOffsetData { increase_entry_id: PayableEntryId::new("pe-2"), ..data() };
         assert!(PayableEntryOffset::new(PayableEntryOffsetId::new("oe-4"), self_offset).is_err());
     }
 

@@ -1,7 +1,8 @@
 //! 开票申请协议。定义和审批人由服务端绑定，客户端不能指定。
-use crate::entity::receivable::{InvoiceRequestData, InvoiceRequestStatus};
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
+
+use crate::entity::receivable::{InvoiceRequestData, InvoiceRequestStatus};
 
 /// 原子创建并提交，或修改撤回后的草稿再提交。
 #[derive(Debug, Clone, Serialize, Deserialize)]

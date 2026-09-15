@@ -2,17 +2,16 @@
 //!
 //! 双指纹分别计算、类型不可混用；领域工厂只收强类型结果。
 
-use crate::entity::fulfillment::{
-    ServiceFulfillment, ServiceFulfillmentDraft, ServiceFulfillmentDraftData, ServiceLocationFingerprint,
-    ServiceRecipientFingerprint,
-};
 use erp_core::common::time::Instant;
 use erp_core::ids::ServiceFulfillmentId;
 use id_generator::next_id;
 
-use crate::{Error, Result};
-
 use crate::dto::CreateServiceFulfillmentRequest;
+use crate::entity::fulfillment::{
+    ServiceFulfillment, ServiceFulfillmentDraft, ServiceFulfillmentDraftData, ServiceLocationFingerprint,
+    ServiceRecipientFingerprint,
+};
+use crate::{Error, Result};
 
 /// 在 Service/crypto port 计算交付对象快照指纹。
 ///
@@ -130,11 +129,7 @@ mod tests {
         assert_ne!(recipient.as_str(), rotated.as_str(), "密钥版本轮换必须改变指纹");
         let rotated_location =
             service_location_fingerprint("location-plain-001", b"fulfillment-fingerprint-key-v2").unwrap();
-        assert_ne!(
-            location.as_str(),
-            rotated_location.as_str(),
-            "地点指纹同样绑定密钥版本"
-        );
+        assert_ne!(location.as_str(), rotated_location.as_str(), "地点指纹同样绑定密钥版本");
         fn accepts_recipient(_: &super::ServiceRecipientFingerprint) {}
         fn accepts_location(_: &super::ServiceLocationFingerprint) {}
         accepts_recipient(&recipient);

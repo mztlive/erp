@@ -104,25 +104,25 @@ impl ApprovalDomainAction {
             | Self::PurchaseChangeOrderCancelApproval => DocumentType::PurchaseChangeOrder,
             Self::StockAdjustmentSubmit | Self::StockAdjustmentPost | Self::StockAdjustmentCancelApproval => {
                 DocumentType::StockAdjustment
-            }
+            },
             Self::SalesInvoiceRequestSubmit
             | Self::SalesInvoiceRequestApprove
             | Self::SalesInvoiceRequestCancelApproval => DocumentType::SalesInvoiceRequest,
             Self::CustomerReceiptSubmit | Self::CustomerReceiptPost | Self::CustomerReceiptCancelApproval => {
                 DocumentType::CustomerReceipt
-            }
+            },
             Self::CustomerRefundSubmit | Self::CustomerRefundPost | Self::CustomerRefundCancelApproval => {
                 DocumentType::CustomerRefund
-            }
+            },
             Self::SupplierRefundSubmit | Self::SupplierRefundPost | Self::SupplierRefundCancelApproval => {
                 DocumentType::SupplierRefund
-            }
+            },
             Self::ReceiptReversalSubmit | Self::ReceiptReversalPost | Self::ReceiptReversalCancelApproval => {
                 DocumentType::ReceiptReversal
-            }
+            },
             Self::PaymentReversalSubmit | Self::PaymentReversalPost | Self::PaymentReversalCancelApproval => {
                 DocumentType::PaymentReversal
-            }
+            },
         }
     }
 
@@ -135,10 +135,10 @@ impl ApprovalDomainAction {
             Self::VoucherSalesOrderStartApprovalSubmission => "SalesOrderService::start_approval_submission",
             Self::VoucherSalesOrderFormalizeApprovedSubmission => {
                 "SalesOrderService::formalize_approved_submission"
-            }
+            },
             Self::VoucherSalesOrderCancelApprovalSubmission => {
                 "SalesOrderService::cancel_approval_submission"
-            }
+            },
             Self::SalesChangeOrderSubmitSalesChange => "SalesChangeOrderService::submit_sales_change",
             Self::SalesChangeOrderApplyEffectiveChange => "SalesChangeOrderService::apply_effective_change",
             Self::SalesChangeOrderCancelApproval => "SalesChangeOrderService::cancel_approval",

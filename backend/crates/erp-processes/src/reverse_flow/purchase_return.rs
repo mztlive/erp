@@ -1,10 +1,9 @@
 //! PurchaseReturnOrder 无审批登记、业务创建与审计的原子流程。
-use super::ReturnsProcess;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_identity::SharedRbacService;
-use erp_read_models::returns_center::{dto::PurchaseReturnOrderView, ReturnsReadService};
+use erp_read_models::returns_center::ReturnsReadService;
+use erp_read_models::returns_center::dto::PurchaseReturnOrderView;
 use erp_returns::dto::CreatePurchaseReturnOrderRequest;
 use erp_returns::entity::returns::{PurchaseReturnLine, PurchaseReturnOrder};
 use erp_returns::service::purchase_return::{
@@ -13,14 +12,17 @@ use erp_returns::service::purchase_return::{
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::{
-    binding_decision, BindPublishedDefinitionCommand, BindingDecision,
+    BindPublishedDefinitionCommand, BindingDecision, binding_decision,
 };
-use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
-use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
+use erp_workflow::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
+use erp_workflow::service::approval::policy::{DocumentApprovalPolicy, policy_of};
 use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
+
+use super::ReturnsProcess;
+use crate::{Error, Result};
 
 impl ReturnsProcess {
     /// 建立采购退货单与明细行（跨集合事务写入）。
@@ -81,10 +83,10 @@ fn purchase_return_create_binding_decision() -> Result<BindingDecision> {
                 return Err(Error::Internal("采购退货政策类型不匹配".to_string()));
             }
             Ok(binding_decision(policy.requirement()))
-        }
-        DocumentApprovalPolicy::ProcessRequired(_) => Err(Error::Internal(
-            "采购退货必须是 NO_APPROVAL，不得绑定流程".to_string(),
-        )),
+        },
+        DocumentApprovalPolicy::ProcessRequired(_) => {
+            Err(Error::Internal("采购退货必须是 NO_APPROVAL，不得绑定流程".to_string()))
+        },
     }
 }
 
@@ -124,9 +126,7 @@ fn ensure_purchase_return_has_no_adapter() -> Result<()> {
 fn purchase_return_binding_organization_id(order: &PurchaseReturnOrder) -> Result<String> {
     let org = order.purchase_order_id.to_string();
     if org.trim().is_empty() {
-        return Err(Error::ValidationError(
-            "采购退货缺少原采购单，无法构造绑定上下文".to_string(),
-        ));
+        return Err(Error::ValidationError("采购退货缺少原采购单，无法构造绑定上下文".to_string()));
     }
     Ok(org)
 }
@@ -174,17 +174,13 @@ fn apply_purchase_return_create_binding(
     binding: Option<ApprovalDefinitionBinding>,
 ) -> Result<Option<ApprovalDefinitionBinding>> {
     if binding.is_some() {
-        return Err(Error::Internal(
-            "采购退货为 NO_APPROVAL，不得写入审批绑定".to_string(),
-        ));
+        return Err(Error::Internal("采购退货为 NO_APPROVAL，不得写入审批绑定".to_string()));
     }
     if document.approval_binding.is_some() {
         return Err(Error::Internal("采购退货注册行不得预置审批绑定".to_string()));
     }
     if document.document_type != DocumentType::PurchaseReturnOrder {
-        return Err(Error::Internal(
-            "采购退货创建只能注册 PurchaseReturnOrder 单据".to_string(),
-        ));
+        return Err(Error::Internal("采购退货创建只能注册 PurchaseReturnOrder 单据".to_string()));
     }
     Ok(None)
 }
@@ -216,9 +212,7 @@ async fn persist_unbound_purchase_return_document(
     )
     .await?;
     apply_purchase_return_create_binding(&mut document, binding)?;
-    persist_registered_document(db, &document, executor)
-        .await
-        .map_err(crate::Error::from)
+    persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
 }
 
 /// 为已构造采购退货登记 `BusinessDocument` 并调用统一绑定端口。
@@ -336,20 +330,20 @@ impl CreationSteps for MongoCreation<'_> {
 
 #[cfg(test)]
 mod purchase_return_no_approval_tests {
-    use super::{
-        apply_purchase_return_create_binding, ensure_purchase_return_has_no_adapter,
-        ensure_purchase_return_skips_approval_binding, policy_of, purchase_return_bind_command,
-        purchase_return_create_binding_decision, BindingDecision, DocumentApprovalPolicy, DocumentType,
-        PurchaseReturnOrder,
-    };
-    use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
+    use bpm::ids::ApprovalProcessDefinitionId;
     use erp_core::common::time::Instant;
     use erp_core::ids::{PurchaseOrderId, PurchaseReturnOrderId};
-    use erp_returns::entity::returns::PurchaseReturnOrderData;
-    use erp_returns::entity::returns::ReturnMode;
+    use erp_returns::entity::returns::{PurchaseReturnOrderData, ReturnMode};
     use erp_workflow::service::approval::binding::binding_from_published;
     use erp_workflow::service::document_registry::new_registered_document;
+
+    use super::{
+        BindingDecision, DocumentApprovalPolicy, DocumentType, PurchaseReturnOrder,
+        apply_purchase_return_create_binding, ensure_purchase_return_has_no_adapter,
+        ensure_purchase_return_skips_approval_binding, policy_of, purchase_return_bind_command,
+        purchase_return_create_binding_decision,
+    };
 
     fn draft_order() -> PurchaseReturnOrder {
         PurchaseReturnOrder::new(
@@ -405,22 +399,16 @@ mod purchase_return_no_approval_tests {
         assert!(empty.is_none());
         assert!(document.approval_binding.is_none());
 
-        let forged = binding_from_published(
-            ApprovalProcessDefinitionId::new("def-1"),
-            1,
-            Instant::from_unix_secs(10),
-        )
-        .expect("测试绑定");
+        let forged =
+            binding_from_published(ApprovalProcessDefinitionId::new("def-1"), 1, Instant::from_unix_secs(10))
+                .expect("测试绑定");
         assert!(apply_purchase_return_create_binding(&mut document, Some(forged)).is_err());
     }
 
     /// 创建路径调用统一绑定端口，不查询发布定义、不启动实例、不建任务。
     #[test]
     fn create_does_not_query_definition_or_start_instance() {
-        let production = include_str!("purchase_return.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("purchase_return.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("persist_created_purchase_return_order"));
         assert!(production.contains("register_created_purchase_return_document"));
         assert!(production.contains("persist_unbound_purchase_return_document"));
@@ -448,9 +436,10 @@ mod purchase_return_no_approval_tests {
 
 #[cfg(test)]
 mod creation_sequence_tests {
-    use super::{persist_creation, CreationSteps};
-    use crate::{Error, Result};
     use persistence_core::Executor;
+
+    use super::{CreationSteps, persist_creation};
+    use crate::{Error, Result};
 
     struct TestExecutor {
         _identity: u8,
@@ -469,8 +458,7 @@ mod creation_sequence_tests {
     impl RecordingCreation {
         fn record(&mut self, step: &'static str, executor: &mut dyn Executor) -> Result<()> {
             self.events.push(step);
-            self.executor_ids
-                .push(executor as *mut dyn Executor as *mut () as usize);
+            self.executor_ids.push(executor as *mut dyn Executor as *mut () as usize);
             if self.fail == Some(step) {
                 return Err(Error::ConflictError(step.to_string()));
             }
@@ -503,10 +491,7 @@ mod creation_sequence_tests {
         let all = ["document", "return_head_and_first_line", "audit"];
         for (at, fail) in all.iter().enumerate() {
             let mut executor = TestExecutor { _identity: 1 };
-            let mut steps = RecordingCreation {
-                fail: Some(*fail),
-                ..Default::default()
-            };
+            let mut steps = RecordingCreation { fail: Some(*fail), ..Default::default() };
             let error = persist_creation(&mut steps, &mut executor).await.unwrap_err();
             assert!(matches!(error, Error::ConflictError(message) if message == *fail));
             assert_eq!(steps.events, all[..=at]);

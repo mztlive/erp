@@ -2,32 +2,31 @@
 
 use std::collections::BTreeMap;
 
-use erp_sales::repository::SalesOrderExt;
-
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SalesOrderId, WorkItemId};
 use erp_sales::entity::sales_order::{
-    procurement_responsibility_key, SalesOrder, SalesOrderRevisionAggregate, SalesOrderSubmission,
-    SalesOrderSubmissionLine,
+    SalesOrder, SalesOrderRevisionAggregate, SalesOrderSubmission, SalesOrderSubmissionLine,
+    procurement_responsibility_key,
 };
+use erp_sales::repository::SalesOrderExt;
+use erp_sales::service::sales_order::formalize::{build_revision_for_order, load_latest_submission};
+use erp_sales::service::sales_order::lifecycle::ensure_final_approve_formalize;
+use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
-use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::SalesOrderCommandProcess;
 use super::adapter::sales_order_responsible_org_id;
 use super::procurement::submission_procurement_inputs;
-use super::SalesOrderCommandProcess;
 use crate::procure_to_pay::responsibility::{
     AuthorizedResolutionPlan, ProcurementResponsibilityProcess, ResolutionInput,
 };
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_sales::service::sales_order::formalize::{build_revision_for_order, load_latest_submission};
-use erp_sales::service::sales_order::lifecycle::ensure_final_approve_formalize;
 
 /// 事务外授权并在销售形式化事务内重验的采购责任计划。
 pub(super) struct ProcurementFormalizationPlan {
@@ -176,10 +175,7 @@ fn build_procurement_work_items(
 ) -> Result<Vec<WorkItem>> {
     let mut groups = BTreeMap::<String, Vec<String>>::new();
     for line in &plan.resolution.lines {
-        groups
-            .entry(line.identity.owner_user_id.clone())
-            .or_default()
-            .push(line.identity.line_key.clone());
+        groups.entry(line.identity.owner_user_id.clone()).or_default().push(line.identity.line_key.clone());
     }
     let organization_id = sales_order_responsible_org_id(order)?;
     groups
@@ -231,9 +227,8 @@ pub(super) async fn persist_procurement_work_items(
     session: &mut dyn Executor,
 ) -> Result<()> {
     for item in items {
-        let responsibility_key = item
-            .responsibility_key()
-            .ok_or_else(|| Error::Internal("供给分配任务缺少责任键".to_string()))?;
+        let responsibility_key =
+            item.responsibility_key().ok_or_else(|| Error::Internal("供给分配任务缺少责任键".to_string()))?;
         let existing = db
             .work_items()
             .list_open_procurement_by_responsibility(
@@ -243,9 +238,7 @@ pub(super) async fn persist_procurement_work_items(
             )
             .await?;
         if existing.len() > 1 {
-            return Err(Error::ConflictError(
-                "同一销售责任行集合存在多条开放供给分配任务".to_string(),
-            ));
+            return Err(Error::ConflictError("同一销售责任行集合存在多条开放供给分配任务".to_string()));
         }
         if let Some(existing) = existing.first() {
             if existing.responsibility_scope_ids() != item.responsibility_scope_ids() {
@@ -269,21 +262,20 @@ impl FormalizedSubmissionWrite {
 
     /// 本次冻结采购责任的授权版本，供流程保持原 CAS 事务栅栏。
     pub fn policy_revision(&self) -> Option<u64> {
-        self.procurement
-            .as_ref()
-            .map(|plan| plan.resolution.policy_revision)
+        self.procurement.as_ref().map(|plan| plan.resolution.policy_revision)
     }
 }
 
 /// 验证销售形式化事务的状态、仓储与供给任务合同。
 #[cfg(test)]
 mod tests {
-    use super::{ensure_final_approve_formalize, procurement_responsibility_key};
     use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
     use erp_finance::entity::receivable::{AccountReviewStatus, SalesBusinessTypeFact};
     use erp_sales::entity::sales_order::{
         BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderData,
     };
+
+    use super::{ensure_final_approve_formalize, procurement_responsibility_key};
 
     fn draft_order() -> SalesOrder {
         SalesOrder::new(
@@ -317,17 +309,12 @@ mod tests {
             include_str!("../../../erp-sales/src/service/sales_order/formalize.rs")
         );
         let production = source.split("/// 验证销售形式化事务").next().expect("生产代码");
-        let formalize_at = production
-            .find("formalize::persist_revision(")
-            .expect("写入销售当前版本");
+        let formalize_at = production.find("formalize::persist_revision(").expect("写入销售当前版本");
         let synchronize_at = production[formalize_at..]
             .find("sync_procurement_tasks_for_sales_order(")
             .map(|offset| formalize_at + offset)
             .expect("校准供给分配任务");
-        assert!(
-            synchronize_at > formalize_at,
-            "供给任务必须在销售当前版本落库后按权威覆盖量校准"
-        );
+        assert!(synchronize_at > formalize_at, "供给任务必须在销售当前版本落库后按权威覆盖量校准");
         assert!(production.contains("ensure_final_approve_formalize"));
         assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
         assert!(!production.contains("CARD_SALES_APPROVAL"));

@@ -110,12 +110,13 @@ fn outcome_of(
 
 #[cfg(test)]
 mod tests {
-    use super::{map_command_view, ApprovalCommandOutcome, OpenTaskSummary};
     use bpm::engine::CommitRequired;
     use bpm::ids::{ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use bpm::model::{
         ApprovalProcessInstance, NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp,
     };
+
+    use super::{ApprovalCommandOutcome, OpenTaskSummary, map_command_view};
 
     /// 视图取自持久化事实，幂等回读不重放可变快照承诺。
     #[test]
@@ -146,9 +147,7 @@ mod tests {
         );
         assert_eq!(view.instance_status, "RUNNING");
         assert_eq!(
-            view.next_open_task
-                .as_ref()
-                .map(|task| task.task_version.as_str()),
+            view.next_open_task.as_ref().map(|task| task.task_version.as_str()),
             Some("9007199254740993")
         );
         assert_eq!(view.latest_rejection_reason.as_deref(), Some("资料不全"));

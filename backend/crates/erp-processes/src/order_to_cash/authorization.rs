@@ -66,10 +66,8 @@ impl SalesCommandAccess {
 
     /// 在调用方事务内读取当前可操作单据，并复用公共单对象判定。
     pub(super) async fn current(&self, id: &str, executor: &mut dyn Executor) -> Result<SalesOrder> {
-        let order = self
-            .access
-            .require_object(&self.actor, self.action, id, &self.permissions, executor)
-            .await?;
+        let order =
+            self.access.require_object(&self.actor, self.action, id, &self.permissions, executor).await?;
         if !self.permissions.is_empty() {
             self.access
                 .require_object(
@@ -93,17 +91,14 @@ impl SalesCommandAccess {
     ) -> Result<()> {
         let current = self.current(id, executor).await?;
         if current.base.version != expected {
-            return Err(Error::ConflictError(
-                "销售单责任或版本已变化，请刷新后重试".into(),
-            ));
+            return Err(Error::ConflictError("销售单责任或版本已变化，请刷新后重试".into()));
         }
         Ok(())
     }
 
     /// 新单使用即将持久化的显式责任解释创建范围，不能由创建人审计字段兜底。
     pub(super) async fn creation(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<()> {
-        self.require_creation_action(order, self.action, &self.permissions, executor)
-            .await?;
+        self.require_creation_action(order, self.action, &self.permissions, executor).await?;
         if !self.permissions.is_empty() {
             self.require_creation_action(
                 order,
@@ -124,10 +119,7 @@ impl SalesCommandAccess {
         permissions: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let (access, scope) = self
-            .access
-            .resolve(&self.actor, action, permissions, executor)
-            .await?;
+        let (access, scope) = self.access.resolve(&self.actor, action, permissions, executor).await?;
         if !SalesAccess::allows(&access, &scope, order)? {
             return Err(Error::Forbidden("没有该业务责任范围的销售建单权限".into()));
         }
@@ -218,12 +210,9 @@ impl SalesCommandAccess {
     /// 无合同的来源不得走本销售写命令绑定路径。
     pub(super) async fn related_order(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<()> {
         let Some(contract_id) = order.contract_id.as_ref() else {
-            return Err(Error::ValidationError(
-                "销售单缺少关联合同，无法重验合同范围".into(),
-            ));
+            return Err(Error::ValidationError("销售单缺少关联合同，无法重验合同范围".into()));
         };
-        self.related(contract_id.as_ref(), order.customer_id.as_ref(), executor)
-            .await
+        self.related(contract_id.as_ref(), order.customer_id.as_ref(), executor).await
     }
 
     /// 在调用方执行器内按合同 detail 动作装载合同实体。

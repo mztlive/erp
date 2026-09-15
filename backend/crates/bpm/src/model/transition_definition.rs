@@ -5,11 +5,11 @@ use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::ids::{ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
-use crate::model::types::{
-    base_model_at, normalize_required, ApprovalTerminalResult, ApprovalTransitionEvent, ModelError,
-    ModelResult, NODE_KEY_MAX_LEN,
-};
 use crate::model::Timestamp;
+use crate::model::types::{
+    ApprovalTerminalResult, ApprovalTransitionEvent, ModelError, ModelResult, NODE_KEY_MAX_LEN,
+    base_model_at, normalize_required,
+};
 
 /// 节点在事件发生后的唯一流向。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
@@ -122,14 +122,14 @@ impl ApprovalTransitionDefinition {
                     return Err(ModelError::InvalidTransition("目标节点键不能为空"));
                 }
                 Ok(())
-            }
+            },
             (ApprovalTransitionEvent::Approve, None, Some(ApprovalTerminalResult::Approved)) => Ok(()),
             (ApprovalTransitionEvent::Reject, _, Some(_)) => {
                 Err(ModelError::InvalidTransition("驳回连线必须指向节点"))
-            }
+            },
             (ApprovalTransitionEvent::Approve, None, None) => {
                 Err(ModelError::InvalidTransition("通过连线必须指向节点或终态"))
-            }
+            },
             (_, Some(_), Some(_)) => Err(ModelError::InvalidTransition("节点目标与终态不能同时存在")),
             (_, None, None) => Err(ModelError::InvalidTransition("连线必须有且仅有一个目标")),
         }
@@ -140,8 +140,8 @@ impl ApprovalTransitionDefinition {
 mod tests {
     use super::ApprovalTransitionDefinition;
     use crate::ids::{ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
-    use crate::model::types::{ApprovalTerminalResult, ApprovalTransitionEvent, ModelError};
     use crate::model::Timestamp;
+    use crate::model::types::{ApprovalTerminalResult, ApprovalTransitionEvent, ModelError};
 
     fn def_id() -> ApprovalProcessDefinitionId {
         ApprovalProcessDefinitionId::new("def")
@@ -170,10 +170,7 @@ mod tests {
             at,
         )
         .unwrap();
-        assert_eq!(
-            approve_end.terminal_result,
-            Some(ApprovalTerminalResult::Approved)
-        );
+        assert_eq!(approve_end.terminal_result, Some(ApprovalTerminalResult::Approved));
         assert!(approve_end.to_node_key.is_none());
 
         assert!(matches!(

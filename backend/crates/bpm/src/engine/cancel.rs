@@ -1,11 +1,10 @@
 //! 取消当前执行与实例。
 
-use crate::model::types::{ApprovalBlockerCode, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
-use crate::model::{ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp};
-
 use super::event::{BpmEvent, BpmEventKind};
 use super::transition_plan::{CommitRequired, TaskCloseReason, TaskIntent, TransitionPlan};
 use super::{EngineError, EngineResult};
+use crate::model::types::{ApprovalBlockerCode, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
+use crate::model::{ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp};
 
 /// 取消命令。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,10 +54,7 @@ pub fn cancel(
     }
     plan.events.push(event);
     if command.close_open_task {
-        plan.task_intents.push(TaskIntent::CloseTask {
-            execution_id,
-            reason: TaskCloseReason::Cancelled,
-        });
+        plan.task_intents.push(TaskIntent::CloseTask { execution_id, reason: TaskCloseReason::Cancelled });
     }
     plan.updated_executions.push(current);
     Ok(plan)
@@ -87,9 +83,7 @@ fn ensure_cancellable(
         return Err(EngineError::Uncommittable("当前执行状态无法形成合法取消计划"));
     }
     let Some(current_id) = instance.current_node_execution_id.as_ref() else {
-        return Err(EngineError::Uncommittable(
-            "实例缺少当前执行，无法形成合法取消计划",
-        ));
+        return Err(EngineError::Uncommittable("实例缺少当前执行，无法形成合法取消计划"));
     };
     if current_id.as_ref() != current.base.id.as_str() {
         return Err(EngineError::InvalidCommand("执行不是实例当前令牌"));

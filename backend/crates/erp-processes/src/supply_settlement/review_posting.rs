@@ -1,35 +1,29 @@
 //! 正式复核事务的生产步骤与同一执行器合同。
-use super::review::{review_decision_receipt_message, ReviewDecisionReceipt};
-use crate::{Error, Result};
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::money::Amount;
-use erp_finance::{
-    entity::{
-        cost::CostEntry,
-        payable::{PayableAccount, PayableEntry},
-    },
-    service::{
-        cost::supplier_settlement::persist_settlement_costs,
-        payable::supplier_settlement::persist_settlement_payable,
-    },
-};
+use erp_finance::entity::cost::CostEntry;
+use erp_finance::entity::payable::{PayableAccount, PayableEntry};
+use erp_finance::service::cost::supplier_settlement::persist_settlement_costs;
+use erp_finance::service::payable::supplier_settlement::persist_settlement_payable;
 use erp_identity::SharedRbacService;
-use erp_supply::{
-    dto::supplier_settlement::SettlementReviewDecisionStatus,
-    entity::supplier_settlement::{
-        SupplierSettlementDifference, SupplierSettlementItem, SupplierSettlementStatement,
-    },
-    service::supplier_settlement::{
-        review::{ensure_current_subject_and_resolved_differences, ensure_reviewer_separation},
-        shared::{load_statement_differences, load_statement_items},
-        SupplierSettlementService,
-    },
+use erp_supply::dto::supplier_settlement::SettlementReviewDecisionStatus;
+use erp_supply::entity::supplier_settlement::{
+    SupplierSettlementDifference, SupplierSettlementItem, SupplierSettlementStatement,
 };
-use erp_workflow::{entity::work_item::WorkItem, WorkItemExt};
+use erp_supply::service::supplier_settlement::SupplierSettlementService;
+use erp_supply::service::supplier_settlement::review::{
+    ensure_current_subject_and_resolved_differences, ensure_reviewer_separation,
+};
+use erp_supply::service::supplier_settlement::shared::{load_statement_differences, load_statement_items};
+use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use super::review::{ReviewDecisionReceipt, review_decision_receipt_message};
+use crate::{Error, Result};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Step {
     Authorize,
@@ -97,26 +91,26 @@ impl PostingSteps for MongoPosting<'_> {
                 crate::adapters::workflow::work_item_service(input.db.clone(), input.rbac.clone())
                     .ensure_domain_decision_access(input.actor, input.work_item, ex)
                     .await?
-            }
+            },
             Step::Separation => ensure_reviewer_separation(input.statement, input.actor_id)?,
             Step::Items => self.items = load_statement_items(input.db, &input.statement.base.id, ex).await?,
             Step::Differences => {
                 self.differences = load_statement_differences(input.db, &self.items, ex).await?
-            }
+            },
             Step::Subject => {
                 ensure_current_subject_and_resolved_differences(input.statement, &self.differences)?
-            }
+            },
             Step::Statement => {
                 SupplierSettlementService::new(input.db.clone())
                     .persist_statement(input.statement, ex)
                     .await?
-            }
+            },
             Step::Task => input.db.work_items().update(input.work_item, ex).await?,
             Step::Payable => {
                 if let (Some(account), Some(entry)) = (input.payable, input.payable_entry) {
                     persist_settlement_payable(input.db, account, entry, ex).await?;
                 }
-            }
+            },
             Step::Costs => persist_settlement_costs(input.db, input.cost_entries, ex).await?,
             Step::Audit => {
                 let receipt = ReviewDecisionReceipt {
@@ -136,22 +130,15 @@ impl PostingSteps for MongoPosting<'_> {
                 )?;
                 input.db.audit_logs().create(&audit, ex).await?;
                 self.receipt = Some(receipt);
-            }
+            },
         }
         Ok(())
     }
 }
 pub(super) async fn post(input: Posting<'_>, ex: &mut dyn Executor) -> Result<ReviewDecisionReceipt> {
-    let mut posting = MongoPosting {
-        input,
-        items: Vec::new(),
-        differences: Vec::new(),
-        receipt: None,
-    };
+    let mut posting = MongoPosting { input, items: Vec::new(), differences: Vec::new(), receipt: None };
     execute(&mut posting, ex).await?;
-    posting
-        .receipt
-        .ok_or_else(|| Error::Internal("结算复核审计收据未生成".to_string()))
+    posting.receipt.ok_or_else(|| Error::Internal("结算复核审计收据未生成".to_string()))
 }
 #[cfg(test)]
 mod tests {
@@ -183,11 +170,8 @@ mod tests {
     #[tokio::test]
     async fn review_reloads_facts_before_writes_with_one_executor() {
         let mut ex = TestExecutor { _identity: 1 };
-        let mut steps = Recording {
-            calls: vec![],
-            executor: &mut ex as *mut TestExecutor as usize,
-            fail: None,
-        };
+        let mut steps =
+            Recording { calls: vec![], executor: &mut ex as *mut TestExecutor as usize, fail: None };
         execute(&mut steps, &mut ex).await.unwrap();
         assert_eq!(steps.calls, ORDER);
     }

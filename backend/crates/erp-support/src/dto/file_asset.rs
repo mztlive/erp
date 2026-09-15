@@ -3,15 +3,15 @@
 //! 字段名与 HTTP 契约一致（api-contract.md）：分页参数 `page`/`page_size`/
 //! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；本域无金额字段。
 
+use application_core::{normalized_text, page_or_default, page_size_or_default};
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+
 use crate::entity::file_asset::{
     AttachmentUsage, ContentHmac, DocumentAttachment, DocumentAttachmentData, FileAsset, FileAssetData,
     RetentionClass, SecurityScanStatus, SensitivityClass,
 };
-use serde::{Deserialize, Serialize};
-use validator::Validate;
-
 use crate::error::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 文件资产列表允许的排序字段白名单。
 pub(crate) const FILE_ASSET_SORT_FIELDS: &[&str] = &["created_at", "updated_at"];
@@ -32,6 +32,10 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空。
+use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -45,12 +49,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空。
-use application_core::non_blank;
 
 /// 文件资产列表响应视图（列表不暴露敏感对象存储键，§6.1）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -348,12 +346,13 @@ pub struct DestroyFileAssetRequest {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        normalize_sort, AttachToDocumentRequest, FileAssetListParams, RegisterFileAssetRequest, SortDir,
-    };
-    use crate::entity::file_asset::{AttachmentUsage, RetentionClass, SensitivityClass};
     use serde_json::json;
     use validator::Validate;
+
+    use super::{
+        AttachToDocumentRequest, FileAssetListParams, RegisterFileAssetRequest, SortDir, normalize_sort,
+    };
+    use crate::entity::file_asset::{AttachmentUsage, RetentionClass, SensitivityClass};
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields() {

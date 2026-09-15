@@ -10,11 +10,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{AcceptanceFulfillmentAllocationId, CustomerAcceptanceLineId};
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 履约事实类型（数据模型 §6.7：发货、电子交付或服务履约事实）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -191,11 +190,9 @@ impl AcceptanceFulfillmentAllocation {
         let net = allocations
             .iter()
             .filter(|allocation| allocation.fulfillment_line_id == fulfillment_line_id)
-            .fold(rust_decimal::Decimal::ZERO, |net, allocation| {
-                match allocation.allocation_action {
-                    AllocationAction::Apply => net + allocation.allocated_quantity.to_decimal(),
-                    AllocationAction::Reverse => net - allocation.allocated_quantity.to_decimal(),
-                }
+            .fold(rust_decimal::Decimal::ZERO, |net, allocation| match allocation.allocation_action {
+                AllocationAction::Apply => net + allocation.allocated_quantity.to_decimal(),
+                AllocationAction::Reverse => net - allocation.allocated_quantity.to_decimal(),
             });
         if net < rust_decimal::Decimal::ZERO {
             return Err(Error::from("履约事实的净验收数量不得为负"));
@@ -283,9 +280,11 @@ impl AcceptanceFulfillmentAllocation {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::*;
-    use erp_core::ids::AcceptanceFulfillmentAllocationId;
     use std::str::FromStr;
+
+    use erp_core::ids::AcceptanceFulfillmentAllocationId;
+
+    use super::*;
 
     pub(crate) fn apply_data() -> AcceptanceFulfillmentAllocationData {
         AcceptanceFulfillmentAllocationData {
@@ -360,42 +359,42 @@ pub(crate) mod tests {
             allocated_quantity: Quantity::from_str("0").unwrap(),
             ..apply_data()
         };
-        assert!(AcceptanceFulfillmentAllocation::new(
-            AcceptanceFulfillmentAllocationId::new("a1"),
-            zero_quantity
-        )
-        .is_err());
+        assert!(
+            AcceptanceFulfillmentAllocation::new(AcceptanceFulfillmentAllocationId::new("a1"), zero_quantity)
+                .is_err()
+        );
 
-        let blank_line = AcceptanceFulfillmentAllocationData {
-            fulfillment_line_id: "   ".to_string(),
-            ..apply_data()
-        };
-        assert!(AcceptanceFulfillmentAllocation::new(
-            AcceptanceFulfillmentAllocationId::new("a2"),
-            blank_line
-        )
-        .is_err());
+        let blank_line =
+            AcceptanceFulfillmentAllocationData { fulfillment_line_id: "   ".to_string(), ..apply_data() };
+        assert!(
+            AcceptanceFulfillmentAllocation::new(AcceptanceFulfillmentAllocationId::new("a2"), blank_line)
+                .is_err()
+        );
 
         let reverse_without_reference = AcceptanceFulfillmentAllocationData {
             allocation_action: AllocationAction::Reverse,
             reverses_allocation_id: None,
             ..apply_data()
         };
-        assert!(AcceptanceFulfillmentAllocation::new(
-            AcceptanceFulfillmentAllocationId::new("a3"),
-            reverse_without_reference
-        )
-        .is_err());
+        assert!(
+            AcceptanceFulfillmentAllocation::new(
+                AcceptanceFulfillmentAllocationId::new("a3"),
+                reverse_without_reference
+            )
+            .is_err()
+        );
 
         let apply_with_reference = AcceptanceFulfillmentAllocationData {
             reverses_allocation_id: Some(AcceptanceFulfillmentAllocationId::new("allocation-9")),
             ..apply_data()
         };
-        assert!(AcceptanceFulfillmentAllocation::new(
-            AcceptanceFulfillmentAllocationId::new("a4"),
-            apply_with_reference
-        )
-        .is_err());
+        assert!(
+            AcceptanceFulfillmentAllocation::new(
+                AcceptanceFulfillmentAllocationId::new("a4"),
+                apply_with_reference
+            )
+            .is_err()
+        );
     }
 
     /// 净分配与剩余可验收数量按 APPLY - REVERSE 计算。
@@ -451,17 +450,21 @@ pub(crate) mod tests {
             )
             .is_err()
         );
-        assert!(AcceptanceFulfillmentAllocation::eligible_quantity_for_fact(
-            Quantity::from_str("2").unwrap(),
-            &allocations,
-            "dl-1",
-        )
-        .is_err());
-        assert!(AcceptanceFulfillmentAllocation::net_quantity_for_fact(
-            std::slice::from_ref(&allocations[1]),
-            "dl-1",
-        )
-        .is_err());
+        assert!(
+            AcceptanceFulfillmentAllocation::eligible_quantity_for_fact(
+                Quantity::from_str("2").unwrap(),
+                &allocations,
+                "dl-1",
+            )
+            .is_err()
+        );
+        assert!(
+            AcceptanceFulfillmentAllocation::net_quantity_for_fact(
+                std::slice::from_ref(&allocations[1]),
+                "dl-1",
+            )
+            .is_err()
+        );
     }
 
     /// 验收分配无审批约束：不得出现绑定字段、实例或任务归属。

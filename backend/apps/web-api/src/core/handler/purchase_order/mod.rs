@@ -4,10 +4,8 @@
 //! DTO 使用采购领域与读模型的唯一定义，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    Extension, Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
 use erp_processes::adapters::MongoPurchaseDataScope;
 use erp_processes::procure_to_pay::PurchaseOrderProcess;
 use erp_procurement::dto::purchase_order::{
@@ -25,10 +23,9 @@ use erp_read_models::purchase_center::dto::{
 };
 use erp_read_models::purchase_center::{PurchaseChangeListView, PurchaseListView, PurchaseOrderReadService};
 
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 /// 构造已注入采购范围 Port 的只读服务。
 ///
@@ -44,10 +41,7 @@ use crate::{
 /// # 关键业务约束
 /// HTTP 列表、详情、候选、导出和变更单必须经此入口，不得回退失败关闭 Port。
 fn purchase_reads(state: &AppState) -> PurchaseOrderReadService {
-    PurchaseOrderReadService::with_scope(
-        state.db(),
-        MongoPurchaseDataScope::shared(state.db(), state.rbac()),
-    )
+    PurchaseOrderReadService::with_scope(state.db(), MongoPurchaseDataScope::shared(state.db(), state.rbac()))
 }
 
 #[permission_macros::permission(
@@ -77,9 +71,7 @@ pub async fn purchase_order_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<PurchaseOrderListParams>,
 ) -> Result<PurchaseListView> {
-    let page = purchase_reads(&state)
-        .purchase_order_list(&params, &actor)
-        .await?;
+    let page = purchase_reads(&state).purchase_order_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -111,9 +103,7 @@ pub async fn purchase_order_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<PurchaseOrderCenterView> {
-    let view = purchase_reads(&state)
-        .purchase_order_detail(&id, Some(&actor))
-        .await?;
+    let view = purchase_reads(&state).purchase_order_detail(&id, Some(&actor)).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -321,9 +311,7 @@ pub async fn purchase_creation_basis_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<CreationBasisListParams>,
 ) -> Result<Vec<CreationBasisView>> {
-    let views = purchase_reads(&state)
-        .creation_basis_list(&params, &actor)
-        .await?;
+    let views = purchase_reads(&state).creation_basis_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(views))
 }
@@ -519,14 +507,8 @@ mod tests {
     /// HTTP 构造审批命令时必须同时接入授权源和对象读取端口，禁止退回未接线默认值。
     #[test]
     fn approval_commands_wire_object_read_port() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
-        let constructors: Vec<_> = production
-            .split("PurchaseOrderProcess::with_rbac(")
-            .skip(1)
-            .collect();
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
+        let constructors: Vec<_> = production.split("PurchaseOrderProcess::with_rbac(").skip(1).collect();
         assert!(!constructors.is_empty());
         for constructor in constructors {
             let statement = constructor.split(';').next().expect("构造语句");
@@ -537,10 +519,7 @@ mod tests {
     /// 采购变更 HTTP 只走统一提交、撤回、生效与详情，客户端不得选定义。
     #[test]
     fn purchase_change_http_uses_unified_ports() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("submit_change"));
         assert!(production.contains("cancel_change_approval"));
         assert!(production.contains("reject_client_effect"));
@@ -555,7 +534,8 @@ mod tests {
 
 #[cfg(test)]
 mod scope_query_tests {
-    use axum::{extract::Query, http::Uri};
+    use axum::extract::Query;
+    use axum::http::Uri;
     use erp_procurement::dto::purchase_order::PurchaseOrderListParams;
 
     /// 跨页必须能解码范围版本，且不得把组织筛选静默当成全量。
@@ -573,9 +553,7 @@ mod scope_query_tests {
     /// 未接入的 `org_unit_ids` 必须拒绝，不得忽略后查全量。
     #[test]
     fn purchase_scope_version_is_consumed_and_org_filter_stays_unsupported() {
-        let uri: Uri = "/?page=2&page_size=25&scope_version=v1&owner_user_ids=a,b"
-            .parse()
-            .unwrap();
+        let uri: Uri = "/?page=2&page_size=25&scope_version=v1&owner_user_ids=a,b".parse().unwrap();
         let query = Query::<PurchaseOrderListParams>::try_from_uri(&uri).unwrap().0;
         assert_eq!(query.scope_version.as_deref(), Some("v1"));
         assert_eq!(query.page, Some(2));

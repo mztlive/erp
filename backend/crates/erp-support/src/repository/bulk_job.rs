@@ -8,6 +8,16 @@
 //!
 //! 筛选/行类型定义在本文件，经 `BulkJobExt` 的关联类型对外暴露。
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
+use serde::{Deserialize, Serialize};
+
+use super::extensions::BulkJobExt;
 use crate::entity::bulk_job::{
     BackgroundJob, BackgroundJobId, BackgroundJobItem, BulkSelectionItem, BulkSelectionSnapshot,
     BulkSelectionSnapshotId, ItemStatus, JobStatus, JobType, SelectionItemStatus, SelectionStatus,
@@ -17,17 +27,6 @@ use crate::repository::owned::{
     BackgroundJobItemRepository, BackgroundJobRepository, BulkSelectionItemRepository,
     BulkSelectionSnapshotRepository,
 };
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use mongodb::Database;
-use serde::{Deserialize, Serialize};
-
-use super::extensions::BulkJobExt;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// 唯一请求身份仲裁后的后台任务登记结果。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -151,10 +150,7 @@ impl<'a> BulkSelectionSnapshotRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -217,10 +213,7 @@ impl<'a> BulkSelectionItemRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.clone(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter, executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -363,10 +356,7 @@ impl<'a> BackgroundJobRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按任务编号查找后台任务。
@@ -480,10 +470,7 @@ impl<'a> BackgroundJobItemRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.clone(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter, executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -559,9 +546,7 @@ impl<'a> BulkJobRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<BulkSelectionSnapshot>(BULK_SELECTION_SNAPSHOTS),
+            &self.db.collection::<BulkSelectionSnapshot>(BULK_SELECTION_SNAPSHOTS),
             snapshot,
             executor,
         )
@@ -597,12 +582,7 @@ impl<'a> BulkJobRepository<'a> {
         items: Vec<BackgroundJobItem>,
         executor: &mut dyn Executor,
     ) -> Result<BackgroundJobRegistration> {
-        mongo_ops::insert_one(
-            &self.db.collection::<BackgroundJob>(BACKGROUND_JOBS),
-            job,
-            executor,
-        )
-        .await?;
+        mongo_ops::insert_one(&self.db.collection::<BackgroundJob>(BACKGROUND_JOBS), job, executor).await?;
         mongo_ops::insert_many(
             &self.db.collection::<BackgroundJobItem>(BACKGROUND_JOB_ITEMS),
             items,
@@ -722,10 +702,11 @@ fn job_item_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, BackgroundJobFilter, BulkSelectionSnapshotFilter};
-    use crate::entity::bulk_job::{JobStatus, JobType, SelectionStatus, SelectionType};
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
+
+    use super::{BackgroundJobFilter, BulkSelectionSnapshotFilter, sort_doc};
+    use crate::entity::bulk_job::{JobStatus, JobType, SelectionStatus, SelectionType};
 
     #[test]
     fn snapshot_filter_applies_type_status_and_creator() {
@@ -770,10 +751,7 @@ mod tests {
     #[test]
     fn sort_doc_defaults_to_created_at_and_whitelists_fields() {
         assert_eq!(sort_doc(None, false), doc! { "created_at": -1, "id": -1 });
-        assert_eq!(
-            sort_doc(Some("updated_at"), true),
-            doc! { "updated_at": 1, "id": 1 }
-        );
+        assert_eq!(sort_doc(Some("updated_at"), true), doc! { "updated_at": 1, "id": 1 });
         assert_eq!(
             sort_doc(Some("job_no"), false),
             doc! { "created_at": -1, "id": -1 },

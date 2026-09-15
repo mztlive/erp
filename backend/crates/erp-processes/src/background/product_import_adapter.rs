@@ -1,8 +1,8 @@
 //! 商品导入任务适配器：把商品导入流程接入统一后台执行器。
 
 use super::adapter::BackgroundTaskAdapter;
-use crate::product_import::ProductImportProcess;
 use crate::Result;
+use crate::product_import::ProductImportProcess;
 
 /// 商品导入任务适配器。
 pub struct ProductImportTaskAdapter {

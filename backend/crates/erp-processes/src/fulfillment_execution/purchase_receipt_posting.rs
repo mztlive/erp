@@ -2,9 +2,6 @@ use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
-use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate, load_po_current_revision};
-use super::FulfillmentProcess;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
@@ -22,6 +19,10 @@ use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
+
+use super::FulfillmentProcess;
+use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate, load_po_current_revision};
+use crate::{Error, Result};
 impl FulfillmentProcess {
     /// 过账采购入库（草稿 → 已过账；§8.2 第 1 条跨集合事务）。
     ///
@@ -47,11 +48,7 @@ impl FulfillmentProcess {
     #[tracing::instrument(
         name = "fulfillment.purchase_receipt_post",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "purchase_receipt_post"
-        )
+        fields(layer = "service", domain = "fulfillment", operation = "purchase_receipt_post")
     )]
     pub async fn post_purchase_receipt(
         &self,
@@ -205,17 +202,17 @@ impl ReceiptPostingSteps for MongoReceiptPosting<'_> {
                             .checked_add(line.qualified_quantity.to_decimal())
                             .ok_or_else(|| Error::BusinessLogicError("累计数量超出精度上限".to_string()))?;
                         *occupied.get_mut() = Quantity::try_from(next).map_err(Error::Logic)?;
-                    }
+                    },
                     Entry::Vacant(vacant) => {
                         vacant.insert(line.qualified_quantity);
-                    }
+                    },
                 }
-            }
+            },
             ReceiptPostingStep::Receipt => {
                 erp_fulfillment::service::FulfillmentService::new(db.clone())
                     .mark_purchase_receipt_posted(receipt, occurred_at, actor.id(), session)
                     .await?;
-            }
+            },
             ReceiptPostingStep::Task => {
                 super::task::complete_fulfillment_task(
                     db,
@@ -224,7 +221,7 @@ impl ReceiptPostingSteps for MongoReceiptPosting<'_> {
                     session,
                 )
                 .await?;
-            }
+            },
             ReceiptPostingStep::PurchaseProgress => {
                 let revision_facts = revision_lines
                     .iter()
@@ -233,19 +230,19 @@ impl ReceiptPostingSteps for MongoReceiptPosting<'_> {
                 let progress = match PurchaseReceipt::fulfillment_progress(&revision_facts, received) {
                     erp_fulfillment::entity::facts::ReceiptFulfillmentProgress::Partial => {
                         erp_procurement::entity::purchase_order::ProgressStatus::Partial
-                    }
+                    },
                     erp_fulfillment::entity::facts::ReceiptFulfillmentProgress::Completed => {
                         erp_procurement::entity::purchase_order::ProgressStatus::Completed
-                    }
+                    },
                 };
                 po.set_fulfillment_progress(progress, actor.id().to_string());
                 db.purchase_orders().update(po, session).await?;
-            }
+            },
             ReceiptPostingStep::WarehouseDrafts => {
                 // 入库过账后自动生成仓发草稿与 W01 指定到人的仓发任务，
                 // 行引用本次入库建立的销售预占。
                 create_warehouse_ship_drafts(db, session, lines).await?;
-            }
+            },
             ReceiptPostingStep::Audit => {
                 let audit = actor.clone().resource_log(
                     "purchase_receipt.post",
@@ -253,7 +250,7 @@ impl ReceiptPostingSteps for MongoReceiptPosting<'_> {
                     receipt_id.to_string(),
                 )?;
                 db.audit_logs().create(&audit, session).await?;
-            }
+            },
         }
         Ok(())
     }
@@ -354,27 +351,19 @@ async fn establish_reservations(
     if allocations.is_empty() {
         return Ok(());
     }
-    let total = revision_line
-        .quantity
-        .ok_or_else(|| Error::BusinessLogicError("采购明细缺少数量".to_string()))?;
-    let allocation_quantities: Vec<Quantity> = allocations
-        .iter()
-        .map(|allocation| allocation.allocated_quantity)
-        .collect();
+    let total =
+        revision_line.quantity.ok_or_else(|| Error::BusinessLogicError("采购明细缺少数量".to_string()))?;
+    let allocation_quantities: Vec<Quantity> =
+        allocations.iter().map(|allocation| allocation.allocated_quantity).collect();
     let shares = line
         .reservation_shares(&allocation_quantities, total)
         .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-    let sales_revision_line_ids: Vec<SalesOrderRevisionLineId> = allocations
-        .iter()
-        .map(|allocation| allocation.sales_order_revision_line_id.clone())
-        .collect();
+    let sales_revision_line_ids: Vec<SalesOrderRevisionLineId> =
+        allocations.iter().map(|allocation| allocation.sales_order_revision_line_id.clone()).collect();
     let sales_revision_lines = db
         .sales_order_revision_lines()
         .list_active_by_ids(
-            &sales_revision_line_ids
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>(),
+            &sales_revision_line_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
             session,
         )
         .await?;
@@ -425,14 +414,10 @@ async fn create_warehouse_ship_drafts(
     if receipt_lines.is_empty() {
         return Ok(());
     }
-    let receipt_line_ids: Vec<PurchaseReceiptLineId> = receipt_lines
-        .iter()
-        .map(|line| line.base.id.clone().into())
-        .collect();
-    let reservations = db
-        .stock_reservations()
-        .list_stock_reservations_for_receipt_lines(&receipt_line_ids, session)
-        .await?;
+    let receipt_line_ids: Vec<PurchaseReceiptLineId> =
+        receipt_lines.iter().map(|line| line.base.id.clone().into()).collect();
+    let reservations =
+        db.stock_reservations().list_stock_reservations_for_receipt_lines(&receipt_line_ids, session).await?;
     if reservations.is_empty() {
         return Ok(());
     }
@@ -444,10 +429,7 @@ async fn create_warehouse_ship_drafts(
         .collect::<Vec<_>>();
     let sales_lines = db
         .sales_order_lines()
-        .list_active_by_ids(
-            &line_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
-            session,
-        )
+        .list_active_by_ids(&line_ids.iter().map(ToString::to_string).collect::<Vec<_>>(), session)
         .await?;
     let sales_order_by_line = sales_lines
         .into_iter()
@@ -485,9 +467,7 @@ async fn ensure_receipt_stock_delivery(
     session: &mut dyn Executor,
 ) -> Result<()> {
     let domain = erp_fulfillment::service::FulfillmentService::new(db.clone());
-    let existing = domain
-        .draft_warehouse_delivery(sales_order_id, warehouse_id, session)
-        .await?;
+    let existing = domain.draft_warehouse_delivery(sales_order_id, warehouse_id, session).await?;
     if let Some(delivery) = existing {
         domain
             .append_receipt_stock_delivery_lines(&delivery, &reservation_line_facts(reservations), session)
@@ -523,13 +503,11 @@ fn reservation_line_facts(
 ) -> Vec<erp_fulfillment::entity::facts::ReceiptReservationLineFact> {
     reservations
         .iter()
-        .map(
-            |reservation| erp_fulfillment::entity::facts::ReceiptReservationLineFact {
-                reservation_id: reservation.base.id.clone().into(),
-                sales_order_line_id: reservation.sales_order_line_id.clone(),
-                reserved_quantity: reservation.reserved_quantity,
-            },
-        )
+        .map(|reservation| erp_fulfillment::entity::facts::ReceiptReservationLineFact {
+            reservation_id: reservation.base.id.clone().into(),
+            sales_order_line_id: reservation.sales_order_line_id.clone(),
+            reserved_quantity: reservation.reserved_quantity,
+        })
         .collect()
 }
 
@@ -540,10 +518,8 @@ mod tests {
     /// 过账路径不得启动审批、不得创建任务、不得选择定义。
     #[test]
     fn post_does_not_start_approval_or_create_tasks() {
-        let production = include_str!("purchase_receipt_posting.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production =
+            include_str!("purchase_receipt_posting.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("pub async fn post_purchase_receipt"));
         assert!(!production.contains("start_approval"));
         assert!(!production.contains("prepare_start"));
@@ -569,14 +545,9 @@ mod tests {
     /// 路径改调仓储聚合并继续在 Service 完成超收校验与进度更新。
     #[test]
     fn received_totals_are_aggregated_in_repository() {
-        let production = include_str!("purchase_receipt_posting.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
-        assert!(
-            !production.contains("cumulative_received_quantities"),
-            "旧 Service 聚合 helper 必须删除"
-        );
+        let production =
+            include_str!("purchase_receipt_posting.rs").split("#[cfg(test)]").next().expect("生产代码");
+        assert!(!production.contains("cumulative_received_quantities"), "旧 Service 聚合 helper 必须删除");
         assert!(!production.contains("list_posted_receipts_for_purchase_order"));
         assert!(
             production.contains("qualified_received_totals_by_purchase_revision_line"),
@@ -594,14 +565,10 @@ mod tests {
     /// 入库预占必须按销售单与仓库复用草稿，并把新预占补成发货行。
     #[test]
     fn receipt_reservations_merge_into_exact_warehouse_draft() {
-        let production = include_str!("purchase_receipt_posting.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
-        let draft_flow = production
-            .split("async fn create_warehouse_ship_drafts")
-            .nth(1)
-            .expect("仓发草稿流程");
+        let production =
+            include_str!("purchase_receipt_posting.rs").split("#[cfg(test)]").next().expect("生产代码");
+        let draft_flow =
+            production.split("async fn create_warehouse_ship_drafts").nth(1).expect("仓发草稿流程");
         assert!(draft_flow.contains("by_order_warehouse"));
         assert!(draft_flow.contains("draft_warehouse_delivery"));
         assert!(draft_flow.contains("append_receipt_stock_delivery_lines"));
@@ -649,11 +616,8 @@ mod posting_contract_tests {
     #[tokio::test]
     async fn receipt_posting_preserves_inventory_receipt_task_purchase_drafts_audit_order() {
         let mut ex = TestExecutor { _identity: 1 };
-        let mut steps = RecordingSteps {
-            calls: vec![],
-            executor: &mut ex as *mut TestExecutor as usize,
-            fail_at: None,
-        };
+        let mut steps =
+            RecordingSteps { calls: vec![], executor: &mut ex as *mut TestExecutor as usize, fail_at: None };
         execute_posting(&mut steps, 3, &mut ex).await.unwrap();
         assert_eq!(steps.calls, ORDER);
     }

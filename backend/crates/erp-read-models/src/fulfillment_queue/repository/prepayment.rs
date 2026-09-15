@@ -2,10 +2,8 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_finance::repository::PayableExt;
 use erp_procurement::repository::PurchaseOrderExt;
-use mongodb::{
-    bson::{doc, Document},
-    Database,
-};
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
 
 pub(super) fn revision_lookup() -> Document {
     doc! { "$lookup": {

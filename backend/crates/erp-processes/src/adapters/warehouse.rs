@@ -45,9 +45,7 @@ impl WarehouseAuditPort for MongoWarehouseAudit {
         resource_type: &str,
         resource_id: String,
     ) -> erp_warehouse::Result<PreparedWarehouseAudit> {
-        let log = actor
-            .resource_log(action, resource_type, resource_id)
-            .map_err(map_audit_to_warehouse)?;
+        let log = actor.resource_log(action, resource_type, resource_id).map_err(map_audit_to_warehouse)?;
         Ok(prepared_warehouse_audit(&log))
     }
 
@@ -71,11 +69,7 @@ impl WarehouseAuditPort for MongoWarehouseAudit {
         executor: &mut dyn Executor,
     ) -> erp_warehouse::Result<()> {
         let log = audit_log_from_warehouse(audit).map_err(map_audit_to_warehouse)?;
-        self.db
-            .audit_logs()
-            .create(&log, executor)
-            .await
-            .map_err(erp_warehouse::Error::from)?;
+        self.db.audit_logs().create(&log, executor).await.map_err(erp_warehouse::Error::from)?;
         Ok(())
     }
 }
@@ -114,12 +108,10 @@ impl MongoWarehouseIdentity {
             .permissions(account.kind, account.base.id.as_str())
             .await
             .map_err(map_identity_to_warehouse)?;
-        let inbound_eligible = inbound
-            .iter()
-            .all(|required| permissions.iter().any(|granted| granted.covers(required)));
-        let outbound_eligible = outbound
-            .iter()
-            .all(|required| permissions.iter().any(|granted| granted.covers(required)));
+        let inbound_eligible =
+            inbound.iter().all(|required| permissions.iter().any(|granted| granted.covers(required)));
+        let outbound_eligible =
+            outbound.iter().all(|required| permissions.iter().any(|granted| granted.covers(required)));
         Ok(HandlerIdentityFact {
             user_id: account.base.id.clone(),
             display_name: account.name.clone(),
@@ -194,10 +186,7 @@ fn required_fulfillment_permissions(business_object_type: &str) -> &'static [&'s
 }
 
 fn handler_permissions(codes: &[&str]) -> Vec<Permission> {
-    codes
-        .iter()
-        .map(|code| Permission::parse(code).expect("固定仓储操作权限必须合法"))
-        .collect()
+    codes.iter().map(|code| Permission::parse(code).expect("固定仓储操作权限必须合法")).collect()
 }
 
 fn prepared_warehouse_audit(log: &AuditLog) -> PreparedWarehouseAudit {

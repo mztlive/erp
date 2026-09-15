@@ -1,11 +1,11 @@
-use crate::entity::account_core::AccountCore;
-use crate::entity::auth::LoginAccount;
-use crate::AccessControlExt;
 use erp_core::AccountKind as DomainAccountKind;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
+use crate::AccessControlExt;
+use crate::entity::account_core::AccountCore;
+use crate::entity::auth::LoginAccount;
 use crate::error::{Error, Result};
 
 pub(crate) mod password;
@@ -118,10 +118,7 @@ impl BackofficeAuthService {
         };
         if let Some(secret) = password_check.into_upgraded_secret() {
             stored_account.secret = secret;
-            self.db
-                .accounts()
-                .update(&mut stored_account, &mut NoTransaction)
-                .await?;
+            self.db.accounts().update(&mut stored_account, &mut NoTransaction).await?;
         }
         Ok(BackofficeAuthResult::from(&stored_account))
     }
@@ -149,11 +146,7 @@ impl BackofficeAuthService {
         account_kind: DomainAccountKind,
         account_version: u64,
     ) -> Result<BackofficeAuthResult> {
-        let stored_account = self
-            .db
-            .accounts()
-            .find_by_id(account_id, &mut NoTransaction)
-            .await?;
+        let stored_account = self.db.accounts().find_by_id(account_id, &mut NoTransaction).await?;
         let Some(stored_account) = stored_account
             .as_ref()
             .filter(|stored| stored.matches_session_identity(account, account_kind, account_version))
@@ -170,11 +163,7 @@ impl BackofficeAuthService {
             return Ok(None);
         };
 
-        Ok(self
-            .db
-            .accounts()
-            .find_by_account(account.as_str(), &mut NoTransaction)
-            .await?)
+        Ok(self.db.accounts().find_by_account(account.as_str(), &mut NoTransaction).await?)
     }
 }
 
@@ -214,10 +203,12 @@ pub use crate::dto::{AuthRequest, AuthResponse, PasswordLoginPayload};
 
 #[cfg(test)]
 mod tests {
-    use super::{password::verify_password, password::PasswordCheck, BackofficeAuthResult};
+    use erp_core::AccountKind;
+
+    use super::BackofficeAuthResult;
+    use super::password::{PasswordCheck, verify_password};
     use crate::entity::account_core::{AccountCore, AccountCoreData, AccountStatus};
     use crate::entity::auth::{LoginAccount, Secret};
-    use erp_core::AccountKind;
 
     fn account(kind: AccountKind, status: AccountStatus) -> AccountCore {
         AccountCore::new(

@@ -1,20 +1,19 @@
+use std::collections::HashMap;
+
+use erp_core::ids::PartyId;
+use mongodb::Database;
+use mongodb::bson::doc;
+use persistence_core::{Executor, Result, mongo_ops};
+
+use super::super::extensions::PartyExt;
+use super::{PARTIES, PARTY_REVISIONS, PartyDomainRepository};
+use crate::entity::party::{
+    Party, PartyAddress, PartyBankAccount, PartyContact, PartyRevision, PartyTaxProfile,
+};
 use crate::repository::owned::{
     PartyAddressRepository, PartyBankAccountRepository, PartyContactRepository, PartyRepository,
     PartyRevisionRepository,
 };
-use std::collections::HashMap;
-
-use crate::entity::party::{
-    Party, PartyAddress, PartyBankAccount, PartyContact, PartyRevision, PartyTaxProfile,
-};
-use erp_core::ids::PartyId;
-use mongodb::bson::doc;
-use mongodb::Database;
-
-use super::super::extensions::PartyExt;
-use super::{PartyDomainRepository, PARTIES, PARTY_REVISIONS};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
 
 impl<'a> PartyDomainRepository<'a> {
     /// 按稳定 ID 读取未删除主体。
@@ -29,9 +28,7 @@ impl<'a> PartyDomainRepository<'a> {
     /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn party(&self, party_id: &PartyId, executor: &mut dyn Executor) -> Result<Option<Party>> {
-        PartyRepository::new(self.db, PARTIES)
-            .find_party(party_id, executor)
-            .await
+        PartyRepository::new(self.db, PARTIES).find_party(party_id, executor).await
     }
 
     /// 按稳定 ID 读取联系人。
@@ -116,13 +113,9 @@ impl<'a> PartyDomainRepository<'a> {
         party_ids: &[PartyId],
         executor: &mut dyn Executor,
     ) -> Result<(Vec<Party>, Vec<PartyRevision>)> {
-        let parties = PartyRepository::new(self.db, PARTIES)
-            .list_by_ids(party_ids, executor)
-            .await?;
-        let revision_ids: Vec<String> = parties
-            .iter()
-            .filter_map(|party| party.stable.current_revision_id.clone())
-            .collect();
+        let parties = PartyRepository::new(self.db, PARTIES).list_by_ids(party_ids, executor).await?;
+        let revision_ids: Vec<String> =
+            parties.iter().filter_map(|party| party.stable.current_revision_id.clone()).collect();
         let revisions = PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
             .list_by_ids(&revision_ids, executor)
             .await?;
@@ -146,10 +139,7 @@ impl<'a> PartyDomainRepository<'a> {
         party_id: &PartyId,
         executor: &mut dyn Executor,
     ) -> Result<Option<(Party, Option<PartyRevision>)>> {
-        let Some(party) = PartyRepository::new(self.db, PARTIES)
-            .find_party(party_id, executor)
-            .await?
-        else {
+        let Some(party) = PartyRepository::new(self.db, PARTIES).find_party(party_id, executor).await? else {
             return Ok(None);
         };
         let revision = match party.stable.current_revision_id.as_deref() {
@@ -157,7 +147,7 @@ impl<'a> PartyDomainRepository<'a> {
                 PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
                     .find_revision(revision_id, executor)
                     .await?
-            }
+            },
             None => None,
         };
         Ok(Some((party, revision)))
@@ -183,32 +173,11 @@ impl<'a> PartyDomainRepository<'a> {
         party_id: &PartyId,
         as_of: erp_core::common::time::BusinessDate,
         executor: &mut dyn Executor,
-    ) -> Result<(
-        Vec<PartyContact>,
-        Vec<PartyAddress>,
-        Vec<PartyTaxProfile>,
-        Vec<PartyBankAccount>,
-    )> {
-        let contacts = self
-            .db
-            .party_contacts()
-            .list_current_on(party_id, as_of, executor)
-            .await?;
-        let addresses = self
-            .db
-            .party_addresses()
-            .list_current_on(party_id, as_of, executor)
-            .await?;
-        let tax_profiles = self
-            .db
-            .party_tax_profiles()
-            .list_current_on(party_id, as_of, executor)
-            .await?;
-        let bank_accounts = self
-            .db
-            .party_bank_accounts()
-            .list_current_on(party_id, as_of, executor)
-            .await?;
+    ) -> Result<(Vec<PartyContact>, Vec<PartyAddress>, Vec<PartyTaxProfile>, Vec<PartyBankAccount>)> {
+        let contacts = self.db.party_contacts().list_current_on(party_id, as_of, executor).await?;
+        let addresses = self.db.party_addresses().list_current_on(party_id, as_of, executor).await?;
+        let tax_profiles = self.db.party_tax_profiles().list_current_on(party_id, as_of, executor).await?;
+        let bank_accounts = self.db.party_bank_accounts().list_current_on(party_id, as_of, executor).await?;
         Ok((contacts, addresses, tax_profiles, bank_accounts))
     }
 
@@ -250,10 +219,8 @@ impl<'a> PartyDomainRepository<'a> {
         let parties = PartyRepository::new(self.db, PARTIES)
             .find_many(doc! { "current_revision_id": { "$in": revision_ids } }, executor)
             .await?;
-        let mut party_ids: Vec<PartyId> = parties
-            .into_iter()
-            .map(|party| PartyId::new(party.base.id))
-            .collect();
+        let mut party_ids: Vec<PartyId> =
+            parties.into_iter().map(|party| PartyId::new(party.base.id)).collect();
         party_ids.sort_by_key(ToString::to_string);
         party_ids.dedup();
         Ok(party_ids)
@@ -282,10 +249,7 @@ impl<'a> PartyDomainRepository<'a> {
         }
         let pattern = format!(r"^\s*{}\s*$", parts.join(r"\s*"));
         let revisions = PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
-            .find_many(
-                doc! { "legal_name": { "$regex": pattern, "$options": "i" } },
-                executor,
-            )
+            .find_many(doc! { "legal_name": { "$regex": pattern, "$options": "i" } }, executor)
             .await?;
         let ids = revisions.into_iter().map(|r| r.base.id).collect::<Vec<_>>();
         if ids.is_empty() {
@@ -327,13 +291,9 @@ impl<'a> PartyDomainRepository<'a> {
         if party_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let parties = PartyRepository::new(self.db, PARTIES)
-            .list_by_ids(party_ids, executor)
-            .await?;
-        let revision_ids: Vec<String> = parties
-            .iter()
-            .filter_map(|party| party.stable.current_revision_id.clone())
-            .collect();
+        let parties = PartyRepository::new(self.db, PARTIES).list_by_ids(party_ids, executor).await?;
+        let revision_ids: Vec<String> =
+            parties.iter().filter_map(|party| party.stable.current_revision_id.clone()).collect();
         if revision_ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -343,10 +303,7 @@ impl<'a> PartyDomainRepository<'a> {
         let revision_names: HashMap<(String, String), &str> = revisions
             .iter()
             .map(|revision| {
-                (
-                    (revision.party_id.to_string(), revision.base.id.clone()),
-                    revision.legal_name.as_str(),
-                )
+                ((revision.party_id.to_string(), revision.base.id.clone()), revision.legal_name.as_str())
             })
             .collect();
         Ok(parties
@@ -386,17 +343,11 @@ impl<'a> PartyDomainRepository<'a> {
         updated_by: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        mongo_ops::insert_one(
-            &self.db.collection::<PartyRevision>(PARTY_REVISIONS),
-            revision,
-            executor,
-        )
-        .await?;
+        mongo_ops::insert_one(&self.db.collection::<PartyRevision>(PARTY_REVISIONS), revision, executor)
+            .await?;
         party.stable.current_revision_id = Some(revision.base.id.clone());
         party.stable.touch(updated_by);
-        PartyRepository::new(self.db, PARTIES)
-            .update(party, executor)
-            .await
+        PartyRepository::new(self.db, PARTIES).update(party, executor).await
     }
 }
 
@@ -417,12 +368,7 @@ impl PartyDomainRepository<'_> {
         if let Some(session) = executor.session() {
             query = query.session(session);
         }
-        ids.extend(
-            query
-                .await?
-                .into_iter()
-                .filter_map(|id| id.as_str().map(|s| PartyId::new(s.to_owned()))),
-        );
+        ids.extend(query.await?.into_iter().filter_map(|id| id.as_str().map(|s| PartyId::new(s.to_owned()))));
         ids.sort_by_key(ToString::to_string);
         ids.dedup();
         Ok(ids)

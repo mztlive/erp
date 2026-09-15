@@ -1,20 +1,22 @@
 //! 通过拥有领域仓储装载一致快照，任一来源失败时整体失败。
-use super::{dto::ProfitLossQuery, query::PeriodBounds};
-use crate::{Error, Result};
-use erp_finance::{
-    entity::cost::{CostAllocation, CostEntry},
-    repository::{cost::profit_loss::PROFIT_LOSS_ALLOCATION_LIMIT, CostExt},
+use std::collections::BTreeSet;
+
+use erp_finance::entity::cost::{CostAllocation, CostEntry};
+use erp_finance::repository::CostExt;
+use erp_finance::repository::cost::profit_loss::PROFIT_LOSS_ALLOCATION_LIMIT;
+use erp_sales::entity::sales_order::{
+    SalesOrderGoodsServiceLineRevision, SalesOrderRevision, SalesOrderRevisionLine,
 };
-use erp_sales::{
-    entity::sales_order::{SalesOrderGoodsServiceLineRevision, SalesOrderRevision, SalesOrderRevisionLine},
-    repository::{
-        sales_order::profit_loss::{ProfitLossOrder, ProfitLossOrderFilter, PROFIT_LOSS_ORDER_LIMIT},
-        SalesOrderExt,
-    },
+use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::sales_order::profit_loss::{
+    PROFIT_LOSS_ORDER_LIMIT, ProfitLossOrder, ProfitLossOrderFilter,
 };
 use mongodb::Database;
 use persistence_core::Executor;
-use std::collections::BTreeSet;
+
+use super::dto::ProfitLossQuery;
+use super::query::PeriodBounds;
+use crate::{Error, Result};
 
 /// 单次分析装载的正式事实，均属于同一事务快照。
 pub(super) struct Sources {
@@ -49,23 +51,12 @@ impl Sources {
     }
     /// 以批次读取当前正式销售版本；不回退到草稿或过期版本。
     async fn load_sales(&mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
-        let ids: Vec<_> = self
-            .orders
-            .iter()
-            .filter_map(|o| o.current_revision_id.clone())
-            .collect();
+        let ids: Vec<_> = self.orders.iter().filter_map(|o| o.current_revision_id.clone()).collect();
         for chunk in ids.chunks(500) {
-            self.revisions.extend(
-                db.sales_order_revisions()
-                    .find_revisions_by_ids(chunk, executor)
-                    .await?,
-            );
+            self.revisions.extend(db.sales_order_revisions().find_revisions_by_ids(chunk, executor).await?);
             let revisions = chunk.iter().cloned().map(Into::into).collect::<Vec<_>>();
-            self.lines.extend(
-                db.sales_order_revision_lines()
-                    .list_lines_by_revisions(&revisions, executor)
-                    .await?,
-            );
+            self.lines
+                .extend(db.sales_order_revision_lines().list_lines_by_revisions(&revisions, executor).await?);
         }
         let ids: Vec<_> = self.lines.iter().map(|l| l.base.id.clone().into()).collect();
         for chunk in ids.chunks(500) {
@@ -81,15 +72,9 @@ impl Sources {
     async fn load_costs(&mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         let ids: Vec<_> = self.orders.iter().map(|o| o.id.clone()).collect();
         for chunk in ids.chunks(500) {
-            self.allocations.extend(
-                db.cost_allocations()
-                    .profit_loss_allocations(chunk, executor)
-                    .await?,
-            );
+            self.allocations.extend(db.cost_allocations().profit_loss_allocations(chunk, executor).await?);
             if self.allocations.len() > PROFIT_LOSS_ALLOCATION_LIMIT {
-                return Err(Error::ValidationError(
-                    "成本分配超过 100000 条，请缩小范围".into(),
-                ));
+                return Err(Error::ValidationError("成本分配超过 100000 条，请缩小范围".into()));
             }
         }
         let ids: Vec<_> = self
@@ -100,8 +85,7 @@ impl Sources {
             .into_iter()
             .collect();
         for chunk in ids.chunks(500) {
-            self.entries
-                .extend(db.cost_entries().profit_loss_entries(chunk, executor).await?);
+            self.entries.extend(db.cost_entries().profit_loss_entries(chunk, executor).await?);
         }
         Ok(())
     }
@@ -124,9 +108,7 @@ pub(super) async fn authorized_orders(
     };
     let orders = db.sales_orders().profit_loss_orders(&filter, executor).await?;
     if orders.len() > PROFIT_LOSS_ORDER_LIMIT {
-        return Err(Error::ValidationError(
-            "匹配销售单超过 10000 单，请缩小期间或指定客户".into(),
-        ));
+        return Err(Error::ValidationError("匹配销售单超过 10000 单，请缩小期间或指定客户".into()));
     }
     Ok(orders)
 }
@@ -135,10 +117,7 @@ pub(super) async fn authorized_orders(
 pub(super) fn version(scope_version: &str, orders: &[ProfitLossOrder]) -> String {
     use std::hash::{Hash, Hasher};
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-    let versions = orders
-        .iter()
-        .map(|o| (&o.id, o.version))
-        .collect::<std::collections::BTreeMap<_, _>>();
+    let versions = orders.iter().map(|o| (&o.id, o.version)).collect::<std::collections::BTreeMap<_, _>>();
     versions.hash(&mut fingerprint);
     format!("{scope_version}:{:x}", fingerprint.finish())
 }

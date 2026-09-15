@@ -6,8 +6,10 @@ use persistence_core::Executor;
 
 use super::super::brief::{format_instant_date, join_list_summary, non_empty};
 use super::super::presentation::format_yuan;
-use super::super::WorkbenchReadService;
-use super::super::{object_ids, ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap as ObjectFactMap};
+use super::super::{
+    ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap as ObjectFactMap, WorkbenchReadService,
+    object_ids,
+};
 use super::mapping::{
     amount_reason_brief, append_funds_origin, funds_fact_display, receipt_brief_source, select_funds_origin,
 };
@@ -52,20 +54,13 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 executor,
             )
             .await?;
-        let party_ids = receipts
-            .iter()
-            .map(|item| item.counterparty_party_id.to_string())
-            .collect::<Vec<_>>();
+        let party_ids =
+            receipts.iter().map(|item| item.counterparty_party_id.to_string()).collect::<Vec<_>>();
         let party_names = self.party_legal_names(&party_ids, executor).await?;
         let allocation_lines = self.receipt_allocation_lines(&receipts, executor).await?;
         for receipt in receipts {
-            let counterparty = party_names
-                .get(&receipt.counterparty_party_id.to_string())
-                .cloned();
-            let lines = allocation_lines
-                .get(&receipt.base.id)
-                .cloned()
-                .unwrap_or_default();
+            let counterparty = party_names.get(&receipt.counterparty_party_id.to_string()).cloned();
+            let lines = allocation_lines.get(&receipt.base.id).cloned().unwrap_or_default();
             let mut fact = WorkbenchObjectFact::from_authority(authority_mapping::customer_receipt_fact(
                 &receipt,
                 created_by.get(&receipt.base.id),
@@ -110,10 +105,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 executor,
             )
             .await?;
-        let customer_ids = refunds
-            .iter()
-            .map(|refund| refund.customer_id.to_string())
-            .collect::<Vec<_>>();
+        let customer_ids = refunds.iter().map(|refund| refund.customer_id.to_string()).collect::<Vec<_>>();
         let customer_names = self.customer_display_names(&customer_ids, executor).await?;
         let receipt_ids = refunds
             .iter()
@@ -122,12 +114,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         let receipt_origins = self.customer_receipt_origins(&receipt_ids, executor).await?;
         let entry_ids = refunds
             .iter()
-            .filter_map(|refund| {
-                refund
-                    .original_receivable_entry_id
-                    .as_ref()
-                    .map(ToString::to_string)
-            })
+            .filter_map(|refund| refund.original_receivable_entry_id.as_ref().map(ToString::to_string))
             .collect::<Vec<_>>();
         let entry_origins = self.receivable_entry_origins(&entry_ids, executor).await?;
         for refund in refunds {
@@ -146,9 +133,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                     &receipt_origins.counterparties,
                     &entry_origins.counterparties,
                 ),
-                customer
-                    .clone()
-                    .or_else(|| origin.and_then(|item| item.counterparty.clone())),
+                customer.clone().or_else(|| origin.and_then(|item| item.counterparty.clone())),
             );
             let mut brief = amount_reason_brief(
                 "退款金额",
@@ -214,9 +199,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .collect::<Vec<_>>();
         let origins = self.customer_receipt_origins(&receipt_ids, executor).await?;
         for reversal in reversals {
-            let origin = origins
-                .briefs
-                .get(&reversal.original_customer_receipt_id.to_string());
+            let origin = origins.briefs.get(&reversal.original_customer_receipt_id.to_string());
             let mut fact = funds_fact_display(
                 authority_mapping::receipt_reversal_fact(
                     &reversal,
@@ -270,12 +253,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        for request in self
-            .db
-            .sales_invoice_requests()
-            .list_active_by_ids(&ids, executor)
-            .await?
-        {
+        for request in self.db.sales_invoice_requests().list_active_by_ids(&ids, executor).await? {
             let mut fact =
                 WorkbenchObjectFact::from_authority(authority_mapping::invoice_request_fact(&request));
             fact.display.approval_subject_version = Some(request.approval_subject_version);

@@ -11,9 +11,10 @@ mod receipt_reversal;
 mod repository;
 mod sales_return;
 mod supplier_refund;
+use std::sync::Arc;
+
 use erp_procurement::{FailClosedPurchaseDataScopePort, PurchaseDataScopePort};
 use mongodb::Database;
-use std::sync::Arc;
 
 /// 组合逆向本域事实与只读审批摘要的查询入口。
 pub struct ReturnsReadService {
@@ -35,10 +36,7 @@ impl ReturnsReadService {
     /// # 关键业务约束
     /// 采购退货列表、详情必须改用 `with_purchase_scope`，未注入时失败关闭。
     pub fn new(db: Database) -> Self {
-        Self {
-            db,
-            purchase_scope: FailClosedPurchaseDataScopePort::shared(),
-        }
+        Self { db, purchase_scope: FailClosedPurchaseDataScopePort::shared() }
     }
 
     /// 注入采购范围 Port，供采购退货沿来源采购单授权。

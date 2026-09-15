@@ -24,12 +24,6 @@ async fn keyword_supplier_ids(
     let Some(q) = application_core::normalized_text(q) else {
         return Ok(Vec::new());
     };
-    let parties = db
-        .party()
-        .matching_current_party_ids_by_name(&q, &mut NoTransaction)
-        .await?;
-    Ok(db
-        .supplier_accounts()
-        .matching_ids_by_parties(&parties, &mut NoTransaction)
-        .await?)
+    let parties = db.party().matching_current_party_ids_by_name(&q, &mut NoTransaction).await?;
+    Ok(db.supplier_accounts().matching_ids_by_parties(&parties, &mut NoTransaction).await?)
 }

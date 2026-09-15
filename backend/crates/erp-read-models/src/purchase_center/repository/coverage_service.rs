@@ -1,5 +1,4 @@
 //! 装配采购覆盖 Port；领域保持指针缺失、覆盖累计和超量规则的唯一实现。
-use crate::Result;
 use async_trait::async_trait;
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId};
 use erp_procurement::entity::purchase_order::{ProcurementCoverageFacts, SalesProcurementCoverage};
@@ -7,6 +6,8 @@ use erp_procurement::ports::coverage::ProcurementCoveragePort;
 use erp_sales::entity::sales_order::SalesOrder;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::Result;
 struct DatabaseCoverageSource<'a> {
     db: &'a Database,
 }

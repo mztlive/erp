@@ -1,13 +1,12 @@
-use crate::repository::owned::SupplierQualificationCapabilityRepository;
 use std::collections::HashSet;
 
-use crate::entity::supplier::SupplierCommercialProfileRevision;
 use erp_core::ids::{PartyId, SupplierAccountId};
+use persistence_core::{Executor, Result};
 
-use super::super::{SupplierRepository, SUPPLIER_QUALIFICATION_CAPABILITIES};
+use super::super::{SUPPLIER_QUALIFICATION_CAPABILITIES, SupplierRepository};
 use super::SupplierDetailBundle;
-use persistence_core::Executor;
-use persistence_core::Result;
+use crate::entity::supplier::SupplierCommercialProfileRevision;
+use crate::repository::owned::SupplierQualificationCapabilityRepository;
 
 impl<'a> SupplierRepository<'a> {
     /// 批量加载供应商详情所需的全部事实（`PROC-R04`）。
@@ -49,9 +48,7 @@ impl<'a> SupplierRepository<'a> {
                 .list_by_qualification_ids(&qualification_ids, executor)
                 .await?;
         let ratings = self.list_ratings_latest_first(supplier_id, executor).await?;
-        let commercial_profiles = self
-            .list_commercial_profiles_latest_first(supplier_id, executor)
-            .await?;
+        let commercial_profiles = self.list_commercial_profiles_latest_first(supplier_id, executor).await?;
         let commercial_party_ids = commercial_party_ids(&commercial_profiles);
         Ok(Some(SupplierDetailBundle {
             supplier,
@@ -71,10 +68,7 @@ fn commercial_party_ids(profiles: &[SupplierCommercialProfileRevision]) -> Vec<P
     profiles
         .iter()
         .flat_map(|profile| {
-            [
-                profile.signing_entity_party_id.to_string(),
-                profile.payment_entity_party_id.to_string(),
-            ]
+            [profile.signing_entity_party_id.to_string(), profile.payment_entity_party_id.to_string()]
         })
         .collect::<HashSet<_>>()
         .into_iter()

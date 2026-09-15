@@ -3,14 +3,14 @@
 use erp_catalog::entity::catalog::product_import::dispimg_id;
 use erp_core::ids::FileAssetId;
 use erp_support::{
-    content_fingerprint, PendingFileAssetRequest, RegisterFileAssetRequest, RetentionClass, SensitivityClass,
-    PENDING_FILE_REFERENCE_PREFIX,
+    PENDING_FILE_REFERENCE_PREFIX, PendingFileAssetRequest, RegisterFileAssetRequest, RetentionClass,
+    SensitivityClass, content_fingerprint,
 };
 use id_generator::next_id;
 use sha2::{Digest, Sha256};
 use storage::S3Storage;
 
-use super::parse::{read_xlsx_media, ParsedProductSheet};
+use super::parse::{ParsedProductSheet, read_xlsx_media};
 use crate::{Error, Result};
 
 /// 一行已上传的媒体引用。
@@ -61,7 +61,7 @@ pub(super) async fn resolve_row_media(
         RowMediaSource::Manifest(media) => Ok((*media).clone()),
         RowMediaSource::Workbook { xlsx, sheet } => {
             upload_row_images(storage, secret, xlsx, sheet, cells).await
-        }
+        },
     }
 }
 

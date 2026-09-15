@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
-use crate::{Error, Result};
 use erp_supply::dto::supplier_fulfillment::SupplierOrderResolution;
+
+use crate::{Error, Result};
 
 #[derive(Debug, Clone)]
 pub(super) struct InvestigationReceipt {
@@ -23,10 +24,7 @@ pub(super) fn investigation_receipt_message(fingerprint: &str, receipt: &Investi
         "fp={fingerprint};e={};o={};t={}",
         receipt.evidence_id,
         receipt.order_version,
-        receipt
-            .task_version
-            .map(|version| version.to_string())
-            .unwrap_or_else(|| "-".to_string())
+        receipt.task_version.map(|version| version.to_string()).unwrap_or_else(|| "-".to_string())
     )
 }
 
@@ -49,11 +47,7 @@ pub(super) fn parse_investigation_receipt(
         Some(value) => Some(parse_positive_version(value, "收据任务版本")?),
         None => return Err(Error::Internal("W26 调查收据缺少任务版本".to_string())),
     };
-    Ok(InvestigationReceipt {
-        evidence_id,
-        order_version,
-        task_version,
-    })
+    Ok(InvestigationReceipt { evidence_id, order_version, task_version })
 }
 
 pub(super) fn completion_receipt_message(fingerprint: &str, receipt: &CompletionReceipt) -> String {
@@ -72,9 +66,7 @@ pub(super) fn parse_completion_receipt(
 ) -> Result<CompletionReceipt> {
     let fields = receipt_fields(message)?;
     if fields.get("fp").map(String::as_str) != Some(expected_fingerprint) {
-        return Err(Error::ConflictError(
-            "请求标识已用于不同的任务完成命令".to_string(),
-        ));
+        return Err(Error::ConflictError("请求标识已用于不同的任务完成命令".to_string()));
     }
     let terminal_action_id = fields
         .get("a")
@@ -84,24 +76,16 @@ pub(super) fn parse_completion_receipt(
     let order_version = parse_receipt_version(fields.get("o"), "订单版本")?;
     let task_version = parse_receipt_version(fields.get("t"), "任务版本")?;
     let resolution = parse_resolution(
-        fields
-            .get("r")
-            .ok_or_else(|| Error::Internal("W26 完成收据缺少业务结果".to_string()))?,
+        fields.get("r").ok_or_else(|| Error::Internal("W26 完成收据缺少业务结果".to_string()))?,
     )?;
-    Ok(CompletionReceipt {
-        terminal_action_id,
-        order_version,
-        task_version,
-        resolution,
-    })
+    Ok(CompletionReceipt { terminal_action_id, order_version, task_version, resolution })
 }
 
 fn receipt_fields(message: &str) -> Result<HashMap<String, String>> {
     let mut fields = HashMap::new();
     for part in message.split(';') {
-        let (key, value) = part
-            .split_once('=')
-            .ok_or_else(|| Error::Internal("W26 幂等收据格式非法".to_string()))?;
+        let (key, value) =
+            part.split_once('=').ok_or_else(|| Error::Internal("W26 幂等收据格式非法".to_string()))?;
         if fields.insert(key.to_string(), value.to_string()).is_some() {
             return Err(Error::Internal("W26 幂等收据字段重复".to_string()));
         }
@@ -111,9 +95,7 @@ fn receipt_fields(message: &str) -> Result<HashMap<String, String>> {
 
 fn parse_receipt_version(value: Option<&String>, field: &str) -> Result<u64> {
     parse_positive_version(
-        value
-            .ok_or_else(|| Error::Internal(format!("W26 收据缺少{field}")))?
-            .as_str(),
+        value.ok_or_else(|| Error::Internal(format!("W26 收据缺少{field}")))?.as_str(),
         field,
     )
     .map_err(|_| Error::Internal(format!("W26 收据{field}非法")))
@@ -146,14 +128,8 @@ mod tests {
         assert!(
             matches!(parse_completion_receipt("fp=other;fp=other","expected"),Err(Error::Internal(message)) if message=="W26 幂等收据字段重复")
         );
-        assert!(matches!(
-            parse_investigation_receipt("fp=other", "expected"),
-            Err(Error::ConflictError(_))
-        ));
-        assert!(matches!(
-            parse_completion_receipt("fp=other", "expected"),
-            Err(Error::ConflictError(_))
-        ));
+        assert!(matches!(parse_investigation_receipt("fp=other", "expected"), Err(Error::ConflictError(_))));
+        assert!(matches!(parse_completion_receipt("fp=other", "expected"), Err(Error::ConflictError(_))));
     }
     #[test]
     fn receipt_forward_fields_and_trimmed_versions_keep_original_wire_behavior() {
@@ -161,19 +137,13 @@ mod tests {
         assert_eq!(receipt.evidence_id, "evidence");
         assert_eq!(receipt.order_version, 7);
         assert_eq!(receipt.task_version, None);
-        assert_eq!(
-            investigation_receipt_message("same", &receipt),
-            "fp=same;e=evidence;o=7;t=-"
-        );
+        assert_eq!(investigation_receipt_message("same", &receipt), "fp=same;e=evidence;o=7;t=-");
         let receipt =
             parse_completion_receipt("fp=same;a=terminal;o= 7 ;t= 3 ;r=REFUNDED;extra=x", "same").unwrap();
         assert_eq!(receipt.order_version, 7);
         assert_eq!(receipt.task_version, 3);
         assert_eq!(receipt.resolution, SupplierOrderResolution::Refunded);
-        assert_eq!(
-            completion_receipt_message("same", &receipt),
-            "fp=same;a=terminal;o=7;t=3;r=REFUNDED"
-        );
+        assert_eq!(completion_receipt_message("same", &receipt), "fp=same;a=terminal;o=7;t=3;r=REFUNDED");
     }
     #[test]
     fn receipt_version_error_class_keeps_investigation_task_exception() {

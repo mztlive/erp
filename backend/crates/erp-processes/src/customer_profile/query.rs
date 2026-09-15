@@ -2,22 +2,17 @@
 
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::PartyId;
-use erp_customer::CustomerExt;
 use erp_customer::{
-    AssignmentRole, CustomerAccount, CustomerAccountId, CustomerAccountStatus, CustomerAssignment,
+    AssignmentRole, CustomerAccount, CustomerAccountId, CustomerAccountStatus, CustomerActionBlockerView,
+    CustomerAssignment, CustomerAssignmentView, CustomerExt, CustomerProfileDetailView,
+    CustomerSensitiveFieldView, CustomerView,
 };
 use erp_identity::AccessControlExt;
-use erp_party::PartyExt;
-use erp_party::{Party, PartyAddress, PartyBankAccount, PartyContact, PartyRevision};
+use erp_party::{Party, PartyAddress, PartyBankAccount, PartyContact, PartyExt, PartyRevision};
 use persistence_core::NoTransaction;
 
-use crate::{Error, Result};
-
 use super::CustomerProfileService;
-use erp_customer::{
-    CustomerActionBlockerView, CustomerAssignmentView, CustomerProfileDetailView, CustomerSensitiveFieldView,
-    CustomerView,
-};
+use crate::{Error, Result};
 
 impl CustomerProfileService {
     /// 查询客户资料对象中心的当前事实、历史版本与敏感字段揭示入口。
@@ -27,29 +22,18 @@ impl CustomerProfileService {
     pub async fn detail(&self, customer_id: &str) -> Result<CustomerProfileDetailView> {
         let account = self.load_customer(customer_id).await?;
         let party = self.load_party(&account.party_id).await?;
-        let revisions = self
-            .db
-            .party_revisions()
-            .list_revision_history(&account.party_id, &mut NoTransaction)
-            .await?;
-        let current_revision = party
-            .current_revision(&revisions)
-            .map_err(|error| Error::Internal(error.to_string()))?
-            .clone();
+        let revisions =
+            self.db.party_revisions().list_revision_history(&account.party_id, &mut NoTransaction).await?;
+        let current_revision =
+            party.current_revision(&revisions).map_err(|error| Error::Internal(error.to_string()))?.clone();
         let assignments = self
             .db
             .customer_assignments()
             .list_history_for_customer(&CustomerAccountId::new(customer_id), &mut NoTransaction)
             .await?;
-        let account_ids: Vec<String> = assignments
-            .iter()
-            .map(|assignment| assignment.user_id.clone())
-            .collect();
-        let account_names = self
-            .db
-            .accounts()
-            .names_by_ids(&account_ids, &mut NoTransaction)
-            .await?;
+        let account_ids: Vec<String> =
+            assignments.iter().map(|assignment| assignment.user_id.clone()).collect();
+        let account_names = self.db.accounts().names_by_ids(&account_ids, &mut NoTransaction).await?;
         let (contacts, addresses, tax_profiles, bank_accounts) = self
             .db
             .party()
@@ -69,10 +53,8 @@ impl CustomerProfileService {
             sensitive_fields,
         });
         for assignment in &mut detail.assignments {
-            assignment.user_name = account_names
-                .get(&assignment.user_id)
-                .cloned()
-                .unwrap_or_else(|| assignment.user_id.clone());
+            assignment.user_name =
+                account_names.get(&assignment.user_id).cloned().unwrap_or_else(|| assignment.user_id.clone());
         }
         Ok(detail)
     }
@@ -147,30 +129,12 @@ fn build_detail(parts: ProfileDetailParts) -> CustomerProfileDetailView {
         party_version: party.base.version,
         unified_credit_code: party.unified_credit_code,
         current_revision: super::views::party_revision_view(current_revision),
-        revisions: revisions
-            .into_iter()
-            .map(super::views::party_revision_view)
-            .collect(),
-        assignments: assignments
-            .into_iter()
-            .map(CustomerAssignmentView::from)
-            .collect(),
-        contacts: contacts
-            .into_iter()
-            .map(super::views::party_contact_view)
-            .collect(),
-        addresses: addresses
-            .into_iter()
-            .map(super::views::party_address_view)
-            .collect(),
-        tax_profiles: tax_profiles
-            .into_iter()
-            .map(super::views::party_tax_profile_view)
-            .collect(),
-        bank_accounts: bank_accounts
-            .into_iter()
-            .map(super::views::party_bank_account_view)
-            .collect(),
+        revisions: revisions.into_iter().map(super::views::party_revision_view).collect(),
+        assignments: assignments.into_iter().map(CustomerAssignmentView::from).collect(),
+        contacts: contacts.into_iter().map(super::views::party_contact_view).collect(),
+        addresses: addresses.into_iter().map(super::views::party_address_view).collect(),
+        tax_profiles: tax_profiles.into_iter().map(super::views::party_tax_profile_view).collect(),
+        bank_accounts: bank_accounts.into_iter().map(super::views::party_bank_account_view).collect(),
         sensitive_fields,
         allowed_actions: Vec::new(),
         action_blockers,

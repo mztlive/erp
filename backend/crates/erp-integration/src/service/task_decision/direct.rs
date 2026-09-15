@@ -1,7 +1,10 @@
 //! 无任务直接对账的本域版本、证据和追加决定。
+use mongodb::Database;
+use persistence_core::Executor;
+
 use super::action::difference_action_fact;
 use super::guard::{ensure_difference_open, latest_resolution, load_difference};
-use super::{append_resolution, DirectFact};
+use super::{DirectFact, append_resolution};
 use crate::dto::{
     DirectReconciliationCommand, DirectReconciliationConclusion, DirectReconciliationDecision,
     DirectReconciliationStatus, IntegrationActionOutcome, IntegrationItemType,
@@ -14,8 +17,6 @@ use crate::ports::evidence::{EvidenceSubject, IntegrationEvidenceAuthority};
 use crate::repository::IntegrationOpsExt;
 use crate::service::evidence::{ensure_direct_reason, verified_reference, verify_evidence_refs};
 use crate::{Error, Result};
-use mongodb::Database;
-use persistence_core::Executor;
 
 /// 正式任务关联已由流程检查后，按原顺序读取版本、验证证据并追加决定。
 pub async fn execute_direct_decision(
@@ -33,9 +34,7 @@ pub async fn execute_direct_decision(
     ensure_difference_open(latest.as_ref())?;
     let fact = direct_decision_fact(authority, &difference, command, receipt_id, actor_id, executor).await?;
     let record = append_resolution(&difference, latest.as_ref(), &fact, receipt_id, actor_id)?;
-    db.reconciliation_difference_resolutions()
-        .create(&record, executor)
-        .await?;
+    db.reconciliation_difference_resolutions().create(&record, executor).await?;
     Ok(fact)
 }
 
@@ -46,9 +45,7 @@ fn ensure_direct_version(expected: u64, latest: Option<&ReconciliationDifference
     if ReconciliationDifferenceResolution::current_version(latest) == expected {
         Ok(())
     } else {
-        Err(Error::ConflictError(
-            "差异决定版本已变化，请刷新后重试".to_string(),
-        ))
+        Err(Error::ConflictError("差异决定版本已变化，请刷新后重试".to_string()))
     }
 }
 
@@ -61,11 +58,7 @@ async fn direct_decision_fact(
     executor: &mut dyn Executor,
 ) -> Result<DirectFact> {
     match &command.decision {
-        DirectReconciliationDecision::NonTerminalAction {
-            action,
-            evidence_refs,
-            comment: _,
-        } => {
+        DirectReconciliationDecision::NonTerminalAction { action, evidence_refs, comment: _ } => {
             difference_action_fact(
                 authority,
                 difference,
@@ -83,7 +76,7 @@ async fn direct_decision_fact(
                 executor,
             )
             .await
-        }
+        },
         DirectReconciliationDecision::TerminalConclusion {
             conclusion,
             reason_code,
@@ -107,10 +100,9 @@ async fn direct_decision_fact(
             let reference = verified_reference(&verified)?;
             let typed = DirectConclusion::from(*conclusion);
             let (resulting_status, outcome) = match conclusion {
-                DirectReconciliationConclusion::ConfirmNoError => (
-                    DirectReconciliationStatus::ConfirmedNoError,
-                    IntegrationActionOutcome::ConfirmedNoError,
-                ),
+                DirectReconciliationConclusion::ConfirmNoError => {
+                    (DirectReconciliationStatus::ConfirmedNoError, IntegrationActionOutcome::ConfirmedNoError)
+                },
                 DirectReconciliationConclusion::ConfirmValidDifference => (
                     DirectReconciliationStatus::ConfirmedValidDifference,
                     IntegrationActionOutcome::ConfirmedValidDifference,
@@ -124,6 +116,6 @@ async fn direct_decision_fact(
                 business_result_reference: Some(reference),
                 verified_evidence: verified.into_iter().map(|evidence| evidence.reference).collect(),
             })
-        }
+        },
     }
 }

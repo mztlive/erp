@@ -1,17 +1,18 @@
 //! 销售变更应收差额的唯一财务准备与写入接口；只消费冻结金额和稳定来源标识。
 
-use crate::entity::receivable::{
-    ReceivableAccount, ReceivableDelta, ReceivableEntry, ReceivableEntryData, ReceivableEntryType,
-    SalesBusinessTypeFact,
-};
-use crate::repository::ReceivableExt;
-use crate::{Error, Result};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{ReceivableEntryId, SalesOrderId, SalesOrderRevisionId};
 use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::entity::receivable::{
+    ReceivableAccount, ReceivableDelta, ReceivableEntry, ReceivableEntryData, ReceivableEntryType,
+    SalesBusinessTypeFact,
+};
+use crate::repository::ReceivableExt;
+use crate::{Error, Result};
 
 /// 财务消费方所需的销售修订事实，不接收销售单或正式版本聚合。
 #[derive(Debug, Clone)]
@@ -55,9 +56,7 @@ impl SalesChangeReceivableWrite {
     /// 唯一键、CAS 与仓储错误保留原分类，由外层根事务回滚。
     pub async fn persist(&mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         db.receivable_entries().create(&self.entry, executor).await?;
-        db.receivable_accounts()
-            .update(&mut self.account, executor)
-            .await?;
+        db.receivable_accounts().update(&mut self.account, executor).await?;
         Ok(())
     }
 }
@@ -75,10 +74,8 @@ pub async fn prepare_sales_change_receivable(
     input: SalesChangeReceivableInput,
     executor: &mut dyn Executor,
 ) -> Result<Option<SalesChangeReceivableWrite>> {
-    let existing_account = db
-        .receivable_accounts()
-        .find_primary_by_sales_order(&input.sales_order_id, executor)
-        .await?;
+    let existing_account =
+        db.receivable_accounts().find_primary_by_sales_order(&input.sales_order_id, executor).await?;
     build_sales_change_receivable(
         input,
         existing_account,
@@ -104,12 +101,9 @@ fn build_sales_change_receivable(
     };
     let mut account = existing_account
         .ok_or_else(|| Error::BusinessLogicError("销售单缺少正式应收子账，不能生效销售变更".to_string()))?;
-    let account_update = account
-        .sales_change_delta_update(input.business_type, input.new_gross)
-        .map_err(Error::Logic)?;
-    account
-        .update(account_update, &input.updated_by)
-        .map_err(Error::Logic)?;
+    let account_update =
+        account.sales_change_delta_update(input.business_type, input.new_gross).map_err(Error::Logic)?;
+    account.update(account_update, &input.updated_by).map_err(Error::Logic)?;
     let entry = ReceivableEntry::new(
         entry_id(),
         ReceivableEntryData {
@@ -131,11 +125,13 @@ fn build_sales_change_receivable(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::entity::receivable::{AccountReviewStatus, EntryDirection, ReceivableAccountData};
-    use erp_core::ids::{CustomerAccountId, PartyId, ReceivableAccountId};
     use std::cell::Cell;
     use std::str::FromStr;
+
+    use erp_core::ids::{CustomerAccountId, PartyId, ReceivableAccountId};
+
+    use super::*;
+    use crate::entity::receivable::{AccountReviewStatus, EntryDirection, ReceivableAccountData};
 
     fn amount(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -188,10 +184,9 @@ mod tests {
 
     #[test]
     fn positive_and_negative_changes_keep_exact_amounts_and_original_source_identity() {
-        for (gross, direction, absolute) in [
-            ("123.45", EntryDirection::Increase, "23.45"),
-            ("76.55", EntryDirection::Decrease, "23.45"),
-        ] {
+        for (gross, direction, absolute) in
+            [("123.45", EntryDirection::Increase, "23.45"), ("76.55", EntryDirection::Decrease, "23.45")]
+        {
             let write = build(
                 input(SalesBusinessTypeFact::GoodsService, gross),
                 Some(account(AccountReviewStatus::NotApplicable, "0.00")),
@@ -250,16 +245,13 @@ mod tests {
             AccountReviewStatus::Reviewed,
             AccountReviewStatus::SyncDeltaPending,
         ] {
-            for (gross, direction) in [
-                ("120.00", EntryDirection::Increase),
-                ("80.00", EntryDirection::Decrease),
-            ] {
-                let write = build(
-                    input(SalesBusinessTypeFact::Voucher, gross),
-                    Some(account(status, "50.00")),
-                )
-                .unwrap()
-                .unwrap();
+            for (gross, direction) in
+                [("120.00", EntryDirection::Increase), ("80.00", EntryDirection::Decrease)]
+            {
+                let write =
+                    build(input(SalesBusinessTypeFact::Voucher, gross), Some(account(status, "50.00")))
+                        .unwrap()
+                        .unwrap();
                 assert_eq!(write.account.review_status, AccountReviewStatus::NotApplicable);
                 assert_eq!(write.account.gross_total, amount(gross));
                 assert_eq!(write.account.invoiceable_total, amount(gross));
@@ -267,11 +259,10 @@ mod tests {
                 assert_eq!(write.entry.direction, direction);
                 assert_eq!(write.entry.amount, amount("20.00"));
             }
-            assert!(build(
-                input(SalesBusinessTypeFact::Voucher, "49.99"),
-                Some(account(status, "50.00"))
-            )
-            .is_err());
+            assert!(
+                build(input(SalesBusinessTypeFact::Voucher, "49.99"), Some(account(status, "50.00")))
+                    .is_err()
+            );
         }
     }
 }

@@ -1,14 +1,13 @@
 //! 合同列表先关联当前修订再筛选、排序、计数，禁止分页后匹配。
 
-use super::{
-    contract::{ContractDomainRepository, ContractFilter, ContractRow},
-    ContractExt,
-};
-use crate::dto::contract::{ContractFilterOption, ContractMetric, ContractMetrics};
 use erp_core::common::time::BusinessDate;
-use mongodb::bson::{doc, Document};
-use persistence_core::{insert_literal_regex_filter, Executor, Pagination, QueryFilter, Result};
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, Pagination, QueryFilter, Result, insert_literal_regex_filter};
 use serde::Deserialize;
+
+use super::ContractExt;
+use super::contract::{ContractDomainRepository, ContractFilter, ContractRow};
+use crate::dto::contract::{ContractFilterOption, ContractMetric, ContractMetrics};
 
 /// 可见合同引用的客户搜索事实，外域数据由端口提供。
 pub struct ContractCustomer {
@@ -45,19 +44,14 @@ impl ContractSearch {
         }
         apply_metric(&mut filter, self.metric);
         if let Some(q) = &self.q {
-            let mut clauses = [
-                "contract_no",
-                "search_customer",
-                "search_settlement",
-                "search_owner",
-            ]
-            .into_iter()
-            .map(|field| {
-                let mut clause = Document::new();
-                insert_literal_regex_filter(&mut clause, field, Some(q));
-                clause
-            })
-            .collect::<Vec<_>>();
+            let mut clauses = ["contract_no", "search_customer", "search_settlement", "search_owner"]
+                .into_iter()
+                .map(|field| {
+                    let mut clause = Document::new();
+                    insert_literal_regex_filter(&mut clause, field, Some(q));
+                    clause
+                })
+                .collect::<Vec<_>>();
             let needle = q.to_lowercase();
             let ids = self
                 .customers
@@ -110,18 +104,12 @@ impl ContractDomainRepository<'_> {
         filter: &ContractFilter,
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
-        let collection = self
-            .db
-            .collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
+        let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
         let mut query = collection.distinct("customer_id", filter.to_doc());
         if let Some(session) = executor.session() {
             query = query.session(session);
         }
-        Ok(query
-            .await?
-            .into_iter()
-            .filter_map(|id| id.as_str().map(str::to_owned))
-            .collect())
+        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
     }
 
     /// 在拥有的合同与修订集合内完成分页；元数据基于同一可见范围。
@@ -134,9 +122,7 @@ impl ContractDomainRepository<'_> {
         search: &ContractSearch,
         executor: &mut dyn Executor,
     ) -> Result<ContractSearchResult> {
-        let collection = self
-            .db
-            .collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
+        let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
         let pipeline = list_pipeline(filter, search, BusinessDate::today());
         if let Some(session) = executor.session() {
             let mut cursor = collection
@@ -149,10 +135,7 @@ impl ContractDomainRepository<'_> {
             }
             return Ok(ContractSearchResult::default());
         }
-        let mut cursor = collection
-            .aggregate(pipeline)
-            .with_type::<ContractSearchResult>()
-            .await?;
+        let mut cursor = collection.aggregate(pipeline).with_type::<ContractSearchResult>().await?;
         if cursor.advance().await? {
             return Ok(cursor.deserialize_current()?);
         }
@@ -216,17 +199,17 @@ fn apply_metric(filter: &mut Document, metric: Option<ContractMetric>) {
     match metric {
         Some(ContractMetric::Effective) => {
             filter.insert("status", "EFFECTIVE");
-        }
+        },
         Some(ContractMetric::Expired) => {
             filter.insert("status", "EXPIRED");
-        }
+        },
         Some(ContractMetric::Terminated) => {
             filter.insert("status", "TERMINATED");
-        }
+        },
         Some(ContractMetric::Expiring30d) => {
             filter.insert("search_expiring", true);
-        }
-        _ => {}
+        },
+        _ => {},
     }
 }
 
@@ -278,11 +261,8 @@ mod tests {
         let matching = items[0].as_document().unwrap().get_document("$match").unwrap();
         assert_eq!(matching.get_str("settlement_party_id").unwrap(), "party-1");
         assert!(matching.get_bool("search_expiring").unwrap());
-        let first = matching.get_array("$or").unwrap()[0]
-            .as_document()
-            .unwrap()
-            .get_document("contract_no")
-            .unwrap();
+        let first =
+            matching.get_array("$or").unwrap()[0].as_document().unwrap().get_document("contract_no").unwrap();
         assert_eq!(first.get_str("$regex").unwrap(), r"客户\.\[x\]");
         assert_eq!(first.get_str("$options").unwrap(), "i");
     }
@@ -312,20 +292,10 @@ mod tests {
         };
 
         assert_eq!(
-            search
-                .filter()
-                .get_array("$or")
-                .unwrap()
-                .last()
-                .unwrap()
-                .as_document()
-                .unwrap(),
+            search.filter().get_array("$or").unwrap().last().unwrap().as_document().unwrap(),
             &doc! { "customer_id": { "$in": ["customer-101"] } }
         );
-        assert_eq!(
-            search.filter().get_document("customer_id").unwrap(),
-            &doc! { "$in": ["customer-101"] }
-        );
+        assert_eq!(search.filter().get_document("customer_id").unwrap(), &doc! { "$in": ["customer-101"] });
     }
 
     /// 到期边界使用业务日并保留空页计数。
@@ -339,11 +309,7 @@ mod tests {
             customers: vec![],
         };
         let fields = display_fields(&search, BusinessDate::from_ymd(2026, 9, 8).unwrap());
-        let expression = fields
-            .get_document("search_expiring")
-            .unwrap()
-            .get_array("$and")
-            .unwrap();
+        let expression = fields.get_document("search_expiring").unwrap().get_array("$and").unwrap();
         assert_eq!(
             expression[1].as_document().unwrap(),
             &doc! { "$gte": ["$current.valid_to", "2026-09-08"] }

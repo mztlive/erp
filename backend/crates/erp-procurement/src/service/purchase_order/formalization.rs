@@ -1,12 +1,13 @@
 //! 采购正式版本的单域序号读取与冻结构造。
-use super::PurchaseOrderService;
-use crate::entity::purchase_order::*;
-use crate::repository::PurchaseOrderExt;
-use crate::{Error, Result};
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderRevisionLineId};
 use id_generator::next_id;
 use persistence_core::NoTransaction;
+
+use super::PurchaseOrderService;
+use crate::entity::purchase_order::*;
+use crate::repository::PurchaseOrderExt;
+use crate::{Error, Result};
 impl PurchaseOrderService {
     /// 计算下一个版本号（同一采购单内从 1 递增）。
     pub async fn next_revision_no(&self, order: &PurchaseOrder) -> Result<u32> {
@@ -30,9 +31,7 @@ impl PurchaseOrderService {
         revision_no: u32,
     ) -> Result<(PurchaseOrderRevision, Vec<PurchaseOrderRevisionLine>)> {
         if submission.purchase_order_id.as_ref() != order.base.id {
-            return Err(crate::Error::BusinessLogicError(
-                "采购提交不属于当前采购单".to_string(),
-            ));
+            return Err(crate::Error::BusinessLogicError("采购提交不属于当前采购单".to_string()));
         }
         let revision = PurchaseOrderRevision::from_submission(
             PurchaseOrderRevisionId::new(next_id()),
@@ -104,16 +103,8 @@ pub async fn persist_formalized_order(
     actor_id: &str,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<PurchaseOrder> {
-    let FormalizedOrderWrite {
-        order,
-        submission,
-        revision,
-        revision_lines,
-        allocations,
-    } = write;
-    db.purchase_order()
-        .create_effective_revision(revision, revision_lines, executor)
-        .await?;
+    let FormalizedOrderWrite { order, submission, revision, revision_lines, allocations } = write;
+    db.purchase_order().create_effective_revision(revision, revision_lines, executor).await?;
     super::allocation_maintenance::persist_current_sales_allocations(db, allocations, executor).await?;
     let mut order_mut = order;
     order_mut.formalize_with_revision(revision.base.id.clone().into(), actor_id)?;
@@ -123,9 +114,7 @@ pub async fn persist_formalized_order(
         Instant::now(),
         actor_id,
     )?;
-    db.purchase_order_submissions()
-        .update(&mut submission_mut, executor)
-        .await?;
+    db.purchase_order_submissions().update(&mut submission_mut, executor).await?;
     db.purchase_orders().update(&mut order_mut, executor).await?;
 
     Ok(order_mut)
@@ -136,7 +125,5 @@ pub fn ensure_review_sources(
     submission: &PurchaseOrderSubmission,
     lines: &[PurchaseOrderSubmissionLine],
 ) -> Result<()> {
-    submission
-        .ensure_line_totals(lines)
-        .map_err(|error| Error::BusinessLogicError(error.to_string()))
+    submission.ensure_line_totals(lines).map_err(|error| Error::BusinessLogicError(error.to_string()))
 }

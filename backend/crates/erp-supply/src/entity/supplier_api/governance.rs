@@ -6,16 +6,16 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_core::common::time::Instant;
+use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::supplier_api::{
     ConnectionEnvironment, SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiConnection,
     SupplierApiConnectionStatus,
 };
-use erp_core::common::time::Instant;
-use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
-use erp_core::validation::{normalize_optional_text, normalize_required_text};
-use erp_core::{Error, Result};
 
 const REFERENCE_MAX_LEN: usize = 512;
 const REASON_MAX_LEN: usize = 128;
@@ -163,9 +163,7 @@ impl BusinessCapabilityConfirmation {
     /// # 返回
     /// 返回首个匹配确认；没有时返回 `None`。
     pub fn latest_for(confirmations: &[Self], capability_code: SupplierApiCapabilityCode) -> Option<&Self> {
-        confirmations
-            .iter()
-            .find(|confirmation| confirmation.capability_code == capability_code)
+        confirmations.iter().find(|confirmation| confirmation.capability_code == capability_code)
     }
 }
 
@@ -305,13 +303,7 @@ impl SupplierHealthCheckRun {
         error_code: String,
         error_summary: String,
     ) -> Result<()> {
-        self.finish(
-            SupplierHealthCheckStatus::Failed,
-            at,
-            latency_ms,
-            Some(error_code),
-            Some(error_summary),
-        )
+        self.finish(SupplierHealthCheckStatus::Failed, at, latency_ms, Some(error_code), Some(error_summary))
     }
 
     /// 形成结果未知证据；调用方不得把它视为成功或自动重试依据。
@@ -325,13 +317,7 @@ impl SupplierHealthCheckRun {
         error_code: String,
         error_summary: String,
     ) -> Result<()> {
-        self.finish(
-            SupplierHealthCheckStatus::Unknown,
-            at,
-            latency_ms,
-            Some(error_code),
-            Some(error_summary),
-        )
+        self.finish(SupplierHealthCheckStatus::Unknown, at, latency_ms, Some(error_code), Some(error_summary))
     }
 
     /// 判断成功运行是否验证了当前能力版本。
@@ -374,9 +360,8 @@ impl SupplierHealthCheckRun {
         if self.status != SupplierHealthCheckStatus::Running || !status.is_terminal() {
             return Err(Error::from("只有执行中的健康检查可以写入终态"));
         }
-        self.error_code = error_code
-            .map(|value| required(value, "错误代码", ERROR_CODE_MAX_LEN))
-            .transpose()?;
+        self.error_code =
+            error_code.map(|value| required(value, "错误代码", ERROR_CODE_MAX_LEN)).transpose()?;
         self.error_summary = normalize_optional_text(error_summary, "错误摘要", ERROR_SUMMARY_MAX_LEN)?;
         self.status = status;
         self.finished_at = Some(at);
@@ -493,7 +478,7 @@ impl SupplierConnectionGovernance<'_> {
             | SupplierConnectionAction::BindEndpointReference
             | SupplierConnectionAction::BindCredentialReference => {
                 self.reference_change_blockers(action, reference_registry_available)
-            }
+            },
             SupplierConnectionAction::RunHealthCheck => self.health_check_blockers(action),
             SupplierConnectionAction::Enable => self.enable_blockers(action),
             SupplierConnectionAction::Disable => self.disable_blockers(action, impact),
@@ -506,9 +491,7 @@ impl SupplierConnectionGovernance<'_> {
     /// # 返回
     /// 返回最新优先历史中的首个成功运行；没有时返回 `None`。
     pub fn latest_successful_health_run(&self) -> Option<&SupplierHealthCheckRun> {
-        self.health_runs
-            .iter()
-            .find(|run| run.status == SupplierHealthCheckStatus::Succeeded)
+        self.health_runs.iter().find(|run| run.status == SupplierHealthCheckStatus::Succeeded)
     }
 
     /// 返回指定能力代码最近一次采购确认。
@@ -540,12 +523,7 @@ impl SupplierConnectionGovernance<'_> {
     ) -> Vec<SupplierGovernanceBlocker> {
         let mut blockers = Vec::new();
         if self.connection.is_active() {
-            blockers.push(governance_blocker(
-                action,
-                "CONNECTION_ENABLED",
-                "请先停用连接，再变更配置",
-                None,
-            ));
+            blockers.push(governance_blocker(action, "CONNECTION_ENABLED", "请先停用连接，再变更配置", None));
         }
         if !reference_registry_available {
             blockers.push(governance_blocker(
@@ -591,12 +569,7 @@ impl SupplierConnectionGovernance<'_> {
         impact: SupplierConnectionBusinessImpact,
     ) -> Vec<SupplierGovernanceBlocker> {
         if self.connection.stable.status == SupplierApiConnectionStatus::Disabled {
-            return vec![governance_blocker(
-                action,
-                "ALREADY_DISABLED",
-                "连接已经停用",
-                None,
-            )];
+            return vec![governance_blocker(action, "ALREADY_DISABLED", "连接已经停用", None)];
         }
         if impact.has_blockers() {
             return vec![governance_blocker(
@@ -621,12 +594,7 @@ impl SupplierConnectionGovernance<'_> {
     /// 返回首个稳定阻塞原因；连接、能力、采购确认和技术证据均满足时返回空集合。
     fn enable_blockers(&self, action: SupplierConnectionAction) -> Vec<SupplierGovernanceBlocker> {
         if self.connection.is_active() {
-            return vec![governance_blocker(
-                action,
-                "ALREADY_ENABLED",
-                "连接已经启用",
-                None,
-            )];
+            return vec![governance_blocker(action, "ALREADY_ENABLED", "连接已经启用", None)];
         }
         if !self.connection.technical_references_ready() {
             return vec![governance_blocker(
@@ -636,18 +604,10 @@ impl SupplierConnectionGovernance<'_> {
                 None,
             )];
         }
-        let active: Vec<&SupplierApiCapability> = self
-            .capabilities
-            .iter()
-            .filter(|capability| capability.is_active())
-            .collect();
+        let active: Vec<&SupplierApiCapability> =
+            self.capabilities.iter().filter(|capability| capability.is_active()).collect();
         if active.is_empty() {
-            return vec![governance_blocker(
-                action,
-                "NO_ACTIVE_CAPABILITY",
-                "至少启用一项连接能力",
-                None,
-            )];
+            return vec![governance_blocker(action, "NO_ACTIVE_CAPABILITY", "至少启用一项连接能力", None)];
         }
         if active.iter().any(|capability| {
             !self
@@ -769,12 +729,7 @@ fn governance_blocker(
     message: &str,
     destination_workspace_id: Option<&'static str>,
 ) -> SupplierGovernanceBlocker {
-    SupplierGovernanceBlocker {
-        action,
-        code,
-        message: message.to_string(),
-        destination_workspace_id,
-    }
+    SupplierGovernanceBlocker { action, code, message: message.to_string(), destination_workspace_id }
 }
 
 /// 命令回执终态。
@@ -879,12 +834,7 @@ impl SupplierConnectionCommandReceipt {
 }
 
 fn required(value: String, label: &str, max_len: usize) -> Result<String> {
-    normalize_required_text(
-        value,
-        &format!("{label}不能为空"),
-        max_len,
-        &format!("{label}过长"),
-    )
+    normalize_required_text(value, &format!("{label}不能为空"), max_len, &format!("{label}过长"))
 }
 
 #[cfg(test)]
@@ -1006,10 +956,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(confirmation.evidence_references, vec!["evidence://1"]);
-        assert_eq!(
-            confirmation.applicability_reference.as_deref(),
-            Some("scope://all")
-        );
+        assert_eq!(confirmation.applicability_reference.as_deref(), Some("scope://all"));
         assert_eq!(confirmation.capability_version, 3);
     }
 
@@ -1049,10 +996,7 @@ mod tests {
     #[test]
     fn command_registry_is_fixed_and_complete() {
         assert_eq!(SupplierConnectionAction::all().len(), 7);
-        assert_eq!(
-            SupplierConnectionAction::BindCredentialReference.as_str(),
-            "BIND_CREDENTIAL_REFERENCE"
-        );
+        assert_eq!(SupplierConnectionAction::BindCredentialReference.as_str(), "BIND_CREDENTIAL_REFERENCE");
     }
 
     #[test]
@@ -1151,10 +1095,8 @@ mod tests {
     fn enable_governance_requires_current_evidence_and_production_dual_roles() {
         let capability = governance_capability(SupplierApiCapabilityCode::Product);
         let confirmation = governance_confirmation(&capability, "operator-1");
-        let testing = governance_connection(
-            SupplierApiConnectionStatus::Disabled,
-            ConnectionEnvironment::Testing,
-        );
+        let testing =
+            governance_connection(SupplierApiConnectionStatus::Disabled, ConnectionEnvironment::Testing);
         let health = governance_health(&testing, &capability, "operator-1");
         let governance = SupplierConnectionGovernance {
             connection: &testing,
@@ -1170,10 +1112,8 @@ mod tests {
             )
             .is_empty());
 
-        let production = governance_connection(
-            SupplierApiConnectionStatus::Disabled,
-            ConnectionEnvironment::Production,
-        );
+        let production =
+            governance_connection(SupplierApiConnectionStatus::Disabled, ConnectionEnvironment::Production);
         let governance = SupplierConnectionGovernance {
             connection: &production,
             capabilities: std::slice::from_ref(&capability),
@@ -1195,10 +1135,8 @@ mod tests {
     #[test]
     fn disable_and_catalog_governance_use_current_business_facts() {
         let capability = governance_capability(SupplierApiCapabilityCode::Product);
-        let mut connection = governance_connection(
-            SupplierApiConnectionStatus::Active,
-            ConnectionEnvironment::Testing,
-        );
+        let mut connection =
+            governance_connection(SupplierApiConnectionStatus::Active, ConnectionEnvironment::Testing);
         connection.record_health(HealthCheckResult::Healthy, Instant::from_unix_secs(4));
         let governance = SupplierConnectionGovernance {
             connection: &connection,
@@ -1206,13 +1144,15 @@ mod tests {
             confirmations: &[],
             health_runs: &[],
         };
-        assert!(governance
-            .blockers(
-                SupplierConnectionAction::StartCatalogSync,
-                SupplierConnectionBusinessImpact::default(),
-                true,
-            )
-            .is_empty());
+        assert!(
+            governance
+                .blockers(
+                    SupplierConnectionAction::StartCatalogSync,
+                    SupplierConnectionBusinessImpact::default(),
+                    true,
+                )
+                .is_empty()
+        );
         assert_eq!(
             governance.blockers(
                 SupplierConnectionAction::Disable,
@@ -1230,15 +1170,19 @@ mod tests {
     /// 重复能力代码在实体边界稳定拒绝。
     #[test]
     fn capability_update_codes_must_be_unique() {
-        assert!(ensure_unique_capability_codes([
-            SupplierApiCapabilityCode::Product,
-            SupplierApiCapabilityCode::Order,
-        ])
-        .is_ok());
-        assert!(ensure_unique_capability_codes([
-            SupplierApiCapabilityCode::Product,
-            SupplierApiCapabilityCode::Product,
-        ])
-        .is_err());
+        assert!(
+            ensure_unique_capability_codes([
+                SupplierApiCapabilityCode::Product,
+                SupplierApiCapabilityCode::Order,
+            ])
+            .is_ok()
+        );
+        assert!(
+            ensure_unique_capability_codes([
+                SupplierApiCapabilityCode::Product,
+                SupplierApiCapabilityCode::Product,
+            ])
+            .is_err()
+        );
     }
 }

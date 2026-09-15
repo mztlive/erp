@@ -1,8 +1,8 @@
 //! 写时授权重验结果收敛为引擎资格。
 
 use bpm::engine::Eligibility;
-use bpm::model::types::ApprovalBlockerCode;
 use bpm::model::ParticipantId;
+use bpm::model::types::ApprovalBlockerCode;
 
 use crate::error::{Error, Result};
 
@@ -64,10 +64,7 @@ pub fn converge_eligibility(
         return Err(Error::ValidationError("审批人显示名不能为空".to_string()));
     }
     match failure {
-        None => Ok(Eligibility::Eligible {
-            participant,
-            assignee_name_snapshot: name.to_string(),
-        }),
+        None => Ok(Eligibility::Eligible { participant, assignee_name_snapshot: name.to_string() }),
         Some(failure) => Ok(Eligibility::Blocked {
             participant,
             code: failure.blocker_code(),
@@ -114,28 +111,24 @@ pub fn ensure_triple_responsibility(
     if actor_id == task_owner_id && actor_id == execution_assignee && actor_id == instance_assignee {
         return Ok(());
     }
-    Err(Error::ConflictError(
-        "APPROVAL_RESPONSIBILITY_CONFLICT".to_string(),
-    ))
+    Err(Error::ConflictError("APPROVAL_RESPONSIBILITY_CONFLICT".to_string()))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        converge_eligibility, ensure_triple_responsibility, hidden_forbidden, requires_blocked_cancel,
-        AuthorizationFailure,
-    };
     use bpm::model::types::ApprovalBlockerCode;
+
+    use super::{
+        AuthorizationFailure, converge_eligibility, ensure_triple_responsibility, hidden_forbidden,
+        requires_blocked_cancel,
+    };
 
     /// 写时失效收敛为人员 blocker，不得回落默认人。
     #[test]
     fn execution_auth_converges_assignee_recovery_blocker() {
         let eligibility =
             converge_eligibility("u1", "张三", Some(AuthorizationFailure::OutOfDataScope)).unwrap();
-        assert_eq!(
-            eligibility.blocked_code(),
-            Some(ApprovalBlockerCode::ApproverOutOfAuthorizedScope)
-        );
+        assert_eq!(eligibility.blocked_code(), Some(ApprovalBlockerCode::ApproverOutOfAuthorizedScope));
         assert!(ApprovalBlockerCode::ApproverOutOfAuthorizedScope.allows_assignee_recovery());
         assert!(requires_blocked_cancel(ApprovalBlockerCode::OpenTaskConflict));
     }

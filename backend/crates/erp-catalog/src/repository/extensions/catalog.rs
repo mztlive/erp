@@ -5,20 +5,20 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as CatalogExt>::PRODUCT_CATEGORIES` 等值。
 
-use crate::entity::catalog::SkuRevisionAttributeValue;
-use crate::repository::owned::{
-    ProductBrandRepository, ProductCategoryAttributeRepository, ProductCategoryRepository, ProductRepository,
-    ProductRevisionMediaRepository, ProductRevisionRepository, SkuAttributeRepository,
-    SkuAttributeValueRepository, SkuRepository, SkuRevisionRepository, UnitOfMeasureRepository,
-    VoucherCategoryProfileRevisionRepository,
-};
 use mongodb::Database;
 
+use crate::entity::catalog::SkuRevisionAttributeValue;
 use crate::repository::catalog::{
     CatalogRepository, CategoryParentChainFact, ProductBrandFilter, ProductCategoryAttributeFilter,
     ProductCategoryFilter, ProductFilter, ProductListingSummary, ProductRevisionFilter, SellableSkuFilter,
     SkuAttributeFilter, SkuAttributeValueFilter, SkuFilter, SkuRevisionFilter, UnitOfMeasureFilter,
     VoucherCategoryProfileRevisionFilter,
+};
+use crate::repository::owned::{
+    ProductBrandRepository, ProductCategoryAttributeRepository, ProductCategoryRepository, ProductRepository,
+    ProductRevisionMediaRepository, ProductRevisionRepository, SkuAttributeRepository,
+    SkuAttributeValueRepository, SkuRepository, SkuRevisionRepository, UnitOfMeasureRepository,
+    VoucherCategoryProfileRevisionRepository,
 };
 
 /// 域 D10 仓储访问器。

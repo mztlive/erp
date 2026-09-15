@@ -1,11 +1,12 @@
 //! 发货过账前的本域加载与状态守卫，以及发货状态 CAS。
+use erp_core::common::time::Instant;
+use erp_core::ids::{DeliveryId, PurchaseOrderId};
+use persistence_core::Executor;
+
 use super::FulfillmentService;
 use crate::entity::fulfillment::{Delivery, DeliveryLine, DeliveryState, DeliveryUpdate};
 use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
-use erp_core::common::time::Instant;
-use erp_core::ids::{DeliveryId, PurchaseOrderId};
-use persistence_core::Executor;
 
 impl FulfillmentService {
     /// 按原序加载发货单、校验草稿和版本、应用物流信息并读取非空发货行。

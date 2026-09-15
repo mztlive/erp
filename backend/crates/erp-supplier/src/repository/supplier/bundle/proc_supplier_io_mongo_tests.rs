@@ -1,15 +1,5 @@
 use std::str::FromStr;
 
-use crate::entity::supplier::{
-    CapabilityCode, CapabilityStatus, InvoiceType, QualificationStatus, QualificationType,
-    ReconciliationCycle, SettlementMode, SupplierAccount, SupplierAccountData, SupplierAccountStatus,
-    SupplierCapability, SupplierCapabilityData, SupplierCommercialProfileRevision,
-    SupplierCommercialProfileRevisionData, SupplierQualification, SupplierQualificationCapability,
-    SupplierQualificationCapabilityData, SupplierQualificationData, SupplierRating, SupplierRatingRevision,
-    SupplierRatingRevisionData,
-};
-use crate::indexes;
-use crate::repository::SupplierExt;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     PartyId, SupplierAccountId, SupplierCapabilityId, SupplierCommercialProfileRevisionId,
@@ -21,6 +11,16 @@ use persistence_core::{NoTransaction, Transactional};
 
 use super::super::{SUPPLIER_ACCOUNTS, SUPPLIER_CAPABILITIES};
 use super::{SupplierListSearchInput, SupplierQualificationHealthFilter};
+use crate::entity::supplier::{
+    CapabilityCode, CapabilityStatus, InvoiceType, QualificationStatus, QualificationType,
+    ReconciliationCycle, SettlementMode, SupplierAccount, SupplierAccountData, SupplierAccountStatus,
+    SupplierCapability, SupplierCapabilityData, SupplierCommercialProfileRevision,
+    SupplierCommercialProfileRevisionData, SupplierQualification, SupplierQualificationCapability,
+    SupplierQualificationCapabilityData, SupplierQualificationData, SupplierRating, SupplierRatingRevision,
+    SupplierRatingRevisionData,
+};
+use crate::indexes;
+use crate::repository::SupplierExt;
 
 /// 列表与详情验收的业务日。
 const AS_OF: &str = "2026-08-31";
@@ -53,11 +53,7 @@ impl TestDb {
             .filter(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
             .take(32)
             .collect();
-        let prefix = if sanitized.is_empty() {
-            "test".to_string()
-        } else {
-            sanitized
-        };
+        let prefix = if sanitized.is_empty() { "test".to_string() } else { sanitized };
         let name = format!("{prefix}_{}", &mongodb::bson::oid::ObjectId::new().to_hex()[..8]);
         let db = client.database(&name);
         db.create_collection("_fixture").await?;
@@ -84,9 +80,7 @@ impl Drop for TestDb {
 
 /// `ERP_TEST_MONGO_URI` 已设置且非空时返回 `true`。
 fn mongo_env_present() -> bool {
-    std::env::var("ERP_TEST_MONGO_URI")
-        .map(|uri| !uri.trim().is_empty())
-        .unwrap_or(false)
+    std::env::var("ERP_TEST_MONGO_URI").map(|uri| !uri.trim().is_empty()).unwrap_or(false)
 }
 
 /// 需要真实 MongoDB 的集成测试门控宏。
@@ -247,18 +241,12 @@ async fn seed_supplier_io_fixture(db: &mongodb::Database) {
         ("sup-orphan", "party-missing", "SUP-ORPHAN", None),
     ] {
         db.supplier_accounts()
-            .create(
-                &supplier_account(id, party_id, supplier_no, profile_id),
-                &mut NoTransaction,
-            )
+            .create(&supplier_account(id, party_id, supplier_no, profile_id), &mut NoTransaction)
             .await
             .expect("供应商角色写入失败");
     }
     db.supplier_commercial_profile_revisions()
-        .create(
-            &commercial_profile("profile-a", "sup-a", "party-a"),
-            &mut NoTransaction,
-        )
+        .create(&commercial_profile("profile-a", "sup-a", "party-a"), &mut NoTransaction)
         .await
         .expect("商务资料写入失败");
     for (id, supplier_id, code) in [
@@ -274,21 +262,9 @@ async fn seed_supplier_io_fixture(db: &mongodb::Database) {
     let expiring = BusinessDate::from_ymd(2026, 9, 10).unwrap();
     let expired = BusinessDate::from_ymd(2026, 6, 1).unwrap();
     for (id, supplier_id, qualification_type, certificate_no, valid_to) in [
-        (
-            "qual-a",
-            "sup-a",
-            QualificationType::FoodLicense,
-            "FOOD-A",
-            Some(expiring),
-        ),
+        ("qual-a", "sup-a", QualificationType::FoodLicense, "FOOD-A", Some(expiring)),
         ("qual-a2", "sup-a", QualificationType::Contract, "HT-A", None),
-        (
-            "qual-c",
-            "sup-c",
-            QualificationType::FoodLicense,
-            "FOOD-C",
-            Some(expired),
-        ),
+        ("qual-c", "sup-c", QualificationType::FoodLicense, "FOOD-C", Some(expired)),
     ] {
         db.supplier_qualifications()
             .create(
@@ -394,9 +370,7 @@ fn bundle_ids(bundle: &super::SupplierListBundle) -> Vec<String> {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn supplier_list_bundle_applies_all_prefilters_before_paging() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_supplier_io_list")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_supplier_io_list").await.expect("测试数据库创建失败");
         indexes::ensure(fixture.db()).await.expect("索引创建失败");
         seed_supplier_io_fixture(fixture.db()).await;
 
@@ -435,11 +409,7 @@ async fn supplier_list_bundle_applies_all_prefilters_before_paging() {
             )
             .await
             .expect("关键词事实束加载失败");
-        assert_eq!(
-            bundle_ids(&keyword),
-            vec!["sup-a"],
-            "主体名称命中经 keyword_party_ids 应在分页前生效"
-        );
+        assert_eq!(bundle_ids(&keyword), vec!["sup-a"], "主体名称命中经 keyword_party_ids 应在分页前生效");
 
         let capability = fixture
             .db()
@@ -530,17 +500,11 @@ async fn supplier_list_bundle_applies_all_prefilters_before_paging() {
         assert_eq!(bundle_ids(&intersection), vec!["sup-a"]);
 
         assert!(
-            bundle
-                .party_ids
-                .iter()
-                .any(|party_id| party_id.to_string() == "party-a"),
+            bundle.party_ids.iter().any(|party_id| party_id.to_string() == "party-a"),
             "水合事实应包含命中主体 ID"
         );
         assert!(
-            bundle
-                .profiles
-                .iter()
-                .any(|profile| profile.base.id == "profile-a"),
+            bundle.profiles.iter().any(|profile| profile.base.id == "profile-a"),
             "水合事实应包含当前商务资料"
         );
     });
@@ -563,9 +527,7 @@ async fn supplier_list_bundle_applies_all_prefilters_before_paging() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn supplier_detail_bundle_returns_batch_facts_and_missing_pointer_semantics() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_supplier_io_detail")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_supplier_io_detail").await.expect("测试数据库创建失败");
         indexes::ensure(fixture.db()).await.expect("索引创建失败");
         seed_supplier_io_fixture(fixture.db()).await;
 
@@ -580,18 +542,11 @@ async fn supplier_detail_bundle_returns_batch_facts_and_missing_pointer_semantic
         assert_eq!(bundle.party_id.to_string(), "party-a");
         assert_eq!(bundle.capabilities.len(), 1);
         assert_eq!(bundle.qualifications.len(), 2);
-        assert_eq!(
-            bundle.qualification_links.len(),
-            2,
-            "两份资质的适用关联应一次批量读回"
-        );
+        assert_eq!(bundle.qualification_links.len(), 2, "两份资质的适用关联应一次批量读回");
         assert_eq!(bundle.ratings.len(), 1);
         assert_eq!(bundle.commercial_profiles.len(), 1);
         assert!(
-            bundle
-                .commercial_party_ids
-                .iter()
-                .any(|party_id| party_id.to_string() == "party-a"),
+            bundle.commercial_party_ids.iter().any(|party_id| party_id.to_string() == "party-a"),
             "商务版本引用的签约/付款主体 ID 应一次返回"
         );
 
@@ -637,9 +592,7 @@ async fn supplier_detail_bundle_returns_batch_facts_and_missing_pointer_semantic
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn supplier_list_candidate_query_uses_index_without_collscan() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_supplier_io_explain")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_supplier_io_explain").await.expect("测试数据库创建失败");
         indexes::ensure(fixture.db()).await.expect("索引创建失败");
         seed_supplier_io_fixture(fixture.db()).await;
 
@@ -663,10 +616,7 @@ async fn supplier_list_candidate_query_uses_index_without_collscan() {
             rendered.contains("uk_supplier_accounts_id"),
             "explain 未命中 uk_supplier_accounts_id：{rendered}"
         );
-        assert!(
-            !rendered.contains("COLLSCAN"),
-            "explain 出现 COLLSCAN：{rendered}"
-        );
+        assert!(!rendered.contains("COLLSCAN"), "explain 出现 COLLSCAN：{rendered}");
 
         let capability_explain = fixture
             .db()
@@ -712,9 +662,7 @@ async fn supplier_list_candidate_query_uses_index_without_collscan() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn supplier_bundles_see_same_session_writes() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_supplier_io_txn")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_supplier_io_txn").await.expect("测试数据库创建失败");
         indexes::ensure(fixture.db()).await.expect("索引创建失败");
         seed_supplier_io_fixture(fixture.db()).await;
 
@@ -730,9 +678,7 @@ async fn supplier_bundles_see_same_session_writes() {
                 let trans_capability = trans_capability.clone();
                 Box::pin(async move {
                     db.supplier_accounts().create(&supplier, session).await?;
-                    db.supplier_capabilities()
-                        .create(&trans_capability, session)
-                        .await?;
+                    db.supplier_capabilities().create(&trans_capability, session).await?;
                     let bundle = db
                         .supplier()
                         .load_supplier_list_bundle(

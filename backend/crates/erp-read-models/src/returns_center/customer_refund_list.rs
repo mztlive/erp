@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
 use erp_returns::entity::returns::{CustomerRefund, CustomerRefundStatus};
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::BusinessDocument;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 
 use super::approval::document_approval_view;
 use super::dto::CustomerRefundView;
@@ -103,10 +103,7 @@ impl CustomerRefundListFacts {
 pub fn index_document_bindings(
     documents: Vec<BusinessDocument>,
 ) -> HashMap<String, Option<ApprovalDefinitionBinding>> {
-    documents
-        .into_iter()
-        .map(|document| (document.base.id.clone(), document.approval_binding))
-        .collect()
+    documents.into_iter().map(|document| (document.base.id.clone(), document.approval_binding)).collect()
 }
 
 /// 由本页退款事实与批量注册行装配列表视图。
@@ -183,10 +180,8 @@ pub fn customer_refund_view_from_facts(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        customer_refund_view_from_facts, index_document_bindings, map_customer_refund_list_page,
-        CustomerRefundListFacts,
-    };
+    use std::str::FromStr;
+
     use bpm::ApprovalProcessDefinitionId;
     use erp_core::common::time::Instant;
     use erp_core::ids::{BusinessDocumentId, CustomerAccountId, CustomerReceiptId, CustomerRefundId};
@@ -194,7 +189,11 @@ mod tests {
     use erp_returns::entity::returns::{CustomerRefund, CustomerRefundData, CustomerRefundStatus};
     use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
     use erp_workflow::entity::document_registry::{BusinessDocument, BusinessDocumentData, DocumentType};
-    use std::str::FromStr;
+
+    use super::{
+        CustomerRefundListFacts, customer_refund_view_from_facts, index_document_bindings,
+        map_customer_refund_list_page,
+    };
 
     fn facts() -> CustomerRefundListFacts {
         CustomerRefundListFacts {

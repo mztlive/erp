@@ -1,14 +1,11 @@
 use application_core::AuditActor;
-use axum::{
-    extract::{Extension, Path, State},
-    Json,
-};
+use axum::Json;
+use axum::extract::{Extension, Path, State};
 use erp_identity::{AdminItem, AdminService, CreateAdminParams, UpdateAdminParams, UpdateAdminRoleParams};
 
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "账号管理",
@@ -22,9 +19,7 @@ pub async fn create_admin(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateAdminParams>,
 ) -> Result<()> {
-    AdminService::new(state.db(), state.rbac())
-        .create_admin(req, actor)
-        .await?;
+    AdminService::new(state.db(), state.rbac()).create_admin(req, actor).await?;
 
     Ok(ApiResponse::<()>::ok())
 }
@@ -55,9 +50,7 @@ pub async fn update_admin(
     Json(mut req): Json<UpdateAdminParams>,
 ) -> Result<()> {
     req.id = id;
-    AdminService::new(state.db(), state.rbac())
-        .update_admin(req, actor)
-        .await?;
+    AdminService::new(state.db(), state.rbac()).update_admin(req, actor).await?;
 
     Ok(ApiResponse::<()>::ok())
 }
@@ -74,9 +67,7 @@ pub async fn delete_admin(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    AdminService::new(state.db(), state.rbac())
-        .delete_admin(id, actor)
-        .await?;
+    AdminService::new(state.db(), state.rbac()).delete_admin(id, actor).await?;
 
     Ok(ApiResponse::<()>::ok())
 }
@@ -95,9 +86,7 @@ pub async fn update_admin_role(
     Json(mut req): Json<UpdateAdminRoleParams>,
 ) -> Result<()> {
     req.id = id;
-    AdminService::new(state.db(), state.rbac())
-        .update_admin_role(req, actor)
-        .await?;
+    AdminService::new(state.db(), state.rbac()).update_admin_role(req, actor).await?;
 
     Ok(ApiResponse::<()>::ok())
 }

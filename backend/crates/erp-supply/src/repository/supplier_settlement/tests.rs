@@ -1,12 +1,13 @@
 use std::str::FromStr;
 
+use erp_core::ids::SupplierSettlementItemId;
+use mongodb::bson::doc;
+use persistence_core::QueryFilter;
+
 use super::projection::{sort_doc, supplier_settlement_statement_projection};
 use super::source_scope::order_scope_filter;
 use super::{SupplierSettlementDifferenceFilter, SupplierSettlementStatementFilter};
 use crate::entity::supplier_settlement::{SettlementDifferenceStatus, SettlementPeriod, SettlementStatus};
-use erp_core::ids::SupplierSettlementItemId;
-use mongodb::bson::doc;
-use persistence_core::QueryFilter;
 
 #[test]
 fn statement_filter_applies_optional_fields_and_deleted_filter() {
@@ -27,14 +28,7 @@ fn statement_filter_applies_optional_fields_and_deleted_filter() {
     let document = filter.to_doc();
     assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
     assert_eq!(document.get_str("status").unwrap(), "CONFIRMED");
-    assert_eq!(
-        document
-            .get_document("statement_no")
-            .unwrap()
-            .get_str("$regex")
-            .unwrap(),
-        r"ST\-2026"
-    );
+    assert_eq!(document.get_document("statement_no").unwrap().get_str("$regex").unwrap(), r"ST\-2026");
 }
 
 #[test]
@@ -49,33 +43,21 @@ fn difference_filter_applies_statement_item_and_status() {
     };
 
     let document = filter.to_doc();
-    assert_eq!(
-        document.get_str("statement_item_id").unwrap(),
-        "settlement-item-1"
-    );
+    assert_eq!(document.get_str("statement_item_id").unwrap(), "settlement-item-1");
     assert_eq!(document.get_str("status").unwrap(), "PENDING");
 }
 
 #[test]
 fn settlement_sort_doc_rejects_fields_outside_whitelist() {
     let whitelist = ["created_at", "period_start", "confirmed_at"];
-    assert_eq!(
-        sort_doc(&whitelist, None, false),
-        doc! { "created_at": -1, "id": -1 }
-    );
+    assert_eq!(sort_doc(&whitelist, None, false), doc! { "created_at": -1, "id": -1 });
     assert_eq!(
         sort_doc(&whitelist, Some("status"), false),
         doc! { "created_at": -1, "id": -1 },
         "白名单外的排序字段必须回退 created_at"
     );
-    assert_eq!(
-        sort_doc(&whitelist, Some("period_start"), true),
-        doc! { "period_start": 1, "id": 1 }
-    );
-    assert_eq!(
-        sort_doc(&whitelist, Some("confirmed_at"), false),
-        doc! { "confirmed_at": -1, "id": -1 }
-    );
+    assert_eq!(sort_doc(&whitelist, Some("period_start"), true), doc! { "period_start": 1, "id": 1 });
+    assert_eq!(sort_doc(&whitelist, Some("confirmed_at"), false), doc! { "confirmed_at": -1, "id": -1 });
 }
 
 #[test]
@@ -105,24 +87,9 @@ fn settlement_period_bounds_use_shanghai_inclusive_start_exclusive_end() {
     // 边界口径必须来自领域 SettlementPeriod::secs_bounds（与 contains 同源），
     // 仓储不再复制第二份计算。
     for (start_text, end_text, first_secs_text, last_secs_text) in [
-        (
-            "2026-07-01",
-            "2026-07-31",
-            "2026-07-01T00:00:00+08:00",
-            "2026-08-01T00:00:00+08:00",
-        ),
-        (
-            "2025-12-01",
-            "2026-02-28",
-            "2025-12-01T00:00:00+08:00",
-            "2026-03-01T00:00:00+08:00",
-        ),
-        (
-            "2028-02-01",
-            "2028-02-29",
-            "2028-02-01T00:00:00+08:00",
-            "2028-03-01T00:00:00+08:00",
-        ),
+        ("2026-07-01", "2026-07-31", "2026-07-01T00:00:00+08:00", "2026-08-01T00:00:00+08:00"),
+        ("2025-12-01", "2026-02-28", "2025-12-01T00:00:00+08:00", "2026-03-01T00:00:00+08:00"),
+        ("2028-02-01", "2028-02-29", "2028-02-01T00:00:00+08:00", "2028-03-01T00:00:00+08:00"),
     ] {
         let start = BusinessDate::from_str(start_text).unwrap();
         let end = BusinessDate::from_str(end_text).unwrap();
@@ -141,19 +108,15 @@ fn settlement_period_bounds_use_shanghai_inclusive_start_exclusive_end() {
     let start = BusinessDate::from_ymd(2026, 7, 1).unwrap();
     let end = BusinessDate::from_ymd(2026, 7, 31).unwrap();
     let (start_secs, end_secs) = SettlementPeriod::secs_bounds(start, end);
-    let last_second = DateTime::parse_from_rfc3339("2026-07-31T23:59:59+08:00")
-        .unwrap()
-        .timestamp();
-    assert!(
-        (start_secs..end_secs).contains(&last_second),
-        "结束日 23:59:59 +08:00 必须落在期间内"
-    );
+    let last_second = DateTime::parse_from_rfc3339("2026-07-31T23:59:59+08:00").unwrap().timestamp();
+    assert!((start_secs..end_secs).contains(&last_second), "结束日 23:59:59 +08:00 必须落在期间内");
 }
 
 #[test]
 fn settlement_scope_filters_cover_supplier_period_and_requested_ids() {
-    use erp_core::ids::{SupplierAccountId, SupplierFulfillmentItemId};
     use std::collections::BTreeSet;
+
+    use erp_core::ids::{SupplierAccountId, SupplierFulfillmentItemId};
 
     use super::source_scope::{item_scope_filter, refund_fact_scope_filter};
 
@@ -182,33 +145,13 @@ fn settlement_scope_filters_cover_supplier_period_and_requested_ids() {
         vec!["order-1"]
     );
     let completed_branch = branches[1].as_document().unwrap();
-    assert_eq!(
-        completed_branch
-            .get_document("completed_at")
-            .unwrap()
-            .get_i64("$gte")
-            .unwrap(),
-        100
-    );
-    assert_eq!(
-        completed_branch
-            .get_document("completed_at")
-            .unwrap()
-            .get_i64("$lt")
-            .unwrap(),
-        200
-    );
+    assert_eq!(completed_branch.get_document("completed_at").unwrap().get_i64("$gte").unwrap(), 100);
+    assert_eq!(completed_branch.get_document("completed_at").unwrap().get_i64("$lt").unwrap(), 200);
     // 损坏行分支：已完成但缺少完成时间（仅直接改库可产生）必须纳入，
     // 使 Service 的 confirmed_completed_at 校验 fail-closed。
     let tampered_branch = branches[2].as_document().unwrap();
-    assert_eq!(
-        tampered_branch.get_str("fulfillment_status").unwrap(),
-        "COMPLETED"
-    );
-    assert!(matches!(
-        tampered_branch.get("completed_at").unwrap(),
-        mongodb::bson::Bson::Null
-    ));
+    assert_eq!(tampered_branch.get_str("fulfillment_status").unwrap(), "COMPLETED");
+    assert!(matches!(tampered_branch.get("completed_at").unwrap(), mongodb::bson::Bson::Null));
     let item_ids = vec![SupplierFulfillmentItemId::new("item-1")];
     let items = item_scope_filter(&order_ids, &item_ids);
     let branches = items.get_array("$or").unwrap();

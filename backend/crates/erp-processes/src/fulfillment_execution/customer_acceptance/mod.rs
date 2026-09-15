@@ -8,11 +8,12 @@ mod registration;
 mod reverse;
 pub mod task;
 
+use std::sync::Arc;
+
 use erp_fulfillment::service::FulfillmentService;
 use erp_identity::SharedRbacService;
 use erp_read_models::fulfillment_center::FulfillmentReadService;
 use mongodb::Database;
-use std::sync::Arc;
 
 /// 持有验收根事务，组合履约事实、销售进度、责任任务及原命令审计。
 pub struct CustomerAcceptanceProcess {
@@ -30,12 +31,6 @@ impl CustomerAcceptanceProcess {
         rbac: SharedRbacService,
         object_read: Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     ) -> Self {
-        Self {
-            read: FulfillmentReadService::new(db.clone()),
-            db,
-            domain: read,
-            rbac,
-            object_read,
-        }
+        Self { read: FulfillmentReadService::new(db.clone()), db, domain: read, rbac, object_read }
     }
 }

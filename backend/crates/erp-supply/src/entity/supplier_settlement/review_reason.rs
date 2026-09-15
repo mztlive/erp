@@ -3,9 +3,8 @@
 //! 驳回原因的 trim、大写规范化、字符集、长度与固定 allowlist 是领域不变量，
 //! 由本值对象独占；Service 只负责传输与事务编排，不得再持有第二份规则。
 
-use serde::{Deserialize, Serialize};
-
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 结算复核驳回原因固定代码（FUL-E13）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -48,9 +47,7 @@ impl SettlementReviewRejectReason {
         if !normalized.bytes().all(|byte| {
             byte.is_ascii_uppercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.')
         }) {
-            return Err(Error::from(
-                "驳回原因代码只能包含大写字母、数字、下划线、连字符或点",
-            ));
+            return Err(Error::from("驳回原因代码只能包含大写字母、数字、下划线、连字符或点"));
         }
         match normalized.as_str() {
             "NEEDS_MORE_EVIDENCE" => Ok(Self::NeedsMoreEvidence),
@@ -114,10 +111,7 @@ mod tests {
             let reason = SettlementReviewRejectReason::parse(code).unwrap();
             assert_eq!(reason.as_str(), code);
             assert_eq!(reason.to_string(), code);
-            assert_eq!(
-                SettlementReviewRejectReason::parse(reason.as_str()).unwrap(),
-                reason
-            );
+            assert_eq!(SettlementReviewRejectReason::parse(reason.as_str()).unwrap(), reason);
         }
     }
 

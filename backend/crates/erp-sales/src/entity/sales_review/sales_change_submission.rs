@@ -7,10 +7,8 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::stable::StableBase;
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     ContractRevisionId, CustomerAccountId, PartyId, SalesChangeOrderId, SalesChangeSubmissionId,
@@ -20,11 +18,12 @@ use erp_core::ids::{
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::snapshot::HeaderSnapshots;
 use super::types::{
-    build_line_groups, validate_line_list, BusinessType, GoodsLineFields, LineSummary, LineType,
-    VoucherLineDraft, WelfareScenario,
+    BusinessType, GoodsLineFields, LineSummary, LineType, VoucherLineDraft, WelfareScenario,
+    build_line_groups, validate_line_list,
 };
 
 /// 提交人标识最大长度。
@@ -172,10 +171,7 @@ impl SalesChangeSubmissionData {
             return Err(Error::from("变更工作副本与销售变更单关系不一致"));
         }
         let working_copy_id = SalesOrderWorkingCopyId::new(working_copy.base.id.clone());
-        if lines
-            .iter()
-            .any(|line| !line.belongs_to_working_copy(&working_copy_id))
-        {
+        if lines.iter().any(|line| !line.belongs_to_working_copy(&working_copy_id)) {
             return Err(Error::from("变更工作副本明细归属不一致"));
         }
         let line_data = lines
@@ -344,12 +340,8 @@ impl SalesChangeSubmission {
         if data.working_copy_version == 0 {
             return Err(Error::from("草稿版本必须为正整数"));
         }
-        let submitted_by = normalize_required_text(
-            data.submitted_by,
-            "提交人不能为空",
-            SUBMITTER_MAX_LEN,
-            "提交人过长",
-        )?;
+        let submitted_by =
+            normalize_required_text(data.submitted_by, "提交人不能为空", SUBMITTER_MAX_LEN, "提交人过长")?;
         let snapshots = HeaderSnapshots::build(&data.snapshot)?;
         let project_name = normalize_optional_text(data.project_name, "项目名称", PROJECT_NAME_MAX_LEN)?;
         let business_remark =
@@ -427,9 +419,7 @@ impl SalesChangeSubmission {
     /// # 错误
     /// 当前序号达到 `u32::MAX` 时返回错误。
     pub fn next_submission_no(current_max: u32) -> Result<u32> {
-        current_max
-            .checked_add(1)
-            .ok_or_else(|| Error::from("变更提交序号溢出"))
+        current_max.checked_add(1).ok_or_else(|| Error::from("变更提交序号溢出"))
     }
 
     /// 通过变更提交（`InReview → Approved`）。
@@ -488,10 +478,7 @@ impl SalesChangeSubmission {
     pub fn sales_order_header_snapshot(&self) -> crate::entity::sales_order::HeaderSnapshotData {
         crate::entity::sales_order::HeaderSnapshotData {
             customer_name: self.customer_snapshot.customer_name.clone(),
-            contract_no: self
-                .contract_snapshot
-                .as_ref()
-                .map(|snapshot| snapshot.contract_no.clone()),
+            contract_no: self.contract_snapshot.as_ref().map(|snapshot| snapshot.contract_no.clone()),
             settlement_party_name: self
                 .settlement_party_snapshot
                 .as_ref()
@@ -788,9 +775,7 @@ impl SalesChangeSubmissionLine {
             fulfillment_due_at: self
                 .fulfillment_due_at
                 .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", self.line_no)))?,
-            quantity: self
-                .quantity
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少数量", self.line_no)))?,
+            quantity: self.quantity.ok_or_else(|| Error::from(format!("第 {} 行缺少数量", self.line_no)))?,
             base_unit_code: self
                 .base_unit_code
                 .clone()
@@ -865,9 +850,10 @@ fn validate_amount_triple(gross_amount: Amount, net_amount: Amount, tax_amount: 
 mod tests {
     use std::str::FromStr;
 
-    use super::*;
     use erp_core::ids::{SalesOrderWorkingCopyId, SkuRevisionId};
     use erp_core::money::Quantity;
+
+    use super::*;
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -960,16 +946,10 @@ mod tests {
 
     #[test]
     fn new_rejects_blank_and_broken_invariants() {
-        let blank_submitter = SalesChangeSubmissionData {
-            submitted_by: "   ".to_string(),
-            ..header_data()
-        };
+        let blank_submitter = SalesChangeSubmissionData { submitted_by: "   ".to_string(), ..header_data() };
         assert!(SalesChangeSubmission::new(SalesChangeSubmissionId::new("cs-1"), blank_submitter).is_err());
 
-        let zero_no = SalesChangeSubmissionData {
-            submission_no: 0,
-            ..header_data()
-        };
+        let zero_no = SalesChangeSubmissionData { submission_no: 0, ..header_data() };
         assert!(SalesChangeSubmission::new(SalesChangeSubmissionId::new("cs-1"), zero_no).is_err());
 
         let half_voucher = SalesChangeSubmissionData {
@@ -979,16 +959,11 @@ mod tests {
         };
         assert!(SalesChangeSubmission::new(SalesChangeSubmissionId::new("cs-1"), half_voucher).is_err());
 
-        let broken_amount = SalesChangeSubmissionData {
-            tax_amount: amt("3.91"),
-            ..header_data()
-        };
+        let broken_amount = SalesChangeSubmissionData { tax_amount: amt("3.91"), ..header_data() };
         assert!(SalesChangeSubmission::new(SalesChangeSubmissionId::new("cs-1"), broken_amount).is_err());
 
-        let duplicated = SalesChangeSubmissionData {
-            lines: vec![line_data(1), line_data(1)],
-            ..header_data()
-        };
+        let duplicated =
+            SalesChangeSubmissionData { lines: vec![line_data(1), line_data(1)], ..header_data() };
         assert!(SalesChangeSubmission::new(SalesChangeSubmissionId::new("cs-1"), duplicated).is_err());
     }
 
@@ -1099,15 +1074,17 @@ mod tests {
 
         let mut unrelated_copy = working_copy;
         unrelated_copy.base.id = "wc-2".to_string();
-        assert!(SalesChangeSubmissionData::from_sales_working_copy(
-            &change_order,
-            &unrelated_copy,
-            std::slice::from_ref(&line),
-            3,
-            Instant::from_unix_secs(1_800_000_000),
-            "sales-1",
-        )
-        .is_err());
+        assert!(
+            SalesChangeSubmissionData::from_sales_working_copy(
+                &change_order,
+                &unrelated_copy,
+                std::slice::from_ref(&line),
+                3,
+                Instant::from_unix_secs(1_800_000_000),
+                "sales-1",
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -1260,16 +1237,15 @@ mod tests {
 
     #[test]
     fn line_new_rejects_zero_no_and_mismatch() {
-        let zero = SalesChangeSubmissionLineData {
-            line_no: 0,
-            ..line_data(1)
-        };
-        assert!(SalesChangeSubmissionLine::new(
-            SalesChangeSubmissionLineId::new("csl-1"),
-            SalesChangeSubmissionId::new("cs-1"),
-            zero
-        )
-        .is_err());
+        let zero = SalesChangeSubmissionLineData { line_no: 0, ..line_data(1) };
+        assert!(
+            SalesChangeSubmissionLine::new(
+                SalesChangeSubmissionLineId::new("csl-1"),
+                SalesChangeSubmissionId::new("cs-1"),
+                zero
+            )
+            .is_err()
+        );
 
         let mismatch = SalesChangeSubmissionLineData {
             line_type: LineType::Voucher,
@@ -1277,11 +1253,13 @@ mod tests {
             voucher: None,
             ..line_data(1)
         };
-        assert!(SalesChangeSubmissionLine::new(
-            SalesChangeSubmissionLineId::new("csl-1"),
-            SalesChangeSubmissionId::new("cs-1"),
-            mismatch
-        )
-        .is_err());
+        assert!(
+            SalesChangeSubmissionLine::new(
+                SalesChangeSubmissionLineId::new("csl-1"),
+                SalesChangeSubmissionId::new("cs-1"),
+                mismatch
+            )
+            .is_err()
+        );
     }
 }

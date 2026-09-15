@@ -1,12 +1,15 @@
 //! 链接生命周期命令：版本竞争与幂等结果共同提交。
+use erp_core::common::time::Instant;
+use erp_core::ids::SalesSelectionBookletId;
+use persistence_core::{Executor, Transactional};
+
 use super::{IdempotencyStoreInput, SalesSelectionService};
 use crate::dto::sales_selection::{SalesSelectionBookletView, SalesSelectionCommandRequest};
 use crate::entity::sales_selection::{
-    normalize_idempotency_key, request_hash, IdempotencyOperation, LinkTokenCrypto,
+    IdempotencyOperation, LinkTokenCrypto, normalize_idempotency_key, request_hash,
 };
-use crate::{repository::SalesSelectionExt, Error, Result};
-use erp_core::{common::time::Instant, ids::SalesSelectionBookletId};
-use persistence_core::{Executor, Transactional};
+use crate::repository::SalesSelectionExt;
+use crate::{Error, Result};
 
 impl SalesSelectionService {
     /// 更换、关闭、撤销和作废的共同原子入口。
@@ -25,11 +28,7 @@ impl SalesSelectionService {
         self.db
             .client()
             .with_transaction(move |tx| {
-                Box::pin(async move {
-                    service
-                        .lifecycle_in(&id, req, &actor, operation, crypto, tx)
-                        .await
-                })
+                Box::pin(async move { service.lifecycle_in(&id, req, &actor, operation, crypto, tx).await })
             })
             .await
     }
@@ -61,7 +60,7 @@ impl SalesSelectionService {
                     .issue()
                     .map_err(|e| Error::Internal(e.to_string()))?;
                 book.rotate_link(hash, cipher, actor)?;
-            }
+            },
             IdempotencyOperation::Close => book.close(Instant::now(), actor)?,
             IdempotencyOperation::RevokeAccess => book.revoke_access(actor)?,
             IdempotencyOperation::Void => book.void(Instant::now(), actor)?,

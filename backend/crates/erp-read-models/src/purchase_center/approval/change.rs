@@ -1,11 +1,12 @@
 //! 冻结绑定与业务状态的采购审批只读投影。
+use erp_procurement::entity::purchase_order::PurchaseChangeOrderStatus;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::service::approval::policy::ApprovalRequirement;
+
 use super::super::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
     DocumentApprovalView,
 };
-use erp_procurement::entity::purchase_order::PurchaseChangeOrderStatus;
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::policy::ApprovalRequirement;
 /// 由绑定与可选实例事实构造只读审批结构。
 ///
 /// 创建后未提交只返回绑定定义；客户端不得据此选择定义或审批人。
@@ -31,10 +32,7 @@ pub fn document_approval_view(
         definition: binding.map(definition_view_from_binding),
         instance,
         recent_history: Vec::new(),
-        history_page: DocumentApprovalHistoryPageView {
-            next_cursor: None,
-            has_more: false,
-        },
+        history_page: DocumentApprovalHistoryPageView { next_cursor: None, has_more: false },
         allowed_actions: allowed_document_actions(status),
     }
 }
@@ -60,30 +58,25 @@ fn allowed_document_actions(status: PurchaseChangeOrderStatus) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use bpm::ids::ApprovalProcessDefinitionId;
     use erp_core::common::time::Instant;
     use erp_workflow::service::approval::binding::binding_from_published;
+
+    use super::*;
     const RECENT_HISTORY_LIMIT: usize = 8;
     /// 详情只读审批结构；允许动作不含选择定义或审批人。
     #[test]
     fn detail_approval_is_read_only_and_has_history_cap() {
-        let binding = binding_from_published(
-            ApprovalProcessDefinitionId::new("def-1"),
-            2,
-            Instant::from_unix_secs(1),
-        )
-        .unwrap();
+        let binding =
+            binding_from_published(ApprovalProcessDefinitionId::new("def-1"), 2, Instant::from_unix_secs(1))
+                .unwrap();
         let view = document_approval_view(Some(&binding), None, PurchaseChangeOrderStatus::Draft);
         assert_eq!(view.requirement, "PROCESS_REQUIRED");
         assert_eq!(view.definition.as_ref().unwrap().id, "def-1");
         assert!(view.instance.is_none());
         assert!(view.recent_history.len() <= RECENT_HISTORY_LIMIT);
         assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
-        assert!(!view
-            .allowed_actions
-            .iter()
-            .any(|item| item.contains("DEFINITION")));
+        assert!(!view.allowed_actions.iter().any(|item| item.contains("DEFINITION")));
         let running = document_approval_view(Some(&binding), None, PurchaseChangeOrderStatus::InApproval);
         assert_eq!(running.allowed_actions, vec!["CANCEL".to_string()]);
     }

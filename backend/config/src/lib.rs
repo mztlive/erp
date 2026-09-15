@@ -43,12 +43,14 @@
 //! * `DatabaseConfig`: 数据库连接设置
 //! * `S3Config`: 必需的 S3 对象存储启动参数
 
+use std::fmt;
+use std::path::Path;
+
 use clap::Parser;
 use command::Args;
 use nacos::NacosConfig;
 use nacos_watch::NacosConfigWatcher;
 use serde::Deserialize;
-use std::{fmt, path::Path};
 use tokio::sync::watch;
 use tracing::info;
 use url::Url;
@@ -61,10 +63,8 @@ pub use errors::{Error, Result};
 use nacos::NacosConfigClient;
 
 const MIN_JWT_SECRET_BYTES: usize = 32;
-const JWT_SECRET_PLACEHOLDERS: [&str; 2] = [
-    "your-secret-key-change-me",
-    "replace-with-at-least-32-random-bytes",
-];
+const JWT_SECRET_PLACEHOLDERS: [&str; 2] =
+    ["your-secret-key-change-me", "replace-with-at-least-32-random-bytes"];
 
 /// 包含所有应用程序设置的主配置结构。
 ///
@@ -139,10 +139,7 @@ impl fmt::Debug for S3Config {
             .field("endpoint", &self.endpoint)
             .field("access_key_id", &"<redacted>")
             .field("secret_access_key", &"<redacted>")
-            .field(
-                "session_token",
-                &self.session_token.as_ref().map(|_| "<redacted>"),
-            )
+            .field("session_token", &self.session_token.as_ref().map(|_| "<redacted>"))
             .field("key_prefix", &self.key_prefix)
             .field("public_base_url", &self.public_base_url)
             .field("force_path_style", &self.force_path_style)
@@ -216,20 +213,12 @@ fn validate_s3_config(config: &S3Config) -> Result<()> {
         validate_s3_url("endpoint", endpoint)?;
     }
     validate_s3_url("public_base_url", &config.public_base_url)?;
-    if config
-        .session_token
-        .as_ref()
-        .is_some_and(|token| token.trim().is_empty() || token.trim() != token)
-    {
+    if config.session_token.as_ref().is_some_and(|token| token.trim().is_empty() || token.trim() != token) {
         return Err(Error::Invalid(
             "s3.session_token must not be empty or contain surrounding whitespace".to_string(),
         ));
     }
-    if config
-        .key_prefix
-        .as_deref()
-        .is_some_and(|prefix| !is_safe_s3_prefix(prefix))
-    {
+    if config.key_prefix.as_deref().is_some_and(|prefix| !is_safe_s3_prefix(prefix)) {
         return Err(Error::Invalid(
             "s3.key_prefix must be a relative object-key prefix without empty, '.' or '..' segments"
                 .to_string(),
@@ -246,9 +235,7 @@ fn validate_s3_url(name: &str, value: &str) -> Result<()> {
         || url.query().is_some()
         || url.fragment().is_some()
     {
-        return Err(Error::Invalid(format!(
-            "s3.{name} must be an HTTP(S) URL without query or fragment"
-        )));
+        return Err(Error::Invalid(format!("s3.{name} must be an HTTP(S) URL without query or fragment")));
     }
     Ok(())
 }
@@ -263,9 +250,7 @@ fn is_safe_s3_prefix(prefix: &str) -> bool {
     {
         return false;
     }
-    prefix
-        .split('/')
-        .all(|segment| !segment.is_empty() && segment != "." && segment != "..")
+    prefix.split('/').all(|segment| !segment.is_empty() && segment != "." && segment != "..")
 }
 
 impl std::str::FromStr for Config {
@@ -461,11 +446,7 @@ force_path_style = true
 
     #[test]
     fn weak_or_example_jwt_secrets_are_rejected() {
-        for secret in [
-            "short",
-            "your-secret-key-change-me",
-            "replace-with-at-least-32-random-bytes",
-        ] {
+        for secret in ["short", "your-secret-key-change-me", "replace-with-at-least-32-random-bytes"] {
             let content = MINIMAL_CONFIG.replace("test-secret-that-is-at-least-32-bytes", secret);
             assert!(Config::from_toml_str(&content).is_err());
         }
@@ -498,10 +479,7 @@ force_path_style = true
                 invalid_field,
             );
 
-            assert!(
-                Config::from_toml_str(&content).is_err(),
-                "{invalid_field} must be rejected"
-            );
+            assert!(Config::from_toml_str(&content).is_err(), "{invalid_field} must be rejected");
         }
     }
 

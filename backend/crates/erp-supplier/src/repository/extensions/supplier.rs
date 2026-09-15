@@ -5,6 +5,8 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as SupplierExt>::SUPPLIER_ACCOUNTS` 等值。
 
+use mongodb::Database;
+
 use crate::entity::supplier::{
     SupplierCapabilityRevision, SupplierQualificationRevision, SupplierRatingRevision,
 };
@@ -13,8 +15,6 @@ use crate::repository::owned::{
     SupplierProfileCommandRepository, SupplierQualificationCapabilityRepository,
     SupplierQualificationRepository,
 };
-use mongodb::Database;
-
 use crate::repository::supplier::{
     SupplierAccountFilter, SupplierCapabilityFilter, SupplierCommercialProfileFilter, SupplierDetailBundle,
     SupplierListBundle, SupplierListSearchInput, SupplierQualificationFilter,

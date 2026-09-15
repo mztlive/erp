@@ -11,7 +11,7 @@ pub use invoice::{
 mod payment;
 pub use account::prepare_payable_account;
 pub use payment::{
-    finish_supplier_payment_in_transaction, settle_supplier_payment_in_transaction, PaymentSettlement,
+    PaymentSettlement, finish_supplier_payment_in_transaction, settle_supplier_payment_in_transaction,
 };
 /// 应付领域服务，仅读取与写入财务事实。
 pub struct PayableService {

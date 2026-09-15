@@ -2,14 +2,12 @@
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::doc;
+use persistence_core::{Executor, Result, mongo_ops};
 
 use crate::entity::catalog::{EnableStatus, Product, ProductBrand, ProductCategory, UnitOfMeasure};
 use crate::repository::owned::{
     ProductBrandRepository, ProductCategoryRepository, ProductRepository, UnitOfMeasureRepository,
 };
-use persistence_core::mongo_ops;
-use persistence_core::Executor;
-use persistence_core::Result;
 
 impl<'a> ProductBrandRepository<'a> {
     /// 按品牌名称精确查找启用中的品牌。

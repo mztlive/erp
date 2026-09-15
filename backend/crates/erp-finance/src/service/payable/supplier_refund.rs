@@ -1,21 +1,21 @@
 //! 供应商退款的财务反向分配、已结算回冲和减少分录写入。
 
-use super::offset_batch::{load_payable_offset_facts, OffsetFacts};
-use crate::entity::payable::PayableAccount;
-use crate::entity::payable::{
-    AllocationAction as PayableAllocationAction, EntryDirection as PayableEntryDirection, PayableEntry,
-    PayableEntryData, PayableEntryOffset, PayableEntryOffsetData, PayableEntryType, PaymentAllocation,
-    PaymentAllocationData, SupplierPayment, SupplierPaymentStatus,
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::{
+    PayableAccountId, PayableEntryId, PayableEntryOffsetId, PaymentAllocationId, SupplierPaymentId,
 };
-use crate::repository::PayableExt;
-use crate::{Error, Result};
-use erp_core::common::time::BusinessDate;
-use erp_core::common::time::Instant;
-use erp_core::ids::PayableAccountId;
-use erp_core::ids::{PayableEntryId, PayableEntryOffsetId, PaymentAllocationId, SupplierPaymentId};
 use erp_core::money::Amount;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use super::offset_batch::{OffsetFacts, load_payable_offset_facts};
+use crate::entity::payable::{
+    AllocationAction as PayableAllocationAction, EntryDirection as PayableEntryDirection, PayableAccount,
+    PayableEntry, PayableEntryData, PayableEntryOffset, PayableEntryOffsetData, PayableEntryType,
+    PaymentAllocation, PaymentAllocationData, SupplierPayment, SupplierPaymentStatus,
+};
+use crate::repository::PayableExt;
+use crate::{Error, Result};
 
 /// 财务执行只消费退款稳定身份、金额和原发生时点。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,15 +103,8 @@ async fn create_decrease_offsets<P: RefundPostingPort>(
     chunks: &[crate::entity::payable::PaymentReverseChunk],
     session: &mut dyn Executor,
 ) -> Result<Option<PayableEntry>> {
-    let facts = port
-        .facts(
-            chunks
-                .iter()
-                .map(|chunk| chunk.increase_entry_id.clone())
-                .collect(),
-            session,
-        )
-        .await?;
+    let facts =
+        port.facts(chunks.iter().map(|chunk| chunk.increase_entry_id.clone()).collect(), session).await?;
     let mut decrease_entry: Option<PayableEntry> = None;
     for (offset_index, chunk) in chunks.iter().enumerate() {
         let entry = facts
@@ -145,9 +138,8 @@ async fn revert_supplier_refund_settlement<P: RefundPostingPort>(
     actor_id: &str,
     session: &mut dyn Executor,
 ) -> Result<()> {
-    let reverted = port
-        .revert_settlement(&entry.payable_account_id, &chunk.amount, actor_id, session)
-        .await?;
+    let reverted =
+        port.revert_settlement(&entry.payable_account_id, &chunk.amount, actor_id, session).await?;
     if !reverted {
         return Err(Error::BusinessLogicError("退款冲减超过已核销金额".to_string()));
     }
@@ -269,11 +261,7 @@ impl RefundPostingPort for MongoRefundPosting<'_> {
         actor: &str,
         e: &mut dyn Executor,
     ) -> Result<bool> {
-        Ok(self
-            .db
-            .payable_accounts()
-            .revert_settlement(id, amount, actor, e)
-            .await?)
+        Ok(self.db.payable_accounts().revert_settlement(id, amount, actor, e).await?)
     }
     async fn offset(&self, offset: &PayableEntryOffset, e: &mut dyn Executor) -> Result<()> {
         self.db.payable_entry_offsets().create(offset, e).await?;
@@ -297,10 +285,14 @@ impl RefundPostingPort for MongoRefundPosting<'_> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::str::FromStr;
+    use std::sync::Mutex;
+
+    use erp_core::ids::{FileAssetId, PartyBankAccountId, SupplierAccountId};
+
     use super::*;
     use crate::entity::payable::{PayableAccountData, PayableSourceType, SupplierPaymentData};
-    use erp_core::ids::{FileAssetId, PartyBankAccountId, SupplierAccountId};
-    use std::{collections::HashMap, str::FromStr, sync::Mutex};
 
     fn amount(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -374,10 +366,7 @@ mod tests {
                 (id.to_string(), entry)
             })
             .collect();
-        OffsetFacts {
-            entries,
-            accounts: HashMap::from([("account".into(), account)]),
-        }
+        OffsetFacts { entries, accounts: HashMap::from([("account".into(), account)]) }
     }
     struct TestExecutor {
         visits: usize,
@@ -426,10 +415,7 @@ mod tests {
             e: &mut dyn Executor,
         ) -> Result<Vec<PaymentAllocation>> {
             self.io("allocations", e)?;
-            Ok(vec![
-                allocation("apply1", "entry1", 1, "60"),
-                allocation("apply2", "entry2", 2, "40"),
-            ])
+            Ok(vec![allocation("apply1", "entry1", 1, "60"), allocation("apply2", "entry2", 2, "40")])
         }
         async fn facts(
             &self,
@@ -497,9 +483,7 @@ mod tests {
         let mut e = TestExecutor { visits: 0 };
         let port = port(&mut e);
         let payment = payment();
-        persist_refund(&port, &input(), &payment, "actor", &mut e)
-            .await
-            .unwrap();
+        persist_refund(&port, &input(), &payment, "actor", &mut e).await.unwrap();
         let state = port.recorded.lock().unwrap();
         assert_eq!(
             state.calls,
@@ -528,29 +512,15 @@ mod tests {
         assert_eq!(entry.source_revision_id, "refund");
         assert_eq!(entry.amount, amount("80"));
         assert_eq!(entry.posted_at, Instant::from_unix_secs(10));
-        let total = state
-            .allocations
-            .iter()
-            .fold(amount("0"), |a, row| a.checked_add(row.allocated_amount));
+        let total = state.allocations.iter().fold(amount("0"), |a, row| a.checked_add(row.allocated_amount));
         assert_eq!(total, amount("80"));
-        let offset_total = state
-            .offsets
-            .iter()
-            .fold(amount("0"), |a, row| a.checked_add(row.offset_amount));
+        let offset_total = state.offsets.iter().fold(amount("0"), |a, row| a.checked_add(row.offset_amount));
         assert_eq!(offset_total, total);
-        assert_eq!(
-            state
-                .allocations
-                .iter()
-                .map(|row| row.allocation_seq)
-                .collect::<Vec<_>>(),
-            [3, 4]
+        assert_eq!(state.allocations.iter().map(|row| row.allocation_seq).collect::<Vec<_>>(), [3, 4]);
+        assert!(
+            state.allocations.iter().all(|row| row.allocation_action == PayableAllocationAction::Reverse
+                && row.reverses_allocation_id.is_some())
         );
-        assert!(state
-            .allocations
-            .iter()
-            .all(|row| row.allocation_action == PayableAllocationAction::Reverse
-                && row.reverses_allocation_id.is_some()));
         assert_eq!(payment.status, SupplierPaymentStatus::Posted);
         assert_eq!(e.visits, state.io);
     }
@@ -561,9 +531,7 @@ mod tests {
             let mut e = TestExecutor { visits: 0 };
             let mut port = port(&mut e);
             port.fail = Some(fail);
-            let error = persist_refund(&port, &input(), &payment(), "actor", &mut e)
-                .await
-                .unwrap_err();
+            let error = persist_refund(&port, &input(), &payment(), "actor", &mut e).await.unwrap_err();
             assert!(matches!(error,Error::ConflictError(message) if message==format!("failure {fail}")));
             assert_eq!(port.recorded.lock().unwrap().io, fail + 1);
         }
@@ -576,9 +544,7 @@ mod tests {
             let mut port = port(&mut e);
             port.supplier = if foreign { "other" } else { "supplier" };
             port.revert = false;
-            let error = persist_refund(&port, &input(), &payment(), "actor", &mut e)
-                .await
-                .unwrap_err();
+            let error = persist_refund(&port, &input(), &payment(), "actor", &mut e).await.unwrap_err();
             assert!(
                 matches!(error,Error::BusinessLogicError(message) if message==if foreign{"禁止跨供应商退款"}else{"退款冲减超过已核销金额"})
             );

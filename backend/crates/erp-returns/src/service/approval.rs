@@ -36,9 +36,7 @@ pub fn cancel_customer_refund_to_draft(refund: &mut CustomerRefund) -> Result<()
 /// 状态不是审批中时返回冲突。
 pub fn ensure_final_approve_posting(refund: &CustomerRefund) -> Result<()> {
     if refund.status != CustomerRefundStatus::InApproval {
-        return Err(Error::ConflictError(
-            "只有审批中的客户退款单可以由最终通过动作过账".to_string(),
-        ));
+        return Err(Error::ConflictError("只有审批中的客户退款单可以由最终通过动作过账".to_string()));
     }
     Ok(())
 }
@@ -74,9 +72,7 @@ pub fn cancel_supplier_refund_to_draft(refund: &mut SupplierRefund) -> Result<()
 /// 状态不是审批中时返回冲突。
 pub fn ensure_supplier_refund_final_approve_posting(refund: &SupplierRefund) -> Result<()> {
     if refund.status != SupplierRefundStatus::InApproval {
-        return Err(Error::ConflictError(
-            "只有审批中的供应商退款单可以由最终通过动作过账".to_string(),
-        ));
+        return Err(Error::ConflictError("只有审批中的供应商退款单可以由最终通过动作过账".to_string()));
     }
     Ok(())
 }
@@ -112,9 +108,7 @@ pub fn cancel_receipt_reversal_to_draft(reversal: &mut ReceiptReversal) -> Resul
 /// 状态不是审批中时返回冲突。
 pub fn ensure_receipt_reversal_final_approve_posting(reversal: &ReceiptReversal) -> Result<()> {
     if reversal.status != ReceiptReversalStatus::InApproval {
-        return Err(Error::ConflictError(
-            "只有审批中的回款冲正单可以由最终通过动作过账".to_string(),
-        ));
+        return Err(Error::ConflictError("只有审批中的回款冲正单可以由最终通过动作过账".to_string()));
     }
     Ok(())
 }
@@ -150,9 +144,7 @@ pub fn cancel_payment_reversal_to_draft(reversal: &mut PaymentReversal) -> Resul
 /// 状态不是审批中时返回冲突。
 pub fn ensure_payment_reversal_final_approve_posting(reversal: &PaymentReversal) -> Result<()> {
     if reversal.status != PaymentReversalStatus::InApproval {
-        return Err(Error::ConflictError(
-            "只有审批中的付款冲正单可以由最终通过动作过账".to_string(),
-        ));
+        return Err(Error::ConflictError("只有审批中的付款冲正单可以由最终通过动作过账".to_string()));
     }
     Ok(())
 }

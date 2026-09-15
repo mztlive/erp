@@ -8,15 +8,15 @@
 //! `invoice` 由 D18 拥有（domains.md §3 唯一跨批次共享聚合），D19 在 P3 通过
 //! `invoices()` 访问器复用，禁止复制发票实体或另建访问路径。
 
-use crate::repository::owned::{
-    CustomerReceiptRepository, InvoiceRepository, ReceiptAllocationRepository, ReceivableAccountRepository,
-    ReceivableEntryOffsetRepository, ReceivableEntryRepository, SalesInvoiceAllocationRepository,
-    SalesInvoiceRequestRepository,
-};
 use mongodb::Database;
 
 use super::super::receivable::{
     CustomerReceiptFilter, InvoiceFilter, ReceivableAccountFilter, ReceivableRepository,
+};
+use crate::repository::owned::{
+    CustomerReceiptRepository, InvoiceRepository, ReceiptAllocationRepository, ReceivableAccountRepository,
+    ReceivableEntryOffsetRepository, ReceivableEntryRepository, SalesInvoiceAllocationRepository,
+    SalesInvoiceRequestRepository,
 };
 
 /// 域 D18 仓储访问器。

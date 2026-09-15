@@ -4,15 +4,14 @@
 //! [`ApprovalDomainActionPort`]；本注册表负责把合同动作路由到所属业务域，
 //! 并强制复用审批运行时持有的唯一事务执行器。
 
-use mongodb::Database;
-use persistence_core::Executor;
-
-use crate::Error as ServiceError;
-use crate::Result as ServiceResult;
 use application_core::AuditActor;
 use erp_identity::SharedRbacService;
 use erp_workflow::service::approval::policy::ApprovalDomainAction;
 use erp_workflow::{ApprovalActionContext, ApprovalActionFuture, ApprovalDomainActionPort};
+use mongodb::Database;
+use persistence_core::Executor;
+
+use crate::{Error as ServiceError, Result as ServiceResult};
 
 /// 审批强类型领域动作注册表。
 pub struct ApprovalActionRegistry {
@@ -37,9 +36,7 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
     ) -> ApprovalActionFuture<'a> {
         Box::pin(async move {
             validate_context(action, context, actor).map_err(map_service_error)?;
-            dispatch_action(self, action, context, actor, executor)
-                .await
-                .map_err(map_service_error)
+            dispatch_action(self, action, context, actor, executor).await.map_err(map_service_error)
         })
     }
 }
@@ -61,13 +58,13 @@ async fn dispatch_action(
             )
             .formalize_approved_submission_in_transaction(context.business_object_id(), actor, session)
             .await
-        }
+        },
         ApprovalDomainAction::SalesChangeOrderApplyEffectiveChange => {
             let session = require_transaction(executor)?;
             crate::sales_change::SalesChangeProcess::new(registry.db.clone(), registry.rbac.clone())
                 .apply_effective_change_in_transaction(context.business_object_id(), actor, session)
                 .await
-        }
+        },
         ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder => {
             let session = require_transaction(executor)?;
             crate::procure_to_pay::PurchaseOrderFormalizationProcess::new(
@@ -76,13 +73,13 @@ async fn dispatch_action(
             )
             .formalize_approved_order_in_transaction(context.business_object_id(), actor, session)
             .await
-        }
+        },
         ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange => {
             let session = require_transaction(executor)?;
             crate::procure_to_pay::PurchaseOrderProcess::new(registry.db.clone())
                 .apply_effective_change_in_transaction(context.business_object_id(), actor, session)
                 .await
-        }
+        },
         ApprovalDomainAction::StockAdjustmentPost => {
             crate::inventory_adjustment::InventoryAdjustmentService::new(
                 registry.db.clone(),
@@ -91,7 +88,7 @@ async fn dispatch_action(
             .post_stock_adjustment(context, actor, executor)
             .await
             .map(|_| ())
-        }
+        },
         ApprovalDomainAction::SalesInvoiceRequestApprove => {
             crate::finance_posting::receivable::invoice_request::approve_in_transaction(
                 &registry.db,
@@ -100,7 +97,7 @@ async fn dispatch_action(
                 executor,
             )
             .await
-        }
+        },
         ApprovalDomainAction::SalesInvoiceRequestCancelApproval => {
             crate::finance_posting::receivable::invoice_request::cancel_in_transaction(
                 &registry.db,
@@ -109,7 +106,7 @@ async fn dispatch_action(
                 executor,
             )
             .await
-        }
+        },
         ApprovalDomainAction::CustomerReceiptPost => {
             let session = require_transaction(executor)?;
             crate::finance_posting::receivable::post_customer_receipt_in_transaction(
@@ -119,7 +116,7 @@ async fn dispatch_action(
                 session,
             )
             .await
-        }
+        },
         ApprovalDomainAction::CustomerRefundPost | ApprovalDomainAction::SupplierRefundPost => {
             let session = require_transaction(executor)?;
             crate::reverse_flow::finalize_approved_return_in_transaction(
@@ -130,19 +127,19 @@ async fn dispatch_action(
                 session,
             )
             .await
-        }
+        },
         ApprovalDomainAction::ReceiptReversalPost => {
             let session = require_transaction(executor)?;
             crate::reverse_flow::ReceiptReversalProcess::new(registry.db.clone())
                 .post_receipt_reversal_in_transaction(context.business_object_id(), actor, session)
                 .await
-        }
+        },
         ApprovalDomainAction::PaymentReversalPost => {
             let session = require_transaction(executor)?;
             crate::reverse_flow::PaymentReversalProcess::new(registry.db.clone(), registry.rbac.clone())
                 .post_payment_reversal_in_transaction(context.business_object_id(), actor, session)
                 .await
-        }
+        },
         ApprovalDomainAction::SalesOrderCancelApprovalSubmission
         | ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission => {
             crate::order_to_cash::cancel_approval_in_transaction(
@@ -153,7 +150,7 @@ async fn dispatch_action(
                 executor,
             )
             .await
-        }
+        },
         ApprovalDomainAction::SalesChangeOrderCancelApproval => {
             crate::sales_change::cancel_approval_in_transaction(
                 &registry.db,
@@ -163,7 +160,7 @@ async fn dispatch_action(
                 executor,
             )
             .await
-        }
+        },
         ApprovalDomainAction::PurchaseOrderCancelApproval => {
             crate::procure_to_pay::cancel_order_approval_in_transaction(
                 &registry.db,
@@ -173,7 +170,7 @@ async fn dispatch_action(
                 executor,
             )
             .await
-        }
+        },
         ApprovalDomainAction::PurchaseChangeOrderCancelApproval => {
             crate::procure_to_pay::cancel_change_approval_in_transaction(
                 &registry.db,
@@ -183,7 +180,7 @@ async fn dispatch_action(
                 executor,
             )
             .await
-        }
+        },
         ApprovalDomainAction::StockAdjustmentCancelApproval => {
             crate::inventory_adjustment::cancel_approval::cancel_stock_adjustment_approval_in_transaction(
                 &registry.db,
@@ -193,7 +190,7 @@ async fn dispatch_action(
                 executor,
             )
             .await
-        }
+        },
         ApprovalDomainAction::CustomerReceiptCancelApproval => {
             crate::finance_posting::receivable::cancel_customer_receipt_approval_in_transaction(
                 &registry.db,
@@ -203,7 +200,7 @@ async fn dispatch_action(
                 executor,
             )
             .await
-        }
+        },
         ApprovalDomainAction::CustomerRefundCancelApproval
         | ApprovalDomainAction::SupplierRefundCancelApproval
         | ApprovalDomainAction::ReceiptReversalCancelApproval
@@ -217,7 +214,7 @@ async fn dispatch_action(
                 executor,
             )
             .await
-        }
+        },
         _ => Err(ServiceError::BusinessLogicError(format!(
             "动作 {} 必须由业务域提交入口执行，审批运行时不得反向调用",
             action.as_str()
@@ -226,9 +223,7 @@ async fn dispatch_action(
 }
 
 fn require_transaction(executor: &mut dyn Executor) -> ServiceResult<&mut mongodb::ClientSession> {
-    executor
-        .session()
-        .ok_or_else(|| ServiceError::Internal("审批领域动作缺少事务会话".to_string()))
+    executor.session().ok_or_else(|| ServiceError::Internal("审批领域动作缺少事务会话".to_string()))
 }
 
 fn validate_context(
@@ -238,14 +233,10 @@ fn validate_context(
 ) -> ServiceResult<()> {
     let expected = action.document_type();
     if context.business_object_type() != expected.as_str() {
-        return Err(ServiceError::ConflictError(
-            "审批领域动作与冻结单据类型不一致".to_string(),
-        ));
+        return Err(ServiceError::ConflictError("审批领域动作与冻结单据类型不一致".to_string()));
     }
     if context.actor_id() != actor.id() {
-        return Err(ServiceError::Forbidden(
-            "审批领域动作操作人与认证身份不一致".to_string(),
-        ));
+        return Err(ServiceError::Forbidden("审批领域动作操作人与认证身份不一致".to_string()));
     }
     Ok(())
 }

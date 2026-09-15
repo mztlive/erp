@@ -8,7 +8,7 @@ use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_identity::{
-    subject, AccessControlExt, MongoCasbinAdapter, Permission, PermissionSet, SharedRbacService,
+    AccessControlExt, MongoCasbinAdapter, Permission, PermissionSet, SharedRbacService, subject,
 };
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_workflow::entity::document_registry::DocumentType;
@@ -81,9 +81,7 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         keys: &HashSet<(DocumentType, String)>,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<WorkflowScopeObjects> {
-        super::approval_objects::load(&self.db, keys, executor)
-            .await
-            .map_err(map_service)
+        super::approval_objects::load(&self.db, keys, executor).await.map_err(map_service)
     }
 
     async fn approval_scope_object(
@@ -92,13 +90,10 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         document_id: &str,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<WorkflowScopeObject> {
-        self.approval_scope_objects(
-            &HashSet::from([(document_type, document_id.to_string())]),
-            executor,
-        )
-        .await?
-        .remove(&(document_type, document_id.to_string()))
-        .ok_or_else(|| WorkflowError::NotFound("审批当前业务对象不存在".into()))
+        self.approval_scope_objects(&HashSet::from([(document_type, document_id.to_string())]), executor)
+            .await?
+            .remove(&(document_type, document_id.to_string()))
+            .ok_or_else(|| WorkflowError::NotFound("审批当前业务对象不存在".into()))
     }
 
     async fn managed_task_owners(
@@ -151,13 +146,13 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
                     .require_object(actor, "detail", id, &[], executor)
                     .await
                     .map_err(|error| map_service(Error::from(error)))?;
-            }
+            },
             OrderTaskSource::Purchase(id) => {
                 purchase_access(self.db.clone(), self.rbac.clone())
                     .require_object(actor, "detail", id, &[], executor)
                     .await
                     .map_err(|error| map_service(Error::from(error)))?;
-            }
+            },
         }
         Ok(())
     }
@@ -169,11 +164,7 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
     ) -> impl Future<Output = WorkflowResult<Vec<String>>> + Send {
         let rbac = self.rbac.clone();
         let account_id = account_id.to_string();
-        async move {
-            rbac.role_ids(account_kind, &account_id)
-                .await
-                .map_err(Self::map_identity)
-        }
+        async move { rbac.role_ids(account_kind, &account_id).await.map_err(Self::map_identity) }
     }
 
     fn role_ids_with_executor(
@@ -239,24 +230,16 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         let permission_code = permission_code.to_string();
         async move {
             let permission = Self::parse_permission(&permission_code)?;
-            rbac.enforce(&subject, &permission)
-                .await
-                .map_err(Self::map_identity)
+            rbac.enforce(&subject, &permission).await.map_err(Self::map_identity)
         }
     }
 
     fn permissions_cover(&self, owned: &[String], required: &[&str]) -> WorkflowResult<bool> {
         let owned = PermissionSet::new(
-            owned
-                .iter()
-                .map(|code| Self::parse_permission(code))
-                .collect::<WorkflowResult<Vec<_>>>()?,
+            owned.iter().map(|code| Self::parse_permission(code)).collect::<WorkflowResult<Vec<_>>>()?,
         );
         let required = PermissionSet::new(
-            required
-                .iter()
-                .map(|code| Self::parse_permission(code))
-                .collect::<WorkflowResult<Vec<_>>>()?,
+            required.iter().map(|code| Self::parse_permission(code)).collect::<WorkflowResult<Vec<_>>>()?,
         );
         Ok(owned.covers(&required))
     }
@@ -273,11 +256,7 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
             let permission = Self::parse_permission(&permission_code)?;
             let mut granting = Vec::new();
             for role_id in role_ids {
-                if rbac
-                    .enforce(&format!("role:{role_id}"), &permission)
-                    .await
-                    .map_err(Self::map_identity)?
-                {
+                if rbac.enforce(&format!("role:{role_id}"), &permission).await.map_err(Self::map_identity)? {
                     granting.push(role_id);
                 }
             }
@@ -293,10 +272,7 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
     ) -> impl Future<Output = WorkflowResult<RolePermissionSnapshotFact>> + Send {
         let rbac = self.rbac.clone();
         let account_id = account_id.to_string();
-        let required = required
-            .iter()
-            .map(|code| (*code).to_string())
-            .collect::<Vec<_>>();
+        let required = required.iter().map(|code| (*code).to_string()).collect::<Vec<_>>();
         async move {
             let permissions = required
                 .iter()
@@ -319,10 +295,7 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
                     let granted = permissions
                         .iter()
                         .filter(|permission| {
-                            snapshot
-                                .granting_role_ids(permission)
-                                .iter()
-                                .any(|id| id == role_id)
+                            snapshot.granting_role_ids(permission).iter().any(|id| id == role_id)
                         })
                         .map(|permission| permission.to_string())
                         .collect::<Vec<_>>();
@@ -382,11 +355,7 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         executor: &mut dyn Executor,
     ) -> impl Future<Output = WorkflowResult<u64>> + Send {
         let rbac = self.rbac.clone();
-        async move {
-            rbac.policy_revision_with_executor(executor)
-                .await
-                .map_err(Self::map_identity)
-        }
+        async move { rbac.policy_revision_with_executor(executor).await.map_err(Self::map_identity) }
     }
 
     fn load_account(
@@ -488,9 +457,7 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         async move {
             rbac.run_authorized_policy_transaction(policy_revision, move |session| {
                 Box::pin(async move {
-                    transaction(session)
-                        .await
-                        .map_err(|error| PolicyTxnError::<E>::Caller(error))
+                    transaction(session).await.map_err(|error| PolicyTxnError::<E>::Caller(error))
                 })
             })
             .await
@@ -565,28 +532,20 @@ mod tests {
 
     #[test]
     fn workflow_error_mapping_preserves_source_variants_and_repository_reclassification() {
-        let repository = map_service(Error::RepositoryError(
-            persistence_core::Error::OptimisticLockingError,
-        ));
+        let repository = map_service(Error::RepositoryError(persistence_core::Error::OptimisticLockingError));
         assert!(
             matches!(repository, WorkflowError::ConflictError(message) if message == "数据已被其他请求修改，请刷新后重试")
         );
         assert!(matches!(
-            map_service(Error::ReceiptDuplicate(
-                persistence_core::Error::OptimisticLockingError
-            )),
+            map_service(Error::ReceiptDuplicate(persistence_core::Error::OptimisticLockingError)),
             WorkflowError::ReceiptDuplicate(persistence_core::Error::OptimisticLockingError)
         ));
         assert!(matches!(
-            map_service(Error::TransientTransaction(
-                persistence_core::Error::OptimisticLockingError
-            )),
+            map_service(Error::TransientTransaction(persistence_core::Error::OptimisticLockingError)),
             WorkflowError::TransientTransaction(persistence_core::Error::OptimisticLockingError)
         ));
         assert!(matches!(
-            map_service(Error::OutcomeUnknown(
-                persistence_core::Error::OptimisticLockingError
-            )),
+            map_service(Error::OutcomeUnknown(persistence_core::Error::OptimisticLockingError)),
             WorkflowError::OutcomeUnknown(persistence_core::Error::OptimisticLockingError)
         ));
         macro_rules! preserves_message {
@@ -629,9 +588,7 @@ mod tests {
         let wrapped = PolicyTxnError::Caller(Caller { marker: 173 });
         assert_eq!(wrapped.to_string(), "caller 173");
         assert_eq!(format!("{wrapped:?}"), "Caller(Caller { marker: 173 })");
-        let PolicyTxnError::Caller(original) = wrapped else {
-            panic!("caller error kind changed")
-        };
+        let PolicyTxnError::Caller(original) = wrapped else { panic!("caller error kind changed") };
         assert_eq!(original, Caller { marker: 173 });
     }
 }

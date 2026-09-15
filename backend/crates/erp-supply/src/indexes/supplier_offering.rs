@@ -3,14 +3,12 @@
 //! 项目尚未上线，不提供旧供应商商品/SKU/映射集合的数据兼容；部署前直接清空
 //! 旧集合。新模型只创建供给、商业条款修订、实时可供投影和幂等命令索引。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::SupplierOfferingExt;
-use persistence_core::Result;
 
 const OFFERINGS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS;
 const OFFERING_REVISIONS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERING_REVISIONS;
@@ -35,34 +33,20 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
 }
 
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
 fn offering_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_supplier_offerings_supplier_sku",
-            doc! { "supplier_id": 1, "supplier_sku_code": 1 },
-        ),
-        named_index(
-            "idx_supplier_offerings_sku_status",
-            doc! { "sku_id": 1, "status": 1 },
-        ),
-        named_index(
-            "idx_supplier_offerings_supplier_status",
-            doc! { "supplier_id": 1, "status": 1 },
-        ),
+        unique_index("uk_supplier_offerings_supplier_sku", doc! { "supplier_id": 1, "supplier_sku_code": 1 }),
+        named_index("idx_supplier_offerings_sku_status", doc! { "sku_id": 1, "status": 1 }),
+        named_index("idx_supplier_offerings_supplier_status", doc! { "supplier_id": 1, "status": 1 }),
         named_index(
             "idx_supplier_offerings_source_connection",
             doc! { "source_connection_id": 1, "status": 1 },
         ),
-        named_index(
-            "idx_supplier_offerings_source_status",
-            doc! { "source_type": 1, "status": 1 },
-        ),
+        named_index("idx_supplier_offerings_source_status", doc! { "source_type": 1, "status": 1 }),
     ]
 }
 
@@ -81,10 +65,7 @@ fn revision_indexes() -> Vec<IndexModel> {
 
 fn availability_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_supplier_offering_availabilities_offering",
-            doc! { "supplier_offering_id": 1 },
-        ),
+        unique_index("uk_supplier_offering_availabilities_offering", doc! { "supplier_offering_id": 1 }),
         named_index(
             "idx_supplier_offering_availabilities_freshness",
             doc! { "availability_status": 1, "source_updated_at": 1 },
@@ -93,17 +74,11 @@ fn availability_indexes() -> Vec<IndexModel> {
 }
 
 fn command_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_supplier_offering_commands_idempotency_key",
-        doc! { "idempotency_key": 1 },
-    )]
+    vec![unique_index("uk_supplier_offering_commands_idempotency_key", doc! { "idempotency_key": 1 })]
 }
 
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
@@ -135,9 +110,11 @@ mod tests {
 
     #[test]
     fn revision_and_availability_have_separate_unique_keys() {
-        assert!(revision_indexes()
-            .iter()
-            .any(|index| { index.keys == doc! { "supplier_offering_id": 1, "revision_no": 1 } }));
+        assert!(
+            revision_indexes()
+                .iter()
+                .any(|index| { index.keys == doc! { "supplier_offering_id": 1, "revision_no": 1 } })
+        );
         assert!(availability_indexes().iter().any(|index| {
             index.keys == doc! { "supplier_offering_id": 1 }
                 && index.options.as_ref().and_then(|value| value.unique) == Some(true)
@@ -146,8 +123,6 @@ mod tests {
 
     #[test]
     fn offering_source_filter_has_an_index() {
-        assert!(offering_indexes()
-            .iter()
-            .any(|index| index.keys == doc! { "source_type": 1, "status": 1 }));
+        assert!(offering_indexes().iter().any(|index| index.keys == doc! { "source_type": 1, "status": 1 }));
     }
 }

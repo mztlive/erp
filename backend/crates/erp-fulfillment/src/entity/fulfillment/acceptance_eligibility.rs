@@ -7,13 +7,12 @@
 //! 跨聚合加载、按销售行组织输入与最终视图映射。数量汇总一律受检：精度或溢出
 //! 错误向上传递，禁止静默回退为零（FUL-E07）。
 
-use rust_decimal::Decimal;
-
-use crate::entity::facts::AcceptanceFulfillmentProgress as FulfillmentProgress;
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+use rust_decimal::Decimal;
 
 use super::acceptance_fulfillment_allocation::AcceptanceFulfillmentAllocation;
+use crate::entity::facts::AcceptanceFulfillmentProgress as FulfillmentProgress;
 
 /// 单条履约事实的验收资格投影。
 ///
@@ -193,10 +192,7 @@ impl AcceptanceProgress {
         } else {
             FulfillmentProgress::NotStarted
         };
-        Some(Self {
-            progress,
-            has_remaining_eligible,
-        })
+        Some(Self { progress, has_remaining_eligible })
     }
 }
 
@@ -204,6 +200,7 @@ impl AcceptanceProgress {
 mod tests {
     use std::str::FromStr;
 
+    use erp_core::ids::AcceptanceFulfillmentAllocationId;
     use rust_decimal::Decimal;
 
     use super::*;
@@ -211,7 +208,6 @@ mod tests {
         AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AllocationAction,
         FulfillmentFactType,
     };
-    use erp_core::ids::AcceptanceFulfillmentAllocationId;
 
     /// 构造一条 APPLY 分配（默认数量 4）。
     fn apply_allocation(line_id: &str, quantity: &str) -> AcceptanceFulfillmentAllocation {
@@ -263,10 +259,7 @@ mod tests {
             AcceptanceFactEligibility::from_fact("dl-1", Quantity::from_str("5").unwrap(), &allocations)
                 .unwrap();
         assert_eq!(projection.fulfillment_line_id, "dl-1");
-        assert_eq!(
-            projection.net_accepted_quantity,
-            Quantity::from_str("2.5").unwrap()
-        );
+        assert_eq!(projection.net_accepted_quantity, Quantity::from_str("2.5").unwrap());
         assert_eq!(projection.eligible_quantity, Quantity::from_str("2.5").unwrap());
     }
 
@@ -275,20 +268,20 @@ mod tests {
     fn fact_projection_fails_on_negative_net_or_over_acceptance() {
         let applied = apply_allocation("dl-1", "4");
         let reversed = reverse_allocation("dl-1", "4.5", &applied);
-        assert!(AcceptanceFactEligibility::from_fact(
-            "dl-1",
-            Quantity::from_str("5").unwrap(),
-            &[applied.clone(), reversed],
-        )
-        .is_err());
+        assert!(
+            AcceptanceFactEligibility::from_fact(
+                "dl-1",
+                Quantity::from_str("5").unwrap(),
+                &[applied.clone(), reversed],
+            )
+            .is_err()
+        );
 
         let over = apply_allocation("dl-1", "6");
-        assert!(AcceptanceFactEligibility::from_fact(
-            "dl-1",
-            Quantity::from_str("5").unwrap(),
-            &[applied, over],
-        )
-        .is_err());
+        assert!(
+            AcceptanceFactEligibility::from_fact("dl-1", Quantity::from_str("5").unwrap(), &[applied, over],)
+                .is_err()
+        );
     }
 
     /// 行级投影按输入顺序汇总多条事实并保持事实顺序。
@@ -311,10 +304,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(line.net_accepted_quantity, Quantity::from_str("3.5").unwrap());
-        assert_eq!(
-            line.remaining_eligible_quantity,
-            Quantity::from_str("5.5").unwrap()
-        );
+        assert_eq!(line.remaining_eligible_quantity, Quantity::from_str("5.5").unwrap());
         assert_eq!(line.facts, vec![fact_a, fact_b]);
     }
 
@@ -360,65 +350,39 @@ mod tests {
     /// 行级谓词覆盖未验收、部分验收与全部验收。
     #[test]
     fn line_predicates_cover_not_started_partial_full() {
-        let no_acceptance = line_with_net(
-            Quantity::from_str("0").unwrap(),
-            Quantity::from_str("10").unwrap(),
-        );
+        let no_acceptance =
+            line_with_net(Quantity::from_str("0").unwrap(), Quantity::from_str("10").unwrap());
         assert!(!no_acceptance.has_acceptance());
         assert!(!no_acceptance.is_fully_fulfilled());
 
-        let partial = line_with_net(
-            Quantity::from_str("5").unwrap(),
-            Quantity::from_str("10").unwrap(),
-        );
+        let partial = line_with_net(Quantity::from_str("5").unwrap(), Quantity::from_str("10").unwrap());
         assert!(partial.has_acceptance());
         assert!(!partial.is_fully_fulfilled());
 
-        let full = line_with_net(
-            Quantity::from_str("10").unwrap(),
-            Quantity::from_str("10").unwrap(),
-        );
+        let full = line_with_net(Quantity::from_str("10").unwrap(), Quantity::from_str("10").unwrap());
         assert!(full.has_acceptance());
         assert!(full.is_fully_fulfilled());
 
-        let over = line_with_net(
-            Quantity::from_str("12").unwrap(),
-            Quantity::from_str("10").unwrap(),
-        );
+        let over = line_with_net(Quantity::from_str("12").unwrap(), Quantity::from_str("10").unwrap());
         assert!(over.is_fully_fulfilled());
     }
 
     /// 行级剩余可验收标记只在仍有剩余时成立。
     #[test]
     fn line_remaining_eligible_flag() {
-        let remaining = line_with_net(
-            Quantity::from_str("2").unwrap(),
-            Quantity::from_str("10").unwrap(),
-        );
+        let remaining = line_with_net(Quantity::from_str("2").unwrap(), Quantity::from_str("10").unwrap());
         assert!(remaining.has_remaining_eligible());
 
-        let exhausted = line_with_net(
-            Quantity::from_str("10").unwrap(),
-            Quantity::from_str("10").unwrap(),
-        );
+        let exhausted = line_with_net(Quantity::from_str("10").unwrap(), Quantity::from_str("10").unwrap());
         assert!(!exhausted.has_remaining_eligible());
     }
 
     /// 进度派生覆盖未开始、部分履约、已完成及剩余可验收标记。
     #[test]
     fn progress_derive_covers_full_matrix() {
-        let not_started = line_with_net(
-            Quantity::from_str("0").unwrap(),
-            Quantity::from_str("10").unwrap(),
-        );
-        let partial = line_with_net(
-            Quantity::from_str("5").unwrap(),
-            Quantity::from_str("10").unwrap(),
-        );
-        let full = line_with_net(
-            Quantity::from_str("10").unwrap(),
-            Quantity::from_str("10").unwrap(),
-        );
+        let not_started = line_with_net(Quantity::from_str("0").unwrap(), Quantity::from_str("10").unwrap());
+        let partial = line_with_net(Quantity::from_str("5").unwrap(), Quantity::from_str("10").unwrap());
+        let full = line_with_net(Quantity::from_str("10").unwrap(), Quantity::from_str("10").unwrap());
 
         let derived = AcceptanceProgress::derive(std::slice::from_ref(&not_started)).unwrap();
         assert_eq!(derived.progress, FulfillmentProgress::NotStarted);
@@ -438,10 +402,7 @@ mod tests {
 
         // 全部行验收通过 → 已完成；剩余可验收标记跨行汇总。
         let derived = AcceptanceProgress::derive(&[
-            line_with_net(
-                Quantity::from_str("10").unwrap(),
-                Quantity::from_str("10").unwrap(),
-            ),
+            line_with_net(Quantity::from_str("10").unwrap(), Quantity::from_str("10").unwrap()),
             line_with_net(Quantity::from_str("2").unwrap(), Quantity::from_str("2").unwrap()),
         ])
         .unwrap();

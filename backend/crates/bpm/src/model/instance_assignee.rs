@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::ids::{ApprovalInstanceAssigneeId, ApprovalProcessInstanceId};
 use crate::model::types::{
-    base_model_at, normalize_required, ApprovalAssigneeBindingSource, ModelError, ModelResult,
-    NODE_KEY_MAX_LEN,
+    ApprovalAssigneeBindingSource, ModelError, ModelResult, NODE_KEY_MAX_LEN, base_model_at,
+    normalize_required,
 };
 use crate::model::{ParticipantId, Timestamp};
 
@@ -105,14 +105,8 @@ mod tests {
     #[test]
     fn definition_binding_is_unchanged() {
         let assignee = binding();
-        assert_eq!(
-            assignee.assignment_source,
-            ApprovalAssigneeBindingSource::Definition
-        );
-        assert_eq!(
-            assignee.current_assignee_participant_id,
-            assignee.definition_assignee_participant_id
-        );
+        assert_eq!(assignee.assignment_source, ApprovalAssigneeBindingSource::Definition);
+        assert_eq!(assignee.current_assignee_participant_id, assignee.definition_assignee_participant_id);
         assert!(assignee.changed_by.is_none());
         assert!(assignee.changed_at.is_none());
         assert!(assignee.change_reason.is_none());

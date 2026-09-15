@@ -1,6 +1,5 @@
 //! 销售变更正式版本、应收差额、复核/开票任务及审计的同事务组合。
 
-use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
@@ -8,6 +7,8 @@ use erp_read_models::sales_center::review::{SalesChangeOrderDetailView, SalesCha
 use erp_sales::service::sales_review::SalesReviewService;
 use mongodb::{ClientSession, Database};
 use persistence_core::{NoTransaction, Transactional};
+
+use crate::Result;
 
 mod adapter;
 mod authorization;
@@ -40,11 +41,7 @@ impl SalesChangeProcess {
     /// # 关键业务约束
     /// 变更命令必须沿原销售单范围独立重验，不得退回路由级授权。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self {
-            db,
-            rbac,
-            object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
-        }
+        Self { db, rbac, object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort) }
     }
 
     /// 返回写命令使用的授权源。
@@ -92,9 +89,7 @@ impl SalesChangeProcess {
         actor: &AuditActor,
     ) -> Result<SalesChangeOrderDetailView> {
         let service = SalesReviewService::new(self.db.clone());
-        let write = service
-            .prepare_effective_change(id, actor, &mut NoTransaction)
-            .await?;
+        let write = service.prepare_effective_change(id, actor, &mut NoTransaction).await?;
         let delta = posting::prepare_receivable_delta(&self.db, &write, actor).await?;
         let audit = actor.clone().resource_log(
             "sales_change_order.effective",
@@ -124,9 +119,8 @@ impl SalesChangeProcess {
         actor: &AuditActor,
         session: &mut ClientSession,
     ) -> Result<()> {
-        let write = SalesReviewService::new(self.db.clone())
-            .prepare_effective_change(id, actor, session)
-            .await?;
+        let write =
+            SalesReviewService::new(self.db.clone()).prepare_effective_change(id, actor, session).await?;
         let delta = posting::prepare_receivable_delta(&self.db, &write, actor).await?;
         let audit = actor.clone().resource_log(
             "sales_change_order.effective",

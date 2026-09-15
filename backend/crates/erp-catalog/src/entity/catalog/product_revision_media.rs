@@ -9,11 +9,10 @@ use std::collections::HashSet;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{FileAssetId, ProductRevisionId, ProductRevisionMediaId};
 use erp_core::validation::normalize_optional_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 无障碍替代文本最大长度。
 const ALT_TEXT_MAX_LEN: usize = 256;
@@ -184,8 +183,9 @@ fn ensure_non_negative_sort_order(sort_order: i32) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::ids::ProductRevisionId;
+
+    use super::*;
 
     fn data() -> ProductRevisionMediaData {
         ProductRevisionMediaData {
@@ -211,16 +211,10 @@ mod tests {
     /// 失败路径：越界（负排序）与超长（alt_text）各一条。
     #[test]
     fn new_rejects_negative_sort_and_overlong_alt_text() {
-        let negative_sort = ProductRevisionMediaData {
-            sort_order: -1,
-            ..data()
-        };
+        let negative_sort = ProductRevisionMediaData { sort_order: -1, ..data() };
         assert!(ProductRevisionMedia::new(ProductRevisionMediaId::new("media-1"), negative_sort).is_err());
 
-        let overlong_alt = ProductRevisionMediaData {
-            alt_text: Some("a".repeat(257)),
-            ..data()
-        };
+        let overlong_alt = ProductRevisionMediaData { alt_text: Some("a".repeat(257)), ..data() };
         assert!(ProductRevisionMedia::new(ProductRevisionMediaId::new("media-1"), overlong_alt).is_err());
     }
 
@@ -229,10 +223,7 @@ mod tests {
     fn copy_to_revision_preserves_media_snapshot() {
         let media = ProductRevisionMedia::new(ProductRevisionMediaId::new("media-1"), data()).unwrap();
         let copied = media
-            .copy_to_revision(
-                ProductRevisionMediaId::new("media-2"),
-                ProductRevisionId::new("rev-2"),
-            )
+            .copy_to_revision(ProductRevisionMediaId::new("media-2"), ProductRevisionId::new("rev-2"))
             .unwrap();
 
         assert_eq!(copied.product_revision_id, ProductRevisionId::new("rev-2"));
@@ -247,10 +238,7 @@ mod tests {
         let carousel = ProductRevisionMedia::new(ProductRevisionMediaId::new("media-1"), data()).unwrap();
         let detail = ProductRevisionMedia::new(
             ProductRevisionMediaId::new("media-2"),
-            ProductRevisionMediaData {
-                media_role: MediaRole::Detail,
-                ..data()
-            },
+            ProductRevisionMediaData { media_role: MediaRole::Detail, ..data() },
         )
         .unwrap();
         assert!(ensure_unique_media_sort_orders(&[carousel.clone(), detail]).is_ok());

@@ -3,26 +3,21 @@ use test_support::matches_filter as matches;
 
 #[test]
 fn public_sales_decision_matches_database_conditions() {
+    use std::collections::BTreeSet;
+
     use erp_core::common::time::Instant;
     use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
-    use erp_identity::access_control::ResolvedScope;
-    use erp_identity::access_control::ScopeClause;
+    use erp_identity::access_control::{ResolvedScope, ScopeClause};
     use erp_identity::service::access_control::resolve::AuthorizedDataScope;
-    use erp_read_models::sales_center::access::{sales_scope, SalesAccess};
-    use erp_sales::entity::sales_order::SalesOrder;
-    use erp_sales::entity::sales_order::{BusinessType, OriginSystem, SalesOrderData};
+    use erp_read_models::sales_center::access::{SalesAccess, sales_scope};
+    use erp_sales::entity::sales_order::{BusinessType, OriginSystem, SalesOrder, SalesOrderData};
     use serde_json::json;
-    use std::collections::BTreeSet;
 
     let clause = |mask| ScopeClause {
         company: mask & 1 != 0,
         self_owned: mask & 2 != 0,
         collaborative: mask & 4 != 0,
-        org_unit_ids: if mask & 8 != 0 {
-            BTreeSet::from(["org-a".into()])
-        } else {
-            BTreeSet::new()
-        },
+        org_unit_ids: if mask & 8 != 0 { BTreeSet::from(["org-a".into()]) } else { BTreeSet::new() },
         ..Default::default()
     };
     let mut order = SalesOrder::new(
@@ -63,16 +58,9 @@ fn public_sales_decision_matches_database_conditions() {
                     for bits in 0..16 {
                         order.sales_owner_user_id = if bits & 1 != 0 { "actor" } else { "other" }.into();
                         order.business_org_unit_id = if bits & 4 != 0 { "org-a" } else { "org-b" }.into();
-                        let collaborators = if bits & 2 != 0 {
-                            vec!["customer".into()]
-                        } else {
-                            vec![]
-                        };
-                        let history = if action == "detail" && bits & 8 != 0 {
-                            vec!["order".into()]
-                        } else {
-                            vec![]
-                        };
+                        let collaborators = if bits & 2 != 0 { vec!["customer".into()] } else { vec![] };
+                        let history =
+                            if action == "detail" && bits & 8 != 0 { vec!["order".into()] } else { vec![] };
                         let scope = sales_scope(&access, "actor", &collaborators, history);
                         let document = json!({ "id": "order", "sales_owner_user_id": &order.sales_owner_user_id,
                         "business_org_unit_id": &order.business_org_unit_id, "customer_id": "customer" });

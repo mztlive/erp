@@ -2,12 +2,11 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::Instant;
 use erp_core::ids::ApprovalNotificationOutboxId;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 const DEDUP_KEY_MAX_LEN: usize = 128;
 const RECIPIENT_MAX_LEN: usize = 128;
@@ -245,10 +244,8 @@ impl ApprovalNotificationOutbox {
             ERROR_CLASS_MAX_LEN,
             "错误分类过长",
         )?);
-        self.attempt_count = self
-            .attempt_count
-            .checked_add(1)
-            .ok_or_else(|| Error::from("投递尝试次数溢出"))?;
+        self.attempt_count =
+            self.attempt_count.checked_add(1).ok_or_else(|| Error::from("投递尝试次数溢出"))?;
         self.lease_owner = None;
         self.lease_until = None;
         if self.attempt_count >= MAX_DELIVERY_ATTEMPTS {
@@ -331,9 +328,7 @@ fn next_attempt_at(attempt_count: u32, failed_at: Instant) -> Result<Instant> {
     let Some(delay) = RETRY_BACKOFF_SECS.get(index).copied() else {
         return Err(Error::from("没有更多退避间隔"));
     };
-    Ok(Instant::from_unix_secs(
-        failed_at.unix_secs().saturating_add(delay),
-    ))
+    Ok(Instant::from_unix_secs(failed_at.unix_secs().saturating_add(delay)))
 }
 
 /// 当前消息是否允许被领取。
@@ -347,7 +342,7 @@ impl ApprovalNotificationOutbox {
                     return Err(Error::from("尚未到达下次尝试时间"));
                 }
                 Ok(())
-            }
+            },
             ApprovalNotificationDeliveryStatus::InFlight => match self.lease_until {
                 Some(until) if until.unix_secs() <= now.unix_secs() => Ok(()),
                 _ => Err(Error::from("租约尚未到期")),
@@ -358,12 +353,13 @@ impl ApprovalNotificationOutbox {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::time::Instant;
+    use erp_core::ids::ApprovalNotificationOutboxId;
+
     use super::{
         ApprovalNotificationDeliveryStatus, ApprovalNotificationEventKind, ApprovalNotificationOutbox,
         ApprovalNotificationTemplateParams, MAX_DELIVERY_ATTEMPTS, RETRY_BACKOFF_SECS,
     };
-    use erp_core::common::time::Instant;
-    use erp_core::ids::ApprovalNotificationOutboxId;
 
     fn params() -> ApprovalNotificationTemplateParams {
         ApprovalNotificationTemplateParams {
@@ -407,24 +403,14 @@ mod tests {
     #[test]
     fn delivered_message_cannot_be_leased() {
         let mut item = pending();
-        item.acquire_lease(
-            "worker-a",
-            Instant::from_unix_secs(1_000),
-            Instant::from_unix_secs(1_060),
-        )
-        .unwrap();
+        item.acquire_lease("worker-a", Instant::from_unix_secs(1_000), Instant::from_unix_secs(1_060))
+            .unwrap();
         item.mark_delivered().unwrap();
-        assert_eq!(
-            item.delivery_status,
-            ApprovalNotificationDeliveryStatus::Delivered
+        assert_eq!(item.delivery_status, ApprovalNotificationDeliveryStatus::Delivered);
+        assert!(
+            item.acquire_lease("worker-b", Instant::from_unix_secs(2_000), Instant::from_unix_secs(2_060))
+                .is_err()
         );
-        assert!(item
-            .acquire_lease(
-                "worker-b",
-                Instant::from_unix_secs(2_000),
-                Instant::from_unix_secs(2_060)
-            )
-            .is_err());
     }
 
     /// 第 6 次失败进入死信；此前按固定退避。
@@ -433,14 +419,9 @@ mod tests {
         let mut item = pending();
         let mut now = 1_000_i64;
         for attempt in 1..=MAX_DELIVERY_ATTEMPTS {
-            item.acquire_lease(
-                "worker-a",
-                Instant::from_unix_secs(now),
-                Instant::from_unix_secs(now + 30),
-            )
-            .unwrap();
-            item.mark_failure("TIMEOUT", Instant::from_unix_secs(now))
+            item.acquire_lease("worker-a", Instant::from_unix_secs(now), Instant::from_unix_secs(now + 30))
                 .unwrap();
+            item.mark_failure("TIMEOUT", Instant::from_unix_secs(now)).unwrap();
             if attempt < MAX_DELIVERY_ATTEMPTS {
                 assert_eq!(item.delivery_status, ApprovalNotificationDeliveryStatus::Pending);
                 let delay = RETRY_BACKOFF_SECS[(attempt - 1) as usize];
@@ -448,18 +429,16 @@ mod tests {
                 now += delay;
             }
         }
-        assert_eq!(
-            item.delivery_status,
-            ApprovalNotificationDeliveryStatus::DeadLetter
-        );
+        assert_eq!(item.delivery_status, ApprovalNotificationDeliveryStatus::DeadLetter);
         assert!(item.dead_lettered_at.is_some());
-        assert!(item
-            .acquire_lease(
+        assert!(
+            item.acquire_lease(
                 "worker-b",
                 Instant::from_unix_secs(now + 10),
                 Instant::from_unix_secs(now + 40)
             )
-            .is_err());
+            .is_err()
+        );
     }
 
     /// BSON 往返保持投递字段。

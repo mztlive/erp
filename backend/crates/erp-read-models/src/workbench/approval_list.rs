@@ -1,9 +1,6 @@
 //! 审批跟踪列表复用责任队列的单据摘要，读取授权与操作授权保持独立。
-use super::brief::assemble_brief;
-use super::dto::{WorkItemBriefLine, WorkItemSummarySection};
-use super::facts::{object_policy, WorkbenchObjectFact};
-use super::WorkbenchReadService;
-use crate::errors::Result;
+use std::collections::HashSet;
+
 use application_core::AuditActor;
 use erp_workflow::entity::work_item::WorkItemType;
 use erp_workflow::service::approval::execution::runtime_service::{
@@ -11,7 +8,12 @@ use erp_workflow::service::approval::execution::runtime_service::{
 };
 use persistence_core::NoTransaction;
 use serde::Serialize;
-use std::collections::HashSet;
+
+use super::WorkbenchReadService;
+use super::brief::assemble_brief;
+use super::dto::{WorkItemBriefLine, WorkItemSummarySection};
+use super::facts::{WorkbenchObjectFact, object_policy};
+use crate::errors::Result;
 
 /// 实例授权后的单据摘要；与责任队列使用同一组字段与明细格式。
 #[derive(Debug, Clone, Serialize)]
@@ -69,18 +71,11 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                     .and_then(|kind| object_policy(WorkItemType::DocumentApproval, kind))
                     .and_then(|policy| facts.get(&(policy.object_kind, instance.document_id.clone()?)))
                     .and_then(|fact| document_summary(fact, instance.subject_version));
-                ApprovalListItem {
-                    instance,
-                    document_summary,
-                }
+                ApprovalListItem { instance, document_summary }
             })
             .collect::<Vec<_>>();
         self.apply_approval_party_names(&mut items).await?;
-        Ok(ApprovalListPage {
-            items,
-            total: page.total,
-            next_cursor: page.next_cursor,
-        })
+        Ok(ApprovalListPage { items, total: page.total, next_cursor: page.next_cursor })
     }
 }
 /// 有提交级摘要时必须精确匹配版本，不得用当前提交覆盖历史审批。
@@ -136,8 +131,8 @@ pub(super) fn document_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workbench::brief::{BriefLine, BriefSection, ObjectBriefSource};
     use crate::workbench::WorkbenchSubjectDisplay;
+    use crate::workbench::brief::{BriefLine, BriefSection, ObjectBriefSource};
 
     /// 同单据两个提交保留各自金额与明细；两个入口消费同一组摘要字段。
     #[test]
@@ -178,18 +173,8 @@ mod tests {
         assert_eq!(old.counterparty_label.as_deref(), Some("供应商"));
         assert_eq!(old.brief_lines[0].title, "礼盒");
         assert_eq!(latest.brief_lines[0].title, "礼盒新版");
-        assert_eq!(
-            old.summary_sections
-                .iter()
-                .find(|s| s.label == "含税金额")
-                .unwrap()
-                .value,
-            "¥920"
-        );
-        let queue = assemble_brief(
-            fact.display.subject_briefs["1"].brief_source.as_ref().unwrap(),
-            None,
-        );
+        assert_eq!(old.summary_sections.iter().find(|s| s.label == "含税金额").unwrap().value, "¥920");
+        let queue = assemble_brief(fact.display.subject_briefs["1"].brief_source.as_ref().unwrap(), None);
         assert_eq!(old.summary_sections.len(), queue.sections.len());
         for (actual, expected) in old.summary_sections.iter().zip(&queue.sections) {
             assert_eq!((&actual.label, &actual.value), (&expected.label, &expected.value));
@@ -203,17 +188,10 @@ mod tests {
     #[test]
     fn all_document_policies_match_workbench_approval_relations() {
         use erp_workflow::entity::document_registry::DocumentType;
-        use erp_workflow::service::approval::policy::{policy_of, ApprovalRequirement};
+        use erp_workflow::service::approval::policy::{ApprovalRequirement, policy_of};
         let relations = WorkItemType::registered_brief_relations();
         assert_eq!(relations.len(), 29);
-        assert_eq!(
-            relations
-                .iter()
-                .map(|r| r.work_item_type)
-                .collect::<HashSet<_>>()
-                .len(),
-            10
-        );
+        assert_eq!(relations.iter().map(|r| r.work_item_type).collect::<HashSet<_>>().len(), 10);
         let mut required = 0;
         for document in DocumentType::ALL {
             let needs_approval =
@@ -227,10 +205,7 @@ mod tests {
         }
         assert_eq!(required, 12);
         assert_eq!(
-            relations
-                .iter()
-                .filter(|r| r.work_item_type == WorkItemType::DocumentApproval)
-                .count(),
+            relations.iter().filter(|r| r.work_item_type == WorkItemType::DocumentApproval).count(),
             required
         );
     }
@@ -243,23 +218,15 @@ mod tests {
             "退款单",
             "starter",
         ));
-        fact.display.brief_source = Some(ObjectBriefSource {
-            amount_label: Some("¥200".into()),
-            ..Default::default()
-        });
+        fact.display.brief_source =
+            Some(ObjectBriefSource { amount_label: Some("¥200".into()), ..Default::default() });
         assert!(document_summary(&fact, Some(1)).is_none());
         fact.display.approval_subject_version = Some(2);
         assert!(document_summary(&fact, Some(1)).is_none());
         assert!(document_summary(&fact, None).is_none());
         assert!(document_summary(&fact, Some(2)).is_some());
         fact.display.root_document_id = "parent".into();
-        assert_eq!(
-            document_summary(&fact, Some(2)).unwrap().root_business_object_id,
-            "parent"
-        );
-        assert_eq!(
-            fact.authority.root_document_id, "refund",
-            "页面路由不得改变授权根对象"
-        );
+        assert_eq!(document_summary(&fact, Some(2)).unwrap().root_business_object_id, "parent");
+        assert_eq!(fact.authority.root_document_id, "refund", "页面路由不得改变授权根对象");
     }
 }

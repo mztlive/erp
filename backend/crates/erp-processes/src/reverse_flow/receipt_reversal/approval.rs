@@ -1,21 +1,5 @@
 //! 回款冲正提交与撤回审批；保留原版本、绑定、回执及运行事实的先后顺序。
 
-use super::super::adapter::{
-    build_receipt_reversal_snapshot, execute_receipt_reversal_domain_action, receipt_reversal_adapter,
-    receipt_reversal_object_readable, receipt_reversal_start_command, receipt_reversal_start_command_kind,
-    receipt_reversal_subject_ref, require_receipt_reversal_binding,
-};
-use super::super::cancel_approval::{
-    build_receipt_reversal_cancel_input, load_cancel_runtime, persist_receipt_reversal_cancel,
-    ReceiptReversalCancelPersistInput,
-};
-use super::super::start_approval::{
-    build_receipt_reversal_start_input, load_bound_definition_graph, load_receipt_reversal_start_receipt,
-    persist_receipt_reversal_start, ReceiptReversalStartInput, ReceiptReversalStartPersistInput,
-};
-use super::super::ReturnsProcess;
-use super::context::load_receipt_reversal_context;
-use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
@@ -30,6 +14,23 @@ use erp_workflow::service::approval::execution::{prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::NoTransaction;
 use validator::Validate;
+
+use super::super::ReturnsProcess;
+use super::super::adapter::{
+    build_receipt_reversal_snapshot, execute_receipt_reversal_domain_action, receipt_reversal_adapter,
+    receipt_reversal_object_readable, receipt_reversal_start_command, receipt_reversal_start_command_kind,
+    receipt_reversal_subject_ref, require_receipt_reversal_binding,
+};
+use super::super::cancel_approval::{
+    ReceiptReversalCancelPersistInput, build_receipt_reversal_cancel_input, load_cancel_runtime,
+    persist_receipt_reversal_cancel,
+};
+use super::super::start_approval::{
+    ReceiptReversalStartInput, ReceiptReversalStartPersistInput, build_receipt_reversal_start_input,
+    load_bound_definition_graph, load_receipt_reversal_start_receipt, persist_receipt_reversal_start,
+};
+use super::context::load_receipt_reversal_context;
+use crate::Result;
 
 impl ReturnsProcess {
     /// 提交回款冲正并调用统一 `start_approval`。
@@ -58,8 +59,7 @@ impl ReturnsProcess {
         let adapter = receipt_reversal_adapter()?;
         let mut reversal = self.domain().load_receipt_reversal(id).await?;
         prepare_receipt_reversal_submit(&mut reversal, req.expected_version)?;
-        self.dispatch_receipt_reversal_start(id, reversal, req.idempotency_key, actor, adapter)
-            .await
+        self.dispatch_receipt_reversal_start(id, reversal, req.idempotency_key, actor, adapter).await
     }
 
     /// 撤回回款冲正审批，成功后回到草稿且 `subject_version` 不回退。
@@ -86,12 +86,8 @@ impl ReturnsProcess {
         req.validate()?;
         let mut reversal = self.domain().load_receipt_reversal(id).await?;
         ensure_receipt_reversal_version(&reversal, req.expected_version)?;
-        self.persist_cancelled_receipt_reversal(id, &mut reversal, &req, actor)
-            .await?;
-        self.reads()
-            .receipt_reversal_detail(id)
-            .await
-            .map_err(crate::Error::from)
+        self.persist_cancelled_receipt_reversal(id, &mut reversal, &req, actor).await?;
+        self.reads().receipt_reversal_detail(id).await.map_err(crate::Error::from)
     }
 
     /// 从绑定读取定义并持久化启动事实。
@@ -107,9 +103,8 @@ impl ReturnsProcess {
         adapter: super::super::adapter::ReceiptReversalAdapter,
     ) -> Result<ReceiptReversalView> {
         let subject = receipt_reversal_subject_ref(id)?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)?;
+        let binding =
+            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
         let binding = require_receipt_reversal_binding(binding.as_ref())?.clone();
         let now = Instant::now();
         let (organization_id, customer_id) =
@@ -163,10 +158,7 @@ impl ReturnsProcess {
             },
         )
         .await?;
-        self.reads()
-            .receipt_reversal_detail(id)
-            .await
-            .map_err(crate::Error::from)
+        self.reads().receipt_reversal_detail(id).await.map_err(crate::Error::from)
     }
 
     /// 加载撤回运行事实并写回草稿。
@@ -181,9 +173,8 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<()> {
         let adapter = receipt_reversal_adapter()?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)?;
+        let binding =
+            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
         let binding = require_receipt_reversal_binding(binding.as_ref())?.clone();
         let subject = receipt_reversal_subject_ref(id)?;
         let runtime =

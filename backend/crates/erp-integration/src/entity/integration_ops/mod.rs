@@ -31,16 +31,14 @@ mod w29_close;
 mod w29_work_items;
 
 pub use decision_policy::{
-    difference_terminal_policy, error_terminal_policy, next_actions_after_outcome,
-    project_difference_actions, project_error_actions, reconciliation_reason_registry, ActionBlocker,
-    DecidedAction, DifferenceActionProjection, ErrorActionProjection, FundsImpact, ProjectionOutcome,
-    ProjectionSubject, ReasonRegistry, RegisteredReason, RequiredEvidenceKind, TerminalEvidencePolicy,
-    DIFFERENCE_POLICY_ID, ERROR_POLICY_ID, EVIDENCE_POLICY_VERSION, REASON_REGISTRY_ID,
-    REASON_REGISTRY_VERSION,
+    ActionBlocker, DIFFERENCE_POLICY_ID, DecidedAction, DifferenceActionProjection, ERROR_POLICY_ID,
+    EVIDENCE_POLICY_VERSION, ErrorActionProjection, FundsImpact, ProjectionOutcome, ProjectionSubject,
+    REASON_REGISTRY_ID, REASON_REGISTRY_VERSION, ReasonRegistry, RegisteredReason, RequiredEvidenceKind,
+    TerminalEvidencePolicy, difference_terminal_policy, error_terminal_policy, next_actions_after_outcome,
+    project_difference_actions, project_error_actions, reconciliation_reason_registry,
 };
 pub use direct_conclusion::DirectConclusion;
 pub use error_classification::{is_result_unknown, normalized_result_unknown_class};
-
 pub use evidence_reference::{
     CanonicalEvidenceReference, CompactEvidenceSet, EvidenceRecordRef, EvidenceReferenceSet,
     EvidenceSubjectBindings, ReplayOriginalReference,
@@ -51,11 +49,11 @@ pub use reconciliation_difference::*;
 pub use reconciliation_difference_resolution::*;
 pub use w29_close::*;
 pub use w29_work_items::{
+    DIFFERENCE_INITIAL_SUBJECT_VERSION, DIFFERENCE_WORK_ITEM_OBJECT_TYPE, ERROR_WORK_ITEM_OBJECT_TYPE,
+    IntegrationResponsibilityKind, IntegrationResponsibilityPriority, IntegrationResponsibilitySpec,
+    W29_FINANCE_ROLE, W29_OPERATIONS_ROLE, W29_OWNER_ORGANIZATION, W29_PROCUREMENT_ROLE, W29_SYSADMIN_ROLE,
     difference_owner_role, difference_responsibility, error_owner_role, error_priority, error_responsibility,
-    error_work_item_type, IntegrationResponsibilityKind, IntegrationResponsibilityPriority,
-    IntegrationResponsibilitySpec, DIFFERENCE_INITIAL_SUBJECT_VERSION, DIFFERENCE_WORK_ITEM_OBJECT_TYPE,
-    ERROR_WORK_ITEM_OBJECT_TYPE, W29_FINANCE_ROLE, W29_OPERATIONS_ROLE, W29_OWNER_ORGANIZATION,
-    W29_PROCUREMENT_ROLE, W29_SYSADMIN_ROLE,
+    error_work_item_type,
 };
 
 /// W29 命令的稳定幂等身份与载荷指纹。

@@ -11,13 +11,12 @@ use std::fmt;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::revision::RevisionBase;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{WarehouseId, WarehouseRevisionId};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 仓库名称最大长度。
 const NAME_MAX_LEN: usize = 128;
@@ -43,10 +42,7 @@ pub struct SensitiveText {
 impl fmt::Debug for SensitiveText {
     /// 调试输出只暴露查询指纹，不输出密文与明文。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("SensitiveText")
-            .field("fingerprint", &self.fingerprint)
-            .finish()
+        formatter.debug_struct("SensitiveText").field("fingerprint", &self.fingerprint).finish()
     }
 }
 
@@ -74,10 +70,7 @@ impl SensitiveText {
             return Err(Error::from("指纹必须是 64 位十六进制"));
         }
 
-        Ok(Self {
-            encrypted,
-            fingerprint,
-        })
+        Ok(Self { encrypted, fingerprint })
     }
 
     /// 返回加密列密文。
@@ -197,18 +190,17 @@ impl WarehouseRevision {
     /// 业务日落在 `[effective_from, effective_to)` 时返回 `true`。
     pub fn is_effective_on(&self, business_day: BusinessDate) -> bool {
         business_day >= self.effective_from
-            && self
-                .effective_to
-                .is_none_or(|effective_to| business_day < effective_to)
+            && self.effective_to.is_none_or(|effective_to| business_day < effective_to)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::ids::WarehouseRevisionId;
     use hmac::{Hmac, KeyInit, Mac};
     use sha2::Sha256;
+
+    use super::*;
 
     type HmacSha256 = Hmac<Sha256>;
 
@@ -219,11 +211,7 @@ mod tests {
     fn fingerprint(plain: &str, key: &[u8]) -> String {
         let mut mac = HmacSha256::new_from_slice(key).expect("HMAC 密钥接受任意长度");
         mac.update(plain.trim().as_bytes());
-        mac.finalize()
-            .into_bytes()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect()
+        mac.finalize().into_bytes().iter().map(|byte| format!("{byte:02x}")).collect()
     }
 
     fn data() -> WarehouseRevisionData {
@@ -261,26 +249,17 @@ mod tests {
     /// 失败路径：必填空与超长各一条。
     #[test]
     fn new_rejects_empty_and_overlong_fields() {
-        let empty_name = WarehouseRevisionData {
-            name: "  ".to_string(),
-            ..data()
-        };
+        let empty_name = WarehouseRevisionData { name: "  ".to_string(), ..data() };
         assert!(WarehouseRevision::new(WarehouseRevisionId::new("rev-1"), empty_name).is_err());
 
-        let overlong_reason = WarehouseRevisionData {
-            change_reason: "r".repeat(513),
-            ..data()
-        };
+        let overlong_reason = WarehouseRevisionData { change_reason: "r".repeat(513), ..data() };
         assert!(WarehouseRevision::new(WarehouseRevisionId::new("rev-1"), overlong_reason).is_err());
     }
 
     /// 失败路径：越界（修订序号为 0）与关联不一致（生效区间倒挂）各一条。
     #[test]
     fn new_rejects_zero_revision_no_and_reversed_window() {
-        let zero_revision = WarehouseRevisionData {
-            revision_no: 0,
-            ..data()
-        };
+        let zero_revision = WarehouseRevisionData { revision_no: 0, ..data() };
         assert!(WarehouseRevision::new(WarehouseRevisionId::new("rev-1"), zero_revision).is_err());
 
         let reversed = WarehouseRevisionData {
@@ -299,18 +278,12 @@ mod tests {
         let padded = "  北京市朝阳区望京街道 1 号  ";
 
         assert_eq!(fingerprint(plain, b"key-1"), fingerprint(plain, b"key-1"));
-        assert_eq!(
-            fingerprint(plain, b"key-1"),
-            fingerprint(padded, b"key-1"),
-            "首尾空白不参与指纹"
-        );
+        assert_eq!(fingerprint(plain, b"key-1"), fingerprint(padded, b"key-1"), "首尾空白不参与指纹");
         assert_ne!(fingerprint(plain, b"key-1"), fingerprint(plain, b"key-2"));
         assert_ne!(fingerprint(plain, b"key-1"), fingerprint("另一个地址", b"key-1"));
         assert_eq!(fingerprint(plain, b"key-1").len(), 64);
         assert!(
-            fingerprint(plain, b"key-1")
-                .bytes()
-                .all(|byte| byte.is_ascii_hexdigit()),
+            fingerprint(plain, b"key-1").bytes().all(|byte| byte.is_ascii_hexdigit()),
             "指纹必须是十六进制"
         );
     }

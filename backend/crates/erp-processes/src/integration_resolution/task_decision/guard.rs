@@ -1,16 +1,18 @@
 //! 正式任务绑定、权限前置与审计回执重放。
-use super::super::IntegrationResolutionProcess;
-use super::ReceiptEnvelope;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditExt;
 use erp_integration::dto::{IntegrationItemType, IntegrationNonTerminalTaskAction, PreparedWorkItemTarget};
 use erp_integration::entity::integration_ops::IntegrationCommandIdentity;
-use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+
+use super::super::IntegrationResolutionProcess;
+use super::ReceiptEnvelope;
+use crate::{Error, Result};
 
 impl IntegrationResolutionProcess {
     pub(super) async fn replay_receipt<T: DeserializeOwned>(
@@ -18,11 +20,7 @@ impl IntegrationResolutionProcess {
         receipt: &IntegrationCommandIdentity,
         actor: &AuditActor,
     ) -> Result<Option<T>> {
-        let Some(audit) = self
-            .db
-            .audit_logs()
-            .find_by_id(receipt.receipt_id(), &mut NoTransaction)
-            .await?
+        let Some(audit) = self.db.audit_logs().find_by_id(receipt.receipt_id(), &mut NoTransaction).await?
         else {
             return Ok(None);
         };
@@ -101,9 +99,7 @@ pub(super) async fn load_bound_work_item(
 /// 校验任务与业务主题版本与调用方冻结的 typed 版本一致（无二次解析）。
 fn ensure_work_item_version(item: &WorkItem, task_version: u64, subject_version: &str) -> Result<()> {
     if item.base.version != task_version || item.subject_version != subject_version {
-        return Err(Error::ConflictError(
-            "任务或业务主题版本已变化，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("任务或业务主题版本已变化，请刷新后重试".to_string()));
     }
     Ok(())
 }
@@ -153,10 +149,10 @@ async fn ensure_work_item_association(
                 },
                 "integration_error_task",
             )
-        }
+        },
         IntegrationItemType::ReconciliationDifference => {
             (WorkItemType::BusinessException, "reconciliation_difference")
-        }
+        },
     };
     if item.work_item_type != expected.0
         || item.business_object_type != expected.1
@@ -182,18 +178,12 @@ fn decode_receipt<T: DeserializeOwned>(
     actor_id: &str,
     audit: ReceiptAudit<'_>,
 ) -> Result<T> {
-    if !receipt.matches_receipt(
-        audit.actor_id,
-        audit.action,
-        audit.resource_type,
-        audit.resource_id,
-    ) || actor_id != audit.actor_id
+    if !receipt.matches_receipt(audit.actor_id, audit.action, audit.resource_type, audit.resource_id)
+        || actor_id != audit.actor_id
     {
         return Err(Error::ConflictError("幂等键已用于不同命令".to_string()));
     }
-    let message = audit
-        .message
-        .ok_or_else(|| Error::Internal("W29 幂等收据缺少结果".to_string()))?;
+    let message = audit.message.ok_or_else(|| Error::Internal("W29 幂等收据缺少结果".to_string()))?;
     let envelope: ReceiptEnvelope<T> =
         serde_json::from_str(message).map_err(|_| Error::Internal("W29 幂等收据不可解析".to_string()))?;
     if envelope.fingerprint != receipt.fingerprint() {

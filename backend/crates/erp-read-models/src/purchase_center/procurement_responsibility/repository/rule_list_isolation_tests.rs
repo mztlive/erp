@@ -1,40 +1,32 @@
-use crate::test_indexes::ensure_indexes;
 use erp_catalog::entity::catalog::product_category::ProductCategoryData;
 use erp_catalog::entity::catalog::sku::SkuData;
 use erp_catalog::entity::catalog::sku_revision::SkuRevisionData;
-use erp_catalog::CatalogExt;
-use erp_catalog::{EnableStatus, ListingStatus, ProductCategory, Sku, SkuRevision};
+use erp_catalog::{CatalogExt, EnableStatus, ListingStatus, ProductCategory, Sku, SkuRevision};
+use erp_core::AccountKind;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     ProcurementResponsibilityRuleId, ProductCategoryId, SkuId, SkuRevisionId, UnitOfMeasureId,
 };
-use erp_core::AccountKind;
-use erp_identity::AccessControlExt;
-use erp_identity::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
+use erp_identity::{AccessControlExt, AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
 use erp_procurement::entity::procurement_responsibility::{
     ProcurementResponsibilityRule, ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
 };
 use erp_procurement::repository::ProcurementResponsibilityExt;
 use mongodb::bson::doc;
 use persistence_core::{NoTransaction, Transactional};
-use test_support::{require_mongo, TestDb};
+use test_support::{TestDb, require_mongo};
 
 use super::{
-    load_procurement_rule_list_facts, load_procurement_rule_list_page, ProcurementResponsibilityRuleFilter,
+    ProcurementResponsibilityRuleFilter, load_procurement_rule_list_facts, load_procurement_rule_list_page,
 };
+use crate::test_indexes::ensure_indexes;
 
 fn page_filter(
     rule_type: Option<ProcurementResponsibilityRuleType>,
     page: u64,
     page_size: u32,
 ) -> ProcurementResponsibilityRuleFilter {
-    ProcurementResponsibilityRuleFilter {
-        rule_type,
-        owner_user_id: None,
-        status: None,
-        page,
-        page_size,
-    }
+    ProcurementResponsibilityRuleFilter { rule_type, owner_user_id: None, status: None, page, page_size }
 }
 
 /// 构造可登录的后台测试负责人.
@@ -224,9 +216,7 @@ fn test_rule(
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn empty_db_returns_empty_page_and_facts() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_rule_list_empty")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_rule_list_empty").await.expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
         let page =
             load_procurement_rule_list_page(fixture.db(), &page_filter(None, 1, 50), &mut NoTransaction)
@@ -265,9 +255,7 @@ async fn empty_db_returns_empty_page_and_facts() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn page_returns_facts_with_stable_pagination() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_rule_list_page")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_rule_list_page").await.expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
         for (id, login, name) in [("owner-1", "buyer-1", "张三"), ("owner-2", "buyer-2", "李四")] {
             fixture
@@ -292,27 +280,12 @@ async fn page_returns_facts_with_stable_pagination() {
         fixture
             .db()
             .sku_revisions()
-            .create(
-                &test_sku_revision("sku-rev-1", "sku-1", "红色零件"),
-                &mut NoTransaction,
-            )
+            .create(&test_sku_revision("sku-rev-1", "sku-1", "红色零件"), &mut NoTransaction)
             .await
             .expect("SKU修订写入失败");
         for rule in [
-            test_rule(
-                "r-sku",
-                ProcurementResponsibilityRuleType::Sku,
-                Some("sku-1"),
-                None,
-                "owner-1",
-            ),
-            test_rule(
-                "r-cat",
-                ProcurementResponsibilityRuleType::Category,
-                None,
-                Some("cat-1"),
-                "owner-2",
-            ),
+            test_rule("r-sku", ProcurementResponsibilityRuleType::Sku, Some("sku-1"), None, "owner-1"),
+            test_rule("r-cat", ProcurementResponsibilityRuleType::Category, None, Some("cat-1"), "owner-2"),
             test_rule(
                 "r-default",
                 ProcurementResponsibilityRuleType::DefaultDispatcher,
@@ -351,22 +324,10 @@ async fn page_returns_facts_with_stable_pagination() {
         );
         // Facts deduplicated: two rules share owner-1.
         assert_eq!(full.facts.owner_names.len(), 2);
-        assert_eq!(
-            full.facts.owner_names.get("owner-1").map(String::as_str),
-            Some("张三")
-        );
-        assert_eq!(
-            full.facts.sku_nos.get("sku-1").map(String::as_str),
-            Some("SKU-sku-1")
-        );
-        assert_eq!(
-            full.facts.sku_names.get("sku-1").map(String::as_str),
-            Some("红色零件")
-        );
-        assert_eq!(
-            full.facts.category_names.get("cat-1").map(String::as_str),
-            Some("五金")
-        );
+        assert_eq!(full.facts.owner_names.get("owner-1").map(String::as_str), Some("张三"));
+        assert_eq!(full.facts.sku_nos.get("sku-1").map(String::as_str), Some("SKU-sku-1"));
+        assert_eq!(full.facts.sku_names.get("sku-1").map(String::as_str), Some("红色零件"));
+        assert_eq!(full.facts.category_names.get("cat-1").map(String::as_str), Some("五金"));
 
         // Page split covers all rows without overlap; out-of-range page keeps total.
         let first =
@@ -385,15 +346,8 @@ async fn page_returns_facts_with_stable_pagination() {
         assert_eq!(first.items.len(), 2);
         assert_eq!(second.items.len(), 1);
         assert!(beyond.items.is_empty());
-        let first_ids = first
-            .items
-            .iter()
-            .map(|rule| rule.base.id.as_str())
-            .collect::<Vec<_>>();
-        assert!(
-            !first_ids.contains(&second.items[0].base.id.as_str()),
-            "分页不得重叠"
-        );
+        let first_ids = first.items.iter().map(|rule| rule.base.id.as_str()).collect::<Vec<_>>();
+        assert!(!first_ids.contains(&second.items[0].base.id.as_str()), "分页不得重叠");
     });
 }
 
@@ -414,31 +368,14 @@ async fn page_returns_facts_with_stable_pagination() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn missing_and_soft_deleted_refs_stay_sparse() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_rule_list_sparse")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_rule_list_sparse").await.expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
         // Soft-deleted facts: owner, category, sku and sku revision.
         let mut owner = test_owner("owner-del", "buyer-del", "已删");
-        fixture
-            .db()
-            .accounts()
-            .create(&owner, &mut NoTransaction)
-            .await
-            .expect("负责人写入失败");
-        fixture
-            .db()
-            .accounts()
-            .soft_delete(&mut owner, &mut NoTransaction)
-            .await
-            .expect("负责人软删除失败");
+        fixture.db().accounts().create(&owner, &mut NoTransaction).await.expect("负责人写入失败");
+        fixture.db().accounts().soft_delete(&mut owner, &mut NoTransaction).await.expect("负责人软删除失败");
         let mut category = test_category("cat-del", "已删");
-        fixture
-            .db()
-            .product_categories()
-            .create(&category, &mut NoTransaction)
-            .await
-            .expect("分类写入失败");
+        fixture.db().product_categories().create(&category, &mut NoTransaction).await.expect("分类写入失败");
         fixture
             .db()
             .product_categories()
@@ -446,25 +383,10 @@ async fn missing_and_soft_deleted_refs_stay_sparse() {
             .await
             .expect("分类软删除失败");
         let mut sku = test_sku("sku-del", "sku-rev-del");
-        fixture
-            .db()
-            .skus()
-            .create(&sku, &mut NoTransaction)
-            .await
-            .expect("SKU写入失败");
-        fixture
-            .db()
-            .skus()
-            .soft_delete(&mut sku, &mut NoTransaction)
-            .await
-            .expect("SKU软删除失败");
+        fixture.db().skus().create(&sku, &mut NoTransaction).await.expect("SKU写入失败");
+        fixture.db().skus().soft_delete(&mut sku, &mut NoTransaction).await.expect("SKU软删除失败");
         let mut revision = test_sku_revision("sku-rev-del", "sku-del", "已删修订");
-        fixture
-            .db()
-            .sku_revisions()
-            .create(&revision, &mut NoTransaction)
-            .await
-            .expect("修订写入失败");
+        fixture.db().sku_revisions().create(&revision, &mut NoTransaction).await.expect("修订写入失败");
         fixture
             .db()
             .sku_revisions()
@@ -480,13 +402,7 @@ async fn missing_and_soft_deleted_refs_stay_sparse() {
             .expect("孤儿SKU写入失败");
 
         let rules = vec![
-            test_rule(
-                "r-gone",
-                ProcurementResponsibilityRuleType::Sku,
-                Some("sku-gone"),
-                None,
-                "owner-gone",
-            ),
+            test_rule("r-gone", ProcurementResponsibilityRuleType::Sku, Some("sku-gone"), None, "owner-gone"),
             test_rule(
                 "r-cat-gone",
                 ProcurementResponsibilityRuleType::Category,
@@ -494,13 +410,7 @@ async fn missing_and_soft_deleted_refs_stay_sparse() {
                 Some("cat-gone"),
                 "owner-gone",
             ),
-            test_rule(
-                "r-del",
-                ProcurementResponsibilityRuleType::Sku,
-                Some("sku-del"),
-                None,
-                "owner-del",
-            ),
+            test_rule("r-del", ProcurementResponsibilityRuleType::Sku, Some("sku-del"), None, "owner-del"),
             test_rule(
                 "r-cat-del",
                 ProcurementResponsibilityRuleType::Category,
@@ -520,30 +430,21 @@ async fn missing_and_soft_deleted_refs_stay_sparse() {
             .await
             .expect("稀疏事实加载失败");
         for key in ["owner-gone", "owner-del"] {
-            assert!(
-                !facts.owner_names.contains_key(key),
-                "缺失/软删除负责人必须稀疏: {key}"
-            );
+            assert!(!facts.owner_names.contains_key(key), "缺失/软删除负责人必须稀疏: {key}");
         }
         for key in ["sku-gone", "sku-del"] {
             assert!(!facts.sku_nos.contains_key(key), "缺失/软删除SKU必须稀疏: {key}");
             assert!(!facts.sku_names.contains_key(key));
         }
         for key in ["cat-gone", "cat-del"] {
-            assert!(
-                !facts.category_names.contains_key(key),
-                "缺失/软删除分类必须稀疏: {key}"
-            );
+            assert!(!facts.category_names.contains_key(key), "缺失/软删除分类必须稀疏: {key}");
         }
         assert_eq!(
             facts.sku_nos.get("sku-orphan").map(String::as_str),
             Some("SKU-sku-orphan"),
             "修订缺失不得清空SKU编号展示"
         );
-        assert!(
-            !facts.sku_names.contains_key("sku-orphan"),
-            "软删除修订名称必须稀疏"
-        );
+        assert!(!facts.sku_names.contains_key("sku-orphan"), "软删除修订名称必须稀疏");
     });
 }
 
@@ -564,17 +465,10 @@ async fn missing_and_soft_deleted_refs_stay_sparse() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn total_uses_same_filter_and_excludes_soft_deleted() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_rule_list_total")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_rule_list_total").await.expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
-        let mut deleted = test_rule(
-            "r-del",
-            ProcurementResponsibilityRuleType::Sku,
-            Some("sku-1"),
-            None,
-            "owner-1",
-        );
+        let mut deleted =
+            test_rule("r-del", ProcurementResponsibilityRuleType::Sku, Some("sku-1"), None, "owner-1");
         // 先写入再软删除：部分唯一索引只覆盖启用且未删除的行，删除后
         // 同选择器键被释放，后续同键启用规则可写入。
         fixture
@@ -590,20 +484,8 @@ async fn total_uses_same_filter_and_excludes_soft_deleted() {
             .await
             .expect("规则软删除失败");
         for rule in [
-            test_rule(
-                "r-sku",
-                ProcurementResponsibilityRuleType::Sku,
-                Some("sku-1"),
-                None,
-                "owner-1",
-            ),
-            test_rule(
-                "r-cat",
-                ProcurementResponsibilityRuleType::Category,
-                None,
-                Some("cat-1"),
-                "owner-1",
-            ),
+            test_rule("r-sku", ProcurementResponsibilityRuleType::Sku, Some("sku-1"), None, "owner-1"),
+            test_rule("r-cat", ProcurementResponsibilityRuleType::Category, None, Some("cat-1"), "owner-1"),
         ] {
             fixture
                 .db()
@@ -649,19 +531,12 @@ async fn total_uses_same_filter_and_excludes_soft_deleted() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn transaction_reuses_caller_executor_read_your_writes() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_rule_list_txn")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_rule_list_txn").await.expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
         let db = fixture.db().clone();
         let client = db.client().clone();
-        let rule = test_rule(
-            "r-txn",
-            ProcurementResponsibilityRuleType::DefaultDispatcher,
-            None,
-            None,
-            "owner-1",
-        );
+        let rule =
+            test_rule("r-txn", ProcurementResponsibilityRuleType::DefaultDispatcher, None, None, "owner-1");
         let filter = page_filter(None, 1, 10);
         client
             .with_transaction::<_, (), persistence_core::Error>(move |session| {
@@ -675,9 +550,7 @@ async fn transaction_reuses_caller_executor_read_your_writes() {
                     page_size: filter.page_size,
                 };
                 Box::pin(async move {
-                    db.procurement_responsibility_rules()
-                        .create(&rule, session)
-                        .await?;
+                    db.procurement_responsibility_rules().create(&rule, session).await?;
                     let page = load_procurement_rule_list_page(&db, &filter, session).await?;
                     assert_eq!(page.total, 1, "事务内应能 read-your-writes");
                     assert_eq!(page.items[0].base.id, "r-txn");
@@ -711,9 +584,7 @@ async fn transaction_reuses_caller_executor_read_your_writes() {
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn explain_rule_list_query_documents_index_state() {
     require_mongo!(async {
-        let fixture = TestDb::new("proc_rule_list_explain")
-            .await
-            .expect("测试数据库创建失败");
+        let fixture = TestDb::new("proc_rule_list_explain").await.expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
         let explain = fixture
             .db()
@@ -728,7 +599,9 @@ async fn explain_rule_list_query_documents_index_state() {
             .expect("explain 失败");
         let rendered = format!("{explain:?}");
         if rendered.contains("COLLSCAN") {
-            eprintln!("N/A: procurement_responsibility_rules 列表查询当前为 COLLSCAN，未建专用过滤索引，依赖后续索引批次；explain={rendered}");
+            eprintln!(
+                "N/A: procurement_responsibility_rules 列表查询当前为 COLLSCAN，未建专用过滤索引，依赖后续索引批次；explain={rendered}"
+            );
         } else {
             assert!(rendered.contains("IXSCAN"), "explain 未使用 IXSCAN: {rendered}");
         }

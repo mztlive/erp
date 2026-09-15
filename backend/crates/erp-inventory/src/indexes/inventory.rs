@@ -16,14 +16,12 @@
 //! - 事实类集合（movement/entry）不设业务软删除，无需部分唯一索引。
 
 use futures_util::TryStreamExt;
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::InventoryExt;
-use persistence_core::Result;
 
 /// `stock_movement` 集合名。
 pub(crate) const STOCK_MOVEMENTS: &str = <mongodb::Database as InventoryExt>::STOCK_MOVEMENTS;
@@ -87,9 +85,7 @@ async fn reconcile_stock_reservation_source_indexes(db: &Database) -> Result<()>
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -109,10 +105,7 @@ fn stock_movement_indexes() -> Vec<IndexModel> {
 
 /// 返回 `stock_balance` 的库存维度唯一约束（§6.7）。
 fn stock_balance_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_stock_balances_dimension",
-        doc! { "warehouse_id": 1, "sku_id": 1 },
-    )]
+    vec![unique_index("uk_stock_balances_dimension", doc! { "warehouse_id": 1, "sku_id": 1 })]
 }
 
 /// 返回 `stock_reservation` 的建立动作唯一与预占查询索引（§6.7）。
@@ -151,27 +144,18 @@ fn stock_reservation_entry_indexes() -> Vec<IndexModel> {
 fn stock_adjustment_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_stock_adjustments_adjustment_no", doc! { "adjustment_no": 1 }),
-        named_index(
-            "idx_stock_adjustments_warehouse_status",
-            doc! { "warehouse_id": 1, "status": 1 },
-        ),
+        named_index("idx_stock_adjustments_warehouse_status", doc! { "warehouse_id": 1, "status": 1 }),
     ]
 }
 
 /// 返回 `stock_adjustment_line` 的明细查询索引（§6.7）。
 fn stock_adjustment_line_indexes() -> Vec<IndexModel> {
-    vec![named_index(
-        "idx_stock_adjustment_lines_adjustment",
-        doc! { "stock_adjustment_id": 1 },
-    )]
+    vec![named_index("idx_stock_adjustment_lines_adjustment", doc! { "stock_adjustment_id": 1 })]
 }
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -187,11 +171,7 @@ fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Documen
     IndexModel::builder()
         .keys(keys)
         .options(
-            IndexOptions::builder()
-                .name(name.into())
-                .unique(true)
-                .partial_filter_expression(filter)
-                .build(),
+            IndexOptions::builder().name(name.into()).unique(true).partial_filter_expression(filter).build(),
         )
         .build()
 }
@@ -215,10 +195,7 @@ mod tests {
                     == Some("uk_stock_movements_source")
             })
             .unwrap();
-        assert_eq!(
-            source.keys,
-            doc! { "source_document_id": 1, "source_line_id": 1, "movement_type": 1 }
-        );
+        assert_eq!(source.keys, doc! { "source_document_id": 1, "source_line_id": 1, "movement_type": 1 });
         assert_eq!(source.options.as_ref().unwrap().unique, Some(true));
         assert!(indexes.iter().any(|index| {
             index.keys == doc! { "warehouse_id": 1, "sku_id": 1, "occurred_at": 1, "id": 1 }
@@ -271,20 +248,18 @@ mod tests {
             direct.options.as_ref().unwrap().partial_filter_expression,
             Some(doc! { "source_type": "EXISTING_STOCK" })
         );
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "warehouse_id": 1, "sku_id": 1, "status": 1 } }));
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "sales_order_line_id": 1, "status": 1 } }));
+        assert!(
+            indexes
+                .iter()
+                .any(|index| { index.keys == doc! { "warehouse_id": 1, "sku_id": 1, "status": 1 } })
+        );
+        assert!(indexes.iter().any(|index| { index.keys == doc! { "sales_order_line_id": 1, "status": 1 } }));
     }
 
     #[test]
     fn entry_and_adjustment_indexes_cover_queries() {
         let entry = stock_reservation_entry_indexes();
-        assert!(entry
-            .iter()
-            .any(|index| index.keys == doc! { "reservation_id": 1, "entry_type": 1 }));
+        assert!(entry.iter().any(|index| index.keys == doc! { "reservation_id": 1, "entry_type": 1 }));
 
         let adjustment = stock_adjustment_indexes();
         let identity = adjustment
@@ -295,12 +270,12 @@ mod tests {
             })
             .unwrap();
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
-        assert!(adjustment
-            .iter()
-            .any(|index| index.keys == doc! { "warehouse_id": 1, "status": 1 }));
+        assert!(adjustment.iter().any(|index| index.keys == doc! { "warehouse_id": 1, "status": 1 }));
 
-        assert!(stock_adjustment_line_indexes()
-            .iter()
-            .any(|index| index.keys == doc! { "stock_adjustment_id": 1 }));
+        assert!(
+            stock_adjustment_line_indexes()
+                .iter()
+                .any(|index| index.keys == doc! { "stock_adjustment_id": 1 })
+        );
     }
 }

@@ -2,13 +2,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{PayableAccountId, PayableEntryId};
 use erp_core::money::Amount;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 来源事实类型最大长度。
 const FACT_TYPE_MAX_LEN: usize = 64;
@@ -250,11 +249,7 @@ fn validate_direction_consistency(entry_type: PayableEntryType, direction: Entry
     };
     if let Some(fixed) = fixed {
         if direction != fixed {
-            return Err(Error::from(format!(
-                "{} 分录方向必须为 {}",
-                entry_type.label(),
-                fixed.label()
-            )));
+            return Err(Error::from(format!("{} 分录方向必须为 {}", entry_type.label(), fixed.label())));
         }
     }
     Ok(())
@@ -262,8 +257,9 @@ fn validate_direction_consistency(entry_type: PayableEntryType, direction: Entry
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn data() -> PayableEntryData {
         PayableEntryData {
@@ -292,28 +288,16 @@ mod tests {
 
     #[test]
     fn new_rejects_blank_overlong_and_negative() {
-        let blank = PayableEntryData {
-            source_document_id: "   ".to_string(),
-            ..data()
-        };
+        let blank = PayableEntryData { source_document_id: "   ".to_string(), ..data() };
         assert!(PayableEntry::new(PayableEntryId::new("pe-2"), blank).is_err());
 
-        let overlong = PayableEntryData {
-            source_revision_id: "r".repeat(129),
-            ..data()
-        };
+        let overlong = PayableEntryData { source_revision_id: "r".repeat(129), ..data() };
         assert!(PayableEntry::new(PayableEntryId::new("pe-3"), overlong).is_err());
 
-        let non_positive = PayableEntryData {
-            amount: Amount::from_str("0.00").unwrap(),
-            ..data()
-        };
+        let non_positive = PayableEntryData { amount: Amount::from_str("0.00").unwrap(), ..data() };
         assert!(PayableEntry::new(PayableEntryId::new("pe-4"), non_positive).is_err());
 
-        let zero_seq = PayableEntryData {
-            source_sequence: 0,
-            ..data()
-        };
+        let zero_seq = PayableEntryData { source_sequence: 0, ..data() };
         assert!(PayableEntry::new(PayableEntryId::new("pe-5"), zero_seq).is_err());
     }
 
@@ -353,10 +337,7 @@ mod tests {
             serde_json::to_string(&PayableEntryType::SettlementDelta).unwrap(),
             "\"settlement_delta\""
         );
-        assert_eq!(
-            serde_json::to_string(&EntryDirection::Decrease).unwrap(),
-            "\"decrease\""
-        );
+        assert_eq!(serde_json::to_string(&EntryDirection::Decrease).unwrap(), "\"decrease\"");
         assert_eq!(PayableEntryType::SupplierRefund.label(), "供应商退款");
         assert_eq!(PayableEntryType::Reversal.as_str(), "reversal");
         assert_eq!(EntryDirection::Increase.label(), "增加");

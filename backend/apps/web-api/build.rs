@@ -1,12 +1,10 @@
-use std::{
-    collections::{HashMap, HashSet},
-    env, fs, io,
-    path::{Path, PathBuf},
-};
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::{env, fs, io};
 
-use syn::{
-    punctuated::Punctuated, spanned::Spanned, Attribute, Expr, File, Item, ItemFn, Lit, MetaNameValue, Token,
-};
+use syn::punctuated::Punctuated;
+use syn::spanned::Spanned;
+use syn::{Attribute, Expr, File, Item, ItemFn, Lit, MetaNameValue, Token};
 
 #[derive(Debug, Clone)]
 struct PermissionMeta {
@@ -85,14 +83,14 @@ fn main() {
         Err(err) => {
             println!("cargo:warning=missing manifest dir: {}", err);
             return;
-        }
+        },
     };
     let backend_root = match manifest_dir.parent().and_then(|path| path.parent()) {
         Some(path) => path.to_path_buf(),
         None => {
             println!("cargo:warning=missing backend root");
             return;
-        }
+        },
     };
     // `erp-client` 位于仓库根（backend 的兄弟目录）。
     let repo_root = match backend_root.parent() {
@@ -100,7 +98,7 @@ fn main() {
         None => {
             println!("cargo:warning=missing repo root");
             return;
-        }
+        },
     };
 
     let routes_mod_path = manifest_dir.join("src/core/routes/mod.rs");
@@ -115,7 +113,7 @@ fn main() {
         Err(err) => {
             println!("cargo:warning=failed to collect handler files: {}", err);
             return;
-        }
+        },
     };
 
     for file in &handler_files {
@@ -128,13 +126,9 @@ fn main() {
     let prefix = match fs::read_to_string(&routes_mod_path) {
         Ok(content) => parse_admin_prefix(&content).unwrap_or_else(|| "/admin".to_string()),
         Err(err) => {
-            println!(
-                "cargo:warning=failed to read routes mod file {}: {}",
-                routes_mod_path.display(),
-                err
-            );
+            println!("cargo:warning=failed to read routes mod file {}: {}", routes_mod_path.display(), err);
             return;
-        }
+        },
     };
 
     let handler_meta = match parse_handler_permissions(&handlers_root, &handler_files) {
@@ -142,7 +136,7 @@ fn main() {
         Err(err) => {
             println!("cargo:warning=failed to parse handler permissions: {}", err);
             return;
-        }
+        },
     };
 
     let route_handlers = match collect_route_handlers(&manifest_dir) {
@@ -150,7 +144,7 @@ fn main() {
         Err(err) => {
             println!("cargo:warning=failed to read route files: {}", err);
             return;
-        }
+        },
     };
 
     let (groups, used_handlers) = build_permission_groups(&prefix, &handler_meta, &route_handlers);
@@ -232,8 +226,8 @@ fn parse_admin_prefix(content: &str) -> Option<String> {
                     if depth == 0 {
                         break;
                     }
-                }
-                _ => {}
+                },
+                _ => {},
             }
             end += 1;
         }
@@ -279,13 +273,9 @@ fn parse_handler_permissions(
         let file = match syn::parse_file(&content) {
             Ok(file) => file,
             Err(err) => {
-                println!(
-                    "cargo:warning=failed to parse handler file {}: {}",
-                    file_path.display(),
-                    err
-                );
+                println!("cargo:warning=failed to parse handler file {}: {}", file_path.display(), err);
                 continue;
-            }
+            },
         };
 
         collect_permission_meta(&file, &module_path, &mut out);
@@ -311,10 +301,7 @@ fn collect_permission_meta(file: &File, module_path: &str, out: &mut HashMap<Str
         if let Some(meta) = extract_permission_meta(item_fn) {
             let handler_name = format!("{}::{}", module_path, item_fn.sig.ident);
             if out.insert(handler_name.clone(), meta).is_some() {
-                println!(
-                    "cargo:warning=duplicate permission metadata for handler '{}'",
-                    handler_name
-                );
+                println!("cargo:warning=duplicate permission metadata for handler '{}'", handler_name);
             }
         }
     }
@@ -342,7 +329,7 @@ fn extract_permission_meta(item_fn: &ItemFn) -> Option<PermissionMeta> {
                     item_fn.sig.ident, err
                 );
                 return None;
-            }
+            },
         }
     }
 
@@ -357,11 +344,7 @@ fn extract_permission_meta(item_fn: &ItemFn) -> Option<PermissionMeta> {
 /// # 返回
 /// 返回布尔值表示条件是否满足或操作是否成功。
 fn is_permission_attr(attr: &Attribute) -> bool {
-    attr.path()
-        .segments
-        .last()
-        .map(|seg| seg.ident == "permission")
-        .unwrap_or(false)
+    attr.path().segments.last().map(|seg| seg.ident == "permission").unwrap_or(false)
 }
 
 /// 解析 permission 宏参数。
@@ -400,7 +383,7 @@ fn parse_permission_args(attr: &Attribute) -> syn::Result<PermissionMeta> {
             Some("desc") => desc = Some(value),
             Some("resource") => resource = Some(value),
             Some("action") => action = Some(value),
-            _ => {}
+            _ => {},
         }
     }
 
@@ -408,13 +391,7 @@ fn parse_permission_args(attr: &Attribute) -> syn::Result<PermissionMeta> {
     let group_desc = group_desc.ok_or_else(|| syn::Error::new(attr.span(), "missing group_desc"))?;
     let desc = desc.ok_or_else(|| syn::Error::new(attr.span(), "missing desc"))?;
 
-    Ok(PermissionMeta {
-        group,
-        group_desc,
-        desc,
-        resource,
-        action,
-    })
+    Ok(PermissionMeta { group, group_desc, desc, resource, action })
 }
 
 /// 获取 handler 文件对应的模块路径。
@@ -574,8 +551,8 @@ fn parse_routes(content: &str) -> Vec<RouteHandler> {
                     if depth == 0 {
                         break;
                     }
-                }
-                _ => {}
+                },
+                _ => {},
             }
             end += 1;
         }
@@ -651,8 +628,8 @@ fn parse_handler_chain(expr: &str) -> Vec<RouteHandler> {
                     if depth == 0 {
                         break;
                     }
-                }
-                _ => {}
+                },
+                _ => {},
             }
             cursor += 1;
         }
@@ -661,11 +638,7 @@ fn parse_handler_chain(expr: &str) -> Vec<RouteHandler> {
         }
 
         let handler = expr[handler_start..cursor].trim().to_string();
-        out.push(RouteHandler {
-            method: method.to_uppercase(),
-            path: String::new(),
-            handler,
-        });
+        out.push(RouteHandler { method: method.to_uppercase(), path: String::new(), handler });
 
         index = cursor + 1;
     }
@@ -698,10 +671,7 @@ fn build_permission_groups(
             continue;
         }
         let Some(meta) = handler_meta.get(&route.handler) else {
-            println!(
-                "cargo:warning=missing #[permission] for handler '{}'",
-                route.handler
-            );
+            println!("cargo:warning=missing #[permission] for handler '{}'", route.handler);
             continue;
         };
 
@@ -709,10 +679,7 @@ fn build_permission_groups(
 
         let entry = groups.entry(meta.group.clone()).or_insert_with(|| {
             order.push(meta.group.clone());
-            PermissionGroup {
-                desc: meta.group_desc.clone(),
-                permissions: Vec::new(),
-            }
+            PermissionGroup { desc: meta.group_desc.clone(), permissions: Vec::new() }
         });
 
         if entry.desc != meta.group_desc {
@@ -723,17 +690,11 @@ fn build_permission_groups(
         }
 
         let Some(resource) = meta.resource.clone() else {
-            println!(
-                "cargo:warning=missing resource for permission mapping '{}'",
-                route.handler
-            );
+            println!("cargo:warning=missing resource for permission mapping '{}'", route.handler);
             continue;
         };
         let Some(action) = meta.action.clone() else {
-            println!(
-                "cargo:warning=missing action for permission mapping '{}'",
-                route.handler
-            );
+            println!("cargo:warning=missing action for permission mapping '{}'", route.handler);
             continue;
         };
         entry.permissions.push(PermissionItem {
@@ -746,10 +707,8 @@ fn build_permission_groups(
         });
     }
 
-    let ordered = order
-        .into_iter()
-        .filter_map(|name| groups.remove(&name).map(|group| (name, group)))
-        .collect();
+    let ordered =
+        order.into_iter().filter_map(|name| groups.remove(&name).map(|group| (name, group))).collect();
 
     (ordered, used_handlers)
 }
@@ -802,28 +761,14 @@ fn write_generated_file(
         content.push_str("        permissions: [\n");
         for perm in &group.permissions {
             content.push_str("            {\n");
-            content.push_str(&format!(
-                "                module: \"{}\",\n",
-                escape_ts(&perm.module)
-            ));
-            content.push_str(&format!(
-                "                method: \"{}\",\n",
-                escape_ts(&perm.method)
-            ));
+            content.push_str(&format!("                module: \"{}\",\n", escape_ts(&perm.module)));
+            content.push_str(&format!("                method: \"{}\",\n", escape_ts(&perm.method)));
             content.push_str(&format!("                path: \"{}\",\n", escape_ts(&perm.path)));
-            content.push_str(&format!(
-                "                description: \"{}\",\n",
-                escape_ts(&perm.description)
-            ));
+            content
+                .push_str(&format!("                description: \"{}\",\n", escape_ts(&perm.description)));
             content.push_str("                permission: {\n");
-            content.push_str(&format!(
-                "                    resource: \"{}\",\n",
-                escape_ts(&perm.resource)
-            ));
-            content.push_str(&format!(
-                "                    action: \"{}\",\n",
-                escape_ts(&perm.action)
-            ));
+            content.push_str(&format!("                    resource: \"{}\",\n", escape_ts(&perm.resource)));
+            content.push_str(&format!("                    action: \"{}\",\n", escape_ts(&perm.action)));
             content.push_str("                },\n");
             content.push_str("            },\n");
         }

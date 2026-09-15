@@ -1,5 +1,3 @@
-use crate::entity::supplier_fulfillment::SupplierFulfillmentOrder;
-use crate::repository::SupplierFulfillmentExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
@@ -7,6 +5,8 @@ use super::SupplierFulfillmentService;
 use crate::dto::supplier_fulfillment::{
     PageView, SortDir, SupplierFulfillmentOrderListParams, SupplierFulfillmentOrderView,
 };
+use crate::entity::supplier_fulfillment::SupplierFulfillmentOrder;
+use crate::repository::SupplierFulfillmentExt;
 use crate::{Error, Result};
 
 /// 履约订单列表筛选条件类型（经 `SupplierFulfillmentExt` 关联类型跨 crate 可达）。
@@ -68,12 +68,7 @@ impl SupplierFulfillmentService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 按 ID 加载未删除供应商子订单。

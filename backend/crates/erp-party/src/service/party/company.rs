@@ -10,11 +10,7 @@ impl PartyService {
     pub async fn company_list(&self, params: &CompanyListParams) -> Result<PageView<CompanyView>> {
         let page = self.db.parties().companies(params, &mut NoTransaction).await?;
         Ok(PageView {
-            items: page
-                .items
-                .into_iter()
-                .map(CompanyView::try_from)
-                .collect::<Result<_>>()?,
+            items: page.items.into_iter().map(CompanyView::try_from).collect::<Result<_>>()?,
             total: page.total,
             page: params.page.unwrap_or(1).clamp(1, 1_000_000),
             page_size: params.page_size.unwrap_or(30).clamp(1, 100),
@@ -35,11 +31,8 @@ impl PartyService {
     /// 编号占用、名称别名冲突、校验或事务失败时返回错误。
     pub async fn create_company(&self, req: SaveCompanyRequest, actor: &AuditActor) -> Result<CompanyView> {
         let profile = req.profile()?;
-        if let Some(existing) = self
-            .db
-            .parties()
-            .find_by_party_no_including_deleted(&req.party_no, &mut NoTransaction)
-            .await?
+        if let Some(existing) =
+            self.db.parties().find_by_party_no_including_deleted(&req.party_no, &mut NoTransaction).await?
         {
             if existing.company_profile.as_ref() == Some(&profile)
                 && existing.unified_credit_code == req.unified_credit_code
@@ -97,8 +90,7 @@ impl PartyService {
             short_name: profile.short_name.clone(),
             change_reason: "维护公司主体".into(),
         };
-        self.update_party_record(id, command, Some(profile), actor)
-            .await?;
+        self.update_party_record(id, command, Some(profile), actor).await?;
         self.company_detail(id).await
     }
 }

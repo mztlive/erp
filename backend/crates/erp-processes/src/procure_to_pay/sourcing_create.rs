@@ -6,50 +6,48 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::{DeliveryId, DeliveryLineId, SalesOrderId, WarehouseId};
 use erp_fulfillment::entity::fulfillment::{
     Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType,
 };
+use erp_fulfillment::repository::FulfillmentExt;
+use erp_identity::SharedRbacService;
 use erp_inventory::StockReservation;
-use erp_procurement::entity::purchase_order::{
-    LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
+use erp_procurement::dto::purchase_order::{
+    CREATE_SOURCING_ACTION, CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest,
+    CreatePurchaseOrderResult, CreatePurchaseOrdersFromSourcingRequest,
+    CreatePurchaseOrdersFromSourcingResult, ExistingStockReservationResult,
 };
-use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
+use erp_procurement::entity::purchase_order::{
+    LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError, SourcingAssignmentSet,
+    SourcingPlan, SourcingPlanError, StockBasisGroup, basis_id_for,
+};
+use erp_read_models::purchase_center::repository::sales_order_basis_fact;
+use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use id_generator::next_id;
 use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-use {erp_fulfillment::repository::FulfillmentExt, erp_sales::repository::SalesOrderExt};
 
-use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
+use super::PurchaseOrderProcess;
+use super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
 use super::creation_basis::{
-    basis_groups_and_facts, basis_groups_for_order, load_effective_sales_order, persist_basis_draft,
-    procurement_quantity_changed, stock_basis_groups_for_order, validate_requested_quantities,
-    CreateBasisCommand, VerifiedBasisInput,
+    CreateBasisCommand, VerifiedBasisInput, basis_groups_and_facts, basis_groups_for_order,
+    load_effective_sales_order, persist_basis_draft, procurement_quantity_changed,
+    stock_basis_groups_for_order, validate_requested_quantities,
 };
 use super::procurement_task_sync::{
     load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
 };
-use super::PurchaseOrderProcess;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_identity::SharedRbacService;
-use erp_procurement::dto::purchase_order::{
-    CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult,
-    CreatePurchaseOrdersFromSourcingRequest, CreatePurchaseOrdersFromSourcingResult,
-    ExistingStockReservationResult, CREATE_SOURCING_ACTION,
-};
-use erp_procurement::entity::purchase_order::{
-    basis_id_for, SourcingAssignmentSet, SourcingPlan, SourcingPlanError, StockBasisGroup,
-};
-use erp_read_models::purchase_center::repository::sales_order_basis_fact;
 
 mod stock_posting;
-use stock_posting::{persist_stock_allocations, PersistedStockAllocation};
+use stock_posting::{PersistedStockAllocation, persist_stock_allocations};
 
 const CREATE_PERMISSION: &str = "purchase_order:create";
 const CREATE_SOURCING_RECEIPT_PREFIX: &str = "purchase-order-sourcing-command-";
@@ -115,10 +113,8 @@ impl PurchaseOrderProcess {
             LegacyReceiptIdScheme::None,
         )?;
         let audit_id = receipt_identity.receipt_id().to_string();
-        let PurchaseOrderAuthorization {
-            rbac,
-            policy_revision,
-        } = self.authorize_actor_permission(actor, CREATE_PERMISSION).await?;
+        let PurchaseOrderAuthorization { rbac, policy_revision } =
+            self.authorize_actor_permission(actor, CREATE_PERMISSION).await?;
         if let Some(result) = replay_sourcing(
             &self.db,
             &audit_id,
@@ -256,8 +252,7 @@ async fn create_from_sourcing_in_transaction(
     db.sales_orders().update(&mut order, session).await?;
     let latest_stock_groups =
         stock_basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
-    plan.validate_against_latest_stock(&latest_stock_groups)
-        .map_err(map_sourcing_plan_error)?;
+    plan.validate_against_latest_stock(&latest_stock_groups).map_err(map_sourcing_plan_error)?;
     let persisted_stock = persist_stock_allocations(
         db,
         plan.stock_plans(),
@@ -269,14 +264,11 @@ async fn create_from_sourcing_in_transaction(
     )
     .await?;
     create_stock_delivery_drafts(db, input.sales_order_id, &persisted_stock, session).await?;
-    let stock_reservations = persisted_stock
-        .into_iter()
-        .map(|allocation| allocation.result)
-        .collect::<Vec<_>>();
+    let stock_reservations =
+        persisted_stock.into_iter().map(|allocation| allocation.result).collect::<Vec<_>>();
     let (latest_groups, latest_facts) =
         basis_groups_and_facts(db, &order, task.responsibility_scope_ids(), session).await?;
-    plan.validate_against_latest_sourcing(&latest_groups)
-        .map_err(map_sourcing_plan_error)?;
+    plan.validate_against_latest_sourcing(&latest_groups).map_err(map_sourcing_plan_error)?;
     let mut orders = Vec::with_capacity(plan.purchase_plans().len());
     for plan in plan.purchase_plans() {
         let latest = latest_groups
@@ -396,10 +388,7 @@ async fn create_from_sourcing_in_transaction(
 /// # 关键业务约束
 /// 余额依据在 guard 推进后可能被作废释放，必须以最新集合查找。
 fn latest_stock_group<'a>(groups: &'a [StockBasisGroup], balance_id: &str) -> Result<&'a StockBasisGroup> {
-    groups
-        .iter()
-        .find(|group| group.balance.base.id == balance_id)
-        .ok_or_else(procurement_quantity_changed)
+    groups.iter().find(|group| group.balance.base.id == balance_id).ok_or_else(procurement_quantity_changed)
 }
 
 /// 把选源计划领域错误映射为服务层稳定业务错误。
@@ -417,7 +406,7 @@ fn map_sourcing_plan_error(error: SourcingPlanError) -> Error {
         SourcingPlanError::StaleFacts => procurement_quantity_changed(),
         SourcingPlanError::WarehouseContract(message) | SourcingPlanError::QuantityContract(message) => {
             Error::ValidationError(message)
-        }
+        },
     }
 }
 
@@ -456,10 +445,7 @@ async fn ensure_stock_delivery_for_warehouse(
     reservations: &[&StockReservation],
     session: &mut ClientSession,
 ) -> Result<()> {
-    let existing = db
-        .fulfillment()
-        .draft_warehouse_delivery(sales_order_id, warehouse_id, session)
-        .await?;
+    let existing = db.fulfillment().draft_warehouse_delivery(sales_order_id, warehouse_id, session).await?;
     if let Some(delivery) = existing {
         append_stock_delivery_lines(db, &delivery, reservations, session).await?;
         crate::fulfillment_execution::task::ensure_fulfillment_task(
@@ -486,9 +472,7 @@ async fn ensure_stock_delivery_for_warehouse(
         },
     )?;
     let lines = build_stock_delivery_lines(&delivery_id, reservations, 1)?;
-    db.fulfillment()
-        .create_delivery_with_lines(&delivery, &lines, session)
-        .await?;
+    db.fulfillment().create_delivery_with_lines(&delivery, &lines, session).await?;
     crate::fulfillment_execution::task::ensure_fulfillment_task(
         db,
         crate::fulfillment_execution::task::FulfillmentTaskObject::Delivery(&delivery),
@@ -505,10 +489,8 @@ async fn append_stock_delivery_lines(
     session: &mut ClientSession,
 ) -> Result<()> {
     let delivery_id = DeliveryId::new(delivery.base.id.clone());
-    let existing = db
-        .fulfillment()
-        .delivery_lines_by_delivery_ids(std::slice::from_ref(&delivery_id), session)
-        .await?;
+    let existing =
+        db.fulfillment().delivery_lines_by_delivery_ids(std::slice::from_ref(&delivery_id), session).await?;
     let existing_reservations = existing
         .iter()
         .filter_map(|line| line.stock_reservation_id.as_ref().map(ToString::to_string))
@@ -632,10 +614,10 @@ async fn replay_sourcing(
         Ok(receipt) => receipt,
         Err(PurchaseCommandReceiptError::IdentityMismatch | PurchaseCommandReceiptError::PayloadConflict) => {
             return Err(Error::ConflictError("幂等键已用于不同采购命令".to_string()));
-        }
+        },
         Err(PurchaseCommandReceiptError::Corrupted(message)) => {
             return Err(Error::Internal(message));
-        }
+        },
     }
     .into_payload();
     let work_item_status = sourcing_receipt_work_item_status(
@@ -686,9 +668,7 @@ async fn sourcing_receipt_work_item_status(
         || item.business_object_type != "sales_order"
         || item.business_object_id != sales_order_id
     {
-        return Err(Error::Internal(
-            "旧版选源幂等收据对应的工作项身份非法".to_string(),
-        ));
+        return Err(Error::Internal("旧版选源幂等收据对应的工作项身份非法".to_string()));
     }
     sourcing_work_item_status(item.status, true)
 }
@@ -705,8 +685,9 @@ fn sourcing_work_item_status(status: WorkItemStatus, legacy: bool) -> Result<Str
 
 #[cfg(test)]
 mod tests {
-    use super::{sourcing_work_item_status, SourcingReceipt};
     use erp_workflow::entity::work_item::WorkItemStatus;
+
+    use super::{SourcingReceipt, sourcing_work_item_status};
 
     /// 幂等回放必须保留同步后的任务状态，不能把部分分配误报为任务完成。
     #[test]
@@ -730,23 +711,18 @@ mod tests {
             serde_json::from_str(r#"{"orders":[],"stock_reservations":[]}"#).expect("旧版选源回执必须可回放");
 
         assert_eq!(replayed.work_item_status, None);
-        assert_eq!(
-            sourcing_work_item_status(WorkItemStatus::Closed, true).unwrap(),
-            "COMPLETED"
-        );
+        assert_eq!(sourcing_work_item_status(WorkItemStatus::Closed, true).unwrap(), "COMPLETED");
         assert!(sourcing_work_item_status(WorkItemStatus::Closed, false).is_err());
     }
 
     /// 验证选源创建的操作人授权提交栅栏。
     #[test]
     fn create_from_sourcing_binds_actor_authorization_to_commit() {
-        let production = [
-            include_str!("sourcing_create.rs"),
-            include_str!("sourcing_create/stock_posting.rs"),
-        ]
-        .into_iter()
-        .map(|source| source.split("#[cfg(test)]").next().expect("生产代码必须存在"))
-        .collect::<String>();
+        let production =
+            [include_str!("sourcing_create.rs"), include_str!("sourcing_create/stock_posting.rs")]
+                .into_iter()
+                .map(|source| source.split("#[cfg(test)]").next().expect("生产代码必须存在"))
+                .collect::<String>();
         assert!(production.contains("authorize_actor_permission(actor, CREATE_PERMISSION)"));
         assert!(production.contains("ensure_purchase_order_actor_account"));
         assert!(production.contains("run_authorized_policy_transaction(policy_revision"));

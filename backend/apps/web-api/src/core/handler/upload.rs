@@ -2,14 +2,10 @@ use axum::extract::{Multipart, State};
 use serde::Serialize;
 use tracing::error;
 
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::{Error, Result},
-        response::ApiResponse,
-        upload::extract_file,
-    },
-};
+use crate::app_state::AppState;
+use crate::core::errors::{Error, Result};
+use crate::core::response::ApiResponse;
+use crate::core::upload::extract_file;
 
 /// 上传成功响应。
 #[derive(Debug, Serialize)]
@@ -50,13 +46,10 @@ pub(crate) async fn upload_file(
             error!(error = %storage_error, object_key = %unique_name, "Failed to save upload to S3");
             Error::Internal("Object storage operation failed".to_string())
         })?;
-    let url = state
-        .storage()
-        .public_url(&unique_name)
-        .map_err(|storage_error| {
-            error!(error = %storage_error, object_key = %unique_name, "Failed to build S3 public URL");
-            Error::Internal("Object storage URL generation failed".to_string())
-        })?;
+    let url = state.storage().public_url(&unique_name).map_err(|storage_error| {
+        error!(error = %storage_error, object_key = %unique_name, "Failed to build S3 public URL");
+        Error::Internal("Object storage URL generation failed".to_string())
+    })?;
 
     Ok(ApiResponse::ok_with_data(UploadResponse { url }))
 }

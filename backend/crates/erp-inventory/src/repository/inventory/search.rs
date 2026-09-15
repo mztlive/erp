@@ -1,15 +1,15 @@
 //! 库存搜索条件在列表查询和计数前求交。
 
-use super::{InventoryRepository, STOCK_ADJUSTMENT_LINES, STOCK_RESERVATIONS};
-use crate::{dto::StockAvailability, entity::inventory::ReservationStatus};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::SkuId;
-use mongodb::{
-    bson::{doc, Document},
-    options::FindOptions,
-};
-use persistence_core::{mongo_ops, Executor, Result};
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, Result, mongo_ops};
 use serde::Deserialize;
+
+use super::{InventoryRepository, STOCK_ADJUSTMENT_LINES, STOCK_RESERVATIONS};
+use crate::dto::StockAvailability;
+use crate::entity::inventory::ReservationStatus;
 
 /// 由领域查询编排产生的库存筛选，持久化表达只在仓储内可见。
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -19,10 +19,7 @@ impl InventorySearch {
     /// 关键词 SKU 集合与显式 SKU 求交；Some 空集合表示无命中。
     pub fn skus(ids: Option<Vec<SkuId>>, sku: Option<&SkuId>) -> Self {
         let Some(ids) = ids else {
-            return Self(
-                sku.map(|id| doc! { "sku_id": id.to_string() })
-                    .unwrap_or_default(),
-            );
+            return Self(sku.map(|id| doc! { "sku_id": id.to_string() }).unwrap_or_default());
         };
         let ids = ids
             .into_iter()
@@ -69,10 +66,10 @@ impl InventoryRepository<'_> {
         match availability {
             Some(StockAvailability::Zero) => {
                 search.insert("available_quantity", doc! { "$eq": 0 });
-            }
+            },
             Some(StockAvailability::Positive) => {
                 search.insert("available_quantity", doc! { "$gt": 0 });
-            }
+            },
             Some(StockAvailability::Reserved) => {
                 let dimensions = self.reservation_dimensions(executor).await?;
                 let clauses = dimensions
@@ -84,8 +81,8 @@ impl InventoryRepository<'_> {
                 } else {
                     search.insert("$or", clauses);
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
         Ok(InventorySearch(search))
     }
@@ -120,9 +117,7 @@ impl InventoryRepository<'_> {
         let rows = mongo_ops::find_many(
             &self.db.collection::<AdjustmentReference>(STOCK_ADJUSTMENT_LINES),
             line_filter,
-            FindOptions::builder()
-                .projection(doc! { "_id": 0, "stock_adjustment_id": 1 })
-                .build(),
+            FindOptions::builder().projection(doc! { "_id": 0, "stock_adjustment_id": 1 }).build(),
             executor,
         )
         .await?;
@@ -148,10 +143,7 @@ mod tests {
         let mut filter =
             doc! { "warehouse_id": { "$in": ["authorized"] }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         search.apply(&mut filter);
-        assert_eq!(
-            filter.get_document("warehouse_id").unwrap(),
-            &doc! { "$in": ["authorized"] }
-        );
+        assert_eq!(filter.get_document("warehouse_id").unwrap(), &doc! { "$in": ["authorized"] });
         assert_eq!(
             filter.get_array("$and").unwrap()[0].as_document().unwrap(),
             &doc! { "sku_id": { "$in": [] } }

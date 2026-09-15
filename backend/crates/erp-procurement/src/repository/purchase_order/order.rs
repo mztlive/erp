@@ -1,23 +1,22 @@
 //! `purchase_order` 采购主表仓储：列表投影查询与按采购单号身份查询。
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{SalesOrderId, SupplierAccountId};
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
+use serde::{Deserialize, Serialize};
+
+use super::PurchaseOrderDomainRepository;
+use super::common::{PURCHASE_ORDER_SORT_FIELDS, in_filter, sort_doc};
 use crate::entity::purchase_order::{
     FulfillmentResponsibility, ProgressStatus, PurchaseOrder, PurchaseOrderStatus, PurchaseReviewStatus,
     PurchaseType,
 };
-use crate::repository::owned::PurchaseOrderRepository;
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::ids::{SalesOrderId, SupplierAccountId};
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use serde::{Deserialize, Serialize};
-
-use super::common::{in_filter, sort_doc, PURCHASE_ORDER_SORT_FIELDS};
-use super::PurchaseOrderDomainRepository;
 use crate::repository::extensions::PurchaseOrderExt;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::repository::owned::PurchaseOrderRepository;
 
 /// 采购单列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -206,9 +205,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
                 .db
                 .collection::<PurchaseOrderNoRow>(<mongodb::Database as PurchaseOrderExt>::PURCHASE_ORDERS),
             in_filter("id", deduped),
-            FindOptions::builder()
-                .projection(mongodb::bson::doc! { "id": 1, "purchase_no": 1 })
-                .build(),
+            FindOptions::builder().projection(mongodb::bson::doc! { "id": 1, "purchase_no": 1 }).build(),
             executor,
         )
         .await?;
@@ -250,11 +247,7 @@ impl<'a> PurchaseOrderRepository<'a> {
         if let Some(session) = executor.session() {
             query = query.session(session);
         }
-        Ok(query
-            .await?
-            .into_iter()
-            .filter_map(|v| v.as_str().map(str::to_owned))
-            .collect())
+        Ok(query.await?.into_iter().filter_map(|v| v.as_str().map(str::to_owned)).collect())
     }
 
     /// 分页检索采购单列表（投影查询）。
@@ -282,11 +275,7 @@ impl<'a> PurchaseOrderRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<PurchaseOrderRow>> {
         let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                PURCHASE_ORDER_SORT_FIELDS,
-                filter.sort_ascending,
-            ))
+            .sort(sort_doc(filter.sort_by.as_deref(), PURCHASE_ORDER_SORT_FIELDS, filter.sort_ascending))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(purchase_order_projection())
@@ -306,10 +295,7 @@ impl<'a> PurchaseOrderRepository<'a> {
         )
         .await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 查询销售单当前采购覆盖所需的采购单。
@@ -332,8 +318,7 @@ impl<'a> PurchaseOrderRepository<'a> {
         sales_order_id: &SalesOrderId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchaseOrder>> {
-        self.find_many(active_purchase_order_filter(sales_order_id), executor)
-            .await
+        self.find_many(active_purchase_order_filter(sales_order_id), executor).await
     }
 
     /// 统计销售单关联的有效采购单。
@@ -355,12 +340,8 @@ impl<'a> PurchaseOrderRepository<'a> {
         sales_order_id: &SalesOrderId,
         executor: &mut dyn Executor,
     ) -> Result<u64> {
-        mongo_ops::count_documents(
-            &self.collection(),
-            active_purchase_order_filter(sales_order_id),
-            executor,
-        )
-        .await
+        mongo_ops::count_documents(&self.collection(), active_purchase_order_filter(sales_order_id), executor)
+            .await
     }
 }
 
@@ -431,18 +412,12 @@ impl PurchaseOrderRepository<'_> {
             })
             .collect::<Vec<_>>();
         let collection = self.collection();
-        let mut query = collection.distinct(
-            "id",
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": clauses },
-        );
+        let mut query =
+            collection.distinct("id", doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": clauses });
         if let Some(session) = executor.session() {
             query = query.session(session);
         }
-        Ok(query
-            .await?
-            .into_iter()
-            .filter_map(|id| id.as_str().map(str::to_owned))
-            .collect())
+        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
     }
 }
 
@@ -463,11 +438,12 @@ impl PurchaseOrderRepository<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{active_purchase_order_filter, PurchaseOrderFilter};
-    use crate::entity::purchase_order::PurchaseOrderStatus;
     use erp_core::ids::{SalesOrderId, SupplierAccountId};
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
+
+    use super::{PurchaseOrderFilter, active_purchase_order_filter};
+    use crate::entity::purchase_order::PurchaseOrderStatus;
 
     #[test]
     fn filter_applies_optional_fields_and_deleted_filter() {
@@ -494,11 +470,7 @@ mod tests {
         );
         assert_eq!(document.get_str("status").unwrap(), "PENDING_FINANCE_REVIEW");
         let regex = document.get_document("purchase_no").unwrap();
-        assert_eq!(
-            regex.get_str("$regex").unwrap(),
-            "PO\\-2026",
-            "正则必须转义字面量"
-        );
+        assert_eq!(regex.get_str("$regex").unwrap(), "PO\\-2026", "正则必须转义字面量");
         assert_eq!(regex.get_str("$options").unwrap(), "i");
     }
 
@@ -519,10 +491,7 @@ mod tests {
             sort_ascending: false,
         };
         let document = filter.to_doc();
-        assert_eq!(
-            document.get_document("owner_user_id").unwrap(),
-            &doc! { "$in": ["buyer-2", "buyer-3"] }
-        );
+        assert_eq!(document.get_document("owner_user_id").unwrap(), &doc! { "$in": ["buyer-2", "buyer-3"] });
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(document.get_str("supplier_id").unwrap(), "supplier-2");
         assert_eq!(document.get_str("status").unwrap(), "IN_APPROVAL");

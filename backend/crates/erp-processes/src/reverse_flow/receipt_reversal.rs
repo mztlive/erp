@@ -9,9 +9,6 @@ mod sales_refresh;
 #[cfg(test)]
 mod receipt_reversal_approval_tests;
 
-use sales_refresh::{refresh_affected_sales, AffectedSales};
-
-use crate::Result;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt};
@@ -20,11 +17,15 @@ use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::service::receivable::receipt_reversal::{
     load_posted_receipt, receipt_allocation_sales_order_ids, reverse_receipt_allocations,
 };
-use erp_read_models::returns_center::{dto::ReceiptReversalView, ReturnsReadService};
+use erp_read_models::returns_center::ReturnsReadService;
+use erp_read_models::returns_center::dto::ReceiptReversalView;
 use erp_returns::entity::returns::ReceiptReversal;
 use erp_returns::service::ReturnsService;
 use mongodb::{ClientSession, Database};
 use persistence_core::{Executor, Transactional};
+use sales_refresh::{AffectedSales, refresh_affected_sales};
+
+use crate::Result;
 
 /// 回款冲正最终动作的跨域流程；客户端直接过账入口仍由原 Handler 拒绝。
 pub struct ReceiptReversalProcess {
@@ -98,12 +99,7 @@ async fn apply_receipt_reversal_final_post(
     let reversal = ReturnsService::prepare_receipt_reversal_post(db, id, executor).await?;
     let receipt = load_posted_receipt(db, &reversal.original_customer_receipt_id, executor).await?;
     ReturnsService::validate_receipt_reversal_amount(db, &reversal, receipt.amount, executor).await?;
-    let mut posting = DatabasePosting {
-        db,
-        reversal,
-        receipt,
-        actor,
-    };
+    let mut posting = DatabasePosting { db, reversal, receipt, actor };
     post(&mut posting, executor).await
 }
 
@@ -165,14 +161,8 @@ impl ReceiptReversalPosting for DatabasePosting<'_> {
 #[async_trait]
 impl AffectedSales for DatabasePosting<'_> {
     async fn load_sales(&mut self, executor: &mut dyn Executor) -> Result<Vec<SalesOrderId>> {
-        Ok(
-            receipt_allocation_sales_order_ids(
-                self.db,
-                &self.reversal.original_customer_receipt_id,
-                executor,
-            )
-            .await?,
-        )
+        Ok(receipt_allocation_sales_order_ids(self.db, &self.reversal.original_customer_receipt_id, executor)
+            .await?)
     }
 
     async fn refresh_sale(
@@ -193,10 +183,11 @@ impl AffectedSales for DatabasePosting<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{post, ReceiptReversalPosting};
-    use crate::{Error, Result};
     use async_trait::async_trait;
     use persistence_core::Executor;
+
+    use super::{ReceiptReversalPosting, post};
+    use crate::{Error, Result};
 
     struct TestExecutor {
         _identity: u8,
@@ -215,8 +206,7 @@ mod tests {
     impl RecordingPosting {
         fn record(&mut self, step: &'static str, executor: &mut dyn Executor) -> Result<()> {
             self.events.push(step);
-            self.executors
-                .push(executor as *mut dyn Executor as *mut () as usize);
+            self.executors.push(executor as *mut dyn Executor as *mut () as usize);
             if self.fail == Some(step) {
                 return Err(Error::ConflictError(step.to_string()));
             }
@@ -246,28 +236,15 @@ mod tests {
         post(&mut port, &mut executor).await.unwrap();
         assert_eq!(
             port.events,
-            [
-                "reverse_finance",
-                "post_reversal",
-                "audit",
-                "query_allocations_and_refresh_sales"
-            ]
+            ["reverse_finance", "post_reversal", "audit", "query_allocations_and_refresh_sales"]
         );
         assert_eq!(port.executors, vec![expected; 4]);
     }
     #[tokio::test]
     async fn each_failed_step_preserves_error_and_prevents_later_writes() {
-        let steps = [
-            "reverse_finance",
-            "post_reversal",
-            "audit",
-            "query_allocations_and_refresh_sales",
-        ];
+        let steps = ["reverse_finance", "post_reversal", "audit", "query_allocations_and_refresh_sales"];
         for (index, step) in steps.iter().enumerate() {
-            let mut port = RecordingPosting {
-                fail: Some(step),
-                ..Default::default()
-            };
+            let mut port = RecordingPosting { fail: Some(step), ..Default::default() };
             let mut executor = TestExecutor { _identity: 1 };
             let error = post(&mut port, &mut executor).await.unwrap_err();
             assert!(matches!(error, Error::ConflictError(message) if message == *step));

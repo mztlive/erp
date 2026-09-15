@@ -2,14 +2,15 @@
 
 use std::collections::HashMap;
 
-use crate::{Error, Result};
 use erp_core::common::time::Instant;
 use erp_core::ids::LegacyImportConfirmationId;
 use erp_import::{ConfirmationStatus, LegacyImportConfirmation, LegacyImportExt};
-use erp_workflow::entity::work_item::{WorkItem, WorkItemCloseData, WorkItemStatus};
 use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemCloseData, WorkItemStatus};
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::{Error, Result};
 
 /// Collect work-item ids referenced by confirmations replaced by a newer trial.
 ///
@@ -26,10 +27,7 @@ pub fn replaced_confirmation_work_item_ids(
     use std::collections::HashSet;
     let mut ids = Vec::new();
     let mut seen = HashSet::new();
-    for confirmation in confirmations
-        .iter()
-        .filter(|item| item.is_replaced_by(replacement_trial_version))
-    {
+    for confirmation in confirmations.iter().filter(|item| item.is_replaced_by(replacement_trial_version)) {
         if seen.insert(confirmation.work_item_id.to_string()) {
             ids.push(confirmation.work_item_id.clone());
         }
@@ -94,18 +92,13 @@ pub async fn invalidate_replaced_confirmation(
     if replaced_ids.is_empty() {
         return Ok(());
     }
-    let work_items = db
-        .work_items()
-        .list_legacy_import_confirmations_by_ids(&replaced_ids, executor)
-        .await?;
+    let work_items = db.work_items().list_legacy_import_confirmations_by_ids(&replaced_ids, executor).await?;
     let mut work_items_by_id = HashMap::new();
     for item in work_items {
         work_items_by_id.insert(item.base.id.clone(), item);
     }
     let replacement_id = LegacyImportConfirmationId::new(replacement.base.id.clone());
-    for confirmation in confirmations
-        .iter_mut()
-        .filter(|item| item.is_replaced_by(replacement.trial_version))
+    for confirmation in confirmations.iter_mut().filter(|item| item.is_replaced_by(replacement.trial_version))
     {
         confirmation.invalidate(replacement_id.clone(), Instant::now())?;
     }
@@ -118,28 +111,26 @@ pub async fn invalidate_replaced_confirmation(
     for work_item in to_close.iter_mut() {
         work_item.close(
             actor_id,
-            WorkItemCloseData {
-                close_reason: "SUPERSEDED_BY_NEW_IMPORT_TRIAL".to_string(),
-            },
+            WorkItemCloseData { close_reason: "SUPERSEDED_BY_NEW_IMPORT_TRIAL".to_string() },
             Instant::now(),
         )?;
     }
     db.legacy_import_confirmations()
         .persist_invalidated_confirmations(confirmations, &replacement_id, executor)
         .await?;
-    db.work_items()
-        .persist_closed_confirmation_work_items(&mut to_close, executor)
-        .await?;
+    db.work_items().persist_closed_confirmation_work_items(&mut to_close, executor).await?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::collect_superseded_closable_work_items;
+    use std::collections::HashMap;
+
     use erp_core::ids::{LegacyImportBatchId, LegacyImportConfirmationId, WorkItemId};
     use erp_import::{LegacyImportConfirmation, LegacyImportConfirmationData};
     use erp_workflow::entity::work_item::WorkItemStatus;
-    use std::collections::HashMap;
+
+    use super::collect_superseded_closable_work_items;
 
     #[test]
     fn missing_work_item_fails_closed_without_partial_close_set() {

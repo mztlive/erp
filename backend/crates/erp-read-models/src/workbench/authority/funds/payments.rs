@@ -2,12 +2,12 @@
 
 use std::collections::HashSet;
 
+use erp_workflow::ports::{ObjectFactMap, ObjectKind};
 use persistence_core::Executor;
 
 use super::super::object_ids;
 use super::mapping;
 use crate::errors::Result;
-use erp_workflow::ports::{ObjectFactMap, ObjectKind};
 
 impl super::super::WorkItemFactsReader {
     /// Load supplier-payment identity, creator, counterparty and impact.
@@ -29,10 +29,7 @@ impl super::super::WorkItemFactsReader {
                 executor,
             )
             .await?;
-        let supplier_ids = payments
-            .iter()
-            .map(|item| item.supplier_id.to_string())
-            .collect::<Vec<_>>();
+        let supplier_ids = payments.iter().map(|item| item.supplier_id.to_string()).collect::<Vec<_>>();
         let supplier_names = self.supplier_display_names(&supplier_ids, executor).await?;
         for payment in payments {
             let fact = mapping::supplier_payment_fact(
@@ -64,10 +61,7 @@ impl super::super::WorkItemFactsReader {
                 executor,
             )
             .await?;
-        let supplier_ids = refunds
-            .iter()
-            .map(|item| item.supplier_id.to_string())
-            .collect::<Vec<_>>();
+        let supplier_ids = refunds.iter().map(|item| item.supplier_id.to_string()).collect::<Vec<_>>();
         let supplier_names = self.supplier_display_names(&supplier_ids, executor).await?;
         let payment_ids = refunds
             .iter()

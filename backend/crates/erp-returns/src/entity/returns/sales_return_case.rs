@@ -7,13 +7,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::stable::StableBase;
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerAcceptanceId, SalesOrderId, SalesReturnCaseId};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 退货处理号最大长度。
 const RETURN_NO_MAX_LEN: usize = 64;
@@ -356,16 +355,10 @@ mod tests {
 
     #[test]
     fn new_rejects_blank_no_and_overlong_reason() {
-        let blank_no = SalesReturnCaseData {
-            return_no: "   ".to_string(),
-            ..data()
-        };
+        let blank_no = SalesReturnCaseData { return_no: "   ".to_string(), ..data() };
         assert!(SalesReturnCase::new(SalesReturnCaseId::new("src-2"), blank_no, "admin").is_err());
 
-        let overlong = SalesReturnCaseData {
-            reason: "r".repeat(513),
-            ..data()
-        };
+        let overlong = SalesReturnCaseData { reason: "r".repeat(513), ..data() };
         assert!(SalesReturnCase::new(SalesReturnCaseId::new("src-3"), overlong, "admin").is_err());
     }
 
@@ -389,35 +382,24 @@ mod tests {
         assert_eq!(case.return_no, "SR-2026-001", "关键字段不改");
 
         case.update(
-            SalesReturnCaseUpdate {
-                status: Some(SalesReturnCaseStatus::Completed),
-                ..Default::default()
-            },
+            SalesReturnCaseUpdate { status: Some(SalesReturnCaseStatus::Completed), ..Default::default() },
             "admin-2",
         )
         .unwrap();
         assert!(case.is_completed());
-        assert!(case
-            .update(
-                SalesReturnCaseUpdate {
-                    reason: Some("新原因".to_string()),
-                    ..Default::default()
-                },
+        assert!(
+            case.update(
+                SalesReturnCaseUpdate { reason: Some("新原因".to_string()), ..Default::default() },
                 "admin-3",
             )
-            .is_err());
+            .is_err()
+        );
     }
 
     #[test]
     fn enums_serialize_with_stable_codes_and_labels() {
-        assert_eq!(
-            serde_json::to_string(&CaseType::Shortage).unwrap(),
-            "\"shortage\""
-        );
-        assert_eq!(
-            serde_json::to_string(&ReturnRoute::NoPhysicalReturn).unwrap(),
-            "\"no_physical_return\""
-        );
+        assert_eq!(serde_json::to_string(&CaseType::Shortage).unwrap(), "\"shortage\"");
+        assert_eq!(serde_json::to_string(&ReturnRoute::NoPhysicalReturn).unwrap(), "\"no_physical_return\"");
         assert_eq!(
             serde_json::to_string(&SalesReturnCaseStatus::PendingFinance).unwrap(),
             "\"pending_finance\""
@@ -446,16 +428,10 @@ mod tests {
             SalesReturnCaseStatus::PendingWarehouseAcceptance.as_str(),
             "pending_warehouse_acceptance"
         );
-        assert_eq!(
-            SalesReturnCaseStatus::PendingProcurement.as_str(),
-            "pending_procurement"
-        );
+        assert_eq!(SalesReturnCaseStatus::PendingProcurement.as_str(), "pending_procurement");
         assert_eq!(SalesReturnCaseStatus::PendingFinance.as_str(), "pending_finance");
 
-        let production = include_str!("sales_return_case.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("sales_return_case.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(!production.contains("IN_APPROVAL"));
         assert!(!production.contains("fn start_approval"));
         assert!(!production.contains("approval_subject_version"));

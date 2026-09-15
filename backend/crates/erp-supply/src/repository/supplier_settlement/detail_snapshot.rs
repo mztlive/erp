@@ -3,22 +3,21 @@
 //! 把结算详情固定的四段持久化关联（结算头、明细、差异、差异补证）收敛为一次
 //! 有界批量读取，替代原来散落在 Service 的关系加载与归组。
 
-use crate::repository::owned::{
-    SupplierSettlementDifferenceEvidenceRepository, SupplierSettlementDifferenceRepository,
-    SupplierSettlementItemRepository, SupplierSettlementStatementRepository,
-};
 use std::collections::BTreeMap;
 
+use mongodb::bson::doc;
+use persistence_core::{Executor, Result};
+
+use super::super::extensions::SupplierSettlementExt;
+use super::SupplierSettlementRepository;
 use crate::entity::supplier_settlement::{
     SupplierSettlementDifference, SupplierSettlementDifferenceEvidence, SupplierSettlementItem,
     SupplierSettlementStatement,
 };
-use mongodb::bson::doc;
-
-use super::super::extensions::SupplierSettlementExt;
-use super::SupplierSettlementRepository;
-use persistence_core::Executor;
-use persistence_core::Result;
+use crate::repository::owned::{
+    SupplierSettlementDifferenceEvidenceRepository, SupplierSettlementDifferenceRepository,
+    SupplierSettlementItemRepository, SupplierSettlementStatementRepository,
+};
 
 /// 供应商结算单详情的最小事实快照。
 ///
@@ -81,11 +80,7 @@ impl<'a> SupplierSettlementRepository<'a> {
             self.db,
             <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_ITEMS,
         )
-        .find_many_sorted(
-            doc! { "statement_id": statement_id },
-            doc! { "created_at": 1, "id": 1 },
-            executor,
-        )
+        .find_many_sorted(doc! { "statement_id": statement_id }, doc! { "created_at": 1, "id": 1 }, executor)
         .await?;
         let item_ids = items.iter().map(|item| item.base.id.clone()).collect::<Vec<_>>();
         let differences: Vec<SupplierSettlementDifference> = if item_ids.is_empty() {
@@ -102,10 +97,8 @@ impl<'a> SupplierSettlementRepository<'a> {
             )
             .await?
         };
-        let difference_ids = differences
-            .iter()
-            .map(|difference| difference.base.id.clone())
-            .collect::<Vec<_>>();
+        let difference_ids =
+            differences.iter().map(|difference| difference.base.id.clone()).collect::<Vec<_>>();
         let evidence: Vec<SupplierSettlementDifferenceEvidence> = if difference_ids.is_empty() {
             Vec::new()
         } else {
@@ -153,20 +146,18 @@ fn group_evidence_by_difference(
 ) -> BTreeMap<String, Vec<SupplierSettlementDifferenceEvidence>> {
     let mut grouped: BTreeMap<String, Vec<SupplierSettlementDifferenceEvidence>> = BTreeMap::new();
     for value in evidence {
-        grouped
-            .entry(value.difference_id.to_string())
-            .or_default()
-            .push(value);
+        grouped.entry(value.difference_id.to_string()).or_default().push(value);
     }
     grouped
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::entity::supplier_settlement::SupplierSettlementDifferenceEvidenceData;
     use erp_core::common::time::Instant;
     use erp_core::ids::{SupplierSettlementDifferenceId, SupplierSettlementStatementId};
+
+    use super::*;
+    use crate::entity::supplier_settlement::SupplierSettlementDifferenceEvidenceData;
 
     /// 构造单条补证实体。
     ///

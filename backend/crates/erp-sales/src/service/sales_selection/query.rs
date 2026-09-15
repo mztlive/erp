@@ -3,17 +3,16 @@
 use erp_core::common::time::Instant;
 use persistence_core::{Executor, NoTransaction};
 
+use super::SalesSelectionService;
 use crate::dto::sales_selection::{
     PublicChoiceView, PublicReceiptView, PublicSelectionPageKind, PublicSelectionPageView,
     SalesSelectionBookletListParams, SalesSelectionBookletPage, SalesSelectionBookletView,
     SalesSelectionProposalView, SalesSelectionSessionView,
 };
 use crate::entity::sales_selection::{SalesSelectionBooklet, SalesSelectionProposal};
-use crate::repository::sales_selection::{validate_book_sort, SelectionBookFilter};
 use crate::repository::SalesSelectionExt;
+use crate::repository::sales_selection::{SelectionBookFilter, validate_book_sort};
 use crate::{Error, Result};
-
-use super::SalesSelectionService;
 
 impl SalesSelectionService {
     /// 分页列出选品册。
@@ -59,11 +58,7 @@ impl SalesSelectionService {
                 &mut executor,
             )
             .await?;
-        items.sort_by(|a, b| {
-            b.submitted_at
-                .cmp(&a.submitted_at)
-                .then_with(|| b.base.id.cmp(&a.base.id))
-        });
+        items.sort_by(|a, b| b.submitted_at.cmp(&a.submitted_at).then_with(|| b.base.id.cmp(&a.base.id)));
         let total = i64::try_from(items.len()).unwrap_or(i64::MAX);
         let page = params.page.unwrap_or(1);
         let page_size = params.page_size.unwrap_or(20);
@@ -167,20 +162,15 @@ impl SalesSelectionService {
         let batch = batch_id.or_else(|| booklet.current_batch_id.clone());
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
         let items = if let Some(batch) = batch {
-            domain
-                .list_effective_items(&booklet.base.id, &batch, executor)
-                .await?
+            domain.list_effective_items(&booklet.base.id, &batch, executor).await?
         } else {
             Vec::new()
         };
         let task = self.active_task_of(booklet, executor).await?;
         let mut view = Self::booklet_view(booklet, &items, task.as_ref(), None);
         if let Some(proposal_id) = booklet.proposal_id.as_ref() {
-            if let Some(proposal) = self
-                .db
-                .sales_selection_proposals()
-                .find_by_id(proposal_id.as_ref(), executor)
-                .await?
+            if let Some(proposal) =
+                self.db.sales_selection_proposals().find_by_id(proposal_id.as_ref(), executor).await?
             {
                 view.proposal_no = Some(proposal.proposal_no);
             }
@@ -212,11 +202,7 @@ impl SalesSelectionService {
                 .await?;
             return Ok(merge_task_reports(tasks));
         };
-        Ok(self
-            .db
-            .sales_selection_prepare_tasks()
-            .find_by_id(task_id, executor)
-            .await?)
+        Ok(self.db.sales_selection_prepare_tasks().find_by_id(task_id, executor).await?)
     }
 
     /// 读取方案详情。
@@ -231,11 +217,7 @@ impl SalesSelectionService {
     /// 尚无方案时返回未找到。
     pub async fn proposal_detail(&self, id: &str) -> Result<SalesSelectionProposalView> {
         let mut executor = NoTransaction;
-        let proposal = self
-            .db
-            .sales_selection_proposals()
-            .find_by_id(id, &mut executor)
-            .await?;
+        let proposal = self.db.sales_selection_proposals().find_by_id(id, &mut executor).await?;
         let proposal = match proposal {
             Some(item) => item,
             None => {
@@ -245,7 +227,7 @@ impl SalesSelectionService {
                     .find_proposal_by_booklet(id, &mut executor)
                     .await?
                     .ok_or_else(|| Error::NotFound("销售方案不存在".into()))?
-            }
+            },
         };
         self.proposal_view_of(&proposal, &mut executor).await
     }
@@ -304,16 +286,10 @@ impl SalesSelectionService {
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionProposalView> {
         let proposal_id = proposal.base.id.clone();
-        let display_lines = self
-            .db
-            .sales_selection_proposal_display_lines()
-            .list_by_proposal(&proposal_id, executor)
-            .await?;
-        let sku_lines = self
-            .db
-            .sales_selection_proposal_sku_lines()
-            .list_by_proposal(&proposal_id, executor)
-            .await?;
+        let display_lines =
+            self.db.sales_selection_proposal_display_lines().list_by_proposal(&proposal_id, executor).await?;
+        let sku_lines =
+            self.db.sales_selection_proposal_sku_lines().list_by_proposal(&proposal_id, executor).await?;
         Ok(Self::proposal_view(proposal, &display_lines, &sku_lines))
     }
 
@@ -334,19 +310,10 @@ impl SalesSelectionService {
         now: Instant,
     ) -> Result<PublicSelectionPageView> {
         let mut executor = NoTransaction;
-        let booklet = self
-            .db
-            .sales_selection_booklets()
-            .find_by_token_hash(token_hash, &mut executor)
-            .await?;
+        let booklet =
+            self.db.sales_selection_booklets().find_by_token_hash(token_hash, &mut executor).await?;
         let Some(booklet) = booklet else {
-            return Ok(Self::public_page(
-                PublicSelectionPageKind::Ended,
-                &ended_booklet(),
-                &[],
-                None,
-                None,
-            ));
+            return Ok(Self::public_page(PublicSelectionPageKind::Ended, &ended_booklet(), &[], None, None));
         };
         self.public_page_for(&booklet, now, &mut executor).await
     }
@@ -369,17 +336,8 @@ impl SalesSelectionService {
         now: Instant,
         executor: &mut dyn Executor,
     ) -> Result<PublicSelectionPageView> {
-        if booklet
-            .status
-            .public_is_ended(booklet.link_revoked, booklet.is_expired(now))
-        {
-            return Ok(Self::public_page(
-                PublicSelectionPageKind::Ended,
-                booklet,
-                &[],
-                None,
-                None,
-            ));
+        if booklet.status.public_is_ended(booklet.link_revoked, booklet.is_expired(now)) {
+            return Ok(Self::public_page(PublicSelectionPageKind::Ended, booklet, &[], None, None));
         }
         if booklet.status == crate::entity::sales_selection::BookletStatus::Submitted {
             return self.receipt_page(booklet, executor).await;
@@ -405,17 +363,9 @@ impl SalesSelectionService {
     ) -> Result<PublicSelectionPageView> {
         let batch = booklet.current_batch_id.clone().unwrap_or_default();
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
-        let items = domain
-            .list_effective_items(&booklet.base.id, &batch, executor)
-            .await?;
+        let items = domain.list_effective_items(&booklet.base.id, &batch, executor).await?;
         let session = domain.find_session_by_booklet(&booklet.base.id, executor).await?;
-        Ok(Self::public_page(
-            PublicSelectionPageKind::Selecting,
-            booklet,
-            &items,
-            session.as_ref(),
-            None,
-        ))
+        Ok(Self::public_page(PublicSelectionPageKind::Selecting, booklet, &items, session.as_ref(), None))
     }
 
     /// 组装只读回执页。
@@ -435,9 +385,7 @@ impl SalesSelectionService {
         executor: &mut dyn Executor,
     ) -> Result<PublicSelectionPageView> {
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
-        let proposal = domain
-            .find_proposal_by_booklet(&booklet.base.id, executor)
-            .await?;
+        let proposal = domain.find_proposal_by_booklet(&booklet.base.id, executor).await?;
         let receipt = match proposal {
             Some(item) => {
                 let choices = self.receipt_items(&item.base.id, executor).await?;
@@ -448,21 +396,13 @@ impl SalesSelectionService {
                     items: choices,
                     total_amount: item.total_amount,
                 })
-            }
+            },
             None => None,
         };
         let batch = booklet.current_batch_id.clone().unwrap_or_default();
-        let items = domain
-            .list_effective_items(&booklet.base.id, &batch, executor)
-            .await?;
+        let items = domain.list_effective_items(&booklet.base.id, &batch, executor).await?;
         let session = domain.find_session_by_booklet(&booklet.base.id, executor).await?;
-        Ok(Self::public_page(
-            PublicSelectionPageKind::Receipt,
-            booklet,
-            &items,
-            session.as_ref(),
-            receipt,
-        ))
+        Ok(Self::public_page(PublicSelectionPageKind::Receipt, booklet, &items, session.as_ref(), receipt))
     }
 
     /// 回执明细行。
@@ -481,11 +421,8 @@ impl SalesSelectionService {
         proposal_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PublicChoiceView>> {
-        let lines = self
-            .db
-            .sales_selection_proposal_display_lines()
-            .list_by_proposal(proposal_id, executor)
-            .await?;
+        let lines =
+            self.db.sales_selection_proposal_display_lines().list_by_proposal(proposal_id, executor).await?;
         Ok(lines
             .into_iter()
             .map(|line| PublicChoiceView {
@@ -535,9 +472,11 @@ fn booklet_filter(params: &SalesSelectionBookletListParams) -> Result<SelectionB
 /// # 错误
 /// 无。
 fn ended_booklet() -> SalesSelectionBooklet {
-    use crate::entity::sales_selection::{PoolFilterSnapshot, PoolSource, SelectionForm, SubmitMode};
-    use crate::entity::sales_selection::{PoolSourceKind, SalesSelectionBookletData};
     use erp_core::ids::{CustomerAccountId, SalesSelectionBookletId};
+
+    use crate::entity::sales_selection::{
+        PoolFilterSnapshot, PoolSource, PoolSourceKind, SalesSelectionBookletData, SelectionForm, SubmitMode,
+    };
     SalesSelectionBooklet::new(
         SalesSelectionBookletId::new("ended"),
         SalesSelectionBookletData {
@@ -562,11 +501,7 @@ fn ended_booklet() -> SalesSelectionBooklet {
 fn merge_task_reports(
     mut tasks: Vec<crate::entity::sales_selection::SalesSelectionPrepareTask>,
 ) -> Option<crate::entity::sales_selection::SalesSelectionPrepareTask> {
-    tasks.sort_by(|a, b| {
-        b.finished_at
-            .cmp(&a.finished_at)
-            .then_with(|| b.base.id.cmp(&a.base.id))
-    });
+    tasks.sort_by(|a, b| b.finished_at.cmp(&a.finished_at).then_with(|| b.base.id.cmp(&a.base.id)));
     let mut latest = tasks.first()?.clone();
     let mut seen = std::collections::BTreeSet::new();
     latest.tier_reports = tasks

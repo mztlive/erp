@@ -1,15 +1,17 @@
 //! Sales-owned first-submission working-copy identities and reconstruction.
-use super::{mapper::build_working_copy, SalesOrderService};
+use application_core::AuditActor;
+use erp_core::ids::{SalesOrderId, SalesOrderLineId};
+use id_generator::next_id;
+use persistence_core::NoTransaction;
+
+use super::SalesOrderService;
+use super::mapper::build_working_copy;
+use crate::Result;
 use crate::dto::sales_order::{SalesOrderDraftLineRequest, SalesOrderDraftRequest};
 use crate::entity::sales_order::{
     SalesOrder, SalesOrderLine, SalesOrderLineData, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine,
 };
 use crate::repository::SalesOrderExt;
-use crate::Result;
-use application_core::AuditActor;
-use erp_core::ids::{SalesOrderId, SalesOrderLineId};
-use id_generator::next_id;
-use persistence_core::NoTransaction;
 /// Existing and newly allocated stable line identities for one draft.
 pub struct DraftStableLines {
     /// All aligned identities.
@@ -37,11 +39,7 @@ impl SalesOrderService {
         order_id: &SalesOrderId,
         draft_lines: &[SalesOrderDraftLineRequest],
     ) -> Result<DraftStableLines> {
-        let existing = self
-            .db
-            .sales_order_lines()
-            .list_lines_by_order(order_id, &mut NoTransaction)
-            .await?;
+        let existing = self.db.sales_order_lines().list_lines_by_order(order_id, &mut NoTransaction).await?;
         let mut all = existing;
         let mut created = Vec::new();
         for line in draft_lines {
@@ -51,9 +49,7 @@ impl SalesOrderService {
             let new_line = SalesOrderLine::new(
                 SalesOrderLineId::new(next_id()),
                 order_id.clone(),
-                SalesOrderLineData {
-                    line_no: line.line_no,
-                },
+                SalesOrderLineData { line_no: line.line_no },
             )?;
             created.push(new_line.clone());
             all.push(new_line);

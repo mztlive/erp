@@ -1,10 +1,11 @@
 //! 销售变更命令的版本与状态读取守卫，保留调用方安排的回执前读取时点。
 
+use persistence_core::NoTransaction;
+
 use super::SalesReviewService;
 use crate::entity::sales_review::SalesChangeOrder;
 use crate::repository::SalesReviewExt;
 use crate::{Error, Result};
-use persistence_core::NoTransaction;
 
 impl SalesReviewService {
     /// 读取提交命令的销售状态并检查版本和草稿；必须在流程回执读取之前调用。
@@ -19,14 +20,10 @@ impl SalesReviewService {
             .await?
             .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
         if !change_order.matches_version(expected_version) {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         if !change_order.is_draft() {
-            return Err(Error::ConflictError(
-                "只有草稿状态的销售变更单可以提交审批".to_string(),
-            ));
+            return Err(Error::ConflictError("只有草稿状态的销售变更单可以提交审批".to_string()));
         }
         Ok(change_order)
     }
@@ -42,9 +39,7 @@ impl SalesReviewService {
             .await?
             .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
         if !change_order.matches_version(expected_version) {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         Ok(change_order)
     }

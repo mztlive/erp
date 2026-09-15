@@ -1,26 +1,30 @@
+use application_core::AuditActor;
 use bpm::engine::{DefinitionGraph, TaskIntent};
 use bpm::ids::ApprovalProcessInstanceId;
+use bpm::model::ApprovalNodeExecution;
 use bpm::model::types::{
     ApprovalCommandKind, ApprovalExecutionAssignmentSource, ApprovalNodeExecutionStatus,
     ApprovalProcessInstanceStatus,
 };
-use bpm::model::ApprovalNodeExecution;
-use erp_audit::AuditExt;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalNotificationOutboxId, ApprovalSubjectSnapshotId, WorkItemId};
-use erp_inventory::InventoryExt;
-use erp_inventory::{StockAdjustment, StockAdjustmentLine, StockAdjustmentState};
+use erp_identity::SharedRbacService;
+use erp_inventory::{
+    ExpectedStockBalanceVersion, InventoryExt, StockAdjustment, StockAdjustmentLine, StockAdjustmentState,
+    StockAdjustmentView,
+};
 use erp_workflow::entity::approval_integration::{
     ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
     ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload,
 };
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::entity::work_item::DocumentApprovalWorkItemData;
-use erp_workflow::entity::work_item::{WorkItem, WorkItemPriority};
-use erp_workflow::ApprovalIntegrationExt;
-use erp_workflow::BpmExt;
-use erp_workflow::DocumentRegistryExt;
-use erp_workflow::WorkItemExt;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
+use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
+use erp_workflow::service::approval::execution::map_receipt_first_write_error;
+use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -33,14 +37,6 @@ use super::approval_prepare::{
 use super::approval_query::load_approval_binding;
 use super::mapping::{list_projection_from_execution, stock_adjustment_start_scopes};
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_identity::SharedRbacService;
-use erp_inventory::{ExpectedStockBalanceVersion, StockAdjustmentView};
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
-use erp_workflow::service::approval::execution::map_receipt_first_write_error;
-use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 库存调整启动事务写入集合。
 ///
@@ -126,9 +122,7 @@ pub async fn persist_stock_adjustment_start(
         expected_document_version,
         expected_subject_version,
     } = input;
-    let audit = actor
-        .clone()
-        .resource_log("stock_adjustment.submit", "stock_adjustment", id.clone())?;
+    let audit = actor.clone().resource_log("stock_adjustment.submit", "stock_adjustment", id.clone())?;
     let db = db.clone();
     let client = db.client().clone();
     let updated = client
@@ -152,9 +146,7 @@ pub async fn persist_stock_adjustment_start(
                 let persisted_binding = load_approval_binding(&db, &id, session).await?;
                 let persisted_binding = require_frozen_binding(persisted_binding.as_ref())?;
                 if persisted_binding != &binding {
-                    return Err(Error::ConflictError(
-                        "库存调整审批定义绑定已变化，请刷新后重试".to_string(),
-                    ));
+                    return Err(Error::ConflictError("库存调整审批定义绑定已变化，请刷新后重试".to_string()));
                 }
                 let graph =
                     load_bound_definition_graph_with_executor(&db, persisted_binding, session).await?;
@@ -169,14 +161,7 @@ pub async fn persist_stock_adjustment_start(
                 .await?;
                 revalidate_start_lines(&db, &current, &lines, session).await?;
                 validate_balance_versions(&db, &adjustment, &lines, &balances, session).await?;
-                validate_start_writes(
-                    &writes,
-                    &graph,
-                    &binding,
-                    &id,
-                    actor.id(),
-                    expected_subject_version,
-                )?;
+                validate_start_writes(&writes, &graph, &binding, &id, actor.id(), expected_subject_version)?;
                 // 命令收据是事务内第一笔写入。并发 loser 退出失败事务后只允许
                 // 使用新会话回读 winner，不得先留下任何业务或 BPM 写入。
                 db.bpm_workflow()
@@ -195,9 +180,7 @@ pub async fn persist_stock_adjustment_start(
                     )
                     .await?;
                 if guarded.is_none() {
-                    return Err(Error::ConflictError(
-                        "库存调整单审批启动守卫冲突，请刷新后重试".to_string(),
-                    ));
+                    return Err(Error::ConflictError("库存调整单审批启动守卫冲突，请刷新后重试".to_string()));
                 }
                 // 同一事务先写本次提交的数量与状态，随后冻结完整展示。
                 for line in &lines {
@@ -254,9 +237,7 @@ fn ensure_fresh_start_document(
         || current.warehouse_id != target.warehouse_id
         || current.prepared_by != target.prepared_by
     {
-        return Err(Error::ConflictError(
-            "库存调整单事务内版本、状态或审批主题已变化".to_string(),
-        ));
+        return Err(Error::ConflictError("库存调整单事务内版本、状态或审批主题已变化".to_string()));
     }
     Ok(())
 }
@@ -285,9 +266,7 @@ async fn revalidate_start_lines(
             })
         })
     {
-        return Err(Error::ConflictError(
-            "库存调整明细身份或版本已变化，请刷新后重试".to_string(),
-        ));
+        return Err(Error::ConflictError("库存调整明细身份或版本已变化，请刷新后重试".to_string()));
     }
     Ok(())
 }
@@ -320,54 +299,34 @@ fn validate_start_writes(
         || writes.instance.blocker_code.is_some()
         || writes.instance.ended_at.is_some()
     {
-        return Err(Error::Internal(
-            "库存调整启动计划与签署命令身份不一致".to_string(),
-        ));
+        return Err(Error::Internal("库存调整启动计划与签署命令身份不一致".to_string()));
     }
     let [first] = writes.created_executions.as_slice() else {
-        return Err(Error::Internal(
-            "库存调整启动计划必须且只能创建一个入口执行".to_string(),
-        ));
+        return Err(Error::Internal("库存调整启动计划必须且只能创建一个入口执行".to_string()));
     };
     if first.process_instance_id.as_ref() != writes.instance.base.id
         || first.round_no != writes.instance.current_round_no
         || first.status != ApprovalNodeExecutionStatus::Active
         || first.assignment_source != ApprovalExecutionAssignmentSource::Definition
         || first.replaces_execution_id.is_some()
-        || writes
-            .instance
-            .current_node_execution_id
-            .as_ref()
-            .map(|id| id.as_ref())
+        || writes.instance.current_node_execution_id.as_ref().map(|id| id.as_ref())
             != Some(first.base.id.as_str())
     {
-        return Err(Error::Internal(
-            "库存调整启动计划的入口执行身份不一致".to_string(),
-        ));
+        return Err(Error::Internal("库存调整启动计划的入口执行身份不一致".to_string()));
     }
-    let entry = graph
-        .entry_node()
-        .map_err(|_| Error::Internal("库存调整事务内定义缺少入口节点".to_string()))?;
+    let entry =
+        graph.entry_node().map_err(|_| Error::Internal("库存调整事务内定义缺少入口节点".to_string()))?;
     if first.node_key != entry.node_key
         || first.node_name != entry.node_name
         || first.assignee_participant_id != entry.assignee_participant_id
         || first.assignee_name_snapshot != entry.assignee_label_snapshot
     {
-        return Err(Error::ConflictError(
-            "库存调整启动入口执行与事务内定义事实不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("库存调整启动入口执行与事务内定义事实不一致".to_string()));
     }
-    let [TaskIntent::HumanTaskRequested {
-        execution_id,
-        assignee,
-        node_key,
-        node_name,
-        round_no,
-    }] = writes.create_tasks.as_slice()
+    let [TaskIntent::HumanTaskRequested { execution_id, assignee, node_key, node_name, round_no }] =
+        writes.create_tasks.as_slice()
     else {
-        return Err(Error::Internal(
-            "库存调整启动计划必须且只能创建一个入口任务".to_string(),
-        ));
+        return Err(Error::Internal("库存调整启动计划必须且只能创建一个入口任务".to_string()));
     };
     if execution_id.as_ref() != first.base.id
         || assignee != &first.assignee_participant_id
@@ -375,9 +334,7 @@ fn validate_start_writes(
         || node_name != &first.node_name
         || *round_no != first.round_no
     {
-        return Err(Error::Internal(
-            "库存调整启动计划的入口任务身份不一致".to_string(),
-        ));
+        return Err(Error::Internal("库存调整启动计划的入口任务身份不一致".to_string()));
     }
     if writes.created_assignees.len() != graph.nodes.len()
         || graph.nodes.iter().any(|node| {
@@ -396,9 +353,7 @@ fn validate_start_writes(
         || !writes.complete_tasks.is_empty()
         || !writes.close_tasks.is_empty()
     {
-        return Err(Error::Internal(
-            "库存调整启动计划的审批人绑定或写入集合不一致".to_string(),
-        ));
+        return Err(Error::Internal("库存调整启动计划的审批人绑定或写入集合不一致".to_string()));
     }
     Ok(())
 }
@@ -445,9 +400,7 @@ async fn validate_balance_versions(
     if lines.iter().any(|line| {
         !covered_dimensions.contains(&(adjustment.warehouse_id.to_string(), line.sku_id.to_string()))
     }) {
-        return Err(Error::ValidationError(
-            "提交缺少调整明细对应的库存余额版本".to_string(),
-        ));
+        return Err(Error::ValidationError("提交缺少调整明细对应的库存余额版本".to_string()));
     }
     Ok(())
 }
@@ -514,18 +467,8 @@ async fn persist_runtime_writes(
         )
         .await?,
     );
-    db.approval_subject_snapshots()
-        .create_immutable_snapshot(&snapshot, session)
-        .await?;
-    persist_open_tasks(
-        db,
-        writes,
-        context.owner_role,
-        context.organization_id,
-        context.now,
-        session,
-    )
-    .await?;
+    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, session).await?;
+    persist_open_tasks(db, writes, context.owner_role, context.organization_id, context.now, session).await?;
     persist_start_notifications(
         db,
         writes,
@@ -581,9 +524,7 @@ async fn persist_start_notifications(
             now,
         )
         .map_err(|error| Error::ValidationError(error.to_string()))?;
-        db.approval_notification_outbox()
-            .create(&record, executor)
-            .await?;
+        db.approval_notification_outbox().create(&record, executor).await?;
     }
     Ok(())
 }
@@ -639,12 +580,7 @@ async fn persist_open_tasks(
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
     for intent in &writes.create_tasks {
-        let TaskIntent::HumanTaskRequested {
-            execution_id,
-            assignee,
-            ..
-        } = intent
-        else {
+        let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
             continue;
         };
         let item = WorkItem::new_document_approval(

@@ -1,14 +1,16 @@
 //! 退款回调的原三组跨域写入，在一个调用方执行器内按序完成。
-use crate::Result;
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
-use erp_integration::{entity::integration_ops::InboxMessage, repository::IntegrationOpsExt};
+use erp_integration::entity::integration_ops::InboxMessage;
+use erp_integration::repository::IntegrationOpsExt;
 use erp_supply::entity::supplier_fulfillment::{
     SupplierFulfillmentOrder, SupplierRefundAllocation, SupplierRefundFact,
 };
 use erp_supply::service::supplier_fulfillment::refund_result::persist_refund_result;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::Result;
 
 #[async_trait]
 trait RefundWrites: Send {
@@ -54,25 +56,15 @@ pub(super) async fn persist(
     audit: &AuditLog,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    execute(
-        &mut MongoWrites {
-            db,
-            message,
-            order,
-            fact,
-            allocations,
-            audit,
-        },
-        executor,
-    )
-    .await
+    execute(&mut MongoWrites { db, message, order, fact, allocations, audit }, executor).await
 }
 #[cfg(test)]
 mod tests {
-    use super::{execute, RefundWrites};
-    use crate::{Error, Result};
     use async_trait::async_trait;
     use persistence_core::Executor;
+
+    use super::{RefundWrites, execute};
+    use crate::{Error, Result};
     struct TestExecutor {
         _identity: u8,
     }
@@ -123,10 +115,7 @@ mod tests {
         let steps = ["inbox", "order_fact_allocations", "audit"];
         for (index, fail) in steps.iter().enumerate() {
             let mut executor = TestExecutor { _identity: 1 };
-            let mut writes = Writes {
-                fail: Some(*fail),
-                ..Default::default()
-            };
+            let mut writes = Writes { fail: Some(*fail), ..Default::default() };
             let result = execute(&mut writes, &mut executor).await;
             assert!(matches!(result,Err(Error::ConflictError(message)) if message==*fail));
             assert_eq!(writes.steps, steps[..=index]);

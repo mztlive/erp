@@ -4,11 +4,9 @@
 //! 其余字段复用 `erp_inventory` 类型；禁止在 Handler 承载业务规则或直连数据库。
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    http::HeaderMap,
-    Extension, Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::http::HeaderMap;
+use axum::{Extension, Json};
 use erp_core::ids::WarehouseId;
 use erp_inventory::{
     AdjustmentReasonType, CancelStockAdjustmentApprovalRequest, CreateStockAdjustmentRequest,
@@ -20,14 +18,12 @@ use erp_inventory::{
 };
 use serde::Deserialize;
 
-use crate::{
-    app_state::AppState,
-    core::{
-        errors::Result,
-        handler::approval_instance::error::{parse_optional_version, parse_version, ApprovalHttpError},
-        response::ApiResponse,
-    },
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::handler::approval_instance::error::{
+    ApprovalHttpError, parse_optional_version, parse_version,
 };
+use crate::core::response::ApiResponse;
 
 /// 创建库存调整单的 HTTP wire。余额版本必须是十进制字符串。
 #[derive(Debug, Clone, Deserialize)]
@@ -184,10 +180,7 @@ pub async fn stock_balance_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<StockBalanceListParams>,
 ) -> Result<PageView<StockBalanceView>> {
-    let page = state
-        .inventory_service()
-        .stock_balance_list(&params, &actor)
-        .await?;
+    let page = state.inventory_service().stock_balance_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -213,10 +206,7 @@ pub async fn stock_balance_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<StockBalanceDetailView> {
-    let view = state
-        .inventory_service()
-        .stock_balance_detail(&id, &actor)
-        .await?;
+    let view = state.inventory_service().stock_balance_detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -242,10 +232,7 @@ pub async fn stock_movement_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<StockMovementListParams>,
 ) -> Result<PageView<StockMovementView>> {
-    let page = state
-        .inventory_service()
-        .stock_movement_list(&params, &actor)
-        .await?;
+    let page = state.inventory_service().stock_movement_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -271,10 +258,7 @@ pub async fn stock_reservation_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<StockReservationListParams>,
 ) -> Result<PageView<StockReservationView>> {
-    let page = state
-        .inventory_service()
-        .stock_reservation_list(&params, &actor)
-        .await?;
+    let page = state.inventory_service().stock_reservation_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -300,10 +284,7 @@ pub async fn stock_adjustment_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<StockAdjustmentListParams>,
 ) -> Result<PageView<StockAdjustmentView>> {
-    let page = state
-        .inventory_service()
-        .stock_adjustment_list(&params, &actor)
-        .await?;
+    let page = state.inventory_service().stock_adjustment_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -329,10 +310,7 @@ pub async fn stock_adjustment_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<StockAdjustmentDetailView> {
-    let view = state
-        .inventory_adjustment_service()
-        .stock_adjustment_detail(&id, &actor)
-        .await?;
+    let view = state.inventory_adjustment_service().stock_adjustment_detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -568,35 +546,25 @@ pub async fn stock_adjustment_post(
     Extension(_actor): Extension<AuditActor>,
     Path(_id): Path<String>,
 ) -> Result<StockAdjustmentView> {
-    Err(crate::core::errors::Error::Conflict(
-        "库存调整过账只能由审批最终通过动作调用".to_string(),
-    ))
+    Err(crate::core::errors::Error::Conflict("库存调整过账只能由审批最终通过动作调用".to_string()))
 }
 
 #[cfg(test)]
 mod tests {
+    use axum::http::HeaderMap;
+    use erp_inventory::SubmitStockAdjustmentRequest;
+
     use super::{
         CancelStockAdjustmentApprovalHttpRequest, CreateStockAdjustmentHttpRequest,
         StockAdjustmentSubmitResultHttpQuery, SubmitStockAdjustmentHttpRequest,
         UpdateStockAdjustmentHttpRequest,
     };
-    use axum::http::HeaderMap;
-    use erp_inventory::SubmitStockAdjustmentRequest;
 
     /// 人工复核端点已删除，提交请求拒绝客户端选择审批人。
     #[test]
     fn manual_approve_reject_endpoints_are_removed() {
-        const REMOVED_PATHS: &[&str] = &[
-            "/stock-adjustments/{id}/approve",
-            "/stock-adjustments/{id}/reject",
-        ];
-        assert_eq!(
-            REMOVED_PATHS,
-            &[
-                "/stock-adjustments/{id}/approve",
-                "/stock-adjustments/{id}/reject"
-            ]
-        );
+        const REMOVED_PATHS: &[&str] = &["/stock-adjustments/{id}/approve", "/stock-adjustments/{id}/reject"];
+        assert_eq!(REMOVED_PATHS, &["/stock-adjustments/{id}/approve", "/stock-adjustments/{id}/reject"]);
         assert!(
             serde_json::from_value::<SubmitStockAdjustmentRequest>(serde_json::json!({
                 "expected_version": 1,
@@ -610,10 +578,7 @@ mod tests {
     /// 正式撤回端口必须复用 Service DTO 和签署方法，直接过账仍失败关闭。
     #[test]
     fn cancel_approval_is_wired_and_direct_post_remains_closed() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产 handler 必须存在");
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产 handler 必须存在");
         assert!(production.contains("CancelStockAdjustmentApprovalRequest"));
         assert!(production.contains("CancelStockAdjustmentApprovalHttpRequest"));
         assert!(production.contains("cancel_stock_adjustment_approval(&id, command, &actor)"));
@@ -626,10 +591,7 @@ mod tests {
     /// 库存读入口必须把认证主体传入 Service，静态权限宏不能替代对象范围。
     #[test]
     fn scoped_inventory_reads_forward_actor_to_service() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产 handler 必须存在");
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产 handler 必须存在");
         assert!(production.contains("stock_balance_list(&params, &actor)"));
         assert!(production.contains("stock_balance_detail(&id, &actor)"));
         assert!(production.contains("stock_movement_list(&params, &actor)"));
@@ -702,48 +664,31 @@ mod tests {
         for value in ["", " 7", "-1", "0", "18446744073709551616"] {
             let mut document = cancel_http_request();
             document.expected_version = value.to_string();
-            assert!(
-                document.into_service(&headers).is_err(),
-                "非法单据版本必须拒绝: {value:?}"
-            );
+            assert!(document.into_service(&headers).is_err(), "非法单据版本必须拒绝: {value:?}");
 
             let mut subject = cancel_http_request();
             subject.expected_subject_version = value.to_string();
-            assert!(
-                subject.into_service(&headers).is_err(),
-                "非法主题版本必须拒绝: {value:?}"
-            );
+            assert!(subject.into_service(&headers).is_err(), "非法主题版本必须拒绝: {value:?}");
 
             let mut instance = cancel_http_request();
             instance.expected_instance_version = value.to_string();
-            assert!(
-                instance.into_service(&headers).is_err(),
-                "非法实例版本必须拒绝: {value:?}"
-            );
+            assert!(instance.into_service(&headers).is_err(), "非法实例版本必须拒绝: {value:?}");
 
             let mut execution = cancel_http_request();
             execution.expected_execution_version = value.to_string();
-            assert!(
-                execution.into_service(&headers).is_err(),
-                "非法执行版本必须拒绝: {value:?}"
-            );
+            assert!(execution.into_service(&headers).is_err(), "非法执行版本必须拒绝: {value:?}");
 
             let mut task = cancel_http_request();
             task.expected_task_version = Some(value.to_string());
-            assert!(
-                task.into_service(&headers).is_err(),
-                "非法任务版本必须拒绝: {value:?}"
-            );
+            assert!(task.into_service(&headers).is_err(), "非法任务版本必须拒绝: {value:?}");
         }
 
         let mut subject_overflow = cancel_http_request();
         subject_overflow.expected_subject_version = "4294967296".to_string();
         assert!(subject_overflow.into_service(&headers).is_err());
 
-        let without_task = CancelStockAdjustmentApprovalHttpRequest {
-            expected_task_version: None,
-            ..cancel_http_request()
-        };
+        let without_task =
+            CancelStockAdjustmentApprovalHttpRequest { expected_task_version: None, ..cancel_http_request() };
         assert!(without_task.into_service(&headers).is_ok());
     }
 
@@ -791,10 +736,7 @@ mod tests {
     fn create_and_submit_http_versions_are_lossless_decimal_strings() {
         let headers = HeaderMap::new();
         let create = create_http_request();
-        assert_eq!(
-            create.into_service(&headers).unwrap().expected_balance_version,
-            9_007_199_254_740_993
-        );
+        assert_eq!(create.into_service(&headers).unwrap().expected_balance_version, 9_007_199_254_740_993);
 
         let submit = submit_http_request().into_service(&headers).unwrap();
         assert_eq!(submit.expected_version, 7);
@@ -862,10 +804,7 @@ mod tests {
         for value in ["", " 7", "-1", "18446744073709551616"] {
             let mut create = create_http_request();
             create.expected_balance_version = value.to_string();
-            assert!(
-                create.into_service(&headers).is_err(),
-                "非法创建余额版本必须拒绝: {value:?}"
-            );
+            assert!(create.into_service(&headers).is_err(), "非法创建余额版本必须拒绝: {value:?}");
 
             let mut req = submit_http_request();
             req.expected_version = value.to_string();
@@ -873,17 +812,11 @@ mod tests {
 
             let mut subject = submit_http_request();
             subject.expected_subject_version = value.to_string();
-            assert!(
-                subject.into_service(&headers).is_err(),
-                "非法主题版本必须拒绝: {value:?}"
-            );
+            assert!(subject.into_service(&headers).is_err(), "非法主题版本必须拒绝: {value:?}");
 
             let mut balance = submit_http_request();
             balance.balances[0].expected_version = value.to_string();
-            assert!(
-                balance.into_service(&headers).is_err(),
-                "非法余额版本必须拒绝: {value:?}"
-            );
+            assert!(balance.into_service(&headers).is_err(), "非法余额版本必须拒绝: {value:?}");
         }
         let mut subject_overflow = submit_http_request();
         subject_overflow.expected_subject_version = "4294967296".to_string();
@@ -921,10 +854,7 @@ mod tests {
                 expected_subject_version: value.to_string(),
                 idempotency_key: "submit-1".to_string(),
             };
-            assert!(
-                query.into_service(&headers).is_err(),
-                "非法查询版本必须拒绝: {value:?}"
-            );
+            assert!(query.into_service(&headers).is_err(), "非法查询版本必须拒绝: {value:?}");
         }
         assert!(
             serde_json::from_value::<StockAdjustmentSubmitResultHttpQuery>(serde_json::json!({
@@ -955,10 +885,7 @@ mod tests {
             "occurred_at": null
         }))
         .unwrap();
-        assert_eq!(
-            valid.into_service(&headers).unwrap().version,
-            9_007_199_254_740_993
-        );
+        assert_eq!(valid.into_service(&headers).unwrap().version, 9_007_199_254_740_993);
 
         for value in ["", " 7", "+7", "07", "-1", "0", "18446744073709551616"] {
             let request = UpdateStockAdjustmentHttpRequest {
@@ -968,10 +895,7 @@ mod tests {
                 note: None,
                 occurred_at: None,
             };
-            assert!(
-                request.into_service(&headers).is_err(),
-                "非法 PUT 版本必须拒绝: {value:?}"
-            );
+            assert!(request.into_service(&headers).is_err(), "非法 PUT 版本必须拒绝: {value:?}");
         }
         assert!(
             serde_json::from_value::<UpdateStockAdjustmentHttpRequest>(serde_json::json!({

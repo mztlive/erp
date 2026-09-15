@@ -1,6 +1,6 @@
 //! 销售单当前责任范围查询；输入必须由应用层完成资源动作授权。
 
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 
 /// 一个已经通过同角色权限证明的销售责任范围。
 #[derive(Debug, Clone, Default)]
@@ -65,14 +65,8 @@ impl SalesReadScope {
     #[cfg(test)]
     pub fn allows_creation(&self, owner: &str, org: &str, customer: &str) -> bool {
         self.roles.iter().any(|c| c.allows(owner, org, customer))
-            && self
-                .user_limit
-                .as_ref()
-                .is_none_or(|c| c.allows(owner, org, customer))
-            && self
-                .required_scopes
-                .iter()
-                .all(|c| c.allows_creation(owner, org, customer))
+            && self.user_limit.as_ref().is_none_or(|c| c.allows(owner, org, customer))
+            && self.required_scopes.iter().all(|c| c.allows_creation(owner, org, customer))
     }
     /// 判断完整销售集合是否已获授权，个人上限仍须允许公司范围。
     ///
@@ -97,21 +91,13 @@ impl SalesReadScope {
     /// # 返回
     /// 返回仓储读取条件，空角色集不产生全量授权。
     pub fn document(&self) -> Document {
-        let mut grants = self
-            .roles
-            .iter()
-            .map(SalesScopeClause::document)
-            .collect::<Vec<_>>();
+        let mut grants = self.roles.iter().map(SalesScopeClause::document).collect::<Vec<_>>();
         if !self.historical_order_ids.is_empty() {
             grants.push(doc! { "id": { "$in": &self.historical_order_ids } });
         }
         let mut roles = union(grants);
         if !self.required_scopes.is_empty() {
-            let mut required = self
-                .required_scopes
-                .iter()
-                .map(Self::document)
-                .collect::<Vec<_>>();
+            let mut required = self.required_scopes.iter().map(Self::document).collect::<Vec<_>>();
             required.push(roles);
             roles = doc! { "$and": required };
         }
@@ -169,8 +155,7 @@ impl super::super::owned::SalesOrderRepository<'_> {
         scope: &SalesReadScope,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Option<crate::entity::sales_order::SalesOrder>> {
-        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor)
-            .await
+        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
     }
 
     /// 列出当前范围内的销售单主键，供变更单沿原单接入。
@@ -225,25 +210,17 @@ mod tests {
     #[test]
     fn creation_requires_role_scope_and_every_action_and_personal_limit() {
         let mut scope = SalesReadScope {
-            roles: vec![SalesScopeClause {
-                company: true,
-                ..Default::default()
-            }],
+            roles: vec![SalesScopeClause { company: true, ..Default::default() }],
             required_scopes: vec![SalesReadScope {
-                roles: vec![SalesScopeClause {
-                    owner_user_id: Some("sales-a".into()),
-                    ..Default::default()
-                }],
+                roles: vec![SalesScopeClause { owner_user_id: Some("sales-a".into()), ..Default::default() }],
                 ..Default::default()
             }],
             ..Default::default()
         };
         assert!(scope.allows_creation("sales-a", "org-a", "customer-a"));
         assert!(!scope.allows_creation("sales-b", "org-a", "customer-a"));
-        scope.user_limit = Some(SalesScopeClause {
-            business_org_unit_ids: vec!["org-b".into()],
-            ..Default::default()
-        });
+        scope.user_limit =
+            Some(SalesScopeClause { business_org_unit_ids: vec!["org-b".into()], ..Default::default() });
         assert!(!scope.allows_creation("sales-a", "org-a", "customer-a"));
         assert!(scope.allows_creation("sales-a", "org-b", "customer-a"));
         scope.roles.clear();
@@ -254,15 +231,9 @@ mod tests {
     #[test]
     fn independent_cost_scope_cannot_expand_sales_or_bypass_a_personal_limit() {
         let mut scope = SalesReadScope {
-            roles: vec![SalesScopeClause {
-                company: true,
-                ..Default::default()
-            }],
+            roles: vec![SalesScopeClause { company: true, ..Default::default() }],
             required_scopes: vec![SalesReadScope {
-                roles: vec![SalesScopeClause {
-                    owner_user_id: Some("sales-a".into()),
-                    ..Default::default()
-                }],
+                roles: vec![SalesScopeClause { owner_user_id: Some("sales-a".into()), ..Default::default() }],
                 ..Default::default()
             }],
             ..Default::default()
@@ -281,31 +252,20 @@ mod tests {
         assert!(SalesReadScope::default().is_empty());
         let scope = SalesReadScope {
             required_scopes: vec![],
-            roles: vec![SalesScopeClause {
-                company: true,
-                ..Default::default()
-            }],
+            roles: vec![SalesScopeClause { company: true, ..Default::default() }],
             user_limit: Some(SalesScopeClause::default()),
             historical_order_ids: vec![],
         };
-        assert_eq!(
-            scope.document(),
-            doc! { "$and": [{ "$or": [{}] }, { "$expr": false }] }
-        );
+        assert_eq!(scope.document(), doc! { "$and": [{ "$or": [{}] }, { "$expr": false }] });
         assert!(scope.is_empty());
     }
 
     #[test]
     fn historical_participation_adds_reads_without_bypassing_personal_limit() {
-        let mut scope = SalesReadScope {
-            historical_order_ids: vec!["old-order".into()],
-            ..Default::default()
-        };
+        let mut scope =
+            SalesReadScope { historical_order_ids: vec!["old-order".into()], ..Default::default() };
         assert!(!scope.is_empty());
-        assert_eq!(
-            scope.document(),
-            doc! { "$or": [{ "id": { "$in": ["old-order"] } }] }
-        );
+        assert_eq!(scope.document(), doc! { "$or": [{ "id": { "$in": ["old-order"] } }] });
         scope.user_limit = Some(SalesScopeClause::default());
         assert!(scope.is_empty());
         assert_eq!(

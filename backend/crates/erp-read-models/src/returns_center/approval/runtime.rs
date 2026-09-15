@@ -1,19 +1,20 @@
 //! 逆向资金单据详情的审批运行事实；列表仍保持批量摘要查询。
+use bpm::ids::ApprovalProcessInstanceId;
+use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
+use erp_workflow::BpmExt;
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::service::approval::execution::{
+    history_item_from_execution, history_page_from, latest_rejection_reason,
+};
+use mongodb::Database;
+use persistence_core::NoTransaction;
+
 use super::super::dto::{
     DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
     DocumentApprovalView,
 };
 use super::RECENT_HISTORY_LIMIT;
 use crate::Result;
-use bpm::ids::ApprovalProcessInstanceId;
-use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
-use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::service::approval::execution::{
-    history_item_from_execution, history_page_from, latest_rejection_reason,
-};
-use erp_workflow::BpmExt;
-use mongodb::Database;
-use persistence_core::NoTransaction;
 
 /// 为已授权单据详情补齐真实实例、当前执行和有界历史。
 ///
@@ -36,29 +37,16 @@ pub async fn load_runtime(
 ) -> Result<DocumentApprovalView> {
     let subject = erp_workflow::entity::approval_integration::subject_ref_for(document_type, id)
         .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
-    let Some(instance) = db
-        .bpm_workflow()
-        .find_latest_by_subject(&subject, &mut NoTransaction)
-        .await?
-    else {
+    let Some(instance) = db.bpm_workflow().find_latest_by_subject(&subject, &mut NoTransaction).await? else {
         return Ok(view);
     };
     let instance_id = ApprovalProcessInstanceId::new(instance.base.id.clone());
-    let current = db
-        .bpm_workflow()
-        .find_current_execution(&instance_id, &mut NoTransaction)
-        .await?;
+    let current = db.bpm_workflow().find_current_execution(&instance_id, &mut NoTransaction).await?;
     let limit = RECENT_HISTORY_LIMIT as u32;
-    let rows = db
-        .bpm_workflow()
-        .list_execution_history(&instance_id, None, limit + 1, &mut NoTransaction)
-        .await?;
+    let rows =
+        db.bpm_workflow().list_execution_history(&instance_id, None, limit + 1, &mut NoTransaction).await?;
     let page = history_page_from(rows.iter().map(history_item_from_execution).collect(), limit);
-    view.instance = Some(instance_view(
-        &instance,
-        current.as_ref(),
-        latest_rejection_reason(&page.items),
-    ));
+    view.instance = Some(instance_view(&instance, current.as_ref(), latest_rejection_reason(&page.items)));
     view.recent_history = page
         .items
         .iter()
@@ -69,10 +57,8 @@ pub async fn load_runtime(
             result: item.result.clone(),
         })
         .collect();
-    view.history_page = DocumentApprovalHistoryPageView {
-        next_cursor: page.next_cursor,
-        has_more: page.has_more,
-    };
+    view.history_page =
+        DocumentApprovalHistoryPageView { next_cursor: page.next_cursor, has_more: page.has_more };
     Ok(view)
 }
 
@@ -99,12 +85,13 @@ fn instance_view(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId};
     use bpm::model::types::ApprovalExecutionAssignmentSource;
     use bpm::model::{
         NewNodeExecution, NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp,
     };
+
+    use super::*;
     fn running_instance() -> ApprovalProcessInstance {
         ApprovalProcessInstance::start_running(NewProcessInstance {
             id: ApprovalProcessInstanceId::new("inst-1"),
@@ -139,11 +126,8 @@ mod tests {
     /// 退款详情必须同时提供稳定标识和当前执行显示名。
     #[test]
     fn refund_runtime_preserves_execution_identity_and_names() {
-        let view = instance_view(
-            &running_instance(),
-            Some(&current_execution()),
-            Some("核对退款依据".into()),
-        );
+        let view =
+            instance_view(&running_instance(), Some(&current_execution()), Some("核对退款依据".into()));
         assert_eq!(view.status, "RUNNING");
         assert_eq!(view.current_round_no, 1);
         assert_eq!(view.current_node.as_deref(), Some("procurement_confirm"));

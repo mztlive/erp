@@ -3,16 +3,13 @@
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/sales-orders`；每条路由
 //! 统一走 JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
 
-use axum::{
-    routing::{get, post, put},
-    Router,
-};
+use axum::Router;
+use axum::routing::{get, post, put};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::sales_order, middleware::with_permission},
-};
+use crate::app_state::AppState;
+use crate::core::handler::sales_order;
+use crate::core::middleware::with_permission;
 
 /// 返回本域管理端路由集合。
 ///
@@ -86,10 +83,7 @@ mod tests {
     /// `VoucherSalesOrder` 复用销售单提交/撤回路由，不得新增卡券专用决定入口。
     #[test]
     fn voucher_sales_order_reuses_unified_sales_routes() {
-        let production = include_str!("sales_order.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("sales_order.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("/sales-orders/{id}/submit"));
         assert!(production.contains("/sales-orders/{id}/cancel-approval"));
         assert!(!production.contains("CARD_SALES"));

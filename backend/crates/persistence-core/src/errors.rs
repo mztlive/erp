@@ -1,7 +1,5 @@
-use mongodb::{
-    bson,
-    error::{ErrorKind, WriteFailure, TRANSIENT_TRANSACTION_ERROR},
-};
+use mongodb::bson;
+use mongodb::error::{ErrorKind, TRANSIENT_TRANSACTION_ERROR, WriteFailure};
 use thiserror::Error;
 
 const DUPLICATE_KEY_CODE: i32 = 11000;
@@ -76,10 +74,9 @@ fn is_duplicate_key(error: &mongodb::error::Error) -> bool {
             .write_errors
             .as_ref()
             .is_some_and(|errors| errors.iter().any(|error| error.code == DUPLICATE_KEY_CODE)),
-        ErrorKind::BulkWrite(error) => error
-            .write_errors
-            .values()
-            .any(|error| error.code == DUPLICATE_KEY_CODE),
+        ErrorKind::BulkWrite(error) => {
+            error.write_errors.values().any(|error| error.code == DUPLICATE_KEY_CODE)
+        },
         _ => false,
     }
 }
@@ -119,11 +116,7 @@ fn extract_duplicate_index_name(error: &mongodb::error::Error) -> Option<&str> {
 /// 索引名切片；未匹配时返回 `None`。
 fn parse_index_name_from_message(message: &str) -> Option<&str> {
     let after_index = message.split("index: ").nth(1)?;
-    let name = after_index
-        .split_whitespace()
-        .next()
-        .map(str::trim)
-        .filter(|name| !name.is_empty())?;
+    let name = after_index.split_whitespace().next().map(str::trim).filter(|name| !name.is_empty())?;
     Some(name)
 }
 
@@ -131,10 +124,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[cfg(test)]
 mod tests {
-    use mongodb::{
-        bson::{deserialize_from_document, doc},
-        error::{Error as MongoError, ErrorKind, WriteError, WriteFailure},
-    };
+    use mongodb::bson::{deserialize_from_document, doc};
+    use mongodb::error::{Error as MongoError, ErrorKind, WriteError, WriteFailure};
 
     use super::Error;
 

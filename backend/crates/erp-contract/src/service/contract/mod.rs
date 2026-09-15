@@ -12,6 +12,13 @@
 
 use std::sync::Arc;
 
+use application_core::AuditActor;
+use erp_core::ids::{ContractId, ContractRevisionId, CustomerAccountId, FileAssetId, PartyId};
+use id_generator::next_id;
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
+use validator::Validate;
+
 use crate::dto::contract::{
     ArchiveContractRevisionRequest, ContractDetailView, ContractRevisionView, ContractView,
     CreateContractRequest, TerminateContractRequest, UploadContractRequest,
@@ -25,12 +32,6 @@ use crate::ports::{
     CustomerAssignmentFactsPort, CustomerFactsPort, FileAssetFact, FileAssetFactsPort,
 };
 use crate::repository::ContractExt;
-use application_core::AuditActor;
-use erp_core::ids::{ContractId, ContractRevisionId, CustomerAccountId, FileAssetId, PartyId};
-use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
-use validator::Validate;
 
 pub mod access;
 mod query;
@@ -175,9 +176,7 @@ impl ContractService {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    access
-                        .require_create(&actor_for_tx, &customer_id, session)
-                        .await?;
+                    access.require_create(&actor_for_tx, &customer_id, session).await?;
                     db.contract()
                         .create_contract_with_revision(&mut contract_for_tx, &revision, session)
                         .await?;
@@ -212,10 +211,8 @@ impl ContractService {
     ) -> Result<PlannedContractArchive> {
         req.validate()?;
         let customer = self.ensure_active_customer(&req.customer_id).await?;
-        let settlement_party_id = req
-            .settlement_party_id
-            .clone()
-            .unwrap_or_else(|| customer.party_id.clone());
+        let settlement_party_id =
+            req.settlement_party_id.clone().unwrap_or_else(|| customer.party_id.clone());
         plan_upload_archive(req, file_asset_id, settlement_party_id, actor_id)
     }
 
@@ -236,10 +233,7 @@ impl ContractService {
         revision: &ContractRevision,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .contract()
-            .create_contract_with_revision(contract, revision, executor)
-            .await?;
+        self.db.contract().create_contract_with_revision(contract, revision, executor).await?;
         Ok(())
     }
 
@@ -292,11 +286,8 @@ impl ContractService {
             .list_by_contract(&contract.base.id.clone().into(), &mut NoTransaction)
             .await?;
         let view: ContractView = contract.into();
-        let owner = self
-            .list_customer_facts(std::slice::from_ref(&view.customer_id))
-            .await?
-            .into_iter()
-            .next();
+        let owner =
+            self.list_customer_facts(std::slice::from_ref(&view.customer_id)).await?.into_iter().next();
         Ok(ContractDetailView {
             owner_user_id: owner.as_ref().and_then(|c| c.owner_id.clone()),
             owner_user_name: owner.filter(|c| c.owner_id.is_some()).map(|c| c.owner),
@@ -366,12 +357,8 @@ impl ContractService {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    access
-                        .require_with(actor_for_tx, "update", &contract_id, session)
-                        .await?;
-                    db.contract()
-                        .archive_contract_revision(&mut contract_for_tx, &revision, session)
-                        .await?;
+                    access.require_with(actor_for_tx, "update", &contract_id, session).await?;
+                    db.contract().archive_contract_revision(&mut contract_for_tx, &revision, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<(), crate::error::Error>(())
                 })
@@ -396,10 +383,7 @@ impl ContractService {
         revision: &ContractRevision,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .contract()
-            .archive_contract_revision(contract, revision, executor)
-            .await?;
+        self.db.contract().archive_contract_revision(contract, revision, executor).await?;
         Ok(())
     }
 
@@ -448,9 +432,7 @@ impl ContractService {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    access
-                        .require_with(actor_for_tx, "update", &contract_id, session)
-                        .await?;
+                    access.require_with(actor_for_tx, "update", &contract_id, session).await?;
                     db.contracts().update(&mut contract, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<(), crate::error::Error>(())
@@ -526,11 +508,7 @@ impl ContractService {
     ) -> Result<()> {
         self.access().require(actor, "detail", contract_id).await?;
         let detail = self.load_contract_detail(contract_id).await?;
-        if !detail
-            .revisions
-            .iter()
-            .any(|revision| revision.contract_pdf_file_id == file_id)
-        {
+        if !detail.revisions.iter().any(|revision| revision.contract_pdf_file_id == file_id) {
             return Err(Error::NotFound("合同附件不存在或无权查看".into()));
         }
         Ok(())
@@ -580,9 +558,7 @@ impl ContractService {
 fn customer_eligibility(customer: Option<CustomerAccountFact>) -> Result<CustomerAccountFact> {
     let customer = customer.ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
     if !customer.is_active {
-        return Err(Error::BusinessLogicError(
-            "客户已停用，禁止归档新合同".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("客户已停用，禁止归档新合同".to_string()));
     }
     Ok(customer)
 }
@@ -714,10 +690,7 @@ fn plan_next_revision(
             signed_at: req.signed_at,
         },
     )?;
-    Ok(PlannedContractArchive {
-        contract: contract.clone(),
-        revision,
-    })
+    Ok(PlannedContractArchive { contract: contract.clone(), revision })
 }
 
 /// 将实体版本匹配结果映射为稳定 409 语义。
@@ -737,28 +710,24 @@ fn conflict_if_stale_version(matched: bool) -> Result<()> {
     if matched {
         return Ok(());
     }
-    Err(Error::ConflictError(
-        "数据已被其他请求修改，请刷新后重试".to_string(),
-    ))
+    Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))
 }
 
 #[cfg(test)]
 mod version_lock_tests {
-    use super::{conflict_if_stale_version, plan_first_archive, plan_upload_archive};
-    use crate::dto::contract::{CreateContractRequest, UploadContractRequest};
-    use crate::entity::contract::{ArchiveSource, Contract, ContractData, ContractId};
-    use crate::error::Error;
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::{CustomerAccountId, FileAssetId, PartyId};
     use serde_json::json;
 
+    use super::{conflict_if_stale_version, plan_first_archive, plan_upload_archive};
+    use crate::dto::contract::{CreateContractRequest, UploadContractRequest};
+    use crate::entity::contract::{ArchiveSource, Contract, ContractData, ContractId};
+    use crate::error::Error;
+
     /// 归档与终止必须使用实体 matches_version，禁止字段级直接比较。
     #[test]
     fn archive_and_terminate_use_entity_matches_version() {
-        let production = include_str!("mod.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(production.contains("conflict_if_stale_version(contract.matches_version(req.version))"));
         assert!(!production.contains("contract.base.version != req.version"));
         assert!(!production.contains("contract.base.version == req.version"));
@@ -780,7 +749,7 @@ mod version_lock_tests {
         match conflict_if_stale_version(contract.matches_version(0)) {
             Err(Error::ConflictError(message)) => {
                 assert_eq!(message, "数据已被其他请求修改，请刷新后重试");
-            }
+            },
             other => panic!("必须映射为 ConflictError，得到 {other:?}"),
         }
     }
@@ -810,16 +779,10 @@ mod version_lock_tests {
         assert_eq!(planned.contract.contract_no, "HT-2026-0088");
         assert_eq!(planned.revision.revision.revision_no, 1);
         assert_eq!(planned.revision.customer_snapshot.customer_name, "东方企业");
-        assert_eq!(
-            planned.revision.settlement_party_snapshot.settlement_party_name,
-            "集团结算中心"
-        );
+        assert_eq!(planned.revision.settlement_party_snapshot.settlement_party_name, "集团结算中心");
         assert_eq!(planned.revision.contract_pdf_file_id, FileAssetId::new("file-1"));
         assert_eq!(planned.revision.archive_source, ArchiveSource::ContractCenter);
-        assert_eq!(
-            planned.revision.valid_from,
-            BusinessDate::from_ymd(2026, 1, 1).unwrap()
-        );
+        assert_eq!(planned.revision.valid_from, BusinessDate::from_ymd(2026, 1, 1).unwrap());
     }
 
     #[test]
@@ -840,7 +803,7 @@ mod version_lock_tests {
         match customer_eligibility(Some(disabled)) {
             Err(Error::BusinessLogicError(message)) => {
                 assert_eq!(message, "客户已停用，禁止归档新合同");
-            }
+            },
             other => panic!("期望 BusinessLogicError，得到 {other:?}"),
         }
     }
@@ -867,10 +830,7 @@ mod version_lock_tests {
             "admin-1",
         )
         .unwrap();
-        assert_eq!(
-            planned.contract.settlement_party_id,
-            PartyId::new("party-from-customer")
-        );
+        assert_eq!(planned.contract.settlement_party_id, PartyId::new("party-from-customer"));
         assert_eq!(planned.revision.contract_pdf_file_id, FileAssetId::new("asset-9"));
         assert_eq!(planned.revision.archive_source, ArchiveSource::ContractCenter);
         assert_eq!(planned.revision.revision.revision_no, 1);

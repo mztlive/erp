@@ -2,14 +2,14 @@
 //!
 //! 仓发创建与入库预占补仓发两条路径共用同一编号与归属规则。
 
-use serde::{Deserialize, Serialize};
-
-use crate::entity::fulfillment::{DeliveryLine, DeliveryLineData, DeliveryType};
 use erp_core::ids::{
     DeliveryId, DeliveryLineId, PurchaseLineSalesAllocationId, SalesOrderLineId, StockReservationId,
 };
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::fulfillment::{DeliveryLine, DeliveryLineData, DeliveryType};
 
 /// 单行领域输入（已验证形态，不含行号与表头）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -58,9 +58,7 @@ impl DeliveryLineBatch {
         let mut lines = Vec::with_capacity(specs.len());
         for (index, spec) in specs.into_iter().enumerate() {
             let offset = u32::try_from(index).map_err(|_| Error::from("发货行号溢出"))?;
-            let line_no = first_line_no
-                .checked_add(offset)
-                .ok_or_else(|| Error::from("发货行号溢出"))?;
+            let line_no = first_line_no.checked_add(offset).ok_or_else(|| Error::from("发货行号溢出"))?;
             if line_no < 1 {
                 return Err(Error::from("行号必须从 1 开始"));
             }
@@ -83,8 +81,9 @@ impl DeliveryLineBatch {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn spec(id: &str) -> DeliveryLineSpec {
         DeliveryLineSpec {
@@ -140,54 +139,52 @@ mod tests {
             }],
         )
         .unwrap();
-        assert_eq!(
-            lines[0]
-                .purchase_line_sales_allocation_id
-                .as_ref()
-                .unwrap()
-                .as_ref(),
-            "pla-1"
-        );
+        assert_eq!(lines[0].purchase_line_sales_allocation_id.as_ref().unwrap().as_ref(), "pla-1");
     }
 
     /// 错误组合 fail-closed：仓发行缺预占、直发行带预占。
     #[test]
     fn invalid_reservation_allocation_combo_fails_closed() {
-        assert!(DeliveryLineBatch::build(
-            DeliveryId::new("d-1"),
-            DeliveryType::WarehouseShip,
-            1,
-            vec![DeliveryLineSpec {
-                stock_reservation_id: None,
-                ..spec("l-1")
-            }],
-        )
-        .is_err());
-        assert!(DeliveryLineBatch::build(
-            DeliveryId::new("d-1"),
-            DeliveryType::SupplierDirect,
-            1,
-            vec![spec("l-1")],
-        )
-        .is_err());
+        assert!(
+            DeliveryLineBatch::build(
+                DeliveryId::new("d-1"),
+                DeliveryType::WarehouseShip,
+                1,
+                vec![DeliveryLineSpec { stock_reservation_id: None, ..spec("l-1") }],
+            )
+            .is_err()
+        );
+        assert!(
+            DeliveryLineBatch::build(
+                DeliveryId::new("d-1"),
+                DeliveryType::SupplierDirect,
+                1,
+                vec![spec("l-1")],
+            )
+            .is_err()
+        );
     }
 
     /// 行号溢出返回错误而非 panic：首行号 0 与 u32 上限追加。
     #[test]
     fn line_no_overflow_fails_without_panic() {
-        assert!(DeliveryLineBatch::build(
-            DeliveryId::new("d-1"),
-            DeliveryType::WarehouseShip,
-            0,
-            vec![spec("l-1")],
-        )
-        .is_err());
-        assert!(DeliveryLineBatch::build(
-            DeliveryId::new("d-1"),
-            DeliveryType::WarehouseShip,
-            u32::MAX,
-            vec![spec("l-1"), spec("l-2")],
-        )
-        .is_err());
+        assert!(
+            DeliveryLineBatch::build(
+                DeliveryId::new("d-1"),
+                DeliveryType::WarehouseShip,
+                0,
+                vec![spec("l-1")],
+            )
+            .is_err()
+        );
+        assert!(
+            DeliveryLineBatch::build(
+                DeliveryId::new("d-1"),
+                DeliveryType::WarehouseShip,
+                u32::MAX,
+                vec![spec("l-1"), spec("l-2")],
+            )
+            .is_err()
+        );
     }
 }

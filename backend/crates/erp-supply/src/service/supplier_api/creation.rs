@@ -1,9 +1,12 @@
 //! 连接本域构造和写入；供应商存在性由外层先验证。
-use super::SupplierApiService;
-use crate::repository::SupplierApiExt;
-use crate::{dto::supplier_api::*, entity::supplier_api::*, Result};
 use id_generator::next_id;
 use persistence_core::Executor;
+
+use super::SupplierApiService;
+use crate::Result;
+use crate::dto::supplier_api::*;
+use crate::entity::supplier_api::*;
+use crate::repository::SupplierApiExt;
 impl SupplierApiService {
     /// 在原供应商存在性检查之后生成 ID 并构造身份连接。
     pub fn prepare_connection(
@@ -36,10 +39,7 @@ impl SupplierApiService {
         connection: &SupplierApiConnection,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .supplier_api()
-            .create_connection_with_capabilities(connection, &[], executor)
-            .await?;
+        self.db.supplier_api().create_connection_with_capabilities(connection, &[], executor).await?;
         Ok(())
     }
     /// 在调用方事务中推进连接 CAS。
@@ -48,10 +48,7 @@ impl SupplierApiService {
         connection: &mut SupplierApiConnection,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .supplier_api_connections()
-            .update(connection, executor)
-            .await?;
+        self.db.supplier_api_connections().update(connection, executor).await?;
         Ok(())
     }
     /// 在调用方事务中推进健康运行记录 CAS。
@@ -60,10 +57,7 @@ impl SupplierApiService {
         run: &mut SupplierHealthCheckRun,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .supplier_api_health_check_runs()
-            .update(run, executor)
-            .await?;
+        self.db.supplier_api_health_check_runs().update(run, executor).await?;
         Ok(())
     }
 }

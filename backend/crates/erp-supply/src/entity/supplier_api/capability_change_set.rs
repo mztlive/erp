@@ -88,10 +88,10 @@ impl std::fmt::Display for CapabilityChangeSetRejection {
             Self::UnexpectedExpectedVersion(key) => write!(f, "能力版本映射存在多余能力 {key}"),
             Self::NewCapabilityVersionMustBeZero(key) => {
                 write!(f, "新能力 {key} 的期望版本必须为0")
-            }
+            },
             Self::NewCapabilityMustStartDisabled(_) => {
                 write!(f, "新能力必须先以停用状态登记，再由采购确认后启用")
-            }
+            },
         }
     }
 }
@@ -173,15 +173,11 @@ impl CapabilityChangeSet {
                 expected_version: expected,
             });
         }
-        let change_codes: BTreeSet<String> = changes
-            .iter()
-            .map(|change| change.code.as_str().to_string())
-            .collect();
+        let change_codes: BTreeSet<String> =
+            changes.iter().map(|change| change.code.as_str().to_string()).collect();
         for key in expected_versions.keys() {
             if !change_codes.contains(key) {
-                return Err(CapabilityChangeSetRejection::UnexpectedExpectedVersion(
-                    key.clone(),
-                ));
+                return Err(CapabilityChangeSetRejection::UnexpectedExpectedVersion(key.clone()));
             }
         }
         Ok(Self { changes })
@@ -208,10 +204,8 @@ impl CapabilityChangeSet {
         self,
         existing: &[SupplierApiCapability],
     ) -> Result<ClassifiedCapabilityChangeSet, CapabilityChangeSetRejection> {
-        let existing_codes: HashSet<SupplierApiCapabilityCode> = existing
-            .iter()
-            .map(|capability| capability.capability_code)
-            .collect();
+        let existing_codes: HashSet<SupplierApiCapabilityCode> =
+            existing.iter().map(|capability| capability.capability_code).collect();
         let mut changes = Vec::with_capacity(self.changes.len());
         for pending in self.changes {
             let key = pending.code.as_str();
@@ -288,13 +282,15 @@ impl ClassifiedCapabilityChangeSet {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
+    use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
+
     use super::{CapabilityChangeInput, CapabilityChangeSet, CapabilityChangeSetRejection, MAX_CHANGES};
     use crate::entity::supplier_api::{
         SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiCapabilityData,
         SupplierApiCapabilityStatus,
     };
-    use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
-    use std::collections::BTreeMap;
 
     /// 构造既有能力声明测试夹具。
     fn existing_capability(code: SupplierApiCapabilityCode) -> SupplierApiCapability {
@@ -312,19 +308,12 @@ mod tests {
 
     /// 构造单条变更输入测试夹具。
     fn change(code: SupplierApiCapabilityCode, enabled: bool) -> CapabilityChangeInput {
-        CapabilityChangeInput {
-            code,
-            enabled,
-            constraint_snapshot: None,
-        }
+        CapabilityChangeInput { code, enabled, constraint_snapshot: None }
     }
 
     /// 构造与变更清单精确匹配的版本映射测试夹具。
     fn versions(pairs: Vec<(&'static str, u64)>) -> BTreeMap<String, u64> {
-        pairs
-            .into_iter()
-            .map(|(key, version)| (key.to_string(), version))
-            .collect()
+        pairs.into_iter().map(|(key, version)| (key.to_string(), version)).collect()
     }
 
     #[test]
@@ -371,10 +360,7 @@ mod tests {
             &versions(vec![]),
         )
         .expect_err("缺 key 必须拒绝");
-        assert_eq!(
-            missing,
-            CapabilityChangeSetRejection::MissingExpectedVersion("order")
-        );
+        assert_eq!(missing, CapabilityChangeSetRejection::MissingExpectedVersion("order"));
         assert_eq!(missing.to_string(), "缺少能力 order 的期望版本");
 
         let unexpected = CapabilityChangeSet::new(
@@ -397,10 +383,7 @@ mod tests {
         .unwrap()
         .classify(&[])
         .expect_err("新能力期望版本不为 0 必须拒绝");
-        assert_eq!(
-            version,
-            CapabilityChangeSetRejection::NewCapabilityVersionMustBeZero("product")
-        );
+        assert_eq!(version, CapabilityChangeSetRejection::NewCapabilityVersionMustBeZero("product"));
 
         let enabled = CapabilityChangeSet::new(
             vec![change(SupplierApiCapabilityCode::Product, true)],
@@ -409,10 +392,7 @@ mod tests {
         .unwrap()
         .classify(&[])
         .expect_err("新能力启用必须拒绝");
-        assert_eq!(
-            enabled,
-            CapabilityChangeSetRejection::NewCapabilityMustStartDisabled("product")
-        );
+        assert_eq!(enabled, CapabilityChangeSetRejection::NewCapabilityMustStartDisabled("product"));
     }
 
     #[test]
@@ -421,9 +401,8 @@ mod tests {
             CapabilityChangeSet::new(vec![], &versions(vec![])).expect_err("空清单必须拒绝"),
             CapabilityChangeSetRejection::EmptyOrTooMany
         );
-        let overlong: Vec<CapabilityChangeInput> = (0..=MAX_CHANGES)
-            .map(|_| change(SupplierApiCapabilityCode::Order, false))
-            .collect();
+        let overlong: Vec<CapabilityChangeInput> =
+            (0..=MAX_CHANGES).map(|_| change(SupplierApiCapabilityCode::Order, false)).collect();
         assert_eq!(
             CapabilityChangeSet::new(overlong, &versions(vec![("order", 1)])).expect_err("超限清单必须拒绝"),
             CapabilityChangeSetRejection::EmptyOrTooMany

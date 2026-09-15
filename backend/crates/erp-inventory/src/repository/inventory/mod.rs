@@ -11,14 +11,13 @@ mod search;
 pub use search::InventorySearch;
 mod shared;
 
-use mongodb::Database;
-
-use super::extensions::InventoryExt;
-
 pub use adjustment::{StockAdjustmentFilter, StockAdjustmentRow};
 pub use balance::{StockBalanceFilter, StockBalanceRow};
+use mongodb::Database;
 pub use movement::{StockMovementFilter, StockMovementRow};
 pub use reservation::{StockReservationFilter, StockReservationRow};
+
+use super::extensions::InventoryExt;
 
 /// `stock_adjustment_line` 集合名（单一来源：`InventoryExt` 关联常量）。
 const STOCK_ADJUSTMENT_LINES: &str = <mongodb::Database as InventoryExt>::STOCK_ADJUSTMENT_LINES;

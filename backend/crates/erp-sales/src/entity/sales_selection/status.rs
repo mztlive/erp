@@ -1,8 +1,7 @@
 //! 选品册状态及允许的动作。
 
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::state::DocumentState;
+use serde::{Deserialize, Serialize};
 
 /// 选品册业务状态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -216,8 +215,9 @@ impl DocumentState for BookletStatus {
 
 #[cfg(test)]
 mod tests {
-    use super::BookletStatus;
     use erp_core::common::state::ensure_transition;
+
+    use super::BookletStatus;
 
     #[test]
     fn published_cannot_return_to_pending() {

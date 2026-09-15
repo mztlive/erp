@@ -1,4 +1,3 @@
-use crate::entity::facts::SalesOrderBasisFact as SalesOrder;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 
@@ -6,11 +5,12 @@ use erp_core::ids::WarehouseId;
 use erp_core::money::Quantity;
 
 use super::super::creation_basis::{
-    basis_id_for, basis_scope_key, stable_line_id, BasisGroup, RequestedLine,
+    BasisGroup, RequestedLine, basis_id_for, basis_scope_key, stable_line_id,
 };
 use super::super::types::FulfillmentResponsibility;
 use super::assignment::{SourcingAssignment, SourcingAssignmentSet, SupplySourceType};
-use super::stock::{stock_basis_id_for, RequestedStockLine, StockAllocationPlan, StockBasisGroup};
+use super::stock::{RequestedStockLine, StockAllocationPlan, StockBasisGroup, stock_basis_id_for};
+use crate::entity::facts::SalesOrderBasisFact as SalesOrder;
 
 /// 已归入一张采购单的选源计划。
 #[derive(Debug, Clone)]
@@ -77,10 +77,7 @@ impl SourcingPlan {
         let purchase_plans = plan_sourcing_drafts(order, purchase_groups, work_item_id, assignments)?;
         let stock_plans = plan_stock_allocations(order, stock_groups, work_item_id, assignments)?;
         validate_combined_line_totals(&purchase_plans, &stock_plans)?;
-        Ok(Self {
-            purchase_plans,
-            stock_plans,
-        })
+        Ok(Self { purchase_plans, stock_plans })
     }
 
     /// 以 guard 推进后重新加载的最新库存余额依据验证计划。
@@ -108,9 +105,8 @@ impl SourcingPlan {
         for plan in &self.stock_plans {
             let latest = latest_stock_group(latest_groups, &plan.group.balance.base.id)?;
             for requested in &plan.requested_lines {
-                let line = latest
-                    .line_for(&requested.sales_order_line_id)
-                    .ok_or(SourcingPlanError::StaleFacts)?;
+                let line =
+                    latest.line_for(&requested.sales_order_line_id).ok_or(SourcingPlanError::StaleFacts)?;
                 validate_quantity(&line.coverage, requested.quantity)?;
                 add_requested_total(
                     &mut line_totals,
@@ -122,10 +118,8 @@ impl SourcingPlan {
                 *balance_totals
                     .entry(latest.balance.base.id.clone())
                     .or_insert(rust_decimal::Decimal::ZERO) += requested.quantity.to_decimal();
-                balance_caps.insert(
-                    latest.balance.base.id.clone(),
-                    latest.balance.available_quantity.to_decimal(),
-                );
+                balance_caps
+                    .insert(latest.balance.base.id.clone(), latest.balance.available_quantity.to_decimal());
             }
         }
         if exceeds_any_cap(&line_totals, &line_caps) || exceeds_any_cap(&balance_totals, &balance_caps) {
@@ -178,9 +172,8 @@ impl SourcingPlan {
                     basis.coverage.summary.remaining_quantity.to_decimal(),
                 );
                 let supply_key = basis.supply.offering.base.id.clone();
-                *supply_totals
-                    .entry(supply_key.clone())
-                    .or_insert(rust_decimal::Decimal::ZERO) += requested.quantity.to_decimal();
+                *supply_totals.entry(supply_key.clone()).or_insert(rust_decimal::Decimal::ZERO) +=
+                    requested.quantity.to_decimal();
                 supply_caps.insert(
                     supply_key,
                     basis
@@ -259,10 +252,7 @@ fn plan_sourcing_drafts(
         let key = format!(
             "{}|{}",
             basis_scope_key(&group.scope),
-            target_warehouse_id
-                .as_ref()
-                .map(ToString::to_string)
-                .unwrap_or_default()
+            target_warehouse_id.as_ref().map(ToString::to_string).unwrap_or_default()
         );
         let requested = RequestedLine {
             sales_order_line_id: assignment.sales_order_line_id.clone(),
@@ -310,9 +300,9 @@ fn target_warehouse_for_assignment(
             .as_ref()
             .map(|value| Some(WarehouseId::new(value.clone())))
             .ok_or_else(|| SourcingPlanError::WarehouseContract("仓库履约必须先选择目标收货仓".to_string())),
-        _ if assignment.target_warehouse_id.is_some() => Err(SourcingPlanError::WarehouseContract(
-            "非仓库履约不能指定目标收货仓".to_string(),
-        )),
+        _ if assignment.target_warehouse_id.is_some() => {
+            Err(SourcingPlanError::WarehouseContract("非仓库履约不能指定目标收货仓".to_string()))
+        },
         _ => Ok(None),
     }
 }
@@ -409,10 +399,8 @@ fn validate_combined_line_totals(
     }
     for plan in stock_plans {
         for requested in &plan.requested_lines {
-            let line = plan
-                .group
-                .line_for(&requested.sales_order_line_id)
-                .ok_or(SourcingPlanError::StaleFacts)?;
+            let line =
+                plan.group.line_for(&requested.sales_order_line_id).ok_or(SourcingPlanError::StaleFacts)?;
             validate_quantity(&line.coverage, requested.quantity)?;
             add_requested_total(
                 &mut totals,
@@ -453,9 +441,7 @@ fn add_requested_total(
     quantity: Quantity,
     cap: Quantity,
 ) {
-    *totals
-        .entry(line_id.to_string())
-        .or_insert(rust_decimal::Decimal::ZERO) += quantity.to_decimal();
+    *totals.entry(line_id.to_string()).or_insert(rust_decimal::Decimal::ZERO) += quantity.to_decimal();
     caps.insert(line_id.to_string(), cap.to_decimal());
 }
 
@@ -477,10 +463,7 @@ fn latest_stock_group<'a>(
     groups: &'a [StockBasisGroup],
     balance_id: &str,
 ) -> std::result::Result<&'a StockBasisGroup, SourcingPlanError> {
-    groups
-        .iter()
-        .find(|group| group.balance.base.id == balance_id)
-        .ok_or(SourcingPlanError::StaleFacts)
+    groups.iter().find(|group| group.balance.base.id == balance_id).ok_or(SourcingPlanError::StaleFacts)
 }
 
 /// 查找一条选源行命中的精确依据。
@@ -507,10 +490,7 @@ fn find_assignment_group<'a>(
         .iter()
         .find(|group| {
             basis_id_for(order, group, work_item_id, None) == assignment.basis_id
-                && group
-                    .lines
-                    .iter()
-                    .any(|line| stable_line_id(line) == assignment.sales_order_line_id)
+                && group.lines.iter().any(|line| stable_line_id(line) == assignment.sales_order_line_id)
         })
         .ok_or(SourcingPlanError::StaleFacts)
 }
@@ -533,9 +513,7 @@ fn exceeds_any_cap(
     totals: &HashMap<String, rust_decimal::Decimal>,
     caps: &HashMap<String, rust_decimal::Decimal>,
 ) -> bool {
-    totals
-        .iter()
-        .any(|(key, total)| caps.get(key).is_none_or(|cap| total > cap))
+    totals.iter().any(|(key, total)| caps.get(key).is_none_or(|cap| total > cap))
 }
 
 /// 返回合法分配数量零值。

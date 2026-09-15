@@ -1,49 +1,47 @@
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SalesOrderId, WarehouseId};
+use erp_identity::SharedRbacService;
+use erp_procurement::dto::purchase_order::{
+    CREATE_ACTION, CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult,
+};
 use erp_procurement::entity::purchase_order::{
-    basis_id_for, BasisGroup, CreationBasisFacts, FulfillmentResponsibility, LegacyReceiptIdScheme,
-    PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseOrder, PurchaseOrderData,
-    PurchaseOrderSubmission, PurchaseOrderSubmissionLine, RequestedLine,
+    BasisGroup, CreationBasisFacts, FulfillmentResponsibility, LegacyReceiptIdScheme, PurchaseCommandReceipt,
+    PurchaseCommandReceiptError, PurchaseOrder, PurchaseOrderData, PurchaseOrderSubmission,
+    PurchaseOrderSubmissionLine, RequestedLine, basis_id_for,
+};
+use erp_procurement::repository::PurchaseOrderExt;
+use erp_procurement::service::purchase_order::creation_basis::{
+    SelectedLine, build_draft_submission, build_submission_line, compute_selected_lines,
+    ensure_request_scope, find_requested_group, parse_basis_sales_order_id,
+};
+use erp_read_models::purchase_center::repository::{
+    basis_groups_and_facts, basis_groups_for_order, load_effective_sales_order, sales_order_basis_fact,
 };
 use erp_sales::entity::sales_order::SalesOrder;
-use erp_warehouse::WarehouseExt;
-use erp_warehouse::WarehouseFulfillmentOperation;
+use erp_sales::repository::SalesOrderExt;
+use erp_warehouse::{WarehouseExt, WarehouseFulfillmentOperation};
+use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::ports::OrderTaskSource;
-use erp_workflow::DocumentRegistryExt;
+use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
+use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::service::document_registry::new_registered_document;
 use id_generator::next_id;
 use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-use {erp_procurement::repository::PurchaseOrderExt, erp_sales::repository::SalesOrderExt};
 
+use super::super::PurchaseOrderProcess;
 use super::super::adapter::{purchase_order_object_readable, purchase_order_responsible_org_id};
-use super::super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
+use super::super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
 use super::super::create_submit::submit_created_draft_in_session;
 use super::super::procurement_task_sync::{
     load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
 };
-use erp_procurement::dto::purchase_order::{
-    CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CREATE_ACTION,
-};
-
-use super::super::PurchaseOrderProcess;
 use super::{procurement_quantity_changed, validate_requested_quantities};
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_identity::SharedRbacService;
-use erp_procurement::service::purchase_order::creation_basis::{
-    build_draft_submission, build_submission_line, compute_selected_lines, ensure_request_scope,
-    find_requested_group, parse_basis_sales_order_id, SelectedLine,
-};
-use erp_read_models::purchase_center::repository::{
-    basis_groups_and_facts, basis_groups_for_order, load_effective_sales_order, sales_order_basis_fact,
-};
-use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
-use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
-use erp_workflow::service::document_registry::new_registered_document;
 
 const CREATE_PERMISSION: &str = "purchase_order:create";
 const CREATE_RECEIPT_PREFIX: &str = "purchase-order-create-command-";
@@ -123,18 +121,10 @@ impl PurchaseOrderProcess {
             LegacyReceiptIdScheme::None,
         )?;
         let audit_id = receipt_identity.receipt_id().to_string();
-        let PurchaseOrderAuthorization {
-            rbac,
-            policy_revision,
-        } = self.authorize_actor_permission(actor, CREATE_PERMISSION).await?;
-        if let Some(result) = replay_creation(
-            &self.db,
-            &audit_id,
-            &request_fingerprint,
-            actor,
-            &mut NoTransaction,
-        )
-        .await?
+        let PurchaseOrderAuthorization { rbac, policy_revision } =
+            self.authorize_actor_permission(actor, CREATE_PERMISSION).await?;
+        if let Some(result) =
+            replay_creation(&self.db, &audit_id, &request_fingerprint, actor, &mut NoTransaction).await?
         {
             return Ok(result);
         }
@@ -171,15 +161,11 @@ impl PurchaseOrderProcess {
             .await;
         match transaction_result {
             Ok(result) => Ok(result),
-            Err(error) => replay_creation(
-                &self.db,
-                &audit_id,
-                &request_fingerprint,
-                actor,
-                &mut NoTransaction,
-            )
-            .await?
-            .ok_or(error),
+            Err(error) => {
+                replay_creation(&self.db, &audit_id, &request_fingerprint, actor, &mut NoTransaction)
+                    .await?
+                    .ok_or(error)
+            },
         }
     }
 }
@@ -207,14 +193,8 @@ async fn create_from_basis_in_transaction(
     command: &CreateBasisCommand<'_>,
     session: &mut ClientSession,
 ) -> Result<CreatePurchaseOrderResult> {
-    if let Some(result) = replay_creation(
-        db,
-        command.audit_id,
-        command.request_fingerprint,
-        command.actor,
-        session,
-    )
-    .await?
+    if let Some(result) =
+        replay_creation(db, command.audit_id, command.request_fingerprint, command.actor, session).await?
     {
         return Ok(result);
     }
@@ -452,9 +432,7 @@ async fn write_prepared_draft(
     attach_published_binding(&mut document, binding)?;
     db.purchase_orders().create(write.order, session).await?;
     db.business_documents().create(&document, session).await?;
-    db.purchase_order_submissions()
-        .create(write.submission, session)
-        .await?;
+    db.purchase_order_submissions().create(write.submission, session).await?;
     for line in write.lines {
         db.purchase_order_submission_lines().create(line, session).await?;
     }
@@ -488,11 +466,8 @@ async fn write_creation_receipt(
     lock_version: u64,
     session: &mut ClientSession,
 ) -> Result<CreatePurchaseOrderResult> {
-    let receipt = CreationReceipt {
-        purchase_order_id: purchase_order_id.to_string(),
-        purchase_no,
-        lock_version,
-    };
+    let receipt =
+        CreationReceipt { purchase_order_id: purchase_order_id.to_string(), purchase_no, lock_version };
     let audit = command.actor.clone().resource_log_with_id(
         command.audit_id.to_string(),
         CREATE_ACTION,
@@ -581,13 +556,10 @@ async fn resolve_target_warehouse(
                 .await?
                 .ok_or_else(|| Error::NotFound("目标仓库不存在，请重新选择".to_string()))?;
             if !warehouse.is_active() {
-                return Err(Error::ValidationError(
-                    "目标仓库已停用，请重新选择后再创建采购单".to_string(),
-                ));
+                return Err(Error::ValidationError("目标仓库已停用，请重新选择后再创建采购单".to_string()));
             }
-            let handler_user_id = warehouse
-                .fulfillment_handler(WarehouseFulfillmentOperation::Receipt)
-                .map_err(|_| {
+            let handler_user_id =
+                warehouse.fulfillment_handler(WarehouseFulfillmentOperation::Receipt).map_err(|_| {
                     Error::ValidationError("目标仓库未配置合格入库经办人，请先完成仓库责任配置".to_string())
                 })?;
             crate::fulfillment_execution::task::ensure_fulfillment_owner_eligible(
@@ -605,7 +577,7 @@ async fn resolve_target_warehouse(
                 )
             })?;
             Ok(Some(id))
-        }
+        },
         _ if normalized.is_some() => Err(Error::ValidationError("非仓库履约不能指定目标收货仓".to_string())),
         _ => Ok(None),
     }
@@ -656,15 +628,13 @@ async fn replay_creation(
         Ok(receipt) => receipt,
         Err(PurchaseCommandReceiptError::IdentityMismatch | PurchaseCommandReceiptError::PayloadConflict) => {
             return Err(Error::ConflictError("幂等键已用于不同采购创建命令".to_string()));
-        }
+        },
         Err(PurchaseCommandReceiptError::Corrupted(message)) => {
             return Err(Error::Internal(message));
-        }
+        },
     };
     if audit.resource_id.as_deref() != Some(receipt.payload().purchase_order_id.as_str()) {
-        return Err(Error::ConflictError(
-            "采购创建幂等收据与业务资源不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("采购创建幂等收据与业务资源不一致".to_string()));
     }
     let order = db
         .purchase_orders()
@@ -672,9 +642,7 @@ async fn replay_creation(
         .await?
         .ok_or_else(|| Error::Internal("采购创建幂等收据引用的采购单不存在".to_string()))?;
     if order.base.id != receipt.payload().purchase_order_id {
-        return Err(Error::ConflictError(
-            "采购创建幂等收据与当前采购单不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("采购创建幂等收据与当前采购单不一致".to_string()));
     }
     Ok(Some(receipt.into_payload().into_result(true)))
 }

@@ -1,10 +1,10 @@
 //! 供应连接详情、动作权限和后台任务只读投影。
-use erp_identity::SharedRbacService;
-use erp_supply::{
-    ports::supplier_reference_registry::SupplierReferenceRegistry, service::supplier_api::SupplierApiService,
-};
-use mongodb::Database;
 use std::sync::Arc;
+
+use erp_identity::SharedRbacService;
+use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
+use erp_supply::service::supplier_api::SupplierApiService;
+use mongodb::Database;
 mod context;
 pub mod dto;
 mod jobs;
@@ -18,11 +18,7 @@ pub struct SupplierApiReadService {
 impl SupplierApiReadService {
     /// 复用应用数据库，未注入的授权和引用元数据保持失败关闭。
     pub fn new(db: Database) -> Self {
-        Self {
-            db,
-            rbac: None,
-            reference_registry: None,
-        }
+        Self { db, rbac: None, reference_registry: None }
     }
     /// 注入应用已有的权威 RBAC。
     pub fn with_rbac(mut self, rbac: SharedRbacService) -> Self {

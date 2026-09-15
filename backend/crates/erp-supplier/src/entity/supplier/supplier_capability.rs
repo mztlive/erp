@@ -6,16 +6,14 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::stable::StableBase;
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::BusinessDate;
 use erp_core::field_update::FieldUpdate;
+pub use erp_core::ids::{SupplierAccountId, SupplierCapabilityId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
-
-pub use erp_core::ids::{SupplierAccountId, SupplierCapabilityId};
+use serde::{Deserialize, Serialize};
 
 /// 服务区域引用最大长度。
 const SERVICE_REGION_MAX_LEN: usize = 128;
@@ -341,12 +339,12 @@ impl SupplierCapability {
     /// 当区域超长时返回错误。
     fn apply_service_region(&mut self, update: FieldUpdate<String>) -> Result<()> {
         match update {
-            FieldUpdate::Unchanged => {}
+            FieldUpdate::Unchanged => {},
             FieldUpdate::Clear => self.service_region = None,
             FieldUpdate::Set(value) => {
                 self.service_region =
                     normalize_optional_text(Some(value), "服务区域", SERVICE_REGION_MAX_LEN)?
-            }
+            },
         }
         Ok(())
     }
@@ -375,12 +373,12 @@ impl SupplierCapability {
     /// 当说明超长时返回错误。
     fn apply_fulfillment_note(&mut self, update: FieldUpdate<String>) -> Result<()> {
         match update {
-            FieldUpdate::Unchanged => {}
+            FieldUpdate::Unchanged => {},
             FieldUpdate::Clear => self.fulfillment_note = None,
             FieldUpdate::Set(value) => {
                 self.fulfillment_note =
                     normalize_optional_text(Some(value), "履约说明", FULFILLMENT_NOTE_MAX_LEN)?
-            }
+            },
         }
         Ok(())
     }
@@ -473,14 +471,15 @@ fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>)
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        CapabilityCode, CapabilityStatus, SupplierCapability, SupplierCapabilityData,
-        SupplierCapabilityUpdate,
-    };
     use erp_core::common::state::assert_adjacency_closed;
     use erp_core::common::time::BusinessDate;
     use erp_core::field_update::FieldUpdate;
     use erp_core::ids::{SupplierAccountId, SupplierCapabilityId};
+
+    use super::{
+        CapabilityCode, CapabilityStatus, SupplierCapability, SupplierCapabilityData,
+        SupplierCapabilityUpdate,
+    };
 
     fn capability_data() -> SupplierCapabilityData {
         SupplierCapabilityData {
@@ -522,16 +521,11 @@ mod tests {
     /// 失败路径：负责人为空/超长、区域超长、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank_owner = SupplierCapabilityData {
-            owner_user_id: "   ".to_string(),
-            ..capability_data()
-        };
+        let blank_owner = SupplierCapabilityData { owner_user_id: "   ".to_string(), ..capability_data() };
         assert!(SupplierCapability::new(SupplierCapabilityId::new("c"), blank_owner, "admin-1").is_err());
 
-        let overlong_region = SupplierCapabilityData {
-            service_region: Some("r".repeat(129)),
-            ..capability_data()
-        };
+        let overlong_region =
+            SupplierCapabilityData { service_region: Some("r".repeat(129)), ..capability_data() };
         assert!(SupplierCapability::new(SupplierCapabilityId::new("c"), overlong_region, "admin-1").is_err());
 
         let reversed = SupplierCapabilityData {
@@ -565,10 +559,7 @@ mod tests {
         assert!(!capability.is_effective_on(BusinessDate::from_ymd(2026, 3, 1).unwrap()));
         assert_eq!(capability.service_region, None);
         assert_eq!(capability.owner_user_id, "buyer-2");
-        assert_eq!(
-            capability.valid_to,
-            Some(BusinessDate::from_ymd(2026, 6, 30).unwrap())
-        );
+        assert_eq!(capability.valid_to, Some(BusinessDate::from_ymd(2026, 6, 30).unwrap()));
         assert_eq!(capability.stable.updated_by, "admin-2");
     }
 
@@ -597,17 +588,11 @@ mod tests {
     /// 快照字段必须与实体当前状态完全一致；修订号溢出仍由 `RevisionBase::next_revision_no` 负责，本方法仅校验字段一致性。
     #[test]
     fn snapshot_matches_entity_fields() {
-        let capability = SupplierCapability::new(
-            SupplierCapabilityId::new("cap-snap"),
-            capability_data(),
-            "admin-1",
-        )
-        .unwrap();
+        let capability =
+            SupplierCapability::new(SupplierCapabilityId::new("cap-snap"), capability_data(), "admin-1")
+                .unwrap();
         let rev = capability
-            .snapshot_revision(
-                erp_core::ids::SupplierCapabilityRevisionId::new("cap-rev-snap"),
-                5,
-            )
+            .snapshot_revision(erp_core::ids::SupplierCapabilityRevisionId::new("cap-rev-snap"), 5)
             .unwrap();
         assert_eq!(rev.supplier_id, capability.supplier_id);
         assert_eq!(rev.capability_code, capability.capability_code);
@@ -625,20 +610,14 @@ mod tests {
     fn revision_overflow_fails_closed_and_snapshot_not_invoked() {
         use erp_core::common::revision::RevisionBase;
         assert!(RevisionBase::next_revision_no(Some(u32::MAX)).is_err());
-        let capability = SupplierCapability::new(
-            SupplierCapabilityId::new("cap-overflow"),
-            capability_data(),
-            "admin-1",
-        )
-        .unwrap();
+        let capability =
+            SupplierCapability::new(SupplierCapabilityId::new("cap-overflow"), capability_data(), "admin-1")
+                .unwrap();
         let overflow = RevisionBase::next_revision_no(Some(u32::MAX));
         assert!(overflow.is_err());
         // 溢出时不调用快照；正常序号仍可快照
         let rev = capability
-            .snapshot_revision(
-                erp_core::ids::SupplierCapabilityRevisionId::new("cap-rev-overflow"),
-                1,
-            )
+            .snapshot_revision(erp_core::ids::SupplierCapabilityRevisionId::new("cap-rev-overflow"), 1)
             .unwrap();
         assert_eq!(rev.revision.revision_no, 1);
     }

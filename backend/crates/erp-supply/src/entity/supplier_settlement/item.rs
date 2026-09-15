@@ -7,15 +7,14 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{
     SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierSettlementItemId,
     SupplierSettlementStatementId,
 };
 use erp_core::money::{Amount, Quantity};
 use erp_core::{Error, Result};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 
 /// 已冻结双方金额派生的成本差额三元组。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,11 +34,7 @@ impl SettlementCostDelta {
     /// 返回三项均为零的差额。
     pub fn zero() -> Self {
         let zero = Amount::try_from(Decimal::ZERO).expect("零是合法金额");
-        Self {
-            gross: zero,
-            net: zero,
-            tax: zero,
-        }
+        Self { gross: zero, net: zero, tax: zero }
     }
 
     /// 将另一组三元组累加到当前差额。
@@ -179,9 +174,7 @@ impl SupplierSettlementItem {
             .checked_add(data.service_fee_amount)
             .checked_sub(data.refund_amount);
         if expected != data.erp_calculated_amount {
-            return Err(Error::from(
-                "ERP 计算金额必须等于订单金额加运费加服务费减退款金额",
-            ));
+            return Err(Error::from("ERP 计算金额必须等于订单金额加运费加服务费减退款金额"));
         }
         ensure_amount_components(
             data.erp_calculated_amount,
@@ -235,15 +228,9 @@ impl SupplierSettlementItem {
     /// 派生差额不满足 `gross = net + tax` 时返回领域错误。
     pub fn supplier_minus_erp_delta(&self) -> Result<SettlementCostDelta> {
         let delta = SettlementCostDelta {
-            gross: self
-                .supplier_billed_amount
-                .checked_sub(self.erp_calculated_amount),
-            net: self
-                .supplier_billed_net_amount
-                .checked_sub(self.erp_calculated_net_amount),
-            tax: self
-                .supplier_billed_tax_amount
-                .checked_sub(self.erp_calculated_tax_amount),
+            gross: self.supplier_billed_amount.checked_sub(self.erp_calculated_amount),
+            net: self.supplier_billed_net_amount.checked_sub(self.erp_calculated_net_amount),
+            tax: self.supplier_billed_tax_amount.checked_sub(self.erp_calculated_tax_amount),
         };
         delta.validate()?;
         Ok(delta)
@@ -275,9 +262,11 @@ fn ensure_amount_components(gross: Amount, net: Amount, tax: Amount, message: &s
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use erp_core::ids::{SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierSettlementItemId};
     use std::str::FromStr;
+
+    use erp_core::ids::{SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierSettlementItemId};
+
+    use super::*;
 
     fn sample_data() -> SupplierSettlementItemData {
         SupplierSettlementItemData {

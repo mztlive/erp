@@ -6,14 +6,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::ReturnsExt;
-use persistence_core::Result;
 
 /// `sales_return_case` 集合名。
 pub(crate) const SALES_RETURN_CASES: &str = <mongodb::Database as ReturnsExt>::SALES_RETURN_CASES;
@@ -58,9 +56,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -68,10 +64,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 fn sales_return_case_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_return_cases_no", doc! { "return_no": 1 }),
-        named_index(
-            "idx_sales_return_cases_order_status",
-            doc! { "sales_order_id": 1, "status": 1 },
-        ),
+        named_index("idx_sales_return_cases_order_status", doc! { "sales_order_id": 1, "status": 1 }),
         named_index("idx_sales_return_cases_status", doc! { "status": 1 }),
     ]
 }
@@ -80,10 +73,7 @@ fn sales_return_case_indexes() -> Vec<IndexModel> {
 fn sales_return_line_indexes() -> Vec<IndexModel> {
     vec![
         named_index("idx_sales_return_lines_case", doc! { "sales_return_case_id": 1 }),
-        named_index(
-            "idx_sales_return_lines_order_line",
-            doc! { "sales_order_line_id": 1 },
-        ),
+        named_index("idx_sales_return_lines_order_line", doc! { "sales_order_line_id": 1 }),
     ]
 }
 
@@ -91,24 +81,15 @@ fn sales_return_line_indexes() -> Vec<IndexModel> {
 fn purchase_return_order_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_purchase_return_orders_no", doc! { "purchase_return_no": 1 }),
-        named_index(
-            "idx_purchase_return_orders_po_status",
-            doc! { "purchase_order_id": 1, "status": 1 },
-        ),
+        named_index("idx_purchase_return_orders_po_status", doc! { "purchase_order_id": 1, "status": 1 }),
     ]
 }
 
 /// 返回 `purchase_return_line` 的退货单追溯索引。
 fn purchase_return_line_indexes() -> Vec<IndexModel> {
     vec![
-        named_index(
-            "idx_purchase_return_lines_order",
-            doc! { "purchase_return_order_id": 1 },
-        ),
-        named_index(
-            "idx_purchase_return_lines_rev_line",
-            doc! { "purchase_order_revision_line_id": 1 },
-        ),
+        named_index("idx_purchase_return_lines_order", doc! { "purchase_return_order_id": 1 }),
+        named_index("idx_purchase_return_lines_rev_line", doc! { "purchase_order_revision_line_id": 1 }),
     ]
 }
 
@@ -116,10 +97,7 @@ fn purchase_return_line_indexes() -> Vec<IndexModel> {
 fn customer_refund_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_customer_refunds_no", doc! { "refund_no": 1 }),
-        named_index(
-            "idx_customer_refunds_customer_status",
-            doc! { "customer_id": 1, "status": 1 },
-        ),
+        named_index("idx_customer_refunds_customer_status", doc! { "customer_id": 1, "status": 1 }),
         named_index(
             "idx_customer_refunds_original",
             doc! { "original_receipt_id": 1, "original_receivable_entry_id": 1 },
@@ -131,10 +109,7 @@ fn customer_refund_indexes() -> Vec<IndexModel> {
 fn supplier_refund_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_refunds_no", doc! { "refund_no": 1 }),
-        named_index(
-            "idx_supplier_refunds_supplier_status",
-            doc! { "supplier_id": 1, "status": 1 },
-        ),
+        named_index("idx_supplier_refunds_supplier_status", doc! { "supplier_id": 1, "status": 1 }),
         named_index(
             "idx_supplier_refunds_original",
             doc! { "original_payment_id": 1, "original_payable_entry_id": 1 },
@@ -166,10 +141,7 @@ fn payment_reversal_indexes() -> Vec<IndexModel> {
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -182,8 +154,8 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
-    use mongodb::bson::doc;
     use mongodb::IndexModel;
+    use mongodb::bson::doc;
 
     use super::{
         customer_refund_indexes, payment_reversal_indexes, purchase_return_order_indexes,
@@ -197,13 +169,15 @@ mod tests {
 
     #[test]
     fn case_and_order_numbers_are_globally_unique() {
-        assert!(sales_return_case_indexes()
-            .iter()
-            .any(|index| name(index) == Some("uk_sales_return_cases_no")
-                && index.options.as_ref().and_then(|o| o.unique) == Some(true)));
-        assert!(purchase_return_order_indexes()
-            .iter()
-            .any(|index| name(index) == Some("uk_purchase_return_orders_no")));
+        assert!(
+            sales_return_case_indexes().iter().any(|index| name(index) == Some("uk_sales_return_cases_no")
+                && index.options.as_ref().and_then(|o| o.unique) == Some(true))
+        );
+        assert!(
+            purchase_return_order_indexes()
+                .iter()
+                .any(|index| name(index) == Some("uk_purchase_return_orders_no"))
+        );
         assert!(sales_return_case_indexes().iter().any(|index| {
             name(index) == Some("idx_sales_return_cases_order_status")
                 && index.keys == doc! { "sales_order_id": 1, "status": 1 }
@@ -212,25 +186,27 @@ mod tests {
 
     #[test]
     fn refunds_and_reversals_cover_original_fact_lookups() {
-        assert!(customer_refund_indexes()
-            .iter()
-            .any(|index| name(index) == Some("uk_customer_refunds_no")));
+        assert!(customer_refund_indexes().iter().any(|index| name(index) == Some("uk_customer_refunds_no")));
         assert!(customer_refund_indexes().iter().any(|index| {
             name(index) == Some("idx_customer_refunds_original")
                 && index.keys == doc! { "original_receipt_id": 1, "original_receivable_entry_id": 1 }
         }));
-        assert!(supplier_refund_indexes()
-            .iter()
-            .any(|index| name(index) == Some("uk_supplier_refunds_no")));
-        assert!(receipt_reversal_indexes()
-            .iter()
-            .any(|index| { index.keys == doc! { "original_customer_receipt_id": 1, "status": 1 } }));
-        assert!(payment_reversal_indexes()
-            .iter()
-            .any(|index| { index.keys == doc! { "original_supplier_payment_id": 1, "status": 1 } }));
-        assert!(sales_return_line_indexes()
-            .iter()
-            .any(|index| name(index) == Some("idx_sales_return_lines_order_line")));
+        assert!(supplier_refund_indexes().iter().any(|index| name(index) == Some("uk_supplier_refunds_no")));
+        assert!(
+            receipt_reversal_indexes()
+                .iter()
+                .any(|index| { index.keys == doc! { "original_customer_receipt_id": 1, "status": 1 } })
+        );
+        assert!(
+            payment_reversal_indexes()
+                .iter()
+                .any(|index| { index.keys == doc! { "original_supplier_payment_id": 1, "status": 1 } })
+        );
+        assert!(
+            sales_return_line_indexes()
+                .iter()
+                .any(|index| name(index) == Some("idx_sales_return_lines_order_line"))
+        );
     }
 
     /// 固定八集合的 19 个索引，名称、复合键顺序与全局唯一语义不可漂移。
@@ -249,59 +225,23 @@ mod tests {
         assert_eq!(groups.each_ref().map(Vec::len), [3, 2, 2, 2, 3, 3, 2, 2]);
         let expected = [
             ("uk_sales_return_cases_no", doc! { "return_no": 1 }, true),
-            (
-                "idx_sales_return_cases_order_status",
-                doc! { "sales_order_id": 1, "status": 1 },
-                false,
-            ),
+            ("idx_sales_return_cases_order_status", doc! { "sales_order_id": 1, "status": 1 }, false),
             ("idx_sales_return_cases_status", doc! { "status": 1 }, false),
-            (
-                "idx_sales_return_lines_case",
-                doc! { "sales_return_case_id": 1 },
-                false,
-            ),
-            (
-                "idx_sales_return_lines_order_line",
-                doc! { "sales_order_line_id": 1 },
-                false,
-            ),
-            (
-                "uk_purchase_return_orders_no",
-                doc! { "purchase_return_no": 1 },
-                true,
-            ),
-            (
-                "idx_purchase_return_orders_po_status",
-                doc! { "purchase_order_id": 1, "status": 1 },
-                false,
-            ),
-            (
-                "idx_purchase_return_lines_order",
-                doc! { "purchase_return_order_id": 1 },
-                false,
-            ),
-            (
-                "idx_purchase_return_lines_rev_line",
-                doc! { "purchase_order_revision_line_id": 1 },
-                false,
-            ),
+            ("idx_sales_return_lines_case", doc! { "sales_return_case_id": 1 }, false),
+            ("idx_sales_return_lines_order_line", doc! { "sales_order_line_id": 1 }, false),
+            ("uk_purchase_return_orders_no", doc! { "purchase_return_no": 1 }, true),
+            ("idx_purchase_return_orders_po_status", doc! { "purchase_order_id": 1, "status": 1 }, false),
+            ("idx_purchase_return_lines_order", doc! { "purchase_return_order_id": 1 }, false),
+            ("idx_purchase_return_lines_rev_line", doc! { "purchase_order_revision_line_id": 1 }, false),
             ("uk_customer_refunds_no", doc! { "refund_no": 1 }, true),
-            (
-                "idx_customer_refunds_customer_status",
-                doc! { "customer_id": 1, "status": 1 },
-                false,
-            ),
+            ("idx_customer_refunds_customer_status", doc! { "customer_id": 1, "status": 1 }, false),
             (
                 "idx_customer_refunds_original",
                 doc! { "original_receipt_id": 1, "original_receivable_entry_id": 1 },
                 false,
             ),
             ("uk_supplier_refunds_no", doc! { "refund_no": 1 }, true),
-            (
-                "idx_supplier_refunds_supplier_status",
-                doc! { "supplier_id": 1, "status": 1 },
-                false,
-            ),
+            ("idx_supplier_refunds_supplier_status", doc! { "supplier_id": 1, "status": 1 }, false),
             (
                 "idx_supplier_refunds_original",
                 doc! { "original_payment_id": 1, "original_payable_entry_id": 1 },
@@ -324,10 +264,7 @@ mod tests {
         assert_eq!(actual.len(), expected.len());
         for (index, (expected_name, keys, unique)) in actual.iter().zip(expected) {
             assert_eq!(name(index), Some(expected_name));
-            assert_eq!(
-                index.keys.iter().collect::<Vec<_>>(),
-                keys.iter().collect::<Vec<_>>()
-            );
+            assert_eq!(index.keys.iter().collect::<Vec<_>>(), keys.iter().collect::<Vec<_>>());
             let options = index.options.as_ref().unwrap();
             assert_eq!(options.unique, unique.then_some(true));
             assert!(options.partial_filter_expression.is_none());

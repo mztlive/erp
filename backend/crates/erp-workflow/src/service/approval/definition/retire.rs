@@ -1,23 +1,22 @@
-use crate::repository::BpmExt;
+use application_core::AuditActor;
 use bpm::graph::DefinitionGraph;
-use bpm::model::types::ApprovalCommandKind;
 use bpm::model::ApprovalProcessDefinition;
+use bpm::model::types::ApprovalCommandKind;
 use mongodb::Database;
 use persistence_core::Transactional;
 
-use crate::error::{Error, Result};
-use application_core::AuditActor;
-
 use super::super::definition_dto::{DefinitionDetailView, RetireDefinitionRequest};
 use super::super::policy::ProcessRequiredApprovalPolicy;
+use super::ApprovalDefinitionService;
 use super::command::{
-    ensure_definition_admin_permission, ensure_lock, lock_command_identity, map_model_error, now,
-    parse_idempotency_key, participant, policy_for_definition, replay_prepared_definition_receipt,
-    write_definition_audit, write_receipt, DefinitionCommandResultRef, DefinitionResultExpectation,
-    PreparedDefinitionIdentity, RETIRE_DEFINITION_COMMAND_DOMAIN,
+    DefinitionCommandResultRef, DefinitionResultExpectation, PreparedDefinitionIdentity,
+    RETIRE_DEFINITION_COMMAND_DOMAIN, ensure_definition_admin_permission, ensure_lock, lock_command_identity,
+    map_model_error, now, parse_idempotency_key, participant, policy_for_definition,
+    replay_prepared_definition_receipt, write_definition_audit, write_receipt,
 };
 use super::mapping::detail_view;
-use super::ApprovalDefinitionService;
+use crate::error::{Error, Result};
+use crate::repository::BpmExt;
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// 退役当前已发布定义。
@@ -99,8 +98,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
                 .await
             })
         });
-        self.recover_definition_command(outcome.await, &policy, actor, identity, expectation)
-            .await
+        self.recover_definition_command(outcome.await, &policy, actor, identity, expectation).await
     }
 }
 
@@ -160,13 +158,7 @@ async fn retire_tx(
     input: RetireTxInput<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<DefinitionDetailView> {
-    let RetireTxInput {
-        policy,
-        request,
-        actor,
-        identity,
-        audit,
-    } = input;
+    let RetireTxInput { policy, request, actor, identity, audit } = input;
     ensure_definition_admin_permission(rbac, actor, &policy, session).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
@@ -178,40 +170,24 @@ async fn retire_tx(
     {
         return Ok(view);
     }
-    let published = db
-        .bpm_workflow()
-        .find_published_by_process_kind(policy.process_kind, session)
-        .await?;
+    let published = db.bpm_workflow().find_published_by_process_kind(policy.process_kind, session).await?;
     let RetireWriteStep::RetireCurrentPublished = decide_retire_write(
         published.as_ref(),
         &graph.definition.base.id,
         request.expected_definition_lock_version,
     )?;
     let Some(mut retired) = published else {
-        return Err(Error::BusinessLogicError(
-            "当前没有可退役的已发布定义".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("当前没有可退役的已发布定义".to_string()));
     };
     let expected = retired.definition_lock_version();
-    retired
-        .retire(participant(actor)?, now()?)
-        .map_err(map_model_error)?;
-    let graph = DefinitionGraph {
-        definition: retired.clone(),
-        nodes: graph.nodes,
-        transitions: graph.transitions,
-    };
+    retired.retire(participant(actor)?, now()?).map_err(map_model_error)?;
+    let graph =
+        DefinitionGraph { definition: retired.clone(), nodes: graph.nodes, transitions: graph.transitions };
     let result_ref = DefinitionCommandResultRef::from_graph(&graph).encode();
     write_receipt(db, &identity.current, &result_ref, session).await?;
     retired.base.version = expected;
-    db.approval_process_definitions()
-        .update(&mut retired, session)
-        .await?;
-    let graph = DefinitionGraph {
-        definition: retired,
-        nodes: graph.nodes,
-        transitions: graph.transitions,
-    };
+    db.approval_process_definitions().update(&mut retired, session).await?;
+    let graph = DefinitionGraph { definition: retired, nodes: graph.nodes, transitions: graph.transitions };
     write_definition_audit(
         audit,
         actor,
@@ -238,9 +214,7 @@ enum RetireWriteStep {
 /// 无 PUBLISHED 或请求 ID 不是当前发布版时返回业务错误。
 fn ensure_retire_target(published_id: Option<&str>, requested_id: &str) -> Result<()> {
     let Some(published_id) = published_id else {
-        return Err(Error::BusinessLogicError(
-            "当前没有可退役的已发布定义".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("当前没有可退役的已发布定义".to_string()));
     };
     if published_id != requested_id {
         return Err(Error::BusinessLogicError("只能退役当前已发布定义".to_string()));
@@ -266,13 +240,14 @@ fn decide_retire_write(
 
 #[cfg(test)]
 mod tests {
+    use bpm::{ParticipantId, ProcessKind, Timestamp};
+
     use super::super::super::definition_dto::DefinitionConfigurationStatus;
     use super::super::super::policy::ApprovalRequirement;
     use super::super::mapping::configuration_status;
     use super::super::test_support::{draft_definition, production_source, source_fn};
     use super::*;
     use crate::error::ErrorCode;
-    use bpm::{ParticipantId, ProcessKind, Timestamp};
 
     /// 只能退役当前 PUBLISHED；无发布版或非当前版失败，锁匹配才允许写回。
     #[test]
@@ -290,10 +265,7 @@ mod tests {
         let published = {
             let mut definition = draft_definition(ProcessKind::StockAdjustment, "n1");
             definition
-                .publish(
-                    ParticipantId::new("admin").unwrap(),
-                    Timestamp::from_unix_secs(2).unwrap(),
-                )
+                .publish(ParticipantId::new("admin").unwrap(), Timestamp::from_unix_secs(2).unwrap())
                 .unwrap();
             definition
         };
@@ -322,11 +294,7 @@ mod tests {
             configuration_status(ApprovalRequirement::ProcessRequired, None, Some(1)),
             DefinitionConfigurationStatus::Draft
         );
-        let retire_tx = source_fn(
-            production_source(),
-            "async fn retire_tx",
-            "async fn build_new_draft",
-        );
+        let retire_tx = source_fn(production_source(), "async fn retire_tx", "async fn build_new_draft");
         assert!(retire_tx.contains("decide_retire_write"));
     }
 }

@@ -52,10 +52,7 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
                     ));
                 }
                 if replay_adapter_registered(message.message_type, message.payload_reference.as_deref())
-                    && matches!(
-                        message.status,
-                        InboxMessageStatus::Failed | InboxMessageStatus::ToManual
-                    )
+                    && matches!(message.status, InboxMessageStatus::Failed | InboxMessageStatus::ToManual)
                     && message.processed_at.is_none()
                     && !known_result_exists(&self.db, message_id, executor).await?
                 {
@@ -86,16 +83,11 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
                 .await?
                 .ok_or_else(|| Error::NotFound("关联入站消息不存在".to_string()))?;
             if !replay_adapter_registered(message.message_type, message.payload_reference.as_deref())
-                || !matches!(
-                    message.status,
-                    InboxMessageStatus::Failed | InboxMessageStatus::ToManual
-                )
+                || !matches!(message.status, InboxMessageStatus::Failed | InboxMessageStatus::ToManual)
                 || message.processed_at.is_some()
                 || known_result_exists(&self.db, message_id, executor).await?
             {
-                return Err(Error::BusinessLogicError(
-                    "原动作当前不满足无结果且可安全重放条件".to_string(),
-                ));
+                return Err(Error::BusinessLogicError("原动作当前不满足无结果且可安全重放条件".to_string()));
             }
             message.update(InboxMessageUpdate {
                 status: Some(InboxMessageStatus::Received),
@@ -118,9 +110,7 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
     ) -> EvidenceFuture<'a, String> {
         Box::pin(async move {
             // 商城事实已移除，当前无已注册的重新归集事实。
-            Err(Error::BusinessLogicError(
-                "当前对象类型没有已注册的重新归集事实".to_string(),
-            ))
+            Err(Error::BusinessLogicError("当前对象类型没有已注册的重新归集事实".to_string()))
         })
     }
 
@@ -156,7 +146,7 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
                         Some(message.base.version),
                         "processed",
                     )?
-                }
+                },
                 "customer_refund" => {
                     if !matches!(
                         evidence.kind,
@@ -178,9 +168,7 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
                     if evidence.kind == ControlledEvidenceKind::DistinctReview
                         && refund.reviewed_by == actor_id
                     {
-                        return Err(Error::BusinessLogicError(
-                            "独立复核人不得是当前处理人".to_string(),
-                        ));
+                        return Err(Error::BusinessLogicError("独立复核人不得是当前处理人".to_string()));
                     }
                     ensure_association(
                         subject,
@@ -188,10 +176,7 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
                             &refund.base.id,
                             refund.sales_return_case_id.as_ref().map(ToString::to_string),
                             refund.original_receipt_id.as_ref().map(ToString::to_string),
-                            refund
-                                .original_receivable_entry_id
-                                .as_ref()
-                                .map(ToString::to_string),
+                            refund.original_receivable_entry_id.as_ref().map(ToString::to_string),
                         ),
                     )?;
                     canonical_verified(
@@ -200,7 +185,7 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
                         Some(refund.base.version),
                         "posted",
                     )?
-                }
+                },
                 "supplier_refund" => {
                     if !matches!(
                         evidence.kind,
@@ -222,9 +207,7 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
                     if evidence.kind == ControlledEvidenceKind::DistinctReview
                         && refund.reviewed_by == actor_id
                     {
-                        return Err(Error::BusinessLogicError(
-                            "独立复核人不得是当前处理人".to_string(),
-                        ));
+                        return Err(Error::BusinessLogicError("独立复核人不得是当前处理人".to_string()));
                     }
                     ensure_association(
                         subject,
@@ -241,7 +224,7 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
                         Some(refund.base.version),
                         "posted",
                     )?
-                }
+                },
                 "supplier_refund_fact" => {
                     ensure_compensation_kind(evidence.kind)?;
                     let fact = self
@@ -265,7 +248,7 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
                         Some(fact.base.version),
                         "succeeded",
                     )?
-                }
+                },
                 "reconciliation_difference_resolution" => {
                     if evidence.kind != ControlledEvidenceKind::DistinctReview {
                         return kind_mismatch();
@@ -291,13 +274,13 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
                         None,
                         "reviewed",
                     )?
-                }
+                },
                 _ => {
                     return Err(Error::BusinessLogicError(format!(
                         "证据对象类型 {} 尚未注册权威验证器",
                         parsed.kind()
-                    )))
-                }
+                    )));
+                },
             };
             Ok(VerifiedEvidence {
                 reference: ControlledEvidenceRef {
@@ -361,10 +344,7 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
 
 async fn known_result_exists(db: &Database, message_id: &str, executor: &mut dyn Executor) -> Result<bool> {
     // 商城事实已移除，仅以供应商退款事实判断已知结果。
-    db.supplier_refund_facts()
-        .exists_by_inbox_message(message_id, executor)
-        .await
-        .map_err(Into::into)
+    db.supplier_refund_facts().exists_by_inbox_message(message_id, executor).await.map_err(Into::into)
 }
 
 fn replay_adapter_registered(message_type: MessageType, payload_reference: Option<&str>) -> bool {
@@ -388,11 +368,7 @@ async fn discover_compensation(
     let Some(id) = subject.business_object_id.as_deref() else {
         return Ok(());
     };
-    let kind = subject
-        .business_object_type
-        .as_deref()
-        .unwrap_or_default()
-        .to_ascii_lowercase();
+    let kind = subject.business_object_type.as_deref().unwrap_or_default().to_ascii_lowercase();
     if kind.is_empty() || kind == "customer_refund" {
         if let Some(refund) = db.customer_refunds().find_by_id(id, executor).await? {
             if refund.status == CustomerRefundStatus::Posted {
@@ -411,12 +387,7 @@ async fn discover_compensation(
     }
     if kind.is_empty() || kind == "supplier_refund_fact" {
         if let Some(refund) = db.supplier_refund_facts().find_by_id(id, executor).await? {
-            push_compensation_refs(
-                evidence,
-                "supplier_refund_fact",
-                &refund.base.id,
-                "供应商退款成功事实",
-            )?;
+            push_compensation_refs(evidence, "supplier_refund_fact", &refund.base.id, "供应商退款成功事实")?;
             return Ok(());
         }
     }
@@ -429,18 +400,8 @@ fn push_compensation_refs(
     id: &str,
     label: &str,
 ) -> Result<()> {
-    refs.push(controlled_ref(
-        ControlledEvidenceKind::CompensationResult,
-        kind,
-        id,
-        label,
-    )?);
-    refs.push(controlled_ref(
-        ControlledEvidenceKind::FinancialReconciliation,
-        kind,
-        id,
-        label,
-    )?);
+    refs.push(controlled_ref(ControlledEvidenceKind::CompensationResult, kind, id, label)?);
+    refs.push(controlled_ref(ControlledEvidenceKind::FinancialReconciliation, kind, id, label)?);
     Ok(())
 }
 
@@ -482,9 +443,7 @@ fn ensure_association(subject: &EvidenceSubject, ids: &[String]) -> Result<()> {
     if bindings.associates_any(ids.iter().map(String::as_str)) {
         return Ok(());
     }
-    Err(Error::ConflictError(
-        "证据记录与当前业务项没有可验证的正式关联".to_string(),
-    ))
+    Err(Error::ConflictError("证据记录与当前业务项没有可验证的正式关联".to_string()))
 }
 
 /// 由权威仓储事实构造 canonical 证据引用。

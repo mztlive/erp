@@ -1,9 +1,10 @@
 //! 销售变更向组合层交付的冻结修订事实；不引用下游领域类型。
 
-use crate::entity::sales_order::BusinessType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId};
 use erp_core::money::Amount;
+
+use crate::entity::sales_order::BusinessType;
 
 /// 已准备正式版本的稳定来源和金额，供下游消费方显式映射。
 #[derive(Debug, Clone)]

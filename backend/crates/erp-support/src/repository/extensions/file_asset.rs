@@ -5,10 +5,10 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as FileAssetExt>::FILE_ASSETS` 等值。
 
-use crate::repository::owned::{DocumentAttachmentRepository, FileAssetRepository};
 use mongodb::Database;
 
 use super::super::file_asset::FileAssetFilter;
+use crate::repository::owned::{DocumentAttachmentRepository, FileAssetRepository};
 
 /// 域 D05 仓储访问器。
 pub trait FileAssetExt {

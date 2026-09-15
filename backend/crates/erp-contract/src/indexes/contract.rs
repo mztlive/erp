@@ -4,14 +4,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::ContractExt;
-use persistence_core::Result;
 
 /// `contract` 集合名。
 pub(crate) const CONTRACTS: &str = <mongodb::Database as ContractExt>::CONTRACTS;
@@ -39,9 +37,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -49,33 +45,21 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 fn contract_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_contracts_contract_no", doc! { "contract_no": 1 }),
-        named_index(
-            "idx_contracts_customer_status",
-            doc! { "customer_id": 1, "status": 1 },
-        ),
+        named_index("idx_contracts_customer_status", doc! { "customer_id": 1, "status": 1 }),
     ]
 }
 
 /// 返回 `contract_revision` 的版本唯一约束与有效期查询索引。
 fn contract_revision_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_contract_revisions_contract_revision",
-            doc! { "contract_id": 1, "revision_no": 1 },
-        ),
-        named_index(
-            "idx_contract_revisions_validity",
-            doc! { "contract_id": 1, "valid_to": 1 },
-        ),
+        unique_index("uk_contract_revisions_contract_revision", doc! { "contract_id": 1, "revision_no": 1 }),
+        named_index("idx_contract_revisions_validity", doc! { "contract_id": 1, "valid_to": 1 }),
     ]
 }
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -105,16 +89,9 @@ mod tests {
             .unwrap();
         assert_eq!(no_index.keys, doc! { "contract_no": 1 });
         assert_eq!(no_index.options.as_ref().unwrap().unique, Some(true));
-        assert!(no_index
-            .options
-            .as_ref()
-            .unwrap()
-            .partial_filter_expression
-            .is_none());
+        assert!(no_index.options.as_ref().unwrap().partial_filter_expression.is_none());
 
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "customer_id": 1, "status": 1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "customer_id": 1, "status": 1 }));
     }
 
     #[test]
@@ -127,8 +104,6 @@ mod tests {
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
                 && index.keys == doc! { "contract_id": 1, "revision_no": 1 }
         }));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "contract_id": 1, "valid_to": 1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "contract_id": 1, "valid_to": 1 }));
     }
 }

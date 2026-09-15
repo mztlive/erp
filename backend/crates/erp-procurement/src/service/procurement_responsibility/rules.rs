@@ -1,5 +1,7 @@
 //! 规则选择器校验和采购集合写入，始终加入调用方执行器。
 
+use persistence_core::Executor;
+
 use super::ProcurementResponsibilityService;
 use crate::entity::procurement_responsibility::{
     ProcurementResponsibilityRule, ProcurementResponsibilityRuleData,
@@ -8,7 +10,6 @@ use crate::entity::procurement_responsibility::{
 use crate::ports::procurement_responsibility::ProcurementResponsibilityFactsPort;
 use crate::repository::ProcurementResponsibilityExt;
 use crate::{Error, Result};
-use persistence_core::Executor;
 
 impl ProcurementResponsibilityService {
     /// 创建已完成校验的规则；唯一冲突保持原采购责任错误文案。
@@ -17,10 +18,7 @@ impl ProcurementResponsibilityService {
         rule: &ProcurementResponsibilityRule,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .procurement_responsibility_rules()
-            .create(rule, executor)
-            .await?;
+        self.db.procurement_responsibility_rules().create(rule, executor).await?;
         Ok(())
     }
 
@@ -43,10 +41,7 @@ impl ProcurementResponsibilityService {
             return Err(Error::ConflictError("采购责任规则版本已变化".to_string()));
         }
         rule.update(data, updated_by).map_err(Error::Logic)?;
-        self.db
-            .procurement_responsibility_rules()
-            .update(&mut rule, executor)
-            .await?;
+        self.db.procurement_responsibility_rules().update(&mut rule, executor).await?;
         Ok(rule)
     }
 
@@ -71,14 +66,12 @@ impl ProcurementResponsibilityService {
             ProcurementResponsibilitySelectorReference::Sku(id) => port.sku_exists(id, executor).await?,
             ProcurementResponsibilitySelectorReference::Category(id) => {
                 port.category_exists(id, executor).await?
-            }
+            },
             ProcurementResponsibilitySelectorReference::None => return Ok(()),
         };
         if exists {
             return Ok(());
         }
-        Err(Error::ValidationError(
-            "采购责任规则引用的目录实体不存在或已删除".to_string(),
-        ))
+        Err(Error::ValidationError("采购责任规则引用的目录实体不存在或已删除".to_string()))
     }
 }

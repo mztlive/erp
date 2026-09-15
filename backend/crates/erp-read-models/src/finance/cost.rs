@@ -2,7 +2,6 @@
 mod paging;
 mod snapshot;
 
-use crate::{Error, Result};
 use application_core::{AuditActor, PageView};
 use erp_finance::dto::cost::{
     CostAllocationListParams, CostAllocationView, CostEntryListParams, ScopedCostEntryView,
@@ -10,6 +9,8 @@ use erp_finance::dto::cost::{
 use erp_identity::SharedRbacService;
 use mongodb::Database;
 use serde::Serialize;
+
+use crate::{Error, Result};
 
 /// 查询直接复用领域 DTO；避免将 URL 数值参数经 serde flatten 再解码。
 pub type CostReadParams = CostEntryListParams;
@@ -53,16 +54,8 @@ impl CostReadModel {
     ) -> Result<CostReadResult<PageView<ScopedCostEntryView>>> {
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
-        let mut snapshot = self
-            .checked(
-                &params,
-                None,
-                "cost_entry",
-                "list",
-                actor,
-                params.scope_version.as_deref(),
-            )
-            .await?;
+        let mut snapshot =
+            self.checked(&params, None, "cost_entry", "list", actor, params.scope_version.as_deref()).await?;
         let rows = std::mem::take(&mut snapshot.rows);
         Ok(snapshot.result(paging::costs(rows, query.paging)))
     }
@@ -72,13 +65,9 @@ impl CostReadModel {
     /// # 错误
     /// 不可见与不存在统一为 NotFound；撤权后不交付旧宽范围事实。
     pub async fn detail(&self, id: &str, actor: &AuditActor) -> Result<CostReadResult<ScopedCostEntryView>> {
-        let mut snapshot = self
-            .checked(&empty_query(), Some(id), "cost_entry", "detail", actor, None)
-            .await?;
-        let row = snapshot
-            .rows
-            .pop()
-            .ok_or_else(|| Error::NotFound("成本不存在或无权查看".into()))?;
+        let mut snapshot =
+            self.checked(&empty_query(), Some(id), "cost_entry", "detail", actor, None).await?;
+        let row = snapshot.rows.pop().ok_or_else(|| Error::NotFound("成本不存在或无权查看".into()))?;
         Ok(snapshot.result(row))
     }
     /// 分配列表使用自己的读取权限，只输出当前授权且匹配业务条件的行。
@@ -95,14 +84,7 @@ impl CostReadModel {
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
         let id = query.cost_entry_id.as_ref().map(|id| id.as_ref());
         let mut snapshot = self
-            .checked(
-                &empty_query(),
-                id,
-                "cost_allocation",
-                "list",
-                actor,
-                params.scope_version.as_deref(),
-            )
+            .checked(&empty_query(), id, "cost_allocation", "list", actor, params.scope_version.as_deref())
             .await?;
         let entries = std::mem::take(&mut snapshot.rows);
         let rows = entries.into_iter().flat_map(|entry| entry.allocations).collect();
@@ -113,9 +95,7 @@ impl CostReadModel {
 /// 首页面后必须携带同一范围版本，禁止不同授权页拼接。
 fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
     if page > 1 && version.is_none_or(str::is_empty) {
-        return Err(Error::ConflictError(
-            "DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into(),
-        ));
+        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into()));
     }
     Ok(())
 }

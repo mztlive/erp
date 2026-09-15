@@ -5,9 +5,8 @@
 //! [`erp_core::common::state::ensure_transition`] 拒绝（从高状态回低状态即非法迁移）。
 //! 本模块只承载状态定义与邻接矩阵，不引用订单实体（避免与 `fulfillment_order` 循环依赖）。
 
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::state::DocumentState;
+use serde::{Deserialize, Serialize};
 
 /// 可由订单与原供应商动作共同证明的业务终态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -102,12 +101,7 @@ impl DocumentState for FulfillmentStatus {
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Received => &[Self::Submitting, Self::Exception],
-            Self::Submitting => &[
-                Self::Accepted,
-                Self::Rejected,
-                Self::ResultUnknown,
-                Self::Exception,
-            ],
+            Self::Submitting => &[Self::Accepted, Self::Rejected, Self::ResultUnknown, Self::Exception],
             Self::Accepted => &[Self::Fulfilling, Self::Exception],
             Self::Fulfilling => &[Self::Shipped, Self::Completed, Self::Exception],
             Self::Shipped => &[Self::Completed, Self::Exception],
@@ -249,9 +243,10 @@ impl DocumentState for RefundStatus {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use erp_core::common::state::ensure_transition;
     use erp_core::Error;
+    use erp_core::common::state::ensure_transition;
+
+    use super::*;
 
     #[test]
     fn terminal_states_are_absorbing() {
@@ -292,11 +287,7 @@ mod tests {
         }
 
         assert!(ensure_transition(FulfillmentStatus::Submitting, FulfillmentStatus::ResultUnknown).is_ok());
-        for to in [
-            FulfillmentStatus::Accepted,
-            FulfillmentStatus::Rejected,
-            FulfillmentStatus::Exception,
-        ] {
+        for to in [FulfillmentStatus::Accepted, FulfillmentStatus::Rejected, FulfillmentStatus::Exception] {
             assert!(
                 ensure_transition(FulfillmentStatus::ResultUnknown, to).is_ok(),
                 "RESULT_UNKNOWN 可解析为 {to:?}"
@@ -311,14 +302,8 @@ mod tests {
             ensure_transition(CancelStatus::None, CancelStatus::Canceled).is_err(),
             "跳过 CANCEL_PENDING 非法"
         );
-        assert!(
-            ensure_transition(CancelStatus::Canceled, CancelStatus::Manual).is_err(),
-            "CANCELED 是终态"
-        );
-        assert!(
-            ensure_transition(CancelStatus::Canceled, CancelStatus::None).is_err(),
-            "取消进度不得倒退"
-        );
+        assert!(ensure_transition(CancelStatus::Canceled, CancelStatus::Manual).is_err(), "CANCELED 是终态");
+        assert!(ensure_transition(CancelStatus::Canceled, CancelStatus::None).is_err(), "取消进度不得倒退");
     }
 
     #[test]
@@ -327,10 +312,7 @@ mod tests {
             ensure_transition(RefundStatus::None, RefundStatus::Refunded).is_err(),
             "跳过 REFUND_PENDING 非法"
         );
-        assert!(
-            ensure_transition(RefundStatus::Refunded, RefundStatus::Partial).is_err(),
-            "REFUNDED 是终态"
-        );
+        assert!(ensure_transition(RefundStatus::Refunded, RefundStatus::Partial).is_err(), "REFUNDED 是终态");
         assert!(
             ensure_transition(RefundStatus::RefundFailed, RefundStatus::None).is_err(),
             "退款进度不得倒退"

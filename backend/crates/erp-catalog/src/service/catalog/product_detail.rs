@@ -111,12 +111,7 @@ impl CatalogService {
             .skus_for_product(&ProductId::new(product_id.to_string()), &mut NoTransaction)
             .await?;
         if skus.is_empty() {
-            return Ok(PageView {
-                items: Vec::new(),
-                total: 0,
-                page: 1,
-                page_size: 100,
-            });
+            return Ok(PageView { items: Vec::new(), total: 0, page: 1, page_size: 100 });
         }
         let mut merged: Vec<SkuRevisionView> = Vec::new();
         let mut total: i64 = 0;
@@ -137,17 +132,9 @@ impl CatalogService {
         }
         // 跨 SKU 修订按序号倒序，序号相同按创建时间倒序保证确定性。
         merged.sort_by(|left, right| {
-            right
-                .revision_no
-                .cmp(&left.revision_no)
-                .then_with(|| right.created_at.cmp(&left.created_at))
+            right.revision_no.cmp(&left.revision_no).then_with(|| right.created_at.cmp(&left.created_at))
         });
         merged.truncate(100);
-        Ok(PageView {
-            items: merged,
-            total,
-            page: 1,
-            page_size: 100,
-        })
+        Ok(PageView { items: merged, total, page: 1, page_size: 100 })
     }
 }

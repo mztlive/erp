@@ -10,9 +10,6 @@ use std::str::FromStr;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     CostAllocationId, CostEntryId, InboxMessageId, PayableEntryId, PaymentAllocationId, SupplierAccountId,
@@ -22,6 +19,8 @@ use erp_core::ids::{
 use erp_core::money::{Amount, Quantity};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 
 /// 外部退款号最大长度。
 const EXTERNAL_REFUND_NO_MAX_LEN: usize = 64;
@@ -348,11 +347,12 @@ fn ensure_non_negative(value: Amount, message: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::ids::{
         CostAllocationId, CostEntryId, InboxMessageId, PayableEntryId, PaymentAllocationId,
         SupplierRefundAllocationId, SupplierRefundFactId, SupplierRefundId,
     };
+
+    use super::*;
 
     fn sample_fact_data() -> SupplierRefundFactData {
         SupplierRefundFactData {
@@ -401,36 +401,24 @@ mod tests {
 
     #[test]
     fn fact_new_rejects_non_positive_refund_amount() {
-        for amount in [
-            Amount::from_str("0.00").unwrap(),
-            Amount::from_str("-1.00").unwrap(),
-        ] {
-            let data = SupplierRefundFactData {
-                refund_amount: amount,
-                ..sample_fact_data()
-            };
+        for amount in [Amount::from_str("0.00").unwrap(), Amount::from_str("-1.00").unwrap()] {
+            let data = SupplierRefundFactData { refund_amount: amount, ..sample_fact_data() };
             assert!(SupplierRefundFact::new(SupplierRefundFactId::new("fact-2"), data).is_err());
         }
     }
 
     #[test]
     fn fact_new_rejects_empty_or_overlong_fields() {
-        let empty_refund_no = SupplierRefundFactData {
-            external_refund_no: "  ".to_string(),
-            ..sample_fact_data()
-        };
+        let empty_refund_no =
+            SupplierRefundFactData { external_refund_no: "  ".to_string(), ..sample_fact_data() };
         assert!(SupplierRefundFact::new(SupplierRefundFactId::new("fact-3"), empty_refund_no).is_err());
 
-        let overlong_version = SupplierRefundFactData {
-            external_refund_version: "v".repeat(65),
-            ..sample_fact_data()
-        };
+        let overlong_version =
+            SupplierRefundFactData { external_refund_version: "v".repeat(65), ..sample_fact_data() };
         assert!(SupplierRefundFact::new(SupplierRefundFactId::new("fact-4"), overlong_version).is_err());
 
-        let empty_event_id = SupplierRefundFactData {
-            source_event_id: "  ".to_string(),
-            ..sample_fact_data()
-        };
+        let empty_event_id =
+            SupplierRefundFactData { source_event_id: "  ".to_string(), ..sample_fact_data() };
         assert!(SupplierRefundFact::new(SupplierRefundFactId::new("fact-5"), empty_event_id).is_err());
     }
 
@@ -455,10 +443,7 @@ mod tests {
             SupplierRefundAllocation::new(SupplierRefundAllocationId::new("allocation-2"), reverse_data)
                 .unwrap();
         assert_eq!(reverse.allocation_action, AllocationAction::Reverse);
-        assert_eq!(
-            reverse.reverses_allocation_id,
-            Some(SupplierRefundAllocationId::new("allocation-1"))
-        );
+        assert_eq!(reverse.reverses_allocation_id, Some(SupplierRefundAllocationId::new("allocation-1")));
     }
 
     #[test]
@@ -468,22 +453,26 @@ mod tests {
             reverses_allocation_id: None,
             ..sample_allocation_data()
         };
-        assert!(SupplierRefundAllocation::new(
-            SupplierRefundAllocationId::new("allocation-3"),
-            reverse_without_original
-        )
-        .is_err());
+        assert!(
+            SupplierRefundAllocation::new(
+                SupplierRefundAllocationId::new("allocation-3"),
+                reverse_without_original
+            )
+            .is_err()
+        );
 
         let apply_with_reference = SupplierRefundAllocationData {
             allocation_action: AllocationAction::Apply,
             reverses_allocation_id: Some(SupplierRefundAllocationId::new("allocation-1")),
             ..sample_allocation_data()
         };
-        assert!(SupplierRefundAllocation::new(
-            SupplierRefundAllocationId::new("allocation-4"),
-            apply_with_reference
-        )
-        .is_err());
+        assert!(
+            SupplierRefundAllocation::new(
+                SupplierRefundAllocationId::new("allocation-4"),
+                apply_with_reference
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -494,11 +483,10 @@ mod tests {
             cash_refund_amount: Amount::from_str("-29.97").unwrap(),
             ..sample_allocation_data()
         };
-        assert!(SupplierRefundAllocation::new(
-            SupplierRefundAllocationId::new("allocation-5"),
-            negative_gross
-        )
-        .is_err());
+        assert!(
+            SupplierRefundAllocation::new(SupplierRefundAllocationId::new("allocation-5"), negative_gross)
+                .is_err()
+        );
     }
 
     #[test]
@@ -550,8 +538,7 @@ mod tests {
             sample_allocation_data(),
         )
         .unwrap();
-        fact.validate_allocations(std::slice::from_ref(&allocation))
-            .unwrap();
+        fact.validate_allocations(std::slice::from_ref(&allocation)).unwrap();
 
         let half = SupplierRefundAllocation::new(
             SupplierRefundAllocationId::new("allocation-2"),
@@ -566,10 +553,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(
-            fact.validate_allocations(&[allocation, half]).is_err(),
-            "合计不等于退款头金额必须被拒绝"
-        );
+        assert!(fact.validate_allocations(&[allocation, half]).is_err(), "合计不等于退款头金额必须被拒绝");
     }
 
     #[test]

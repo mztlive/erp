@@ -2,12 +2,12 @@
 
 use std::collections::HashSet;
 
+use erp_workflow::ports::{ObjectFactMap, ObjectKind};
 use persistence_core::Executor;
 
 use super::super::object_ids;
 use super::mapping;
 use crate::errors::Result;
-use erp_workflow::ports::{ObjectFactMap, ObjectKind};
 
 impl super::super::WorkItemFactsReader {
     /// Load receivable-account identity, counterparty and impact.
@@ -25,18 +25,14 @@ impl super::super::WorkItemFactsReader {
         if accounts.is_empty() {
             return Ok(());
         }
-        let party_ids = accounts
-            .iter()
-            .map(|item| item.counterparty_party_id.to_string())
-            .collect::<Vec<_>>();
+        let party_ids =
+            accounts.iter().map(|item| item.counterparty_party_id.to_string()).collect::<Vec<_>>();
         let party_names = self.party_legal_names(&party_ids, executor).await?;
         let voucher_revisions = self.receivable_voucher_revision_ids(&accounts, executor).await?;
         for account in accounts {
             let fact = mapping::receivable_account_fact(
                 &account,
-                party_names
-                    .get(&account.counterparty_party_id.to_string())
-                    .cloned(),
+                party_names.get(&account.counterparty_party_id.to_string()).cloned(),
                 voucher_revisions.contains(&account.source_sales_order_revision_id.to_string()),
             );
             facts.insert((ObjectKind::ReceivableAccount, account.base.id.clone()), fact);

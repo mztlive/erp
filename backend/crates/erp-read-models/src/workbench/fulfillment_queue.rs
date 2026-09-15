@@ -5,6 +5,8 @@
 
 use std::collections::HashMap;
 
+use application_core::AuditActor;
+use application_core::query::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::Instant;
 use erp_workflow::entity::work_item::{
     QueueContextField, QueueContextIdentity, WorkItemPriority, WorkItemType,
@@ -13,17 +15,13 @@ use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::access::{ActorAccess, has_execution_permissions};
+use super::query::ensure_queue_context;
+use super::{WorkItemDueFilter, WorkbenchReadService};
 use crate::errors::{Error, Result};
 use crate::fulfillment_queue::{
     FulfillmentQueueFilter as RepositoryFilter, FulfillmentQueueItemRow, FulfillmentQueueRepository,
 };
-use application_core::query::{normalized_text, page_or_default, page_size_or_default};
-use application_core::AuditActor;
-
-use super::access::{has_execution_permissions, ActorAccess};
-use super::query::ensure_queue_context;
-use super::WorkItemDueFilter;
-use super::WorkbenchReadService;
 
 const ALL_OPERATION_TYPES: [FulfillmentQueueOperationType; 5] = [
     FulfillmentQueueOperationType::Receipt,
@@ -372,16 +370,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             )
             .await?;
 
-        let items = repository_page
-            .items
-            .into_iter()
-            .map(map_item)
-            .collect::<Result<Vec<_>>>()?;
-        let counts: HashMap<_, _> = repository_page
-            .metrics
-            .into_iter()
-            .map(|metric| (metric.operation_type, metric.count))
-            .collect();
+        let items = repository_page.items.into_iter().map(map_item).collect::<Result<Vec<_>>>()?;
+        let counts: HashMap<_, _> =
+            repository_page.metrics.into_iter().map(|metric| (metric.operation_type, metric.count)).collect();
         let metrics = visible_types
             .iter()
             .copied()
@@ -393,10 +384,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let warehouse_options = repository_page
             .warehouses
             .into_iter()
-            .map(|warehouse| FulfillmentQueueWarehouseView {
-                id: warehouse.id,
-                label: warehouse.label,
-            })
+            .map(|warehouse| FulfillmentQueueWarehouseView { id: warehouse.id, label: warehouse.label })
             .collect();
 
         Ok(FulfillmentQueuePageView {
@@ -429,10 +417,7 @@ fn parse_operation_types(value: Option<&str>) -> Result<Vec<FulfillmentQueueOper
     if requested.is_empty() {
         return Err(Error::ValidationError("履约作业类型不能为空".to_string()));
     }
-    Ok(ALL_OPERATION_TYPES
-        .into_iter()
-        .filter(|operation_type| requested.contains(operation_type))
-        .collect())
+    Ok(ALL_OPERATION_TYPES.into_iter().filter(|operation_type| requested.contains(operation_type)).collect())
 }
 
 fn visible_operation_types(
@@ -460,22 +445,15 @@ fn ensure_timezone(timezone: Option<&str>) -> Result<()> {
     {
         return Ok(());
     }
-    Err(Error::ValidationError(
-        "履约队列时区只支持 Asia/Shanghai".to_string(),
-    ))
+    Err(Error::ValidationError("履约队列时区只支持 Asia/Shanghai".to_string()))
 }
 
 fn due_bounds(due: Option<WorkItemDueFilter>) -> Result<(Option<i64>, Option<i64>)> {
     let Some(due) = due else {
         return Ok((None, None));
     };
-    let window = due
-        .window_at(Instant::now())
-        .map_err(|error| Error::Internal(error.to_string()))?;
-    Ok((
-        window.from.map(Instant::unix_secs),
-        Some(window.before.unix_secs()),
-    ))
+    let window = due.window_at(Instant::now()).map_err(|error| Error::Internal(error.to_string()))?;
+    Ok((window.from.map(Instant::unix_secs), Some(window.before.unix_secs())))
 }
 
 fn fulfillment_queue_context_id(
@@ -487,10 +465,7 @@ fn fulfillment_queue_context_id(
         "fulfillment-queue",
         [
             QueueContextField::scalar("actor", actor_id),
-            QueueContextField::set(
-                "types",
-                visible_types.iter().map(|value| value.as_str().to_string()),
-            ),
+            QueueContextField::set("types", visible_types.iter().map(|value| value.as_str().to_string())),
             QueueContextField::optional("operation", query.operation_id.as_deref()),
             QueueContextField::optional("sales_order", query.sales_order_id.as_deref()),
             QueueContextField::optional("purchase_order", query.purchase_order_id.as_deref()),
@@ -560,17 +535,14 @@ fn empty_page(page: u64, page_size: u32, context_id: String) -> FulfillmentQueue
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_timezone, parse_operation_types, FulfillmentQueueOperationType, ALL_OPERATION_TYPES};
+    use super::{ALL_OPERATION_TYPES, FulfillmentQueueOperationType, ensure_timezone, parse_operation_types};
 
     #[test]
     fn operation_types_are_canonical_and_deduplicated() {
         let parsed = parse_operation_types(Some("SERVICE,RECEIPT,SERVICE")).unwrap();
         assert_eq!(
             parsed,
-            vec![
-                FulfillmentQueueOperationType::Receipt,
-                FulfillmentQueueOperationType::Service,
-            ]
+            vec![FulfillmentQueueOperationType::Receipt, FulfillmentQueueOperationType::Service,]
         );
     }
 

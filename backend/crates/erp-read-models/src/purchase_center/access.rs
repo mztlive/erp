@@ -3,18 +3,17 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_procurement::PurchaseResolvedScope;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
 use erp_procurement::ports::PurchaseDataScopePort;
-use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
 use erp_procurement::service::purchase_order::access::{
-    attach_history, PurchaseAccess as DomainPurchaseAccess,
+    PurchaseAccess as DomainPurchaseAccess, attach_history,
 };
-use erp_procurement::PurchaseResolvedScope;
 use erp_workflow::DocumentRegistryExt;
 use mongodb::Database;
-use persistence_core::Executor;
-use persistence_core::Transactional;
+use persistence_core::{Executor, Transactional};
 
 use crate::{Error, Result};
 
@@ -41,10 +40,7 @@ impl PurchaseAccess {
     /// # 关键业务约束
     /// 不得在构造时补公司范围或读取登录人默认组织。
     pub fn new(db: Database, scope: Arc<dyn PurchaseDataScopePort>) -> Self {
-        Self {
-            inner: DomainPurchaseAccess::new(db.clone(), scope),
-            db,
-        }
+        Self { inner: DomainPurchaseAccess::new(db.clone(), scope), db }
     }
 
     /// 在独立事务中重验详情权限和当前责任，返回业务版本绑定的范围版本。
@@ -77,10 +73,8 @@ impl PurchaseAccess {
                         .find_authorized(&id, &scope, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("采购单不存在或无权查看".into()))?;
-                    let version = format!(
-                        "{}:{}:{}",
-                        context.scope_version, order.base.id, order.base.version
-                    );
+                    let version =
+                        format!("{}:{}:{}", context.scope_version, order.base.id, order.base.version);
                     Ok((order, version))
                 })
             })
@@ -110,10 +104,7 @@ impl PurchaseAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<PurchaseOrder> {
-        self.inner
-            .require_object(actor, action, id, &[], executor)
-            .await
-            .map_err(crate::Error::from)
+        self.inner.require_object(actor, action, id, &[], executor).await.map_err(crate::Error::from)
     }
 
     /// 新单使用即将持久化的显式责任解释创建与提交范围。
@@ -137,10 +128,7 @@ impl PurchaseAccess {
         order: &PurchaseOrder,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.inner
-            .ensure_create_and_submit(actor, order, executor)
-            .await
-            .map_err(crate::Error::from)
+        self.inner.ensure_create_and_submit(actor, order, executor).await.map_err(crate::Error::from)
     }
 
     /// 按资源动作证明范围，读取动作附加合法历史参与。
@@ -191,10 +179,7 @@ impl PurchaseAccess {
         scope: &PurchaseReadScope,
         executor: &mut dyn Executor,
     ) -> Result<Option<Vec<String>>> {
-        self.inner
-            .authorized_source_ids(scope, executor)
-            .await
-            .map_err(crate::Error::from)
+        self.inner.authorized_source_ids(scope, executor).await.map_err(crate::Error::from)
     }
 
     /// 完整读取动作已由身份域证明，参与事实独立补充读取并继续受个人上限约束。
@@ -212,11 +197,7 @@ impl PurchaseAccess {
     /// # 关键业务约束
     /// 不得由历史业绩快照推导参与资格。
     async fn participant_orders(&self, user: &str, executor: &mut dyn Executor) -> Result<Vec<String>> {
-        let ids = self
-            .db
-            .document_participants()
-            .document_ids_by_user(user, executor)
-            .await?;
+        let ids = self.db.document_participants().document_ids_by_user(user, executor).await?;
         if ids.len() > 10_000 {
             return Err(Error::ValidationError("历史参与范围超过查询上限".into()));
         }
@@ -250,15 +231,7 @@ mod tests {
         for action in ["list", "detail"] {
             assert!(allows_history(action));
         }
-        for action in [
-            "create",
-            "update",
-            "submit",
-            "cancel_approval",
-            "delete",
-            "transfer",
-            "*",
-        ] {
+        for action in ["create", "update", "submit", "cancel_approval", "delete", "transfer", "*"] {
             assert!(!allows_history(action));
         }
     }

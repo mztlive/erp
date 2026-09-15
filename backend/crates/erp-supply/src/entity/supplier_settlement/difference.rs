@@ -7,13 +7,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierSettlementDifferenceId, SupplierSettlementItemId};
 use erp_core::money::Amount;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 处理结果文本最大长度。
 const RESOLUTION_MAX_LEN: usize = 512;
@@ -206,19 +205,11 @@ impl SettlementDifferenceConclusion {
         if kind.requires_evidence() && evidence_reference_ids.is_empty() {
             return Err(Error::from("已补偿或无需调整关闭必须提供正式证据引用"));
         }
-        let encoded = format!(
-            "reason={reason_code};evidence={}",
-            evidence_reference_ids.join(",")
-        );
+        let encoded = format!("reason={reason_code};evidence={}", evidence_reference_ids.join(","));
         if encoded.len() > RESOLUTION_MAX_LEN {
             return Err(Error::from("差异结论的原因与证据引用合计不能超过512字节"));
         }
-        Ok(Self {
-            kind,
-            reason_code,
-            evidence_reference_ids,
-            encoded,
-        })
+        Ok(Self { kind, reason_code, evidence_reference_ids, encoded })
     }
 
     /// 返回结论对应的差异状态。
@@ -434,22 +425,12 @@ impl SupplierSettlementDifference {
     pub fn update(&mut self, update: SupplierSettlementDifferenceUpdate) -> Result<()> {
         let status = update.status.unwrap_or(self.status);
         let resolution = if let Some(resolution) = update.resolution {
-            Some(normalize_required_text(
-                resolution,
-                "处理结果不能为空",
-                RESOLUTION_MAX_LEN,
-                "处理结果过长",
-            )?)
+            Some(normalize_required_text(resolution, "处理结果不能为空", RESOLUTION_MAX_LEN, "处理结果过长")?)
         } else {
             self.resolution.clone()
         };
         let resolved_by = if let Some(resolved_by) = update.resolved_by {
-            Some(normalize_required_text(
-                resolved_by,
-                "处理人不能为空",
-                ACTOR_MAX_LEN,
-                "处理人过长",
-            )?)
+            Some(normalize_required_text(resolved_by, "处理人不能为空", ACTOR_MAX_LEN, "处理人过长")?)
         } else {
             self.resolved_by.clone()
         };
@@ -488,9 +469,7 @@ fn normalize_evidence_references(mut values: Vec<String>) -> Result<Vec<String>>
         *value = value.trim().to_string();
         if value.is_empty()
             || value.len() > 128
-            || value
-                .chars()
-                .any(|character| matches!(character, '|' | ';' | ','))
+            || value.chars().any(|character| matches!(character, '|' | ';' | ','))
         {
             return Err(Error::from("证据引用必须非空、长度不超过128且不得包含分隔符"));
         }
@@ -525,16 +504,18 @@ fn validate_resolution_state(
         SettlementDifferenceStatus::Pending if trio_present => Err(Error::from("待处理差异不得填写处理结果")),
         SettlementDifferenceStatus::Compensated | SettlementDifferenceStatus::Closed if !trio_complete => {
             Err(Error::from("已补偿或已关闭差异必须填写处理结果"))
-        }
+        },
         _ => Ok(()),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use erp_core::ids::SupplierSettlementDifferenceId;
     use std::str::FromStr;
+
+    use erp_core::ids::SupplierSettlementDifferenceId;
+
+    use super::*;
 
     fn sample_data() -> SupplierSettlementDifferenceData {
         SupplierSettlementDifferenceData {
@@ -591,11 +572,13 @@ mod tests {
             status: SettlementDifferenceStatus::Compensated,
             ..sample_data()
         };
-        assert!(SupplierSettlementDifference::new(
-            SupplierSettlementDifferenceId::new("difference-3"),
-            compensated_without_resolution
-        )
-        .is_err());
+        assert!(
+            SupplierSettlementDifference::new(
+                SupplierSettlementDifferenceId::new("difference-3"),
+                compensated_without_resolution
+            )
+            .is_err()
+        );
 
         let pending_with_resolution = SupplierSettlementDifferenceData {
             resolution: Some("补偿完成".to_string()),
@@ -603,22 +586,26 @@ mod tests {
             resolved_at: Some(Instant::from_unix_secs(1_700_000_000)),
             ..sample_data()
         };
-        assert!(SupplierSettlementDifference::new(
-            SupplierSettlementDifferenceId::new("difference-4"),
-            pending_with_resolution
-        )
-        .is_err());
+        assert!(
+            SupplierSettlementDifference::new(
+                SupplierSettlementDifferenceId::new("difference-4"),
+                pending_with_resolution
+            )
+            .is_err()
+        );
 
         let partial_trio = SupplierSettlementDifferenceData {
             status: SettlementDifferenceStatus::Closed,
             resolution: Some("关闭".to_string()),
             ..sample_data()
         };
-        assert!(SupplierSettlementDifference::new(
-            SupplierSettlementDifferenceId::new("difference-5"),
-            partial_trio
-        )
-        .is_err());
+        assert!(
+            SupplierSettlementDifference::new(
+                SupplierSettlementDifferenceId::new("difference-5"),
+                partial_trio
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -641,32 +628,29 @@ mod tests {
         let conclusion = SettlementDifferenceConclusion::new(
             SettlementDifferenceConclusionKind::ErpAccepted,
             " accept_bill ",
-            vec![
-                " proof-2 ".to_string(),
-                "proof-1".to_string(),
-                "proof-1".to_string(),
-            ],
+            vec![" proof-2 ".to_string(), "proof-1".to_string(), "proof-1".to_string()],
         )
         .unwrap();
         assert_eq!(conclusion.reason_code(), "ACCEPT_BILL");
-        assert_eq!(
-            conclusion.evidence_reference_ids(),
-            &["proof-1".to_string(), "proof-2".to_string()]
-        );
+        assert_eq!(conclusion.evidence_reference_ids(), &["proof-1".to_string(), "proof-2".to_string()]);
         assert_eq!(conclusion.status(), SettlementDifferenceStatus::ErpAcknowledged);
 
-        assert!(SettlementDifferenceConclusion::new(
-            SettlementDifferenceConclusionKind::Compensated,
-            "COMPENSATED_ELSEWHERE",
-            Vec::new(),
-        )
-        .is_err());
-        assert!(SettlementDifferenceConclusion::new(
-            SettlementDifferenceConclusionKind::SupplierAccepted,
-            "ACCEPT_BILL",
-            vec!["proof-1".to_string()],
-        )
-        .is_err());
+        assert!(
+            SettlementDifferenceConclusion::new(
+                SettlementDifferenceConclusionKind::Compensated,
+                "COMPENSATED_ELSEWHERE",
+                Vec::new(),
+            )
+            .is_err()
+        );
+        assert!(
+            SettlementDifferenceConclusion::new(
+                SettlementDifferenceConclusionKind::SupplierAccepted,
+                "ACCEPT_BILL",
+                vec!["proof-1".to_string()],
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -686,13 +670,12 @@ mod tests {
             .record_conclusion(&conclusion, "finance-1", Instant::from_unix_secs(1_700_000_000))
             .unwrap();
         assert_eq!(difference.status, SettlementDifferenceStatus::Closed);
-        assert_eq!(
-            difference.resolution.as_deref(),
-            Some("reason=NO_BUSINESS_IMPACT;evidence=proof-1")
+        assert_eq!(difference.resolution.as_deref(), Some("reason=NO_BUSINESS_IMPACT;evidence=proof-1"));
+        assert!(
+            difference
+                .record_conclusion(&conclusion, "finance-1", Instant::from_unix_secs(1_700_000_001))
+                .is_err()
         );
-        assert!(difference
-            .record_conclusion(&conclusion, "finance-1", Instant::from_unix_secs(1_700_000_001))
-            .is_err());
     }
 
     #[test]
@@ -720,11 +703,7 @@ mod tests {
             .unwrap();
         assert_eq!(difference.status, SettlementDifferenceStatus::Compensated);
         assert_eq!(difference.resolved_by.as_deref(), Some("财务-2"));
-        assert_eq!(
-            difference.difference_type,
-            SettlementDifferenceType::Amount,
-            "关键字段不可修改"
-        );
+        assert_eq!(difference.difference_type, SettlementDifferenceType::Amount, "关键字段不可修改");
     }
 
     #[test]
@@ -734,11 +713,13 @@ mod tests {
             sample_data(),
         )
         .unwrap();
-        assert!(difference
-            .update(SupplierSettlementDifferenceUpdate {
-                status: Some(SettlementDifferenceStatus::Closed),
-                ..Default::default()
-            })
-            .is_err());
+        assert!(
+            difference
+                .update(SupplierSettlementDifferenceUpdate {
+                    status: Some(SettlementDifferenceStatus::Closed),
+                    ..Default::default()
+                })
+                .is_err()
+        );
     }
 }

@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
+use application_core::AuditActor;
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseLineSalesAllocationId, PurchaseOrderId, PurchaseReceiptId, SalesOrderLineId};
@@ -13,6 +14,7 @@ use erp_fulfillment::entity::fulfillment::{
     PurchaseReceiptLineId, QualityResult, ServiceFulfillment, ServiceFulfillmentData, ServiceFulfillmentId,
 };
 use erp_fulfillment::repository::FulfillmentExt;
+use erp_procurement::dto::purchase_order::PurchaseReviewResult;
 use erp_procurement::entity::purchase_order::{
     FulfillmentResponsibility, PurchaseLineType, PurchaseOrder, PurchaseOrderSubmission,
     PurchaseOrderSubmissionLine,
@@ -22,11 +24,9 @@ use erp_workflow::entity::work_item::WorkItemStatus;
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction};
 
-use super::allocation_maintenance::prepare_current_sales_allocations;
 use super::PurchaseOrderProcess;
+use super::allocation_maintenance::prepare_current_sales_allocations;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_procurement::dto::purchase_order::PurchaseReviewResult;
 
 impl PurchaseOrderProcess {
     /// 读取并完成采购形式化的事务外领域计算。
@@ -65,22 +65,16 @@ impl PurchaseOrderProcess {
         submission
             .ensure_pending()
             .map_err(|_| Error::ConflictError("提交已审核或已失效，请勿重复生效".to_string()))?;
-        let submission_lines = self
-            .db
-            .purchase_order()
-            .list_submission_lines(&submission_id, &mut NoTransaction)
-            .await?;
+        let submission_lines =
+            self.db.purchase_order().list_submission_lines(&submission_id, &mut NoTransaction).await?;
         let revision_no = self.domain().next_revision_no(&order).await?;
         let (revision, revision_lines) = self
             .domain()
             .build_effective_revision(&order, &submission, &submission_lines, revision_no)
             .await?;
-        let payable = self
-            .build_payable(&order, &submission, &submission_lines, actor.id())
-            .await?;
-        let cost_entries = self
-            .build_confirmed_cost_entries(&submission, &submission_lines, revision_no)
-            .await?;
+        let payable = self.build_payable(&order, &submission, &submission_lines, actor.id()).await?;
+        let cost_entries =
+            self.build_confirmed_cost_entries(&submission, &submission_lines, revision_no).await?;
         let result = PurchaseReviewResult {
             work_item_id: String::new(),
             work_item_status: WorkItemStatus::Completed.as_str().to_string(),
@@ -114,10 +108,8 @@ impl PurchaseOrderProcess {
         submission: &PurchaseOrderSubmission,
         submission_lines: &[PurchaseOrderSubmissionLine],
         actor_id: &str,
-    ) -> Result<(
-        erp_finance::entity::payable::PayableAccount,
-        erp_finance::entity::payable::PayableEntry,
-    )> {
+    ) -> Result<(erp_finance::entity::payable::PayableAccount, erp_finance::entity::payable::PayableEntry)>
+    {
         let expected_delivery_on = submission_lines
             .iter()
             .filter(|line| line.line_type == PurchaseLineType::ItemService)
@@ -152,16 +144,14 @@ impl PurchaseOrderProcess {
     ) -> Result<Vec<erp_finance::entity::cost::CostEntry>> {
         let facts = lines
             .iter()
-            .map(
-                |line| erp_finance::service::cost::purchase_initial::PurchaseCostLine {
-                    id: line.base.id.clone(),
-                    is_logistics: line.line_type == PurchaseLineType::LogisticsFee,
-                    gross_amount: line.gross_amount,
-                    net_amount: line.net_amount,
-                    tax_amount: line.tax_amount,
-                    input_tax_rate: line.input_tax_rate,
-                },
-            )
+            .map(|line| erp_finance::service::cost::purchase_initial::PurchaseCostLine {
+                id: line.base.id.clone(),
+                is_logistics: line.line_type == PurchaseLineType::LogisticsFee,
+                gross_amount: line.gross_amount,
+                net_amount: line.net_amount,
+                tax_amount: line.tax_amount,
+                input_tax_rate: line.input_tax_rate,
+            })
             .collect::<Vec<_>>();
         Ok(erp_finance::service::cost::purchase_initial::prepare(
             submission.purchase_order_id.as_ref(),
@@ -208,10 +198,7 @@ pub struct FormalizedOrderPersist {
     /// 生效版本行。
     revision_lines: Vec<erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine>,
     /// 应付账户与分录。
-    payable: (
-        erp_finance::entity::payable::PayableAccount,
-        erp_finance::entity::payable::PayableEntry,
-    ),
+    payable: (erp_finance::entity::payable::PayableAccount, erp_finance::entity::payable::PayableEntry),
     /// 确认成本分录。
     cost_entries: Vec<erp_finance::entity::cost::CostEntry>,
 }
@@ -261,9 +248,7 @@ async fn create_receipt_draft_for_order(
             .map_err(Error::Logic)?,
         );
     }
-    db.fulfillment()
-        .create_purchase_receipt_with_lines(&receipt, &lines, executor)
-        .await?;
+    db.fulfillment().create_purchase_receipt_with_lines(&receipt, &lines, executor).await?;
     crate::fulfillment_execution::task::ensure_fulfillment_task(
         db,
         crate::fulfillment_execution::task::FulfillmentTaskObject::PurchaseReceipt(&receipt),
@@ -335,9 +320,7 @@ async fn create_delivery_draft_for_order(
     if lines.is_empty() {
         return Ok(());
     }
-    db.fulfillment()
-        .create_delivery_with_lines(&delivery, &lines, executor)
-        .await?;
+    db.fulfillment().create_delivery_with_lines(&delivery, &lines, executor).await?;
     crate::fulfillment_execution::task::ensure_fulfillment_task(
         db,
         crate::fulfillment_execution::task::FulfillmentTaskObject::Delivery(&delivery),
@@ -439,10 +422,7 @@ pub struct FormalizedPurchaseEffects {
     order: PurchaseOrder,
     revision_lines: Vec<erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine>,
     allocations_by_line: HashMap<String, PurchaseLineSalesAllocationId>,
-    payable: (
-        erp_finance::entity::payable::PayableAccount,
-        erp_finance::entity::payable::PayableEntry,
-    ),
+    payable: (erp_finance::entity::payable::PayableAccount, erp_finance::entity::payable::PayableEntry),
     cost_entries: Vec<erp_finance::entity::cost::CostEntry>,
 }
 
@@ -506,10 +486,7 @@ impl FormalizedPurchaseEffects {
     /// 本次原始应付账户与分录；须先写入后创建付款工作项。
     pub fn payable(
         &self,
-    ) -> &(
-        erp_finance::entity::payable::PayableAccount,
-        erp_finance::entity::payable::PayableEntry,
-    ) {
+    ) -> &(erp_finance::entity::payable::PayableAccount, erp_finance::entity::payable::PayableEntry) {
         &self.payable
     }
 

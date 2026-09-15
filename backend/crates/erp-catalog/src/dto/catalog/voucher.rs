@@ -1,15 +1,14 @@
-use crate::entity::catalog::{EnableStatus, VoucherCategoryProfileRevision};
+use application_core::{page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ProductBrandId, ProductCategoryId, SkuId, UnitOfMeasureId};
 use erp_core::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::error::Result;
-use application_core::{page_or_default, page_size_or_default};
-
-use super::common::{non_blank, normalize_sort, PageParams};
+use super::common::{PageParams, non_blank, normalize_sort};
 use super::product::ProductSkuInput;
+use crate::entity::catalog::{EnableStatus, VoucherCategoryProfileRevision};
+use crate::error::Result;
 
 /// 卡券类目扩展修订列表允许的排序字段白名单。
 pub(crate) const VOUCHER_PROFILE_SORT_FIELDS: &[&str] = &["created_at", "revision_no"];
@@ -297,10 +296,9 @@ mod tests {
         let base = serde_json::json!({ "version": 1, "name": "体验卡", "description": "体验卡描述" });
         let original: super::UpdateVoucherCategoryRequest = serde_json::from_value(base.clone()).unwrap();
         assert_eq!(original.status, None);
-        for (wire, expected) in [
-            ("active", super::EnableStatus::Active),
-            ("disabled", super::EnableStatus::Disabled),
-        ] {
+        for (wire, expected) in
+            [("active", super::EnableStatus::Active), ("disabled", super::EnableStatus::Disabled)]
+        {
             let mut value = base.clone();
             value["status"] = serde_json::json!(wire);
             let request: super::UpdateVoucherCategoryRequest = serde_json::from_value(value).unwrap();
@@ -361,10 +359,7 @@ mod tests {
         assert_eq!(sku.base_unit_id.as_ref(), "unit-sheet");
         assert_eq!(sku.weight_kg, Some(Quantity::from_str("0.010000").unwrap()));
         assert_eq!(sku.volume_m3, Some(Quantity::from_str("0.000100").unwrap()));
-        assert_eq!(
-            sku.sales_visible_price_gross,
-            Some(Amount::from_str("99.00").unwrap())
-        );
+        assert_eq!(sku.sales_visible_price_gross, Some(Amount::from_str("99.00").unwrap()));
         assert_eq!(sku.market_price, Some(Amount::from_str("129.00").unwrap()));
         assert!(sku.sku_id.is_none());
         assert!(sku.expected_sku_revision_id.is_none());

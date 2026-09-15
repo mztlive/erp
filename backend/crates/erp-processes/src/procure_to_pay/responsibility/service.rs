@@ -1,13 +1,7 @@
 //! 采购责任规则管理和预览用例编排.
 
-use super::adapter::ResponsibilityFactsAdapter;
-use super::resolver::{load_owner_account, ResolutionInput};
-use super::ProcurementResponsibilityProcess;
-use crate::{Error, Result};
 use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_audit::AuditExt;
-use erp_audit::AuditLog;
+use erp_audit::{AuditActorLogs, AuditExt, AuditLog};
 use erp_core::ids::ProcurementResponsibilityRuleId;
 use erp_procurement::dto::procurement_responsibility::{
     CreateProcurementResponsibilityRuleRequest, ProcurementResponsibilityResolveLineView,
@@ -19,10 +13,16 @@ use erp_procurement::entity::procurement_responsibility::{
     ProcurementResponsibilityRuleData,
 };
 use erp_procurement::service::procurement_responsibility::ProcurementResponsibilityService;
+use erp_read_models::purchase_center::procurement_responsibility::dto::ProcurementResponsibilityRuleView;
 use erp_read_models::purchase_center::procurement_responsibility::{
-    apply_rule_list_facts, dto::ProcurementResponsibilityRuleView, load_procurement_rule_list_facts,
+    apply_rule_list_facts, load_procurement_rule_list_facts,
 };
 use persistence_core::{Executor, NoTransaction};
+
+use super::ProcurementResponsibilityProcess;
+use super::adapter::ResponsibilityFactsAdapter;
+use super::resolver::{ResolutionInput, load_owner_account};
+use crate::{Error, Result};
 
 impl ProcurementResponsibilityProcess {
     /// 创建采购责任规则并记录审计。
@@ -42,11 +42,8 @@ impl ProcurementResponsibilityProcess {
         actor: &AuditActor,
     ) -> Result<ProcurementResponsibilityRuleView> {
         let data = request.into_data();
-        self.validate_selector_reference(&data, &mut NoTransaction)
-            .await?;
-        let policy_revision = self
-            .authorize_owner_eligibility(data.owner_user_id.as_str())
-            .await?;
+        self.validate_selector_reference(&data, &mut NoTransaction).await?;
+        let policy_revision = self.authorize_owner_eligibility(data.owner_user_id.as_str()).await?;
         let id = ProcurementResponsibilityRuleId::new(id_generator::next_id());
         let rule = ProcurementResponsibilityRule::new(id, data.clone(), actor.id()).map_err(Error::Logic)?;
         let audit = actor.clone().resource_log(
@@ -54,9 +51,7 @@ impl ProcurementResponsibilityProcess {
             "procurement_responsibility_rule",
             rule.base.id.clone(),
         )?;
-        let rule = self
-            .persist_created_rule(rule, data, audit, policy_revision)
-            .await?;
+        let rule = self.persist_created_rule(rule, data, audit, policy_revision).await?;
         let facts =
             load_procurement_rule_list_facts(&self.db, std::slice::from_ref(&rule), &mut NoTransaction)
                 .await?;
@@ -84,19 +79,14 @@ impl ProcurementResponsibilityProcess {
         actor: &AuditActor,
     ) -> Result<ProcurementResponsibilityRuleView> {
         let (version, data) = request.into_parts();
-        self.validate_selector_reference(&data, &mut NoTransaction)
-            .await?;
-        let policy_revision = self
-            .authorize_owner_eligibility(data.owner_user_id.as_str())
-            .await?;
+        self.validate_selector_reference(&data, &mut NoTransaction).await?;
+        let policy_revision = self.authorize_owner_eligibility(data.owner_user_id.as_str()).await?;
         let audit = actor.clone().resource_log(
             "procurement_responsibility_rule.update",
             "procurement_responsibility_rule",
             id.to_string(),
         )?;
-        let rule = self
-            .persist_updated_rule(id, version, data, actor.id(), audit, policy_revision)
-            .await?;
+        let rule = self.persist_updated_rule(id, version, data, actor.id(), audit, policy_revision).await?;
         let facts =
             load_procurement_rule_list_facts(&self.db, std::slice::from_ref(&rule), &mut NoTransaction)
                 .await?;
@@ -132,9 +122,7 @@ impl ProcurementResponsibilityProcess {
             Box::pin(async move {
                 validation.validate_selector_reference(&data, session).await?;
                 load_owner_account(&db, data.owner_user_id.as_str(), session).await?;
-                ProcurementResponsibilityService::new(db.clone())
-                    .create_rule(&rule, session)
-                    .await?;
+                ProcurementResponsibilityService::new(db.clone()).create_rule(&rule, session).await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok(rule)
             })
@@ -215,7 +203,7 @@ impl ProcurementResponsibilityProcess {
                 Ok(plan) => {
                     let resolution = plan.views().into_iter().next().expect("单行解析必须返回单行");
                     success_preview(resolution)
-                }
+                },
                 Err(error) => failed_preview(line_key, error),
             });
         }
@@ -229,11 +217,7 @@ impl ProcurementResponsibilityProcess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         Ok(ProcurementResponsibilityService::new(self.db.clone())
-            .validate_selector_reference(
-                data,
-                &ResponsibilityFactsAdapter { db: self.db.clone() },
-                executor,
-            )
+            .validate_selector_reference(data, &ResponsibilityFactsAdapter { db: self.db.clone() }, executor)
             .await?)
     }
 }
@@ -274,17 +258,9 @@ mod tests {
     /// 任一调用缺失时测试失败。
     #[test]
     fn rule_writes_bind_owner_authorization_and_revalidate_references() {
-        let production = include_str!("service.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码必须存在");
+        let production = include_str!("service.rs").split("#[cfg(test)]").next().expect("生产代码必须存在");
 
-        assert_eq!(
-            production
-                .matches("run_authorized_policy_transaction(policy_revision")
-                .count(),
-            2
-        );
+        assert_eq!(production.matches("run_authorized_policy_transaction(policy_revision").count(), 2);
         assert!(production.contains("validation.validate_selector_reference(&data, session)"));
         assert!(production.contains("load_owner_account(&db, data.owner_user_id.as_str(), session)"));
     }

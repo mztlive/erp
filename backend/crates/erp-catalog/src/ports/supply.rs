@@ -1,8 +1,9 @@
 //! 商品消费的跨域列表与精确可售资格查询合同。
-use crate::repository::{ProductFilter, ProductRow, SellableSkuFilter, SellableSkuRow};
 use async_trait::async_trait;
 use erp_core::common::time::BusinessDate;
 use persistence_core::{Executor, PageResult, Result};
+
+use crate::repository::{ProductFilter, ProductRow, SellableSkuFilter, SellableSkuRow};
 
 /// 保持原查询形状、仓储错误与调用方 Executor；实现由组合层注入。
 #[async_trait]

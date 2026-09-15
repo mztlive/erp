@@ -5,13 +5,13 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as LegacyImportExt>::LEGACY_IMPORT_BATCHES` 等值。
 
-use crate::repository::owned::{
-    LegacyImportBatchRepository, LegacyImportConfirmationRepository, LegacyImportRowRepository,
-};
 use mongodb::Database;
 
 use super::super::legacy_import::{
     LegacyImportBatchFilter, LegacyImportConfirmationFilter, LegacyImportRepository, LegacyImportRowFilter,
+};
+use crate::repository::owned::{
+    LegacyImportBatchRepository, LegacyImportConfirmationRepository, LegacyImportRowRepository,
 };
 
 /// 域 D22 仓储访问器。

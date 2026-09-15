@@ -1,16 +1,17 @@
 //! 回款冲正命令的原回款组织读取与发布定义绑定。
 
-use super::super::adapter::{receipt_reversal_object_readable, receipt_reversal_responsible_org_id};
-use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_core::ids::{CustomerAccountId, CustomerReceiptId};
 use erp_finance::repository::ReceivableExt;
 use erp_identity::SharedRbacService;
-use erp_workflow::entity::document_registry::BusinessDocument;
-use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
 use erp_workflow::DocumentRegistryExt;
+use erp_workflow::entity::document_registry::BusinessDocument;
+use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use mongodb::Database;
 use persistence_core::NoTransaction;
+
+use super::super::adapter::{receipt_reversal_object_readable, receipt_reversal_responsible_org_id};
+use crate::{Error, Result};
 
 /// 查询原回款往来主体作为责任组织，并带回可选客户。
 ///

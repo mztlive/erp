@@ -1,8 +1,9 @@
-use std::{borrow::Borrow, collections::HashSet, fmt};
-
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Borrow;
+use std::collections::HashSet;
+use std::fmt;
 
 use erp_core::{Error, Result};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 const MAX_ID_LEN: usize = 128;
 const MAX_PERMISSION_PART_LEN: usize = 128;
@@ -24,10 +25,7 @@ impl RoleId {
         if value.len() > MAX_ID_LEN {
             return Err(Error::from("角色ID长度不能超过128个字符"));
         }
-        if !value
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
-        {
+        if !value.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.')) {
             return Err(Error::from("角色ID包含非法字符"));
         }
 
@@ -186,10 +184,7 @@ impl Permission {
         }
         Self::validate_part(resource, "权限资源", true)?;
         Self::validate_part(action, "权限动作", false)?;
-        Ok(Self {
-            resource: resource.to_string(),
-            action: action.to_string(),
-        })
+        Ok(Self { resource: resource.to_string(), action: action.to_string() })
     }
 
     /// 返回权限资源。
@@ -279,11 +274,7 @@ impl PermissionSet {
     /// # 返回值
     /// 返回去重并按 `resource:action` 排序的权限集合。
     pub fn new(permissions: impl IntoIterator<Item = Permission>) -> Self {
-        let mut permissions = permissions
-            .into_iter()
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
+        let mut permissions = permissions.into_iter().collect::<HashSet<_>>().into_iter().collect::<Vec<_>>();
         permissions.sort();
         Self(permissions)
     }
@@ -336,13 +327,7 @@ impl PermissionSet {
     /// # 业务约束
     /// 已存在更宽通配的权限不会再作为缺失项返回；管理员额外授予的权限不影响判定。
     pub fn missing_from(&self, desired: &Self) -> Self {
-        Self::new(
-            desired
-                .0
-                .iter()
-                .filter(|required| !self.covers_one(required))
-                .cloned(),
-        )
+        Self::new(desired.0.iter().filter(|required| !self.covers_one(required)).cloned())
     }
 
     /// 合并两个权限集合。
@@ -377,11 +362,7 @@ impl PermissionSet {
     /// 只追加缺失项，保留当前集合中管理员额外授予的权限。
     pub fn with_missing(&self, desired: &Self) -> Option<Self> {
         let missing = self.missing_from(desired);
-        if missing.is_empty() {
-            None
-        } else {
-            Some(self.union(&missing))
-        }
+        if missing.is_empty() { None } else { Some(self.union(&missing)) }
     }
 
     /// 判断集合是否为空。
@@ -504,10 +485,7 @@ mod tests {
         ]);
         let missing = current.missing_from(&desired);
 
-        assert_eq!(
-            missing.as_slice(),
-            [Permission::parse("sales_order:create").unwrap()]
-        );
+        assert_eq!(missing.as_slice(), [Permission::parse("sales_order:create").unwrap()]);
         assert!(current.missing_from(&current).is_empty());
     }
 

@@ -5,14 +5,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::stable::StableBase;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{InvoiceId, PartyId};
-use erp_core::money::{round_to_cent, Amount};
+use erp_core::money::{Amount, round_to_cent};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 发票代码最大长度。
 const INVOICE_CODE_MAX_LEN: usize = 32;
@@ -318,18 +317,13 @@ impl RedInvoiceAllocationPlan {
         let mut remaining = remaining_red_invoice_bases(direction, basis, reversals)?;
         remaining.sort_by_key(|line| line.allocation_seq);
         remaining.retain(|line| line.gross > zero_amount());
-        let remaining_total = remaining
-            .iter()
-            .fold(zero_amount(), |sum, line| sum.checked_add(line.gross));
+        let remaining_total = remaining.iter().fold(zero_amount(), |sum, line| sum.checked_add(line.gross));
         if remaining_total <= zero_amount() {
             return Err(RedInvoiceAllocationPlanError::NoRemainingAllocation);
         }
         let requested = validate_red_invoice_requested_amount(requested, remaining_total)?;
         let lines = build_red_invoice_allocation_lines(remaining, requested)?;
-        Ok(Self {
-            lines,
-            fully_reversed: requested == remaining_total,
-        })
+        Ok(Self { lines, fully_reversed: requested == remaining_total })
     }
 
     /// 返回按原分配顺序生成的只读反向分配行。
@@ -380,16 +374,9 @@ impl RedInvoiceAllocationPlan {
     /// # 约束
     /// 仅做定点加法，不重新分摊或舍入。
     pub fn totals(&self) -> (Amount, Amount, Amount) {
-        self.lines.iter().fold(
-            (zero_amount(), zero_amount(), zero_amount()),
-            |(gross, net, tax), line| {
-                (
-                    gross.checked_add(line.gross),
-                    net.checked_add(line.net),
-                    tax.checked_add(line.tax),
-                )
-            },
-        )
+        self.lines.iter().fold((zero_amount(), zero_amount(), zero_amount()), |(gross, net, tax), line| {
+            (gross.checked_add(line.gross), net.checked_add(line.net), tax.checked_add(line.tax))
+        })
     }
 }
 
@@ -413,10 +400,7 @@ fn remaining_red_invoice_bases(
     basis: Vec<RedInvoiceAllocationBasis>,
     reversals: &[RedInvoiceAllocationReversal],
 ) -> std::result::Result<Vec<RedInvoiceAllocationBasis>, RedInvoiceAllocationPlanError> {
-    basis
-        .into_iter()
-        .map(|line| remaining_red_invoice_basis(direction, line, reversals))
-        .collect()
+    basis.into_iter().map(|line| remaining_red_invoice_basis(direction, line, reversals)).collect()
 }
 
 /// 计算单条原蓝票分配扣除历史红冲后的剩余金额三元组。
@@ -442,16 +426,9 @@ fn remaining_red_invoice_basis(
     let reversed = reversals
         .iter()
         .filter(|reversal| reversal.original_allocation_id == line.original_allocation_id)
-        .fold(
-            (zero_amount(), zero_amount(), zero_amount()),
-            |(gross, net, tax), reversal| {
-                (
-                    gross.checked_add(reversal.gross),
-                    net.checked_add(reversal.net),
-                    tax.checked_add(reversal.tax),
-                )
-            },
-        );
+        .fold((zero_amount(), zero_amount(), zero_amount()), |(gross, net, tax), reversal| {
+            (gross.checked_add(reversal.gross), net.checked_add(reversal.net), tax.checked_add(reversal.tax))
+        });
     if reversed.0 > line.gross || reversed.1 > line.net || reversed.2 > line.tax {
         return Err(match direction {
             InvoiceDirection::Sales => RedInvoiceAllocationPlanError::SalesHistoricalOverReversal,
@@ -678,19 +655,15 @@ impl Invoice {
         match data.invoice_kind {
             InvoiceKind::Red if data.original_invoice_id.is_none() => {
                 return Err(Error::from("红票必须引用原蓝票"));
-            }
+            },
             InvoiceKind::Blue if data.original_invoice_id.is_some() => {
                 return Err(Error::from("蓝票不得引用原发票"));
-            }
-            _ => {}
+            },
+            _ => {},
         }
         let invoice_code = normalize_optional_text(data.invoice_code, "发票代码", INVOICE_CODE_MAX_LEN)?;
-        let invoice_no = normalize_required_text(
-            data.invoice_no,
-            "发票号码不能为空",
-            INVOICE_NO_MAX_LEN,
-            "发票号码过长",
-        )?;
+        let invoice_no =
+            normalize_required_text(data.invoice_no, "发票号码不能为空", INVOICE_NO_MAX_LEN, "发票号码过长")?;
         let normalized_code = invoice_code.as_ref().map(|code| code.to_uppercase());
         let rounding_reason =
             normalize_optional_text(data.rounding_reason, "尾差原因", ROUNDING_REASON_MAX_LEN)?;
@@ -860,17 +833,18 @@ fn derive_accounting_direction(direction: InvoiceDirection, kind: InvoiceKind) -
     match (direction, kind) {
         (InvoiceDirection::Sales, InvoiceKind::Blue) | (InvoiceDirection::Purchase, InvoiceKind::Blue) => {
             AccountingDirection::Increase
-        }
+        },
         (InvoiceDirection::Sales, InvoiceKind::Red) | (InvoiceDirection::Purchase, InvoiceKind::Red) => {
             AccountingDirection::Decrease
-        }
+        },
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn data() -> InvoiceData {
         InvoiceData {
@@ -1003,10 +977,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(matches!(
-            error,
-            RedInvoiceAllocationPlanError::NoRemainingAllocation
-        ));
+        assert!(matches!(error, RedInvoiceAllocationPlanError::NoRemainingAllocation));
     }
 
     /// 验证历史红冲超过原分配时保留销项与进项各自的稳定错误语义。
@@ -1020,17 +991,11 @@ mod tests {
 
         let sales = RedInvoiceAllocationPlan::build(InvoiceDirection::Sales, basis.clone(), &reversals, None)
             .unwrap_err();
-        assert!(matches!(
-            sales,
-            RedInvoiceAllocationPlanError::SalesHistoricalOverReversal
-        ));
+        assert!(matches!(sales, RedInvoiceAllocationPlanError::SalesHistoricalOverReversal));
 
         let purchase =
             RedInvoiceAllocationPlan::build(InvoiceDirection::Purchase, basis, &reversals, None).unwrap_err();
-        assert!(matches!(
-            purchase,
-            RedInvoiceAllocationPlanError::PurchaseHistoricalOverReversal
-        ));
+        assert!(matches!(purchase, RedInvoiceAllocationPlanError::PurchaseHistoricalOverReversal));
     }
 
     /// 验证零金额与超过剩余总额的显式请求都被同一稳定规则拒绝。
@@ -1047,10 +1012,7 @@ mod tests {
                 Some(Amount::from_str(requested).unwrap()),
             )
             .unwrap_err();
-            assert!(matches!(
-                error,
-                RedInvoiceAllocationPlanError::InvalidRequestedAmount
-            ));
+            assert!(matches!(error, RedInvoiceAllocationPlanError::InvalidRequestedAmount));
         }
     }
 
@@ -1069,17 +1031,11 @@ mod tests {
 
     #[test]
     fn new_rejects_amount_mismatch_and_red_blue_relation() {
-        let mismatch = InvoiceData {
-            net_amount: Amount::from_str("800.00").unwrap(),
-            ..data()
-        };
+        let mismatch = InvoiceData { net_amount: Amount::from_str("800.00").unwrap(), ..data() };
         assert!(Invoice::new(InvoiceId::new("inv-2"), mismatch, "admin").is_err());
 
-        let red_without_original = InvoiceData {
-            invoice_kind: InvoiceKind::Red,
-            original_invoice_id: None,
-            ..data()
-        };
+        let red_without_original =
+            InvoiceData { invoice_kind: InvoiceKind::Red, original_invoice_id: None, ..data() };
         assert!(Invoice::new(InvoiceId::new("inv-3"), red_without_original, "admin").is_err());
 
         let blue_with_original = InvoiceData {
@@ -1121,15 +1077,17 @@ mod tests {
 
         invoice.mark_registered("admin-2").unwrap();
         assert!(invoice.is_registered());
-        assert!(invoice
-            .update(
-                InvoiceUpdate {
-                    invoice_date: Some(BusinessDate::from_ymd(2026, 8, 7).unwrap()),
-                    ..Default::default()
-                },
-                "admin-3",
-            )
-            .is_err());
+        assert!(
+            invoice
+                .update(
+                    InvoiceUpdate {
+                        invoice_date: Some(BusinessDate::from_ymd(2026, 8, 7).unwrap()),
+                        ..Default::default()
+                    },
+                    "admin-3",
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -1169,10 +1127,7 @@ mod tests {
         assert_eq!(InvoiceStatus::Registered.as_str(), "registered");
         assert_eq!(InvoiceStatus::RedInvoiced.as_str(), "red_invoiced");
 
-        let production = include_str!("invoice.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("invoice.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(!production.contains("IN_APPROVAL"));
         assert!(!production.contains("fn start_approval"));
         assert!(!production.contains("approval_subject_version"));
@@ -1182,15 +1137,9 @@ mod tests {
 
     #[test]
     fn enums_serialize_with_stable_codes_and_labels() {
-        assert_eq!(
-            serde_json::to_string(&InvoiceDirection::Purchase).unwrap(),
-            "\"purchase\""
-        );
+        assert_eq!(serde_json::to_string(&InvoiceDirection::Purchase).unwrap(), "\"purchase\"");
         assert_eq!(serde_json::to_string(&InvoiceKind::Red).unwrap(), "\"red\"");
-        assert_eq!(
-            serde_json::to_string(&InvoiceStatus::RedInvoiced).unwrap(),
-            "\"red_invoiced\""
-        );
+        assert_eq!(serde_json::to_string(&InvoiceStatus::RedInvoiced).unwrap(), "\"red_invoiced\"");
         assert_eq!(InvoiceDirection::Sales.label(), "销项");
         assert_eq!(InvoiceKind::Blue.label(), "蓝票");
         assert_eq!(InvoiceStatus::Registered.label(), "已登记");

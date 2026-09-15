@@ -1,12 +1,13 @@
 //! 采购变更冻结提交前的来源销售和付款事实组合。
-use super::super::PurchaseOrderProcess;
-use crate::{Error, Result};
 use erp_procurement::dto::purchase_order::{SavePurchaseOrderLine, SubmitPurchaseChangeRequest};
 use erp_procurement::entity::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrder, PurchaseOrderRevision,
 };
 use erp_sales::repository::SalesOrderExt;
 use persistence_core::NoTransaction;
+
+use super::super::PurchaseOrderProcess;
+use crate::{Error, Result};
 impl PurchaseOrderProcess {
     /// 将采购变更目标行绑定到来源销售单当前版本行。
     ///
@@ -57,12 +58,10 @@ impl PurchaseOrderProcess {
                 )
             })
             .collect::<std::collections::HashMap<_, _>>();
-        Ok(
-            erp_procurement::service::purchase_order::change::mapping::enrich_change_lines(
-                lines,
-                &by_stable_id,
-            )?,
-        )
+        Ok(erp_procurement::service::purchase_order::change::mapping::enrich_change_lines(
+            lines,
+            &by_stable_id,
+        )?)
     }
     /// 保留原行校验/金额、付款代码解析、提交序号查询及 ID 分配的顺序。
     pub(super) async fn build_change_submission(

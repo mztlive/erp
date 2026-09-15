@@ -1,15 +1,15 @@
 //! AccountCore实体的特化方法
 
-use crate::repository::owned::AccountCoreRepository;
 use std::collections::HashMap;
 
-use crate::entity::AccountCore;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::AccountKind;
 use mongodb::bson::doc;
 use mongodb::options::FindOptions;
-use persistence_core::Result;
-use persistence_core::{mongo_ops, Executor};
+use persistence_core::{Executor, Result, mongo_ops};
+
+use crate::entity::AccountCore;
+use crate::repository::owned::AccountCoreRepository;
 
 impl<'a> AccountCoreRepository<'a> {
     /// 按账号 ID 查找未删除统一账号。
@@ -125,11 +125,7 @@ impl<'a> AccountCoreRepository<'a> {
             .await?
             .into_iter()
             .map(|account| {
-                let status = if account.status.is_active() {
-                    ""
-                } else {
-                    " · 已停用"
-                };
+                let status = if account.status.is_active() { "" } else { " · 已停用" };
                 application_core::FilterOption {
                     value: account.base.id.clone(),
                     label: format!("{}（{}）{}", account.name, account.secret.account(), status),

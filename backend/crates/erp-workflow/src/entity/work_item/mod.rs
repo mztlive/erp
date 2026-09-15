@@ -14,10 +14,10 @@ mod queue_context;
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
 pub use due::{WorkItemDueFilter, WorkItemDueWindow};
 pub use entity::{
-    casbin_subject, ApprovalDecisionTaskError, ApprovalRuntimeTaskEnding, AssignmentSource,
-    AvailableWorkItemAccount, DocumentApprovalWorkItemData, WorkItem, WorkItemAssignmentSeparationPolicy,
-    WorkItemBriefObjectKind, WorkItemBriefRelation, WorkItemCloseData, WorkItemData, WorkItemPriority,
-    WorkItemStatus, WorkItemSubjectVersions, WorkItemType, WorkflowAccountFact,
+    ApprovalDecisionTaskError, ApprovalRuntimeTaskEnding, AssignmentSource, AvailableWorkItemAccount,
+    DocumentApprovalWorkItemData, WorkItem, WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind,
+    WorkItemBriefRelation, WorkItemCloseData, WorkItemData, WorkItemPriority, WorkItemStatus,
+    WorkItemSubjectVersions, WorkItemType, WorkflowAccountFact, casbin_subject,
 };
 pub use erp_core::ids::WorkItemId;
 pub use finance_responsibility::{
@@ -25,14 +25,14 @@ pub use finance_responsibility::{
     FinanceResponsibilityRuleSet, FinanceResponsibilityScope,
 };
 pub use finance_task::{
+    FINANCE_OWNER_ROLE, PAYABLE_OBJECT_TYPE, PayablePurchaseAdmissionFact, RECEIVABLE_OBJECT_TYPE,
+    SalesInvoiceTaskReason, SalesInvoiceTaskSpec, SupplierPaymentTaskReason, SupplierPaymentTaskSpec,
     is_purchase_payable, is_zero_amount, matches_sales_invoice_identity, matches_supplier_payment_identity,
     new_approved_sales_invoice_task, new_sales_invoice_task, new_supplier_payment_task, payment_due_at,
-    sales_invoice_impact_summary, supplier_payment_impact_summary, PayablePurchaseAdmissionFact,
-    SalesInvoiceTaskReason, SalesInvoiceTaskSpec, SupplierPaymentTaskReason, SupplierPaymentTaskSpec,
-    FINANCE_OWNER_ROLE, PAYABLE_OBJECT_TYPE, RECEIVABLE_OBJECT_TYPE,
+    sales_invoice_impact_summary, supplier_payment_impact_summary,
 };
 pub use fulfillment_responsibility::FulfillmentResponsibilityKey;
 pub use payment_execution_merge::{
-    PaymentExecutionMergeMember, PaymentExecutionMergeSet, MAX_PAYMENT_EXECUTION_MERGE,
+    MAX_PAYMENT_EXECUTION_MERGE, PaymentExecutionMergeMember, PaymentExecutionMergeSet,
 };
 pub use queue_context::{QueueContextField, QueueContextIdentity};

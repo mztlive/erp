@@ -2,28 +2,22 @@
 
 use std::collections::{HashMap, HashSet};
 
-use erp_finance::entity::payable::{AllocationAction, PaymentAllocation, SupplierPayment};
-use erp_finance::repository::PayableExt;
-
 use erp_core::ids::{FileAssetId, PartyBankAccountId, SupplierPaymentId};
 use erp_core::money::Amount;
-use erp_party::PartyBankAccount;
-use erp_party::PartyExt;
-use erp_supplier::SupplierAccount;
-use erp_supplier::SupplierExt;
+use erp_finance::entity::payable::{AllocationAction, PaymentAllocation, SupplierPayment};
+use erp_finance::repository::PayableExt;
+use erp_party::{PartyBankAccount, PartyExt};
+use erp_supplier::{SupplierAccount, SupplierExt};
 use erp_support::FileAssetExt;
-
 use persistence_core::NoTransaction;
 use validator::Validate;
 
-use super::display;
 use super::dto::{
     PageView, PaymentRecipientView, SortDir, SupplierPaymentBankReceiptView, SupplierPaymentListParams,
     SupplierPaymentView,
 };
 use super::mapping::{payment_recipient_view, zero_amount};
-
-use super::{PayableReadService, SupplierPaymentFilter};
+use super::{PayableReadService, SupplierPaymentFilter, display};
 use crate::{Error, Result};
 
 impl PayableReadService {
@@ -62,24 +56,12 @@ impl PayableReadService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .supplier_payments()
-            .search_supplier_payments(&filter, &mut NoTransaction)
-            .await?;
-        let payment_ids: Vec<SupplierPaymentId> = page
-            .items
-            .iter()
-            .map(|row| SupplierPaymentId::new(row.id.clone()))
-            .collect();
+        let page = self.db.supplier_payments().search_supplier_payments(&filter, &mut NoTransaction).await?;
+        let payment_ids: Vec<SupplierPaymentId> =
+            page.items.iter().map(|row| SupplierPaymentId::new(row.id.clone())).collect();
         let mut views = self.assemble_supplier_payment_views(&payment_ids, false).await?;
         self.attach_supplier_payment_reversals(&mut views).await?;
-        Ok(PageView {
-            items: views,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items: views, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 查询供应商付款单详情（含核销分配行）。
@@ -95,9 +77,7 @@ impl PayableReadService {
     pub async fn supplier_payment_detail(&self, id: &str) -> Result<SupplierPaymentView> {
         let mut views = vec![self.supplier_payment_view(id.to_string(), true).await?];
         self.attach_supplier_payment_reversals(&mut views).await?;
-        views
-            .pop()
-            .ok_or_else(|| Error::Internal("供应商付款详情装配失败".to_string()))
+        views.pop().ok_or_else(|| Error::Internal("供应商付款详情装配失败".to_string()))
     }
 
     /// 装配供应商付款单视图（FIN-R02 单笔入口，经批量装载保持与列表一致）。
@@ -122,9 +102,7 @@ impl PayableReadService {
                 include_payment_recipient,
             )
             .await?;
-        views
-            .pop()
-            .ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))
+        views.pop().ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))
     }
 
     /// 按付款 ID 集合批量装载并集中映射付款视图（FIN-R02）。
@@ -158,10 +136,8 @@ impl PayableReadService {
             .supplier_payments()
             .find_supplier_payments_by_ids(payment_ids, &mut NoTransaction)
             .await?;
-        let payments_by_id: HashMap<&str, &SupplierPayment> = payments
-            .iter()
-            .map(|payment| (payment.base.id.as_str(), payment))
-            .collect();
+        let payments_by_id: HashMap<&str, &SupplierPayment> =
+            payments.iter().map(|payment| (payment.base.id.as_str(), payment)).collect();
         let mut ordered = Vec::with_capacity(payment_ids.len());
         for id in payment_ids {
             let payment = payments_by_id
@@ -183,18 +159,13 @@ impl PayableReadService {
         }
         for group in allocations_by_payment.values_mut() {
             group.sort_by(|left, right| {
-                left.allocation_seq
-                    .cmp(&right.allocation_seq)
-                    .then_with(|| left.base.id.cmp(&right.base.id))
+                left.allocation_seq.cmp(&right.allocation_seq).then_with(|| left.base.id.cmp(&right.base.id))
             });
         }
         let mut grouped_views = Vec::with_capacity(ordered.len());
         let mut allocated_totals = Vec::with_capacity(ordered.len());
         for payment in &ordered {
-            let group = allocations_by_payment
-                .get(payment.base.id.as_str())
-                .cloned()
-                .unwrap_or_default();
+            let group = allocations_by_payment.get(payment.base.id.as_str()).cloned().unwrap_or_default();
             let owned: Vec<PaymentAllocation> = group.into_iter().map(|item| (*item).clone()).collect();
             let (allocated_total, views) = payment_allocation_view(&owned);
             grouped_views.push(views);
@@ -213,10 +184,8 @@ impl PayableReadService {
         for ((payment, allocated_total), enriched) in
             ordered.into_iter().zip(allocated_totals).zip(enriched_groups)
         {
-            let (supplier_no, supplier_name) = supplier_displays
-                .get(payment.base.id.as_str())
-                .cloned()
-                .unwrap_or((None, None));
+            let (supplier_no, supplier_name) =
+                supplier_displays.get(payment.base.id.as_str()).cloned().unwrap_or((None, None));
             views.push(SupplierPaymentView {
                 id: payment.base.id.clone(),
                 payment_no: payment.payment_no.clone(),
@@ -255,11 +224,8 @@ impl PayableReadService {
                 supplier_ids.push(payment.supplier_id.clone());
             }
         }
-        let suppliers = self
-            .db
-            .supplier_accounts()
-            .find_accounts_by_ids(&supplier_ids, &mut NoTransaction)
-            .await?;
+        let suppliers =
+            self.db.supplier_accounts().find_accounts_by_ids(&supplier_ids, &mut NoTransaction).await?;
         let mut seen_parties = HashSet::new();
         let mut party_ids = Vec::new();
         for supplier in &suppliers {
@@ -267,26 +233,17 @@ impl PayableReadService {
                 party_ids.push(supplier.party_id.clone());
             }
         }
-        let parties = self
-            .db
-            .parties()
-            .find_parties_by_ids(&party_ids, &mut NoTransaction)
-            .await?;
+        let parties = self.db.parties().find_parties_by_ids(&party_ids, &mut NoTransaction).await?;
         let revision_ids: Vec<String> = parties
             .iter()
             .filter_map(|party| party.stable.current_revision_id.clone())
             .collect::<HashSet<_>>()
             .into_iter()
             .collect();
-        let revisions = self
-            .db
-            .party_revisions()
-            .find_revisions_by_ids(&revision_ids, &mut NoTransaction)
-            .await?;
-        let suppliers_by_id: HashMap<&str, &SupplierAccount> = suppliers
-            .iter()
-            .map(|supplier| (supplier.base.id.as_str(), supplier))
-            .collect();
+        let revisions =
+            self.db.party_revisions().find_revisions_by_ids(&revision_ids, &mut NoTransaction).await?;
+        let suppliers_by_id: HashMap<&str, &SupplierAccount> =
+            suppliers.iter().map(|supplier| (supplier.base.id.as_str(), supplier)).collect();
         let parties_by_id: HashMap<String, Option<String>> = parties
             .iter()
             .map(|party| (party.base.id.clone(), party.stable.current_revision_id.clone()))
@@ -332,15 +289,9 @@ impl PayableReadService {
                 }
             }
         }
-        let assets = self
-            .db
-            .file_assets()
-            .find_by_ids(&asset_ids, &mut NoTransaction)
-            .await?;
-        let assets_by_id: HashMap<&str, &erp_support::FileAsset> = assets
-            .iter()
-            .map(|asset| (asset.base.id.as_str(), asset))
-            .collect();
+        let assets = self.db.file_assets().find_by_ids(&asset_ids, &mut NoTransaction).await?;
+        let assets_by_id: HashMap<&str, &erp_support::FileAsset> =
+            assets.iter().map(|asset| (asset.base.id.as_str(), asset)).collect();
         let mut views = HashMap::with_capacity(payments.len());
         for payment in payments {
             if let Some(asset_id) = payment.bank_receipt_asset_id.as_ref() {
@@ -378,15 +329,10 @@ impl PayableReadService {
                 }
             }
         }
-        let accounts = self
-            .db
-            .party_bank_accounts()
-            .find_bank_accounts_by_ids(&account_ids, &mut NoTransaction)
-            .await?;
-        let accounts_by_id: HashMap<&str, &PartyBankAccount> = accounts
-            .iter()
-            .map(|account| (account.base.id.as_str(), account))
-            .collect();
+        let accounts =
+            self.db.party_bank_accounts().find_bank_accounts_by_ids(&account_ids, &mut NoTransaction).await?;
+        let accounts_by_id: HashMap<&str, &PartyBankAccount> =
+            accounts.iter().map(|account| (account.base.id.as_str(), account)).collect();
         let mut views = HashMap::new();
         for payment in payments {
             if let Some(account_id) = payment.payee_bank_account_id.as_ref() {

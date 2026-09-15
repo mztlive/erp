@@ -1,23 +1,21 @@
-use crate::repository::owned::{ProductRepository, SkuRepository, SkuRevisionRepository};
 use std::collections::{HashMap, HashSet};
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use serde::{Deserialize, Serialize};
-
-use crate::entity::catalog::{EnableStatus, ListingStatus, Sku, SkuRevision, SkuRevisionAttributeValue};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ProductId, SkuId, SkuRevisionId};
 use erp_core::money::{Amount, Quantity};
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
+use serde::{Deserialize, Serialize};
 
-use super::shared::{in_filter, sort_doc, SKUS, SKU_REVISIONS};
 use super::CatalogRepository;
+use super::shared::{SKU_REVISIONS, SKUS, in_filter, sort_doc};
+use crate::entity::catalog::{EnableStatus, ListingStatus, Sku, SkuRevision, SkuRevisionAttributeValue};
 use crate::repository::CatalogExt;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::repository::owned::{ProductRepository, SkuRepository, SkuRevisionRepository};
 
 /// `sku_revision_attribute_value` 集合名（单一来源：`CatalogExt` 关联常量）。
 const SKU_REVISION_ATTRIBUTE_VALUES: &str = <mongodb::Database as CatalogExt>::SKU_REVISION_ATTRIBUTE_VALUES;
@@ -133,8 +131,7 @@ impl<'a> SkuRepository<'a> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor)
-            .await
+        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor).await
     }
 
     /// 批量查询一组商品下的全部 SKU。
@@ -156,11 +153,7 @@ impl<'a> SkuRepository<'a> {
         if product_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(
-            in_filter("product_id", product_ids.iter().map(ToString::to_string)),
-            executor,
-        )
-        .await
+        self.find_many(in_filter("product_id", product_ids.iter().map(ToString::to_string)), executor).await
     }
 
     /// 批量读取采购责任解析或规则展示引用的 SKU。
@@ -235,10 +228,7 @@ impl<'a> SkuRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -354,10 +344,7 @@ impl<'a> SkuRevisionRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SkuRevisionRow>> {
         let options = FindOptions::builder()
-            .sort(sku_revision_sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-            ))
+            .sort(sku_revision_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(sku_revision_projection())
@@ -366,10 +353,7 @@ impl<'a> SkuRevisionRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按稳定 ID 读取发布修订引用的 SKU 修订。
@@ -471,8 +455,7 @@ impl<'a> SkuRevisionRepository<'a> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor)
-            .await
+        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor).await
     }
 
     /// 批量读取采购责任规则展示需要的 SKU 当前修订。
@@ -538,14 +521,11 @@ impl<'a> CatalogRepository<'a> {
     ) -> Result<Vec<SkuId>> {
         let mut sku_filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut sku_filter, "sku_no", Some(keyword));
-        let mut skus = SkuRepository::new(self.db, SKUS)
-            .find_many(sku_filter, executor)
-            .await?;
+        let mut skus = SkuRepository::new(self.db, SKUS).find_many(sku_filter, executor).await?;
 
         let revision_filter = sku_revision_keyword_filter(keyword, include_specification);
-        let revisions = SkuRevisionRepository::new(self.db, SKU_REVISIONS)
-            .find_many(revision_filter, executor)
-            .await?;
+        let revisions =
+            SkuRevisionRepository::new(self.db, SKU_REVISIONS).find_many(revision_filter, executor).await?;
         if !revisions.is_empty() {
             let revision_ids = revisions.into_iter().map(|revision| revision.base.id);
             skus.extend(
@@ -555,10 +535,7 @@ impl<'a> CatalogRepository<'a> {
             );
         }
 
-        let mut ids = skus
-            .into_iter()
-            .map(|sku| SkuId::new(sku.base.id))
-            .collect::<Vec<_>>();
+        let mut ids = skus.into_iter().map(|sku| SkuId::new(sku.base.id)).collect::<Vec<_>>();
         ids.sort_by(|left, right| left.as_ref().cmp(right.as_ref()));
         ids.dedup_by(|left, right| left.as_ref() == right.as_ref());
         Ok(ids)
@@ -627,10 +604,8 @@ impl<'a> CatalogRepository<'a> {
         if products.is_empty() {
             return Ok(Vec::new());
         }
-        let product_ids = products
-            .into_iter()
-            .map(|product| ProductId::new(product.base.id))
-            .collect::<Vec<_>>();
+        let product_ids =
+            products.into_iter().map(|product| ProductId::new(product.base.id)).collect::<Vec<_>>();
         Ok(SkuRepository::new(self.db, SKUS)
             .find_by_product_ids(&product_ids, executor)
             .await?
@@ -711,10 +686,7 @@ impl<'a> CatalogRepository<'a> {
         filter: &SkuRevisionFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SkuRevisionRow>> {
-        self.db
-            .sku_revisions()
-            .search_sku_revisions(filter, executor)
-            .await
+        self.db.sku_revisions().search_sku_revisions(filter, executor).await
     }
 
     /// 按稳定 ID 读取单个未删除 SKU。
@@ -748,10 +720,7 @@ impl<'a> CatalogRepository<'a> {
         product_id: &ProductId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<Sku>> {
-        self.db
-            .skus()
-            .find_by_product_ids(std::slice::from_ref(product_id), executor)
-            .await
+        self.db.skus().find_by_product_ids(std::slice::from_ref(product_id), executor).await
     }
 
     /// 读取指定 SKU 的历史最大修订序号。
@@ -770,15 +739,9 @@ impl<'a> CatalogRepository<'a> {
         sku_id: &SkuId,
         executor: &mut dyn Executor,
     ) -> Result<Option<u32>> {
-        let revisions = self
-            .db
-            .sku_revisions()
-            .find_by_sku_ids(std::slice::from_ref(sku_id), executor)
-            .await?;
-        Ok(revisions
-            .iter()
-            .map(|revision| revision.revision.revision_no)
-            .max())
+        let revisions =
+            self.db.sku_revisions().find_by_sku_ids(std::slice::from_ref(sku_id), executor).await?;
+        Ok(revisions.iter().map(|revision| revision.revision.revision_no).max())
     }
 
     /// 返回当前启用修订中占用规范化条码的 SKU 身份。
@@ -825,15 +788,8 @@ impl<'a> CatalogRepository<'a> {
         skus: &[Sku],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, SkuRevision>> {
-        let sku_ids = skus
-            .iter()
-            .map(|sku| SkuId::new(sku.base.id.clone()))
-            .collect::<Vec<_>>();
-        let revisions = self
-            .db
-            .sku_revisions()
-            .find_by_sku_ids(&sku_ids, executor)
-            .await?;
+        let sku_ids = skus.iter().map(|sku| SkuId::new(sku.base.id.clone())).collect::<Vec<_>>();
+        let revisions = self.db.sku_revisions().find_by_sku_ids(&sku_ids, executor).await?;
         Ok(select_current_sku_revisions(skus, revisions))
     }
 
@@ -853,10 +809,7 @@ impl<'a> CatalogRepository<'a> {
         sku: &Sku,
         executor: &mut dyn Executor,
     ) -> Result<Option<SkuRevision>> {
-        Ok(self
-            .current_sku_revisions(std::slice::from_ref(sku), executor)
-            .await?
-            .remove(&sku.base.id))
+        Ok(self.current_sku_revisions(std::slice::from_ref(sku), executor).await?.remove(&sku.base.id))
     }
 
     /// 批量装配 SKU 列表投影的当前修订名称。
@@ -871,27 +824,18 @@ impl<'a> CatalogRepository<'a> {
     /// # 错误
     /// MongoDB 批量查询或反序列化失败时返回错误。
     async fn attach_current_sku_names(&self, rows: &mut [SkuRow], executor: &mut dyn Executor) -> Result<()> {
-        let revision_ids = rows
-            .iter()
-            .filter_map(|row| row.current_revision_id.clone())
-            .collect::<Vec<_>>();
+        let revision_ids = rows.iter().filter_map(|row| row.current_revision_id.clone()).collect::<Vec<_>>();
         if revision_ids.is_empty() {
             return Ok(());
         }
-        let revisions = self
-            .db
-            .sku_revisions()
-            .find_many(in_filter("id", revision_ids), executor)
-            .await?;
+        let revisions = self.db.sku_revisions().find_many(in_filter("id", revision_ids), executor).await?;
         let names = revisions
             .into_iter()
             .map(|revision| (revision.base.id, revision.name))
             .collect::<HashMap<_, _>>();
         for row in rows {
-            row.name = row
-                .current_revision_id
-                .as_ref()
-                .and_then(|revision_id| names.get(revision_id).cloned());
+            row.name =
+                row.current_revision_id.as_ref().and_then(|revision_id| names.get(revision_id).cloned());
         }
         Ok(())
     }
@@ -921,16 +865,9 @@ impl<'a> CatalogRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(&self.db.collection::<Sku>(SKUS), sku, executor).await?;
-        mongo_ops::insert_one(
-            &self.db.collection::<SkuRevision>(SKU_REVISIONS),
-            revision,
-            executor,
-        )
-        .await?;
+        mongo_ops::insert_one(&self.db.collection::<SkuRevision>(SKU_REVISIONS), revision, executor).await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<SkuRevisionAttributeValue>(SKU_REVISION_ATTRIBUTE_VALUES),
+            &self.db.collection::<SkuRevisionAttributeValue>(SKU_REVISION_ATTRIBUTE_VALUES),
             attribute_values.to_vec(),
             executor,
         )
@@ -955,11 +892,7 @@ fn select_current_sku_revision<'a>(sku: &Sku, revisions: &'a [SkuRevision]) -> O
         .current_revision_id
         .as_deref()
         .and_then(|current_id| revisions.iter().find(|revision| revision.base.id == current_id))
-        .or_else(|| {
-            revisions
-                .iter()
-                .max_by_key(|revision| revision.revision.revision_no)
-        })
+        .or_else(|| revisions.iter().max_by_key(|revision| revision.revision.revision_no))
 }
 
 /// 批量解析 SKU 当前修订映射。
@@ -976,10 +909,7 @@ fn select_current_sku_revision<'a>(sku: &Sku, revisions: &'a [SkuRevision]) -> O
 fn select_current_sku_revisions(skus: &[Sku], revisions: Vec<SkuRevision>) -> HashMap<String, SkuRevision> {
     let mut grouped: HashMap<String, Vec<SkuRevision>> = HashMap::new();
     for revision in revisions {
-        grouped
-            .entry(revision.sku_id.to_string())
-            .or_default()
-            .push(revision);
+        grouped.entry(revision.sku_id.to_string()).or_default().push(revision);
     }
     skus.iter()
         .filter_map(|sku| {
@@ -1082,9 +1012,7 @@ impl CatalogRepository<'_> {
         let mut ids = self.keyword_sku_ids(keyword, true, executor).await?;
         let mut name_filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut name_filter, "name", Some(keyword));
-        let revisions = self
-            .db
-            .collection::<Document>(<mongodb::Database as CatalogExt>::PRODUCT_REVISIONS);
+        let revisions = self.db.collection::<Document>(<mongodb::Database as CatalogExt>::PRODUCT_REVISIONS);
         let mut query = revisions.distinct("id", name_filter);
         if let Some(session) = executor.session() {
             query = query.session(session);
@@ -1092,9 +1020,7 @@ impl CatalogRepository<'_> {
         let revision_ids = query.await?;
         let mut number = Document::new();
         insert_literal_regex_filter(&mut number, "product_no", Some(keyword));
-        let products = self
-            .db
-            .collection::<Document>(<mongodb::Database as CatalogExt>::PRODUCTS);
+        let products = self.db.collection::<Document>(<mongodb::Database as CatalogExt>::PRODUCTS);
         let mut query = products.distinct("id", doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": [number, doc! { "current_revision_id": { "$in": revision_ids } }] });
         if let Some(session) = executor.session() {
             query = query.session(session);
@@ -1109,10 +1035,7 @@ impl CatalogRepository<'_> {
             query = query.session(session);
         }
         ids.extend(
-            query
-                .await?
-                .into_iter()
-                .filter_map(|id| id.as_str().map(|value| SkuId::new(value.to_owned()))),
+            query.await?.into_iter().filter_map(|id| id.as_str().map(|value| SkuId::new(value.to_owned()))),
         );
         ids.sort_by_key(ToString::to_string);
         ids.dedup();
@@ -1186,12 +1109,13 @@ mod tests {
     fn sku_revision_roundtrips_through_bson() {
         use std::str::FromStr;
 
-        use crate::entity::catalog::sku_revision::{SkuRevision, SkuRevisionData};
-        use crate::entity::catalog::EnableStatus;
         use erp_core::common::time::BusinessDate;
         use erp_core::ids::{FileAssetId, SkuId, SkuRevisionId};
         use erp_core::money::{Amount, Quantity};
         use mongodb::bson::{self, Bson};
+
+        use crate::entity::catalog::EnableStatus;
+        use crate::entity::catalog::sku_revision::{SkuRevision, SkuRevisionData};
 
         let revision = SkuRevision::new(
             SkuRevisionId::new("rev-1"),
@@ -1215,10 +1139,7 @@ mod tests {
         .unwrap();
         let bytes = bson::serialize_to_vec(&revision).unwrap();
         let wire_doc: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
-        assert!(matches!(
-            wire_doc.get("sales_visible_price_gross"),
-            Some(Bson::Decimal128(_))
-        ));
+        assert!(matches!(wire_doc.get("sales_visible_price_gross"), Some(Bson::Decimal128(_))));
         assert!(matches!(wire_doc.get("weight_kg"), Some(Bson::Decimal128(_))));
         let back: SkuRevision = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(back, revision);
@@ -1237,11 +1158,7 @@ mod inventory_keyword_tests {
         let inventory = sku_revision_keyword_filter("500ml.[x]", true);
         assert!(inventory.contains_key("deleted_at"));
         let clauses = inventory.get_array("$or").unwrap();
-        let spec = clauses[1]
-            .as_document()
-            .unwrap()
-            .get_document("specification")
-            .unwrap();
+        let spec = clauses[1].as_document().unwrap().get_document("specification").unwrap();
         assert_eq!(spec.get_str("$regex").unwrap(), r"500ml\.\[x\]");
     }
 }

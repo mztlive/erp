@@ -2,9 +2,6 @@
 
 use std::collections::HashMap;
 
-use crate::entity::approval_integration::{ApprovalNotificationOutbox, ApprovalNotificationTemplateParams};
-use crate::entity::work_item::DocumentApprovalWorkItemData;
-use crate::entity::work_item::{ApprovalRuntimeTaskEnding, WorkItem, WorkItemPriority};
 use bpm::engine::{TaskCloseReason, TaskIntent};
 use bpm::ids::ApprovalNodeExecutionId;
 use bpm::model::types::ApprovalCommandKind;
@@ -17,6 +14,10 @@ use erp_core::ids::{ApprovalNotificationOutboxId, WorkItemId};
 
 use super::apply_plan::{DomainActionKind, PlannedWrites};
 use super::notification_outbox::NotificationIntent;
+use crate::entity::approval_integration::{ApprovalNotificationOutbox, ApprovalNotificationTemplateParams};
+use crate::entity::work_item::{
+    ApprovalRuntimeTaskEnding, DocumentApprovalWorkItemData, WorkItem, WorkItemPriority,
+};
 use crate::error::{Error, Result};
 
 /// 事务应用失败。调用方必须整体回滚。
@@ -39,10 +40,10 @@ impl From<ApplyError> for Error {
             ApplyError::DuplicateReceipt => super::idempotency::payload_conflict_error(),
             ApplyError::VersionConflict => {
                 Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            }
+            },
             ApplyError::DomainActionFailed(message) | ApplyError::Invariant(message) => {
                 Error::BusinessLogicError(message)
-            }
+            },
         }
     }
 }
@@ -327,11 +328,7 @@ fn persist_instance(
     instance: &ApprovalProcessInstance,
 ) -> std::result::Result<(), ApplyError> {
     if let Some(existing) = store.instances.get(&instance.base.id) {
-        let expected = instance
-            .base
-            .version
-            .checked_sub(1)
-            .ok_or(ApplyError::VersionConflict)?;
+        let expected = instance.base.version.checked_sub(1).ok_or(ApplyError::VersionConflict)?;
         if existing.base.version != expected {
             return Err(ApplyError::VersionConflict);
         }
@@ -347,9 +344,7 @@ fn insert_execution(
     if store.executions.contains_key(&execution.base.id) {
         return Err(ApplyError::Invariant("执行主键重复".to_string()));
     }
-    store
-        .executions
-        .insert(execution.base.id.clone(), execution.clone());
+    store.executions.insert(execution.base.id.clone(), execution.clone());
     Ok(())
 }
 
@@ -374,17 +369,11 @@ fn replace_execution(
     let Some(existing) = store.executions.get(&execution.base.id) else {
         return Err(ApplyError::VersionConflict);
     };
-    let expected = execution
-        .base
-        .version
-        .checked_sub(1)
-        .ok_or(ApplyError::VersionConflict)?;
+    let expected = execution.base.version.checked_sub(1).ok_or(ApplyError::VersionConflict)?;
     if existing.base.version != expected {
         return Err(ApplyError::VersionConflict);
     }
-    store
-        .executions
-        .insert(execution.base.id.clone(), execution.clone());
+    store.executions.insert(execution.base.id.clone(), execution.clone());
     Ok(())
 }
 
@@ -394,12 +383,7 @@ fn apply_task_intents(
     ctx: &TaskApplyContext,
 ) -> std::result::Result<(), ApplyError> {
     for intent in &writes.create_tasks {
-        let TaskIntent::HumanTaskRequested {
-            execution_id,
-            assignee,
-            ..
-        } = intent
-        else {
+        let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
             continue;
         };
         if assignee.as_str().trim().is_empty() {
@@ -454,13 +438,7 @@ fn complete_open_task(
     actor_id: &str,
     now: Instant,
 ) -> std::result::Result<(), ApplyError> {
-    end_open_tasks(
-        store,
-        execution_id,
-        actor_id,
-        &ApprovalRuntimeTaskEnding::Complete,
-        now,
-    )
+    end_open_tasks(store, execution_id, actor_id, &ApprovalRuntimeTaskEnding::Complete, now)
 }
 
 /// 关闭指定执行下全部开放审批任务。
@@ -491,9 +469,7 @@ pub(super) fn close_open_tasks(
         store,
         execution_id,
         actor_id,
-        &ApprovalRuntimeTaskEnding::Close {
-            reason: reason.as_str().to_string(),
-        },
+        &ApprovalRuntimeTaskEnding::Close { reason: reason.as_str().to_string() },
         now,
     )
 }
@@ -555,10 +531,7 @@ pub(super) fn persist_ended_tasks(
     items: &[WorkItem],
 ) -> std::result::Result<(), ApplyError> {
     for item in items {
-        let stored = store
-            .work_items
-            .get(&item.base.id)
-            .ok_or(ApplyError::VersionConflict)?;
+        let stored = store.work_items.get(&item.base.id).ok_or(ApplyError::VersionConflict)?;
         if stored.base.version != item.base.version
             || stored.status != crate::entity::work_item::WorkItemStatus::Open
         {
@@ -577,11 +550,7 @@ fn enqueue_notifications(
     ctx: &TaskApplyContext,
 ) -> std::result::Result<(), ApplyError> {
     for intent in intents {
-        if store
-            .outbox
-            .values()
-            .any(|item| item.dedup_key == intent.dedup_key)
-        {
+        if store.outbox.values().any(|item| item.dedup_key == intent.dedup_key) {
             continue;
         }
         let record = ApprovalNotificationOutbox::enqueue(
@@ -619,11 +588,12 @@ fn assignee_key(assignee: &ApprovalInstanceAssignee) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::entity::work_item::WorkItemStatus;
     use bpm::engine::TaskCloseReason;
     use bpm::ids::ApprovalNodeExecutionId;
     use erp_core::ids::WorkItemId;
+
+    use super::*;
+    use crate::entity::work_item::WorkItemStatus;
 
     fn open_task(id: &str, execution_id: &str) -> WorkItem {
         WorkItem::new_document_approval(
@@ -661,9 +631,7 @@ mod tests {
         )
         .expect("重复开放任务必须全部关闭");
         assert_eq!(store.open_task_count(&execution_id), 0);
-        assert!(store
-            .work_items()
-            .all(|item| item.status == WorkItemStatus::Closed));
+        assert!(store.work_items().all(|item| item.status == WorkItemStatus::Closed));
     }
 
     /// 实例版本跳跃必须 CAS 失败且不覆盖已提交快照。
@@ -687,14 +655,8 @@ mod tests {
         persist_instance(&mut store, &instance).unwrap();
         let mut drifted = instance.clone();
         drifted.base.version = 3;
-        assert_eq!(
-            persist_instance(&mut store, &drifted),
-            Err(ApplyError::VersionConflict)
-        );
-        assert_eq!(
-            store.instance("inst").unwrap().base.version,
-            instance.base.version
-        );
+        assert_eq!(persist_instance(&mut store, &drifted), Err(ApplyError::VersionConflict));
+        assert_eq!(store.instance("inst").unwrap().base.version, instance.base.version);
     }
 
     /// 同载荷收据回放、异载荷冲突。
@@ -722,10 +684,7 @@ mod tests {
         )
         .unwrap();
         insert_receipt(&mut store, &receipt).unwrap();
-        assert_eq!(
-            insert_receipt(&mut store, &receipt),
-            Err(ApplyError::DuplicateReceipt)
-        );
+        assert_eq!(insert_receipt(&mut store, &receipt), Err(ApplyError::DuplicateReceipt));
         let same = replay_after_duplicate(
             &store,
             kind,
@@ -737,17 +696,19 @@ mod tests {
         assert_eq!(same.payload_digest, receipt.payload_digest);
         let conflict =
             replay_after_duplicate(&store, kind, receipt.scope_id.as_str(), &key, "other").unwrap_err();
-        assert!(conflict
-            .to_string()
-            .contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
+        assert!(conflict.to_string().contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
     }
 
     /// Mongo 契约已上收到 `runtime_persistence_contract`；本文件只保留内存原语。
     #[test]
     fn memory_close_is_covered_by_shared_persistence_contract() {
-        assert!(include_str!("runtime_persistence_contract.rs")
-            .contains("run_memory_runtime_persistence_contract"));
-        assert!(include_str!("runtime_persistence_contract.rs")
-            .contains("mongo_adapter_satisfies_runtime_persistence_contract"));
+        assert!(
+            include_str!("runtime_persistence_contract.rs")
+                .contains("run_memory_runtime_persistence_contract")
+        );
+        assert!(
+            include_str!("runtime_persistence_contract.rs")
+                .contains("mongo_adapter_satisfies_runtime_persistence_contract")
+        );
     }
 }

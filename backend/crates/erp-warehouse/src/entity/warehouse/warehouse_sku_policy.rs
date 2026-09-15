@@ -6,14 +6,14 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use super::status::EnableStatus;
 use erp_core::common::state::ensure_transition;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{SkuId, WarehouseId, WarehouseSkuPolicyId};
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use super::status::EnableStatus;
 
 /// 仓库-SKU 策略的半开生效区间。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -40,10 +40,7 @@ impl WarehouseSkuPolicyPeriod {
         if effective_to.is_some_and(|effective_to| effective_to <= effective_from) {
             return Err(Error::from("生效结束日必须晚于生效开始日"));
         }
-        Ok(Self {
-            effective_from,
-            effective_to,
-        })
+        Ok(Self { effective_from, effective_to })
     }
 
     /// 判断两个半开区间是否存在交集。
@@ -178,10 +175,7 @@ impl WarehouseSkuPolicy {
     /// # 返回
     /// 返回由实体持久化起止日构造的合法区间值对象。
     pub fn effective_period(&self) -> WarehouseSkuPolicyPeriod {
-        WarehouseSkuPolicyPeriod {
-            effective_from: self.effective_from,
-            effective_to: self.effective_to,
-        }
+        WarehouseSkuPolicyPeriod { effective_from: self.effective_from, effective_to: self.effective_to }
     }
 
     /// 判断当前策略是否仍参与启用策略约束。
@@ -281,10 +275,12 @@ fn ensure_non_negative_quantity(value: Quantity) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
+
     use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
     use erp_core::ids::WarehouseSkuPolicyId;
-    use std::str::FromStr;
+
+    use super::*;
 
     fn data() -> WarehouseSkuPolicyData {
         WarehouseSkuPolicyData {
@@ -304,10 +300,7 @@ mod tests {
 
         assert_eq!(policy.warehouse_id, WarehouseId::new("wh-1"));
         assert_eq!(policy.sku_id, SkuId::new("sku-1"));
-        assert_eq!(
-            policy.minimum_available_quantity,
-            Quantity::from_str("10.000000").unwrap()
-        );
+        assert_eq!(policy.minimum_available_quantity, Quantity::from_str("10.000000").unwrap());
         assert!(policy.status.is_active());
     }
 
@@ -383,10 +376,7 @@ mod tests {
         let policy = WarehouseSkuPolicy::new(WarehouseSkuPolicyId::new("policy-1"), data()).unwrap();
         let json = serde_json::to_string(&policy).unwrap();
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(
-            value["minimum_available_quantity"],
-            serde_json::json!("10.000000")
-        );
+        assert_eq!(value["minimum_available_quantity"], serde_json::json!("10.000000"));
 
         let back: WarehouseSkuPolicy = serde_json::from_str(&json).unwrap();
         assert_eq!(back, policy);
@@ -407,10 +397,7 @@ mod tests {
                 status: Some(EnableStatus::Disabled),
             })
             .unwrap();
-        assert_eq!(
-            policy.minimum_available_quantity,
-            Quantity::from_str("5.000000").unwrap()
-        );
+        assert_eq!(policy.minimum_available_quantity, Quantity::from_str("5.000000").unwrap());
         assert!(!policy.status.is_active());
         assert!(!policy.is_operable());
 
@@ -421,23 +408,24 @@ mod tests {
             )
             .unwrap();
         assert_eq!(policy.effective_from, BusinessDate::from_ymd(2026, 4, 1).unwrap());
-        assert_eq!(
-            policy.effective_to,
-            Some(BusinessDate::from_ymd(2026, 6, 1).unwrap())
-        );
+        assert_eq!(policy.effective_to, Some(BusinessDate::from_ymd(2026, 6, 1).unwrap()));
 
-        assert!(policy
-            .reschedule(
-                BusinessDate::from_ymd(2026, 6, 1).unwrap(),
-                Some(BusinessDate::from_ymd(2026, 5, 1).unwrap())
-            )
-            .is_err());
-        assert!(policy
-            .update(WarehouseSkuPolicyUpdate {
-                minimum_available_quantity: Some(Quantity::from_str("-1.000000").unwrap()),
-                ..Default::default()
-            })
-            .is_err());
+        assert!(
+            policy
+                .reschedule(
+                    BusinessDate::from_ymd(2026, 6, 1).unwrap(),
+                    Some(BusinessDate::from_ymd(2026, 5, 1).unwrap())
+                )
+                .is_err()
+        );
+        assert!(
+            policy
+                .update(WarehouseSkuPolicyUpdate {
+                    minimum_available_quantity: Some(Quantity::from_str("-1.000000").unwrap()),
+                    ..Default::default()
+                })
+                .is_err()
+        );
     }
 
     /// 状态机：合法迁移通过，邻接矩阵对称闭合。

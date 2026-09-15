@@ -34,33 +34,31 @@ mod purchase_receipt;
 mod purchase_receipt_totals;
 mod service_fulfillment;
 
+use std::collections::HashMap;
+
 pub use customer_acceptance::CustomerAcceptanceFilter;
 pub use delivery::DeliveryFilter;
 pub use electronic_delivery::ElectronicDeliveryFilter;
-pub use purchase_receipt::PurchaseReceiptFilter;
-pub use service_fulfillment::ServiceFulfillmentFilter;
-
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use mongodb::Database;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-
-use crate::entity::fulfillment::{
-    AcceptanceFulfillmentAllocation, CustomerAcceptance, CustomerAcceptanceLine, Delivery, DeliveryLine,
-    DeliveryState, DeliveryType, ElectronicDelivery, ElectronicDeliveryState, FulfillmentFactType,
-    PurchaseReceipt, PurchaseReceiptLine, ServiceFulfillment, ServiceFulfillmentState,
-};
 use erp_core::ids::{
     CustomerAcceptanceId, CustomerAcceptanceLineId, DeliveryId, ElectronicDeliveryId, PurchaseOrderId,
     PurchaseOrderRevisionLineId, PurchaseReceiptId, SalesOrderLineId, ServiceFulfillmentId,
 };
 use erp_core::money::Quantity;
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, Result, mongo_ops};
+pub use purchase_receipt::PurchaseReceiptFilter;
+use serde::{Deserialize, Serialize};
+pub use service_fulfillment::ServiceFulfillmentFilter;
 
 use super::extensions::FulfillmentExt;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
+use crate::entity::fulfillment::{
+    AcceptanceFulfillmentAllocation, CustomerAcceptance, CustomerAcceptanceLine, Delivery, DeliveryLine,
+    DeliveryState, DeliveryType, ElectronicDelivery, ElectronicDeliveryState, FulfillmentFactType,
+    PurchaseReceipt, PurchaseReceiptLine, ServiceFulfillment, ServiceFulfillmentState,
+};
 
 /// `purchase_receipt_line` 集合名（单一来源：`FulfillmentExt` 关联常量）。
 const PURCHASE_RECEIPT_LINES: &str = <mongodb::Database as FulfillmentExt>::PURCHASE_RECEIPT_LINES;
@@ -119,14 +117,10 @@ impl<'a> FulfillmentRepository<'a> {
         sales_order_id: &erp_core::ids::SalesOrderId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<Delivery>> {
-        let states: Vec<&str> = DeliveryState::acceptance_eligible_states()
-            .iter()
-            .map(DeliveryState::as_str)
-            .collect();
+        let states: Vec<&str> =
+            DeliveryState::acceptance_eligible_states().iter().map(DeliveryState::as_str).collect();
         mongo_ops::find_many(
-            &self
-                .db
-                .collection::<Delivery>(<mongodb::Database as FulfillmentExt>::DELIVERIES),
+            &self.db.collection::<Delivery>(<mongodb::Database as FulfillmentExt>::DELIVERIES),
             doc! {
                 "sales_order_id": sales_order_id.to_string(),
                 "status": { "$in": states },
@@ -386,9 +380,7 @@ impl<'a> FulfillmentRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<Option<Delivery>> {
         mongo_ops::find_one(
-            &self
-                .db
-                .collection::<Delivery>(<mongodb::Database as FulfillmentExt>::DELIVERIES),
+            &self.db.collection::<Delivery>(<mongodb::Database as FulfillmentExt>::DELIVERIES),
             doc! {
                 "sales_order_id": sales_order_id.to_string(),
                 "status": DeliveryState::Draft.as_str(),
@@ -428,9 +420,7 @@ impl<'a> FulfillmentRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<Option<Delivery>> {
         mongo_ops::find_one(
-            &self
-                .db
-                .collection::<Delivery>(<mongodb::Database as FulfillmentExt>::DELIVERIES),
+            &self.db.collection::<Delivery>(<mongodb::Database as FulfillmentExt>::DELIVERIES),
             doc! {
                 "sales_order_id": sales_order_id.to_string(),
                 "warehouse_id": warehouse_id.to_string(),
@@ -491,14 +481,9 @@ impl<'a> FulfillmentRepository<'a> {
         delivery_ids: &[DeliveryId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<DeliveryLine>> {
-        let mut lines = find_lines_in(
-            self.db,
-            DELIVERY_LINES,
-            "delivery_id",
-            &ids_to_strings(delivery_ids),
-            executor,
-        )
-        .await?;
+        let mut lines =
+            find_lines_in(self.db, DELIVERY_LINES, "delivery_id", &ids_to_strings(delivery_ids), executor)
+                .await?;
         lines.sort_by_key(|line: &DeliveryLine| (line.delivery_id.to_string(), line.line_no));
         Ok(lines)
     }
@@ -586,9 +571,8 @@ impl<'a> FulfillmentRepository<'a> {
         if fulfillment_line_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let collection = self
-            .db
-            .collection::<AcceptanceFulfillmentAllocation>(ACCEPTANCE_FULFILLMENT_ALLOCATIONS);
+        let collection =
+            self.db.collection::<AcceptanceFulfillmentAllocation>(ACCEPTANCE_FULFILLMENT_ALLOCATIONS);
         mongo_ops::find_many(
             &collection,
             doc! {
@@ -634,9 +618,7 @@ impl<'a> FulfillmentRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<PurchaseReceipt>(<mongodb::Database as FulfillmentExt>::PURCHASE_RECEIPTS),
+            &self.db.collection::<PurchaseReceipt>(<mongodb::Database as FulfillmentExt>::PURCHASE_RECEIPTS),
             receipt,
             executor,
         )
@@ -681,19 +663,13 @@ impl<'a> FulfillmentRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<Delivery>(<mongodb::Database as FulfillmentExt>::DELIVERIES),
+            &self.db.collection::<Delivery>(<mongodb::Database as FulfillmentExt>::DELIVERIES),
             delivery,
             executor,
         )
         .await?;
-        mongo_ops::insert_many(
-            &self.db.collection::<DeliveryLine>(DELIVERY_LINES),
-            lines.to_vec(),
-            executor,
-        )
-        .await
+        mongo_ops::insert_many(&self.db.collection::<DeliveryLine>(DELIVERY_LINES), lines.to_vec(), executor)
+            .await
     }
 
     /// 创建客户验收单及全部行（跨集合多步骤写入）。
@@ -737,9 +713,7 @@ impl<'a> FulfillmentRepository<'a> {
         )
         .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<CustomerAcceptanceLine>(CUSTOMER_ACCEPTANCE_LINES),
+            &self.db.collection::<CustomerAcceptanceLine>(CUSTOMER_ACCEPTANCE_LINES),
             lines.to_vec(),
             executor,
         )
@@ -776,17 +750,13 @@ impl<'a> FulfillmentRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::delete_many(
-            &self
-                .db
-                .collection::<CustomerAcceptanceLine>(CUSTOMER_ACCEPTANCE_LINES),
+            &self.db.collection::<CustomerAcceptanceLine>(CUSTOMER_ACCEPTANCE_LINES),
             doc! { "customer_acceptance_id": acceptance_id.to_string() },
             executor,
         )
         .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<CustomerAcceptanceLine>(CUSTOMER_ACCEPTANCE_LINES),
+            &self.db.collection::<CustomerAcceptanceLine>(CUSTOMER_ACCEPTANCE_LINES),
             lines.to_vec(),
             executor,
         )
@@ -885,27 +855,22 @@ where
 /// 返回排序条件文档。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
-    let field = sort_by
-        .filter(|field| allowed.contains(field))
-        .unwrap_or("created_at");
+    let field = sort_by.filter(|field| allowed.contains(field)).unwrap_or("created_at");
     doc! { field: direction }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ids_to_strings, sort_doc};
+    use erp_core::ids::PurchaseOrderId;
     use mongodb::bson::doc;
 
-    use erp_core::ids::PurchaseOrderId;
+    use super::{ids_to_strings, sort_doc};
 
     #[test]
     fn sort_doc_maps_whitelisted_fields_and_defaults_otherwise() {
         let allowed = ["created_at", "posted_at"];
         assert_eq!(sort_doc(None, false, &allowed), doc! { "created_at": -1 });
-        assert_eq!(
-            sort_doc(Some("posted_at"), true, &allowed),
-            doc! { "posted_at": 1 }
-        );
+        assert_eq!(sort_doc(Some("posted_at"), true, &allowed), doc! { "posted_at": 1 });
         assert_eq!(
             sort_doc(Some("任意字段"), false, &allowed),
             doc! { "created_at": -1 },

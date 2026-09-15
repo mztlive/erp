@@ -65,9 +65,8 @@ impl EvidenceRecordRef {
     /// 只允许恰好一段类型和一段 ID；额外 `:` 一律拒绝。
     pub fn parse(value: &str) -> Result<Self> {
         let value = value.trim();
-        let (kind, id) = value
-            .split_once(':')
-            .ok_or_else(|| Error::from("证据记录 ID 必须使用 type:id 格式"))?;
+        let (kind, id) =
+            value.split_once(':').ok_or_else(|| Error::from("证据记录 ID 必须使用 type:id 格式"))?;
         if id.contains(':') {
             return Err(Error::from("证据记录 ID 必须使用唯一的 type:id 格式"));
         }
@@ -282,7 +281,7 @@ impl CanonicalEvidenceReference {
         match (self.version, self.status.as_deref()) {
             (Some(version), Some(status)) => {
                 format!("{}:{}:v{}:{}", self.kind, self.id, version, status)
-            }
+            },
             (None, Some(status)) => format!("{}:{}:{}", self.kind, self.id, status),
             (Some(version), None) => format!("{}:{}:v{}", self.kind, self.id, version),
             (None, None) => format!("{}:{}", self.kind, self.id),
@@ -330,10 +329,7 @@ impl ReplayOriginalReference {
         if business_fact_key.is_empty() {
             return Err(Error::from("业务事实键不能为空"));
         }
-        Ok(Self {
-            inbox,
-            business_fact_key: business_fact_key.to_string(),
-        })
+        Ok(Self { inbox, business_fact_key: business_fact_key.to_string() })
     }
 
     /// 解析重放引用的持久化形态。
@@ -354,10 +350,7 @@ impl ReplayOriginalReference {
         let (inbox, business_fact_key) = value
             .split_once(";business_fact_key:")
             .ok_or_else(|| Error::from("重放引用必须包含 business_fact_key 字段"))?;
-        Self::from_parts(
-            CanonicalEvidenceReference::parse_stored(inbox)?,
-            business_fact_key,
-        )
+        Self::from_parts(CanonicalEvidenceReference::parse_stored(inbox)?, business_fact_key)
     }
 
     /// 返回 inbox canonical 引用。
@@ -421,10 +414,7 @@ impl ReplayOriginalReference {
         if business_fact_key.is_empty() {
             return Err(Error::from("业务事实键不能为空"));
         }
-        Ok(Self {
-            inbox,
-            business_fact_key: business_fact_key.to_string(),
-        })
+        Ok(Self { inbox, business_fact_key: business_fact_key.to_string() })
     }
 }
 
@@ -665,10 +655,7 @@ impl EvidenceSubjectBindings {
         self.message_id.as_deref() == Some(id)
             || self.business_object_id.as_deref() == Some(id)
             || self.fact_identities.iter().any(|reference| reference.id() == id)
-            || self
-                .unparsed_fact_references
-                .iter()
-                .any(|reference| reference.as_str() == id)
+            || self.unparsed_fact_references.iter().any(|reference| reference.as_str() == id)
     }
 }
 
@@ -686,10 +673,7 @@ impl EvidenceSubjectBindings {
 /// # 约束
 /// 不解析 grammar，只处理主体字段。
 fn normalize_optional_identity(value: Option<&str>) -> Option<String> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
+    value.map(str::trim).filter(|value| !value.is_empty()).map(ToString::to_string)
 }
 
 /// 编码紧凑集合的单个成员。
@@ -872,18 +856,15 @@ fn parse_id(value: &str, message: &str) -> Result<String> {
 /// # 约束
 /// `v0` 合法；`v01` 非法，避免同一版本多种写法。
 fn parse_version_token(value: &str) -> Result<u64> {
-    let digits = value
-        .strip_prefix('v')
-        .ok_or_else(|| Error::from("证据记录 ID 必须使用唯一的 type:id 格式"))?;
+    let digits =
+        value.strip_prefix('v').ok_or_else(|| Error::from("证据记录 ID 必须使用唯一的 type:id 格式"))?;
     if digits.is_empty()
         || !digits.bytes().all(|byte| byte.is_ascii_digit())
         || (digits.len() > 1 && digits.starts_with('0'))
     {
         return Err(Error::from("证据记录 ID 必须使用唯一的 type:id 格式"));
     }
-    digits
-        .parse()
-        .map_err(|_| Error::from("证据记录 ID 必须使用唯一的 type:id 格式"))
+    digits.parse().map_err(|_| Error::from("证据记录 ID 必须使用唯一的 type:id 格式"))
 }
 
 /// 判断字符是否会切断引用边界。
@@ -906,8 +887,8 @@ fn is_delimiter(character: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        CanonicalEvidenceReference, CompactEvidenceSet, EvidenceRecordRef, EvidenceReferenceSet,
-        EvidenceSubjectBindings, ReplayOriginalReference, ENCODED_MAX_LEN,
+        CanonicalEvidenceReference, CompactEvidenceSet, ENCODED_MAX_LEN, EvidenceRecordRef,
+        EvidenceReferenceSet, EvidenceSubjectBindings, ReplayOriginalReference,
     };
 
     fn bindings(facts: &[&str]) -> EvidenceSubjectBindings {
@@ -937,10 +918,7 @@ mod tests {
             "inbox_message:message-1=forged",
             "inbox_message:message 1",
         ] {
-            assert!(
-                EvidenceRecordRef::parse(injected).is_err(),
-                "{injected} 应拒绝分隔符注入"
-            );
+            assert!(EvidenceRecordRef::parse(injected).is_err(), "{injected} 应拒绝分隔符注入");
         }
     }
 
@@ -967,10 +945,7 @@ mod tests {
                 .unwrap();
         assert_eq!(reviewed.id(), "res-1");
         assert_eq!(reviewed.status(), Some("reviewed"));
-        assert_eq!(
-            reviewed.to_string(),
-            "reconciliation_difference_resolution:res-1:reviewed"
-        );
+        assert_eq!(reviewed.to_string(), "reconciliation_difference_resolution:res-1:reviewed");
     }
 
     #[test]
@@ -1028,13 +1003,9 @@ mod tests {
         let second =
             CanonicalEvidenceReference::verified("inbox_message", "a", Some(1), "processed").unwrap();
         let duplicate = second.clone();
-        let encoded = EvidenceReferenceSet::try_from_canonical([first, second, duplicate])
-            .unwrap()
-            .into_wire();
-        assert_eq!(
-            encoded,
-            "inbox_message:a:v1:processed;inbox_message:b:v1:processed"
-        );
+        let encoded =
+            EvidenceReferenceSet::try_from_canonical([first, second, duplicate]).unwrap().into_wire();
+        assert_eq!(encoded, "inbox_message:a:v1:processed;inbox_message:b:v1:processed");
         assert!(EvidenceReferenceSet::try_from_canonical(Vec::new()).is_err());
 
         let left_ok = "a".repeat(251);
@@ -1052,9 +1023,7 @@ mod tests {
 
     #[test]
     fn compact_set_sorts_dedups_empty_and_512_boundary() {
-        assert!(CompactEvidenceSet::try_from_pairs(Vec::<(&str, &str)>::new())
-            .unwrap()
-            .is_none());
+        assert!(CompactEvidenceSet::try_from_pairs(Vec::<(&str, &str)>::new()).unwrap().is_none());
         let encoded = CompactEvidenceSet::try_from_pairs([
             ("EXTERNAL_CASE_RESULT", "inbox_message:b"),
             ("BUSINESS_OBJECT_VERIFICATION", "mall_order_fact:a"),
@@ -1102,10 +1071,7 @@ mod tests {
         assert_eq!(replay.inbox().to_string(), "inbox_message:msg-1:v2:requeued");
         assert_eq!(replay.business_fact_key(), KEY);
         let wire = replay.into_wire();
-        assert_eq!(
-            wire,
-            format!("inbox_message:msg-1:v2:requeued;business_fact_key:{KEY}")
-        );
+        assert_eq!(wire, format!("inbox_message:msg-1:v2:requeued;business_fact_key:{KEY}"));
         let parsed = ReplayOriginalReference::parse(&wire).unwrap();
         assert_eq!(parsed.business_fact_key(), KEY);
         assert_eq!(parsed.inbox().id(), "msg-1");

@@ -2,7 +2,8 @@
 
 mod adapters;
 
-use crate::{Error, Result};
+use std::sync::Arc;
+
 use erp_core::common::time::Instant;
 use erp_sales::dto::sales_selection::{
     CopyLinkView, CreateSalesSelectionBookletRequest, DeleteDisplayItemRequest, PrepareSalesSelectionRequest,
@@ -16,10 +17,10 @@ use erp_sales::ports::sales_selection::SelectionImagePort;
 use erp_sales::service::sales_selection::SalesSelectionService;
 use mongodb::Database;
 use persistence_core::Transactional;
-use std::sync::Arc;
 use storage::S3Storage;
 
 use self::adapters::{CatalogAdapter, CustomerAdapter, ImageAdapter};
+use crate::{Error, Result};
 
 /// 销售选品组合根。
 pub struct SalesSelectionProcess {
@@ -42,11 +43,7 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 无。
     pub fn new(db: Database, storage: S3Storage, secret: &[u8]) -> Self {
-        Self {
-            db,
-            storage,
-            crypto: LinkTokenCrypto::from_secret(secret),
-        }
+        Self { db, storage, crypto: LinkTokenCrypto::from_secret(secret) }
     }
 
     /// 创建选品册并排队首次准备。
@@ -97,9 +94,7 @@ impl SalesSelectionProcess {
         &self,
         params: SalesSelectionBookletListParams,
     ) -> Result<SalesSelectionBookletPage> {
-        Ok(SalesSelectionService::new(self.db.clone())
-            .list_booklets(params)
-            .await?)
+        Ok(SalesSelectionService::new(self.db.clone()).list_booklets(params).await?)
     }
 
     /// 详情。
@@ -113,9 +108,7 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 不存在。
     pub async fn booklet_detail(&self, id: &str) -> Result<SalesSelectionBookletView> {
-        Ok(SalesSelectionService::new(self.db.clone())
-            .booklet_detail(id)
-            .await?)
+        Ok(SalesSelectionService::new(self.db.clone()).booklet_detail(id).await?)
     }
 
     /// 启动准备。
@@ -139,10 +132,7 @@ impl SalesSelectionProcess {
         let mut req = req;
         req.booklet_id = id;
         let catalog = CatalogAdapter { db: self.db.clone() };
-        let images = ImageAdapter {
-            db: self.db.clone(),
-            storage: std::sync::Arc::new(self.storage.clone()),
-        };
+        let images = ImageAdapter { db: self.db.clone(), storage: std::sync::Arc::new(self.storage.clone()) };
         Ok(SalesSelectionService::new(self.db.clone())
             .start_prepare(
                 req,
@@ -234,14 +224,9 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 无链接。
     pub async fn copy_link_url(&self, id: &str) -> Result<CopyLinkView> {
-        let token = SalesSelectionService::new(self.db.clone())
-            .copy_link(id, &self.crypto)
-            .await?;
+        let token = SalesSelectionService::new(self.db.clone()).copy_link(id, &self.crypto).await?;
         let path = format!("/s/{token}");
-        Ok(CopyLinkView {
-            public_url: path.clone(),
-            public_path: path,
-        })
+        Ok(CopyLinkView { public_url: path.clone(), public_path: path })
     }
 
     /// 内部会话快照。
@@ -255,9 +240,7 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 无会话。
     pub async fn admin_session(&self, id: &str) -> Result<SalesSelectionSessionView> {
-        Ok(SalesSelectionService::new(self.db.clone())
-            .admin_session(id)
-            .await?)
+        Ok(SalesSelectionService::new(self.db.clone()).admin_session(id).await?)
     }
 
     /// 更换链接。
@@ -360,9 +343,7 @@ impl SalesSelectionProcess {
         &self,
         params: SalesSelectionProposalListParams,
     ) -> Result<SalesSelectionProposalPage> {
-        Ok(SalesSelectionService::new(self.db.clone())
-            .proposal_list(params)
-            .await?)
+        Ok(SalesSelectionService::new(self.db.clone()).proposal_list(params).await?)
     }
 
     /// 方案详情。
@@ -376,9 +357,7 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 不存在。
     pub async fn proposal_detail(&self, id: &str) -> Result<SalesSelectionProposalView> {
-        Ok(SalesSelectionService::new(self.db.clone())
-            .proposal_detail(id)
-            .await?)
+        Ok(SalesSelectionService::new(self.db.clone()).proposal_detail(id).await?)
     }
 
     /// 运行到期准备任务。
@@ -393,13 +372,8 @@ impl SalesSelectionProcess {
     /// 仓储失败。
     pub async fn run_due_prepare_tasks(&self) -> Result<u32> {
         let catalog = CatalogAdapter { db: self.db.clone() };
-        let images = ImageAdapter {
-            db: self.db.clone(),
-            storage: Arc::new(self.storage.clone()),
-        };
-        Ok(SalesSelectionService::new(self.db.clone())
-            .run_due_prepare_tasks(&catalog, &images)
-            .await?)
+        let images = ImageAdapter { db: self.db.clone(), storage: Arc::new(self.storage.clone()) };
+        Ok(SalesSelectionService::new(self.db.clone()).run_due_prepare_tasks(&catalog, &images).await?)
     }
 
     /// 公开页。
@@ -513,9 +487,7 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 资产不属于本册或对象不存在时拒绝。
     pub async fn admin_image(&self, id: &str, asset_id: &str) -> Result<(Vec<u8>, String)> {
-        let key = SalesSelectionService::new(self.db.clone())
-            .admin_image_key(id, asset_id)
-            .await?;
+        let key = SalesSelectionService::new(self.db.clone()).admin_image_key(id, asset_id).await?;
         self.read_image_bytes(&key).await
     }
 
@@ -530,13 +502,10 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 对象不存在。
     pub async fn read_image_bytes(&self, storage_object_key: &str) -> Result<(Vec<u8>, String)> {
-        ImageAdapter {
-            db: self.db.clone(),
-            storage: Arc::new(self.storage.clone()),
-        }
-        .load_bytes(storage_object_key)
-        .await
-        .map_err(Error::from)
+        ImageAdapter { db: self.db.clone(), storage: Arc::new(self.storage.clone()) }
+            .load_bytes(storage_object_key)
+            .await
+            .map_err(Error::from)
     }
 
     /// 公开限流。非法令牌只按 IP 限流。
@@ -557,11 +526,7 @@ impl SalesSelectionProcess {
         use erp_sales::repository::SalesSelectionExt;
         let window = Instant::now().unix_secs() / 60;
         let ip_key = format!("ip:{kind}:{ip}");
-        let ok = self
-            .db
-            .sales_selection_rate()
-            .admit(&ip_key, limit, window)
-            .await?;
+        let ok = self.db.sales_selection_rate().admit(&ip_key, limit, window).await?;
         if !ok {
             return Err(Error::BusinessLogicError("请求过于频繁，请稍后重试".into()));
         }
@@ -582,11 +547,7 @@ impl SalesSelectionProcess {
             return Ok(());
         }
         let token_key = format!("token:{kind}:{hash}");
-        let ok = self
-            .db
-            .sales_selection_rate()
-            .admit(&token_key, limit, window)
-            .await?;
+        let ok = self.db.sales_selection_rate().admit(&token_key, limit, window).await?;
         if !ok {
             return Err(Error::BusinessLogicError("请求过于频繁，请稍后重试".into()));
         }

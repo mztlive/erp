@@ -2,15 +2,15 @@
 //!
 //! 变更路径只负责 D14→D13 字段组转换，公共行、快照和卡券单行约束复用销售单域工厂。
 
-use crate::entity::sales_order::formal_revision::{FormalRevisionHeader, PreparedRevisionLine};
-use crate::entity::sales_order::SalesContentHash;
-use crate::entity::sales_order::{
-    FormalRevisionContext, FormalRevisionIdentities, LineType as SalesLineType, SalesOrderRevisionAggregate,
-};
 use erp_core::{Error, Result};
 
 use super::sales_change_submission::{SalesChangeSubmission, SalesChangeSubmissionLine};
 use super::types::{BusinessType, LineType};
+use crate::entity::sales_order::formal_revision::{FormalRevisionHeader, PreparedRevisionLine};
+use crate::entity::sales_order::{
+    FormalRevisionContext, FormalRevisionIdentities, LineType as SalesLineType, SalesContentHash,
+    SalesOrderRevisionAggregate,
+};
 
 impl FormalRevisionHeader {
     /// 从销售变更提交复制表头快照、金额和内容指纹。
@@ -146,6 +146,14 @@ fn ensure_change_business_type(
 mod tests {
     use std::str::FromStr;
 
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{
+        ContractRevisionId, CustomerAccountId, PartyId, SalesChangeOrderId, SalesChangeSubmissionId,
+        SalesChangeSubmissionLineId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
+        SalesOrderRevisionLineId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
+    };
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+
     use super::*;
     use crate::entity::sales_order::{
         FormalRevisionLineIdentity, FormalRevisionSubtypeIdentity, RevisionSource,
@@ -154,13 +162,6 @@ mod tests {
         CardForm, GoodsLineFields, SalesChangeSubmissionData, SalesChangeSubmissionLineData,
         VoucherLineDraft, WelfareScenario,
     };
-    use erp_core::common::time::Instant;
-    use erp_core::ids::{
-        ContractRevisionId, CustomerAccountId, PartyId, SalesChangeOrderId, SalesChangeSubmissionId,
-        SalesChangeSubmissionLineId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
-        SalesOrderRevisionLineId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
-    };
-    use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -329,10 +330,7 @@ mod tests {
 
         assert_eq!(aggregate.revision.revision.revision_no, 4);
         assert_eq!(aggregate.revision.revision_source, RevisionSource::SalesChange);
-        assert_eq!(
-            aggregate.revision.previous_revision_id,
-            Some(SalesOrderRevisionId::new("rev-1"))
-        );
+        assert_eq!(aggregate.revision.previous_revision_id, Some(SalesOrderRevisionId::new("rev-1")));
         assert_eq!(aggregate.revision.content_hash, "sub:cs-1");
         assert_eq!(aggregate.revision.customer_snapshot.customer_name, "东方企业");
         assert_eq!(aggregate.revision.business_remark.as_deref(), Some("变更后执行"));
@@ -365,10 +363,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(aggregate.voucher_lines.len(), 1);
-        assert_eq!(
-            aggregate.voucher_lines[0].card_form,
-            crate::entity::sales_order::CardForm::Physical
-        );
+        assert_eq!(aggregate.voucher_lines[0].card_form, crate::entity::sales_order::CardForm::Physical);
         assert_eq!(aggregate.voucher_lines[0].card_count, 3);
         assert!(aggregate.goods_lines.is_empty());
     }
@@ -376,18 +371,20 @@ mod tests {
     #[test]
     fn change_factory_rejects_business_type_drift() {
         let (submission, lines) = submission_and_lines(goods_header(vec![goods_line_data(1)]));
-        assert!(SalesOrderRevisionAggregate::from_sales_change_submission(
-            identities_for(&[SalesLineType::GoodsService]),
-            FormalRevisionContext::new(
-                2,
-                RevisionSource::SalesChange,
-                None,
-                crate::entity::sales_order::BusinessType::Voucher,
-                at(),
-            ),
-            &submission,
-            &lines,
-        )
-        .is_err());
+        assert!(
+            SalesOrderRevisionAggregate::from_sales_change_submission(
+                identities_for(&[SalesLineType::GoodsService]),
+                FormalRevisionContext::new(
+                    2,
+                    RevisionSource::SalesChange,
+                    None,
+                    crate::entity::sales_order::BusinessType::Voucher,
+                    at(),
+                ),
+                &submission,
+                &lines,
+            )
+            .is_err()
+        );
     }
 }

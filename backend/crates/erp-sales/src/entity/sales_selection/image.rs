@@ -1,7 +1,8 @@
 //! 套餐图生成端口与 P0 兜底实现。
 
-use super::limits::PACKAGE_IMAGE_FALLBACK_VERSION;
 use erp_core::{Error, Result};
+
+use super::limits::PACKAGE_IMAGE_FALLBACK_VERSION;
 
 /// 套餐图生成端口。调用方只依赖本端口，不判断当前是兜底还是正式实现。
 pub trait PackageImageGenerator: Send + Sync {
@@ -77,9 +78,7 @@ impl PackageImageGenerator for FirstNonEmptyMemberImage {
 /// # 错误
 /// 无。
 pub fn first_non_empty_url(member_image_urls: &[Option<String>]) -> Option<&str> {
-    member_image_urls
-        .iter()
-        .find_map(|url| url.as_deref().map(str::trim).filter(|value| !value.is_empty()))
+    member_image_urls.iter().find_map(|url| url.as_deref().map(str::trim).filter(|value| !value.is_empty()))
 }
 
 /// 套餐主图长期引用。
@@ -131,16 +130,11 @@ impl PackageCoverRef {
 
 #[cfg(test)]
 mod tests {
-    use super::{first_non_empty_url, FirstNonEmptyMemberImage, PackageImageGenerator};
+    use super::{FirstNonEmptyMemberImage, PackageImageGenerator, first_non_empty_url};
 
     #[test]
     fn fallback_takes_first_non_blank_member() {
-        let urls = [
-            None,
-            Some("  ".into()),
-            Some("asset://one".into()),
-            Some("asset://two".into()),
-        ];
+        let urls = [None, Some("  ".into()), Some("asset://one".into()), Some("asset://two".into())];
         let generator = FirstNonEmptyMemberImage;
         assert_eq!(generator.generate(&urls).unwrap(), "asset://one");
         assert_eq!(first_non_empty_url(&urls), Some("asset://one"));

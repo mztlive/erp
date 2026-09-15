@@ -1,9 +1,10 @@
 //! 财务拥有的履约付款来源查询。
 
-use crate::entity::payable::{PayableAccount, PayableSourceType};
-use crate::repository::owned::PayableAccountRepository;
 use erp_core::ids::PurchaseOrderId;
 use persistence_core::{Executor, Result};
+
+use crate::entity::payable::{PayableAccount, PayableSourceType};
+use crate::repository::owned::PayableAccountRepository;
 
 impl PayableAccountRepository<'_> {
     /// 查询采购单来源的应付往来子账。

@@ -2,13 +2,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::stable::StableBase;
 use erp_core::ids::{PayableAccountId, SupplierAccountId};
 use erp_core::money::Amount;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 来源单据 ID 最大长度。
 const DOCUMENT_ID_MAX_LEN: usize = 128;
@@ -232,12 +231,8 @@ impl PayableAccount {
         invoiced_total: Amount,
         updated_by: impl Into<String>,
     ) -> Result<()> {
-        let (open_total, open_invoiceable) = validate_totals(
-            self.gross_total,
-            settled_total,
-            self.invoiceable_total,
-            invoiced_total,
-        )?;
+        let (open_total, open_invoiceable) =
+            validate_totals(self.gross_total, settled_total, self.invoiceable_total, invoiced_total)?;
         self.settled_total = settled_total;
         self.invoiced_total = invoiced_total;
         self.open_total = open_total;
@@ -288,10 +283,7 @@ fn validate_totals(
     if invoiced_total > invoiceable_total {
         return Err(Error::from("净已收票金额不得超过可收票总额"));
     }
-    Ok((
-        gross_total.checked_sub(settled_total),
-        invoiceable_total.checked_sub(invoiced_total),
-    ))
+    Ok((gross_total.checked_sub(settled_total), invoiceable_total.checked_sub(invoiced_total)))
 }
 
 /// 由开放余额派生子账状态。
@@ -314,9 +306,11 @@ fn derive_status(open_total: Amount, settled_total: Amount) -> PayableAccountSta
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use erp_core::money::Amount;
     use std::str::FromStr;
+
+    use erp_core::money::Amount;
+
+    use super::*;
 
     fn data() -> PayableAccountData {
         PayableAccountData {
@@ -336,37 +330,23 @@ mod tests {
 
         assert_eq!(account.source_document_id, "PO-2026-001");
         assert_eq!(account.open_total, Amount::from_str("1000.00").unwrap());
-        assert_eq!(
-            account.open_invoiceable_total,
-            Amount::from_str("1000.00").unwrap()
-        );
+        assert_eq!(account.open_invoiceable_total, Amount::from_str("1000.00").unwrap());
         assert_eq!(account.stable.status(), PayableAccountStatus::Open);
     }
 
     #[test]
     fn new_rejects_blank_source_and_invalid_totals() {
-        let blank = PayableAccountData {
-            source_document_id: "   ".to_string(),
-            ..data()
-        };
+        let blank = PayableAccountData { source_document_id: "   ".to_string(), ..data() };
         assert!(PayableAccount::new(PayableAccountId::new("pa-2"), blank, "admin").is_err());
 
-        let overlong = PayableAccountData {
-            source_document_id: "x".repeat(129),
-            ..data()
-        };
+        let overlong = PayableAccountData { source_document_id: "x".repeat(129), ..data() };
         assert!(PayableAccount::new(PayableAccountId::new("pa-3"), overlong, "admin").is_err());
 
-        let over_settled = PayableAccountData {
-            settled_total: Amount::from_str("1001.00").unwrap(),
-            ..data()
-        };
+        let over_settled =
+            PayableAccountData { settled_total: Amount::from_str("1001.00").unwrap(), ..data() };
         assert!(PayableAccount::new(PayableAccountId::new("pa-4"), over_settled, "admin").is_err());
 
-        let negative = PayableAccountData {
-            invoiced_total: Amount::from_str("-1.00").unwrap(),
-            ..data()
-        };
+        let negative = PayableAccountData { invoiced_total: Amount::from_str("-1.00").unwrap(), ..data() };
         assert!(PayableAccount::new(PayableAccountId::new("pa-5"), negative, "admin").is_err());
     }
 
@@ -375,32 +355,26 @@ mod tests {
         let mut account = PayableAccount::new(PayableAccountId::new("pa-1"), data(), "admin-1").unwrap();
 
         account
-            .sync_totals(
-                Amount::from_str("400.00").unwrap(),
-                Amount::from_str("1000.00").unwrap(),
-                "system",
-            )
+            .sync_totals(Amount::from_str("400.00").unwrap(), Amount::from_str("1000.00").unwrap(), "system")
             .unwrap();
         assert_eq!(account.stable.status(), PayableAccountStatus::PartiallySettled);
         assert_eq!(account.open_total, Amount::from_str("600.00").unwrap());
         assert_eq!(account.open_invoiceable_total, Amount::from_str("0.00").unwrap());
 
         account
-            .sync_totals(
-                Amount::from_str("1000.00").unwrap(),
-                Amount::from_str("1000.00").unwrap(),
-                "system",
-            )
+            .sync_totals(Amount::from_str("1000.00").unwrap(), Amount::from_str("1000.00").unwrap(), "system")
             .unwrap();
         assert!(account.is_settled());
 
-        assert!(account
-            .sync_totals(
-                Amount::from_str("1001.00").unwrap(),
-                Amount::from_str("0.00").unwrap(),
-                "system",
-            )
-            .is_err());
+        assert!(
+            account
+                .sync_totals(
+                    Amount::from_str("1001.00").unwrap(),
+                    Amount::from_str("0.00").unwrap(),
+                    "system",
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -415,9 +389,6 @@ mod tests {
         );
         assert_eq!(PayableSourceType::PurchaseOrder.label(), "采购单");
         assert_eq!(PayableAccountStatus::Settled.label(), "已结清");
-        assert_eq!(
-            PayableSourceType::SupplierSettlement.as_str(),
-            "supplier_settlement"
-        );
+        assert_eq!(PayableSourceType::SupplierSettlement.as_str(), "supplier_settlement");
     }
 }

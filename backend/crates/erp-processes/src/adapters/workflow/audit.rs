@@ -1,7 +1,5 @@
 //! 将工作流审计写入与回执读取装配到审计域。
 
-use super::map_service;
-use crate::errors::Error;
 use application_core::CommandReceiptFact;
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog, AuditLogData};
@@ -10,6 +8,9 @@ use erp_workflow::ports::{PreparedWorkflowAudit, WorkflowAuditFact, WorkflowAudi
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult};
 use mongodb::Database;
 use persistence_core::Executor;
+
+use super::map_service;
+use crate::errors::Error;
 
 /// Persist workflow audits through `erp-audit`.
 #[derive(Clone)]
@@ -47,11 +48,7 @@ impl WorkflowAuditPort for WorkflowAudit {
             },
         )
         .map_err(|error| map_service(Error::from(error)))?;
-        self.db
-            .audit_logs()
-            .create(&log, executor)
-            .await
-            .map_err(WorkflowError::from)?;
+        self.db.audit_logs().create(&log, executor).await.map_err(WorkflowError::from)?;
         Ok(())
     }
 

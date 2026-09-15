@@ -62,10 +62,10 @@ impl Error {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
             Self::ConflictError(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_) => {
                 ErrorClass::Conflict
-            }
+            },
             Self::BusinessLogicError(_) | Self::ValidationError(_) | Self::NotFound(_) => {
                 ErrorClass::BusinessRule
-            }
+            },
             Self::Forbidden(_) | Self::Unauthenticated(_) => ErrorClass::Forbidden,
             Self::OutcomeUnknown(_) => ErrorClass::Internal,
         }
@@ -82,13 +82,13 @@ impl From<persistence_core::Error> for Error {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
                 Self::ConflictError(duplicate_key_conflict_message(&error))
-            }
+            },
             persistence_core::Error::OptimisticLockingError => {
                 Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            }
+            },
             error @ persistence_core::Error::TransientTransactionConflict(_) => {
                 Self::TransientTransaction(error)
-            }
+            },
             error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
             other => Self::RepositoryError(other),
         }
@@ -114,10 +114,7 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
 /// # 返回
 /// 已知索引返回字段级中文提示；未知索引返回通用冲突提示。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
-    index_name
-        .and_then(known_duplicate_index_message)
-        .unwrap_or("数据已存在，请勿重复提交")
-        .to_string()
+    index_name.and_then(known_duplicate_index_message).unwrap_or("数据已存在，请勿重复提交").to_string()
 }
 
 /// 返回本域已知唯一索引的固定冲突提示。
@@ -150,10 +147,10 @@ impl From<validator::ValidationErrors> for Error {
 
 #[cfg(test)]
 mod tests {
+    use application_core::ErrorClass;
     use mongodb::error::Error as MongoError;
 
-    use super::{duplicate_index_conflict_message, Error};
-    use application_core::ErrorClass;
+    use super::{Error, duplicate_index_conflict_message};
 
     #[test]
     fn known_party_duplicate_index_maps_to_field_message() {
@@ -192,15 +189,9 @@ mod tests {
         ];
         for (index, expected) in cases {
             assert_eq!(super::known_duplicate_index_message(index), Some(expected));
-            assert_eq!(
-                super::known_duplicate_index_message(&format!("{index}_extra")),
-                None
-            );
+            assert_eq!(super::known_duplicate_index_message(&format!("{index}_extra")), None);
             assert_eq!(super::known_duplicate_index_message(&format!(" {index}")), None);
-            assert_eq!(
-                super::known_duplicate_index_message(&index.to_ascii_uppercase()),
-                None
-            );
+            assert_eq!(super::known_duplicate_index_message(&index.to_ascii_uppercase()), None);
         }
         assert_eq!(super::known_duplicate_index_message(""), None);
         assert_eq!(super::known_duplicate_index_message("unknown_index"), None);

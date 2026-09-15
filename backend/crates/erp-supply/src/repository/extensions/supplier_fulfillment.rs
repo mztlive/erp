@@ -5,14 +5,14 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as SupplierFulfillmentExt>::SUPPLIER_FULFILLMENT_ORDERS` 等值。
 
+use mongodb::Database;
+
+use super::super::supplier_fulfillment::{SupplierFulfillmentOrderFilter, SupplierFulfillmentRepository};
 use crate::repository::owned::{
     SupplierFulfillmentItemRepository, SupplierFulfillmentOrderRepository, SupplierOrderActionLineRepository,
     SupplierOrderActionRepository, SupplierOrderStatusHistoryRepository, SupplierRefundAllocationRepository,
     SupplierRefundFactRepository,
 };
-use mongodb::Database;
-
-use super::super::supplier_fulfillment::{SupplierFulfillmentOrderFilter, SupplierFulfillmentRepository};
 
 /// 域 D32 仓储访问器。
 pub trait SupplierFulfillmentExt {

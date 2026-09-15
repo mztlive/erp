@@ -39,17 +39,17 @@ pub use connection::{
     ConnectionEnvironment, HealthCheckResult, RateLimitPolicy, SupplierApiConnection,
     SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierApiConnectionUpdate,
 };
+// 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
+pub use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
 pub use governance::{
-    ensure_unique_capability_codes, BusinessCapabilityConfirmation, BusinessCapabilityConfirmationData,
-    BusinessCapabilityRequirement, CapabilityVersionSnapshot, SupplierCommandOutcome,
-    SupplierConnectionAction, SupplierConnectionBusinessImpact, SupplierConnectionCommandReceipt,
-    SupplierConnectionCommandReceiptData, SupplierConnectionGovernance, SupplierGovernanceBlocker,
-    SupplierHealthCheckRun, SupplierHealthCheckRunData, SupplierHealthCheckStatus, SupplierHealthCheckType,
+    BusinessCapabilityConfirmation, BusinessCapabilityConfirmationData, BusinessCapabilityRequirement,
+    CapabilityVersionSnapshot, SupplierCommandOutcome, SupplierConnectionAction,
+    SupplierConnectionBusinessImpact, SupplierConnectionCommandReceipt, SupplierConnectionCommandReceiptData,
+    SupplierConnectionGovernance, SupplierGovernanceBlocker, SupplierHealthCheckRun,
+    SupplierHealthCheckRunData, SupplierHealthCheckStatus, SupplierHealthCheckType,
+    ensure_unique_capability_codes,
 };
 pub use prepared_commands::{
     CommandOptionalField, PreparedSupplierConnectionCommand, PreparedSupplierConnectionCreate,
     SupplierCommandShapeRejection,
 };
-
-// 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
-pub use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};

@@ -5,11 +5,13 @@
 
 use std::collections::HashMap;
 
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
-use erp_import::LegacyImportExt;
 use erp_import::{
-    ApplyResultDraft, ApplyResultItem, ApplyResultOutcome, ApplyResultSet, ImportStatus, LegacyImportBatch,
+    ApplyLegacyImportBatchRequest, ApplyResultDraft, ApplyResultItem, ApplyResultOutcome, ApplyResultSet,
+    ApplyRowOutcome, ApplyRowResult, CUSTOMER_NOT_FOUND_ERROR_CODE, CUSTOMER_NOT_FOUND_ERROR_DETAIL,
+    CUSTOMER_OBJECT_TYPE, ImportStatus, LegacyImportBatch, LegacyImportBatchView, LegacyImportExt,
     LegacyImportRow,
 };
 use erp_party::PartyExt;
@@ -18,15 +20,8 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-
 use super::ImportApplyService;
-use erp_import::{
-    ApplyLegacyImportBatchRequest, ApplyRowOutcome, ApplyRowResult, LegacyImportBatchView,
-    CUSTOMER_NOT_FOUND_ERROR_CODE, CUSTOMER_NOT_FOUND_ERROR_DETAIL, CUSTOMER_OBJECT_TYPE,
-};
+use crate::{Error, Result};
 
 /// 本批实际发生合法状态迁移的行与计数。
 struct ApplyBatchDeltas {
@@ -39,12 +34,7 @@ struct ApplyBatchDeltas {
 impl ApplyBatchDeltas {
     /// 空增量。
     fn empty() -> Self {
-        Self {
-            rows: Vec::new(),
-            success: 0,
-            failed: 0,
-            skipped: 0,
-        }
+        Self { rows: Vec::new(), success: 0, failed: 0, skipped: 0 }
     }
 }
 
@@ -101,9 +91,7 @@ impl ImportApplyService {
             return self.batch_view_of(batch).await;
         }
         if !batch.is_importing() {
-            return Err(Error::BusinessLogicError(
-                "批次尚未进入导入阶段，禁止应用".to_string(),
-            ));
+            return Err(Error::BusinessLogicError("批次尚未进入导入阶段，禁止应用".to_string()));
         }
         let job = self.load_running_import_job(&batch).await?;
         let scope_batch_id = erp_core::ids::LegacyImportBatchId::new(batch_id.to_string());
@@ -121,8 +109,7 @@ impl ImportApplyService {
             return self.batch_view_of(batch).await;
         }
         advance_batch_counts(&mut batch, &deltas, pending_rows)?;
-        self.persist_apply_batch(batch, job, deltas, all_terminal, actor)
-            .await
+        self.persist_apply_batch(batch, job, deltas, all_terminal, actor).await
     }
 
     /// 装载已由 `START_APPLY` 启动的后台任务。
@@ -142,13 +129,9 @@ impl ImportApplyService {
             .find_by_request_id(&batch.batch_no, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::Internal("导入批次后台任务缺失".to_string()))?;
-        if !matches!(
-            job.status,
-            erp_support::JobStatus::Running | erp_support::JobStatus::PartiallySucceeded
-        ) {
-            return Err(Error::BusinessLogicError(
-                "后台应用尚未由 START_APPLY 启动".to_string(),
-            ));
+        if !matches!(job.status, erp_support::JobStatus::Running | erp_support::JobStatus::PartiallySucceeded)
+        {
+            return Err(Error::BusinessLogicError("后台应用尚未由 START_APPLY 启动".to_string()));
         }
         Ok(job)
     }
@@ -186,11 +169,7 @@ impl ImportApplyService {
                 party_ids.push(PartyId::new(target.clone()));
             }
         }
-        let found = self
-            .db
-            .parties()
-            .find_parties_by_ids(&party_ids, &mut NoTransaction)
-            .await?;
+        let found = self.db.parties().find_parties_by_ids(&party_ids, &mut NoTransaction).await?;
         Ok(map_customer_party_ok(&targets, &found))
     }
 
@@ -303,11 +282,7 @@ fn collect_apply_deltas(
 fn apply_pending_row(row: &mut LegacyImportRow, item: &ApplyResultItem, party_ok: bool) -> Result<()> {
     row.prepare_for_import(item.external_identity_map_id().cloned())?;
     match item {
-        ApplyResultItem::Imported {
-            target_document_id,
-            target_object_reference,
-            ..
-        } => {
+        ApplyResultItem::Imported { target_document_id, target_object_reference, .. } => {
             if !party_ok {
                 row.mark_import_failed(
                     CUSTOMER_NOT_FOUND_ERROR_CODE.to_string(),
@@ -316,21 +291,13 @@ fn apply_pending_row(row: &mut LegacyImportRow, item: &ApplyResultItem, party_ok
                 return Ok(());
             }
             row.mark_imported(target_document_id.clone(), target_object_reference.clone())?;
-        }
-        ApplyResultItem::Failed {
-            error_code,
-            error_detail,
-            ..
-        } => {
+        },
+        ApplyResultItem::Failed { error_code, error_detail, .. } => {
             row.mark_import_failed(error_code.clone(), error_detail.clone())?;
-        }
-        ApplyResultItem::Skipped {
-            error_code,
-            error_detail,
-            ..
-        } => {
+        },
+        ApplyResultItem::Skipped { error_code, error_detail, .. } => {
             row.mark_skipped(error_code.clone(), error_detail.clone())?;
-        }
+        },
     }
     Ok(())
 }
@@ -362,9 +329,7 @@ fn ensure_no_missing_apply_rows(missing: &[erp_core::ids::LegacyImportRowId]) ->
     let Some(first) = missing.first() else {
         return Ok(());
     };
-    Err(Error::ValidationError(format!(
-        "导入行不属于当前批次或不存在: {first}"
-    )))
+    Err(Error::ValidationError(format!("导入行不属于当前批次或不存在: {first}")))
 }
 
 /// 按本批 delta 更新批次计数并派生应用状态。
@@ -405,7 +370,7 @@ fn record_delta(deltas: &mut ApplyBatchDeltas, row: &LegacyImportRow, item: &App
     match item {
         ApplyResultItem::Imported { .. } if row.import_status == ImportStatus::Imported => {
             deltas.success += 1;
-        }
+        },
         ApplyResultItem::Skipped { .. } => deltas.skipped += 1,
         ApplyResultItem::Failed { .. } | ApplyResultItem::Imported { .. } => deltas.failed += 1,
     }
@@ -435,10 +400,7 @@ fn collect_customer_import_targets(
 ) -> Vec<(String, String)> {
     let mut targets = Vec::new();
     for item in result_set.items() {
-        let ApplyResultItem::Imported {
-            target_document_id, ..
-        } = item
-        else {
+        let ApplyResultItem::Imported { target_document_id, .. } = item else {
             continue;
         };
         let Some(row) = rows.get(item.row_id().as_ref()) else {
@@ -471,15 +433,10 @@ fn collect_customer_import_targets(
 /// 纯内存映射，不访问数据库；未命中目标一律视为不存在。
 fn map_customer_party_ok(targets: &[(String, String)], found: &[erp_party::Party]) -> HashMap<String, bool> {
     use std::collections::{HashMap, HashSet};
-    let existing = found
-        .iter()
-        .map(|party| party.base.id.clone())
-        .collect::<HashSet<_>>();
+    let existing = found.iter().map(|party| party.base.id.clone()).collect::<HashSet<_>>();
     let mut target_ok = HashMap::new();
     for (_, target) in targets {
-        target_ok
-            .entry(target.clone())
-            .or_insert_with(|| existing.contains(target));
+        target_ok.entry(target.clone()).or_insert_with(|| existing.contains(target));
     }
     targets
         .iter()
@@ -532,11 +489,7 @@ async fn persist_apply_transaction(
     for row in write.rows.iter_mut() {
         write.db.legacy_import_rows().update(row, executor).await?;
     }
-    write
-        .db
-        .legacy_import_batches()
-        .update(write.batch, executor)
-        .await?;
+    write.db.legacy_import_batches().update(write.batch, executor).await?;
     write.job.record_import_result_batch(
         write.success,
         write.skipped,
@@ -555,16 +508,15 @@ mod tests {
 
     use erp_core::ids::{ExternalIdentityMapId, LegacyImportBatchId, LegacyImportRowId};
     use erp_import::{
-        ApplyResultDraft, ApplyResultOutcome, ApplyResultSet, ImportStatus, LegacyImportRow,
-        LegacyImportRowData, ParseStatus,
+        ApplyLegacyImportBatchRequest, ApplyResultDraft, ApplyResultOutcome, ApplyResultSet, ApplyRowOutcome,
+        ApplyRowResult, ImportStatus, LegacyImportRow, LegacyImportRowData, ParseStatus,
     };
 
     use super::{
-        advance_batch_counts, apply_result_set_from_request, collect_apply_deltas,
+        PersistApplyWrite, advance_batch_counts, apply_result_set_from_request, collect_apply_deltas,
         collect_customer_import_targets, ensure_no_missing_apply_rows, map_customer_party_ok,
-        persist_apply_transaction, PersistApplyWrite,
+        persist_apply_transaction,
     };
-    use erp_import::{ApplyLegacyImportBatchRequest, ApplyRowOutcome, ApplyRowResult};
 
     fn applicable_row(id: &str) -> LegacyImportRow {
         let mut row = LegacyImportRow::new(
@@ -578,8 +530,7 @@ mod tests {
         )
         .unwrap();
         row.mark_parse_result(ParseStatus::Valid, None, None).unwrap();
-        row.mark_mapped(ExternalIdentityMapId::new(format!("mapping:{id}")))
-            .unwrap();
+        row.mark_mapped(ExternalIdentityMapId::new(format!("mapping:{id}"))).unwrap();
         row
     }
 
@@ -603,17 +554,11 @@ mod tests {
     }
 
     fn failed_draft(id: &str, code: &str) -> ApplyResultDraft {
-        ApplyResultDraft {
-            error_code: Some(code.to_string()),
-            ..draft(id, ApplyResultOutcome::Failed)
-        }
+        ApplyResultDraft { error_code: Some(code.to_string()), ..draft(id, ApplyResultOutcome::Failed) }
     }
 
     fn skipped_draft(id: &str, code: &str) -> ApplyResultDraft {
-        ApplyResultDraft {
-            error_code: Some(code.to_string()),
-            ..draft(id, ApplyResultOutcome::Skipped)
-        }
+        ApplyResultDraft { error_code: Some(code.to_string()), ..draft(id, ApplyResultOutcome::Skipped) }
     }
 
     fn imported_result(id: &str) -> ApplyRowResult {
@@ -631,18 +576,12 @@ mod tests {
     #[test]
     fn request_rejects_missing_and_forbidden_outcome_fields() {
         let missing_target = ApplyLegacyImportBatchRequest {
-            results: vec![ApplyRowResult {
-                target_document_id: None,
-                ..imported_result("row-1")
-            }],
+            results: vec![ApplyRowResult { target_document_id: None, ..imported_result("row-1") }],
         };
         assert!(apply_result_set_from_request(missing_target).is_err());
 
         let forbidden_error = ApplyLegacyImportBatchRequest {
-            results: vec![ApplyRowResult {
-                error_code: Some("X".to_string()),
-                ..imported_result("row-1")
-            }],
+            results: vec![ApplyRowResult { error_code: Some("X".to_string()), ..imported_result("row-1") }],
         };
         assert!(apply_result_set_from_request(forbidden_error).is_err());
     }
@@ -735,18 +674,13 @@ mod tests {
         )
         .unwrap();
         illegal.mark_parse_result(ParseStatus::Valid, None, None).unwrap();
-        illegal
-            .mark_conflict("IDENTITY_CONFLICT".to_string(), None)
-            .unwrap();
+        illegal.mark_conflict("IDENTITY_CONFLICT".to_string(), None).unwrap();
         let set = ApplyResultSet::try_from_drafts(vec![
             imported_draft("row-ok", "SO-1"),
             imported_draft("row-illegal", "SO-2"),
         ])
         .unwrap();
-        let mut rows = [pending, illegal]
-            .into_iter()
-            .map(|row| (row.base.id.clone(), row))
-            .collect();
+        let mut rows = [pending, illegal].into_iter().map(|row| (row.base.id.clone(), row)).collect();
 
         assert!(collect_apply_deltas(&set, &mut rows, &HashMap::new()).is_err());
     }
@@ -762,9 +696,7 @@ mod tests {
         non_customer.source_object_type = "CONTRACT".to_string();
         let mut terminal_customer = applicable_row("row-terminal");
         terminal_customer.source_object_type = CUSTOMER_OBJECT_TYPE.to_string();
-        terminal_customer
-            .mark_imported("party-shared".to_string(), None)
-            .unwrap();
+        terminal_customer.mark_imported("party-shared".to_string(), None).unwrap();
         let set = ApplyResultSet::try_from_drafts(vec![
             imported_draft("row-customer", "party-shared"),
             imported_draft("row-customer-dup", "party-shared"),
@@ -772,15 +704,10 @@ mod tests {
             imported_draft("row-terminal", "party-missing"),
         ])
         .unwrap();
-        let rows = [
-            customer_pending,
-            customer_duplicate,
-            non_customer,
-            terminal_customer,
-        ]
-        .into_iter()
-        .map(|row| (row.base.id.clone(), row))
-        .collect::<HashMap<_, _>>();
+        let rows = [customer_pending, customer_duplicate, non_customer, terminal_customer]
+            .into_iter()
+            .map(|row| (row.base.id.clone(), row))
+            .collect::<HashMap<_, _>>();
         let targets = collect_customer_import_targets(&set, &rows);
         assert_eq!(targets.len(), 2);
         assert!(targets.contains(&("row-customer".to_string(), "party-shared".to_string())));
@@ -793,8 +720,9 @@ mod tests {
 
     #[test]
     fn customer_targets_scale_to_large_batch_with_shared_targets() {
-        use erp_import::CUSTOMER_OBJECT_TYPE;
         use std::collections::HashSet;
+
+        use erp_import::CUSTOMER_OBJECT_TYPE;
         let mut drafts = Vec::new();
         let mut rows = HashMap::new();
         for index in 0..300 {
@@ -808,10 +736,7 @@ mod tests {
         let set = ApplyResultSet::try_from_drafts(drafts).unwrap();
         let targets = collect_customer_import_targets(&set, &rows);
         assert_eq!(targets.len(), 300);
-        let unique_targets = targets
-            .iter()
-            .map(|(_, target)| target.clone())
-            .collect::<HashSet<_>>();
+        let unique_targets = targets.iter().map(|(_, target)| target.clone()).collect::<HashSet<_>>();
         assert_eq!(unique_targets.len(), 10);
         let ok = map_customer_party_ok(&targets, &[]);
         assert_eq!(ok.len(), 300);
@@ -821,24 +746,21 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn persist_rolls_back_when_later_row_cas_fails() {
-        use crate::test_indexes::ensure_indexes;
-        use erp_audit::AuditExt;
-        use erp_audit::AuditLog;
-        use erp_audit::AuditLogData;
+        use erp_audit::{AuditExt, AuditLog, AuditLogData};
+        use erp_core::AccountKind;
         use erp_core::common::time::{BusinessDate, Instant};
         use erp_core::ids::{BackgroundJobId, LegacyImportBatchId, SourceSystemId};
-        use erp_core::AccountKind;
-        use erp_import::LegacyImportExt;
-        use erp_import::{LegacyImportBatch, LegacyImportBatchData, LegacyImportBatchStatus};
-        use erp_support::BulkJobExt;
-        use erp_support::{BackgroundJob, BackgroundJobData, JobStatus, JobType};
+        use erp_import::{
+            LegacyImportBatch, LegacyImportBatchData, LegacyImportBatchStatus, LegacyImportExt,
+        };
+        use erp_support::{BackgroundJob, BackgroundJobData, BulkJobExt, JobStatus, JobType};
         use persistence_core::{NoTransaction, Transactional};
-        use test_support::{require_mongo, TestDb};
+        use test_support::{TestDb, require_mongo};
+
+        use crate::test_indexes::ensure_indexes;
 
         require_mongo!(async {
-            let fixture = TestDb::new("legacy_import_apply_cas")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("legacy_import_apply_cas").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
             let db = fixture.db();
             let mut batch = LegacyImportBatch::new(
@@ -878,32 +800,18 @@ mod tests {
             job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
             let pending_ok = applicable_row("row-ok");
             let pending_stale = applicable_row("row-stale");
-            db.legacy_import_batches()
-                .create(&batch, &mut NoTransaction)
-                .await
-                .expect("批次写入失败");
-            db.background_jobs()
-                .create(&job, &mut NoTransaction)
-                .await
-                .expect("任务写入失败");
-            db.legacy_import_rows()
-                .create(&pending_ok, &mut NoTransaction)
-                .await
-                .expect("行写入失败");
-            db.legacy_import_rows()
-                .create(&pending_stale, &mut NoTransaction)
-                .await
-                .expect("冲突行写入失败");
+            db.legacy_import_batches().create(&batch, &mut NoTransaction).await.expect("批次写入失败");
+            db.background_jobs().create(&job, &mut NoTransaction).await.expect("任务写入失败");
+            db.legacy_import_rows().create(&pending_ok, &mut NoTransaction).await.expect("行写入失败");
+            db.legacy_import_rows().create(&pending_stale, &mut NoTransaction).await.expect("冲突行写入失败");
 
             let set = ApplyResultSet::try_from_drafts(vec![
                 imported_draft("row-ok", "SO-1"),
                 imported_draft("row-stale", "SO-2"),
             ])
             .unwrap();
-            let mut rows = [pending_ok, pending_stale]
-                .into_iter()
-                .map(|row| (row.base.id.clone(), row))
-                .collect();
+            let mut rows =
+                [pending_ok, pending_stale].into_iter().map(|row| (row.base.id.clone(), row)).collect();
             let mut deltas = collect_apply_deltas(&set, &mut rows, &HashMap::new()).unwrap();
             let mut bumped = db
                 .legacy_import_rows()
@@ -956,35 +864,18 @@ mod tests {
                 .await;
             assert!(persist.is_err(), "后行乐观锁失败必须整体回滚");
 
-            let ok = db
-                .legacy_import_rows()
-                .find_by_id("row-ok", &mut NoTransaction)
-                .await
-                .unwrap()
-                .unwrap();
-            let stale = db
-                .legacy_import_rows()
-                .find_by_id("row-stale", &mut NoTransaction)
-                .await
-                .unwrap()
-                .unwrap();
+            let ok = db.legacy_import_rows().find_by_id("row-ok", &mut NoTransaction).await.unwrap().unwrap();
+            let stale =
+                db.legacy_import_rows().find_by_id("row-stale", &mut NoTransaction).await.unwrap().unwrap();
             let stored_batch = db
                 .legacy_import_batches()
                 .find_by_id("batch-cas", &mut NoTransaction)
                 .await
                 .unwrap()
                 .unwrap();
-            let stored_job = db
-                .background_jobs()
-                .find_by_id("job-cas", &mut NoTransaction)
-                .await
-                .unwrap()
-                .unwrap();
-            let stored_audit = db
-                .audit_logs()
-                .find_by_id("audit-cas-1", &mut NoTransaction)
-                .await
-                .unwrap();
+            let stored_job =
+                db.background_jobs().find_by_id("job-cas", &mut NoTransaction).await.unwrap().unwrap();
+            let stored_audit = db.audit_logs().find_by_id("audit-cas-1", &mut NoTransaction).await.unwrap();
             assert_eq!(ok.import_status, ImportStatus::PendingImport);
             assert_eq!(stale.import_status, ImportStatus::PendingImport);
             assert_eq!(stored_batch.status, LegacyImportBatchStatus::Importing);

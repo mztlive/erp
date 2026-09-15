@@ -2,10 +2,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_core::ids::{SalesSelectionBookletId, SalesSelectionPoolMemberId};
 use serde::{Deserialize, Serialize};
 
 use super::sku_snapshot::SkuSnapshot;
-use erp_core::ids::{SalesSelectionBookletId, SalesSelectionPoolMemberId};
 
 /// 批次内一个冻结 SKU。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
@@ -40,11 +40,6 @@ impl SalesSelectionPoolMember {
         batch_id: String,
         sku: SkuSnapshot,
     ) -> Self {
-        Self {
-            base: BaseModel::new(id.to_string()),
-            booklet_id,
-            batch_id,
-            sku,
-        }
+        Self { base: BaseModel::new(id.to_string()), booklet_id, batch_id, sku }
     }
 }

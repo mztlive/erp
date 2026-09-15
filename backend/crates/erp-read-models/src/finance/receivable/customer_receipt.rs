@@ -1,20 +1,22 @@
 //! Customer receipt read projections with immutable approval bindings.
 
-use super::approval_view::document_approval_view;
-use super::ReceivableReadService;
-use crate::finance::dto::CustomerReceiptView;
-use crate::{Error, Result};
+use std::collections::HashMap;
+
 use erp_core::ids::CustomerReceiptId;
 use erp_core::money::Amount;
 use erp_finance::dto::receivable::{CustomerReceiptListParams, PageView, SortDir};
 use erp_finance::entity::receivable::{AllocationAction, ReceiptAllocation};
 use erp_finance::repository::ReceivableExt;
 use erp_finance::service::receivable::mapping::zero_amount;
-use erp_workflow::service::document_registry::find_approval_binding;
 use erp_workflow::DocumentRegistryExt;
+use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::NoTransaction;
-use std::collections::HashMap;
 use validator::Validate;
+
+use super::ReceivableReadService;
+use super::approval_view::document_approval_view;
+use crate::finance::dto::CustomerReceiptView;
+use crate::{Error, Result};
 
 impl ReceivableReadService {
     /// 分页查询客户回款单列表。
@@ -59,11 +61,8 @@ impl ReceivableReadService {
             .receivable()
             .search_customer_receipts_in_account_scope(&scope_query, &mut NoTransaction)
             .await?;
-        let receipt_ids = page
-            .items
-            .iter()
-            .map(|row| CustomerReceiptId::new(row.id.clone()))
-            .collect::<Vec<_>>();
+        let receipt_ids =
+            page.items.iter().map(|row| CustomerReceiptId::new(row.id.clone())).collect::<Vec<_>>();
         let document_ids = page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
         let mut allocations_by_receipt = HashMap::<String, Vec<ReceiptAllocation>>::new();
         for allocation in self
@@ -206,10 +205,7 @@ fn allocation_view(
                 receivable_entry_id: allocation.receivable_entry_id.to_string(),
                 allocated_amount: allocation.allocated_amount,
                 allocated_at: allocation.allocated_at,
-                reverses_allocation_id: allocation
-                    .reverses_allocation_id
-                    .as_ref()
-                    .map(|id| id.to_string()),
+                reverses_allocation_id: allocation.reverses_allocation_id.as_ref().map(|id| id.to_string()),
             }
         })
         .collect();

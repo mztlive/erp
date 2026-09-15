@@ -14,14 +14,12 @@ pub mod import;
 
 use std::sync::Arc;
 
-use erp_supplier::SupplierExt;
-use erp_supplier::SupplierProfileCommand;
+use erp_party::SensitiveDataCodec;
+use erp_supplier::{SupplierExt, SupplierProfileCommand, SupplierProfileMutationView, command_view};
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
 use crate::Result;
-use erp_party::SensitiveDataCodec;
-use erp_supplier::{command_view, SupplierProfileMutationView};
 
 mod party_change;
 
@@ -64,10 +62,6 @@ impl SupplierProfileService {
     /// # 错误
     /// 仓储查询或反序列化失败时返回错误。
     async fn command_record(&self, idempotency_key: &str) -> Result<Option<SupplierProfileCommand>> {
-        Ok(self
-            .db
-            .supplier()
-            .profile_command(idempotency_key, &mut NoTransaction)
-            .await?)
+        Ok(self.db.supplier().profile_command(idempotency_key, &mut NoTransaction).await?)
     }
 }

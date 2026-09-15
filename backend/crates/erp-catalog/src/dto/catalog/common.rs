@@ -1,9 +1,8 @@
+/// 排序方向。
+pub use application_core::SortDir;
 use erp_core::money::Amount;
 
 use crate::error::{Error, Result};
-
-/// 排序方向。
-pub use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,6 +17,11 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+pub use application_core::PageView;
+/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
+/// 不生效，空 code/name 需要按「空白视为空」拒绝，落入 HTTP 400）。
+pub(super) use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -31,13 +35,6 @@ pub struct PageParams {
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-
-/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
-/// 不生效，空 code/name 需要按「空白视为空」拒绝，落入 HTTP 400）。
-pub(super) use application_core::non_blank;
 
 /// 校验目录查询共用的销售价区间。
 ///

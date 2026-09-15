@@ -1,17 +1,19 @@
+use std::sync::Arc;
+use std::time::Duration;
+
 use config::{Config, SafeConfig};
 use erp_identity::SharedRbacService;
 use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
 use erp_party::SensitiveDataCodec;
+use erp_processes::ApprovalActionRegistry;
 use erp_processes::adapters::supplier_api::{
     UnavailableSupplierApiGateway, UnavailableSupplierReferenceRegistry,
 };
 use erp_processes::adapters::supplier_fulfillment_gateway::UnavailableSupplierGateway;
-use erp_processes::adapters::workflow::{workflow_audit, workflow_auth, workflow_object_facts, WorkflowAuth};
+use erp_processes::adapters::workflow::{WorkflowAuth, workflow_audit, workflow_auth, workflow_object_facts};
 use erp_processes::approval_dispatch::{ProcessObjectRead, ProcessUpgradeSubject};
-use erp_processes::integration_resolution::{
-    evidence_adapter::MongoIntegrationEvidenceAuthority, IntegrationResolutionProcess,
-};
-use erp_processes::ApprovalActionRegistry;
+use erp_processes::integration_resolution::IntegrationResolutionProcess;
+use erp_processes::integration_resolution::evidence_adapter::MongoIntegrationEvidenceAuthority;
 use erp_read_models::integration_center::IntegrationCenterReadService;
 use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
 use erp_supply::ports::supplier_gateway::SupplierGateway;
@@ -19,14 +21,12 @@ use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
 use erp_supply::service::supplier_api::SupplierApiService;
 use erp_supply::service::supplier_fulfillment::SupplierFulfillmentService;
 use erp_support::{BulkJobService, FileAssetService, SourceRegistryService};
-use erp_workflow::service::approval::execution::ApprovalRuntimeService;
 use erp_workflow::ApprovalNotificationOutboxPort;
+use erp_workflow::service::approval::execution::ApprovalRuntimeService;
 use mongodb::Database;
 use serde::Serialize;
-use std::sync::Arc;
-use std::time::Duration;
 use storage::S3Storage;
-use tokio::sync::{watch, RwLock};
+use tokio::sync::{RwLock, watch};
 use tokio::task::JoinHandle;
 use tracing::{error, info};
 
@@ -235,9 +235,8 @@ impl AppState {
         storage: S3Storage,
         external_connectors: ExternalConnectorPorts,
     ) -> Self {
-        let sensitive_data = Arc::new(SensitiveDataCodec::from_secret(
-            config.snapshot().app.secret.as_bytes(),
-        ));
+        let sensitive_data =
+            Arc::new(SensitiveDataCodec::from_secret(config.snapshot().app.secret.as_bytes()));
         let rbac = erp_processes::adapters::identity::shared_rbac_service(db.clone());
         let approval_action_port = Arc::new(ApprovalActionRegistry::new(db.clone(), Arc::clone(&rbac)));
         let approval_runtime_service = Arc::new(ApprovalRuntimeService::with_ports(
@@ -667,15 +666,15 @@ mod tests {
         };
         assert!(configured.is_ready());
 
-        assert!(!ExternalConnectorReadiness {
-            supplier_api: ConnectorMode::FailClosed,
-            ..configured
-        }
-        .is_ready());
-        assert!(!ExternalConnectorReadiness {
-            supplier_reference_registry: ConnectorMode::FailClosed,
-            ..configured
-        }
-        .is_ready());
+        assert!(
+            !ExternalConnectorReadiness { supplier_api: ConnectorMode::FailClosed, ..configured }.is_ready()
+        );
+        assert!(
+            !ExternalConnectorReadiness {
+                supplier_reference_registry: ConnectorMode::FailClosed,
+                ..configured
+            }
+            .is_ready()
+        );
     }
 }

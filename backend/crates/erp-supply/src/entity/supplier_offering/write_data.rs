@@ -134,11 +134,7 @@ pub fn parse_business_date(value: &str) -> Result<BusinessDate> {
 /// # 约束
 /// 纯内存转换，不触碰 I/O、时钟、ID 生成器或密钥。
 pub fn parse_optional_business_date(value: Option<&str>) -> Result<Option<BusinessDate>> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(parse_business_date)
-        .transpose()
+    value.map(str::trim).filter(|value| !value.is_empty()).map(parse_business_date).transpose()
 }
 
 #[cfg(test)]
@@ -190,29 +186,14 @@ mod tests {
 
     #[test]
     fn error_messages_keep_api_contract() {
-        assert_eq!(
-            parse_input_tax_rate("abc").unwrap_err().to_string(),
-            "非法进项税率: abc"
-        );
+        assert_eq!(parse_input_tax_rate("abc").unwrap_err().to_string(), "非法进项税率: abc");
         assert_eq!(
             parse_unit_price("abc", "一件代发供给价").unwrap_err().to_string(),
             "非法一件代发供给价: abc"
         );
-        assert_eq!(
-            parse_optional_amount(Some("abc")).unwrap_err().to_string(),
-            "非法金额: abc"
-        );
-        assert_eq!(
-            parse_optional_quantity(Some("abc")).unwrap_err().to_string(),
-            "非法数量: abc"
-        );
-        assert_eq!(
-            parse_minimum_order_quantity("abc").unwrap_err().to_string(),
-            "非法集采起订量: abc"
-        );
-        assert_eq!(
-            parse_business_date("abc").unwrap_err().to_string(),
-            "非法业务日期: abc"
-        );
+        assert_eq!(parse_optional_amount(Some("abc")).unwrap_err().to_string(), "非法金额: abc");
+        assert_eq!(parse_optional_quantity(Some("abc")).unwrap_err().to_string(), "非法数量: abc");
+        assert_eq!(parse_minimum_order_quantity("abc").unwrap_err().to_string(), "非法集采起订量: abc");
+        assert_eq!(parse_business_date("abc").unwrap_err().to_string(), "非法业务日期: abc");
     }
 }

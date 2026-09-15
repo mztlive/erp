@@ -1,14 +1,15 @@
 //! 内部组织协议适配；组织授权和变更校验由身份域执行。
 
-use crate::{
-    app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
-};
 use application_core::AuditActor;
-use axum::{extract::State, Extension, Json};
-use erp_identity::entity::organization_change::{OrganizationChangeReceipt, OrganizationChangeRequest};
+use axum::extract::State;
+use axum::{Extension, Json};
 use erp_identity::OrganizationStateView;
+use erp_identity::entity::organization_change::{OrganizationChangeReceipt, OrganizationChangeRequest};
 use erp_processes::adapters::organization_service;
+
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::response::ApiResponse;
 
 /// 查询组织管理范围内的组织和关系。
 ///
@@ -35,11 +36,7 @@ pub async fn list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
 ) -> Result<OrganizationStateView> {
-    Ok(ApiResponse::ok_with_data(
-        organization_service(state.db(), state.rbac())
-            .state(&actor)
-            .await?,
-    ))
+    Ok(ApiResponse::ok_with_data(organization_service(state.db(), state.rbac()).state(&actor).await?))
 }
 
 /// 预览组织变更影响，提交前不写入任何关系。
@@ -70,9 +67,7 @@ pub async fn preview(
     Json(request): Json<OrganizationChangeRequest>,
 ) -> Result<OrganizationChangeReceipt> {
     Ok(ApiResponse::ok_with_data(
-        organization_service(state.db(), state.rbac())
-            .preview(&actor, request)
-            .await?,
+        organization_service(state.db(), state.rbac()).preview(&actor, request).await?,
     ))
 }
 
@@ -104,8 +99,6 @@ pub async fn change(
     Json(request): Json<OrganizationChangeRequest>,
 ) -> Result<OrganizationChangeReceipt> {
     Ok(ApiResponse::ok_with_data(
-        organization_service(state.db(), state.rbac())
-            .change(&actor, request)
-            .await?,
+        organization_service(state.db(), state.rbac()).change(&actor, request).await?,
     ))
 }

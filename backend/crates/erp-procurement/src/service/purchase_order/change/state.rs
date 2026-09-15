@@ -42,9 +42,7 @@ pub fn cancel_purchase_change_to_draft(order: &mut PurchaseChangeOrder, updated_
 /// 状态不是审批中时返回冲突。
 pub fn ensure_final_approve_effective(order: &PurchaseChangeOrder) -> Result<()> {
     if order.stable.status != PurchaseChangeOrderStatus::InApproval {
-        return Err(Error::ConflictError(
-            "只有审批中的采购变更单可以由最终通过动作生效".to_string(),
-        ));
+        return Err(Error::ConflictError("只有审批中的采购变更单可以由最终通过动作生效".to_string()));
     }
     Ok(())
 }

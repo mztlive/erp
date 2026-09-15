@@ -16,12 +16,7 @@ use erp_core::{Error, Result};
 /// # 错误
 /// 最大序号已经达到 `u32::MAX` 时返回领域错误，禁止回绕或重复使用序号。
 pub fn next_revision_no(revision_nos: impl IntoIterator<Item = u32>) -> Result<u32> {
-    revision_nos
-        .into_iter()
-        .max()
-        .unwrap_or(0)
-        .checked_add(1)
-        .ok_or_else(|| Error::from("修订序号已达上限"))
+    revision_nos.into_iter().max().unwrap_or(0).checked_add(1).ok_or_else(|| Error::from("修订序号已达上限"))
 }
 
 #[cfg(test)]

@@ -13,7 +13,6 @@ mod procurement;
 pub mod progress;
 mod start_approval;
 
-use crate::{Error, Result};
 pub use adapter::sales_order_object_readable;
 use erp_identity::SharedRbacService;
 use erp_sales::entity::sales_order::BusinessType;
@@ -22,6 +21,8 @@ use erp_workflow::entity::document_registry::DocumentType;
 pub use formalization_root::SalesOrderFormalizationProcess;
 use formalize::FormalizedSubmissionWrite;
 use mongodb::Database;
+
+use crate::{Error, Result};
 
 /// Sales lifecycle commands combining sales writes, provider checks, workflow and audit.
 pub struct SalesOrderCommandProcess {
@@ -32,18 +33,11 @@ pub struct SalesOrderCommandProcess {
 impl SalesOrderCommandProcess {
     /// Construct with fail-closed approval binding defaults; performs no I/O.
     pub fn new(db: Database) -> Self {
-        Self {
-            db,
-            rbac: None,
-            object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
-        }
+        Self { db, rbac: None, object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort) }
     }
     /// Construct with an authorization source while retaining fail-closed object-read defaults.
     pub fn with_rbac(db: Database, rbac: SharedRbacService) -> Self {
-        Self {
-            rbac: Some(rbac),
-            ..Self::new(db)
-        }
+        Self { rbac: Some(rbac), ..Self::new(db) }
     }
     /// Inject the composition root's object-read provider for approval binding.
     pub fn with_object_read(
@@ -54,9 +48,7 @@ impl SalesOrderCommandProcess {
         self
     }
     fn require_rbac(&self) -> Result<&SharedRbacService> {
-        self.rbac
-            .as_ref()
-            .ok_or_else(|| Error::Internal("销售单审批绑定需要授权源".into()))
+        self.rbac.as_ref().ok_or_else(|| Error::Internal("销售单审批绑定需要授权源".into()))
     }
     fn sales(&self) -> SalesOrderService {
         SalesOrderService::new(self.db.clone())
@@ -106,12 +98,8 @@ pub async fn cancel_approval_in_transaction(
         .await?
         .ok_or_else(|| Error::NotFound("销售单不存在".into()))?;
     adapter::execute_sales_order_domain_action(&mut order, action, actor.id())?;
-    SalesOrderService::new(db.clone())
-        .persist_order(&mut order, executor)
-        .await?;
-    let audit = actor
-        .clone()
-        .resource_log("sales_order.cancel_approval", "sales_order", id.to_string())?;
+    SalesOrderService::new(db.clone()).persist_order(&mut order, executor).await?;
+    let audit = actor.clone().resource_log("sales_order.cancel_approval", "sales_order", id.to_string())?;
     db.audit_logs().create(&audit, executor).await?;
     Ok(())
 }

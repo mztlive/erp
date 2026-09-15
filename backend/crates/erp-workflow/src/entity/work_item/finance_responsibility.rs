@@ -5,11 +5,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::state::DocumentState;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::entity::WorkItemType;
 
@@ -119,7 +118,7 @@ impl FinanceResponsibilityOperation {
                 .supplier_payment_execution_permissions("payable_account"),
             Self::SalesInvoice => {
                 WorkItemType::SalesInvoiceExecution.sales_invoice_execution_permissions("receivable_account")
-            }
+            },
             Self::CardFundsReview => None,
         }
     }
@@ -193,12 +192,8 @@ impl FinanceResponsibilityRule {
         data: FinanceResponsibilityRuleData,
         created_by: impl Into<String>,
     ) -> Result<Self> {
-        let id = normalize_required_text(
-            id.into(),
-            "财务责任规则ID不能为空",
-            ID_MAX_LEN,
-            "财务责任规则ID过长",
-        )?;
+        let id =
+            normalize_required_text(id.into(), "财务责任规则ID不能为空", ID_MAX_LEN, "财务责任规则ID过长")?;
         let created_by = normalize_actor(created_by.into())?;
         let normalized = NormalizedRuleData::try_from(data)?;
         Ok(Self {
@@ -279,14 +274,13 @@ impl<'a> FinanceResponsibilityRuleSet<'a> {
         {
             return Ok(rule);
         }
-        self.unique_match(operation, FinanceResponsibilityScope::Default, |_| true)?
-            .ok_or_else(|| {
-                Error::from(format!(
-                    "{}未配置{}责任人，也未配置默认负责人",
-                    operation.counterparty_label(),
-                    operation.label()
-                ))
-            })
+        self.unique_match(operation, FinanceResponsibilityScope::Default, |_| true)?.ok_or_else(|| {
+            Error::from(format!(
+                "{}未配置{}责任人，也未配置默认负责人",
+                operation.counterparty_label(),
+                operation.label()
+            ))
+        })
     }
 
     fn unique_match(
@@ -300,10 +294,7 @@ impl<'a> FinanceResponsibilityRuleSet<'a> {
         });
         let first = matched.next();
         if matched.next().is_some() {
-            return Err(Error::from(format!(
-                "{}存在重复启用责任规则，请先停用冲突规则",
-                operation.label()
-            )));
+            return Err(Error::from(format!("{}存在重复启用责任规则，请先停用冲突规则", operation.label())));
         }
         Ok(first)
     }
@@ -331,11 +322,11 @@ impl TryFrom<FinanceResponsibilityRuleData> for NormalizedRuleData {
                     data.operation.label(),
                     data.operation.counterparty_label()
                 )));
-            }
+            },
             (FinanceResponsibilityScope::Default, Some(_)) => {
                 return Err(Error::from("默认财务责任规则不得指定往来方"));
-            }
-            _ => {}
+            },
+            _ => {},
         }
         let owner_user_id = normalize_required_text(
             data.owner_user_id,
@@ -369,25 +360,19 @@ fn selector_key(
         ),
         FinanceResponsibilityScope::Default => {
             format!("{}:{}", operation.as_str(), scope.as_str())
-        }
+        },
     }
 }
 
 fn normalize_actor(value: String) -> Result<String> {
-    normalize_required_text(
-        value,
-        "财务责任规则操作人不能为空",
-        ACTOR_ID_MAX_LEN,
-        "财务责任规则操作人过长",
-    )
+    normalize_required_text(value, "财务责任规则操作人不能为空", ACTOR_ID_MAX_LEN, "财务责任规则操作人过长")
 }
 
 #[cfg(test)]
 mod tests {
-    use super::EnableStatus;
     use super::{
-        FinanceResponsibilityOperation, FinanceResponsibilityRule, FinanceResponsibilityRuleData,
-        FinanceResponsibilityRuleSet, FinanceResponsibilityScope,
+        EnableStatus, FinanceResponsibilityOperation, FinanceResponsibilityRule,
+        FinanceResponsibilityRuleData, FinanceResponsibilityRuleSet, FinanceResponsibilityScope,
     };
 
     fn rule(
@@ -421,18 +406,20 @@ mod tests {
             "finance-1",
         );
         assert_eq!(exact.selector_key, "SUPPLIER_PAYMENT:COUNTERPARTY:supplier-1");
-        assert!(FinanceResponsibilityRule::new(
-            "r-2",
-            FinanceResponsibilityRuleData {
-                operation: FinanceResponsibilityOperation::SalesInvoice,
-                scope: FinanceResponsibilityScope::Default,
-                counterparty_id: Some("customer-1".to_string()),
-                owner_user_id: "finance-1".to_string(),
-                status: EnableStatus::Active,
-            },
-            "admin-1",
-        )
-        .is_err());
+        assert!(
+            FinanceResponsibilityRule::new(
+                "r-2",
+                FinanceResponsibilityRuleData {
+                    operation: FinanceResponsibilityOperation::SalesInvoice,
+                    scope: FinanceResponsibilityScope::Default,
+                    counterparty_id: Some("customer-1".to_string()),
+                    owner_user_id: "finance-1".to_string(),
+                    status: EnableStatus::Active,
+                },
+                "admin-1",
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -467,10 +454,7 @@ mod tests {
                 .as_slice()
             )
         );
-        assert_eq!(
-            FinanceResponsibilityOperation::CardFundsReview.required_permission_codes(),
-            None
-        );
+        assert_eq!(FinanceResponsibilityOperation::CardFundsReview.required_permission_codes(), None);
     }
 
     #[test]
@@ -493,19 +477,17 @@ mod tests {
         ];
         let set = FinanceResponsibilityRuleSet::new(&rules);
         assert_eq!(
-            set.resolve(FinanceResponsibilityOperation::SalesInvoice, "customer-1")
-                .unwrap()
-                .owner_user_id,
+            set.resolve(FinanceResponsibilityOperation::SalesInvoice, "customer-1").unwrap().owner_user_id,
             "finance-exact"
         );
         assert_eq!(
-            set.resolve(FinanceResponsibilityOperation::SalesInvoice, "customer-2")
-                .unwrap()
-                .owner_user_id,
+            set.resolve(FinanceResponsibilityOperation::SalesInvoice, "customer-2").unwrap().owner_user_id,
             "finance-default"
         );
-        assert!(FinanceResponsibilityRuleSet::new(&[])
-            .resolve(FinanceResponsibilityOperation::SupplierPayment, "supplier-1")
-            .is_err());
+        assert!(
+            FinanceResponsibilityRuleSet::new(&[])
+                .resolve(FinanceResponsibilityOperation::SupplierPayment, "supplier-1")
+                .is_err()
+        );
     }
 }

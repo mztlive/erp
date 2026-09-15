@@ -12,17 +12,17 @@ pub use erp_returns::service::approval::{
 use erp_workflow::entity::approval_integration::{
     ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload,
 };
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::DocumentType;
-
-use crate::{Error, Result};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::business_adapter::{
-    adapter_spec_of, ensure_adapter_spec_complete, AdapterReadScope, ApprovalAdapterSpec,
+    AdapterReadScope, ApprovalAdapterSpec, adapter_spec_of, ensure_adapter_spec_complete,
 };
 use erp_workflow::service::approval::policy::{
     ApprovalDomainAction, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource, OwnerOrganizationSource,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
+
+use crate::{Error, Result};
 
 /// 已注册的付款冲正单适配器规格。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,9 +78,7 @@ fn payment_reversal_adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<Payme
         || spec.owner_role.as_str() != "payment_reversal_approver"
         || spec.owner_organization_source != OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         || spec.read_scope != AdapterReadScope::DocumentOrganizationAndCreator
-        || !spec
-            .subject_snapshot_fields
-            .contains(&ApprovalSubjectSnapshotField::TotalAmount)
+        || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalAmount)
     {
         return Err(Error::Internal("付款冲正单审批适配器登记不完整".to_string()));
     }
@@ -159,9 +157,7 @@ pub fn payment_reversal_start_command(
     idempotency_key: &str,
 ) -> PaymentReversalStartCommand {
     PaymentReversalStartCommand {
-        subject_kind: process_kind_of(DocumentType::PaymentReversal)
-            .as_str()
-            .to_string(),
+        subject_kind: process_kind_of(DocumentType::PaymentReversal).as_str().to_string(),
         subject_id: reversal_id.to_string(),
         subject_version,
         actor_id: actor_id.to_string(),
@@ -197,14 +193,11 @@ pub fn execute_payment_reversal_domain_action(
     match action {
         ApprovalDomainAction::PaymentReversalPost => {
             ensure_payment_reversal_final_approve_posting(reversal).map_err(Error::from)
-        }
+        },
         ApprovalDomainAction::PaymentReversalCancelApproval => {
             cancel_payment_reversal_to_draft(reversal).map_err(Error::from)
-        }
-        other => Err(Error::ValidationError(format!(
-            "动作 {} 不属于付款冲正单",
-            other.as_str()
-        ))),
+        },
+        other => Err(Error::ValidationError(format!("动作 {} 不属于付款冲正单", other.as_str()))),
     }
 }
 
@@ -240,9 +233,7 @@ pub fn payment_reversal_object_readable(organization_id: &str, assignee_user_id:
 /// 往来主体为空时返回校验错误。
 pub fn payment_reversal_responsible_org_id(organization_id: &str) -> Result<String> {
     if organization_id.trim().is_empty() {
-        return Err(Error::ValidationError(
-            "付款冲正单缺少往来主体，无法冻结责任组织".to_string(),
-        ));
+        return Err(Error::ValidationError("付款冲正单缺少往来主体，无法冻结责任组织".to_string()));
     }
     Ok(organization_id.to_string())
 }
@@ -284,10 +275,12 @@ pub fn build_payment_reversal_snapshot(
 
 #[cfg(test)]
 mod payment_reversal_tests {
-    use super::*;
+    use std::str::FromStr;
+
     use erp_core::ids::{PaymentReversalId, SupplierPaymentId};
     use erp_returns::entity::returns::PaymentReversalData;
-    use std::str::FromStr;
+
+    use super::*;
 
     fn draft_reversal() -> PaymentReversal {
         PaymentReversal::new(
@@ -315,9 +308,7 @@ mod payment_reversal_tests {
         assert_eq!(adapter.document_type, DocumentType::PaymentReversal);
         assert_eq!(adapter.process_kind.as_str(), "payment_reversal");
         assert_eq!(
-            payment_reversal_subject_ref("prr-1")
-                .expect("主体引用必须可构造")
-                .subject_kind(),
+            payment_reversal_subject_ref("prr-1").expect("主体引用必须可构造").subject_kind(),
             "payment_reversal"
         );
         assert_eq!(adapter.subject_ref_builder, "subject_ref_for(PaymentReversal)");
@@ -325,31 +316,16 @@ mod payment_reversal_tests {
             adapter.subject_version_source,
             ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
         );
-        assert_eq!(
-            adapter.subject_snapshot_builder,
-            "build_payment_reversal_snapshot"
-        );
-        assert_eq!(
-            adapter.on_approval_start,
-            ApprovalDomainAction::PaymentReversalSubmit
-        );
-        assert_eq!(
-            adapter.on_final_approve,
-            ApprovalDomainAction::PaymentReversalPost
-        );
-        assert_eq!(
-            adapter.cancel_action,
-            ApprovalDomainAction::PaymentReversalCancelApproval
-        );
+        assert_eq!(adapter.subject_snapshot_builder, "build_payment_reversal_snapshot");
+        assert_eq!(adapter.on_approval_start, ApprovalDomainAction::PaymentReversalSubmit);
+        assert_eq!(adapter.on_final_approve, ApprovalDomainAction::PaymentReversalPost);
+        assert_eq!(adapter.cancel_action, ApprovalDomainAction::PaymentReversalCancelApproval);
         assert_eq!(adapter.owner_role, "payment_reversal_approver");
         assert_eq!(
             adapter.owner_organization_snapshot,
             OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         );
-        assert_eq!(
-            adapter.read_scope,
-            AdapterReadScope::DocumentOrganizationAndCreator
-        );
+        assert_eq!(adapter.read_scope, AdapterReadScope::DocumentOrganizationAndCreator);
         assert_ne!(adapter.on_approval_start, adapter.on_final_approve);
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
     }
@@ -427,18 +403,17 @@ mod payment_reversal_tests {
         assert_eq!(payload.total_amount.unwrap().to_string(), "100");
         assert_eq!(payload.line_count, 1);
         assert!(payload.total_quantity.is_none());
-        assert!(matches!(
-            payload.counterparty,
-            Some(ApprovalSubjectCounterparty::Supplier { .. })
-        ));
-        assert!(build_payment_reversal_snapshot(
-            &reversal,
-            " ",
-            &supplier_id,
-            "user-1",
-            Instant::from_unix_secs(10)
-        )
-        .is_err());
+        assert!(matches!(payload.counterparty, Some(ApprovalSubjectCounterparty::Supplier { .. })));
+        assert!(
+            build_payment_reversal_snapshot(
+                &reversal,
+                " ",
+                &supplier_id,
+                "user-1",
+                Instant::from_unix_secs(10)
+            )
+            .is_err()
+        );
     }
 
     /// 对象读取权空组织或空审批人失败关闭。
@@ -456,10 +431,12 @@ mod payment_reversal_tests {
         start_payment_reversal_approval(&mut reversal).unwrap();
         execute_payment_reversal_domain_action(&mut reversal, ApprovalDomainAction::PaymentReversalPost)
             .unwrap();
-        assert!(execute_payment_reversal_domain_action(
-            &mut reversal,
-            ApprovalDomainAction::StockAdjustmentSubmit,
-        )
-        .is_err());
+        assert!(
+            execute_payment_reversal_domain_action(
+                &mut reversal,
+                ApprovalDomainAction::StockAdjustmentSubmit,
+            )
+            .is_err()
+        );
     }
 }

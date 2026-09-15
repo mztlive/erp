@@ -10,18 +10,17 @@ use erp_core::common::time::Instant;
 use erp_returns::entity::returns::{CustomerRefund, PaymentReversal, ReceiptReversal, SupplierRefund};
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
-use erp_workflow::BpmExt;
-use erp_workflow::WorkItemExt;
+use erp_workflow::service::approval::execution::authorization::converge_eligibility;
+use erp_workflow::service::approval::execution::{
+    CancelExecutionInput, ExecutionCommandInput, PreparedExecution, normalize_document_cancel_reason,
+};
+use erp_workflow::{BpmExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::start_approval::load_bound_definition_graph;
 use crate::{Error, Result};
-use erp_workflow::service::approval::execution::authorization::converge_eligibility;
-use erp_workflow::service::approval::execution::{
-    normalize_document_cancel_reason, CancelExecutionInput, ExecutionCommandInput, PreparedExecution,
-};
 
 /// 已加载的可撤回运行事实。
 pub(super) struct LoadedCancelRuntime {
@@ -63,9 +62,8 @@ pub(super) async fn load_cancel_runtime(
         .cancellation_instance_by_subject(subject, subject_version, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::ConflictError("没有可撤回的审批实例".to_string()))?;
-    let task_policy = instance
-        .cancellation_task_policy()
-        .map_err(|error| Error::ConflictError(error.to_string()))?;
+    let task_policy =
+        instance.cancellation_task_policy().map_err(|error| Error::ConflictError(error.to_string()))?;
     let current = db
         .bpm_workflow()
         .current_execution_for_cancellation(
@@ -203,15 +201,8 @@ pub(super) async fn persist_customer_refund_cancel(
     db: &Database,
     input: CustomerRefundCancelPersistInput,
 ) -> Result<()> {
-    let CustomerRefundCancelPersistInput {
-        mut refund,
-        prepared,
-        open_tasks,
-        actor_id,
-        reason,
-        now,
-        audit,
-    } = input;
+    let CustomerRefundCancelPersistInput { mut refund, prepared, open_tasks, actor_id, reason, now, audit } =
+        input;
     let db = db.clone();
     let client = db.client().clone();
     client
@@ -320,15 +311,8 @@ pub(super) async fn persist_supplier_refund_cancel(
     db: &Database,
     input: SupplierRefundCancelPersistInput,
 ) -> Result<()> {
-    let SupplierRefundCancelPersistInput {
-        mut refund,
-        prepared,
-        open_tasks,
-        actor_id,
-        reason,
-        now,
-        audit,
-    } = input;
+    let SupplierRefundCancelPersistInput { mut refund, prepared, open_tasks, actor_id, reason, now, audit } =
+        input;
     let db = db.clone();
     let client = db.client().clone();
     client

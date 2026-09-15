@@ -368,8 +368,9 @@ pub struct PurchaseChangeOrderView {
 
 #[cfg(test)]
 mod wire_tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     /// 财务余额跨域投影不得经过浮点数；保留超过 JS 安全整数范围的分位和字段名。
     #[test]

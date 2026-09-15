@@ -8,6 +8,17 @@
 //! 筛选/行类型定义在本文件，经 `SupplierApiExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
+use serde::{Deserialize, Serialize};
+
+pub use super::SupplierApiExt;
+use super::{SupplierFulfillmentExt, SupplierOfferingExt};
 use crate::entity::supplier_api::{
     BusinessCapabilityConfirmation, ConnectionEnvironment, HealthCheckResult, SupplierApiCapability,
     SupplierApiCapabilityCode, SupplierApiCapabilityStatus, SupplierApiConnection, SupplierApiConnectionId,
@@ -19,20 +30,6 @@ use crate::repository::owned::{
     SupplierApiConnectionRepository, SupplierConnectionCommandReceiptRepository,
     SupplierHealthCheckRunRepository,
 };
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use mongodb::Database;
-use serde::{Deserialize, Serialize};
-
-pub use super::SupplierApiExt;
-use super::{SupplierFulfillmentExt, SupplierOfferingExt};
-
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
 
 mod capability_change_batch;
 
@@ -181,10 +178,7 @@ impl<'a> SupplierApiConnectionRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -314,10 +308,7 @@ impl<'a> SupplierApiCapabilityRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 查找指定连接的全部能力声明（按能力代码升序）。
@@ -390,8 +381,7 @@ impl<'a> SupplierHealthCheckRunRepository<'a> {
         job_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierHealthCheckRun>> {
-        self.find_one(doc! { "background_job_id": job_id }, executor)
-            .await
+        self.find_one(doc! { "background_job_id": job_id }, executor).await
     }
 
     /// 查询连接最近的健康运行记录。
@@ -701,16 +691,9 @@ impl<'a> SupplierApiRepository<'a> {
     ) -> Result<SupplierApiGovernanceData> {
         let capabilities = self.connection_capabilities(connection_id, executor).await?;
         let confirmations = self.business_confirmations(connection_id, executor).await?;
-        let health_runs = self
-            .recent_health_runs(connection_id, health_limit, executor)
-            .await?;
+        let health_runs = self.recent_health_runs(connection_id, health_limit, executor).await?;
         let owned_impact = self.owned_connection_impact(connection_id, executor).await?;
-        Ok(SupplierApiGovernanceData {
-            capabilities,
-            confirmations,
-            health_runs,
-            owned_impact,
-        })
+        Ok(SupplierApiGovernanceData { capabilities, confirmations, health_runs, owned_impact })
     }
 
     /// 建立连接及其能力声明（跨集合多步骤写入）。
@@ -737,17 +720,13 @@ impl<'a> SupplierApiRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<SupplierApiConnection>(SUPPLIER_API_CONNECTIONS),
+            &self.db.collection::<SupplierApiConnection>(SUPPLIER_API_CONNECTIONS),
             connection,
             executor,
         )
         .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<SupplierApiCapability>(SUPPLIER_API_CAPABILITIES),
+            &self.db.collection::<SupplierApiCapability>(SUPPLIER_API_CAPABILITIES),
             capabilities.to_vec(),
             executor,
         )
@@ -785,10 +764,7 @@ impl<'a> SupplierApiRepository<'a> {
             executor,
         )
         .await?;
-        Ok(SupplierConnectionOwnedImpact {
-            active_offerings,
-            open_supplier_orders,
-        })
+        Ok(SupplierConnectionOwnedImpact { active_offerings, open_supplier_orders })
     }
 
     /// 读取连接下活动供给数量及其当前修订 ID。
@@ -811,11 +787,7 @@ impl<'a> SupplierApiRepository<'a> {
         struct OfferingRevisionRow {
             current_revision_id: Option<String>,
         }
-        let collection = self
-            .db
-            .supplier_offerings()
-            .collection()
-            .clone_with_type::<OfferingRevisionRow>();
+        let collection = self.db.supplier_offerings().collection().clone_with_type::<OfferingRevisionRow>();
         let rows = mongo_ops::find_many(
             &collection,
             doc! {
@@ -823,17 +795,12 @@ impl<'a> SupplierApiRepository<'a> {
                 "status": "ACTIVE",
                 "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
             },
-            FindOptions::builder()
-                .projection(doc! { "current_revision_id": 1 })
-                .build(),
+            FindOptions::builder().projection(doc! { "current_revision_id": 1 }).build(),
             executor,
         )
         .await?;
         let count = rows.len() as u64;
-        let revision_ids = rows
-            .into_iter()
-            .filter_map(|row| row.current_revision_id)
-            .collect();
+        let revision_ids = rows.into_iter().filter_map(|row| row.current_revision_id).collect();
         Ok((count, revision_ids))
     }
 }
@@ -895,13 +862,14 @@ fn supplier_api_capability_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, SupplierApiCapabilityFilter, SupplierApiConnectionFilter};
+    use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
+
+    use super::{SupplierApiCapabilityFilter, SupplierApiConnectionFilter, sort_doc};
     use crate::entity::supplier_api::{
         ConnectionEnvironment, SupplierApiCapabilityCode, SupplierApiCapabilityStatus,
         SupplierApiConnectionStatus,
     };
-    use mongodb::bson::doc;
-    use persistence_core::QueryFilter;
 
     #[test]
     fn connection_filter_applies_optional_fields_and_deleted_filter() {
@@ -950,10 +918,7 @@ mod tests {
     #[test]
     fn sort_doc_defaults_to_created_at_and_whitelists_fields() {
         assert_eq!(sort_doc(None, false), doc! { "created_at": -1, "id": -1 });
-        assert_eq!(
-            sort_doc(Some("connection_code"), true),
-            doc! { "connection_code": 1, "id": 1 }
-        );
+        assert_eq!(sort_doc(Some("connection_code"), true), doc! { "connection_code": 1, "id": 1 });
         assert_eq!(
             sort_doc(Some("任意字段"), false),
             doc! { "created_at": -1, "id": -1 },

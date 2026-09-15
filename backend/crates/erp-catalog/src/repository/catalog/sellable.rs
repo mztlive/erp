@@ -1,8 +1,9 @@
 //! 可售查询消费的筛选条件与稳定行合同。
-use crate::entity::catalog::ProductKind;
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
+
+use crate::entity::catalog::ProductKind;
 
 /// 公司商品池列表筛选条件。
 ///

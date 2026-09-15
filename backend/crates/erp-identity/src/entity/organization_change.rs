@@ -94,14 +94,9 @@ impl OrganizationChangeRequest {
     pub fn validate(&self) -> Result<()> {
         if self.idempotency_key.is_empty()
             || self.idempotency_key.len() > 128
-            || !self
-                .idempotency_key
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
+            || !self.idempotency_key.bytes().all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
         {
-            return Err(Error::ValidationError(
-                "幂等键必须为不超过128位的字母、数字、下划线或短横线".into(),
-            ));
+            return Err(Error::ValidationError("幂等键必须为不超过128位的字母、数字、下划线或短横线".into()));
         }
         if self.reason.trim().is_empty() || self.reason.chars().count() > 1000 {
             return Err(Error::ValidationError("必须填写不超过1000字的变更原因".into()));
@@ -130,10 +125,7 @@ impl OrganizationState {
         next.apply(&request.change, id, actor, request.reason.trim(), at)?;
         OrgTree::new(&next.units)?;
         next.validate_memberships()?;
-        next.version = self
-            .version
-            .checked_add(1)
-            .ok_or_else(|| Error::Internal("组织版本溢出".into()))?;
+        next.version = self.version.checked_add(1).ok_or_else(|| Error::Internal("组织版本溢出".into()))?;
         Ok(next)
     }
 
@@ -155,11 +147,7 @@ impl OrganizationState {
 
     /// 校验单用户全部有效期不重叠，含未来关系。
     fn validate_memberships(&self) -> Result<()> {
-        let mut members = self
-            .memberships
-            .iter()
-            .filter(|m| !m.base.is_deleted())
-            .collect::<Vec<_>>();
+        let mut members = self.memberships.iter().filter(|m| !m.base.is_deleted()).collect::<Vec<_>>();
         members.sort_by_key(|m| (&m.user_id, m.validity.valid_from));
         for m in &members {
             m.validity.validate()?;
@@ -188,19 +176,19 @@ impl OrganizationState {
             | OrganizationOperation::RenameUnit { .. } => self.change_unit(change, id, actor, reason)?,
             OrganizationOperation::DisableUnit { org_unit_id } => {
                 self.disable(org_unit_id, actor, reason, at)?
-            }
+            },
             OrganizationOperation::TransferMember { user_id, org_unit_id } => {
                 self.transfer(user_id, org_unit_id, id, actor, reason, at)?
-            }
+            },
             OrganizationOperation::EndMembership { user_id } => {
                 self.end_membership(user_id, actor, reason, at)?
-            }
+            },
             OrganizationOperation::GrantManagement { .. } => {
                 self.grant_management(change, id, actor, reason, at)?
-            }
+            },
             OrganizationOperation::RevokeManagement { assignment_id } => {
                 self.revoke_management(assignment_id, at)?
-            }
+            },
         }
         Ok(())
     }
@@ -214,11 +202,7 @@ impl OrganizationState {
         reason: &str,
     ) -> Result<()> {
         match change {
-            OrganizationOperation::CreateUnit {
-                name,
-                parent_id,
-                kind,
-            } => {
+            OrganizationOperation::CreateUnit { name, parent_id, kind } => {
                 if let Some(parent) = parent_id {
                     self.ensure_enabled(parent)?;
                 }
@@ -230,16 +214,13 @@ impl OrganizationState {
                     actor.into(),
                     reason.into(),
                 )?);
-            }
-            OrganizationOperation::MoveUnit {
-                org_unit_id,
-                parent_id,
-            } => {
+            },
+            OrganizationOperation::MoveUnit { org_unit_id, parent_id } => {
                 if let Some(parent) = parent_id {
                     self.ensure_enabled(parent)?;
                 }
                 self.unit_mut(org_unit_id, actor, reason)?.parent_id = parent_id.clone();
-            }
+            },
             OrganizationOperation::RenameUnit { org_unit_id, name } => {
                 let name = erp_core::validation::normalize_required_text(
                     name.clone(),
@@ -248,7 +229,7 @@ impl OrganizationState {
                     "组织名称过长",
                 )?;
                 self.unit_mut(org_unit_id, actor, reason)?.name = name;
-            }
+            },
             _ => return Err(Error::Internal("错误的组织节点命令".into())),
         }
         Ok(())
@@ -272,10 +253,7 @@ impl OrganizationState {
                 valid_to,
             } => {
                 self.ensure_enabled(org_unit_id)?;
-                let validity = OrgValidity {
-                    valid_from: at,
-                    valid_to: *valid_to,
-                };
+                let validity = OrgValidity { valid_from: at, valid_to: *valid_to };
                 validity.validate()?;
                 self.management.push(OrgManagementAssignment {
                     base: BaseModel::new(id.into()),
@@ -287,7 +265,7 @@ impl OrganizationState {
                     granted_by: actor.into(),
                     reason: reason.into(),
                 });
-            }
+            },
             _ => return Err(Error::Internal("错误的管理关系命令".into())),
         }
         Ok(())
@@ -316,14 +294,9 @@ impl OrganizationState {
             .management
             .iter()
             .any(|m| m.org_unit_id == id && m.validity.valid_to.is_none_or(|end| end > at));
-        let children = self
-            .units
-            .iter()
-            .any(|u| u.enabled && u.parent_id.as_deref() == Some(id));
+        let children = self.units.iter().any(|u| u.enabled && u.parent_id.as_deref() == Some(id));
         if pending_members || pending_managers || children {
-            return Err(Error::ConflictError(
-                "组织仍有成员、管理关系或有效下级，请先完成交接".into(),
-            ));
+            return Err(Error::ConflictError("组织仍有成员、管理关系或有效下级，请先完成交接".into()));
         }
         self.unit_mut(id, actor, reason)?.enabled = false;
         Ok(())
@@ -348,10 +321,7 @@ impl OrganizationState {
             base: BaseModel::new(id.into()),
             user_id: user.into(),
             org_unit_id: org.into(),
-            validity: OrgValidity {
-                valid_from: at,
-                valid_to: None,
-            },
+            validity: OrgValidity { valid_from: at, valid_to: None },
             changed_by: actor.into(),
             reason: reason.into(),
         });
@@ -360,10 +330,7 @@ impl OrganizationState {
 
     /// 结束当前有效关系，保留原始关系记录和此次变更原因。
     fn end_membership(&mut self, user: &str, actor: &str, reason: &str, at: Instant) -> Result<()> {
-        for membership in self
-            .memberships
-            .iter_mut()
-            .filter(|m| m.user_id == user && m.validity.contains(at))
+        for membership in self.memberships.iter_mut().filter(|m| m.user_id == user && m.validity.contains(at))
         {
             if membership.validity.valid_from >= at {
                 return Err(Error::ConflictError("关系刚生效，请稍后再调岗".into()));
@@ -429,10 +396,7 @@ mod tests {
                 base: BaseModel::new("membership".into()),
                 user_id: "sales".into(),
                 org_unit_id: "one".into(),
-                validity: OrgValidity {
-                    valid_from: Instant::from_unix_secs(1),
-                    valid_to: None,
-                },
+                validity: OrgValidity { valid_from: Instant::from_unix_secs(1), valid_to: None },
                 changed_by: "admin".into(),
                 reason: "初始化".into(),
             }],
@@ -463,18 +427,9 @@ mod tests {
                 Instant::from_unix_secs(10),
             )
             .unwrap();
-        assert_eq!(
-            before.own_org("sales", Instant::from_unix_secs(10)).unwrap(),
-            Some("one")
-        );
-        assert_eq!(
-            next.own_org("sales", Instant::from_unix_secs(9)).unwrap(),
-            Some("one")
-        );
-        assert_eq!(
-            next.own_org("sales", Instant::from_unix_secs(10)).unwrap(),
-            Some("two")
-        );
+        assert_eq!(before.own_org("sales", Instant::from_unix_secs(10)).unwrap(), Some("one"));
+        assert_eq!(next.own_org("sales", Instant::from_unix_secs(9)).unwrap(), Some("one"));
+        assert_eq!(next.own_org("sales", Instant::from_unix_secs(10)).unwrap(), Some("two"));
         assert_eq!(next.memberships.len(), 2);
         assert_eq!(next.version, 2);
     }
@@ -482,12 +437,8 @@ mod tests {
     #[test]
     fn stale_version_cycle_and_disable_with_members_are_rejected_without_partial_changes() {
         let before = state();
-        let mut change = request(OrganizationOperation::DisableUnit {
-            org_unit_id: "one".into(),
-        });
-        assert!(before
-            .changed(&change, "id", "admin", Instant::from_unix_secs(10))
-            .is_err());
+        let mut change = request(OrganizationOperation::DisableUnit { org_unit_id: "one".into() });
+        assert!(before.changed(&change, "id", "admin", Instant::from_unix_secs(10)).is_err());
         change.expected_version = 0;
         assert!(matches!(
             before.changed(&change, "id", "admin", Instant::from_unix_secs(10)),
@@ -497,9 +448,7 @@ mod tests {
             org_unit_id: "one".into(),
             parent_id: Some("one".into()),
         });
-        assert!(before
-            .changed(&cycle, "id", "admin", Instant::from_unix_secs(10))
-            .is_err());
+        assert!(before.changed(&cycle, "id", "admin", Instant::from_unix_secs(10)).is_err());
         assert_eq!(before.version, 1);
         assert!(before.units[0].enabled);
         assert_eq!(before.units[0].parent_id, None);
@@ -513,9 +462,7 @@ mod tests {
         duplicate.org_unit_id = "two".into();
         before.memberships.push(duplicate);
         assert!(before.own_org("sales", Instant::from_unix_secs(10)).is_err());
-        let mut invalid = request(OrganizationOperation::EndMembership {
-            user_id: "sales".into(),
-        });
+        let mut invalid = request(OrganizationOperation::EndMembership { user_id: "sales".into() });
         invalid.idempotency_key = " ".into();
         assert!(invalid.validate().is_err());
     }

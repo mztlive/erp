@@ -13,16 +13,16 @@ mod start;
 mod start_plan;
 mod transition_plan;
 
-pub use crate::graph::DefinitionGraph;
-pub use cancel::{cancel, CancelCommand};
-pub use cancel_plan::{plan_cancel, CancelPlan, CancelPlanInput};
-pub use decision::{block_current, decide, DecideCommand};
+pub use cancel::{CancelCommand, cancel};
+pub use cancel_plan::{CancelPlan, CancelPlanInput, plan_cancel};
+pub use decision::{DecideCommand, block_current, decide};
 pub use event::{BpmEvent, BpmEventKind};
-pub use resume::{resume, ResumeCommand};
-pub use start::{start, StartAssigneeBinding, StartCommand};
-pub use start_plan::{plan_start, StartBindingInput, StartPlan, StartPlanInput};
+pub use resume::{ResumeCommand, resume};
+pub use start::{StartAssigneeBinding, StartCommand, start};
+pub use start_plan::{StartBindingInput, StartPlan, StartPlanInput, plan_start};
 pub use transition_plan::{CommitRequired, TaskCloseReason, TaskIntent, TransitionPlan};
 
+pub use crate::graph::DefinitionGraph;
 use crate::model::types::{ApprovalBlockerCode, ModelError};
 use crate::model::{ApprovalNodeDefinition, ParticipantId};
 
@@ -81,14 +81,9 @@ impl Eligibility {
     /// 返回构造时写入的快照。
     pub fn name_snapshot(&self) -> &str {
         match self {
-            Self::Eligible {
-                assignee_name_snapshot,
-                ..
-            }
-            | Self::Blocked {
-                assignee_name_snapshot,
-                ..
-            } => assignee_name_snapshot,
+            Self::Eligible { assignee_name_snapshot, .. } | Self::Blocked { assignee_name_snapshot, .. } => {
+                assignee_name_snapshot
+            },
         }
     }
 
@@ -126,18 +121,17 @@ impl DefinitionGraph {
     /// # 错误
     /// 入口不存在时返回图损坏。
     pub fn entry_node(&self) -> EngineResult<&ApprovalNodeDefinition> {
-        self.node(&self.definition.entry_node_key)
-            .ok_or(EngineError::GraphCorrupted)
+        self.node(&self.definition.entry_node_key).ok_or(EngineError::GraphCorrupted)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::enter_node::{plan_enter_node, EnterNodeInput};
+    use super::enter_node::{EnterNodeInput, plan_enter_node};
     use super::{
-        block_current, cancel, decide, resume, start, CancelCommand, CommitRequired, DecideCommand,
-        DefinitionGraph, Eligibility, EngineError, ResumeCommand, StartAssigneeBinding, StartCommand,
-        TaskCloseReason, TaskIntent,
+        CancelCommand, CommitRequired, DecideCommand, DefinitionGraph, Eligibility, EngineError,
+        ResumeCommand, StartAssigneeBinding, StartCommand, TaskCloseReason, TaskIntent, block_current,
+        cancel, decide, resume, start,
     };
     use crate::ids::{
         ApprovalInstanceAssigneeId, ApprovalNodeDefinitionId, ApprovalNodeExecutionId,
@@ -160,14 +154,8 @@ mod tests {
         assert_eq!(first, second);
         assert_eq!(first.instance.status, ApprovalProcessInstanceStatus::Running);
         assert_eq!(first.created_assignees.len(), 2);
-        assert!(matches!(
-            first.task_intents.first(),
-            Some(TaskIntent::HumanTaskRequested { .. })
-        ));
-        assert!(first
-            .events
-            .iter()
-            .any(|event| event.kind.as_str() == "INSTANCE_STARTED"));
+        assert!(matches!(first.task_intents.first(), Some(TaskIntent::HumanTaskRequested { .. })));
+        assert!(first.events.iter().any(|event| event.kind.as_str() == "INSTANCE_STARTED"));
     }
 
     /// 即使入口合格，任一非入口审批人失效时也必须拒绝启动。
@@ -211,10 +199,7 @@ mod tests {
             eligible("u2", "李四"),
         )
         .unwrap_err();
-        assert_eq!(
-            error,
-            EngineError::InvalidCommand("启动时全部审批人必须有效，不得创建受阻实例")
-        );
+        assert_eq!(error, EngineError::InvalidCommand("启动时全部审批人必须有效，不得创建受阻实例"));
     }
 
     /// 资格结果必须逐节点属于定义中冻结的审批人。
@@ -246,19 +231,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(plan.commit, CommitRequired::Proceed);
-        assert_eq!(
-            plan.updated_executions[0].status,
-            ApprovalNodeExecutionStatus::Approved
-        );
-        assert_eq!(
-            plan.created_executions[0].status,
-            ApprovalNodeExecutionStatus::Blocked
-        );
+        assert_eq!(plan.updated_executions[0].status, ApprovalNodeExecutionStatus::Approved);
+        assert_eq!(plan.created_executions[0].status, ApprovalNodeExecutionStatus::Blocked);
         assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Blocked);
-        assert!(!plan
-            .task_intents
-            .iter()
-            .any(|intent| matches!(intent, TaskIntent::HumanTaskRequested { .. })));
+        assert!(
+            !plan.task_intents.iter().any(|intent| matches!(intent, TaskIntent::HumanTaskRequested { .. }))
+        );
     }
 
     /// 下一节点资格主体不得伪装成定义责任人形成隐藏换人通道。
@@ -334,10 +312,7 @@ mod tests {
         .unwrap();
         assert_eq!(plan.instance.current_round_no, 2);
         assert_eq!(plan.instance.subject_version, subject_version);
-        assert_eq!(
-            plan.updated_executions[0].status,
-            ApprovalNodeExecutionStatus::Rejected
-        );
+        assert_eq!(plan.updated_executions[0].status, ApprovalNodeExecutionStatus::Rejected);
         assert_eq!(plan.created_executions[0].node_key, "n1");
         assert_eq!(plan.created_executions[0].round_no, 2);
         assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Running);
@@ -365,16 +340,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(plan.commit, CommitRequired::Blocked);
-        assert_eq!(
-            plan.updated_executions[0].status,
-            ApprovalNodeExecutionStatus::Blocked
-        );
+        assert_eq!(plan.updated_executions[0].status, ApprovalNodeExecutionStatus::Blocked);
         assert!(matches!(
             plan.task_intents.first(),
-            Some(TaskIntent::CloseTask {
-                reason: TaskCloseReason::ApprovalRuntimeBlocked,
-                ..
-            })
+            Some(TaskIntent::CloseTask { reason: TaskCloseReason::ApprovalRuntimeBlocked, .. })
         ));
     }
 
@@ -383,25 +352,14 @@ mod tests {
     fn engine_block_current_emits_complete_standard_plan() {
         let started = start_two_node(eligible("u1", "张三"));
         let current = started.created_executions[0].clone();
-        let plan = block_current(
-            started.instance,
-            current,
-            ApprovalBlockerCode::OpenTaskConflict,
-            at(24),
-        )
-        .unwrap();
+        let plan =
+            block_current(started.instance, current, ApprovalBlockerCode::OpenTaskConflict, at(24)).unwrap();
 
         assert_eq!(plan.commit, CommitRequired::Blocked);
-        assert_eq!(
-            plan.updated_executions[0].blocker_code,
-            Some(ApprovalBlockerCode::OpenTaskConflict)
-        );
+        assert_eq!(plan.updated_executions[0].blocker_code, Some(ApprovalBlockerCode::OpenTaskConflict));
         assert!(matches!(
             plan.task_intents.as_slice(),
-            [TaskIntent::CloseTask {
-                reason: TaskCloseReason::ApprovalRuntimeBlocked,
-                ..
-            }]
+            [TaskIntent::CloseTask { reason: TaskCloseReason::ApprovalRuntimeBlocked, .. }]
         ));
         let event = plan
             .events
@@ -420,13 +378,8 @@ mod tests {
         let mut current = started.created_executions[0].clone();
         current.base.id = "other-execution".to_string();
 
-        let error = block_current(
-            started.instance,
-            current,
-            ApprovalBlockerCode::OpenTaskConflict,
-            at(24),
-        )
-        .unwrap_err();
+        let error = block_current(started.instance, current, ApprovalBlockerCode::OpenTaskConflict, at(24))
+            .unwrap_err();
 
         assert_eq!(error, EngineError::InvalidCommand("执行不是实例当前令牌"));
     }
@@ -436,17 +389,10 @@ mod tests {
     fn engine_block_current_rejects_non_active_execution() {
         let started = start_two_node(eligible("u1", "张三"));
         let mut current = started.created_executions[0].clone();
-        current
-            .block(ApprovalBlockerCode::DefinitionGraphCorrupted, at(23))
-            .unwrap();
+        current.block(ApprovalBlockerCode::DefinitionGraphCorrupted, at(23)).unwrap();
 
-        let error = block_current(
-            started.instance,
-            current,
-            ApprovalBlockerCode::OpenTaskConflict,
-            at(24),
-        )
-        .unwrap_err();
+        let error = block_current(started.instance, current, ApprovalBlockerCode::OpenTaskConflict, at(24))
+            .unwrap_err();
 
         assert_eq!(error, EngineError::InvalidCommand("只有活动执行可以接受决定"));
     }
@@ -500,10 +446,7 @@ mod tests {
         assert_eq!(plan.commit, CommitRequired::Cancelled);
         assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Cancelled);
         assert!(plan.instance.current_node_execution_id.is_none());
-        assert_eq!(
-            plan.updated_executions[0].status,
-            ApprovalNodeExecutionStatus::Cancelled
-        );
+        assert_eq!(plan.updated_executions[0].status, ApprovalNodeExecutionStatus::Cancelled);
     }
 
     /// 恢复创建新执行和新任务，旧任务保持关闭。
@@ -526,18 +469,12 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(
-            plan.updated_executions[0].status,
-            ApprovalNodeExecutionStatus::Superseded
-        );
+        assert_eq!(plan.updated_executions[0].status, ApprovalNodeExecutionStatus::Superseded);
         assert_eq!(
             plan.updated_executions[0].ended_reason,
             Some(ApprovalExecutionEndReason::AssigneeRecovered)
         );
-        assert_eq!(
-            plan.created_executions[0].status,
-            ApprovalNodeExecutionStatus::Active
-        );
+        assert_eq!(plan.created_executions[0].status, ApprovalNodeExecutionStatus::Active);
         assert_eq!(
             plan.created_executions[0].assignment_source,
             ApprovalExecutionAssignmentSource::AssigneeRecovery
@@ -556,10 +493,7 @@ mod tests {
         assert_eq!(assignee, original_assignee);
         assert!(assignee.ensure_unchanged_from_definition().is_ok());
         assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Running);
-        assert!(matches!(
-            plan.task_intents.first(),
-            Some(TaskIntent::HumanTaskRequested { .. })
-        ));
+        assert!(matches!(plan.task_intents.first(), Some(TaskIntent::HumanTaskRequested { .. })));
     }
 
     /// 结构性 blocker 不得进入原审批人恢复。
@@ -568,13 +502,9 @@ mod tests {
         let started = start_two_node(eligible("u1", "张三"));
         let assignee = started.created_assignees[0].clone();
         let mut instance = started.instance;
-        instance
-            .enter_blocked(ApprovalBlockerCode::DefinitionGraphCorrupted, at(27))
-            .unwrap();
+        instance.enter_blocked(ApprovalBlockerCode::DefinitionGraphCorrupted, at(27)).unwrap();
         let mut current = started.created_executions[0].clone();
-        current
-            .block(ApprovalBlockerCode::DefinitionGraphCorrupted, at(27))
-            .unwrap();
+        current.block(ApprovalBlockerCode::DefinitionGraphCorrupted, at(27)).unwrap();
         let error = resume(
             instance,
             current,
@@ -893,11 +823,7 @@ mod tests {
             )
             .unwrap(),
         ];
-        DefinitionGraph {
-            definition,
-            nodes: vec![n1, n2],
-            transitions,
-        }
+        DefinitionGraph { definition, nodes: vec![n1, n2], transitions }
     }
 
     fn single_node_graph() -> DefinitionGraph {
@@ -975,18 +901,11 @@ mod tests {
     }
 
     fn eligible(user: &str, name: &str) -> Eligibility {
-        Eligibility::Eligible {
-            participant: participant(user),
-            assignee_name_snapshot: name.into(),
-        }
+        Eligibility::Eligible { participant: participant(user), assignee_name_snapshot: name.into() }
     }
 
     fn blocked(user: &str, name: &str, code: ApprovalBlockerCode) -> Eligibility {
-        Eligibility::Blocked {
-            participant: participant(user),
-            code,
-            assignee_name_snapshot: name.into(),
-        }
+        Eligibility::Blocked { participant: participant(user), code, assignee_name_snapshot: name.into() }
     }
 
     fn participant(id: &str) -> ParticipantId {

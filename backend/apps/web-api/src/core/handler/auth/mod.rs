@@ -1,8 +1,9 @@
 pub mod login;
 pub mod profile;
 
-use erp_identity::LoginAccount;
 use std::net::IpAddr;
+
+use erp_identity::LoginAccount;
 
 const MAX_LOGIN_RATE_KEY_CHARS: usize = 64;
 pub(super) const BACKOFFICE_LOGIN_REALM: &str = "backoffice";
@@ -31,7 +32,7 @@ fn normalized_rate_account(account: &str) -> String {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
 
-    use super::{login_rate_keys, BACKOFFICE_LOGIN_REALM};
+    use super::{BACKOFFICE_LOGIN_REALM, login_rate_keys};
 
     fn peer(last_octet: u8) -> IpAddr {
         IpAddr::V4(Ipv4Addr::new(192, 0, 2, last_octet))
@@ -41,10 +42,7 @@ mod tests {
     fn login_rate_keys_reuse_account_normalization() {
         assert_eq!(
             login_rate_keys(BACKOFFICE_LOGIN_REALM, peer(1), " account01 "),
-            (
-                "backoffice|192.0.2.1".to_string(),
-                "backoffice|192.0.2.1|account01".to_string()
-            )
+            ("backoffice|192.0.2.1".to_string(), "backoffice|192.0.2.1|account01".to_string())
         );
         assert_ne!(
             login_rate_keys(BACKOFFICE_LOGIN_REALM, peer(1), "Account01").1,
@@ -54,25 +52,16 @@ mod tests {
 
     #[test]
     fn login_rate_keys_bound_invalid_input() {
-        assert_eq!(
-            login_rate_keys(BACKOFFICE_LOGIN_REALM, peer(1), "   ").1,
-            "backoffice|192.0.2.1|"
-        );
+        assert_eq!(login_rate_keys(BACKOFFICE_LOGIN_REALM, peer(1), "   ").1, "backoffice|192.0.2.1|");
         let key = login_rate_keys(BACKOFFICE_LOGIN_REALM, peer(1), &"x".repeat(100)).1;
-        assert_eq!(
-            key.strip_prefix("backoffice|192.0.2.1|").unwrap().chars().count(),
-            64
-        );
+        assert_eq!(key.strip_prefix("backoffice|192.0.2.1|").unwrap().chars().count(), 64);
     }
 
     #[test]
     fn login_rate_keys_separate_peer_and_realm() {
         let first = login_rate_keys(BACKOFFICE_LOGIN_REALM, peer(1), "account01");
 
-        assert_ne!(
-            first,
-            login_rate_keys(BACKOFFICE_LOGIN_REALM, peer(2), "account01")
-        );
+        assert_ne!(first, login_rate_keys(BACKOFFICE_LOGIN_REALM, peer(2), "account01"));
     }
 
     #[test]

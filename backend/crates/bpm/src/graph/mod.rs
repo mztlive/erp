@@ -5,15 +5,15 @@ pub mod validator;
 
 use std::collections::{HashMap, HashSet};
 
+pub use linear::{LinearTransitionDraft, build_linear_transitions, generate_linear_transitions};
+pub use validator::{ordered_nodes, validate_entry_node, validate_linear_graph, validate_transition};
+
 use crate::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
 use crate::model::types::{ApprovalDecision, ApprovalTransitionEvent, ModelError, ModelResult};
 use crate::model::{
     ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition, NewNodeDefinition,
     ParticipantId, ProcessKind, Timestamp,
 };
-
-pub use linear::{build_linear_transitions, generate_linear_transitions, LinearTransitionDraft};
-pub use validator::{ordered_nodes, validate_entry_node, validate_linear_graph, validate_transition};
 
 /// 单个审批定义允许的最大节点数。
 pub const MAX_DEFINITION_NODES: usize = 20;
@@ -160,11 +160,7 @@ impl DefinitionGraph {
     /// # 关键业务约束
     /// 返回顺序可直接交给线性连线生成器。
     pub fn ordered_node_keys(&self) -> ModelResult<Vec<String>> {
-        Ok(self
-            .ordered_nodes()?
-            .into_iter()
-            .map(|node| node.node_key.clone())
-            .collect())
+        Ok(self.ordered_nodes()?.into_iter().map(|node| node.node_key.clone()).collect())
     }
 
     /// 提取定义内确定性的审批人 ID 集合。
@@ -198,10 +194,7 @@ impl DefinitionGraph {
     /// # 关键业务约束
     /// BPM 只保持用途为不透明字符串，不解释 ERP 含义。
     pub fn purpose_refs(&self) -> Vec<Option<&str>> {
-        self.nodes
-            .iter()
-            .map(|node| node.node_purpose.as_deref())
-            .collect()
+        self.nodes.iter().map(|node| node.node_purpose.as_deref()).collect()
     }
 
     /// 校验定义图符合完整线性审批模型。
@@ -268,9 +261,7 @@ impl DefinitionGraph {
             .transitions
             .iter()
             .filter(|item| item.from_node_key == current_node_key && item.event == event);
-        let edge = matches
-            .next()
-            .ok_or(ModelError::InvalidTransition("审批定义缺少决定连线"))?;
+        let edge = matches.next().ok_or(ModelError::InvalidTransition("审批定义缺少决定连线"))?;
         if matches.next().is_some() {
             return Err(ModelError::InvalidTransition("审批定义存在重复决定连线"));
         }
@@ -299,11 +290,7 @@ impl DefinitionGraph {
     ) -> ModelResult<Vec<ApprovalNodeDefinition>> {
         self.definition.ensure_mutable()?;
         let drafts = ordered_replacement_drafts(drafts)?;
-        let existing = self
-            .nodes
-            .iter()
-            .map(|node| (node.base.id.as_str(), node))
-            .collect::<HashMap<_, _>>();
+        let existing = self.nodes.iter().map(|node| (node.base.id.as_str(), node)).collect::<HashMap<_, _>>();
         let mut seen_existing = HashSet::new();
         let mut planned = Vec::with_capacity(drafts.len());
         for draft in drafts {
@@ -358,11 +345,7 @@ impl DefinitionGraph {
             transition_ids,
             at,
         )?;
-        let graph = Self {
-            definition,
-            nodes,
-            transitions,
-        };
+        let graph = Self { definition, nodes, transitions };
         graph.validate_linear()?;
         Ok(graph)
     }
@@ -441,10 +424,8 @@ pub struct NewPopulatedDraftParams {
 /// # 关键业务约束
 /// 输出不得依赖节点存储顺序，供批量账号查询与资格重验复用。
 pub fn assignee_ids(nodes: &[ApprovalNodeDefinition]) -> Vec<String> {
-    let mut ids = nodes
-        .iter()
-        .map(|node| node.assignee_participant_id.as_str().to_string())
-        .collect::<Vec<_>>();
+    let mut ids =
+        nodes.iter().map(|node| node.assignee_participant_id.as_str().to_string()).collect::<Vec<_>>();
     ids.sort();
     ids.dedup();
     ids
@@ -546,16 +527,11 @@ fn replacement_identity(
     }
     let node = existing
         .get(existing_id.as_ref())
-        .ok_or(ModelError::InvalidField(
-            "节点不属于当前草稿，不能跨定义引用或改写已删除节点",
-        ))?;
+        .ok_or(ModelError::InvalidField("节点不属于当前草稿，不能跨定义引用或改写已删除节点"))?;
     if node.process_definition_id.as_ref() != definition_id {
         return Err(ModelError::InvalidField("节点归属定义不一致"));
     }
-    Ok((
-        ApprovalNodeDefinitionId::new(node.base.id.clone()),
-        node.node_key.clone(),
-    ))
+    Ok((ApprovalNodeDefinitionId::new(node.base.id.clone()), node.node_key.clone()))
 }
 
 /// 校验节点 ID 与稳定键在定义内均唯一。
@@ -597,10 +573,7 @@ fn ensure_nodes_belong_to_definition(
     nodes: &[ApprovalNodeDefinition],
     definition_id: &str,
 ) -> ModelResult<()> {
-    if nodes
-        .iter()
-        .all(|node| node.process_definition_id.as_ref() == definition_id)
-    {
+    if nodes.iter().all(|node| node.process_definition_id.as_ref() == definition_id) {
         return Ok(());
     }
     Err(ModelError::InvalidField("节点归属定义不一致"))
@@ -609,8 +582,8 @@ fn ensure_nodes_belong_to_definition(
 #[cfg(test)]
 mod tests {
     use super::{
-        copy_nodes_for_definition, CopiedNodeIdentity, DefinitionGraph, NewPopulatedDraftParams,
-        NodeReplacementDraft,
+        CopiedNodeIdentity, DefinitionGraph, NewPopulatedDraftParams, NodeReplacementDraft,
+        copy_nodes_for_definition,
     };
     use crate::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
     use crate::model::types::ApprovalDecision;
@@ -699,77 +672,89 @@ mod tests {
         .unwrap();
         let mut second = duplicate.clone();
         second.display_order = 2;
-        assert!(graph
-            .plan_replacement_nodes(&[duplicate, second], Timestamp::from_unix_secs(2).unwrap(),)
-            .is_err());
-        assert!(graph
-            .plan_replacement_nodes(
-                &[NodeReplacementDraft::new(
-                    Some(ApprovalNodeDefinitionId::new("foreign")),
-                    ApprovalNodeDefinitionId::new("ignored"),
-                    "ignored",
-                    "仓储",
-                    1,
-                    ParticipantId::new("u1").unwrap(),
+        assert!(
+            graph
+                .plan_replacement_nodes(&[duplicate, second], Timestamp::from_unix_secs(2).unwrap(),)
+                .is_err()
+        );
+        assert!(
+            graph
+                .plan_replacement_nodes(
+                    &[NodeReplacementDraft::new(
+                        Some(ApprovalNodeDefinitionId::new("foreign")),
+                        ApprovalNodeDefinitionId::new("ignored"),
+                        "ignored",
+                        "仓储",
+                        1,
+                        ParticipantId::new("u1").unwrap(),
+                    )
+                    .unwrap()],
+                    Timestamp::from_unix_secs(2).unwrap(),
                 )
-                .unwrap()],
-                Timestamp::from_unix_secs(2).unwrap(),
-            )
-            .is_err());
-        assert!(graph
-            .plan_replacement_nodes(&[], Timestamp::from_unix_secs(2).unwrap())
-            .is_err());
+                .is_err()
+        );
+        assert!(graph.plan_replacement_nodes(&[], Timestamp::from_unix_secs(2).unwrap()).is_err());
     }
 
     /// 节点替换草稿拒绝空白身份、空名称、零顺序，且不生成 ID。
     #[test]
     fn replacement_draft_constructor_owns_node_invariants() {
         let assignee = ParticipantId::new("u1").unwrap();
-        assert!(NodeReplacementDraft::new(
-            None,
-            ApprovalNodeDefinitionId::new("id2"),
-            "n2",
-            "  ",
-            1,
-            assignee.clone(),
-        )
-        .is_err());
-        assert!(NodeReplacementDraft::new(
-            None,
-            ApprovalNodeDefinitionId::new("id2"),
-            "n2",
-            "仓储",
-            0,
-            assignee.clone(),
-        )
-        .is_err());
-        assert!(NodeReplacementDraft::new(
-            Some(ApprovalNodeDefinitionId::new("   ")),
-            ApprovalNodeDefinitionId::new("id2"),
-            "n2",
-            "仓储",
-            1,
-            assignee.clone(),
-        )
-        .is_err());
-        assert!(NodeReplacementDraft::new(
-            None,
-            ApprovalNodeDefinitionId::new(""),
-            "n2",
-            "仓储",
-            1,
-            assignee.clone(),
-        )
-        .is_err());
-        assert!(NodeReplacementDraft::new(
-            None,
-            ApprovalNodeDefinitionId::new("id2"),
-            "  ",
-            "仓储",
-            1,
-            assignee.clone(),
-        )
-        .is_err());
+        assert!(
+            NodeReplacementDraft::new(
+                None,
+                ApprovalNodeDefinitionId::new("id2"),
+                "n2",
+                "  ",
+                1,
+                assignee.clone(),
+            )
+            .is_err()
+        );
+        assert!(
+            NodeReplacementDraft::new(
+                None,
+                ApprovalNodeDefinitionId::new("id2"),
+                "n2",
+                "仓储",
+                0,
+                assignee.clone(),
+            )
+            .is_err()
+        );
+        assert!(
+            NodeReplacementDraft::new(
+                Some(ApprovalNodeDefinitionId::new("   ")),
+                ApprovalNodeDefinitionId::new("id2"),
+                "n2",
+                "仓储",
+                1,
+                assignee.clone(),
+            )
+            .is_err()
+        );
+        assert!(
+            NodeReplacementDraft::new(
+                None,
+                ApprovalNodeDefinitionId::new(""),
+                "n2",
+                "仓储",
+                1,
+                assignee.clone(),
+            )
+            .is_err()
+        );
+        assert!(
+            NodeReplacementDraft::new(
+                None,
+                ApprovalNodeDefinitionId::new("id2"),
+                "  ",
+                "仓储",
+                1,
+                assignee.clone(),
+            )
+            .is_err()
+        );
         let draft = NodeReplacementDraft::new(
             None,
             ApprovalNodeDefinitionId::new("id2"),
@@ -787,10 +772,7 @@ mod tests {
     /// 节点复制替换全部身份并清除用途，结果可直接重建为合法线性图。
     #[test]
     fn copied_nodes_and_rebuilt_graph_are_deterministic() {
-        let source = vec![
-            node("old2", "old-n2", 2, None),
-            node("old1", "old-n1", 1, Some("legacy")),
-        ];
+        let source = vec![node("old2", "old-n2", 2, None), node("old1", "old-n1", 1, Some("legacy"))];
         let new_definition_id = ApprovalProcessDefinitionId::new("new-def");
         let copied = copy_nodes_for_definition(
             &source,
@@ -828,21 +810,11 @@ mod tests {
         graph.validate_linear().unwrap();
         assert_eq!(graph.definition.entry_node_key, "new-n1");
         assert_eq!(
-            graph
-                .decision_target_node_key("new-n1", ApprovalDecision::Approve)
-                .unwrap()
-                .as_deref(),
+            graph.decision_target_node_key("new-n1", ApprovalDecision::Approve).unwrap().as_deref(),
             Some("new-n2")
         );
-        assert_eq!(
-            graph
-                .decision_target_node_key("new-n2", ApprovalDecision::Approve)
-                .unwrap(),
-            None
-        );
-        assert!(graph
-            .decision_target_node_key("missing", ApprovalDecision::Approve)
-            .is_err());
+        assert_eq!(graph.decision_target_node_key("new-n2", ApprovalDecision::Approve).unwrap(), None);
+        assert!(graph.decision_target_node_key("missing", ApprovalDecision::Approve).is_err());
     }
 
     /// 只有已发布且线性完整的图可通过绑定校验；草稿、退役和损坏发布图失败关闭。
@@ -866,10 +838,7 @@ mod tests {
 
         graph
             .definition
-            .publish(
-                ParticipantId::new("admin").unwrap(),
-                Timestamp::from_unix_secs(2).unwrap(),
-            )
+            .publish(ParticipantId::new("admin").unwrap(), Timestamp::from_unix_secs(2).unwrap())
             .unwrap();
         graph.validate_published_linear().unwrap();
 
@@ -879,10 +848,7 @@ mod tests {
 
         graph
             .definition
-            .retire(
-                ParticipantId::new("admin").unwrap(),
-                Timestamp::from_unix_secs(3).unwrap(),
-            )
+            .retire(ParticipantId::new("admin").unwrap(), Timestamp::from_unix_secs(3).unwrap())
             .unwrap();
         assert!(graph.validate_published_linear().is_err());
     }

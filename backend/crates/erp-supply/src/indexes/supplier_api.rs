@@ -4,14 +4,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::SupplierApiExt;
-use persistence_core::Result;
 
 /// `supplier_api_connection` 集合名。
 pub(crate) const SUPPLIER_API_CONNECTIONS: &str =
@@ -41,12 +39,7 @@ pub(crate) const SUPPLIER_API_COMMAND_RECEIPTS: &str =
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SUPPLIER_API_CONNECTIONS, supplier_api_connection_indexes()).await?;
     create_indexes(db, SUPPLIER_API_CAPABILITIES, supplier_api_capability_indexes()).await?;
-    create_indexes(
-        db,
-        SUPPLIER_API_BUSINESS_CONFIRMATIONS,
-        business_confirmation_indexes(),
-    )
-    .await?;
+    create_indexes(db, SUPPLIER_API_BUSINESS_CONFIRMATIONS, business_confirmation_indexes()).await?;
     create_indexes(db, SUPPLIER_API_HEALTH_CHECK_RUNS, health_check_run_indexes()).await?;
     create_indexes(db, SUPPLIER_API_COMMAND_RECEIPTS, command_receipt_indexes()).await?;
     Ok(())
@@ -54,23 +47,15 @@ pub async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
 /// 返回 `supplier_api_connection` 的身份约束与查询索引。
 fn supplier_api_connection_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_supplier_api_connections_connection_code",
-            doc! { "connection_code": 1 },
-        ),
-        named_index(
-            "idx_supplier_api_connections_supplier_status",
-            doc! { "supplier_id": 1, "status": 1 },
-        ),
+        unique_index("uk_supplier_api_connections_connection_code", doc! { "connection_code": 1 }),
+        named_index("idx_supplier_api_connections_supplier_status", doc! { "supplier_id": 1, "status": 1 }),
         named_index(
             "idx_supplier_api_connections_environment_status_health",
             doc! { "environment": 1, "status": 1, "last_health_result": 1, "updated_at": -1 },
@@ -97,10 +82,7 @@ fn business_confirmation_indexes() -> Vec<IndexModel> {
 
 fn health_check_run_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_supplier_api_health_runs_background_job",
-            doc! { "background_job_id": 1 },
-        ),
+        unique_index("uk_supplier_api_health_runs_background_job", doc! { "background_job_id": 1 }),
         unique_index(
             "uk_supplier_api_health_runs_idempotency",
             doc! { "connection_id": 1, "requested_by": 1, "idempotency_key_hash": 1 },
@@ -134,10 +116,7 @@ fn supplier_api_capability_indexes() -> Vec<IndexModel> {
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -194,10 +173,7 @@ mod tests {
                     == Some("uk_supplier_api_capabilities_connection_capability")
             })
             .unwrap();
-        assert_eq!(
-            capability_index.keys,
-            doc! { "connection_id": 1, "capability_code": 1 }
-        );
+        assert_eq!(capability_index.keys, doc! { "connection_id": 1, "capability_code": 1 });
         assert_eq!(capability_index.options.as_ref().unwrap().unique, Some(true));
     }
 
@@ -214,9 +190,6 @@ mod tests {
                 "connection_id": 1, "created_at": -1, "id": -1
             }));
         let receipts = command_receipt_indexes();
-        assert_eq!(
-            receipts[0].options.as_ref().and_then(|options| options.unique),
-            Some(true)
-        );
+        assert_eq!(receipts[0].options.as_ref().and_then(|options| options.unique), Some(true));
     }
 }

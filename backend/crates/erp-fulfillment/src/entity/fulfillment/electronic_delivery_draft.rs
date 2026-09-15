@@ -2,9 +2,6 @@
 //!
 //! 指纹由 Service/crypto port 预计算；本层只收强类型结果。
 
-use serde::{Deserialize, Serialize};
-
-use super::electronic_delivery::{ElectronicDelivery, ElectronicDeliveryData, FulfillmentResult};
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
@@ -13,7 +10,9 @@ use erp_core::ids::{
 use erp_core::money::Quantity;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
+use super::electronic_delivery::{ElectronicDelivery, ElectronicDeliveryData, FulfillmentResult};
 use super::fingerprint::FINGERPRINT_HEX_LEN;
 
 /// 预计算的交付对象快照指纹（不含密钥与明文）。
@@ -136,8 +135,9 @@ impl ElectronicDeliveryDraft {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn fingerprint() -> ElectronicRecipientFingerprint {
         ElectronicRecipientFingerprint::from_precomputed("a".repeat(64)).unwrap()
@@ -175,27 +175,25 @@ mod tests {
     fn occurred_conversion_and_inverted_time_fails() {
         let entity = ElectronicDeliveryDraft::build(ElectronicDeliveryId::new("ed-1"), data()).unwrap();
         assert_eq!(entity.fact.occurred_at.unix_secs(), 1_700_000_000);
-        assert!(ElectronicDeliveryDraft::build(
-            ElectronicDeliveryId::new("ed-2"),
-            ElectronicDeliveryDraftData {
-                recorded_at: Instant::from_unix_secs(1_699_999_999),
-                ..data()
-            },
-        )
-        .is_err());
+        assert!(
+            ElectronicDeliveryDraft::build(
+                ElectronicDeliveryId::new("ed-2"),
+                ElectronicDeliveryDraftData { recorded_at: Instant::from_unix_secs(1_699_999_999), ..data() },
+            )
+            .is_err()
+        );
     }
 
     /// 非正数量与非法指纹失败。
     #[test]
     fn non_positive_quantity_and_bad_fingerprint_fail() {
-        assert!(ElectronicDeliveryDraft::build(
-            ElectronicDeliveryId::new("ed-3"),
-            ElectronicDeliveryDraftData {
-                quantity: Quantity::from_str("0").unwrap(),
-                ..data()
-            },
-        )
-        .is_err());
+        assert!(
+            ElectronicDeliveryDraft::build(
+                ElectronicDeliveryId::new("ed-3"),
+                ElectronicDeliveryDraftData { quantity: Quantity::from_str("0").unwrap(), ..data() },
+            )
+            .is_err()
+        );
         assert!(ElectronicRecipientFingerprint::from_precomputed("zz").is_err());
     }
 }

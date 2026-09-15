@@ -138,11 +138,7 @@ fn random_db_name(prefix: &str) -> String {
         .filter(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
         .take(MAX_DB_NAME_LEN)
         .collect();
-    let prefix = if sanitized.is_empty() {
-        "test".to_string()
-    } else {
-        sanitized
-    };
+    let prefix = if sanitized.is_empty() { "test".to_string() } else { sanitized };
     format!("{prefix}_{}", &Uuid::new_v4().simple().to_string()[..8])
 }
 
@@ -162,9 +158,7 @@ mod tests {
     fn random_db_name_should_sanitize_and_truncate_prefix() {
         let name = random_db_name("p0/测试 test\n");
         assert!(name.starts_with("p0test_"));
-        assert!(name
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-')));
+        assert!(name.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-')));
         assert_eq!(name.len(), 6 + 1 + 8);
     }
 

@@ -1,28 +1,27 @@
-use crate::repository::BpmExt;
+use application_core::AuditActor;
 use bpm::graph::DefinitionGraph;
 use bpm::model::types::ApprovalCommandKind;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
-use crate::error::Result;
-use application_core::AuditActor;
-
 use super::super::definition_dto::{DefinitionDetailView, PublishDefinitionRequest};
 use super::super::policy::{
-    ensure_actions_registered, validate_required_purposes, ProcessRequiredApprovalPolicy,
+    ProcessRequiredApprovalPolicy, ensure_actions_registered, validate_required_purposes,
 };
+use super::ApprovalDefinitionService;
 use super::command::{
-    applied_definition, ensure_definition_admin_permission, lock_command_identity, map_model_error, now,
-    parse_idempotency_key, participant, policy_for_definition, replay_prepared_definition_receipt,
-    write_definition_audit, write_receipt, DefinitionCommandResultRef, DefinitionResultExpectation,
-    PreparedDefinitionIdentity, PUBLISH_DEFINITION_COMMAND_DOMAIN,
+    DefinitionCommandResultRef, DefinitionResultExpectation, PUBLISH_DEFINITION_COMMAND_DOMAIN,
+    PreparedDefinitionIdentity, applied_definition, ensure_definition_admin_permission,
+    lock_command_identity, map_model_error, now, parse_idempotency_key, participant, policy_for_definition,
+    replay_prepared_definition_receipt, write_definition_audit, write_receipt,
 };
 use super::mapping::detail_view;
 use super::replace::{
     apply_snapshots, load_assignee_snapshots, rebuild_draft_graph, reload_draft_for_cas, replace_graph,
     validate_assignees,
 };
-use super::ApprovalDefinitionService;
+use crate::error::Result;
+use crate::repository::BpmExt;
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// 发布草稿为当前唯一已发布版本。
@@ -104,8 +103,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
                 .await
             })
         });
-        self.recover_definition_command(outcome.await, &policy, actor, identity, expectation)
-            .await
+        self.recover_definition_command(outcome.await, &policy, actor, identity, expectation).await
     }
 }
 
@@ -165,13 +163,7 @@ async fn publish_tx(
     input: PublishTxInput<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<DefinitionDetailView> {
-    let PublishTxInput {
-        policy,
-        request,
-        actor,
-        identity,
-        audit,
-    } = input;
+    let PublishTxInput { policy, request, actor, identity, audit } = input;
     ensure_definition_admin_permission(rbac, actor, &policy, session).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
@@ -183,13 +175,9 @@ async fn publish_tx(
     {
         return Ok(view);
     }
-    let mut current = reload_draft_for_cas(
-        db,
-        &graph.definition,
-        request.expected_definition_lock_version,
-        session,
-    )
-    .await?;
+    let mut current =
+        reload_draft_for_cas(db, &graph.definition, request.expected_definition_lock_version, session)
+            .await?;
     let PublishWriteStep::RefreshSnapshotsAndRetirePrevious = decide_publish_write(
         current.validate_linear().map_err(map_model_error),
         validate_required_purposes(&policy, &current.purpose_refs()),
@@ -197,10 +185,7 @@ async fn publish_tx(
         ensure_actions_registered(&policy),
     )?;
     current = prepare_publish_graph(db, rbac, current, session).await?;
-    let previous = db
-        .bpm_workflow()
-        .find_published_by_process_kind(policy.process_kind, session)
-        .await?;
+    let previous = db.bpm_workflow().find_published_by_process_kind(policy.process_kind, session).await?;
     let previous_lock = previous.as_ref().map(|item| item.definition_lock_version());
     let (published, previous) = current
         .definition
@@ -308,9 +293,7 @@ mod tests {
         .unwrap();
         assert!(production_source().contains("不伪造实例"));
         assert!(!production_source().contains("access_control::DataScopeFact"));
-        let failed_assignees = Err(Error::ValidationError(
-            "指定审批人账号不存在、已停用或任职失效".into(),
-        ));
+        let failed_assignees = Err(Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into()));
         assert!(decide_publish_write(Ok(()), Ok(()), failed_assignees, Ok(())).is_err());
         let publish_tx = source_fn(production_source(), "async fn publish_tx", "async fn retire_tx");
         let gate = publish_tx.find("decide_publish_write").expect("发布闸门");
@@ -331,21 +314,23 @@ mod tests {
             Error::BusinessLogicError(message) if message.contains("approval") || message.contains("静态审批")
         ));
         ensure_static_decide_permission(true).unwrap();
-        assert!(decide_publish_write(
-            Ok(()),
-            Ok(()),
-            Err(Error::ValidationError(
-                "指定审批人账号不存在、已停用或任职失效".into()
-            )),
-            Ok(()),
-        )
-        .is_err());
-        assert!(decide_publish_write(
-            Ok(()),
-            Ok(()),
-            Err(Error::BusinessLogicError("指定审批人不具备静态审批权限".into())),
-            Ok(()),
-        )
-        .is_err());
+        assert!(
+            decide_publish_write(
+                Ok(()),
+                Ok(()),
+                Err(Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into())),
+                Ok(()),
+            )
+            .is_err()
+        );
+        assert!(
+            decide_publish_write(
+                Ok(()),
+                Ok(()),
+                Err(Error::BusinessLogicError("指定审批人不具备静态审批权限".into())),
+                Ok(()),
+            )
+            .is_err()
+        );
     }
 }

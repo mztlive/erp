@@ -2,14 +2,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use erp_core::common::state::{ensure_transition, DocumentState};
+use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerAccountId, CustomerReceiptId, PartyId, ReceivableEntryId};
 use erp_core::money::Amount;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 回款单号最大长度。
 const RECEIPT_NO_MAX_LEN: usize = 64;
@@ -95,10 +94,7 @@ impl PendingReceiptAllocation {
     /// 金额非正时返回错误。
     pub fn new(receivable_entry_id: ReceivableEntryId, allocated_amount: Amount) -> Result<Self> {
         ensure_positive_amount(&allocated_amount)?;
-        Ok(Self {
-            receivable_entry_id,
-            allocated_amount,
-        })
+        Ok(Self { receivable_entry_id, allocated_amount })
     }
 }
 
@@ -203,12 +199,8 @@ impl CustomerReceipt {
         data: CustomerReceiptData,
         created_by: impl Into<String>,
     ) -> Result<Self> {
-        let receipt_no = normalize_required_text(
-            data.receipt_no,
-            "回款单号不能为空",
-            RECEIPT_NO_MAX_LEN,
-            "回款单号过长",
-        )?;
+        let receipt_no =
+            normalize_required_text(data.receipt_no, "回款单号不能为空", RECEIPT_NO_MAX_LEN, "回款单号过长")?;
         let bank_reference =
             normalize_optional_text(data.bank_reference, "银行流水引用", BANK_REFERENCE_MAX_LEN)?;
         let created_by = normalize_required_text(
@@ -352,10 +344,8 @@ impl CustomerReceipt {
             return Err(Error::from("只有草稿状态的客户回款单可以提交审批"));
         }
         ensure_pending_allocations(&self.amount, &allocations)?;
-        let next = self
-            .approval_subject_version
-            .checked_add(1)
-            .ok_or_else(|| Error::from("审批提交版本溢出"))?;
+        let next =
+            self.approval_subject_version.checked_add(1).ok_or_else(|| Error::from("审批提交版本溢出"))?;
         self.approval_subject_version = next;
         self.pending_allocations = allocations;
         self.transition(CustomerReceiptStatus::InApproval)?;
@@ -438,8 +428,9 @@ fn ensure_pending_allocations(amount: &Amount, allocations: &[PendingReceiptAllo
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn data() -> CustomerReceiptData {
         CustomerReceiptData {
@@ -464,22 +455,13 @@ mod tests {
 
     #[test]
     fn new_rejects_blank_no_overlong_reference_and_non_positive() {
-        let blank_no = CustomerReceiptData {
-            receipt_no: "   ".to_string(),
-            ..data()
-        };
+        let blank_no = CustomerReceiptData { receipt_no: "   ".to_string(), ..data() };
         assert!(CustomerReceipt::new(CustomerReceiptId::new("cr-2"), blank_no, "creator-1").is_err());
 
-        let overlong = CustomerReceiptData {
-            bank_reference: Some("b".repeat(257)),
-            ..data()
-        };
+        let overlong = CustomerReceiptData { bank_reference: Some("b".repeat(257)), ..data() };
         assert!(CustomerReceipt::new(CustomerReceiptId::new("cr-3"), overlong, "creator-1").is_err());
 
-        let non_positive = CustomerReceiptData {
-            amount: Amount::from_str("0.00").unwrap(),
-            ..data()
-        };
+        let non_positive = CustomerReceiptData { amount: Amount::from_str("0.00").unwrap(), ..data() };
         assert!(CustomerReceipt::new(CustomerReceiptId::new("cr-4"), non_positive, "creator-1").is_err());
     }
 
@@ -498,26 +480,30 @@ mod tests {
         assert_eq!(receipt.bank_reference.as_deref(), Some("BANK-2"));
 
         receipt
-            .start_approval(vec![PendingReceiptAllocation::new(
-                erp_core::ids::ReceivableEntryId::new("re-1"),
-                Amount::from_str("100.00").unwrap(),
-            )
-            .unwrap()])
+            .start_approval(vec![
+                PendingReceiptAllocation::new(
+                    erp_core::ids::ReceivableEntryId::new("re-1"),
+                    Amount::from_str("100.00").unwrap(),
+                )
+                .unwrap(),
+            ])
             .unwrap();
         receipt.mark_posted().unwrap();
         assert!(receipt.is_posted());
-        assert!(receipt
-            .update(CustomerReceiptUpdate {
-                amount: Some(Amount::from_str("1.00").unwrap()),
-                ..Default::default()
-            })
-            .is_err());
+        assert!(
+            receipt
+                .update(CustomerReceiptUpdate {
+                    amount: Some(Amount::from_str("1.00").unwrap()),
+                    ..Default::default()
+                })
+                .is_err()
+        );
     }
 
     #[test]
     fn state_machine_edges_are_directed() {
-        use erp_core::common::state::ensure_transition as tr;
         use CustomerReceiptStatus as S;
+        use erp_core::common::state::ensure_transition as tr;
 
         assert!(tr(S::Draft, S::InApproval).is_ok());
         assert!(tr(S::InApproval, S::Posted).is_ok());
@@ -539,16 +525,16 @@ mod tests {
     #[test]
     fn start_approval_increments_version_and_cancel_does_not_rollback() {
         let mut receipt = CustomerReceipt::new(CustomerReceiptId::new("cr-1"), data(), "creator-1").unwrap();
-        receipt
-            .ensure_initial_approval_state()
-            .expect("新建草稿是初始未提交状态");
+        receipt.ensure_initial_approval_state().expect("新建草稿是初始未提交状态");
         assert_eq!(receipt.approval_subject_version, 0);
         let version = receipt
-            .start_approval(vec![PendingReceiptAllocation::new(
-                erp_core::ids::ReceivableEntryId::new("re-1"),
-                Amount::from_str("100.00").unwrap(),
-            )
-            .unwrap()])
+            .start_approval(vec![
+                PendingReceiptAllocation::new(
+                    erp_core::ids::ReceivableEntryId::new("re-1"),
+                    Amount::from_str("100.00").unwrap(),
+                )
+                .unwrap(),
+            ])
             .unwrap();
         assert_eq!(version, 1);
         assert_eq!(receipt.status, CustomerReceiptStatus::InApproval);
@@ -561,10 +547,7 @@ mod tests {
 
     #[test]
     fn status_serializes_with_stable_codes_and_labels() {
-        assert_eq!(
-            serde_json::to_string(&CustomerReceiptStatus::InApproval).unwrap(),
-            "\"IN_APPROVAL\""
-        );
+        assert_eq!(serde_json::to_string(&CustomerReceiptStatus::InApproval).unwrap(), "\"IN_APPROVAL\"");
         assert_eq!(CustomerReceiptStatus::Posted.label(), "已过账");
         assert_eq!(CustomerReceiptStatus::Reversed.as_str(), "reversed");
         assert_eq!(CustomerReceiptStatus::Draft.as_str(), "draft");
@@ -574,11 +557,13 @@ mod tests {
         let mut receipt =
             CustomerReceipt::new(CustomerReceiptId::new("cr-approval"), data(), "creator-1").unwrap();
         receipt
-            .start_approval(vec![PendingReceiptAllocation::new(
-                erp_core::ids::ReceivableEntryId::new("re-1"),
-                Amount::from_str("100.00").unwrap(),
-            )
-            .unwrap()])
+            .start_approval(vec![
+                PendingReceiptAllocation::new(
+                    erp_core::ids::ReceivableEntryId::new("re-1"),
+                    Amount::from_str("100.00").unwrap(),
+                )
+                .unwrap(),
+            ])
             .unwrap();
         receipt
     }
@@ -589,10 +574,7 @@ mod tests {
         let facts = receipt.approval_facts().unwrap();
         assert_eq!(facts.document_no, "RC-2026-001");
         assert_eq!(facts.responsible_org_id, "party-1");
-        assert_eq!(
-            facts.customer_id.as_ref().map(ToString::to_string),
-            Some("cust-1".to_string())
-        );
+        assert_eq!(facts.customer_id.as_ref().map(ToString::to_string), Some("cust-1".to_string()));
         assert_eq!(facts.total_amount, Amount::from_str("1000.00").unwrap());
         assert_eq!(facts.line_count, 1);
     }
@@ -600,10 +582,7 @@ mod tests {
     #[test]
     fn approval_facts_are_deterministic_across_repeated_generation() {
         let receipt = approved_receipt();
-        assert_eq!(
-            receipt.approval_facts().unwrap(),
-            receipt.approval_facts().unwrap()
-        );
+        assert_eq!(receipt.approval_facts().unwrap(), receipt.approval_facts().unwrap());
     }
 
     #[test]
@@ -612,11 +591,13 @@ mod tests {
             CustomerReceipt::new(CustomerReceiptId::new("cr-no-cust"), data(), "creator-1").unwrap();
         receipt.customer_id = None;
         receipt
-            .start_approval(vec![PendingReceiptAllocation::new(
-                erp_core::ids::ReceivableEntryId::new("re-1"),
-                Amount::from_str("100.00").unwrap(),
-            )
-            .unwrap()])
+            .start_approval(vec![
+                PendingReceiptAllocation::new(
+                    erp_core::ids::ReceivableEntryId::new("re-1"),
+                    Amount::from_str("100.00").unwrap(),
+                )
+                .unwrap(),
+            ])
             .unwrap();
         let facts = receipt.approval_facts().unwrap();
         assert!(facts.customer_id.is_none());

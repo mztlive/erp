@@ -1,10 +1,12 @@
 //! 结算持久化 JSON 与 raw BSON 格式合同；只通过实体公开构造器构建夹具。
 
-use crate::entity::supplier_settlement::*;
+use std::str::FromStr;
+
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId};
 use erp_core::money::{Amount, Quantity};
-use std::str::FromStr;
+
+use crate::entity::supplier_settlement::*;
 
 mod statement {
     use super::*;
@@ -101,10 +103,7 @@ mod difference {
         }
         let bytes = bson::serialize_to_vec(&value).unwrap();
         let wire: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
-        assert!(matches!(
-            wire.get("difference_amount"),
-            Some(bson::Bson::Decimal128(_))
-        ));
+        assert!(matches!(wire.get("difference_amount"), Some(bson::Bson::Decimal128(_))));
         let restored: SupplierSettlementDifference = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(restored, value);
     }
@@ -269,19 +268,9 @@ mod source_evidence {
         let wire: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
         let line = wire.get_array("lines").unwrap()[0].as_document().unwrap();
         assert!(matches!(line.get("quantity"), Some(bson::Bson::Decimal128(_))));
-        for prefix in [
-            "order",
-            "freight",
-            "service_fee",
-            "refund",
-            "erp",
-            "supplier_billed",
-        ] {
+        for prefix in ["order", "freight", "service_fee", "refund", "erp", "supplier_billed"] {
             for component in ["gross", "net", "tax"] {
-                assert!(matches!(
-                    line.get(format!("{prefix}_{component}")),
-                    Some(bson::Bson::Decimal128(_))
-                ));
+                assert!(matches!(line.get(format!("{prefix}_{component}")), Some(bson::Bson::Decimal128(_))));
             }
         }
         let restored: SupplierSettlementSourceEvidence = bson::deserialize_from_slice(&bytes).unwrap();

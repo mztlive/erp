@@ -1,17 +1,16 @@
-use crate::repository::owned::SupplierAccountRepository;
 use std::collections::HashSet;
 
-use crate::entity::supplier::{CapabilityCode, QualificationType, SupplierQualification};
 use erp_core::ids::{PartyId, SupplierAccountId};
+use persistence_core::{Error, Executor, PageResult, Result};
 
 use super::super::account::{SupplierAccountFilter, SupplierAccountRow};
-use super::super::{SupplierRepository, SUPPLIER_ACCOUNTS};
+use super::super::{SUPPLIER_ACCOUNTS, SupplierRepository};
 use super::{
     QualificationConstraintKind, SupplierListBundle, SupplierListSearchInput,
     SupplierQualificationHealthFilter,
 };
-use persistence_core::Executor;
-use persistence_core::{Error, PageResult, Result};
+use crate::entity::supplier::{CapabilityCode, QualificationType, SupplierQualification};
+use crate::repository::owned::SupplierAccountRepository;
 
 /// 判定资质筛选约束的纯分支种类。
 ///
@@ -68,12 +67,7 @@ pub(super) fn intersect_supplier_ids(
         (None, None) => return None,
     };
     let matched: HashSet<String> = matched.into_iter().map(|id| id.to_string()).collect();
-    Some(
-        current
-            .into_iter()
-            .filter(|id| matched.contains(&id.to_string()))
-            .collect(),
-    )
+    Some(current.into_iter().filter(|id| matched.contains(&id.to_string())).collect())
 }
 
 /// 计算“30 天内到期”筛选窗口的结束业务日。
@@ -171,32 +165,14 @@ impl<'a> SupplierRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<SupplierListBundle> {
         let party_ids: Vec<PartyId> = page.items.iter().map(|row| PartyId::new(&row.party_id)).collect();
-        let profile_ids: Vec<String> = page
-            .items
-            .iter()
-            .filter_map(|row| row.current_commercial_profile_revision_id.clone())
-            .collect();
-        let supplier_ids: Vec<SupplierAccountId> = page
-            .items
-            .iter()
-            .map(|row| SupplierAccountId::new(&row.id))
-            .collect();
-        let profiles = self
-            .list_commercial_profiles_by_ids(&profile_ids, executor)
-            .await?;
-        let capabilities = self
-            .list_capabilities_by_supplier_ids(&supplier_ids, executor)
-            .await?;
-        let qualifications = self
-            .list_qualifications_by_supplier_ids(&supplier_ids, executor)
-            .await?;
-        Ok(SupplierListBundle {
-            page,
-            party_ids,
-            profiles,
-            capabilities,
-            qualifications,
-        })
+        let profile_ids: Vec<String> =
+            page.items.iter().filter_map(|row| row.current_commercial_profile_revision_id.clone()).collect();
+        let supplier_ids: Vec<SupplierAccountId> =
+            page.items.iter().map(|row| SupplierAccountId::new(&row.id)).collect();
+        let profiles = self.list_commercial_profiles_by_ids(&profile_ids, executor).await?;
+        let capabilities = self.list_capabilities_by_supplier_ids(&supplier_ids, executor).await?;
+        let qualifications = self.list_qualifications_by_supplier_ids(&supplier_ids, executor).await?;
+        Ok(SupplierListBundle { page, party_ids, profiles, capabilities, qualifications })
     }
 
     /// 组装能力与资质条件对应的角色 ID 约束。
@@ -227,18 +203,11 @@ impl<'a> SupplierRepository<'a> {
         let capability_ids = if capability_codes.is_empty() {
             None
         } else {
-            Some(
-                self.list_supplier_ids_by_active_capability_codes(capability_codes, as_of, executor)
-                    .await?,
-            )
+            Some(self.list_supplier_ids_by_active_capability_codes(capability_codes, as_of, executor).await?)
         };
-        let (qualification_ids, excluded_qualification_ids) = self
-            .list_filter_qualification_constraints(qualification_types, health, as_of, executor)
-            .await?;
-        Ok((
-            intersect_supplier_ids(capability_ids, qualification_ids),
-            excluded_qualification_ids,
-        ))
+        let (qualification_ids, excluded_qualification_ids) =
+            self.list_filter_qualification_constraints(qualification_types, health, as_of, executor).await?;
+        Ok((intersect_supplier_ids(capability_ids, qualification_ids), excluded_qualification_ids))
     }
 
     /// 查询资质类型和健康状态对应的供应商角色 ID 约束。
@@ -268,17 +237,11 @@ impl<'a> SupplierRepository<'a> {
             QualificationConstraintKind::Unconstrained => Ok((None, None)),
             QualificationConstraintKind::Excluded => Ok((
                 None,
-                Some(
-                    self.list_supplier_ids_by_qualification_types(qualification_types, executor)
-                        .await?,
-                ),
+                Some(self.list_supplier_ids_by_qualification_types(qualification_types, executor).await?),
             )),
             QualificationConstraintKind::Included => match health {
                 None => Ok((
-                    Some(
-                        self.list_supplier_ids_by_qualification_types(qualification_types, executor)
-                            .await?,
-                    ),
+                    Some(self.list_supplier_ids_by_qualification_types(qualification_types, executor).await?),
                     None,
                 )),
                 Some(SupplierQualificationHealthFilter::Unverified) => Ok((
@@ -309,7 +272,7 @@ impl<'a> SupplierRepository<'a> {
                         ),
                         None,
                     ))
-                }
+                },
                 Some(SupplierQualificationHealthFilter::Expired) => Ok((
                     Some(
                         self.list_supplier_ids_by_expired_qualifications(
@@ -323,10 +286,7 @@ impl<'a> SupplierRepository<'a> {
                 )),
                 Some(SupplierQualificationHealthFilter::NotRegistered) => Ok((
                     None,
-                    Some(
-                        self.list_supplier_ids_by_qualification_types(qualification_types, executor)
-                            .await?,
-                    ),
+                    Some(self.list_supplier_ids_by_qualification_types(qualification_types, executor).await?),
                 )),
             },
         }

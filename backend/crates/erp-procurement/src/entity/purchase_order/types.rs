@@ -171,25 +171,16 @@ mod tests {
             FulfillmentResponsibility::Service.owner_fulfillment_object_type(),
             Some("service_fulfillment")
         );
-        assert_eq!(
-            FulfillmentResponsibility::Warehouse.owner_fulfillment_object_type(),
-            None
-        );
+        assert_eq!(FulfillmentResponsibility::Warehouse.owner_fulfillment_object_type(), None);
     }
 
     #[test]
     fn enums_serialize_uppercase() {
-        assert_eq!(
-            serde_json::to_string(&PurchaseType::Service).unwrap(),
-            "\"SERVICE\""
-        );
+        assert_eq!(serde_json::to_string(&PurchaseType::Service).unwrap(), "\"SERVICE\"");
         assert_eq!(
             serde_json::to_string(&FulfillmentResponsibility::SupplierDirect).unwrap(),
             "\"SUPPLIER_DIRECT\""
         );
-        assert_eq!(
-            serde_json::to_string(&PurchaseLineType::LogisticsFee).unwrap(),
-            "\"LOGISTICS_FEE\""
-        );
+        assert_eq!(serde_json::to_string(&PurchaseLineType::LogisticsFee).unwrap(), "\"LOGISTICS_FEE\"");
     }
 }

@@ -104,11 +104,7 @@ fn sha256(data: &[u8]) -> [u8; 32] {
         for i in 0..64 {
             let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
             let ch = (e & f) ^ ((!e) & g);
-            let temp1 = h
-                .wrapping_add(s1)
-                .wrapping_add(ch)
-                .wrapping_add(K[i])
-                .wrapping_add(w[i]);
+            let temp1 = h.wrapping_add(s1).wrapping_add(ch).wrapping_add(K[i]).wrapping_add(w[i]);
             let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
             let maj = (a & b) ^ (a & c) ^ (b & c);
             let temp2 = s0.wrapping_add(maj);
@@ -140,9 +136,8 @@ fn sha256(data: &[u8]) -> [u8; 32] {
 }
 
 /// SHA-256 初始化哈希。
-const H0: [u32; 8] = [
-    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
-];
+const H0: [u32; 8] =
+    [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
 
 /// SHA-256 轮常量（前 64 个素数立方根的小数部分）。
 const K: [u32; 64] = [
@@ -158,9 +153,10 @@ const K: [u32; 64] = [
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use hmac::{Hmac, KeyInit, Mac};
     use sha2::Sha256;
+
+    use super::*;
 
     type HmacSha256 = Hmac<Sha256>;
 
@@ -202,10 +198,7 @@ mod tests {
         let plain = b"address";
         assert_eq!(hmac_sha256_hex(b"key-a", plain), hmac_sha256_hex(b"key-a", plain));
         assert_ne!(hmac_sha256_hex(b"key-a", plain), hmac_sha256_hex(b"key-b", plain));
-        assert_ne!(
-            hmac_sha256_hex(b"key-a", plain),
-            hmac_sha256_hex(b"key-a", b"address2")
-        );
+        assert_ne!(hmac_sha256_hex(b"key-a", plain), hmac_sha256_hex(b"key-a", b"address2"));
     }
 
     /// 校验函数接受小写/大写十六进制，拒绝长度与字符非法值。

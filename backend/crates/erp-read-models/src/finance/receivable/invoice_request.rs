@@ -1,7 +1,6 @@
 //! 开票申请详情、列表及额度汇总；审批运行信息通过通用审批查询读取。
-use super::ReceivableReadService;
-use crate::finance::dto::DocumentApprovalView;
-use crate::{Error, Result};
+use std::collections::HashMap;
+
 use erp_core::money::Amount;
 use erp_finance::dto::receivable::{InvoiceRequestAmounts, InvoiceRequestQuery, PageView};
 use erp_finance::entity::receivable::{InvoiceRequestStatus, SalesInvoiceRequest};
@@ -11,7 +10,10 @@ use erp_sales::repository::SalesOrderExt;
 use erp_workflow::BpmExt;
 use persistence_core::NoTransaction;
 use serde::Serialize;
-use std::collections::HashMap;
+
+use super::ReceivableReadService;
+use crate::finance::dto::DocumentApprovalView;
+use crate::{Error, Result};
 
 /// 申请详情包含固定来源、单据审批绑定和中文业务单号。
 #[derive(Debug, Clone, Serialize)]
@@ -31,11 +33,7 @@ impl ReceivableReadService {
         &self,
         query: &InvoiceRequestQuery,
     ) -> Result<PageView<InvoiceRequestView>> {
-        let page = self
-            .db
-            .sales_invoice_requests()
-            .page(query, &mut NoTransaction)
-            .await?;
+        let page = self.db.sales_invoice_requests().page(query, &mut NoTransaction).await?;
         let items = self.invoice_request_summaries(page.items).await?;
         Ok(PageView {
             items,
@@ -64,18 +62,15 @@ impl ReceivableReadService {
             .find_by_id(account_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售应收不存在".into()))?;
-        let requests = self
-            .db
-            .sales_invoice_requests()
-            .reserved_for_account(account_id, &mut NoTransaction)
-            .await?;
+        let requests =
+            self.db.sales_invoice_requests().reserved_for_account(account_id, &mut NoTransaction).await?;
         let mut pending = Amount::zero();
         let mut approved = Amount::zero();
         for request in requests {
             match request.status {
                 InvoiceRequestStatus::InApproval => pending = pending.checked_add(request.remaining()),
                 InvoiceRequestStatus::Approved => approved = approved.checked_add(request.remaining()),
-                _ => {}
+                _ => {},
             }
         }
         Ok(InvoiceRequestAmounts {
@@ -102,7 +97,7 @@ impl ReceivableReadService {
             InvoiceRequestStatus::Draft => erp_finance::entity::receivable::CustomerReceiptStatus::Draft,
             InvoiceRequestStatus::InApproval => {
                 erp_finance::entity::receivable::CustomerReceiptStatus::InApproval
-            }
+            },
             _ => erp_finance::entity::receivable::CustomerReceiptStatus::Posted,
         };
         let order = self
@@ -116,11 +111,8 @@ impl ReceivableReadService {
             erp_workflow::DocumentType::SalesInvoiceRequest,
             &request.base.id,
         )?;
-        if let Some(instance) = self
-            .db
-            .bpm_workflow()
-            .find_latest_by_subject(&subject, &mut NoTransaction)
-            .await?
+        if let Some(instance) =
+            self.db.bpm_workflow().find_latest_by_subject(&subject, &mut NoTransaction).await?
         {
             let current = self
                 .db
@@ -162,14 +154,8 @@ impl ReceivableReadService {
         if requests.is_empty() {
             return Ok(Vec::new());
         }
-        let sales_ids = requests
-            .iter()
-            .map(|item| item.sales_order_id.to_string())
-            .collect::<Vec<_>>();
-        let actors = requests
-            .iter()
-            .map(|item| item.created_by.clone())
-            .collect::<Vec<_>>();
+        let sales_ids = requests.iter().map(|item| item.sales_order_id.to_string()).collect::<Vec<_>>();
+        let actors = requests.iter().map(|item| item.created_by.clone()).collect::<Vec<_>>();
         let orders = self
             .db
             .sales_orders()

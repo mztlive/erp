@@ -9,21 +9,20 @@ use bpm::model::{
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_sales::entity::sales_order::SalesOrder;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
-use erp_workflow::BpmExt;
-use erp_workflow::WorkItemExt;
+use erp_workflow::service::approval::execution::authorization::converge_eligibility;
+use erp_workflow::service::approval::execution::{
+    CancelExecutionInput, ExecutionCommandInput, PreparedExecution,
+    claim_and_persist_document_cancel_runtime, normalize_document_cancel_reason,
+};
+use erp_workflow::{BpmExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::start_approval::load_bound_definition_graph;
 use crate::{Error, Result};
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::execution::authorization::converge_eligibility;
-use erp_workflow::service::approval::execution::{
-    claim_and_persist_document_cancel_runtime, normalize_document_cancel_reason, CancelExecutionInput,
-    ExecutionCommandInput, PreparedExecution,
-};
 
 /// 已加载的可撤回运行事实。
 pub(super) struct LoadedCancelRuntime {
@@ -65,9 +64,8 @@ pub(super) async fn load_cancel_runtime(
         .cancellation_instance_by_subject(subject, subject_version, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::ConflictError("没有可撤回的审批实例".to_string()))?;
-    let task_policy = instance
-        .cancellation_task_policy()
-        .map_err(|error| Error::ConflictError(error.to_string()))?;
+    let task_policy =
+        instance.cancellation_task_policy().map_err(|error| Error::ConflictError(error.to_string()))?;
     let current = db
         .bpm_workflow()
         .current_execution_for_cancellation(
@@ -207,25 +205,14 @@ pub(super) async fn persist_sales_order_cancel(
     expected_order_version: u64,
     input: SalesOrderCancelPersistInput,
 ) -> Result<()> {
-    let SalesOrderCancelPersistInput {
-        mut order,
-        prepared,
-        open_tasks,
-        actor_id,
-        reason,
-        now,
-        audit,
-    } = input;
+    let SalesOrderCancelPersistInput { mut order, prepared, open_tasks, actor_id, reason, now, audit } =
+        input;
     let check = access.clone();
     let check_id = order.base.id.clone();
     db.client()
         .clone()
         .with_transaction(move |executor| {
-            Box::pin(async move {
-                check
-                    .revalidate(&check_id, expected_order_version, executor)
-                    .await
-            })
+            Box::pin(async move { check.revalidate(&check_id, expected_order_version, executor).await })
         })
         .await?;
     let PreparedExecution::Apply(writes) = prepared else {
@@ -237,9 +224,7 @@ pub(super) async fn persist_sales_order_cancel(
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                access
-                    .revalidate(&order.base.id, expected_order_version, session)
-                    .await?;
+                access.revalidate(&order.base.id, expected_order_version, session).await?;
                 claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, session).await?;
                 erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                     .persist_order(&mut order, session)
@@ -253,7 +238,6 @@ pub(super) async fn persist_sales_order_cancel(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_sales_order_cancel_input, LoadedCancelRuntime};
     use bpm::engine::DefinitionGraph;
     use bpm::ids::{
         ApprovalNodeDefinitionId, ApprovalNodeExecutionId, ApprovalProcessDefinitionId,
@@ -271,7 +255,9 @@ mod tests {
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
     use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
-    use erp_workflow::service::approval::execution::{prepare_cancel, PreparedExecution};
+    use erp_workflow::service::approval::execution::{PreparedExecution, prepare_cancel};
+
+    use super::{LoadedCancelRuntime, build_sales_order_cancel_input};
 
     fn at(secs: i64) -> Timestamp {
         Timestamp::from_unix_secs(secs).expect("时间合法")
@@ -295,26 +281,30 @@ mod tests {
                 started,
             )
             .expect("定义"),
-            nodes: vec![ApprovalNodeDefinition::new(bpm::model::NewNodeDefinition {
-                id: ApprovalNodeDefinitionId::new("nd-1"),
-                process_definition_id: definition_id.clone(),
-                node_key: "n1".into(),
-                node_name: "入口".into(),
-                node_purpose: None,
-                display_order: 1,
-                assignee_participant_id: participant("u1"),
-                assignee_label_snapshot: "张三".into(),
-                at: started,
-            })
-            .expect("节点")],
-            transitions: vec![ApprovalTransitionDefinition::to_approved(
-                ApprovalTransitionDefinitionId::new("tr-1"),
-                definition_id,
-                "n1",
-                ApprovalTransitionEvent::Approve,
-                started,
-            )
-            .expect("连线")],
+            nodes: vec![
+                ApprovalNodeDefinition::new(bpm::model::NewNodeDefinition {
+                    id: ApprovalNodeDefinitionId::new("nd-1"),
+                    process_definition_id: definition_id.clone(),
+                    node_key: "n1".into(),
+                    node_name: "入口".into(),
+                    node_purpose: None,
+                    display_order: 1,
+                    assignee_participant_id: participant("u1"),
+                    assignee_label_snapshot: "张三".into(),
+                    at: started,
+                })
+                .expect("节点"),
+            ],
+            transitions: vec![
+                ApprovalTransitionDefinition::to_approved(
+                    ApprovalTransitionDefinitionId::new("tr-1"),
+                    definition_id,
+                    "n1",
+                    ApprovalTransitionEvent::Approve,
+                    started,
+                )
+                .expect("连线"),
+            ],
         }
     }
 

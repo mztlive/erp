@@ -5,11 +5,13 @@ use std::collections::HashSet;
 use persistence_core::Executor;
 
 use super::super::brief::{
-    format_instant_date, join_list_summary, non_empty, push_section, ObjectBriefSource, BRIEF_LINE_LIMIT,
+    BRIEF_LINE_LIMIT, ObjectBriefSource, format_instant_date, join_list_summary, non_empty, push_section,
 };
 use super::super::presentation::format_yuan;
-use super::super::WorkbenchReadService;
-use super::super::{object_ids, ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap as ObjectFactMap};
+use super::super::{
+    ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap as ObjectFactMap, WorkbenchReadService,
+    object_ids,
+};
 use super::mapping::{amount_reason_brief, append_funds_origin, funds_fact_display, select_funds_origin};
 use crate::errors::Result;
 use crate::workbench::authority::funds::mapping as authority_mapping;
@@ -45,18 +47,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 executor,
             )
             .await?;
-        let supplier_ids = payments
-            .iter()
-            .map(|item| item.supplier_id.to_string())
-            .collect::<Vec<_>>();
+        let supplier_ids = payments.iter().map(|item| item.supplier_id.to_string()).collect::<Vec<_>>();
         let supplier_names = self.supplier_display_names(&supplier_ids, executor).await?;
         let allocation_lines = self.payment_allocation_lines(&payments, executor).await?;
         for payment in payments {
             let supplier = supplier_names.get(&payment.supplier_id.to_string()).cloned();
-            let lines = allocation_lines
-                .get(&payment.base.id)
-                .cloned()
-                .unwrap_or_default();
+            let lines = allocation_lines.get(&payment.base.id).cloned().unwrap_or_default();
             let mut fact = WorkbenchObjectFact::from_authority(authority_mapping::supplier_payment_fact(
                 &payment,
                 created_by.get(&payment.base.id),
@@ -65,12 +61,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
 
             let mut sections = Vec::new();
             push_section(&mut sections, "供应商", supplier.as_deref(), false);
-            push_section(
-                &mut sections,
-                "付款金额",
-                Some(format_yuan(&payment.amount)).as_deref(),
-                true,
-            );
+            push_section(&mut sections, "付款金额", Some(format_yuan(&payment.amount)).as_deref(), true);
             push_section(
                 &mut sections,
                 "付款日",
@@ -136,10 +127,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 executor,
             )
             .await?;
-        let supplier_ids = refunds
-            .iter()
-            .map(|item| item.supplier_id.to_string())
-            .collect::<Vec<_>>();
+        let supplier_ids = refunds.iter().map(|item| item.supplier_id.to_string()).collect::<Vec<_>>();
         let supplier_names = self.supplier_display_names(&supplier_ids, executor).await?;
         let payment_ids = refunds
             .iter()
@@ -233,9 +221,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .collect::<Vec<_>>();
         let origins = self.supplier_payment_origins(&payment_ids, executor).await?;
         for reversal in reversals {
-            let origin = origins
-                .briefs
-                .get(&reversal.original_supplier_payment_id.to_string());
+            let origin = origins.briefs.get(&reversal.original_supplier_payment_id.to_string());
             let mut fact = funds_fact_display(
                 authority_mapping::payment_reversal_fact(
                     &reversal,

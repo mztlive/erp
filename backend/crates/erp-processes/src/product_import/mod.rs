@@ -39,10 +39,6 @@ impl ProductImportProcess {
     /// # 错误
     /// 无。
     pub fn new(db: Database, storage: S3Storage, secret: impl Into<Vec<u8>>) -> Self {
-        Self {
-            db,
-            storage,
-            secret: secret.into(),
-        }
+        Self { db, storage, secret: secret.into() }
     }
 }

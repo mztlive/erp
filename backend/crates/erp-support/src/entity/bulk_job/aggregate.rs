@@ -1,15 +1,16 @@
 //! 批量选择快照与后台任务的父子聚合工厂。
 
-use crate::entity::bulk_job::{
-    BackgroundJob, BackgroundJobData, BackgroundJobItem, BackgroundJobItemData, BulkSelectionItem,
-    BulkSelectionItemData, BulkSelectionSnapshot, BulkSelectionSnapshotData, JobType, SelectionType,
-};
 use application_core::command::CommandFingerprint;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     BackgroundJobId, BackgroundJobItemId, BulkSelectionItemId, BulkSelectionSnapshotId, FileAssetId,
 };
 use erp_core::{Error, Result};
+
+use crate::entity::bulk_job::{
+    BackgroundJob, BackgroundJobData, BackgroundJobItem, BackgroundJobItemData, BulkSelectionItem,
+    BulkSelectionItemData, BulkSelectionSnapshot, BulkSelectionSnapshotData, JobType, SelectionType,
+};
 
 /// 选择快照聚合创建数据；目标数由子项自动派生。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -195,20 +196,8 @@ fn background_job_fingerprint(job: &BackgroundJob, items: &[BackgroundJobItem]) 
     ];
     push_optional(&mut parts, job.domain_job_type.as_deref());
     push_optional(&mut parts, job.domain_job_id.as_deref());
-    push_optional(
-        &mut parts,
-        job.selection_snapshot_id
-            .as_ref()
-            .map(ToString::to_string)
-            .as_deref(),
-    );
-    push_optional(
-        &mut parts,
-        job.input_file_asset_id
-            .as_ref()
-            .map(ToString::to_string)
-            .as_deref(),
-    );
+    push_optional(&mut parts, job.selection_snapshot_id.as_ref().map(ToString::to_string).as_deref());
+    push_optional(&mut parts, job.input_file_asset_id.as_ref().map(ToString::to_string).as_deref());
     for item in items {
         parts.push("item".to_string());
         parts.push(item.item_no.to_string());
@@ -217,10 +206,7 @@ fn background_job_fingerprint(job: &BackgroundJob, items: &[BackgroundJobItem]) 
         push_optional(&mut parts, item.expected_version.as_deref());
         push_optional(&mut parts, item.expected_hash.as_deref());
         push_optional(&mut parts, item.worksheet_name.as_deref());
-        push_optional(
-            &mut parts,
-            item.source_row_no.map(|value| value.to_string()).as_deref(),
-        );
+        push_optional(&mut parts, item.source_row_no.map(|value| value.to_string()).as_deref());
         push_optional(&mut parts, item.source_column_name.as_deref());
     }
     CommandFingerprint::from_parts(parts)
@@ -231,20 +217,21 @@ fn push_optional(parts: &mut Vec<String>, value: Option<&str>) {
         Some(value) => {
             parts.push("some".to_string());
             parts.push(value.to_string());
-        }
+        },
         None => parts.push("none".to_string()),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{BackgroundJobId, BackgroundJobItemId, BulkSelectionItemId, BulkSelectionSnapshotId};
+
     use super::{
         BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobItemDraft, BulkSelectionItemDraft,
         BulkSelectionSnapshotAggregate, BulkSelectionSnapshotAggregateData,
     };
     use crate::entity::bulk_job::{JobType, SelectionType};
-    use erp_core::common::time::Instant;
-    use erp_core::ids::{BackgroundJobId, BackgroundJobItemId, BulkSelectionItemId, BulkSelectionSnapshotId};
 
     #[test]
     fn selection_aggregate_rejects_empty_and_derives_parent_and_count() {
@@ -254,12 +241,14 @@ mod tests {
             created_by: "actor-1".to_string(),
             expires_at: Instant::from_unix_secs(2),
         };
-        assert!(BulkSelectionSnapshotAggregate::new(
-            BulkSelectionSnapshotId::new("snapshot-empty"),
-            data.clone(),
-            vec![],
-        )
-        .is_err());
+        assert!(
+            BulkSelectionSnapshotAggregate::new(
+                BulkSelectionSnapshotId::new("snapshot-empty"),
+                data.clone(),
+                vec![],
+            )
+            .is_err()
+        );
 
         let aggregate = BulkSelectionSnapshotAggregate::new(
             BulkSelectionSnapshotId::new("snapshot-1"),
@@ -275,10 +264,7 @@ mod tests {
         .unwrap();
         let (snapshot, items) = aggregate.into_parts();
         assert_eq!(snapshot.item_count, 1);
-        assert_eq!(
-            items[0].selection_snapshot_id,
-            BulkSelectionSnapshotId::new("snapshot-1")
-        );
+        assert_eq!(items[0].selection_snapshot_id, BulkSelectionSnapshotId::new("snapshot-1"));
     }
 
     #[test]
@@ -310,12 +296,14 @@ mod tests {
         );
         let mut mismatched = data.clone();
         mismatched.declared_total_count = 1;
-        assert!(BackgroundJobAggregate::new(
-            BackgroundJobId::new("job-mismatch"),
-            mismatched,
-            vec![draft("item-1"), draft("item-2")],
-        )
-        .is_err());
+        assert!(
+            BackgroundJobAggregate::new(
+                BackgroundJobId::new("job-mismatch"),
+                mismatched,
+                vec![draft("item-1"), draft("item-2")],
+            )
+            .is_err()
+        );
         let aggregate = BackgroundJobAggregate::new(
             BackgroundJobId::new("job-1"),
             data,
@@ -324,13 +312,8 @@ mod tests {
         .unwrap();
         let (job, items) = aggregate.into_parts();
         assert_eq!(job.total_count, 2);
-        assert_eq!(
-            items.iter().map(|item| item.item_no).collect::<Vec<_>>(),
-            vec![1, 2]
-        );
-        assert!(items
-            .iter()
-            .all(|item| item.background_job_id == BackgroundJobId::new("job-1")));
+        assert_eq!(items.iter().map(|item| item.item_no).collect::<Vec<_>>(), vec![1, 2]);
+        assert!(items.iter().all(|item| item.background_job_id == BackgroundJobId::new("job-1")));
         let first_fingerprint = job.request_fingerprint.clone();
         let again = BackgroundJobAggregate::new(
             BackgroundJobId::new("job-2"),

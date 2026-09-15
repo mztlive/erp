@@ -6,10 +6,10 @@ use erp_catalog::{CatalogExt, CreateProductRequest, ProductMediaInput, ProductSk
 use erp_core::common::time::BusinessDate;
 use persistence_core::NoTransaction;
 
-use super::identity::normalize_import_row;
-use super::images::{resolve_row_media, RowMediaSource};
-use super::resolve::ImportDictionaryCache;
 use super::ProductImportProcess;
+use super::identity::normalize_import_row;
+use super::images::{RowMediaSource, resolve_row_media};
+use super::resolve::ImportDictionaryCache;
 use crate::{Error, Result};
 
 /// 单行导入结果。
@@ -47,27 +47,16 @@ impl ProductImportProcess {
         cache: &mut ImportDictionaryCache,
     ) -> Result<RowImportOutcome> {
         let row = normalize_import_row(row_number, cells)?;
-        if let Some(existing) = self
-            .db
-            .products()
-            .find_by_product_no(&row.product_no, &mut NoTransaction)
-            .await?
+        if let Some(existing) =
+            self.db.products().find_by_product_no(&row.product_no, &mut NoTransaction).await?
         {
             if row.coded_spu {
-                return self
-                    .import_sku_into_spu(existing, row, cells, media_source, actor)
-                    .await;
+                return self.import_sku_into_spu(existing, row, cells, media_source, actor).await;
             }
-            return self
-                .import_existing_with_images(existing, cells, media_source, actor)
-                .await;
+            return self.import_existing_with_images(existing, cells, media_source, actor).await;
         }
         if let Some(barcode) = &row.barcode {
-            let owners = self
-                .db
-                .catalog()
-                .barcode_owner_sku_ids(barcode, &mut NoTransaction)
-                .await?;
+            let owners = self.db.catalog().barcode_owner_sku_ids(barcode, &mut NoTransaction).await?;
             if !owners.is_empty() {
                 return Ok(RowImportOutcome {
                     product_id: None,
@@ -141,7 +130,7 @@ impl ProductImportProcess {
                     message: "商品已存在，本行未重复写入".into(),
                     skipped: true,
                 })
-            }
+            },
             Err(error) => Err(error),
         }
     }

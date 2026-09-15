@@ -6,18 +6,16 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
+use erp_core::Result;
 use erp_core::common::revision::RevisionBase;
 use erp_core::common::time::BusinessDate;
-use erp_core::validation::{normalize_optional_text, normalize_required_text};
-use erp_core::Result;
-
-use super::supplier_qualification::{QualificationStatus, QualificationType};
-
 pub use erp_core::ids::{
     FileAssetId, SupplierAccountId, SupplierQualificationId, SupplierQualificationRevisionId,
 };
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use serde::{Deserialize, Serialize};
+
+use super::supplier_qualification::{QualificationStatus, QualificationType};
 
 /// 证书编号最大长度。
 const CERTIFICATE_NO_MAX_LEN: usize = 128;
@@ -95,8 +93,7 @@ impl SupplierQualificationRevision {
             "证书编号过长",
         )?;
         let issuer = normalize_optional_text(data.issuer, "发证机构", ISSUER_MAX_LEN)?;
-        data.qualification_type
-            .ensure_validity_window(data.valid_from, data.valid_to)?;
+        data.qualification_type.ensure_validity_window(data.valid_from, data.valid_to)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -115,10 +112,11 @@ impl SupplierQualificationRevision {
 
 #[cfg(test)]
 mod tests {
-    use super::{SupplierQualificationRevision, SupplierQualificationRevisionData};
-    use crate::entity::supplier::supplier_qualification::{QualificationStatus, QualificationType};
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::{FileAssetId, SupplierAccountId, SupplierQualificationRevisionId};
+
+    use super::{SupplierQualificationRevision, SupplierQualificationRevisionData};
+    use crate::entity::supplier::supplier_qualification::{QualificationStatus, QualificationType};
 
     fn revision_data() -> SupplierQualificationRevisionData {
         SupplierQualificationRevisionData {
@@ -152,10 +150,8 @@ mod tests {
     /// 失败路径：编号为空/超长、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank = SupplierQualificationRevisionData {
-            certificate_no: "   ".to_string(),
-            ..revision_data()
-        };
+        let blank =
+            SupplierQualificationRevisionData { certificate_no: "   ".to_string(), ..revision_data() };
         assert!(
             SupplierQualificationRevision::new(SupplierQualificationRevisionId::new("r"), blank,).is_err()
         );

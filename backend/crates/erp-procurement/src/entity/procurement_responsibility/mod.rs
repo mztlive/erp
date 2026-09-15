@@ -9,8 +9,8 @@ mod rule;
 mod status;
 
 pub use catalog::{
-    build_catalog_facts, category_chain, current_revision_ids, dedup_sorted_ids, ProcurementCatalogBundle,
-    ProcurementCatalogFact,
+    ProcurementCatalogBundle, ProcurementCatalogFact, build_catalog_facts, category_chain,
+    current_revision_ids, dedup_sorted_ids,
 };
 pub use resolution::{
     EligibleProcurementOwner, ProcurementResponsibilityContext, ProcurementResponsibilityResolutionBatch,
@@ -18,7 +18,7 @@ pub use resolution::{
     ProcurementResponsibilityRuleSet,
 };
 pub use rule::{
-    normalize_service_region, ProcurementResponsibilityRule, ProcurementResponsibilityRuleData,
-    ProcurementResponsibilityRuleType, ProcurementResponsibilitySelectorReference,
+    ProcurementResponsibilityRule, ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
+    ProcurementResponsibilitySelectorReference, normalize_service_region,
 };
 pub use status::EnableStatus;

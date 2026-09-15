@@ -7,14 +7,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::source::SourceType;
 use erp_core::common::state::ensure_transition;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierApiConnectionId, SupplierFulfillmentOrderId, SupplierOrderStatusHistoryId};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::status::FulfillmentStatus;
 
@@ -188,8 +187,9 @@ impl SupplierOrderStatusHistory {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::ids::SupplierOrderStatusHistoryId;
+
+    use super::*;
 
     fn sample_data() -> SupplierOrderStatusHistoryData {
         SupplierOrderStatusHistoryData {
@@ -233,10 +233,8 @@ mod tests {
 
     #[test]
     fn new_rejects_equal_previous_and_new_status() {
-        let data = SupplierOrderStatusHistoryData {
-            new_status: FulfillmentStatus::Received,
-            ..sample_data()
-        };
+        let data =
+            SupplierOrderStatusHistoryData { new_status: FulfillmentStatus::Received, ..sample_data() };
         assert!(
             SupplierOrderStatusHistory::new(SupplierOrderStatusHistoryId::new("history-2"), data).is_err()
         );
@@ -278,24 +276,21 @@ mod tests {
 
     #[test]
     fn new_rejects_empty_or_overlong_fields() {
-        let empty_version = SupplierOrderStatusHistoryData {
-            supplier_status_version: "  ".to_string(),
-            ..sample_data()
-        };
-        assert!(SupplierOrderStatusHistory::new(
-            SupplierOrderStatusHistoryId::new("history-6"),
-            empty_version
-        )
-        .is_err());
+        let empty_version =
+            SupplierOrderStatusHistoryData { supplier_status_version: "  ".to_string(), ..sample_data() };
+        assert!(
+            SupplierOrderStatusHistory::new(SupplierOrderStatusHistoryId::new("history-6"), empty_version)
+                .is_err()
+        );
 
-        let overlong_event_id = SupplierOrderStatusHistoryData {
-            external_event_id: "e".repeat(129),
-            ..sample_data()
-        };
-        assert!(SupplierOrderStatusHistory::new(
-            SupplierOrderStatusHistoryId::new("history-7"),
-            overlong_event_id
-        )
-        .is_err());
+        let overlong_event_id =
+            SupplierOrderStatusHistoryData { external_event_id: "e".repeat(129), ..sample_data() };
+        assert!(
+            SupplierOrderStatusHistory::new(
+                SupplierOrderStatusHistoryId::new("history-7"),
+                overlong_event_id
+            )
+            .is_err()
+        );
     }
 }

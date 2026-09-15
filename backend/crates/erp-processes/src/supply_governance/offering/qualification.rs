@@ -1,15 +1,14 @@
 //! 供给资格的实际catalog/supplier组合，按原位置读取六项事实。
-use crate::{Error, Result};
 use async_trait::async_trait;
 use erp_catalog::{CatalogExt, ProductKind};
-use erp_core::{
-    common::time::BusinessDate,
-    ids::{ProductId, SkuId, SupplierAccountId},
-};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{ProductId, SkuId, SupplierAccountId};
 use erp_supplier::entity::supplier::eligibility::OfferingProductKind;
 use erp_supply::ports::offering_qualification::QualificationPort;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::{Error, Result};
 /// 生产资格适配器；构造不读取任何事实。
 pub struct MongoOfferingQualification {
     db: Database,
@@ -44,18 +43,10 @@ impl CatalogQualificationPort for MongoOfferingQualification {
             .skus()
             .find_by_id(id, executor)
             .await?
-            .map(|sku| SkuQualificationFact {
-                is_active: sku.is_active(),
-                product_id: sku.product_id,
-            }))
+            .map(|sku| SkuQualificationFact { is_active: sku.is_active(), product_id: sku.product_id }))
     }
     async fn product_kind(&self, id: &ProductId, executor: &mut dyn Executor) -> Result<Option<ProductKind>> {
-        Ok(self
-            .db
-            .products()
-            .find_by_id(id, executor)
-            .await?
-            .map(|product| product.product_kind))
+        Ok(self.db.products().find_by_id(id, executor).await?.map(|product| product.product_kind))
     }
     async fn supplier(
         &self,
@@ -92,10 +83,8 @@ async fn qualify<P: CatalogQualificationPort>(
     on_date: BusinessDate,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let sku = port
-        .sku(sku_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("公司 SKU 不存在".to_string()))?;
+    let sku =
+        port.sku(sku_id, executor).await?.ok_or_else(|| Error::NotFound("公司 SKU 不存在".to_string()))?;
     if !sku.is_active {
         return Err(Error::BusinessLogicError("公司 SKU 未启用".to_string()));
     }
@@ -114,8 +103,9 @@ async fn qualify<P: CatalogQualificationPort>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::sync::Mutex;
+
+    use super::*;
     struct Marker(u64);
     impl Executor for Marker {
         fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
@@ -211,12 +201,9 @@ mod tests {
     }
     #[tokio::test]
     async fn catalog_qualification_keeps_executor_and_all_kind_variants() {
-        for kind in [
-            ProductKind::Physical,
-            ProductKind::Virtual,
-            ProductKind::OfflineService,
-            ProductKind::Voucher,
-        ] {
+        for kind in
+            [ProductKind::Physical, ProductKind::Virtual, ProductKind::OfflineService, ProductKind::Voucher]
+        {
             let (result, calls) = invoke(kind, true, false, false, None).await;
             result.unwrap();
             assert_eq!(calls, ["sku", "product", "supplier"]);

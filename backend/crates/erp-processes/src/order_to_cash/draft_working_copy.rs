@@ -1,20 +1,18 @@
 //! 草稿工作副本补开：驳回回草稿后没有 `Editing` 副本时，按本次草稿新建一份。
 
-use erp_audit::AuditExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::SalesOrderId;
+use erp_sales::dto::sales_order::SalesOrderDraftRequest;
 use erp_sales::entity::sales_order::{
     SalesOrder, SalesOrderLine, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine, WorkingPurpose,
 };
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::service::sales_order::draft_working_copy::DraftStableLines;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::SalesOrderCommandProcess;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_sales::dto::sales_order::SalesOrderDraftRequest;
-
-use erp_sales::service::sales_order::draft_working_copy::DraftStableLines;
 impl SalesOrderCommandProcess {
     /// 查找有效首次提交工作副本；草稿且没有有效副本时新开一份并落库。
     ///
@@ -47,10 +45,7 @@ impl SalesOrderCommandProcess {
             .ensure_first_submission_working_copy_editable()
             .map_err(|error| Error::ConflictError(error.to_string()))?;
         let order_id = SalesOrderId::new(order.base.id.clone());
-        let stable = self
-            .sales()
-            .collect_stable_lines_for_draft(&order_id, &draft.lines)
-            .await?;
+        let stable = self.sales().collect_stable_lines_for_draft(&order_id, &draft.lines).await?;
         if let Some(working_copy) = self
             .db
             .sales_order_working_copies()
@@ -58,9 +53,7 @@ impl SalesOrderCommandProcess {
             .await?
         {
             if !working_copy.matches_version(req_version) {
-                return Err(Error::ConflictError(
-                    "数据已被其他请求修改，请刷新后重试".to_string(),
-                ));
+                return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
             }
             return Ok((working_copy, stable, false));
         }
@@ -81,14 +74,7 @@ impl SalesOrderCommandProcess {
                 actor,
             )
             .await?;
-        Ok((
-            working_copy,
-            DraftStableLines {
-                all: Vec::new(),
-                created: Vec::new(),
-            },
-            true,
-        ))
+        Ok((working_copy, DraftStableLines { all: Vec::new(), created: Vec::new() }, true))
     }
 
     /// 把新开的首次提交工作副本、明细和补建的稳定行写入同一事务。
@@ -118,9 +104,7 @@ impl SalesOrderCommandProcess {
     ) -> Result<SalesOrderWorkingCopy> {
         let order_id = order.base.id.clone();
         let expected_order_version = order.base.version;
-        let audit = actor
-            .clone()
-            .resource_log("sales_order.save_draft", "sales_order", order_id.clone())?;
+        let audit = actor.clone().resource_log("sales_order.save_draft", "sales_order", order_id.clone())?;
         let db = self.db.clone();
         let client = db.client().clone();
         let sellable_refs = erp_sales::service::sales_order::SalesOrderService::sellable_working_copy_refs(
@@ -132,9 +116,7 @@ impl SalesOrderCommandProcess {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     access.related_order(&related_order, session).await?;
-                    access
-                        .revalidate(&order_id, expected_order_version, session)
-                        .await?;
+                    access.revalidate(&order_id, expected_order_version, session).await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                         .ensure_sellable_refs(
                             &sellable_refs,

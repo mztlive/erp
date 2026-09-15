@@ -2,12 +2,11 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierSettlementDifferenceId, SupplierSettlementStatementId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 const REQUEST_ID_MAX_LEN: usize = 128;
 const REFERENCE_MAX_LEN: usize = 256;

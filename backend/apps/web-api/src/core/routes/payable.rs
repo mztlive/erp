@@ -4,16 +4,14 @@
 //! `/admin/supplier-payments`、`/admin/purchase-invoice-allocations`；
 //! 每条路由统一走 JWT + RBAC（`with_permission`）。
 
-use axum::{
-    routing::{get, post},
-    Router,
-};
+use axum::Router;
+use axum::routing::{get, post};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::payable, middleware::with_permission, upload},
-};
+use crate::app_state::AppState;
+use crate::core::handler::payable;
+use crate::core::middleware::with_permission;
+use crate::core::upload;
 
 /// 返回本域管理端路由集合。
 ///
@@ -122,10 +120,7 @@ mod tests {
     /// 供应商付款只暴露任务内原子登记，不暴露付款审批或独立过账入口。
     #[test]
     fn supplier_payment_routes_expose_direct_commit_and_recipient_reveal() {
-        let production = include_str!("payable.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产路由必须存在");
+        let production = include_str!("payable.rs").split("#[cfg(test)]").next().expect("生产路由必须存在");
         assert!(production.contains("/supplier-payments/commit"));
         assert!(production.contains("/supplier-payments/merge-candidates"));
         assert!(production.contains("/payment-recipient/reveal"));

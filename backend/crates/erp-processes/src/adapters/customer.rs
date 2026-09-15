@@ -43,9 +43,7 @@ impl CustomerAuditPort for MongoCustomerAudit {
         resource_type: &str,
         resource_id: String,
     ) -> erp_customer::Result<PreparedCustomerAudit> {
-        let log = actor
-            .resource_log(action, resource_type, resource_id)
-            .map_err(map_audit_to_customer)?;
+        let log = actor.resource_log(action, resource_type, resource_id).map_err(map_audit_to_customer)?;
         Ok(prepared_customer_audit(&log))
     }
 
@@ -55,11 +53,7 @@ impl CustomerAuditPort for MongoCustomerAudit {
         executor: &mut dyn Executor,
     ) -> erp_customer::Result<()> {
         let log = audit_log_from_customer(audit).map_err(map_audit_to_customer)?;
-        self.db
-            .audit_logs()
-            .create(&log, executor)
-            .await
-            .map_err(erp_customer::Error::from)?;
+        self.db.audit_logs().create(&log, executor).await.map_err(erp_customer::Error::from)?;
         Ok(())
     }
 }
@@ -101,18 +95,12 @@ impl PartyFactPort for MongoCustomerPartyFacts {
             .list_with_current_revisions(party_ids, &mut NoTransaction)
             .await
             .map_err(erp_customer::Error::from)?;
-        let revisions: HashMap<String, erp_party::PartyRevision> = revisions
-            .into_iter()
-            .map(|revision| (revision.base.id.clone(), revision))
-            .collect();
+        let revisions: HashMap<String, erp_party::PartyRevision> =
+            revisions.into_iter().map(|revision| (revision.base.id.clone(), revision)).collect();
         Ok(parties
             .into_iter()
             .map(|party| {
-                let current = party
-                    .stable
-                    .current_revision_id
-                    .as_ref()
-                    .and_then(|id| revisions.get(id));
+                let current = party.stable.current_revision_id.as_ref().and_then(|id| revisions.get(id));
                 PartyIdentityFact {
                     party_id: party.base.id.clone(),
                     party_no: party.party_no.clone(),
@@ -171,9 +159,7 @@ impl AccountFactPort for MongoCustomerAccountFacts {
             .await
             .map_err(erp_customer::Error::from)?
             .ok_or_else(|| erp_customer::Error::NotFound("负责销售账号不存在".to_string()))?;
-        account
-            .ensure_can_login()
-            .map_err(|error| erp_customer::Error::BusinessLogicError(error.to_string()))
+        account.ensure_can_login().map_err(|error| erp_customer::Error::BusinessLogicError(error.to_string()))
     }
 
     async fn names_by_ids(&self, account_ids: &[String]) -> erp_customer::Result<HashMap<String, String>> {

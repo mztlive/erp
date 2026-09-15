@@ -1,17 +1,16 @@
-use super::SupplierApiReadService;
-use crate::Result;
 use application_core::AuditActor;
 use erp_core::ids::SupplierApiConnectionId;
-use erp_identity::{subject, Permission};
-use erp_supply::{
-    entity::supplier_api::{
-        BusinessCapabilityConfirmation, SupplierApiCapability, SupplierApiConnection,
-        SupplierConnectionAction, SupplierHealthCheckRun,
-    },
-    repository::SupplierApiExt,
-    service::supplier_api::context::action_permission,
+use erp_identity::{Permission, subject};
+use erp_supply::entity::supplier_api::{
+    BusinessCapabilityConfirmation, SupplierApiCapability, SupplierApiConnection, SupplierConnectionAction,
+    SupplierHealthCheckRun,
 };
+use erp_supply::repository::SupplierApiExt;
+use erp_supply::service::supplier_api::context::action_permission;
 use erp_support::BulkJobExt;
+
+use super::SupplierApiReadService;
+use crate::Result;
 type SupplierConnectionImpact = <mongodb::Database as SupplierApiExt>::SupplierConnectionImpact;
 pub(super) struct GovernanceContext {
     pub(super) capabilities: Vec<SupplierApiCapability>,
@@ -54,8 +53,6 @@ impl SupplierApiReadService {
             return Ok(false);
         };
         let permission = Permission::parse(permission)?;
-        Ok(rbac
-            .enforce(&subject(actor.kind(), actor.id()), &permission)
-            .await?)
+        Ok(rbac.enforce(&subject(actor.kind(), actor.id()), &permission).await?)
     }
 }

@@ -1,32 +1,24 @@
 //! 客户资料修订用例与事务载荷。
 
-use erp_audit::AuditExt;
-use erp_core::{
-    field_update::FieldUpdate,
-    ids::{PartyId, PartyRevisionId},
-};
-use erp_customer::CustomerExt;
+use application_core::AuditActor;
+use erp_audit::{AuditActorLogs, AuditExt};
+use erp_core::field_update::FieldUpdate;
+use erp_core::ids::{PartyId, PartyRevisionId};
 use erp_customer::{
-    CustomerAccount, CustomerAccountUpdate, CustomerProfileCommand, CustomerProfileCommandResultData,
-    CustomerProfileOperation, CustomerProfileReplayContext,
+    CustomerAccount, CustomerAccountUpdate, CustomerExt, CustomerProfileCommand,
+    CustomerProfileCommandResultData, CustomerProfileMutationView, CustomerProfileOperation,
+    CustomerProfileReplayContext, SaveCustomerProfileRequest,
 };
-use erp_party::PartyExt;
-use erp_party::{Party, PartyRevision, PartyRevisionData, PartyUpdate};
+use erp_party::{Party, PartyExt, PartyRevision, PartyRevisionData, PartyUpdate};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
+use super::CustomerProfileService;
+use super::facts::PartyFactChanges;
+use super::idempotency::{checked_command_view, command_view};
 use crate::adapters::customer_access;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-
-use super::{
-    facts::PartyFactChanges,
-    idempotency::{checked_command_view, command_view},
-    CustomerProfileService,
-};
-use erp_customer::{CustomerProfileMutationView, SaveCustomerProfileRequest};
 
 impl CustomerProfileService {
     /// 原子修订 Party 身份、客户角色与显式提交的资料事实集合。
@@ -56,9 +48,7 @@ impl CustomerProfileService {
         if let Some(command) = self.command_record(replay.idempotency_key()).await? {
             return checked_command_view(command, &replay);
         }
-        let prepared = self
-            .prepare_update(customer_id, req, replay.clone(), actor)
-            .await?;
+        let prepared = self.prepare_update(customer_id, req, replay.clone(), actor).await?;
         let intended = prepared.result.clone();
         let transaction = self.commit_update(customer_id, prepared, actor).await;
         self.resolve_transaction(transaction, intended, &replay).await
@@ -133,15 +123,10 @@ impl CustomerProfileService {
         party
             .ensure_version(req.expected_party_version.unwrap_or_default())
             .map_err(|error| Error::ConflictError(error.to_string()))?;
-        let revision_no = self
-            .db
-            .party_revisions()
-            .next_revision_no(&account.party_id, &mut NoTransaction)
-            .await?;
+        let revision_no =
+            self.db.party_revisions().next_revision_no(&account.party_id, &mut NoTransaction).await?;
         let revision = update_roots(&mut party, &mut account, &req, revision_no, actor.id())?;
-        let facts = self
-            .prepare_fact_changes(&account.party_id, &req, actor.id())
-            .await?;
+        let facts = self.prepare_fact_changes(&account.party_id, &req, actor.id()).await?;
         PreparedUpdate::new(party, revision, account, facts, req, replay, actor)
     }
 }
@@ -189,15 +174,7 @@ impl PreparedUpdate {
             "customer_profile",
             account.base.id.clone(),
         )?;
-        Ok(Self {
-            party,
-            revision,
-            account,
-            facts,
-            command,
-            audit,
-            result,
-        })
+        Ok(Self { party, revision, account, facts, command, audit, result })
     }
 
     /// 将根修订、事实差异、幂等结果与审计写入同一事务。
@@ -206,9 +183,7 @@ impl PreparedUpdate {
         db.parties().update(&mut self.party, session).await?;
         db.customer_accounts().update(&mut self.account, session).await?;
         self.facts.persist(db, session).await?;
-        db.customer_profile_commands()
-            .create(&self.command, session)
-            .await?;
+        db.customer_profile_commands().create(&self.command, session).await?;
         db.audit_logs().create(&self.audit, session).await?;
         Ok(())
     }

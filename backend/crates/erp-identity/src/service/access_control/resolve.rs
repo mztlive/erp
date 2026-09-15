@@ -1,10 +1,11 @@
 //! DataScope v2 唯一应用解析入口，复用现有 RBAC 版本和同角色权限证明。
 
+use std::collections::BTreeMap;
+
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Executor;
-use std::collections::BTreeMap;
 
 use crate::access_control::{DataScopeSubjectType, ResolvedScope, ScopeClause, ScopeResolution};
 use crate::entity::organization::OrgTree;
@@ -55,18 +56,9 @@ impl DataScopeService {
             .await?
             .filter(|account| account.is_active_backoffice() && account.kind == actor.kind())
             .ok_or_else(|| Error::Forbidden("账号已失效".into()))?;
-        let snapshot = self
-            .rbac
-            .role_permission_snapshot(actor.kind(), actor.id(), &[])
-            .await?;
-        self.rbac
-            .ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor)
-            .await?;
-        let mut roles = self
-            .db
-            .roles()
-            .enabled_roles(snapshot.role_ids(), executor)
-            .await?;
+        let snapshot = self.rbac.role_permission_snapshot(actor.kind(), actor.id(), &[]).await?;
+        self.rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
+        let mut roles = self.db.roles().enabled_roles(snapshot.role_ids(), executor).await?;
         roles.sort_by(|a, b| a.base.id.cmp(&b.base.id));
         let state = OrganizationRepository::new(&self.db).state(executor).await?;
         let active = active_relations(&state, Instant::now());
@@ -78,10 +70,7 @@ impl DataScopeService {
                 account.base.version,
                 snapshot.policy_revision(),
                 state.version,
-                roles
-                    .iter()
-                    .map(|role| (&role.base.id, role.base.version))
-                    .collect::<Vec<_>>()
+                roles.iter().map(|role| (&role.base.id, role.base.version)).collect::<Vec<_>>()
             ))
         ))
     }
@@ -106,8 +95,7 @@ impl DataScopeService {
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedDataScope> {
         let permission = Permission::parse(format!("{resource}:{action}"))?;
-        self.resolve_permissions(actor, resource, action, &[permission], executor)
-            .await
+        self.resolve_permissions(actor, resource, action, &[permission], executor).await
     }
 
     /// 同一角色必须满足全部权限，范围仍只绑定目标资源动作。
@@ -132,13 +120,8 @@ impl DataScopeService {
             .await?
             .filter(|a| a.is_active_backoffice())
             .ok_or_else(|| Error::Forbidden("账号已失效".into()))?;
-        let snapshot = self
-            .rbac
-            .role_permission_snapshot(actor.kind(), actor.id(), &required)
-            .await?;
-        self.rbac
-            .ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor)
-            .await?;
+        let snapshot = self.rbac.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
+        self.rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
         let role_ids = snapshot.granting_role_ids_for_all(&required);
         let roles = self.db.roles().enabled_roles(&role_ids, executor).await?;
         let eligible = roles.iter().map(|role| role.base.id.clone()).collect::<Vec<_>>();
@@ -147,9 +130,8 @@ impl DataScopeService {
         }
         let state = OrganizationRepository::new(&self.db).state(executor).await?;
         let as_of = Instant::now();
-        let (scope, role_scopes) = self
-            .resolved(actor.id(), &eligible, (resource, action), &state, as_of, executor)
-            .await?;
+        let (scope, role_scopes) =
+            self.resolved(actor.id(), &eligible, (resource, action), &state, as_of, executor).await?;
         let fingerprint = format!(
             "{}:{}:{}:{}:{}:{:?}:{:?}",
             account.base.version,
@@ -157,10 +139,7 @@ impl DataScopeService {
             state.version,
             resource,
             action,
-            roles
-                .iter()
-                .map(|r| (&r.base.id, r.base.version))
-                .collect::<Vec<_>>(),
+            roles.iter().map(|r| (&r.base.id, r.base.version)).collect::<Vec<_>>(),
             scope
         );
         Ok(AuthorizedDataScope {
@@ -171,10 +150,7 @@ impl DataScopeService {
             role_scopes,
             organizations: state,
             policy_version: snapshot.policy_revision(),
-            scope_version: format!(
-                "{:x}",
-                md5::compute(format!("{}:{fingerprint}", actor.id()).as_bytes())
-            ),
+            scope_version: format!("{:x}", md5::compute(format!("{}:{fingerprint}", actor.id()).as_bytes())),
             as_of,
         })
     }
@@ -190,27 +166,13 @@ impl DataScopeService {
         executor: &mut dyn Executor,
     ) -> Result<(ResolvedScope, BTreeMap<String, ScopeClause>)> {
         let (resource, action) = resource_action;
-        if self
-            .db
-            .data_scopes()
-            .has_legacy_user_limit(user, executor)
-            .await?
-        {
-            return Err(Error::ValidationError(
-                "账号存在未迁移的个人范围上限，请先显式迁移配置".into(),
-            ));
+        if self.db.data_scopes().has_legacy_user_limit(user, executor).await? {
+            return Err(Error::ValidationError("账号存在未迁移的个人范围上限，请先显式迁移配置".into()));
         }
-        let mut rules = self
-            .db
-            .data_scopes()
-            .list_by_subjects(DataScopeSubjectType::Role, roles, executor)
-            .await?;
-        rules.extend(
-            self.db
-                .data_scopes()
-                .list_by_subject(DataScopeSubjectType::User, user, executor)
-                .await?,
-        );
+        let mut rules =
+            self.db.data_scopes().list_by_subjects(DataScopeSubjectType::Role, roles, executor).await?;
+        rules
+            .extend(self.db.data_scopes().list_by_subject(DataScopeSubjectType::User, user, executor).await?);
         for rule in rules.iter().filter(|rule| rule.binding.applies(resource, action)) {
             super::consumers::validate_binding(&rule.binding)?;
         }

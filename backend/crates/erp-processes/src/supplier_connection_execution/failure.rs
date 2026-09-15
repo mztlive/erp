@@ -1,20 +1,22 @@
 //! 在原结果事务中登记连接失败的 W29 事实、工作项和审计。
-use crate::adapters::supplier_failure::integration_class;
-use crate::integration_resolution::producer::error_work_item;
-use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::IntegrationErrorTaskId;
-use erp_integration::{
-    entity::integration_ops::{error_owner_role, IntegrationErrorTask, IntegrationErrorTaskData},
-    repository::IntegrationOpsExt,
+use erp_integration::entity::integration_ops::{
+    IntegrationErrorTask, IntegrationErrorTaskData, error_owner_role,
 };
+use erp_integration::repository::IntegrationOpsExt;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{SupplierApiConnection, SupplierHealthCheckRun};
-use erp_supply::{ports::supplier_api_gateway::ClassifiedError, service::supplier_api::context::digest};
+use erp_supply::ports::supplier_api_gateway::ClassifiedError;
+use erp_supply::service::supplier_api::context::digest;
 use erp_support::BackgroundJob;
 use erp_workflow::WorkItemExt;
+
+use crate::Result;
+use crate::adapters::supplier_failure::integration_class;
+use crate::integration_resolution::producer::error_work_item;
 
 pub(super) fn settle_health_failure(
     job: &mut BackgroundJob,
@@ -59,14 +61,7 @@ pub(super) async fn persist_health_failure_task(
         work_item.base.id.clone(),
         Some(format!("job_id={}", job.base.id)),
     )?;
-    persist_failure(
-        &MongoFailureWrite(db),
-        &task,
-        &work_item,
-        &work_item_audit,
-        executor,
-    )
-    .await
+    persist_failure(&MongoFailureWrite(db), &task, &work_item, &work_item_audit, executor).await
 }
 
 /// 三个真实写入步骤共用调用方结果事务；构造与 ID/时钟仍在原调用点。
@@ -129,10 +124,12 @@ impl FailureWritePort for MongoFailureWrite<'_> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
+    use persistence_core::Executor;
+
     use super::*;
     use crate::Error;
-    use persistence_core::Executor;
-    use std::sync::Mutex;
 
     struct TestExecutor {
         visits: usize,
@@ -207,9 +204,7 @@ mod tests {
                 fail_at: Some(fail_at),
                 calls: Mutex::new(Vec::new()),
             };
-            let error = persist_failure(&port, &1, &2, &3, &mut executor)
-                .await
-                .unwrap_err();
+            let error = persist_failure(&port, &1, &2, &3, &mut executor).await.unwrap_err();
             assert!(
                 matches!(error, Error::ConflictError(message) if message == format!("failed {}", expected[fail_at]))
             );

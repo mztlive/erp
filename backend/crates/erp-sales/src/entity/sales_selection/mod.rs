@@ -19,10 +19,10 @@ mod token;
 mod types;
 
 pub use booklet::{SalesSelectionBooklet, SalesSelectionBookletData};
-pub use combination::{combination_key, search_packages, GeneratedPackage, TierSearchReport};
-pub use display_item::{ensure_publishable_display, DisplayKind, SalesSelectionDisplayItem};
+pub use combination::{GeneratedPackage, TierSearchReport, combination_key, search_packages};
+pub use display_item::{DisplayKind, SalesSelectionDisplayItem, ensure_publishable_display};
 pub use idempotency::{
-    request_hash, IdempotencyOperation, SalesSelectionIdempotency, SalesSelectionIdempotencyData,
+    IdempotencyOperation, SalesSelectionIdempotency, SalesSelectionIdempotencyData, request_hash,
 };
 pub use image::{FirstNonEmptyMemberImage, PackageCoverRef, PackageImageGenerator};
 pub use limits::*;
@@ -31,15 +31,15 @@ pub use pool_member::SalesSelectionPoolMember;
 pub use prepare_task::{SalesSelectionPrepareTask, SalesSelectionPrepareTaskData};
 pub use pricing::{abs_diff, try_add, try_mul_u32, try_sum};
 pub use proposal::{
-    build_proposal_lines, SalesSelectionProposal, SalesSelectionProposalData,
-    SalesSelectionProposalDisplayLine, SalesSelectionProposalSkuLine,
+    SalesSelectionProposal, SalesSelectionProposalData, SalesSelectionProposalDisplayLine,
+    SalesSelectionProposalSkuLine, build_proposal_lines,
 };
 pub use session::{SalesSelectionSession, SessionChoice};
-pub use sku_snapshot::{sort_by_sku_id, ImageAssetSnapshot, SkuSnapshot, SpecificationAttributeSnapshot};
+pub use sku_snapshot::{ImageAssetSnapshot, SkuSnapshot, SpecificationAttributeSnapshot, sort_by_sku_id};
 pub use status::BookletStatus;
 pub use tier::TierRule;
-pub use token::{token_hash, LinkTokenCrypto};
+pub use token::{LinkTokenCrypto, token_hash};
 pub use types::{
-    normalize_idempotency_key, PoolSourceKind, PrepareKind, PrepareStage, PrepareTaskStatus, ProposalSource,
-    SearchStopReason, SelectionForm, SubmitMode,
+    PoolSourceKind, PrepareKind, PrepareStage, PrepareTaskStatus, ProposalSource, SearchStopReason,
+    SelectionForm, SubmitMode, normalize_idempotency_key,
 };

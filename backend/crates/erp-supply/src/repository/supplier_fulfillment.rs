@@ -14,39 +14,38 @@
 //! 筛选/行类型定义在本文件，经 `SupplierFulfillmentExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
-use crate::repository::owned::{
-    SupplierFulfillmentItemRepository, SupplierFulfillmentOrderRepository, SupplierOfferingRepository,
-    SupplierOfferingRevisionRepository, SupplierOrderActionLineRepository, SupplierOrderActionRepository,
-    SupplierOrderStatusHistoryRepository, SupplierRefundAllocationRepository, SupplierRefundFactRepository,
-};
-use erp_core::common::time::Instant;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use crate::entity::supplier_fulfillment::{
-    CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentItem, SupplierFulfillmentOrder,
-    SupplierOrderAction, SupplierOrderActionLine, SupplierOrderStatusHistory, SupplierRefundAllocation,
-    SupplierRefundFact,
-};
-use crate::entity::supplier_offering::SupplierOffering;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::Instant;
 use erp_core::ids::{
     SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentOrderId, SupplierOfferingRevisionId,
     SupplierOrderActionId, SupplierRefundFactId,
 };
 use erp_core::money::Amount;
 use futures_util::TryStreamExt;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
 use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
 pub use super::extensions::SupplierFulfillmentExt;
 use super::extensions::SupplierOfferingExt;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::supplier_fulfillment::{
+    CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentItem, SupplierFulfillmentOrder,
+    SupplierOrderAction, SupplierOrderActionLine, SupplierOrderStatusHistory, SupplierRefundAllocation,
+    SupplierRefundFact,
+};
+use crate::entity::supplier_offering::SupplierOffering;
+use crate::repository::owned::{
+    SupplierFulfillmentItemRepository, SupplierFulfillmentOrderRepository, SupplierOfferingRepository,
+    SupplierOfferingRevisionRepository, SupplierOrderActionLineRepository, SupplierOrderActionRepository,
+    SupplierOrderStatusHistoryRepository, SupplierRefundAllocationRepository, SupplierRefundFactRepository,
+};
 
 /// `supplier_fulfillment_order` 集合名（单一来源：`SupplierFulfillmentExt` 关联常量）。
 const SUPPLIER_FULFILLMENT_ORDERS: &str =
@@ -140,11 +139,7 @@ impl QueryFilter for SupplierFulfillmentOrderFilter {
         if let Some(fulfillment_status) = self.fulfillment_status {
             filter.insert("fulfillment_status", fulfillment_status.as_str());
         }
-        insert_literal_regex_filter(
-            &mut filter,
-            "external_order_no",
-            self.external_order_no.as_deref(),
-        );
+        insert_literal_regex_filter(&mut filter, "external_order_no", self.external_order_no.as_deref());
         if let Some(q) = &self.q {
             let clauses = ["fulfillment_order_no", "external_order_no"]
                 .into_iter()
@@ -200,10 +195,7 @@ impl<'a> SupplierFulfillmentOrderRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按供应商批量读取全部未删除履约订单。
@@ -222,8 +214,7 @@ impl<'a> SupplierFulfillmentOrderRepository<'a> {
         supplier_id: &SupplierAccountId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierFulfillmentOrder>> {
-        self.find_many(doc! { "supplier_id": supplier_id.to_string() }, executor)
-            .await
+        self.find_many(doc! { "supplier_id": supplier_id.to_string() }, executor).await
     }
 
     /// 按 ERP 供应商子订单号查找唯一履约订单。
@@ -245,8 +236,7 @@ impl<'a> SupplierFulfillmentOrderRepository<'a> {
         fulfillment_order_no: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierFulfillmentOrder>> {
-        self.find_one(doc! { "fulfillment_order_no": fulfillment_order_no }, executor)
-            .await
+        self.find_one(doc! { "fulfillment_order_no": fulfillment_order_no }, executor).await
     }
 }
 
@@ -357,11 +347,7 @@ impl<'a> SupplierOrderActionRepository<'a> {
         action_type: crate::entity::supplier_fulfillment::SupplierOrderActionType,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierOrderAction>> {
-        Ok(self
-            .list_by_order_and_type_newest(order_id, action_type, executor)
-            .await?
-            .into_iter()
-            .next())
+        Ok(self.list_by_order_and_type_newest(order_id, action_type, executor).await?.into_iter().next())
     }
 
     /// 按对供应商动作幂等键查找唯一动作。
@@ -383,8 +369,7 @@ impl<'a> SupplierOrderActionRepository<'a> {
         idempotency_key: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierOrderAction>> {
-        self.find_one(doc! { "idempotency_key": idempotency_key }, executor)
-            .await
+        self.find_one(doc! { "idempotency_key": idempotency_key }, executor).await
     }
 }
 
@@ -413,10 +398,7 @@ impl<'a> SupplierOrderActionLineRepository<'a> {
         }
 
         let mut lines = self
-            .find_many(
-                doc! { "supplier_order_action_id": { "$in": ids_to_strings(action_ids) } },
-                executor,
-            )
+            .find_many(doc! { "supplier_order_action_id": { "$in": ids_to_strings(action_ids) } }, executor)
             .await?;
         lines.sort_by(|left, right| left.base.id.cmp(&right.base.id));
         Ok(lines)
@@ -567,8 +549,7 @@ impl<'a> SupplierRefundFactRepository<'a> {
         message_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        self.exists(doc! { "inbox_message_id": message_id }, executor)
-            .await
+        self.exists(doc! { "inbox_message_id": message_id }, executor).await
     }
 }
 
@@ -597,10 +578,7 @@ impl<'a> SupplierRefundAllocationRepository<'a> {
         }
 
         let mut allocations = self
-            .find_many(
-                doc! { "supplier_refund_fact_id": { "$in": ids_to_strings(fact_ids) } },
-                executor,
-            )
+            .find_many(doc! { "supplier_refund_fact_id": { "$in": ids_to_strings(fact_ids) } }, executor)
             .await?;
         allocations.sort_by(|left, right| left.base.id.cmp(&right.base.id));
         Ok(allocations)
@@ -686,10 +664,8 @@ impl<'a> SupplierFulfillmentRepository<'a> {
         let revisions = SupplierOfferingRevisionRepository::new(self.db, SUPPLIER_OFFERING_REVISIONS)
             .list_by_ids(&revision_id_strings, executor)
             .await?;
-        let offering_ids = revisions
-            .iter()
-            .map(|revision| revision.supplier_offering_id.clone())
-            .collect::<Vec<_>>();
+        let offering_ids =
+            revisions.iter().map(|revision| revision.supplier_offering_id.clone()).collect::<Vec<_>>();
         let offerings = SupplierOfferingRepository::new(self.db, SUPPLIER_OFFERINGS)
             .list_by_ids(&offering_ids, executor)
             .await?
@@ -733,17 +709,13 @@ impl<'a> SupplierFulfillmentRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<SupplierFulfillmentOrder>(SUPPLIER_FULFILLMENT_ORDERS),
+            &self.db.collection::<SupplierFulfillmentOrder>(SUPPLIER_FULFILLMENT_ORDERS),
             order,
             executor,
         )
         .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<SupplierFulfillmentItem>(SUPPLIER_FULFILLMENT_ITEMS),
+            &self.db.collection::<SupplierFulfillmentItem>(SUPPLIER_FULFILLMENT_ITEMS),
             items.to_vec(),
             executor,
         )
@@ -787,9 +759,7 @@ impl<'a> SupplierFulfillmentRepository<'a> {
         )
         .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<SupplierRefundAllocation>(SUPPLIER_REFUND_ALLOCATIONS),
+            &self.db.collection::<SupplierRefundAllocation>(SUPPLIER_REFUND_ALLOCATIONS),
             allocations.to_vec(),
             executor,
         )
@@ -836,10 +806,7 @@ impl<'a> SupplierFulfillmentRepository<'a> {
             executor,
         )
         .await?;
-        Ok(RefundFinancialSnapshot {
-            order_cost_gross,
-            refunded_total,
-        })
+        Ok(RefundFinancialSnapshot { order_cost_gross, refunded_total })
     }
 
     /// 按订单读取退款事实及其分配行的归组快照（FUL-R04）。
@@ -872,10 +839,8 @@ impl<'a> SupplierFulfillmentRepository<'a> {
         if facts.is_empty() {
             return Ok(Vec::new());
         }
-        let fact_ids: Vec<SupplierRefundFactId> = facts
-            .iter()
-            .map(|fact| SupplierRefundFactId::new(fact.base.id.as_str()))
-            .collect();
+        let fact_ids: Vec<SupplierRefundFactId> =
+            facts.iter().map(|fact| SupplierRefundFactId::new(fact.base.id.as_str())).collect();
         let allocations = SupplierRefundAllocationRepository::new(self.db, SUPPLIER_REFUND_ALLOCATIONS)
             .find_allocations_by_fact_ids(&fact_ids, executor)
             .await?;
@@ -893,9 +858,7 @@ impl<'a> SupplierFulfillmentRepository<'a> {
 /// 返回排序条件文档。
 fn order_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
-    let field = sort_by
-        .filter(|field| ORDER_SORT_FIELDS.contains(field))
-        .unwrap_or("created_at");
+    let field = sort_by.filter(|field| ORDER_SORT_FIELDS.contains(field)).unwrap_or("created_at");
     doc! { field: direction, "id": direction }
 }
 
@@ -932,15 +895,8 @@ where
                 .stream(session)
                 .try_collect::<Vec<_>>()
                 .await
-        }
-        None => {
-            collection
-                .aggregate(pipeline)
-                .with_type::<T>()
-                .await?
-                .try_collect::<Vec<_>>()
-                .await
-        }
+        },
+        None => collection.aggregate(pipeline).with_type::<T>().await?.try_collect::<Vec<_>>().await,
     }
     .map_err(persistence_core::Error::from)
 }
@@ -986,10 +942,7 @@ fn zero_total() -> Amount {
 /// # 返回
 /// 返回首行合计金额；空集合返回 [`zero_total`]。
 fn first_total_or_zero(rows: Vec<AmountTotalRow>) -> Amount {
-    rows.into_iter()
-        .next()
-        .map(|row| row.total)
-        .unwrap_or_else(zero_total)
+    rows.into_iter().next().map(|row| row.total).unwrap_or_else(zero_total)
 }
 
 /// 构造订单金额合计管道（FUL-R05）。
@@ -1051,10 +1004,7 @@ fn group_refund_allocations(
 ) -> Vec<SupplierRefundFactBundle> {
     let mut by_fact: HashMap<String, Vec<SupplierRefundAllocation>> = HashMap::new();
     for allocation in allocations {
-        by_fact
-            .entry(allocation.supplier_refund_fact_id.to_string())
-            .or_default()
-            .push(allocation);
+        by_fact.entry(allocation.supplier_refund_fact_id.to_string()).or_default().push(allocation);
     }
     facts
         .into_iter()
@@ -1091,11 +1041,12 @@ fn supplier_fulfillment_order_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{order_sort_doc, SupplierFulfillmentOrderFilter};
-    use crate::entity::supplier_fulfillment::FulfillmentStatus;
     use erp_core::ids::SupplierAccountId;
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
+
+    use super::{SupplierFulfillmentOrderFilter, order_sort_doc};
+    use crate::entity::supplier_fulfillment::FulfillmentStatus;
 
     #[test]
     fn order_filter_applies_optional_fields_and_deleted_filter() {
@@ -1114,14 +1065,7 @@ mod tests {
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(document.get_str("supplier_id").unwrap(), "supplier-1");
         assert_eq!(document.get_str("fulfillment_status").unwrap(), "ACCEPTED");
-        assert_eq!(
-            document
-                .get_document("external_order_no")
-                .unwrap()
-                .get_str("$regex")
-                .unwrap(),
-            r"SUP\-1"
-        );
+        assert_eq!(document.get_document("external_order_no").unwrap().get_str("$regex").unwrap(), r"SUP\-1");
     }
 
     #[test]
@@ -1132,14 +1076,8 @@ mod tests {
             doc! { "created_at": -1, "id": -1 },
             "白名单外的排序字段必须回退 created_at"
         );
-        assert_eq!(
-            order_sort_doc(Some("submitted_at"), true),
-            doc! { "submitted_at": 1, "id": 1 }
-        );
-        assert_eq!(
-            order_sort_doc(Some("completed_at"), false),
-            doc! { "completed_at": -1, "id": -1 }
-        );
+        assert_eq!(order_sort_doc(Some("submitted_at"), true), doc! { "submitted_at": 1, "id": 1 });
+        assert_eq!(order_sort_doc(Some("completed_at"), false), doc! { "completed_at": -1, "id": -1 });
     }
 }
 
@@ -1147,11 +1085,6 @@ mod tests {
 mod refund_bundle_tests {
     use std::str::FromStr;
 
-    use super::group_refund_allocations;
-    use crate::entity::supplier_fulfillment::{
-        AllocationAction, SupplierRefundAllocation, SupplierRefundAllocationData, SupplierRefundFact,
-        SupplierRefundFactData,
-    };
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         CostAllocationId, CostEntryId, InboxMessageId, PayableEntryId, SupplierAccountId,
@@ -1159,6 +1092,12 @@ mod refund_bundle_tests {
         SupplierRefundAllocationId, SupplierRefundFactId,
     };
     use erp_core::money::{Amount, Quantity};
+
+    use super::group_refund_allocations;
+    use crate::entity::supplier_fulfillment::{
+        AllocationAction, SupplierRefundAllocation, SupplierRefundAllocationData, SupplierRefundFact,
+        SupplierRefundFactData,
+    };
 
     fn sample_fact(id: &str) -> SupplierRefundFact {
         SupplierRefundFact::new(
@@ -1229,11 +1168,8 @@ mod refund_bundle_tests {
         assert_eq!(bundles.len(), 2);
         assert_eq!(bundles[0].fact.base.id.as_str(), "fact-1");
         assert_eq!(bundles[1].fact.base.id.as_str(), "fact-2");
-        let first_ids: Vec<&str> = bundles[0]
-            .allocations
-            .iter()
-            .map(|allocation| allocation.base.id.as_str())
-            .collect();
+        let first_ids: Vec<&str> =
+            bundles[0].allocations.iter().map(|allocation| allocation.base.id.as_str()).collect();
         assert_eq!(first_ids, vec!["allocation-1", "allocation-3"]);
         assert_eq!(bundles[1].allocations.len(), 1);
         assert_eq!(bundles[1].allocations[0].base.id.as_str(), "allocation-2");
@@ -1250,11 +1186,8 @@ mod refund_bundle_tests {
             ],
         );
         assert_eq!(bundles.len(), 1);
-        let ids: Vec<&str> = bundles[0]
-            .allocations
-            .iter()
-            .map(|allocation| allocation.base.id.as_str())
-            .collect();
+        let ids: Vec<&str> =
+            bundles[0].allocations.iter().map(|allocation| allocation.base.id.as_str()).collect();
         assert_eq!(ids, vec!["allocation-1", "allocation-3"]);
     }
 }
@@ -1263,11 +1196,11 @@ mod refund_bundle_tests {
 mod snapshot_tests {
     use std::str::FromStr;
 
-    use mongodb::bson::{doc, Bson};
-
-    use super::{financial_total_pipeline, first_total_or_zero, zero_total, AmountTotalRow};
     use erp_core::ids::SupplierFulfillmentOrderId;
     use erp_core::money::Amount;
+    use mongodb::bson::{Bson, doc};
+
+    use super::{AmountTotalRow, financial_total_pipeline, first_total_or_zero, zero_total};
 
     /// FUL-R05 金额合计管道：按订单过滤未删除文档、单值求和并移除分组键。
     #[test]
@@ -1277,19 +1210,12 @@ mod snapshot_tests {
             "cost_snapshot_total_gross",
         );
         let match_stage = pipeline[0].get_document("$match").expect("过滤阶段");
-        assert_eq!(
-            match_stage.get_str("supplier_fulfillment_order_id").unwrap(),
-            "order-1"
-        );
+        assert_eq!(match_stage.get_str("supplier_fulfillment_order_id").unwrap(), "order-1");
         assert_eq!(match_stage.get_i64("deleted_at").expect("未删除条件"), 0);
         let group_stage = pipeline[1].get_document("$group").expect("分组阶段");
         assert!(matches!(group_stage.get("_id").expect("分组键"), Bson::Null));
         assert_eq!(
-            group_stage
-                .get_document("total")
-                .expect("求和字段")
-                .get_str("$sum")
-                .expect("求和表达式"),
+            group_stage.get_document("total").expect("求和字段").get_str("$sum").expect("求和表达式"),
             "$cost_snapshot_total_gross"
         );
         let project_stage = pipeline[2].get_document("$project").expect("投影阶段");
@@ -1302,11 +1228,7 @@ mod snapshot_tests {
         let pipeline = financial_total_pipeline(&SupplierFulfillmentOrderId::new("order-1"), "refund_amount");
         let group_stage = pipeline[1].get_document("$group").expect("分组阶段");
         assert_eq!(
-            group_stage
-                .get_document("total")
-                .expect("求和字段")
-                .get_str("$sum")
-                .expect("求和表达式"),
+            group_stage.get_document("total").expect("求和字段").get_str("$sum").expect("求和表达式"),
             "$refund_amount"
         );
     }
@@ -1338,10 +1260,7 @@ mod snapshot_tests {
         let document = doc! { "total": { "$numberDecimal": "88.80" } };
         let row: AmountTotalRow =
             mongodb::bson::deserialize_from_document(document).expect("合法 Decimal128 必须成功");
-        assert_eq!(
-            first_total_or_zero(vec![row]),
-            Amount::from_str("88.80").expect("合法金额")
-        );
+        assert_eq!(first_total_or_zero(vec![row]), Amount::from_str("88.80").expect("合法金额"));
     }
 }
 
@@ -1367,9 +1286,6 @@ mod keyword_regression_tests {
         assert!(query.contains_key("external_order_no"));
         let alternatives = query.get_array("$or").unwrap();
         assert_eq!(alternatives.len(), 2);
-        assert!(alternatives[0]
-            .as_document()
-            .unwrap()
-            .contains_key("fulfillment_order_no"));
+        assert!(alternatives[0].as_document().unwrap().contains_key("fulfillment_order_no"));
     }
 }

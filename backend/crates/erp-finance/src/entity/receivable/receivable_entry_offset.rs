@@ -2,11 +2,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{ReceivableEntryId, ReceivableEntryOffsetId};
 use erp_core::money::Amount;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 应收分录抵销创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -93,8 +92,9 @@ impl ReceivableEntryOffset {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn data() -> ReceivableEntryOffsetData {
         ReceivableEntryOffsetData {
@@ -114,22 +114,15 @@ mod tests {
 
     #[test]
     fn new_rejects_non_positive_and_self_offset() {
-        let non_positive = ReceivableEntryOffsetData {
-            offset_amount: Amount::from_str("-1.00").unwrap(),
-            ..data()
-        };
+        let non_positive =
+            ReceivableEntryOffsetData { offset_amount: Amount::from_str("-1.00").unwrap(), ..data() };
         assert!(ReceivableEntryOffset::new(ReceivableEntryOffsetId::new("oe-2"), non_positive).is_err());
 
-        let zero_seq = ReceivableEntryOffsetData {
-            offset_sequence: 0,
-            ..data()
-        };
+        let zero_seq = ReceivableEntryOffsetData { offset_sequence: 0, ..data() };
         assert!(ReceivableEntryOffset::new(ReceivableEntryOffsetId::new("oe-3"), zero_seq).is_err());
 
-        let self_offset = ReceivableEntryOffsetData {
-            increase_entry_id: ReceivableEntryId::new("re-2"),
-            ..data()
-        };
+        let self_offset =
+            ReceivableEntryOffsetData { increase_entry_id: ReceivableEntryId::new("re-2"), ..data() };
         assert!(ReceivableEntryOffset::new(ReceivableEntryOffsetId::new("oe-4"), self_offset).is_err());
     }
 

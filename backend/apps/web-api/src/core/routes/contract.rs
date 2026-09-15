@@ -3,16 +3,14 @@
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/contracts`；每条路由统一
 //! 走 JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
 
-use axum::{
-    routing::{get, post},
-    Router,
-};
+use axum::Router;
+use axum::routing::{get, post};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::contract, middleware::with_permission, upload},
-};
+use crate::app_state::AppState;
+use crate::core::handler::contract;
+use crate::core::middleware::with_permission;
+use crate::core::upload;
 
 /// 返回本域管理端路由集合。
 ///
@@ -25,11 +23,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/contracts",
-            with_permission(
-                get(contract::contract_list),
-                rbac,
-                contract::contract_list_permission_key(),
-            ),
+            with_permission(get(contract::contract_list), rbac, contract::contract_list_permission_key()),
         )
         .route(
             "/contracts/upload",
@@ -52,19 +46,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         )
         .route(
             "/contracts/{id}",
-            with_permission(
-                get(contract::contract_detail),
-                rbac,
-                contract::contract_detail_permission_key(),
-            ),
+            with_permission(get(contract::contract_detail), rbac, contract::contract_detail_permission_key()),
         )
         .route(
             "/contracts/{id}/files/{file_id}",
-            with_permission(
-                get(contract::contract_file),
-                rbac,
-                contract::contract_file_permission_key(),
-            ),
+            with_permission(get(contract::contract_file), rbac, contract::contract_file_permission_key()),
         )
         .route(
             "/contracts/{id}/files/{file_id}/preview",

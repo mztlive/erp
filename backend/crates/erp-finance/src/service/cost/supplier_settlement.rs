@@ -1,11 +1,13 @@
 //! 结算成本差额缺少权威原成本链时保持原失败关闭。
-use crate::entity::cost::CostEntry;
-use crate::repository::CostExt;
-use crate::{Error, Result};
+use std::str::FromStr;
+
 use erp_core::money::Amount;
 use mongodb::Database;
 use persistence_core::Executor;
-use std::str::FromStr;
+
+use crate::entity::cost::CostEntry;
+use crate::repository::CostExt;
+use crate::{Error, Result};
 /// 财务成本实际消费的差额三元组；不补建不存在的成本来源事实。
 #[derive(Debug, Clone, Copy)]
 pub struct SettlementCostDeltaFact {
@@ -33,9 +35,7 @@ pub async fn persist_settlement_costs(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     for entry in entries {
-        db.cost()
-            .create_cost_entry_with_allocations(entry, Vec::new(), executor)
-            .await?;
+        db.cost().create_cost_entry_with_allocations(entry, Vec::new(), executor).await?;
     }
     Ok(())
 }
@@ -53,21 +53,21 @@ mod tests {
     }
     #[test]
     fn cost_delta_writer_skips_zero_delta() {
-        assert!(build_settlement_cost_delta(&SettlementCostDeltaFact {
-            gross: zero_amount(),
-            net: zero_amount(),
-            tax: zero_amount()
-        })
-        .unwrap()
-        .is_empty());
+        assert!(
+            build_settlement_cost_delta(&SettlementCostDeltaFact {
+                gross: zero_amount(),
+                net: zero_amount(),
+                tax: zero_amount()
+            })
+            .unwrap()
+            .is_empty()
+        );
     }
     #[test]
     fn each_nonzero_component_preserves_original_fail_closed_error() {
-        for (gross, net, tax) in [
-            ("1.00", "0.00", "0.00"),
-            ("0.00", "1.00", "0.00"),
-            ("0.00", "0.00", "1.00"),
-        ] {
+        for (gross, net, tax) in
+            [("1.00", "0.00", "0.00"), ("0.00", "1.00", "0.00"), ("0.00", "0.00", "1.00")]
+        {
             let error = build_settlement_cost_delta(&SettlementCostDeltaFact {
                 gross: Amount::from_str(gross).unwrap(),
                 net: Amount::from_str(net).unwrap(),

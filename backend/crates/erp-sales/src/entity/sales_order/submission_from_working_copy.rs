@@ -3,9 +3,9 @@
 //! ID 生成、外部身份解析、提交序号与提交审计由调用方注入；本模块不依赖
 //! `services::dto` 或 `id-generator`。
 
+use erp_core::Result;
 use erp_core::common::time::Instant;
 use erp_core::ids::SalesOrderWorkingCopyId;
-use erp_core::Result;
 
 use super::snapshot::HeaderSnapshotData;
 use super::submission::{SalesOrderSubmissionData, SalesOrderSubmissionLineData};
@@ -26,10 +26,7 @@ impl SalesOrderWorkingCopy {
     pub fn header_snapshot_data(&self) -> HeaderSnapshotData {
         HeaderSnapshotData {
             customer_name: self.customer_snapshot.customer_name.clone(),
-            contract_no: self
-                .contract_snapshot
-                .as_ref()
-                .map(|snapshot| snapshot.contract_no.clone()),
+            contract_no: self.contract_snapshot.as_ref().map(|snapshot| snapshot.contract_no.clone()),
             settlement_party_name: self
                 .settlement_party_snapshot
                 .as_ref()
@@ -128,16 +125,17 @@ impl SalesOrderSubmissionData {
 
 #[cfg(test)]
 mod tests {
-    use super::super::types::{BusinessType, CardForm, LineType, VoucherLineDraft};
-    use super::super::working_copy::{SalesOrderWorkingCopyData, WorkingPurpose};
-    use super::super::working_copy_line::SalesOrderWorkingCopyLineData;
-    use super::super::working_copy_test_support::{amt, line_data, price, rate};
-    use super::*;
     use erp_core::common::time::{BusinessDate, Instant};
     use erp_core::ids::{
         ContractId, ContractRevisionId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId,
         SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId, SkuId,
     };
+
+    use super::super::types::{BusinessType, CardForm, LineType, VoucherLineDraft};
+    use super::super::working_copy::{SalesOrderWorkingCopyData, WorkingPurpose};
+    use super::super::working_copy_line::SalesOrderWorkingCopyLineData;
+    use super::super::working_copy_test_support::{amt, line_data, price, rate};
+    use super::*;
 
     fn goods_copy() -> (SalesOrderWorkingCopy, Vec<SalesOrderWorkingCopyLine>) {
         let data = SalesOrderWorkingCopyData {
@@ -303,10 +301,7 @@ mod tests {
         assert_eq!(submission.snapshot.contract_no, None);
         assert_eq!(submission.voucher_category_sku_id, Some(SkuId::new("vcat-1")));
         assert_line_copied_from_working_copy(&line, &submission.lines[0]);
-        let voucher = submission.lines[0]
-            .voucher
-            .as_ref()
-            .expect("卡券行必须复制卡券字段组");
+        let voucher = submission.lines[0].voucher.as_ref().expect("卡券行必须复制卡券字段组");
         assert_eq!(voucher.face_value, line.face_value.unwrap());
         assert_eq!(voucher.card_count, line.card_count.unwrap());
         assert_eq!(voucher.card_form, line.card_form.unwrap());
@@ -352,9 +347,7 @@ mod tests {
         .unwrap();
         line.sku_id = None;
         assert_eq!(
-            SalesOrderSubmissionLineData::from_working_copy_line(&line)
-                .unwrap_err()
-                .to_string(),
+            SalesOrderSubmissionLineData::from_working_copy_line(&line).unwrap_err().to_string(),
             "第 1 行缺少商品字段组"
         );
 
@@ -362,9 +355,7 @@ mod tests {
         voucher.line_type = LineType::Voucher;
         voucher.face_value = None;
         assert_eq!(
-            SalesOrderSubmissionLineData::from_working_copy_line(&voucher)
-                .unwrap_err()
-                .to_string(),
+            SalesOrderSubmissionLineData::from_working_copy_line(&voucher).unwrap_err().to_string(),
             "第 1 行缺少卡券字段组"
         );
     }

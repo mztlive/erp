@@ -2,11 +2,10 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::{InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId};
 use erp_core::money::Amount;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::payment_allocation::AllocationAction;
 
@@ -76,22 +75,18 @@ impl PurchaseInvoiceAllocation {
     /// # 错误
     /// 当金额恒等不成立/非正、序号为 0 或动作与引用不一致时返回错误。
     pub fn new(id: PurchaseInvoiceAllocationId, data: PurchaseInvoiceAllocationData) -> Result<Self> {
-        validate_amounts(
-            data.allocated_gross_amount,
-            data.allocated_net_amount,
-            data.allocated_tax_amount,
-        )?;
+        validate_amounts(data.allocated_gross_amount, data.allocated_net_amount, data.allocated_tax_amount)?;
         if data.allocation_seq == 0 {
             return Err(Error::from("分配序号必须从 1 开始"));
         }
         match data.allocation_action {
             AllocationAction::Apply if data.reverses_allocation_id.is_some() => {
                 return Err(Error::from("APPLY 分配不得引用原分配"));
-            }
+            },
             AllocationAction::Reverse if data.reverses_allocation_id.is_none() => {
                 return Err(Error::from("REVERSE 分配必须引用原 APPLY 分配"));
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         Ok(Self {
@@ -155,9 +150,11 @@ fn validate_amounts(gross: Amount, net: Amount, tax: Amount) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use erp_core::money::{line_amounts, Quantity, Rate, UnitPrice};
     use std::str::FromStr;
+
+    use erp_core::money::{Quantity, Rate, UnitPrice, line_amounts};
+
+    use super::*;
 
     fn data() -> PurchaseInvoiceAllocationData {
         let (gross, net, tax) = line_amounts(
@@ -184,15 +181,10 @@ mod tests {
 
         assert_eq!(
             allocation.allocated_gross_amount,
-            allocation
-                .allocated_net_amount
-                .checked_add(allocation.allocated_tax_amount),
+            allocation.allocated_net_amount.checked_add(allocation.allocated_tax_amount),
             "gross = net + tax 必须精确成立"
         );
-        assert_eq!(
-            allocation.allocated_gross_amount,
-            erp_core::money::Amount::from_str("250.00").unwrap()
-        );
+        assert_eq!(allocation.allocated_gross_amount, erp_core::money::Amount::from_str("250.00").unwrap());
     }
 
     #[test]
@@ -203,10 +195,7 @@ mod tests {
         };
         assert!(PurchaseInvoiceAllocation::new(PurchaseInvoiceAllocationId::new("pi-2"), mismatch).is_err());
 
-        let zero_seq = PurchaseInvoiceAllocationData {
-            allocation_seq: 0,
-            ..data()
-        };
+        let zero_seq = PurchaseInvoiceAllocationData { allocation_seq: 0, ..data() };
         assert!(PurchaseInvoiceAllocation::new(PurchaseInvoiceAllocationId::new("pi-3"), zero_seq).is_err());
     }
 
@@ -217,11 +206,10 @@ mod tests {
             reverses_allocation_id: None,
             ..data()
         };
-        assert!(PurchaseInvoiceAllocation::new(
-            PurchaseInvoiceAllocationId::new("pi-4"),
-            reverse_without_ref
-        )
-        .is_err());
+        assert!(
+            PurchaseInvoiceAllocation::new(PurchaseInvoiceAllocationId::new("pi-4"), reverse_without_ref)
+                .is_err()
+        );
 
         let reverse_valid = PurchaseInvoiceAllocationData {
             allocation_action: AllocationAction::Reverse,

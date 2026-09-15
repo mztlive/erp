@@ -1,7 +1,5 @@
 //! 采购责任范围重读与责任人 CAS 的真实工作流适配。
 
-use super::map_service;
-use crate::errors::Error;
 use async_trait::async_trait;
 use erp_core::ids::PurchaseOrderId;
 use erp_procurement::entity::purchase_order::{PurchaseOrder, PurchaseOrderStatus};
@@ -10,6 +8,9 @@ use erp_workflow::entity::work_item::WorkItem;
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult, WorkItemExt};
 use mongodb::Database;
 use persistence_core::Executor;
+
+use super::map_service;
+use crate::errors::Error;
 
 #[async_trait]
 trait PurchaseResponsibilityPort: Sync {
@@ -53,11 +54,7 @@ impl PurchaseResponsibilityPort for MongoPurchaseResponsibility<'_> {
         order: &mut PurchaseOrder,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<()> {
-        self.db
-            .purchase_orders()
-            .update(order, executor)
-            .await
-            .map_err(WorkflowError::from)?;
+        self.db.purchase_orders().update(order, executor).await.map_err(WorkflowError::from)?;
         Ok(())
     }
 }
@@ -67,13 +64,7 @@ pub(super) async fn purchase_order_fulfillment_scope(
     purchase_order_id: &str,
     executor: &mut dyn Executor,
 ) -> WorkflowResult<(String, Vec<WorkItem>)> {
-    scope(
-        &MongoPurchaseResponsibility { db },
-        selected,
-        purchase_order_id,
-        executor,
-    )
-    .await
+    scope(&MongoPurchaseResponsibility { db }, selected, purchase_order_id, executor).await
 }
 pub(super) async fn reassign_purchase_order_owner(
     db: &Database,
@@ -82,14 +73,7 @@ pub(super) async fn reassign_purchase_order_owner(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> WorkflowResult<()> {
-    reassign(
-        &MongoPurchaseResponsibility { db },
-        purchase_order_id,
-        target_user_id,
-        actor_id,
-        executor,
-    )
-    .await
+    reassign(&MongoPurchaseResponsibility { db }, purchase_order_id, target_user_id, actor_id, executor).await
 }
 async fn scope(
     port: &impl PurchaseResponsibilityPort,
@@ -102,18 +86,11 @@ async fn scope(
         .load_order(purchase_order_id, executor)
         .await?
         .ok_or_else(|| WorkflowError::BusinessLogicError("履约任务引用的采购单不存在".to_string()))?;
-    if matches!(
-        order.stable.status,
-        PurchaseOrderStatus::Completed | PurchaseOrderStatus::Voided
-    ) {
-        return Err(WorkflowError::BusinessLogicError(
-            "已完成或已作废采购单不能变更责任人".to_string(),
-        ));
+    if matches!(order.stable.status, PurchaseOrderStatus::Completed | PurchaseOrderStatus::Voided) {
+        return Err(WorkflowError::BusinessLogicError("已完成或已作废采购单不能变更责任人".to_string()));
     }
-    let original_owner = order
-        .current_owner_user_id()
-        .map_err(|error| map_service(Error::from(error)))?
-        .to_string();
+    let original_owner =
+        order.current_owner_user_id().map_err(|error| map_service(Error::from(error)))?.to_string();
     if selected.owner_user_id.as_deref() != Some(original_owner.as_str()) {
         return Err(WorkflowError::ConflictError(
             "采购单责任人与当前履约任务责任不一致，请刷新责任事实后重试".to_string(),
@@ -121,9 +98,7 @@ async fn scope(
     }
     let tasks = port.open_tasks(&responsibility_key, executor).await?;
     if tasks.is_empty() || !tasks.iter().any(|task| task.base.id == selected.base.id) {
-        return Err(WorkflowError::ConflictError(
-            "采购单开放履约任务已变化，请刷新后重试".to_string(),
-        ));
+        return Err(WorkflowError::ConflictError("采购单开放履约任务已变化，请刷新后重试".to_string()));
     }
     Ok((original_owner, tasks))
 }
@@ -147,16 +122,18 @@ async fn reassign(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::sync::Mutex;
+
     use erp_core::common::time::Instant;
     use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SupplierAccountId, WarehouseId, WorkItemId};
     use erp_procurement::entity::facts::PaymentTermFact;
     use erp_procurement::entity::purchase_order::{
         FulfillmentResponsibility, PurchaseOrderData, PurchaseType,
     };
-    use erp_workflow::entity::work_item::{AssignmentSource, WorkItemData, WorkItemPriority};
     use erp_workflow::WorkItemType;
-    use std::sync::Mutex;
+    use erp_workflow::entity::work_item::{AssignmentSource, WorkItemData, WorkItemPriority};
+
+    use super::*;
 
     struct Marker(u64);
     impl Executor for Marker {
@@ -278,9 +255,7 @@ mod tests {
         let (owner, tasks) = scope(&port, &item("selected"), "po-1", &mut ex).await.unwrap();
         assert_eq!(owner, "buyer-1");
         assert_eq!(tasks, port.tasks);
-        reassign(&port, "po-1", " buyer-2 ", "actor-2", &mut ex)
-            .await
-            .unwrap();
+        reassign(&port, "po-1", " buyer-2 ", "actor-2", &mut ex).await.unwrap();
         assert_eq!(*port.calls.lock().unwrap(), ["order", "tasks", "order", "CAS"]);
         let written = port.written.lock().unwrap();
         let changed = written.as_ref().unwrap();

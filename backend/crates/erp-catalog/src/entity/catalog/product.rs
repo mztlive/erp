@@ -5,15 +5,15 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_core::Result;
+use erp_core::common::stable::StableBase;
+use erp_core::ids::ProductId;
+use erp_core::validation::normalize_required_text;
 use serde::{Deserialize, Serialize};
 
 use crate::entity::catalog::product_kind::ProductKind;
 use crate::entity::catalog::product_revision::ProductRevision;
 use crate::entity::catalog::status::EnableStatus;
-use erp_core::common::stable::StableBase;
-use erp_core::ids::ProductId;
-use erp_core::validation::normalize_required_text;
-use erp_core::Result;
 
 /// 商品编号最大长度。
 const PRODUCT_NO_MAX_LEN: usize = 64;
@@ -84,12 +84,8 @@ impl Product {
     /// # 错误
     /// 当 product_no 为空或超长时返回错误。
     pub fn new(id: ProductId, data: ProductData, created_by: impl Into<String>) -> Result<Self> {
-        let product_no = normalize_required_text(
-            data.product_no,
-            "商品编号不能为空",
-            PRODUCT_NO_MAX_LEN,
-            "商品编号过长",
-        )?;
+        let product_no =
+            normalize_required_text(data.product_no, "商品编号不能为空", PRODUCT_NO_MAX_LEN, "商品编号过长")?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -193,20 +189,16 @@ impl Product {
         if !self.is_active() {
             return Err("商品已经停用".into());
         }
-        self.update(
-            ProductUpdate {
-                status: Some(EnableStatus::Disabled),
-            },
-            updated_by,
-        )
+        self.update(ProductUpdate { status: Some(EnableStatus::Disabled) }, updated_by)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
     use erp_core::ids::ProductId;
+
+    use super::*;
 
     fn data() -> ProductData {
         ProductData {
@@ -230,16 +222,10 @@ mod tests {
     /// 失败路径：必填空与超长各一条。
     #[test]
     fn new_rejects_empty_and_overlong_product_no() {
-        let empty = ProductData {
-            product_no: "  ".to_string(),
-            ..data()
-        };
+        let empty = ProductData { product_no: "  ".to_string(), ..data() };
         assert!(Product::new(ProductId::new("prod-1"), empty, "admin-1").is_err());
 
-        let overlong = ProductData {
-            product_no: "p".repeat(65),
-            ..data()
-        };
+        let overlong = ProductData { product_no: "p".repeat(65), ..data() };
         assert!(Product::new(ProductId::new("prod-1"), overlong, "admin-1").is_err());
     }
 
@@ -248,14 +234,7 @@ mod tests {
     fn update_only_changes_status_and_preserves_identity() {
         let mut product = Product::new(ProductId::new("prod-1"), data(), "admin-1").unwrap();
 
-        product
-            .update(
-                ProductUpdate {
-                    status: Some(EnableStatus::Disabled),
-                },
-                "admin-2",
-            )
-            .unwrap();
+        product.update(ProductUpdate { status: Some(EnableStatus::Disabled) }, "admin-2").unwrap();
 
         assert!(!product.is_active());
         assert_eq!(product.product_no, "P-2025-001");

@@ -1,7 +1,8 @@
 //! 实际动作事实函数使用注入权威端口的顺序与失败停止证据。
+use std::sync::Mutex;
+
 use super::*;
 use crate::ports::evidence::{EvidenceFuture, VerifiedEvidence};
-use std::sync::Mutex;
 
 struct TestExecutor {
     _identity: u8,
@@ -21,10 +22,7 @@ struct Authority {
 
 impl Authority {
     fn record(&self, step: &'static str, executor: &mut dyn Executor) -> Result<()> {
-        self.seen
-            .lock()
-            .unwrap()
-            .push((step, executor as *mut dyn Executor as *mut () as usize));
+        self.seen.lock().unwrap().push((step, executor as *mut dyn Executor as *mut () as usize));
         if self.fail == Some(step) {
             return Err(Error::ConflictError(format!("authority:{step}")));
         }
@@ -106,18 +104,10 @@ async fn terminal_query_discovers_after_query_on_same_injected_executor() {
     };
     let mut executor = TestExecutor { _identity: 1 };
     let identity = &mut executor as *mut TestExecutor as usize;
-    let fact = query_action_fact(&authority, &subject(), &mut executor)
-        .await
-        .unwrap();
+    let fact = query_action_fact(&authority, &subject(), &mut executor).await.unwrap();
     assert_eq!(fact.outcome, IntegrationActionOutcome::TerminalEvidenceFound);
-    assert_eq!(
-        fact.business_result_reference.as_deref(),
-        Some("inbox_message:message-1")
-    );
-    assert_eq!(
-        *authority.seen.lock().unwrap(),
-        [("query", identity), ("discover", identity)]
-    );
+    assert_eq!(fact.business_result_reference.as_deref(), Some("inbox_message:message-1"));
+    assert_eq!(*authority.seen.lock().unwrap(), [("query", identity), ("discover", identity)]);
 }
 
 #[tokio::test]
@@ -146,25 +136,13 @@ async fn authority_error_is_preserved_and_no_later_call_runs() {
 #[tokio::test]
 async fn absent_or_unknown_original_does_not_discover_or_replay() {
     for (original, outcome) in [
-        (
-            OriginalResultFact::NoResult,
-            IntegrationActionOutcome::NoResultConfirmed,
-        ),
-        (
-            OriginalResultFact::Unknown,
-            IntegrationActionOutcome::ResultUnknown,
-        ),
+        (OriginalResultFact::NoResult, IntegrationActionOutcome::NoResultConfirmed),
+        (OriginalResultFact::Unknown, IntegrationActionOutcome::ResultUnknown),
     ] {
-        let authority = Authority {
-            original,
-            fail: None,
-            seen: Mutex::new(Vec::new()),
-        };
+        let authority = Authority { original, fail: None, seen: Mutex::new(Vec::new()) };
         let mut executor = TestExecutor { _identity: 3 };
         let identity = &mut executor as *mut TestExecutor as usize;
-        let fact = query_action_fact(&authority, &subject(), &mut executor)
-            .await
-            .unwrap();
+        let fact = query_action_fact(&authority, &subject(), &mut executor).await.unwrap();
         assert_eq!(fact.outcome, outcome);
         assert!(fact.business_result_reference.is_none());
         assert!(fact.verified_evidence.is_empty());

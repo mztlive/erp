@@ -5,13 +5,13 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as BulkJobExt>::BULK_SELECTION_SNAPSHOTS` 等值。
 
+use mongodb::Database;
+
+use super::super::bulk_job::{BackgroundJobFilter, BulkJobRepository, BulkSelectionSnapshotFilter};
 use crate::repository::owned::{
     BackgroundJobItemRepository, BackgroundJobRepository, BulkSelectionItemRepository,
     BulkSelectionSnapshotRepository,
 };
-use mongodb::Database;
-
-use super::super::bulk_job::{BackgroundJobFilter, BulkJobRepository, BulkSelectionSnapshotFilter};
 
 /// 域 D04 仓储访问器。
 pub trait BulkJobExt {

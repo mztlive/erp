@@ -1,9 +1,3 @@
-use crate::entity::supplier::{
-    CapabilityCode, CapabilityStatus, QualificationStatus, SupplierCapability, SupplierCapabilityData,
-    SupplierCapabilityRevision, SupplierQualification, SupplierQualificationCapability,
-    SupplierQualificationCapabilityData, SupplierQualificationData, SupplierQualificationRevision,
-    SupplierQualificationUpdate,
-};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId, SupplierQualificationCapabilityId,
@@ -11,6 +5,12 @@ use erp_core::ids::{
 };
 
 use super::types::option_as_authoritative_update;
+use crate::entity::supplier::{
+    CapabilityCode, CapabilityStatus, QualificationStatus, SupplierCapability, SupplierCapabilityData,
+    SupplierCapabilityRevision, SupplierQualification, SupplierQualificationCapability,
+    SupplierQualificationCapabilityData, SupplierQualificationData, SupplierQualificationRevision,
+    SupplierQualificationUpdate,
+};
 
 /// 创建一项新能力及首版快照。
 ///
@@ -185,9 +185,8 @@ pub fn new_qualification(
     let revision = SupplierQualification::snapshot_revision(&qualification, revision_id, 1)?;
     let mut links = Vec::with_capacity(capability_codes.len());
     for (code, link_id) in capability_codes.iter().zip(link_ids) {
-        let capability_id = capability_ids
-            .get(code.as_str())
-            .ok_or_else(|| erp_core::Error::from("资质适用能力不存在"))?;
+        let capability_id =
+            capability_ids.get(code.as_str()).ok_or_else(|| erp_core::Error::from("资质适用能力不存在"))?;
         links.push(SupplierQualificationCapability::new(
             link_id,
             SupplierQualificationCapabilityData {

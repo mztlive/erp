@@ -3,14 +3,12 @@
 //! P0 从 `indexes.rs` 整体迁入既有索引（accounts/roles/audit_logs/casbin），
 //! 职责不变；P2 追加 permission、user_role、data_scope、audit_event 的索引声明。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::{AccessControlExt, CASBIN_RULES};
-use persistence_core::Result;
 
 const ACCOUNTS: &str = "accounts";
 const ROLES: &str = "roles";
@@ -71,9 +69,7 @@ pub async fn ensure_authorization(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -93,10 +89,7 @@ fn account_indexes() -> Vec<IndexModel> {
 fn role_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_roles_id", doc! { "id": 1 }),
-        named_index(
-            "idx_roles_active_enabled",
-            doc! { "deleted_at": 1, "disabled": 1 },
-        ),
+        named_index("idx_roles_active_enabled", doc! { "deleted_at": 1, "disabled": 1 }),
     ]
 }
 
@@ -105,14 +98,8 @@ fn role_indexes() -> Vec<IndexModel> {
 /// 规则身份由 MongoDB 内建的 `_id` 唯一索引保证。
 fn casbin_indexes() -> Vec<IndexModel> {
     vec![
-        named_index(
-            "idx_casbin_ptype_value0",
-            doc! { "sec": 1, "ptype": 1, "values.0": 1 },
-        ),
-        named_index(
-            "idx_casbin_ptype_value1",
-            doc! { "sec": 1, "ptype": 1, "values.1": 1 },
-        ),
+        named_index("idx_casbin_ptype_value0", doc! { "sec": 1, "ptype": 1, "values.0": 1 }),
+        named_index("idx_casbin_ptype_value1", doc! { "sec": 1, "ptype": 1, "values.1": 1 }),
     ]
 }
 
@@ -123,10 +110,7 @@ fn casbin_indexes() -> Vec<IndexModel> {
 /// 避免复用破坏审计与授权绑定语义。
 fn permission_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_permissions_resource_action",
-            doc! { "resource": 1, "action": 1 },
-        ),
+        unique_index("uk_permissions_resource_action", doc! { "resource": 1, "action": 1 }),
         named_index("idx_permissions_disabled", doc! { "disabled": 1 }),
     ]
 }
@@ -157,10 +141,7 @@ fn user_role_indexes() -> Vec<IndexModel> {
                     .build(),
             )
             .build(),
-        named_index(
-            "idx_user_roles_user_effective",
-            doc! { "user_id": 1, "effective_from": -1 },
-        ),
+        named_index("idx_user_roles_user_effective", doc! { "user_id": 1, "effective_from": -1 }),
     ]
 }
 
@@ -188,10 +169,7 @@ fn data_scope_indexes() -> Vec<IndexModel> {
 fn audit_event_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_audit_events_id", doc! { "id": 1 }),
-        named_index(
-            "idx_audit_events_actor_created",
-            doc! { "actor_id": 1, "created_at": -1 },
-        ),
+        named_index("idx_audit_events_actor_created", doc! { "actor_id": 1, "created_at": -1 }),
         named_index(
             "idx_audit_events_object_created",
             doc! { "object_type": 1, "object_id": 1, "created_at": -1 },
@@ -203,10 +181,7 @@ fn audit_event_indexes() -> Vec<IndexModel> {
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -220,27 +195,14 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 /// 组织实体身份、成员有效期与管理范围的索引；跨行约束由全局版本事务防止写偏差。
 async fn ensure_organizations(db: &Database) -> Result<()> {
     use crate::repository::organization::*;
-    for collection in [
-        ORG_UNITS,
-        ORG_MEMBERSHIPS,
-        ORG_MANAGEMENT,
-        ORG_REVISIONS,
-        ORG_CHANGES,
-    ] {
-        create_indexes(
-            db,
-            collection,
-            vec![unique_index(format!("uk_{collection}_id"), doc! { "id": 1 })],
-        )
-        .await?;
+    for collection in [ORG_UNITS, ORG_MEMBERSHIPS, ORG_MANAGEMENT, ORG_REVISIONS, ORG_CHANGES] {
+        create_indexes(db, collection, vec![unique_index(format!("uk_{collection}_id"), doc! { "id": 1 })])
+            .await?;
     }
     create_indexes(
         db,
         ORG_UNITS,
-        vec![named_index(
-            "idx_org_parent_status",
-            doc! { "parent_id": 1, "enabled": 1 },
-        )],
+        vec![named_index("idx_org_parent_status", doc! { "parent_id": 1, "enabled": 1 })],
     )
     .await?;
     create_indexes(
@@ -272,12 +234,7 @@ async fn ensure_organizations(db: &Database) -> Result<()> {
 /// 移除阻止同主体按资源配置多条规则的旧索引；不回填或解释旧范围数据。
 async fn remove_obsolete_scope_index(db: &Database) -> Result<()> {
     let collection = db.collection::<Document>(DATA_SCOPES);
-    if collection
-        .list_index_names()
-        .await?
-        .iter()
-        .any(|name| name == "uk_data_scopes_subject_scope")
-    {
+    if collection.list_index_names().await?.iter().any(|name| name == "uk_data_scopes_subject_scope") {
         collection.drop_index("uk_data_scopes_subject_scope").await?;
     }
     Ok(())
@@ -330,12 +287,7 @@ mod tests {
             .unwrap();
         assert_eq!(identity.keys, doc! { "resource": 1, "action": 1 });
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
-        assert!(identity
-            .options
-            .as_ref()
-            .unwrap()
-            .partial_filter_expression
-            .is_none());
+        assert!(identity.options.as_ref().unwrap().partial_filter_expression.is_none());
         assert!(indexes.iter().any(|index| index.keys == doc! { "disabled": 1 }));
     }
 
@@ -356,9 +308,7 @@ mod tests {
             active.options.as_ref().unwrap().partial_filter_expression,
             Some(doc! { "revoked_at": null })
         );
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "user_id": 1, "effective_from": -1 } }));
+        assert!(indexes.iter().any(|index| { index.keys == doc! { "user_id": 1, "effective_from": -1 } }));
     }
 
     #[test]
@@ -380,12 +330,12 @@ mod tests {
             index.options.as_ref().and_then(|options| options.name.as_deref()) == Some("uk_audit_events_id")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "actor_id": 1, "created_at": -1 }));
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "object_type": 1, "object_id": 1, "created_at": -1 } }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "actor_id": 1, "created_at": -1 }));
+        assert!(
+            indexes
+                .iter()
+                .any(|index| { index.keys == doc! { "object_type": 1, "object_id": 1, "created_at": -1 } })
+        );
         assert!(indexes.iter().any(|index| index.keys == doc! { "request_id": 1 }));
     }
 }

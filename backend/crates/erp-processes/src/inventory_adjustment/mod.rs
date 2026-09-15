@@ -40,11 +40,7 @@ impl InventoryAdjustmentService {
     /// # Returns
     /// Process service that reuses one Executor per command.
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self {
-            db,
-            rbac,
-            object_read: Arc::new(erp_workflow::FailClosedObjectReadPort),
-        }
+        Self { db, rbac, object_read: Arc::new(erp_workflow::FailClosedObjectReadPort) }
     }
 
     /// Inject composition-root object-read for approval binding.

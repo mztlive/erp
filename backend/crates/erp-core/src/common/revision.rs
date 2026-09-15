@@ -40,10 +40,7 @@ impl RevisionBase {
     /// # 关键业务约束
     /// 本方法只做受检后继；并发唯一性仍由唯一索引或 CAS 保证。
     pub fn next_revision_no(latest: Option<u32>) -> Result<u32> {
-        latest
-            .unwrap_or(0)
-            .checked_add(1)
-            .ok_or_else(|| Error::from("修订序号已达上限"))
+        latest.unwrap_or(0).checked_add(1).ok_or_else(|| Error::from("修订序号已达上限"))
     }
 }
 

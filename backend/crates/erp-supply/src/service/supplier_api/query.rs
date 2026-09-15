@@ -1,10 +1,11 @@
 //! 连接与能力本域分页，不读取供应商主数据或后台任务。
-use super::SupplierApiService;
-use crate::dto::supplier_api::*;
-use crate::repository::SupplierApiExt;
-use crate::Result;
 use persistence_core::NoTransaction;
 use validator::Validate;
+
+use super::SupplierApiService;
+use crate::Result;
+use crate::dto::supplier_api::*;
+use crate::repository::SupplierApiExt;
 type SupplierApiConnectionFilter = <mongodb::Database as SupplierApiExt>::SupplierApiConnectionFilter;
 type SupplierApiCapabilityFilter = <mongodb::Database as SupplierApiExt>::SupplierApiCapabilityFilter;
 impl SupplierApiService {
@@ -61,21 +62,13 @@ impl SupplierApiService {
                 last_health_result: row.last_health_result,
                 safe_references: SafeReferencesView {
                     endpoint: SafeReferenceView {
-                        state: if row.endpoint_reference_bound {
-                            "BOUND"
-                        } else {
-                            "MISSING"
-                        },
+                        state: if row.endpoint_reference_bound { "BOUND" } else { "MISSING" },
                         alias: None,
                         version: None,
                         visible: false,
                     },
                     credential: SafeReferenceView {
-                        state: if row.credential_reference_bound {
-                            "BOUND"
-                        } else {
-                            "MISSING"
-                        },
+                        state: if row.credential_reference_bound { "BOUND" } else { "MISSING" },
                         alias: None,
                         version: None,
                         visible: false,
@@ -89,12 +82,7 @@ impl SupplierApiService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
     /// 分页查询连接能力列表。
     ///
@@ -146,11 +134,6 @@ impl SupplierApiService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 }

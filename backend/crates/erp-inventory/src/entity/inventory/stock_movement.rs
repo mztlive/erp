@@ -10,16 +10,14 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::fact::FactBase;
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SkuId, StockMovementId, WarehouseId};
 use erp_core::money::Quantity;
-use erp_core::validation::normalize_optional_text;
-use erp_core::validation::normalize_required_text;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// 来源引用最大长度。
 const SOURCE_REFERENCE_MAX_LEN: usize = 256;
@@ -132,10 +130,10 @@ impl MovementType {
         match self {
             Self::Initial | Self::PurchaseReceiptIn | Self::SalesReturnIn | Self::StockGain => {
                 Some(MovementDirection::Increase)
-            }
+            },
             Self::WarehouseShipOut | Self::PurchaseReturnOut | Self::StockLoss | Self::Damage => {
                 Some(MovementDirection::Decrease)
-            }
+            },
             Self::Reversal => None,
         }
     }
@@ -313,9 +311,11 @@ impl StockMovement {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use erp_core::ids::StockMovementId;
     use std::str::FromStr;
+
+    use erp_core::ids::StockMovementId;
+
+    use super::*;
 
     fn data() -> StockMovementData {
         StockMovementData {
@@ -347,82 +347,41 @@ mod tests {
         assert_eq!(movement.fact.recorded_by, "operator-1");
         assert_eq!(movement.fact.source_reference.as_deref(), Some("msg-1"));
         assert_eq!(movement.fact.occurred_at.unix_secs(), 1_700_000_000);
-        assert_eq!(
-            movement.movement_type.inherent_direction(),
-            Some(MovementDirection::Increase)
-        );
+        assert_eq!(movement.movement_type.inherent_direction(), Some(MovementDirection::Increase));
     }
 
     /// 失败路径：方向与类型不一致、数量越界、引用自身、时间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let wrong_direction = StockMovementData {
-            direction: MovementDirection::Decrease,
-            ..data()
-        };
+        let wrong_direction = StockMovementData { direction: MovementDirection::Decrease, ..data() };
         assert!(StockMovement::new(StockMovementId::new("m-2"), wrong_direction).is_err());
 
-        let zero_quantity = StockMovementData {
-            quantity: Quantity::from_str("0").unwrap(),
-            ..data()
-        };
+        let zero_quantity = StockMovementData { quantity: Quantity::from_str("0").unwrap(), ..data() };
         assert!(StockMovement::new(StockMovementId::new("m-3"), zero_quantity).is_err());
 
-        let blank_source = StockMovementData {
-            source_document_id: "   ".to_string(),
-            ..data()
-        };
+        let blank_source = StockMovementData { source_document_id: "   ".to_string(), ..data() };
         assert!(StockMovement::new(StockMovementId::new("m-4"), blank_source).is_err());
 
-        let self_reversal = StockMovementData {
-            reversal_of_movement_id: Some(StockMovementId::new("m-5")),
-            ..data()
-        };
+        let self_reversal =
+            StockMovementData { reversal_of_movement_id: Some(StockMovementId::new("m-5")), ..data() };
         assert!(StockMovement::new(StockMovementId::new("m-5"), self_reversal).is_err());
 
-        let reversed_time = StockMovementData {
-            recorded_at: Instant::from_unix_secs(1_699_999_999),
-            ..data()
-        };
+        let reversed_time =
+            StockMovementData { recorded_at: Instant::from_unix_secs(1_699_999_999), ..data() };
         assert!(StockMovement::new(StockMovementId::new("m-6"), reversed_time).is_err());
     }
 
     /// 方向语义：全部类型的固有方向与冲正自由方向。
     #[test]
     fn movement_type_direction_semantics() {
-        assert_eq!(
-            MovementType::Initial.inherent_direction(),
-            Some(MovementDirection::Increase)
-        );
-        assert_eq!(
-            MovementType::SalesReturnIn.inherent_direction(),
-            Some(MovementDirection::Increase)
-        );
-        assert_eq!(
-            MovementType::StockGain.inherent_direction(),
-            Some(MovementDirection::Increase)
-        );
-        assert_eq!(
-            MovementType::WarehouseShipOut.inherent_direction(),
-            Some(MovementDirection::Decrease)
-        );
-        assert_eq!(
-            MovementType::PurchaseReturnOut.inherent_direction(),
-            Some(MovementDirection::Decrease)
-        );
-        assert_eq!(
-            MovementType::StockLoss.inherent_direction(),
-            Some(MovementDirection::Decrease)
-        );
-        assert_eq!(
-            MovementType::Damage.inherent_direction(),
-            Some(MovementDirection::Decrease)
-        );
-        assert_eq!(
-            MovementType::Reversal.inherent_direction(),
-            None,
-            "冲正方向随原流水（P3）"
-        );
+        assert_eq!(MovementType::Initial.inherent_direction(), Some(MovementDirection::Increase));
+        assert_eq!(MovementType::SalesReturnIn.inherent_direction(), Some(MovementDirection::Increase));
+        assert_eq!(MovementType::StockGain.inherent_direction(), Some(MovementDirection::Increase));
+        assert_eq!(MovementType::WarehouseShipOut.inherent_direction(), Some(MovementDirection::Decrease));
+        assert_eq!(MovementType::PurchaseReturnOut.inherent_direction(), Some(MovementDirection::Decrease));
+        assert_eq!(MovementType::StockLoss.inherent_direction(), Some(MovementDirection::Decrease));
+        assert_eq!(MovementType::Damage.inherent_direction(), Some(MovementDirection::Decrease));
+        assert_eq!(MovementType::Reversal.inherent_direction(), None, "冲正方向随原流水（P3）");
 
         // 冲正流水两种方向均可构造，由 P3 对照原流水校验。
         let reversal_increase = StockMovementData {
@@ -438,14 +397,8 @@ mod tests {
     /// 序列化：枚举稳定代码；枚举稳定代码（不可变事实无 update）。
     #[test]
     fn serde_shapes_and_bson_roundtrip() {
-        assert_eq!(
-            serde_json::to_string(&MovementType::WarehouseShipOut).unwrap(),
-            "\"WAREHOUSE_SHIP_OUT\""
-        );
-        assert_eq!(
-            serde_json::to_string(&MovementDirection::Decrease).unwrap(),
-            "\"DECREASE\""
-        );
+        assert_eq!(serde_json::to_string(&MovementType::WarehouseShipOut).unwrap(), "\"WAREHOUSE_SHIP_OUT\"");
+        assert_eq!(serde_json::to_string(&MovementDirection::Decrease).unwrap(), "\"DECREASE\"");
         assert_eq!(MovementType::StockLoss.label(), "盘亏");
 
         let movement = StockMovement::new(StockMovementId::new("m-8"), data()).unwrap();

@@ -1,17 +1,17 @@
-use crate::entity::catalog::sku_attribute::{SkuAttribute, SkuAttributeUpdate};
-use crate::entity::catalog::sku_attribute_value::{SkuAttributeValue, SkuAttributeValueUpdate};
-use crate::repository::CatalogExt;
+use application_core::AuditActor;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use super::support::ensure_version;
 use super::CatalogService;
+use super::support::ensure_version;
 use crate::dto::{
     PageView, SkuAttributeListParams, SkuAttributeValueListParams, SkuAttributeValueView, SkuAttributeView,
     SortDir, UpdateSkuAttributeRequest, UpdateSkuAttributeValueRequest,
 };
+use crate::entity::catalog::sku_attribute::{SkuAttribute, SkuAttributeUpdate};
+use crate::entity::catalog::sku_attribute_value::{SkuAttributeValue, SkuAttributeValueUpdate};
 use crate::error::{Error, Result};
-use application_core::AuditActor;
+use crate::repository::CatalogExt;
 
 /// 规格属性列表筛选条件类型。
 type SkuAttributeFilter = <mongodb::Database as CatalogExt>::SkuAttributeFilter;
@@ -47,11 +47,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .sku_attributes()
-            .search_sku_attributes(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.sku_attributes().search_sku_attributes(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -65,12 +61,7 @@ impl CatalogService {
                 version: row.version,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 更新规格属性（乐观锁语义）。
@@ -96,11 +87,7 @@ impl CatalogService {
         let mut attribute = self.load_attribute(id).await?;
         ensure_version(attribute.base.version, req.version)?;
         attribute.update(
-            SkuAttributeUpdate {
-                name: req.name,
-                value_type: req.value_type,
-                status: req.status,
-            },
+            SkuAttributeUpdate { name: req.name, value_type: req.value_type, status: req.status },
             actor.id(),
         )?;
         let audit = self.audit.resource_log(
@@ -186,11 +173,8 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .sku_attribute_values()
-            .search_sku_attribute_values(&filter, &mut NoTransaction)
-            .await?;
+        let page =
+            self.db.sku_attribute_values().search_sku_attribute_values(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -205,12 +189,7 @@ impl CatalogService {
                 version: row.version,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 更新规格属性值（乐观锁语义）。

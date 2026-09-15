@@ -1,9 +1,10 @@
 //! 销售拥有的履约分配关联查询。
 
-use crate::entity::sales_order::SalesOrderRevisionLine;
-use crate::repository::owned::SalesOrderRevisionLineRepository;
 use erp_core::ids::{SalesOrderLineId, SalesOrderRevisionLineId};
 use persistence_core::{Executor, Result};
+
+use crate::entity::sales_order::SalesOrderRevisionLine;
+use crate::repository::owned::SalesOrderRevisionLineRepository;
 
 impl SalesOrderRevisionLineRepository<'_> {
     /// 查询同时匹配版本行主键与销售稳定明细的销售版本行。

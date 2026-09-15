@@ -1,7 +1,8 @@
 //! Stable sales-line facts required by procurement responsibility resolution.
+use erp_core::ids::SkuId;
+
 use crate::entity::sales_order::{LineType, SalesOrderSubmissionLine, SalesOrderWorkingCopyLine};
 use crate::{Error, Result};
-use erp_core::ids::SkuId;
 /// Minimal sales-owned line input; provider rule and authorization types stay outside sales.
 pub struct SalesProcurementLineFact {
     /// Stable sales line identity, not a copy/submission line id.
@@ -17,9 +18,7 @@ pub fn working_copy_inputs(lines: &[SalesOrderWorkingCopyLine]) -> Result<Vec<Sa
         .iter()
         .map(|line| {
             if line.line_type != LineType::GoodsService {
-                return Err(Error::ConflictError(
-                    "实物及服务销售单包含非实物服务行".to_string(),
-                ));
+                return Err(Error::ConflictError("实物及服务销售单包含非实物服务行".to_string()));
             }
             let sku_id = line
                 .sku_id
@@ -42,9 +41,7 @@ pub fn submission_procurement_inputs(
         .iter()
         .map(|line| {
             if line.line_type != LineType::GoodsService {
-                return Err(Error::ConflictError(
-                    "实物及服务销售提交包含非实物服务行".to_string(),
-                ));
+                return Err(Error::ConflictError("实物及服务销售提交包含非实物服务行".to_string()));
             }
             let sku_id = line
                 .sku_id

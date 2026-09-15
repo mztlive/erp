@@ -1,9 +1,11 @@
-use super::{dto::SupplierConnectionJobView, SupplierApiReadService};
-use crate::{Error, Result};
 use erp_support::{
     BackgroundJob, BulkJobExt, SUPPLIER_CATALOG_SYNC_JOB_TYPE, SUPPLIER_HEALTH_CHECK_JOB_TYPE,
 };
 use persistence_core::NoTransaction;
+
+use super::SupplierApiReadService;
+use super::dto::SupplierConnectionJobView;
+use crate::{Error, Result};
 impl SupplierApiReadService {
     /// 查询连接下健康检查或目录同步后台任务的当前终态/进度。
     ///

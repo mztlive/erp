@@ -6,11 +6,9 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::Result;
-
 pub use erp_core::ids::{SupplierCapabilityId, SupplierQualificationCapabilityId, SupplierQualificationId};
+use serde::{Deserialize, Serialize};
 
 /// 资质适用能力创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -100,8 +98,9 @@ impl SupplierQualificationCapability {
 
 #[cfg(test)]
 mod tests {
-    use super::{SupplierQualificationCapability, SupplierQualificationCapabilityData};
     use erp_core::ids::{SupplierCapabilityId, SupplierQualificationCapabilityId, SupplierQualificationId};
+
+    use super::{SupplierQualificationCapability, SupplierQualificationCapabilityData};
 
     /// happy path：成对关联落库。
     #[test]
@@ -121,8 +120,9 @@ mod tests {
     /// 关联按当前能力集合完整重建，空集合与缺失均覆盖。
     #[test]
     fn links_for_qualification_covers_empty_and_missing() {
-        use crate::entity::supplier::CapabilityCode;
         use std::collections::HashMap;
+
+        use crate::entity::supplier::CapabilityCode;
         let mut ids = HashMap::new();
         ids.insert("physical".to_string(), SupplierCapabilityId::new("cap-1"));
         // 空集合返回空

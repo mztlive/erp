@@ -13,7 +13,7 @@
 
 mod create;
 pub(super) mod supplier;
-pub use create::{persist_basis_draft, CreateBasisCommand, VerifiedBasisInput};
+pub use create::{CreateBasisCommand, VerifiedBasisInput, persist_basis_draft};
 pub use erp_procurement::service::purchase_order::creation_basis::validate_requested_quantities;
 pub use erp_read_models::purchase_center::repository::{
     basis_groups_and_facts, basis_groups_for_order, load_effective_sales_order, stock_basis_groups_for_order,
@@ -59,30 +59,12 @@ mod tests {
     fn creation_basis_uses_batch_facts_loader() {
         let production = production_source();
 
-        assert!(
-            production.contains("load_creation_basis_facts"),
-            "必须使用批量事实加载"
-        );
-        assert!(
-            production.contains("basis_groups_and_facts"),
-            "事务内必须复用同一批事实"
-        );
-        assert!(
-            !production.contains("list_active_offerings_by_sku("),
-            "逐 SKU 供给查询已删除"
-        );
-        assert!(
-            !production.contains("cached_settlement_terms"),
-            "逐供应商付款条件缓存已删除"
-        );
-        assert!(
-            !production.contains("resolve_supplier_name"),
-            "逐供应商名称查询已删除"
-        );
-        assert!(
-            !production.contains("fn normalize_requested_lines"),
-            "请求行规范化已下沉实体"
-        );
+        assert!(production.contains("load_creation_basis_facts"), "必须使用批量事实加载");
+        assert!(production.contains("basis_groups_and_facts"), "事务内必须复用同一批事实");
+        assert!(!production.contains("list_active_offerings_by_sku("), "逐 SKU 供给查询已删除");
+        assert!(!production.contains("cached_settlement_terms"), "逐供应商付款条件缓存已删除");
+        assert!(!production.contains("resolve_supplier_name"), "逐供应商名称查询已删除");
+        assert!(!production.contains("fn normalize_requested_lines"), "请求行规范化已下沉实体");
         assert!(
             !production.contains("fn basis_id_for") && !production.contains("fn basis_scope_key"),
             "依据身份规则已下沉实体"

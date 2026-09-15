@@ -24,11 +24,7 @@ impl AuditActor {
     /// # 返回值
     /// 返回只包含鉴权身份的审计操作人。
     pub fn new(actor_id: String, actor_account: String, actor_type: AccountKind) -> Self {
-        Self {
-            actor_id,
-            actor_account,
-            actor_type,
-        }
+        Self { actor_id, actor_account, actor_type }
     }
 
     /// 返回操作人账号 ID。

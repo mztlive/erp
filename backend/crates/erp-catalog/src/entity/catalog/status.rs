@@ -5,9 +5,8 @@
 //! 数据模型第 7 章未定义本域文档状态机，第 13.3 条要求邻接矩阵固化、
 //! 禁止运行时扩展。
 
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::state::DocumentState;
+use serde::{Deserialize, Serialize};
 
 /// 启用/停用状态（数据模型 §6.3：启用、停用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -203,8 +202,9 @@ impl SkuCoverageStatus {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::state::{assert_adjacency_closed, ensure_transition};
+
+    use super::*;
 
     /// 启用/停用双向迁移与幂等迁移合法，邻接矩阵对称闭合。
     #[test]
@@ -221,10 +221,7 @@ mod tests {
     fn enable_status_exposes_labels_and_codes() {
         assert_eq!(EnableStatus::Active.label(), "启用");
         assert_eq!(EnableStatus::Disabled.label(), "停用");
-        assert_eq!(
-            serde_json::to_string(&EnableStatus::Active).unwrap(),
-            "\"active\""
-        );
+        assert_eq!(serde_json::to_string(&EnableStatus::Active).unwrap(), "\"active\"");
         assert_eq!(EnableStatus::Disabled.as_str(), "disabled");
         assert!(EnableStatus::Active.is_active());
         assert!(!EnableStatus::Disabled.is_active());
@@ -242,22 +239,10 @@ mod tests {
     /// SPU 上架状态完全由当前启用 SKU 的上架数量继承。
     #[test]
     fn product_listing_status_is_inherited_from_sku_counts() {
-        assert_eq!(
-            ProductListingStatus::inherited(2, 2),
-            ProductListingStatus::Listed
-        );
-        assert_eq!(
-            ProductListingStatus::inherited(1, 2),
-            ProductListingStatus::PartiallyListed
-        );
-        assert_eq!(
-            ProductListingStatus::inherited(0, 2),
-            ProductListingStatus::Unlisted
-        );
-        assert_eq!(
-            ProductListingStatus::inherited(0, 0),
-            ProductListingStatus::Unlisted
-        );
+        assert_eq!(ProductListingStatus::inherited(2, 2), ProductListingStatus::Listed);
+        assert_eq!(ProductListingStatus::inherited(1, 2), ProductListingStatus::PartiallyListed);
+        assert_eq!(ProductListingStatus::inherited(0, 2), ProductListingStatus::Unlisted);
+        assert_eq!(ProductListingStatus::inherited(0, 0), ProductListingStatus::Unlisted);
         assert_eq!(ProductListingStatus::PartiallyListed.as_str(), "partially_listed");
     }
 

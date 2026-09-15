@@ -1,10 +1,9 @@
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::state::ensure_transition;
 use erp_core::ids::{SalesOrderId, SalesOrderLineId};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::LineStatus;
 

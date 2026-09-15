@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use crate::model::types::{
-    base_model_at, normalize_optional, normalize_required, touch_base, ApprovalBlockerCode, ApprovalDecision,
-    ApprovalExecutionAssignmentSource, ApprovalExecutionEndReason, ApprovalNodeExecutionStatus, ModelError,
-    ModelResult, LABEL_MAX_LEN, NAME_MAX_LEN, NODE_KEY_MAX_LEN, REASON_MAX_LEN,
+    ApprovalBlockerCode, ApprovalDecision, ApprovalExecutionAssignmentSource, ApprovalExecutionEndReason,
+    ApprovalNodeExecutionStatus, LABEL_MAX_LEN, ModelError, ModelResult, NAME_MAX_LEN, NODE_KEY_MAX_LEN,
+    REASON_MAX_LEN, base_model_at, normalize_optional, normalize_required, touch_base,
 };
 use crate::model::{ParticipantId, Timestamp};
 
@@ -187,22 +187,18 @@ impl ApprovalNodeExecution {
         if !status.is_current() {
             return Err(ModelError::InvalidStatus("构造器不得创建已结束执行"));
         }
-        match (
-            input.assignment_source,
-            input.replaces_execution_id.is_some(),
-            status,
-        ) {
+        match (input.assignment_source, input.replaces_execution_id.is_some(), status) {
             (ApprovalExecutionAssignmentSource::Definition, false, _)
             | (
                 ApprovalExecutionAssignmentSource::AssigneeRecovery,
                 true,
                 ApprovalNodeExecutionStatus::Active,
-            ) => {}
+            ) => {},
             _ => {
                 return Err(ModelError::InvalidField(
                     "定义进入不得替换执行，原审批人恢复必须关联旧执行并创建活动执行",
                 ));
-            }
+            },
         }
         let blocked_at = blocker_code.map(|_| input.at);
         Ok(Self {
@@ -322,12 +318,8 @@ mod tests {
     #[test]
     fn ended_execution_cannot_reopen() {
         let mut exec = active();
-        exec.record_approve(
-            ParticipantId::new("u1").unwrap(),
-            None,
-            Timestamp::from_unix_secs(3).unwrap(),
-        )
-        .unwrap();
+        exec.record_approve(ParticipantId::new("u1").unwrap(), None, Timestamp::from_unix_secs(3).unwrap())
+            .unwrap();
         assert_eq!(exec.status, ApprovalNodeExecutionStatus::Approved);
         assert_eq!(exec.decision, Some(ApprovalDecision::Approve));
         assert_eq!(
@@ -348,19 +340,12 @@ mod tests {
     #[test]
     fn assignee_recovery_supersedes_blocked_and_keeps_snapshot() {
         let mut exec = active();
-        exec.block(
-            ApprovalBlockerCode::ApproverEmploymentInvalid,
-            Timestamp::from_unix_secs(6).unwrap(),
-        )
-        .unwrap();
-        let old_assignee = exec.assignee_participant_id.clone();
-        exec.supersede_for_assignee_recovery(Timestamp::from_unix_secs(7).unwrap())
+        exec.block(ApprovalBlockerCode::ApproverEmploymentInvalid, Timestamp::from_unix_secs(6).unwrap())
             .unwrap();
+        let old_assignee = exec.assignee_participant_id.clone();
+        exec.supersede_for_assignee_recovery(Timestamp::from_unix_secs(7).unwrap()).unwrap();
         assert_eq!(exec.status, ApprovalNodeExecutionStatus::Superseded);
-        assert_eq!(
-            exec.ended_reason,
-            Some(ApprovalExecutionEndReason::AssigneeRecovered)
-        );
+        assert_eq!(exec.ended_reason, Some(ApprovalExecutionEndReason::AssigneeRecovered));
         assert_eq!(exec.assignee_participant_id, old_assignee);
     }
 
@@ -368,11 +353,8 @@ mod tests {
     #[test]
     fn structural_blocker_cannot_be_superseded_for_assignee_recovery() {
         let mut exec = active();
-        exec.block(
-            ApprovalBlockerCode::DefinitionGraphCorrupted,
-            Timestamp::from_unix_secs(6).unwrap(),
-        )
-        .unwrap();
+        exec.block(ApprovalBlockerCode::DefinitionGraphCorrupted, Timestamp::from_unix_secs(6).unwrap())
+            .unwrap();
         assert_eq!(
             exec.supersede_for_assignee_recovery(Timestamp::from_unix_secs(7).unwrap()),
             Err(ModelError::InvalidStatus("结构性或一致性阻塞不得恢复原审批人"))
@@ -400,9 +382,7 @@ mod tests {
         });
         assert_eq!(
             invalid_definition,
-            Err(ModelError::InvalidField(
-                "定义进入不得替换执行，原审批人恢复必须关联旧执行并创建活动执行"
-            ))
+            Err(ModelError::InvalidField("定义进入不得替换执行，原审批人恢复必须关联旧执行并创建活动执行"))
         );
 
         let missing_replacement = ApprovalNodeExecution::new_active(NewNodeExecution {
@@ -420,9 +400,7 @@ mod tests {
         });
         assert_eq!(
             missing_replacement,
-            Err(ModelError::InvalidField(
-                "定义进入不得替换执行，原审批人恢复必须关联旧执行并创建活动执行"
-            ))
+            Err(ModelError::InvalidField("定义进入不得替换执行，原审批人恢复必须关联旧执行并创建活动执行"))
         );
 
         let blocked_recovery = ApprovalNodeExecution::new_blocked(
@@ -443,9 +421,7 @@ mod tests {
         );
         assert_eq!(
             blocked_recovery,
-            Err(ModelError::InvalidField(
-                "定义进入不得替换执行，原审批人恢复必须关联旧执行并创建活动执行"
-            ))
+            Err(ModelError::InvalidField("定义进入不得替换执行，原审批人恢复必须关联旧执行并创建活动执行"))
         );
     }
 }

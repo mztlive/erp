@@ -9,25 +9,24 @@
 //! （[`ProcurementCoverageFacts`]）；本模块负责当前行关联、指针选择、覆盖累计、
 //! 超覆盖拒绝、剩余量与进度派生的纯业务规则，不依赖任何 I/O、时钟或 ID 生成器。
 
+use std::collections::{HashMap, HashSet};
+
+use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId};
+use erp_core::money::Quantity;
+use erp_core::{Error, Result};
+use rust_decimal::Decimal;
+
+use super::allocation::PurchaseLineSalesAllocation;
 use super::coverage_summary::ProcurementCoverageSummary;
+use super::order::{PurchaseOrder, PurchaseOrderStatus};
+use super::purchase_revision::PurchaseOrderRevisionLine;
+use super::purchase_submission::PurchaseOrderSubmissionLine;
+use super::types::PurchaseLineType;
 use crate::entity::facts::{
     ExistingStockReservationFact as StockReservation, ProductFact as Product, ProductKind,
     SalesGoodsLineFact as SalesOrderGoodsServiceLineRevision, SalesLineType as LineType,
     SalesRevisionFact as SalesOrderRevision, SalesRevisionLineFact as SalesOrderRevisionLine, SkuFact as Sku,
 };
-use std::collections::{HashMap, HashSet};
-
-use rust_decimal::Decimal;
-
-use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId};
-use erp_core::money::Quantity;
-use erp_core::{Error, Result};
-
-use super::allocation::PurchaseLineSalesAllocation;
-use super::order::{PurchaseOrder, PurchaseOrderStatus};
-use super::purchase_revision::PurchaseOrderRevisionLine;
-use super::purchase_submission::PurchaseOrderSubmissionLine;
-use super::types::PurchaseLineType;
 
 /// 当前销售版本单行的采购覆盖信息。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,18 +102,11 @@ pub struct ProcurementCoverageFacts {
 /// 历史采购不参与；现有库存预占只按 `reserved + consumed` 计入一次，采购入库
 /// 预占由 Repository 过滤；覆盖超过目标不得截断，必须显式失败。
 pub fn build_procurement_coverage(facts: ProcurementCoverageFacts) -> Result<SalesProcurementCoverage> {
-    let revision = facts
-        .revision
-        .ok_or_else(|| Error::from("销售单当前版本不存在，无法计算采购剩余量"))?;
+    let revision = facts.revision.ok_or_else(|| Error::from("销售单当前版本不存在，无法计算采购剩余量"))?;
     let targets = join_target_lines(facts.revision_lines, facts.goods_lines)?;
     let product_kinds = resolve_product_kinds(&targets, &facts.skus, &facts.products)?;
     let mut covered = HashMap::new();
-    accumulate_submission_coverage(
-        &targets,
-        &facts.purchase_orders,
-        &facts.submission_lines,
-        &mut covered,
-    )?;
+    accumulate_submission_coverage(&targets, &facts.purchase_orders, &facts.submission_lines, &mut covered)?;
     accumulate_revision_coverage(
         &targets,
         &facts.purchase_orders,
@@ -219,10 +211,7 @@ fn accumulate_submission_coverage(
 ) -> Result<()> {
     let target_ids = target_stable_ids(targets);
     current_submission_ids(orders)?;
-    for line in lines
-        .iter()
-        .filter(|line| line.line_type == PurchaseLineType::ItemService)
-    {
+    for line in lines.iter().filter(|line| line.line_type == PurchaseLineType::ItemService) {
         let stable_id = line
             .sales_order_line_id
             .as_ref()
@@ -231,9 +220,7 @@ fn accumulate_submission_coverage(
         if !target_ids.contains_key(&stable_id) {
             continue;
         }
-        let quantity = line
-            .allocated_quantity
-            .ok_or_else(|| Error::from("采购当前提交行缺少分配数量"))?;
+        let quantity = line.allocated_quantity.ok_or_else(|| Error::from("采购当前提交行缺少分配数量"))?;
         add_covered(covered, &stable_id, quantity)?;
     }
     Ok(())
@@ -267,10 +254,8 @@ fn accumulate_revision_coverage(
 ) -> Result<()> {
     let targets = target_stable_ids(targets);
     current_revision_ids(orders)?;
-    let lines = purchase_lines
-        .iter()
-        .map(|line| (line.base.id.clone(), line.clone()))
-        .collect::<HashMap<_, _>>();
+    let lines =
+        purchase_lines.iter().map(|line| (line.base.id.clone(), line.clone())).collect::<HashMap<_, _>>();
     let expected = lines
         .iter()
         .filter(|(_, line)| line.line_type == PurchaseLineType::ItemService)
@@ -449,10 +434,7 @@ fn current_revision_ids(orders: &[PurchaseOrder]) -> Result<Vec<PurchaseOrderRev
 fn target_stable_ids(
     targets: &[(SalesOrderRevisionLine, SalesOrderGoodsServiceLineRevision)],
 ) -> HashMap<String, String> {
-    targets
-        .iter()
-        .map(|(line, _)| (line.sales_order_line_id.to_string(), line.base.id.clone()))
-        .collect()
+    targets.iter().map(|(line, _)| (line.sales_order_line_id.to_string(), line.base.id.clone())).collect()
 }
 
 /// 向稳定销售行累加覆盖数量。
@@ -475,10 +457,7 @@ fn add_covered(
     sales_order_line_id: &str,
     quantity: Quantity,
 ) -> Result<()> {
-    let current = covered
-        .get(sales_order_line_id)
-        .copied()
-        .unwrap_or_else(zero_quantity);
+    let current = covered.get(sales_order_line_id).copied().unwrap_or_else(zero_quantity);
     let value = Quantity::try_from(current.to_decimal() + quantity.to_decimal())
         .map_err(|error| Error::from(format!("采购覆盖数量精度非法: {error}")))?;
     covered.insert(sales_order_line_id.to_string(), value);
@@ -532,11 +511,7 @@ fn build_coverage(
         });
     }
     let summary = coverage_summary(quantity_of(total)?, quantity_of(total_covered)?)?;
-    Ok(SalesProcurementCoverage {
-        revision,
-        lines,
-        summary,
-    })
+    Ok(SalesProcurementCoverage { revision, lines, summary })
 }
 
 /// 构造覆盖值对象并统一映射为一致性错误。
@@ -594,15 +569,6 @@ fn zero_quantity() -> Quantity {
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::facts::{
-        CurrentRevisionFact, ExistingStockReservationFact as StockReservation, FactIdentity,
-        ProductFact as Product, ProductKind, SalesCustomerSnapshotFact,
-        SalesGoodsLineFact as SalesOrderGoodsServiceLineRevision, SalesLineType as LineType,
-        SalesRevisionFact as SalesOrderRevision, SalesRevisionLineFact as SalesOrderRevisionLine,
-        SkuFact as Sku,
-    };
-    use crate::entity::purchase_order::ProcurementCoverageSummary;
-
     use std::str::FromStr;
 
     use erp_core::common::time::Instant;
@@ -615,10 +581,16 @@ mod tests {
     use erp_core::money::{Amount, Quantity, Rate};
 
     use super::{
-        add_covered, build_procurement_coverage, coverage_summary, current_revision_ids,
-        current_submission_ids, reservation_covered_quantity, zero_quantity, ProcurementCoverageFacts,
+        ProcurementCoverageFacts, add_covered, build_procurement_coverage, coverage_summary,
+        current_revision_ids, current_submission_ids, reservation_covered_quantity, zero_quantity,
     };
-
+    use crate::entity::facts::{
+        CurrentRevisionFact, ExistingStockReservationFact as StockReservation, FactIdentity,
+        ProductFact as Product, ProductKind, SalesCustomerSnapshotFact,
+        SalesGoodsLineFact as SalesOrderGoodsServiceLineRevision, SalesLineType as LineType,
+        SalesRevisionFact as SalesOrderRevision, SalesRevisionLineFact as SalesOrderRevisionLine,
+        SkuFact as Sku,
+    };
     use crate::entity::purchase_order::allocation::{
         PurchaseLineSalesAllocation, PurchaseLineSalesAllocationData,
     };
@@ -629,7 +601,9 @@ mod tests {
     use crate::entity::purchase_order::purchase_submission::{
         PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData,
     };
-    use crate::entity::purchase_order::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
+    use crate::entity::purchase_order::{
+        FulfillmentResponsibility, ProcurementCoverageSummary, PurchaseLineType, PurchaseType,
+    };
 
     /// 构造指定状态和当前指针的采购单。
     fn purchase_order(
@@ -666,12 +640,8 @@ mod tests {
     /// 构造销售当前版本头。
     fn revision(id: &str) -> SalesOrderRevision {
         SalesOrderRevision {
-            base: FactIdentity {
-                id: format!("rev-{id}"),
-            },
-            customer_snapshot: SalesCustomerSnapshotFact {
-                customer_name: "客户".to_string(),
-            },
+            base: FactIdentity { id: format!("rev-{id}") },
+            customer_snapshot: SalesCustomerSnapshotFact { customer_name: "客户".to_string() },
             contract_snapshot: None,
         }
     }
@@ -707,10 +677,7 @@ mod tests {
 
     /// 构造 SKU 事实。
     fn sku(id: &str) -> Sku {
-        Sku {
-            base: FactIdentity { id: id.to_string() },
-            product_id: ProductId::new(format!("product-{id}")),
-        }
+        Sku { base: FactIdentity { id: id.to_string() }, product_id: ProductId::new(format!("product-{id}")) }
     }
 
     /// 构造商品事实。
@@ -835,12 +802,7 @@ mod tests {
             products: std::iter::once(("product-sku-1".to_string(), product("product-sku-1"))).collect(),
             purchase_orders: vec![
                 purchase_order("po-draft", PurchaseOrderStatus::Draft, Some("sub-1"), None),
-                purchase_order(
-                    "po-effective",
-                    PurchaseOrderStatus::Effective,
-                    None,
-                    Some("rev-1"),
-                ),
+                purchase_order("po-effective", PurchaseOrderStatus::Effective, None, Some("rev-1")),
             ],
             submission_lines: vec![submission_line("subl-1", "sub-1", Some("sol-1"), Some("2"))],
             purchase_revision_lines: vec![purchase_revision_line(
@@ -870,19 +832,14 @@ mod tests {
     fn existing_stock_coverage_is_reserved_plus_consumed() {
         let reservation = reservation("rsv-direct-1", "line-1", "6", "4");
 
-        assert_eq!(
-            reservation_covered_quantity(&reservation).unwrap(),
-            Quantity::from_str("10").unwrap()
-        );
+        assert_eq!(reservation_covered_quantity(&reservation).unwrap(), Quantity::from_str("10").unwrap());
     }
 
     /// 覆盖超过销售当前版本数量时统一返回一致性错误。
     #[test]
     fn over_coverage_is_consistency_error() {
-        let result = coverage_summary(
-            Quantity::from_str("1").unwrap(),
-            Quantity::from_str("1.000001").unwrap(),
-        );
+        let result =
+            coverage_summary(Quantity::from_str("1").unwrap(), Quantity::from_str("1.000001").unwrap());
 
         assert!(result.unwrap_err().to_string().contains("采购数量一致性错误"));
     }
@@ -898,48 +855,22 @@ mod tests {
                 Some("sub-finance"),
                 None,
             ),
-            purchase_order(
-                "po-approval",
-                PurchaseOrderStatus::InApproval,
-                Some("sub-approval"),
-                None,
-            ),
+            purchase_order("po-approval", PurchaseOrderStatus::InApproval, Some("sub-approval"), None),
             purchase_order(
                 "po-effective",
                 PurchaseOrderStatus::Effective,
                 Some("sub-history"),
                 Some("rev-current"),
             ),
-            purchase_order(
-                "po-partial",
-                PurchaseOrderStatus::PartiallyExecuted,
-                None,
-                Some("rev-partial"),
-            ),
-            purchase_order(
-                "po-completed",
-                PurchaseOrderStatus::Completed,
-                None,
-                Some("rev-completed"),
-            ),
-            purchase_order(
-                "po-voided",
-                PurchaseOrderStatus::Voided,
-                Some("sub-voided"),
-                Some("rev-voided"),
-            ),
+            purchase_order("po-partial", PurchaseOrderStatus::PartiallyExecuted, None, Some("rev-partial")),
+            purchase_order("po-completed", PurchaseOrderStatus::Completed, None, Some("rev-completed")),
+            purchase_order("po-voided", PurchaseOrderStatus::Voided, Some("sub-voided"), Some("rev-voided")),
         ];
 
-        let submission_ids = current_submission_ids(&orders)
-            .unwrap()
-            .into_iter()
-            .map(|id| id.to_string())
-            .collect::<Vec<_>>();
-        let revision_ids = current_revision_ids(&orders)
-            .unwrap()
-            .into_iter()
-            .map(|id| id.to_string())
-            .collect::<Vec<_>>();
+        let submission_ids =
+            current_submission_ids(&orders).unwrap().into_iter().map(|id| id.to_string()).collect::<Vec<_>>();
+        let revision_ids =
+            current_revision_ids(&orders).unwrap().into_iter().map(|id| id.to_string()).collect::<Vec<_>>();
 
         assert_eq!(submission_ids, vec!["sub-current", "sub-finance", "sub-approval"]);
         assert_eq!(revision_ids, vec!["rev-current", "rev-partial", "rev-completed"]);
@@ -966,12 +897,8 @@ mod tests {
     #[test]
     fn missing_revision_pointer_is_consistency_error() {
         let mut facts = facts_with_two_coverage_sources();
-        facts.purchase_orders = vec![purchase_order(
-            "po-effective",
-            PurchaseOrderStatus::Effective,
-            None,
-            None,
-        )];
+        facts.purchase_orders =
+            vec![purchase_order("po-effective", PurchaseOrderStatus::Effective, None, None)];
         let error = build_procurement_coverage(facts).unwrap_err().to_string();
         assert_eq!(error, "采购正式状态缺少当前版本指针");
     }
@@ -980,12 +907,8 @@ mod tests {
     #[test]
     fn coverage_build_handles_zero_partial_and_full() {
         let mut facts = facts_with_two_coverage_sources();
-        facts.purchase_orders = vec![purchase_order(
-            "po-draft",
-            PurchaseOrderStatus::Draft,
-            Some("sub-1"),
-            None,
-        )];
+        facts.purchase_orders =
+            vec![purchase_order("po-draft", PurchaseOrderStatus::Draft, Some("sub-1"), None)];
         facts.submission_lines = vec![submission_line("subl-1", "sub-1", Some("sol-1"), Some("2"))];
         facts.purchase_revision_lines.clear();
         facts.allocations.clear();
@@ -993,22 +916,10 @@ mod tests {
 
         let coverage = build_procurement_coverage(facts).unwrap();
         assert_eq!(coverage.lines.len(), 1);
-        assert_eq!(
-            coverage.lines[0].summary.total_quantity,
-            Quantity::from_str("10").unwrap()
-        );
-        assert_eq!(
-            coverage.lines[0].summary.covered_quantity,
-            Quantity::from_str("2").unwrap()
-        );
-        assert_eq!(
-            coverage.lines[0].summary.remaining_quantity,
-            Quantity::from_str("8").unwrap()
-        );
-        assert_eq!(
-            coverage.summary.covered_quantity,
-            Quantity::from_str("2").unwrap()
-        );
+        assert_eq!(coverage.lines[0].summary.total_quantity, Quantity::from_str("10").unwrap());
+        assert_eq!(coverage.lines[0].summary.covered_quantity, Quantity::from_str("2").unwrap());
+        assert_eq!(coverage.lines[0].summary.remaining_quantity, Quantity::from_str("8").unwrap());
+        assert_eq!(coverage.summary.covered_quantity, Quantity::from_str("2").unwrap());
 
         let mut full = facts_with_two_coverage_sources();
         full.submission_lines = vec![submission_line("subl-1", "sub-1", Some("sol-1"), Some("10"))];
@@ -1016,10 +927,7 @@ mod tests {
         full.allocations.clear();
         full.reservations.clear();
         let full = build_procurement_coverage(full).unwrap();
-        assert_eq!(
-            full.lines[0].summary.remaining_quantity,
-            Quantity::from_str("0").unwrap()
-        );
+        assert_eq!(full.lines[0].summary.remaining_quantity, Quantity::from_str("0").unwrap());
         assert_eq!(full.lines[0].summary.progress, Rate::from_str("1").unwrap());
 
         let mut zero = facts_with_two_coverage_sources();
@@ -1028,10 +936,7 @@ mod tests {
         zero.allocations.clear();
         zero.reservations.clear();
         let zero = build_procurement_coverage(zero).unwrap();
-        assert_eq!(
-            zero.lines[0].summary.covered_quantity,
-            Quantity::from_str("0").unwrap()
-        );
+        assert_eq!(zero.lines[0].summary.covered_quantity, Quantity::from_str("0").unwrap());
         assert_eq!(zero.lines[0].summary.progress, Rate::from_str("0").unwrap());
     }
 
@@ -1052,25 +957,15 @@ mod tests {
     fn removed_sales_line_is_ignored() {
         let mut facts = facts_with_two_coverage_sources();
         facts.submission_lines = vec![submission_line("subl-1", "sub-1", Some("sol-removed"), Some("2"))];
-        facts.purchase_revision_lines = vec![purchase_revision_line(
-            "porl-1",
-            "rev-1",
-            Some("sol-removed"),
-            Some("sorl-other"),
-        )];
+        facts.purchase_revision_lines =
+            vec![purchase_revision_line("porl-1", "rev-1", Some("sol-removed"), Some("sorl-other"))];
         facts.allocations = vec![allocation("alloc-1", "porl-1", "sorl-other", "3")];
         facts.reservations.clear();
 
         let coverage = build_procurement_coverage(facts).unwrap();
         assert_eq!(coverage.lines.len(), 1);
-        assert_eq!(
-            coverage.lines[0].summary.covered_quantity,
-            Quantity::from_str("0").unwrap()
-        );
-        assert_eq!(
-            coverage.summary.remaining_quantity,
-            Quantity::from_str("10").unwrap()
-        );
+        assert_eq!(coverage.lines[0].summary.covered_quantity, Quantity::from_str("0").unwrap());
+        assert_eq!(coverage.summary.remaining_quantity, Quantity::from_str("10").unwrap());
     }
 
     /// 正式分配绑定到错误的销售当前版本行时按一致性错误失败。
@@ -1097,14 +992,8 @@ mod tests {
         let facts = facts_with_two_coverage_sources();
         let coverage = build_procurement_coverage(facts).unwrap();
         // 提交行 2 + 正式分配 3 + 现有库存预占 2 = 7。
-        assert_eq!(
-            coverage.lines[0].summary.covered_quantity,
-            Quantity::from_str("7").unwrap()
-        );
-        assert_eq!(
-            coverage.lines[0].summary.remaining_quantity,
-            Quantity::from_str("3").unwrap()
-        );
+        assert_eq!(coverage.lines[0].summary.covered_quantity, Quantity::from_str("7").unwrap());
+        assert_eq!(coverage.lines[0].summary.remaining_quantity, Quantity::from_str("3").unwrap());
     }
 
     /// 相同事实重复构造产生完全一致的结果（确定性）。
@@ -1113,10 +1002,7 @@ mod tests {
         let first = build_procurement_coverage(facts_with_two_coverage_sources()).unwrap();
         let second = build_procurement_coverage(facts_with_two_coverage_sources()).unwrap();
         assert_eq!(first, second);
-        assert_eq!(
-            first.lines[0].summary.remaining_quantity,
-            Quantity::from_str("3").unwrap()
-        );
+        assert_eq!(first.lines[0].summary.remaining_quantity, Quantity::from_str("3").unwrap());
     }
 
     /// 商品类型缺失时按一致性错误失败。

@@ -7,20 +7,20 @@ use std::time::Duration;
 
 use application_core::AuditActor;
 use erp_catalog::{
-    ProductImportDirectUploadCompleteRequest, ProductImportDirectUploadInitRequest,
-    ProductImportDirectUploadInitView, ProductImportJobView, MAX_PRODUCT_IMPORT_FILE_BYTES,
-    PRODUCT_IMPORT_DIRECT_PART_BYTES, PRODUCT_IMPORT_DIRECT_PART_URL_TTL_SECS, PRODUCT_IMPORT_XLSX_MIME,
+    MAX_PRODUCT_IMPORT_FILE_BYTES, PRODUCT_IMPORT_DIRECT_PART_BYTES, PRODUCT_IMPORT_DIRECT_PART_URL_TTL_SECS,
+    PRODUCT_IMPORT_XLSX_MIME, ProductImportDirectUploadCompleteRequest, ProductImportDirectUploadInitRequest,
+    ProductImportDirectUploadInitView, ProductImportJobView,
 };
 use erp_support::{
-    content_fingerprint, FileAsset, FileAssetId, RegisterFileAssetRequest, RetentionClass, SensitivityClass,
+    FileAsset, FileAssetId, RegisterFileAssetRequest, RetentionClass, SensitivityClass, content_fingerprint,
 };
 use id_generator::next_id;
 use sha2::{Digest, Sha256};
 use storage::UploadedPart;
 use validator::Validate;
 
-use super::parse::parse_product_quote_xlsx;
 use super::ProductImportProcess;
+use super::parse::parse_product_quote_xlsx;
 use crate::{Error, Result};
 
 /// 直传对象键前缀（与表单上传的随机键区分，便于排查与生命周期管理）。
@@ -124,10 +124,7 @@ impl ProductImportProcess {
         let parts = req
             .parts
             .iter()
-            .map(|part| UploadedPart {
-                part_number: part.part_number,
-                etag: part.etag.trim().to_string(),
-            })
+            .map(|part| UploadedPart { part_number: part.part_number, etag: part.etag.trim().to_string() })
             .collect::<Vec<_>>();
         self.storage
             .complete_multipart_upload(&req.object_key, upload_id, parts)
@@ -173,19 +170,15 @@ impl ProductImportProcess {
         let bytes = match self.storage.read(&req.object_key).await {
             Ok(bytes) => bytes,
             Err(storage::Error::NotFound) => {
-                return Err(Error::ValidationError(
-                    "直传文件不存在或已过期，请重新上传".to_string(),
-                ));
-            }
+                return Err(Error::ValidationError("直传文件不存在或已过期，请重新上传".to_string()));
+            },
             Err(error) => {
                 return Err(Error::Internal(format!("读取直传文件失败: {error}")));
-            }
+            },
         };
         if bytes.len() as u64 != req.byte_size || bytes.len() as u64 > MAX_PRODUCT_IMPORT_FILE_BYTES {
             let _ = self.storage.delete(&req.object_key).await;
-            return Err(Error::ValidationError(
-                "文件大小与申报不一致，请重新上传".to_string(),
-            ));
+            return Err(Error::ValidationError("文件大小与申报不一致，请重新上传".to_string()));
         }
         if bytes.len() < 4 || &bytes[..2] != b"PK" {
             let _ = self.storage.delete(&req.object_key).await;
@@ -203,7 +196,7 @@ impl ProductImportProcess {
             Ok(Err(error)) => {
                 let _ = self.storage.delete(&req.object_key).await;
                 return Err(error);
-            }
+            },
             Err(error) => return Err(error),
         };
         let registration = RegisterFileAssetRequest {
@@ -233,9 +226,7 @@ impl ProductImportProcess {
 fn direct_object_key(request_id: &str) -> Result<String> {
     if request_id.is_empty()
         || request_id.len() > 64
-        || !request_id
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+        || !request_id.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
     {
         return Err(Error::ValidationError("请求身份非法，请重新选择文件".to_string()));
     }
@@ -245,9 +236,7 @@ fn direct_object_key(request_id: &str) -> Result<String> {
 /// 校验对象键确由请求身份推导，防止操作他人直传对象。
 fn require_bound_object_key(object_key: &str, request_id: &str) -> Result<()> {
     if object_key != direct_object_key(request_id)? {
-        return Err(Error::ValidationError(
-            "对象键与请求身份不一致，请重新上传".to_string(),
-        ));
+        return Err(Error::ValidationError("对象键与请求身份不一致，请重新上传".to_string()));
     }
     Ok(())
 }
@@ -258,10 +247,7 @@ fn validate_xlsx_file_name(file_name: &str) -> Result<()> {
     if name.is_empty() || name.len() > 256 {
         return Err(Error::ValidationError("请选择产品报价表文件".to_string()));
     }
-    let is_xlsx = name
-        .rsplit('.')
-        .next()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("xlsx"));
+    let is_xlsx = name.rsplit('.').next().is_some_and(|ext| ext.eq_ignore_ascii_case("xlsx"));
     if !is_xlsx {
         return Err(Error::ValidationError("请上传 .xlsx 产品报价表".to_string()));
     }

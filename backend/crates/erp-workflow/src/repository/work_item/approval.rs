@@ -1,17 +1,16 @@
-use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
-use crate::repository::owned::WorkItemRepository;
 use bpm::ApprovalNodeExecutionId;
 use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
 use futures_util::TryStreamExt;
-use mongodb::bson::{doc, serialize_to_document, Document};
+use mongodb::bson::{Document, doc, serialize_to_document};
 use mongodb::options::FindOptions;
 use mongodb::{Collection, Database};
+use persistence_core::{Error, Executor, Result, mongo_ops};
 use serde::Deserialize;
 
-use super::super::bpm::{approval_task_cas_filter, classify_cas_miss, CasWriteOutcome};
+use super::super::bpm::{CasWriteOutcome, approval_task_cas_filter, classify_cas_miss};
 use super::super::extensions::{ApprovalIntegrationExt, BpmExt};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Error, Result};
+use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use crate::repository::owned::WorkItemRepository;
 
 const APPROVAL_NODE_EXECUTIONS: &str = <Database as BpmExt>::APPROVAL_NODE_EXECUTIONS;
 const APPROVAL_PROCESS_INSTANCES: &str = <Database as BpmExt>::APPROVAL_PROCESS_INSTANCES;
@@ -184,10 +183,8 @@ impl<'a> WorkItemRepository<'a> {
         limit: u32,
         executor: &mut dyn Executor,
     ) -> Result<DocumentApprovalWorkItemPage> {
-        let cursor = cursor.map(|(assigned_at, id)| DocumentApprovalWorkItemCursor {
-            assigned_at,
-            id: id.to_string(),
-        });
+        let cursor = cursor
+            .map(|(assigned_at, id)| DocumentApprovalWorkItemCursor { assigned_at, id: id.to_string() });
         let pipeline = document_approval_page_pipeline(
             owner_user_id,
             business_object_type,
@@ -234,10 +231,8 @@ impl<'a> WorkItemRepository<'a> {
         if let Some(business_object_type) = business_object_type {
             filter.insert("business_object_type", business_object_type);
         }
-        let options = FindOptions::builder()
-            .sort(doc! { "created_at": 1, "id": 1 })
-            .limit(i64::from(limit))
-            .build();
+        let options =
+            FindOptions::builder().sort(doc! { "created_at": 1, "id": 1 }).limit(i64::from(limit)).build();
         mongo_ops::find_many(&self.collection(), filter, options, executor).await
     }
 
@@ -390,9 +385,7 @@ impl<'a> WorkItemRepository<'a> {
                 .approval_node_execution_id
                 .as_ref()
                 .ok_or(Error::EntityMetadataOutOfRange("approval_node_execution_id"))?;
-            let outcome = self
-                .close_approval_task(item, item.base.version, execution_id, executor)
-                .await?;
+            let outcome = self.close_approval_task(item, item.base.version, execution_id, executor).await?;
             if !matches!(outcome, CasWriteOutcome::Applied(_)) {
                 return Err(Error::OptimisticLockingError);
             }
@@ -740,10 +733,7 @@ fn document_approval_overfetch_limit(limit: u32) -> Result<i64> {
     if limit == 0 {
         return Err(Error::EntityMetadataOutOfRange("document_approval_page_limit"));
     }
-    limit
-        .checked_add(1)
-        .map(i64::from)
-        .ok_or(Error::EntityMetadataOutOfRange("document_approval_page_limit"))
+    limit.checked_add(1).map(i64::from).ok_or(Error::EntityMetadataOutOfRange("document_approval_page_limit"))
 }
 
 /// 将 facet 行切为当前页并形成下一页游标。
@@ -773,20 +763,16 @@ fn document_approval_integrity_conflicts(
 ) -> Result<Vec<DocumentApprovalWorkItemIntegrityConflict>> {
     let mut conflicts = Vec::new();
     for duplicate in duplicate_executions {
-        conflicts.push(
-            DocumentApprovalWorkItemIntegrityConflict::MultipleOpenTasksForExecution {
-                approval_node_execution_id: duplicate.approval_node_execution_id,
-                open_work_item_count: document_approval_integrity_count(duplicate.open_work_item_count)?,
-            },
-        );
+        conflicts.push(DocumentApprovalWorkItemIntegrityConflict::MultipleOpenTasksForExecution {
+            approval_node_execution_id: duplicate.approval_node_execution_id,
+            open_work_item_count: document_approval_integrity_count(duplicate.open_work_item_count)?,
+        });
     }
     for duplicate in duplicate_instances {
-        conflicts.push(
-            DocumentApprovalWorkItemIntegrityConflict::MultipleOpenExecutionsForInstance {
-                approval_process_instance_id: duplicate.approval_process_instance_id,
-                open_execution_count: document_approval_integrity_count(duplicate.open_execution_count)?,
-            },
-        );
+        conflicts.push(DocumentApprovalWorkItemIntegrityConflict::MultipleOpenExecutionsForInstance {
+            approval_process_instance_id: duplicate.approval_process_instance_id,
+            open_execution_count: document_approval_integrity_count(duplicate.open_execution_count)?,
+        });
     }
     Ok(conflicts)
 }
@@ -809,23 +795,15 @@ fn document_approval_page_from_items(
         items.truncate(limit as usize);
     }
     let next_cursor = if has_more {
-        let item = items.last().ok_or(Error::EntityMetadataOutOfRange(
-            "document_approval_work_item_page",
-        ))?;
-        let assigned_at = item.assigned_at.ok_or(Error::EntityMetadataOutOfRange(
-            "document_approval_work_item_assigned_at",
-        ))?;
+        let item = items.last().ok_or(Error::EntityMetadataOutOfRange("document_approval_work_item_page"))?;
+        let assigned_at = item
+            .assigned_at
+            .ok_or(Error::EntityMetadataOutOfRange("document_approval_work_item_assigned_at"))?;
         Some((assigned_at.unix_secs(), item.base.id.clone()))
     } else {
         None
     };
-    Ok(DocumentApprovalWorkItemPage {
-        items,
-        total,
-        has_more,
-        next_cursor,
-        integrity_conflicts,
-    })
+    Ok(DocumentApprovalWorkItemPage { items, total, has_more, next_cursor, integrity_conflicts })
 }
 
 /// 构造按节点执行读取开放审批任务的索引友好过滤条件。
@@ -857,9 +835,7 @@ fn open_approval_execution_filter(execution_id: &ApprovalNodeExecutionId) -> Doc
 /// # 错误
 /// 版本溢出或无法表示为 BSON 整数时返回错误。
 fn next_task_version(expected_task_version: u64) -> Result<i64> {
-    let next = expected_task_version
-        .checked_add(1)
-        .ok_or(Error::EntityMetadataOutOfRange("version"))?;
+    let next = expected_task_version.checked_add(1).ok_or(Error::EntityMetadataOutOfRange("version"))?;
     i64::try_from(next).map_err(|_| Error::EntityMetadataOutOfRange("version"))
 }
 
@@ -869,21 +845,21 @@ fn approval_task_still_open(item: &WorkItem, execution_id: &ApprovalNodeExecutio
 
 #[cfg(test)]
 mod tests {
+    use bpm::ApprovalNodeExecutionId;
     use entity_core::HasBaseModel;
-    use mongodb::bson::{doc, Bson};
+    use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
+    use mongodb::bson::{Bson, doc};
 
     use super::{
-        approval_task_still_open, document_approval_page_from_items, document_approval_page_pipeline,
-        open_approval_execution_filter, DocumentApprovalWorkItemCursor,
+        DocumentApprovalWorkItemCursor, approval_task_still_open, document_approval_page_from_items,
+        document_approval_page_pipeline, open_approval_execution_filter,
     };
     use crate::entity::work_item::{
         AssignmentSource, DocumentApprovalWorkItemData, WorkItem, WorkItemData, WorkItemPriority,
         WorkItemStatus, WorkItemType,
     };
-    use crate::repository::bpm::{approval_task_cas_filter, classify_cas_miss, CasWriteOutcome};
-    use bpm::ApprovalNodeExecutionId;
-    use erp_core::common::time::Instant;
-    use erp_core::ids::WorkItemId;
+    use crate::repository::bpm::{CasWriteOutcome, approval_task_cas_filter, classify_cas_miss};
 
     fn assigned_item() -> WorkItem {
         WorkItem::new_at(
@@ -932,10 +908,7 @@ mod tests {
             "alice",
             Some("purchase_order"),
             None,
-            Some(&DocumentApprovalWorkItemCursor {
-                assigned_at: 30,
-                id: "wi-b".to_string(),
-            }),
+            Some(&DocumentApprovalWorkItemCursor { assigned_at: 30, id: "wi-b".to_string() }),
             2,
         )
         .expect("审批任务页 pipeline");
@@ -972,10 +945,7 @@ mod tests {
             "total facet 不得带 cursor"
         );
         let duplicate_instances = facets.get_array("duplicate_instances").unwrap();
-        assert!(duplicate_instances[0]
-            .as_document()
-            .unwrap()
-            .contains_key("$lookup"));
+        assert!(duplicate_instances[0].as_document().unwrap().contains_key("$lookup"));
         for branch in ["duplicate_executions", "duplicate_instances"] {
             let contract = Bson::Array(facets.get_array(branch).unwrap().clone()).to_string();
             assert!(!contract.contains("assigned_at"), "{branch} 不得受 cursor 影响");
@@ -989,26 +959,15 @@ mod tests {
             .expect("带检索审批任务页 pipeline");
         assert_eq!(pipeline.len(), 9);
         assert_eq!(
-            pipeline[1]
-                .get_document("$lookup")
-                .unwrap()
-                .get_str("from")
-                .unwrap(),
+            pipeline[1].get_document("$lookup").unwrap().get_str("from").unwrap(),
             "approval_node_executions"
         );
         assert_eq!(
-            pipeline[3]
-                .get_document("$lookup")
-                .unwrap()
-                .get_str("from")
-                .unwrap(),
+            pipeline[3].get_document("$lookup").unwrap().get_str("from").unwrap(),
             "approval_process_instances"
         );
         let snapshot_lookup = pipeline[5].get_document("$lookup").unwrap();
-        assert_eq!(
-            snapshot_lookup.get_str("from").unwrap(),
-            "approval_subject_snapshots"
-        );
+        assert_eq!(snapshot_lookup.get_str("from").unwrap(), "approval_subject_snapshots");
         let snapshot_contract = snapshot_lookup.to_string();
         for required in [
             "$$instance_id",
@@ -1022,48 +981,35 @@ mod tests {
             "$$task_object_id",
             "$$task_subject_version",
         ] {
-            assert!(
-                snapshot_contract.contains(required),
-                "缺少精确快照约束 {required}"
-            );
+            assert!(snapshot_contract.contains(required), "缺少精确快照约束 {required}");
         }
         let query_match = pipeline[6].get_document("$match").unwrap().to_string();
         assert!(query_match.contains(r"PO\.\[1\]"));
         assert!(query_match.contains("_mine_instance.current_node_name"));
         assert!(query_match.contains("_mine_instance.current_assignee_name"));
         assert!(query_match.contains("_mine_snapshots.payload.document_no"));
-        let duplicate_instances = pipeline[8]
-            .get_document("$facet")
-            .unwrap()
-            .get_array("duplicate_instances")
-            .unwrap();
+        let duplicate_instances =
+            pipeline[8].get_document("$facet").unwrap().get_array("duplicate_instances").unwrap();
         assert!(
             duplicate_instances[0].as_document().unwrap().contains_key("$set"),
             "q 分支必须复用已加载 execution"
         );
-        assert!(duplicate_instances
-            .iter()
-            .all(|stage| !stage.as_document().unwrap().contains_key("$lookup")));
+        assert!(
+            duplicate_instances.iter().all(|stage| !stage.as_document().unwrap().contains_key("$lookup"))
+        );
     }
 
     #[test]
     fn document_approval_page_overfetch_sets_next_cursor() {
         let page = document_approval_page_from_items(
-            vec![
-                approval_item("wi-c", 30),
-                approval_item("wi-b", 30),
-                approval_item("wi-a", 30),
-            ],
+            vec![approval_item("wi-c", 30), approval_item("wi-b", 30), approval_item("wi-a", 30)],
             9,
             2,
             Vec::new(),
         )
         .expect("分页结果");
         assert_eq!(
-            page.items
-                .iter()
-                .map(|item| item.base.id.as_str())
-                .collect::<Vec<_>>(),
+            page.items.iter().map(|item| item.base.id.as_str()).collect::<Vec<_>>(),
             vec!["wi-c", "wi-b"]
         );
         assert_eq!(page.total, 9);

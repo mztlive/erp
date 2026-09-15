@@ -6,14 +6,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::time::BusinessDate;
 use erp_core::field_update::FieldUpdate;
+pub use erp_core::ids::{CustomerAccountId, CustomerAssignmentId};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
-
-pub use erp_core::ids::{CustomerAccountId, CustomerAssignmentId};
+use serde::{Deserialize, Serialize};
 
 /// 用户标识最大长度。
 const USER_ID_MAX_LEN: usize = 128;
@@ -117,12 +115,8 @@ impl CustomerAssignment {
     /// # 错误
     /// 当 user_id / change_reason 为空或超长，或生效区间倒挂时返回错误。
     pub fn new(id: CustomerAssignmentId, data: CustomerAssignmentData) -> Result<Self> {
-        let user_id = normalize_required_text(
-            data.user_id,
-            "销售人员不能为空",
-            USER_ID_MAX_LEN,
-            "销售人员标识过长",
-        )?;
+        let user_id =
+            normalize_required_text(data.user_id, "销售人员不能为空", USER_ID_MAX_LEN, "销售人员标识过长")?;
         let change_reason = normalize_required_text(
             data.change_reason,
             "调整原因不能为空",
@@ -201,9 +195,7 @@ impl CustomerAssignment {
             return Ok(false);
         }
         if replacement.valid_from <= self.valid_from {
-            return Err(Error::from(
-                "新归属开始日期必须晚于旧归属开始日期，请调整生效日期",
-            ));
+            return Err(Error::from("新归属开始日期必须晚于旧归属开始日期，请调整生效日期"));
         }
         self.set_valid_to(replacement.valid_from)?;
         Ok(true)
@@ -329,10 +321,11 @@ fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>)
 
 #[cfg(test)]
 mod tests {
-    use super::{AssignmentRole, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentUpdate};
     use erp_core::common::time::BusinessDate;
     use erp_core::field_update::FieldUpdate;
     use erp_core::ids::{CustomerAccountId, CustomerAssignmentId};
+
+    use super::{AssignmentRole, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentUpdate};
 
     fn assignment_data() -> CustomerAssignmentData {
         CustomerAssignmentData {
@@ -360,22 +353,13 @@ mod tests {
     /// 失败路径：用户为空/超长、原因为空/超长、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
-        let blank_user = CustomerAssignmentData {
-            user_id: "   ".to_string(),
-            ..assignment_data()
-        };
+        let blank_user = CustomerAssignmentData { user_id: "   ".to_string(), ..assignment_data() };
         assert!(CustomerAssignment::new(CustomerAssignmentId::new("a"), blank_user).is_err());
 
-        let blank_reason = CustomerAssignmentData {
-            change_reason: "   ".to_string(),
-            ..assignment_data()
-        };
+        let blank_reason = CustomerAssignmentData { change_reason: "   ".to_string(), ..assignment_data() };
         assert!(CustomerAssignment::new(CustomerAssignmentId::new("a"), blank_reason).is_err());
 
-        let overlong_user = CustomerAssignmentData {
-            user_id: "u".repeat(129),
-            ..assignment_data()
-        };
+        let overlong_user = CustomerAssignmentData { user_id: "u".repeat(129), ..assignment_data() };
         assert!(CustomerAssignment::new(CustomerAssignmentId::new("a"), overlong_user).is_err());
 
         let reversed = CustomerAssignmentData {
@@ -392,16 +376,10 @@ mod tests {
             CustomerAssignment::new(CustomerAssignmentId::new("assign-2"), assignment_data()).unwrap();
         assert!(assignment.is_active_on(BusinessDate::from_ymd(2026, 6, 1).unwrap()));
         assert!(assignment.is_active_on(BusinessDate::from_ymd(2026, 1, 1).unwrap()));
-        assert!(
-            !assignment.is_active_on(BusinessDate::from_ymd(2026, 12, 31).unwrap()),
-            "结束日不包含"
-        );
+        assert!(!assignment.is_active_on(BusinessDate::from_ymd(2026, 12, 31).unwrap()), "结束日不包含");
         assert!(!assignment.is_active_on(BusinessDate::from_ymd(2025, 12, 31).unwrap()));
 
-        let open = CustomerAssignmentData {
-            valid_to: None,
-            ..assignment_data()
-        };
+        let open = CustomerAssignmentData { valid_to: None, ..assignment_data() };
         let open_assignment = CustomerAssignment::new(CustomerAssignmentId::new("assign-3"), open).unwrap();
         assert!(open_assignment.is_active_on(BusinessDate::from_ymd(2030, 1, 1).unwrap()));
     }
@@ -409,20 +387,15 @@ mod tests {
     /// 正常路径：协作归属可以直接结束，人员与角色保持不变。
     #[test]
     fn collaborator_can_end_directly() {
-        let data = CustomerAssignmentData {
-            assignment_role: AssignmentRole::Collaborator,
-            ..assignment_data()
-        };
+        let data =
+            CustomerAssignmentData { assignment_role: AssignmentRole::Collaborator, ..assignment_data() };
         let mut assignment = CustomerAssignment::new(CustomerAssignmentId::new("assign-4"), data).unwrap();
         assignment
             .update(CustomerAssignmentUpdate {
                 valid_to: FieldUpdate::Set(BusinessDate::from_ymd(2026, 3, 31).unwrap()),
             })
             .unwrap();
-        assert_eq!(
-            assignment.valid_to,
-            Some(BusinessDate::from_ymd(2026, 3, 31).unwrap())
-        );
+        assert_eq!(assignment.valid_to, Some(BusinessDate::from_ymd(2026, 3, 31).unwrap()));
         assert_eq!(assignment.user_id, "sales-zhangsan");
         assert_eq!(assignment.assignment_role, AssignmentRole::Collaborator);
     }
@@ -432,19 +405,13 @@ mod tests {
     fn direct_end_rejects_owner_and_reversed_window() {
         let mut owner =
             CustomerAssignment::new(CustomerAssignmentId::new("assign-owner"), assignment_data()).unwrap();
-        assert!(owner
-            .end_directly(BusinessDate::from_ymd(2026, 3, 31).unwrap())
-            .is_err());
+        assert!(owner.end_directly(BusinessDate::from_ymd(2026, 3, 31).unwrap()).is_err());
 
-        let data = CustomerAssignmentData {
-            assignment_role: AssignmentRole::Collaborator,
-            ..assignment_data()
-        };
+        let data =
+            CustomerAssignmentData { assignment_role: AssignmentRole::Collaborator, ..assignment_data() };
         let mut collaborator =
             CustomerAssignment::new(CustomerAssignmentId::new("assign-collaborator"), data).unwrap();
-        assert!(collaborator
-            .end_directly(BusinessDate::from_ymd(2025, 1, 1).unwrap())
-            .is_err());
+        assert!(collaborator.end_directly(BusinessDate::from_ymd(2025, 1, 1).unwrap()).is_err());
     }
 
     /// 冲突规则：负责人跨用户冲突，协作者只与同用户冲突。
@@ -464,15 +431,11 @@ mod tests {
         assert!(owner.end_for_replacement(&new_owner).unwrap());
         assert_eq!(owner.valid_to, Some(new_owner.valid_from));
 
-        let collaborator_data = CustomerAssignmentData {
-            assignment_role: AssignmentRole::Collaborator,
-            ..assignment_data()
-        };
-        let collaborator = CustomerAssignment::new(
-            CustomerAssignmentId::new("collaborator-old"),
-            collaborator_data.clone(),
-        )
-        .unwrap();
+        let collaborator_data =
+            CustomerAssignmentData { assignment_role: AssignmentRole::Collaborator, ..assignment_data() };
+        let collaborator =
+            CustomerAssignment::new(CustomerAssignmentId::new("collaborator-old"), collaborator_data.clone())
+                .unwrap();
         let other_user_data = CustomerAssignmentData {
             user_id: "sales-lisi".to_string(),
             valid_from: BusinessDate::from_ymd(2026, 6, 1).unwrap(),
@@ -498,10 +461,7 @@ mod tests {
 
         let same_start = CustomerAssignment::new(
             CustomerAssignmentId::new("same-start"),
-            CustomerAssignmentData {
-                valid_to: None,
-                ..assignment_data()
-            },
+            CustomerAssignmentData { valid_to: None, ..assignment_data() },
         )
         .unwrap();
         assert!(old.end_for_replacement(&same_start).is_err());
@@ -514,11 +474,7 @@ mod tests {
             CustomerAssignment::new(CustomerAssignmentId::new("assign-version"), assignment_data()).unwrap();
         assert!(assignment.ensure_version(1).is_ok());
         assert!(assignment.ensure_version(2).is_err());
-        assert!(assignment
-            .ensure_customer(&CustomerAccountId::new("customer-1"))
-            .is_ok());
-        assert!(assignment
-            .ensure_customer(&CustomerAccountId::new("customer-2"))
-            .is_err());
+        assert!(assignment.ensure_customer(&CustomerAccountId::new("customer-1")).is_ok());
+        assert!(assignment.ensure_customer(&CustomerAccountId::new("customer-2")).is_err());
     }
 }

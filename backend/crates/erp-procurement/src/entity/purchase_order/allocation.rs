@@ -7,15 +7,15 @@ use std::collections::HashMap;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
-use super::purchase_revision::PurchaseOrderRevisionLine;
-use super::types::PurchaseLineType;
 use erp_core::ids::{
     PurchaseLineSalesAllocationId, PurchaseOrderRevisionLineId, SalesOrderLineId, SalesOrderRevisionLineId,
 };
 use erp_core::money::{Amount, Quantity};
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use super::purchase_revision::PurchaseOrderRevisionLine;
+use super::types::PurchaseLineType;
 
 /// 销售当前版本中可供采购分配重绑定的类型化行事实。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -181,11 +181,7 @@ impl CurrentSalesAllocationPlan {
         if allocation_ids.next().is_some() {
             return Err(CurrentSalesAllocationPlanError::AllocationIdCountMismatch);
         }
-        Ok(Self {
-            rebound_purchase_lines,
-            allocations,
-            allocation_ids_by_purchase_line,
-        })
+        Ok(Self { rebound_purchase_lines, allocations, allocation_ids_by_purchase_line })
     }
 }
 
@@ -218,28 +214,19 @@ fn build_current_sales_allocation(
         .sales_order_line_id
         .as_ref()
         .map(ToString::to_string)
-        .or_else(|| {
-            purchase_line
-                .procurement_confirmation_line_id
-                .as_ref()
-                .map(ToString::to_string)
-        })
+        .or_else(|| purchase_line.procurement_confirmation_line_id.as_ref().map(ToString::to_string))
         .ok_or(CurrentSalesAllocationPlanError::MissingStableSalesLine)?;
     let current_sales_line = current_sales_by_stable_line
         .get(&stable_id)
         .ok_or(CurrentSalesAllocationPlanError::MissingCurrentSalesLine)?;
-    let quantity = purchase_line
-        .quantity
-        .ok_or(CurrentSalesAllocationPlanError::MissingPurchaseQuantity)?;
-    let allocated = purchase_line
-        .allocated_quantity
-        .ok_or(CurrentSalesAllocationPlanError::MissingAllocatedQuantity)?;
+    let quantity = purchase_line.quantity.ok_or(CurrentSalesAllocationPlanError::MissingPurchaseQuantity)?;
+    let allocated =
+        purchase_line.allocated_quantity.ok_or(CurrentSalesAllocationPlanError::MissingAllocatedQuantity)?;
     if allocated != quantity {
         return Err(CurrentSalesAllocationPlanError::QuantityMismatch);
     }
-    let allocation_id = allocation_ids
-        .next()
-        .ok_or(CurrentSalesAllocationPlanError::AllocationIdCountMismatch)?;
+    let allocation_id =
+        allocation_ids.next().ok_or(CurrentSalesAllocationPlanError::AllocationIdCountMismatch)?;
     purchase_line.sales_order_line_id = Some(current_sales_line.sales_order_line_id.clone());
     purchase_line.sales_order_revision_line_id =
         Some(current_sales_line.sales_order_revision_line_id.clone());
@@ -261,6 +248,13 @@ mod tests {
 
     use std::str::FromStr;
 
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{
+        ProcurementConfirmationLineId, PurchaseLineSalesAllocationId, PurchaseOrderRevisionId,
+        PurchaseOrderRevisionLineId, SalesOrderLineId, SalesOrderRevisionLineId, SkuId,
+    };
+    use erp_core::money::{Amount, Quantity, Rate, UnitPrice, line_amounts};
+
     use super::{
         CurrentSalesAllocationLine, CurrentSalesAllocationPlan, CurrentSalesAllocationPlanError,
         PurchaseLineSalesAllocation, PurchaseLineSalesAllocationData,
@@ -268,12 +262,6 @@ mod tests {
     use crate::entity::purchase_order::{
         PurchaseLineType, PurchaseOrderRevisionLine, PurchaseOrderRevisionLineData,
     };
-    use erp_core::common::time::BusinessDate;
-    use erp_core::ids::{
-        ProcurementConfirmationLineId, PurchaseLineSalesAllocationId, PurchaseOrderRevisionId,
-        PurchaseOrderRevisionLineId, SalesOrderLineId, SalesOrderRevisionLineId, SkuId,
-    };
-    use erp_core::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
 
     /// 构造可被当前销售版本重新绑定的商品/服务采购版本行夹具。
     ///
@@ -409,14 +397,8 @@ mod tests {
             allocation_data(),
         )
         .unwrap();
-        assert_eq!(
-            allocation.allocated_quantity,
-            Quantity::from_str("3.000000").unwrap()
-        );
-        assert_eq!(
-            allocation.allocated_cost_gross,
-            Amount::from_str("29.97").unwrap()
-        );
+        assert_eq!(allocation.allocated_quantity, Quantity::from_str("3.000000").unwrap());
+        assert_eq!(allocation.allocated_cost_gross, Amount::from_str("29.97").unwrap());
     }
 
     #[test]
@@ -425,11 +407,13 @@ mod tests {
             allocated_quantity: Quantity::from_str("-1.000000").unwrap(),
             ..allocation_data()
         };
-        assert!(PurchaseLineSalesAllocation::new(
-            PurchaseLineSalesAllocationId::new("alloc-2"),
-            negative_quantity,
-        )
-        .is_err());
+        assert!(
+            PurchaseLineSalesAllocation::new(
+                PurchaseLineSalesAllocationId::new("alloc-2"),
+                negative_quantity,
+            )
+            .is_err()
+        );
 
         let inverted = PurchaseLineSalesAllocationData {
             allocated_cost_net: Amount::from_str("30.00").unwrap(),
@@ -444,11 +428,10 @@ mod tests {
             allocated_cost_gross: Amount::from_str("-1.00").unwrap(),
             ..allocation_data()
         };
-        assert!(PurchaseLineSalesAllocation::new(
-            PurchaseLineSalesAllocationId::new("alloc-4"),
-            negative_cost
-        )
-        .is_err());
+        assert!(
+            PurchaseLineSalesAllocation::new(PurchaseLineSalesAllocationId::new("alloc-4"), negative_cost)
+                .is_err()
+        );
     }
 
     /// 验证计划按稳定行优先级重绑定并保持分配主键关联顺序。
@@ -485,44 +468,21 @@ mod tests {
         )
         .unwrap();
 
+        assert_eq!(purchase_lines[0].sales_order_revision_line_id.as_ref().unwrap().as_ref(), "old-sorl");
         assert_eq!(
-            purchase_lines[0]
-                .sales_order_revision_line_id
-                .as_ref()
-                .unwrap()
-                .as_ref(),
-            "old-sorl"
-        );
-        assert_eq!(
-            plan.rebound_purchase_lines[0]
-                .sales_order_line_id
-                .as_ref()
-                .unwrap()
-                .as_ref(),
+            plan.rebound_purchase_lines[0].sales_order_line_id.as_ref().unwrap().as_ref(),
             "sol-primary"
         );
         assert_eq!(
-            plan.rebound_purchase_lines[0]
-                .sales_order_revision_line_id
-                .as_ref()
-                .unwrap()
-                .as_ref(),
+            plan.rebound_purchase_lines[0].sales_order_revision_line_id.as_ref().unwrap().as_ref(),
             "current-primary"
         );
         assert_eq!(
-            plan.rebound_purchase_lines[1]
-                .sales_order_line_id
-                .as_ref()
-                .unwrap()
-                .as_ref(),
+            plan.rebound_purchase_lines[1].sales_order_line_id.as_ref().unwrap().as_ref(),
             "sol-fallback"
         );
         assert_eq!(
-            plan.rebound_purchase_lines[1]
-                .sales_order_revision_line_id
-                .as_ref()
-                .unwrap()
-                .as_ref(),
+            plan.rebound_purchase_lines[1].sales_order_revision_line_id.as_ref().unwrap().as_ref(),
             "current-fallback"
         );
         assert_eq!(plan.allocations[0].base.id, "alloc-1");

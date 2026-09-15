@@ -3,18 +3,16 @@
 //! 提交是不可变采购内容快照（§6.6）：财务审批与工作任务必须引用具体提交，
 //! 不得审批可变采购主表。提交与明细**不提供软删除方法**。
 
-use crate::entity::purchase_order::{PurchaseOrderSubmission, PurchaseOrderSubmissionLine, SubmissionStatus};
-use crate::repository::owned::{PurchaseOrderSubmissionLineRepository, PurchaseOrderSubmissionRepository};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SupplierAccountId};
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, Pagination, QueryFilter, Result, mongo_ops};
 
 use super::common::in_filter;
-use super::{PurchaseOrderDomainRepository, PURCHASE_ORDER_SUBMISSIONS, PURCHASE_ORDER_SUBMISSION_LINES};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{Pagination, QueryFilter};
+use super::{PURCHASE_ORDER_SUBMISSION_LINES, PURCHASE_ORDER_SUBMISSIONS, PurchaseOrderDomainRepository};
+use crate::entity::purchase_order::{PurchaseOrderSubmission, PurchaseOrderSubmissionLine, SubmissionStatus};
+use crate::repository::owned::{PurchaseOrderSubmissionLineRepository, PurchaseOrderSubmissionRepository};
 
 /// 采购提交列表筛选条件（财务审核队列）。
 #[derive(Debug, Clone)]
@@ -82,13 +80,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         purchase_order_id: &PurchaseOrderId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchaseOrderSubmission>> {
-        let options = FindOptions::builder()
-            .sort(doc! { "submission_no": 1, "id": 1 })
-            .build();
+        let options = FindOptions::builder().sort(doc! { "submission_no": 1, "id": 1 }).build();
         mongo_ops::find_many(
-            &self
-                .db
-                .collection::<PurchaseOrderSubmission>(PURCHASE_ORDER_SUBMISSIONS),
+            &self.db.collection::<PurchaseOrderSubmission>(PURCHASE_ORDER_SUBMISSIONS),
             doc! { "purchase_order_id": purchase_order_id.to_string() },
             options,
             executor,
@@ -117,9 +111,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         }
         let options = FindOptions::builder().sort(doc! { "id": 1 }).build();
         mongo_ops::find_many(
-            &self
-                .db
-                .collection::<PurchaseOrderSubmission>(PURCHASE_ORDER_SUBMISSIONS),
+            &self.db.collection::<PurchaseOrderSubmission>(PURCHASE_ORDER_SUBMISSIONS),
             in_filter("id", submission_ids.iter().map(ToString::to_string)),
             options,
             executor,
@@ -143,13 +135,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         submission_id: &PurchaseOrderSubmissionId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchaseOrderSubmissionLine>> {
-        let options = FindOptions::builder()
-            .sort(doc! { "line_no": 1, "id": 1 })
-            .build();
+        let options = FindOptions::builder().sort(doc! { "line_no": 1, "id": 1 }).build();
         mongo_ops::find_many(
-            &self
-                .db
-                .collection::<PurchaseOrderSubmissionLine>(PURCHASE_ORDER_SUBMISSION_LINES),
+            &self.db.collection::<PurchaseOrderSubmissionLine>(PURCHASE_ORDER_SUBMISSION_LINES),
             doc! { "purchase_order_submission_id": submission_id.to_string() },
             options,
             executor,
@@ -237,8 +225,7 @@ impl<'a> PurchaseOrderSubmissionRepository<'a> {
         if order_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(doc! { "purchase_order_id": { "$in": order_ids } }, executor)
-            .await
+        self.find_many(doc! { "purchase_order_id": { "$in": order_ids } }, executor).await
     }
 }
 
@@ -265,10 +252,7 @@ impl<'a> PurchaseOrderSubmissionLineRepository<'a> {
             return Ok(Vec::new());
         }
         self.find_many(
-            in_filter(
-                "purchase_order_submission_id",
-                submission_ids.iter().map(|id| id.to_string()),
-            ),
+            in_filter("purchase_order_submission_id", submission_ids.iter().map(|id| id.to_string())),
             executor,
         )
         .await
@@ -277,11 +261,12 @@ impl<'a> PurchaseOrderSubmissionLineRepository<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::PurchaseOrderSubmissionFilter;
-    use crate::entity::purchase_order::SubmissionStatus;
     use erp_core::ids::PurchaseOrderId;
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
+
+    use super::PurchaseOrderSubmissionFilter;
+    use crate::entity::purchase_order::SubmissionStatus;
 
     #[test]
     fn submission_filter_applies_order_supplier_and_status() {

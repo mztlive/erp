@@ -1,20 +1,20 @@
 //! `sales_order` 与 `sales_order_line` 仓储：主单列表查询、稳定明细维护。
 
+use std::collections::HashSet;
+
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
+use serde::{Deserialize, Serialize};
+
+use super::{SALES_ORDERS, SalesOrderDomainRepository, sort_doc};
 use crate::entity::sales_order::{
     BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderId, SalesOrderLine,
 };
 use crate::repository::owned::{SalesOrderLineRepository, SalesOrderRepository};
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use serde::{Deserialize, Serialize};
-
-use super::{sort_doc, SalesOrderDomainRepository, SALES_ORDERS};
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
-use std::collections::HashSet;
 
 /// 销售单列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -242,11 +242,7 @@ impl<'a> SalesOrderRepository<'a> {
         if let Some(session) = executor.session() {
             query = query.session(session);
         }
-        Ok(query
-            .await?
-            .into_iter()
-            .filter_map(|v| v.as_str().map(str::to_owned))
-            .collect())
+        Ok(query.await?.into_iter().filter_map(|v| v.as_str().map(str::to_owned)).collect())
     }
 
     /// 按销售单 ID 集合批量读取活跃销售单。
@@ -268,10 +264,7 @@ impl<'a> SalesOrderRepository<'a> {
         if sales_order_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let ids = sales_order_ids
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>();
+        let ids = sales_order_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 
@@ -297,10 +290,7 @@ impl<'a> SalesOrderRepository<'a> {
         if sales_order_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let ids = sales_order_ids
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>();
+        let ids = sales_order_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
         self.find_many(
             doc! {
                 "id": { "$in": ids },
@@ -387,10 +377,7 @@ impl<'a> SalesOrderRepository<'a> {
         )
         .await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
     /// 装载查询的有界身份与版本集合，用于跨页及导出的一致性校验。
     ///
@@ -487,9 +474,7 @@ impl<'a> SalesOrderDomainRepository<'a> {
         let rows = mongo_ops::find_many(
             &self.db.collection::<SalesOrderIdRow>(SALES_ORDERS),
             doc! { "id": { "$in": id_strings }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
-            FindOptions::builder()
-                .projection(doc! { "_id": 0, "id": 1 })
-                .build(),
+            FindOptions::builder().projection(doc! { "_id": 0, "id": 1 }).build(),
             executor,
         )
         .await?;
@@ -516,10 +501,7 @@ struct SalesOrderIdRow {
 /// 无。
 fn dedupe_sales_order_ids(ids: &[SalesOrderId]) -> Vec<SalesOrderId> {
     let mut seen = HashSet::with_capacity(ids.len());
-    ids.iter()
-        .filter(|&id| seen.insert(id.clone()))
-        .cloned()
-        .collect()
+    ids.iter().filter(|&id| seen.insert(id.clone())).cloned().collect()
 }
 
 /// 销售单列表投影字段。
@@ -579,9 +561,7 @@ impl SalesOrderRepository<'_> {
         let rows = mongo_ops::find_many(
             &self.collection().clone_with_type::<SalesSearchId>(),
             filter,
-            FindOptions::builder()
-                .projection(doc! { "id": 1, "_id": 0 })
-                .build(),
+            FindOptions::builder().projection(doc! { "id": 1, "_id": 0 }).build(),
             executor,
         )
         .await?;
@@ -652,19 +632,9 @@ mod tests {
             document.get_document("sales_owner_user_id").unwrap(),
             &doc! { "$in": ["sales-2", "sales-3"] }
         );
-        assert_eq!(
-            document.get_document("business_org_unit_id").unwrap(),
-            &doc! { "$in": ["org-1"] }
-        );
+        assert_eq!(document.get_document("business_org_unit_id").unwrap(), &doc! { "$in": ["org-1"] });
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
-        assert_eq!(
-            document
-                .get_document("order_no")
-                .unwrap()
-                .get_str("$regex")
-                .unwrap(),
-            r"SO\-2026"
-        );
+        assert_eq!(document.get_document("order_no").unwrap().get_str("$regex").unwrap(), r"SO\-2026");
         assert_eq!(document.get_str("customer_id").unwrap(), "cust-1");
         assert_eq!(document.get_str("contract_id").unwrap(), "contract-1");
         assert_eq!(document.get_str("origin_system").unwrap(), "ERP");
@@ -675,14 +645,7 @@ mod tests {
         assert_eq!(document.get_str("collection_progress").unwrap(), "NOT_COLLECTED");
         assert_eq!(document.get_str("invoice_progress").unwrap(), "NOT_INVOICED");
         assert_eq!(document.get_str("close_status").unwrap(), "NOT_SATISFIED");
-        assert_eq!(
-            document
-                .get_document("created_at")
-                .unwrap()
-                .get_i64("$gte")
-                .unwrap(),
-            1_700_000_000
-        );
+        assert_eq!(document.get_document("created_at").unwrap().get_i64("$gte").unwrap(), 1_700_000_000);
         assert_eq!(document.get_str("created_by").unwrap(), "user-1");
     }
 
@@ -718,10 +681,7 @@ mod tests {
 
     #[test]
     fn sales_order_projection_includes_responsible_sales_account() {
-        assert_eq!(
-            sales_order_projection().get_i32("sales_owner_user_id").unwrap(),
-            1
-        );
+        assert_eq!(sales_order_projection().get_i32("sales_owner_user_id").unwrap(), 1);
     }
 
     #[test]
@@ -753,14 +713,7 @@ mod tests {
         };
 
         let document = filter.to_doc();
-        assert_eq!(
-            document
-                .get_document("order_no")
-                .unwrap()
-                .get_str("$regex")
-                .unwrap(),
-            r"SO\-2026\.\[x\]"
-        );
+        assert_eq!(document.get_document("order_no").unwrap().get_str("$regex").unwrap(), r"SO\-2026\.\[x\]");
     }
 
     #[test]
@@ -824,18 +777,9 @@ mod keyword_regression_tests {
         let query = filter.to_doc();
         assert_eq!(query.get_str("customer_id").unwrap(), "selected-customer");
         assert!(query.contains_key("$or"), "待我处理 OR 必须保留");
-        let text = &query.get_array("$and").unwrap()[0]
-            .as_document()
-            .unwrap()
-            .get_array("$or")
-            .unwrap()[0];
+        let text = &query.get_array("$and").unwrap()[0].as_document().unwrap().get_array("$or").unwrap()[0];
         assert_eq!(
-            text.as_document()
-                .unwrap()
-                .get_document("order_no")
-                .unwrap()
-                .get_str("$regex")
-                .unwrap(),
+            text.as_document().unwrap().get_document("order_no").unwrap().get_str("$regex").unwrap(),
             r"Acme\.\[1\]"
         );
         assert!(format!("{query:?}").contains("contract-hit"));

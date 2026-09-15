@@ -1,10 +1,8 @@
-use super::IntegrationCenterReadService;
-use crate::{Error, Result};
 use erp_core::ids::ReconciliationDifferenceId;
 use erp_integration::dto::*;
 use erp_integration::entity::integration_ops::{
-    difference_terminal_policy, project_difference_actions, DifferenceActionProjection,
-    ReconciliationDifference,
+    DifferenceActionProjection, ReconciliationDifference, difference_terminal_policy,
+    project_difference_actions,
 };
 use erp_integration::ports::evidence::EvidenceSubject;
 use erp_integration::repository::IntegrationOpsExt;
@@ -13,6 +11,9 @@ use erp_integration::service::evidence::{
 };
 use erp_workflow::WorkItemExt;
 use persistence_core::NoTransaction;
+
+use super::IntegrationCenterReadService;
+use crate::{Error, Result};
 
 impl IntegrationCenterReadService {
     /// 查询对账差异详情与不可变决定时间线。
@@ -52,10 +53,7 @@ impl IntegrationCenterReadService {
             .collect();
         let terminal = view.status.is_some_and(|status| status.is_terminal());
         let has_work_item = self.has_difference_work_item(&view.id).await?;
-        let linked_evidence = self
-            .evidence
-            .discover_evidence(&subject, &mut NoTransaction)
-            .await?;
+        let linked_evidence = self.evidence.discover_evidence(&subject, &mut NoTransaction).await?;
         let policy = difference_evidence_policy(&difference);
         let (allowed_actions, action_blockers) =
             difference_action_projection(&difference, terminal, has_work_item, &linked_evidence);

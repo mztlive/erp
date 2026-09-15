@@ -1,9 +1,10 @@
 //! Publish the existing account selection as narrow balance facts.
 
-use crate::entity::receivable::money_progress_facts::ReceivableMoneyProgressFact;
-use crate::repository::owned::ReceivableAccountRepository;
 use erp_core::ids::SalesOrderId;
 use persistence_core::{Executor, Result};
+
+use crate::entity::receivable::money_progress_facts::ReceivableMoneyProgressFact;
+use crate::repository::owned::ReceivableAccountRepository;
 
 impl ReceivableAccountRepository<'_> {
     /// Read per-account balances with the original account filtering, ordering and errors.
@@ -15,11 +16,6 @@ impl ReceivableAccountRepository<'_> {
         id: &SalesOrderId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ReceivableMoneyProgressFact>> {
-        Ok(self
-            .list_by_sales_order(id, executor)
-            .await?
-            .iter()
-            .map(Into::into)
-            .collect())
+        Ok(self.list_by_sales_order(id, executor).await?.iter().map(Into::into).collect())
     }
 }

@@ -1,14 +1,12 @@
-use crate::entity::payable::{PayableAccount, PayableAccountStatus, PayableSourceType};
-use crate::repository::owned::PayableAccountRepository;
 use erp_core::ids::{PayableAccountId, PurchaseOrderId, SupplierAccountId};
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 
 use super::super::sort_doc;
 use super::{PayableAccountFilter, PayableAccountRow};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::payable::{PayableAccount, PayableAccountStatus, PayableSourceType};
+use crate::repository::owned::PayableAccountRepository;
 
 impl<'a> PayableAccountRepository<'a> {
     /// 分页检索应付往来子账列表（投影查询）。
@@ -34,13 +32,7 @@ impl<'a> PayableAccountRepository<'a> {
             .sort(sort_doc(
                 filter.sort_by.as_deref(),
                 filter.sort_ascending,
-                &[
-                    "gross_total",
-                    "settled_total",
-                    "open_total",
-                    "open_invoiceable_total",
-                    "created_at",
-                ],
+                &["gross_total", "settled_total", "open_total", "open_invoiceable_total", "created_at"],
             ))
             .skip(filter.skip())
             .limit(filter.limit())
@@ -50,10 +42,7 @@ impl<'a> PayableAccountRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 按主键集合批量取回应付子账（`$in` 一次取回，禁止 N+1）。

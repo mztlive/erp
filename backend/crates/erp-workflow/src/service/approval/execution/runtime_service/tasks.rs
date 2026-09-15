@@ -1,9 +1,5 @@
 //! 审批任务完成、关闭与开放任务创建。
 
-use crate::entity::work_item::{
-    ApprovalRuntimeTaskEnding, DocumentApprovalWorkItemData, WorkItem, WorkItemPriority,
-};
-use crate::repository::WorkItemExt;
 use bpm::engine::{TaskCloseReason, TaskIntent};
 use bpm::ids::ApprovalNodeExecutionId;
 use erp_core::common::time::Instant;
@@ -13,7 +9,11 @@ use mongodb::Database;
 
 use super::super::apply_plan::PlannedWrites;
 use super::{ensure_expected_version, hidden_not_found};
+use crate::entity::work_item::{
+    ApprovalRuntimeTaskEnding, DocumentApprovalWorkItemData, WorkItem, WorkItemPriority,
+};
 use crate::error::{Error, Result};
+use crate::repository::WorkItemExt;
 
 /// 完成或关闭审批任务所需的同一决定上下文。
 pub(super) struct CompleteOrCloseTasksInput<'a> {
@@ -50,21 +50,14 @@ pub(super) async fn complete_or_close_tasks(
     let Some(ending) = approval_task_ending(&input, &execution_id)? else {
         return Ok(());
     };
-    let tasks = db
-        .work_items()
-        .open_approval_tasks_for_execution(&execution_id, session)
-        .await?;
-    let requested = tasks
-        .iter()
-        .find(|item| item.base.id == input.work_item_id)
-        .ok_or_else(hidden_not_found)?;
+    let tasks = db.work_items().open_approval_tasks_for_execution(&execution_id, session).await?;
+    let requested =
+        tasks.iter().find(|item| item.base.id == input.work_item_id).ok_or_else(hidden_not_found)?;
     ensure_expected_version("审批任务", input.expected_task_version, requested.base.version)?;
     let tasks =
         WorkItem::end_all_for_approval_execution(tasks, &execution_id, input.actor_id, &ending, input.now)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
-    db.work_items()
-        .persist_ended_approval_tasks(&tasks, session)
-        .await?;
+    db.work_items().persist_ended_approval_tasks(&tasks, session).await?;
     Ok(())
 }
 
@@ -90,13 +83,9 @@ pub(super) fn approval_task_ending(
         return Ok(completes.then_some(ApprovalRuntimeTaskEnding::Complete));
     };
     if close_reasons.iter().any(|reason| reason != first_reason) {
-        return Err(Error::ConflictError(
-            "同一审批执行存在不同任务关闭原因".to_string(),
-        ));
+        return Err(Error::ConflictError("同一审批执行存在不同任务关闭原因".to_string()));
     }
-    Ok(Some(ApprovalRuntimeTaskEnding::Close {
-        reason: (*first_reason).to_string(),
-    }))
+    Ok(Some(ApprovalRuntimeTaskEnding::Close { reason: (*first_reason).to_string() }))
 }
 
 /// 创建开放审批任务所需的决定输出与单据责任上下文。
@@ -120,12 +109,7 @@ pub(super) async fn create_open_tasks(
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
     for (index, intent) in input.writes.create_tasks.iter().enumerate() {
-        let TaskIntent::HumanTaskRequested {
-            execution_id,
-            assignee,
-            ..
-        } = intent
-        else {
+        let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
             continue;
         };
         let item = WorkItem::new_document_approval(

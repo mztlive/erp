@@ -1,25 +1,22 @@
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_inventory::StockAdjustmentUpdate;
+use erp_inventory::{
+    StockAdjustmentDetailView, StockAdjustmentSubmitResultQuery, StockAdjustmentUpdate,
+    SubmitStockAdjustmentRequest,
+};
+use erp_workflow::service::approval::execution::PreparedExecution;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_workflow::service::approval::execution::PreparedExecution;
-
 use super::adapter::{
-    execute_stock_adjustment_domain_action, require_frozen_binding, start_approval_command_kind,
-    stock_adjustment_adapter, stock_adjustment_start_command, stock_adjustment_subject_ref,
-    RECENT_HISTORY_LIMIT,
+    RECENT_HISTORY_LIMIT, execute_stock_adjustment_domain_action, require_frozen_binding,
+    start_approval_command_kind, stock_adjustment_adapter, stock_adjustment_start_command,
+    stock_adjustment_subject_ref,
 };
 use super::approval_query::load_approval_binding;
-use super::InventoryAdjustmentService;
-use super::{
-    approval_prepare as start_approval, mapping::build_adjustment_line_updates, persist as start_persist,
-};
-use erp_inventory::{
-    StockAdjustmentDetailView, StockAdjustmentSubmitResultQuery, SubmitStockAdjustmentRequest,
-};
+use super::mapping::build_adjustment_line_updates;
+use super::{InventoryAdjustmentService, approval_prepare as start_approval, persist as start_persist};
+use crate::{Error, Result};
 
 impl InventoryAdjustmentService {
     /// 提交库存调整并调用统一 `start_approval`。
@@ -41,11 +38,7 @@ impl InventoryAdjustmentService {
     #[tracing::instrument(
         name = "inventory.stock_adjustment_submit",
         skip_all,
-        fields(
-            layer = "service",
-            domain = "inventory",
-            operation = "stock_adjustment_submit"
-        )
+        fields(layer = "service", domain = "inventory", operation = "stock_adjustment_submit")
     )]
     pub async fn submit_stock_adjustment(
         &self,
@@ -69,18 +62,14 @@ impl InventoryAdjustmentService {
         )
         .await?;
         if !adjustment.matches_version(req.expected_version) {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         let target_subject_version = adjustment
             .approval_subject_version
             .checked_add(1)
             .ok_or_else(|| Error::ConflictError("库存调整审批主题版本已达上限".to_string()))?;
         if req.expected_subject_version != target_subject_version {
-            return Err(Error::ConflictError(
-                "库存调整审批主题版本已变化，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("库存调整审批主题版本已变化，请刷新后重试".to_string()));
         }
         adjustment.update(StockAdjustmentUpdate {
             reason_type: Some(req.reason_type),

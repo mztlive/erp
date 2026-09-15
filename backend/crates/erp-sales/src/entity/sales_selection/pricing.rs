@@ -1,9 +1,8 @@
 //! 选品册金额运算：禁止浮点，溢出整次拒绝。
 
-use rust_decimal::Decimal;
-
 use erp_core::money::Amount;
 use erp_core::{Error, Result};
+use rust_decimal::Decimal;
 
 /// 两个金额精确相加。
 ///
@@ -76,11 +75,7 @@ where
 /// # 错误
 /// 无。金额类型减法不溢出。
 pub fn abs_diff(left: Amount, right: Amount) -> Amount {
-    if left >= right {
-        left.checked_sub(right)
-    } else {
-        right.checked_sub(left)
-    }
+    if left >= right { left.checked_sub(right) } else { right.checked_sub(left) }
 }
 
 /// 判断售价是否落在目标金额 ± 容差内（含边界）。
@@ -96,20 +91,18 @@ pub fn abs_diff(left: Amount, right: Amount) -> Amount {
 /// # 错误
 /// 目标加容差溢出时返回错误。
 pub fn price_in_tier(price: Amount, target: Amount, tolerance: Amount) -> Result<bool> {
-    let lower = if tolerance >= target {
-        Amount::zero()
-    } else {
-        target.checked_sub(tolerance)
-    };
+    let lower = if tolerance >= target { Amount::zero() } else { target.checked_sub(tolerance) };
     let upper = try_add(target, tolerance)?;
     Ok(price >= lower && price <= upper)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{abs_diff, price_in_tier, try_add, try_mul_u32, try_sum};
-    use erp_core::money::Amount;
     use std::str::FromStr;
+
+    use erp_core::money::Amount;
+
+    use super::{abs_diff, price_in_tier, try_add, try_mul_u32, try_sum};
 
     fn amount(value: &str) -> Amount {
         Amount::from_str(value).expect("测试金额必须合法")

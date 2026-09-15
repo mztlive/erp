@@ -1,56 +1,51 @@
-use super::adapter::{
-    build_payment_reversal_snapshot, execute_payment_reversal_domain_action, payment_reversal_adapter,
-    payment_reversal_object_readable, payment_reversal_responsible_org_id, payment_reversal_start_command,
-    payment_reversal_start_command_kind, payment_reversal_subject_ref, require_payment_reversal_binding,
-};
-use super::cancel_approval::{
-    build_payment_reversal_cancel_input, load_cancel_runtime, persist_payment_reversal_cancel,
-    PaymentReversalCancelPersistInput,
-};
-use erp_returns::dto::{
-    CancelPaymentReversalApprovalRequest, CommitPaymentReversalRequest, CreatePaymentReversalRequest,
-    SubmitPaymentReversalRequest,
-};
-use erp_returns::service::approval::start_payment_reversal_approval;
-
-use super::start_approval::{
-    build_payment_reversal_start_input, load_bound_definition_graph,
-    load_bound_definition_graph_with_executor, load_payment_reversal_start_receipt,
-    persist_payment_reversal_runtime, persist_payment_reversal_start, PaymentReversalStartInput,
-    PaymentReversalStartPersistInput,
-};
-use super::ReturnsProcess;
-use crate::{Error, Result};
-use application_core::AuditActor;
-use application_core::CommandReceipt;
-use erp_audit::AuditActorLogs;
-use erp_audit::AuditExt;
-use erp_audit::CommandReceiptServiceExt as _;
+use application_core::{AuditActor, CommandReceipt};
+use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
 use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierAccountId, SupplierPaymentId};
 use erp_finance::entity::payable::SupplierPaymentStatus;
 use erp_finance::repository::PayableExt;
 use erp_identity::SharedRbacService;
 use erp_read_models::returns_center::dto::PaymentReversalView;
+use erp_returns::dto::{
+    CancelPaymentReversalApprovalRequest, CommitPaymentReversalRequest, CreatePaymentReversalRequest,
+    SubmitPaymentReversalRequest,
+};
 use erp_returns::entity::returns::PaymentReversal;
+use erp_returns::service::ReturnsService;
+use erp_returns::service::approval::start_payment_reversal_approval;
 use erp_returns::service::payment_reversal::{
-    new_payment_reversal, new_payment_reversal_commit, PaymentReversalSourceFact,
+    PaymentReversalSourceFact, new_payment_reversal, new_payment_reversal_commit,
 };
 use erp_returns::service::shared::ensure_posted_source;
 use erp_returns::service::version_conflict::conflict_if_stale_version;
-use erp_returns::service::ReturnsService;
 use erp_supplier::SupplierExt;
-use erp_workflow::entity::document_registry::BusinessDocument;
-use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
+use erp_workflow::DocumentRegistryExt;
+use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::{prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
-use erp_workflow::DocumentRegistryExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
+
+use super::ReturnsProcess;
+use super::adapter::{
+    build_payment_reversal_snapshot, execute_payment_reversal_domain_action, payment_reversal_adapter,
+    payment_reversal_object_readable, payment_reversal_responsible_org_id, payment_reversal_start_command,
+    payment_reversal_start_command_kind, payment_reversal_subject_ref, require_payment_reversal_binding,
+};
+use super::cancel_approval::{
+    PaymentReversalCancelPersistInput, build_payment_reversal_cancel_input, load_cancel_runtime,
+    persist_payment_reversal_cancel,
+};
+use super::start_approval::{
+    PaymentReversalStartInput, PaymentReversalStartPersistInput, build_payment_reversal_start_input,
+    load_bound_definition_graph, load_bound_definition_graph_with_executor,
+    load_payment_reversal_start_receipt, persist_payment_reversal_runtime, persist_payment_reversal_start,
+};
+use crate::{Error, Result};
 
 impl ReturnsProcess {
     // -----------------------------------------------------------------------
@@ -87,10 +82,7 @@ impl ReturnsProcess {
             actor.clone(),
         )
         .await?;
-        self.reads()
-            .payment_reversal_detail(&reversal.base.id)
-            .await
-            .map_err(crate::Error::from)
+        self.reads().payment_reversal_detail(&reversal.base.id).await.map_err(crate::Error::from)
     }
 
     /// 按原付款一次创建付款冲正并启动审批。
@@ -112,11 +104,7 @@ impl ReturnsProcess {
             &req,
         )?;
         if let Some(reversal_id) = command_receipt.committed_resource_id(&self.db).await? {
-            return self
-                .reads()
-                .payment_reversal_detail(&reversal_id)
-                .await
-                .map_err(crate::Error::from);
+            return self.reads().payment_reversal_detail(&reversal_id).await.map_err(crate::Error::from);
         }
         let payment = self
             .db
@@ -128,10 +116,7 @@ impl ReturnsProcess {
         let source_version = payment.base.version;
         let mut reversal = new_payment_reversal_commit(
             &req,
-            PaymentReversalSourceFact {
-                payment_id: source_fact_id.clone(),
-                amount: payment.amount,
-            },
+            PaymentReversalSourceFact { payment_id: source_fact_id.clone(), amount: payment.amount },
             actor.id(),
         )?;
         let adapter = payment_reversal_adapter()?;
@@ -161,13 +146,9 @@ impl ReturnsProcess {
             new_registered_document(&id, DocumentType::PaymentReversal, reversal.reversal_no.clone())
                 .map_err(crate::Error::from)?;
         let create_audit =
-            actor
-                .clone()
-                .resource_log("payment_reversal.create", "payment_reversal", id.clone())?;
+            actor.clone().resource_log("payment_reversal.create", "payment_reversal", id.clone())?;
         let submit_audit =
-            actor
-                .clone()
-                .resource_log("payment_reversal.submit", "payment_reversal", id.clone())?;
+            actor.clone().resource_log("payment_reversal.submit", "payment_reversal", id.clone())?;
         let command_audit = command_receipt.audit(actor.clone(), id.clone())?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
@@ -202,9 +183,7 @@ impl ReturnsProcess {
                         now,
                     })?;
                     let prepared = prepare_start(start_input)?;
-                    ReturnsService::new(db.clone())
-                        .create_payment_reversal(&reversal, session)
-                        .await?;
+                    ReturnsService::new(db.clone()).create_payment_reversal(&reversal, session).await?;
                     if let erp_workflow::service::approval::execution::PreparedExecution::Apply(writes) =
                         prepared
                     {
@@ -233,10 +212,7 @@ impl ReturnsProcess {
                 None => return Err(error),
             },
         };
-        self.reads()
-            .payment_reversal_detail(&detail_id)
-            .await
-            .map_err(crate::Error::from)
+        self.reads().payment_reversal_detail(&detail_id).await.map_err(crate::Error::from)
     }
 
     /// 提交付款冲正并调用统一 `start_approval`。
@@ -263,14 +239,10 @@ impl ReturnsProcess {
     ) -> Result<PaymentReversalView> {
         req.validate()?;
         let adapter = payment_reversal_adapter()?;
-        let mut reversal = self
-            .domain()
-            .load_payment_reversal(id, &mut NoTransaction)
-            .await?;
+        let mut reversal = self.domain().load_payment_reversal(id, &mut NoTransaction).await?;
         conflict_if_stale_version(reversal.matches_version(req.expected_version))?;
         start_payment_reversal_approval(&mut reversal)?;
-        self.dispatch_payment_reversal_start(id, reversal, req.idempotency_key, actor, adapter)
-            .await
+        self.dispatch_payment_reversal_start(id, reversal, req.idempotency_key, actor, adapter).await
     }
 
     /// 撤回付款冲正审批，成功后回到草稿且 `subject_version` 不回退。
@@ -295,17 +267,10 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<PaymentReversalView> {
         req.validate()?;
-        let mut reversal = self
-            .domain()
-            .load_payment_reversal(id, &mut NoTransaction)
-            .await?;
+        let mut reversal = self.domain().load_payment_reversal(id, &mut NoTransaction).await?;
         conflict_if_stale_version(reversal.matches_version(req.expected_version))?;
-        self.persist_cancelled_payment_reversal(id, &mut reversal, &req, actor)
-            .await?;
-        self.reads()
-            .payment_reversal_detail(id)
-            .await
-            .map_err(crate::Error::from)
+        self.persist_cancelled_payment_reversal(id, &mut reversal, &req, actor).await?;
+        self.reads().payment_reversal_detail(id).await.map_err(crate::Error::from)
     }
 
     /// 从绑定读取定义并持久化启动事实。
@@ -321,14 +286,12 @@ impl ReturnsProcess {
         adapter: super::adapter::PaymentReversalAdapter,
     ) -> Result<PaymentReversalView> {
         let subject = payment_reversal_subject_ref(id)?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)?;
+        let binding =
+            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
         let binding = require_payment_reversal_binding(binding.as_ref())?.clone();
         let now = Instant::now();
-        let (organization_id, supplier_id) = self
-            .payment_reversal_context(&reversal.original_supplier_payment_id)
-            .await?;
+        let (organization_id, supplier_id) =
+            self.payment_reversal_context(&reversal.original_supplier_payment_id).await?;
         let snapshot =
             build_payment_reversal_snapshot(&reversal, &organization_id, &supplier_id, actor.id(), now)?;
         let start = payment_reversal_start_command(
@@ -373,10 +336,7 @@ impl ReturnsProcess {
             },
         )
         .await?;
-        self.reads()
-            .payment_reversal_detail(id)
-            .await
-            .map_err(crate::Error::from)
+        self.reads().payment_reversal_detail(id).await.map_err(crate::Error::from)
     }
 
     /// 加载撤回运行事实并写回草稿。
@@ -391,9 +351,8 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<()> {
         let adapter = payment_reversal_adapter()?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)?;
+        let binding =
+            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
         let binding = require_payment_reversal_binding(binding.as_ref())?.clone();
         let subject = payment_reversal_subject_ref(id)?;
         let runtime =
@@ -502,9 +461,7 @@ async fn persist_created_payment_reversal(
                     session,
                 )
                 .await?;
-                ReturnsService::new(db.clone())
-                    .create_payment_reversal(&reversal, session)
-                    .await?;
+                ReturnsService::new(db.clone()).create_payment_reversal(&reversal, session).await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::Error>(())
             })
@@ -590,13 +547,15 @@ async fn persist_bound_payment_reversal_document(
 
 #[cfg(test)]
 mod payment_reversal_approval_tests {
-    use super::{execute_payment_reversal_domain_action, start_payment_reversal_approval, ReturnsService};
+    use std::str::FromStr;
+
     use erp_core::common::time::Instant;
     use erp_core::ids::{PaymentReversalId, SupplierPaymentId};
     use erp_core::money::Amount;
     use erp_returns::entity::returns::{PaymentReversal, PaymentReversalData, PaymentReversalStatus};
     use erp_workflow::service::approval::policy::ApprovalDomainAction;
-    use std::str::FromStr;
+
+    use super::{ReturnsService, execute_payment_reversal_domain_action, start_payment_reversal_approval};
 
     fn draft_reversal() -> PaymentReversal {
         PaymentReversal::new(

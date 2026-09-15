@@ -1,6 +1,6 @@
 //! 在采购原解析时点调用供应商唯一付款条件规则。
 use erp_procurement::entity::facts::PaymentTermFact;
-use erp_supplier::{split_encoded_payment_term_snapshot, SupplierPaymentTerm};
+use erp_supplier::{SupplierPaymentTerm, split_encoded_payment_term_snapshot};
 /// 解析采购单付款条件；保持提供方原校验与错误。
 pub(crate) fn parse(code: &str) -> erp_core::Result<PaymentTermFact> {
     let term = SupplierPaymentTerm::parse(code)?;
@@ -19,9 +19,10 @@ pub(crate) fn parse_snapshot(code: &str) -> erp_core::Result<PaymentTermFact> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::time::BusinessDate;
     use erp_procurement::entity::purchase_order::PaymentTermSnapshot;
+
+    use super::*;
 
     #[test]
     fn payment_fact_preserves_all_provider_codes_gates_and_due_rules() {
@@ -54,10 +55,7 @@ mod tests {
             let snapshot =
                 PaymentTermSnapshot::new(term.canonical_code, term.prepay_gate, None, None, parse_snapshot)
                     .unwrap();
-            assert_eq!(
-                snapshot.prepay_minimum_ratio,
-                ratio.map(|value| value.parse().unwrap())
-            );
+            assert_eq!(snapshot.prepay_minimum_ratio, ratio.map(|value| value.parse().unwrap()));
         }
     }
 
@@ -73,9 +71,7 @@ mod tests {
                 prepay_minimum_ratio: None,
             };
             assert_eq!(
-                snapshot
-                    .payable_due_date(approved, Some(delivery), parse_snapshot)
-                    .unwrap(),
+                snapshot.payable_due_date(approved, Some(delivery), parse_snapshot).unwrap(),
                 BusinessDate::from_ymd(2026, 9, 30).unwrap()
             );
             assert!(parse(encoded).is_err());

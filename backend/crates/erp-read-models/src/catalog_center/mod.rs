@@ -1,5 +1,6 @@
 //! 商品中心聚合读取；查询规则和响应形状由商品领域提供。
-use crate::Result;
+use std::sync::Arc;
+
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use erp_catalog::repository::ProductFilter;
 use erp_catalog::service::catalog::{
@@ -7,7 +8,8 @@ use erp_catalog::service::catalog::{
 };
 use erp_catalog::{PageView, ProductListParams, ProductView, SellableSkuListParams, SellableSkuView};
 use persistence_core::NoTransaction;
-use std::sync::Arc;
+
+use crate::Result;
 
 /// 商品列表与可售商品列表的组合入口。
 pub struct CatalogCenterReadService {
@@ -21,11 +23,8 @@ impl CatalogCenterReadService {
     /// 查询商品列表，保持原校验、仓储错误转换与分页投影。
     pub async fn product_list(&self, params: &ProductListParams) -> Result<PageView<ProductView>> {
         let filter = prepare_product_list(params)?;
-        let page = self
-            .query
-            .product_page(&filter, &mut NoTransaction)
-            .await
-            .map_err(erp_catalog::Error::from)?;
+        let page =
+            self.query.product_page(&filter, &mut NoTransaction).await.map_err(erp_catalog::Error::from)?;
         Ok(product_page_view(page, &filter)?)
     }
 
@@ -41,16 +40,10 @@ impl CatalogCenterReadService {
     /// 商品不存在时返回 `NotFound("商品不存在")`；仓储失败时透出目录错误。
     pub async fn product_detail(&self, id: &str) -> Result<ProductView> {
         let filter = product_detail_filter(id);
-        let page = self
-            .query
-            .product_page(&filter, &mut NoTransaction)
-            .await
-            .map_err(erp_catalog::Error::from)?;
+        let page =
+            self.query.product_page(&filter, &mut NoTransaction).await.map_err(erp_catalog::Error::from)?;
         let view = product_page_view(page, &filter)?;
-        view.items
-            .into_iter()
-            .next()
-            .ok_or_else(|| crate::Error::NotFound("商品不存在".to_string()))
+        view.items.into_iter().next().ok_or_else(|| crate::Error::NotFound("商品不存在".to_string()))
     }
     /// 查询可售 SKU；资格日期由原商品领域逻辑确定。
     pub async fn sellable_sku_list(

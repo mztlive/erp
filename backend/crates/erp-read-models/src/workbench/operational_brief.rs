@@ -1,13 +1,15 @@
 //! 导入和供应侧异常的共同只读字段；不装载加密地址、连接凭据和文件指纹。
-use super::brief::{format_instant_datetime, push_section, ObjectBriefSource};
-use super::{object_ids, ObjectKind, WorkbenchObjectFactMap, WorkbenchReadService};
-use crate::errors::Result;
+use std::collections::{HashMap, HashSet};
+
 use erp_import::LegacyImportExt;
 use erp_supply::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use erp_supply::entity::supplier_offering::{SupplierOffering, SupplierOfferingAvailability};
 use erp_supply::repository::{SupplierFulfillmentExt, SupplierOfferingExt};
 use persistence_core::Executor;
-use std::collections::{HashMap, HashSet};
+
+use super::brief::{ObjectBriefSource, format_instant_datetime, push_section};
+use super::{ObjectKind, WorkbenchObjectFactMap, WorkbenchReadService, object_ids};
+use crate::errors::Result;
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 对已授权装载的导入、供应商订单和供给异常补齐公共事实。
@@ -40,12 +42,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        for batch in self
-            .db
-            .legacy_import_batches()
-            .list_active_by_ids(&ids, executor)
-            .await?
-        {
+        for batch in self.db.legacy_import_batches().list_active_by_ids(&ids, executor).await? {
             let Some(fact) = facts.get_mut(&(ObjectKind::LegacyImportBatch, batch.base.id.clone())) else {
                 continue;
             };
@@ -72,17 +69,10 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let rows = self
-            .db
-            .supplier_fulfillment_orders()
-            .list_active_by_ids(&ids, executor)
-            .await?;
+        let rows = self.db.supplier_fulfillment_orders().list_active_by_ids(&ids, executor).await?;
         let names = self
             .supplier_display_names(
-                &rows
-                    .iter()
-                    .map(|row| row.supplier_id.to_string())
-                    .collect::<Vec<_>>(),
+                &rows.iter().map(|row| row.supplier_id.to_string()).collect::<Vec<_>>(),
                 executor,
             )
             .await?;
@@ -92,10 +82,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 continue;
             };
             fact.display.counterparty_label = names.get(row.supplier_id.as_ref()).cloned();
-            fact.display.brief_source = Some(supplier_order_source(
-                row,
-                fact.display.counterparty_label.clone(),
-            ));
+            fact.display.brief_source =
+                Some(supplier_order_source(row, fact.display.counterparty_label.clone()));
         }
         Ok(())
     }
@@ -111,17 +99,10 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let rows = self
-            .db
-            .supplier_offerings()
-            .list_active_by_ids(&ids, executor)
-            .await?;
+        let rows = self.db.supplier_offerings().list_active_by_ids(&ids, executor).await?;
         let names = self
             .supplier_display_names(
-                &rows
-                    .iter()
-                    .map(|row| row.supplier_id.to_string())
-                    .collect::<Vec<_>>(),
+                &rows.iter().map(|row| row.supplier_id.to_string()).collect::<Vec<_>>(),
                 executor,
             )
             .await?;
@@ -200,12 +181,7 @@ fn offering_source(
             .available_quantity
             .as_ref()
             .map(|quantity| super::brief::format_quantity(quantity, None));
-        push_section(
-            &mut source.extra_sections,
-            "当前可供数量",
-            quantity.as_deref(),
-            true,
-        );
+        push_section(&mut source.extra_sections, "当前可供数量", quantity.as_deref(), true);
         push_section(
             &mut source.extra_sections,
             "供给更新时间",

@@ -1,7 +1,8 @@
 //! Per-account monetary facts published for consumer progress calculations.
 
-use super::ReceivableAccount;
 use erp_core::money::Amount;
+
+use super::ReceivableAccount;
 
 /// Preserve each account, including accounts whose four balances are zero.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

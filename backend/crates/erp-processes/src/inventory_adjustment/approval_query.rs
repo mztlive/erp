@@ -1,40 +1,37 @@
 //! 库存调整详情的审批运行摘要与 actor-aware 普通撤回令牌。
 
+use application_core::AuditActor;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
-use erp_inventory::{StockAdjustment, StockAdjustmentState};
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_inventory::{
+    CancelStockAdjustmentApprovalTokenView, DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView,
+    DocumentApprovalInstanceView, DocumentApprovalView, StockAdjustment, StockAdjustmentState,
+    SubmitStockAdjustmentApprovalTokenView,
+};
 use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
-use erp_workflow::ApprovalIntegrationExt;
-use erp_workflow::BpmExt;
-use erp_workflow::DocumentRegistryExt;
-use erp_workflow::WorkItemExt;
+use erp_workflow::service::approval::execution::authorization::requires_blocked_cancel;
+use erp_workflow::service::approval::execution::{
+    RuntimeHistoryItem, history_item_from_execution, history_page_from, latest_rejection_reason,
+};
+use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
+use super::InventoryAdjustmentService;
 use super::adapter::{
-    document_approval_view_with_history, require_frozen_binding, stock_adjustment_subject_ref,
-    RECENT_HISTORY_LIMIT,
+    RECENT_HISTORY_LIMIT, document_approval_view_with_history, require_frozen_binding,
+    stock_adjustment_subject_ref,
 };
 use super::approval_prepare::actor_can_submit;
 use super::cancel_approval::{
     actor_can_cancel, ensure_cancel_instance_binding, ensure_cancel_instance_subject,
     ensure_stock_adjustment_open_task_identity,
 };
-use super::InventoryAdjustmentService;
 use crate::{Error, Result};
-use application_core::AuditActor;
-use erp_inventory::{
-    CancelStockAdjustmentApprovalTokenView, DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView,
-    DocumentApprovalInstanceView, DocumentApprovalView, SubmitStockAdjustmentApprovalTokenView,
-};
-use erp_workflow::service::approval::execution::authorization::requires_blocked_cancel;
-use erp_workflow::service::approval::execution::{
-    history_item_from_execution, history_page_from, latest_rejection_reason, RuntimeHistoryItem,
-};
-use erp_workflow::service::approval::process_kind::process_kind_of;
 
 /// 加载库存调整详情的审批实例、历史与当前调用人撤回令牌。
 pub(super) async fn load_document_approval(
@@ -45,11 +42,8 @@ pub(super) async fn load_document_approval(
 ) -> Result<DocumentApprovalView> {
     let submit_command = submit_token(service, adjustment, binding, actor).await?;
     let subject = stock_adjustment_subject_ref(&adjustment.base.id)?;
-    let Some(instance) = service
-        .db
-        .bpm_workflow()
-        .find_latest_by_subject(&subject, &mut NoTransaction)
-        .await?
+    let Some(instance) =
+        service.db.bpm_workflow().find_latest_by_subject(&subject, &mut NoTransaction).await?
     else {
         return Ok(document_approval_view_with_history(
             binding,
@@ -88,9 +82,7 @@ pub(super) async fn load_document_approval_for_instance(
         || instance.subject.subject_id() != adjustment.base.id
         || instance.subject_version != expected_subject_version
     {
-        return Err(Error::ConflictError(
-            "库存调整签署结果与审批实例身份不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("库存调整签署结果与审批实例身份不一致".to_string()));
     }
     ensure_cancel_instance_binding(&instance, require_frozen_binding(binding)?)?;
     project_runtime(service, adjustment, binding, instance, None, actor).await
@@ -105,11 +97,7 @@ async fn project_runtime(
     actor: &AuditActor,
 ) -> Result<DocumentApprovalView> {
     let instance_id = ApprovalProcessInstanceId::new(instance.base.id.clone());
-    let current = service
-        .db
-        .bpm_workflow()
-        .find_current_execution(&instance_id, &mut NoTransaction)
-        .await?;
+    let current = service.db.bpm_workflow().find_current_execution(&instance_id, &mut NoTransaction).await?;
     let open_tasks = load_open_tasks(service, current.as_ref()).await?;
     let rows = service
         .db
@@ -125,16 +113,8 @@ async fn project_runtime(
         rows.iter().map(history_item_from_execution).collect(),
         RECENT_HISTORY_LIMIT as u32,
     );
-    let cancel_command = cancel_token(
-        service,
-        adjustment,
-        &instance,
-        current.as_ref(),
-        &open_tasks,
-        binding,
-        actor,
-    )
-    .await?;
+    let cancel_command =
+        cancel_token(service, adjustment, &instance, current.as_ref(), &open_tasks, binding, actor).await?;
     Ok(document_approval_view_with_history(
         binding,
         Some(instance_view(
@@ -144,10 +124,7 @@ async fn project_runtime(
             latest_rejection_reason(&history.items),
         )),
         history.items.iter().map(history_item_view).collect(),
-        DocumentApprovalHistoryPageView {
-            next_cursor: history.next_cursor,
-            has_more: history.has_more,
-        },
+        DocumentApprovalHistoryPageView { next_cursor: history.next_cursor, has_more: history.has_more },
         adjustment.status,
         submit_command,
         cancel_command,
@@ -229,9 +206,7 @@ async fn cancel_token(
         || current.round_no != instance.current_round_no
         || instance.current_node_execution_id.as_ref().map(AsRef::as_ref) != Some(current.base.id.as_str())
     {
-        return Err(Error::ConflictError(
-            "库存调整审批当前执行与实例不一致".to_string(),
-        ));
+        return Err(Error::ConflictError("库存调整审批当前执行与实例不一致".to_string()));
     }
     let expected_task_version = match instance.status {
         ApprovalProcessInstanceStatus::Running
@@ -244,14 +219,14 @@ async fn cancel_token(
                 &snapshot.payload.responsible_org_id,
             )?;
             Some(open_tasks[0].base.version.to_string())
-        }
+        },
         ApprovalProcessInstanceStatus::Blocked
             if current.status == ApprovalNodeExecutionStatus::Blocked
                 && open_tasks.is_empty()
                 && same_personnel_blocker(instance.blocker_code, current.blocker_code) =>
         {
             None
-        }
+        },
         _ => return Ok(None),
     };
     if !actor_can_cancel(service, instance, actor).await? {
@@ -311,10 +286,7 @@ fn history_item_view(item: &RuntimeHistoryItem) -> DocumentApprovalHistoryItemVi
 }
 
 fn empty_history_page() -> DocumentApprovalHistoryPageView {
-    DocumentApprovalHistoryPageView {
-        next_cursor: None,
-        has_more: false,
-    }
+    DocumentApprovalHistoryPageView { next_cursor: None, has_more: false }
 }
 
 /// 按执行器加载库存调整单的审批绑定。
@@ -344,8 +316,9 @@ pub(super) async fn load_approval_binding(
 
 #[cfg(test)]
 mod tests {
-    use super::same_personnel_blocker;
     use bpm::model::types::ApprovalBlockerCode;
+
+    use super::same_personnel_blocker;
 
     /// BLOCKED 令牌必须要求实例与执行 blocker 同时存在、相等且属于人员失效。
     #[test]

@@ -1,7 +1,12 @@
 //! 发货单查询、草稿构造、领域视图与调用方事务内持久化。
 
-use super::delivery_lines::delivery_line_specs;
+use erp_core::ids::DeliveryId;
+use id_generator::next_id;
+use persistence_core::{Executor, NoTransaction};
+use validator::Validate;
+
 use super::FulfillmentService;
+use super::delivery_lines::delivery_line_specs;
 use crate::dto::{
     CreateDeliveryRequest, DeliveryDetailView, DeliveryLineView, DeliveryListParams, DeliveryView, PageView,
     SortDir, UpdateDeliveryRequest,
@@ -9,10 +14,6 @@ use crate::dto::{
 use crate::entity::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineBatch};
 use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
-use erp_core::ids::DeliveryId;
-use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
-use validator::Validate;
 
 /// 发货单列表筛选条件类型。
 type DeliveryFilter = <mongodb::Database as FulfillmentExt>::DeliveryFilter;
@@ -45,11 +46,7 @@ impl FulfillmentService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .deliveries()
-            .search_deliveries(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.deliveries().search_deliveries(&filter, &mut NoTransaction).await?;
         let items = page
             .items
             .into_iter()
@@ -68,12 +65,7 @@ impl FulfillmentService {
                 created_at: row.created_at,
             })
             .collect();
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 查询发货单详情（表头 + 行）。
@@ -131,13 +123,9 @@ impl FulfillmentService {
                 address_snapshot_fingerprint: None,
             },
         )?;
-        let lines = DeliveryLineBatch::build(
-            id.clone(),
-            delivery.delivery_type,
-            1,
-            delivery_line_specs(&req.lines)?,
-        )
-        .map_err(Error::Logic)?;
+        let lines =
+            DeliveryLineBatch::build(id.clone(), delivery.delivery_type, 1, delivery_line_specs(&req.lines)?)
+                .map_err(Error::Logic)?;
         Ok((delivery, lines))
     }
 
@@ -154,9 +142,7 @@ impl FulfillmentService {
             .await?
             .ok_or_else(|| Error::NotFound("发货单不存在".to_string()))?;
         if delivery.base.version != req.version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         delivery.update(crate::entity::fulfillment::DeliveryUpdate {
             carrier: req.carrier,
@@ -175,10 +161,7 @@ impl FulfillmentService {
         lines: &[DeliveryLine],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .fulfillment()
-            .create_delivery_with_lines(delivery, lines, executor)
-            .await?;
+        self.db.fulfillment().create_delivery_with_lines(delivery, lines, executor).await?;
         Ok(())
     }
 
@@ -232,12 +215,14 @@ impl From<DeliveryLine> for DeliveryLineView {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use erp_core::ids::{DeliveryId, PurchaseLineSalesAllocationId, SalesOrderLineId, StockReservationId};
+    use erp_core::money::Quantity;
+
     use super::delivery_line_specs;
     use crate::dto::DeliveryLineInput;
     use crate::entity::fulfillment::{DeliveryLineBatch, DeliveryType};
-    use erp_core::ids::{DeliveryId, PurchaseLineSalesAllocationId, SalesOrderLineId, StockReservationId};
-    use erp_core::money::Quantity;
-    use std::str::FromStr;
 
     #[test]
     fn delivery_lines_enforce_type_ownership() {
@@ -273,17 +258,8 @@ mod tests {
     /// 创建路径经实体批量工厂编号：旧 Service helper 已删除。
     #[test]
     fn delivery_create_uses_entity_batch_factory() {
-        let production = include_str!("delivery.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
-        assert!(
-            !production.contains("fn build_delivery_lines"),
-            "旧 helper 必须删除"
-        );
-        assert!(
-            production.contains("DeliveryLineBatch::build"),
-            "创建路径必须调用实体工厂"
-        );
+        let production = include_str!("delivery.rs").split("#[cfg(test)]").next().expect("生产代码");
+        assert!(!production.contains("fn build_delivery_lines"), "旧 helper 必须删除");
+        assert!(production.contains("DeliveryLineBatch::build"), "创建路径必须调用实体工厂");
     }
 }

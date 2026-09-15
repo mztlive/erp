@@ -1,9 +1,8 @@
 //! Audit persistence consumed by workflow; adapters live at the composition root.
 
+use application_core::{AuditActor, CommandReceipt, CommandReceiptFact};
 use async_trait::async_trait;
 use persistence_core::Executor;
-
-use application_core::{AuditActor, CommandReceipt, CommandReceiptFact};
 
 use crate::error::{Error, Result};
 
@@ -89,14 +88,7 @@ impl PreparedWorkflowAudit {
         resource_id: String,
         message: Option<String>,
     ) -> Result<Self> {
-        Self::resource_with_id(
-            id_generator::next_id(),
-            actor,
-            action,
-            resource_type,
-            resource_id,
-            message,
-        )
+        Self::resource_with_id(id_generator::next_id(), actor, action, resource_type, resource_id, message)
     }
 
     /// Build a success resource audit with an explicit id and optional message.
@@ -202,21 +194,19 @@ pub async fn committed_resource_id(
     receipt: &CommandReceipt,
 ) -> Result<Option<String>> {
     let candidates = receipt.id_candidates();
-    let facts = port
-        .find_command_receipts_by_ids(&candidates, &mut persistence_core::NoTransaction)
-        .await?;
+    let facts = port.find_command_receipts_by_ids(&candidates, &mut persistence_core::NoTransaction).await?;
     for candidate in candidates {
         let Some(fact) = facts.iter().find(|fact| fact.id == candidate) else {
             continue;
         };
         return match receipt.match_fact(fact) {
             application_core::CommandReceiptMatch::SamePayload(resource_id) => Ok(Some(resource_id)),
-            application_core::CommandReceiptMatch::DifferentPayload => Err(Error::ConflictError(
-                "同一操作号已用于不同提交，请重新发起操作".to_string(),
-            )),
+            application_core::CommandReceiptMatch::DifferentPayload => {
+                Err(Error::ConflictError("同一操作号已用于不同提交，请重新发起操作".to_string()))
+            },
             application_core::CommandReceiptMatch::Corrupted => {
                 Err(Error::Internal("业务命令收据格式无效".to_string()))
-            }
+            },
         };
     }
     Ok(None)

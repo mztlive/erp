@@ -8,4 +8,4 @@ pub mod ports;
 pub mod repository;
 pub mod service;
 
-pub use error::{known_duplicate_index_message, Error, Result};
+pub use error::{Error, Result, known_duplicate_index_message};

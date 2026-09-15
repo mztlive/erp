@@ -12,10 +12,11 @@ pub use error::{Error, Result};
 
 #[cfg(test)]
 mod compile_probe_equivalence_tests {
-    use crate::service::receivable::mapping::zero_amount;
     use erp_core::money::Amount;
     use mongodb::bson;
     use serde::Serialize;
+
+    use crate::service::receivable::mapping::zero_amount;
 
     #[derive(Serialize)]
     struct MoneyDocument {
@@ -24,12 +25,8 @@ mod compile_probe_equivalence_tests {
 
     #[test]
     fn zero_amount_parse_spelling_preserves_value_json_and_decimal128_wire() {
-        let original = MoneyDocument {
-            amount: zero_amount(),
-        };
-        let alternative = MoneyDocument {
-            amount: "0.00".parse::<Amount>().unwrap(),
-        };
+        let original = MoneyDocument { amount: zero_amount() };
+        let alternative = MoneyDocument { amount: "0.00".parse::<Amount>().unwrap() };
         assert_eq!(original.amount, alternative.amount);
         assert_eq!(original.amount.to_decimal().scale(), 2);
         assert_eq!(alternative.amount.to_decimal().scale(), 2);
@@ -48,23 +45,13 @@ mod compile_probe_equivalence_tests {
 
     #[test]
     fn former_zero_literal_probe_changes_scale_json_and_decimal128_wire() {
-        let original = MoneyDocument {
-            amount: zero_amount(),
-        };
-        let invalid_probe = MoneyDocument {
-            amount: "0".parse::<Amount>().unwrap(),
-        };
+        let original = MoneyDocument { amount: zero_amount() };
+        let invalid_probe = MoneyDocument { amount: "0".parse::<Amount>().unwrap() };
         assert_eq!(original.amount, invalid_probe.amount);
         assert_eq!(original.amount.to_decimal().scale(), 2);
         assert_eq!(invalid_probe.amount.to_decimal().scale(), 0);
-        assert_eq!(
-            serde_json::to_string(&invalid_probe).unwrap(),
-            r#"{"amount":"0"}"#
-        );
-        assert_ne!(
-            serde_json::to_string(&original).unwrap(),
-            serde_json::to_string(&invalid_probe).unwrap()
-        );
+        assert_eq!(serde_json::to_string(&invalid_probe).unwrap(), r#"{"amount":"0"}"#);
+        assert_ne!(serde_json::to_string(&original).unwrap(), serde_json::to_string(&invalid_probe).unwrap());
         let original_wire = bson::serialize_to_vec(&original).unwrap();
         let invalid_wire = bson::serialize_to_vec(&invalid_probe).unwrap();
         assert_ne!(original_wire, invalid_wire);
@@ -75,7 +62,7 @@ mod compile_probe_equivalence_tests {
                 assert_eq!(before.to_string(), "0.00");
                 assert_eq!(after.to_string(), "0");
                 assert_ne!(before.bytes(), after.bytes());
-            }
+            },
             other => panic!("expected two Decimal128 amounts, got {other:?}"),
         }
     }

@@ -4,9 +4,10 @@
 //! 列表投影查询。集合名统一取 `SalesSelectionExt` 关联常量。
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
 use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 
 use crate::entity::sales_selection::{
     SalesSelectionBooklet, SalesSelectionDisplayItem, SalesSelectionIdempotency, SalesSelectionPoolMember,
@@ -14,8 +15,6 @@ use crate::entity::sales_selection::{
     SalesSelectionProposalSkuLine, SalesSelectionSession,
 };
 use crate::repository::extensions::SalesSelectionExt;
-use persistence_core::mongo_ops;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
 
 /// 选品册集合名（单一来源）。
 const BOOKLETS: &str = <mongodb::Database as SalesSelectionExt>::SALES_SELECTION_BOOKLETS;
@@ -80,10 +79,7 @@ impl QueryFilter for SelectionBookFilter {
             filter.insert("submit_mode", mode.as_str());
         }
         if let Some(q) = self.q.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
-            filter.insert(
-                "customer_name",
-                doc! { "$regex": regex_escape(q), "$options": "i" },
-            );
+            filter.insert("customer_name", doc! { "$regex": regex_escape(q), "$options": "i" });
         }
         filter
     }
@@ -118,9 +114,7 @@ pub fn validate_book_sort(sort_by: Option<&str>, sort_ascending: bool) -> crate:
     if BOOK_SORT_FIELDS.contains(&field) {
         return Ok((field.to_string(), sort_ascending));
     }
-    Err(crate::Error::ValidationError(format!(
-        "不支持的排序字段: {field}"
-    )))
+    Err(crate::Error::ValidationError(format!("不支持的排序字段: {field}")))
 }
 
 /// 转义正则特殊字符，避免关键字被当作模式。
@@ -136,10 +130,7 @@ pub fn validate_book_sort(sort_by: Option<&str>, sort_ascending: bool) -> crate:
 fn regex_escape(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for ch in value.chars() {
-        if matches!(
-            ch,
-            '.' | '+' | '*' | '?' | '^' | '$' | '(' | ')' | '[' | ']' | '{' | '}' | '|' | '\\'
-        ) {
+        if matches!(ch, '.' | '+' | '*' | '?' | '^' | '$' | '(' | ')' | '[' | ']' | '{' | '}' | '|' | '\\') {
             escaped.push('\\');
         }
         escaped.push(ch);
@@ -202,10 +193,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
             executor,
         )
         .await?;
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 列出某批次当前有效陈列。
@@ -228,10 +216,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     ) -> Result<Vec<SalesSelectionDisplayItem>> {
         self.db
             .sales_selection_display_items()
-            .find_many(
-                doc! { "booklet_id": booklet_id, "batch_id": batch_id, "effective": true },
-                executor,
-            )
+            .find_many(doc! { "booklet_id": booklet_id, "batch_id": batch_id, "effective": true }, executor)
             .await
     }
 
@@ -275,10 +260,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
         booklet_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SalesSelectionSession>> {
-        self.db
-            .sales_selection_sessions()
-            .find_one(doc! { "booklet_id": booklet_id }, executor)
-            .await
+        self.db.sales_selection_sessions().find_one(doc! { "booklet_id": booklet_id }, executor).await
     }
 
     /// 按选品册读取方案。
@@ -297,10 +279,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
         booklet_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SalesSelectionProposal>> {
-        self.db
-            .sales_selection_proposals()
-            .find_one(doc! { "booklet_id": booklet_id }, executor)
-            .await
+        self.db.sales_selection_proposals().find_one(doc! { "booklet_id": booklet_id }, executor).await
     }
 
     /// 持久化一次同步准备的全部结果。
@@ -326,10 +305,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let mut task = task.clone();
-        self.db
-            .sales_selection_prepare_tasks()
-            .update(&mut task, executor)
-            .await?;
+        self.db.sales_selection_prepare_tasks().update(&mut task, executor).await?;
         if task.kind.reuses_current_batch() {
             let old = self
                 .list_effective_items(
@@ -344,17 +320,11 @@ impl<'a> SalesSelectionDomainRepository<'a> {
                         if task.tier_ids.contains(tier_id));
                 if targeted {
                     item.effective = false;
-                    self.db
-                        .sales_selection_display_items()
-                        .update(&mut item, executor)
-                        .await?;
+                    self.db.sales_selection_display_items().update(&mut item, executor).await?;
                 }
             }
         }
-        self.db
-            .sales_selection_booklets()
-            .update(booklet, executor)
-            .await?;
+        self.db.sales_selection_booklets().update(booklet, executor).await?;
         self.insert_members_and_items(members, items, executor).await
     }
 
@@ -419,16 +389,9 @@ impl<'a> SalesSelectionDomainRepository<'a> {
         booklet: &mut SalesSelectionBooklet,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .sales_selection_proposals()
-            .create(proposal, executor)
-            .await?;
-        self.insert_proposal_lines(display_lines, sku_lines, executor)
-            .await?;
-        self.db
-            .sales_selection_sessions()
-            .update(session, executor)
-            .await?;
+        self.db.sales_selection_proposals().create(proposal, executor).await?;
+        self.insert_proposal_lines(display_lines, sku_lines, executor).await?;
+        self.db.sales_selection_sessions().update(session, executor).await?;
         self.db.sales_selection_booklets().update(booklet, executor).await
     }
 
@@ -451,17 +414,13 @@ impl<'a> SalesSelectionDomainRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<SalesSelectionProposalDisplayLine>(PROPOSAL_DISPLAY_LINES),
+            &self.db.collection::<SalesSelectionProposalDisplayLine>(PROPOSAL_DISPLAY_LINES),
             display_lines.to_vec(),
             executor,
         )
         .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<SalesSelectionProposalSkuLine>(PROPOSAL_SKU_LINES),
+            &self.db.collection::<SalesSelectionProposalSkuLine>(PROPOSAL_SKU_LINES),
             sku_lines.to_vec(),
             executor,
         )
@@ -484,10 +443,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
         record: &SalesSelectionIdempotency,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .sales_selection_idempotency()
-            .create(record, executor)
-            .await
+        self.db.sales_selection_idempotency().create(record, executor).await
     }
 
     /// 按操作域与作用域读取幂等记录。
@@ -512,18 +468,16 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     ) -> Result<Option<SalesSelectionIdempotency>> {
         self.db
             .sales_selection_idempotency()
-            .find_one(
-                doc! { "operation": operation, "scope_id": scope_id, "idempotency_key": key },
-                executor,
-            )
+            .find_one(doc! { "operation": operation, "scope_id": scope_id, "idempotency_key": key }, executor)
             .await
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_book_sort, SelectionBookFilter};
     use persistence_core::{Pagination, QueryFilter};
+
+    use super::{SelectionBookFilter, validate_book_sort};
 
     fn filter() -> SelectionBookFilter {
         SelectionBookFilter {
@@ -561,23 +515,15 @@ mod tests {
         );
         scoped.authorized_customer_ids = Some(vec![]);
         assert_eq!(
-            scoped.to_doc().get_array("$and").unwrap()[0]
-                .as_document()
-                .unwrap(),
+            scoped.to_doc().get_array("$and").unwrap()[0].as_document().unwrap(),
             &mongodb::bson::doc! { "customer_id": { "$in": [] } }
         );
     }
 
     #[test]
     fn sort_whitelist_defaults_and_rejects_unknown() {
-        assert_eq!(
-            validate_book_sort(None, false).unwrap(),
-            ("created_at".to_string(), false)
-        );
-        assert_eq!(
-            validate_book_sort(Some("status"), true).unwrap(),
-            ("status".to_string(), true)
-        );
+        assert_eq!(validate_book_sort(None, false).unwrap(), ("created_at".to_string(), false));
+        assert_eq!(validate_book_sort(Some("status"), true).unwrap(), ("status".to_string(), true));
         assert!(validate_book_sort(Some("price"), false).is_err());
         assert!(validate_book_sort(Some("  "), false).unwrap().0 == "created_at");
     }

@@ -1,17 +1,19 @@
 //! 精确创建依据资格、拆单和业务日期规则。
-use crate::entity::facts::{AvailabilityStatus, OfferingFact, SalesOrderBasisFact, SalesRevisionFact};
-use crate::entity::purchase_order::{
-    basis_scope_key, fulfillment_options, maximum_create_quantity, purchase_type_from_product_kind,
-    stable_line_id, BasisGroup, BasisLine, BasisScope, CreationBasisFacts, LineSupply,
-    SalesProcurementCoverage, SalesProcurementCoverageLine,
-};
-use crate::{Error, Result};
+use std::collections::HashSet;
+use std::str::FromStr;
+
 use chrono::{Datelike, FixedOffset};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::SupplierAccountId;
 use erp_core::money::Quantity;
-use std::collections::HashSet;
-use std::str::FromStr;
+
+use crate::entity::facts::{AvailabilityStatus, OfferingFact, SalesOrderBasisFact, SalesRevisionFact};
+use crate::entity::purchase_order::{
+    BasisGroup, BasisLine, BasisScope, CreationBasisFacts, LineSupply, SalesProcurementCoverage,
+    SalesProcurementCoverageLine, basis_scope_key, fulfillment_options, maximum_create_quantity,
+    purchase_type_from_product_kind, stable_line_id,
+};
+use crate::{Error, Result};
 
 /// 供应商当前商务资料中的付款条件与经营类目。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,10 +36,7 @@ impl SupplierSettlementTerms {
     /// # 错误
     /// 无。
     fn net30() -> Self {
-        Self {
-            payment_term_code: "NET-30".to_string(),
-            business_category: None,
-        }
+        Self { payment_term_code: "NET-30".to_string(), business_category: None }
     }
 }
 
@@ -67,10 +66,8 @@ pub fn basis_groups_from_facts(
     if !order.is_effective {
         return Ok(Vec::new());
     }
-    let responsibility_scope_ids = responsibility_scope_ids
-        .iter()
-        .map(String::as_str)
-        .collect::<HashSet<_>>();
+    let responsibility_scope_ids =
+        responsibility_scope_ids.iter().map(String::as_str).collect::<HashSet<_>>();
     let mut groups: Vec<BasisGroup> = Vec::new();
     for line in &coverage.lines {
         if !responsibility_scope_ids.contains(line.revision_line.sales_order_line_id.as_ref())
@@ -82,9 +79,7 @@ pub fn basis_groups_from_facts(
         append_line_supplies(&coverage.revision, line.clone(), supplies, facts, &mut groups)?;
     }
     for group in &mut groups {
-        group
-            .lines
-            .sort_by(|left, right| stable_line_id(left).cmp(stable_line_id(right)));
+        group.lines.sort_by(|left, right| stable_line_id(left).cmp(stable_line_id(right)));
     }
     groups.sort_by_key(|group| basis_scope_key(&group.scope));
     Ok(groups)
@@ -119,10 +114,8 @@ fn append_line_supplies(
         let supplier_id = supply.offering.supplier_id.clone();
         let terms = settlement_terms_for(facts, &supplier_id);
         let purchase_type = purchase_type_from_product_kind(line.product_kind)?;
-        let max_create_quantity = maximum_create_quantity(
-            line.summary.remaining_quantity,
-            supply.availability.available_quantity,
-        )?;
+        let max_create_quantity =
+            maximum_create_quantity(line.summary.remaining_quantity, supply.availability.available_quantity)?;
         if max_create_quantity <= zero_quantity() {
             continue;
         }
@@ -133,11 +126,8 @@ fn append_line_supplies(
                 payment_term_code: terms.payment_term_code.clone(),
                 fulfillment_responsibility,
             };
-            let basis_line = BasisLine {
-                coverage: line.clone(),
-                supply: supply.clone(),
-                max_create_quantity,
-            };
+            let basis_line =
+                BasisLine { coverage: line.clone(), supply: supply.clone(), max_create_quantity };
             if let Some(group) = groups.iter_mut().find(|group| group.scope == scope) {
                 group.lines.push(basis_line);
             } else {
@@ -213,11 +203,7 @@ fn qualified_supplies_for_line(
 ) -> Result<Vec<LineSupply>> {
     let mut seen_suppliers = HashSet::new();
     let mut supplies = Vec::new();
-    for offering in facts
-        .offerings
-        .iter()
-        .filter(|offering| offering.sku_id == line.goods_line.sku_id)
-    {
+    for offering in facts.offerings.iter().filter(|offering| offering.sku_id == line.goods_line.sku_id) {
         if seen_suppliers.contains(&offering.supplier_id.to_string()) {
             continue;
         }
@@ -262,16 +248,10 @@ fn qualified_supply(facts: &CreationBasisFacts, offering: &OfferingFact) -> Resu
     if availability.availability_status != AvailabilityStatus::Available {
         return Ok(None);
     }
-    if availability
-        .available_quantity
-        .is_some_and(|quantity| quantity < zero_quantity())
-    {
+    if availability.available_quantity.is_some_and(|quantity| quantity < zero_quantity()) {
         return Err(Error::BusinessLogicError("供应商可供数量不能为负".to_string()));
     }
-    if availability
-        .available_quantity
-        .is_some_and(|quantity| quantity == zero_quantity())
-    {
+    if availability.available_quantity.is_some_and(|quantity| quantity == zero_quantity()) {
         return Ok(None);
     }
     Ok(Some(LineSupply {
@@ -321,22 +301,19 @@ pub fn zero_quantity() -> Quantity {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::ids::{SkuId, SupplierCommercialProfileRevisionId, SupplierOfferingId};
+    use erp_core::money::{Rate, UnitPrice};
+
     use super::*;
     use crate::entity::facts::{
         AvailabilityFact, CurrentRevisionFact, FactIdentity, OfferingRevisionFact, SupplierCommercialFact,
         SupplierRoleFact, VersionedFactIdentity,
     };
-    use erp_core::ids::{SkuId, SupplierCommercialProfileRevisionId, SupplierOfferingId};
-    use erp_core::money::{Rate, UnitPrice};
 
     fn offering() -> OfferingFact {
         OfferingFact {
-            base: FactIdentity {
-                id: "offering-1".to_string(),
-            },
-            stable: CurrentRevisionFact {
-                current_revision_id: Some("revision-1".to_string()),
-            },
+            base: FactIdentity { id: "offering-1".to_string() },
+            stable: CurrentRevisionFact { current_revision_id: Some("revision-1".to_string()) },
             sku_id: SkuId::new("sku-1"),
             supplier_id: SupplierAccountId::new("supplier-1"),
         }
@@ -346,9 +323,7 @@ mod tests {
         facts.revisions.insert(
             "revision-1".to_string(),
             OfferingRevisionFact {
-                base: FactIdentity {
-                    id: "revision-1".to_string(),
-                },
+                base: FactIdentity { id: "revision-1".to_string() },
                 valid_from: BusinessDate::today(),
                 valid_to: None,
                 bulk_supply_price_gross: UnitPrice::from_str("1").unwrap(),
@@ -359,10 +334,7 @@ mod tests {
         facts.availabilities.insert(
             "offering-1".to_string(),
             AvailabilityFact {
-                base: VersionedFactIdentity {
-                    id: "availability-1".to_string(),
-                    version: 3,
-                },
+                base: VersionedFactIdentity { id: "availability-1".to_string(), version: 3 },
                 supplier_offering_id: SupplierOfferingId::new("offering-1"),
                 availability_status: status,
                 available_quantity: quantity.map(|value| Quantity::from_str(value).unwrap()),
@@ -393,9 +365,8 @@ mod tests {
     /// 数量为空表示无限制，零数量仍不构成合格依据。
     #[test]
     fn unlimited_and_zero_availability_remain_distinct() {
-        let unlimited = qualified_supply(&facts(None, AvailabilityStatus::Available), &offering())
-            .unwrap()
-            .unwrap();
+        let unlimited =
+            qualified_supply(&facts(None, AvailabilityStatus::Available), &offering()).unwrap().unwrap();
         assert_eq!(unlimited.availability.available_quantity, None);
         assert!(
             qualified_supply(&facts(Some("0"), AvailabilityStatus::Available), &offering())
@@ -408,10 +379,7 @@ mod tests {
     fn settlement_missing_facts_and_blank_payment_keep_original_fallback() {
         let id = SupplierAccountId::new("supplier-1");
         let mut facts = CreationBasisFacts::default();
-        assert_eq!(
-            settlement_terms_for(&facts, &id),
-            SupplierSettlementTerms::net30()
-        );
+        assert_eq!(settlement_terms_for(&facts, &id), SupplierSettlementTerms::net30());
         facts.suppliers.insert(
             id.to_string(),
             SupplierRoleFact {
@@ -420,10 +388,7 @@ mod tests {
                 )),
             },
         );
-        assert_eq!(
-            settlement_terms_for(&facts, &id),
-            SupplierSettlementTerms::net30()
-        );
+        assert_eq!(settlement_terms_for(&facts, &id), SupplierSettlementTerms::net30());
         facts.commercial_profiles.insert(
             "profile-1".to_string(),
             SupplierCommercialFact {

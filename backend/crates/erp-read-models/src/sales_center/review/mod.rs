@@ -5,10 +5,10 @@ mod projection;
 mod query;
 
 pub use dto::*;
+use erp_identity::SharedRbacService;
 pub use query::SalesChangeListView;
 
 use crate::{Error, Result};
-use erp_identity::SharedRbacService;
 
 /// 销售变更详情读取器；不负责审批命令或业务写入。
 pub struct SalesChangeReadService {
@@ -65,8 +65,6 @@ impl SalesChangeReadService {
     /// # 关键业务约束
     /// 不得退回路由级授权或补公司范围。
     fn require_rbac(&self) -> Result<&SharedRbacService> {
-        self.rbac
-            .as_ref()
-            .ok_or_else(|| Error::Internal("销售变更单读取需要授权源".into()))
+        self.rbac.as_ref().ok_or_else(|| Error::Internal("销售变更单读取需要授权源".into()))
     }
 }

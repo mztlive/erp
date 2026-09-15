@@ -29,6 +29,7 @@ pub mod sales_invoice_allocation_plan;
 pub mod sales_order_amount_summary;
 
 pub use customer_receipt::*;
+pub use external_facts::SalesBusinessTypeFact;
 pub use funds_ledger::ReceivableFundsLedger;
 pub use invoice::*;
 pub use receipt_allocation::*;
@@ -39,8 +40,6 @@ pub use sales_change_delta::ReceivableDelta;
 pub use sales_invoice_allocation::*;
 pub use sales_invoice_allocation_plan::*;
 pub use sales_order_amount_summary::SalesOrderReceivableAmountSummary;
-
-pub use external_facts::SalesBusinessTypeFact;
 
 pub mod money_progress_facts;
 

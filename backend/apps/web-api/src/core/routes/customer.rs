@@ -4,16 +4,13 @@
 //! `/admin/customers/{id}/assignments` 等；每条路由统一走
 //! JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
 
-use axum::{
-    routing::{delete, get, post, put},
-    Router,
-};
+use axum::Router;
+use axum::routing::{delete, get, post, put};
 use erp_identity::SharedRbacService;
 
-use crate::{
-    app_state::AppState,
-    core::{handler::customer, middleware::with_permission},
-};
+use crate::app_state::AppState;
+use crate::core::handler::customer;
+use crate::core::middleware::with_permission;
 
 /// 返回本域管理端路由集合。
 ///
@@ -82,11 +79,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         )
         .route(
             "/customers",
-            with_permission(
-                get(customer::customer_list),
-                rbac,
-                customer::customer_list_permission_key(),
-            ),
+            with_permission(get(customer::customer_list), rbac, customer::customer_list_permission_key()),
         )
         .route(
             "/customers/all-authorized",
@@ -106,19 +99,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         )
         .route(
             "/customers/{id}",
-            with_permission(
-                get(customer::customer_detail),
-                rbac,
-                customer::customer_detail_permission_key(),
-            ),
+            with_permission(get(customer::customer_detail), rbac, customer::customer_detail_permission_key()),
         )
         .route(
             "/customers/{id}",
-            with_permission(
-                put(customer::customer_update),
-                rbac,
-                customer::customer_update_permission_key(),
-            ),
+            with_permission(put(customer::customer_update), rbac, customer::customer_update_permission_key()),
         )
         .route(
             "/customers/{id}",

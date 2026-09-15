@@ -4,14 +4,12 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::extensions::WarehouseExt;
-use persistence_core::Result;
 
 /// `warehouse` 集合名。
 pub(crate) const WAREHOUSES: &str = <mongodb::Database as WarehouseExt>::WAREHOUSES;
@@ -46,9 +44,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -63,10 +59,7 @@ fn warehouse_indexes() -> Vec<IndexModel> {
 /// 返回 `warehouse_revision` 的聚合修订唯一约束与查询索引。
 fn warehouse_revision_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_warehouse_revisions_revision",
-            doc! { "warehouse_id": 1, "revision_no": 1 },
-        ),
+        unique_index("uk_warehouse_revisions_revision", doc! { "warehouse_id": 1, "revision_no": 1 }),
         // 「同一仓库有效期不得重叠」的保守子集（§6.3）：同一仓库生效开始日
         // 相同必然重叠，直接拒绝；完整区间重叠校验在 P3 Service 事务内完成。
         unique_index(
@@ -101,10 +94,7 @@ fn warehouse_sku_policy_indexes() -> Vec<IndexModel> {
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -122,10 +112,7 @@ mod tests {
     use super::{warehouse_indexes, warehouse_revision_indexes, warehouse_sku_policy_indexes};
 
     fn names(indexes: &[mongodb::IndexModel]) -> Vec<String> {
-        indexes
-            .iter()
-            .filter_map(|index| index.options.as_ref()?.name.clone())
-            .collect()
+        indexes.iter().filter_map(|index| index.options.as_ref()?.name.clone()).collect()
     }
 
     #[test]

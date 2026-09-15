@@ -9,28 +9,23 @@ pub mod error;
 pub mod http;
 
 use application_core::AuditActor;
-use axum::{
-    extract::{Path, Query, State},
-    http::HeaderMap,
-    Extension, Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::http::HeaderMap;
+use axum::{Extension, Json};
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::service::approval::execution::{ApprovalRuntimeService, UpgradeBindingCommand};
 use erp_workflow::{ApprovalCancelBlockedCommand, ApprovalResumeCommand};
-
-use crate::{
-    app_state::AppState,
-    core::{
-        handler::approval_instance::error::{parse_optional_version, parse_version, ApprovalHttpError},
-        response::ApiResponse,
-    },
-};
 
 use self::http::{
     CancelBlockedHttpRequest, DecisionValue, InstanceHistoryQuery, InstanceListCursor,
     PreparedInstanceListQuery, ResumeApproverHttpRequest, SubmitDecisionHttpRequest,
     UpgradeBindingHttpRequest,
 };
+use crate::app_state::AppState;
+use crate::core::handler::approval_instance::error::{
+    ApprovalHttpError, parse_optional_version, parse_version,
+};
+use crate::core::response::ApiResponse;
 
 /// 审批实例 Handler 结果。
 type ApprovalResult<T> = std::result::Result<ApiResponse<T>, ApprovalHttpError>;
@@ -93,9 +88,7 @@ pub async fn instance_list(
     .approval_instance_list(&runtime_service(&state), &actor, query)
     .await
     .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
-    let next_cursor = page
-        .next_cursor
-        .map(|cursor| InstanceListCursor::from_runtime(view, cursor).encode());
+    let next_cursor = page.next_cursor.map(|cursor| InstanceListCursor::from_runtime(view, cursor).encode());
     ok_json(serde_json::json!({
         "items": page.items,
         "total": page.total,
@@ -148,12 +141,10 @@ pub async fn instance_history(
     headers: HeaderMap,
     Query(query): Query<InstanceHistoryQuery>,
 ) -> ApprovalResult<serde_json::Value> {
-    let limit = query
-        .normalized_limit()
-        .map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
-    let after_execution_no = query
-        .normalized_cursor()
-        .map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
+    let limit =
+        query.normalized_limit().map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
+    let after_execution_no =
+        query.normalized_cursor().map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
     let page = runtime_service(&state)
         .instance_history(&actor, &id, after_execution_no, limit)
         .await
@@ -407,17 +398,15 @@ fn ensure_non_empty_reason(reason: &str, headers: &HeaderMap) -> Result<(), Appr
 
 #[cfg(test)]
 mod tests {
-    use axum::{
-        body::{to_bytes, Body},
-        http::{HeaderMap, Request, StatusCode},
-        response::Response,
-        routing::get,
-        Router,
-    };
+    use axum::Router;
+    use axum::body::{Body, to_bytes};
+    use axum::http::{HeaderMap, Request, StatusCode};
+    use axum::response::Response;
+    use axum::routing::get;
     use serde_json::json;
     use tower::ServiceExt;
 
-    use super::{decision_command, resume_command, PreparedInstanceListQuery, SubmitDecisionHttpRequest};
+    use super::{PreparedInstanceListQuery, SubmitDecisionHttpRequest, decision_command, resume_command};
     use crate::core::handler::approval_instance::http::{DecisionValue, ResumeApproverHttpRequest};
 
     async fn instance_list_query_boundary(_: PreparedInstanceListQuery) -> StatusCode {
@@ -427,12 +416,7 @@ mod tests {
     async fn instance_list_query_response(uri: &str) -> Response {
         Router::new()
             .route("/", get(instance_list_query_boundary))
-            .oneshot(
-                Request::builder()
-                    .uri(uri)
-                    .body(Body::empty())
-                    .expect("构造查询请求"),
-            )
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).expect("构造查询请求"))
             .await
             .expect("执行 Axum 查询提取")
     }
@@ -477,18 +461,14 @@ mod tests {
     async fn instance_list_query_extractor_keeps_stable_error_envelope() {
         let response = instance_list_query_response("/?view=unknown").await;
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("读取错误信封");
+        let body = to_bytes(response.into_body(), usize::MAX).await.expect("读取错误信封");
         let payload: serde_json::Value = serde_json::from_slice(&body).expect("解析错误信封");
         assert_eq!(payload["status"], 422);
         assert_eq!(payload["success"], false);
         assert_eq!(payload["code"], "BUSINESS_RULE_BLOCKED");
         assert_eq!(payload.get("retryable"), Some(&serde_json::Value::Bool(false)));
         assert_eq!(payload.get("data"), Some(&serde_json::Value::Null));
-        assert!(payload["errorMessage"]
-            .as_str()
-            .is_some_and(|message| !message.is_empty()));
+        assert!(payload["errorMessage"].as_str().is_some_and(|message| !message.is_empty()));
     }
 
     /// 合法查询必须通过同一生产提取器，且 Managed cursor 保留完整 i64 时间域。
@@ -557,13 +537,15 @@ mod tests {
 
     #[test]
     fn recover_alias_payload_is_rejected() {
-        assert!(serde_json::from_value::<ResumeApproverHttpRequest>(json!({
-            "expected_instance_version": "1",
-            "expected_execution_version": "1",
-            "expected_assignment_version": "1",
-            "idempotency_key": "k1",
-            "recovery_action": "RETRY_CURRENT_STEP"
-        }))
-        .is_err());
+        assert!(
+            serde_json::from_value::<ResumeApproverHttpRequest>(json!({
+                "expected_instance_version": "1",
+                "expected_execution_version": "1",
+                "expected_assignment_version": "1",
+                "idempotency_key": "k1",
+                "recovery_action": "RETRY_CURRENT_STEP"
+            }))
+            .is_err()
+        );
     }
 }

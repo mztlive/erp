@@ -1,16 +1,15 @@
-use std::{future::Future, pin::Pin};
+use std::future::Future;
+use std::pin::Pin;
 
 use async_trait::async_trait;
-use casbin::{error::AdapterError, Adapter, Filter, Model};
+use casbin::error::AdapterError;
+use casbin::{Adapter, Filter, Model};
 use futures_util::StreamExt;
-use mongodb::{
-    bson::{doc, serialize_to_document, Document},
-    options::FindOptions,
-    ClientSession, Database,
-};
+use mongodb::bson::{Document, doc, serialize_to_document};
+use mongodb::options::FindOptions;
+use mongodb::{ClientSession, Database};
+use persistence_core::{Executor, Result, Transactional, mongo_ops};
 use serde::{Deserialize, Serialize};
-
-use persistence_core::{mongo_ops, Executor, Result, Transactional};
 
 pub const CASBIN_RULES: &str = "casbin_rules";
 const CASBIN_POLICY_STATE: &str = "casbin_policy_state";
@@ -34,12 +33,7 @@ struct CasbinRule {
 
 impl CasbinRule {
     fn new(sec: &str, ptype: &str, values: Vec<String>) -> Self {
-        Self {
-            id: Self::id(sec, ptype, &values),
-            sec: sec.to_string(),
-            ptype: ptype.to_string(),
-            values,
-        }
+        Self { id: Self::id(sec, ptype, &values), sec: sec.to_string(), ptype: ptype.to_string(), values }
     }
 
     fn id(sec: &str, ptype: &str, values: &[String]) -> String {
@@ -145,10 +139,8 @@ impl MongoCasbinAdapter {
     }
 
     fn subject_role_keys(rules: Vec<CasbinRule>) -> Vec<String> {
-        let mut role_keys = rules
-            .into_iter()
-            .filter_map(|rule| rule.values.get(1).cloned())
-            .collect::<Vec<_>>();
+        let mut role_keys =
+            rules.into_iter().filter_map(|rule| rule.values.get(1).cloned()).collect::<Vec<_>>();
         role_keys.sort();
         role_keys.dedup();
         role_keys
@@ -158,11 +150,7 @@ impl MongoCasbinAdapter {
         permissions
             .iter()
             .map(|(resource, action)| {
-                CasbinRule::new(
-                    "p",
-                    "p",
-                    vec![role_key.to_string(), resource.clone(), action.clone()],
-                )
+                CasbinRule::new("p", "p", vec![role_key.to_string(), resource.clone(), action.clone()])
             })
             .collect()
     }
@@ -217,12 +205,9 @@ impl MongoCasbinAdapter {
     /// # 错误
     /// 当 MongoDB 查询失败或持久化版本非法时返回错误。
     pub async fn policy_revision(&self, executor: &mut dyn Executor) -> Result<u64> {
-        let state = mongo_ops::find_one(
-            &self.policy_state_collection(),
-            Self::policy_revision_filter(),
-            executor,
-        )
-        .await?;
+        let state =
+            mongo_ops::find_one(&self.policy_state_collection(), Self::policy_revision_filter(), executor)
+                .await?;
         let Some(state) = state else {
             return Ok(0);
         };
@@ -395,12 +380,7 @@ impl MongoCasbinAdapter {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let collection = self.collection();
-        mongo_ops::delete_many(
-            &collection,
-            Self::role_permission_filter(role_key),
-            &mut *executor,
-        )
-        .await?;
+        mongo_ops::delete_many(&collection, Self::role_permission_filter(role_key), &mut *executor).await?;
 
         let rules = Self::role_permission_rules(role_key, permissions);
         mongo_ops::insert_many(&collection, rules, executor).await
@@ -423,12 +403,7 @@ impl MongoCasbinAdapter {
     /// 当任一规则删除失败时返回数据库错误。
     pub async fn remove_role(&self, role_key: &str, executor: &mut dyn Executor) -> Result<()> {
         let collection = self.collection();
-        mongo_ops::delete_many(
-            &collection,
-            Self::role_permission_filter(role_key),
-            &mut *executor,
-        )
-        .await?;
+        mongo_ops::delete_many(&collection, Self::role_permission_filter(role_key), &mut *executor).await?;
         mongo_ops::delete_many(&collection, Self::role_binding_filter(role_key), executor).await?;
         Ok(())
     }
@@ -455,11 +430,7 @@ impl MongoCasbinAdapter {
 impl Adapter for MongoCasbinAdapter {
     async fn load_policy(&mut self, model: &mut dyn Model) -> casbin::Result<()> {
         self.filtered = false;
-        let mut cursor = self
-            .collection()
-            .find(doc! {})
-            .await
-            .map_err(Self::adapter_error)?;
+        let mut cursor = self.collection().find(doc! {}).await.map_err(Self::adapter_error)?;
         while let Some(rule) = cursor.next().await {
             Self::load_rule(model, rule.map_err(Self::adapter_error)?);
         }
@@ -472,11 +443,7 @@ impl Adapter for MongoCasbinAdapter {
         filter: Filter<'a>,
     ) -> casbin::Result<()> {
         self.filtered = true;
-        let mut cursor = self
-            .collection()
-            .find(doc! {})
-            .await
-            .map_err(Self::adapter_error)?;
+        let mut cursor = self.collection().find(doc! {}).await.map_err(Self::adapter_error)?;
         while let Some(rule) = cursor.next().await {
             let rule = rule.map_err(Self::adapter_error)?;
             if Self::matches_filter(&rule, &filter) {
@@ -494,11 +461,7 @@ impl Adapter for MongoCasbinAdapter {
             };
             for (ptype, assertion) in assertions {
                 rules.extend(
-                    assertion
-                        .get_policy()
-                        .iter()
-                        .cloned()
-                        .map(|values| CasbinRule::new(sec, ptype, values)),
+                    assertion.get_policy().iter().cloned().map(|values| CasbinRule::new(sec, ptype, values)),
                 );
             }
         }
@@ -551,10 +514,7 @@ impl Adapter for MongoCasbinAdapter {
         ptype: &str,
         rules: Vec<Vec<String>>,
     ) -> casbin::Result<bool> {
-        let rules = rules
-            .into_iter()
-            .map(|rule| CasbinRule::new(sec, ptype, rule))
-            .collect::<Vec<_>>();
+        let rules = rules.into_iter().map(|rule| CasbinRule::new(sec, ptype, rule)).collect::<Vec<_>>();
         if rules.is_empty() {
             return Ok(false);
         }
@@ -604,10 +564,7 @@ impl Adapter for MongoCasbinAdapter {
         if rules.is_empty() {
             return Ok(false);
         }
-        let ids = rules
-            .iter()
-            .map(|rule| CasbinRule::id(sec, ptype, rule))
-            .collect::<Vec<_>>();
+        let ids = rules.iter().map(|rule| CasbinRule::id(sec, ptype, rule)).collect::<Vec<_>>();
         let expected_count = rules.len() as u64;
         let adapter = self.clone();
         self.run_policy_write(move |session| {
@@ -654,10 +611,8 @@ mod tests {
 
     #[test]
     fn role_permission_rules_use_role_resource_action_order() {
-        let permissions = vec![
-            ("role".to_string(), "read".to_string()),
-            ("customer".to_string(), "create".to_string()),
-        ];
+        let permissions =
+            vec![("role".to_string(), "read".to_string()), ("customer".to_string(), "create".to_string())];
 
         let rules = MongoCasbinAdapter::role_permission_rules("role:manager", &permissions);
 
@@ -700,21 +655,9 @@ mod tests {
         );
 
         let roles = MongoCasbinAdapter::subject_role_keys(vec![
-            CasbinRule::new(
-                "g",
-                "g",
-                vec!["user:admin:account-1".to_string(), "role:sales".to_string()],
-            ),
-            CasbinRule::new(
-                "g",
-                "g",
-                vec!["user:admin:account-1".to_string(), "role:finance".to_string()],
-            ),
-            CasbinRule::new(
-                "g",
-                "g",
-                vec!["user:admin:account-1".to_string(), "role:sales".to_string()],
-            ),
+            CasbinRule::new("g", "g", vec!["user:admin:account-1".to_string(), "role:sales".to_string()]),
+            CasbinRule::new("g", "g", vec!["user:admin:account-1".to_string(), "role:finance".to_string()]),
+            CasbinRule::new("g", "g", vec!["user:admin:account-1".to_string(), "role:sales".to_string()]),
             CasbinRule::new("g", "g", vec!["user:admin:account-1".to_string()]),
         ]);
 
@@ -723,13 +666,7 @@ mod tests {
 
     #[test]
     fn policy_revision_uses_one_monotonic_coordination_document() {
-        assert_eq!(
-            MongoCasbinAdapter::policy_revision_filter(),
-            doc! { "_id": "policy" }
-        );
-        assert_eq!(
-            MongoCasbinAdapter::policy_revision_increment(),
-            doc! { "$inc": { "revision": 1_i64 } }
-        );
+        assert_eq!(MongoCasbinAdapter::policy_revision_filter(), doc! { "_id": "policy" });
+        assert_eq!(MongoCasbinAdapter::policy_revision_increment(), doc! { "$inc": { "revision": 1_i64 } });
     }
 }

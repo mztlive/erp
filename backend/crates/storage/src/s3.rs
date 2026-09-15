@@ -1,17 +1,17 @@
 use std::path::Path;
 use std::time::Duration;
 
-use aws_sdk_s3::{
-    config::{Credentials, Region},
-    error::SdkError,
-    operation::{get_object::GetObjectError, head_object::HeadObjectError},
-    primitives::ByteStream,
-    types::{CompletedMultipartUpload, CompletedPart},
-    Client,
-};
+use aws_sdk_s3::Client;
+use aws_sdk_s3::config::{Credentials, Region};
+use aws_sdk_s3::error::SdkError;
+use aws_sdk_s3::operation::get_object::GetObjectError;
+use aws_sdk_s3::operation::head_object::HeadObjectError;
+use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
 use url::Url;
 
-use crate::{path::object_key_path, Error, Result};
+use crate::path::object_key_path;
+use crate::{Error, Result};
 
 /// 创建 S3 客户端所需的启动配置。
 #[derive(Clone)]
@@ -109,12 +109,8 @@ impl S3Storage {
         content_type: Option<&str>,
     ) -> Result<()> {
         let key = self.object_key(path.as_ref())?;
-        let mut request = self
-            .client
-            .put_object()
-            .bucket(&self.bucket)
-            .key(key)
-            .body(ByteStream::from(content.to_vec()));
+        let mut request =
+            self.client.put_object().bucket(&self.bucket).key(key).body(ByteStream::from(content.to_vec()));
         if let Some(content_type) = content_type {
             request = request.content_type(content_type);
         }
@@ -158,14 +154,8 @@ impl S3Storage {
     /// 对象不存在时返回 `Error::NotFound`；路径无效、S3 请求或响应体读取失败时返回错误。
     pub async fn read<P: AsRef<Path>>(&self, path: P) -> Result<Vec<u8>> {
         let key = self.object_key(path.as_ref())?;
-        let response = self
-            .client
-            .get_object()
-            .bucket(&self.bucket)
-            .key(key)
-            .send()
-            .await
-            .map_err(get_error)?;
+        let response =
+            self.client.get_object().bucket(&self.bucket).key(key).send().await.map_err(get_error)?;
         let body = response.body.collect().await.map_err(s3_error)?;
         Ok(body.into_bytes().to_vec())
     }
@@ -190,11 +180,7 @@ impl S3Storage {
         content_type: Option<&str>,
     ) -> Result<String> {
         let key = self.object_key(path.as_ref())?;
-        let mut request = self
-            .client
-            .create_multipart_upload()
-            .bucket(&self.bucket)
-            .key(key);
+        let mut request = self.client.create_multipart_upload().bucket(&self.bucket).key(key);
         if let Some(content_type) = content_type {
             request = request.content_type(content_type);
         }
@@ -276,9 +262,7 @@ impl S3Storage {
                     .build()
             })
             .collect::<Vec<_>>();
-        let upload = CompletedMultipartUpload::builder()
-            .set_parts(Some(completed))
-            .build();
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(completed)).build();
         self.client
             .complete_multipart_upload()
             .bucket(&self.bucket)
@@ -325,36 +309,19 @@ impl S3Storage {
             return Err(Error::NotFound);
         }
 
-        self.client
-            .delete_object()
-            .bucket(&self.bucket)
-            .key(key)
-            .send()
-            .await
-            .map_err(s3_error)?;
+        self.client.delete_object().bucket(&self.bucket).key(key).send().await.map_err(s3_error)?;
         Ok(())
     }
 
     /// 返回加上可选前缀的规范 S3 对象键。
     fn object_key(&self, path: &Path) -> Result<String> {
         let path = object_key_path(path)?;
-        Ok(self
-            .key_prefix
-            .as_ref()
-            .map(|prefix| format!("{prefix}/{path}"))
-            .unwrap_or(path))
+        Ok(self.key_prefix.as_ref().map(|prefix| format!("{prefix}/{path}")).unwrap_or(path))
     }
 
     /// 通过 `HeadObject` 区分对象不存在与存储服务失败。
     async fn object_exists(&self, key: &str) -> Result<bool> {
-        match self
-            .client
-            .head_object()
-            .bucket(&self.bucket)
-            .key(key)
-            .send()
-            .await
-        {
+        match self.client.head_object().bucket(&self.bucket).key(key).send().await {
             Ok(_) => Ok(true),
             Err(error) if head_not_found(&error) => Ok(false),
             Err(error) => Err(s3_error(error)),
@@ -391,23 +358,11 @@ fn validate_config(config: &S3StorageConfig) -> Result<()> {
         }
     }
 
-    if config
-        .endpoint
-        .as_deref()
-        .is_some_and(|endpoint| !is_valid_endpoint(endpoint))
-    {
-        return Err(Error::InvalidConfig(
-            "S3 endpoint 必须使用 http:// 或 https:// 绝对地址".to_string(),
-        ));
+    if config.endpoint.as_deref().is_some_and(|endpoint| !is_valid_endpoint(endpoint)) {
+        return Err(Error::InvalidConfig("S3 endpoint 必须使用 http:// 或 https:// 绝对地址".to_string()));
     }
-    if config
-        .session_token
-        .as_ref()
-        .is_some_and(|token| token.trim().is_empty() || token.trim() != token)
-    {
-        return Err(Error::InvalidConfig(
-            "S3 session_token 不能为空或包含首尾空白".to_string(),
-        ));
+    if config.session_token.as_ref().is_some_and(|token| token.trim().is_empty() || token.trim() != token) {
+        return Err(Error::InvalidConfig("S3 session_token 不能为空或包含首尾空白".to_string()));
     }
 
     public_base_url(&config.public_base_url).map(|_| ())?;
@@ -435,9 +390,7 @@ fn public_base_url(value: &str) -> Result<Url> {
 
 /// 判断 endpoint 是否为带主机部分且不含空白的 HTTP(S) 绝对地址。
 fn is_valid_endpoint(endpoint: &str) -> bool {
-    let authority_and_path = endpoint
-        .strip_prefix("https://")
-        .or_else(|| endpoint.strip_prefix("http://"));
+    let authority_and_path = endpoint.strip_prefix("https://").or_else(|| endpoint.strip_prefix("http://"));
     authority_and_path.is_some_and(|value| {
         !value.is_empty()
             && !value.starts_with('/')
@@ -455,13 +408,9 @@ fn normalize_prefix(prefix: Option<String>) -> Result<Option<String>> {
         || prefix.starts_with('/')
         || prefix.ends_with('/')
         || prefix.contains('\\')
-        || prefix
-            .split('/')
-            .any(|segment| segment.is_empty() || segment == "." || segment == "..")
+        || prefix.split('/').any(|segment| segment.is_empty() || segment == "." || segment == "..")
     {
-        return Err(Error::InvalidConfig(
-            "S3 key_prefix 必须是不带首尾分隔符的相对对象键前缀".to_string(),
-        ));
+        return Err(Error::InvalidConfig("S3 key_prefix 必须是不带首尾分隔符的相对对象键前缀".to_string()));
     }
     Ok(Some(prefix))
 }
@@ -473,10 +422,7 @@ fn s3_error(error: impl std::fmt::Display) -> Error {
 
 /// 将 `GetObject` 的不存在语义映射到统一存储错误。
 fn get_error<R>(error: SdkError<GetObjectError, R>) -> Error {
-    if error
-        .as_service_error()
-        .is_some_and(GetObjectError::is_no_such_key)
-    {
+    if error.as_service_error().is_some_and(GetObjectError::is_no_such_key) {
         return Error::NotFound;
     }
     s3_error(error)
@@ -484,17 +430,13 @@ fn get_error<R>(error: SdkError<GetObjectError, R>) -> Error {
 
 /// 判断 `HeadObject` 失败是否表示对象不存在。
 fn head_not_found<R>(error: &SdkError<HeadObjectError, R>) -> bool {
-    error
-        .as_service_error()
-        .is_some_and(HeadObjectError::is_not_found)
+    error.as_service_error().is_some_and(HeadObjectError::is_not_found)
 }
 
 #[cfg(test)]
 mod tests {
-    use aws_sdk_s3::{
-        config::{Credentials, Region},
-        Config,
-    };
+    use aws_sdk_s3::Config;
+    use aws_sdk_s3::config::{Credentials, Region};
     use aws_smithy_http_client::test_util::capture_request;
 
     use super::*;
@@ -518,9 +460,7 @@ mod tests {
             "https://cdn.example.com/assets",
         )?;
 
-        storage
-            .save_with_content_type("images/example.png", b"image-bytes", Some("image/png"))
-            .await?;
+        storage.save_with_content_type("images/example.png", b"image-bytes", Some("image/png")).await?;
 
         let request = request_receiver.expect_request();
         assert_eq!(request.method(), "PUT");
@@ -583,10 +523,7 @@ mod tests {
 
         let url = storage.public_url("images/中 文.png")?;
 
-        assert_eq!(
-            url,
-            "https://cdn.example.com/assets/tenant-a/uploads/images/%E4%B8%AD%20%E6%96%87.png"
-        );
+        assert_eq!(url, "https://cdn.example.com/assets/tenant-a/uploads/images/%E4%B8%AD%20%E6%96%87.png");
         Ok(())
     }
 
@@ -607,9 +544,7 @@ mod tests {
             "https://cdn.example.com",
         )?;
 
-        let result = storage
-            .save_with_content_type("../escaped.txt", b"escaped", None)
-            .await;
+        let result = storage.save_with_content_type("../escaped.txt", b"escaped", None).await;
 
         assert!(matches!(result, Err(Error::PathError(_))));
         Ok(())
@@ -652,9 +587,7 @@ mod tests {
             "https://cdn.example.com/assets",
         )?;
 
-        let _ = storage
-            .create_multipart_upload("imports/req-1.xlsx", Some("application/octet-stream"))
-            .await;
+        let _ = storage.create_multipart_upload("imports/req-1.xlsx", Some("application/octet-stream")).await;
 
         let request = request_receiver.expect_request();
         assert_eq!(request.method(), "POST");
@@ -686,10 +619,7 @@ mod tests {
             .complete_multipart_upload(
                 "imports/req-1.xlsx",
                 "upload-id",
-                vec![super::UploadedPart {
-                    part_number: 1,
-                    etag: "\"etag-1\"".to_string(),
-                }],
+                vec![super::UploadedPart { part_number: 1, etag: "\"etag-1\"".to_string() }],
             )
             .await
             .ok();
@@ -725,9 +655,7 @@ mod tests {
             "https://cdn.example.com/assets",
         )?;
 
-        storage
-            .abort_multipart_upload("imports/req-1.xlsx", "upload-id")
-            .await?;
+        storage.abort_multipart_upload("imports/req-1.xlsx", "upload-id").await?;
 
         let request = request_receiver.expect_request();
         assert_eq!(request.method(), "DELETE");
@@ -755,12 +683,7 @@ mod tests {
         )?;
 
         let url = storage
-            .presign_upload_part(
-                "imports/req-1.xlsx",
-                "upload-id",
-                2,
-                std::time::Duration::from_secs(7200),
-            )
+            .presign_upload_part("imports/req-1.xlsx", "upload-id", 2, std::time::Duration::from_secs(7200))
             .await?;
 
         assert!(url.contains("partNumber=2"));
@@ -784,9 +707,7 @@ mod tests {
             None,
             "https://cdn.example.com",
         )?;
-        let result = storage
-            .complete_multipart_upload("imports/req-1.xlsx", "upload-id", vec![])
-            .await;
+        let result = storage.complete_multipart_upload("imports/req-1.xlsx", "upload-id", vec![]).await;
 
         assert!(matches!(result, Err(Error::S3(_))));
         Ok(())
@@ -809,12 +730,7 @@ mod tests {
             "https://cdn.example.com",
         )?;
         let result = storage
-            .presign_upload_part(
-                "imports/req-1.xlsx",
-                "upload-id",
-                0,
-                std::time::Duration::from_secs(60),
-            )
+            .presign_upload_part("imports/req-1.xlsx", "upload-id", 0, std::time::Duration::from_secs(60))
             .await;
 
         assert!(matches!(result, Err(Error::S3(_))));

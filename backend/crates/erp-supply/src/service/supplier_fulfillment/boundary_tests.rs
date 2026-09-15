@@ -1,11 +1,12 @@
-use super::investigate::apply_replay_outcome;
+use erp_core::common::time::Instant;
+use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
+
 use super::SupplierFulfillmentService;
+use super::investigate::apply_replay_outcome;
 use crate::dto::supplier_fulfillment::SupplierOrderInvestigationOutcome;
 use crate::entity::failure::SupplierFailureClass;
 use crate::entity::supplier_fulfillment::*;
 use crate::ports::supplier_gateway::DispatchOutcome;
-use erp_core::common::time::Instant;
-use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
 fn sample_order() -> SupplierFulfillmentOrder {
     SupplierFulfillmentOrder::new(
         SupplierFulfillmentOrderId::new("order-1"),
@@ -51,10 +52,7 @@ fn missing_external_order_number_keeps_ordinary_and_replay_rules_distinct() {
     SupplierFulfillmentService::apply_dispatch_outcome(
         &mut order,
         &mut action,
-        DispatchOutcome::Succeeded {
-            external_request_id: "req".into(),
-            external_order_no: None,
-        },
+        DispatchOutcome::Succeeded { external_request_id: "req".into(), external_order_no: None },
         false,
     )
     .unwrap();
@@ -67,10 +65,7 @@ fn missing_external_order_number_keeps_ordinary_and_replay_rules_distinct() {
     let finding = apply_replay_outcome(
         &mut order,
         &mut action,
-        DispatchOutcome::Succeeded {
-            external_request_id: "req".into(),
-            external_order_no: None,
-        },
+        DispatchOutcome::Succeeded { external_request_id: "req".into(), external_order_no: None },
     )
     .unwrap();
     assert_eq!(order, before);
@@ -128,10 +123,7 @@ fn replay_failure_ignores_class_and_never_reuses_ordinary_retry_policy() {
         let finding = apply_replay_outcome(
             &mut order,
             &mut action,
-            DispatchOutcome::Failed {
-                error_class: class,
-                summary: "retry unknown".into(),
-            },
+            DispatchOutcome::Failed { error_class: class, summary: "retry unknown".into() },
         )
         .unwrap();
         assert_eq!(order, before);

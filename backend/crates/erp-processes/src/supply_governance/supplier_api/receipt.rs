@@ -1,17 +1,16 @@
 //! 回执先写、审计后写、最后读取任务编号；复用同一调用方 Executor。
-use crate::Result;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
-use erp_supply::{
-    dto::supplier_api::SupplierConnectionCommandResult,
-    entity::supplier_api::{
-        SupplierApiConnection, SupplierCommandOutcome, SupplierConnectionAction,
-        SupplierConnectionCommandReceipt,
-    },
-    service::supplier_api::{command::CommandIdentity, SupplierApiService},
+use erp_supply::dto::supplier_api::SupplierConnectionCommandResult;
+use erp_supply::entity::supplier_api::{
+    SupplierApiConnection, SupplierCommandOutcome, SupplierConnectionAction, SupplierConnectionCommandReceipt,
 };
+use erp_supply::service::supplier_api::SupplierApiService;
+use erp_supply::service::supplier_api::command::CommandIdentity;
 use erp_support::BulkJobExt;
 use persistence_core::Executor;
+
+use crate::Result;
 
 pub(super) struct CommandReceiptWrite<'a> {
     pub(super) connection: &'a SupplierApiConnection,
@@ -26,14 +25,7 @@ pub(super) async fn persist_command_receipt(
     write: CommandReceiptWrite<'_>,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<SupplierConnectionCommandResult> {
-    let CommandReceiptWrite {
-        connection,
-        action,
-        identity,
-        outcome,
-        job_id,
-        actor,
-    } = write;
+    let CommandReceiptWrite { connection, action, identity, outcome, job_id, actor } = write;
     let receipt = SupplierApiService::prepare_command_receipt(
         connection,
         action,
@@ -49,14 +41,8 @@ pub(super) async fn persist_command_receipt(
         connection.base.id.clone(),
         Some(format!("request_sha256={}", identity.fingerprint)),
     )?;
-    let job_no = persist_receipt(
-        &MongoReceiptWrite(db),
-        &receipt,
-        &audit,
-        job_id.as_deref(),
-        executor,
-    )
-    .await?;
+    let job_no =
+        persist_receipt(&MongoReceiptWrite(db), &receipt, &audit, job_id.as_deref(), executor).await?;
     Ok(SupplierConnectionCommandResult {
         outcome,
         action,
@@ -105,28 +91,22 @@ impl ReceiptWritePort for MongoReceiptWrite<'_> {
     type Receipt = SupplierConnectionCommandReceipt;
     type Audit = erp_audit::AuditLog;
     async fn receipt(&self, receipt: &Self::Receipt, executor: &mut dyn Executor) -> Result<()> {
-        Ok(SupplierApiService::new(self.0.clone())
-            .persist_command_receipt(receipt, executor)
-            .await?)
+        Ok(SupplierApiService::new(self.0.clone()).persist_command_receipt(receipt, executor).await?)
     }
     async fn audit(&self, audit: &Self::Audit, executor: &mut dyn Executor) -> Result<()> {
         self.0.audit_logs().create(audit, executor).await?;
         Ok(())
     }
     async fn job_no(&self, job_id: &str, executor: &mut dyn Executor) -> Result<Option<String>> {
-        Ok(self
-            .0
-            .background_jobs()
-            .find_by_id(job_id, executor)
-            .await?
-            .map(|job| job.job_no))
+        Ok(self.0.background_jobs().find_by_id(job_id, executor).await?.map(|job| job.job_no))
     }
 }
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use super::*;
     use crate::Error;
-    use std::sync::Mutex;
     struct TestExecutor {
         visits: usize,
     }
@@ -180,10 +160,7 @@ mod tests {
             calls: Mutex::new(Vec::new()),
         };
         assert_eq!(
-            persist_receipt(&port, &1, &2, Some("job-1"), &mut executor)
-                .await
-                .unwrap()
-                .as_deref(),
+            persist_receipt(&port, &1, &2, Some("job-1"), &mut executor).await.unwrap().as_deref(),
             Some("JOB-001")
         );
         assert_eq!(*port.calls.lock().unwrap(), ["receipt", "audit", "job_no"]);
@@ -199,9 +176,7 @@ mod tests {
                 fail_at: Some(fail_at),
                 calls: Mutex::new(Vec::new()),
             };
-            let error = persist_receipt(&port, &1, &2, Some("job-1"), &mut executor)
-                .await
-                .unwrap_err();
+            let error = persist_receipt(&port, &1, &2, Some("job-1"), &mut executor).await.unwrap_err();
             assert!(
                 matches!(error,Error::ConflictError(message) if message==format!("failed {}",expected[fail_at]))
             );
@@ -217,10 +192,7 @@ mod tests {
             fail_at: None,
             calls: Mutex::new(Vec::new()),
         };
-        assert_eq!(
-            persist_receipt(&port, &1, &2, None, &mut executor).await.unwrap(),
-            None
-        );
+        assert_eq!(persist_receipt(&port, &1, &2, None, &mut executor).await.unwrap(), None);
         assert_eq!(*port.calls.lock().unwrap(), ["receipt", "audit"]);
         assert_eq!(executor.visits, 2);
     }

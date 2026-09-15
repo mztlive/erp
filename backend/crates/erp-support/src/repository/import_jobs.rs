@@ -3,12 +3,10 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::doc;
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, Result, mongo_ops};
 
 use crate::entity::bulk_job::{BackgroundJob, BackgroundJobId, BackgroundJobItem, JobStatus};
 use crate::repository::owned::{BackgroundJobItemRepository, BackgroundJobRepository};
-use persistence_core::mongo_ops;
-use persistence_core::Executor;
-use persistence_core::Result;
 
 impl<'a> BackgroundJobRepository<'a> {
     /// 读取指定领域类型且尚未终态的后台任务，供 worker 领取。
@@ -41,10 +39,7 @@ impl<'a> BackgroundJobRepository<'a> {
             },
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
         };
-        let options = FindOptions::builder()
-            .sort(doc! { "created_at": 1, "id": 1 })
-            .limit(limit)
-            .build();
+        let options = FindOptions::builder().sort(doc! { "created_at": 1, "id": 1 }).limit(limit).build();
         mongo_ops::find_many(&self.collection(), filter, options, executor).await
     }
 }

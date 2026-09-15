@@ -1,14 +1,14 @@
 //! 定义期审批人候选：只做静态账号过滤，不读具体单据 DataScopeFact。
 
-use crate::entity::document_registry::DocumentType;
+use application_core::AuditActor;
 use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 
 use super::definition::ApprovalDefinitionService;
 use super::execution::runtime_service::RuntimeAssigneeCandidate;
 use super::policy::require_process_required;
+use crate::entity::document_registry::DocumentType;
 use crate::error::Result;
-use application_core::AuditActor;
 
 /// 定义期候选人查询。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,10 +55,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
             .await?;
         let items = accounts
             .into_iter()
-            .map(|account| RuntimeAssigneeCandidate {
-                user_id: account.id,
-                name: account.display_name,
-            })
+            .map(|account| RuntimeAssigneeCandidate { user_id: account.id, name: account.display_name })
             .collect();
         Ok(DefinitionAssigneePage { items })
     }

@@ -1,9 +1,9 @@
+use application_core::AuditActor;
+use erp_supply::dto::supplier_fulfillment::{SubmitActionResultView, SubmitAfterSalesActionRequest};
 use erp_supply::entity::supplier_fulfillment::SupplierOrderActionType;
 
 use super::SupplierFulfillmentProcess;
 use crate::Result;
-use application_core::AuditActor;
-use erp_supply::dto::supplier_fulfillment::{SubmitActionResultView, SubmitAfterSalesActionRequest};
 
 impl SupplierFulfillmentProcess {
     /// 提交供应商退款（幂等键：「订单号 + REFUND」，§6.19）。
@@ -29,7 +29,6 @@ impl SupplierFulfillmentProcess {
         req: SubmitAfterSalesActionRequest,
         actor: &AuditActor,
     ) -> Result<SubmitActionResultView> {
-        self.submit_after_sales_action(id, req, SupplierOrderActionType::Refund, actor)
-            .await
+        self.submit_after_sales_action(id, req, SupplierOrderActionType::Refund, actor).await
     }
 }

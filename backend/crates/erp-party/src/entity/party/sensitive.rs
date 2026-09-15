@@ -82,16 +82,8 @@ const K: [u32; 64] = [
 ];
 
 /// SHA-256 初始哈希值（FIPS 180-4 §5.3.3）。
-const H_INIT: [u32; 8] = [
-    0x6a09_e667,
-    0xbb67_ae85,
-    0x3c6e_f372,
-    0xa54f_f53a,
-    0x510e_527f,
-    0x9b05_688c,
-    0x1f83_d9ab,
-    0x5be0_cd19,
-];
+const H_INIT: [u32; 8] =
+    [0x6a09_e667, 0xbb67_ae85, 0x3c6e_f372, 0xa54f_f53a, 0x510e_527f, 0x9b05_688c, 0x1f83_d9ab, 0x5be0_cd19];
 
 /// 计算 SHA-256 摘要。
 ///
@@ -124,10 +116,8 @@ fn sha256(data: &[u8]) -> [u8; 32] {
                 ^ (schedule[t - 15] >> 3);
             let sigma1 =
                 schedule[t - 2].rotate_right(17) ^ schedule[t - 2].rotate_right(19) ^ (schedule[t - 2] >> 10);
-            schedule[t] = schedule[t - 16]
-                .wrapping_add(sigma0)
-                .wrapping_add(schedule[t - 7])
-                .wrapping_add(sigma1);
+            schedule[t] =
+                schedule[t - 16].wrapping_add(sigma0).wrapping_add(schedule[t - 7]).wrapping_add(sigma1);
         }
 
         let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = hash;
@@ -255,12 +245,7 @@ pub(crate) fn normalize_mobile(plain: &str) -> String {
 /// # 返回
 /// 返回可用于指纹与精确查询的规范化地址。
 pub(crate) fn normalize_address(plain: &str) -> String {
-    plain
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .trim()
-        .to_string()
+    plain.split_whitespace().collect::<Vec<_>>().join(" ").trim().to_string()
 }
 
 #[cfg(test)]
@@ -271,21 +256,13 @@ mod tests {
     #[test]
     fn matches_rfc4231_test_vectors() {
         let cases: [(&[u8], &[u8], &str); 3] = [
-            (
-                &[0x0b; 20],
-                b"Hi There",
-                "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7",
-            ),
+            (&[0x0b; 20], b"Hi There", "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"),
             (
                 b"Jefe",
                 b"what do ya want for nothing?",
                 "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843",
             ),
-            (
-                &[0xaa; 20],
-                &[0xdd; 50],
-                "773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe",
-            ),
+            (&[0xaa; 20], &[0xdd; 50], "773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe"),
         ];
         for (key, data, expected) in cases {
             assert_eq!(hmac_sha256_hex(key, data), expected);
@@ -314,15 +291,9 @@ mod tests {
     /// 规范化函数行为：账号移除分隔符、手机号仅去空白、地址折叠空白。
     #[test]
     fn normalizers_behave_as_documented() {
-        assert_eq!(
-            normalize_account_number(" 6222-0212_3456 7890 "),
-            "6222021234567890"
-        );
+        assert_eq!(normalize_account_number(" 6222-0212_3456 7890 "), "6222021234567890");
         assert_eq!(normalize_mobile(" 13800138000 "), "13800138000");
-        assert_eq!(
-            normalize_address(" 北京市  朝阳区 望京街 10 号 "),
-            "北京市 朝阳区 望京街 10 号"
-        );
+        assert_eq!(normalize_address(" 北京市  朝阳区 望京街 10 号 "), "北京市 朝阳区 望京街 10 号");
         assert_eq!(normalize_address(""), "");
     }
 }

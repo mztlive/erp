@@ -3,8 +3,8 @@
 //! Service 只注入任务 ID、源文件资产、行数与发起人；本模块独占任务编号、
 //! 领域任务类型与幂等 `request_id` 合同。无 I/O、时钟或密钥。
 
-use erp_core::ids::{BackgroundJobId, FileAssetId};
 use erp_core::Result;
+use erp_core::ids::{BackgroundJobId, FileAssetId};
 
 use super::{BackgroundJob, BackgroundJobData, JobType};
 
@@ -72,9 +72,10 @@ impl BackgroundJob {
 
 #[cfg(test)]
 mod tests {
-    use super::{product_import_job_no, PRODUCT_IMPORT_DOMAIN_JOB_TYPE};
-    use crate::entity::bulk_job::JobType;
     use erp_core::ids::{BackgroundJobId, FileAssetId};
+
+    use super::{PRODUCT_IMPORT_DOMAIN_JOB_TYPE, product_import_job_no};
+    use crate::entity::bulk_job::JobType;
 
     #[test]
     fn factory_pins_import_type_and_file() {
@@ -88,10 +89,7 @@ mod tests {
         .unwrap();
         assert_eq!(job.job_no, product_import_job_no("req-1"));
         assert_eq!(job.job_type, JobType::Import);
-        assert_eq!(
-            job.domain_job_type.as_deref(),
-            Some(PRODUCT_IMPORT_DOMAIN_JOB_TYPE)
-        );
+        assert_eq!(job.domain_job_type.as_deref(), Some(PRODUCT_IMPORT_DOMAIN_JOB_TYPE));
         assert_eq!(job.requested_by, "admin-1");
         assert_eq!(job.total_count, 3);
     }

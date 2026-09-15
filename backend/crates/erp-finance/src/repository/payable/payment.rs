@@ -1,17 +1,16 @@
-use crate::entity::payable::{SupplierPayment, SupplierPaymentStatus};
-use crate::repository::owned::SupplierPaymentRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::SupplierAccountId;
 use erp_core::money::Amount;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use persistence_core::insert_literal_regex_filter;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
+use crate::entity::payable::{SupplierPayment, SupplierPaymentStatus};
+use crate::repository::owned::SupplierPaymentRepository;
 
 /// 供应商付款单列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -69,12 +68,7 @@ impl QueryFilter for SupplierPaymentFilter {
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "payment_no", self.payment_no.as_deref());
-        if let Some(keyword) = self
-            .keyword
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
+        if let Some(keyword) = self.keyword.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
             let mut number_match = Document::new();
             insert_literal_regex_filter(&mut number_match, "payment_no", Some(keyword));
             let mut alternatives = vec![number_match];
@@ -183,10 +177,7 @@ impl<'a> SupplierPaymentRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 }
 
@@ -210,8 +201,9 @@ fn supplier_payment_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::SupplierPaymentFilter;
     use persistence_core::QueryFilter;
+
+    use super::SupplierPaymentFilter;
 
     #[test]
     fn payment_filter_escapes_regex_literals() {
@@ -279,13 +271,7 @@ mod keyword_regression_tests {
         filter.keyword_ids = Some(Vec::new());
         let query = filter.to_doc();
         let clauses = query.get_array("$and").unwrap();
-        let ids = clauses[1]
-            .as_document()
-            .unwrap()
-            .get_document("id")
-            .unwrap()
-            .get_array("$in")
-            .unwrap();
+        let ids = clauses[1].as_document().unwrap().get_document("id").unwrap().get_array("$in").unwrap();
         assert!(ids.is_empty(), "空关键词命中必须保持零结果");
         assert!(clauses[0].as_document().unwrap().contains_key("deleted_at"));
     }

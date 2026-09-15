@@ -53,13 +53,6 @@ impl InventoryService {
         fulfillment_facts: Arc<dyn FulfillmentFactsPort>,
         audit: Arc<dyn InventoryAuditPort>,
     ) -> Self {
-        Self {
-            db,
-            authorization,
-            warehouse_facts,
-            catalog_facts,
-            fulfillment_facts,
-            audit,
-        }
+        Self { db, authorization, warehouse_facts, catalog_facts, fulfillment_facts, audit }
     }
 }

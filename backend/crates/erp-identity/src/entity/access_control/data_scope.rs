@@ -1,15 +1,15 @@
 //! `data_scope`：数据范围（能看哪些客户、团队、组织和单据，数据模型 §5.1 / W19 §5.1）。
 
-use super::{ScopeBinding, ScopeTargetMode};
 use std::collections::HashSet;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::ids::DataScopeId;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use super::{ScopeBinding, ScopeTargetMode};
 
 /// 主体 ID 最大长度。
 const SUBJECT_ID_MAX_LEN: usize = 128;
@@ -200,18 +200,12 @@ impl DataScope {
 fn normalize_scope_targets(scope_type: DataScopeType, targets: Vec<String>) -> Result<Vec<String>> {
     if !scope_type.requires_targets() {
         if !targets.is_empty() {
-            return Err(Error::from(format!(
-                "{}范围不允许携带范围目标",
-                scope_type.label()
-            )));
+            return Err(Error::from(format!("{}范围不允许携带范围目标", scope_type.label())));
         }
         return Ok(Vec::new());
     }
     if targets.is_empty() {
-        return Err(Error::from(format!(
-            "{}范围必须至少指定一个范围目标",
-            scope_type.label()
-        )));
+        return Err(Error::from(format!("{}范围必须至少指定一个范围目标", scope_type.label())));
     }
     if targets.len() > MAX_TARGETS {
         return Err(Error::from(format!("范围目标数量不能超过 {MAX_TARGETS}")));
@@ -220,10 +214,7 @@ fn normalize_scope_targets(scope_type: DataScopeType, targets: Vec<String>) -> R
     let mut normalized = Vec::with_capacity(targets.len());
     for target in targets {
         let target = normalize_required_text(target, "范围目标不能为空", TARGET_MAX_LEN, "范围目标过长")?;
-        if !target
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
-        {
+        if !target.bytes().all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte)) {
             return Err(Error::from("范围目标必须为稳定身份，不允许通配符或显示名称"));
         }
         if seen.insert(target.clone()) {
@@ -235,8 +226,9 @@ fn normalize_scope_targets(scope_type: DataScopeType, targets: Vec<String>) -> R
 
 #[cfg(test)]
 mod tests {
-    use super::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
     use erp_core::ids::DataScopeId;
+
+    use super::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
 
     fn data() -> DataScopeData {
         DataScopeData {
@@ -252,11 +244,7 @@ mod tests {
             subject_type: DataScopeSubjectType::Role,
             subject_id: " role-sales ".to_string(),
             scope_type: DataScopeType::Team,
-            scope_targets: vec![
-                " team-1 ".to_string(),
-                "team-2".to_string(),
-                " team-1 ".to_string(),
-            ],
+            scope_targets: vec![" team-1 ".to_string(), "team-2".to_string(), " team-1 ".to_string()],
         }
     }
 
@@ -272,10 +260,7 @@ mod tests {
     /// 失败路径：必填为空被拒。
     #[test]
     fn new_rejects_empty_subject_id() {
-        let payload = DataScopeData {
-            subject_id: "  ".to_string(),
-            ..data()
-        };
+        let payload = DataScopeData { subject_id: "  ".to_string(), ..data() };
         assert!(DataScope::new(DataScopeId::new("ds-1"), payload).is_err());
     }
 
@@ -299,30 +284,19 @@ mod tests {
         };
         assert!(DataScope::new(DataScopeId::new("ds-1"), company_with_targets).is_err());
 
-        let team_without_targets = DataScopeData {
-            scope_type: DataScopeType::Team,
-            scope_targets: vec![],
-            ..data()
-        };
+        let team_without_targets =
+            DataScopeData { scope_type: DataScopeType::Team, scope_targets: vec![], ..data() };
         assert!(DataScope::new(DataScopeId::new("ds-2"), team_without_targets).is_err());
     }
 
     /// 公司级与本人负责允许无目标。
     #[test]
     fn implicit_scopes_accept_empty_targets() {
-        for scope_type in [
-            DataScopeType::Company,
-            DataScopeType::SelfOwned,
-            DataScopeType::Collaborative,
-        ] {
+        for scope_type in [DataScopeType::Company, DataScopeType::SelfOwned, DataScopeType::Collaborative] {
             let mut source = data();
             source.binding.target_mode = None;
             source.binding.include_descendants = None;
-            let data = DataScopeData {
-                scope_type,
-                scope_targets: vec![],
-                ..source
-            };
+            let data = DataScopeData { scope_type, scope_targets: vec![], ..source };
             let scope = DataScope::new(DataScopeId::new("ds-1"), data).unwrap();
             assert!(scope.scope_targets.is_empty());
         }
@@ -331,14 +305,8 @@ mod tests {
     /// 枚举序列化与标签稳定。
     #[test]
     fn enums_codes_and_labels_are_stable() {
-        assert_eq!(
-            serde_json::to_string(&DataScopeType::SelfOwned).unwrap(),
-            "\"self_owned\""
-        );
-        assert_eq!(
-            serde_json::to_string(&DataScopeSubjectType::User).unwrap(),
-            "\"user\""
-        );
+        assert_eq!(serde_json::to_string(&DataScopeType::SelfOwned).unwrap(), "\"self_owned\"");
+        assert_eq!(serde_json::to_string(&DataScopeSubjectType::User).unwrap(), "\"user\"");
         assert_eq!(DataScopeType::Organization.as_str(), "organization");
         assert_eq!(DataScopeType::Team.label(), "团队");
         assert_eq!(DataScopeSubjectType::Role.label(), "角色");

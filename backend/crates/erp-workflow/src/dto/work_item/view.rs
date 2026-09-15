@@ -1,5 +1,6 @@
-use crate::entity::work_item::{AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType};
 use serde::Serialize;
+
+use crate::entity::work_item::{AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType};
 
 /// 用户或组织安全摘要。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

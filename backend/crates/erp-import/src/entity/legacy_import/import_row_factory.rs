@@ -49,10 +49,7 @@ pub fn build_import_rows(
     let mut seen = HashSet::new();
     let mut rows = Vec::with_capacity(specs.len());
     for spec in specs {
-        let key = (
-            spec.source_object_type.trim().to_string(),
-            spec.source_row_key.trim().to_string(),
-        );
+        let key = (spec.source_object_type.trim().to_string(), spec.source_row_key.trim().to_string());
         if !seen.insert(key) {
             return Err(Error::from("同一批次内来源行身份重复"));
         }
@@ -71,8 +68,9 @@ pub fn build_import_rows(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_import_rows, ImportRowSpec};
     use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId};
+
+    use super::{ImportRowSpec, build_import_rows};
 
     fn spec(id: &str, object: &str, key: &str) -> ImportRowSpec {
         ImportRowSpec {
@@ -91,14 +89,13 @@ mod tests {
         assert_eq!(rows[0].source_row_key, "key-1");
 
         assert!(build_import_rows(&batch, vec![spec("row-1", "CUSTOMER", "   ")]).is_err());
-        assert!(build_import_rows(
-            &batch,
-            vec![
-                spec("row-1", "CUSTOMER", "key-1"),
-                spec("row-2", "CUSTOMER", "key-1"),
-            ],
-        )
-        .is_err());
+        assert!(
+            build_import_rows(
+                &batch,
+                vec![spec("row-1", "CUSTOMER", "key-1"), spec("row-2", "CUSTOMER", "key-1"),],
+            )
+            .is_err()
+        );
         assert!(build_import_rows(&batch, vec![]).unwrap().is_empty());
     }
 
@@ -107,10 +104,7 @@ mod tests {
         let batch = LegacyImportBatchId::new("batch-1");
         let rows = build_import_rows(
             &batch,
-            vec![
-                spec("row-1", "CUSTOMER", "key-1"),
-                spec("row-2", "CONTRACT", "key-1"),
-            ],
+            vec![spec("row-1", "CUSTOMER", "key-1"), spec("row-2", "CONTRACT", "key-1")],
         )
         .unwrap();
         assert_eq!(rows.len(), 2);

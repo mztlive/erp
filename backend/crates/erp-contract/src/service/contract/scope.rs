@@ -1,12 +1,12 @@
 //! 合同列表与候选的一致授权快照；范围与业务版本跨页携带。
 
-use persistence_core::Transactional;
 use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
+use persistence_core::Transactional;
 
-use super::access::intersect_ids;
 use super::ContractService;
+use super::access::intersect_ids;
 use crate::dto::contract::{
     ContractListParams, ContractListQuery, ContractListScope, ContractListView, PageView,
 };
@@ -103,11 +103,7 @@ impl ContractService {
                     context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
                     let owner_options = accounts
                         .filter_options(
-                            &search
-                                .customers
-                                .iter()
-                                .filter_map(|c| c.owner_id.clone())
-                                .collect::<Vec<_>>(),
+                            &search.customers.iter().filter_map(|c| c.owner_id.clone()).collect::<Vec<_>>(),
                         )
                         .await?
                         .into_iter()
@@ -130,12 +126,7 @@ impl ContractService {
                             as_of: String::new(),
                             empty_reason: None,
                             scope_summary: "合同当前客户主负责人、协作关系、负责人所属组织及合法单据参与",
-                            page: PageView {
-                                items,
-                                total,
-                                page: filter.page,
-                                page_size: filter.page_size,
-                            },
+                            page: PageView { items, total, page: filter.page, page_size: filter.page_size },
                             metrics: result.metrics.into_iter().next().unwrap_or_default(),
                             settlement_options: result.settlement_options,
                             owner_options,
@@ -322,16 +313,8 @@ async fn apply_list_filters(
                 .await?,
         );
     }
-    constraint = apply_org_unit_filter(
-        data_scope,
-        assignments,
-        context,
-        constraint,
-        query,
-        as_of,
-        executor,
-    )
-    .await?;
+    constraint =
+        apply_org_unit_filter(data_scope, assignments, context, constraint, query, as_of, executor).await?;
     if let Some(customer_id) = &query.customer_id {
         constraint = intersect_ids(constraint, Some(vec![customer_id.clone()]));
     }
@@ -426,28 +409,16 @@ async fn apply_org_unit_filter(
         return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
     }
     let expanded = data_scope
-        .expand_org_units(
-            org_ids.as_slice(),
-            query.include_descendants.unwrap_or(false),
-            executor,
-        )
+        .expand_org_units(org_ids.as_slice(), query.include_descendants.unwrap_or(false), executor)
         .await?;
-    let members = data_scope
-        .org_member_ids(&expanded, context.as_of, executor)
-        .await?;
+    let members = data_scope.org_member_ids(&expanded, context.as_of, executor).await?;
     if members.len() > 10_000 {
-        return Err(Error::ValidationError(
-            "组织成员超过查询上限，请收窄组织筛选".into(),
-        ));
+        return Err(Error::ValidationError("组织成员超过查询上限，请收窄组织筛选".into()));
     }
     if members.is_empty() {
         return Ok(Some(Vec::new()));
     }
-    Ok(Some(
-        assignments
-            .current_owner_customer_ids(ids.as_deref(), Some(&members), as_of, executor)
-            .await?,
-    ))
+    Ok(Some(assignments.current_owner_customer_ids(ids.as_deref(), Some(&members), as_of, executor).await?))
 }
 
 /// 目录范围标签转换为授权集合上的额外收窄。
@@ -473,7 +444,7 @@ fn assignment_filter(scope: &ContractReadScope, requested: ContractListScope) ->
             ids.sort();
             ids.dedup();
             Some(ids)
-        }
+        },
     }
 }
 
@@ -490,7 +461,7 @@ mod tests {
         match ensure_page(2, None) {
             Err(Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED："));
-            }
+            },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
     }
@@ -502,13 +473,13 @@ mod tests {
         match ensure_scope_version(Some("v1"), "v2") {
             Err(Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED："));
-            }
+            },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
         match ensure_stable_snapshot("v1", "v9") {
             Err(Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED："));
-            }
+            },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
         assert!(ensure_stable_snapshot("v1", "v1").is_ok());

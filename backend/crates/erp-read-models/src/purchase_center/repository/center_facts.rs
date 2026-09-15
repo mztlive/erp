@@ -9,18 +9,16 @@
 
 use erp_core::ids::{PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId};
 use erp_core::money::Amount;
+use erp_finance::repository::PayableExt;
+use erp_identity::AccessControlExt;
 use erp_procurement::entity::purchase_order::{
     PurchaseChangeOrder, PurchaseLineSalesAllocation, PurchaseOrder, PurchaseOrderRevision,
     PurchaseOrderRevisionLine, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
-use mongodb::Database;
-
-use erp_finance::repository::PayableExt;
-use erp_identity::AccessControlExt;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
-use persistence_core::Executor;
-use persistence_core::Result;
+use mongodb::Database;
+use persistence_core::{Executor, Result};
 
 /// 采购单对象中心事实 Bundle。
 ///
@@ -90,24 +88,14 @@ pub async fn load_purchase_order_center_facts(
     .await?;
     let supplier_name = supplier_names.get(&order.supplier_id.to_string()).cloned();
     let sales_id = order.sales_order_id.clone();
-    let sales_orders = db
-        .sales_orders()
-        .find_orders_by_ids(std::slice::from_ref(&sales_id), executor)
-        .await?;
+    let sales_orders =
+        db.sales_orders().find_orders_by_ids(std::slice::from_ref(&sales_id), executor).await?;
     let sales_order_no = sales_orders.into_iter().find_map(|item| {
-        if item.base.id == sales_id.to_string() {
-            Some(item.order_no.clone())
-        } else {
-            None
-        }
+        if item.base.id == sales_id.to_string() { Some(item.order_no.clone()) } else { None }
     });
     let owner_name = load_owner_name(db, &order, executor).await?;
     let current_revision = match &order.stable.current_revision_id {
-        Some(revision_id) => {
-            db.purchase_order_revisions()
-                .find_by_id(revision_id, executor)
-                .await?
-        }
+        Some(revision_id) => db.purchase_order_revisions().find_by_id(revision_id, executor).await?,
         None => None,
     };
     let revision_lines = match &current_revision {
@@ -118,37 +106,25 @@ pub async fn load_purchase_order_center_facts(
                     executor,
                 )
                 .await?
-        }
+        },
         None => Vec::new(),
     };
     let current_submission = match &order.current_submission_id {
-        Some(submission_id) => {
-            db.purchase_order_submissions()
-                .find_by_id(submission_id, executor)
-                .await?
-        }
+        Some(submission_id) => db.purchase_order_submissions().find_by_id(submission_id, executor).await?,
         None => None,
     };
     let submission_lines = match &current_submission {
         Some(submission) => {
             db.purchase_order()
-                .list_submission_lines(
-                    &PurchaseOrderSubmissionId::new(submission.base.id.clone()),
-                    executor,
-                )
+                .list_submission_lines(&PurchaseOrderSubmissionId::new(submission.base.id.clone()), executor)
                 .await?
-        }
+        },
         None => Vec::new(),
     };
     let allocations = load_allocations(db, &revision_lines, executor).await?;
-    let changes = db
-        .purchase_order()
-        .list_changes_by_order(&order.base.id.clone().into(), executor)
-        .await?;
-    let payable = db
-        .payable_accounts()
-        .find_by_purchase_order(&order.base.id.clone().into(), executor)
-        .await?;
+    let changes = db.purchase_order().list_changes_by_order(&order.base.id.clone().into(), executor).await?;
+    let payable =
+        db.payable_accounts().find_by_purchase_order(&order.base.id.clone().into(), executor).await?;
     Ok(PurchaseOrderCenterFacts {
         order: Some(order),
         supplier_name,
@@ -189,18 +165,10 @@ async fn load_owner_name(
     order: &PurchaseOrder,
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
-    let Some(owner) = order
-        .owner_user_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|id| !id.is_empty())
-    else {
+    let Some(owner) = order.owner_user_id.as_deref().map(str::trim).filter(|id| !id.is_empty()) else {
         return Ok(None);
     };
-    let names = db
-        .accounts()
-        .names_by_ids(std::slice::from_ref(&owner.to_string()), executor)
-        .await?;
+    let names = db.accounts().names_by_ids(std::slice::from_ref(&owner.to_string()), executor).await?;
     Ok(names.get(owner).cloned())
 }
 
@@ -231,9 +199,7 @@ async fn load_allocations(
     if line_ids.is_empty() {
         return Ok(Vec::new());
     }
-    db.purchase_line_sales_allocations()
-        .find_by_purchase_revision_line_ids(&line_ids, executor)
-        .await
+    db.purchase_line_sales_allocations().find_by_purchase_revision_line_ids(&line_ids, executor).await
 }
 
 #[cfg(test)]
@@ -256,13 +222,12 @@ mod isolation_tests {
     use erp_procurement::entity::purchase_order::{
         FulfillmentResponsibility, PurchaseOrder, PurchaseOrderData, PurchaseOrderStatus, PurchaseType,
     };
-    use test_support::{require_mongo, TestDb};
-
-    use crate::test_indexes::ensure_indexes;
     use erp_procurement::repository::PurchaseOrderExt;
     use persistence_core::{NoTransaction, Transactional};
+    use test_support::{TestDb, require_mongo};
 
     use super::load_purchase_order_center_facts;
+    use crate::test_indexes::ensure_indexes;
 
     /// 构造最小采购单。
     fn order(id: &str, submission: Option<&str>, revision: Option<&str>) -> PurchaseOrder {
@@ -307,9 +272,7 @@ mod isolation_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn missing_order_returns_empty_bundle() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_po_center_missing")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_po_center_missing").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
             let facts = load_purchase_order_center_facts(fixture.db(), "po-missing", &mut NoTransaction)
                 .await
@@ -344,9 +307,7 @@ mod isolation_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn loads_order_with_missing_associations_as_empty() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_po_center_minimal")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_po_center_minimal").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
             fixture
                 .db()
@@ -359,10 +320,7 @@ mod isolation_tests {
                 .expect("事实加载失败");
             assert!(facts.order.is_some());
             assert!(facts.supplier_name.is_none());
-            assert!(
-                facts.sales_order_no.is_none(),
-                "缺失销售单以空值表达，由 Service 报完整性错误"
-            );
+            assert!(facts.sales_order_no.is_none(), "缺失销售单以空值表达，由 Service 报完整性错误");
             assert!(facts.current_revision.is_none());
             assert!(facts.revision_lines.is_empty());
             assert!(facts.allocations.is_empty());
@@ -388,9 +346,7 @@ mod isolation_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn transaction_reads_own_writes_with_same_session() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_po_center_txn")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_po_center_txn").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
             let db = fixture.db().clone();
             let client = db.client().clone();
@@ -398,9 +354,7 @@ mod isolation_tests {
                 .with_transaction::<_, (), persistence_core::Error>(move |session| {
                     let db = db.clone();
                     Box::pin(async move {
-                        db.purchase_orders()
-                            .create(&order("po-txn", None, None), session)
-                            .await?;
+                        db.purchase_orders().create(&order("po-txn", None, None), session).await?;
                         let facts = load_purchase_order_center_facts(&db, "po-txn", session).await?;
                         assert!(facts.order.is_some(), "事务内应能 read-your-writes");
                         Ok(())

@@ -2,14 +2,11 @@
 
 use async_trait::async_trait;
 use erp_catalog::CatalogExt;
-use erp_core::{
-    ids::{ProductCategoryId, SkuId},
-    AccountKind,
-};
+use erp_core::AccountKind;
+use erp_core::ids::{ProductCategoryId, SkuId};
 use erp_identity::{AccessControlExt, AccountCore};
-use erp_procurement::entity::{
-    facts::IdentityOwnerFact, procurement_responsibility::ProcurementCatalogBundle,
-};
+use erp_procurement::entity::facts::IdentityOwnerFact;
+use erp_procurement::entity::procurement_responsibility::ProcurementCatalogBundle;
 use erp_procurement::ports::procurement_responsibility::ProcurementResponsibilityFactsPort;
 use persistence_core::Executor;
 
@@ -21,12 +18,7 @@ pub(super) struct ResponsibilityFactsAdapter {
 fn owner_fact(account: AccountCore) -> IdentityOwnerFact {
     let can_login = account.can_login();
     let is_admin = account.is_kind(AccountKind::Admin);
-    IdentityOwnerFact {
-        id: account.base.id,
-        name: account.name,
-        can_login,
-        is_admin,
-    }
+    IdentityOwnerFact { id: account.base.id, name: account.name, can_login, is_admin }
 }
 
 #[async_trait]
@@ -36,12 +28,10 @@ impl ProcurementResponsibilityFactsPort for ResponsibilityFactsAdapter {
         sku_ids: &[SkuId],
         executor: &mut dyn Executor,
     ) -> persistence_core::Result<ProcurementCatalogBundle> {
-        Ok(
-            erp_read_models::purchase_center::procurement_responsibility::load_procurement_catalog_bundle(
-                &self.db, sku_ids, executor,
-            )
-            .await?,
+        Ok(erp_read_models::purchase_center::procurement_responsibility::load_procurement_catalog_bundle(
+            &self.db, sku_ids, executor,
         )
+        .await?)
     }
     async fn load_owners(
         &self,
@@ -70,21 +60,13 @@ impl ProcurementResponsibilityFactsPort for ResponsibilityFactsAdapter {
             .map(owner_fact))
     }
     async fn sku_exists(&self, id: &SkuId, executor: &mut dyn Executor) -> persistence_core::Result<bool> {
-        Ok(self
-            .db
-            .skus()
-            .has_procurement_responsibility_sku(id, executor)
-            .await?)
+        Ok(self.db.skus().has_procurement_responsibility_sku(id, executor).await?)
     }
     async fn category_exists(
         &self,
         id: &ProductCategoryId,
         executor: &mut dyn Executor,
     ) -> persistence_core::Result<bool> {
-        Ok(self
-            .db
-            .product_categories()
-            .has_procurement_responsibility_category(id, executor)
-            .await?)
+        Ok(self.db.product_categories().has_procurement_responsibility_category(id, executor).await?)
     }
 }

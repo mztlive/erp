@@ -2,23 +2,21 @@
 //!
 //! 旧采购确认、低毛利确认、卡券审批记录与变更复核集合已删除。
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::{SalesChangeOrderId, SalesChangeSubmissionId, SalesOrderId};
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use serde::{Deserialize, Serialize};
+
+use super::extensions::SalesReviewExt;
 use crate::entity::sales_review::{
     SalesChangeOrder, SalesChangeOrderStatus, SalesChangeSubmission, SalesChangeSubmissionLine,
 };
 use crate::repository::owned::{
     SalesChangeOrderRepository, SalesChangeSubmissionLineRepository, SalesChangeSubmissionRepository,
 };
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::ids::{SalesChangeOrderId, SalesChangeSubmissionId, SalesOrderId};
-use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use mongodb::Database;
-use serde::{Deserialize, Serialize};
-
-use super::extensions::SalesReviewExt;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
-use persistence_core::{PageResult, Pagination, QueryFilter};
 
 /// `sales_change_order` 集合名。
 const SALES_CHANGE_ORDERS: &str = <mongodb::Database as SalesReviewExt>::SALES_CHANGE_ORDERS;
@@ -119,10 +117,7 @@ impl<'a> SalesChangeOrderRepository<'a> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
+        Ok(PageResult { items, total: total as i64 })
     }
 
     /// 装载变更查询的有界身份与版本集合，用于跨页一致性校验。
@@ -236,10 +231,7 @@ impl<'a> SalesChangeSubmissionRepository<'a> {
         if change_order_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let ids = change_order_ids
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>();
+        let ids = change_order_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
         self.find_many(
             doc! { "sales_change_order_id": { "$in": ids }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
             executor,
@@ -439,24 +431,18 @@ impl<'a> SalesReviewRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<SalesChangeSubmission>(SALES_CHANGE_SUBMISSIONS),
+            &self.db.collection::<SalesChangeSubmission>(SALES_CHANGE_SUBMISSIONS),
             submission,
             executor,
         )
         .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<SalesChangeSubmissionLine>(SALES_CHANGE_SUBMISSION_LINES),
+            &self.db.collection::<SalesChangeSubmissionLine>(SALES_CHANGE_SUBMISSION_LINES),
             lines.to_vec(),
             executor,
         )
         .await?;
-        SalesChangeOrderRepository::new(self.db, SALES_CHANGE_ORDERS)
-            .update(change_order, executor)
-            .await
+        SalesChangeOrderRepository::new(self.db, SALES_CHANGE_ORDERS).update(change_order, executor).await
     }
 }
 
@@ -509,22 +495,22 @@ fn change_order_filter(
     match (sales_order_id, authorized_sales_order_ids) {
         (Some(sales_order_id), None) => {
             filter.insert("sales_order_id", sales_order_id);
-        }
+        },
         (Some(sales_order_id), Some(authorized)) => {
             if authorized.iter().any(|id| id == sales_order_id) {
                 filter.insert("sales_order_id", sales_order_id);
             } else {
                 filter.insert("$expr", false);
             }
-        }
+        },
         (None, Some(authorized)) => {
             if authorized.is_empty() {
                 filter.insert("$expr", false);
             } else {
                 filter.insert("sales_order_id", doc! { "$in": authorized });
             }
-        }
-        (None, None) => {}
+        },
+        (None, None) => {},
     }
     filter
 }

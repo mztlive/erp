@@ -6,13 +6,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
-
 use erp_core::common::revision::RevisionBase;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ContractId, ContractRevisionId, FileAssetId, PartyId};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::snapshot::{
     CustomerSnapshot, InvoiceRequirementSnapshot, PaymentTermSnapshot, SettlementPartySnapshot,
@@ -202,9 +201,7 @@ impl ContractRevision {
     /// # 错误
     /// 当前修订序号达到 `u32::MAX` 时返回错误。
     pub fn next_revision_no(current_max: u32) -> Result<u32> {
-        current_max
-            .checked_add(1)
-            .ok_or_else(|| Error::from("合同版本号溢出"))
+        current_max.checked_add(1).ok_or_else(|| Error::from("合同版本号溢出"))
     }
 
     /// 判断本版本是否属于给定合同。
@@ -244,9 +241,10 @@ impl ContractRevision {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::ContractId;
+
+    use super::*;
 
     fn data() -> ContractRevisionData {
         ContractRevisionData {
@@ -268,22 +266,15 @@ mod tests {
 
     #[test]
     fn new_trims_snapshots_and_keeps_revision_metadata() {
-        let revision = ContractRevision::new(
-            ContractRevisionId::new("rev-1"),
-            ContractId::new("c-1"),
-            1,
-            data(),
-        )
-        .unwrap();
+        let revision =
+            ContractRevision::new(ContractRevisionId::new("rev-1"), ContractId::new("c-1"), 1, data())
+                .unwrap();
 
         assert_eq!(revision.revision.revision_no, 1);
         assert_eq!(revision.contract_id, ContractId::new("c-1"));
         assert_eq!(revision.contract_no, "HT-2026-0088");
         assert_eq!(revision.customer_snapshot.customer_name, "东方企业");
-        assert_eq!(
-            revision.settlement_party_snapshot.settlement_party_name,
-            "集团结算中心"
-        );
+        assert_eq!(revision.settlement_party_snapshot.settlement_party_name, "集团结算中心");
         assert_eq!(revision.payment_term_snapshot.payment_term_name, "月结 30 天");
         assert_eq!(revision.invoice_requirement_snapshot.tax_point, "6");
         assert_eq!(revision.contract_pdf_file_id, FileAssetId::new("file-1"));
@@ -291,60 +282,38 @@ mod tests {
 
     #[test]
     fn new_rejects_blank_and_reversed_validity() {
-        let blank_no = ContractRevisionData {
-            contract_no: "   ".to_string(),
-            ..data()
-        };
-        assert!(ContractRevision::new(
-            ContractRevisionId::new("rev-1"),
-            ContractId::new("c-1"),
-            1,
-            blank_no
-        )
-        .is_err());
+        let blank_no = ContractRevisionData { contract_no: "   ".to_string(), ..data() };
+        assert!(
+            ContractRevision::new(ContractRevisionId::new("rev-1"), ContractId::new("c-1"), 1, blank_no)
+                .is_err()
+        );
 
-        let reversed = ContractRevisionData {
-            valid_to: Some(BusinessDate::from_ymd(2025, 12, 31).unwrap()),
-            ..data()
-        };
-        assert!(ContractRevision::new(
-            ContractRevisionId::new("rev-1"),
-            ContractId::new("c-1"),
-            1,
-            reversed
-        )
-        .is_err());
+        let reversed =
+            ContractRevisionData { valid_to: Some(BusinessDate::from_ymd(2025, 12, 31).unwrap()), ..data() };
+        assert!(
+            ContractRevision::new(ContractRevisionId::new("rev-1"), ContractId::new("c-1"), 1, reversed)
+                .is_err()
+        );
 
-        assert!(ContractRevision::new(
-            ContractRevisionId::new("rev-1"),
-            ContractId::new("c-1"),
-            0,
-            data()
-        )
-        .is_err());
+        assert!(
+            ContractRevision::new(ContractRevisionId::new("rev-1"), ContractId::new("c-1"), 0, data())
+                .is_err()
+        );
     }
 
     #[test]
     fn update_is_rejected_for_immutable_revision() {
-        let mut revision = ContractRevision::new(
-            ContractRevisionId::new("rev-1"),
-            ContractId::new("c-1"),
-            1,
-            data(),
-        )
-        .unwrap();
+        let mut revision =
+            ContractRevision::new(ContractRevisionId::new("rev-1"), ContractId::new("c-1"), 1, data())
+                .unwrap();
         assert!(revision.update(data()).is_err());
     }
 
     #[test]
     fn belongs_to_contract_and_settlement_party_detect_drift() {
-        let revision = ContractRevision::new(
-            ContractRevisionId::new("rev-1"),
-            ContractId::new("c-1"),
-            1,
-            data(),
-        )
-        .unwrap();
+        let revision =
+            ContractRevision::new(ContractRevisionId::new("rev-1"), ContractId::new("c-1"), 1, data())
+                .unwrap();
 
         assert!(revision.belongs_to_contract(&ContractId::new("c-1")));
         assert!(!revision.belongs_to_contract(&ContractId::new("c-other")));
@@ -356,26 +325,15 @@ mod tests {
     fn next_revision_no_is_checked() {
         assert_eq!(ContractRevision::next_revision_no(0).unwrap(), 1);
         assert_eq!(ContractRevision::next_revision_no(7).unwrap(), 8);
-        assert_eq!(
-            ContractRevision::next_revision_no(u32::MAX)
-                .unwrap_err()
-                .to_string(),
-            "合同版本号溢出"
-        );
+        assert_eq!(ContractRevision::next_revision_no(u32::MAX).unwrap_err().to_string(), "合同版本号溢出");
     }
 
     #[test]
     fn overlong_snapshot_rejected() {
-        let overlong = ContractRevisionData {
-            customer_name: "x".repeat(129),
-            ..data()
-        };
-        assert!(ContractRevision::new(
-            ContractRevisionId::new("rev-1"),
-            ContractId::new("c-1"),
-            1,
-            overlong
-        )
-        .is_err());
+        let overlong = ContractRevisionData { customer_name: "x".repeat(129), ..data() };
+        assert!(
+            ContractRevision::new(ContractRevisionId::new("rev-1"), ContractId::new("c-1"), 1, overlong)
+                .is_err()
+        );
     }
 }

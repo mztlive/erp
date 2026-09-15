@@ -4,6 +4,11 @@
 //! 相同的业务快照；明细/差异主键由 Service 注入，本层不触碰全局 ID 生成器，
 //! 也不做任何 I/O。
 
+use erp_core::ids::{
+    SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
+};
+use erp_core::money::Amount;
+use erp_core::{Error, Result};
 use rust_decimal::Decimal;
 
 use crate::entity::supplier_settlement::{
@@ -11,11 +16,6 @@ use crate::entity::supplier_settlement::{
     SupplierSettlementDifferenceData, SupplierSettlementItem, SupplierSettlementItemData,
     SupplierSettlementSourceEvidence,
 };
-use erp_core::ids::{
-    SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
-};
-use erp_core::money::Amount;
-use erp_core::{Error, Result};
 
 /// 由不可变来源证据批次派生的完整草稿快照。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,9 +55,7 @@ impl SupplierSettlementDraftSnapshot {
         mut next_difference_id: impl FnMut() -> SupplierSettlementDifferenceId,
     ) -> Result<Self> {
         if source.lines.is_empty() {
-            return Err(Error::from(
-                "SOURCE_EVIDENCE_INCOMPLETE: 来源证据批次没有可结算行",
-            ));
+            return Err(Error::from("SOURCE_EVIDENCE_INCOMPLETE: 来源证据批次没有可结算行"));
         }
         let mut items = Vec::with_capacity(source.lines.len());
         let mut differences = Vec::new();
@@ -102,12 +100,7 @@ impl SupplierSettlementDraftSnapshot {
             }
             items.push(item);
         }
-        Ok(Self {
-            items,
-            differences,
-            erp_amount,
-            supplier_amount,
-        })
+        Ok(Self { items, differences, erp_amount, supplier_amount })
     }
 }
 
@@ -123,14 +116,15 @@ fn zero() -> Amount {
 mod tests {
     use std::str::FromStr;
 
-    use super::*;
-    use crate::entity::supplier_settlement::{
-        SettlementSourceFactType, SupplierSettlementSourceEvidenceData, SupplierSettlementSourceEvidenceLine,
-        SETTLEMENT_TIMEZONE,
-    };
     use erp_core::common::time::{BusinessDate, Instant};
     use erp_core::ids::{SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId};
     use erp_core::money::Quantity;
+
+    use super::*;
+    use crate::entity::supplier_settlement::{
+        SETTLEMENT_TIMEZONE, SettlementSourceFactType, SupplierSettlementSourceEvidenceData,
+        SupplierSettlementSourceEvidenceLine,
+    };
 
     fn amount(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -224,22 +218,13 @@ mod tests {
         assert_eq!(snapshot.items.len(), 1);
         assert_eq!(snapshot.differences.len(), 1);
         assert_eq!(snapshot.items[0].base.id, "settlement-item-1");
-        assert_eq!(
-            snapshot.items[0].statement_id,
-            SupplierSettlementStatementId::new("statement-1")
-        );
+        assert_eq!(snapshot.items[0].statement_id, SupplierSettlementStatementId::new("statement-1"));
         assert_eq!(snapshot.items[0].supplier_fulfillment_item_id.as_ref(), "item-1");
-        assert_eq!(
-            snapshot.items[0].quantity.to_decimal(),
-            Quantity::from_str("1").unwrap().to_decimal()
-        );
+        assert_eq!(snapshot.items[0].quantity.to_decimal(), Quantity::from_str("1").unwrap().to_decimal());
         assert_eq!(snapshot.items[0].erp_calculated_amount, amount("113.00"));
         assert_eq!(snapshot.items[0].supplier_billed_amount, amount("114.00"));
         assert_eq!(snapshot.differences[0].base.id, "settlement-difference-1");
-        assert_eq!(
-            snapshot.differences[0].statement_item_id.as_ref(),
-            "settlement-item-1"
-        );
+        assert_eq!(snapshot.differences[0].statement_item_id.as_ref(), "settlement-item-1");
         assert_eq!(snapshot.differences[0].difference_amount, amount("1.00"));
         assert_eq!(snapshot.erp_amount, amount("113.00"));
         assert_eq!(snapshot.supplier_amount, amount("114.00"));
@@ -309,10 +294,8 @@ mod tests {
 
     #[test]
     fn from_source_is_deterministic_given_same_injected_ids() {
-        let lines = vec![
-            source_line("item-1", "113.00", "114.00"),
-            source_line("item-2", "105.00", "100.00"),
-        ];
+        let lines =
+            vec![source_line("item-1", "113.00", "114.00"), source_line("item-2", "105.00", "100.00")];
         let first = SupplierSettlementDraftSnapshot::from_source(
             &SupplierSettlementStatementId::new("statement-1"),
             &source(lines.clone()),
@@ -350,21 +333,9 @@ mod tests {
         assert_ne!(first, second, "注入主键不同时快照身份不同");
         assert_eq!(first.erp_amount, second.erp_amount);
         assert_eq!(first.supplier_amount, second.supplier_amount);
-        assert_eq!(
-            first.items[0].erp_calculated_amount,
-            second.items[0].erp_calculated_amount
-        );
-        assert_eq!(
-            first.items[0].supplier_billed_amount,
-            second.items[0].supplier_billed_amount
-        );
-        assert_eq!(
-            first.items[0].supplier_fulfillment_item_id,
-            second.items[0].supplier_fulfillment_item_id
-        );
-        assert_eq!(
-            first.differences[0].difference_amount,
-            second.differences[0].difference_amount
-        );
+        assert_eq!(first.items[0].erp_calculated_amount, second.items[0].erp_calculated_amount);
+        assert_eq!(first.items[0].supplier_billed_amount, second.items[0].supplier_billed_amount);
+        assert_eq!(first.items[0].supplier_fulfillment_item_id, second.items[0].supplier_fulfillment_item_id);
+        assert_eq!(first.differences[0].difference_amount, second.differences[0].difference_amount);
     }
 }

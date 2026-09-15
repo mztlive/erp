@@ -33,14 +33,13 @@ pub use entity::{Party, PartyData, PartyKind, PartyStatus, PartyUpdate};
 pub use erp_core::ids::{
     PartyAddressId, PartyBankAccountId, PartyContactId, PartyId, PartyRevisionId, PartyTaxProfileId,
 };
+use erp_core::{Error, Result};
 pub use party_address::{AddressType, PartyAddress, PartyAddressData, PartyAddressUpdate};
 pub use party_bank_account::{PartyBankAccount, PartyBankAccountData, PartyBankAccountUpdate};
 pub use party_contact::{PartyContact, PartyContactData, PartyContactUpdate};
 pub use party_revision::{PartyRevision, PartyRevisionData};
 pub use party_tax_profile::{PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileUpdate};
-pub use status::{select_current_default, EffectiveRecordStatus};
-
-use erp_core::{Error, Result};
+pub use status::{EffectiveRecordStatus, select_current_default};
 
 /// 由单一 Party 拥有的从属实体。
 pub trait PartyOwned {

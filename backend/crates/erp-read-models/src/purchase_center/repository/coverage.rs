@@ -8,20 +8,20 @@
 
 use std::collections::HashMap;
 
+use erp_catalog::CatalogExt;
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId};
+use erp_inventory::InventoryExt;
 use erp_procurement::entity::purchase_order::ProcurementCoverageFacts;
+use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::entity::sales_order::LineType;
-use mongodb::{bson::doc, Database};
+use erp_sales::repository::SalesOrderExt;
+use mongodb::Database;
+use mongodb::bson::doc;
+use persistence_core::{Executor, Result};
 
 use super::mapping::{
     product_fact, reservation_fact, sales_goods_fact, sales_line_fact, sales_revision_fact, sku_fact,
 };
-use erp_catalog::CatalogExt;
-use erp_inventory::InventoryExt;
-use erp_procurement::repository::PurchaseOrderExt;
-use erp_sales::repository::SalesOrderExt;
-use persistence_core::Executor;
-use persistence_core::Result;
 
 /// 批量加载采购覆盖计算所需的最小持久化事实。
 ///
@@ -51,31 +51,20 @@ pub async fn load_procurement_coverage_facts(
     sales_order_id: &SalesOrderId,
     executor: &mut dyn Executor,
 ) -> Result<ProcurementCoverageFacts> {
-    let Some(revision) = db
-        .sales_order_revisions()
-        .find_by_id(revision_id.as_ref(), executor)
-        .await?
-    else {
+    let Some(revision) = db.sales_order_revisions().find_by_id(revision_id.as_ref(), executor).await? else {
         return Ok(ProcurementCoverageFacts::default());
     };
     let revision_key = SalesOrderRevisionId::new(revision.base.id.clone());
-    let revision_lines = db
-        .sales_order_revision_lines()
-        .list_lines_by_revision(&revision_key, executor)
-        .await?;
+    let revision_lines =
+        db.sales_order_revision_lines().list_lines_by_revision(&revision_key, executor).await?;
     let goods_ids = revision_lines
         .iter()
         .filter(|line| line.line_type == LineType::GoodsService)
         .map(|line| SalesOrderRevisionLineId::new(line.base.id.clone()))
         .collect::<Vec<_>>();
-    let goods_lines = db
-        .sales_order_goods_service_line_revisions()
-        .list_by_revision_line_ids(&goods_ids, executor)
-        .await?;
-    let sku_ids = goods_lines
-        .iter()
-        .map(|line| line.sku_id.clone())
-        .collect::<Vec<_>>();
+    let goods_lines =
+        db.sales_order_goods_service_line_revisions().list_by_revision_line_ids(&goods_ids, executor).await?;
+    let sku_ids = goods_lines.iter().map(|line| line.sku_id.clone()).collect::<Vec<_>>();
     let skus = db
         .skus()
         .find_by_ids(&sku_ids, executor)
@@ -83,10 +72,7 @@ pub async fn load_procurement_coverage_facts(
         .into_iter()
         .map(|sku| (sku.base.id.clone(), sku))
         .collect::<HashMap<_, _>>();
-    let unit_ids = skus
-        .values()
-        .map(|sku| sku.base_unit_id.to_string())
-        .collect::<Vec<_>>();
+    let unit_ids = skus.values().map(|sku| sku.base_unit_id.to_string()).collect::<Vec<_>>();
     let units = db
         .unit_of_measures()
         .find_many(
@@ -94,22 +80,13 @@ pub async fn load_procurement_coverage_facts(
             executor,
         )
         .await?;
-    let unit_scales = units
-        .into_iter()
-        .map(|unit| (unit.base.id, unit.quantity_scale))
-        .collect::<HashMap<_, _>>();
+    let unit_scales =
+        units.into_iter().map(|unit| (unit.base.id, unit.quantity_scale)).collect::<HashMap<_, _>>();
     let quantity_scales = skus
         .iter()
-        .filter_map(|(id, sku)| {
-            unit_scales
-                .get(sku.base_unit_id.as_ref())
-                .map(|scale| (id.clone(), *scale))
-        })
+        .filter_map(|(id, sku)| unit_scales.get(sku.base_unit_id.as_ref()).map(|scale| (id.clone(), *scale)))
         .collect();
-    let product_ids = skus
-        .values()
-        .map(|sku| sku.product_id.clone())
-        .collect::<Vec<_>>();
+    let product_ids = skus.values().map(|sku| sku.product_id.clone()).collect::<Vec<_>>();
     let products = db
         .products()
         .find_by_ids(&product_ids, executor)
@@ -117,32 +94,21 @@ pub async fn load_procurement_coverage_facts(
         .into_iter()
         .map(|product| (product.base.id.clone(), product))
         .collect::<HashMap<_, _>>();
-    let sources = db
-        .purchase_order()
-        .coverage_sources(sales_order_id, executor)
-        .await?;
+    let sources = db.purchase_order().coverage_sources(sales_order_id, executor).await?;
     let target_sales_line_ids = revision_lines
         .iter()
         .filter(|line| line.line_type == LineType::GoodsService)
         .map(|line| line.sales_order_line_id.clone())
         .collect::<Vec<_>>();
-    let reservations = db
-        .inventory()
-        .existing_stock_reservations_for_sales_lines(&target_sales_line_ids, executor)
-        .await?;
+    let reservations =
+        db.inventory().existing_stock_reservations_for_sales_lines(&target_sales_line_ids, executor).await?;
     Ok(ProcurementCoverageFacts {
         quantity_scales,
         revision: Some(sales_revision_fact(revision)),
         revision_lines: revision_lines.into_iter().map(sales_line_fact).collect(),
         goods_lines: goods_lines.into_iter().map(sales_goods_fact).collect(),
-        skus: skus
-            .into_iter()
-            .map(|(id, value)| (id, sku_fact(value)))
-            .collect(),
-        products: products
-            .into_iter()
-            .map(|(id, value)| (id, product_fact(value)))
-            .collect(),
+        skus: skus.into_iter().map(|(id, value)| (id, sku_fact(value))).collect(),
+        products: products.into_iter().map(|(id, value)| (id, product_fact(value))).collect(),
         purchase_orders: sources.purchase_orders,
         submission_lines: sources.submission_lines,
         purchase_revision_lines: sources.purchase_revision_lines,
@@ -157,7 +123,7 @@ mod isolation_tests {
 
     use erp_catalog::entity::catalog::product::ProductData;
     use erp_catalog::entity::catalog::sku::SkuData;
-    use erp_catalog::{EnableStatus, ListingStatus, Product, Sku};
+    use erp_catalog::{CatalogExt, EnableStatus, ListingStatus, Product, Sku};
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         ProductId, PurchaseLineSalesAllocationId, PurchaseOrderId, PurchaseOrderRevisionId,
@@ -167,7 +133,7 @@ mod isolation_tests {
     };
     use erp_core::money::{Amount, Quantity, Rate};
     use erp_inventory::{
-        ReservationStatus, StockReservation, StockReservationData, StockReservationSourceType,
+        InventoryExt, ReservationStatus, StockReservation, StockReservationData, StockReservationSourceType,
     };
     use erp_procurement::entity::purchase_order::{
         FulfillmentResponsibility, PaymentTermSnapshot, PurchaseLineType, PurchaseOrder, PurchaseOrderData,
@@ -176,26 +142,19 @@ mod isolation_tests {
         PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData,
         PurchaseType, SupplierSnapshot,
     };
-    use erp_sales::entity::sales_order::snapshot::HeaderSnapshotData;
-    use test_support::{require_mongo, TestDb};
-    use {
-        erp_sales::entity::sales_order::revision::SalesOrderGoodsServiceLineRevision,
-        erp_sales::entity::sales_order::revision::SalesOrderGoodsServiceLineRevisionData,
-        erp_sales::entity::sales_order::revision::SalesOrderRevision,
-        erp_sales::entity::sales_order::revision::SalesOrderRevisionData,
-        erp_sales::entity::sales_order::revision::SalesOrderRevisionLine,
-        erp_sales::entity::sales_order::revision::SalesOrderRevisionLineData,
-    };
-    use {erp_sales::entity::sales_order::LineType, erp_sales::entity::sales_order::RevisionSource};
-
-    use crate::test_indexes::ensure_indexes;
-    use erp_catalog::CatalogExt;
-    use erp_inventory::InventoryExt;
     use erp_procurement::repository::PurchaseOrderExt;
+    use erp_sales::entity::sales_order::revision::{
+        SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData, SalesOrderRevision,
+        SalesOrderRevisionData, SalesOrderRevisionLine, SalesOrderRevisionLineData,
+    };
+    use erp_sales::entity::sales_order::snapshot::HeaderSnapshotData;
+    use erp_sales::entity::sales_order::{LineType, RevisionSource};
     use erp_sales::repository::SalesOrderExt;
     use persistence_core::{NoTransaction, Transactional};
+    use test_support::{TestDb, require_mongo};
 
     use super::load_procurement_coverage_facts;
+    use crate::test_indexes::ensure_indexes;
 
     /// 构造销售当前版本头。
     fn test_revision(id: &str) -> SalesOrderRevision {
@@ -509,14 +468,8 @@ mod isolation_tests {
             .create(&test_goods_line("sorl-1"), &mut NoTransaction)
             .await
             .expect("商品子类型行写入失败");
-        db.skus()
-            .create(&test_sku("sku-1"), &mut NoTransaction)
-            .await
-            .expect("SKU 写入失败");
-        db.products()
-            .create(&test_product("product-sku-1"), &mut NoTransaction)
-            .await
-            .expect("商品写入失败");
+        db.skus().create(&test_sku("sku-1"), &mut NoTransaction).await.expect("SKU 写入失败");
+        db.products().create(&test_product("product-sku-1"), &mut NoTransaction).await.expect("商品写入失败");
         db.purchase_orders()
             .create(
                 &purchase_order("po-draft", PurchaseOrderStatus::Draft, Some("sub-1"), None),
@@ -549,10 +502,7 @@ mod isolation_tests {
             .await
             .expect("采购版本写入失败");
         db.purchase_order_revision_lines()
-            .create(
-                &purchase_revision_line("porl-1", "rev-po-1", "sol-1"),
-                &mut NoTransaction,
-            )
+            .create(&purchase_revision_line("porl-1", "rev-po-1", "sol-1"), &mut NoTransaction)
             .await
             .expect("采购版本行写入失败");
         db.purchase_line_sales_allocations()
@@ -582,9 +532,7 @@ mod isolation_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn missing_revision_doc_returns_empty_facts() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_coverage_missing_revision")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_coverage_missing_revision").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
             let facts = load_procurement_coverage_facts(
                 fixture.db(),
@@ -624,9 +572,7 @@ mod isolation_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn loads_current_target_and_all_coverage_sources() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_coverage_facts")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_coverage_facts").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
             seed_coverage_fixture(fixture.db()).await;
 
@@ -648,14 +594,7 @@ mod isolation_tests {
             assert_eq!(facts.purchase_revision_lines.len(), 1, "当前版本行应被加载");
             assert_eq!(facts.allocations.len(), 1, "正式分配应被加载");
             assert_eq!(facts.reservations.len(), 1, "现有库存预占应被加载");
-            assert_eq!(
-                facts.submission_lines[0]
-                    .sales_order_line_id
-                    .as_ref()
-                    .unwrap()
-                    .to_string(),
-                "sol-1"
-            );
+            assert_eq!(facts.submission_lines[0].sales_order_line_id.as_ref().unwrap().to_string(), "sol-1");
         });
     }
 
@@ -676,9 +615,7 @@ mod isolation_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn voided_orders_and_historical_pointers_are_excluded() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_coverage_voided")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_coverage_voided").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
             seed_coverage_fixture(fixture.db()).await;
             // 作废采购单：即使携带指针也不进入覆盖事实。
@@ -706,10 +643,7 @@ mod isolation_tests {
             fixture
                 .db()
                 .purchase_order_submission_lines()
-                .create(
-                    &submission_line("subl-history", "sub-history", "sol-history"),
-                    &mut NoTransaction,
-                )
+                .create(&submission_line("subl-history", "sub-history", "sol-history"), &mut NoTransaction)
                 .await
                 .expect("历史提交行写入失败");
 
@@ -723,11 +657,7 @@ mod isolation_tests {
             .expect("事实加载失败");
             assert_eq!(facts.purchase_orders.len(), 2, "作废采购单不得参与覆盖");
             assert_eq!(facts.submission_lines.len(), 1, "历史提交行不得进入当前覆盖");
-            assert_eq!(
-                facts.purchase_revision_lines.len(),
-                1,
-                "历史版本行不得进入当前覆盖"
-            );
+            assert_eq!(facts.purchase_revision_lines.len(), 1, "历史版本行不得进入当前覆盖");
         });
     }
 
@@ -748,9 +678,7 @@ mod isolation_tests {
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn transaction_reads_own_writes_with_same_session() {
         require_mongo!(async {
-            let fixture = TestDb::new("proc_coverage_txn")
-                .await
-                .expect("测试数据库创建失败");
+            let fixture = TestDb::new("proc_coverage_txn").await.expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
             seed_coverage_fixture(fixture.db()).await;
 
@@ -779,10 +707,7 @@ mod isolation_tests {
                         )
                         .await?;
                         assert!(
-                            facts
-                                .submission_lines
-                                .iter()
-                                .any(|line| line.base.id == "subl-txn"),
+                            facts.submission_lines.iter().any(|line| line.base.id == "subl-txn"),
                             "事务内应能 read-your-writes"
                         );
                         Ok(())

@@ -2,12 +2,6 @@
 
 use std::str::FromStr;
 
-use crate::entity::receivable::{
-    AccountReviewStatus, EntryDirection, ReceivableAccount, ReceivableAccountData, ReceivableEntry,
-    ReceivableEntryData, ReceivableEntryType, SalesBusinessTypeFact,
-};
-use crate::repository::ReceivableExt;
-use crate::{Error, Result};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     CustomerAccountId, PartyId, ReceivableAccountId, ReceivableEntryId, SalesOrderId, SalesOrderRevisionId,
@@ -16,6 +10,13 @@ use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::entity::receivable::{
+    AccountReviewStatus, EntryDirection, ReceivableAccount, ReceivableAccountData, ReceivableEntry,
+    ReceivableEntryData, ReceivableEntryType, SalesBusinessTypeFact,
+};
+use crate::repository::ReceivableExt;
+use crate::{Error, Result};
 
 /// 首次应收形成所需的冻结事实；不得携带销售聚合或审批、工作项对象。
 #[derive(Debug, Clone)]
@@ -55,9 +56,7 @@ pub async fn create_initial_receivable(
     let account_id = ReceivableAccountId::new(next_id());
     let entry_id = ReceivableEntryId::new(next_id());
     let (account, entry) = build_initial_receivable(input, account_id, entry_id, BusinessDate::today)?;
-    db.receivable()
-        .create_receivable_with_entry(&account, &entry, executor)
-        .await?;
+    db.receivable().create_receivable_with_entry(&account, &entry, executor).await?;
     Ok(account)
 }
 
@@ -110,9 +109,10 @@ fn build_initial_receivable(
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use super::*;
     use crate::entity::receivable::ReceivableAccountStatus;
-    use std::cell::Cell;
 
     fn input(business_type: SalesBusinessTypeFact, gross: &str) -> InitialReceivableInput {
         InitialReceivableInput {
@@ -133,10 +133,7 @@ mod tests {
     #[test]
     fn goods_and_voucher_keep_initial_review_state_and_original_source_identity() {
         for (business_type, review_status) in [
-            (
-                SalesBusinessTypeFact::GoodsService,
-                AccountReviewStatus::NotApplicable,
-            ),
+            (SalesBusinessTypeFact::GoodsService, AccountReviewStatus::NotApplicable),
             (SalesBusinessTypeFact::Voucher, AccountReviewStatus::NotApplicable),
         ] {
             let input = input(business_type, "123.45");
@@ -197,10 +194,9 @@ mod tests {
 
     #[test]
     fn nonpositive_amounts_keep_domain_errors_and_validation_order() {
-        for (gross, expected_message, expected_date_reads) in [
-            ("-0.01", "子账汇总金额不得为负", 0),
-            ("0.00", "应收分录金额必须为正数", 1),
-        ] {
+        for (gross, expected_message, expected_date_reads) in
+            [("-0.01", "子账汇总金额不得为负", 0), ("0.00", "应收分录金额必须为正数", 1)]
+        {
             let date_reads = Cell::new(0);
             let error = build_initial_receivable(
                 input(SalesBusinessTypeFact::Voucher, gross),

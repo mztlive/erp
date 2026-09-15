@@ -1,6 +1,7 @@
 //! 结算复核候选查询的协议适配，复用提交权限。
-use super::*;
 use erp_processes::supply_settlement::SettlementReviewerOption;
+
+use super::*;
 
 #[permission_macros::permission(
     group = "供应商结算",
@@ -15,8 +16,6 @@ pub async fn supplier_settlement_reviewer_options(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<SettlementReviewerOption>> {
-    let options = SupplierSettlementProcess::new(state.db())
-        .reviewer_options(&id, &actor)
-        .await?;
+    let options = SupplierSettlementProcess::new(state.db()).reviewer_options(&id, &actor).await?;
     Ok(ApiResponse::ok_with_data(options))
 }

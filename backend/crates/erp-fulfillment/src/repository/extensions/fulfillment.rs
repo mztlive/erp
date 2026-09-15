@@ -5,18 +5,18 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as FulfillmentExt>::PURCHASE_RECEIPTS` 等值。
 
+use mongodb::Database;
+
+use super::super::fulfillment::{
+    CustomerAcceptanceFilter, DeliveryFilter, ElectronicDeliveryFilter, FulfillmentRepository,
+    PurchaseReceiptFilter, ServiceFulfillmentFilter,
+};
 use crate::entity::fulfillment::{
     AcceptanceFulfillmentAllocation, CustomerAcceptanceLine, DeliveryLine, PurchaseReceiptLine,
 };
 use crate::repository::owned::{
     CustomerAcceptanceRepository, DeliveryRepository, ElectronicDeliveryRepository,
     PurchaseReceiptRepository, ServiceFulfillmentRepository,
-};
-use mongodb::Database;
-
-use super::super::fulfillment::{
-    CustomerAcceptanceFilter, DeliveryFilter, ElectronicDeliveryFilter, FulfillmentRepository,
-    PurchaseReceiptFilter, ServiceFulfillmentFilter,
 };
 
 /// 域 D16 仓储访问器。

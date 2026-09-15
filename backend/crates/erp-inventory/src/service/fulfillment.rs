@@ -1,12 +1,10 @@
 //! 履约入库的库存余额、流水与销售预占写入；复用调用方唯一执行器。
 pub mod delivery;
-use crate::{
-    Error, InventoryExt, MovementDirection, MovementType, ReservationEntryType, ReservationStatus, Result,
-    StockBalance, StockBalanceData, StockMovement, StockMovementData, StockReservation, StockReservationData,
-    StockReservationEntry, StockReservationEntryData, StockReservationSourceType,
-};
+use std::str::FromStr;
+
 use async_trait::async_trait;
-use erp_core::common::{source::SourceType, time::Instant};
+use erp_core::common::source::SourceType;
+use erp_core::common::time::Instant;
 use erp_core::ids::{
     PurchaseLineSalesAllocationId, PurchaseReceiptLineId, SalesOrderLineId, SkuId, StockBalanceId,
     StockMovementId, StockReservationEntryId, StockReservationId, WarehouseId,
@@ -15,7 +13,12 @@ use erp_core::money::Quantity;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
-use std::str::FromStr;
+
+use crate::{
+    Error, InventoryExt, MovementDirection, MovementType, ReservationEntryType, ReservationStatus, Result,
+    StockBalance, StockBalanceData, StockMovement, StockMovementData, StockReservation, StockReservationData,
+    StockReservationEntry, StockReservationEntryData, StockReservationSourceType,
+};
 /// 收货实际库存仓储边界；事实构造与数量规则由库存服务唯一持有。
 #[async_trait]
 trait ReceiptInventoryStore: Send {
@@ -71,11 +74,7 @@ impl ReceiptInventoryStore for MongoReceiptStore<'_> {
         movement_id: &str,
         ex: &mut dyn Executor,
     ) -> Result<bool> {
-        Ok(self
-            .0
-            .stock_balances()
-            .apply_last_movement(balance_id, movement_id, ex)
-            .await?)
+        Ok(self.0.stock_balances().apply_last_movement(balance_id, movement_id, ex).await?)
     }
     async fn reservation(&mut self, reservation: &StockReservation, ex: &mut dyn Executor) -> Result<()> {
         self.0.stock_reservations().create(reservation, ex).await?;
@@ -187,12 +186,7 @@ pub async fn post_receipt_stock(
     actor_id: &str,
 ) -> Result<String> {
     execute_receipt_stock(
-        &mut ReceiptStockPosting {
-            store: &mut MongoReceiptStore(db),
-            fact,
-            occurred_at,
-            actor_id,
-        },
+        &mut ReceiptStockPosting { store: &mut MongoReceiptStore(db), fact, occurred_at, actor_id },
         executor,
     )
     .await
@@ -298,14 +292,8 @@ impl<S: ReceiptInventoryStore> ReceiptReservationSteps for ReceiptReservationPos
         Ok(reservation.base.id)
     }
     async fn reserve(&mut self, session: &mut dyn Executor) -> Result<()> {
-        if !self
-            .store
-            .reserve(self.fact.balance_id, self.fact.quantity, session)
-            .await?
-        {
-            return Err(Error::BusinessLogicError(
-                "可用库存不足，无法建立销售预占".to_string(),
-            ));
+        if !self.store.reserve(self.fact.balance_id, self.fact.quantity, session).await? {
+            return Err(Error::BusinessLogicError("可用库存不足，无法建立销售预占".to_string()));
         }
         Ok(())
     }
@@ -330,10 +318,7 @@ pub async fn establish_receipt_reservation(
     fact: ReceiptReservationFact<'_>,
 ) -> Result<()> {
     execute_receipt_reservation(
-        &mut ReceiptReservationPosting {
-            store: &mut MongoReceiptStore(db),
-            fact,
-        },
+        &mut ReceiptReservationPosting { store: &mut MongoReceiptStore(db), fact },
         executor,
     )
     .await
@@ -403,15 +388,9 @@ mod receipt_write_tests {
     #[tokio::test]
     async fn receipt_stock_preserves_balance_movement_lastmovement_and_executor() {
         let mut ex = TestExecutor { _identity: 1 };
-        let mut steps = RecordingSteps {
-            calls: vec![],
-            executor: &mut ex as *mut TestExecutor as usize,
-            fail_at: None,
-        };
-        assert_eq!(
-            execute_receipt_stock(&mut steps, &mut ex).await.unwrap(),
-            "balance-1"
-        );
+        let mut steps =
+            RecordingSteps { calls: vec![], executor: &mut ex as *mut TestExecutor as usize, fail_at: None };
+        assert_eq!(execute_receipt_stock(&mut steps, &mut ex).await.unwrap(), "balance-1");
         assert_eq!(steps.calls, ["balance", "movement", "lastmovement"]);
     }
     #[tokio::test]
@@ -433,11 +412,8 @@ mod receipt_write_tests {
     #[tokio::test]
     async fn reservation_preserves_create_reserve_entry_and_executor() {
         let mut ex = TestExecutor { _identity: 1 };
-        let mut steps = RecordingSteps {
-            calls: vec![],
-            executor: &mut ex as *mut TestExecutor as usize,
-            fail_at: None,
-        };
+        let mut steps =
+            RecordingSteps { calls: vec![], executor: &mut ex as *mut TestExecutor as usize, fail_at: None };
         execute_receipt_reservation(&mut steps, &mut ex).await.unwrap();
         assert_eq!(steps.calls, ["reservation", "reserve", "entry"]);
     }
@@ -504,10 +480,7 @@ mod receipt_store_tests {
             Ok(())
         }
         fn balance_id(&self) -> &str {
-            self.balance
-                .as_ref()
-                .map(|balance| balance.base.id.as_str())
-                .unwrap_or("balance-1")
+            self.balance.as_ref().map(|balance| balance.base.id.as_str()).unwrap_or("balance-1")
         }
     }
     #[async_trait]
@@ -648,21 +621,11 @@ mod receipt_store_tests {
             let reservation = store.reservation.unwrap();
             assert_eq!(reservation.sales_order_line_id.as_ref(), "sales-line-1");
             assert_eq!(
-                reservation
-                    .purchase_line_sales_allocation_id
-                    .as_ref()
-                    .unwrap()
-                    .as_ref(),
+                reservation.purchase_line_sales_allocation_id.as_ref().unwrap().as_ref(),
                 "allocation-1"
             );
-            assert_eq!(
-                reservation.source_receipt_line_id.as_ref().unwrap().as_ref(),
-                "receipt-line-1"
-            );
-            assert_eq!(
-                reservation.source_type,
-                StockReservationSourceType::PurchaseReceipt
-            );
+            assert_eq!(reservation.source_receipt_line_id.as_ref().unwrap().as_ref(), "receipt-line-1");
+            assert_eq!(reservation.source_type, StockReservationSourceType::PurchaseReceipt);
             assert_eq!(reservation.reserved_quantity, q("2"));
             assert_eq!(reservation.consumed_quantity, q("0"));
             assert_eq!(reservation.released_quantity, q("0"));

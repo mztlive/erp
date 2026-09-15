@@ -1,52 +1,48 @@
 mod start;
-use super::adapter::{
-    build_customer_refund_snapshot, customer_refund_adapter, customer_refund_object_readable,
-    customer_refund_responsible_org_id, customer_refund_start_command, customer_refund_subject_ref,
-    execute_customer_refund_domain_action, require_frozen_binding, start_approval_command_kind,
-};
-use super::cancel_approval::{
-    build_customer_refund_cancel_input, load_cancel_runtime, persist_customer_refund_cancel,
-    CustomerRefundCancelPersistInput,
-};
-use super::start_approval::{
-    build_customer_refund_start_input, ensure_return_start_actor_active,
-    ensure_return_start_replay_authorized, load_bound_definition_graph,
-    load_bound_definition_graph_with_executor, load_start_receipt, persist_customer_refund_start,
-    persist_runtime_writes, replay_return_start_with_executor, replay_subject_versions,
-    CustomerRefundStartInput, CustomerRefundStartPersistInput, ReplayReturnStartInput,
-};
-use super::ReturnsProcess;
-use crate::{Error, Result};
-use application_core::AuditActor;
-use application_core::CommandReceipt;
-use erp_audit::AuditActorLogs;
-use erp_audit::AuditExt;
-use erp_audit::CommandReceiptServiceExt as _;
+use application_core::{AuditActor, CommandReceipt};
+use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerAccountId, CustomerReceiptId};
 use erp_customer::CustomerExt;
+use erp_finance::entity::receivable::CustomerReceiptStatus;
 use erp_identity::SharedRbacService;
 use erp_read_models::returns_center::dto::CustomerRefundView;
 use erp_returns::dto::{
     CancelCustomerRefundApprovalRequest, CommitCustomerRefundRequest, CreateCustomerRefundRequest,
     SubmitCustomerRefundRequest,
 };
+use erp_returns::entity::returns::CustomerRefund;
 use erp_returns::service::approval::start_customer_refund_approval;
 use erp_returns::service::version_conflict::conflict_if_stale_version;
-use erp_workflow::entity::document_registry::BusinessDocument;
-use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
+use erp_workflow::DocumentRegistryExt;
+use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
-use erp_workflow::DocumentRegistryExt;
-use persistence_core::{Executor, NoTransaction, Transactional};
-
-use erp_finance::entity::receivable::CustomerReceiptStatus;
-use erp_returns::entity::returns::CustomerRefund;
 use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
+
+use super::ReturnsProcess;
+use super::adapter::{
+    build_customer_refund_snapshot, customer_refund_adapter, customer_refund_object_readable,
+    customer_refund_responsible_org_id, customer_refund_start_command, customer_refund_subject_ref,
+    execute_customer_refund_domain_action, require_frozen_binding, start_approval_command_kind,
+};
+use super::cancel_approval::{
+    CustomerRefundCancelPersistInput, build_customer_refund_cancel_input, load_cancel_runtime,
+    persist_customer_refund_cancel,
+};
+use super::start_approval::{
+    CustomerRefundStartInput, CustomerRefundStartPersistInput, ReplayReturnStartInput,
+    build_customer_refund_start_input, ensure_return_start_actor_active,
+    ensure_return_start_replay_authorized, load_bound_definition_graph,
+    load_bound_definition_graph_with_executor, load_start_receipt, persist_customer_refund_start,
+    persist_runtime_writes, replay_return_start_with_executor, replay_subject_versions,
+};
+use crate::{Error, Result};
 
 impl ReturnsProcess {
     // -----------------------------------------------------------------------
@@ -81,10 +77,7 @@ impl ReturnsProcess {
             actor.clone(),
         )
         .await?;
-        self.reads()
-            .customer_refund_detail(&refund.base.id)
-            .await
-            .map_err(crate::Error::from)
+        self.reads().customer_refund_detail(&refund.base.id).await.map_err(crate::Error::from)
     }
 
     /// 按原回款一次创建客户退款并启动审批。
@@ -106,11 +99,7 @@ impl ReturnsProcess {
             &req,
         )?;
         if let Some(refund_id) = command_receipt.committed_resource_id(&self.db).await? {
-            return self
-                .reads()
-                .customer_refund_detail(&refund_id)
-                .await
-                .map_err(crate::Error::from);
+            return self.reads().customer_refund_detail(&refund_id).await.map_err(crate::Error::from);
         }
         let receipt = erp_finance::service::receivable::customer_refund::load_customer_refund_source(
             &self.db,
@@ -150,13 +139,9 @@ impl ReturnsProcess {
         let document = new_registered_document(&id, DocumentType::CustomerRefund, refund.refund_no.clone())
             .map_err(crate::Error::from)?;
         let create_audit =
-            actor
-                .clone()
-                .resource_log("customer_refund.create", "customer_refund", id.clone())?;
+            actor.clone().resource_log("customer_refund.create", "customer_refund", id.clone())?;
         let submit_audit =
-            actor
-                .clone()
-                .resource_log("customer_refund.submit", "customer_refund", id.clone())?;
+            actor.clone().resource_log("customer_refund.submit", "customer_refund", id.clone())?;
         let command_audit = command_receipt.audit(actor.clone(), id.clone())?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
@@ -222,10 +207,7 @@ impl ReturnsProcess {
                 None => return Err(error),
             },
         };
-        self.reads()
-            .customer_refund_detail(&detail_id)
-            .await
-            .map_err(crate::Error::from)
+        self.reads().customer_refund_detail(&detail_id).await.map_err(crate::Error::from)
     }
 
     /// 提交客户退款并调用统一 `start_approval`。
@@ -251,26 +233,15 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<CustomerRefundView> {
         req.validate()?;
-        req.idempotency_key = normalize_idempotency_key(&req.idempotency_key)?
-            .as_str()
-            .to_string();
-        if self
-            .replay_customer_refund_start(id, &req.idempotency_key, actor)
-            .await?
-            .is_some()
-        {
-            return self
-                .reads()
-                .customer_refund_detail(id)
-                .await
-                .map_err(crate::Error::from);
+        req.idempotency_key = normalize_idempotency_key(&req.idempotency_key)?.as_str().to_string();
+        if self.replay_customer_refund_start(id, &req.idempotency_key, actor).await?.is_some() {
+            return self.reads().customer_refund_detail(id).await.map_err(crate::Error::from);
         }
         let adapter = customer_refund_adapter()?;
         let mut refund = self.domain().load_customer_refund(id, &mut NoTransaction).await?;
         conflict_if_stale_version(refund.matches_version(req.expected_version))?;
         start_customer_refund_approval(&mut refund)?;
-        self.dispatch_customer_refund_start(id, refund, req.idempotency_key, actor, adapter)
-            .await
+        self.dispatch_customer_refund_start(id, refund, req.idempotency_key, actor, adapter).await
     }
 
     /// 撤回客户退款审批，成功后回到草稿且 `subject_version` 不回退。
@@ -297,12 +268,8 @@ impl ReturnsProcess {
         req.validate()?;
         let mut refund = self.domain().load_customer_refund(id, &mut NoTransaction).await?;
         conflict_if_stale_version(refund.matches_version(req.expected_version))?;
-        self.persist_cancelled_customer_refund(id, &mut refund, &req, actor)
-            .await?;
-        self.reads()
-            .customer_refund_detail(id)
-            .await
-            .map_err(crate::Error::from)
+        self.persist_cancelled_customer_refund(id, &mut refund, &req, actor).await?;
+        self.reads().customer_refund_detail(id).await.map_err(crate::Error::from)
     }
 
     /// 最终通过过账（§8.3-3 事务不变量）。
@@ -339,10 +306,7 @@ impl ReturnsProcess {
             })
             .await?;
 
-        self.reads()
-            .customer_refund_detail(&detail_id)
-            .await
-            .map_err(crate::Error::from)
+        self.reads().customer_refund_detail(&detail_id).await.map_err(crate::Error::from)
     }
 }
 
@@ -358,23 +322,13 @@ pub(super) async fn apply_customer_refund_final_post(
     session: &mut dyn Executor,
 ) -> Result<()> {
     let domain = erp_returns::service::ReturnsService::new(db.clone());
-    let mut refund = domain
-        .prepare_customer_refund_final_post(refund_id, session)
-        .await?;
+    let mut refund = domain.prepare_customer_refund_final_post(refund_id, session).await?;
     execute_customer_refund_domain_action(
         &mut refund,
         erp_workflow::service::approval::policy::ApprovalDomainAction::CustomerRefundPost,
     )?;
-    execute_refund_posting(
-        &mut MongoRefundPosting {
-            db,
-            refund: &mut refund,
-            actor_id,
-            actor,
-        },
-        session,
-    )
-    .await?;
+    execute_refund_posting(&mut MongoRefundPosting { db, refund: &mut refund, actor_id, actor }, session)
+        .await?;
     Ok(())
 }
 
@@ -420,12 +374,12 @@ impl RefundPostingSteps for MongoRefundPosting<'_> {
         match step {
             RefundPostingStep::Finance => {
                 apply_customer_refund_posting(db, refund, actor_id, session).await?;
-            }
+            },
             RefundPostingStep::Refund => {
                 erp_returns::service::ReturnsService::new(db.clone())
                     .persist_posted_customer_refund(refund, session)
                     .await?;
-            }
+            },
             RefundPostingStep::SalesProgress => {
                 let receipt_id = erp_returns::service::ReturnsService::customer_refund_receipt_id(refund)?;
                 let sales =
@@ -445,7 +399,7 @@ impl RefundPostingSteps for MongoRefundPosting<'_> {
                     )
                     .await?;
                 }
-            }
+            },
             RefundPostingStep::Audit => {
                 let audit = actor.clone().resource_log(
                     "customer_refund.post",
@@ -453,7 +407,7 @@ impl RefundPostingSteps for MongoRefundPosting<'_> {
                     refund.base.id.clone(),
                 )?;
                 db.audit_logs().create(&audit, session).await?;
-            }
+            },
         }
         Ok(())
     }
@@ -485,17 +439,11 @@ async fn persist_created_customer_refund(
             creator_id: actor.id().to_string(),
         },
     };
-    let document = new_registered_document(
-        &refund.base.id,
-        DocumentType::CustomerRefund,
-        refund.refund_no.clone(),
-    )
-    .map_err(crate::Error::from)?;
-    let audit = actor.clone().resource_log(
-        "customer_refund.create",
-        "customer_refund",
-        refund.base.id.clone(),
-    )?;
+    let document =
+        new_registered_document(&refund.base.id, DocumentType::CustomerRefund, refund.refund_no.clone())
+            .map_err(crate::Error::from)?;
+    let audit =
+        actor.clone().resource_log("customer_refund.create", "customer_refund", refund.base.id.clone())?;
     let db = db.clone();
     let rbac = rbac.clone();
     let object_read = object_read.clone();
@@ -641,13 +589,15 @@ fn customer_refund_source_fact(
 
 #[cfg(test)]
 mod customer_refund_approval_tests {
-    use super::{execute_customer_refund_domain_action, start_customer_refund_approval};
+    use std::str::FromStr;
+
     use erp_core::common::time::Instant;
     use erp_core::ids::{CustomerAccountId, CustomerReceiptId, CustomerRefundId};
     use erp_core::money::Amount;
     use erp_returns::entity::returns::{CustomerRefund, CustomerRefundData, CustomerRefundStatus};
     use erp_workflow::service::approval::policy::ApprovalDomainAction;
-    use std::str::FromStr;
+
+    use super::{execute_customer_refund_domain_action, start_customer_refund_approval};
 
     fn draft_refund() -> CustomerRefund {
         CustomerRefund::new(
@@ -674,11 +624,8 @@ mod customer_refund_approval_tests {
     /// 创建必须注册 BusinessDocument 并绑定发布定义。
     #[test]
     fn create_registers_document_and_binds_published_definition() {
-        let source = [
-            include_str!("customer_refund.rs"),
-            include_str!("customer_refund/start.rs"),
-        ]
-        .join("\n");
+        let source =
+            [include_str!("customer_refund.rs"), include_str!("customer_refund/start.rs")].join("\n");
         assert!(source.contains("bind_published_definition_on_document_create"));
         assert!(source.contains("new_registered_document"));
         assert!(source.contains("DocumentType::CustomerRefund"));
@@ -691,10 +638,7 @@ mod customer_refund_approval_tests {
         use super::super::adapter::customer_refund_object_readable;
 
         let production = [
-            include_str!("customer_refund.rs")
-                .split("#[cfg(test)]")
-                .next()
-                .expect("生产代码"),
+            include_str!("customer_refund.rs").split("#[cfg(test)]").next().expect("生产代码"),
             include_str!("customer_refund/start.rs"),
         ]
         .join("\n");
@@ -708,11 +652,8 @@ mod customer_refund_approval_tests {
     /// 提交必须锁定单据、递增 approval_subject_version 并调用 start_approval。
     #[test]
     fn submit_calls_start_approval_with_subject_version() {
-        let source = [
-            include_str!("customer_refund.rs"),
-            include_str!("customer_refund/start.rs"),
-        ]
-        .join("\n");
+        let source =
+            [include_str!("customer_refund.rs"), include_str!("customer_refund/start.rs")].join("\n");
         assert!(source.contains("pub async fn submit_customer_refund"));
         assert!(source.contains("customer_refund_start_command"));
         assert!(source.contains("refund.approval_subject_version"));
@@ -722,11 +663,8 @@ mod customer_refund_approval_tests {
     /// 最终动作唯一为 post_customer_refund，且客户端过账旁路关闭。
     #[test]
     fn final_action_is_post_customer_refund() {
-        let source = [
-            include_str!("customer_refund.rs"),
-            include_str!("customer_refund/start.rs"),
-        ]
-        .join("\n");
+        let source =
+            [include_str!("customer_refund.rs"), include_str!("customer_refund/start.rs")].join("\n");
         assert!(source.contains("pub async fn post_customer_refund"));
         assert!(
             include_str!("../../../erp-returns/src/service/customer_refund.rs")
@@ -739,11 +677,8 @@ mod customer_refund_approval_tests {
     /// 撤回必须调用统一 cancel 并回到草稿。
     #[test]
     fn cancel_uses_unified_port() {
-        let source = [
-            include_str!("customer_refund.rs"),
-            include_str!("customer_refund/start.rs"),
-        ]
-        .join("\n");
+        let source =
+            [include_str!("customer_refund.rs"), include_str!("customer_refund/start.rs")].join("\n");
         assert!(source.contains("pub async fn cancel_customer_refund_approval"));
         assert!(source.contains("prepare_cancel"));
         assert!(source.contains("persist_customer_refund_cancel"));
@@ -763,10 +698,7 @@ mod customer_refund_approval_tests {
     #[test]
     fn production_closes_draft_post_and_pending_review() {
         let production = [
-            include_str!("customer_refund.rs")
-                .split("#[cfg(test)]")
-                .next()
-                .expect("生产代码"),
+            include_str!("customer_refund.rs").split("#[cfg(test)]").next().expect("生产代码"),
             include_str!("customer_refund/start.rs"),
         ]
         .join("\n");

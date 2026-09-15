@@ -10,12 +10,12 @@ use erp_workflow::{BpmExt, WorkItemExt};
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use super::access::{authorized_fields, authorized_item_fields, detail_scope, ActorAccess};
+use super::access::{ActorAccess, authorized_fields, authorized_item_fields, detail_scope};
 use super::facts::object_policy;
 use super::stats::apply_due_filter;
 use super::{
-    dto, ProcessingBlockerView, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFilter, WorkItemListParams,
-    WorkItemPageView, WorkItemScope, WorkItemView,
+    ProcessingBlockerView, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFilter, WorkItemListParams,
+    WorkItemPageView, WorkItemScope, WorkItemView, dto,
 };
 use crate::errors::{Error, Result};
 
@@ -98,9 +98,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         ensure_queue_context(&query.queue_context_id, &queue_context_id)?;
         let mut filter = self.scope_filter(&query, &actor, &access)?;
         apply_due_filter(&mut filter, query.due)?;
-        let (authorized_page, result_version) = self
-            .authorized_page_fields(&filter, query.page, query.page_size, &access, executor)
-            .await?;
+        let (authorized_page, result_version) =
+            self.authorized_page_fields(&filter, query.page, query.page_size, &access, executor).await?;
         let scope_version = queue_scope_version(&identity_version, &queue_context_id, &result_version);
         ensure_scope_version(query.page, query.scope_version.as_deref(), &scope_version)?;
         let fields = self
@@ -108,16 +107,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                 authorized_page.items,
                 query.current_work_item_id.as_deref(),
                 &filter,
-                FocusedQueueContext {
-                    page_size: query.page_size,
-                    access: &access,
-                },
+                FocusedQueueContext { page_size: query.page_size, access: &access },
                 executor,
             )
             .await?;
-        let items = self
-            .project_fields(fields, query.scope, &actor, &access, &queue_context_id, executor)
-            .await?;
+        let items =
+            self.project_fields(fields, query.scope, &actor, &access, &queue_context_id, executor).await?;
         let current_version = self.auth.queue_scope_version(&actor, executor).await?;
         ensure_scope_version(1, Some(&identity_version), &current_version)?;
         Ok(WorkItemPageView {
@@ -158,12 +153,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             .find_visible_by_id(current_id, &candidates, executor)
             .await?
             .ok_or_else(|| Error::NotFound("当前焦点任务不在授权队列中".to_string()))?;
-        let current = self
-            .authorized_fields_with_executor(vec![current], context.access, executor)
-            .await?;
-        let Some(current) = current
-            .into_iter()
-            .find(|fields| matches_keyword(fields, filter.query.as_deref()))
+        let current = self.authorized_fields_with_executor(vec![current], context.access, executor).await?;
+        let Some(current) =
+            current.into_iter().find(|fields| matches_keyword(fields, filter.query.as_deref()))
         else {
             return Err(Error::NotFound("当前焦点任务不在授权队列中".to_string()));
         };
@@ -187,20 +179,15 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let mut result_version = String::new();
         let mut candidate_offset = 0_u64;
         loop {
-            let rows = self
-                .candidate_batch(&candidates, candidate_offset, executor)
-                .await?;
+            let rows = self.candidate_batch(&candidates, candidate_offset, executor).await?;
             let candidate_count = rows.len();
             if candidate_count == 0 {
                 break;
             }
             let mut facts = self.object_facts_for_rows(&rows, executor).await?;
-            self.filter_order_access(&access.actor_id, &mut facts, executor)
-                .await?;
+            self.filter_order_access(&access.actor_id, &mut facts, executor).await?;
             let fields = authorized_fields(rows, access, &facts);
-            for fields in fields
-                .into_iter()
-                .filter(|fields| matches_keyword(fields, filter.query.as_deref()))
+            for fields in fields.into_iter().filter(|fields| matches_keyword(fields, filter.query.as_deref()))
             {
                 result_version =
                     queue_scope_version(&result_version, &fields.id, &fields.task_version.to_string());
@@ -234,8 +221,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         items: Vec<WorkItem>,
         access: &ActorAccess,
     ) -> Result<Vec<dto::WorkItemFields>> {
-        self.authorized_fields_with_executor(items, access, &mut NoTransaction)
-            .await
+        self.authorized_fields_with_executor(items, access, &mut NoTransaction).await
     }
 
     /// 焦点和详情读取沿用调用方事务，不重新建立对象授权时点。
@@ -253,12 +239,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             })
             .collect::<HashSet<_>>();
         let mut facts = self.load_object_facts(&keys, executor).await?;
-        self.filter_order_access(&access.actor_id, &mut facts, executor)
-            .await?;
-        Ok(items
-            .into_iter()
-            .filter_map(|item| authorized_item_fields(item, access, &facts))
-            .collect())
+        self.filter_order_access(&access.actor_id, &mut facts, executor).await?;
+        Ok(items.into_iter().filter_map(|item| authorized_item_fields(item, access, &facts)).collect())
     }
 
     /// 为已授权任务逐条计算审批阻断与允许动作。
@@ -274,14 +256,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let mut items = Vec::with_capacity(fields.len());
         for fields in fields {
             let access = self.view_access(&fields, scope, actor, actor_access)?;
-            items.push(
-                WorkItemView::from_fields(fields, queue_context_id.to_string())?.with_access(
-                    access.processing_state,
-                    access.processing_blocker,
-                    access.allowed_actions,
-                    access.action_blockers,
-                ),
-            );
+            items.push(WorkItemView::from_fields(fields, queue_context_id.to_string())?.with_access(
+                access.processing_state,
+                access.processing_blocker,
+                access.allowed_actions,
+                access.action_blockers,
+            ));
         }
         self.apply_party_names_with(executor, &mut items).await?;
         self.apply_approval_contexts(&mut items, executor).await?;
@@ -315,28 +295,17 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         if execution_ids.is_empty() {
             return Ok(());
         }
-        let executions = self
-            .db
-            .bpm_workflow()
-            .list_executions_by_ids(&execution_ids, executor)
-            .await?;
-        let instance_ids = executions
-            .iter()
-            .map(|execution| execution.process_instance_id.clone())
-            .collect::<Vec<_>>();
-        let summaries = self
-            .db
-            .bpm_workflow()
-            .list_instance_summaries_by_ids(&instance_ids, executor)
-            .await?;
+        let executions = self.db.bpm_workflow().list_executions_by_ids(&execution_ids, executor).await?;
+        let instance_ids =
+            executions.iter().map(|execution| execution.process_instance_id.clone()).collect::<Vec<_>>();
+        let summaries =
+            self.db.bpm_workflow().list_instance_summaries_by_ids(&instance_ids, executor).await?;
         let executions = executions
             .into_iter()
             .map(|execution| (execution.base.id.clone(), execution))
             .collect::<HashMap<_, _>>();
-        let summaries = summaries
-            .into_iter()
-            .map(|summary| (summary.id.clone(), summary))
-            .collect::<HashMap<_, _>>();
+        let summaries =
+            summaries.into_iter().map(|summary| (summary.id.clone(), summary)).collect::<HashMap<_, _>>();
         for item in items {
             let Some(execution_id) = item.approval_node_execution_id.as_deref() else {
                 continue;
@@ -364,10 +333,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let access = self.actor_access(&actor).await?;
         let scope = detail_scope(&item, actor.id(), &access)?;
         let fields = self.authorized_fields_for_items(vec![item], &access).await?;
-        let fields = fields
-            .into_iter()
-            .next()
-            .ok_or_else(|| Error::NotFound("任务或业务对象不可见".to_string()))?;
+        let fields =
+            fields.into_iter().next().ok_or_else(|| Error::NotFound("任务或业务对象不可见".to_string()))?;
         let queue_context_id = single_item_context_id(actor.id(), &item_id);
         let view_access = self.view_access(&fields, scope, &actor, &access)?;
         let mut view = WorkItemView::from_fields(fields, queue_context_id)?.with_access(
@@ -377,10 +344,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             view_access.action_blockers,
         );
         self.apply_party_names(std::slice::from_mut(&mut view)).await?;
-        self.apply_approval_contexts(std::slice::from_mut(&mut view), &mut NoTransaction)
-            .await?;
-        self.apply_owner_qualification(std::slice::from_mut(&mut view), &mut NoTransaction)
-            .await?;
+        self.apply_approval_contexts(std::slice::from_mut(&mut view), &mut NoTransaction).await?;
+        self.apply_owner_qualification(std::slice::from_mut(&mut view), &mut NoTransaction).await?;
         Ok(view)
     }
 
@@ -415,10 +380,7 @@ fn approval_context_view(
         current_round_no: execution.round_no,
         current_node_label: execution.node_name.clone(),
         current_assignee_label: non_empty_text(&execution.assignee_name_snapshot),
-        latest_rejection_reason: summary
-            .latest_rejection_summary
-            .as_deref()
-            .and_then(non_empty_text),
+        latest_rejection_reason: summary.latest_rejection_summary.as_deref().and_then(non_empty_text),
         process_version: Some(summary.definition_version),
     }
 }
@@ -437,12 +399,8 @@ fn fail_closed_missing_approval_context(item: &mut WorkItemView) {
 /// 从动作集合中移除审批决定并返回是否发生移除。
 pub(super) fn remove_approval_decision_actions(actions: &mut Vec<WorkItemAllowedAction>) -> bool {
     let before = actions.len();
-    actions.retain(|action| {
-        !matches!(
-            action,
-            WorkItemAllowedAction::Approve | WorkItemAllowedAction::Reject
-        )
-    });
+    actions
+        .retain(|action| !matches!(action, WorkItemAllowedAction::Approve | WorkItemAllowedAction::Reject));
     actions.len() != before
 }
 
@@ -460,15 +418,9 @@ fn queue_context_id(actor_id: &str, query: &dto::WorkItemListQuery, access: &Act
             QueueContextField::scalar("scope", query.scope.as_str()),
             QueueContextField::set(
                 "types",
-                query
-                    .work_item_types
-                    .iter()
-                    .map(|value| value.as_str().to_string()),
+                query.work_item_types.iter().map(|value| value.as_str().to_string()),
             ),
-            QueueContextField::set(
-                "statuses",
-                query.statuses.iter().map(|value| value.as_str().to_string()),
-            ),
+            QueueContextField::set("statuses", query.statuses.iter().map(|value| value.as_str().to_string())),
             QueueContextField::optional("due", query.due.map(WorkItemDueFilter::as_str)),
             QueueContextField::set(
                 "priorities",
@@ -501,9 +453,7 @@ fn queue_scope_version(identity: &str, query: &str, result: &str) -> String {
 /// 后续页无版本或版本漂移必须失败关闭，禁止拼接不同范围结果。
 fn ensure_scope_version(page: u64, provided: Option<&str>, expected: &str) -> Result<()> {
     if (page > 1 && provided.is_none()) || provided.is_some_and(|value| value != expected) {
-        return Err(Error::ConflictError(
-            "DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into(),
-        ));
+        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
     }
     Ok(())
 }
@@ -511,10 +461,7 @@ fn ensure_scope_version(page: u64, provided: Option<&str>, expected: &str) -> Re
 pub(super) fn single_item_context_id(actor_id: &str, work_item_id: &str) -> String {
     QueueContextIdentity::new(
         "work-item-single",
-        [
-            QueueContextField::scalar("actor", actor_id),
-            QueueContextField::scalar("work_item", work_item_id),
-        ],
+        [QueueContextField::scalar("actor", actor_id), QueueContextField::scalar("work_item", work_item_id)],
     )
     .into_string()
 }
@@ -523,9 +470,7 @@ pub(super) fn ensure_queue_context(provided: &Option<String>, expected: &str) ->
     if provided.as_deref().is_none_or(|provided| provided == expected) {
         return Ok(());
     }
-    Err(Error::ConflictError(
-        "DATA_SCOPE_CHANGED：队列范围已变化，请从第一页刷新".to_string(),
-    ))
+    Err(Error::ConflictError("DATA_SCOPE_CHANGED：队列范围已变化，请从第一页刷新".to_string()))
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -552,12 +497,7 @@ impl<T> AuthorizedPageCollector<T> {
         let end = start
             .checked_add(u64::from(page_size))
             .ok_or_else(|| Error::ValidationError("分页偏移超出支持范围".to_string()))?;
-        Ok(Self {
-            start,
-            end,
-            total: 0,
-            items: Vec::with_capacity(page_size as usize),
-        })
+        Ok(Self { start, end, total: 0, items: Vec::with_capacity(page_size as usize) })
     }
 
     pub(super) fn extend(&mut self, authorized: impl IntoIterator<Item = T>) {
@@ -571,19 +511,14 @@ impl<T> AuthorizedPageCollector<T> {
     }
 
     pub(super) fn finish(self) -> AuthorizedPage<T> {
-        AuthorizedPage {
-            items: self.items,
-            total: i64::try_from(self.total).unwrap_or(i64::MAX),
-        }
+        AuthorizedPage { items: self.items, total: i64::try_from(self.total).unwrap_or(i64::MAX) }
     }
 }
 
 pub(super) fn next_candidate_offset(current: u64, batch_len: usize) -> Result<u64> {
     let batch_len = u64::try_from(batch_len)
         .map_err(|_| Error::Internal("责任队列候选批次大小超出支持范围".to_string()))?;
-    current
-        .checked_add(batch_len)
-        .ok_or_else(|| Error::Internal("责任队列候选偏移溢出".to_string()))
+    current.checked_add(batch_len).ok_or_else(|| Error::Internal("责任队列候选偏移溢出".to_string()))
 }
 
 /// 对已授权并装配业务显示事实的任务执行字面量 OR 搜索；必须先于总数和分页。
@@ -608,8 +543,8 @@ pub(super) fn matches_keyword(fields: &dto::WorkItemFields, q: Option<&str>) -> 
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_queue_context, next_candidate_offset, remove_approval_decision_actions, AuthorizedPage,
-        AuthorizedPageCollector, WorkItemAllowedAction, AUTHORIZED_SCAN_BATCH_SIZE,
+        AUTHORIZED_SCAN_BATCH_SIZE, AuthorizedPage, AuthorizedPageCollector, WorkItemAllowedAction,
+        ensure_queue_context, next_candidate_offset, remove_approval_decision_actions,
     };
 
     #[test]
@@ -665,10 +600,7 @@ mod tests {
 
         assert_eq!(
             collector.finish(),
-            AuthorizedPage {
-                items: vec!["authorized-3", "authorized-4"],
-                total: 4
-            }
+            AuthorizedPage { items: vec!["authorized-3", "authorized-4"], total: 4 }
         );
     }
 
@@ -717,10 +649,7 @@ mod tests {
             WorkItemAllowedAction::Process,
         ];
         assert!(remove_approval_decision_actions(&mut actions));
-        assert_eq!(
-            actions,
-            vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Process]
-        );
+        assert_eq!(actions, vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Process]);
         assert!(!remove_approval_decision_actions(&mut actions));
     }
 

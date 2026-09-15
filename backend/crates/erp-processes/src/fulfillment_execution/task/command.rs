@@ -1,14 +1,15 @@
 //! W01 活动与完成命令的真实生产读取、责任重验与写入边界。
-use super::{
-    ensure_current_owner_execution_access, ensure_task_matches_frozen_identity, load_single_open_task,
-    FulfillmentTaskObject,
-};
-use crate::Result;
 use async_trait::async_trait;
-use erp_workflow::entity::work_item::WorkItem;
 use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use super::{
+    FulfillmentTaskObject, ensure_current_owner_execution_access, ensure_task_matches_frozen_identity,
+    load_single_open_task,
+};
+use crate::Result;
 
 #[derive(Clone, Copy)]
 enum CommandKind {
@@ -54,19 +55,14 @@ async fn execute(
     kind: CommandKind,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let mut task = port
-        .load_open(
-            object.business_object_type(),
-            object.business_object_id(),
-            executor,
-        )
-        .await?;
+    let mut task =
+        port.load_open(object.business_object_type(), object.business_object_id(), executor).await?;
     ensure_task_matches_frozen_identity(&task, &object)?;
     match kind {
         CommandKind::Activity => task.record_activity(actor_id, erp_core::common::time::Instant::now())?,
         CommandKind::Complete => {
             task.complete_by_domain_command(actor_id, erp_core::common::time::Instant::now())?
-        }
+        },
     }
     port.authorize(&task, actor_id, executor).await?;
     port.update(&mut task, executor).await?;
@@ -78,14 +74,7 @@ pub(super) async fn record(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    execute(
-        &MongoTaskCommand { db },
-        object,
-        actor_id,
-        CommandKind::Activity,
-        executor,
-    )
-    .await
+    execute(&MongoTaskCommand { db }, object, actor_id, CommandKind::Activity, executor).await
 }
 pub(super) async fn complete(
     db: &Database,
@@ -93,26 +82,21 @@ pub(super) async fn complete(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    execute(
-        &MongoTaskCommand { db },
-        object,
-        actor_id,
-        CommandKind::Complete,
-        executor,
-    )
-    .await
+    execute(&MongoTaskCommand { db }, object, actor_id, CommandKind::Complete, executor).await
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::Error;
+    use std::sync::Mutex;
+
     use erp_core::ids::{DeliveryId, PurchaseOrderId, SalesOrderId, WorkItemId};
     use erp_fulfillment::entity::fulfillment::{Delivery, DeliveryData, DeliveryType};
     use erp_workflow::entity::work_item::{
         AssignmentSource, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
     };
-    use std::sync::Mutex;
+
+    use super::*;
+    use crate::Error;
 
     struct TestExecutor {
         marker: u64,
@@ -175,12 +159,12 @@ mod tests {
                     assert!(task.last_activity_at.is_some());
                     assert_eq!(task.completed_at, self.task.completed_at);
                     assert_eq!(task.completed_by, self.task.completed_by);
-                }
+                },
                 CommandKind::Complete => {
                     assert!(task.completed_at.is_some());
                     assert_eq!(task.completed_by.as_deref(), Some(actor_id));
                     assert_eq!(task.last_activity_at, self.task.last_activity_at);
-                }
+                },
             }
             self.recorded.lock().unwrap().status_at_authorization = Some(task.status);
             Ok(())
@@ -244,14 +228,8 @@ mod tests {
             recorded: Mutex::default(),
         };
         let delivery = delivery();
-        let result = execute(
-            &port,
-            FulfillmentTaskObject::Delivery(&delivery),
-            actor,
-            kind,
-            &mut executor,
-        )
-        .await;
+        let result =
+            execute(&port, FulfillmentTaskObject::Delivery(&delivery), actor, kind, &mut executor).await;
         assert_eq!(executor.marker, 79);
         (result, port.recorded.into_inner().unwrap())
     }

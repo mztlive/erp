@@ -5,10 +5,10 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as CostExt>::COST_ENTRIES` 等值。
 
-use crate::repository::owned::{CostAllocationRepository, CostEntryRepository};
 use mongodb::Database;
 
 use super::super::cost::{CostAllocationFilter, CostEntryFilter, CostEntryRow, CostRepository};
+use crate::repository::owned::{CostAllocationRepository, CostEntryRepository};
 
 /// 域 D20 仓储访问器。
 pub trait CostExt {

@@ -2,14 +2,15 @@
 
 use std::collections::HashMap;
 
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::PartyId;
+
 use crate::dto::supplier::{CommercialProfileView, SupplierQualificationHealth, SupplierView};
 use crate::entity::supplier::{
     CapabilityCode, SupplierCapability, SupplierCommercialProfileRevision, SupplierQualification,
 };
 use crate::ports::{PartyListFact, PartyRevisionFact};
 use crate::repository::SupplierAccountRow;
-use erp_core::common::time::BusinessDate;
-use erp_core::ids::PartyId;
 
 /// 装配供应商列表视图所需的批量事实。
 pub(super) struct SupplierViewAssembleInput {
@@ -51,11 +52,7 @@ pub(super) fn assemble_supplier_views(input: SupplierViewAssembleInput) -> Vec<S
         entity_names: input.entity_names,
         as_of: input.as_of,
     };
-    input
-        .rows
-        .into_iter()
-        .map(|row| assemble_one_supplier_view(row, &context))
-        .collect()
+    input.rows.into_iter().map(|row| assemble_one_supplier_view(row, &context)).collect()
 }
 
 /// 单行装配所需的已建字典。
@@ -90,10 +87,7 @@ pub(super) fn commercial_party_ids(profiles: &[SupplierCommercialProfileRevision
     let mut ids: Vec<String> = profiles
         .iter()
         .flat_map(|profile| {
-            [
-                profile.signing_entity_party_id.to_string(),
-                profile.payment_entity_party_id.to_string(),
-            ]
+            [profile.signing_entity_party_id.to_string(), profile.payment_entity_party_id.to_string()]
         })
         .collect();
     ids.sort();
@@ -114,20 +108,15 @@ pub(super) fn commercial_party_ids(profiles: &[SupplierCommercialProfileRevision
 /// 无。
 fn assemble_one_supplier_view(row: SupplierAccountRow, context: &SupplierRowContext<'_>) -> SupplierView {
     let party = context.parties.get(&row.party_id);
-    let revision = party
-        .and_then(|party| party.current_revision_id.as_ref())
-        .and_then(|id| context.revisions.get(id));
+    let revision =
+        party.and_then(|party| party.current_revision_id.as_ref()).and_then(|id| context.revisions.get(id));
     let current_profile = row
         .current_commercial_profile_revision_id
         .as_ref()
         .and_then(|id| context.profiles.get(id))
         .cloned()
         .map(|profile| named_profile(profile, &context.entity_names));
-    let quals = context
-        .qualifications
-        .get(&row.id)
-        .map(|items| items.as_slice())
-        .unwrap_or(&[]);
+    let quals = context.qualifications.get(&row.id).map(|items| items.as_slice()).unwrap_or(&[]);
     SupplierView {
         id: row.id.clone(),
         party_id: row.party_id,
@@ -143,9 +132,10 @@ fn assemble_one_supplier_view(row: SupplierAccountRow, context: &SupplierRowCont
         created_at: row.created_at,
         current_profile,
         capability_codes: context.capabilities.get(&row.id).cloned().unwrap_or_default(),
-        qualification_health: Some(SupplierQualificationHealth::from(
-            SupplierQualification::rollup_health(quals.iter().copied(), context.as_of),
-        )),
+        qualification_health: Some(SupplierQualificationHealth::from(SupplierQualification::rollup_health(
+            quals.iter().copied(),
+            context.as_of,
+        ))),
         qualification_types: SupplierQualification::registered_types(quals.iter().copied()),
     }
 }
@@ -166,16 +156,10 @@ fn named_profile(
     names: &HashMap<String, String>,
 ) -> CommercialProfileView {
     let mut view = CommercialProfileView::from(profile);
-    view.signing_entity_name = view
-        .signing_entity_party_id
-        .as_ref()
-        .and_then(|party_id| names.get(party_id))
-        .cloned();
-    view.payment_entity_name = view
-        .payment_entity_party_id
-        .as_ref()
-        .and_then(|party_id| names.get(party_id))
-        .cloned();
+    view.signing_entity_name =
+        view.signing_entity_party_id.as_ref().and_then(|party_id| names.get(party_id)).cloned();
+    view.payment_entity_name =
+        view.payment_entity_party_id.as_ref().and_then(|party_id| names.get(party_id)).cloned();
     view
 }
 
@@ -187,10 +171,7 @@ fn named_profile(
 /// # 返回
 /// 返回主体 ID 到事实的映射。
 fn party_by_id(parties: Vec<PartyListFact>) -> HashMap<String, PartyListFact> {
-    parties
-        .into_iter()
-        .map(|party| (party.id.clone(), party))
-        .collect()
+    parties.into_iter().map(|party| (party.id.clone(), party)).collect()
 }
 
 /// 按修订 ID 建字典。
@@ -201,10 +182,7 @@ fn party_by_id(parties: Vec<PartyListFact>) -> HashMap<String, PartyListFact> {
 /// # 返回
 /// 返回修订 ID 到事实的映射。
 fn revision_by_id(revisions: Vec<PartyRevisionFact>) -> HashMap<String, PartyRevisionFact> {
-    revisions
-        .into_iter()
-        .map(|revision| (revision.id.clone(), revision))
-        .collect()
+    revisions.into_iter().map(|revision| (revision.id.clone(), revision)).collect()
 }
 
 /// 按商务资料 ID 建字典。
@@ -217,10 +195,7 @@ fn revision_by_id(revisions: Vec<PartyRevisionFact>) -> HashMap<String, PartyRev
 fn profile_by_id(
     profiles: Vec<SupplierCommercialProfileRevision>,
 ) -> HashMap<String, SupplierCommercialProfileRevision> {
-    profiles
-        .into_iter()
-        .map(|profile| (profile.base.id.clone(), profile))
-        .collect()
+    profiles.into_iter().map(|profile| (profile.base.id.clone(), profile)).collect()
 }
 
 /// 按供应商折叠当前有效能力代码。
@@ -237,10 +212,7 @@ fn capability_codes_by_supplier(
 ) -> HashMap<String, Vec<CapabilityCode>> {
     let mut grouped: HashMap<String, Vec<&SupplierCapability>> = HashMap::new();
     for capability in capabilities {
-        grouped
-            .entry(capability.supplier_id.to_string())
-            .or_default()
-            .push(capability);
+        grouped.entry(capability.supplier_id.to_string()).or_default().push(capability);
     }
     grouped
         .into_iter()
@@ -260,17 +232,24 @@ fn qualifications_by_supplier(
 ) -> HashMap<String, Vec<&SupplierQualification>> {
     let mut grouped: HashMap<String, Vec<&SupplierQualification>> = HashMap::new();
     for qualification in qualifications {
-        grouped
-            .entry(qualification.supplier_id.to_string())
-            .or_default()
-            .push(qualification);
+        grouped.entry(qualification.supplier_id.to_string()).or_default().push(qualification);
     }
     grouped
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{assemble_supplier_views, commercial_party_ids, SupplierViewAssembleInput};
+    use std::collections::HashMap;
+    use std::str::FromStr;
+
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{
+        PartyId, SupplierAccountId, SupplierCapabilityId, SupplierCommercialProfileRevisionId,
+        SupplierQualificationId,
+    };
+    use erp_core::money::Rate;
+
+    use super::{SupplierViewAssembleInput, assemble_supplier_views, commercial_party_ids};
     use crate::entity::supplier::{
         CapabilityCode, CapabilityStatus, InvoiceType, QualificationStatus, QualificationType,
         ReconciliationCycle, SettlementMode, SupplierAccountStatus, SupplierCapability,
@@ -279,14 +258,6 @@ mod tests {
     };
     use crate::ports::{PartyListFact, PartyRevisionFact, PartyStatusFact};
     use crate::repository::SupplierAccountRow;
-    use erp_core::common::time::BusinessDate;
-    use erp_core::ids::{
-        PartyId, SupplierAccountId, SupplierCapabilityId, SupplierCommercialProfileRevisionId,
-        SupplierQualificationId,
-    };
-    use erp_core::money::Rate;
-    use std::collections::HashMap;
-    use std::str::FromStr;
 
     /// 返回装配测试业务日。
     fn as_of() -> BusinessDate {
@@ -389,10 +360,8 @@ mod tests {
         let profile_view = view.current_profile.as_ref().expect("商务资料");
         assert_eq!(profile_view.signing_entity_name.as_deref(), Some("签约公司"));
         assert_eq!(profile_view.payment_entity_name.as_deref(), Some("付款公司"));
-        let mut party_ids: Vec<String> = commercial_party_ids(&[profile])
-            .into_iter()
-            .map(|id| id.to_string())
-            .collect();
+        let mut party_ids: Vec<String> =
+            commercial_party_ids(&[profile]).into_iter().map(|id| id.to_string()).collect();
         party_ids.sort();
         assert_eq!(party_ids, vec!["party-pay".to_string(), "party-sign".to_string()]);
     }

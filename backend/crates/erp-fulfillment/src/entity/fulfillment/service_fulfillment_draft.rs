@@ -2,10 +2,6 @@
 //!
 //! 双指纹均由 Service/crypto port 分别预计算；类型不可混用。
 
-use serde::{Deserialize, Serialize};
-
-use super::electronic_delivery::FulfillmentResult;
-use super::service_fulfillment::{ServiceFulfillment, ServiceFulfillmentData};
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
@@ -14,8 +10,11 @@ use erp_core::ids::{
 use erp_core::money::Quantity;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use serde::{Deserialize, Serialize};
 
+use super::electronic_delivery::FulfillmentResult;
 use super::fingerprint::FINGERPRINT_HEX_LEN;
+use super::service_fulfillment::{ServiceFulfillment, ServiceFulfillmentData};
 
 fn typed_fingerprint(label: &str, hex: String) -> Result<String> {
     let value = normalize_required_text(hex, label, FINGERPRINT_HEX_LEN, label)?;
@@ -185,8 +184,9 @@ impl ServiceFulfillmentDraft {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn data() -> ServiceFulfillmentDraftData {
         ServiceFulfillmentDraftData {
@@ -224,23 +224,24 @@ mod tests {
     /// 开始/结束时间、数量与完成说明不变量。
     #[test]
     fn window_quantity_and_note_invariants() {
-        assert!(ServiceFulfillmentDraft::build(
-            ServiceFulfillmentId::new("sf-2"),
-            ServiceFulfillmentDraftData {
-                service_started_at: Some(Instant::from_unix_secs(1_700_003_600)),
-                service_ended_at: Some(Instant::from_unix_secs(1_700_000_000)),
-                ..data()
-            },
-        )
-        .is_err());
-        assert!(ServiceFulfillmentDraft::build(
-            ServiceFulfillmentId::new("sf-3"),
-            ServiceFulfillmentDraftData {
-                quantity: Quantity::from_str("0").unwrap(),
-                ..data()
-            },
-        )
-        .is_err());
+        assert!(
+            ServiceFulfillmentDraft::build(
+                ServiceFulfillmentId::new("sf-2"),
+                ServiceFulfillmentDraftData {
+                    service_started_at: Some(Instant::from_unix_secs(1_700_003_600)),
+                    service_ended_at: Some(Instant::from_unix_secs(1_700_000_000)),
+                    ..data()
+                },
+            )
+            .is_err()
+        );
+        assert!(
+            ServiceFulfillmentDraft::build(
+                ServiceFulfillmentId::new("sf-3"),
+                ServiceFulfillmentDraftData { quantity: Quantity::from_str("0").unwrap(), ..data() },
+            )
+            .is_err()
+        );
     }
 
     /// 两项指纹类型不可混用：构造各自校验，非法格式失败。

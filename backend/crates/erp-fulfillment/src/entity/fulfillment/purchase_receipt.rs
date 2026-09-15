@@ -12,6 +12,15 @@ use std::collections::HashMap;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_core::common::state::{DocumentState, ensure_transition};
+use erp_core::common::time::Instant;
+use erp_core::ids::{
+    PurchaseOrderId, PurchaseOrderRevisionLineId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderLineId,
+    SalesOrderRevisionLineId, WarehouseId,
+};
+use erp_core::money::{Amount, Quantity, round_to_cent};
+use erp_core::validation::normalize_required_text;
+use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::facts::{
@@ -19,15 +28,6 @@ use crate::entity::facts::{
     PurchaseOrderStatusFact as PurchaseOrderStatus, PurchaseRevisionLineFact as PurchaseOrderRevisionLine,
     ReceiptFulfillmentProgress as ProgressStatus,
 };
-use erp_core::common::state::{ensure_transition, DocumentState};
-use erp_core::common::time::Instant;
-use erp_core::ids::{
-    PurchaseOrderId, PurchaseOrderRevisionLineId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderLineId,
-    SalesOrderRevisionLineId, WarehouseId,
-};
-use erp_core::money::{round_to_cent, Amount, Quantity};
-use erp_core::validation::normalize_required_text;
-use erp_core::{Error, Result};
 
 /// 入库单号最大长度。
 const RECEIPT_NO_MAX_LEN: usize = 64;
@@ -52,10 +52,7 @@ impl PurchaseFulfillmentEligibility {
     /// # 错误
     /// 其它状态返回业务规则错误。
     pub fn ensure_order_fulfillable(status: PurchaseOrderStatus) -> Result<()> {
-        if matches!(
-            status,
-            PurchaseOrderStatus::Effective | PurchaseOrderStatus::PartiallyExecuted
-        ) {
+        if matches!(status, PurchaseOrderStatus::Effective | PurchaseOrderStatus::PartiallyExecuted) {
             return Ok(());
         }
         Err(Error::from("采购单不在可履约状态，无法过账"))
@@ -82,24 +79,18 @@ impl PurchaseFulfillmentEligibility {
             return Ok(());
         }
         if snapshot.prepay_minimum_amount.is_none() && snapshot.prepay_minimum_ratio.is_none() {
-            return Err(Error::from(
-                "该采购单的先款条件缺少冻结门槛，请先通过采购变更补齐",
-            ));
+            return Err(Error::from("该采购单的先款条件缺少冻结门槛，请先通过采购变更补齐"));
         }
         if snapshot
             .prepay_minimum_amount
             .is_some_and(|minimum| effective_paid.to_decimal() < minimum.to_decimal())
         {
-            return Err(Error::from(
-                "该采购单为先款后货，有效付款未达金额门槛，请先完成付款",
-            ));
+            return Err(Error::from("该采购单为先款后货，有效付款未达金额门槛，请先完成付款"));
         }
         if let Some(minimum_ratio) = snapshot.prepay_minimum_ratio {
             let required = round_to_cent(gross_amount.to_decimal() * minimum_ratio.to_decimal());
             if effective_paid.to_decimal() < required {
-                return Err(Error::from(
-                    "该采购单为先款后货，有效付款未达比例门槛，请先完成付款",
-                ));
+                return Err(Error::from("该采购单为先款后货，有效付款未达比例门槛，请先完成付款"));
             }
         }
         Ok(())
@@ -405,15 +396,11 @@ impl PurchaseReceipt {
         let total = revision_lines
             .iter()
             .filter_map(|line| line.quantity)
-            .fold(rust_decimal::Decimal::ZERO, |sum, quantity| {
-                sum + quantity.to_decimal()
-            });
+            .fold(rust_decimal::Decimal::ZERO, |sum, quantity| sum + quantity.to_decimal());
         let received_total = revision_lines
             .iter()
             .filter_map(|line| received.get(&line.id))
-            .fold(rust_decimal::Decimal::ZERO, |sum, quantity| {
-                sum + quantity.to_decimal()
-            });
+            .fold(rust_decimal::Decimal::ZERO, |sum, quantity| sum + quantity.to_decimal());
         if total > rust_decimal::Decimal::ZERO && received_total >= total {
             ProgressStatus::Completed
         } else {
@@ -437,12 +424,8 @@ impl PurchaseReceipt {
     /// 当前状态不允许迁移（非草稿），或经办人为空/超长时返回错误。
     pub fn mark_posted(&mut self, posted_at: Instant, posted_by: impl Into<String>) -> Result<()> {
         ensure_transition(self.status, PurchaseReceiptState::Posted)?;
-        let posted_by = normalize_required_text(
-            posted_by.into(),
-            "仓储经办人不能为空",
-            ACTOR_MAX_LEN,
-            "仓储经办人过长",
-        )?;
+        let posted_by =
+            normalize_required_text(posted_by.into(), "仓储经办人不能为空", ACTOR_MAX_LEN, "仓储经办人过长")?;
         self.posted_at = Some(posted_at);
         self.posted_by = Some(posted_by);
         self.status = PurchaseReceiptState::Posted;
@@ -594,13 +577,9 @@ impl PurchaseReceiptLine {
         if revision_line.id != self.purchase_order_revision_line_id {
             return Err(Error::from("采购入库行与采购版本明细关联不一致"));
         }
-        let available = revision_line
-            .quantity
-            .ok_or_else(|| Error::from("物流费用行不能入库"))?;
+        let available = revision_line.quantity.ok_or_else(|| Error::from("物流费用行不能入库"))?;
         if already_received.to_decimal() + self.posting_quantity()?.to_decimal() > available.to_decimal() {
-            return Err(Error::from(
-                "累计有效收货超过当前有效采购数量，超收必须走明确审批和采购变更",
-            ));
+            return Err(Error::from("累计有效收货超过当前有效采购数量，超收必须走明确审批和采购变更"));
         }
         Ok(())
     }
@@ -679,9 +658,11 @@ fn ensure_line_valid(data: &PurchaseReceiptLineData) -> Result<()> {
 #[cfg(test)]
 pub(crate) mod tests {
 
-    use super::*;
-    use erp_core::ids::PurchaseReceiptId;
     use std::str::FromStr;
+
+    use erp_core::ids::PurchaseReceiptId;
+
+    use super::*;
 
     fn line_data() -> PurchaseReceiptLineData {
         PurchaseReceiptLineData {
@@ -725,9 +706,7 @@ pub(crate) mod tests {
         assert_eq!(receipt.status, PurchaseReceiptState::Draft);
         assert!(receipt.is_editable());
 
-        receipt
-            .mark_posted(Instant::from_unix_secs(1_700_000_000), " operator-1 ")
-            .unwrap();
+        receipt.mark_posted(Instant::from_unix_secs(1_700_000_000), " operator-1 ").unwrap();
         assert_eq!(receipt.status, PurchaseReceiptState::Posted);
         assert_eq!(receipt.posted_by.as_deref(), Some("operator-1"));
         assert_eq!(receipt.posted_at.unwrap().unix_secs(), 1_700_000_000);
@@ -739,16 +718,10 @@ pub(crate) mod tests {
     /// 失败路径：必填空（单号空白）与超长。
     #[test]
     fn new_rejects_blank_or_overlong_no() {
-        let blank = PurchaseReceiptData {
-            receipt_no: "   ".to_string(),
-            ..receipt_data()
-        };
+        let blank = PurchaseReceiptData { receipt_no: "   ".to_string(), ..receipt_data() };
         assert!(PurchaseReceipt::new(PurchaseReceiptId::new("r2"), blank).is_err());
 
-        let overlong = PurchaseReceiptData {
-            receipt_no: "x".repeat(65),
-            ..receipt_data()
-        };
+        let overlong = PurchaseReceiptData { receipt_no: "x".repeat(65), ..receipt_data() };
         assert!(PurchaseReceipt::new(PurchaseReceiptId::new("r3"), overlong).is_err());
     }
 
@@ -757,29 +730,15 @@ pub(crate) mod tests {
     fn state_machine_directed_edges() {
         let mut receipt = PurchaseReceipt::new(PurchaseReceiptId::new("receipt-2"), receipt_data()).unwrap();
         assert!(receipt.reverse().is_err(), "草稿不能直接冲正");
-        assert!(receipt
-            .update(PurchaseReceiptUpdate {
-                warehouse_id: Some(WarehouseId::new("wh-2")),
-            })
-            .is_ok());
-        receipt
-            .mark_posted(Instant::from_unix_secs(1_700_000_000), "operator-1")
-            .unwrap();
         assert!(
-            receipt
-                .update(PurchaseReceiptUpdate { warehouse_id: None })
-                .is_err(),
-            "已过账不可编辑"
+            receipt.update(PurchaseReceiptUpdate { warehouse_id: Some(WarehouseId::new("wh-2")) }).is_ok()
         );
+        receipt.mark_posted(Instant::from_unix_secs(1_700_000_000), "operator-1").unwrap();
+        assert!(receipt.update(PurchaseReceiptUpdate { warehouse_id: None }).is_err(), "已过账不可编辑");
         // from == to 幂等迁移恒合法（state.rs 契约）；POSTED 不可编辑由 update 把关。
-        assert!(receipt
-            .mark_posted(Instant::from_unix_secs(1_700_000_100), "o2")
-            .is_ok());
+        assert!(receipt.mark_posted(Instant::from_unix_secs(1_700_000_100), "o2").is_ok());
         assert!(receipt.reverse().is_ok());
-        assert!(
-            receipt.reverse().is_ok(),
-            "REVERSED 幂等迁移合法，且无法迁移到其他状态"
-        );
+        assert!(receipt.reverse().is_ok(), "REVERSED 幂等迁移合法，且无法迁移到其他状态");
     }
 
     /// 状态机：固定邻接矩阵的合法/非法迁移（幂等合法）。
@@ -828,32 +787,22 @@ pub(crate) mod tests {
             QualityResult::Partial
         );
 
-        let inconsistent = PurchaseReceiptLineData {
-            quality_result: QualityResult::Passed,
-            ..line_data()
-        };
+        let inconsistent = PurchaseReceiptLineData { quality_result: QualityResult::Passed, ..line_data() };
         assert!(PurchaseReceiptLine::new(PurchaseReceiptLineId::new("line-invalid"), inconsistent).is_err());
     }
 
     /// 失败路径：数量越界（合计超过到货）与负数量。
     #[test]
     fn line_rejects_quantity_violations() {
-        let over_sum = PurchaseReceiptLineData {
-            qualified_quantity: Quantity::from_str("9.5").unwrap(),
-            ..line_data()
-        };
+        let over_sum =
+            PurchaseReceiptLineData { qualified_quantity: Quantity::from_str("9.5").unwrap(), ..line_data() };
         assert!(PurchaseReceiptLine::new(PurchaseReceiptLineId::new("l2"), over_sum).is_err());
 
-        let negative = PurchaseReceiptLineData {
-            rejected_quantity: Quantity::from_str("-0.5").unwrap(),
-            ..line_data()
-        };
+        let negative =
+            PurchaseReceiptLineData { rejected_quantity: Quantity::from_str("-0.5").unwrap(), ..line_data() };
         assert!(PurchaseReceiptLine::new(PurchaseReceiptLineId::new("l3"), negative).is_err());
 
-        let zero_line_no = PurchaseReceiptLineData {
-            line_no: 0,
-            ..line_data()
-        };
+        let zero_line_no = PurchaseReceiptLineData { line_no: 0, ..line_data() };
         assert!(PurchaseReceiptLine::new(PurchaseReceiptLineId::new("l4"), zero_line_no).is_err());
     }
 
@@ -874,22 +823,16 @@ pub(crate) mod tests {
             },
         )
         .unwrap();
-        assert!(receipt
-            .ensure_posting_lines(std::slice::from_ref(&foreign_line))
-            .is_err());
+        assert!(receipt.ensure_posting_lines(std::slice::from_ref(&foreign_line)).is_err());
 
         let revision_line = revision_line(Quantity::from_str("10").unwrap());
-        assert!(line
-            .ensure_within_revision(&revision_line, Quantity::from_str("0").unwrap(),)
-            .is_ok());
-        assert!(line
-            .ensure_within_revision(&revision_line, Quantity::from_str("1").unwrap(),)
-            .is_err());
+        assert!(line.ensure_within_revision(&revision_line, Quantity::from_str("0").unwrap(),).is_ok());
+        assert!(line.ensure_within_revision(&revision_line, Quantity::from_str("1").unwrap(),).is_err());
         let mut foreign_revision_line = revision_line.clone();
         foreign_revision_line.id = PurchaseOrderRevisionLineId::new("other-po-line");
-        assert!(line
-            .ensure_within_revision(&foreign_revision_line, Quantity::from_str("0").unwrap())
-            .is_err());
+        assert!(
+            line.ensure_within_revision(&foreign_revision_line, Quantity::from_str("0").unwrap()).is_err()
+        );
 
         let shares = line
             .reservation_shares(
@@ -904,18 +847,13 @@ pub(crate) mod tests {
         assert_eq!(shares[0], Quantity::from_str("2.7").unwrap());
         assert_eq!(shares[1], Quantity::from_str("1.8").unwrap());
         assert_eq!(shares[2], Quantity::from_str("4.5").unwrap());
-        assert!(line
-            .reservation_shares(
-                &[Quantity::from_str("1").unwrap()],
-                Quantity::from_str("0").unwrap()
-            )
-            .is_err());
+        assert!(
+            line.reservation_shares(&[Quantity::from_str("1").unwrap()], Quantity::from_str("0").unwrap())
+                .is_err()
+        );
 
         let mut received = HashMap::new();
-        received.insert(
-            PurchaseOrderRevisionLineId::new("po-line-1"),
-            Quantity::from_str("10").unwrap(),
-        );
+        received.insert(PurchaseOrderRevisionLineId::new("po-line-1"), Quantity::from_str("10").unwrap());
         assert_eq!(
             PurchaseReceipt::fulfillment_progress(std::slice::from_ref(&revision_line), &received),
             ProgressStatus::Completed,
@@ -924,9 +862,7 @@ pub(crate) mod tests {
             PurchaseReceipt::fulfillment_progress(std::slice::from_ref(&revision_line), &HashMap::new()),
             ProgressStatus::Partial,
         );
-        receipt
-            .mark_posted(Instant::from_unix_secs(1_700_000_000), "operator-1")
-            .unwrap();
+        receipt.mark_posted(Instant::from_unix_secs(1_700_000_000), "operator-1").unwrap();
         assert!(receipt.ensure_draft_version(receipt.base.version).is_err());
     }
 
@@ -945,51 +881,61 @@ pub(crate) mod tests {
             prepay_minimum_amount: Some(Amount::from_str("50.00").unwrap()),
             prepay_minimum_ratio: Some(erp_core::money::Rate::from_str("0.500000").unwrap()),
         };
-        assert!(PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
-            &snapshot,
-            Amount::from_str("100.00").unwrap(),
-            Amount::from_str("50.00").unwrap(),
-        )
-        .is_ok());
-        assert!(PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
-            &snapshot,
-            Amount::from_str("100.00").unwrap(),
-            Amount::from_str("49.99").unwrap(),
-        )
-        .is_err());
+        assert!(
+            PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
+                &snapshot,
+                Amount::from_str("100.00").unwrap(),
+                Amount::from_str("50.00").unwrap(),
+            )
+            .is_ok()
+        );
+        assert!(
+            PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
+                &snapshot,
+                Amount::from_str("100.00").unwrap(),
+                Amount::from_str("49.99").unwrap(),
+            )
+            .is_err()
+        );
         let ratio_only = PaymentTermSnapshot {
             prepay_gate: true,
             prepay_minimum_amount: None,
             prepay_minimum_ratio: Some(erp_core::money::Rate::from_str("0.750000").unwrap()),
         };
-        assert!(PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
-            &ratio_only,
-            Amount::from_str("100.00").unwrap(),
-            Amount::from_str("74.99").unwrap(),
-        )
-        .is_err());
+        assert!(
+            PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
+                &ratio_only,
+                Amount::from_str("100.00").unwrap(),
+                Amount::from_str("74.99").unwrap(),
+            )
+            .is_err()
+        );
         let missing_threshold = PaymentTermSnapshot {
             prepay_gate: true,
             prepay_minimum_amount: None,
             prepay_minimum_ratio: None,
         };
-        assert!(PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
-            &missing_threshold,
-            Amount::from_str("100.00").unwrap(),
-            Amount::from_str("100.00").unwrap(),
-        )
-        .is_err());
+        assert!(
+            PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
+                &missing_threshold,
+                Amount::from_str("100.00").unwrap(),
+                Amount::from_str("100.00").unwrap(),
+            )
+            .is_err()
+        );
         let gate_disabled = PaymentTermSnapshot {
             prepay_gate: false,
             prepay_minimum_amount: Some(Amount::from_str("100.00").unwrap()),
             prepay_minimum_ratio: None,
         };
-        assert!(PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
-            &gate_disabled,
-            Amount::from_str("100.00").unwrap(),
-            Amount::from_str("0.00").unwrap(),
-        )
-        .is_ok());
+        assert!(
+            PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
+                &gate_disabled,
+                Amount::from_str("100.00").unwrap(),
+                Amount::from_str("0.00").unwrap(),
+            )
+            .is_ok()
+        );
 
         let allocation = PurchaseLineSalesAllocation {
             purchase_order_revision_line_id: PurchaseOrderRevisionLineId::new("po-line-1"),
@@ -998,35 +944,43 @@ pub(crate) mod tests {
         let purchase_line_ids = [PurchaseOrderRevisionLineId::new("po-line-1")];
         let sales_revision_line_id = SalesOrderRevisionLineId::new("sales-revision-line-1");
         let sales_order_line_id = SalesOrderLineId::new("sales-line-1");
-        assert!(PurchaseFulfillmentEligibility::ensure_allocation_consistent(
-            &allocation,
-            &purchase_line_ids,
-            Some((&sales_revision_line_id, &sales_order_line_id)),
-            &sales_order_line_id,
-        )
-        .is_ok());
-        assert!(PurchaseFulfillmentEligibility::ensure_allocation_consistent(
-            &allocation,
-            &[],
-            Some((&sales_revision_line_id, &sales_order_line_id)),
-            &sales_order_line_id,
-        )
-        .is_err());
+        assert!(
+            PurchaseFulfillmentEligibility::ensure_allocation_consistent(
+                &allocation,
+                &purchase_line_ids,
+                Some((&sales_revision_line_id, &sales_order_line_id)),
+                &sales_order_line_id,
+            )
+            .is_ok()
+        );
+        assert!(
+            PurchaseFulfillmentEligibility::ensure_allocation_consistent(
+                &allocation,
+                &[],
+                Some((&sales_revision_line_id, &sales_order_line_id)),
+                &sales_order_line_id,
+            )
+            .is_err()
+        );
         let other_sales_order_line_id = SalesOrderLineId::new("other-sales-line");
-        assert!(PurchaseFulfillmentEligibility::ensure_allocation_consistent(
-            &allocation,
-            &purchase_line_ids,
-            Some((&sales_revision_line_id, &other_sales_order_line_id)),
-            &sales_order_line_id,
-        )
-        .is_err());
-        assert!(PurchaseFulfillmentEligibility::ensure_allocation_consistent(
-            &allocation,
-            &purchase_line_ids,
-            None,
-            &sales_order_line_id,
-        )
-        .is_err());
+        assert!(
+            PurchaseFulfillmentEligibility::ensure_allocation_consistent(
+                &allocation,
+                &purchase_line_ids,
+                Some((&sales_revision_line_id, &other_sales_order_line_id)),
+                &sales_order_line_id,
+            )
+            .is_err()
+        );
+        assert!(
+            PurchaseFulfillmentEligibility::ensure_allocation_consistent(
+                &allocation,
+                &purchase_line_ids,
+                None,
+                &sales_order_line_id,
+            )
+            .is_err()
+        );
     }
 
     /// 采购收货单无审批约束：不得出现绑定字段或审批状态机。
@@ -1043,10 +997,7 @@ pub(crate) mod tests {
         assert_eq!(PurchaseReceiptState::Posted.as_str(), "POSTED");
         assert_eq!(PurchaseReceiptState::Reversed.as_str(), "REVERSED");
 
-        let production = include_str!("purchase_receipt.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
+        let production = include_str!("purchase_receipt.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(!production.contains("IN_APPROVAL"));
         assert!(!production.contains("fn start_approval"));
         assert!(!production.contains("approval_subject_version"));
@@ -1068,33 +1019,15 @@ pub(crate) mod tests {
             },
         ];
         let mut received = HashMap::new();
-        received.insert(
-            PurchaseOrderRevisionLineId::new("line-a"),
-            Quantity::from_str("10").unwrap(),
-        );
-        assert_eq!(
-            PurchaseReceipt::fulfillment_progress(&lines, &received),
-            ProgressStatus::Completed
-        );
-        received.insert(
-            PurchaseOrderRevisionLineId::new("line-a"),
-            Quantity::from_str("9.999999").unwrap(),
-        );
-        assert_eq!(
-            PurchaseReceipt::fulfillment_progress(&lines, &received),
-            ProgressStatus::Partial
-        );
-        assert_eq!(
-            PurchaseReceipt::fulfillment_progress(&[], &received),
-            ProgressStatus::Partial
-        );
+        received.insert(PurchaseOrderRevisionLineId::new("line-a"), Quantity::from_str("10").unwrap());
+        assert_eq!(PurchaseReceipt::fulfillment_progress(&lines, &received), ProgressStatus::Completed);
+        received.insert(PurchaseOrderRevisionLineId::new("line-a"), Quantity::from_str("9.999999").unwrap());
+        assert_eq!(PurchaseReceipt::fulfillment_progress(&lines, &received), ProgressStatus::Partial);
+        assert_eq!(PurchaseReceipt::fulfillment_progress(&[], &received), ProgressStatus::Partial);
         let zero = [PurchaseOrderRevisionLine {
             id: PurchaseOrderRevisionLineId::new("line-a"),
             quantity: Some(Quantity::from_str("0").unwrap()),
         }];
-        assert_eq!(
-            PurchaseReceipt::fulfillment_progress(&zero, &received),
-            ProgressStatus::Partial
-        );
+        assert_eq!(PurchaseReceipt::fulfillment_progress(&zero, &received), ProgressStatus::Partial);
     }
 }

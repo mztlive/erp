@@ -5,8 +5,8 @@ use erp_sales::entity::sales_order::{
 };
 
 use super::SalesOrderCommandProcess;
-use crate::procure_to_pay::responsibility::{ProcurementResponsibilityProcess, ResolutionInput};
 use crate::Result;
+use crate::procure_to_pay::responsibility::{ProcurementResponsibilityProcess, ResolutionInput};
 
 impl SalesOrderCommandProcess {
     /// 在销售提交审批前严格校验全部实物及服务行的采购责任。
@@ -42,20 +42,14 @@ impl SalesOrderCommandProcess {
 fn resolution_input(
     fact: erp_sales::service::sales_order::procurement::SalesProcurementLineFact,
 ) -> ResolutionInput {
-    ResolutionInput {
-        line_key: fact.line_key,
-        sku_id: fact.sku_id,
-        service_region: fact.service_region,
-    }
+    ResolutionInput { line_key: fact.line_key, sku_id: fact.sku_id, service_region: fact.service_region }
 }
 /// Map frozen sales-line facts onto the unchanged procurement resolver input.
 pub(super) fn submission_procurement_inputs(
     lines: &[SalesOrderSubmissionLine],
 ) -> Result<Vec<ResolutionInput>> {
-    Ok(
-        erp_sales::service::sales_order::procurement::submission_procurement_inputs(lines)?
-            .into_iter()
-            .map(resolution_input)
-            .collect(),
-    )
+    Ok(erp_sales::service::sales_order::procurement::submission_procurement_inputs(lines)?
+        .into_iter()
+        .map(resolution_input)
+        .collect())
 }

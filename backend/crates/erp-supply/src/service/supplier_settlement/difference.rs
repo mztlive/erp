@@ -1,14 +1,15 @@
-use super::shared::*;
+use erp_core::common::time::Instant;
+use persistence_core::{Executor, NoTransaction};
+use validator::Validate;
+
 use super::SupplierSettlementService;
+use super::shared::*;
 use crate::dto::supplier_fulfillment::SortDir;
 use crate::dto::supplier_settlement as dto;
 use crate::dto::supplier_settlement::*;
 use crate::entity::supplier_settlement::*;
 use crate::repository::SupplierSettlementExt;
 use crate::{Error, Result};
-use erp_core::common::time::Instant;
-use persistence_core::{Executor, NoTransaction};
-use validator::Validate;
 /// 结算差异列表筛选条件类型。
 type DifferenceFilter = <mongodb::Database as SupplierSettlementExt>::SupplierSettlementDifferenceFilter;
 impl SupplierSettlementService {
@@ -60,12 +61,7 @@ impl SupplierSettlementService {
             })
             .collect();
 
-        Ok(SettlementPageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        Ok(SettlementPageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 结算本域prepare_difference_decision，保持原校验、构造和执行器顺序。
@@ -101,9 +97,7 @@ impl SupplierSettlementService {
             .ensure_version(req.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
         if !statement.is_prepared_by(actor_id) {
-            return Err(Error::Forbidden(
-                "只有当前结算经办人可以登记正式差异结论".to_string(),
-            ));
+            return Err(Error::Forbidden("只有当前结算经办人可以登记正式差异结论".to_string()));
         }
         if !statement.is_editable() {
             return Err(Error::BusinessLogicError("当前结算状态禁止处理差异".to_string()));
@@ -153,14 +147,8 @@ impl SupplierSettlementService {
         difference: &mut SupplierSettlementDifference,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
-            .supplier_settlement_statements()
-            .update(statement, executor)
-            .await?;
-        self.db
-            .supplier_settlement_differences()
-            .update(difference, executor)
-            .await?;
+        self.db.supplier_settlement_statements().update(statement, executor).await?;
+        self.db.supplier_settlement_differences().update(difference, executor).await?;
         Ok(())
     }
 }
@@ -177,12 +165,12 @@ pub fn difference_conclusion_kind(
     match resolution {
         dto::SettlementDifferenceResolution::SupplierAccepted => {
             SettlementDifferenceConclusionKind::SupplierAccepted
-        }
+        },
         dto::SettlementDifferenceResolution::ErpAccepted => SettlementDifferenceConclusionKind::ErpAccepted,
         dto::SettlementDifferenceResolution::Compensated => SettlementDifferenceConclusionKind::Compensated,
         dto::SettlementDifferenceResolution::ClosedNoAdjustment => {
             SettlementDifferenceConclusionKind::ClosedNoAdjustment
-        }
+        },
     }
 }
 

@@ -1,9 +1,5 @@
 //! 仓发逐行消耗预占、释放后扣减余额并追加库存事实。
 
-use crate::{
-    Error, InventoryExt, MovementDirection, MovementType, ReservationEntryType, Result, StockMovement,
-    StockMovementData, StockReservationEntry, StockReservationEntryData,
-};
 use async_trait::async_trait;
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
@@ -14,6 +10,11 @@ use erp_core::money::Quantity;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::{
+    Error, InventoryExt, MovementDirection, MovementType, ReservationEntryType, Result, StockMovement,
+    StockMovementData, StockReservationEntry, StockReservationEntryData,
+};
 
 /// 库存消费的单条仓发事实；可选来源必须在原逐行校验位置检查。
 pub struct WarehouseShipmentLine {
@@ -55,14 +56,7 @@ pub async fn post_warehouse_ship_line(
     occurred_at: Instant,
     actor_id: &str,
 ) -> Result<()> {
-    post_with_store(
-        &mut MongoShipmentStore(db),
-        executor,
-        input,
-        occurred_at,
-        actor_id,
-    )
-    .await
+    post_with_store(&mut MongoShipmentStore(db), executor, input, occurred_at, actor_id).await
 }
 
 /// 当前仓发实际消费的预占事实，查询顺序由生产过账函数控制。
@@ -79,7 +73,7 @@ struct ReservationFact {
 #[async_trait]
 trait ShipmentStore: Send {
     async fn reservation(&mut self, id: &str, executor: &mut dyn Executor)
-        -> Result<Option<ReservationFact>>;
+    -> Result<Option<ReservationFact>>;
     async fn balance(
         &mut self,
         warehouse: &WarehouseId,
@@ -122,18 +116,13 @@ impl ShipmentStore for MongoShipmentStore<'_> {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<ReservationFact>> {
-        Ok(self
-            .0
-            .stock_reservations()
-            .find_by_id(id, executor)
-            .await?
-            .map(|reservation| ReservationFact {
-                id: reservation.base.id,
-                sales_order_line_id: reservation.sales_order_line_id,
-                reserved_quantity: reservation.reserved_quantity,
-                warehouse_id: reservation.warehouse_id,
-                sku_id: reservation.sku_id,
-            }))
+        Ok(self.0.stock_reservations().find_by_id(id, executor).await?.map(|reservation| ReservationFact {
+            id: reservation.base.id,
+            sales_order_line_id: reservation.sales_order_line_id,
+            reserved_quantity: reservation.reserved_quantity,
+            warehouse_id: reservation.warehouse_id,
+            sku_id: reservation.sku_id,
+        }))
     }
     async fn balance(
         &mut self,
@@ -149,11 +138,7 @@ impl ShipmentStore for MongoShipmentStore<'_> {
             .map(|balance| balance.base.id))
     }
     async fn consume(&mut self, id: &str, quantity: Quantity, executor: &mut dyn Executor) -> Result<bool> {
-        Ok(self
-            .0
-            .stock_reservations()
-            .consume_quantity(id, quantity, executor)
-            .await?)
+        Ok(self.0.stock_reservations().consume_quantity(id, quantity, executor).await?)
     }
     async fn reservation_entry(
         &mut self,
@@ -169,11 +154,7 @@ impl ShipmentStore for MongoShipmentStore<'_> {
         quantity: Quantity,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        Ok(self
-            .0
-            .stock_balances()
-            .release_reserved(id, quantity, executor)
-            .await?)
+        Ok(self.0.stock_balances().release_reserved(id, quantity, executor).await?)
     }
     async fn deduct_available(
         &mut self,
@@ -181,11 +162,7 @@ impl ShipmentStore for MongoShipmentStore<'_> {
         quantity: Quantity,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        Ok(self
-            .0
-            .stock_balances()
-            .deduct_available(id, quantity, executor)
-            .await?)
+        Ok(self.0.stock_balances().deduct_available(id, quantity, executor).await?)
     }
     async fn movement(&mut self, movement: &StockMovement, executor: &mut dyn Executor) -> Result<()> {
         self.0.stock_movements().create(movement, executor).await?;
@@ -197,11 +174,7 @@ impl ShipmentStore for MongoShipmentStore<'_> {
         movement_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        Ok(self
-            .0
-            .stock_balances()
-            .apply_last_movement(balance_id, movement_id, executor)
-            .await?)
+        Ok(self.0.stock_balances().apply_last_movement(balance_id, movement_id, executor).await?)
     }
 }
 
@@ -222,32 +195,22 @@ async fn post_with_store(
         .await?
         .ok_or_else(|| Error::BusinessLogicError("库存预占不存在".to_string()))?;
     if reservation.sales_order_line_id != input.sales_order_line_id {
-        return Err(Error::BusinessLogicError(
-            "库存预占不属于本销售明细，不能消耗".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("库存预占不属于本销售明细，不能消耗".to_string()));
     }
     if reservation.reserved_quantity.to_decimal() < input.quantity.to_decimal() {
-        return Err(Error::BusinessLogicError(
-            "为这单留的货不足，无法发货".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("为这单留的货不足，无法发货".to_string()));
     }
-    let warehouse_id = input
-        .warehouse_id
-        .clone()
-        .ok_or_else(|| Error::BusinessLogicError("仓发缺少发货仓".to_string()))?;
+    let warehouse_id =
+        input.warehouse_id.clone().ok_or_else(|| Error::BusinessLogicError("仓发缺少发货仓".to_string()))?;
     if reservation.warehouse_id != warehouse_id {
-        return Err(Error::BusinessLogicError(
-            "库存预占不属于本发货仓，无法发货".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("库存预占不属于本发货仓，无法发货".to_string()));
     }
     let balance = store
         .balance(&warehouse_id, &reservation.sku_id, executor)
         .await?
         .ok_or_else(|| Error::BusinessLogicError("库存余额不存在，无法发货".to_string()))?;
     if !store.consume(&reservation.id, input.quantity, executor).await? {
-        return Err(Error::BusinessLogicError(
-            "预占数量不足或状态不符，无法消耗".to_string(),
-        ));
+        return Err(Error::BusinessLogicError("预占数量不足或状态不符，无法消耗".to_string()));
     }
     let entry = StockReservationEntry::new(
         StockReservationEntryId::new(next_id()),
@@ -298,8 +261,9 @@ async fn post_with_store(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     enum Call {
@@ -487,9 +451,7 @@ mod tests {
         let mut executor = TestExecutor { _identity: 1 };
         let mut store = RecordingStore::new(&mut executor);
         let occurred_at = Instant::from_unix_secs(12345);
-        post_with_store(&mut store, &mut executor, &input(), occurred_at, "actor-1")
-            .await
-            .unwrap();
+        post_with_store(&mut store, &mut executor, &input(), occurred_at, "actor-1").await.unwrap();
         assert_eq!(store.calls, sequence());
         assert_eq!((store.available, store.reserved, store.on_hand), (0, 0, 0));
         let entry = store.entry.unwrap();
@@ -523,15 +485,10 @@ mod tests {
             let mut executor = TestExecutor { _identity: 1 };
             let mut store = RecordingStore::new(&mut executor);
             store.fail_at = Some(call);
-            let error = post_with_store(
-                &mut store,
-                &mut executor,
-                &input(),
-                Instant::from_unix_secs(10),
-                "actor-1",
-            )
-            .await
-            .unwrap_err();
+            let error =
+                post_with_store(&mut store, &mut executor, &input(), Instant::from_unix_secs(10), "actor-1")
+                    .await
+                    .unwrap_err();
             assert!(matches!(error, Error::ConflictError(message) if message == "原库存写入冲突"));
             assert_eq!(store.calls, expected[..=index]);
         }
@@ -549,15 +506,10 @@ mod tests {
             let mut executor = TestExecutor { _identity: 1 };
             let mut store = RecordingStore::new(&mut executor);
             store.false_at = Some(call);
-            let error = post_with_store(
-                &mut store,
-                &mut executor,
-                &input(),
-                Instant::from_unix_secs(10),
-                "actor-1",
-            )
-            .await
-            .unwrap_err();
+            let error =
+                post_with_store(&mut store, &mut executor, &input(), Instant::from_unix_secs(10), "actor-1")
+                    .await
+                    .unwrap_err();
             assert!(matches!(error, Error::BusinessLogicError(actual) if actual == message));
             let expected = sequence();
             let index = expected.iter().position(|step| *step == call).unwrap();
@@ -573,15 +525,9 @@ mod tests {
         let mut line = input();
         line.stock_reservation_id = None;
         line.warehouse_id = None;
-        let error = post_with_store(
-            &mut store,
-            &mut executor,
-            &line,
-            Instant::from_unix_secs(10),
-            "actor-1",
-        )
-        .await
-        .unwrap_err();
+        let error = post_with_store(&mut store, &mut executor, &line, Instant::from_unix_secs(10), "actor-1")
+            .await
+            .unwrap_err();
         assert!(matches!(error, Error::BusinessLogicError(message) if message == "仓发必须消耗有效预占"));
         assert!(store.calls.is_empty());
     }
@@ -610,15 +556,10 @@ mod tests {
             } else {
                 line.warehouse_id = Some(WarehouseId::new("other-warehouse"));
             }
-            let error = post_with_store(
-                &mut store,
-                &mut executor,
-                &line,
-                Instant::from_unix_secs(10),
-                "actor-1",
-            )
-            .await
-            .unwrap_err();
+            let error =
+                post_with_store(&mut store, &mut executor, &line, Instant::from_unix_secs(10), "actor-1")
+                    .await
+                    .unwrap_err();
             assert!(matches!(error, Error::BusinessLogicError(actual) if actual == message));
             assert_eq!(store.calls, [Call::Reservation]);
         }
@@ -635,15 +576,10 @@ mod tests {
             } else {
                 store.balance = None;
             }
-            let error = post_with_store(
-                &mut store,
-                &mut executor,
-                &input(),
-                Instant::from_unix_secs(10),
-                "actor-1",
-            )
-            .await
-            .unwrap_err();
+            let error =
+                post_with_store(&mut store, &mut executor, &input(), Instant::from_unix_secs(10), "actor-1")
+                    .await
+                    .unwrap_err();
             let expected = if missing_reservation {
                 "库存预占不存在"
             } else {

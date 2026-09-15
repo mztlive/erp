@@ -1,12 +1,11 @@
-use crate::entity::catalog::{EnableStatus, ProductCategory, ProductKind};
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::ids::ProductCategoryId;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::common::{PageParams, non_blank, normalize_sort};
+use crate::entity::catalog::{EnableStatus, ProductCategory, ProductKind};
 use crate::error::Result;
-use application_core::{normalized_text, page_or_default, page_size_or_default};
-
-use super::common::{non_blank, normalize_sort, PageParams};
 
 /// 商品分类列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const PRODUCT_CATEGORY_SORT_FIELDS: &[&str] = &["created_at", "category_code", "name"];
@@ -163,16 +162,12 @@ impl ProductCategoryListParams {
     pub(crate) fn normalized(&self) -> Result<ProductCategoryListQuery> {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, PRODUCT_CATEGORY_SORT_FIELDS)?;
-        let parent_category_id = match self
-            .parent_category_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            Some("root") => Some(None),
-            Some(id) => Some(Some(id.to_string())),
-            None => None,
-        };
+        let parent_category_id =
+            match self.parent_category_id.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+                Some("root") => Some(None),
+                Some(id) => Some(Some(id.to_string())),
+                None => None,
+            };
         Ok(ProductCategoryListQuery {
             q: normalized_text(self.q.as_deref()),
             category_code: normalized_text(self.category_code.as_deref()),

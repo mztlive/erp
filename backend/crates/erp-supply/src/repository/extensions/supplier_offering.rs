@@ -1,12 +1,12 @@
 //! 域 D24 供应商供给仓储访问器。
 
+use mongodb::Database;
+
+use super::super::supplier_offering::{SupplierOfferingDomainRepository, SupplierOfferingFilter};
 use crate::repository::owned::{
     SupplierOfferingAvailabilityRepository, SupplierOfferingCommandRepository, SupplierOfferingRepository,
     SupplierOfferingRevisionRepository,
 };
-use mongodb::Database;
-
-use super::super::supplier_offering::{SupplierOfferingDomainRepository, SupplierOfferingFilter};
 
 /// 供应商供给仓储访问器。
 pub trait SupplierOfferingExt: Sized {

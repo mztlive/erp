@@ -3,13 +3,11 @@
 //! 供应商资料根命令由 `erp-processes::supplier_profile` 持有事务；本模块仅
 //! 提供列表、完整详情和单域读取入口，主体事实经 [`PartyFactsPort`] 组装。
 
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use crate::entity::supplier::{SupplierAccount, SupplierAccountId};
-use crate::ports::{select_current_default, PartyFactsPort, SensitiveFieldKindFact, SensitiveTokenPort};
-use crate::repository::{SupplierAccountRow, SupplierExt};
 use erp_core::common::time::BusinessDate;
-use list_view::{assemble_supplier_views, SupplierViewAssembleInput};
+use list_view::{SupplierViewAssembleInput, assemble_supplier_views};
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
@@ -17,7 +15,10 @@ use crate::dto::supplier::{
     CommercialProfileView, SupplierCapabilityView, SupplierDetailView, SupplierQualificationView,
     SupplierSensitiveFieldView,
 };
+use crate::entity::supplier::{SupplierAccount, SupplierAccountId};
 use crate::error::{Error, Result};
+use crate::ports::{PartyFactsPort, SensitiveFieldKindFact, SensitiveTokenPort, select_current_default};
+use crate::repository::{SupplierAccountRow, SupplierExt};
 
 pub mod eligibility;
 mod list;
@@ -45,11 +46,7 @@ impl SupplierService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database, party: Arc<dyn PartyFactsPort>) -> Self {
-        Self {
-            db,
-            party,
-            sensitive_data: None,
-        }
+        Self { db, party, sensitive_data: None }
     }
 
     /// 创建可签发敏感字段短时揭示令牌的详情查询服务。
@@ -58,11 +55,7 @@ impl SupplierService {
         party: Arc<dyn PartyFactsPort>,
         sensitive_data: Arc<dyn SensitiveTokenPort>,
     ) -> Self {
-        Self {
-            db,
-            party,
-            sensitive_data: Some(sensitive_data),
-        }
+        Self { db, party, sensitive_data: Some(sensitive_data) }
     }
 
     /// 查询供应商角色详情（供应商 + 当前商务结算版本 + 主体编号）。
@@ -88,22 +81,10 @@ impl SupplierService {
             .find_with_current_revision(&bundle.party_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商关联的企业主体不存在".to_string()))?;
-        let contacts = self
-            .party
-            .list_contacts(&bundle.party_id, &mut NoTransaction)
-            .await?;
-        let addresses = self
-            .party
-            .list_addresses(&bundle.party_id, &mut NoTransaction)
-            .await?;
-        let tax_profiles = self
-            .party
-            .list_tax_profiles(&bundle.party_id, &mut NoTransaction)
-            .await?;
-        let bank_accounts = self
-            .party
-            .list_bank_accounts(&bundle.party_id, &mut NoTransaction)
-            .await?;
+        let contacts = self.party.list_contacts(&bundle.party_id, &mut NoTransaction).await?;
+        let addresses = self.party.list_addresses(&bundle.party_id, &mut NoTransaction).await?;
+        let tax_profiles = self.party.list_tax_profiles(&bundle.party_id, &mut NoTransaction).await?;
+        let bank_accounts = self.party.list_bank_accounts(&bundle.party_id, &mut NoTransaction).await?;
         let commercial_party_names = self
             .party
             .current_legal_names_by_party_ids(&bundle.commercial_party_ids, &mut NoTransaction)
@@ -170,10 +151,8 @@ impl SupplierService {
                 .cloned();
         }
         if let Some(current_id) = account.current_commercial_profile_revision_id.as_deref() {
-            account.current_profile = commercial_profiles
-                .iter()
-                .find(|profile| profile.id == current_id)
-                .cloned();
+            account.current_profile =
+                commercial_profiles.iter().find(|profile| profile.id == current_id).cloned();
         }
         let sensitive_fields = self.sensitive_field_views(id, &contacts, &addresses, &bank_accounts)?;
         Ok(SupplierDetailView {
@@ -233,11 +212,9 @@ impl SupplierService {
                 expires_at,
             )?);
         }
-        if let Some(account) = select_current_default(
-            bank_accounts,
-            |item| item.is_default,
-            |item| item.status.is_active(),
-        ) {
+        if let Some(account) =
+            select_current_default(bank_accounts, |item| item.is_default, |item| item.status.is_active())
+        {
             fields.push(sensitive_field(
                 codec.as_ref(),
                 SensitiveFieldKindFact::BankAccountNumber,
@@ -278,10 +255,7 @@ fn assemble_qualification_views(
     let mut links_by_qualification: HashMap<String, Vec<erp_core::ids::SupplierCapabilityId>> =
         HashMap::new();
     for link in links {
-        links_by_qualification
-            .entry(link.qualification_id.to_string())
-            .or_default()
-            .push(link.capability_id);
+        links_by_qualification.entry(link.qualification_id.to_string()).or_default().push(link.capability_id);
     }
     qualifications
         .into_iter()

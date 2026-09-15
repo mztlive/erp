@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use crate::entity::document_registry::DocumentType;
-use crate::repository::bpm::DefinitionCatalogStatusFact;
 use bpm::graph::DefinitionGraph;
 use bpm::model::{ApprovalNodeDefinition, ApprovalProcessDefinition};
 
@@ -12,6 +10,8 @@ use super::super::definition_dto::{
 use super::super::policy::{ApprovalRequirement, DocumentApprovalPolicy};
 use super::super::process_kind::document_type_of;
 use super::DefinitionManagementVisibility;
+use crate::entity::document_registry::DocumentType;
+use crate::repository::bpm::DefinitionCatalogStatusFact;
 
 /// 配置状态。
 pub(super) fn configuration_status(
@@ -23,7 +23,7 @@ pub(super) fn configuration_status(
         ApprovalRequirement::NoApproval => DefinitionConfigurationStatus::NotApplicable,
         ApprovalRequirement::ProcessRequired if published.is_some() => {
             DefinitionConfigurationStatus::Published
-        }
+        },
         ApprovalRequirement::ProcessRequired if draft.is_some() => DefinitionConfigurationStatus::Draft,
         ApprovalRequirement::ProcessRequired => DefinitionConfigurationStatus::MissingConfiguration,
     }
@@ -161,17 +161,9 @@ pub(super) fn detail_view(graph: &DefinitionGraph) -> DefinitionDetailView {
         definition_lock_version: graph.definition.definition_lock_version(),
         nodes: nodes.iter().map(node_view).collect(),
         created_by: graph.definition.created_by.as_str().to_string(),
-        published_by: graph
-            .definition
-            .published_by
-            .as_ref()
-            .map(|item| item.as_str().to_string()),
+        published_by: graph.definition.published_by.as_ref().map(|item| item.as_str().to_string()),
         published_at: graph.definition.published_at.map(|item| item.unix_secs()),
-        retired_by: graph
-            .definition
-            .retired_by
-            .as_ref()
-            .map(|item| item.as_str().to_string()),
+        retired_by: graph.definition.retired_by.as_ref().map(|item| item.as_str().to_string()),
         retired_at: graph.definition.retired_at.map(|item| item.unix_secs()),
     }
 }
@@ -203,10 +195,11 @@ pub(super) fn version_item(definition: &ApprovalProcessDefinition) -> Definition
 
 #[cfg(test)]
 mod tests {
+    use bpm::{ParticipantId, ProcessKind, Timestamp};
+
     use super::super::super::policy::policy_of;
     use super::super::test_support::{production_source, source_fn, two_node_publish_graph};
     use super::*;
-    use bpm::{ParticipantId, ProcessKind, Timestamp};
 
     /// 目录状态必须同时消费 published/draft：仅草稿为 Draft，退役且无草稿为缺失。
     #[test]
@@ -232,11 +225,8 @@ mod tests {
             DefinitionConfigurationStatus::NotApplicable
         );
         let production = production_source();
-        let catalog = source_fn(
-            production,
-            "pub async fn definition_catalog",
-            "pub async fn create_definition_draft",
-        );
+        let catalog =
+            source_fn(production, "pub async fn definition_catalog", "pub async fn create_definition_draft");
         assert!(catalog.contains("definition_catalog_facts"));
         assert!(!catalog.contains("find_published_by_process_kind"));
         assert!(!catalog.contains("find_active_draft"));
@@ -271,40 +261,24 @@ mod tests {
         let mut graph = two_node_publish_graph();
         graph.nodes.reverse();
         let draft_view = detail_view(&graph);
-        assert_eq!(
-            draft_view
-                .nodes
-                .iter()
-                .map(|item| item.display_order)
-                .collect::<Vec<_>>(),
-            vec![1, 2]
-        );
+        assert_eq!(draft_view.nodes.iter().map(|item| item.display_order).collect::<Vec<_>>(), vec![1, 2]);
         assert_eq!(draft_view.nodes[0].node_key, "n1");
         assert_eq!(draft_view.nodes[0].node_type, "USER_APPROVAL");
         assert_eq!(draft_view.nodes[1].node_type, "USER_APPROVAL");
         assert_eq!(draft_view.entry_node_key, "n1");
         assert_eq!(draft_view.created_by, "admin");
-        assert_eq!(
-            draft_view.definition_lock_version,
-            graph.definition.definition_lock_version()
-        );
+        assert_eq!(draft_view.definition_lock_version, graph.definition.definition_lock_version());
         assert!(draft_view.published_by.is_none());
         assert!(draft_view.retired_by.is_none());
 
         let actor = ParticipantId::new("admin").unwrap();
-        graph
-            .definition
-            .publish(actor.clone(), Timestamp::from_unix_secs(2).unwrap())
-            .unwrap();
+        graph.definition.publish(actor.clone(), Timestamp::from_unix_secs(2).unwrap()).unwrap();
         let published_view = detail_view(&graph);
         assert_eq!(published_view.status, "PUBLISHED");
         assert_eq!(published_view.published_by.as_deref(), Some("admin"));
         assert_eq!(published_view.published_at, Some(2));
 
-        graph
-            .definition
-            .retire(actor, Timestamp::from_unix_secs(3).unwrap())
-            .unwrap();
+        graph.definition.retire(actor, Timestamp::from_unix_secs(3).unwrap()).unwrap();
         let retired_view = detail_view(&graph);
         assert_eq!(retired_view.status, "RETIRED");
         assert_eq!(retired_view.retired_by.as_deref(), Some("admin"));
@@ -315,10 +289,7 @@ mod tests {
         assert_eq!(item.definition_version, 1);
         assert_eq!(item.status, "RETIRED");
         assert_eq!(item.name, "测试流程");
-        assert_eq!(
-            item.definition_lock_version,
-            graph.definition.definition_lock_version()
-        );
+        assert_eq!(item.definition_lock_version, graph.definition.definition_lock_version());
         assert_eq!(node_view(&graph.nodes[1]).node_id, "id1");
     }
 }

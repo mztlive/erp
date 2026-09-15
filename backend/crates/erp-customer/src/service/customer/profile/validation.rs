@@ -1,17 +1,16 @@
 //! 客户资料输入的协议适配与结构校验。
 
-use crate::entity::customer::{
-    CustomerProfileFactInput, CustomerProfileFactKind, CustomerProfileFactSet, CustomerProfileOperation,
-    CustomerProfileReplayContext, CustomerProfileRequestFingerprint, CustomerProfileRequestShape,
-};
 use validator::Validate;
-
-use crate::error::Result;
 
 use crate::dto::customer::{
     CustomerProfileAddressInput, CustomerProfileBankAccountInput, CustomerProfileContactInput,
     SaveCustomerProfileRequest,
 };
+use crate::entity::customer::{
+    CustomerProfileFactInput, CustomerProfileFactKind, CustomerProfileFactSet, CustomerProfileOperation,
+    CustomerProfileReplayContext, CustomerProfileRequestFingerprint, CustomerProfileRequestShape,
+};
+use crate::error::Result;
 
 impl CustomerProfileFactInput for CustomerProfileContactInput {
     fn existing_id(&self) -> Option<&str> {
@@ -134,21 +133,18 @@ impl SaveCustomerProfileRequest {
             .validate(shape.operation())?;
         CustomerProfileFactSet::new(CustomerProfileFactKind::Address, self.addresses.as_deref())
             .validate(shape.operation())?;
-        CustomerProfileFactSet::new(
-            CustomerProfileFactKind::BankAccount,
-            self.bank_accounts.as_deref(),
-        )
-        .validate(shape.operation())?;
+        CustomerProfileFactSet::new(CustomerProfileFactKind::BankAccount, self.bank_accounts.as_deref())
+            .validate(shape.operation())?;
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::customer::CustomerProfileOperation;
     use serde_json::json;
 
     use super::SaveCustomerProfileRequest;
+    use crate::entity::customer::CustomerProfileOperation;
 
     #[test]
     fn request_builds_stable_versioned_context_without_retaining_sensitive_body() {
@@ -171,22 +167,15 @@ mod tests {
         }))
         .unwrap();
 
-        let first = request
-            .replay_context(CustomerProfileOperation::Create, None, "admin-1")
-            .unwrap();
-        let second = request
-            .replay_context(CustomerProfileOperation::Create, None, "admin-1")
-            .unwrap();
+        let first = request.replay_context(CustomerProfileOperation::Create, None, "admin-1").unwrap();
+        let second = request.replay_context(CustomerProfileOperation::Create, None, "admin-1").unwrap();
         assert_eq!(first, second);
         assert_eq!(
             first.request_fingerprint().as_str(),
             "sha256-json-v1:07525242bd0a4ce006b4ec1bd7b60c88d2fcf009ca693e43a0a403a82922f8b7"
         );
         assert_eq!(first.idempotency_key(), "save-customer-1");
-        assert!(first
-            .request_fingerprint()
-            .as_str()
-            .starts_with("sha256-json-v1:"));
+        assert!(first.request_fingerprint().as_str().starts_with("sha256-json-v1:"));
         let debug_context = format!("{first:?}");
         assert!(!debug_context.contains("13800000000"));
         assert!(!debug_context.contains("6222020000000000"));
@@ -198,12 +187,8 @@ mod tests {
             serde_json::from_value(base_request("13800000000")).unwrap();
         let changed: SaveCustomerProfileRequest =
             serde_json::from_value(base_request("13900000000")).unwrap();
-        let first = request
-            .replay_context(CustomerProfileOperation::Create, None, "admin-1")
-            .unwrap();
-        let second = changed
-            .replay_context(CustomerProfileOperation::Create, None, "admin-1")
-            .unwrap();
+        let first = request.replay_context(CustomerProfileOperation::Create, None, "admin-1").unwrap();
+        let second = changed.replay_context(CustomerProfileOperation::Create, None, "admin-1").unwrap();
         assert_ne!(first.request_fingerprint(), second.request_fingerprint());
     }
 

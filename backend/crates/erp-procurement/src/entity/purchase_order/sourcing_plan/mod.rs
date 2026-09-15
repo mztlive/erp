@@ -15,7 +15,7 @@ mod stock;
 pub use assignment::{SourcingAssignment, SourcingAssignmentSet, SupplySourceType};
 pub use plan::{SourcingDraftPlan, SourcingPlan, SourcingPlanError};
 pub use stock::{
-    stock_basis_id_for, RequestedStockLine, StockAllocationPlan, StockBasisGroup, StockBasisLine,
+    RequestedStockLine, StockAllocationPlan, StockBasisGroup, StockBasisLine, stock_basis_id_for,
 };
 
 #[cfg(test)]

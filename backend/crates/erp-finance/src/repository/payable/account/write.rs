@@ -1,9 +1,8 @@
-use crate::repository::owned::PayableAccountRepository;
 use erp_core::money::Amount;
-use mongodb::bson::{doc, Bson, Document};
+use mongodb::bson::{Bson, Document, doc};
+use persistence_core::{Executor, Result};
 
-use persistence_core::Executor;
-use persistence_core::Result;
+use crate::repository::owned::PayableAccountRepository;
 
 impl<'a> PayableAccountRepository<'a> {
     /// 执行单文档条件更新（管道形态）。
@@ -28,12 +27,7 @@ impl<'a> PayableAccountRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<bool> {
         let result = match executor.session() {
-            Some(session) => {
-                self.collection()
-                    .update_one(filter, pipeline)
-                    .session(session)
-                    .await?
-            }
+            Some(session) => self.collection().update_one(filter, pipeline).session(session).await?,
             None => self.collection().update_one(filter, pipeline).await?,
         };
         Ok(result.matched_count == 1)
@@ -82,11 +76,7 @@ pub(super) fn progress_pipeline(
     increase: bool,
     updated_by: &str,
 ) -> Vec<Document> {
-    let total_field = if progress_field == "settled_total" {
-        "gross_total"
-    } else {
-        "invoiceable_total"
-    };
+    let total_field = if progress_field == "settled_total" { "gross_total" } else { "invoiceable_total" };
     let new_progress = if increase {
         doc! { "$add": ["$" .to_owned() + progress_field, amount] }
     } else {

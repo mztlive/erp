@@ -1,13 +1,5 @@
-use super::super::repository::{
-    load_creation_basis_facts, load_sales_procurement_coverage, sales_order_basis_fact,
-    stock_basis_groups_for_order,
-};
-use super::super::{
-    dto::{CreationBasisListParams, CreationBasisView},
-    PurchaseOrderReadService,
-};
-use super::mapping::{build_basis_view, build_stock_basis_view};
-use crate::{Error, Result};
+use std::collections::{HashMap, HashSet};
+
 use application_core::AuditActor;
 use erp_core::ids::{SalesOrderId, SkuId};
 use erp_procurement::entity::purchase_order::SalesProcurementCoverage;
@@ -15,7 +7,15 @@ use erp_procurement::service::purchase_order::creation_basis::{basis_groups_from
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
 use persistence_core::NoTransaction;
-use std::collections::{HashMap, HashSet};
+
+use super::super::PurchaseOrderReadService;
+use super::super::dto::{CreationBasisListParams, CreationBasisView};
+use super::super::repository::{
+    load_creation_basis_facts, load_sales_procurement_coverage, sales_order_basis_fact,
+    stock_basis_groups_for_order,
+};
+use super::mapping::{build_basis_view, build_stock_basis_view};
+use crate::{Error, Result};
 impl PurchaseOrderReadService {
     /// 查询当前账号开放采购任务范围内仍有剩余量的精确采购创建依据。
     ///
@@ -59,32 +59,23 @@ impl PurchaseOrderReadService {
             .collect::<HashSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let orders = self
-            .db
-            .sales_orders()
-            .find_effective_orders_by_ids(&order_ids, &mut NoTransaction)
-            .await?;
+        let orders =
+            self.db.sales_orders().find_effective_orders_by_ids(&order_ids, &mut NoTransaction).await?;
         let owner_names = self
             .resolve_account_names(
-                &orders
-                    .iter()
-                    .map(|order| order.stable.created_by.clone())
-                    .collect::<Vec<_>>(),
+                &orders.iter().map(|order| order.stable.created_by.clone()).collect::<Vec<_>>(),
             )
             .await?;
-        let orders = orders
-            .into_iter()
-            .map(|order| (order.base.id.clone(), order))
-            .collect::<HashMap<_, _>>();
+        let orders =
+            orders.into_iter().map(|order| (order.base.id.clone(), order)).collect::<HashMap<_, _>>();
         // 按销售单归组任务，使覆盖与供给事实按单一次批量读取。
         let mut task_indexes_by_order: Vec<(String, Vec<usize>)> = Vec::new();
         for (index, task) in tasks.iter().enumerate() {
             if task.responsibility_key().is_none() || task.responsibility_scope_ids().is_empty() {
                 return Err(Error::ConflictError("供给分配任务缺少冻结责任范围".to_string()));
             }
-            if let Some(entry) = task_indexes_by_order
-                .iter_mut()
-                .find(|(order_id, _)| *order_id == task.business_object_id)
+            if let Some(entry) =
+                task_indexes_by_order.iter_mut().find(|(order_id, _)| *order_id == task.business_object_id)
             {
                 entry.1.push(index);
             } else {
@@ -121,9 +112,7 @@ impl PurchaseOrderReadService {
             let Some(order) = orders.get(&order_id) else {
                 continue;
             };
-            let coverage = coverage_by_order
-                .get(&order_id)
-                .expect("已加载的销售覆盖必须存在");
+            let coverage = coverage_by_order.get(&order_id).expect("已加载的销售覆盖必须存在");
             let owner_name = owner_names.get(&order.stable.created_by).cloned();
             for task_index in task_indexes {
                 let task = &tasks[task_index];
@@ -174,8 +163,5 @@ impl PurchaseOrderReadService {
 /// # 错误
 /// 无。
 fn normalized_optional_filter(value: Option<&str>) -> Option<String> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
+    value.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string)
 }

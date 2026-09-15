@@ -4,6 +4,16 @@
 //! 不可更新（数据模型 §6.4）。`previous_revision_id` 必须属于同一销售单由
 //! P3 在形成版本时校验。
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, Result, mongo_ops};
+use serde::Deserialize;
+
+use super::{
+    SALES_ORDER_GOODS_SERVICE_LINE_REVISIONS, SALES_ORDER_REVISION_LINES, SALES_ORDER_REVISIONS,
+    SALES_ORDER_VOUCHER_LINE_REVISIONS, SALES_ORDERS, SalesOrderDomainRepository,
+};
 use crate::entity::sales_order::{
     SalesOrderGoodsServiceLineRevision, SalesOrderId, SalesOrderRevision, SalesOrderRevisionId,
     SalesOrderRevisionLine, SalesOrderRevisionLineId, SalesOrderVoucherLineRevision,
@@ -12,19 +22,6 @@ use crate::repository::owned::{
     SalesOrderGoodsServiceLineRevisionRepository, SalesOrderRepository, SalesOrderRevisionLineRepository,
     SalesOrderRevisionRepository, SalesOrderVoucherLineRevisionRepository,
 };
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::{
-    bson::{doc, Document},
-    options::FindOptions,
-};
-use serde::Deserialize;
-
-use super::{
-    SalesOrderDomainRepository, SALES_ORDERS, SALES_ORDER_GOODS_SERVICE_LINE_REVISIONS,
-    SALES_ORDER_REVISIONS, SALES_ORDER_REVISION_LINES, SALES_ORDER_VOUCHER_LINE_REVISIONS,
-};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
 
 /// 销售版本号最小投影行。
 #[derive(Debug, Deserialize)]
@@ -53,8 +50,7 @@ impl<'a> SalesOrderRevisionRepository<'a> {
         if revision_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(doc! { "id": { "$in": revision_ids } }, executor)
-            .await
+        self.find_many(doc! { "id": { "$in": revision_ids } }, executor).await
     }
 
     /// 按销售单与版本号查找正式版本。
@@ -256,8 +252,7 @@ impl<'a> SalesOrderRevisionLineRepository<'a> {
             return Ok(Vec::new());
         }
         let ids = revision_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>();
-        self.find_many(doc! { "sales_order_revision_id": { "$in": ids } }, executor)
-            .await
+        self.find_many(doc! { "sales_order_revision_id": { "$in": ids } }, executor).await
     }
 }
 
@@ -281,12 +276,8 @@ impl<'a> SalesOrderGoodsServiceLineRevisionRepository<'a> {
         if revision_line_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let ids = revision_line_ids
-            .iter()
-            .map(|id| id.to_string())
-            .collect::<Vec<_>>();
-        self.find_many(doc! { "revision_line_id": { "$in": ids } }, executor)
-            .await
+        let ids = revision_line_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>();
+        self.find_many(doc! { "revision_line_id": { "$in": ids } }, executor).await
     }
 }
 
@@ -310,12 +301,8 @@ impl<'a> SalesOrderVoucherLineRevisionRepository<'a> {
         if revision_line_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let ids = revision_line_ids
-            .iter()
-            .map(|id| id.to_string())
-            .collect::<Vec<_>>();
-        self.find_many(doc! { "revision_line_id": { "$in": ids } }, executor)
-            .await
+        let ids = revision_line_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>();
+        self.find_many(doc! { "revision_line_id": { "$in": ids } }, executor).await
     }
 }
 
@@ -367,9 +354,7 @@ impl<'a> SalesOrderDomainRepository<'a> {
         )
         .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<SalesOrderRevisionLine>(SALES_ORDER_REVISION_LINES),
+            &self.db.collection::<SalesOrderRevisionLine>(SALES_ORDER_REVISION_LINES),
             revision_lines.to_vec(),
             executor,
         )
@@ -383,27 +368,24 @@ impl<'a> SalesOrderDomainRepository<'a> {
         )
         .await?;
         mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<SalesOrderVoucherLineRevision>(SALES_ORDER_VOUCHER_LINE_REVISIONS),
+            &self.db.collection::<SalesOrderVoucherLineRevision>(SALES_ORDER_VOUCHER_LINE_REVISIONS),
             voucher_lines.to_vec(),
             executor,
         )
         .await?;
-        SalesOrderRepository::new(self.db, SALES_ORDERS)
-            .update(order, executor)
-            .await
+        SalesOrderRepository::new(self.db, SALES_ORDERS).update(order, executor).await
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        latest_sales_order_revision_filter, latest_sales_order_revision_options,
-        sales_order_revision_no_from_rows, SalesOrderRevisionNoRow,
-    };
     use erp_core::ids::SalesOrderId;
     use mongodb::bson::doc;
+
+    use super::{
+        SalesOrderRevisionNoRow, latest_sales_order_revision_filter, latest_sales_order_revision_options,
+        sales_order_revision_no_from_rows,
+    };
 
     #[test]
     fn latest_revision_query_is_minimal_bounded_and_reads_empty_history() {

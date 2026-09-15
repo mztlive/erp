@@ -1,15 +1,16 @@
 //! 有界认领、逐行幂等执行与进度原子更新。
-use super::{SupplierImportProcess, SUPPLIER_IMPORT_DOMAIN};
-use crate::{Error, Result, SupplierProfileService};
+use std::time::Duration;
+
 use application_core::AuditActor;
-use erp_core::{common::time::Instant, AccountKind};
-use erp_supplier::dto::{
-    import::{SupplierImportRequest, SupplierImportResult},
-    import_job::SupplierImportJobRequest,
-};
+use erp_core::AccountKind;
+use erp_core::common::time::Instant;
+use erp_supplier::dto::import::{SupplierImportRequest, SupplierImportResult};
+use erp_supplier::dto::import_job::SupplierImportJobRequest;
 use erp_support::{BackgroundJob, BackgroundJobId, BackgroundJobItem, BulkJobExt, ItemStatus, JobStatus};
 use persistence_core::{NoTransaction, Transactional};
-use std::time::Duration;
+
+use super::{SUPPLIER_IMPORT_DOMAIN, SupplierImportProcess};
+use crate::{Error, Result, SupplierProfileService};
 
 impl SupplierImportProcess {
     /// 处理至多四个未完成任务，恢复超过两分钟未推进的任务。
@@ -46,13 +47,10 @@ impl SupplierImportProcess {
         let request = match tokio::time::timeout(Duration::from_secs(60), self.source(job)).await {
             Ok(Ok(request)) => request,
             _ => {
-                job.mark_failed(
-                    Some("导入源文件读取失败，请使用原文件重新提交核对".into()),
-                    Instant::now(),
-                )?;
+                job.mark_failed(Some("导入源文件读取失败，请使用原文件重新提交核对".into()), Instant::now())?;
                 self.db.background_jobs().update(job, &mut NoTransaction).await?;
                 return Ok(());
-            }
+            },
         };
         self.execute_rows(job, request).await
     }
@@ -65,11 +63,7 @@ impl SupplierImportProcess {
             .list_entities_by_job(&BackgroundJobId::new(&job.base.id), &mut NoTransaction)
             .await?;
         let service = SupplierProfileService::new(self.db.clone(), self.codec.clone());
-        let actor = AuditActor::new(
-            job.requested_by.clone(),
-            job.requested_by.clone(),
-            AccountKind::Admin,
-        );
+        let actor = AuditActor::new(job.requested_by.clone(), job.requested_by.clone(), AccountKind::Admin);
         for mut item in items.into_iter().filter(|item| item.status.is_none()) {
             if !self.renew(job).await? {
                 return Ok(());
@@ -181,9 +175,7 @@ fn claimable(job: &BackgroundJob, now: Instant) -> bool {
     }
     job.status == JobStatus::Pending
         || (matches!(job.status, JobStatus::Running | JobStatus::PartiallySucceeded)
-            && job
-                .last_progress_at
-                .is_none_or(|last| now.unix_secs() - last.unix_secs() >= 120))
+            && job.last_progress_at.is_none_or(|last| now.unix_secs() - last.unix_secs() >= 120))
 }
 
 /// 未知结果使用专属原因码，不声明回滚；失败项可由原文件重导核对。

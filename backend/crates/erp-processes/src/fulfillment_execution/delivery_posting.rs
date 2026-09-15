@@ -1,8 +1,5 @@
 //! 发货过账根事务：逐行库存或采购门槛、发货状态、任务与审计。
 
-use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate};
-use super::FulfillmentProcess;
-use crate::{Error, Result};
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt};
@@ -14,6 +11,10 @@ use erp_procurement::repository::PurchaseOrderExt;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
+
+use super::FulfillmentProcess;
+use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate};
+use crate::{Error, Result};
 
 impl FulfillmentProcess {
     /// 过账发货（草稿 → 已发货；§8.2 第 2 条跨集合事务）。
@@ -70,14 +71,8 @@ impl FulfillmentProcess {
                     let occurred_at = Instant::now();
                     let delivery_type = delivery.delivery_type;
                     let line_count = lines.len();
-                    let mut posting = DeliveryPosting {
-                        db: &db,
-                        delivery_id,
-                        delivery,
-                        lines,
-                        occurred_at,
-                        actor,
-                    };
+                    let mut posting =
+                        DeliveryPosting { db: &db, delivery_id, delivery, lines, occurred_at, actor };
                     execute_posting(&mut posting, delivery_type, line_count, session).await?;
                     Ok::<Delivery, crate::Error>(posting.delivery)
                 })
@@ -116,15 +111,10 @@ async fn execute_posting(
             for index in 0..line_count {
                 steps.apply(PostingStep::WarehouseLine(index), executor).await?;
             }
-        }
+        },
         DeliveryType::SupplierDirect => steps.apply(PostingStep::SupplierGate, executor).await?,
     }
-    for step in [
-        PostingStep::Delivery,
-        PostingStep::Task,
-        PostingStep::AcceptanceTask,
-        PostingStep::Audit,
-    ] {
+    for step in [PostingStep::Delivery, PostingStep::Task, PostingStep::AcceptanceTask, PostingStep::Audit] {
         steps.apply(step, executor).await?;
     }
     Ok(())
@@ -160,7 +150,7 @@ impl PostingSteps for DeliveryPosting<'_> {
                     self.actor.id(),
                 )
                 .await?;
-            }
+            },
             PostingStep::SupplierGate => {
                 let po =
                     erp_fulfillment::service::delivery_posting::supplier_purchase_source(&self.delivery)?;
@@ -172,12 +162,12 @@ impl PostingSteps for DeliveryPosting<'_> {
                     .ok_or_else(|| Error::NotFound("来源采购单不存在".to_string()))?;
                 ensure_po_fulfillable(&po)?;
                 ensure_prepay_gate(self.db, executor, &po).await?;
-            }
+            },
             PostingStep::Delivery => {
                 erp_fulfillment::service::FulfillmentService::new(self.db.clone())
                     .persist_posted_delivery(&mut self.delivery, self.occurred_at, executor)
                     .await?;
-            }
+            },
             PostingStep::Task => {
                 super::task::complete_fulfillment_task(
                     self.db,
@@ -186,7 +176,7 @@ impl PostingSteps for DeliveryPosting<'_> {
                     executor,
                 )
                 .await?;
-            }
+            },
             PostingStep::AcceptanceTask => {
                 super::customer_acceptance::task::ensure_customer_acceptance_task(
                     self.db,
@@ -195,7 +185,7 @@ impl PostingSteps for DeliveryPosting<'_> {
                     executor,
                 )
                 .await?;
-            }
+            },
             PostingStep::Audit => {
                 let audit = self.actor.clone().resource_log(
                     "delivery.post",
@@ -203,7 +193,7 @@ impl PostingSteps for DeliveryPosting<'_> {
                     self.delivery_id.to_string(),
                 )?;
                 self.db.audit_logs().create(&audit, executor).await?;
-            }
+            },
         }
         Ok(())
     }
@@ -239,11 +229,7 @@ mod tests {
         }
     }
     fn recording(executor: &mut TestExecutor) -> RecordingSteps {
-        RecordingSteps {
-            executor: executor as *mut TestExecutor as usize,
-            calls: vec![],
-            fail_at: None,
-        }
+        RecordingSteps { executor: executor as *mut TestExecutor as usize, calls: vec![], fail_at: None }
     }
 
     /// 生产入口先逐行完成仓发库存，再写发货状态、执行任务、验收任务与审计。
@@ -251,9 +237,7 @@ mod tests {
     async fn warehouse_posting_preserves_each_line_and_following_task_order() {
         let mut executor = TestExecutor { _identity: 1 };
         let mut steps = recording(&mut executor);
-        execute_posting(&mut steps, DeliveryType::WarehouseShip, 2, &mut executor)
-            .await
-            .unwrap();
+        execute_posting(&mut steps, DeliveryType::WarehouseShip, 2, &mut executor).await.unwrap();
         assert_eq!(
             steps.calls,
             [
@@ -272,9 +256,7 @@ mod tests {
     async fn supplier_direct_posting_checks_purchase_before_delivery_without_stock() {
         let mut executor = TestExecutor { _identity: 1 };
         let mut steps = recording(&mut executor);
-        execute_posting(&mut steps, DeliveryType::SupplierDirect, 2, &mut executor)
-            .await
-            .unwrap();
+        execute_posting(&mut steps, DeliveryType::SupplierDirect, 2, &mut executor).await.unwrap();
         assert_eq!(
             steps.calls,
             [
@@ -318,9 +300,7 @@ mod tests {
                 let mut executor = TestExecutor { _identity: 1 };
                 let mut steps = recording(&mut executor);
                 steps.fail_at = Some(step);
-                let error = execute_posting(&mut steps, delivery_type, 3, &mut executor)
-                    .await
-                    .unwrap_err();
+                let error = execute_posting(&mut steps, delivery_type, 3, &mut executor).await.unwrap_err();
                 assert!(matches!(error, Error::BusinessLogicError(message) if message == "原发货步骤失败"));
                 assert_eq!(steps.calls, expected[..=index]);
             }

@@ -121,75 +121,39 @@ impl SalesContentHash {
 
 #[cfg(test)]
 mod tests {
-    use super::{SalesContentHash, CONTENT_HASH_MAX_LEN};
+    use super::{CONTENT_HASH_MAX_LEN, SalesContentHash};
 
     #[test]
     fn golden_wire_formats_match_persisted_semantics() {
-        assert_eq!(
-            SalesContentHash::draft("so-1", 1).unwrap().as_str(),
-            "draft:so-1:1"
-        );
-        assert_eq!(
-            SalesContentHash::draft("wc-abc", 12).unwrap().into_wire(),
-            "draft:wc-abc:12"
-        );
+        assert_eq!(SalesContentHash::draft("so-1", 1).unwrap().as_str(), "draft:so-1:1");
+        assert_eq!(SalesContentHash::draft("wc-abc", 12).unwrap().into_wire(), "draft:wc-abc:12");
         assert_eq!(
             SalesContentHash::change("change-order-1", 1).unwrap().as_str(),
             "change:change-order-1:1"
         );
         assert_eq!(SalesContentHash::submission("s-1").unwrap().as_str(), "sub:s-1");
-        assert_eq!(
-            SalesContentHash::submission("chg-sub-9").unwrap().into_wire(),
-            "sub:chg-sub-9"
-        );
+        assert_eq!(SalesContentHash::submission("chg-sub-9").unwrap().into_wire(), "sub:chg-sub-9");
     }
 
     #[test]
     fn empty_id_and_zero_version_fail_closed() {
-        assert_eq!(
-            SalesContentHash::draft("", 1).unwrap_err().to_string(),
-            "内容身份不能为空"
-        );
-        assert_eq!(
-            SalesContentHash::change("", 2).unwrap_err().to_string(),
-            "内容身份不能为空"
-        );
-        assert_eq!(
-            SalesContentHash::submission("").unwrap_err().to_string(),
-            "内容身份不能为空"
-        );
-        assert_eq!(
-            SalesContentHash::draft("so-1", 0).unwrap_err().to_string(),
-            "内容版本必须为正整数"
-        );
-        assert_eq!(
-            SalesContentHash::change("co-1", 0).unwrap_err().to_string(),
-            "内容版本必须为正整数"
-        );
+        assert_eq!(SalesContentHash::draft("", 1).unwrap_err().to_string(), "内容身份不能为空");
+        assert_eq!(SalesContentHash::change("", 2).unwrap_err().to_string(), "内容身份不能为空");
+        assert_eq!(SalesContentHash::submission("").unwrap_err().to_string(), "内容身份不能为空");
+        assert_eq!(SalesContentHash::draft("so-1", 0).unwrap_err().to_string(), "内容版本必须为正整数");
+        assert_eq!(SalesContentHash::change("co-1", 0).unwrap_err().to_string(), "内容版本必须为正整数");
     }
 
     #[test]
     fn length_boundary_fails_when_wire_exceeds_working_copy_max() {
         let id = "a".repeat(CONTENT_HASH_MAX_LEN);
-        assert_eq!(
-            SalesContentHash::draft(&id, 1).unwrap_err().to_string(),
-            "内容指纹过长"
-        );
-        assert_eq!(
-            SalesContentHash::change(&id, 1).unwrap_err().to_string(),
-            "内容指纹过长"
-        );
-        assert_eq!(
-            SalesContentHash::submission(&id).unwrap_err().to_string(),
-            "内容指纹过长"
-        );
+        assert_eq!(SalesContentHash::draft(&id, 1).unwrap_err().to_string(), "内容指纹过长");
+        assert_eq!(SalesContentHash::change(&id, 1).unwrap_err().to_string(), "内容指纹过长");
+        assert_eq!(SalesContentHash::submission(&id).unwrap_err().to_string(), "内容指纹过长");
 
         let max_submission_id = "b".repeat(CONTENT_HASH_MAX_LEN - "sub:".len());
         assert_eq!(
-            SalesContentHash::submission(&max_submission_id)
-                .unwrap()
-                .as_str()
-                .len(),
+            SalesContentHash::submission(&max_submission_id).unwrap().as_str().len(),
             CONTENT_HASH_MAX_LEN
         );
     }

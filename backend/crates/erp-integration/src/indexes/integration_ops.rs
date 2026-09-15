@@ -14,14 +14,12 @@
 //! - `reconciliation_difference_resolution`：`(reconciliation_difference_id,
 //!   resolution_no)` 唯一，历史只追加。
 
-use mongodb::{
-    bson::{doc, Document},
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::bson::{Document, doc};
+use mongodb::options::IndexOptions;
+use mongodb::{Database, IndexModel};
+use persistence_core::Result;
 
 use crate::repository::IntegrationOpsExt;
-use persistence_core::Result;
 
 /// `inbox_message` 集合名。
 pub(crate) const INBOX_MESSAGES: &str = <mongodb::Database as IntegrationOpsExt>::INBOX_MESSAGES;
@@ -50,26 +48,15 @@ pub(crate) const RECONCILIATION_DIFFERENCE_RESOLUTIONS: &str =
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, INBOX_MESSAGES, inbox_message_indexes()).await?;
     create_indexes(db, INTEGRATION_ERROR_TASKS, integration_error_task_indexes()).await?;
-    create_indexes(
-        db,
-        RECONCILIATION_DIFFERENCES,
-        reconciliation_difference_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        RECONCILIATION_DIFFERENCE_RESOLUTIONS,
-        reconciliation_difference_resolution_indexes(),
-    )
-    .await?;
+    create_indexes(db, RECONCILIATION_DIFFERENCES, reconciliation_difference_indexes()).await?;
+    create_indexes(db, RECONCILIATION_DIFFERENCE_RESOLUTIONS, reconciliation_difference_resolution_indexes())
+        .await?;
     Ok(())
 }
 
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection)
-        .create_indexes(indexes)
-        .await?;
+    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -80,18 +67,9 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// `(message_type, business_fact_key)` 全局唯一索引，无需部分索引。
 fn inbox_message_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_inbox_messages_identity",
-            doc! { "source_system_id": 1, "source_event_id": 1 },
-        ),
-        unique_index(
-            "uk_inbox_messages_business_fact",
-            doc! { "message_type": 1, "business_fact_key": 1 },
-        ),
-        named_index(
-            "idx_inbox_messages_backlog",
-            doc! { "status": 1, "received_at": 1 },
-        ),
+        unique_index("uk_inbox_messages_identity", doc! { "source_system_id": 1, "source_event_id": 1 }),
+        unique_index("uk_inbox_messages_business_fact", doc! { "message_type": 1, "business_fact_key": 1 }),
+        named_index("idx_inbox_messages_backlog", doc! { "status": 1, "received_at": 1 }),
     ]
 }
 
@@ -162,10 +140,7 @@ fn reconciliation_difference_resolution_indexes() -> Vec<IndexModel> {
 
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).build())
-        .build()
+    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
 /// 构建命名唯一索引。
@@ -210,10 +185,7 @@ mod tests {
                     == Some("uk_inbox_messages_identity")
             })
             .unwrap();
-        assert_eq!(
-            identity.keys,
-            doc! { "source_system_id": 1, "source_event_id": 1 }
-        );
+        assert_eq!(identity.keys, doc! { "source_system_id": 1, "source_event_id": 1 });
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
 
         let business_fact = indexes
@@ -223,15 +195,10 @@ mod tests {
                     == Some("uk_inbox_messages_business_fact")
             })
             .unwrap();
-        assert_eq!(
-            business_fact.keys,
-            doc! { "message_type": 1, "business_fact_key": 1 }
-        );
+        assert_eq!(business_fact.keys, doc! { "message_type": 1, "business_fact_key": 1 });
         assert_eq!(business_fact.options.as_ref().unwrap().unique, Some(true));
 
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "status": 1, "received_at": 1 }));
+        assert!(indexes.iter().any(|index| index.keys == doc! { "status": 1, "received_at": 1 }));
     }
 
     #[test]
@@ -256,9 +223,9 @@ mod tests {
             })
         );
 
-        assert!(indexes
-            .iter()
-            .any(|index| index.keys == doc! { "status": 1, "owner_role": 1, "created_at": 1 }));
+        assert!(
+            indexes.iter().any(|index| index.keys == doc! { "status": 1, "owner_role": 1, "created_at": 1 })
+        );
     }
 
     #[test]
@@ -269,9 +236,11 @@ mod tests {
                 == Some("uk_reconciliation_differences_object")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
-        assert!(difference_indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "business_object_type": 1, "created_at": 1 } }));
+        assert!(
+            difference_indexes
+                .iter()
+                .any(|index| { index.keys == doc! { "business_object_type": 1, "created_at": 1 } })
+        );
 
         let resolution_indexes = reconciliation_difference_resolution_indexes();
         let sequence = resolution_indexes
@@ -281,13 +250,10 @@ mod tests {
                     == Some("uk_reconciliation_difference_resolutions_no")
             })
             .unwrap();
-        assert_eq!(
-            sequence.keys,
-            doc! { "reconciliation_difference_id": 1, "resolution_no": 1 }
-        );
+        assert_eq!(sequence.keys, doc! { "reconciliation_difference_id": 1, "resolution_no": 1 });
         assert_eq!(sequence.options.as_ref().unwrap().unique, Some(true));
-        assert!(resolution_indexes
-            .iter()
-            .any(|index| index.keys == doc! { "reconciliation_difference_id": 1 }));
+        assert!(
+            resolution_indexes.iter().any(|index| index.keys == doc! { "reconciliation_difference_id": 1 })
+        );
     }
 }

@@ -35,16 +35,12 @@ pub use self::source::{
     RecordSettlementSourceEvidenceLineRequest, RecordSettlementSourceEvidenceRequest,
     SupplierSettlementSourceEvidenceQuery, SupplierSettlementSourceEvidenceView,
 };
-
 #[cfg(test)]
 use crate::dto::supplier_fulfillment::normalize_sort;
 
 /// 校验需写入幂等收据的操作 ID 不含协议分隔符。
 fn safe_command_id(value: &str) -> std::result::Result<(), validator::ValidationError> {
-    if value
-        .bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':'))
-    {
+    if value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':')) {
         return Ok(());
     }
     Err(validator::ValidationError::new("操作ID包含非法字符"))
@@ -52,16 +48,16 @@ fn safe_command_id(value: &str) -> std::result::Result<(), validator::Validation
 
 #[cfg(test)]
 mod tests {
+    use validator::Validate;
+
     use super::review::SettlementReviewDecisionData;
     use super::{
-        normalize_sort, SettlementDifferenceDecisionRequest, SettlementDifferenceResolution,
-        SettlementReviewAction, SettlementReviewCommand, SubmitSettlementReviewRequest,
-        SupplierSettlementDifferenceListParams, SupplierSettlementItemListParams,
-        SupplierSettlementStatementListParams,
+        SettlementDifferenceDecisionRequest, SettlementDifferenceResolution, SettlementReviewAction,
+        SettlementReviewCommand, SubmitSettlementReviewRequest, SupplierSettlementDifferenceListParams,
+        SupplierSettlementItemListParams, SupplierSettlementStatementListParams, normalize_sort,
     };
     use crate::dto::supplier_fulfillment::SortDir;
     use crate::entity::supplier_settlement::SettlementStatus;
-    use validator::Validate;
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
@@ -178,10 +174,7 @@ mod tests {
             idempotency_key: "difference-key-1".to_string(),
         };
         assert!(request.validate().is_ok());
-        assert_eq!(
-            serde_json::to_value(request).unwrap()["resolution"],
-            "CLOSED_NO_ADJUSTMENT"
-        );
+        assert_eq!(serde_json::to_value(request).unwrap()["resolution"], "CLOSED_NO_ADJUSTMENT");
 
         let command = SettlementReviewCommand {
             work_item_id: "work-item-1".to_string(),
@@ -197,10 +190,7 @@ mod tests {
             },
             idempotency_key: "confirm-key-1".to_string(),
         };
-        assert_eq!(
-            serde_json::to_value(command).unwrap()["decision"]["action"],
-            "CONFIRM"
-        );
+        assert_eq!(serde_json::to_value(command).unwrap()["decision"]["action"], "CONFIRM");
     }
 
     #[test]

@@ -1,23 +1,21 @@
 use std::collections::HashMap;
 
-use crate::entity::rbac::Permission;
-use crate::entity::role::Role;
-use crate::AccessControlExt;
+use application_core::AuditActor;
 use casbin::RbacApi;
 use erp_core::AccountKind;
 use persistence_core::NoTransaction;
 
-use super::{
-    authorize::role_is_assignable,
-    policy::{
-        collect_role_ids, collect_role_permissions, implicit_permissions_for_role, parse_policy_permissions,
-        permissions_for_actor, role_ids_for_account,
-    },
-    subject, RbacService,
+use super::authorize::role_is_assignable;
+use super::policy::{
+    collect_role_ids, collect_role_permissions, implicit_permissions_for_role, parse_policy_permissions,
+    permissions_for_actor, role_ids_for_account,
 };
+use super::{RbacService, subject};
+use crate::AccessControlExt;
 use crate::dto::RoleItem;
+use crate::entity::rbac::Permission;
+use crate::entity::role::Role;
 use crate::error::Result;
-use application_core::AuditActor;
 
 impl RbacService {
     /// 查询全部角色及其直接权限。

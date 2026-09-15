@@ -3,9 +3,10 @@
 //! 映射规则由 `crate::entity::approval_integration` 独占。本模块保留 BPM 边界脚本
 //! 要求的穷尽 match 入口，供尚未迁入实体层的其他域调用点使用。
 
+use bpm::ProcessKind;
+
 use crate::entity::approval_integration;
 use crate::entity::document_registry::DocumentType;
-use bpm::ProcessKind;
 
 /// 将 ERP 单据类型映射为 BPM 流程种类。
 ///

@@ -7,9 +7,9 @@
 //! ID 与时钟由 Service 显式注入：任务主键 `WorkItemId` 与活动时间 `Instant` 均为
 //! 参数；本模块不生成 ID、不读取全局时钟、不访问 I/O。
 
-use chrono::{FixedOffset, TimeZone};
 use std::str::FromStr;
 
+use chrono::{FixedOffset, TimeZone};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::WorkItemId;
 use erp_core::money::Amount;
@@ -231,9 +231,7 @@ pub fn matches_sales_invoice_identity(task: &WorkItem, account_id: &str) -> bool
         && task.business_object_type == RECEIVABLE_OBJECT_TYPE
         && task.business_object_id == account_id
         && task.owner_role == FINANCE_OWNER_ROLE
-        && task
-            .responsibility_key()
-            .is_some_and(|key| key.starts_with("finance:SALES_INVOICE:"))
+        && task.responsibility_key().is_some_and(|key| key.starts_with("finance:SALES_INVOICE:"))
         && matches!(
             task.reason_code.as_deref(),
             Some(
@@ -277,9 +275,7 @@ pub fn matches_supplier_payment_identity(task: &WorkItem, account_id: &str) -> b
         && task.business_object_type == PAYABLE_OBJECT_TYPE
         && task.business_object_id == account_id
         && task.owner_role == FINANCE_OWNER_ROLE
-        && task
-            .responsibility_key()
-            .is_some_and(|key| key.starts_with("finance:SUPPLIER_PAYMENT:"))
+        && task.responsibility_key().is_some_and(|key| key.starts_with("finance:SUPPLIER_PAYMENT:"))
         && matches!(
             task.reason_code.as_deref(),
             Some("PAYABLE_PAYMENT_REQUIRED" | "PAYABLE_REOPENED_BY_REVERSAL")
@@ -323,10 +319,12 @@ pub fn payment_due_at(due_date: BusinessDate) -> Result<Instant> {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use erp_core::ids::WorkItemId;
+
     use super::*;
     use crate::entity::work_item::WorkItemStatus;
-    use erp_core::ids::WorkItemId;
-    use std::str::FromStr;
 
     fn amount(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -365,20 +363,19 @@ mod tests {
         assert_ne!(first.responsibility_key(), second.responsibility_key());
         assert!(matches_sales_invoice_identity(&first, "ra-1"));
         assert!(matches_sales_invoice_identity(&second, "ra-1"));
-        assert_eq!(
-            first.reason_code.as_deref(),
-            Some("SALES_INVOICE_REQUEST_APPROVED")
-        );
+        assert_eq!(first.reason_code.as_deref(), Some("SALES_INVOICE_REQUEST_APPROVED"));
         assert!(first.impact_summary.as_deref().unwrap().contains("KP-001"));
         assert!(first.impact_summary.as_deref().unwrap().contains("100.00"));
-        assert!(new_approved_sales_invoice_task(
-            WorkItemId::new("t3"),
-            sales_spec(),
-            "finance:SALES_INVOICE:rule",
-            "",
-            "KP-003"
-        )
-        .is_err());
+        assert!(
+            new_approved_sales_invoice_task(
+                WorkItemId::new("t3"),
+                sales_spec(),
+                "finance:SALES_INVOICE:rule",
+                "",
+                "KP-003"
+            )
+            .is_err()
+        );
     }
 
     fn sales_task() -> WorkItem {
@@ -400,11 +397,7 @@ mod tests {
         assert_eq!(first.business_object_id, "ra-1");
         assert_eq!(first.owner_role, FINANCE_OWNER_ROLE);
         assert_eq!(first.reason_code.as_deref(), Some("RECEIVABLE_INVOICE_REQUIRED"));
-        assert_eq!(
-            first.responsibility_key(),
-            second.responsibility_key(),
-            "同一业务事实责任键稳定"
-        );
+        assert_eq!(first.responsibility_key(), second.responsibility_key(), "同一业务事实责任键稳定");
         assert_eq!(first.impact_summary, second.impact_summary);
         assert_eq!(first.due_at, second.due_at);
         assert!(first.impact_summary.as_deref().unwrap().contains("100"));
@@ -415,31 +408,19 @@ mod tests {
     fn sales_invoice_identity_rejects_wrong_dimensions() {
         let task = sales_task();
         assert!(matches_sales_invoice_identity(&task, "ra-1"));
-        assert!(
-            !matches_sales_invoice_identity(&task, "ra-2"),
-            "business key 不符"
-        );
+        assert!(!matches_sales_invoice_identity(&task, "ra-2"), "business key 不符");
         let mut wrong_type = task.clone();
         wrong_type.work_item_type = WorkItemType::SupplierPaymentExecution;
-        assert!(
-            !matches_sales_invoice_identity(&wrong_type, "ra-1"),
-            "task type 不符"
-        );
+        assert!(!matches_sales_invoice_identity(&wrong_type, "ra-1"), "task type 不符");
         let mut wrong_object = task.clone();
         wrong_object.business_object_type = "payable_account".to_string();
-        assert!(
-            !matches_sales_invoice_identity(&wrong_object, "ra-1"),
-            "object 不符"
-        );
+        assert!(!matches_sales_invoice_identity(&wrong_object, "ra-1"), "object 不符");
         let mut wrong_role = task.clone();
         wrong_role.owner_role = "role-other".to_string();
         assert!(!matches_sales_invoice_identity(&wrong_role, "ra-1"), "role 不符");
         let mut wrong_reason = task.clone();
         wrong_reason.reason_code = Some("UNKNOWN".to_string());
-        assert!(
-            !matches_sales_invoice_identity(&wrong_reason, "ra-1"),
-            "reason 不符"
-        );
+        assert!(!matches_sales_invoice_identity(&wrong_reason, "ra-1"), "reason 不符");
         let wrong_key = WorkItem::new_with_responsibility_key(
             WorkItemId::new("wi-2"),
             WorkItemData {
@@ -459,25 +440,18 @@ mod tests {
             "finance:OTHER:cust-1".to_string(),
         )
         .unwrap();
-        assert!(
-            !matches_sales_invoice_identity(&wrong_key, "ra-1"),
-            "business key 前缀不符"
-        );
+        assert!(!matches_sales_invoice_identity(&wrong_key, "ra-1"), "business key 前缀不符");
     }
 
     /// 红票/销售变更重开原因同样通过身份校验。
     #[test]
     fn sales_invoice_reopened_reasons_match_identity() {
-        for reason in [
-            SalesInvoiceTaskReason::ReopenedByRedInvoice,
-            SalesInvoiceTaskReason::ReopenedBySalesChange,
-        ] {
+        for reason in
+            [SalesInvoiceTaskReason::ReopenedByRedInvoice, SalesInvoiceTaskReason::ReopenedBySalesChange]
+        {
             let task = new_sales_invoice_task(
                 WorkItemId::new("wi-1"),
-                SalesInvoiceTaskSpec {
-                    reason,
-                    ..sales_spec()
-                },
+                SalesInvoiceTaskSpec { reason, ..sales_spec() },
                 "finance:SALES_INVOICE:cust-1".to_string(),
             )
             .unwrap();
@@ -543,34 +517,19 @@ mod tests {
     fn supplier_payment_identity_rejects_wrong_dimensions() {
         let task = supplier_task();
         assert!(matches_supplier_payment_identity(&task, "pa-1"));
-        assert!(
-            !matches_supplier_payment_identity(&task, "pa-2"),
-            "business key 不符"
-        );
+        assert!(!matches_supplier_payment_identity(&task, "pa-2"), "business key 不符");
         let mut wrong_type = task.clone();
         wrong_type.work_item_type = WorkItemType::SalesInvoiceExecution;
-        assert!(
-            !matches_supplier_payment_identity(&wrong_type, "pa-1"),
-            "task type 不符"
-        );
+        assert!(!matches_supplier_payment_identity(&wrong_type, "pa-1"), "task type 不符");
         let mut wrong_object = task.clone();
         wrong_object.business_object_type = "receivable_account".to_string();
-        assert!(
-            !matches_supplier_payment_identity(&wrong_object, "pa-1"),
-            "object 不符"
-        );
+        assert!(!matches_supplier_payment_identity(&wrong_object, "pa-1"), "object 不符");
         let mut wrong_role = task.clone();
         wrong_role.owner_role = "role-other".to_string();
-        assert!(
-            !matches_supplier_payment_identity(&wrong_role, "pa-1"),
-            "role 不符"
-        );
+        assert!(!matches_supplier_payment_identity(&wrong_role, "pa-1"), "role 不符");
         let mut wrong_reason = task.clone();
         wrong_reason.reason_code = Some("UNKNOWN".to_string());
-        assert!(
-            !matches_supplier_payment_identity(&wrong_reason, "pa-1"),
-            "reason 不符"
-        );
+        assert!(!matches_supplier_payment_identity(&wrong_reason, "pa-1"), "reason 不符");
         let reopened = new_supplier_payment_task(
             WorkItemId::new("wi-2"),
             SupplierPaymentTaskSpec {
@@ -580,10 +539,7 @@ mod tests {
             "finance:SUPPLIER_PAYMENT:sup-1".to_string(),
         )
         .unwrap();
-        assert_eq!(
-            reopened.reason_code.as_deref(),
-            Some("PAYABLE_REOPENED_BY_REVERSAL")
-        );
+        assert_eq!(reopened.reason_code.as_deref(), Some("PAYABLE_REOPENED_BY_REVERSAL"));
         assert!(matches_supplier_payment_identity(&reopened, "pa-1"));
     }
 
@@ -604,12 +560,9 @@ mod tests {
     #[test]
     fn supplier_payment_terminal_state_is_closed() {
         let mut task = supplier_task();
-        task.complete_when_payable_settled(Instant::from_unix_secs(100))
-            .unwrap();
+        task.complete_when_payable_settled(Instant::from_unix_secs(100)).unwrap();
         assert_eq!(task.status, WorkItemStatus::Completed);
-        assert!(task
-            .complete_when_payable_settled(Instant::from_unix_secs(101))
-            .is_err());
+        assert!(task.complete_when_payable_settled(Instant::from_unix_secs(101)).is_err());
         assert!(task.update_impact_summary(Some("changed".to_string())).is_err());
     }
 
@@ -633,17 +586,8 @@ mod tests {
             }
         }
         assert!(is_purchase_payable(&fact(true, "po-1", false, "po-1")));
-        assert!(
-            !is_purchase_payable(&fact(false, "po-1", false, "po-1")),
-            "来源类型不符"
-        );
-        assert!(
-            !is_purchase_payable(&fact(true, "po-1", false, "po-2")),
-            "单据不一致"
-        );
-        assert!(
-            !is_purchase_payable(&fact(true, "po-1", true, "po-1")),
-            "已结清不得建任务"
-        );
+        assert!(!is_purchase_payable(&fact(false, "po-1", false, "po-1")), "来源类型不符");
+        assert!(!is_purchase_payable(&fact(true, "po-1", false, "po-2")), "单据不一致");
+        assert!(!is_purchase_payable(&fact(true, "po-1", true, "po-1")), "已结清不得建任务");
     }
 }
