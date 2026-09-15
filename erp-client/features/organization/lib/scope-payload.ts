@@ -4,6 +4,45 @@ import type { CreateDataScopeInput } from "@/features/organization/types"
 const RESOURCE_ACTION_PATTERN = /^[a-z0-9_]{1,128}$/
 const STABLE_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/
 
+/** 与 `erp-identity` `WIRED_CONSUMERS` 同步；未接线资源不得出现在可配置清单。 */
+const WIRED_CONSUMERS: ReadonlyArray<{
+    resource: string
+    actions: readonly string[]
+}> = [
+    { resource: "org_unit", actions: ["list", "manage"] },
+    {
+        resource: "customer",
+        actions: ["list", "detail", "create", "update", "delete"],
+    },
+    { resource: "contract", actions: ["list", "detail", "create", "update"] },
+    {
+        resource: "sales_order",
+        actions: [
+            "list",
+            "detail",
+            "create",
+            "update",
+            "delete",
+            "submit",
+            "cancel_approval",
+        ],
+    },
+    {
+        resource: "purchase_order",
+        actions: [
+            "list",
+            "detail",
+            "create",
+            "update",
+            "delete",
+            "submit",
+            "cancel_approval",
+        ],
+    },
+    { resource: "cost_entry", actions: ["list", "detail"] },
+    { resource: "cost_allocation", actions: ["list"] },
+]
+
 export function isRegisteredIdentifier(value: string): boolean {
     return RESOURCE_ACTION_PATTERN.test(value)
 }
@@ -12,11 +51,20 @@ export function isStableIdentity(value: string): boolean {
     return STABLE_ID_PATTERN.test(value) && !value.includes("*")
 }
 
+export function isWiredResourceAction(
+    resource: string,
+    action: string,
+): boolean {
+    return WIRED_CONSUMERS.some(
+        (item) => item.resource === resource && item.actions.includes(action),
+    )
+}
+
 export function registeredResources(): Array<{
     resource: string
     actions: string[]
 }> {
-    const byResource = new Map<string, Set<string>>()
+    const catalog = new Set<string>()
     for (const group of PERMISSION_GROUPS) {
         for (const item of group.permissions) {
             const resource = item.permission.resource
@@ -27,15 +75,19 @@ export function registeredResources(): Array<{
             ) {
                 continue
             }
-            const bucket = byResource.get(resource) ?? new Set<string>()
-            bucket.add(action)
-            byResource.set(resource, bucket)
+            catalog.add(`${resource}:${action}`)
         }
     }
-    return [...byResource.entries()].map(([resource, actions]) => ({
-        resource,
-        actions: [...actions].sort(),
-    }))
+    return WIRED_CONSUMERS.flatMap(({ resource, actions }) => {
+        const wired = actions.filter(
+            (action) =>
+                isRegisteredIdentifier(action) &&
+                catalog.has(`${resource}:${action}`),
+        )
+        return wired.length > 0
+            ? [{ resource, actions: [...wired].sort() }]
+            : []
+    })
 }
 
 export function validateCreateDataScope(
@@ -49,6 +101,13 @@ export function validateCreateDataScope(
         input.actions.some((action) => !isRegisteredIdentifier(action))
     ) {
         return "动作必须使用已注册标识，禁止通配符和显示名"
+    }
+    if (
+        input.actions.some(
+            (action) => !isWiredResourceAction(input.resource, action),
+        )
+    ) {
+        return "资源或动作尚未接入 DataScope v2"
     }
     if (!isStableIdentity(input.subjectId)) {
         return "主体必须使用稳定 ID，不能用显示名"

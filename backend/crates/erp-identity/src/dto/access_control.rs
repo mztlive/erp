@@ -285,6 +285,71 @@ impl From<DataScope> for DataScopeView {
     }
 }
 
+/// 范围配置列表信封；版本与空集字段与组织查询同口径。
+#[derive(Debug, Clone, Serialize)]
+pub struct DataScopeListView {
+    /// 当前页配置项；不含版本元数据。
+    #[serde(flatten)]
+    pub page: PageView<DataScopeView>,
+    /// 本次列表范围版本。
+    pub scope_version: String,
+    /// 当前权限策略版本。
+    pub policy_version: u64,
+    /// 当前组织版本。
+    pub organization_version: u64,
+    /// 解析时点（RFC3339 UTC）。
+    pub as_of: String,
+    /// 角色缺范围时为 `no_scope`；有规则但无配置时为空。
+    pub empty_reason: Option<&'static str>,
+    /// 面向客户端的范围摘要，不含内部证明。
+    pub scope_summary: &'static str,
+    /// 范围配置归属口径。
+    pub ownership_basis: &'static str,
+}
+
+/// 范围配置列表信封所需的版本与空集字段。
+pub struct DataScopeListMeta {
+    /// 本次列表范围版本。
+    pub scope_version: String,
+    /// 当前权限策略版本。
+    pub policy_version: u64,
+    /// 当前组织版本。
+    pub organization_version: u64,
+    /// 解析时点（RFC3339 UTC）。
+    pub as_of: String,
+    /// 角色是否缺少该动作范围。
+    pub no_scope: bool,
+}
+
+impl DataScopeListView {
+    /// 组合范围配置列表信封。
+    ///
+    /// # 参数
+    /// * `page` - 当前页配置项与分页计数
+    /// * `meta` - 范围、权限、组织版本与空集标记
+    ///
+    /// # 返回
+    /// 与组织查询同口径的列表信封。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 版本与空集原因只出现在信封上，不得写入单条配置。缺范围标记 `no_scope`，不得补 Company。
+    pub fn compose(page: PageView<DataScopeView>, meta: DataScopeListMeta) -> Self {
+        Self {
+            page,
+            scope_version: meta.scope_version,
+            policy_version: meta.policy_version,
+            organization_version: meta.organization_version,
+            as_of: meta.as_of,
+            empty_reason: meta.no_scope.then_some("no_scope"),
+            scope_summary: "已接入 DataScope v2 的资源动作配置",
+            ownership_basis: "data_scope_configuration",
+        }
+    }
+}
+
 /// 数据范围创建请求（主体 + 范围类型唯一）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
@@ -333,6 +398,8 @@ pub struct DataScopeListParams {
     pub resource: Option<String>,
     /// 动作筛选（已注册标识，禁止通配与显示名）。
     pub action: Option<String>,
+    /// 跨页携带的范围版本；缺省表示首页。
+    pub scope_version: Option<String>,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
@@ -358,6 +425,8 @@ pub(crate) struct DataScopeListQuery {
     pub resource: Option<String>,
     /// 动作筛选。
     pub action: Option<String>,
+    /// 跨页携带的范围版本。
+    pub scope_version: Option<String>,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -388,6 +457,7 @@ impl DataScopeListParams {
             subject_id,
             resource: registered_identifier(self.resource.as_deref(), "资源")?,
             action: registered_identifier(self.action.as_deref(), "动作")?,
+            scope_version: normalized_text(self.scope_version.as_deref()),
             paging: PageParams {
                 page: page_or_default(self.page),
                 page_size: page_size_or_default(self.page_size),
@@ -716,7 +786,8 @@ impl AuditEventListParams {
 mod tests {
     use super::{
         normalize_sort, AssignUserRoleRequest, AuditEventListParams, CreateDataScopeRequest,
-        CreatePermissionRequest, DataScopeListParams, PermissionListParams, SortDir, UpdatePermissionRequest,
+        CreatePermissionRequest, DataScopeListMeta, DataScopeListParams, DataScopeListView, PageView,
+        PermissionListParams, SortDir, UpdatePermissionRequest,
     };
     use crate::entity::access_control::{AuditEventResult, DataScopeSubjectType, DataScopeType};
     use serde_json::json;
@@ -772,6 +843,7 @@ mod tests {
             subject_id: Some(" role-sales ".to_string()),
             resource: Some(" sales_order ".to_string()),
             action: Some(" list ".to_string()),
+            scope_version: Some(" scope-v ".to_string()),
             page: None,
             page_size: None,
             sort_by: None,
@@ -781,6 +853,7 @@ mod tests {
         assert_eq!(query.subject_id.as_deref(), Some("role-sales"));
         assert_eq!(query.resource.as_deref(), Some("sales_order"));
         assert_eq!(query.action.as_deref(), Some("list"));
+        assert_eq!(query.scope_version.as_deref(), Some("scope-v"));
 
         let missing = DataScopeListParams {
             subject_type: None,
@@ -788,6 +861,7 @@ mod tests {
             subject_id: Some("role-sales".to_string()),
             resource: None,
             action: None,
+            scope_version: None,
             page: None,
             page_size: None,
             sort_by: None,
@@ -801,12 +875,40 @@ mod tests {
             subject_id: None,
             resource: Some("*".to_string()),
             action: None,
+            scope_version: None,
             page: None,
             page_size: None,
             sort_by: None,
             sort_dir: None,
         };
         assert!(wildcard.normalized().is_err());
+    }
+
+    #[test]
+    fn data_scope_list_envelope_keeps_versions_off_items() {
+        let view = DataScopeListView::compose(
+            PageView {
+                items: Vec::new(),
+                total: 0,
+                page: 1,
+                page_size: 20,
+            },
+            DataScopeListMeta {
+                scope_version: "scope-v".into(),
+                policy_version: 3,
+                organization_version: 4,
+                as_of: "2026-09-15T00:00:00Z".into(),
+                no_scope: true,
+            },
+        );
+        let json = serde_json::to_value(&view).unwrap();
+        assert_eq!(json["empty_reason"], "no_scope");
+        assert_eq!(json["scope_version"], "scope-v");
+        assert_eq!(json["policy_version"], 3);
+        assert_eq!(json["organization_version"], 4);
+        assert_eq!(json["ownership_basis"], "data_scope_configuration");
+        assert_eq!(json["items"].as_array().unwrap().len(), 0);
+        assert!(json.get("role_clauses").is_none());
     }
 
     #[test]

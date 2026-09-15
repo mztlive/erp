@@ -1,13 +1,14 @@
 //! 内部组织查询、影响预览及事务变更。
 
+mod access;
+
 use application_core::AuditActor;
-use entity_core::BaseModel;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use std::sync::Arc;
 
-use crate::access_control::ScopedObject;
+use self::access::{prepare_organization_change, visible_state};
 use crate::dto::{OrgPersonView, OrgRoleView, OrganizationStateView};
 use crate::entity::organization_change::*;
 use crate::ports::OrganizationBusinessPort;
@@ -183,6 +184,20 @@ impl OrganizationService {
     }
 
     /// 统一预览和提交的事务快照与授权校验路径。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证操作人
+    /// * `request` - 含期望版本、幂等键和变更命令
+    /// * `preview` - 预览不写入仓储
+    ///
+    /// # 返回
+    /// 可见边界内的变更回执。
+    ///
+    /// # 错误
+    /// 权限、期望版本、越界、未结业务或幂等异载荷失败时回滚。
+    ///
+    /// # 关键业务约束
+    /// 预览与提交共用校验；只有提交且无回放时持久化。
     async fn execute(
         &self,
         actor: &AuditActor,
@@ -201,27 +216,26 @@ impl OrganizationService {
                     let access = this.access(&actor, "manage", session).await?;
                     let repository = OrganizationRepository::new(&this.db);
                     let receipt_id = format!("{}:{}", actor.id(), request.idempotency_key);
-                    if let Some(receipt) = repository.receipt(&receipt_id, session).await? {
-                        return replay(receipt, &request, &access);
+                    let existing = repository.receipt(&receipt_id, session).await?;
+                    if existing.is_none() {
+                        this.ensure_change(&request.change, &access, session).await?;
+                        if this.rbac.current_policy_revision().await? != access.policy_version {
+                            return Err(Error::ConflictError("授权版本已变化，请刷新后重试".into()));
+                        }
                     }
-                    this.ensure_change(&request.change, &access, session).await?;
-                    if this.rbac.current_policy_revision().await? != access.policy_version {
-                        return Err(Error::ConflictError("授权版本已变化，请刷新后重试".into()));
-                    }
-                    let at = Instant::now();
-                    let after = access.organizations.changed(&request, &id, actor.id(), at)?;
-                    let mut receipt = OrganizationChangeReceipt {
-                        base: BaseModel::new(receipt_id),
-                        actor_id: actor.id().into(),
+                    let (mut receipt, persist) = prepare_organization_change(
+                        preview,
+                        existing,
                         request,
-                        before: access.organizations.clone(),
-                        after,
-                        as_of: at,
-                    };
-                    if !preview {
+                        &access,
+                        &id,
+                        actor.id(),
+                        Instant::now(),
+                    )?;
+                    if persist {
                         repository.save(&mut receipt, session).await?;
                     }
-                    Ok::<_, Error>(visible_receipt(receipt, &access))
+                    Ok::<_, Error>(receipt)
                 })
             })
             .await
@@ -246,7 +260,7 @@ impl OrganizationService {
         access: &AuthorizedDataScope,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        ensure_targets(change, access)?;
+        access::ensure_targets(change, access)?;
         match change {
             OrganizationOperation::TransferMember { user_id, .. } => {
                 self.ensure_account(user_id, executor).await?;
@@ -294,126 +308,4 @@ impl OrganizationService {
         }
         Ok(())
     }
-}
-
-/// 以组织对象身份判断配置边界，不使用“同部门”作为权限。
-fn covers(access: &AuthorizedDataScope, id: Option<&str>) -> bool {
-    access.scope.allows(
-        &ScopedObject {
-            owned: false,
-            collaborating: false,
-            historical_read_participant: false,
-            org_unit_id: id,
-            settlement_party_id: None,
-            warehouse_id: None,
-        },
-        false,
-    )
-}
-
-/// 组织移动和包含下级授权须覆盖整个相关子树；调岗同时检查原组织和新组织。
-fn ensure_targets(change: &OrganizationOperation, access: &AuthorizedDataScope) -> Result<()> {
-    use OrganizationOperation::*;
-    let state = &access.organizations;
-    let mut targets = Vec::<Option<&str>>::new();
-    match change {
-        CreateUnit { parent_id, .. } => targets.push(parent_id.as_deref()),
-        MoveUnit {
-            org_unit_id,
-            parent_id,
-        } => {
-            targets.push(parent_id.as_deref());
-            add_subtree_targets(state, org_unit_id, &mut targets)?;
-        }
-        RenameUnit { org_unit_id, .. } | DisableUnit { org_unit_id } => targets.push(Some(org_unit_id)),
-        TransferMember { user_id, org_unit_id } => {
-            targets.push(Some(org_unit_id));
-            targets.push(state.own_org(user_id, access.as_of)?);
-        }
-        EndMembership { user_id } => targets.push(state.own_org(user_id, access.as_of)?),
-        GrantManagement {
-            org_unit_id,
-            include_descendants,
-            ..
-        } => {
-            targets.push(Some(org_unit_id));
-            if *include_descendants {
-                add_subtree_targets(state, org_unit_id, &mut targets)?;
-            }
-        }
-        RevokeManagement { assignment_id } => {
-            let grant = state
-                .management
-                .iter()
-                .find(|g| g.base.id == *assignment_id)
-                .ok_or_else(|| Error::NotFound("管理关系不存在".into()))?;
-            targets.push(Some(&grant.org_unit_id));
-            if grant.include_descendants {
-                add_subtree_targets(state, &grant.org_unit_id, &mut targets)?;
-            }
-        }
-    }
-    if targets.into_iter().any(|id| !covers(access, id)) {
-        return Err(Error::Forbidden("目标超出组织配置管理边界".into()));
-    }
-    Ok(())
-}
-
-/// 使用完整树验证子树边界；不按当前页或名称判断。
-fn add_subtree_targets<'a>(
-    state: &'a OrganizationState,
-    id: &str,
-    targets: &mut Vec<Option<&'a str>>,
-) -> Result<()> {
-    let tree = crate::entity::organization::OrgTree::new(&state.units)?;
-    let ids = tree.expand(id, true)?;
-    targets.extend(
-        state
-            .units
-            .iter()
-            .filter(|u| ids.contains(&u.base.id))
-            .map(|u| Some(u.base.id.as_str())),
-    );
-    Ok(())
-}
-
-/// 幂等回放前仍检查当前管理边界，撤权后不能通过回执取回旧宽范围事实。
-fn replay(
-    receipt: OrganizationChangeReceipt,
-    request: &OrganizationChangeRequest,
-    access: &AuthorizedDataScope,
-) -> Result<OrganizationChangeReceipt> {
-    if receipt.request != *request {
-        return Err(Error::ConflictError("幂等键已用于不同变更".into()));
-    }
-    ensure_targets(&request.change, access)?;
-    Ok(visible_receipt(receipt, access))
-}
-
-/// 客户端只接收当前可管理节点和相应关系，隐藏不可见父身份。
-fn visible_state(mut state: OrganizationState, access: &AuthorizedDataScope) -> OrganizationState {
-    state.units.retain(|u| covers(access, Some(&u.base.id)));
-    let ids = state
-        .units
-        .iter()
-        .map(|u| u.base.id.clone())
-        .collect::<std::collections::BTreeSet<_>>();
-    for unit in &mut state.units {
-        if unit.parent_id.as_ref().is_some_and(|id| !ids.contains(id)) {
-            unit.parent_id = None;
-        }
-    }
-    state.memberships.retain(|m| ids.contains(&m.org_unit_id));
-    state.management.retain(|m| ids.contains(&m.org_unit_id));
-    state
-}
-
-/// 审计回执仅投影当前管理范围内的前后事实。
-fn visible_receipt(
-    mut receipt: OrganizationChangeReceipt,
-    access: &AuthorizedDataScope,
-) -> OrganizationChangeReceipt {
-    receipt.before = visible_state(receipt.before, access);
-    receipt.after = visible_state(receipt.after, access);
-    receipt
 }

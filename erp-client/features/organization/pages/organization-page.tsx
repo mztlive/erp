@@ -29,10 +29,20 @@ import {
     usePreviewOrganizationChangeMutation,
     useSubmitOrganizationChangeMutation,
 } from "@/features/organization/hooks/queries"
-import { EMPTY_CHANGE_DRAFT, type OrganizationChangeDraft } from "@/features/organization/lib/change-payload"
+import {
+    EMPTY_CHANGE_DRAFT,
+    type OrganizationChangeDraft,
+} from "@/features/organization/lib/change-payload"
 import { organizationEmptyReason } from "@/features/organization/lib/empty-reason"
-import { KIND_LABEL, ORGANIZATION_BOUNDARY_NOTICE, PAGE_NARROW_CLASS } from "@/features/organization/lib/labels"
-import { buildOrganizationForest, flattenTree } from "@/features/organization/lib/tree"
+import {
+    KIND_LABEL,
+    ORGANIZATION_BOUNDARY_NOTICE,
+    PAGE_NARROW_CLASS,
+} from "@/features/organization/lib/labels"
+import {
+    buildOrganizationForest,
+    flattenTree,
+} from "@/features/organization/lib/tree"
 import {
     mergeOrganizationSearchParams,
     parseOrganizationSearchParams,
@@ -59,12 +69,11 @@ export function OrganizationPage() {
     )
 
     const profileQuery = useAccountProfileQuery()
-    const canList = hasPermission(profileQuery.data?.permissions, "org_unit:list")
     const canManage = hasPermission(
         profileQuery.data?.permissions,
         "org_unit:manage",
     )
-    const stateQuery = useOrganizationStateQuery(canList)
+    const stateQuery = useOrganizationStateQuery()
     const previewMutation = usePreviewOrganizationChangeMutation()
     const submitMutation = useSubmitOrganizationChangeMutation()
     const [searchDraft, setSearchDraft] = React.useState(url.q ?? "")
@@ -86,6 +95,7 @@ export function OrganizationPage() {
         noScope: view?.emptyReason === "no_scope",
         filtered: Boolean(url.q || url.kind !== "all" || url.status !== "all"),
         empty: forest.length === 0,
+        permissionPending: profileQuery.isPending,
     })
 
     const openChange = (
@@ -103,7 +113,7 @@ export function OrganizationPage() {
         setChangeOpen(true)
     }
 
-    if (stateQuery.isPending && canList) {
+    if (profileQuery.isPending || stateQuery.isPending) {
         return (
             <PageScaffold density="compact" className={styles.page}>
                 <div className="h-9 w-40 animate-pulse rounded-lg bg-muted" />
@@ -144,7 +154,8 @@ export function OrganizationPage() {
                 <Alert>
                     <AlertTitle>当前范围</AlertTitle>
                     <AlertDescription>
-                        {view.scopeSummary} · 组织版本 {view.organizationVersion}
+                        {view.scopeSummary} · 组织版本{" "}
+                        {view.organizationVersion}
                     </AlertDescription>
                 </Alert>
             ) : null}
@@ -256,7 +267,12 @@ export function OrganizationPage() {
                     />
                 }
                 table={
-                    stateQuery.isError && !view ? (
+                    emptyReason === "NO_MODULE_PERMISSION" ? (
+                        <OrganizationEmptyByReason
+                            idPrefix="organization"
+                            reason={emptyReason}
+                        />
+                    ) : stateQuery.isError && !view ? (
                         <BusinessFailureState
                             id="organization-retry"
                             title="组织列表加载失败"
@@ -311,7 +327,9 @@ export function OrganizationPage() {
                     expectedVersion={view.organizationVersion}
                     previewing={previewMutation.isPending}
                     submitting={submitMutation.isPending}
-                    onPreview={(request) => previewMutation.mutateAsync(request)}
+                    onPreview={(request) =>
+                        previewMutation.mutateAsync(request)
+                    }
                     onSubmit={async (request) => {
                         await submitMutation.mutateAsync(request)
                     }}

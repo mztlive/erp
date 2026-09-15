@@ -2,7 +2,11 @@
 
 import { Button } from "@/components/ui/button"
 import { KIND_LABEL } from "@/features/organization/lib/labels"
-import { personLabel, roleLabel } from "@/features/organization/lib/tree"
+import {
+    isRelationActive,
+    personLabel,
+    roleLabel,
+} from "@/features/organization/lib/tree"
 import type { OrgTreeNode } from "@/features/organization/lib/tree"
 import type { OrganizationStateView } from "@/features/organization/types"
 import { formatDateTime } from "@/lib/datetime"
@@ -29,7 +33,9 @@ export function OrganizationUnitPanel({
     return (
         <section className="min-w-0 space-y-4 overflow-x-hidden">
             <div className="min-w-0 space-y-1">
-                <h2 className="text-lg font-semibold wrap-anywhere">{unit.name}</h2>
+                <h2 className="text-lg font-semibold wrap-anywhere">
+                    {unit.name}
+                </h2>
                 <p className="text-sm text-muted-foreground">
                     {KIND_LABEL[unit.kind]} · {unit.enabled ? "启用" : "停用"}
                 </p>
@@ -115,7 +121,9 @@ export function OrganizationUnitPanel({
             <div className="min-w-0 space-y-2">
                 <h3 className="text-sm font-medium">成员</h3>
                 {node.members.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">当前没有主属成员。</p>
+                    <p className="text-sm text-muted-foreground">
+                        当前没有主属成员。
+                    </p>
                 ) : (
                     <ul className="min-w-0 space-y-2">
                         {node.members.map((member) => (
@@ -130,7 +138,12 @@ export function OrganizationUnitPanel({
                                         {instantLabel(member.valid_to)}
                                     </span>
                                 </span>
-                                {canManage ? (
+                                {canManage &&
+                                isRelationActive(
+                                    member.valid_from,
+                                    member.valid_to,
+                                    view.asOf,
+                                ) ? (
                                     <Button
                                         id={`organization-member-${toAutomationIdSegment(member.id)}-end`}
                                         type="button"
@@ -174,7 +187,12 @@ export function OrganizationUnitPanel({
                                         · {instantLabel(grant.valid_from)} 起
                                     </span>
                                 </span>
-                                {canManage ? (
+                                {canManage &&
+                                isRelationActive(
+                                    grant.valid_from,
+                                    grant.valid_to,
+                                    view.asOf,
+                                ) ? (
                                     <Button
                                         id={`organization-grant-${toAutomationIdSegment(grant.id)}-revoke`}
                                         type="button"

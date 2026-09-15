@@ -20,6 +20,7 @@ import type {
 
 export const organizationKeys = {
     all: ["organization"] as const,
+    /** 组织筛选只做客户端裁剪，请求键固定为 state，不随 unitId/q/kind/status 变化。 */
     state: () => [...organizationKeys.all, "state"] as const,
 }
 
@@ -29,19 +30,17 @@ export const dataScopeKeys = {
         [...dataScopeKeys.all, "list", query] as const,
 }
 
-export function useOrganizationStateQuery(enabled = true) {
+export function useOrganizationStateQuery() {
     return useQuery({
         queryKey: organizationKeys.state(),
         queryFn: fetchOrganizationState,
-        enabled,
     })
 }
 
-export function useDataScopesQuery(url: DataScopeUrlState, enabled = true) {
+export function useDataScopesQuery(url: DataScopeUrlState) {
     return useQuery({
         queryKey: dataScopeKeys.list(url),
         queryFn: () => fetchDataScopes(url),
-        enabled,
     })
 }
 

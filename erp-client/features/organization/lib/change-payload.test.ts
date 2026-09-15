@@ -3,6 +3,7 @@ import { expect, it } from "vitest"
 import {
     buildOrganizationChangeRequest,
     EMPTY_CHANGE_DRAFT,
+    sameOrganizationChangeRequest,
     shanghaiDateTimeToUnix,
 } from "./change-payload"
 
@@ -42,4 +43,42 @@ it("管理授权有效期按上海时区转为服务端时点", () => {
         include_descendants: true,
         valid_to: shanghaiDateTimeToUnix("2026-09-15T18:00:00"),
     })
+})
+
+it("字段或期望版本变化后不再视为同一预览命令", () => {
+    const previewed = buildOrganizationChangeRequest(3, "k", {
+        ...EMPTY_CHANGE_DRAFT,
+        name: "销售部",
+        reason: "新建",
+    })
+    expect(
+        sameOrganizationChangeRequest(
+            previewed,
+            buildOrganizationChangeRequest(3, "k", {
+                ...EMPTY_CHANGE_DRAFT,
+                name: "销售部",
+                reason: "新建",
+            }),
+        ),
+    ).toBe(true)
+    expect(
+        sameOrganizationChangeRequest(
+            previewed,
+            buildOrganizationChangeRequest(4, "k", {
+                ...EMPTY_CHANGE_DRAFT,
+                name: "销售部",
+                reason: "新建",
+            }),
+        ),
+    ).toBe(false)
+    expect(
+        sameOrganizationChangeRequest(
+            previewed,
+            buildOrganizationChangeRequest(3, "k", {
+                ...EMPTY_CHANGE_DRAFT,
+                name: "市场部",
+                reason: "新建",
+            }),
+        ),
+    ).toBe(false)
 })

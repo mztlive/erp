@@ -107,3 +107,10 @@ export function buildOrganizationChangeRequest(
         change: buildOrganizationOperation(draft),
     }
 }
+
+export function sameOrganizationChangeRequest(
+    left: OrganizationChangeRequest,
+    right: OrganizationChangeRequest,
+): boolean {
+    return JSON.stringify(left) === JSON.stringify(right)
+}

@@ -2,20 +2,72 @@ import { apiGet } from "@/lib/api"
 import type { Page } from "@/lib/api/paging"
 import { createApiError } from "@/lib/api/errors"
 
-/** 读取完整匹配集合；重复页、总数变化或空的中间页使整次查询失败。 */
+const ENVELOPE_KEYS = [
+    "empty_reason",
+    "scope_version",
+    "policy_version",
+    "organization_version",
+    "as_of",
+    "scope_summary",
+    "ownership_basis",
+] as const
+
+type ListEnvelope = {
+    empty_reason?: string | null
+    scope_version?: string
+    policy_version?: number
+    organization_version?: number
+    as_of?: string
+    scope_summary?: string
+    ownership_basis?: string
+}
+
+type CompletePage<T> = Page<T> & ListEnvelope
+
+function scopeChangedError() {
+    return createApiError({
+        kind: "Http",
+        status: 409,
+        code: "DATA_SCOPE_CHANGED",
+        message: "DATA_SCOPE_CHANGED：数据范围已变化，请重新查询。",
+    })
+}
+
+function takeEnvelope(
+    page: CompletePage<unknown>,
+    seen: ListEnvelope,
+): ListEnvelope {
+    const next = { ...seen }
+    for (const key of ENVELOPE_KEYS) {
+        const value = page[key]
+        if (value === undefined) continue
+        const previous = next[key]
+        if (previous !== undefined && previous !== value)
+            throw scopeChangedError()
+        Object.assign(next, { [key]: value })
+    }
+    return next
+}
+
+/** 读取完整匹配集合；重复页、总数变化、空的中间页或范围版本变化使整次查询失败。 */
 export async function fetchCompleteList<T>(
     path: string,
     query: Record<string, unknown> = {},
     keyOf: (item: T) => string = (item) => (item as { id: string }).id,
-): Promise<{ items: T[]; total: number }> {
+): Promise<{ items: T[]; total: number } & ListEnvelope> {
     const items = new Map<string, T>()
     let expectedTotal: number | undefined
+    let envelope: ListEnvelope = {}
     for (let page = 1; ; page += 1) {
-        const result = await apiGet<Page<T>>(path, {
+        const result = await apiGet<CompletePage<T>>(path, {
             ...query,
             page,
             page_size: 100,
+            ...(typeof envelope.scope_version === "string"
+                ? { scope_version: envelope.scope_version }
+                : {}),
         })
+        envelope = takeEnvelope(result, envelope)
         expectedTotal ??= result.total
         const before = items.size
         for (const item of result.items) {
@@ -41,6 +93,10 @@ export async function fetchCompleteList<T>(
             })
         }
         if (items.size === result.total)
-            return { items: [...items.values()], total: result.total }
+            return {
+                items: [...items.values()],
+                total: result.total,
+                ...envelope,
+            }
     }
 }

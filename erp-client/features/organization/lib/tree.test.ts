@@ -64,3 +64,44 @@ it("窄屏页面类禁止横向溢出", () => {
     expect(PAGE_NARROW_CLASS).toContain("overflow-x-hidden")
     expect(PAGE_NARROW_CLASS).toContain("min-w-0")
 })
+
+it("只展示 as_of 有效期内的成员和管理授权", () => {
+    const forest = buildOrganizationForest(
+        {
+            ...view,
+            memberships: [
+                {
+                    id: "current",
+                    user_id: "u1",
+                    org_unit_id: "sales",
+                    valid_from: 1,
+                    valid_to: null,
+                    reason: "在职",
+                },
+                {
+                    id: "ended",
+                    user_id: "u1",
+                    org_unit_id: "sales",
+                    valid_from: 1,
+                    valid_to: 10,
+                    reason: "已结束",
+                },
+            ],
+            management: [
+                {
+                    id: "grant-ended",
+                    user_id: "u1",
+                    role_id: "role-sales",
+                    org_unit_id: "sales",
+                    include_descendants: false,
+                    valid_from: 1,
+                    valid_to: 10,
+                    reason: "已撤销",
+                },
+            ],
+        },
+        { kind: "all", status: "all" },
+    )
+    expect(forest[0]?.members.map((item) => item.id)).toEqual(["current"])
+    expect(forest[0]?.management).toEqual([])
+})

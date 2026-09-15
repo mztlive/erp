@@ -3,10 +3,7 @@
 import * as React from "react"
 import { z } from "zod"
 
-import {
-    BatchImpactPreview,
-    BusinessDiffPanel,
-} from "@/components/business"
+import { BatchImpactPreview, BusinessDiffPanel } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -23,6 +20,7 @@ import {
     buildOrganizationChangeRequest,
     EMPTY_CHANGE_DRAFT,
     newIdempotencyKey,
+    sameOrganizationChangeRequest,
     type OrganizationChangeDraft,
 } from "@/features/organization/lib/change-payload"
 import { impactChanges, impactCounts } from "@/features/organization/lib/impact"
@@ -32,7 +30,12 @@ import {
     OPERATION_LABEL,
     ORGANIZATION_BOUNDARY_NOTICE,
 } from "@/features/organization/lib/labels"
-import { personLabel, roleLabel, unitLabel } from "@/features/organization/lib/tree"
+import {
+    isRelationActive,
+    personLabel,
+    roleLabel,
+    unitLabel,
+} from "@/features/organization/lib/tree"
 import type {
     OrganizationChangeReceipt,
     OrganizationStateView,
@@ -61,6 +64,33 @@ const schema = z.object({
     reason: z.string().trim().min(1, "必须填写变更原因").max(1000),
 })
 
+function PreviewReceiptGuard({
+    values,
+    expectedVersion,
+    idempotencyKey,
+    receipt,
+    onInvalidate,
+}: {
+    values: OrganizationChangeDraft
+    expectedVersion: number
+    idempotencyKey: string
+    receipt: OrganizationChangeReceipt | null
+    onInvalidate: () => void
+}) {
+    React.useEffect(() => {
+        if (!receipt) return
+        const request = buildOrganizationChangeRequest(
+            expectedVersion,
+            idempotencyKey,
+            values,
+        )
+        if (!sameOrganizationChangeRequest(receipt.request, request)) {
+            onInvalidate()
+        }
+    }, [values, expectedVersion, idempotencyKey, receipt, onInvalidate])
+    return null
+}
+
 export function OrganizationChangeDialog({
     open,
     onOpenChange,
@@ -86,10 +116,10 @@ export function OrganizationChangeDialog({
         request: ReturnType<typeof buildOrganizationChangeRequest>,
     ) => Promise<void>
 }) {
-    const [idempotencyKey, setIdempotencyKey] = React.useState(newIdempotencyKey)
-    const [receipt, setReceipt] = React.useState<OrganizationChangeReceipt | null>(
-        null,
-    )
+    const [idempotencyKey, setIdempotencyKey] =
+        React.useState(newIdempotencyKey)
+    const [receipt, setReceipt] =
+        React.useState<OrganizationChangeReceipt | null>(null)
     const [actionError, setActionError] = React.useState<string | null>(null)
 
     const form = useAppForm({
@@ -103,11 +133,14 @@ export function OrganizationChangeDialog({
                 value,
             )
             try {
-                if (!receipt) {
+                if (
+                    !receipt ||
+                    !sameOrganizationChangeRequest(receipt.request, request)
+                ) {
                     setReceipt(await onPreview(request))
                     return
                 }
-                await onSubmit(request)
+                await onSubmit(receipt.request)
                 onOpenChange(false)
             } catch (error) {
                 setActionError(getErrorPresentation(error).description)
@@ -135,10 +168,14 @@ export function OrganizationChangeDialog({
     const roleOptions = view.roles
         .filter((role) => role.enabled)
         .map((role) => ({ value: role.id, label: role.name }))
-    const assignmentOptions = view.management.map((item) => ({
-        value: item.id,
-        label: `${personLabel(view.people, item.user_id)} · ${roleLabel(view.roles, item.role_id)} · ${unitLabel(view.units, item.org_unit_id)}`,
-    }))
+    const assignmentOptions = view.management
+        .filter((item) =>
+            isRelationActive(item.valid_from, item.valid_to, view.asOf),
+        )
+        .map((item) => ({
+            value: item.id,
+            label: `${personLabel(view.people, item.user_id)} · ${roleLabel(view.roles, item.role_id)} · ${unitLabel(view.units, item.org_unit_id)}`,
+        }))
     const changes = receipt ? impactChanges(receipt, view) : []
     const counts = impactCounts(changes)
 
@@ -319,6 +356,18 @@ export function OrganizationChangeDialog({
                             />
                         )}
                     />
+                    <form.Subscribe
+                        selector={(state) => state.values}
+                        children={(values) => (
+                            <PreviewReceiptGuard
+                                values={values}
+                                expectedVersion={expectedVersion}
+                                idempotencyKey={idempotencyKey}
+                                receipt={receipt}
+                                onInvalidate={() => setReceipt(null)}
+                            />
+                        )}
+                    />
 
                     {actionError ? (
                         <Alert variant="destructive">
@@ -331,7 +380,9 @@ export function OrganizationChangeDialog({
                         <div className="min-w-0 space-y-3">
                             <BatchImpactPreview
                                 title={
-                                    OPERATION_LABEL[receipt.request.change.operation]
+                                    OPERATION_LABEL[
+                                        receipt.request.change.operation
+                                    ]
                                 }
                                 description={ORGANIZATION_BOUNDARY_NOTICE}
                                 filterSummary={`期望版本 ${receipt.request.expected_version}`}

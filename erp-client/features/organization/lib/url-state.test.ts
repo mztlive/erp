@@ -34,13 +34,14 @@ it("组织筛选进入 URL，刷新与清除使用同一组键", () => {
 it("范围配置按资源动作进入 URL 与查询草稿", () => {
     const url = parseDataScopeSearchParams(
         new URLSearchParams(
-            "resource=sales_order&action=list&subjectType=role&subjectId=role-sales",
+            "resource=sales_order&action=list&subjectType=role&subjectId=role-sales&scopeType=company",
         ),
     )
     expect(url.resource).toBe("sales_order")
     expect(url.action).toBe("list")
     expect(url.subjectType).toBe("role")
     expect(url.subjectId).toBe("role-sales")
+    expect(url.scopeType).toBe("company")
     const built = buildDataScopeSearchParams(url)
     expect(built).toContain("resource=sales_order")
     expect(built).toContain("action=list")

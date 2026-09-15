@@ -35,6 +35,20 @@ export function unitLabel(units: OrgUnit[], id: string): string {
     return units.find((item) => item.id === id)?.name ?? "组织信息待确认"
 }
 
+export function asOfUnixSeconds(asOf: string): number {
+    const parsed = Date.parse(asOf)
+    return Number.isFinite(parsed) ? parsed / 1000 : Date.now() / 1000
+}
+
+export function isRelationActive(
+    validFrom: number,
+    validTo: number | null,
+    asOf: string,
+): boolean {
+    const at = asOfUnixSeconds(asOf)
+    return validFrom <= at && (validTo == null || at < validTo)
+}
+
 export function matchesOrganizationFilters(
     unit: OrgUnit,
     url: OrganizationUrlState,
@@ -63,10 +77,22 @@ export function buildOrganizationForest(
                 unit,
                 children: [],
                 members: view.memberships.filter(
-                    (item) => item.org_unit_id === unit.id,
+                    (item) =>
+                        item.org_unit_id === unit.id &&
+                        isRelationActive(
+                            item.valid_from,
+                            item.valid_to,
+                            view.asOf,
+                        ),
                 ),
                 management: view.management.filter(
-                    (item) => item.org_unit_id === unit.id,
+                    (item) =>
+                        item.org_unit_id === unit.id &&
+                        isRelationActive(
+                            item.valid_from,
+                            item.valid_to,
+                            view.asOf,
+                        ),
                 ),
             },
         ]),

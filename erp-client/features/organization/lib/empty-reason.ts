@@ -6,7 +6,9 @@ export function organizationEmptyReason(input: {
     noScope: boolean
     filtered: boolean
     empty: boolean
+    permissionPending?: boolean
 }): OrganizationEmptyReason | null {
+    if (input.permissionPending) return null
     const status =
         input.error && typeof input.error === "object"
             ? (input.error as ApiError).status

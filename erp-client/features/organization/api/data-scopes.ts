@@ -22,10 +22,6 @@ type BackendDataScope = {
     enabled: boolean
     version: number
     created_at: number
-    scope_version?: string
-    policy_version?: number
-    organization_version?: number
-    empty_reason?: string | null
 }
 
 function mapRecord(row: BackendDataScope): DataScopeRecord {
@@ -52,7 +48,10 @@ export function dataScopeListQuery(url: DataScopeUrlState) {
         resource: url.resource,
         action: url.action,
         subject_type: url.subjectType === "all" ? undefined : url.subjectType,
-        subject_id: url.subjectId,
+        subject_id:
+            url.subjectType === "all" || !url.subjectId
+                ? undefined
+                : url.subjectId,
         scope_type: url.scopeType === "all" ? undefined : url.scopeType,
     }
 }
@@ -65,28 +64,28 @@ export async function fetchDataScopes(
         dataScopeListQuery(url),
     )
     const keyword = url.q?.trim().toLowerCase()
-    const items = page.items
-        .map(mapRecord)
-        .filter((row) => {
-            if (!keyword) return true
-            return [
-                row.resource,
-                row.actions.join(" "),
-                row.subjectId,
-                row.scopeType,
-            ]
-                .join(" ")
-                .toLowerCase()
-                .includes(keyword)
-        })
-    const first = page.items[0]
+    const items = page.items.map(mapRecord).filter((row) => {
+        if (!keyword) return true
+        return [
+            row.resource,
+            row.actions.join(" "),
+            row.subjectId,
+            row.scopeType,
+        ]
+            .join(" ")
+            .toLowerCase()
+            .includes(keyword)
+    })
     return {
         items,
         total: items.length,
-        emptyReason: first?.empty_reason === "no_scope" ? "no_scope" : null,
-        scopeVersion: first?.scope_version,
-        policyVersion: first?.policy_version,
-        organizationVersion: first?.organization_version,
+        emptyReason: page.empty_reason === "no_scope" ? "no_scope" : null,
+        scopeVersion: page.scope_version,
+        policyVersion: page.policy_version,
+        organizationVersion: page.organization_version,
+        asOf: page.as_of,
+        scopeSummary: page.scope_summary,
+        ownershipBasis: page.ownership_basis,
     }
 }
 

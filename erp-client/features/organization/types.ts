@@ -163,6 +163,9 @@ export type DataScopeListView = {
     scopeVersion?: string
     policyVersion?: number
     organizationVersion?: number
+    asOf?: string
+    scopeSummary?: string
+    ownershipBasis?: string
 }
 
 export type DataScopeUrlState = {

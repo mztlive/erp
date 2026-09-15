@@ -10,9 +10,9 @@ use axum::{
 };
 use erp_identity::{
     AccessControlService, AssignUserRoleRequest, AuditEventListParams, AuditEventView,
-    CreateDataScopeRequest, CreatePermissionRequest, DataScopeListParams, DataScopeView, PageView,
-    PermissionListParams, PermissionView, RevokeUserRoleRequest, UpdatePermissionRequest, UserRoleListParams,
-    UserRoleView,
+    CreateDataScopeRequest, CreatePermissionRequest, DataScopeListParams, DataScopeListView, DataScopeView,
+    PageView, PermissionListParams, PermissionView, RevokeUserRoleRequest, UpdatePermissionRequest,
+    UserRoleListParams, UserRoleView,
 };
 
 use crate::{
@@ -147,23 +147,25 @@ pub async fn permission_delete(
 ///
 /// # 参数
 /// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`subject_type`/`scope_type`/`subject_id`/`resource`/`action`）
+/// * `actor` - 已认证操作人
+/// * `query` - 分页与筛选参数（`subject_type`/`scope_type`/`subject_id`/`resource`/`action`/`scope_version`）
 ///
 /// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 分页项与范围、权限、组织版本、时点和空集原因信封。
 ///
 /// # 错误
-/// 参数非法或仓储失败时返回统一错误。
+/// 参数非法、范围版本变化或仓储失败时返回统一错误。
 ///
 /// # 关键业务约束
-/// 范围按资源、动作筛选；禁止通配符和显示名身份。
+/// 范围按资源、动作筛选；禁止通配符和显示名身份。版本字段只出现在信封上。
 pub async fn data_scope_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<DataScopeListParams>,
-) -> Result<PageView<DataScopeView>> {
+) -> Result<DataScopeListView> {
     let page = AccessControlService::new(state.db())
         .with_rbac(state.rbac())
-        .data_scope_list(&params)
+        .data_scope_list(&actor, &params)
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))

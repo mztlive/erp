@@ -47,3 +47,54 @@ it("空结果只查询一次", async () => {
     expect(await fetchCompleteList("/list")).toEqual({ items: [], total: 0 })
     expect(apiGet).toHaveBeenCalledTimes(1)
 })
+
+it("跨页携带并复核 scope_version，版本变化拒绝拼接", async () => {
+    const items = [{ id: "first" }, { id: "second" }]
+    vi.mocked(apiGet)
+        .mockResolvedValueOnce({
+            items: [items[0]],
+            total: 2,
+            scope_version: "v1",
+            empty_reason: null,
+            policy_version: 3,
+            organization_version: 4,
+        })
+        .mockResolvedValueOnce({
+            items: [items[1]],
+            total: 2,
+            scope_version: "v2",
+            policy_version: 3,
+            organization_version: 4,
+        })
+    await expect(fetchCompleteList("/list")).rejects.toMatchObject({
+        status: 409,
+        code: "DATA_SCOPE_CHANGED",
+    })
+    expect(apiGet).toHaveBeenNthCalledWith(2, "/list", {
+        page: 2,
+        page_size: 100,
+        scope_version: "v1",
+    })
+})
+
+it("完整收集从信封保留版本字段", async () => {
+    vi.mocked(apiGet).mockResolvedValue({
+        items: [{ id: "one" }],
+        total: 1,
+        scope_version: "v9",
+        empty_reason: "no_scope",
+        policy_version: 2,
+        organization_version: 8,
+        as_of: "2026-09-15T00:00:00Z",
+        scope_summary: "摘要",
+        ownership_basis: "data_scope_configuration",
+    })
+    expect(await fetchCompleteList("/list")).toMatchObject({
+        items: [{ id: "one" }],
+        total: 1,
+        scope_version: "v9",
+        empty_reason: "no_scope",
+        policy_version: 2,
+        organization_version: 8,
+    })
+})

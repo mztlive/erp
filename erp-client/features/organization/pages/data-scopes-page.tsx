@@ -19,7 +19,10 @@ import {
 } from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { actionLabel, resourceLabel } from "@/features/admin/lib/permission-catalog"
+import {
+    actionLabel,
+    resourceLabel,
+} from "@/features/admin/lib/permission-catalog"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { DataScopeFormDialog } from "@/features/organization/components/data-scope-form-dialog"
 import { OrganizationEmptyByReason } from "@/features/organization/components/empty-by-reason"
@@ -42,7 +45,11 @@ import {
 } from "@/features/organization/lib/url-state"
 import { hasPermission } from "@/lib/permissions"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { personLabel, roleLabel, unitLabel } from "@/features/organization/lib/tree"
+import {
+    personLabel,
+    roleLabel,
+    unitLabel,
+} from "@/features/organization/lib/tree"
 
 export function DataScopesPage() {
     const router = useRouter()
@@ -65,7 +72,6 @@ export function DataScopesPage() {
         [pathname, router, searchParams, url],
     )
     const profileQuery = useAccountProfileQuery()
-    const canList = hasPermission(profileQuery.data?.permissions, "data_scope:list")
     const canCreate = hasPermission(
         profileQuery.data?.permissions,
         "data_scope:create",
@@ -74,12 +80,8 @@ export function DataScopesPage() {
         profileQuery.data?.permissions,
         "data_scope:delete",
     )
-    const canListOrg = hasPermission(
-        profileQuery.data?.permissions,
-        "org_unit:list",
-    )
-    const scopesQuery = useDataScopesQuery(url, canList)
-    const orgQuery = useOrganizationStateQuery(canListOrg)
+    const scopesQuery = useDataScopesQuery(url)
+    const orgQuery = useOrganizationStateQuery()
     const createMutation = useCreateDataScopeMutation()
     const deleteMutation = useDeleteDataScopeMutation()
     const [searchDraft, setSearchDraft] = React.useState(url.q ?? "")
@@ -99,18 +101,19 @@ export function DataScopesPage() {
         noScope: scopesQuery.data?.emptyReason === "no_scope",
         filtered: Boolean(
             url.q ||
-                url.resource ||
-                url.action ||
-                url.subjectType !== "all" ||
-                url.subjectId ||
-                url.scopeType !== "all",
+            url.resource ||
+            url.action ||
+            url.subjectType !== "all" ||
+            url.subjectId ||
+            url.scopeType !== "all",
         ),
         empty: items.length === 0,
+        permissionPending: profileQuery.isPending,
     })
     const subjectLabel = (type: string, id: string) =>
         type === "user" ? personLabel(people, id) : roleLabel(roles, id)
 
-    if (scopesQuery.isPending && canList) {
+    if (profileQuery.isPending || scopesQuery.isPending) {
         return (
             <PageScaffold density="compact" className={styles.page}>
                 <div className="h-9 w-40 animate-pulse rounded-lg bg-muted" />
@@ -144,7 +147,9 @@ export function DataScopesPage() {
 
             <Alert>
                 <AlertTitle>配置边界</AlertTitle>
-                <AlertDescription>{ORGANIZATION_BOUNDARY_NOTICE}</AlertDescription>
+                <AlertDescription>
+                    {ORGANIZATION_BOUNDARY_NOTICE}
+                </AlertDescription>
             </Alert>
 
             <ListWorkSurface
@@ -198,7 +203,8 @@ export function DataScopesPage() {
                                         ...(
                                             resources.find(
                                                 (item) =>
-                                                    item.resource === url.resource,
+                                                    item.resource ===
+                                                    url.resource,
                                             )?.actions ?? []
                                         ).map((action) => ({
                                             value: action,
@@ -217,7 +223,7 @@ export function DataScopesPage() {
                                 />
                                 <OptionCombobox
                                     id="organization-scope-filter-subject-type"
-                                    aria-label="主体"
+                                    aria-label="主体类型"
                                     value={url.subjectType}
                                     options={[
                                         { value: "all", label: "全部主体" },
@@ -229,6 +235,55 @@ export function DataScopesPage() {
                                             subjectType: (value ??
                                                 "all") as typeof url.subjectType,
                                             subjectId: undefined,
+                                        })
+                                    }
+                                    allowClear={false}
+                                />
+                                {url.subjectType !== "all" ? (
+                                    <OptionCombobox
+                                        id="organization-scope-filter-subject"
+                                        aria-label="主体"
+                                        value={url.subjectId ?? "all"}
+                                        options={[
+                                            { value: "all", label: "全部主体" },
+                                            ...(url.subjectType === "user"
+                                                ? people.map((person) => ({
+                                                      value: person.id,
+                                                      label: `${person.label}（${person.account}）`,
+                                                  }))
+                                                : roles.map((role) => ({
+                                                      value: role.id,
+                                                      label: role.name,
+                                                  }))),
+                                        ]}
+                                        onValueChange={(value) =>
+                                            pushUrl({
+                                                subjectId:
+                                                    !value || value === "all"
+                                                        ? undefined
+                                                        : value,
+                                            })
+                                        }
+                                        allowClear={false}
+                                    />
+                                ) : null}
+                                <OptionCombobox
+                                    id="organization-scope-filter-scope-type"
+                                    aria-label="范围类型"
+                                    value={url.scopeType}
+                                    options={[
+                                        { value: "all", label: "全部范围类型" },
+                                        ...Object.entries(SCOPE_TYPE_LABEL).map(
+                                            ([value, label]) => ({
+                                                value,
+                                                label,
+                                            }),
+                                        ),
+                                    ]}
+                                    onValueChange={(value) =>
+                                        pushUrl({
+                                            scopeType: (value ??
+                                                "all") as typeof url.scopeType,
                                         })
                                     }
                                     allowClear={false}
@@ -268,6 +323,23 @@ export function DataScopesPage() {
                                               : "角色",
                                   }
                                 : null,
+                            url.subjectId
+                                ? {
+                                      key: "subjectId",
+                                      label: `主体：${subjectLabel(
+                                          url.subjectType === "all"
+                                              ? "role"
+                                              : url.subjectType,
+                                          url.subjectId,
+                                      )}`,
+                                  }
+                                : null,
+                            url.scopeType !== "all"
+                                ? {
+                                      key: "scopeType",
+                                      label: SCOPE_TYPE_LABEL[url.scopeType],
+                                  }
+                                : null,
                         ].filter(
                             (chip): chip is { key: string; label: string } =>
                                 chip != null,
@@ -285,6 +357,10 @@ export function DataScopesPage() {
                                     subjectType: "all",
                                     subjectId: undefined,
                                 })
+                            if (key === "subjectId")
+                                pushUrl({ subjectId: undefined })
+                            if (key === "scopeType")
+                                pushUrl({ scopeType: "all" })
                         }}
                         onClearAll={() =>
                             pushUrl({
@@ -302,7 +378,12 @@ export function DataScopesPage() {
                     />
                 }
                 table={
-                    scopesQuery.isError && !scopesQuery.data ? (
+                    emptyReason === "NO_MODULE_PERMISSION" ? (
+                        <OrganizationEmptyByReason
+                            idPrefix="organization-scope"
+                            reason={emptyReason}
+                        />
+                    ) : scopesQuery.isError && !scopesQuery.data ? (
                         <BusinessFailureState
                             id="organization-scope-retry"
                             title="范围配置加载失败"
@@ -346,7 +427,11 @@ export function DataScopesPage() {
                                             {row.subjectType === "user"
                                                 ? "用户上限"
                                                 : "角色"}{" "}
-                                            · {subjectLabel(row.subjectType, row.subjectId)}{" "}
+                                            ·{" "}
+                                            {subjectLabel(
+                                                row.subjectType,
+                                                row.subjectId,
+                                            )}{" "}
                                             · {SCOPE_TYPE_LABEL[row.scopeType]}
                                             {row.scopeTargets.length > 0
                                                 ? ` · ${row.scopeTargets

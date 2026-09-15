@@ -2,7 +2,11 @@ import { beforeEach, expect, it, vi } from "vitest"
 
 import { apiPost } from "@/lib/api"
 import { fetchCompleteList } from "@/lib/collect-pages"
-import { createDataScope, dataScopeListQuery, fetchDataScopes } from "./data-scopes"
+import {
+    createDataScope,
+    dataScopeListQuery,
+    fetchDataScopes,
+} from "./data-scopes"
 
 vi.mock("@/lib/api", () => ({
     apiPost: vi.fn(),
@@ -14,7 +18,7 @@ vi.mock("@/lib/collect-pages", () => ({
 
 beforeEach(() => vi.resetAllMocks())
 
-it("范围列表把资源动作放进查询并回传版本字段", async () => {
+it("范围列表把资源动作放进查询并从信封回传版本字段", async () => {
     vi.mocked(fetchCompleteList).mockResolvedValue({
         items: [
             {
@@ -30,12 +34,16 @@ it("范围列表把资源动作放进查询并回传版本字段", async () => {
                 enabled: true,
                 version: 1,
                 created_at: 1,
-                scope_version: "v2",
-                policy_version: 4,
-                organization_version: 7,
             },
         ],
         total: 1,
+        empty_reason: "no_scope",
+        scope_version: "v2",
+        policy_version: 4,
+        organization_version: 7,
+        as_of: "2026-09-15T00:00:00Z",
+        scope_summary: "已接入 DataScope v2 的资源动作配置",
+        ownership_basis: "data_scope_configuration",
     })
     const url = {
         q: undefined,
@@ -58,8 +66,26 @@ it("范围列表把资源动作放进查询并回传版本字段", async () => {
         dataScopeListQuery(url),
     )
     expect(result.scopeVersion).toBe("v2")
+    expect(result.emptyReason).toBe("no_scope")
+    expect(result.policyVersion).toBe(4)
     expect(result.items[0]?.resource).toBe("sales_order")
     expect(result.items[0]?.actions).toEqual(["list"])
+})
+
+it("主体未选类型时不发送 subject_id", () => {
+    expect(
+        dataScopeListQuery({
+            subjectType: "all",
+            subjectId: "role-sales",
+            scopeType: "company",
+        }),
+    ).toEqual({
+        resource: undefined,
+        action: undefined,
+        subject_type: undefined,
+        subject_id: undefined,
+        scope_type: "company",
+    })
 })
 
 it("创建范围按资源动作提交，不发送通配目标", async () => {
