@@ -65,6 +65,8 @@ export type SalesOrderListView = {
     policyVersion?: number
     organizationVersion?: number
     scopeSummary?: string
+    asOf?: string
+    ownershipBasis?: string
     ownerOptions?: { value: string; label: string }[]
     items: SalesOrderListItem[]
     total: number

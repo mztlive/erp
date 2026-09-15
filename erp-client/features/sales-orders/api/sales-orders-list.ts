@@ -53,6 +53,8 @@ export async function fetchSalesOrders(
             policy_version: number
             organization_version: number
             scope_summary: string
+            as_of?: string
+            ownership_basis?: string
             owner_options: { value: string; label: string }[]
         }
     >("/admin/sales-orders", {
@@ -118,10 +120,12 @@ export async function fetchSalesOrders(
         policyVersion: page.policy_version,
         organizationVersion: page.organization_version,
         scopeSummary: page.scope_summary,
+        asOf: page.as_of,
+        ownershipBasis: page.ownership_basis,
         total: page.total,
         page: page.page,
         pageSize: page.page_size,
-        queriedAt: formatIsoNow(),
+        queriedAt: page.as_of ?? formatIsoNow(),
     }
 }
 

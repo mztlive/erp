@@ -28,6 +28,8 @@ describe("采购单列表范围版本", () => {
             policy_version: 3,
             organization_version: 4,
             scope_summary: "采购单当前负责人及单据业务组织范围",
+            as_of: "2026-09-14T08:00:00Z",
+            ownership_basis: "current_procurement_owner",
         })
         const result = await fetchPurchaseOrders({
             page: 2,
@@ -50,6 +52,9 @@ describe("采购单列表范围版本", () => {
         expect(result.scopeVersion).toBe("v2")
         expect(result.policyVersion).toBe(3)
         expect(result.organizationVersion).toBe(4)
+        expect(result.asOf).toBe("2026-09-14T08:00:00Z")
+        expect(result.ownershipBasis).toBe("current_procurement_owner")
+        expect(result.freshness.updatedAt).toBe("2026-09-14T08:00:00Z")
     })
 
     it("导出跨页携带范围版本并在生成前重验", async () => {

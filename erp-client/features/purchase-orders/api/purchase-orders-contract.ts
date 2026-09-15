@@ -23,6 +23,8 @@ export type PurchaseOrderListResult = {
     policyVersion?: number
     organizationVersion?: number
     scopeSummary?: string
+    asOf?: string
+    ownershipBasis?: string
     ownerOptions?: { value: string; label: string }[]
     rows: PurchaseOrderListItem[]
     total: number

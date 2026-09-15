@@ -67,6 +67,8 @@ export async function fetchPurchaseOrders(
             policy_version: number
             organization_version: number
             scope_summary: string
+            as_of?: string
+            ownership_basis?: string
             owner_options: { value: string; label: string }[]
         }
     >("/admin/purchase-orders", {
@@ -91,12 +93,14 @@ export async function fetchPurchaseOrders(
         policyVersion: pageData.policy_version,
         organizationVersion: pageData.organization_version,
         scopeSummary: pageData.scope_summary,
+        asOf: pageData.as_of,
+        ownershipBasis: pageData.ownership_basis,
         total: pageData.total ?? rows.length,
         page: pageData.page ?? page,
         pageSize: pageData.page_size ?? pageSize,
         metrics: [],
         freshness: {
-            updatedAt: new Date().toISOString(),
+            updatedAt: pageData.as_of ?? new Date().toISOString(),
             state: "fresh",
         },
     }
