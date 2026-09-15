@@ -1,7 +1,7 @@
 //! 按同一角色证明动作后的范围解析；角色授权与个人上限始终分别保留。
 
 use erp_core::common::time::Instant;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::{DataScope, DataScopeSubjectType, DataScopeType, ScopeDimension, ScopeTargetMode};
 use crate::entity::organization::{OrgManagementAssignment, OrgMembership, OrgTree};
@@ -129,14 +129,21 @@ impl ScopeResolution<'_> {
     /// # 错误
     /// 无效目标或组织关系拒绝；缺范围、缺组织和缺必需维度保持空集。
     pub fn resolve(&self) -> Result<ResolvedScope> {
+        self.resolve_with_roles().map(|(scope, _)| scope)
+    }
+
+    /// 保留每个完整授权角色的条款，供需要角色责任证明的消费者使用。
+    pub fn resolve_with_roles(&self) -> Result<(ResolvedScope, BTreeMap<String, ScopeClause>)> {
         if self.eligible_role_ids.is_empty() {
             return Err(crate::Error::Forbidden("没有提供完整动作权限的有效角色".into()));
         }
         let mut role_clauses = Vec::new();
+        let mut role_scopes = BTreeMap::new();
         for role_id in self.eligible_role_ids {
             let rules = self.rules_for(DataScopeSubjectType::Role, role_id);
             let clause = self.clause(&rules, Some(role_id))?;
-            if clause.complete(self.required_dimensions) {
+            if clause != ScopeClause::default() && clause.complete(self.required_dimensions) {
+                role_scopes.insert(role_id.clone(), clause.clone());
                 role_clauses.push(clause);
             }
         }
@@ -144,10 +151,13 @@ impl ScopeResolution<'_> {
         let user_limit = (!rules.is_empty())
             .then(|| self.clause(&rules, None))
             .transpose()?;
-        Ok(ResolvedScope {
-            role_clauses,
-            user_limit,
-        })
+        Ok((
+            ResolvedScope {
+                role_clauses,
+                user_limit,
+            },
+            role_scopes,
+        ))
     }
 
     /// 只提取当前资源动作、主体、状态均匹配的规则。

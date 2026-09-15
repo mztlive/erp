@@ -148,6 +148,10 @@ fn sales_return_case_bind_command(
         business_object_id: case.base.id.clone(),
         business_object_version: case.base.version,
         context: BindingRevalidationContext {
+            order_source: None,
+            customer_id: None,
+            business_org_unit_id: None,
+            scope_owner_user_id: None,
             organization_id: sales_return_case_binding_organization_id(case)?,
             creator_id: creator_id.to_string(),
         },

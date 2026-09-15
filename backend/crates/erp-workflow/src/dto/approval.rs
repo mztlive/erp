@@ -14,8 +14,6 @@ pub struct ApprovalRecoveryAuthorization {
     pub policy_revision: u64,
     /// 在该版本下实际授予运行恢复权的角色。
     pub granting_role_ids: Vec<String>,
-    /// `None` 表示公司级；`Some` 仅允许列出的组织或团队。
-    pub organization_ids: Option<Vec<String>>,
 }
 
 /// 目标运行编排的启动命令。不得包含 definition key 或审批人。

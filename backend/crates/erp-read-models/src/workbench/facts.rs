@@ -8,7 +8,7 @@ use erp_workflow::entity::work_item::{WorkItemBriefRelation, WorkItemType};
 pub(crate) use erp_workflow::ports::ObjectKind;
 use erp_workflow::service::work_item::order_access::filter_order_facts;
 use erp_workflow::WorkflowAuthorizationPort;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 pub(crate) use super::authority::object_ids;
 use super::{brief, dto, WorkbenchReadService};
@@ -334,12 +334,13 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         &self,
         actor_id: &str,
         facts: &mut WorkbenchObjectFactMap,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let mut authority = facts
             .iter()
             .map(|(key, fact)| (key.clone(), fact.authority.clone()))
             .collect();
-        filter_order_facts(&self.auth, actor_id, &mut authority, &mut NoTransaction).await?;
+        filter_order_facts(&self.auth, actor_id, &mut authority, executor).await?;
         facts.retain(|key, _| authority.contains_key(key));
         Ok(())
     }
@@ -350,6 +351,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     pub(super) async fn object_facts_for_rows(
         &self,
         rows: &[erp_workflow::WorkItemRow],
+        executor: &mut dyn Executor,
     ) -> Result<WorkbenchObjectFactMap> {
         let keys = rows
             .iter()
@@ -358,7 +360,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                     .map(|policy| (policy.object_kind, row.business_object_id.clone()))
             })
             .collect::<HashSet<_>>();
-        self.load_object_facts(&keys, &mut NoTransaction).await
+        self.load_object_facts(&keys, executor).await
     }
 
     /// 按固定对象注册表分组查询；未注册类型不会进入本映射。
@@ -697,7 +699,7 @@ mod authority_display_tests {
     }
 
     #[test]
-    fn participation_uses_authority_root_and_creator_and_task_organization() {
+    fn participation_uses_authority_root_and_creator_without_responsibility_org_grants() {
         let fact = WorkbenchObjectFact::from_authority(ObjectFact::new(
             "root",
             "display-is-not-an-organization",
@@ -707,8 +709,7 @@ mod authority_display_tests {
             actor_id: "reader".to_string(),
             permissions: Vec::new(),
             participant_document_ids: HashSet::from(["root".to_string()]),
-            organization_ids: Vec::new(),
-            responsibility_scopes: Vec::new(),
+            managed_owner_ids: Some(Vec::new()),
             can_manage: false,
         };
         assert!(has_object_participation(&access, "role", "company", &fact));
@@ -718,8 +719,8 @@ mod authority_display_tests {
         assert!(has_object_participation(&access, "role", "company", &fact));
         access.actor_id = "reader".to_string();
         access.can_manage = true;
-        access.organization_ids.push("company".to_string());
-        assert!(has_object_participation(&access, "role", "company", &fact));
+        access.managed_owner_ids = None;
+        assert!(!has_object_participation(&access, "role", "company", &fact));
         assert!(!has_object_participation(&access, "role", "other-company", &fact));
     }
 }

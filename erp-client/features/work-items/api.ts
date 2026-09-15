@@ -22,6 +22,7 @@ export type WorkItemListParams = Readonly<{
     sort?: "priority_due" | "due_asc" | "created_desc"
     cursor?: string
     queueContextId?: string
+    scopeVersion?: string
     currentWorkItemId?: string
     timezone: string
     page?: number
@@ -30,6 +31,7 @@ export type WorkItemListParams = Readonly<{
 
 export type WorkItemPage = Page<WorkItemDto> & {
     queue_context_id?: string | null
+    scope_version: string
 }
 
 export type WorkItemStatsParams = Readonly<{
@@ -141,6 +143,7 @@ export function listWorkItems(
         sort: params.sort ?? "priority_due",
         cursor: params.cursor,
         queue_context_id: params.queueContextId,
+        scope_version: params.scopeVersion,
         current_work_item_id: params.currentWorkItemId,
         timezone: params.timezone,
         page: params.page ?? 1,

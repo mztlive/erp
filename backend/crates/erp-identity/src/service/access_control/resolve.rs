@@ -1,15 +1,16 @@
 //! DataScope v2 唯一应用解析入口，复用现有 RBAC 版本和同角色权限证明。
 
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Executor;
+use std::collections::BTreeMap;
 
-use crate::access_control::{DataScopeSubjectType, ResolvedScope, ScopeResolution};
+use crate::access_control::{DataScopeSubjectType, ResolvedScope, ScopeClause, ScopeResolution};
 use crate::entity::organization::OrgTree;
 use crate::entity::organization_change::OrganizationState;
 use crate::repository::OrganizationRepository;
 use crate::{AccessControlExt, Error, Permission, Result, SharedRbacService};
-use application_core::AuditActor;
 
 /// 服务端授权上下文；原始范围和组织事实不直接序列化给客户端。
 pub struct AuthorizedDataScope {
@@ -17,6 +18,8 @@ pub struct AuthorizedDataScope {
     pub resource: String,
     pub action: String,
     pub scope: ResolvedScope,
+    /// 已通过同角色完整动作权限证明的条款。
+    pub role_scopes: BTreeMap<String, ScopeClause>,
     pub organizations: OrganizationState,
     pub policy_version: u64,
     pub scope_version: String,
@@ -31,6 +34,58 @@ pub struct DataScopeService {
 }
 
 impl DataScopeService {
+    /// 读取混合任务队列的身份授权版本，不授予任何资源访问权。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证身份。
+    /// * `executor` - 调用方执行器。
+    /// # 返回
+    /// 账号、启用角色、策略、组织及当前有效关系共同形成的版本。
+    /// # 错误
+    /// 账号失效、策略快照漂移或持久化失败时拒绝。
+    pub async fn authorization_version(
+        &self,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<String> {
+        let account = self
+            .db
+            .accounts()
+            .find_by_id(actor.id(), executor)
+            .await?
+            .filter(|account| account.is_active_backoffice() && account.kind == actor.kind())
+            .ok_or_else(|| Error::Forbidden("账号已失效".into()))?;
+        let snapshot = self
+            .rbac
+            .role_permission_snapshot(actor.kind(), actor.id(), &[])
+            .await?;
+        self.rbac
+            .ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor)
+            .await?;
+        let mut roles = self
+            .db
+            .roles()
+            .enabled_roles(snapshot.role_ids(), executor)
+            .await?;
+        roles.sort_by(|a, b| a.base.id.cmp(&b.base.id));
+        let state = OrganizationRepository::new(&self.db).state(executor).await?;
+        let active = active_relations(&state, Instant::now());
+        Ok(format!(
+            "{:x}",
+            md5::compute(format!(
+                "{}:{}:{}:{}:{:?}:{active:?}",
+                actor.id(),
+                account.base.version,
+                snapshot.policy_revision(),
+                state.version,
+                roles
+                    .iter()
+                    .map(|role| (&role.base.id, role.base.version))
+                    .collect::<Vec<_>>()
+            ))
+        ))
+    }
+
     /// 绑定身份数据库及现有 RBAC 实例。
     ///
     /// # 返回
@@ -92,7 +147,7 @@ impl DataScopeService {
         }
         let state = OrganizationRepository::new(&self.db).state(executor).await?;
         let as_of = Instant::now();
-        let scope = self
+        let (scope, role_scopes) = self
             .resolved(actor.id(), &eligible, (resource, action), &state, as_of, executor)
             .await?;
         let fingerprint = format!(
@@ -113,6 +168,7 @@ impl DataScopeService {
             resource: resource.into(),
             action: action.into(),
             scope,
+            role_scopes,
             organizations: state,
             policy_version: snapshot.policy_revision(),
             scope_version: format!(
@@ -132,8 +188,18 @@ impl DataScopeService {
         state: &OrganizationState,
         at: Instant,
         executor: &mut dyn Executor,
-    ) -> Result<ResolvedScope> {
+    ) -> Result<(ResolvedScope, BTreeMap<String, ScopeClause>)> {
         let (resource, action) = resource_action;
+        if self
+            .db
+            .data_scopes()
+            .has_legacy_user_limit(user, executor)
+            .await?
+        {
+            return Err(Error::ValidationError(
+                "账号存在未迁移的个人范围上限，请先显式迁移配置".into(),
+            ));
+        }
         let mut rules = self
             .db
             .data_scopes()
@@ -163,8 +229,27 @@ impl DataScopeService {
             tree: &tree,
             as_of: at,
         }
-        .resolve()
+        .resolve_with_roles()
     }
+}
+
+/// 有效期边界没有写入也会改变授权，必须纳入跨页版本。
+fn active_relations(state: &OrganizationState, at: Instant) -> (Vec<String>, Vec<String>) {
+    let mut members = state
+        .memberships
+        .iter()
+        .filter(|item| !item.base.is_deleted() && item.validity.contains(at))
+        .map(|item| item.base.id.clone())
+        .collect::<Vec<_>>();
+    let mut managers = state
+        .management
+        .iter()
+        .filter(|item| !item.base.is_deleted() && item.validity.contains(at))
+        .map(|item| item.base.id.clone())
+        .collect::<Vec<_>>();
+    members.sort();
+    managers.sort();
+    (members, managers)
 }
 
 /// 只有完成接线的资源可配置 v2，禁止将新规则交给旧解释器。

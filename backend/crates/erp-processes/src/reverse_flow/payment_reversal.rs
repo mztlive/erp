@@ -149,6 +149,10 @@ impl ReturnsProcess {
             business_object_id: id.clone(),
             business_object_version: reversal.base.version,
             context: BindingRevalidationContext {
+                order_source: None,
+                customer_id: None,
+                business_org_unit_id: None,
+                scope_owner_user_id: None,
                 organization_id: organization_id.clone(),
                 creator_id: actor.id().to_string(),
             },
@@ -462,6 +466,10 @@ async fn persist_created_payment_reversal(
         business_object_id: reversal.base.id.clone(),
         business_object_version: reversal.base.version,
         context: BindingRevalidationContext {
+            order_source: None,
+            customer_id: None,
+            business_org_unit_id: None,
+            scope_owner_user_id: None,
             organization_id,
             creator_id: actor.id().to_string(),
         },

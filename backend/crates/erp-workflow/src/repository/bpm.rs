@@ -9,14 +9,13 @@ use bpm::model::{
     ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessDefinition, ApprovalProcessInstance,
 };
 use bpm::{ProcessKind, SubjectRef};
+use mongodb::Database;
 use mongodb::bson::Document;
 use mongodb::options::FindOptions;
-use mongodb::Database;
+use persistence_core::{Error, Executor, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::extensions::BpmExt;
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Error, Result};
 
 const DEFINITIONS: &str = <mongodb::Database as BpmExt>::APPROVAL_PROCESS_DEFINITIONS;
 const NODE_DEFINITIONS: &str = <mongodb::Database as BpmExt>::APPROVAL_NODE_DEFINITIONS;
@@ -98,6 +97,8 @@ pub struct ApprovalInstanceListFilter {
     pub subject_kind: Option<String>,
     /// 授权范围内的对象主键；`Some(空)` 表示无可见对象。
     pub subject_ids: Option<Vec<String>>,
+    /// 当前业务范围验证后的实例 ID；Some(空) 始终为空集。
+    pub authorized_instance_ids: Option<Vec<String>>,
     /// 字面量检索；空表示不按关键词过滤。
     pub text_query: Option<ApprovalInstanceTextQuery>,
     /// 稳定游标；首页为空。

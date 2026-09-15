@@ -1,3 +1,12 @@
+use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
+use bpm::model::types::{
+    ApprovalCommandKind, ApprovalDefinitionStatus, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus,
+};
+use bpm::model::{ApprovalProcessInstance, IdempotencyKey, NewProcessInstance, ParticipantId, Timestamp};
+use bpm::{ProcessKind, SubjectRef};
+use entity_core::{BaseModel, HasBaseModel};
+use mongodb::bson::{Bson, doc, serialize_to_document};
+
 use super::cas::execution_end_filter;
 use super::definition_query::{
     definition_catalog_filter, definition_catalog_options, definition_child_filter,
@@ -14,22 +23,14 @@ use super::runtime_write::{
     instance_insert_document, previous_version, receipt_key_filter, require_cas_applied,
 };
 use super::{
+    ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListProjection,
+    ApprovalInstanceListView, ApprovalInstanceTextQuery, AssignDocumentNoOutcome, CasWriteOutcome,
+    DefinitionCatalogRow, DefinitionCatalogStatusFact, LatestDefinitionVersionProjection,
+    MAX_CATALOG_STATUS_ROWS, MAX_DEFINITION_GRAPH_DOCS, MAX_EXECUTION_HISTORY, MAX_INSTANCE_PAGE,
     approval_task_cas_filter, assign_document_no_filter, clamp_limit, classify_assign_document_no_miss,
     classify_cas_miss, instance_list_filter_doc, instance_list_scope_empty, instance_list_sort,
-    instance_summary_projection, merge_documents, ApprovalInstanceListCursor, ApprovalInstanceListFilter,
-    ApprovalInstanceListProjection, ApprovalInstanceListView, ApprovalInstanceTextQuery,
-    AssignDocumentNoOutcome, CasWriteOutcome, DefinitionCatalogRow, DefinitionCatalogStatusFact,
-    LatestDefinitionVersionProjection, MAX_CATALOG_STATUS_ROWS, MAX_DEFINITION_GRAPH_DOCS,
-    MAX_EXECUTION_HISTORY, MAX_INSTANCE_PAGE,
+    instance_summary_projection, merge_documents,
 };
-use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
-use bpm::model::types::{
-    ApprovalCommandKind, ApprovalDefinitionStatus, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus,
-};
-use bpm::model::{ApprovalProcessInstance, IdempotencyKey, NewProcessInstance, ParticipantId, Timestamp};
-use bpm::{ProcessKind, SubjectRef};
-use entity_core::{BaseModel, HasBaseModel};
-use mongodb::bson::{doc, serialize_to_document, Bson};
 
 #[derive(Clone)]
 struct LockProbe {
@@ -68,10 +69,7 @@ fn latest_definition_version_query_is_minimal_and_bounded() {
     let options = latest_definition_version_options();
     assert_eq!(options.sort, Some(doc! { "definition_version": -1 }));
     assert_eq!(options.limit, Some(1));
-    assert_eq!(
-        options.projection,
-        Some(doc! { "definition_version": 1, "_id": 0 })
-    );
+    assert_eq!(options.projection, Some(doc! { "definition_version": 1, "_id": 0 }));
 }
 
 /// 目录批量查询保留软删除、草稿/发布状态、种类 `$in` 与固定上限。
@@ -88,15 +86,8 @@ fn definition_catalog_query_is_bounded_and_filters_retired() {
     );
     let filter = definition_catalog_filter(&[ProcessKind::SalesOrder, ProcessKind::StockAdjustment]);
     assert_eq!(
-        filter
-            .get_document("process_kind")
-            .unwrap()
-            .get_array("$in")
-            .unwrap(),
-        &vec![
-            Bson::String("sales_order".into()),
-            Bson::String("stock_adjustment".into())
-        ]
+        filter.get_document("process_kind").unwrap().get_array("$in").unwrap(),
+        &vec![Bson::String("sales_order".into()), Bson::String("stock_adjustment".into())]
     );
     assert_eq!(
         filter.get_document("status").unwrap().get_array("$in").unwrap(),
@@ -181,54 +172,41 @@ fn definition_catalog_grouping_covers_status_matrix_and_duplicate_fail_closed() 
             },
         ]
     );
-    assert!(group_definition_catalog_rows(
-        &[ProcessKind::SalesOrder],
-        vec![
-            DefinitionCatalogRow {
+    assert!(
+        group_definition_catalog_rows(
+            &[ProcessKind::SalesOrder],
+            vec![
+                DefinitionCatalogRow {
+                    process_kind: ProcessKind::SalesOrder,
+                    status: ApprovalDefinitionStatus::Published,
+                    definition_version: 1,
+                },
+                DefinitionCatalogRow {
+                    process_kind: ProcessKind::SalesOrder,
+                    status: ApprovalDefinitionStatus::Published,
+                    definition_version: 2,
+                },
+            ],
+        )
+        .is_err()
+    );
+    assert!(
+        group_definition_catalog_rows(
+            &[ProcessKind::SalesOrder],
+            vec![DefinitionCatalogRow {
                 process_kind: ProcessKind::SalesOrder,
-                status: ApprovalDefinitionStatus::Published,
+                status: ApprovalDefinitionStatus::Retired,
                 definition_version: 1,
-            },
-            DefinitionCatalogRow {
-                process_kind: ProcessKind::SalesOrder,
-                status: ApprovalDefinitionStatus::Published,
-                definition_version: 2,
-            },
-        ],
-    )
-    .is_err());
-    assert!(group_definition_catalog_rows(
-        &[ProcessKind::SalesOrder],
-        vec![DefinitionCatalogRow {
-            process_kind: ProcessKind::SalesOrder,
-            status: ApprovalDefinitionStatus::Retired,
-            definition_version: 1,
-        }],
-    )
-    .is_err());
+            }],
+        )
+        .is_err()
+    );
     assert!(unique_published_definition(Vec::new()).unwrap().is_none());
     let mut published_a = dummy_definition("a");
-    published_a
-        .publish(
-            ParticipantId::new("admin").unwrap(),
-            Timestamp::from_unix_secs(2).unwrap(),
-        )
-        .unwrap();
+    published_a.publish(ParticipantId::new("admin").unwrap(), Timestamp::from_unix_secs(2).unwrap()).unwrap();
     let mut published_b = dummy_definition("b");
-    published_b
-        .publish(
-            ParticipantId::new("admin").unwrap(),
-            Timestamp::from_unix_secs(2).unwrap(),
-        )
-        .unwrap();
-    assert_eq!(
-        unique_published_definition(vec![published_a.clone()])
-            .unwrap()
-            .unwrap()
-            .base
-            .id,
-        "a"
-    );
+    published_b.publish(ParticipantId::new("admin").unwrap(), Timestamp::from_unix_secs(2).unwrap()).unwrap();
+    assert_eq!(unique_published_definition(vec![published_a.clone()]).unwrap().unwrap().base.id, "a");
     assert!(unique_published_definition(vec![published_a, published_b]).is_err());
     let catalog_src = include_str!("definition_query.rs")
         .split("pub async fn definition_catalog_facts")
@@ -281,14 +259,8 @@ fn non_terminal_subject_filter_excludes_definition_id() {
     let subject = SubjectRef::new("stock_adjustment", "adj-1").unwrap();
     let filter = non_terminal_subject_filter(&subject, 2);
     assert!(!filter.contains_key("process_definition_id"));
-    assert_eq!(
-        filter.get_str("subject.subject_kind").unwrap(),
-        "stock_adjustment"
-    );
-    assert_eq!(
-        filter.get_document("status").unwrap(),
-        &doc! { "$in": ["RUNNING", "BLOCKED"] }
-    );
+    assert_eq!(filter.get_str("subject.subject_kind").unwrap(), "stock_adjustment");
+    assert_eq!(filter.get_document("status").unwrap(), &doc! { "$in": ["RUNNING", "BLOCKED"] });
 }
 
 /// 取消候选查询保留提交版本但不得预先过滤实例状态。
@@ -323,20 +295,14 @@ fn instance_and_execution_cas_filters_include_token_and_status() {
     let advance = instance_advance_filter("inst-1", 4, &execution).unwrap();
     assert_eq!(advance.get_i64("version").unwrap(), 4);
     assert_eq!(advance.get_str("current_node_execution_id").unwrap(), "exec-1");
-    assert_eq!(
-        advance.get_document("status").unwrap(),
-        &doc! { "$in": ["RUNNING", "BLOCKED"] }
-    );
+    assert_eq!(advance.get_document("status").unwrap(), &doc! { "$in": ["RUNNING", "BLOCKED"] });
     let ended = execution_end_filter("exec-1", 2, ApprovalNodeExecutionStatus::Active).unwrap();
     assert_eq!(ended.get_str("status").unwrap(), "ACTIVE");
     let blocked = execution_end_filter("exec-1", 2, ApprovalNodeExecutionStatus::Blocked).unwrap();
     assert_eq!(blocked.get_str("status").unwrap(), "BLOCKED");
     assert_eq!(blocked.get_i64("version").unwrap(), 2);
     let current = current_execution_filter(&ApprovalProcessInstanceId::new("inst-1"));
-    assert_eq!(
-        current.get_document("status").unwrap(),
-        &doc! { "$in": ["ACTIVE", "BLOCKED"] }
-    );
+    assert_eq!(current.get_document("status").unwrap(), &doc! { "$in": ["ACTIVE", "BLOCKED"] });
 }
 
 /// 取消执行 CAS 同时允许活动和受阻状态，并保持版本与软删除约束。
@@ -346,10 +312,7 @@ fn instance_and_execution_cas_filters_include_token_and_status() {
 fn cancellable_execution_filter_accepts_current_states_only() {
     let filter = cancellable_execution_end_filter("exec-1", 2).unwrap();
     assert_eq!(filter.get_i64("version").unwrap(), 2);
-    assert_eq!(
-        filter.get_document("status").unwrap(),
-        &doc! { "$in": ["ACTIVE", "BLOCKED"] }
-    );
+    assert_eq!(filter.get_document("status").unwrap(), &doc! { "$in": ["ACTIVE", "BLOCKED"] });
     assert_eq!(filter.get_i64("deleted_at").unwrap(), 0);
 }
 
@@ -408,13 +371,7 @@ fn start_instance_insert_includes_bounded_list_projection() {
     assert_eq!(document.get_str("current_node_key").unwrap(), "n1");
     assert_eq!(document.get_str("current_assignee_participant_id").unwrap(), "u1");
     assert_eq!(document.get_i64("last_status_changed_at").unwrap(), 10);
-    assert_eq!(
-        serialize_to_document(&projection)
-            .unwrap()
-            .get_str("current_node_name")
-            .unwrap(),
-        "仓储复核"
-    );
+    assert_eq!(serialize_to_document(&projection).unwrap().get_str("current_node_name").unwrap(), "仓储复核");
     let mut merged = doc! { "id": "inst-1" };
     merge_documents(&mut merged, serialize_to_document(&projection).unwrap());
     assert_eq!(merged.get_str("current_assignee_name").unwrap(), "张三");
@@ -442,20 +399,11 @@ fn document_no_assignment_distinguishes_same_payload_and_race() {
     assert_eq!(filter.get_str("id").unwrap(), "bd-1");
     assert_eq!(
         filter.get_array("$or").unwrap(),
-        &vec![
-            Bson::Document(doc! { "document_no": "" }),
-            Bson::Document(doc! { "document_no": Bson::Null }),
-        ]
+        &vec![Bson::Document(doc! { "document_no": "" }), Bson::Document(doc! { "document_no": Bson::Null }),]
     );
 
     assert!(matches!(
-        classify_assign_document_no_miss(
-            None::<(u64, String)>,
-            1,
-            "SO-1",
-            |row| row.0,
-            |row| row.1.as_str()
-        ),
+        classify_assign_document_no_miss(None::<(u64, String)>, 1, "SO-1", |row| row.0, |row| row.1.as_str()),
         AssignDocumentNoOutcome::NotFound
     ));
     assert!(matches!(
@@ -516,21 +464,24 @@ fn instance_list_views_use_matching_sort_and_scope() {
         status: Some(ApprovalProcessInstanceStatus::Running),
         started_by: None,
         subject_kind: Some("stock_adjustment".into()),
+        authorized_instance_ids: None,
         subject_ids: Some(vec!["adj-1".into()]),
         text_query: None,
-        cursor: Some(ApprovalInstanceListCursor {
-            sort_time: 10,
-            id: "inst-9".into(),
-        }),
+        cursor: Some(ApprovalInstanceListCursor { sort_time: 10, id: "inst-9".into() }),
         limit: 20,
     };
+    let mut constrained = managed.clone();
+    constrained.authorized_instance_ids = Some(vec![]);
+    let denied = instance_list_filter_doc(&constrained);
+    assert_eq!(denied.get_document("id").unwrap(), &doc! { "$in": [] });
+    constrained.authorized_instance_ids = Some(vec!["allowed-instance".into()]);
+    let allowed = instance_list_filter_doc(&constrained);
+    assert_eq!(allowed.get_document("id").unwrap(), &doc! { "$in": ["allowed-instance"] });
+    assert!(allowed.contains_key("$or"), "scope IDs must intersect the cursor");
     let document = instance_list_filter_doc(&managed);
     assert_eq!(document.get_str("process_kind").unwrap(), "stock_adjustment");
     assert_eq!(document.get_str("status").unwrap(), "RUNNING");
-    assert_eq!(
-        instance_list_sort(&managed),
-        doc! { "status": 1, "updated_at": -1, "id": -1 }
-    );
+    assert_eq!(instance_list_sort(&managed), doc! { "status": 1, "updated_at": -1, "id": -1 });
     assert_eq!(
         document.get_array("$or").unwrap(),
         &vec![
@@ -545,12 +496,10 @@ fn instance_list_views_use_matching_sort_and_scope() {
         status: None,
         started_by: Some("u1".into()),
         subject_kind: None,
+        authorized_instance_ids: None,
         subject_ids: None,
         text_query: None,
-        cursor: Some(ApprovalInstanceListCursor {
-            sort_time: 20,
-            id: "inst-2".into(),
-        }),
+        cursor: Some(ApprovalInstanceListCursor { sort_time: 20, id: "inst-2".into() }),
         limit: 20,
     };
     let started_doc = instance_list_filter_doc(&started);
@@ -571,20 +520,15 @@ fn instance_list_views_use_matching_sort_and_scope() {
         status: None,
         started_by: None,
         subject_kind: None,
+        authorized_instance_ids: None,
         subject_ids: None,
         text_query: None,
-        cursor: Some(ApprovalInstanceListCursor {
-            sort_time: 8,
-            id: "inst-3".into(),
-        }),
+        cursor: Some(ApprovalInstanceListCursor { sort_time: 8, id: "inst-3".into() }),
         limit: 20,
     };
     let managed_open_doc = instance_list_filter_doc(&managed_open);
     assert!(!managed_open_doc.contains_key("status"));
-    assert_eq!(
-        instance_list_sort(&managed_open),
-        doc! { "updated_at": -1, "id": -1 }
-    );
+    assert_eq!(instance_list_sort(&managed_open), doc! { "updated_at": -1, "id": -1 });
     assert_eq!(
         managed_open_doc.get_array("$or").unwrap(),
         &vec![
@@ -599,12 +543,10 @@ fn instance_list_views_use_matching_sort_and_scope() {
         status: None,
         started_by: None,
         subject_kind: None,
+        authorized_instance_ids: None,
         subject_ids: None,
         text_query: None,
-        cursor: Some(ApprovalInstanceListCursor {
-            sort_time: 4,
-            id: "inst-4".into(),
-        }),
+        cursor: Some(ApprovalInstanceListCursor { sort_time: 4, id: "inst-4".into() }),
         limit: 20,
     };
     let blocked_doc = instance_list_filter_doc(&blocked);
@@ -624,6 +566,7 @@ fn instance_list_views_use_matching_sort_and_scope() {
         status: None,
         started_by: None,
         subject_kind: None,
+        authorized_instance_ids: None,
         subject_ids: Some(Vec::new()),
         text_query: None,
         cursor: None,
@@ -631,10 +574,7 @@ fn instance_list_views_use_matching_sort_and_scope() {
     };
     assert!(instance_list_scope_empty(&empty_scope));
     assert!(!instance_list_scope_empty(&started));
-    assert_eq!(
-        instance_list_sort(&empty_scope),
-        doc! { "blocked_at": -1, "id": -1 }
-    );
+    assert_eq!(instance_list_sort(&empty_scope), doc! { "blocked_at": -1, "id": -1 });
     assert_eq!(clamp_limit(0, MAX_INSTANCE_PAGE), 1);
     assert_eq!(clamp_limit(50, MAX_INSTANCE_PAGE), 50);
     assert_eq!(clamp_limit(101, MAX_INSTANCE_PAGE), 101);
@@ -650,6 +590,7 @@ fn started_view_fail_closes_without_started_by_and_allows_optional_filters() {
         status: Some(ApprovalProcessInstanceStatus::Running),
         started_by: None,
         subject_kind: None,
+        authorized_instance_ids: None,
         subject_ids: None,
         text_query: None,
         cursor: None,
@@ -657,10 +598,8 @@ fn started_view_fail_closes_without_started_by_and_allows_optional_filters() {
     };
     assert!(instance_list_scope_empty(&missing_starter));
 
-    let empty_starter = ApprovalInstanceListFilter {
-        started_by: Some(String::new()),
-        ..missing_starter.clone()
-    };
+    let empty_starter =
+        ApprovalInstanceListFilter { started_by: Some(String::new()), ..missing_starter.clone() };
     assert!(instance_list_scope_empty(&empty_starter));
 
     let kind_only = ApprovalInstanceListFilter {
@@ -669,6 +608,7 @@ fn started_view_fail_closes_without_started_by_and_allows_optional_filters() {
         status: None,
         started_by: Some("u1".into()),
         subject_kind: None,
+        authorized_instance_ids: None,
         subject_ids: None,
         text_query: None,
         cursor: None,
@@ -679,10 +619,7 @@ fn started_view_fail_closes_without_started_by_and_allows_optional_filters() {
     assert_eq!(kind_doc.get_str("started_by").unwrap(), "u1");
     assert_eq!(kind_doc.get_str("process_kind").unwrap(), "stock_adjustment");
     assert!(!kind_doc.contains_key("status"));
-    assert_eq!(
-        instance_list_sort(&kind_only),
-        doc! { "started_at": -1, "id": -1 }
-    );
+    assert_eq!(instance_list_sort(&kind_only), doc! { "started_at": -1, "id": -1 });
 
     let status_only = ApprovalInstanceListFilter {
         view: ApprovalInstanceListView::Started,
@@ -690,6 +627,7 @@ fn started_view_fail_closes_without_started_by_and_allows_optional_filters() {
         status: Some(ApprovalProcessInstanceStatus::Running),
         started_by: Some("u1".into()),
         subject_kind: None,
+        authorized_instance_ids: None,
         subject_ids: None,
         text_query: None,
         cursor: None,
@@ -700,25 +638,16 @@ fn started_view_fail_closes_without_started_by_and_allows_optional_filters() {
     assert_eq!(status_doc.get_str("started_by").unwrap(), "u1");
     assert_eq!(status_doc.get_str("status").unwrap(), "RUNNING");
     assert!(!status_doc.contains_key("process_kind"));
-    assert_eq!(
-        instance_list_sort(&status_only),
-        doc! { "started_at": -1, "id": -1 }
-    );
+    assert_eq!(instance_list_sort(&status_only), doc! { "started_at": -1, "id": -1 });
 }
 
 /// 字面量检索转义正则，并与游标 `$or` 用 `$and` 组合。
 #[test]
 fn instance_list_text_query_is_literal_and_composes_with_cursor() {
-    let text_query = ApprovalInstanceTextQuery {
-        query: "SO.[1]".to_string(),
-    };
+    let text_query = ApprovalInstanceTextQuery { query: "SO.[1]".to_string() };
     let alternatives = instance_text_query_or(&text_query);
     assert_eq!(alternatives.len(), 3);
-    let regex = alternatives[0]
-        .get_document("subject.subject_id")
-        .unwrap()
-        .get_str("$regex")
-        .unwrap();
+    let regex = alternatives[0].get_document("subject.subject_id").unwrap().get_str("$regex").unwrap();
     assert_eq!(regex, r"SO\.\[1\]");
     let with_cursor = ApprovalInstanceListFilter {
         view: ApprovalInstanceListView::Started,
@@ -726,12 +655,10 @@ fn instance_list_text_query_is_literal_and_composes_with_cursor() {
         status: None,
         started_by: Some("u1".into()),
         subject_kind: None,
+        authorized_instance_ids: None,
         subject_ids: None,
         text_query: Some(text_query.clone()),
-        cursor: Some(ApprovalInstanceListCursor {
-            sort_time: 20,
-            id: "inst-2".into(),
-        }),
+        cursor: Some(ApprovalInstanceListCursor { sort_time: 20, id: "inst-2".into() }),
         limit: 20,
     };
     let document = instance_list_filter_doc(&with_cursor);
@@ -742,10 +669,7 @@ fn instance_list_text_query_is_literal_and_composes_with_cursor() {
     assert_eq!(document.get_str("started_by").unwrap(), "u1");
     assert!(!document.contains_key("$or"));
 
-    let query_only = ApprovalInstanceListFilter {
-        cursor: None,
-        ..with_cursor
-    };
+    let query_only = ApprovalInstanceListFilter { cursor: None, ..with_cursor };
     let query_doc = instance_list_filter_doc(&query_only);
     assert!(query_doc.contains_key("$or"));
     assert!(!query_doc.contains_key("$and"));
@@ -761,10 +685,7 @@ fn execution_history_filter_and_limit_are_bounded() {
     assert!(!first_page.contains_key("execution_no"));
 
     let next_page = execution_history_filter(&instance_id, Some(7));
-    assert_eq!(
-        next_page.get_document("execution_no").unwrap(),
-        &doc! { "$gt": 7_i64 }
-    );
+    assert_eq!(next_page.get_document("execution_no").unwrap(), &doc! { "$gt": 7_i64 });
     assert_eq!(next_page.get_str("process_instance_id").unwrap(), "inst-1");
     assert_eq!(execution_history_limit(0), 1);
     assert_eq!(execution_history_limit(50), MAX_EXECUTION_HISTORY);
@@ -783,10 +704,7 @@ fn definition_child_filter_batches_by_definition_id_with_graph_limits() {
     assert!(!filter.contains_key("id"));
     assert_eq!(MAX_DEFINITION_GRAPH_DOCS, 20);
     assert_eq!(definition_graph_transition_limit(), 40);
-    assert_eq!(
-        definition_graph_transition_limit(),
-        MAX_DEFINITION_GRAPH_DOCS.saturating_mul(2)
-    );
+    assert_eq!(definition_graph_transition_limit(), MAX_DEFINITION_GRAPH_DOCS.saturating_mul(2));
 }
 
 #[test]

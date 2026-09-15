@@ -25,17 +25,13 @@ pub use dto::{
     ApprovalRecoveryAuthorization, ApprovalResumeCommand, ApprovalStartCommand,
 };
 pub use scope::{
-    approval_actor_is_active, approval_actor_is_active_with_executor,
+    ApprovalManagementScope, approval_actor_is_active, approval_actor_is_active_with_executor,
     approval_cancel_blocked_scope_with_executor, approval_cancel_scope_with_executor,
     approval_decide_scope_with_executor, approval_document_action_scope_with_executor,
     approval_document_read_scope, approval_document_read_scope_with_executor,
-    definition_management_visibility_with_executor,
-};
-pub use scope::{
-    approval_recovery_authorization, approval_recovery_authorization_scope, approval_recovery_scope,
-    ApprovalManagementScope,
+    approval_recovery_authorization, approval_recovery_scope, definition_management_visibility_with_executor,
 };
 pub use upgrade_subject::{
-    ensure_initial_unsubmitted_approval_upgrade_subject, load_approval_upgrade_subject_facts,
-    ApprovalUpgradeSubjectFacts,
+    ApprovalUpgradeSubjectFacts, ensure_initial_unsubmitted_approval_upgrade_subject,
+    load_approval_upgrade_subject_facts,
 };

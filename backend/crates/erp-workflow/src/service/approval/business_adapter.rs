@@ -3,20 +3,19 @@
 //! 12 个 `PROCESS_REQUIRED` 类型必须登记完整规格；9 个 `NO_APPROVAL` 类型
 //! 不得注册空适配器。领域动作由各 DocumentType 子阶段接线。
 
-use crate::entity::document_registry::DocumentType;
-use crate::ports::{DataScopeFact, DataScopeTypeFact};
 use bpm::ProcessKind;
 
-use crate::error::{Error, Result};
-
 use super::policy::{
-    policy_of, require_process_required, ApprovalDomainAction, ApprovalSubjectSnapshotField,
-    ApprovalSubjectVersionSource, DocumentApprovalPolicy, OwnerOrganizationSource,
-    ProcessRequiredApprovalPolicy, SeparationOfDutiesPolicy, WorkItemOwnerRole,
+    ApprovalDomainAction, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource, DocumentApprovalPolicy,
+    OwnerOrganizationSource, ProcessRequiredApprovalPolicy, SeparationOfDutiesPolicy, WorkItemOwnerRole,
+    policy_of, require_process_required,
 };
 use super::process_kind::process_kind_of;
+use crate::entity::document_registry::DocumentType;
+use crate::error::{Error, Result};
+use crate::ports::{OrderTaskSource, WorkflowScopeObject};
 
-/// 适配器读取范围：按单据责任组织重验 DataScopeFact 与对象读取权。
+/// 适配器读取范围：按单据责任组织重验 对象范围 与对象读取权。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdapterReadScope {
     /// 使用当前单据组织与创建人上下文。
@@ -51,10 +50,35 @@ pub struct ApprovalAdapterSpec {
 /// 绑定/升级时的单据组织与创建人上下文。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BindingRevalidationContext {
+    /// 当前或拟创建订单来源，变更单必须指向原单。
+    pub order_source: Option<OrderTaskSource>,
+    /// 销售订单当前客户，用于独立详情范围的协作事实。
+    pub customer_id: Option<String>,
+    /// 订单及变更沿当前原单取得的内部业务部门；不得填入结算主体。
+    pub business_org_unit_id: Option<String>,
+    /// 当前业务负责人；非订单类型可使用不可变创建人。
+    pub scope_owner_user_id: Option<String>,
     /// 当前单据责任组织。
     pub organization_id: String,
     /// 单据创建人或提交人。
     pub creator_id: String,
+}
+
+impl BindingRevalidationContext {
+    /// 按固定业务类型映射授权事实；身份维度不得混用。
+    pub fn scope_object(&self, document_type: DocumentType) -> WorkflowScopeObject {
+        let order = OrderTaskSource::approval_kind(document_type).is_some();
+        WorkflowScopeObject {
+            order_source: order.then(|| self.order_source.clone()).flatten(),
+            customer_id: order.then(|| self.customer_id.clone()).flatten(),
+            owner_user_id: self.scope_owner_user_id.clone().unwrap_or_else(|| self.creator_id.clone()),
+            business_org_unit_id: order.then(|| self.business_org_unit_id.clone()).flatten(),
+            warehouse_id: (document_type == DocumentType::StockAdjustment)
+                .then(|| self.organization_id.clone()),
+            settlement_party_id: (!order && document_type != DocumentType::StockAdjustment)
+                .then(|| self.organization_id.clone()),
+        }
+    }
 }
 
 /// 按合同政策构造必须审批类型的适配器规格。
@@ -110,10 +134,10 @@ pub fn ensure_adapter_spec_complete(spec: &ApprovalAdapterSpec) -> Result<()> {
         return Err(Error::Internal("审批适配器规格不完整".to_string()));
     }
     match spec.read_scope {
-        AdapterReadScope::DocumentOrganizationAndCreator => {}
+        AdapterReadScope::DocumentOrganizationAndCreator => {},
     }
     match spec.owner_organization_source {
-        OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId => {}
+        OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId => {},
     }
     Ok(())
 }
@@ -146,10 +170,7 @@ pub fn execute_policy_domain_action(document_type: DocumentType, action: Approva
             document_type.label()
         )));
     }
-    Err(Error::BusinessLogicError(format!(
-        "审批领域动作 {} 尚未绑定，已按安全策略拒绝推进",
-        action.as_str()
-    )))
+    Err(Error::BusinessLogicError(format!("审批领域动作 {} 尚未绑定，已按安全策略拒绝推进", action.as_str())))
 }
 
 /// 岗位分离：禁止创建人/提交人担任指定审批人。
@@ -162,66 +183,12 @@ pub fn ensure_separation_of_duties(
     assignee_ids: &[String],
 ) -> Result<()> {
     match policy {
-        SeparationOfDutiesPolicy::ForbidSubmitterAsApprover => {}
+        SeparationOfDutiesPolicy::ForbidSubmitterAsApprover => {},
     }
     if assignee_ids.iter().any(|assignee| assignee == creator_id) {
         return Err(Error::ValidationError("提交人不得审批自己的单据".to_string()));
     }
     Ok(())
-}
-
-/// 判断单条范围是否覆盖当前单据组织。
-///
-/// # 返回
-/// 公司范围或组织/团队目标命中为 `true`；本人/协作不得覆盖。
-fn scope_matches_organization(scope: &DataScopeFact, organization_id: &str) -> bool {
-    match scope.scope_type {
-        DataScopeTypeFact::Company => true,
-        DataScopeTypeFact::Organization | DataScopeTypeFact::Team => {
-            scope.scope_targets.iter().any(|target| target == organization_id)
-        }
-        DataScopeTypeFact::SelfOwned | DataScopeTypeFact::Collaborative => false,
-    }
-}
-
-/// 判断已加载范围是否覆盖当前单据组织。
-///
-/// 空范围不得误放行。公司范围或组织/团队命中才覆盖；本人/协作不覆盖。
-///
-/// # 参数
-/// * `scopes` - 用户或角色已加载范围
-/// * `organization_id` - 单据责任组织
-///
-/// # 返回
-/// 至少一条范围命中时为 `true`。
-pub fn data_scope_covers_organization(scopes: &[DataScopeFact], organization_id: &str) -> bool {
-    scopes
-        .iter()
-        .any(|scope| scope_matches_organization(scope, organization_id))
-}
-
-/// 用户范围：无单独范围时沿用角色；有范围时必须显式覆盖组织。
-///
-/// # 返回
-/// 空用户范围返回 `true`（交由角色范围证明）；否则与角色范围相同规则。
-pub fn user_scope_covers_organization(scopes: &[DataScopeFact], organization_id: &str) -> bool {
-    if scopes.is_empty() {
-        return true;
-    }
-    data_scope_covers_organization(scopes, organization_id)
-}
-
-/// 与 Resolver 同等强度：用户覆盖且角色覆盖。双方皆空必须拒绝。
-///
-/// # 返回
-/// 用户与角色范围同时覆盖当前组织时为 `true`。
-pub fn assignment_scope_covers_organization(
-    user_scopes: &[DataScopeFact],
-    role_scopes: &[DataScopeFact],
-    organization_id: &str,
-) -> bool {
-    user_scope_covers_organization(user_scopes, organization_id)
-        && data_scope_covers_organization(role_scopes, organization_id)
 }
 
 /// 领域 Adapter 按单据组织/创建人上下文给出对象读取权。
@@ -251,7 +218,7 @@ pub fn adapter_object_read_decision_with(
     port: &dyn crate::ports::ApprovalObjectReadPort,
 ) -> Result<Option<bool>> {
     match spec.read_scope {
-        AdapterReadScope::DocumentOrganizationAndCreator => {}
+        AdapterReadScope::DocumentOrganizationAndCreator => {},
     }
     if context.organization_id.trim().is_empty() || assignee_user_id.trim().is_empty() {
         return Err(Error::ValidationError("单据组织或审批人不能为空".to_string()));
@@ -284,76 +251,33 @@ pub fn ensure_object_readable(can_read: bool) -> Result<()> {
     Err(Error::ValidationError("审批人不能读取被审单据".to_string()))
 }
 
-/// 以用户+角色范围和显式读取权重验绑定资格。
-///
-/// # 错误
-/// 组织未覆盖或不能读取时返回校验错误。
-pub fn ensure_binding_scope(
-    spec: &ApprovalAdapterSpec,
-    user_scopes: &[DataScopeFact],
-    role_scopes: &[DataScopeFact],
-    organization_id: &str,
-    can_read: bool,
-) -> Result<()> {
-    match spec.read_scope {
-        AdapterReadScope::DocumentOrganizationAndCreator => {}
-    }
-    if !assignment_scope_covers_organization(user_scopes, role_scopes, organization_id) {
-        return Err(Error::ValidationError(
-            "审批人数据范围不覆盖当前单据组织".to_string(),
-        ));
-    }
-    ensure_object_readable(can_read)
-}
-
-/// bind/upgrade 共用闸门：先证明组织覆盖，再要求 Adapter 显式读取权。
-///
-/// # 错误
-/// 范围不足、读取权未接线或显式拒绝时返回错误。
-pub fn revalidate_assignee_binding_access(
-    spec: &ApprovalAdapterSpec,
-    user_scopes: &[DataScopeFact],
-    role_scopes: &[DataScopeFact],
-    context: &BindingRevalidationContext,
-    assignee_user_id: &str,
-) -> Result<()> {
-    revalidate_assignee_binding_access_with(
-        spec,
-        user_scopes,
-        role_scopes,
-        context,
-        assignee_user_id,
-        &crate::ports::FailClosedObjectReadPort,
-    )
-}
-
-/// bind/upgrade 共用闸门：使用注入的对象读取端口。
-pub fn revalidate_assignee_binding_access_with(
-    spec: &ApprovalAdapterSpec,
-    user_scopes: &[DataScopeFact],
-    role_scopes: &[DataScopeFact],
-    context: &BindingRevalidationContext,
-    assignee_user_id: &str,
-    object_read: &dyn crate::ports::ApprovalObjectReadPort,
-) -> Result<()> {
-    if !assignment_scope_covers_organization(user_scopes, role_scopes, &context.organization_id) {
-        return Err(Error::ValidationError(
-            "审批人数据范围不覆盖当前单据组织".to_string(),
-        ));
-    }
-    let can_read = require_wired_object_read(adapter_object_read_decision_with(
-        spec,
-        context,
-        assignee_user_id,
-        object_read,
-    )?)?;
-    ensure_binding_scope(spec, user_scopes, role_scopes, &context.organization_id, can_read)
-}
-
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn scope_facts_keep_business_org_warehouse_and_settlement_separate() {
+        let context = super::BindingRevalidationContext {
+            order_source: Some(super::OrderTaskSource::Sales("order".into())),
+            customer_id: Some("customer".into()),
+            business_org_unit_id: Some("department".into()),
+            scope_owner_user_id: Some("sales-owner".into()),
+            organization_id: "responsibility-id".into(),
+            creator_id: "creator".into(),
+        };
+        let sales = context.scope_object(super::DocumentType::SalesOrder);
+        assert_eq!(sales.business_org_unit_id.as_deref(), Some("department"));
+        assert_eq!(sales.owner_user_id, "sales-owner");
+        assert!(sales.warehouse_id.is_none() && sales.settlement_party_id.is_none());
+        let warehouse = context.scope_object(super::DocumentType::StockAdjustment);
+        assert_eq!(warehouse.warehouse_id.as_deref(), Some("responsibility-id"));
+        assert!(warehouse.business_org_unit_id.is_none() && warehouse.settlement_party_id.is_none());
+        let finance = context.scope_object(super::DocumentType::CustomerReceipt);
+        assert_eq!(finance.settlement_party_id.as_deref(), Some("responsibility-id"));
+        assert!(finance.business_org_unit_id.is_none() && finance.warehouse_id.is_none());
+        assert_eq!(context.organization_id, "responsibility-id");
+    }
+
     use super::*;
-    use crate::service::approval::policy::{policy_of, ALL_DOCUMENT_TYPES};
+    use crate::service::approval::policy::{ALL_DOCUMENT_TYPES, policy_of};
 
     /// 12 个必须审批类型的适配器规格完整，9 个无审批类型不得注册空适配器。
     #[test]
@@ -368,11 +292,11 @@ mod tests {
                     ensure_adapter_spec_complete(&spec).expect("适配器字段必须完整");
                     assert_eq!(spec.document_type, document_type);
                     assert_eq!(spec.process_kind, process_kind_of(document_type));
-                }
+                },
                 DocumentApprovalPolicy::NoApproval(_) => {
                     no_approval += 1;
                     assert!(adapter_spec_of(document_type).is_err());
-                }
+                },
             }
         }
         assert_eq!(required, 12);
@@ -410,36 +334,14 @@ mod tests {
         assert!(ensure_object_readable(false).is_err());
     }
 
-    /// 空范围不得误放行；角色空范围不能证明组织覆盖。
-    #[test]
-    fn empty_scopes_do_not_cover_organization() {
-        assert!(!data_scope_covers_organization(&[], "org-1"));
-        assert!(!assignment_scope_covers_organization(&[], &[], "org-1"));
-        assert!(user_scope_covers_organization(&[], "org-1"));
-    }
-
-    /// 组织未命中与 SelfOwned 不得覆盖，即使角色是公司范围。
-    #[test]
-    fn organization_miss_and_self_owned_fail_closed() {
-        let user_other = fixture_scope("u1", DataScopeTypeFact::Organization, &["org-2"]);
-        let user_self = fixture_scope("u1", DataScopeTypeFact::SelfOwned, &[]);
-        let role_company = fixture_scope("role-1", DataScopeTypeFact::Company, &[]);
-        assert!(!assignment_scope_covers_organization(
-            &[user_other],
-            std::slice::from_ref(&role_company),
-            "org-1"
-        ));
-        assert!(!assignment_scope_covers_organization(
-            &[user_self],
-            std::slice::from_ref(&role_company),
-            "org-1"
-        ));
-    }
-
     /// 读取权未接线或显式拒绝必须失败关闭。
     #[test]
     fn object_read_unwired_and_denied_fail_closed() {
         let context = BindingRevalidationContext {
+            order_source: None,
+            customer_id: None,
+            business_org_unit_id: None,
+            scope_owner_user_id: None,
             organization_id: "org-1".to_string(),
             creator_id: "creator-1".to_string(),
         };
@@ -486,58 +388,5 @@ mod tests {
                 .expect("注入端口后必须返回领域判定"),
             Some(true)
         );
-    }
-
-    /// bind/upgrade 共用闸门会走到组织未覆盖、空范围和读取权拒绝。
-    #[test]
-    fn bind_upgrade_gate_hits_scope_and_read_failures() {
-        let spec = adapter_spec_of(DocumentType::StockAdjustment).expect("试点必须有适配器");
-        let context = BindingRevalidationContext {
-            organization_id: "org-1".to_string(),
-            creator_id: "creator-1".to_string(),
-        };
-        let empty = revalidate_assignee_binding_access(&spec, &[], &[], &context, "u1").unwrap_err();
-        assert!(empty.to_string().contains("数据范围不覆盖当前单据组织"));
-
-        let role_company = fixture_scope("role-1", DataScopeTypeFact::Company, &[]);
-        let user_org = fixture_scope("u1", DataScopeTypeFact::Organization, &["org-1"]);
-        let stock_unwired = revalidate_assignee_binding_access(
-            &spec,
-            std::slice::from_ref(&user_org),
-            std::slice::from_ref(&role_company),
-            &context,
-            "u1",
-        )
-        .expect_err("库存调整不得回退 generic adapter 常量放行");
-        assert!(stock_unwired.to_string().contains("对象读取权未接线"));
-        let payment_unwired = revalidate_assignee_binding_access(
-            &adapter_spec_of(DocumentType::PaymentReversal).expect("付款冲正必须有适配器"),
-            std::slice::from_ref(&user_org),
-            std::slice::from_ref(&role_company),
-            &context,
-            "u1",
-        )
-        .expect_err("领域读取已迁出，workflow 默认失败关闭");
-        assert!(payment_unwired.to_string().contains("对象读取权未接线"));
-        assert!(require_wired_object_read(None)
-            .unwrap_err()
-            .to_string()
-            .contains("对象读取权未接线"));
-        assert!(ensure_binding_scope(
-            &spec,
-            std::slice::from_ref(&user_org),
-            std::slice::from_ref(&role_company),
-            "org-1",
-            false
-        )
-        .is_err());
-    }
-
-    fn fixture_scope(subject_id: &str, scope_type: DataScopeTypeFact, targets: &[&str]) -> DataScopeFact {
-        DataScopeFact::new(
-            subject_id,
-            scope_type,
-            targets.iter().map(|target| (*target).to_string()).collect(),
-        )
     }
 }

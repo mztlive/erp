@@ -1,6 +1,6 @@
 //! 责任队列授权快照、范围过滤与允许动作。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use application_core::AuditActor;
 use persistence_core::{Executor, NoTransaction};
@@ -12,7 +12,7 @@ use crate::entity::work_item::{
     AvailableWorkItemAccount, WorkItem, WorkItemBriefRelation, WorkItemStatus, WorkItemType,
 };
 use crate::error::{Error, ErrorCode, Result};
-use crate::ports::{permission_covers, DataScopeFact, ObjectFact, ObjectFactMap};
+use crate::ports::{ObjectFact, ObjectFactMap, permission_covers};
 use crate::repository::DocumentRegistryExt;
 
 pub fn object_policy(
@@ -31,8 +31,7 @@ pub struct ActorAccess {
     pub actor_id: String,
     pub permissions: Vec<String>,
     pub participant_document_ids: HashSet<String>,
-    pub organization_ids: Vec<String>,
-    pub responsibility_scopes: Vec<(String, Option<String>)>,
+    pub managed_owner_ids: Option<Vec<String>>,
     pub can_manage: bool,
 }
 
@@ -40,17 +39,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     /// 写命令执行前重验对象存在、阅读权限和参与依据。
     pub async fn ensure_object_participation(&self, actor: &AuditActor, item: &WorkItem) -> Result<()> {
         let access = self.actor_access(actor).await?;
-        self.ensure_item_access(item, &access)
-            .await
-            .map_err(task_read_error)
+        self.ensure_item_access(item, &access).await.map_err(task_read_error)
     }
 
     pub async fn ensure_item_access(&self, item: &WorkItem, access: &ActorAccess) -> Result<()> {
-        if self
-            .authorized_fields_for_items(vec![item.clone()], access)
-            .await?
-            .is_empty()
-        {
+        if self.authorized_fields_for_items(vec![item.clone()], access).await?.is_empty() {
             return Err(Error::Forbidden("业务对象不可访问".to_string()));
         }
         Ok(())
@@ -75,19 +68,21 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .into_iter()
             .collect();
         let has_manage_permission = self.auth.permissions_cover(&permissions, &[MANAGE_PERMISSION])?;
-        let manage_role_ids = self
-            .roles_granting_permission(&role_ids, MANAGE_PERMISSION, has_manage_permission)
-            .await?;
-        let (organization_ids, responsibility_scopes) = self
-            .actor_scope_access(actor_id, &role_ids, &manage_role_ids)
+        let manage_role_ids =
+            self.roles_granting_permission(&role_ids, MANAGE_PERMISSION, has_manage_permission).await?;
+        let managed_owner_ids = self
+            .auth
+            .managed_task_owners(
+                &AuditActor::new(actor_id.to_string(), actor_id.to_string(), account_kind),
+                &mut NoTransaction,
+            )
             .await?;
         Ok(ActorAccess {
             actor_id: actor_id.to_string(),
             permissions,
             participant_document_ids,
             can_manage: !manage_role_ids.is_empty(),
-            organization_ids,
-            responsibility_scopes,
+            managed_owner_ids,
         })
     }
 
@@ -108,47 +103,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             }
         }
         Ok(granting_roles)
-    }
-
-    /// 分别保留每个角色的组织授权，避免多角色范围交叉放大。
-    async fn actor_scope_access(
-        &self,
-        actor_id: &str,
-        role_ids: &[String],
-        manage_role_ids: &[String],
-    ) -> Result<(Vec<String>, Vec<(String, Option<String>)>)> {
-        let user_scopes = self
-            .auth
-            .load_data_scopes("user", actor_id, &mut NoTransaction)
-            .await?;
-        let role_scopes = self
-            .auth
-            .load_data_scopes_for_subjects("role", role_ids, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .fold(
-                HashMap::<String, Vec<DataScopeFact>>::new(),
-                |mut grouped, scope| {
-                    grouped.entry(scope.subject_id.clone()).or_default().push(scope);
-                    grouped
-                },
-            );
-        let mut responsibility_scopes = Vec::new();
-        let mut management_scopes = Vec::new();
-        for role_id in role_ids {
-            let role_scopes = role_scopes.get(role_id).map(Vec::as_slice).unwrap_or_default();
-            let pairs = responsibility_scope_for_role(role_id, role_scopes, &user_scopes);
-            responsibility_scopes.extend(pairs.iter().cloned());
-            if manage_role_ids.contains(role_id) {
-                management_scopes.extend(pairs);
-            }
-        }
-        responsibility_scopes.sort();
-        responsibility_scopes.dedup();
-        Ok((
-            organizations_from_pairs(&management_scopes),
-            responsibility_scopes,
-        ))
     }
 
     pub async fn view_access(
@@ -182,10 +136,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         manage_role_ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<ActorAccess> {
-        let role_ids = self
-            .auth
-            .role_ids_with_executor(account_kind, actor_id, executor)
-            .await?;
+        let role_ids = self.auth.role_ids_with_executor(account_kind, actor_id, executor).await?;
         let active_read_roles = intersect_role_ids(&role_ids, read_role_ids);
         let active_manage_roles = intersect_role_ids(&role_ids, manage_role_ids);
         let mut permissions = Vec::with_capacity(2);
@@ -202,56 +153,20 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .await?
             .into_iter()
             .collect();
-        let (organization_ids, responsibility_scopes) = self
-            .scope_access_for_executor(actor_id, &role_ids, &active_manage_roles, executor)
+        let managed_owner_ids = self
+            .auth
+            .managed_task_owners(
+                &AuditActor::new(actor_id.to_string(), actor_id.to_string(), account_kind),
+                executor,
+            )
             .await?;
         Ok(ActorAccess {
             actor_id: actor_id.to_string(),
             permissions,
             participant_document_ids,
             can_manage: !active_manage_roles.is_empty(),
-            organization_ids,
-            responsibility_scopes,
+            managed_owner_ids,
         })
-    }
-
-    /// 分别保留事务内每个角色的数据范围，禁止角色与用户范围交叉放大。
-    async fn scope_access_for_executor(
-        &self,
-        actor_id: &str,
-        role_ids: &[String],
-        manage_role_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<(Vec<String>, Vec<(String, Option<String>)>)> {
-        let user_scopes = self.auth.load_data_scopes("user", actor_id, executor).await?;
-        let role_scopes = self
-            .auth
-            .load_data_scopes_for_subjects("role", role_ids, executor)
-            .await?
-            .into_iter()
-            .fold(
-                HashMap::<String, Vec<DataScopeFact>>::new(),
-                |mut grouped, scope| {
-                    grouped.entry(scope.subject_id.clone()).or_default().push(scope);
-                    grouped
-                },
-            );
-        let mut responsibility_scopes = Vec::new();
-        let mut management_scopes = Vec::new();
-        for role_id in role_ids {
-            let role_scopes = role_scopes.get(role_id).map(Vec::as_slice).unwrap_or_default();
-            let pairs = responsibility_scope_for_role(role_id, role_scopes, &user_scopes);
-            responsibility_scopes.extend(pairs.iter().cloned());
-            if manage_role_ids.contains(role_id) {
-                management_scopes.extend(pairs);
-            }
-        }
-        responsibility_scopes.sort();
-        responsibility_scopes.dedup();
-        Ok((
-            organizations_from_pairs(&management_scopes),
-            responsibility_scopes,
-        ))
     }
 
     /// 使用调用方 executor 读取固定注册表对象事实并重验参与权。
@@ -293,30 +208,19 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".to_string()))?;
         let read_permission = policy.read_permission;
         let policy_revision = self.auth.policy_revision_with_executor(executor).await?;
-        let role_ids = self
-            .auth
-            .role_ids_with_executor(actor.kind(), actor.id(), executor)
-            .await?;
+        let role_ids = self.auth.role_ids_with_executor(actor.kind(), actor.id(), executor).await?;
         let execution_permissions =
             required_execution_permissions(item.work_item_type, &item.business_object_type)
                 .ok_or_else(|| Error::Forbidden("任务类型未注册完整执行权限".to_string()))?;
         for permission in execution_permissions.as_slice() {
-            let granting_roles = self
-                .roles_granting_permission(&role_ids, permission, true)
-                .await?;
+            let granting_roles = self.roles_granting_permission(&role_ids, permission, true).await?;
             if granting_roles.is_empty() {
-                return Err(Error::Forbidden(
-                    "当前账号已不具备任务所需的完整执行权限".to_string(),
-                ));
+                return Err(Error::Forbidden("当前账号已不具备任务所需的完整执行权限".to_string()));
             }
         }
-        let read_role_ids = self
-            .roles_granting_permission(&role_ids, read_permission, true)
-            .await?;
+        let read_role_ids = self.roles_granting_permission(&role_ids, read_permission, true).await?;
         if read_role_ids.is_empty() {
-            return Err(Error::Forbidden(
-                "当前账号已不具备任务业务对象读取权限".to_string(),
-            ));
+            return Err(Error::Forbidden("当前账号已不具备任务业务对象读取权限".to_string()));
         }
         let access = self
             .assignment_access_for_executor(
@@ -328,17 +232,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                 executor,
             )
             .await?;
-        self.ensure_item_access_with_executor(item, &access, executor)
-            .await
-            .map_err(task_read_error)?;
-        self.auth
-            .ensure_policy_snapshot_with_executor(policy_revision, executor)
-            .await
+        self.ensure_item_access_with_executor(item, &access, executor).await.map_err(task_read_error)?;
+        self.auth.ensure_policy_snapshot_with_executor(policy_revision, executor).await
     }
 
     pub async fn managed_access(&self, actor: &AuditActor) -> Result<ActorAccess> {
         let access = self.actor_access(actor).await?;
-        if access.can_manage && !access.organization_ids.is_empty() {
+        if access.can_manage && !access.managed_owner_ids.as_ref().is_some_and(Vec::is_empty) {
             return Ok(access);
         }
         Err(Error::Forbidden("当前账号没有任务责任管理权限".to_string()))
@@ -351,8 +251,7 @@ pub async fn ensure_policy_revision<A: crate::ports::WorkflowAuthorizationPort>(
     expected_revision: u64,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    auth.ensure_policy_snapshot_with_executor(expected_revision, executor)
-        .await
+    auth.ensure_policy_snapshot_with_executor(expected_revision, executor).await
 }
 
 /// 从事务内 Casbin `g` 授权事实与启用角色形成角色集合。
@@ -362,16 +261,11 @@ pub async fn active_role_ids<A: crate::ports::WorkflowAuthorizationPort>(
     account_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
-    auth.role_ids_with_executor(account_kind, account_id, executor)
-        .await
+    auth.role_ids_with_executor(account_kind, account_id, executor).await
 }
 
 pub fn intersect_role_ids(active: &[String], authorized: &[String]) -> Vec<String> {
-    active
-        .iter()
-        .filter(|role_id| authorized.contains(role_id))
-        .cloned()
-        .collect()
+    active.iter().filter(|role_id| authorized.contains(role_id)).cloned().collect()
 }
 
 /// 根据实体注册关系和当前权限形成仓储候选对象形状。
@@ -404,10 +298,7 @@ pub fn object_access_shapes(access: &ActorAccess) -> Vec<(WorkItemType, String)>
 /// # 错误
 /// 无；固定权限代码无效属于程序错误并触发断言。
 pub fn has_permission(access: &ActorAccess, permission: &str) -> bool {
-    access
-        .permissions
-        .iter()
-        .any(|owned| permission_covers(owned, permission))
+    access.permissions.iter().any(|owned| permission_covers(owned, permission))
 }
 
 /// 按对象权限、参与关系与权威版本过滤工作项列表投影。
@@ -522,9 +413,7 @@ pub fn required_execution_permissions(
     if work_item_type == WorkItemType::BusinessException && business_object_type == "SUPPLIER_OFFERING" {
         return Some(vec!["supplier_offering:resolve_supply_exception"]);
     }
-    work_item_type
-        .required_execution_permissions(business_object_type)
-        .map(|codes| codes.to_vec())
+    work_item_type.required_execution_permissions(business_object_type).map(|codes| codes.to_vec())
 }
 
 /// 判断账号是否覆盖执行任务在目标工作面所需的全部权限。
@@ -534,12 +423,7 @@ pub fn has_execution_permissions(
     access: &ActorAccess,
 ) -> bool {
     required_execution_permissions(work_item_type, business_object_type).is_some_and(|required| {
-        required.iter().all(|code| {
-            access
-                .permissions
-                .iter()
-                .any(|owned| permission_covers(owned, code))
-        })
+        required.iter().all(|code| access.permissions.iter().any(|owned| permission_covers(owned, code)))
     })
 }
 
@@ -568,19 +452,18 @@ pub fn has_item_participation(
 ) -> bool {
     let is_explicit_owner =
         work_item_type.uses_explicit_owner_authorization() && owner_user_id == Some(access.actor_id.as_str());
-    is_explicit_owner || has_object_participation(access, owner_role, owner_organization_id, fact)
+    is_explicit_owner
+        || (access.can_manage && covers_owner(access, owner_user_id))
+        || has_object_participation(access, owner_role, owner_organization_id, fact)
 }
 
 pub fn has_object_participation(
     access: &ActorAccess,
-    owner_role: &str,
-    owner_organization_id: &str,
+    _owner_role: &str,
+    _owner_organization_id: &str,
     fact: &ObjectFact,
 ) -> bool {
-    fact.created_by == access.actor_id
-        || access.participant_document_ids.contains(&fact.root_document_id)
-        || covers_responsibility(access, owner_role, owner_organization_id)
-        || (access.can_manage && covers_organization(access, owner_organization_id))
+    fact.created_by == access.actor_id || access.participant_document_ids.contains(&fact.root_document_id)
 }
 
 pub struct ViewAccess {
@@ -630,13 +513,8 @@ pub fn allowed_actions(
     access: &ActorAccess,
 ) -> Vec<WorkItemAllowedAction> {
     let mut actions = vec![WorkItemAllowedAction::View];
-    let is_explicit_owner = item.work_item_type.uses_explicit_owner_authorization()
-        && item.owner_user_id.as_deref() == Some(actor_id);
     if item.owner_user_id.as_deref() == Some(actor_id)
         && has_execution_permissions(item.work_item_type, &item.business_object_type, access)
-        && (is_explicit_owner
-            || covers_responsibility(access, &item.owner_role, &item.owner_organization_id)
-            || item.status != WorkItemStatus::Open)
     {
         actions.push(WorkItemAllowedAction::Process);
     }
@@ -655,7 +533,11 @@ pub fn allowed_actions(
     }
     let is_approval_responsibility =
         item.work_item_type.is_document_approval() || item.approval_node_execution_id.is_some();
-    if access.can_manage && scope == WorkItemScope::Managed && !is_approval_responsibility {
+    if access.can_manage
+        && covers_owner(access, item.owner_user_id.as_deref())
+        && scope == WorkItemScope::Managed
+        && !is_approval_responsibility
+    {
         if has_permission(access, REASSIGN_PERMISSION) {
             actions.push(WorkItemAllowedAction::Reassign);
         }
@@ -673,131 +555,23 @@ pub fn ensure_generic_work_item_mutation(item: &WorkItem) -> Result<()> {
 }
 
 pub fn ensure_managed_access(access: &ActorAccess) -> Result<()> {
-    if !access.can_manage || access.organization_ids.is_empty() {
+    if !access.can_manage || access.managed_owner_ids.as_ref().is_some_and(Vec::is_empty) {
         return Err(Error::Forbidden("当前账号没有任务责任管理范围".to_string()));
     }
     Ok(())
 }
 
 pub fn ensure_item_in_managed_scope(item: &WorkItem, access: &ActorAccess) -> Result<()> {
-    if covers_organization(access, &item.owner_organization_id) {
+    if access.can_manage && covers_owner(access, item.owner_user_id.as_deref()) {
         return Ok(());
     }
     Err(Error::Forbidden("任务不在当前账号的责任管理范围内".to_string()))
 }
 
-pub fn organization_filter(access: &ActorAccess) -> Vec<String> {
-    if access
-        .organization_ids
-        .iter()
-        .any(|organization_id| organization_id == "*")
-    {
-        return Vec::new();
-    }
-    access.organization_ids.to_vec()
-}
-
-pub fn organizations_from_pairs(pairs: &[(String, Option<String>)]) -> Vec<String> {
-    if pairs.iter().any(|(_, organization_id)| organization_id.is_none()) {
-        return vec!["*".to_string()];
-    }
-    let mut organizations = pairs
-        .iter()
-        .filter_map(|(_, organization_id)| organization_id.clone())
-        .collect::<Vec<_>>();
-    organizations.sort();
-    organizations.dedup();
-    organizations
-}
-
-pub fn responsibility_scope_for_role(
-    role_id: &str,
-    role_scopes: &[DataScopeFact],
-    user_scopes: &[DataScopeFact],
-) -> Vec<(String, Option<String>)> {
-    let Some(role_coverage) = organization_coverage(role_scopes) else {
-        return Vec::new();
-    };
-    let user_coverage = organization_coverage(user_scopes).unwrap_or(OrgCoverage::All);
-    match intersect_coverage(role_coverage, user_coverage) {
-        OrgCoverage::All => vec![(role_id.to_string(), None)],
-        OrgCoverage::Ids(ids) => ids
-            .into_iter()
-            .map(|id| (role_id.to_string(), Some(id)))
-            .collect(),
-        OrgCoverage::None => Vec::new(),
-    }
-}
-
-pub fn covers_responsibility(access: &ActorAccess, role: &str, organization_id: &str) -> bool {
-    access.responsibility_scopes.iter().any(|(assigned_role, org)| {
-        assigned_role == role
-            && org
-                .as_deref()
-                .map(|value| value == organization_id)
-                .unwrap_or(true)
-    })
-}
-
-#[derive(Clone)]
-enum OrgCoverage {
-    All,
-    Ids(Vec<String>),
-    None,
-}
-
-fn organization_coverage(scopes: &[DataScopeFact]) -> Option<OrgCoverage> {
-    if scopes.is_empty() {
-        return None;
-    }
-    if scopes
-        .iter()
-        .any(|scope| scope.scope_type == crate::ports::DataScopeTypeFact::Company)
-    {
-        return Some(OrgCoverage::All);
-    }
-    let mut ids = Vec::new();
-    for scope in scopes {
-        match scope.scope_type {
-            crate::ports::DataScopeTypeFact::Organization | crate::ports::DataScopeTypeFact::Team => {
-                ids.extend(scope.scope_targets.iter().cloned());
-            }
-            crate::ports::DataScopeTypeFact::Company
-            | crate::ports::DataScopeTypeFact::SelfOwned
-            | crate::ports::DataScopeTypeFact::Collaborative => {}
-        }
-    }
-    ids.sort();
-    ids.dedup();
-    Some(if ids.is_empty() {
-        OrgCoverage::None
-    } else {
-        OrgCoverage::Ids(ids)
-    })
-}
-
-fn intersect_coverage(left: OrgCoverage, right: OrgCoverage) -> OrgCoverage {
-    match (left, right) {
-        (OrgCoverage::None, _) | (_, OrgCoverage::None) => OrgCoverage::None,
-        (OrgCoverage::All, other) | (other, OrgCoverage::All) => other,
-        (OrgCoverage::Ids(left), OrgCoverage::Ids(right)) => {
-            let ids = left
-                .into_iter()
-                .filter(|id| right.contains(id))
-                .collect::<Vec<_>>();
-            if ids.is_empty() {
-                OrgCoverage::None
-            } else {
-                OrgCoverage::Ids(ids)
-            }
-        }
-    }
-}
-
 pub fn detail_scope(item: &WorkItem, actor_id: &str, access: &ActorAccess) -> Result<WorkItemScope> {
     if item.is_terminal()
         && (has_personal_history_access(item, actor_id)
-            || (access.can_manage && covers_organization(access, &item.owner_organization_id)))
+            || (access.can_manage && covers_owner(access, item.owner_user_id.as_deref())))
     {
         return Ok(WorkItemScope::History);
     }
@@ -806,7 +580,7 @@ pub fn detail_scope(item: &WorkItem, actor_id: &str, access: &ActorAccess) -> Re
     }
     if item.status == WorkItemStatus::Open
         && access.can_manage
-        && covers_organization(access, &item.owner_organization_id)
+        && covers_owner(access, item.owner_user_id.as_deref())
     {
         return Ok(WorkItemScope::Managed);
     }
@@ -819,26 +593,23 @@ pub fn has_personal_history_access(item: &WorkItem, actor_id: &str) -> bool {
         || item.closed_by.as_deref() == Some(actor_id)
 }
 
-pub fn covers_organization(access: &ActorAccess, organization_id: &str) -> bool {
-    access.organization_ids.iter().any(|id| id == organization_id)
+pub fn covers_owner(access: &ActorAccess, owner: Option<&str>) -> bool {
+    access
+        .managed_owner_ids
+        .as_ref()
+        .is_none_or(|ids| owner.is_some_and(|owner| ids.iter().any(|id| id == owner)))
 }
 
 fn apply_object_display(fields: &mut dto::WorkItemFields, fact: &ObjectFact) {
     fields.business_object_label = fact.label.clone();
     fields.root_business_object_id = fact.root_document_id.clone();
     let subject = fact.subject_briefs.get(&fields.subject_version);
-    fields.counterparty_label = subject
-        .and_then(|item| item.counterparty_label.clone())
-        .or_else(|| fact.counterparty_label.clone());
+    fields.counterparty_label =
+        subject.and_then(|item| item.counterparty_label.clone()).or_else(|| fact.counterparty_label.clone());
     let preserve_task_impact = fields.work_item_type.uses_explicit_owner_authorization()
-        && fields
-            .impact_summary
-            .as_deref()
-            .map(str::trim)
-            .is_some_and(|value| !value.is_empty());
+        && fields.impact_summary.as_deref().map(str::trim).is_some_and(|value| !value.is_empty());
     if !preserve_task_impact {
-        fields.impact_summary = subject
-            .and_then(|item| item.impact_summary.clone())
-            .or_else(|| fact.impact_summary.clone());
+        fields.impact_summary =
+            subject.and_then(|item| item.impact_summary.clone()).or_else(|| fact.impact_summary.clone());
     }
 }

@@ -1,4 +1,3 @@
-import { PERMISSION_GROUPS } from "@/lib/permissions.generated"
 import type { CreateDataScopeInput } from "@/features/organization/types"
 
 const RESOURCE_ACTION_PATTERN = /^[a-z0-9_]{1,128}$/
@@ -9,6 +8,28 @@ const WIRED_CONSUMERS: ReadonlyArray<{
     resource: string
     actions: readonly string[]
 }> = [
+    {
+        resource: "approval_instance",
+        actions: [
+            "read",
+            "decide",
+            "resume",
+            "cancel",
+            "cancel_blocked",
+            "upgrade_binding",
+        ],
+    },
+    {
+        resource: "stock_adjustment",
+        actions: ["list", "detail", "create", "update", "submit"],
+    },
+    { resource: "stock_balance", actions: ["list", "detail"] },
+    { resource: "stock_movement", actions: ["list"] },
+    { resource: "stock_reservation", actions: ["list"] },
+    { resource: "customer_refund", actions: ["submit"] },
+    { resource: "supplier_refund", actions: ["submit"] },
+    { resource: "supplier_settlement_statement", actions: ["confirm"] },
+    { resource: "work_item", actions: ["manage"] },
     { resource: "org_unit", actions: ["list", "manage"] },
     {
         resource: "customer",
@@ -64,30 +85,11 @@ export function registeredResources(): Array<{
     resource: string
     actions: string[]
 }> {
-    const catalog = new Set<string>()
-    for (const group of PERMISSION_GROUPS) {
-        for (const item of group.permissions) {
-            const resource = item.permission.resource
-            const action = item.permission.action
-            if (
-                !isRegisteredIdentifier(resource) ||
-                !isRegisteredIdentifier(action)
-            ) {
-                continue
-            }
-            catalog.add(`${resource}:${action}`)
-        }
-    }
-    return WIRED_CONSUMERS.flatMap(({ resource, actions }) => {
-        const wired = actions.filter(
-            (action) =>
-                isRegisteredIdentifier(action) &&
-                catalog.has(`${resource}:${action}`),
-        )
-        return wired.length > 0
-            ? [{ resource, actions: [...wired].sort() }]
-            : []
-    })
+    // 内部复合管理动作没有独立 HTTP 路由，准入以真实消费者登记为准。
+    return WIRED_CONSUMERS.map(({ resource, actions }) => ({
+        resource,
+        actions: [...actions].sort(),
+    }))
 }
 
 export function validateCreateDataScope(

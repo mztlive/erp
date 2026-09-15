@@ -300,6 +300,7 @@ mod tests {
             resource: "org_unit".into(),
             action: "manage".into(),
             scope,
+            role_scopes: Default::default(),
             organizations,
             policy_version: 1,
             scope_version: "scope-v".into(),

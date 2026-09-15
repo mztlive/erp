@@ -9,6 +9,7 @@ use erp_sales::entity::sales_order::SalesOrder;
 use erp_warehouse::WarehouseExt;
 use erp_warehouse::WarehouseFulfillmentOperation;
 use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::DocumentRegistryExt;
 use id_generator::next_id;
 use mongodb::ClientSession;
@@ -428,6 +429,10 @@ async fn write_prepared_draft(
         business_object_id: write.order.base.id.clone(),
         business_object_version: write.order.base.version,
         context: BindingRevalidationContext {
+            order_source: Some(OrderTaskSource::Purchase(write.order.base.id.clone())),
+            customer_id: None,
+            business_org_unit_id: Some(write.order.business_org_unit_id.clone()),
+            scope_owner_user_id: Some(write.order.current_owner_user_id()?.to_string()),
             organization_id,
             creator_id: write.actor.id().to_string(),
         },

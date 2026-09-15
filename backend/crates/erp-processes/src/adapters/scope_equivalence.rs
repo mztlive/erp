@@ -50,6 +50,7 @@ fn public_sales_decision_matches_database_conditions() {
                         user_id: "actor".into(),
                         resource: "sales_order".into(),
                         action: action.into(),
+                        role_scopes: Default::default(),
                         scope: ResolvedScope {
                             role_clauses: vec![clause(role), clause(second)],
                             user_limit: (limit >= 0).then(|| clause(limit)),

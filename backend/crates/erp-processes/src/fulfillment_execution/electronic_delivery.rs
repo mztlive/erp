@@ -131,6 +131,10 @@ fn electronic_delivery_bind_command(
         business_object_id: record.base.id.clone(),
         business_object_version: record.base.version,
         context: BindingRevalidationContext {
+            order_source: None,
+            customer_id: None,
+            business_org_unit_id: None,
+            scope_owner_user_id: None,
             organization_id: record
                 .registration_context_id()
                 .map_err(|error| Error::ValidationError(error.to_string()))?

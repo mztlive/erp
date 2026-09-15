@@ -3,6 +3,7 @@
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::access::{authorized_fields, ActorAccess, ViewAccess};
@@ -32,26 +33,47 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ) -> Result<WorkItemStatsView> {
         params.validate()?;
         let query = params.normalized()?;
-        let access = self.actor_access(&actor).await?;
-        let selected = self.stats_fields_for_scope(&query, &actor, &access).await?;
+        let all_families = params.family.is_none() && params.work_item_type.is_none();
+        let this = self.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |session| {
+                Box::pin(async move { this.stats_at(query, actor, all_families, session).await })
+            })
+            .await
+    }
+
+    async fn stats_at(
+        &self,
+        query: dto::WorkItemListQuery,
+        actor: AuditActor,
+        all_families: bool,
+        executor: &mut dyn Executor,
+    ) -> Result<WorkItemStatsView> {
+        let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
+
         let selected = self
-            .processable_stats_fields(selected, query.scope, &actor, &access)
+            .stats_fields_for_scope(&query, &actor, &access, executor)
+            .await?;
+        let selected = self
+            .processable_stats_fields(selected, query.scope, &actor, &access, executor)
             .await?;
         let assigned = self
-            .stats_fields_for_open_scope(&query, WorkItemScope::Mine, &actor, &access)
+            .stats_fields_for_open_scope(&query, WorkItemScope::Mine, &actor, &access, executor)
             .await?;
         let assigned = self
-            .processable_stats_fields(assigned, WorkItemScope::Mine, &actor, &access)
+            .processable_stats_fields(assigned, WorkItemScope::Mine, &actor, &access, executor)
             .await?;
-        let family_items = if params.family.is_none() && params.work_item_type.is_none() {
+        let family_items = if all_families {
             assigned.clone()
         } else {
             let mut family_query = query.clone();
             family_query.work_item_types = registered_work_item_types();
             let family_items = self
-                .stats_fields_for_open_scope(&family_query, WorkItemScope::Mine, &actor, &access)
+                .stats_fields_for_open_scope(&family_query, WorkItemScope::Mine, &actor, &access, executor)
                 .await?;
-            self.processable_stats_fields(family_items, WorkItemScope::Mine, &actor, &access)
+            self.processable_stats_fields(family_items, WorkItemScope::Mine, &actor, &access, executor)
                 .await?
         };
         let as_of = Instant::now();
@@ -94,10 +116,11 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         query: &dto::WorkItemListQuery,
         actor: &AuditActor,
         access: &ActorAccess,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<dto::WorkItemFields>> {
         let mut filter = self.scope_filter(query, actor, access)?;
         apply_due_filter(&mut filter, query.due)?;
-        self.authorized_stat_fields(filter, access).await
+        self.authorized_stat_fields(filter, access, executor).await
     }
 
     async fn stats_fields_for_open_scope(
@@ -106,11 +129,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         scope: WorkItemScope,
         actor: &AuditActor,
         access: &ActorAccess,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<dto::WorkItemFields>> {
         let mut query = query.clone();
         query.scope = scope;
         query.statuses = vec![WorkItemStatus::Open];
-        self.stats_fields_for_scope(&query, actor, access).await
+        self.stats_fields_for_scope(&query, actor, access, executor).await
     }
 
     /// 复用正式列表逐任务处理状态与允许动作，只保留当前即可执行的统计项。
@@ -120,12 +144,23 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         scope: WorkItemScope,
         actor: &AuditActor,
         access: &ActorAccess,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<dto::WorkItemFields>> {
         let mut processable = Vec::with_capacity(fields.len());
-        for item in fields {
-            let view_access = self.view_access(&item, scope, actor, access)?;
-            if counts_as_processable_stat(scope, &view_access) {
-                processable.push(item);
+        for batch in fields.chunks(100) {
+            let views = self
+                .project_fields(batch.to_vec(), scope, actor, access, "work-item-stats", executor)
+                .await?;
+            for (item, view) in batch.iter().zip(views) {
+                let access = ViewAccess {
+                    processing_state: view.processing_state,
+                    processing_blocker: view.processing_blocker,
+                    allowed_actions: view.allowed_actions,
+                    action_blockers: view.action_blockers,
+                };
+                if counts_as_processable_stat(scope, &access) {
+                    processable.push(item.clone());
+                }
             }
         }
         Ok(processable)
@@ -136,19 +171,23 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         &self,
         filter: WorkItemFilter,
         access: &ActorAccess,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<dto::WorkItemFields>> {
         let mut fields = Vec::new();
         let mut candidate_offset = 0_u64;
         let mut candidates = filter.clone();
         candidates.query = None;
         loop {
-            let rows = self.candidate_batch(&candidates, candidate_offset).await?;
+            let rows = self
+                .candidate_batch(&candidates, candidate_offset, executor)
+                .await?;
             let candidate_count = rows.len();
             if candidate_count == 0 {
                 break;
             }
-            let mut facts = self.object_facts_for_rows(&rows).await?;
-            self.filter_order_access(&access.actor_id, &mut facts).await?;
+            let mut facts = self.object_facts_for_rows(&rows, executor).await?;
+            self.filter_order_access(&access.actor_id, &mut facts, executor)
+                .await?;
             let authorized = authorized_fields(rows, access, &facts);
             fields.extend(
                 authorized

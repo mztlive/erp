@@ -1,4 +1,3 @@
-use crate::entity::document_registry::{DocumentType, WorkflowActionId};
 use bpm::ids::ApprovalCommandReceiptId;
 use erp_core::common::time::Instant;
 use serde::{Deserialize, Serialize};
@@ -7,6 +6,7 @@ use super::super::business_adapter::BindingRevalidationContext;
 use super::super::execution::PreparedCommandIdentity;
 use super::super::policy::ProcessRequiredApprovalPolicy;
 use super::super::upgrade_subject::ApprovalUpgradeSubjectFacts;
+use crate::entity::document_registry::{DocumentType, WorkflowActionId};
 
 /// 创建时绑定命令。客户端不得提交定义 ID。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,10 +90,6 @@ pub enum BindingDecision {
     /// 必须审批：查询唯一 `PUBLISHED` 定义。
     RequirePublished,
 }
-
-/// 单个实际授权角色的范围事实。
-#[derive(Debug)]
-pub(super) struct RoleScopeFacts(pub(super) Vec<crate::ports::DataScopeFact>);
 
 /// 同一事务快照内已重验的升级上下文。
 pub(super) struct AuthorizedUpgradeContext {

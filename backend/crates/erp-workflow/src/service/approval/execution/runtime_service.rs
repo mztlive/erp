@@ -13,33 +13,33 @@ mod upgrade;
 
 use std::sync::Arc;
 
-use crate::entity::approval_integration::ApprovalSubjectSnapshot;
-use crate::entity::document_registry::DocumentType;
-use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
+use application_core::AuditActor;
 use bpm::engine::CommitRequired;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalCommandReceipt, ApprovalProcessInstance};
 use mongodb::Database;
 use persistence_core::Executor;
-use serde::{Deserialize, Serialize};
-
-use super::idempotency::PreparedCommandIdentity;
-use super::view::{map_command_view, ApprovalCommandView, OpenTaskSummary};
-use crate::error::{Error, Result};
-use crate::ports::{
-    ApprovalObjectReadPort, FailClosedObjectReadPort, ObjectFactPort, UpgradeSubjectPort, WorkflowAuditPort,
-};
-use crate::service::approval::process_kind::process_kind_of;
-use crate::service::approval::{ApprovalDomainActionPort, FailClosedApprovalActionPort};
-use application_core::AuditActor;
-
 pub use query::{
     RuntimeInstanceListCursor, RuntimeInstanceListItem, RuntimeInstanceListPage, RuntimeInstanceListQuery,
     RuntimeRecoveryOptionsView,
 };
+use serde::{Deserialize, Serialize};
 pub use upgrade::UpgradeBindingCommand;
 
+use super::idempotency::PreparedCommandIdentity;
+use super::view::{ApprovalCommandView, OpenTaskSummary, map_command_view};
+use crate::entity::approval_integration::ApprovalSubjectSnapshot;
+use crate::entity::document_registry::DocumentType;
+use crate::error::{Error, Result};
+use crate::ports::{
+    ApprovalObjectReadPort, FailClosedObjectReadPort, ObjectFactPort, UpgradeSubjectPort, WorkflowAuditPort,
+};
+use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
+use crate::service::approval::process_kind::process_kind_of;
+use crate::service::approval::{ApprovalDomainActionPort, FailClosedApprovalActionPort};
+
 /// HTTP 面审批运行服务。
+#[derive(Clone)]
 pub struct ApprovalRuntimeService<A> {
     db: Database,
     auth: A,
@@ -107,15 +107,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         audit: Arc<dyn WorkflowAuditPort>,
         facts: Arc<dyn ObjectFactPort>,
     ) -> Self {
-        Self {
-            db,
-            auth,
-            action_port,
-            object_read,
-            upgrade,
-            audit,
-            facts,
-        }
+        Self { db, auth, action_port, object_read, upgrade, audit, facts }
     }
 }
 
@@ -163,15 +155,9 @@ async fn persisted_command_view_with_executor(
     executor: &mut dyn Executor,
 ) -> Result<ApprovalCommandView> {
     let instance_id = ApprovalProcessInstanceId::new(instance_id);
-    let instance = db
-        .bpm_workflow()
-        .find_instance_by_id(&instance_id, executor)
-        .await?
-        .ok_or_else(hidden_not_found)?;
-    let current = db
-        .bpm_workflow()
-        .find_current_execution(&instance_id, executor)
-        .await?;
+    let instance =
+        db.bpm_workflow().find_instance_by_id(&instance_id, executor).await?.ok_or_else(hidden_not_found)?;
+    let current = db.bpm_workflow().find_current_execution(&instance_id, executor).await?;
     let next_open_task = match current.as_ref() {
         Some(execution) => {
             let tasks = db
@@ -189,18 +175,10 @@ async fn persisted_command_view_with_executor(
                 task_version: task.base.version.to_string(),
                 owner_user_id: task.owner_user_id.unwrap_or_default(),
             })
-        }
+        },
         None => None,
     };
-    Ok(map_command_view(
-        &instance,
-        current.as_ref(),
-        None,
-        None,
-        next_open_task,
-        commit,
-        replay,
-    ))
+    Ok(map_command_view(&instance, current.as_ref(), None, None, next_open_task, commit, replay))
 }
 
 /// 按当前 V3 scope 优先、已知历史 scope 次之读取唯一命令收据。
@@ -257,9 +235,7 @@ fn ensure_expected_version(label: &str, expected: u64, actual: u64) -> Result<()
 fn require_cas_applied<T>(outcome: crate::repository::bpm::CasWriteOutcome<T>, label: &str) -> Result<()> {
     match outcome {
         crate::repository::bpm::CasWriteOutcome::Applied(_) => Ok(()),
-        _ => Err(Error::ConflictError(format!(
-            "{label}已被其他请求修改，请刷新后重试"
-        ))),
+        _ => Err(Error::ConflictError(format!("{label}已被其他请求修改，请刷新后重试"))),
     }
 }
 
@@ -267,15 +243,7 @@ fn require_cas_applied<T>(outcome: crate::repository::bpm::CasWriteOutcome<T>, l
 mod tests {
     use std::str::FromStr;
 
-    use mongodb::error::{Error as MongoError, ErrorKind, WriteError, WriteFailure};
-    use serde_json::json;
-
-    use crate::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
-    use crate::entity::document_registry::DocumentType;
-    use crate::repository::approval_integration::{ApprovalRuntimeReadRow, ApprovalRuntimeReadTypeScope};
-    use crate::repository::bpm::{
-        ApprovalInstanceListView, ApprovalInstanceSummary, APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX,
-    };
+    use application_core::AuditActor;
     use bpm::engine::TaskCloseReason;
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use bpm::model::types::{
@@ -287,43 +255,47 @@ mod tests {
         Timestamp,
     };
     use bpm::{ProcessKind, SubjectRef};
+    use erp_core::AccountKind;
     use erp_core::common::time::Instant;
     use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
     use erp_core::money::Quantity;
-    use erp_core::AccountKind;
-
-    use crate::entity::work_item::{
-        ApprovalRuntimeTaskEnding, AssignmentSource, DocumentApprovalWorkItemData, WorkItem,
-        WorkItemPriority, WorkItemStatus,
-    };
-
-    use crate::error::{Error, ErrorCode};
-    use crate::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
-    use crate::service::approval::execution::idempotency::{
-        command_may_have_committed, command_recovery_delay, map_receipt_first_write_error,
-    };
-    use crate::service::approval::ApprovalCancelBlockedCommand;
-    use application_core::AuditActor;
+    use mongodb::error::{Error as MongoError, ErrorKind, WriteError, WriteFailure};
+    use serde_json::json;
 
     use super::super::runtime_query::RuntimeInstanceListView;
     use super::cancel_blocked::{
-        cancel_blocked_terminal_facts_match, ensure_cancel_blocked_instance_preconditions,
-        CancelBlockedTerminalFacts,
+        CancelBlockedTerminalFacts, cancel_blocked_terminal_facts_match,
+        ensure_cancel_blocked_instance_preconditions,
     };
     use super::decision_apply::{
-        decision_receipt_lookup_gate, decision_terminal_actor, decision_terminal_fresh_error,
-        legacy_decision_terminal_facts_match, map_approval_task_error, DecisionReceiptLookup,
-        RuntimeDecisionCommand,
+        DecisionReceiptLookup, RuntimeDecisionCommand, decision_receipt_lookup_gate, decision_terminal_actor,
+        decision_terminal_fresh_error, legacy_decision_terminal_facts_match, map_approval_task_error,
     };
     use super::notifications::{blocked_cancel_notification_recipients, notification_recipients};
     use super::query::{cursor_from_summary, item_from_runtime_read_row, item_from_summary};
     use super::read_auth::{
-        ensure_mine_page_integrity, management_runtime_read_allowed, mine_execution_ids, mine_instance_ids,
-        mine_runtime_chain_matches, ordinary_runtime_read_allowed, runtime_object_readable,
-        started_runtime_read_allowed, task_proves_current_responsibility, unique_by_id,
-        RuntimeReadAuthorizationFacts, RuntimeReadSubject,
+        RuntimeReadAuthorizationFacts, RuntimeReadSubject, ensure_mine_page_integrity,
+        management_runtime_read_allowed, mine_execution_ids, mine_instance_ids, mine_runtime_chain_matches,
+        ordinary_runtime_read_allowed, runtime_object_readable, started_runtime_read_allowed,
+        task_proves_current_responsibility, unique_by_id,
     };
-    use super::tasks::{approval_task_ending, CompleteOrCloseTasksInput};
+    use super::tasks::{CompleteOrCloseTasksInput, approval_task_ending};
+    use crate::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
+    use crate::entity::document_registry::DocumentType;
+    use crate::entity::work_item::{
+        ApprovalRuntimeTaskEnding, AssignmentSource, DocumentApprovalWorkItemData, WorkItem,
+        WorkItemPriority, WorkItemStatus,
+    };
+    use crate::error::{Error, ErrorCode};
+    use crate::repository::approval_integration::{ApprovalRuntimeReadRow, ApprovalRuntimeReadTypeScope};
+    use crate::repository::bpm::{
+        APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX, ApprovalInstanceListView, ApprovalInstanceSummary,
+    };
+    use crate::service::approval::ApprovalCancelBlockedCommand;
+    use crate::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
+    use crate::service::approval::execution::idempotency::{
+        command_may_have_committed, command_recovery_delay, map_receipt_first_write_error,
+    };
 
     fn summary() -> ApprovalInstanceSummary {
         ApprovalInstanceSummary {
@@ -437,9 +409,7 @@ mod tests {
         })
         .expect("实例");
         let execution = active_execution("exec-1", "inst-1");
-        instance
-            .set_current_execution(execution_id.clone(), at)
-            .expect("当前执行");
+        instance.set_current_execution(execution_id.clone(), at).expect("当前执行");
         let task = approval_task("wi-1", execution_id.as_ref());
         (
             RuntimeReadSubject {
@@ -474,30 +444,16 @@ mod tests {
             assert_eq!(item.total_amount, frozen.payload.total_amount);
             assert!(serde_json::to_value(&item).unwrap()["total_amount"].is_string());
             frozen.subject_version += 1;
-            assert_eq!(
-                item_from_summary(summary(), Some(&frozen)).unwrap().total_amount,
-                None
-            );
+            assert_eq!(item_from_summary(summary(), Some(&frozen)).unwrap().total_amount, None);
             frozen.subject_version -= 1;
             frozen.approval_process_instance_id = ApprovalProcessInstanceId::new("other-instance");
-            assert_eq!(
-                item_from_summary(summary(), Some(&frozen)).unwrap().total_amount,
-                None
-            );
+            assert_eq!(item_from_summary(summary(), Some(&frozen)).unwrap().total_amount, None);
             frozen.approval_process_instance_id = ApprovalProcessInstanceId::new("inst-1");
             frozen.business_object_id = "other-object".into();
-            assert_eq!(
-                item_from_summary(summary(), Some(&frozen)).unwrap().total_amount,
-                None
-            );
+            assert_eq!(item_from_summary(summary(), Some(&frozen)).unwrap().total_amount, None);
         }
         assert_eq!(item_from_summary(summary(), None).unwrap().total_amount, None);
-        assert_eq!(
-            item_from_summary(summary(), Some(&snapshot()))
-                .unwrap()
-                .total_amount,
-            None
-        );
+        assert_eq!(item_from_summary(summary(), Some(&snapshot())).unwrap().total_amount, None);
     }
 
     #[test]
@@ -518,10 +474,7 @@ mod tests {
             runtime_admin: false,
         };
         assert!(!ordinary_runtime_read_allowed(denied));
-        assert!(ordinary_runtime_read_allowed(RuntimeReadAuthorizationFacts {
-            initiator: true,
-            ..denied
-        }));
+        assert!(ordinary_runtime_read_allowed(RuntimeReadAuthorizationFacts { initiator: true, ..denied }));
         assert!(ordinary_runtime_read_allowed(RuntimeReadAuthorizationFacts {
             current_responsibility: true,
             ..denied
@@ -627,15 +580,10 @@ mod tests {
 
     #[test]
     fn mine_page_rejects_two_executions_for_the_same_instance() {
-        let execution_ids = vec![
-            ApprovalNodeExecutionId::new("exec-1"),
-            ApprovalNodeExecutionId::new("exec-2"),
-        ];
+        let execution_ids =
+            vec![ApprovalNodeExecutionId::new("exec-1"), ApprovalNodeExecutionId::new("exec-2")];
         let execution_by_id = unique_by_id(
-            vec![
-                active_execution("exec-1", "inst-1"),
-                active_execution("exec-2", "inst-1"),
-            ],
+            vec![active_execution("exec-1", "inst-1"), active_execution("exec-2", "inst-1")],
             |execution| execution.base.id.clone(),
         )
         .expect("执行主键唯一");
@@ -651,20 +599,14 @@ mod tests {
         let tasks = [approval_task("wi-1", "exec-1"), approval_task("wi-2", "exec-2")];
         let execution_ids = mine_execution_ids(&tasks).expect("不同执行");
         let execution_by_id = unique_by_id(
-            vec![
-                active_execution("exec-1", "inst-1"),
-                active_execution("exec-2", "inst-2"),
-            ],
+            vec![active_execution("exec-1", "inst-1"), active_execution("exec-2", "inst-2")],
             |execution| execution.base.id.clone(),
         )
         .expect("执行主键唯一");
 
         let instance_ids = mine_instance_ids(&execution_ids, &execution_by_id).expect("不同实例");
 
-        assert_eq!(
-            instance_ids.iter().map(AsRef::as_ref).collect::<Vec<_>>(),
-            vec!["inst-1", "inst-2"]
-        );
+        assert_eq!(instance_ids.iter().map(AsRef::as_ref).collect::<Vec<_>>(), vec!["inst-1", "inst-2"]);
     }
 
     #[test]
@@ -680,18 +622,9 @@ mod tests {
         assert!(management_runtime_read_allowed(allowed));
         assert!(started_runtime_read_allowed(allowed));
         for denied in [
-            RuntimeReadAuthorizationFacts {
-                actor_active: false,
-                ..allowed
-            },
-            RuntimeReadAuthorizationFacts {
-                object_readable: false,
-                ..allowed
-            },
-            RuntimeReadAuthorizationFacts {
-                scope_covers: false,
-                ..allowed
-            },
+            RuntimeReadAuthorizationFacts { actor_active: false, ..allowed },
+            RuntimeReadAuthorizationFacts { object_readable: false, ..allowed },
+            RuntimeReadAuthorizationFacts { scope_covers: false, ..allowed },
         ] {
             assert!(!management_runtime_read_allowed(denied));
         }
@@ -709,24 +642,18 @@ mod tests {
             runtime_admin: false,
             ..allowed
         }));
-        assert!(!started_runtime_read_allowed(RuntimeReadAuthorizationFacts {
-            initiator: false,
-            ..allowed
-        }));
+        assert!(!started_runtime_read_allowed(RuntimeReadAuthorizationFacts { initiator: false, ..allowed }));
     }
 
     #[test]
     fn scoped_row_revalidates_snapshot_and_view_authorization() {
         let actor = AuditActor::new("starter".to_string(), "starter".to_string(), AccountKind::Admin);
         let type_scopes = [ApprovalRuntimeReadTypeScope {
-            process_kind: ProcessKind::StockAdjustment,
             organization_ids: None,
+            process_kind: ProcessKind::StockAdjustment,
         }];
         let item = item_from_runtime_read_row(
-            ApprovalRuntimeReadRow {
-                instance: summary(),
-                snapshot: Some(snapshot()),
-            },
+            ApprovalRuntimeReadRow { instance: summary(), snapshot: Some(snapshot()) },
             &actor,
             RuntimeInstanceListView::Started,
             &type_scopes,
@@ -734,31 +661,23 @@ mod tests {
         .expect("Started 发起人事实成立");
         assert_eq!(item.instance_id, "inst-1");
 
-        assert!(item_from_runtime_read_row(
-            ApprovalRuntimeReadRow {
-                instance: summary(),
-                snapshot: Some(snapshot()),
-            },
-            &actor,
-            RuntimeInstanceListView::Managed,
-            &[],
-        )
-        .is_err());
+        assert!(
+            item_from_runtime_read_row(
+                ApprovalRuntimeReadRow { instance: summary(), snapshot: Some(snapshot()) },
+                &actor,
+                RuntimeInstanceListView::Managed,
+                &[],
+            )
+            .is_err()
+        );
 
         let mut drifted = snapshot();
         drifted.subject_version = 2;
         assert_eq!(
-            item_from_summary(summary(), Some(&drifted))
-                .expect("漂移快照仅清空标签")
-                .document_label,
+            item_from_summary(summary(), Some(&drifted)).expect("漂移快照仅清空标签").document_label,
             None
         );
-        assert_eq!(
-            item_from_summary(summary(), None)
-                .expect("缺失快照保留运行实例")
-                .document_label,
-            None
-        );
+        assert_eq!(item_from_summary(summary(), None).expect("缺失快照保留运行实例").document_label, None);
     }
 
     #[test]
@@ -781,10 +700,7 @@ mod tests {
         );
 
         let close_tasks = vec![(execution_id.clone(), TaskCloseReason::ApprovalRuntimeBlocked)];
-        let conflicting = CompleteOrCloseTasksInput {
-            close_tasks: &close_tasks,
-            ..input
-        };
+        let conflicting = CompleteOrCloseTasksInput { close_tasks: &close_tasks, ..input };
         assert!(approval_task_ending(&conflicting, &execution_id).is_err());
     }
 
@@ -865,18 +781,10 @@ mod tests {
         assert!(command_may_have_committed(&Error::OutcomeUnknown(
             persistence_core::Error::CommitOutcomeUnknown(mongodb::error::Error::custom("unknown commit")),
         )));
-        assert!(!command_may_have_committed(&Error::ConflictError(
-            "数据已存在，请勿重复提交".to_string()
-        )));
-        assert!(!command_may_have_committed(&Error::ConflictError(
-            "并发事务冲突，请重试".to_string()
-        )));
-        assert!(!command_may_have_committed(&Error::ConflictError(
-            "审批任务已结束".to_string()
-        )));
-        assert!(!command_may_have_committed(&Error::ValidationError(
-            "请求无效".to_string()
-        )));
+        assert!(!command_may_have_committed(&Error::ConflictError("数据已存在，请勿重复提交".to_string())));
+        assert!(!command_may_have_committed(&Error::ConflictError("并发事务冲突，请重试".to_string())));
+        assert!(!command_may_have_committed(&Error::ConflictError("审批任务已结束".to_string())));
+        assert!(!command_may_have_committed(&Error::ValidationError("请求无效".to_string())));
         assert_eq!(command_recovery_delay(0).as_millis(), 5);
         assert_eq!(command_recovery_delay(5).as_millis(), 160);
         assert_eq!(command_recovery_delay(99).as_millis(), 160);
@@ -884,10 +792,8 @@ mod tests {
 
     #[test]
     fn resume_persistence_keeps_receipt_as_first_physical_write() {
-        let source = runtime_source_fn(
-            "async fn persist_resume_writes(",
-            "fn ensure_resume_approver_recovered(",
-        );
+        let source =
+            runtime_source_fn("async fn persist_resume_writes(", "fn ensure_resume_approver_recovered(");
         let receipt = source.find("insert_command_receipt").expect("恢复必须写命令收据");
         assert!(source[..receipt].contains("find_document_approval_by_id"));
         assert!(!source[..receipt].contains("advance_instance"));
@@ -918,10 +824,8 @@ mod tests {
         assert!(endpoint.contains("command_may_have_committed"));
         assert!(endpoint.contains("recover_resume_after_competing_commit"));
 
-        let replay = runtime_source_fn(
-            "async fn replay_resume(",
-            "async fn recover_resume_after_competing_commit(",
-        );
+        let replay =
+            runtime_source_fn("async fn replay_resume(", "async fn recover_resume_after_competing_commit(");
         assert!(replay.contains("with_transaction"));
         assert!(replay.contains("replay_resume_in_transaction"));
 
@@ -948,8 +852,7 @@ mod tests {
             )
             .expect("记录终态决定");
         let mut item = approval_task("wi-legacy", "exec-legacy");
-        item.complete_by_approval_runtime("warehouse-1", Instant::from_unix_secs(20))
-            .expect("完成审批任务");
+        item.complete_by_approval_runtime("warehouse-1", Instant::from_unix_secs(20)).expect("完成审批任务");
         item.base.version = expected_task_version + 1;
         (item, execution)
     }
@@ -977,8 +880,7 @@ mod tests {
         assert_eq!(decision_terminal_actor(&item, &execution), Some("warehouse-1"));
 
         let missing_outsider = map_approval_task_error(
-            item.approval_execution_for_decision("outsider", 3)
-                .expect_err("非原责任人 Fresh 路径必须拒绝"),
+            item.approval_execution_for_decision("outsider", 3).expect_err("非原责任人 Fresh 路径必须拒绝"),
         );
         let existing_outsider =
             decision_receipt_lookup_gate(&item, "outsider", 3).expect_err("非原责任人不得进入收据查询");
@@ -994,20 +896,14 @@ mod tests {
         ));
         let existing_revoked = decision_terminal_fresh_error();
         assert_same_error_semantics(existing_revoked, missing_original);
-        assert_eq!(
-            decision_terminal_fresh_error().code(),
-            Some(ErrorCode::ApprovalTaskNotOpen)
-        );
+        assert_eq!(decision_terminal_fresh_error().code(), Some(ErrorCode::ApprovalTaskNotOpen));
     }
 
     #[test]
     fn cancel_existing_and_missing_keys_share_fresh_terminal_errors_before_digest() {
         let (mut subject, _) = runtime_responsibility_fixture();
         let expected_instance_version = subject.instance.base.version;
-        subject
-            .instance
-            .cancel(Timestamp::from_unix_secs(20).expect("取消时间"))
-            .expect("构造已取消终态");
+        subject.instance.cancel(Timestamp::from_unix_secs(20).expect("取消时间")).expect("构造已取消终态");
         let command = ApprovalCancelBlockedCommand {
             approval_process_instance_id: subject.instance.base.id.clone(),
             expected_instance_version,
@@ -1040,18 +936,8 @@ mod tests {
             execution_version: command.expected_execution_version + 1,
             task_versions: Vec::new(),
         };
-        assert!(cancel_blocked_terminal_facts_match(
-            &subject.instance,
-            &facts,
-            &command,
-            "runtime-admin"
-        ));
-        assert!(!cancel_blocked_terminal_facts_match(
-            &subject.instance,
-            &facts,
-            &command,
-            "other-admin"
-        ));
+        assert!(cancel_blocked_terminal_facts_match(&subject.instance, &facts, &command, "runtime-admin"));
+        assert!(!cancel_blocked_terminal_facts_match(&subject.instance, &facts, &command, "other-admin"));
     }
 
     #[test]
@@ -1093,6 +979,10 @@ mod tests {
     fn stock_adjustment_runtime_object_read_uses_registered_permission_scope() {
         let spec = adapter_spec_of(DocumentType::StockAdjustment).expect("库存调整适配器");
         let context = BindingRevalidationContext {
+            order_source: None,
+            customer_id: None,
+            business_org_unit_id: None,
+            scope_owner_user_id: None,
             organization_id: "org-1".to_string(),
             creator_id: "submitter".to_string(),
         };

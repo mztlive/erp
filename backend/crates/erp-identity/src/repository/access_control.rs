@@ -225,7 +225,7 @@ impl QueryFilter for DataScopeFilter {
     /// # 关键业务约束
     /// 资源按字段精确匹配；动作匹配 `actions` 数组包含该标识，禁止通配。
     fn to_doc(&self) -> Document {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "schema_version": 2 };
         if let Some(subject_type) = self.subject_type {
             filter.insert("subject_type", subject_type.as_str());
         }
@@ -342,6 +342,23 @@ impl<'a> DataScopeRepository<'a> {
         })
     }
 
+    /// 检测未迁移的个人上限；旧个人规则不能因 v2 过滤而丢失收窄效果。
+    ///
+    /// # 参数
+    /// * `user_id` - 当前账号 ID
+    /// * `executor` - 原事务执行器
+    /// # 返回
+    /// 存在未软删除且非 v2 的个人规则时为 true。
+    /// # 错误
+    /// 数据库错误传播，不转换为无上限。
+    pub async fn has_legacy_user_limit(&self, user_id: &str, executor: &mut dyn Executor) -> Result<bool> {
+        self.exists(
+            doc! { "subject_type": "user", "subject_id": user_id, "schema_version": { "$ne": 2 } },
+            executor,
+        )
+        .await
+    }
+
     /// 按单个主体取回数据范围。
     ///
     /// # 参数
@@ -362,6 +379,7 @@ impl<'a> DataScopeRepository<'a> {
     ) -> Result<Vec<DataScope>> {
         self.find_many_sorted(
             doc! {
+                "schema_version": 2,
                 "subject_type": subject_type.as_str(),
                 "subject_id": subject_id,
             },
@@ -420,7 +438,8 @@ fn data_scope_subjects_filter(
         return None;
     }
     Some(doc! {
-        "subject_type": subject_type.as_str(),
+        "schema_version": 2,
+                "subject_type": subject_type.as_str(),
         "subject_id": { "$in": subject_ids },
     })
 }
@@ -784,6 +803,7 @@ mod tests {
         let ids = vec!["role-1".to_string(), "missing-role".to_string()];
         let filter = data_scope_subjects_filter(DataScopeSubjectType::Role, &ids).unwrap();
 
+        assert_eq!(filter.get_i32("schema_version").unwrap(), 2);
         assert_eq!(filter.get_str("subject_type").unwrap(), "role");
         assert_eq!(
             filter

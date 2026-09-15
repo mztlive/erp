@@ -16,7 +16,10 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Field, FieldLabel } from "@/components/ui/field"
-import { actionLabel, resourceLabel } from "@/features/admin/lib/permission-catalog"
+import {
+    actionLabel,
+    resourceLabel,
+} from "@/features/admin/lib/permission-catalog"
 import {
     DIMENSION_LABEL,
     SCOPE_TYPE_LABEL,
@@ -33,6 +36,7 @@ import type {
     ScopeDimension,
     ScopeTargetMode,
 } from "@/features/organization/types"
+import { ScopeTargetPicker } from "./scope-target-picker"
 import { getErrorPresentation } from "@/lib/api/errors"
 
 const schema = z.object({
@@ -100,9 +104,14 @@ export function DataScopeFormDialog({
                 actions: value.actions,
                 targetDimension: value.targetDimension as ScopeDimension,
                 targetMode: needsTargets
-                    ? (value.targetMode as ScopeTargetMode)
+                    ? value.targetDimension === "internal_org"
+                        ? (value.targetMode as ScopeTargetMode)
+                        : "explicit"
                     : null,
                 includeDescendants:
+                    !needsTargets ||
+                    value.targetDimension !== "internal_org" ||
+                    value.targetMode === "managed_orgs" ||
                     value.includeDescendants === "none"
                         ? null
                         : value.includeDescendants === "true",
@@ -138,7 +147,8 @@ export function DataScopeFormDialog({
                 <DialogHeader>
                     <DialogTitle>按资源与动作配置范围</DialogTitle>
                     <DialogDescription>
-                        必须指定资源和动作。目标只能使用稳定 ID，不能用通配符或显示名。
+                        必须指定资源和动作。目标只能使用稳定
+                        ID，不能用通配符或显示名。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -203,8 +213,9 @@ export function DataScopeFormDialog({
                         selector={(state) => state.values.resource}
                         children={(resource) => {
                             const actions =
-                                resources.find((item) => item.resource === resource)
-                                    ?.actions ?? []
+                                resources.find(
+                                    (item) => item.resource === resource,
+                                )?.actions ?? []
                             return (
                                 <form.AppField
                                     name="actions"
@@ -217,10 +228,14 @@ export function DataScopeFormDialog({
                                                 id="organization-scope-actions"
                                                 aria-label="动作"
                                                 value={field.state.value}
-                                                options={actions.map((action) => ({
-                                                    value: action,
-                                                    label: actionLabel(action),
-                                                }))}
+                                                options={actions.map(
+                                                    (action) => ({
+                                                        value: action,
+                                                        label: actionLabel(
+                                                            action,
+                                                        ),
+                                                    }),
+                                                )}
                                                 onValueChange={(ids) =>
                                                     field.handleChange(ids)
                                                 }
@@ -244,26 +259,27 @@ export function DataScopeFormDialog({
                             />
                         )}
                     />
+                    <form.AppField
+                        name="targetDimension"
+                        children={(field) => (
+                            <field.SelectField
+                                id="organization-scope-dimension"
+                                label="目标维度"
+                                options={Object.entries(DIMENSION_LABEL).map(
+                                    ([value, label]) => ({
+                                        value,
+                                        label,
+                                    }),
+                                )}
+                            />
+                        )}
+                    />
                     <form.Subscribe
                         selector={(state) => state.values.scopeType}
                         children={(scopeType) =>
-                            scopeType === "organization" || scopeType === "team" ? (
+                            scopeType === "organization" ||
+                            scopeType === "team" ? (
                                 <>
-                                    <form.AppField
-                                        name="targetDimension"
-                                        children={(field) => (
-                                            <field.SelectField
-                                                id="organization-scope-dimension"
-                                                label="目标维度"
-                                                options={Object.entries(
-                                                    DIMENSION_LABEL,
-                                                ).map(([value, label]) => ({
-                                                    value,
-                                                    label,
-                                                }))}
-                                            />
-                                        )}
-                                    />
                                     <form.AppField
                                         name="targetMode"
                                         children={(field) => (
@@ -280,7 +296,9 @@ export function DataScopeFormDialog({
                                         )}
                                     />
                                     <form.Subscribe
-                                        selector={(state) => state.values.targetMode}
+                                        selector={(state) =>
+                                            state.values.targetMode
+                                        }
                                         children={(mode) =>
                                             mode === "explicit" ? (
                                                 <form.AppField
@@ -290,26 +308,33 @@ export function DataScopeFormDialog({
                                                             <FieldLabel htmlFor="organization-scope-targets">
                                                                 组织目标
                                                             </FieldLabel>
-                                                            <MultiOptionCombobox
-                                                                id="organization-scope-targets"
-                                                                aria-label="组织目标"
-                                                                value={
-                                                                    field.state.value
-                                                                }
-                                                                options={units.map(
-                                                                    (unit) => ({
-                                                                        value: unit.id,
-                                                                        label: unit.name,
-                                                                    }),
-                                                                )}
-                                                                onValueChange={(
-                                                                    ids,
+                                                            <form.Subscribe
+                                                                selector={(
+                                                                    state,
                                                                 ) =>
-                                                                    field.handleChange(
-                                                                        ids,
-                                                                    )
+                                                                    state.values
+                                                                        .targetDimension
                                                                 }
-                                                                placeholder="选择组织"
+                                                                children={(
+                                                                    dimension,
+                                                                ) => (
+                                                                    <ScopeTargetPicker
+                                                                        dimension={
+                                                                            dimension
+                                                                        }
+                                                                        value={
+                                                                            field
+                                                                                .state
+                                                                                .value
+                                                                        }
+                                                                        units={
+                                                                            units
+                                                                        }
+                                                                        onChange={
+                                                                            field.handleChange
+                                                                        }
+                                                                    />
+                                                                )}
                                                             />
                                                         </Field>
                                                     )}
@@ -318,10 +343,15 @@ export function DataScopeFormDialog({
                                         }
                                     />
                                     <form.Subscribe
-                                        selector={(state) => state.values.targetMode}
-                                        children={(mode) =>
-                                            mode === "explicit" ||
-                                            mode === "own_org" ? (
+                                        selector={(state) => ({
+                                            mode: state.values.targetMode,
+                                            dimension:
+                                                state.values.targetDimension,
+                                        })}
+                                        children={({ mode, dimension }) =>
+                                            dimension === "internal_org" &&
+                                            (mode === "explicit" ||
+                                                mode === "own_org") ? (
                                                 <form.AppField
                                                     name="includeDescendants"
                                                     children={(field) => (

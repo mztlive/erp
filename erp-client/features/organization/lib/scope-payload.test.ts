@@ -53,8 +53,8 @@ it("可配置清单只含已接线消费者，未接线项不得出现", () => {
     const resources = registeredResources().map((item) => item.resource)
     expect(resources).toContain("org_unit")
     expect(resources).toContain("sales_order")
-    expect(resources).not.toContain("work_item")
-    expect(resources).not.toContain("approval_instance")
+    expect(resources).toContain("work_item")
+    expect(resources).toContain("approval_instance")
     expect(resources).not.toContain("admin")
     expect(
         validateCreateDataScope({

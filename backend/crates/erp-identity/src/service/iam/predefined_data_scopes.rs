@@ -9,6 +9,28 @@ use crate::Result;
 
 /// 已接入 S2 的资源与完整动作目录；不得用通配符初始化范围。
 pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[
+    (
+        "approval_instance",
+        &[
+            "read",
+            "decide",
+            "resume",
+            "cancel",
+            "cancel_blocked",
+            "upgrade_binding",
+        ],
+    ),
+    (
+        "stock_adjustment",
+        &["list", "detail", "create", "update", "submit"],
+    ),
+    ("stock_balance", &["list", "detail"]),
+    ("stock_movement", &["list"]),
+    ("stock_reservation", &["list"]),
+    ("customer_refund", &["submit"]),
+    ("supplier_refund", &["submit"]),
+    ("supplier_settlement_statement", &["confirm"]),
+    ("work_item", &["manage"]),
     ("org_unit", &["list", "manage"]),
     ("cost_entry", &["list", "detail"]),
     ("cost_allocation", &["list"]),
@@ -82,14 +104,48 @@ pub(crate) async fn seed_role(rbac: &SharedRbacService, role: &str) -> Result<()
 
 /// 明确岗位、资源与动作的默认规则，RBAC 仍独立决定实际动作权限。
 fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeData> {
+    if resource == "work_item" && !matches!(role, "role-root" | "role-sysadmin" | "role-management") {
+        return Vec::new();
+    }
     if resource == "org_unit" && !matches!(role, "role-root" | "role-sysadmin") {
+        return Vec::new();
+    }
+    if matches!(
+        resource,
+        "stock_adjustment"
+            | "stock_balance"
+            | "stock_movement"
+            | "stock_reservation"
+            | "customer_refund"
+            | "supplier_refund"
+    ) && !matches!(role, "role-root" | "role-finance")
+    {
+        return Vec::new();
+    }
+    if resource == "supplier_settlement_statement" && !matches!(role, "role-root" | "role-finance") {
+        return Vec::new();
+    }
+    if resource == "approval_instance" && !matches!(role, "role-root" | "role-finance" | "role-management") {
         return Vec::new();
     }
     let mut scope_types = vec![DataScopeType::Company];
     let mut granted_actions = actions.to_vec();
     match role {
         "role-root" => {}
-        "role-sysadmin" if resource == "org_unit" => {}
+        "role-finance"
+            if matches!(
+                resource,
+                "supplier_settlement_statement"
+                    | "stock_adjustment"
+                    | "stock_balance"
+                    | "stock_movement"
+                    | "stock_reservation"
+                    | "customer_refund"
+                    | "supplier_refund"
+            ) => {}
+        "role-finance" | "role-management" if resource == "approval_instance" => {}
+        "role-sysadmin" if matches!(resource, "org_unit" | "work_item") => {}
+        "role-management" if resource == "work_item" => {}
         "role-management" | "role-finance" => {
             granted_actions.retain(|action| matches!(*action, "list" | "detail"))
         }
@@ -120,7 +176,13 @@ fn definition(role: &str, resource: &str, actions: &[&str], scope_type: DataScop
             schema_version: 2,
             resource: resource.into(),
             actions: actions.iter().map(|value| (*value).into()).collect(),
-            target_dimension: ScopeDimension::InternalOrg,
+            target_dimension: match resource {
+                "stock_adjustment" | "stock_balance" | "stock_movement" | "stock_reservation" => {
+                    ScopeDimension::Warehouse
+                }
+                "customer_refund" | "supplier_refund" => ScopeDimension::SettlementParty,
+                _ => ScopeDimension::InternalOrg,
+            },
             target_mode: scope_type
                 .requires_targets()
                 .then_some(ScopeTargetMode::ManagedOrgs),

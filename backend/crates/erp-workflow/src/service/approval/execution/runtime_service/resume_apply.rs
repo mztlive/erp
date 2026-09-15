@@ -1,49 +1,46 @@
 //! 原审批人恢复提交、回放与事务写入。
 
-use crate::entity::approval_integration::ApprovalSubjectSnapshot;
-use crate::entity::document_registry::DocumentType;
-use crate::entity::work_item::WorkItemStatus;
-use crate::repository::bpm::ApprovalInstanceListProjection;
-use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
+use application_core::AuditActor;
 use bpm::engine::{CommitRequired, Eligibility};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::Timestamp;
-
 use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::super::apply_plan::PlannedWrites;
-use super::super::authorization::{converge_eligibility, AuthorizationFailure};
+use super::super::authorization::{AuthorizationFailure, converge_eligibility};
 use super::super::idempotency::{
-    command_may_have_committed, command_recovery_delay, map_receipt_first_write_error,
-    normalize_idempotency_key, payload_conflict_error, resume_identity, PreparedCommandIdentity,
-    ReceiptBranch,
+    PreparedCommandIdentity, ReceiptBranch, command_may_have_committed, command_recovery_delay,
+    map_receipt_first_write_error, normalize_idempotency_key, payload_conflict_error, resume_identity,
 };
 use super::super::resume::prepare_resume;
-use super::super::runtime_query::{recovery_options_for, RuntimeRecoveryAction};
-use super::super::view::{map_command_view, ApprovalCommandView, OpenTaskSummary};
+use super::super::runtime_query::{RuntimeRecoveryAction, recovery_options_for};
+use super::super::view::{ApprovalCommandView, OpenTaskSummary, map_command_view};
 use super::super::{ExecutionCommandInput, PreparedExecution, ResumeExecutionInput};
-use super::notifications::{persist_resume_notifications, ResumeNotificationFacts};
+use super::notifications::{ResumeNotificationFacts, persist_resume_notifications};
 use super::query::{first_open_task, list_projection_from_writes};
 use super::read_auth::{
-    process_required_separation_policy, revalidate_decision_approver, RevalidateDecisionApproverInput,
+    RevalidateDecisionApproverInput, process_required_separation_policy, revalidate_decision_approver,
 };
-use super::tasks::{create_open_tasks, CreateOpenTasksInput};
+use super::tasks::{CreateOpenTasksInput, create_open_tasks};
 use super::{
-    ensure_command_actor, ensure_expected_version, find_receipt_for_identity, hidden_not_found,
-    load_exact_runtime_snapshot, persisted_command_view_with_executor, require_cas_applied,
-    ApprovalRuntimeService,
+    ApprovalRuntimeService, ensure_command_actor, ensure_expected_version, find_receipt_for_identity,
+    hidden_not_found, load_exact_runtime_snapshot, persisted_command_view_with_executor, require_cas_applied,
 };
+use crate::entity::approval_integration::ApprovalSubjectSnapshot;
+use crate::entity::document_registry::DocumentType;
+use crate::entity::work_item::WorkItemStatus;
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::PreparedWorkflowAudit;
+use crate::repository::bpm::ApprovalInstanceListProjection;
+use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::business_adapter::{
-    adapter_object_read_decision_with, adapter_spec_of, BindingRevalidationContext,
+    BindingRevalidationContext, adapter_object_read_decision_with, adapter_spec_of,
 };
 use crate::service::approval::policy::STATIC_APPROVE_PERMISSION;
-use crate::service::approval::{approval_recovery_scope, ApprovalResumeCommand};
-use application_core::AuditActor;
+use crate::service::approval::{ApprovalResumeCommand, approval_recovery_scope};
 
 /// 人员恢复时对旧关闭任务执行的只读并发守卫。
 struct ClosedTaskGuard {
@@ -128,6 +125,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                     .await?
                 {
                     let context = BindingRevalidationContext {
+                        order_source: None,
+                        customer_id: None,
+                        business_org_unit_id: None,
+                        scope_owner_user_id: None,
                         organization_id: snapshot.payload.responsible_org_id.clone(),
                         creator_id: String::new(),
                     };
@@ -143,7 +144,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 } else {
                     Some(AuthorizationFailure::NotEligible)
                 }
-            }
+            },
             _ => Some(AuthorizationFailure::AccountInactive),
         };
         converge_eligibility(assignee_id, assignee_name, failure)
@@ -184,30 +185,21 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             return Ok(view);
         }
 
-        self.require_recovery_action(&instance_id, RuntimeRecoveryAction::ResumeCurrentApprover)
-            .await?;
+        self.require_recovery_action(&instance_id, RuntimeRecoveryAction::ResumeCurrentApprover).await?;
         let instance = self
             .db
             .bpm_workflow()
             .find_instance_by_id(&ApprovalProcessInstanceId::new(&instance_id), &mut NoTransaction)
             .await?
             .ok_or_else(hidden_not_found)?;
-        ensure_expected_version(
-            "审批实例",
-            command.expected_instance_version,
-            instance.base.version,
-        )?;
+        ensure_expected_version("审批实例", command.expected_instance_version, instance.base.version)?;
         let current = self
             .db
             .bpm_workflow()
             .find_current_execution(&ApprovalProcessInstanceId::new(&instance_id), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::ConflictError("审批实例缺少当前受阻执行".to_string()))?;
-        ensure_expected_version(
-            "审批执行",
-            command.expected_execution_version,
-            current.base.version,
-        )?;
+        ensure_expected_version("审批执行", command.expected_execution_version, current.base.version)?;
         let assignee = self
             .db
             .bpm_workflow()
@@ -218,11 +210,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             )
             .await?
             .ok_or_else(|| Error::ConflictError("实例缺少当前节点审批人绑定".to_string()))?;
-        ensure_expected_version(
-            "审批人绑定",
-            command.expected_assignment_version,
-            assignee.base.version,
-        )?;
+        ensure_expected_version("审批人绑定", command.expected_assignment_version, assignee.base.version)?;
         let closed_task_guard = self
             .load_resume_task_guard(
                 &ApprovalNodeExecutionId::new(current.base.id.clone()),
@@ -247,7 +235,16 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             )
             .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
         let recovery_scope = approval_recovery_scope(&self.auth, actor).await?;
-        if !recovery_scope.covers(&snapshot.payload.responsible_org_id) {
+        if !recovery_scope.covers_object(
+            &self
+                .auth
+                .approval_scope_object(
+                    snapshot.document_type,
+                    &snapshot.business_object_id,
+                    &mut NoTransaction,
+                )
+                .await?,
+        ) {
             return Err(Error::Forbidden("无权恢复该责任组织的审批实例".to_string()));
         }
         let spec = adapter_spec_of(document_type)?;
@@ -290,9 +287,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             actor_id: actor.id().to_string(),
         })?;
         let PreparedExecution::Apply(writes) = prepared else {
-            return self
-                .persisted_command_view(&instance_id, CommitRequired::Proceed, true)
-                .await;
+            return self.persisted_command_view(&instance_id, CommitRequired::Proceed, true).await;
         };
         let writes = *writes;
         let new_task_ids = writes.create_tasks.iter().map(|_| next_id()).collect::<Vec<_>>();
@@ -398,7 +393,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                     error,
                 )
                 .await
-            }
+            },
             Err(error) => Err(error),
         }
     }
@@ -437,8 +432,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         for attempt in 0..RECOVERY_ATTEMPTS {
             match self.replay_resume(actor, &instance_id, &identity).await {
                 Ok(Some(view)) => return Ok(view),
-                Ok(None) => {}
-                Err(error) if command_may_have_committed(&error) => {}
+                Ok(None) => {},
+                Err(error) if command_may_have_committed(&error) => {},
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {
@@ -453,19 +448,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         execution_id: &ApprovalNodeExecutionId,
         expected_closed_task_version: Option<u64>,
     ) -> Result<Option<ClosedTaskGuard>> {
-        let tasks = self
-            .db
-            .work_items()
-            .approval_tasks_for_execution(execution_id, &mut NoTransaction)
-            .await?;
+        let tasks =
+            self.db.work_items().approval_tasks_for_execution(execution_id, &mut NoTransaction).await?;
         if tasks.len() > 1 {
             return Err(Error::ConflictError("受阻执行关联多个历史审批任务".to_string()));
         }
         let Some(task) = tasks.into_iter().next() else {
             if expected_closed_task_version.is_some() {
-                return Err(Error::ConflictError(
-                    "调用方声明了关闭任务版本，但历史任务不存在".to_string(),
-                ));
+                return Err(Error::ConflictError("调用方声明了关闭任务版本，但历史任务不存在".to_string()));
             }
             return Ok(None);
         };
@@ -517,18 +507,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                     task_version: task.base.version.to_string(),
                     owner_user_id: task.owner_user_id.unwrap_or_default(),
                 })
-            }
+            },
             None => None,
         };
-        Ok(map_command_view(
-            &instance,
-            current.as_ref(),
-            None,
-            None,
-            next_open_task,
-            commit,
-            replay,
-        ))
+        Ok(map_command_view(&instance, current.as_ref(), None, None, next_open_task, commit, replay))
     }
 
     async fn require_recovery_action(&self, instance_id: &str, wanted: RuntimeRecoveryAction) -> Result<()> {
@@ -561,8 +543,16 @@ async fn replay_resume_in_transaction(
         .await?
         .ok_or_else(hidden_not_found)?;
     let (_, snapshot) = load_exact_runtime_snapshot(db, &instance, session, true).await?;
-    let recovery_scope = approval_recovery_scope(rbac, actor).await?;
-    if !recovery_scope.covers(&snapshot.payload.responsible_org_id) {
+    let (recovery_scope, _) = crate::service::approval::scope::permission_scope_and_roles_with_executor(
+        rbac,
+        actor,
+        "approval_instance:resume",
+        session,
+    )
+    .await?;
+    if !recovery_scope.covers_object(
+        &rbac.approval_scope_object(snapshot.document_type, &snapshot.business_object_id, session).await?,
+    ) {
         return Err(Error::Forbidden("无权恢复该责任组织的审批实例".to_string()));
     }
     let Some(receipt) = find_receipt_for_identity(db, identity, session).await? else {
@@ -572,7 +562,7 @@ async fn replay_resume_in_transaction(
         return Err(Error::ConflictError("恢复收据结果引用与实例不一致".to_string()));
     }
     match identity.classify(Some(&receipt)) {
-        ReceiptBranch::SamePayload(_) => {}
+        ReceiptBranch::SamePayload(_) => {},
         ReceiptBranch::Fresh => unreachable!("receipt was loaded"),
         ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
     }
@@ -602,9 +592,7 @@ async fn persist_resume_writes(
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
     let [new_execution] = input.writes.created_executions.as_slice() else {
-        return Err(Error::Internal(
-            "原审批人恢复必须且只能创建一个新执行".to_string(),
-        ));
+        return Err(Error::Internal("原审批人恢复必须且只能创建一个新执行".to_string()));
     };
     if let Some(guard) = input.closed_task_guard {
         let task = db
@@ -616,9 +604,7 @@ async fn persist_resume_writes(
             || task.base.version != guard.version
             || task.approval_node_execution_id.as_ref() != Some(&guard.execution_id)
         {
-            return Err(Error::ConflictError(
-                "原关闭审批任务已变化，请刷新后重试".to_string(),
-            ));
+            return Err(Error::ConflictError("原关闭审批任务已变化，请刷新后重试".to_string()));
         }
     }
     // 收据是完成全部只读验证后的第一笔物理写，用唯一身份仲裁同键并发。
@@ -688,9 +674,7 @@ async fn persist_resume_writes(
 /// 恢复端口只接受已重新满足全部资格的原审批人。
 fn ensure_resume_approver_recovered(eligibility: &Eligibility) -> Result<()> {
     if eligibility.blocked_code().is_some() {
-        return Err(Error::from_approval_code(
-            ErrorCode::ApprovalCurrentApproverNotRecovered,
-        ));
+        return Err(Error::from_approval_code(ErrorCode::ApprovalCurrentApproverNotRecovered));
     }
     Ok(())
 }

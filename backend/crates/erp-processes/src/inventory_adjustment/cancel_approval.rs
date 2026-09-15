@@ -1,5 +1,7 @@
 //! 库存调整普通撤回：调用统一取消编排并原子持久化业务与 BPM 事实。
 
+use erp_workflow::ports::WorkflowAuthorizationPort;
+
 use bpm::engine::DefinitionGraph;
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalCommandKind, ApprovalProcessInstanceStatus};
@@ -710,9 +712,14 @@ async fn ensure_cancel_authorized_with_executor(
         executor,
     )
     .await?;
-    if !cancel_scope.covers(&snapshot.payload.responsible_org_id)
-        || !read_scope.covers(&snapshot.payload.responsible_org_id)
-    {
+    let object = crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone())
+        .approval_scope_object(
+            DocumentType::StockAdjustment,
+            &snapshot.business_object_id,
+            executor,
+        )
+        .await?;
+    if !cancel_scope.covers_object(&object) || !read_scope.covers_object(&object) {
         return Err(Error::Forbidden("无权撤回该责任组织的库存调整审批".to_string()));
     }
     if snapshot.payload.submitted_by == actor.id() {

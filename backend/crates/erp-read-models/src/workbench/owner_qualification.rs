@@ -3,11 +3,12 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use application_core::AuditActor;
+use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::WorkItemStatus;
 use erp_workflow::ports::{ObjectFactMap, OrderTaskSource, RolePermissionSnapshotFact, WorkflowAccountFact};
 use erp_workflow::service::work_item::access::required_execution_permissions;
 use erp_workflow::WorkflowAuthorizationPort;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::{
     ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemView, WorkbenchReadService,
@@ -16,7 +17,12 @@ use crate::{Error, Result};
 
 impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 对当前页的订单关联任务按负责人分组重验；保留原责任和受控管理动作。
-    pub(super) async fn apply_owner_qualification(&self, items: &mut [WorkItemView]) -> Result<()> {
+    pub(super) async fn apply_owner_qualification(
+        &self,
+        items: &mut [WorkItemView],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.qualify_approvals(items, executor).await?;
         let keys = items
             .iter()
             .filter(|item| item.status == WorkItemStatus::Open)
@@ -30,13 +36,93 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if keys.is_empty() {
             return Ok(());
         }
-        let facts = self.facts_reader().load(&keys, &mut NoTransaction).await?;
+        let facts = self.facts_reader().load(&keys, executor).await?;
         let groups = owner_groups(items, &facts)?;
-        self.qualify_owner_groups(items, groups).await
+        self.qualify_owner_groups(items, groups, executor).await
+    }
+
+    /// 当前审批动作范围失效时保留原负责人并移除决定动作。
+    async fn qualify_approvals(&self, items: &mut [WorkItemView], executor: &mut dyn Executor) -> Result<()> {
+        let mut keys = HashSet::new();
+        let mut owners = BTreeSet::new();
+        for item in items
+            .iter()
+            .filter(|i| i.status == WorkItemStatus::Open && i.work_item_type.is_document_approval())
+        {
+            let kind = DocumentType::try_from_code(&item.business_object_type)
+                .map_err(|_| Error::Internal("审批任务类型未登记".into()))?;
+            keys.insert((kind, item.business_object_id.clone()));
+            if let Some(id) = &item.owner_user_id {
+                owners.insert(id.clone());
+            }
+        }
+        if keys.is_empty() {
+            return Ok(());
+        }
+        let objects = self.auth.approval_scope_objects(&keys, executor).await?;
+        let accounts = self
+            .auth
+            .load_accounts(&owners.into_iter().collect::<Vec<_>>(), executor)
+            .await?
+            .into_iter()
+            .map(|a| (a.id.clone(), a))
+            .collect::<HashMap<_, _>>();
+        let mut decisions = HashMap::new();
+        let mut reads = HashMap::new();
+        for item in items
+            .iter_mut()
+            .filter(|i| i.status == WorkItemStatus::Open && i.work_item_type.is_document_approval())
+        {
+            let account = item
+                .owner_user_id
+                .as_ref()
+                .and_then(|id| accounts.get(id))
+                .filter(|a| a.is_active_backoffice());
+            let Some(account) = account else {
+                block_owner(item);
+                continue;
+            };
+            let kind = DocumentType::try_from_code(&item.business_object_type)
+                .map_err(|_| Error::Internal("审批任务类型未登记".into()))?;
+            let Some(object) = objects.get(&(kind, item.business_object_id.clone())) else {
+                block_owner(item);
+                continue;
+            };
+            let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
+            if !decisions.contains_key(&account.id) {
+                decisions.insert(
+                    account.id.clone(),
+                    self.auth
+                        .resolve_workflow_scope(&actor, "approval_instance:decide", executor)
+                        .await?,
+                );
+            }
+            let read_key = (account.id.clone(), kind);
+            if !reads.contains_key(&read_key) {
+                reads.insert(
+                    read_key.clone(),
+                    erp_workflow::service::approval::approval_document_read_scope_with_executor(
+                        &self.auth, &actor, kind, executor,
+                    )
+                    .await?,
+                );
+            }
+            if !decisions[&account.id].as_ref().is_some_and(|s| s.allows(object))
+                || !reads[&read_key].covers_object(object)
+            {
+                block_owner(item);
+            }
+        }
+        Ok(())
     }
 
     /// 账号批量读取；同一负责人只解析一次权限和每种订单的详情范围。
-    async fn qualify_owner_groups(&self, items: &mut [WorkItemView], groups: OwnerGroups) -> Result<()> {
+    async fn qualify_owner_groups(
+        &self,
+        items: &mut [WorkItemView],
+        groups: OwnerGroups,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let ids = groups
             .keys()
             .filter(|id| !id.is_empty())
@@ -44,7 +130,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .collect::<Vec<_>>();
         let accounts = self
             .auth
-            .load_accounts(&ids, &mut NoTransaction)
+            .load_accounts(&ids, executor)
             .await?
             .into_iter()
             .map(|account| (account.id.clone(), account))
@@ -59,7 +145,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 }
                 continue;
             };
-            self.qualify_owner(items, account, &tasks).await?;
+            self.qualify_owner(items, account, &tasks, executor).await?;
         }
         Ok(())
     }
@@ -70,6 +156,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         items: &mut [WorkItemView],
         account: &WorkflowAccountFact,
         tasks: &[(usize, OrderTaskSource)],
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
         let required = tasks
@@ -85,17 +172,14 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 &required.into_iter().collect::<Vec<_>>(),
             )
             .await?;
-        let enabled_roles = self
-            .auth
-            .enabled_role_ids(grants.role_ids(), &mut NoTransaction)
-            .await?;
+        let enabled_roles = self.auth.enabled_role_ids(grants.role_ids(), executor).await?;
         let sources = tasks
             .iter()
             .map(|(_, source)| source.clone())
             .collect::<BTreeSet<_>>();
         let readable = self
             .auth
-            .readable_order_sources(&actor, &sources, &mut NoTransaction)
+            .readable_order_sources(&actor, &sources, executor)
             .await?;
         for (index, source) in tasks {
             let item = &mut items[*index];

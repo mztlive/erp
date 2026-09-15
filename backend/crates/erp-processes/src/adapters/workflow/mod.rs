@@ -9,11 +9,14 @@ use mongodb::Database;
 
 use crate::errors::{Error, Result};
 
+mod approval_objects;
+mod approval_scope;
 mod audit;
 mod authorization;
 mod object_facts;
 mod order_access;
 mod purchase_responsibility;
+mod task_scope;
 mod w29_close;
 pub mod work_item_authorization;
 

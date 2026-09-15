@@ -1,3 +1,4 @@
+use application_core::{normalized_text, page_or_default, page_size_or_default};
 pub use erp_workflow::entity::work_item::WorkItemDueFilter;
 use erp_workflow::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
@@ -6,7 +7,6 @@ use validator::Validate;
 use super::status::{family_of, WorkItemFamily, WorkItemScope, WorkItemSort, WORK_ITEM_TYPES};
 use super::view::WorkItemView;
 use crate::errors::{Error, Result};
-use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 pub(super) const DEFAULT_TIMEZONE: &str = "Asia/Shanghai";
 
@@ -32,6 +32,9 @@ pub struct WorkItemListParams {
     pub sort: Option<WorkItemSort>,
     /// 服务端返回的队列上下文；当前实现只接受同查询重算值。
     pub queue_context_id: Option<String>,
+    /// 首次查询返回的范围版本；后续页必须原样回传。
+    #[validate(length(max = 128))]
+    pub scope_version: Option<String>,
     /// 希望聚焦的任务；不可见时服务端失败关闭。
     #[validate(length(max = 128, message = "焦点任务ID不能超过128个字符"))]
     pub current_work_item_id: Option<String>,
@@ -60,6 +63,8 @@ pub(crate) struct WorkItemListQuery {
     pub page: u64,
     pub page_size: u32,
     pub queue_context_id: Option<String>,
+    /// 首次查询返回的范围版本；后续页必须原样回传。
+    pub scope_version: Option<String>,
 }
 
 impl WorkItemListParams {
@@ -89,6 +94,7 @@ impl WorkItemListParams {
             page: page_or_default(self.page),
             page_size: page_size_or_default(self.page_size),
             queue_context_id: normalized_text(self.queue_context_id.as_deref()),
+            scope_version: normalized_text(self.scope_version.as_deref()),
         })
     }
 }
@@ -106,6 +112,8 @@ pub struct WorkItemPageView {
     pub page_size: u32,
     /// 服务端形成的稳定队列上下文。
     pub queue_context_id: String,
+    /// 当前完整授权结果及身份授权版本。
+    pub scope_version: String,
 }
 
 /// 待办统计查询参数。
@@ -143,6 +151,7 @@ impl WorkItemStatsParams {
             q: None,
             sort: Some(WorkItemSort::CreatedDesc),
             queue_context_id: None,
+            scope_version: None,
             current_work_item_id: None,
             timezone: self.timezone.clone(),
             page: Some(1),

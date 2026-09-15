@@ -212,3 +212,6 @@ pub mod support_documents;
 
 #[cfg(test)]
 mod scope_equivalence;
+
+mod scope_target_validation;
+pub use scope_target_validation::scope_configuration;

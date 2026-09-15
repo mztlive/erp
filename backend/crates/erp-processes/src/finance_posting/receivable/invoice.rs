@@ -396,6 +396,10 @@ fn invoice_bind_command(invoice: &Invoice, creator_id: &str) -> Result<BindPubli
         business_object_id: invoice.base.id.clone(),
         business_object_version: invoice.base.version,
         context: BindingRevalidationContext {
+            order_source: None,
+            customer_id: None,
+            business_org_unit_id: None,
+            scope_owner_user_id: None,
             organization_id: invoice_binding_organization_id(invoice)?,
             creator_id: creator_id.to_string(),
         },

@@ -67,7 +67,7 @@ fn adapter_object_read_for_type(
             crate::procure_to_pay::purchase_change_order_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
-        WorkflowDocumentType::SalesInvoiceRequest => Ok(Some(true)),
+        WorkflowDocumentType::SalesInvoiceRequest | WorkflowDocumentType::StockAdjustment => Ok(Some(true)),
         WorkflowDocumentType::CustomerReceipt => Ok(Some(
             crate::finance_posting::receivable::customer_receipt_object_readable(
                 organization_id,
@@ -138,6 +138,10 @@ mod tests {
     #[test]
     fn wired_domain_types_return_explicit_read_decision() {
         let context = BindingRevalidationContext {
+            order_source: None,
+            customer_id: None,
+            business_org_unit_id: None,
+            scope_owner_user_id: None,
             organization_id: "org-1".to_string(),
             creator_id: "creator-1".to_string(),
         };
@@ -153,8 +157,8 @@ mod tests {
         );
         let stock = adapter_spec_of(DocumentType::StockAdjustment).expect("试点必须有适配器");
         assert_eq!(
-            adapter_object_read_decision(&stock, &context, "u1").expect("库存调整本阶段仍未接线"),
-            None
+            adapter_object_read_decision(&stock, &context, "u1").expect("库存调整对象读取已接线"),
+            Some(true)
         );
     }
 }

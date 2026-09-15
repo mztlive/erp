@@ -4,9 +4,8 @@ use persistence_core::Executor;
 
 use crate::entity::document_registry::DocumentType;
 use crate::error::Result;
-use crate::ports::UpgradeSubjectPort;
-
 pub use crate::ports::ApprovalUpgradeSubjectFacts;
+use crate::ports::UpgradeSubjectPort;
 
 /// Load strong-subject facts through the injected port.
 pub async fn load_approval_upgrade_subject_facts(
@@ -31,6 +30,10 @@ impl ApprovalUpgradeSubjectFacts {
     /// Binding revalidation context from strong-subject facts.
     pub fn binding_context(&self) -> crate::service::approval::business_adapter::BindingRevalidationContext {
         crate::service::approval::business_adapter::BindingRevalidationContext {
+            order_source: None,
+            customer_id: None,
+            business_org_unit_id: None,
+            scope_owner_user_id: None,
             organization_id: self.responsible_org_id.clone(),
             creator_id: self.creator_id.clone(),
         }

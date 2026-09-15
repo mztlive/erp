@@ -7,7 +7,7 @@ use std::num::NonZeroU32;
 use application_core::AuditActor;
 use erp_workflow::entity::work_item::{QueueContextField, QueueContextIdentity, WorkItem};
 use erp_workflow::{BpmExt, WorkItemExt};
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::access::{authorized_fields, authorized_item_fields, detail_scope, ActorAccess};
@@ -75,14 +75,34 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ) -> Result<WorkItemPageView> {
         params.validate()?;
         let query = params.normalized()?;
-        let access = self.actor_access(&actor).await?;
+        let this = self.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |session| {
+                Box::pin(async move { this.queue_page(query, actor, session).await })
+            })
+            .await
+    }
+
+    /// 范围、对象事实、完整计数和分页共享原事务快照。
+    async fn queue_page(
+        &self,
+        query: dto::WorkItemListQuery,
+        actor: AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<WorkItemPageView> {
+        let identity_version = self.auth.queue_scope_version(&actor, executor).await?;
+        let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
         let queue_context_id = queue_context_id(actor.id(), &query, &access);
         ensure_queue_context(&query.queue_context_id, &queue_context_id)?;
         let mut filter = self.scope_filter(&query, &actor, &access)?;
         apply_due_filter(&mut filter, query.due)?;
-        let authorized_page = self
-            .authorized_page_fields(&filter, query.page, query.page_size, &access)
+        let (authorized_page, result_version) = self
+            .authorized_page_fields(&filter, query.page, query.page_size, &access, executor)
             .await?;
+        let scope_version = queue_scope_version(&identity_version, &queue_context_id, &result_version);
+        ensure_scope_version(query.page, query.scope_version.as_deref(), &scope_version)?;
         let fields = self
             .focused_fields(
                 authorized_page.items,
@@ -92,17 +112,21 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                     page_size: query.page_size,
                     access: &access,
                 },
+                executor,
             )
             .await?;
         let items = self
-            .project_fields(fields, query.scope, &actor, &access, &queue_context_id)
+            .project_fields(fields, query.scope, &actor, &access, &queue_context_id, executor)
             .await?;
+        let current_version = self.auth.queue_scope_version(&actor, executor).await?;
+        ensure_scope_version(1, Some(&identity_version), &current_version)?;
         Ok(WorkItemPageView {
             items,
             total: authorized_page.total,
             page: query.page,
             page_size: query.page_size,
             queue_context_id,
+            scope_version,
         })
     }
 
@@ -116,6 +140,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         current_work_item_id: Option<&str>,
         filter: &WorkItemFilter,
         context: FocusedQueueContext<'_>,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<dto::WorkItemFields>> {
         let Some(current_id) = current_work_item_id else {
             return Ok(fields);
@@ -130,11 +155,11 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let current = self
             .db
             .work_items()
-            .find_visible_by_id(current_id, &candidates, &mut NoTransaction)
+            .find_visible_by_id(current_id, &candidates, executor)
             .await?
             .ok_or_else(|| Error::NotFound("当前焦点任务不在授权队列中".to_string()))?;
         let current = self
-            .authorized_fields_for_items(vec![current], context.access)
+            .authorized_fields_with_executor(vec![current], context.access, executor)
             .await?;
         let Some(current) = current
             .into_iter()
@@ -154,31 +179,39 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         page: u64,
         page_size: u32,
         access: &ActorAccess,
-    ) -> Result<AuthorizedPage<dto::WorkItemFields>> {
+        executor: &mut dyn Executor,
+    ) -> Result<(AuthorizedPage<dto::WorkItemFields>, String)> {
         let mut candidates = filter.clone();
         candidates.query = None;
         let mut collector = AuthorizedPageCollector::new(page, page_size)?;
+        let mut result_version = String::new();
         let mut candidate_offset = 0_u64;
         loop {
-            let rows = self.candidate_batch(&candidates, candidate_offset).await?;
+            let rows = self
+                .candidate_batch(&candidates, candidate_offset, executor)
+                .await?;
             let candidate_count = rows.len();
             if candidate_count == 0 {
                 break;
             }
-            let mut facts = self.object_facts_for_rows(&rows).await?;
-            self.filter_order_access(&access.actor_id, &mut facts).await?;
+            let mut facts = self.object_facts_for_rows(&rows, executor).await?;
+            self.filter_order_access(&access.actor_id, &mut facts, executor)
+                .await?;
             let fields = authorized_fields(rows, access, &facts);
-            collector.extend(
-                fields
-                    .into_iter()
-                    .filter(|fields| matches_keyword(fields, filter.query.as_deref())),
-            );
+            for fields in fields
+                .into_iter()
+                .filter(|fields| matches_keyword(fields, filter.query.as_deref()))
+            {
+                result_version =
+                    queue_scope_version(&result_version, &fields.id, &fields.task_version.to_string());
+                collector.extend([fields]);
+            }
             candidate_offset = next_candidate_offset(candidate_offset, candidate_count)?;
             if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {
                 break;
             }
         }
-        Ok(collector.finish())
+        Ok((collector.finish(), result_version))
     }
 
     /// 读取一个固定大小候选批次，不执行候选总数计数。
@@ -186,10 +219,11 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         &self,
         filter: &WorkItemFilter,
         offset: u64,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<erp_workflow::WorkItemRow>> {
         self.db
             .work_items()
-            .scan_work_item_batch(filter, offset, AUTHORIZED_SCAN_BATCH_SIZE, &mut NoTransaction)
+            .scan_work_item_batch(filter, offset, AUTHORIZED_SCAN_BATCH_SIZE, executor)
             .await
             .map_err(Error::from)
     }
@@ -200,6 +234,17 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         items: Vec<WorkItem>,
         access: &ActorAccess,
     ) -> Result<Vec<dto::WorkItemFields>> {
+        self.authorized_fields_with_executor(items, access, &mut NoTransaction)
+            .await
+    }
+
+    /// 焦点和详情读取沿用调用方事务，不重新建立对象授权时点。
+    async fn authorized_fields_with_executor(
+        &self,
+        items: Vec<WorkItem>,
+        access: &ActorAccess,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<dto::WorkItemFields>> {
         let keys = items
             .iter()
             .filter_map(|item| {
@@ -207,8 +252,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                     .map(|policy| (policy.object_kind, item.business_object_id.clone()))
             })
             .collect::<HashSet<_>>();
-        let mut facts = self.load_object_facts(&keys, &mut NoTransaction).await?;
-        self.filter_order_access(&access.actor_id, &mut facts).await?;
+        let mut facts = self.load_object_facts(&keys, executor).await?;
+        self.filter_order_access(&access.actor_id, &mut facts, executor)
+            .await?;
         Ok(items
             .into_iter()
             .filter_map(|item| authorized_item_fields(item, access, &facts))
@@ -216,13 +262,14 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     }
 
     /// 为已授权任务逐条计算审批阻断与允许动作。
-    async fn project_fields(
+    pub(super) async fn project_fields(
         &self,
         fields: Vec<dto::WorkItemFields>,
         scope: WorkItemScope,
         actor: &AuditActor,
         actor_access: &ActorAccess,
         queue_context_id: &str,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<WorkItemView>> {
         let mut items = Vec::with_capacity(fields.len());
         for fields in fields {
@@ -236,9 +283,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                 ),
             );
         }
-        self.apply_party_names(&mut items).await?;
-        self.apply_approval_contexts(&mut items).await?;
-        self.apply_owner_qualification(&mut items).await?;
+        self.apply_party_names_with(executor, &mut items).await?;
+        self.apply_approval_contexts(&mut items, executor).await?;
+        self.apply_owner_qualification(&mut items, executor).await?;
         Ok(items)
     }
 
@@ -255,7 +302,11 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ///
     /// # 关键业务约束
     /// 列表固定执行两次批量查询，不得逐任务读取审批历史；最近驳回只取实例有界投影。
-    pub(super) async fn apply_approval_contexts(&self, items: &mut [WorkItemView]) -> Result<()> {
+    pub(super) async fn apply_approval_contexts(
+        &self,
+        items: &mut [WorkItemView],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let execution_ids = items
             .iter()
             .filter_map(|item| item.approval_node_execution_id.as_deref())
@@ -267,7 +318,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let executions = self
             .db
             .bpm_workflow()
-            .list_executions_by_ids(&execution_ids, &mut NoTransaction)
+            .list_executions_by_ids(&execution_ids, executor)
             .await?;
         let instance_ids = executions
             .iter()
@@ -276,7 +327,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let summaries = self
             .db
             .bpm_workflow()
-            .list_instance_summaries_by_ids(&instance_ids, &mut NoTransaction)
+            .list_instance_summaries_by_ids(&instance_ids, executor)
             .await?;
         let executions = executions
             .into_iter()
@@ -326,9 +377,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             view_access.action_blockers,
         );
         self.apply_party_names(std::slice::from_mut(&mut view)).await?;
-        self.apply_approval_contexts(std::slice::from_mut(&mut view))
+        self.apply_approval_contexts(std::slice::from_mut(&mut view), &mut NoTransaction)
             .await?;
-        self.apply_owner_qualification(std::slice::from_mut(&mut view))
+        self.apply_owner_qualification(std::slice::from_mut(&mut view), &mut NoTransaction)
             .await?;
         Ok(view)
     }
@@ -426,20 +477,35 @@ fn queue_context_id(actor_id: &str, query: &dto::WorkItemListQuery, access: &Act
             QueueContextField::optional("query", query.query.as_deref()),
             QueueContextField::scalar("sort", query.sort_by),
             QueueContextField::scalar("ascending", query.sort_ascending.to_string()),
-            QueueContextField::set(
-                "responsibilities",
-                access.responsibility_scopes.iter().map(|(role, organization)| {
-                    QueueContextField::tuple([
-                        role.clone(),
-                        organization.clone().unwrap_or_else(|| "*".to_string()),
-                    ])
-                }),
-            ),
-            QueueContextField::set("organizations", access.organization_ids.clone()),
+            QueueContextField::scalar("all_owners", access.managed_owner_ids.is_none().to_string()),
+            QueueContextField::set("owners", access.managed_owner_ids.clone().unwrap_or_default()),
             QueueContextField::scalar("can_manage", access.can_manage.to_string()),
         ],
     )
     .into_string()
+}
+
+/// 完整结果使用有界滚动指纹；页码不进入版本，跨页共享同一授权锚点。
+fn queue_scope_version(identity: &str, query: &str, result: &str) -> String {
+    QueueContextIdentity::new(
+        "work-item-scope",
+        [
+            QueueContextField::scalar("identity", identity),
+            QueueContextField::scalar("query", query),
+            QueueContextField::scalar("result", result),
+        ],
+    )
+    .into_string()
+}
+
+/// 后续页无版本或版本漂移必须失败关闭，禁止拼接不同范围结果。
+fn ensure_scope_version(page: u64, provided: Option<&str>, expected: &str) -> Result<()> {
+    if (page > 1 && provided.is_none()) || provided.is_some_and(|value| value != expected) {
+        return Err(Error::ConflictError(
+            "DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into(),
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn single_item_context_id(actor_id: &str, work_item_id: &str) -> String {
@@ -457,7 +523,9 @@ pub(super) fn ensure_queue_context(provided: &Option<String>, expected: &str) ->
     if provided.as_deref().is_none_or(|provided| provided == expected) {
         return Ok(());
     }
-    Err(Error::ConflictError("队列上下文已变化，请刷新队列".to_string()))
+    Err(Error::ConflictError(
+        "DATA_SCOPE_CHANGED：队列范围已变化，请从第一页刷新".to_string(),
+    ))
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -613,6 +681,24 @@ mod tests {
         assert_eq!(page.items, vec!["allowed-0", "allowed-1"]);
         assert_eq!(page.total, 3);
         assert_eq!(AUTHORIZED_SCAN_BATCH_SIZE.get(), 100);
+    }
+
+    #[test]
+    fn scope_version_requires_anchor_and_detects_permission_or_result_changes() {
+        let first = super::queue_scope_version("policy-1", "query", "result-1");
+        assert!(super::ensure_scope_version(1, None, &first).is_ok());
+        assert!(super::ensure_scope_version(2, None, &first).is_err());
+        assert!(super::ensure_scope_version(2, Some(&first), &first).is_ok());
+        for changed in [
+            super::queue_scope_version("policy-2", "query", "result-1"),
+            super::queue_scope_version("policy-1", "query", "result-2"),
+            super::queue_scope_version("policy-1", "other-query", "result-1"),
+        ] {
+            let error = super::ensure_scope_version(2, Some(&first), &changed).unwrap_err();
+            assert!(
+                matches!(error, crate::errors::Error::ConflictError(message) if message.starts_with("DATA_SCOPE_CHANGED"))
+            );
+        }
     }
 
     #[test]

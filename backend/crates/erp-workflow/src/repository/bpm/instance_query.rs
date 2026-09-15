@@ -1,18 +1,17 @@
-use bpm::ids::ApprovalProcessInstanceId;
-use bpm::model::types::ApprovalProcessInstanceStatus;
-use bpm::model::ApprovalProcessInstance;
 use bpm::SubjectRef;
+use bpm::ids::ApprovalProcessInstanceId;
+use bpm::model::ApprovalProcessInstance;
+use bpm::model::types::ApprovalProcessInstanceStatus;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::{Executor, Result, mongo_ops};
 
 use super::{
-    clamp_limit, find_limited, ApprovalInstanceListCursor, ApprovalInstanceListFilter,
-    ApprovalInstanceListView, ApprovalInstanceSummary, ApprovalInstanceTextQuery, BpmWorkflowRepository,
-    INSTANCES, MAX_INSTANCE_PAGE,
+    ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListView,
+    ApprovalInstanceSummary, ApprovalInstanceTextQuery, BpmWorkflowRepository, INSTANCES, MAX_INSTANCE_PAGE,
+    clamp_limit, find_limited,
 };
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Result};
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 按主键读取审批流程实例。
@@ -78,9 +77,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         subject_version: u32,
         executor: &mut dyn Executor,
     ) -> Result<Option<ApprovalProcessInstance>> {
-        self.instances()
-            .find_one(non_terminal_subject_filter(subject, subject_version), executor)
-            .await
+        self.instances().find_one(non_terminal_subject_filter(subject, subject_version), executor).await
     }
 
     /// 读取同一主体与提交版本的可取消实例候选。
@@ -225,9 +222,7 @@ impl<'a> BpmWorkflowRepository<'a> {
             return Ok(Vec::new());
         }
         let ids = instance_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
-        let options = FindOptions::builder()
-            .projection(instance_summary_projection())
-            .build();
+        let options = FindOptions::builder().projection(instance_summary_projection()).build();
         mongo_ops::find_many(
             &self.db.collection::<ApprovalInstanceSummary>(INSTANCES),
             doc! {
@@ -308,10 +303,7 @@ pub(crate) fn instance_list_scope_empty(filter: &ApprovalInstanceListFilter) -> 
 /// # 返回
 /// `started_by` 为非空字符串时返回 `true`。
 fn started_by_present(filter: &ApprovalInstanceListFilter) -> bool {
-    filter
-        .started_by
-        .as_ref()
-        .is_some_and(|started_by| !started_by.is_empty())
+    filter.started_by.as_ref().is_some_and(|started_by| !started_by.is_empty())
 }
 
 /// 把列表过滤条件编译为 MongoDB 文档。
@@ -342,6 +334,9 @@ pub(crate) fn instance_list_filter_doc(filter: &ApprovalInstanceListFilter) -> D
     if let Some(subject_ids) = &filter.subject_ids {
         document.insert("subject.subject_id", doc! { "$in": subject_ids.clone() });
     }
+    if let Some(ids) = &filter.authorized_instance_ids {
+        document.insert("id", doc! { "$in": ids });
+    }
     insert_list_disjunctions(&mut document, filter);
     document
 }
@@ -369,15 +364,15 @@ fn insert_list_disjunctions(document: &mut Document, filter: &ApprovalInstanceLi
         groups.push(doc! { "$or": instance_text_query_or(text_query) });
     }
     match groups.len() {
-        0 => {}
+        0 => {},
         1 => {
             if let Some(or) = groups[0].get("$or").cloned() {
                 document.insert("$or", or);
             }
-        }
+        },
         _ => {
             document.insert("$and", groups);
-        }
+        },
     }
 }
 
@@ -421,7 +416,7 @@ pub(crate) fn instance_list_sort(filter: &ApprovalInstanceListFilter) -> Documen
         ApprovalInstanceListView::Blocked => doc! { "blocked_at": -1, "id": -1 },
         ApprovalInstanceListView::Managed if filter.status.is_some() => {
             doc! { "status": 1, "updated_at": -1, "id": -1 }
-        }
+        },
         ApprovalInstanceListView::Managed => doc! { "updated_at": -1, "id": -1 },
     }
 }

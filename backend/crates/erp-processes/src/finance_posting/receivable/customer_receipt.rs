@@ -190,6 +190,10 @@ impl ReceivableProcess {
                                 business_object_id: candidate.base.id.clone(),
                                 business_object_version: candidate.base.version,
                                 context: BindingRevalidationContext {
+                                    order_source: None,
+                                    customer_id: None,
+                                    business_org_unit_id: None,
+                                    scope_owner_user_id: None,
                                     organization_id,
                                     creator_id: actor_owned.id().to_string(),
                                 },
@@ -737,6 +741,10 @@ async fn persist_created_customer_receipt(
         business_object_id: receipt.base.id.clone(),
         business_object_version: receipt.base.version,
         context: BindingRevalidationContext {
+            order_source: None,
+            customer_id: None,
+            business_org_unit_id: None,
+            scope_owner_user_id: None,
             organization_id,
             creator_id: actor.id().to_string(),
         },

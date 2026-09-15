@@ -1,6 +1,6 @@
 //! Inventory authorization, audit and foreign-fact adapters.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use crate::adapters::workflow::workflow_auth;
@@ -11,8 +11,9 @@ use erp_audit::{AuditActorLogs, AuditExt, AuditLog, AuditLogData};
 use erp_catalog::CatalogExt;
 use erp_core::ids::SkuId;
 use erp_fulfillment::repository::FulfillmentExt;
-use erp_identity::access_control::{DataScope, DataScopeSubjectType, OrganizationCoverage};
-use erp_identity::{AccessControlExt, Permission, SharedRbacService};
+use erp_identity::access_control::ScopedObject;
+use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
+use erp_identity::{Error as IdentityError, Permission, SharedRbacService};
 use erp_inventory::{
     AuthorizationPort, CatalogFactsPort, FulfillmentFactsPort, InventoryAuditPort, InventoryAuthorization,
     InventoryService, PreparedInventoryAudit, ReceiptNoFact, SkuFact, SkuRevisionFact, WarehouseFact,
@@ -87,152 +88,95 @@ pub async fn authorize_inventory(
     {
         return Ok(InventoryAuthorization::inactive());
     }
-    let detail = Permission::parse(DETAIL_PERMISSION).map_err(erp_inventory::Error::from)?;
-    let adjustment_list =
-        Permission::parse(ADJUSTMENT_LIST_PERMISSION).map_err(erp_inventory::Error::from)?;
-    let create = Permission::parse(CREATE_PERMISSION).map_err(erp_inventory::Error::from)?;
-    let update = Permission::parse(UPDATE_PERMISSION).map_err(erp_inventory::Error::from)?;
-    let balance_list = Permission::parse(BALANCE_LIST_PERMISSION).map_err(erp_inventory::Error::from)?;
-    let balance_detail = Permission::parse(BALANCE_DETAIL_PERMISSION).map_err(erp_inventory::Error::from)?;
-    let movement_list = Permission::parse(MOVEMENT_LIST_PERMISSION).map_err(erp_inventory::Error::from)?;
-    let reservation_list =
-        Permission::parse(RESERVATION_LIST_PERMISSION).map_err(erp_inventory::Error::from)?;
-    let permissions = [
-        detail.clone(),
-        adjustment_list.clone(),
-        create.clone(),
-        update.clone(),
-        balance_list.clone(),
-        balance_detail.clone(),
-        movement_list.clone(),
-        reservation_list.clone(),
-    ];
-    let snapshot = rbac
-        .role_permission_snapshot(actor.kind(), actor.id(), &permissions)
-        .await
-        .map_err(|error| map_svc(crate::Error::from(error)))?;
-    let enabled = enabled_role_ids(db, snapshot.role_ids(), executor).await?;
-    let balance_list_roles = enabled_grants(snapshot.granting_role_ids(&balance_list), &enabled);
-    let balance_detail_roles = enabled_grants(snapshot.granting_role_ids(&balance_detail), &enabled);
-    let movement_list_roles = enabled_grants(snapshot.granting_role_ids(&movement_list), &enabled);
-    let reservation_list_roles = enabled_grants(snapshot.granting_role_ids(&reservation_list), &enabled);
-    let adjustment_list_roles = enabled_grants(
-        snapshot.granting_role_ids_for_all(&[adjustment_list, detail.clone()]),
-        &enabled,
-    );
-    let read_roles = enabled_grants(snapshot.granting_role_ids(&detail), &enabled);
-    let create_roles = enabled_grants(
-        snapshot.granting_role_ids_for_all(&[detail.clone(), create]),
-        &enabled,
-    );
-    let update_roles = enabled_grants(snapshot.granting_role_ids_for_all(&[detail, update]), &enabled);
-    let user_scopes = db
-        .data_scopes()
-        .list_by_subject(DataScopeSubjectType::User, actor.id(), executor)
-        .await
-        .map_err(erp_inventory::Error::from)?;
-    let role_scopes = load_role_scopes(
-        db,
-        [
-            balance_list_roles.as_slice(),
-            balance_detail_roles.as_slice(),
-            movement_list_roles.as_slice(),
-            reservation_list_roles.as_slice(),
-            adjustment_list_roles.as_slice(),
-            read_roles.as_slice(),
-            create_roles.as_slice(),
-            update_roles.as_slice(),
-        ],
-        executor,
-    )
-    .await?;
-    let authorization = InventoryAuthorization::from_scopes(
+    let service = DataScopeService::new(db.clone(), rbac.clone());
+    let mut scopes = Vec::new();
+    for (code, requires_detail) in [
+        (BALANCE_LIST_PERMISSION, false),
+        (BALANCE_DETAIL_PERMISSION, false),
+        (MOVEMENT_LIST_PERMISSION, false),
+        (RESERVATION_LIST_PERMISSION, false),
+        (ADJUSTMENT_LIST_PERMISSION, true),
+        (DETAIL_PERMISSION, false),
+        (CREATE_PERMISSION, true),
+        (UPDATE_PERMISSION, true),
+    ] {
+        scopes.push(inventory_scope(&service, actor, code, requires_detail, executor).await?);
+    }
+    let mut scopes = scopes.into_iter();
+    let mut next = || scopes.next().expect("八项已解析范围");
+    Ok(InventoryAuthorization::from_scopes(
         true,
-        scope_from_role_facts(&user_scopes, &balance_list_roles, &role_scopes),
-        scope_from_role_facts(&user_scopes, &balance_detail_roles, &role_scopes),
-        scope_from_role_facts(&user_scopes, &movement_list_roles, &role_scopes),
-        scope_from_role_facts(&user_scopes, &reservation_list_roles, &role_scopes),
-        scope_from_role_facts(&user_scopes, &adjustment_list_roles, &role_scopes),
-        scope_from_role_facts(&user_scopes, &read_roles, &role_scopes),
-        scope_from_role_facts(&user_scopes, &create_roles, &role_scopes),
-        scope_from_role_facts(&user_scopes, &update_roles, &role_scopes),
-    );
-    rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor)
-        .await
-        .map_err(|error| map_svc(crate::Error::from(error)))?;
-    Ok(authorization)
+        next(),
+        next(),
+        next(),
+        next(),
+        next(),
+        next(),
+        next(),
+        next(),
+    ))
 }
 
-async fn enabled_role_ids(
-    db: &Database,
-    role_ids: &[String],
+/// 每个库存资源动作独立解析；创建、更新及列表沿用同角色完整详情权限要求。
+async fn inventory_scope(
+    service: &DataScopeService,
+    actor: &AuditActor,
+    code: &str,
+    requires_detail: bool,
     executor: &mut dyn Executor,
-) -> erp_inventory::Result<HashSet<String>> {
-    Ok(db
-        .roles()
-        .enabled_roles(role_ids, executor)
-        .await
-        .map_err(erp_inventory::Error::from)?
+) -> erp_inventory::Result<WarehouseScope> {
+    let (resource, action) = code.split_once(':').expect("固定库存权限合法");
+    let extra = requires_detail
+        .then(|| Permission::parse(DETAIL_PERMISSION).expect("固定权限合法"))
         .into_iter()
-        .map(|role| role.base.id)
-        .collect())
-}
-
-fn enabled_grants(role_ids: Vec<String>, enabled: &HashSet<String>) -> Vec<String> {
-    role_ids
-        .into_iter()
-        .filter(|role_id| enabled.contains(role_id))
-        .collect()
-}
-
-async fn load_role_scopes<const N: usize>(
-    db: &Database,
-    role_sets: [&[String]; N],
-    executor: &mut dyn Executor,
-) -> erp_inventory::Result<HashMap<String, Vec<DataScope>>> {
-    let mut role_ids = role_sets.into_iter().flatten().cloned().collect::<Vec<_>>();
-    role_ids.sort();
-    role_ids.dedup();
-    let scopes = db
-        .data_scopes()
-        .list_by_subjects(DataScopeSubjectType::Role, &role_ids, executor)
+        .collect::<Vec<_>>();
+    let access = match service
+        .resolve_permissions(actor, resource, action, &extra, executor)
         .await
-        .map_err(erp_inventory::Error::from)?;
-    Ok(scopes_by_subject(scopes))
+    {
+        Ok(access) => access,
+        Err(IdentityError::Forbidden(_)) => return Ok(WarehouseScope::empty()),
+        Err(error) => return Err(map_svc(error.into())),
+    };
+    warehouse_scope(&access)
 }
 
-fn scope_from_role_facts(
-    user_scopes: &[DataScope],
-    permitted_role_ids: &[String],
-    scopes_by_role: &HashMap<String, Vec<DataScope>>,
-) -> WarehouseScope {
-    let user = OrganizationCoverage::from_scopes(user_scopes).unwrap_or(OrganizationCoverage::All);
-    let mut warehouses = Vec::new();
-    for role_id in permitted_role_ids {
-        let Some(role) = scopes_by_role
-            .get(role_id)
-            .and_then(|scopes| OrganizationCoverage::from_scopes(scopes))
-        else {
-            continue;
-        };
-        match role.intersect(&user) {
-            Some(OrganizationCoverage::All) => return WarehouseScope::company(),
-            Some(OrganizationCoverage::Targets(targets)) => warehouses.extend(targets),
-            None => {}
-        }
+/// 仅把公共判定通过的仓库转换为库存 Port 条件；其他维度和其他资源不能补授权。
+fn warehouse_scope(access: &AuthorizedDataScope) -> erp_inventory::Result<WarehouseScope> {
+    let allows = |warehouse_id| {
+        access.scope.allows(
+            &ScopedObject {
+                owned: false,
+                collaborating: false,
+                historical_read_participant: false,
+                org_unit_id: None,
+                settlement_party_id: None,
+                warehouse_id,
+            },
+            false,
+        )
+    };
+    if allows(None) {
+        return Ok(WarehouseScope::company());
     }
-    WarehouseScope::from_targets(warehouses)
-}
-
-fn scopes_by_subject(scopes: Vec<DataScope>) -> HashMap<String, Vec<DataScope>> {
-    let mut grouped = HashMap::new();
-    for scope in scopes {
-        grouped
-            .entry(scope.subject_id.clone())
-            .or_insert_with(Vec::new)
-            .push(scope);
+    let ids = access
+        .scope
+        .role_clauses
+        .iter()
+        .chain(access.scope.user_limit.iter())
+        .flat_map(|clause| clause.warehouse_ids.iter().cloned())
+        .collect::<BTreeSet<_>>();
+    if ids.len() > 20_000 {
+        return Err(erp_inventory::Error::ValidationError(
+            "库存范围超过 20000 个仓库，请缩小配置范围".into(),
+        ));
     }
-    grouped
+    Ok(WarehouseScope::from_targets(
+        ids.iter()
+            .filter(|id| allows(Some(id.as_str())))
+            .cloned()
+            .collect(),
+    ))
 }
 
 /// MongoDB adapter that converts inventory audit facts into `erp-audit` writes.
@@ -591,92 +535,46 @@ fn map_svc(error: crate::Error) -> erp_inventory::Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{scope_from_role_facts, scopes_by_subject};
-    use erp_core::ids::DataScopeId;
-    use erp_identity::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
-    use erp_inventory::WarehouseScope;
+    use super::*;
+    use erp_core::common::time::Instant;
+    use erp_identity::access_control::{ResolvedScope, ScopeClause};
 
-    fn scope(
-        id: &str,
-        subject_type: DataScopeSubjectType,
-        subject_id: &str,
-        scope_type: DataScopeType,
-        targets: &[&str],
-    ) -> DataScope {
-        DataScope::new(
-            DataScopeId::new(id),
-            DataScopeData {
-                binding: erp_identity::access_control::ScopeBinding {
-                    schema_version: 2,
-                    resource: "stock".into(),
-                    actions: vec!["list".into()],
-                    target_dimension: erp_identity::access_control::ScopeDimension::Warehouse,
-                    target_mode: scope_type
-                        .requires_targets()
-                        .then_some(erp_identity::access_control::ScopeTargetMode::Explicit),
-                    include_descendants: None,
-                    enabled: true,
-                },
-                subject_type,
-                subject_id: subject_id.to_string(),
-                scope_type,
-                scope_targets: targets.iter().map(|item| (*item).to_string()).collect(),
+    #[test]
+    fn inventory_scope_keeps_dimension_and_user_limit_without_fallback() {
+        let mut access = AuthorizedDataScope {
+            user_id: "warehouse".into(),
+            resource: "stock_balance".into(),
+            action: "list".into(),
+            role_scopes: Default::default(),
+            organizations: Default::default(),
+            policy_version: 1,
+            scope_version: "1".into(),
+            as_of: Instant::from_unix_secs(1),
+            scope: ResolvedScope {
+                role_clauses: vec![],
+                user_limit: None,
             },
-        )
-        .unwrap()
-    }
-
-    #[test]
-    fn role_and_user_scopes_intersect_before_roles_are_unioned() {
-        let user = vec![scope(
-            "user-scope",
-            DataScopeSubjectType::User,
-            "user-1",
-            DataScopeType::Organization,
-            &["warehouse-2"],
-        )];
-        let role_scopes = scopes_by_subject(vec![
-            scope(
-                "role-a-scope",
-                DataScopeSubjectType::Role,
-                "role-a",
-                DataScopeType::Organization,
-                &["warehouse-1", "warehouse-2"],
-            ),
-            scope(
-                "role-b-scope",
-                DataScopeSubjectType::Role,
-                "role-b",
-                DataScopeType::Company,
-                &[],
-            ),
-        ]);
-        let result =
-            scope_from_role_facts(&user, &["role-a".to_string(), "role-b".to_string()], &role_scopes);
+        };
+        assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::empty());
+        access.scope.role_clauses.push(ScopeClause {
+            org_unit_ids: BTreeSet::from(["same-id".into()]),
+            ..Default::default()
+        });
+        assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::empty());
+        access.scope.role_clauses.push(ScopeClause {
+            company: true,
+            ..Default::default()
+        });
+        assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::company());
+        access.scope.user_limit = Some(ScopeClause {
+            warehouse_ids: BTreeSet::from(["warehouse-a".into()]),
+            ..Default::default()
+        });
         assert_eq!(
-            result,
-            WarehouseScope::from_targets(vec!["warehouse-2".to_string()])
+            warehouse_scope(&access).unwrap(),
+            WarehouseScope::from_targets(vec!["warehouse-a".into()])
         );
-    }
-
-    #[test]
-    fn missing_role_scope_fails_closed_even_when_user_scope_is_unrestricted() {
-        let result = scope_from_role_facts(&[], &["role-a".to_string()], &std::collections::HashMap::new());
-        assert_eq!(result, WarehouseScope::empty());
-    }
-
-    #[test]
-    fn company_role_scope_is_company_when_user_has_no_explicit_cap() {
-        let role_scopes = scopes_by_subject(vec![scope(
-            "role-company",
-            DataScopeSubjectType::Role,
-            "role-a",
-            DataScopeType::Company,
-            &[],
-        )]);
-        assert_eq!(
-            scope_from_role_facts(&[], &["role-a".to_string()], &role_scopes),
-            WarehouseScope::company()
-        );
+        access.scope.user_limit = Some(ScopeClause::default());
+        assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::empty());
     }
 }

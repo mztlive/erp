@@ -1,12 +1,12 @@
 //! 域 D03 `work_item` 仓储：指定责任人的人工任务队列查询。
 
-use crate::entity::work_item::{AssignmentSource, WorkItemPriority, WorkItemStatus, WorkItemType};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{Document, doc};
+use persistence_core::{Pagination, QueryFilter};
 use serde::{Deserialize, Serialize};
 
-use persistence_core::{Pagination, QueryFilter};
+use crate::entity::work_item::{AssignmentSource, WorkItemPriority, WorkItemStatus, WorkItemType};
 
 mod approval;
 mod finance;
@@ -87,6 +87,10 @@ pub struct WorkItemFilter {
     pub owner_organization_ids: Vec<String>,
     /// 允许的注册任务类型与权威业务对象类型组合。
     pub object_access_shapes: Option<Vec<(WorkItemType, String)>>,
+    /// 服务端已解析的管理负责人条件；Some(空) 必须查询空集。
+    pub managed_owner_ids: Option<Vec<String>>,
+    /// 历史管理范围：外层 None 无管理授权，内层 None 是显式 Company。
+    pub history_managed_owner_ids: Option<Option<Vec<String>>>,
     /// 当前个人责任人；为空时不筛选。
     pub owner_user_id: Option<String>,
     /// 历史参与人；匹配曾负责、完成人或关闭人之一。
@@ -120,21 +124,35 @@ impl QueryFilter for WorkItemFilter {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_enum_filter(&mut filter, "status", &self.statuses, WorkItemStatus::as_str);
         insert_active_type_filter(&mut filter, &self.work_item_types);
-        insert_enum_filter(
-            &mut filter,
-            "priority",
-            &self.priorities,
-            WorkItemPriority::as_str,
-        );
+        insert_enum_filter(&mut filter, "priority", &self.priorities, WorkItemPriority::as_str);
         insert_string_filter(&mut filter, "owner_organization_id", &self.owner_organization_ids);
         if let Some(owner_user_id) = &self.owner_user_id {
             filter.insert("owner_user_id", owner_user_id);
         }
         let mut conjunctions = Vec::new();
+        if let Some(ids) = &self.managed_owner_ids {
+            conjunctions.push(doc! { "owner_user_id": { "$in": ids } });
+        }
+        if let Some(owners) = &self.history_managed_owner_ids {
+            let mut alternatives = match owners {
+                None => vec![Document::new()],
+                Some(ids) => vec![doc! { "owner_user_id": { "$in": ids } }],
+            };
+            if let Some(actor) = &self.history_actor_id {
+                alternatives.extend([
+                    doc! { "responsibility_actor_ids": actor },
+                    doc! { "completed_by": actor },
+                    doc! { "closed_by": actor },
+                ]);
+            }
+            conjunctions.push(doc! { "$or": alternatives });
+        }
         if let Some(shapes) = &self.object_access_shapes {
             conjunctions.push(object_access_shape_filter(shapes));
         }
-        if self.history_actor_id.is_some() || self.history_managed_organization_ids.is_some() {
+        if self.history_managed_owner_ids.is_none()
+            && (self.history_actor_id.is_some() || self.history_managed_organization_ids.is_some())
+        {
             conjunctions.push(history_scope_filter(
                 self.history_actor_id.as_deref(),
                 self.history_managed_organization_ids.as_deref(),
@@ -173,18 +191,10 @@ fn insert_active_type_filter(filter: &mut Document, types: &[WorkItemType]) {
     let active_types = types
         .iter()
         .copied()
-        .filter(|kind| {
-            !matches!(
-                kind,
-                WorkItemType::CardFundsReview | WorkItemType::CardFundsDeltaReview
-            )
-        })
+        .filter(|kind| !matches!(kind, WorkItemType::CardFundsReview | WorkItemType::CardFundsDeltaReview))
         .collect::<Vec<_>>();
     if types.is_empty() {
-        filter.insert(
-            "work_item_type",
-            doc! { "$nin": ["CARD_FUNDS_REVIEW", "CARD_FUNDS_DELTA_REVIEW"] },
-        );
+        filter.insert("work_item_type", doc! { "$nin": ["CARD_FUNDS_REVIEW", "CARD_FUNDS_DELTA_REVIEW"] });
     } else if active_types.is_empty() {
         filter.insert("work_item_type", doc! { "$in": Vec::<String>::new() });
     } else {
@@ -199,28 +209,25 @@ fn insert_enum_filter<T: Copy>(
     code: impl Fn(T) -> &'static str,
 ) {
     match values {
-        [] => {}
+        [] => {},
         [value] => {
             filter.insert(field, code(*value));
-        }
+        },
         values => {
-            filter.insert(
-                field,
-                doc! { "$in": values.iter().copied().map(code).collect::<Vec<_>>() },
-            );
-        }
+            filter.insert(field, doc! { "$in": values.iter().copied().map(code).collect::<Vec<_>>() });
+        },
     }
 }
 
 fn insert_string_filter(filter: &mut Document, field: &str, values: &[String]) {
     match values {
-        [] => {}
+        [] => {},
         [value] => {
             filter.insert(field, value);
-        }
+        },
         values => {
             filter.insert(field, doc! { "$in": values.to_vec() });
-        }
+        },
     }
 }
 
@@ -287,21 +294,46 @@ fn history_scope_filter(actor_id: Option<&str>, managed_organization_ids: Option
 
 #[cfg(test)]
 mod tests {
-    use mongodb::bson::{doc, Bson};
+    use erp_core::common::time::Instant;
+    use mongodb::bson::{Bson, doc};
+    use persistence_core::QueryFilter;
 
     use super::WorkItemFilter;
     use crate::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
-    use erp_core::common::time::Instant;
-    use persistence_core::QueryFilter;
+
+    #[test]
+    fn managed_scope_uses_current_owner_and_empty_remains_denied() {
+        let empty = WorkItemFilter { managed_owner_ids: Some(vec![]), ..Default::default() }.to_doc();
+        assert_eq!(
+            empty.get_array("$and").unwrap(),
+            &vec![Bson::Document(doc! { "owner_user_id": { "$in": [] } })]
+        );
+        let managed =
+            WorkItemFilter { managed_owner_ids: Some(vec!["member".into()]), ..Default::default() }.to_doc();
+        assert_eq!(
+            managed.get_array("$and").unwrap(),
+            &vec![Bson::Document(doc! { "owner_user_id": { "$in": ["member"] } })]
+        );
+        assert!(!managed.contains_key("owner_organization_id"));
+        let company = WorkItemFilter::default().to_doc();
+        assert!(!company.contains_key("$and"));
+        let history = WorkItemFilter {
+            history_managed_owner_ids: Some(Some(vec![])),
+            history_actor_id: Some("actor".into()),
+            ..Default::default()
+        }
+        .to_doc();
+        let alternatives =
+            history.get_array("$and").unwrap()[0].as_document().unwrap().get_array("$or").unwrap();
+        assert_eq!(alternatives[0], Bson::Document(doc! { "owner_user_id": { "$in": [] } }));
+        assert!(alternatives.contains(&Bson::Document(doc! { "completed_by": "actor" })));
+    }
 
     #[test]
     fn scope_filter_supports_direct_owner_and_history_facts() {
         let mine = WorkItemFilter {
             statuses: vec![WorkItemStatus::Open],
-            work_item_types: vec![
-                WorkItemType::ImportBusinessConfirmation,
-                WorkItemType::BusinessException,
-            ],
+            work_item_types: vec![WorkItemType::ImportBusinessConfirmation, WorkItemType::BusinessException],
             owner_user_id: Some("alice".to_string()),
             owner_organization_ids: vec!["org-1".to_string()],
             priorities: vec![WorkItemPriority::High, WorkItemPriority::Urgent],
@@ -314,14 +346,8 @@ mod tests {
         .to_doc();
         assert_eq!(mine.get_str("status").unwrap(), "OPEN");
         assert_eq!(mine.get_str("owner_user_id").unwrap(), "alice");
-        assert_eq!(
-            mine.get_document("due_at").unwrap(),
-            &doc! { "$gte": 100_i64, "$lt": 200_i64 }
-        );
-        assert_eq!(
-            mine.get_document("priority").unwrap(),
-            &doc! { "$in": ["high", "urgent"] }
-        );
+        assert_eq!(mine.get_document("due_at").unwrap(), &doc! { "$gte": 100_i64, "$lt": 200_i64 });
+        assert_eq!(mine.get_document("priority").unwrap(), &doc! { "$in": ["high", "urgent"] });
         assert_eq!(
             mine.get_document("work_item_type").unwrap(),
             &doc! { "$in": ["IMPORT_BUSINESS_CONFIRMATION", "BUSINESS_EXCEPTION"] }
@@ -335,11 +361,8 @@ mod tests {
             ..WorkItemFilter::default()
         }
         .to_doc();
-        let history_or = history.get_array("$and").unwrap()[0]
-            .as_document()
-            .unwrap()
-            .get_array("$or")
-            .unwrap();
+        let history_or =
+            history.get_array("$and").unwrap()[0].as_document().unwrap().get_array("$or").unwrap();
         assert_eq!(
             history_or,
             &vec![
@@ -386,16 +409,9 @@ mod tests {
         }
         .to_doc();
 
-        let history = filter.get_array("$and").unwrap()[0]
-            .as_document()
-            .unwrap()
-            .get_array("$or")
-            .unwrap();
+        let history = filter.get_array("$and").unwrap()[0].as_document().unwrap().get_array("$or").unwrap();
         assert_eq!(history.len(), 4);
-        assert_eq!(
-            history[3],
-            Bson::Document(doc! { "owner_organization_id": { "$in": ["org-a"] } })
-        );
+        assert_eq!(history[3], Bson::Document(doc! { "owner_organization_id": { "$in": ["org-a"] } }));
     }
 
     #[test]
@@ -407,10 +423,7 @@ mod tests {
             ..WorkItemFilter::default()
         }
         .to_doc();
-        assert_eq!(
-            denied.get_array("$and").unwrap()[0],
-            Bson::Document(doc! { "id": { "$exists": false } })
-        );
+        assert_eq!(denied.get_array("$and").unwrap()[0], Bson::Document(doc! { "id": { "$exists": false } }));
 
         let allowed = WorkItemFilter {
             object_access_shapes: Some(vec![(
@@ -440,34 +453,16 @@ mod retired_review_tests {
     #[test]
     fn retired_review_types_are_excluded_from_queues() {
         let default = WorkItemFilter::default().to_doc();
-        assert_eq!(
-            default
-                .get_document("work_item_type")
-                .unwrap()
-                .get_array("$nin")
-                .unwrap()
-                .len(),
-            2
-        );
-        let retired = WorkItemFilter {
-            work_item_types: vec![WorkItemType::CardFundsReview],
-            ..Default::default()
-        }
-        .to_doc();
-        assert!(retired
-            .get_document("work_item_type")
-            .unwrap()
-            .get_array("$in")
-            .unwrap()
-            .is_empty());
+        assert_eq!(default.get_document("work_item_type").unwrap().get_array("$nin").unwrap().len(), 2);
+        let retired =
+            WorkItemFilter { work_item_types: vec![WorkItemType::CardFundsReview], ..Default::default() }
+                .to_doc();
+        assert!(retired.get_document("work_item_type").unwrap().get_array("$in").unwrap().is_empty());
         let mixed = WorkItemFilter {
             work_item_types: vec![WorkItemType::CardFundsReview, WorkItemType::SalesInvoiceExecution],
             ..Default::default()
         }
         .to_doc();
-        assert_eq!(
-            mixed.get_str("work_item_type").unwrap(),
-            "SALES_INVOICE_EXECUTION"
-        );
+        assert_eq!(mixed.get_str("work_item_type").unwrap(), "SALES_INVOICE_EXECUTION");
     }
 }

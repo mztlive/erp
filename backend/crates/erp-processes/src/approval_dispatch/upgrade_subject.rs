@@ -114,6 +114,10 @@ impl ApprovalUpgradeSubjectFacts {
     /// 返回责任组织与不可变创建人；不读取或注入当前操作人。
     pub fn binding_context(&self) -> BindingRevalidationContext {
         BindingRevalidationContext {
+            order_source: None,
+            customer_id: None,
+            business_org_unit_id: None,
+            scope_owner_user_id: None,
             organization_id: self.responsible_org_id.clone(),
             creator_id: self.creator_id.clone(),
         }
@@ -889,6 +893,10 @@ mod tests {
         assert_eq!(
             facts.binding_context(),
             BindingRevalidationContext {
+                order_source: None,
+                customer_id: None,
+                business_org_unit_id: None,
+                scope_owner_user_id: None,
                 organization_id: "warehouse-1".to_string(),
                 creator_id: "creator-1".to_string(),
             }

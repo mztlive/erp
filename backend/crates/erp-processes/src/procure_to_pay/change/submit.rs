@@ -3,6 +3,7 @@ use erp_core::common::time::Instant;
 use erp_procurement::entity::purchase_order::{PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrder};
 use erp_read_models::purchase_center::dto::PurchaseChangeOrderView;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::DocumentRegistryExt;
 use mongodb::ClientSession;
 use persistence_core::{NoTransaction, Transactional};
@@ -216,6 +217,10 @@ impl PurchaseOrderProcess {
             business_object_id: change.base.id.clone(),
             business_object_version: change.base.version,
             context: BindingRevalidationContext {
+                order_source: Some(OrderTaskSource::Purchase(order.base.id.clone())),
+                customer_id: None,
+                business_org_unit_id: Some(order.business_org_unit_id.clone()),
+                scope_owner_user_id: Some(order.current_owner_user_id()?.to_string()),
                 organization_id: purchase_change_responsible_org_id(&sales_order)?,
                 creator_id: actor.id().to_string(),
             },

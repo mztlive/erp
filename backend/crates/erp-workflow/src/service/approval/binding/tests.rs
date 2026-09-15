@@ -1,32 +1,26 @@
 use std::collections::HashMap;
 
+use application_core::AuditActor;
+use bpm::ids::{ApprovalCommandReceiptId, ApprovalProcessDefinitionId};
+use bpm::model::{ApprovalCommandReceipt, IdempotencyKey, Timestamp};
+use erp_core::AccountKind;
+
+use super::revalidate::{require_ready_assignee, revalidate_published_graph};
+use super::upgrade::{ensure_registered_upgrade_subject, upgrade_result_from_action};
+use super::*;
 use crate::entity::document_registry::workflow_action::ApprovalBindingActionContext;
 use crate::entity::document_registry::{
     BusinessDocumentId, DocumentType, WorkflowAction, WorkflowActionData, WorkflowActionId,
     WorkflowActionType,
 };
 use crate::entity::work_item::WorkflowAccountFact;
-use crate::ports::{DataScopeFact, DataScopeTypeFact};
-use crate::repository::bpm::DefinitionGraph;
-use bpm::ids::{ApprovalCommandReceiptId, ApprovalProcessDefinitionId};
-use bpm::model::{ApprovalCommandReceipt, IdempotencyKey, Timestamp};
-use erp_core::AccountKind;
-
 use crate::error::{Error, ErrorCode};
+use crate::repository::bpm::DefinitionGraph;
 use crate::service::approval::business_adapter::ensure_runtime_cut_over;
 use crate::service::approval::execution::upgrade_binding_identity;
-use crate::service::approval::policy::{policy_of, ApprovalRequirement, ALL_DOCUMENT_TYPES};
+use crate::service::approval::policy::{ALL_DOCUMENT_TYPES, ApprovalRequirement, policy_of};
 use crate::service::approval::upgrade_subject::ApprovalUpgradeSubjectFacts;
 use crate::service::document_registry::new_registered_document;
-use application_core::AuditActor;
-
-use super::super::business_adapter::BindingRevalidationContext;
-use super::revalidate::{
-    group_role_scope_facts, require_granting_role_ids, require_ready_assignee,
-    require_static_decide_permission, revalidate_assignee_binding_access_by_role, revalidate_published_graph,
-};
-use super::upgrade::{ensure_registered_upgrade_subject, upgrade_result_from_action};
-use super::*;
 
 /// Live bind path uses one Executor and one object-read port; it does not open a nested transaction.
 #[test]
@@ -56,15 +50,6 @@ fn production_source() -> String {
 /// 构造审批人账号快照。
 fn assignee_account(id: &str, can_login: bool) -> WorkflowAccountFact {
     WorkflowAccountFact::new(id, AccountKind::Admin, can_login).with_display_name(id)
-}
-
-/// 构造角色组织范围事实。
-fn role_scope(_id: &str, role_id: &str, organization_id: &str) -> DataScopeFact {
-    DataScopeFact::new(
-        role_id,
-        DataScopeTypeFact::Organization,
-        vec![organization_id.to_string()],
-    )
 }
 
 /// 构造严格回读单测命令。
@@ -124,17 +109,11 @@ fn binding_policy_skips_no_approval_and_requires_published() {
         let policy = policy_of(document_type).expect("政策必须存在");
         match policy.requirement() {
             ApprovalRequirement::NoApproval => {
-                assert_eq!(
-                    binding_decision(policy.requirement()),
-                    BindingDecision::SkipNoApproval
-                );
-            }
+                assert_eq!(binding_decision(policy.requirement()), BindingDecision::SkipNoApproval);
+            },
             ApprovalRequirement::ProcessRequired => {
-                assert_eq!(
-                    binding_decision(policy.requirement()),
-                    BindingDecision::RequirePublished
-                );
-            }
+                assert_eq!(binding_decision(policy.requirement()), BindingDecision::RequirePublished);
+            },
         }
     }
 }
@@ -173,15 +152,17 @@ fn upgrade_result_is_rebuilt_from_strict_action_proof() {
 
     let mut corrupt = action.clone();
     corrupt.comment = Some("被篡改的原因".to_string());
-    assert!(upgrade_result_from_action(
-        &command,
-        &actor,
-        &command.reason,
-        &receipt,
-        &corrupt,
-        UpgradeBindingOutcome::Replay,
-    )
-    .is_err());
+    assert!(
+        upgrade_result_from_action(
+            &command,
+            &actor,
+            &command.reason,
+            &receipt,
+            &corrupt,
+            UpgradeBindingOutcome::Replay,
+        )
+        .is_err()
+    );
 }
 
 /// 生产编排必须在当前授权后分流，Fresh 内的收据是第一物理写。
@@ -218,9 +199,7 @@ fn upgrade_orchestration_is_authorized_replay_and_receipt_first() {
     );
     assert!(
         authorization.find("ensure_active_upgrade_actor").unwrap()
-            < authorization
-                .find("approval_binding_upgrade_authorization_with_executor")
-                .unwrap()
+            < authorization.find("approval_binding_upgrade_authorization_with_executor").unwrap()
     );
 
     let recovery = production
@@ -277,10 +256,7 @@ fn upgrade_registry_identity_allows_one_sided_empty_document_number() {
 #[test]
 fn missing_published_definition_fails_closed() {
     let error = published_definition_or_not_configured::<()>(None).unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        ErrorCode::ApprovalProcessNotConfigured.as_str()
-    );
+    assert_eq!(error.to_string(), ErrorCode::ApprovalProcessNotConfigured.as_str());
     assert!(published_definition_or_not_configured(Some(1)).is_ok());
 }
 
@@ -298,30 +274,15 @@ fn published_graph_revalidation_uses_bpm_and_maps_configuration_errors() {
         at,
     )
     .unwrap();
-    let graph = DefinitionGraph {
-        definition: definition.clone(),
-        nodes: Vec::new(),
-        transitions: Vec::new(),
-    };
+    let graph =
+        DefinitionGraph { definition: definition.clone(), nodes: Vec::new(), transitions: Vec::new() };
     let draft_error = revalidate_published_graph(&graph).unwrap_err();
-    assert_eq!(
-        draft_error.to_string(),
-        ErrorCode::ApprovalProcessNotConfigured.as_str()
-    );
+    assert_eq!(draft_error.to_string(), ErrorCode::ApprovalProcessNotConfigured.as_str());
 
-    definition
-        .publish(bpm::ParticipantId::new("admin").unwrap(), at)
-        .unwrap();
-    let published_corrupt = DefinitionGraph {
-        definition,
-        nodes: Vec::new(),
-        transitions: Vec::new(),
-    };
+    definition.publish(bpm::ParticipantId::new("admin").unwrap(), at).unwrap();
+    let published_corrupt = DefinitionGraph { definition, nodes: Vec::new(), transitions: Vec::new() };
     let corrupt = revalidate_published_graph(&published_corrupt).unwrap_err();
-    assert_ne!(
-        corrupt.to_string(),
-        ErrorCode::ApprovalProcessNotConfigured.as_str()
-    );
+    assert_ne!(corrupt.to_string(), ErrorCode::ApprovalProcessNotConfigured.as_str());
 
     let production = production_source();
     let loader = production
@@ -345,11 +306,7 @@ fn process_required_types_are_cut_over() {
 #[test]
 fn business_document_registration_inventory() {
     const ROWS: &[(DocumentType, &str, &str)] = &[
-        (
-            DocumentType::SalesOrder,
-            "已注册",
-            "backend/services/src/sales_order/command.rs:170",
-        ),
+        (DocumentType::SalesOrder, "已注册", "backend/services/src/sales_order/command.rs:170"),
         (
             DocumentType::VoucherSalesOrder,
             "已注册(共用入口，类型分派属销售单子阶段)",
@@ -365,56 +322,20 @@ fn business_document_registration_inventory() {
             "本阶段新增",
             "backend/services/src/purchase_order/draft_from_confirmation.rs",
         ),
-        (
-            DocumentType::PurchaseChangeOrder,
-            "本阶段新增",
-            "backend/services/src/purchase_order/change.rs:38",
-        ),
-        (
-            DocumentType::StockAdjustment,
-            "本阶段新增",
-            "backend/services/src/inventory/mod.rs:492",
-        ),
-        (
-            DocumentType::CustomerReceipt,
-            "待子阶段补齐",
-            "backend/services/src/receivable/mod.rs:735",
-        ),
-        (
-            DocumentType::SupplierPayment,
-            "本阶段新增",
-            "backend/services/src/payable/mod.rs:288",
-        ),
-        (
-            DocumentType::CustomerRefund,
-            "本阶段新增",
-            "backend/services/src/returns/customer_refund.rs:113",
-        ),
-        (
-            DocumentType::SupplierRefund,
-            "本阶段新增",
-            "backend/services/src/returns/supplier_refund.rs:50",
-        ),
-        (
-            DocumentType::ReceiptReversal,
-            "本阶段新增",
-            "backend/services/src/returns/receipt_reversal.rs:33",
-        ),
-        (
-            DocumentType::PaymentReversal,
-            "本阶段新增",
-            "backend/services/src/returns/payment_reversal.rs:29",
-        ),
+        (DocumentType::PurchaseChangeOrder, "本阶段新增", "backend/services/src/purchase_order/change.rs:38"),
+        (DocumentType::StockAdjustment, "本阶段新增", "backend/services/src/inventory/mod.rs:492"),
+        (DocumentType::CustomerReceipt, "待子阶段补齐", "backend/services/src/receivable/mod.rs:735"),
+        (DocumentType::SupplierPayment, "本阶段新增", "backend/services/src/payable/mod.rs:288"),
+        (DocumentType::CustomerRefund, "本阶段新增", "backend/services/src/returns/customer_refund.rs:113"),
+        (DocumentType::SupplierRefund, "本阶段新增", "backend/services/src/returns/supplier_refund.rs:50"),
+        (DocumentType::ReceiptReversal, "本阶段新增", "backend/services/src/returns/receipt_reversal.rs:33"),
+        (DocumentType::PaymentReversal, "本阶段新增", "backend/services/src/returns/payment_reversal.rs:29"),
         (
             DocumentType::PurchaseReceipt,
             "本阶段新增",
             "backend/services/src/fulfillment/purchase_receipt.rs:122",
         ),
-        (
-            DocumentType::Delivery,
-            "本阶段新增",
-            "backend/services/src/fulfillment/delivery.rs:131",
-        ),
+        (DocumentType::Delivery, "本阶段新增", "backend/services/src/fulfillment/delivery.rs:131"),
         (
             DocumentType::ElectronicDelivery,
             "本阶段新增",
@@ -430,16 +351,8 @@ fn business_document_registration_inventory() {
             "本阶段新增",
             "backend/services/src/fulfillment/customer_acceptance.rs:132",
         ),
-        (
-            DocumentType::Invoice,
-            "待子阶段补齐",
-            "backend/services/src/receivable/mod.rs:995",
-        ),
-        (
-            DocumentType::SalesReturnCase,
-            "本阶段新增",
-            "backend/services/src/returns/sales_return.rs:88",
-        ),
+        (DocumentType::Invoice, "待子阶段补齐", "backend/services/src/receivable/mod.rs:995"),
+        (DocumentType::SalesReturnCase, "本阶段新增", "backend/services/src/returns/sales_return.rs:88"),
         (
             DocumentType::PurchaseReturnOrder,
             "本阶段新增",
@@ -456,51 +369,6 @@ fn business_document_registration_inventory() {
     }
 }
 
-/// bind/upgrade 生产路径必须走用户+角色范围与 Adapter 读取权闸门。
-#[test]
-fn bind_and_upgrade_use_shared_scope_and_read_gate() {
-    let production = production_source();
-    assert!(production.contains("revalidate_assignee_binding_access"));
-    assert!(production.contains("load_assignee_scope_sets"));
-    assert_eq!(
-        production
-            .matches("load_accounts(assignee_ids, executor)")
-            .count(),
-        1
-    );
-    assert!(production.contains("load_data_scopes_for_subjects(\"role\""));
-    assert!(!production.contains(".find_approval_assignee_by_id(user_id, executor)"));
-    assert!(production.contains("load_data_scopes(\"user\""));
-    let role_loader = production
-        .split("async fn load_enabled_decide_role_scopes")
-        .nth(1)
-        .expect("必须存在授权角色范围加载器")
-        .split("/// 筛出实际授予静态审批权限的启用角色")
-        .next()
-        .unwrap();
-    assert!(
-        role_loader.find("load_enabled_role_ids").unwrap()
-            < role_loader.find("permission_granting_role_ids").unwrap()
-    );
-    assert!(role_loader.contains("&granting_role_ids"));
-    assert!(!production.contains("ensure_binding_scope(&spec, &scopes, &context.organization_id, true)"));
-    let spec = crate::service::approval::business_adapter::adapter_spec_of(DocumentType::StockAdjustment)
-        .expect("试点必须有适配器");
-    let context = BindingRevalidationContext {
-        organization_id: "org-1".to_string(),
-        creator_id: "creator-1".to_string(),
-    };
-    let error = crate::service::approval::business_adapter::revalidate_assignee_binding_access(
-        &spec,
-        &[],
-        &[],
-        &context,
-        "u1",
-    )
-    .unwrap_err();
-    assert!(error.to_string().contains("数据范围不覆盖当前单据组织"));
-}
-
 /// 批量账号映射必须按 BPM 审批人顺序查表，不得依赖 Repository 返回顺序。
 #[test]
 fn assignee_account_map_preserves_bpm_validation_order() {
@@ -512,12 +380,7 @@ fn assignee_account_map_preserves_bpm_validation_order() {
 
     let ordered = assignee_ids
         .iter()
-        .map(|user_id| {
-            require_ready_assignee(accounts.get(*user_id))
-                .unwrap()
-                .id
-                .as_str()
-        })
+        .map(|user_id| require_ready_assignee(accounts.get(*user_id)).unwrap().id.as_str())
         .collect::<Vec<_>>();
 
     assert_eq!(ordered, assignee_ids);
@@ -533,60 +396,6 @@ fn missing_and_inactive_assignees_keep_exact_error() {
 
     assert!(matches!(missing, Error::ValidationError(message) if message == expected));
     assert!(matches!(inactive, Error::ValidationError(message) if message == expected));
-}
-
-/// 逐用户 RBAC 失败必须保留绑定阶段的精确错误，不得借用定义期文案。
-#[test]
-fn missing_static_decide_permission_keeps_binding_error() {
-    let error = require_static_decide_permission(false).unwrap_err();
-
-    assert!(matches!(
-        error,
-        Error::ValidationError(message) if message == "指定审批人缺少审批权限"
-    ));
-    assert!(require_static_decide_permission(true).is_ok());
-}
-
-/// 权限角色与范围角色不同时必须失败关闭，禁止跨角色拼接授权。
-#[test]
-fn permission_and_scope_from_different_roles_cannot_be_combined() {
-    let role_scope_sets = group_role_scope_facts(
-        &["role-with-permission".to_string()],
-        vec![role_scope("scope-b", "role-with-scope", "org-1")],
-    );
-    let spec = crate::service::approval::business_adapter::adapter_spec_of(DocumentType::StockAdjustment)
-        .expect("试点必须有适配器");
-    let context = BindingRevalidationContext {
-        organization_id: "org-1".to_string(),
-        creator_id: "creator-1".to_string(),
-    };
-
-    let error = revalidate_assignee_binding_access_by_role(
-        &spec,
-        &[],
-        &role_scope_sets,
-        &context,
-        "u1",
-        &crate::ports::FailClosedObjectReadPort,
-    )
-    .unwrap_err();
-
-    assert!(matches!(
-        error,
-        Error::ValidationError(message) if message == "审批人数据范围不覆盖当前单据组织"
-    ));
-    assert!(role_scope_sets[0].0.is_empty());
-}
-
-/// 已停用授权角色被过滤后不得靠账号级残留权限继续放行。
-#[test]
-fn no_enabled_granting_role_fails_with_exact_permission_error() {
-    let error = require_granting_role_ids(Vec::new()).unwrap_err();
-
-    assert!(matches!(
-        error,
-        Error::ValidationError(message) if message == "指定审批人缺少审批权限"
-    ));
 }
 
 /// 草稿允许空编号；正式号原样登记。

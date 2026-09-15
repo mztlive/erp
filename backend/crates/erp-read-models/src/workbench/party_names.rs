@@ -44,7 +44,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     ///
     /// # 错误
     /// 账号查询失败时返回仓储错误。
-    async fn apply_party_names_with(
+    pub(super) async fn apply_party_names_with(
         &self,
         executor: &mut dyn Executor,
         items: &mut [WorkItemView],

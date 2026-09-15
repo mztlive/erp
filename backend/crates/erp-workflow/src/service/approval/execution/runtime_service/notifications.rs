@@ -2,9 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::entity::approval_integration::ApprovalSubjectSnapshot;
-use crate::entity::document_registry::DocumentType;
-use crate::repository::ApprovalIntegrationExt;
+use application_core::AuditActor;
 use bpm::model::ApprovalNodeExecution;
 use erp_core::common::time::Instant;
 use mongodb::Database;
@@ -12,13 +10,15 @@ use persistence_core::Executor;
 
 use super::super::apply_plan::PlannedWrites;
 use super::read_auth::runtime_object_readable;
+use crate::entity::approval_integration::ApprovalSubjectSnapshot;
+use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
 use crate::ports::ApprovalObjectReadPort;
-use crate::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
+use crate::repository::ApprovalIntegrationExt;
+use crate::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
 use crate::service::approval::{
     approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
 };
-use application_core::AuditActor;
 
 /// 决定通知只消费冻结快照、实际执行与当前权限事实。
 pub(super) struct DecisionNotificationFacts<'a> {
@@ -84,9 +84,7 @@ pub(super) async fn persist_cancel_notifications(
 ) -> Result<()> {
     if !writes.create_tasks.is_empty() || !writes.complete_tasks.is_empty() || !writes.close_tasks.is_empty()
     {
-        return Err(Error::Internal(
-            "受阻取消计划不得创建、完成或关闭审批任务".to_string(),
-        ));
+        return Err(Error::Internal("受阻取消计划不得创建、完成或关闭审批任务".to_string()));
     }
     let [intent] = writes.notifications.as_slice() else {
         return Err(Error::Internal("受阻取消必须且只能产生一条通知意图".to_string()));
@@ -136,9 +134,7 @@ pub(super) async fn runtime_admin_notification_recipients(
     executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
     let spec = adapter_spec_of(document_type)?;
-    let accounts = rbac
-        .list_accounts_by_kind(erp_core::AccountKind::Admin, executor)
-        .await?;
+    let accounts = rbac.list_accounts_by_kind(erp_core::AccountKind::Admin, executor).await?;
     let mut recipients = Vec::new();
     for account in accounts {
         if !account.is_active_backoffice() {
@@ -149,11 +145,19 @@ pub(super) async fn runtime_admin_notification_recipients(
         let read_scope =
             approval_document_read_scope_with_executor(rbac, &actor, document_type, executor).await?;
         let context = BindingRevalidationContext {
+            order_source: None,
+            customer_id: None,
+            business_org_unit_id: None,
+            scope_owner_user_id: None,
             organization_id: snapshot.payload.responsible_org_id.clone(),
             creator_id: snapshot.payload.submitted_by.clone(),
         };
-        let read_scope_covers =
-            !read_scope.is_empty() && read_scope.covers(&snapshot.payload.responsible_org_id);
+        let read_scope_covers = !read_scope.is_empty()
+            && read_scope.covers_object(
+                &rbac
+                    .approval_scope_object(snapshot.document_type, &snapshot.business_object_id, executor)
+                    .await?,
+            );
         let object_readable =
             runtime_object_readable(&spec, &context, &account.id, read_scope_covers, object_read)?;
         if visibility.runtime_admin_types().contains(&document_type) && read_scope_covers && object_readable {
@@ -200,7 +204,7 @@ pub(super) async fn persist_decision_notifications(
                         (facts.ended_execution.base.id == execution_id).then_some(facts.ended_execution)
                     })
                     .ok_or_else(|| Error::Internal("审批决定通知执行引用不存在".to_string()))?
-            }
+            },
             EventKind::Completed => facts.ended_execution,
             _ => return Err(Error::Internal("审批决定计划包含非决定通知事件".to_string())),
         };
@@ -219,7 +223,7 @@ pub(super) async fn persist_decision_notifications(
             EventKind::Entered => vec![event_execution.assignee_participant_id.as_str().to_string()],
             EventKind::NodeApproved | EventKind::NodeRejected | EventKind::Completed => {
                 vec![facts.submitted_by.to_string()]
-            }
+            },
             EventKind::Blocked => notification_recipients(
                 facts.submitted_by,
                 facts.runtime_admin_ids.iter().map(String::as_str),
@@ -316,9 +320,7 @@ pub(super) async fn persist_resume_notifications(
     use crate::entity::approval_integration::ApprovalNotificationEventKind as EventKind;
 
     if writes.notifications.len() != 2 {
-        return Err(Error::Internal(
-            "原审批人恢复必须产生进入节点和恢复两条通知意图".to_string(),
-        ));
+        return Err(Error::Internal("原审批人恢复必须产生进入节点和恢复两条通知意图".to_string()));
     }
     let mut seen = HashSet::with_capacity(2);
     for intent in &writes.notifications {
@@ -329,10 +331,8 @@ pub(super) async fn persist_resume_notifications(
             EventKind::Entered => format!("entered:{}", facts.new_execution.base.id),
             EventKind::Resumed => format!("resumed:{}", facts.new_execution.base.id),
             _ => {
-                return Err(Error::Internal(
-                    "原审批人恢复包含非进入节点或恢复通知".to_string(),
-                ));
-            }
+                return Err(Error::Internal("原审批人恢复包含非进入节点或恢复通知".to_string()));
+            },
         };
         if intent.dedup_key != expected_dedup {
             return Err(Error::Internal("原审批人恢复通知去重键不匹配".to_string()));
@@ -362,9 +362,7 @@ pub(super) async fn persist_resume_notifications(
         db.approval_notification_outbox().create(&record, session).await?;
     }
     if !seen.contains(&EventKind::Entered) || !seen.contains(&EventKind::Resumed) {
-        return Err(Error::Internal(
-            "原审批人恢复缺少进入节点或恢复通知意图".to_string(),
-        ));
+        return Err(Error::Internal("原审批人恢复缺少进入节点或恢复通知意图".to_string()));
     }
     Ok(())
 }

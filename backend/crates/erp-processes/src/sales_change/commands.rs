@@ -32,6 +32,7 @@ use erp_sales::service::sales_review::{latest_change_submission_no, CreatedChang
 use erp_workflow::entity::document_registry::{
     BusinessDocument, WorkflowAction, WorkflowActionData, WorkflowActionId, WorkflowActionType,
 };
+use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
@@ -66,7 +67,8 @@ impl SalesChangeProcess {
         actor: &AuditActor,
         rbac: &SharedRbacService,
     ) -> Result<SalesChangeOrderDetailView> {
-        self.command_access(actor, "update")?
+        let source_order = self
+            .command_access(actor, "update")?
             .current(req.sales_order_id.as_ref(), &mut NoTransaction)
             .await?;
         let sales_write = SalesReviewService::new(self.db.clone())
@@ -78,6 +80,10 @@ impl SalesChangeProcess {
             business_object_id: change_id.clone(),
             business_object_version: sales_write.version(),
             context: BindingRevalidationContext {
+                order_source: Some(OrderTaskSource::Sales(source_order.base.id.clone())),
+                customer_id: Some(source_order.customer_id.to_string()),
+                business_org_unit_id: Some(source_order.business_org_unit_id.clone()),
+                scope_owner_user_id: Some(source_order.sales_owner_user_id.clone()),
                 organization_id: sales_change_responsible_org_id(sales_write.settlement_party_id())?,
                 creator_id: actor.id().to_string(),
             },

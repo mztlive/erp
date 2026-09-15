@@ -1,3 +1,4 @@
+use erp_workflow::ports::OrderTaskSource;
 use mongodb::ClientSession;
 
 use crate::{Error, Result};
@@ -26,6 +27,10 @@ pub(super) fn sales_create_bind_command(
         business_object_id: order.base.id.clone(),
         business_object_version: order.base.version,
         context: BindingRevalidationContext {
+            order_source: Some(OrderTaskSource::Sales(order.base.id.clone())),
+            customer_id: Some(order.customer_id.to_string()),
+            business_org_unit_id: Some(order.business_org_unit_id.clone()),
+            scope_owner_user_id: Some(order.sales_owner_user_id.clone()),
             organization_id: sales_order_responsible_org_id(order)?,
             creator_id: actor.id().to_string(),
         },

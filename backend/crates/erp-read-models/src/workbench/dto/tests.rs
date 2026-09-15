@@ -16,6 +16,7 @@ fn params(scope: WorkItemScope) -> WorkItemListParams {
         q: None,
         sort: None,
         queue_context_id: None,
+        scope_version: None,
         current_work_item_id: None,
         timezone: Some(DEFAULT_TIMEZONE.to_string()),
         page: None,

@@ -2,10 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::entity::approval_integration::ApprovalSubjectSnapshot;
-use crate::entity::document_registry::DocumentType;
-use crate::entity::work_item::{AssignmentSource, WorkItem, WorkItemStatus, WorkItemType};
-use crate::repository::bpm::ApprovalInstanceSummary;
+use application_core::AuditActor;
 use bpm::engine::Eligibility;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
@@ -13,20 +10,23 @@ use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::super::authorization::{converge_eligibility, AuthorizationFailure};
+use super::super::authorization::{AuthorizationFailure, converge_eligibility};
 use super::hidden_not_found;
+use crate::entity::approval_integration::ApprovalSubjectSnapshot;
+use crate::entity::document_registry::DocumentType;
+use crate::entity::work_item::{AssignmentSource, WorkItem, WorkItemStatus, WorkItemType};
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::{ApprovalObjectReadPort, OrderTaskSource};
+use crate::repository::bpm::ApprovalInstanceSummary;
 use crate::service::approval::business_adapter::{
-    adapter_object_read_decision_with, adapter_spec_of, ensure_separation_of_duties,
-    BindingRevalidationContext,
+    BindingRevalidationContext, adapter_object_read_decision_with, adapter_spec_of,
+    ensure_separation_of_duties,
 };
-use crate::service::approval::policy::{policy_of, DocumentApprovalPolicy, SeparationOfDutiesPolicy};
+use crate::service::approval::policy::{DocumentApprovalPolicy, SeparationOfDutiesPolicy, policy_of};
 use crate::service::approval::process_kind::process_kind_of;
 use crate::service::approval::{
     approval_decide_scope_with_executor, approval_document_read_scope_with_executor,
 };
-use application_core::AuditActor;
 
 /// 单实例读取授权所需的持久化事实。
 pub(super) struct RuntimeReadSubject {
@@ -116,7 +116,7 @@ pub(super) async fn revalidate_decision_approver(
                     .is_some_and(|actor| actor.id() != account.id || actor.kind() != account.kind) =>
         {
             Some(AuthorizationFailure::AccountInactive)
-        }
+        },
         Some(account) => {
             let scope_actor = authenticated_actor
                 .cloned()
@@ -140,7 +140,11 @@ pub(super) async fn revalidate_decision_approver(
             let decide_scope = approval_decide_scope_with_executor(rbac, &scope_actor, executor).await?;
             if decide_scope.is_empty() {
                 Some(AuthorizationFailure::NotEligible)
-            } else if !decide_scope.covers(&snapshot.payload.responsible_org_id) {
+            } else if !decide_scope.covers_object(
+                &rbac
+                    .approval_scope_object(snapshot.document_type, &snapshot.business_object_id, executor)
+                    .await?,
+            ) {
                 Some(AuthorizationFailure::OutOfDataScope)
             } else {
                 let read_scope = approval_document_read_scope_with_executor(
@@ -152,10 +156,18 @@ pub(super) async fn revalidate_decision_approver(
                 .await?;
                 if read_scope.is_empty() {
                     Some(AuthorizationFailure::CannotReadSubject)
-                } else if !read_scope.covers(&snapshot.payload.responsible_org_id) {
+                } else if !read_scope.covers_object(
+                    &rbac
+                        .approval_scope_object(snapshot.document_type, &snapshot.business_object_id, executor)
+                        .await?,
+                ) {
                     Some(AuthorizationFailure::OutOfDataScope)
                 } else {
                     let context = BindingRevalidationContext {
+                        order_source: None,
+                        customer_id: None,
+                        business_org_unit_id: None,
+                        scope_owner_user_id: None,
                         organization_id: snapshot.payload.responsible_org_id.clone(),
                         creator_id: snapshot.payload.submitted_by.clone(),
                     };
@@ -172,12 +184,12 @@ pub(super) async fn revalidate_decision_approver(
                             } else {
                                 None
                             }
-                        }
+                        },
                         false => Some(AuthorizationFailure::CannotReadSubject),
                     }
                 }
             }
-        }
+        },
     };
     converge_eligibility(assignee_id, assignee_name, failure)
 }
@@ -208,7 +220,7 @@ pub(super) fn process_required_separation_policy(
         DocumentApprovalPolicy::ProcessRequired(policy) => Ok(policy.separation_of_duties_policy),
         DocumentApprovalPolicy::NoApproval(_) => {
             Err(Error::from_approval_code(ErrorCode::ApprovalPolicyNotRegistered))
-        }
+        },
     }
 }
 
@@ -222,7 +234,7 @@ pub(super) fn current_execution_matches_instance(
         (Some(expected), Some(execution)) => {
             expected.as_ref() == execution.base.id
                 && execution.process_instance_id.as_ref() == instance.base.id
-        }
+        },
         _ => false,
     }
 }
@@ -334,10 +346,7 @@ pub(super) fn mine_execution_ids(tasks: &[WorkItem]) -> Result<Vec<ApprovalNodeE
     let mut seen = HashSet::with_capacity(tasks.len());
     let mut execution_ids = Vec::with_capacity(tasks.len());
     for task in tasks {
-        let execution_id = task
-            .approval_node_execution_id
-            .clone()
-            .ok_or_else(hidden_not_found)?;
+        let execution_id = task.approval_node_execution_id.clone().ok_or_else(hidden_not_found)?;
         if !seen.insert(execution_id.to_string()) {
             return Err(hidden_not_found());
         }

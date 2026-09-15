@@ -171,6 +171,10 @@ fn delivery_bind_command(delivery: &Delivery, creator_id: &str) -> Result<BindPu
         business_object_id: delivery.base.id.clone(),
         business_object_version: delivery.base.version,
         context: BindingRevalidationContext {
+            order_source: None,
+            customer_id: None,
+            business_org_unit_id: None,
+            scope_owner_user_id: None,
             organization_id: delivery
                 .registration_context_id()
                 .map_err(|error| Error::ValidationError(error.to_string()))?

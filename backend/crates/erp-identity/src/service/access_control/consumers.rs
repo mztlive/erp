@@ -5,10 +5,42 @@ use crate::error::{Error, Result};
 
 /// 已由真实消费者接入公共解析的资源动作及必需维度。
 ///
-/// 工作流与工作台尚未接线，不得列入本表。采购变更单及退货沿 `purchase_order`
+/// 工作流按审批动作、任务管理及结算复核分别准入。采购变更单及退货沿 `purchase_order`
 /// 资源动作接入，不单独登记平行资源。
 /// 初始化清单见 `predefined_data_scopes`，不得当作本表替代。
 const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
+    (
+        "approval_instance",
+        &[
+            "read",
+            "decide",
+            "resume",
+            "cancel",
+            "cancel_blocked",
+            "upgrade_binding",
+        ],
+        &[
+            ScopeDimension::InternalOrg,
+            ScopeDimension::Warehouse,
+            ScopeDimension::SettlementParty,
+        ],
+    ),
+    (
+        "stock_adjustment",
+        &["list", "detail", "create", "update", "submit"],
+        &[ScopeDimension::Warehouse],
+    ),
+    ("stock_balance", &["list", "detail"], &[ScopeDimension::Warehouse]),
+    ("stock_movement", &["list"], &[ScopeDimension::Warehouse]),
+    ("stock_reservation", &["list"], &[ScopeDimension::Warehouse]),
+    ("customer_refund", &["submit"], &[ScopeDimension::SettlementParty]),
+    ("supplier_refund", &["submit"], &[ScopeDimension::SettlementParty]),
+    (
+        "supplier_settlement_statement",
+        &["confirm"],
+        &[ScopeDimension::InternalOrg],
+    ),
+    ("work_item", &["manage"], &[ScopeDimension::InternalOrg]),
     ("org_unit", &["list", "manage"], &[ScopeDimension::InternalOrg]),
     (
         "customer",
@@ -86,7 +118,11 @@ pub fn registration(resource: &str, action: &str) -> Result<ConsumerRegistration
     }
     Ok(ConsumerRegistration {
         supported_dimensions: entry.2,
-        required_dimensions: entry.2,
+        required_dimensions: if resource == "approval_instance" {
+            &[]
+        } else {
+            entry.2
+        },
         allows_history: matches!(
             resource,
             "customer" | "contract" | "sales_order" | "purchase_order"
@@ -158,6 +194,7 @@ mod tests {
         assert!(registration("contract", "delete").is_err());
         assert!(registration("purchase_order", "transfer").is_err());
         assert!(registration("work_item", "list").is_err());
-        assert!(registration("approval_instance", "decide").is_err());
+        assert!(registration("approval_instance", "decide").is_ok());
+        assert!(registration("work_item", "manage").is_ok());
     }
 }

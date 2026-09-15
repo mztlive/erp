@@ -1,59 +1,19 @@
 //! Authorization facts consumed by workflow; adapters live at the composition root.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 
-use crate::entity::document_registry::DocumentType;
 use application_core::AuditActor;
 use erp_core::AccountKind;
 use mongodb::ClientSession;
 use persistence_core::Executor;
 
 use super::object_facts::OrderTaskSource;
+use super::{WorkflowDataScope, WorkflowScopeObject, WorkflowScopeObjects};
+use crate::entity::document_registry::DocumentType;
 pub use crate::entity::work_item::WorkflowAccountFact;
 use crate::error::{Error, Result};
-
-/// Data-scope coverage type snapshot. Wire values match identity `DataScopeTypeFact`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DataScopeTypeFact {
-    /// Company-wide coverage.
-    Company,
-    /// Organization coverage.
-    Organization,
-    /// Team coverage.
-    Team,
-    /// Self-owned coverage; does not cover document organization.
-    SelfOwned,
-    /// Collaborative coverage; does not cover document organization.
-    Collaborative,
-}
-
-/// One data-scope fact used by assignment revalidation.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DataScopeFact {
-    /// User or role subject id that owns this scope.
-    pub subject_id: String,
-    /// Scope kind.
-    pub scope_type: DataScopeTypeFact,
-    /// Organization/team targets.
-    pub scope_targets: Vec<String>,
-}
-
-impl DataScopeFact {
-    /// Construct a consumer-owned data-scope fact.
-    pub fn new(
-        subject_id: impl Into<String>,
-        scope_type: DataScopeTypeFact,
-        scope_targets: Vec<String>,
-    ) -> Self {
-        Self {
-            subject_id: subject_id.into(),
-            scope_type,
-            scope_targets,
-        }
-    }
-}
 
 /// Frozen role-to-permission grants captured under one enforcer revision.
 #[derive(Debug, Clone)]
@@ -74,11 +34,7 @@ impl RolePermissionSnapshotFact {
     /// # Returns
     /// Snapshot that does not expose Role or Permission aggregates.
     pub fn new(role_ids: Vec<String>, grants: HashMap<String, Vec<String>>, policy_revision: u64) -> Self {
-        Self {
-            role_ids,
-            grants,
-            policy_revision,
-        }
+        Self { role_ids, grants, policy_revision }
     }
 
     /// Role ids bound to the account under this revision.
@@ -154,6 +110,76 @@ pub type WorkflowPolicyWrite<T, E> = Box<
 
 /// Authorization facts and policy-bound transactions for workflow commands.
 pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
+    /// 解析工作流自身资源动作；缺权限返回空，配置和基础设施错误原样传播。
+    fn resolve_workflow_scope(
+        &self,
+        _actor: &AuditActor,
+        _permission: &str,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<Option<WorkflowDataScope>>> + Send {
+        async { Err(Error::Internal("工作流范围解析未装配".into())) }
+    }
+
+    /// 绑定前按当前或拟创建订单事实独立核对详情范围；未装配时失败关闭。
+    fn binding_order_readable(
+        &self,
+        _actor: &AuditActor,
+        _object: &WorkflowScopeObject,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<bool>> + Send {
+        async { Err(Error::Internal("订单绑定读取范围未装配".into())) }
+    }
+
+    /// 有界批量读取当前审批对象事实；缺失对象不进入结果，配置失败不得吞掉。
+    fn approval_scope_objects(
+        &self,
+        _keys: &HashSet<(DocumentType, String)>,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<WorkflowScopeObjects>> + Send {
+        async { Err(Error::Internal("审批批量范围事实未装配".into())) }
+    }
+
+    /// 从当前强业务实体映射审批范围维度，不使用历史责任字段推断部门。
+    fn approval_scope_object(
+        &self,
+        _document_type: DocumentType,
+        _document_id: &str,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<WorkflowScopeObject>> + Send {
+        async { Err(Error::Internal("审批范围事实未装配".into())) }
+    }
+
+    /// 解析 work_item:manage，并按当前有效内部组织关系编译任务负责人条件。
+    ///
+    /// # 返回
+    /// None 仅表示显式公司范围；Some(空) 表示无管理范围。
+    /// # 错误
+    /// 配置、身份或版本错误失败关闭；不得用责任组织字段解释内部部门。
+    fn managed_task_owners(
+        &self,
+        _actor: &AuditActor,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<Option<Vec<String>>>> + Send {
+        async { Err(Error::Internal("任务管理范围未装配".into())) }
+    }
+
+    /// 获取任务队列身份授权版本；不提供对象授权结论。
+    ///
+    /// # 参数
+    /// * `actor` - 服务端认证身份。
+    /// * `executor` - 当前读取执行器。
+    /// # 返回
+    /// 包含策略、组织和关系有效期变化的版本。
+    /// # 错误
+    /// 未装配、账号失效或读取失败时拒绝。
+    fn queue_scope_version(
+        &self,
+        _actor: &AuditActor,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<String>> + Send {
+        async { Err(Error::Internal("任务队列范围版本未装配".into())) }
+    }
+
     /// 在审批原事务内重验 S2 订单对象当前详情权限。
     ///
     /// # 参数
@@ -308,38 +334,6 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
         executor: &mut dyn Executor,
     ) -> impl Future<Output = Result<Vec<WorkflowAccountFact>>> + Send;
 
-    /// Load data-scope facts for a user or role subject.
-    fn load_data_scopes(
-        &self,
-        subject_type: &str,
-        subject_id: &str,
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<DataScopeFact>>> + Send;
-
-    /// Load data-scope facts for many subjects of the same type.
-    fn load_data_scopes_for_subjects(
-        &self,
-        subject_type: &str,
-        subject_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<DataScopeFact>>> + Send;
-
-    /// Organization ids covered by the subject's configured scopes.
-    fn organization_ids(
-        &self,
-        account_kind: AccountKind,
-        account_id: &str,
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<String>>> + Send;
-
-    /// Responsibility scopes as `(role_id, organization_id)` pairs.
-    fn responsibility_scopes(
-        &self,
-        account_kind: AccountKind,
-        account_id: &str,
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<(String, Option<String>)>>> + Send;
-
     /// Run a write transaction bound to the caller's policy revision.
     fn run_authorized_policy_transaction<T, E, F>(
         &self,
@@ -480,42 +474,6 @@ impl WorkflowAuthorizationPort for FailClosedWorkflowAuthorizationPort {
         _limit: u32,
         _executor: &mut dyn Executor,
     ) -> impl Future<Output = Result<Vec<WorkflowAccountFact>>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn load_data_scopes(
-        &self,
-        _subject_type: &str,
-        _subject_id: &str,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<DataScopeFact>>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn load_data_scopes_for_subjects(
-        &self,
-        _subject_type: &str,
-        _subject_ids: &[String],
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<DataScopeFact>>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn organization_ids(
-        &self,
-        _account_kind: AccountKind,
-        _account_id: &str,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<String>>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn responsibility_scopes(
-        &self,
-        _account_kind: AccountKind,
-        _account_id: &str,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<(String, Option<String>)>>> + Send {
         async move { unwired_auth() }
     }
 

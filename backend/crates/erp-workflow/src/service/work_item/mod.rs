@@ -15,9 +15,8 @@ use std::sync::Arc;
 
 #[cfg(test)]
 use access::{
-    allowed_actions, authorized_fields, authorized_item_fields, detail_scope,
-    ensure_generic_work_item_mutation, has_assignment_candidate_access, object_policy, ActorAccess,
-    ViewAccess,
+    ActorAccess, ViewAccess, allowed_actions, authorized_fields, authorized_item_fields, detail_scope,
+    ensure_generic_work_item_mutation, has_assignment_candidate_access, object_policy,
 };
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
@@ -31,15 +30,15 @@ pub use finance_responsibility::{
 use mongodb::Database;
 #[cfg(test)]
 use query_support::{
-    business_day_bounds_at, counts_as_processable_stat, family_counts_for_types,
-    remove_approval_decision_actions, AuthorizedPage, AuthorizedPageCollector, AUTHORIZED_SCAN_BATCH_SIZE,
+    AUTHORIZED_SCAN_BATCH_SIZE, AuthorizedPage, AuthorizedPageCollector, business_day_bounds_at,
+    counts_as_processable_stat, family_counts_for_types, remove_approval_decision_actions,
 };
 #[cfg(test)]
 use reassign::{
-    approval_assignment_separated, audited_fact_operator_actors, non_empty_assignment_actors,
-    purchase_order_fulfillment_responsibility_id, AssignmentSeparationPolicy,
+    AssignmentSeparationPolicy, approval_assignment_separated, audited_fact_operator_actors,
+    non_empty_assignment_actors, purchase_order_fulfillment_responsibility_id,
 };
-pub use write::{expected_task_version, AuthorizedWorkItem};
+pub use write::{AuthorizedWorkItem, expected_task_version};
 
 use crate::dto::work_item as dto;
 use crate::ports::{FailClosedAuditPort, FailClosedObjectFactPort, ObjectFactPort, WorkflowAuditPort};
@@ -68,12 +67,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     /// # 返回
     /// 返回绑定当前应用授权源的服务。
     pub fn new(db: Database, auth: A) -> Self {
-        Self::with_ports(
-            db,
-            auth,
-            Arc::new(FailClosedObjectFactPort),
-            Arc::new(FailClosedAuditPort),
-        )
+        Self::with_ports(db, auth, Arc::new(FailClosedObjectFactPort), Arc::new(FailClosedAuditPort))
     }
 
     /// Create a command service with composition-root ports.
@@ -83,12 +77,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         facts: Arc<dyn ObjectFactPort>,
         audit: Arc<dyn WorkflowAuditPort>,
     ) -> Self {
-        Self {
-            db,
-            auth,
-            facts,
-            audit,
-        }
+        Self { db, auth, facts, audit }
     }
 }
 
@@ -100,14 +89,13 @@ mod tests {
     use erp_core::ids::WorkItemId;
 
     use super::{
-        allowed_actions, approval_assignment_separated, audited_fact_operator_actors, authorized_fields,
-        authorized_item_fields, business_day_bounds_at, counts_as_processable_stat, detail_scope,
-        ensure_generic_work_item_mutation, expected_task_version, family_counts_for_types,
-        has_assignment_candidate_access, non_empty_assignment_actors, object_policy,
-        purchase_order_fulfillment_responsibility_id, remove_approval_decision_actions, ActorAccess,
-        AssignmentSeparationPolicy, AuthorizedPage, AuthorizedPageCollector, ObjectFact, ObjectFactMap,
-        ObjectKind, ProcessingBlockerView, ViewAccess, WorkItemAllowedAction, WorkItemScope,
-        AUTHORIZED_SCAN_BATCH_SIZE,
+        AUTHORIZED_SCAN_BATCH_SIZE, ActorAccess, AssignmentSeparationPolicy, AuthorizedPage,
+        AuthorizedPageCollector, ObjectFact, ObjectFactMap, ObjectKind, ProcessingBlockerView, ViewAccess,
+        WorkItemAllowedAction, WorkItemScope, allowed_actions, approval_assignment_separated,
+        audited_fact_operator_actors, authorized_fields, authorized_item_fields, business_day_bounds_at,
+        counts_as_processable_stat, detail_scope, ensure_generic_work_item_mutation, expected_task_version,
+        family_counts_for_types, has_assignment_candidate_access, non_empty_assignment_actors, object_policy,
+        purchase_order_fulfillment_responsibility_id, remove_approval_decision_actions,
     };
     use crate::entity::work_item::{
         AssignmentSource, DocumentApprovalWorkItemData, WorkItem, WorkItemData, WorkItemPriority,
@@ -120,10 +108,7 @@ mod tests {
     /// 转交必须以分派授权快照版本执行 policy CAS，不能退回仅在事务内读取比较。
     #[test]
     fn reassign_binds_assignment_authorization_to_commit() {
-        let production = include_str!("reassign.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码必须存在");
+        let production = include_str!("reassign.rs").split("#[cfg(test)]").next().expect("生产代码必须存在");
 
         assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
         assert!(production.contains("item.work_item_type.requires_full_execution_permissions()"));
@@ -135,8 +120,7 @@ mod tests {
             actor_id: "finance-user".to_string(),
             permissions: vec!["receivable_account:detail".to_string()],
             participant_document_ids: HashSet::from(["sales-order-1".to_string()]),
-            organization_ids: vec!["company".to_string()],
-            responsibility_scopes: vec![("role-finance".to_string(), Some("company".to_string()))],
+            managed_owner_ids: None,
             can_manage: false,
         }
     }
@@ -219,8 +203,7 @@ mod tests {
             actor_id: actor_id.to_string(),
             permissions: vec!["purchase_order:create".to_string()],
             participant_document_ids: HashSet::new(),
-            organization_ids: Vec::new(),
-            responsibility_scopes: Vec::new(),
+            managed_owner_ids: Some(Vec::new()),
             can_manage: false,
         }
     }
@@ -330,8 +313,7 @@ mod tests {
             actor_id: actor_id.to_string(),
             permissions: codes.iter().map(|code| (*code).to_string()).collect(),
             participant_document_ids: HashSet::new(),
-            organization_ids: Vec::new(),
-            responsibility_scopes: Vec::new(),
+            managed_owner_ids: Some(Vec::new()),
             can_manage: false,
         }
     }
@@ -344,8 +326,7 @@ mod tests {
                 .map(|code| code.to_string())
                 .collect(),
             participant_document_ids: HashSet::new(),
-            organization_ids: vec!["company".to_string()],
-            responsibility_scopes: Vec::new(),
+            managed_owner_ids: None,
             can_manage: true,
         }
     }
@@ -406,9 +387,7 @@ mod tests {
         assert!(WorkItemType::IntegrationResultUnknown.is_w29_closable("integration_error_task", false,));
         assert!(WorkItemType::BusinessException.is_w29_closable("reconciliation_difference", false,));
         assert!(!WorkItemType::BusinessException.is_w29_closable("MASTER_MAPPING_TASK", false));
-        assert!(WorkItemType::BusinessException
-            .brief_relation("MASTER_MAPPING_TASK")
-            .is_none());
+        assert!(WorkItemType::BusinessException.brief_relation("MASTER_MAPPING_TASK").is_none());
         assert!(!WorkItemType::BusinessException.is_w29_closable("SUPPLIER_OFFERING", false));
         assert!(!WorkItemType::BusinessException.is_w29_closable("SUPPLIER_FULFILLMENT_ORDER", false,));
         assert!(!WorkItemType::BusinessException.is_w29_closable("integration_error_task", true,));
@@ -425,14 +404,12 @@ mod tests {
     #[test]
     fn current_owner_does_not_bypass_revoked_object_participation() {
         let mut item = w13_delta_item();
-        item.reassign("finance-user", Instant::from_unix_secs(101))
-            .unwrap();
+        item.reassign("finance-user", Instant::from_unix_secs(101)).unwrap();
         let access = ActorAccess {
             actor_id: "finance-user".to_string(),
             permissions: vec!["receivable_account:detail".to_string()],
             participant_document_ids: HashSet::new(),
-            organization_ids: Vec::new(),
-            responsibility_scopes: Vec::new(),
+            managed_owner_ids: Some(Vec::new()),
             can_manage: false,
         };
 
@@ -492,17 +469,12 @@ mod tests {
             actor_id: "buyer-1".to_string(),
             permissions: Vec::new(),
             participant_document_ids: HashSet::new(),
-            organization_ids: Vec::new(),
-            responsibility_scopes: Vec::new(),
+            managed_owner_ids: Some(Vec::new()),
             can_manage: false,
         };
 
         assert!(authorized_item_fields(item.clone(), &access, &procurement_facts()).is_none());
-        assert!(!has_assignment_candidate_access(
-            &item,
-            &access,
-            &procurement_facts()
-        ));
+        assert!(!has_assignment_candidate_access(&item, &access, &procurement_facts()));
     }
 
     #[test]
@@ -521,15 +493,10 @@ mod tests {
             actor_id: "candidate-1".to_string(),
             permissions: codes.iter().map(|code| (*code).to_string()).collect(),
             participant_document_ids: HashSet::new(),
-            organization_ids: Vec::new(),
-            responsibility_scopes: Vec::new(),
+            managed_owner_ids: Some(Vec::new()),
             can_manage: false,
         };
-        assert!(!has_assignment_candidate_access(
-            &item,
-            &access(&["purchase_receipt:post"]),
-            &facts,
-        ));
+        assert!(!has_assignment_candidate_access(&item, &access(&["purchase_receipt:post"]), &facts,));
         assert!(has_assignment_candidate_access(
             &item,
             &access(&[
@@ -571,16 +538,11 @@ mod tests {
             actor_id: "candidate-1".to_string(),
             permissions: codes.iter().map(|code| (*code).to_string()).collect(),
             participant_document_ids: HashSet::new(),
-            organization_ids: Vec::new(),
-            responsibility_scopes: Vec::new(),
+            managed_owner_ids: Some(Vec::new()),
             can_manage: false,
         };
 
-        assert!(!has_assignment_candidate_access(
-            &item,
-            &access(&["sales_order:detail"]),
-            &facts,
-        ));
+        assert!(!has_assignment_candidate_access(&item, &access(&["sales_order:detail"]), &facts,));
         assert!(has_assignment_candidate_access(
             &item,
             &access(&[
@@ -609,8 +571,10 @@ mod tests {
 
         let full = invoice_execution_access("finance-1", true);
         let fields = authorized_item_fields(item.clone(), &full, &facts).unwrap();
-        assert!(allowed_actions(&fields, WorkItemScope::Mine, "finance-1", &full)
-            .contains(&WorkItemAllowedAction::Process));
+        assert!(
+            allowed_actions(&fields, WorkItemScope::Mine, "finance-1", &full)
+                .contains(&WorkItemAllowedAction::Process)
+        );
         assert!(has_assignment_candidate_access(&item, &full, &facts));
     }
 
@@ -633,10 +597,7 @@ mod tests {
             "warehouse:wh-1:warehouse_ship",
             "WAREHOUSE_DELIVERY_READY",
         );
-        assert_eq!(
-            purchase_order_fulfillment_responsibility_id(&warehouse).unwrap(),
-            None
-        );
+        assert_eq!(purchase_order_fulfillment_responsibility_id(&warehouse).unwrap(), None);
 
         let malformed = fulfillment_item(
             "delivery",
@@ -705,11 +666,8 @@ mod tests {
 
     #[test]
     fn missing_approval_context_removes_decisions_but_keeps_view() {
-        let mut actions = vec![
-            WorkItemAllowedAction::View,
-            WorkItemAllowedAction::Approve,
-            WorkItemAllowedAction::Reject,
-        ];
+        let mut actions =
+            vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Approve, WorkItemAllowedAction::Reject];
 
         assert!(remove_approval_decision_actions(&mut actions));
         assert_eq!(actions, vec![WorkItemAllowedAction::View]);
@@ -740,11 +698,7 @@ mod tests {
 
         assert_eq!(
             allowed_actions(&item, WorkItemScope::Managed, "manager-1", &access),
-            vec![
-                WorkItemAllowedAction::View,
-                WorkItemAllowedAction::Reassign,
-                WorkItemAllowedAction::Close,
-            ]
+            vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Reassign, WorkItemAllowedAction::Close,]
         );
     }
 
@@ -802,12 +756,9 @@ mod tests {
                 .split_once("\n    }")
                 .map(|(body, _)| body)
                 .expect("通用责任命令必须闭合");
-            let guard = body
-                .find("ensure_generic_work_item_mutation(&item)")
-                .expect("命令必须先识别审批任务");
-            let replay = body
-                .find("idempotent_replay(&receipt, &id)")
-                .expect("命令必须保留幂等回放");
+            let guard =
+                body.find("ensure_generic_work_item_mutation(&item)").expect("命令必须先识别审批任务");
+            let replay = body.find("idempotent_replay(&receipt, &id)").expect("命令必须保留幂等回放");
             assert!(guard < replay, "审批任务守卫必须先于命令回放");
         }
     }
@@ -853,21 +804,16 @@ mod tests {
         )
         .unwrap();
         item.reassign("bob", Instant::from_unix_secs(110)).unwrap();
-        item.complete_by_domain_command("bob", Instant::from_unix_secs(120))
-            .unwrap();
+        item.complete_by_domain_command("bob", Instant::from_unix_secs(120)).unwrap();
         let access = |actor_id: &str| ActorAccess {
             actor_id: actor_id.to_string(),
             permissions: Vec::new(),
             participant_document_ids: HashSet::new(),
-            organization_ids: Vec::new(),
-            responsibility_scopes: Vec::new(),
+            managed_owner_ids: Some(Vec::new()),
             can_manage: false,
         };
 
-        assert_eq!(
-            detail_scope(&item, "alice", &access("alice")).unwrap(),
-            WorkItemScope::History
-        );
+        assert_eq!(detail_scope(&item, "alice", &access("alice")).unwrap(), WorkItemScope::History);
         assert!(detail_scope(&item, "charlie", &access("charlie")).is_err());
     }
 
@@ -921,10 +867,7 @@ mod tests {
 
         assert_eq!(
             collector.finish(),
-            AuthorizedPage {
-                items: vec!["authorized-3", "authorized-4"],
-                total: 4
-            }
+            AuthorizedPage { items: vec!["authorized-3", "authorized-4"], total: 4 }
         );
     }
 
@@ -1059,18 +1002,8 @@ mod tests {
     fn card_funds_assignment_excludes_all_receipt_and_invoice_operators() {
         let receipt_ids = HashSet::from(["receipt-1".to_string()]);
         let receipt_audits = vec![
-            audit(
-                "customer_receipt",
-                "receipt-1",
-                "customer_receipt.create",
-                "receipt-creator",
-            ),
-            audit(
-                "customer_receipt",
-                "receipt-1",
-                "customer_receipt.post:receipt-1",
-                "receipt-poster",
-            ),
+            audit("customer_receipt", "receipt-1", "customer_receipt.create", "receipt-creator"),
+            audit("customer_receipt", "receipt-1", "customer_receipt.post:receipt-1", "receipt-poster"),
         ];
         let invoice_ids = HashSet::from(["blue-1".to_string(), "red-1".to_string()]);
         let invoice_audits = vec![
@@ -1114,18 +1047,8 @@ mod tests {
     fn card_funds_assignment_fails_closed_without_formal_audit_for_every_fact() {
         let receipt_ids = HashSet::from(["receipt-1".to_string(), "receipt-2".to_string()]);
         let audits = vec![
-            audit(
-                "customer_receipt",
-                "receipt-1",
-                "customer_receipt.post:receipt-1",
-                "poster-1",
-            ),
-            audit(
-                "customer_receipt",
-                "receipt-2",
-                "customer_receipt.create",
-                "creator-2",
-            ),
+            audit("customer_receipt", "receipt-1", "customer_receipt.post:receipt-1", "poster-1"),
+            audit("customer_receipt", "receipt-2", "customer_receipt.create", "creator-2"),
         ];
 
         assert!(matches!(

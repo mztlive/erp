@@ -1,25 +1,24 @@
 //! ERP 审批集成仓储：业务对象快照与通知 outbox。
 
-use crate::entity::approval_integration::{
-    ApprovalNotificationDeliveryStatus, ApprovalNotificationOutbox, ApprovalSubjectSnapshot,
-};
-use crate::repository::owned::{ApprovalNotificationOutboxRepository, ApprovalSubjectSnapshotRepository};
 use bpm::ProcessKind;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use futures_util::TryStreamExt;
-use mongodb::bson::{doc, Bson, Document};
+use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::ReturnDocument;
 use mongodb::{Collection, Database};
+use persistence_core::{Error, Executor, Result, mongo_ops};
 use serde::Deserialize;
 
 use super::bpm::{
-    instance_cursor_or, instance_list_filter_doc, instance_list_limit, instance_list_scope_empty,
-    instance_list_sort, instance_summary_projection, ApprovalInstanceListFilter, ApprovalInstanceSummary,
+    ApprovalInstanceListFilter, ApprovalInstanceSummary, instance_cursor_or, instance_list_filter_doc,
+    instance_list_limit, instance_list_scope_empty, instance_list_sort, instance_summary_projection,
 };
 use super::extensions::{ApprovalIntegrationExt, BpmExt};
-use persistence_core::Executor;
-use persistence_core::{mongo_ops, Error, Result};
+use crate::entity::approval_integration::{
+    ApprovalNotificationDeliveryStatus, ApprovalNotificationOutbox, ApprovalSubjectSnapshot,
+};
+use crate::repository::owned::{ApprovalNotificationOutboxRepository, ApprovalSubjectSnapshotRepository};
 
 const MAX_OUTBOX_BATCH: i64 = 50;
 const INSTANCES: &str = <Database as BpmExt>::APPROVAL_PROCESS_INSTANCES;
@@ -128,10 +127,7 @@ impl<'a> ApprovalRuntimeReadRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<ApprovalRuntimeReadPage> {
         if runtime_read_scope_empty(filter, scope) {
-            return Ok(ApprovalRuntimeReadPage {
-                items: Vec::new(),
-                total: 0,
-            });
+            return Ok(ApprovalRuntimeReadPage { items: Vec::new(), total: 0 });
         }
         let rows = aggregate_runtime_read(
             &self.db.collection::<Document>(INSTANCES),
@@ -168,36 +164,28 @@ async fn aggregate_runtime_read(
 
 fn runtime_read_page(facet: Option<ApprovalRuntimeReadFacet>) -> Result<ApprovalRuntimeReadPage> {
     let Some(facet) = facet else {
-        return Ok(ApprovalRuntimeReadPage {
-            items: Vec::new(),
-            total: 0,
-        });
+        return Ok(ApprovalRuntimeReadPage { items: Vec::new(), total: 0 });
     };
     let total = facet.total.first().map_or(Ok(0), |row| {
         u64::try_from(row.count).map_err(|_| Error::EntityMetadataOutOfRange("approval_runtime_total"))
     })?;
-    Ok(ApprovalRuntimeReadPage {
-        items: facet.items,
-        total,
-    })
+    Ok(ApprovalRuntimeReadPage { items: facet.items, total })
 }
 
 fn runtime_read_scope_empty(filter: &ApprovalInstanceListFilter, scope: &ApprovalRuntimeReadScope) -> bool {
     let process_kinds = runtime_read_process_kinds(scope);
     instance_list_scope_empty(filter)
         || process_kinds.is_empty()
-        || filter
-            .process_kind
-            .is_some_and(|requested| !process_kinds.contains(&requested))
+        || filter.process_kind.is_some_and(|requested| !process_kinds.contains(&requested))
         || match scope {
             ApprovalRuntimeReadScope::Started { submitted_by, .. } => {
                 filter.view != super::bpm::ApprovalInstanceListView::Started
                     || submitted_by.is_empty()
                     || filter.started_by.as_deref() != Some(submitted_by)
-            }
+            },
             ApprovalRuntimeReadScope::Managed { .. } => {
                 filter.view == super::bpm::ApprovalInstanceListView::Started
-            }
+            },
         }
 }
 
@@ -223,10 +211,7 @@ fn runtime_read_pipeline(
             },
         );
     }
-    instance_match.insert(
-        "$expr",
-        doc! { "$eq": ["$process_kind", "$subject.subject_kind"] },
-    );
+    instance_match.insert("$expr", doc! { "$eq": ["$process_kind", "$subject.subject_kind"] });
     let mut pipeline = vec![
         doc! { "$match": instance_match },
         doc! { "$sort": instance_list_sort(filter) },
@@ -403,11 +388,7 @@ impl<'a> ApprovalSubjectSnapshotRepository<'a> {
             .iter()
             .map(|(kind, id)| doc! { "document_type": kind.as_str(), "business_object_id": id })
             .collect::<Vec<_>>();
-        self.find_many(
-            doc! { "$or": clauses, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
-            executor,
-        )
-        .await
+        self.find_many(doc! { "$or": clauses, "deleted_at": NOT_DELETED_TIMESTAMP_BSON }, executor).await
     }
 
     /// 按审批实例读取唯一快照。
@@ -419,11 +400,7 @@ impl<'a> ApprovalSubjectSnapshotRepository<'a> {
         approval_process_instance_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<ApprovalSubjectSnapshot>> {
-        self.find_one(
-            snapshot_by_process_instance_filter(approval_process_instance_id),
-            executor,
-        )
-        .await
+        self.find_one(snapshot_by_process_instance_filter(approval_process_instance_id), executor).await
     }
 
     /// 按审批实例批量读取不可变业务对象快照。
@@ -445,11 +422,7 @@ impl<'a> ApprovalSubjectSnapshotRepository<'a> {
         if approval_process_instance_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(
-            snapshot_by_process_instances_filter(approval_process_instance_ids),
-            executor,
-        )
-        .await
+        self.find_many(snapshot_by_process_instances_filter(approval_process_instance_ids), executor).await
     }
 }
 
@@ -727,10 +700,8 @@ async fn find_one_and_update_sorted<T>(
 where
     T: serde::de::DeserializeOwned + Send + Sync,
 {
-    let operation = collection
-        .find_one_and_update(filter, pipeline)
-        .sort(sort)
-        .return_document(ReturnDocument::After);
+    let operation =
+        collection.find_one_and_update(filter, pipeline).sort(sort).return_document(ReturnDocument::After);
     let document = match executor.session() {
         Some(session) => operation.session(session).await?,
         None => operation.await?,
@@ -752,23 +723,23 @@ where
 
 #[cfg(test)]
 mod tests {
+    use bpm::ProcessKind;
+    use bpm::model::types::ApprovalProcessInstanceStatus;
+    use erp_core::common::time::Instant;
+    use mongodb::bson::{Bson, doc};
+
     use super::{
-        clamp_outbox_limit, dead_letter_outbox_pipeline, lease_owner_filter, lease_take_pipeline,
-        lease_take_sort, mark_outbox_delivered_pipeline, outbox_lease_filter, reschedule_outbox_pipeline,
+        ApprovalRuntimeReadScope, ApprovalRuntimeReadTypeScope, MAX_OUTBOX_BATCH, clamp_outbox_limit,
+        dead_letter_outbox_pipeline, lease_owner_filter, lease_take_pipeline, lease_take_sort,
+        mark_outbox_delivered_pipeline, outbox_lease_filter, reschedule_outbox_pipeline,
         runtime_read_pipeline, runtime_read_scope_empty, runtime_snapshot_scope_match,
-        snapshot_by_process_instances_filter, ApprovalRuntimeReadScope, ApprovalRuntimeReadTypeScope,
-        MAX_OUTBOX_BATCH,
+        snapshot_by_process_instances_filter,
     };
     use crate::entity::approval_integration::ApprovalNotificationDeliveryStatus;
     use crate::repository::bpm::{
         ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListView,
         ApprovalInstanceTextQuery,
     };
-    use bpm::model::types::ApprovalProcessInstanceStatus;
-    use bpm::ProcessKind;
-    use erp_core::common::time::Instant;
-
-    use mongodb::bson::{doc, Bson};
 
     fn runtime_filter() -> ApprovalInstanceListFilter {
         ApprovalInstanceListFilter {
@@ -777,14 +748,10 @@ mod tests {
             status: Some(ApprovalProcessInstanceStatus::Blocked),
             started_by: None,
             subject_kind: None,
+            authorized_instance_ids: None,
             subject_ids: None,
-            text_query: Some(ApprovalInstanceTextQuery {
-                query: "ADJ.[1]".to_string(),
-            }),
-            cursor: Some(ApprovalInstanceListCursor {
-                sort_time: 20,
-                id: "inst-2".to_string(),
-            }),
+            text_query: Some(ApprovalInstanceTextQuery { query: "ADJ.[1]".to_string() }),
+            cursor: Some(ApprovalInstanceListCursor { sort_time: 20, id: "inst-2".to_string() }),
             limit: 21,
         }
     }
@@ -803,9 +770,7 @@ mod tests {
     }
 
     fn runtime_scope() -> ApprovalRuntimeReadScope {
-        ApprovalRuntimeReadScope::Managed {
-            type_scopes: runtime_type_scopes(),
-        }
+        ApprovalRuntimeReadScope::Managed { type_scopes: runtime_type_scopes() }
     }
 
     #[test]
@@ -835,28 +800,19 @@ mod tests {
         );
         assert!(!instance_match.contains_key("$or"));
 
-        assert_eq!(
-            pipeline[1].get_document("$sort").unwrap(),
-            &doc! { "blocked_at": -1, "id": -1 }
-        );
+        assert_eq!(pipeline[1].get_document("$sort").unwrap(), &doc! { "blocked_at": -1, "id": -1 });
         let lookup = pipeline[2].get_document("$lookup").unwrap();
         assert_eq!(lookup.get_str("localField").unwrap(), "id");
-        assert_eq!(
-            lookup.get_str("foreignField").unwrap(),
-            "approval_process_instance_id"
-        );
+        assert_eq!(lookup.get_str("foreignField").unwrap(), "approval_process_instance_id");
         let exact = pipeline[5]
             .get_document("$set")
             .unwrap()
             .get_document("_runtime_snapshot_exact")
             .unwrap()
             .to_string();
-        for field in [
-            "approval_process_instance_id",
-            "document_type",
-            "business_object_id",
-            "subject_version",
-        ] {
+        for field in
+            ["approval_process_instance_id", "document_type", "business_object_id", "subject_version"]
+        {
             assert!(exact.contains(field));
         }
         let scope_match = pipeline[6].get_document("$match").unwrap().to_string();
@@ -871,19 +827,13 @@ mod tests {
         let facet = pipeline[8].get_document("$facet").unwrap();
         let items = facet.get_array("items").unwrap();
         assert!(items[0].as_document().unwrap().contains_key("$match"));
-        assert!(items.iter().any(|stage| {
-            stage
-                .as_document()
-                .is_some_and(|document| document.contains_key("$limit"))
-        }));
-        assert_eq!(
-            facet.get_array("total").unwrap(),
-            &vec![Bson::Document(doc! { "$count": "count" })]
+        assert!(
+            items
+                .iter()
+                .any(|stage| { stage.as_document().is_some_and(|document| document.contains_key("$limit")) })
         );
-        assert!(!facet.get_array("total").unwrap()[0]
-            .as_document()
-            .unwrap()
-            .contains_key("$match"));
+        assert_eq!(facet.get_array("total").unwrap(), &vec![Bson::Document(doc! { "$count": "count" })]);
+        assert!(!facet.get_array("total").unwrap()[0].as_document().unwrap().contains_key("$match"));
     }
 
     #[test]
@@ -891,10 +841,7 @@ mod tests {
         let scope = ApprovalRuntimeReadScope::Managed {
             type_scopes: runtime_type_scopes()
                 .into_iter()
-                .map(|type_scope| ApprovalRuntimeReadTypeScope {
-                    organization_ids: None,
-                    ..type_scope
-                })
+                .map(|type_scope| ApprovalRuntimeReadTypeScope { organization_ids: None, ..type_scope })
                 .collect(),
         };
         let pipeline = runtime_read_pipeline(&runtime_filter(), &scope);
@@ -922,9 +869,7 @@ mod tests {
     #[test]
     fn runtime_scope_rejects_empty_and_requested_type_outside_proven_types() {
         let filter = runtime_filter();
-        let empty = ApprovalRuntimeReadScope::Managed {
-            type_scopes: Vec::new(),
-        };
+        let empty = ApprovalRuntimeReadScope::Managed { type_scopes: Vec::new() };
         assert!(runtime_read_scope_empty(&filter, &empty));
         let empty_org = ApprovalRuntimeReadScope::Managed {
             type_scopes: runtime_type_scopes()
@@ -937,10 +882,8 @@ mod tests {
         };
         assert!(runtime_read_scope_empty(&filter, &empty_org));
 
-        let requested = ApprovalInstanceListFilter {
-            process_kind: Some(ProcessKind::PurchaseOrder),
-            ..filter
-        };
+        let requested =
+            ApprovalInstanceListFilter { process_kind: Some(ProcessKind::PurchaseOrder), ..filter };
         assert!(runtime_read_scope_empty(&requested, &runtime_scope()));
     }
 
@@ -975,19 +918,13 @@ mod tests {
             pending.get_str("delivery_status").unwrap(),
             ApprovalNotificationDeliveryStatus::Pending.as_str()
         );
-        assert_eq!(
-            pending.get_document("next_attempt_at").unwrap(),
-            &doc! { "$lte": 1_000_i64 }
-        );
+        assert_eq!(pending.get_document("next_attempt_at").unwrap(), &doc! { "$lte": 1_000_i64 });
         let inflight = alternatives[1].as_document().unwrap();
         assert_eq!(
             inflight.get_str("delivery_status").unwrap(),
             ApprovalNotificationDeliveryStatus::InFlight.as_str()
         );
-        assert_eq!(
-            inflight.get_document("lease_until").unwrap(),
-            &doc! { "$lte": 1_000_i64 }
-        );
+        assert_eq!(inflight.get_document("lease_until").unwrap(), &doc! { "$lte": 1_000_i64 });
         let serialized = filter.to_string();
         assert!(!serialized.contains("DELIVERED"));
         assert!(!serialized.contains("DEAD_LETTER"));
@@ -1028,10 +965,7 @@ mod tests {
         assert_eq!(set.get_str("lease_owner").unwrap(), "worker-a");
         assert_eq!(set.get_i64("lease_until").unwrap(), 1_500);
         assert_eq!(set.get_i64("updated_at").unwrap(), 1_000);
-        assert_eq!(
-            set.get_document("version").unwrap(),
-            &doc! { "$add": ["$version", 1_i64] }
-        );
+        assert_eq!(set.get_document("version").unwrap(), &doc! { "$add": ["$version", 1_i64] });
         assert_eq!(lease_take_sort(), doc! { "next_attempt_at": 1, "id": 1 });
     }
 
@@ -1059,10 +993,7 @@ mod tests {
         assert_eq!(delivered_set.get("lease_owner").unwrap(), &Bson::Null);
         assert_eq!(delivered_set.get("lease_until").unwrap(), &Bson::Null);
         assert_eq!(delivered_set.get_i64("delivered_at").unwrap(), 2_000);
-        assert_eq!(
-            delivered_set.get_document("version").unwrap(),
-            &doc! { "$add": ["$version", 1_i64] }
-        );
+        assert_eq!(delivered_set.get_document("version").unwrap(), &doc! { "$add": ["$version", 1_i64] });
         assert_eq!(delivered_set.get_i64("updated_at").unwrap(), 2_000);
 
         let next_attempt_at = Instant::from_unix_secs(3_000);

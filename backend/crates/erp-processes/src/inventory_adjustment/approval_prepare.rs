@@ -439,7 +439,11 @@ pub async fn ensure_stock_adjustment_submit_authorized_with_executor(
     {
         return Err(Error::Forbidden(STOCK_ADJUSTMENT_SUBMIT_FORBIDDEN.to_string()));
     }
-    let organization_id = adjustment.warehouse_id.as_ref();
+    let object = erp_workflow::ports::WorkflowScopeObject {
+        owner_user_id: adjustment.created_by.clone(),
+        warehouse_id: Some(adjustment.warehouse_id.to_string()),
+        ..Default::default()
+    };
     let action_scope = approval_document_action_scope_with_executor(
         &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
         actor,
@@ -454,7 +458,7 @@ pub async fn ensure_stock_adjustment_submit_authorized_with_executor(
         executor,
     )
     .await?;
-    if !action_scope.covers(organization_id) || !read_scope.covers(organization_id) {
+    if !action_scope.covers_object(&object) || !read_scope.covers_object(&object) {
         return Err(Error::Forbidden("无权提交该责任组织的库存调整单".to_string()));
     }
     Ok(())
@@ -670,12 +674,17 @@ pub(super) async fn revalidate_stock_adjustment_start_candidates(
             executor,
         )
         .await?;
-        if !decide_scope.covers(organization_id) {
+        let object = erp_workflow::ports::WorkflowScopeObject {
+            owner_user_id: initiator_id.to_string(),
+            warehouse_id: Some(organization_id.to_string()),
+            ..Default::default()
+        };
+        if !decide_scope.covers_object(&object) {
             return Err(Error::ValidationError(
                 "指定审批人缺少审批权限或数据范围不覆盖当前单据组织".to_string(),
             ));
         }
-        if !read_scope.covers(organization_id) {
+        if !read_scope.covers_object(&object) {
             return Err(Error::ValidationError(
                 "指定审批人不能读取当前库存调整单".to_string(),
             ));

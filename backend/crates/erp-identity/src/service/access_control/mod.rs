@@ -16,15 +16,18 @@
 //!
 //! 跨域：无（依赖列为空；只经 `AccessControlExt` 访问本域仓储）。
 
+use crate::access_control::{ScopeDimension, ScopeTargetMode};
 use crate::entity::access_control::{
     AuditEvent, AuditEventData, AuditEventId, AuditEventResult, DataScope, DataScopeId, Permission,
     PermissionId, UserRole, UserRoleId,
 };
+use crate::ports::ScopeTargetPort;
 use crate::AccessControlExt;
 use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
+use std::sync::Arc;
 use validator::Validate;
 pub mod consumers;
 mod query;
@@ -53,6 +56,7 @@ type AuditEventFilter = <mongodb::Database as crate::AccessControlExt>::AuditEve
 pub struct AccessControlService {
     db: Database,
     rbac: Option<crate::SharedRbacService>,
+    targets: Option<Arc<dyn ScopeTargetPort>>,
 }
 
 impl AccessControlService {
@@ -64,7 +68,22 @@ impl AccessControlService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
-        Self { db, rbac: None }
+        Self {
+            db,
+            rbac: None,
+            targets: None,
+        }
+    }
+
+    /// 装配仓库与结算主体目标的所属领域校验。
+    ///
+    /// # 参数
+    /// * `targets` - 组合层提供的业务身份端口
+    /// # 返回
+    /// 返回已装配服务；未装配的外部目标配置失败关闭。
+    pub fn with_scope_targets(mut self, targets: Arc<dyn ScopeTargetPort>) -> Self {
+        self.targets = Some(targets);
+        self
     }
 
     /// 装配范围配置所需的现有 RBAC。
@@ -307,6 +326,7 @@ impl AccessControlService {
         let db = self.db.clone();
         let client = db.client().clone();
         let scope_for_tx = scope.clone();
+        let targets = self.targets.clone();
         let rbac = self
             .rbac
             .clone()
@@ -317,6 +337,19 @@ impl AccessControlService {
                 Box::pin(async move {
                     ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope_for_tx, "create", session)
                         .await?;
+                    if scope_for_tx.binding.target_mode == Some(ScopeTargetMode::Explicit)
+                        && scope_for_tx.binding.target_dimension != ScopeDimension::InternalOrg
+                    {
+                        targets
+                            .as_ref()
+                            .ok_or_else(|| Error::ValidationError("外部范围目标校验未装配".into()))?
+                            .validate_targets(
+                                scope_for_tx.binding.target_dimension,
+                                &scope_for_tx.scope_targets,
+                                session,
+                            )
+                            .await?;
+                    }
                     db.data_scopes().create(&scope_for_tx, session).await?;
                     crate::MongoCasbinAdapter::new(db.clone())
                         .bump_policy_revision(session)
@@ -690,7 +723,9 @@ async fn ensure_scope_configuration(
         return Ok(());
     }
     ensure_scope_subject(db, &rbac, scope, executor).await?;
-    if scope.binding.target_mode == Some(crate::access_control::ScopeTargetMode::Explicit) {
+    if scope.binding.target_mode == Some(ScopeTargetMode::Explicit)
+        && scope.binding.target_dimension == ScopeDimension::InternalOrg
+    {
         let tree = crate::entity::organization::OrgTree::new(&access.organizations.units)?;
         for id in &scope.scope_targets {
             if tree.expand(id, false)?.is_empty() {

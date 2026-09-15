@@ -672,6 +672,17 @@ paths:
         前端不得根据历史责任模式或卡券类型推断路由。
       parameters:
         - $ref: "#/components/parameters/TraceId"
+        - name: scope_version
+          in: query
+          description: 首次查询返回的范围版本。page 大于 1 时必须携带；版本缺失或变化返回 409 DATA_SCOPE_CHANGED，必须从第一页刷新。
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
       responses:
         "200":
           description: 带责任类型的待办页。
@@ -683,6 +694,8 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/Unprocessable"
         "500":
@@ -1532,6 +1545,21 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RecoveryAction"
+        expected_instance_version:
+          type: string
+          description: 恢复命令所需的期望实例版本，十进制字符串。
+        expected_execution_version:
+          type: string
+          nullable: true
+          description: 恢复命令所需的期望执行版本，无当前执行时为空。
+        expected_assignment_version:
+          type: string
+          nullable: true
+          description: 恢复命令所需的期望审批人绑定版本，无绑定时为空。
+        expected_closed_task_version:
+          type: string
+          nullable: true
+          description: 单一已关闭历史任务版本，无唯一关闭任务时为空；调用方可省略。
     WorkItemView:
       type: object
       required:
@@ -1564,7 +1592,7 @@ components:
             type: string
     WorkItemPage:
       type: object
-      required: [items, total, page, page_size, queue_context_id]
+      required: [items, total, page, page_size, queue_context_id, scope_version]
       properties:
         items:
           type: array
@@ -1580,6 +1608,9 @@ components:
           type: integer
         queue_context_id:
           type: string
+        scope_version:
+          type: string
+          description: 身份授权、规范化队列及完整授权结果的范围版本；不包含页码，不暴露原始范围。
     WorkItemStats:
       type: object
       additionalProperties: true

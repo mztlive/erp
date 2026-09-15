@@ -9,11 +9,11 @@ use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::access::{
-    active_role_ids, ensure_generic_work_item_mutation, ensure_item_in_managed_scope, ensure_managed_access,
-    has_assignment_candidate_access, object_policy, ActorAccess, MANAGE_PERMISSION,
+    ActorAccess, MANAGE_PERMISSION, active_role_ids, ensure_generic_work_item_mutation,
+    ensure_item_in_managed_scope, ensure_managed_access, has_assignment_candidate_access, object_policy,
 };
 use super::order_access::{require_order_task_read, task_read_error};
-use super::write::{expected_task_version, required_text, WorkItemWriteOutcome, IDEMPOTENCY_AUDIT_PREFIX};
+use super::write::{IDEMPOTENCY_AUDIT_PREFIX, WorkItemWriteOutcome, expected_task_version, required_text};
 use super::{
     ReassignWorkItemRequest, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemReassignCandidateView,
     WorkItemService,
@@ -109,10 +109,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             None
         };
 
-        let accounts = self
-            .auth
-            .list_accounts_by_kind(erp_core::AccountKind::Admin, &mut NoTransaction)
-            .await?;
+        let accounts =
+            self.auth.list_accounts_by_kind(erp_core::AccountKind::Admin, &mut NoTransaction).await?;
         let mut candidates = Vec::new();
         for account in accounts {
             if item.owner_user_id.as_deref() == Some(account.id.as_str())
@@ -120,14 +118,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             {
                 continue;
             }
-            let authorization = match self
-                .assignment_authorization_snapshot(&actor, &account.id, &item, true)
-                .await
-            {
-                Ok(authorization) => authorization,
-                Err(Error::Forbidden(_)) => continue,
-                Err(error) => return Err(error),
-            };
+            let authorization =
+                match self.assignment_authorization_snapshot(&actor, &account.id, &item, true).await {
+                    Ok(authorization) => authorization,
+                    Err(Error::Forbidden(_)) => continue,
+                    Err(error) => return Err(error),
+                };
             if let Some(tasks) = cascade_tasks.as_deref() {
                 match ensure_fulfillment_tasks_candidate(
                     &self,
@@ -138,7 +134,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                 )
                 .await
                 {
-                    Ok(()) => {}
+                    Ok(()) => {},
                     Err(Error::Forbidden(_)) => continue,
                     Err(error) => return Err(error),
                 }
@@ -192,14 +188,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             return self.applied_outcome(replayed, &actor).await;
         }
         if item.base.version != expected_task_version {
-            return self
-                .conflict_outcome(&id, WorkItemConflictKind::Version, &actor)
-                .await;
+            return self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await;
         }
         ensure_item_in_managed_scope(&item, &managed_access)?;
-        let authorization = self
-            .assignment_authorization_snapshot(&actor, &target_user_id, &item, true)
-            .await?;
+        let authorization =
+            self.assignment_authorization_snapshot(&actor, &target_user_id, &item, true).await?;
         let updated = self
             .reassign_with_assignment_policy_audit(AssignmentPolicyAuditInput {
                 item,
@@ -214,9 +207,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         match updated {
             WorkItemWriteOutcome::Updated(item) => self.applied_outcome(*item, &actor).await,
             WorkItemWriteOutcome::VersionConflict => {
-                self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor)
-                    .await
-            }
+                self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await
+            },
         }
     }
 
@@ -236,12 +228,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             let before = self.auth.current_policy_revision().await?;
             let actor_role_ids =
                 active_role_ids(&self.auth, actor.kind(), actor.id(), &mut NoTransaction).await?;
-            let actor_read_role_ids = self
-                .roles_granting_permission(&actor_role_ids, &read_permission, true)
-                .await?;
-            let actor_manage_role_ids = self
-                .roles_granting_permission(&actor_role_ids, &manage_permission, true)
-                .await?;
+            let actor_read_role_ids =
+                self.roles_granting_permission(&actor_role_ids, &read_permission, true).await?;
+            let actor_manage_role_ids =
+                self.roles_granting_permission(&actor_role_ids, &manage_permission, true).await?;
             let assignee = self
                 .auth
                 .load_account(assignee_id, &mut NoTransaction)
@@ -252,9 +242,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             let assignee_role_ids =
                 active_role_ids(&self.auth, assignee.kind(), assignee_id, &mut NoTransaction).await?;
             let assignee_permissions = self.auth.permission_codes(assignee.kind(), assignee_id).await?;
-            let assignee_read_role_ids = self
-                .roles_granting_permission(&assignee_role_ids, &read_permission, true)
-                .await?;
+            let assignee_read_role_ids =
+                self.roles_granting_permission(&assignee_role_ids, &read_permission, true).await?;
             let snapshot = AssignmentAuthorizationSnapshot {
                 policy_revision: before,
                 actor_kind: actor.kind(),
@@ -283,17 +272,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                 &mut NoTransaction,
             )
             .await?;
-            let after = self
-                .auth
-                .policy_revision_with_executor(&mut NoTransaction)
-                .await?;
+            let after = self.auth.policy_revision_with_executor(&mut NoTransaction).await?;
             if before == after {
                 return Ok(snapshot);
             }
         }
-        Err(Error::Rbac(
-            "授权策略持续变化，无法形成稳定的任务分派快照".to_string(),
-        ))
+        Err(Error::Rbac("授权策略持续变化，无法形成稳定的任务分派快照".to_string()))
     }
 
     /// 在调用方事务快照中重验操作人权限、管理范围与对象参与权。
@@ -327,9 +311,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             ensure_managed_access(&access)?;
             ensure_item_in_managed_scope(item, &access)?;
         }
-        self.ensure_item_access_with_executor(item, &access, executor)
-            .await
-            .map_err(task_read_error)
+        self.ensure_item_access_with_executor(item, &access, executor).await.map_err(task_read_error)
     }
 
     /// 在调用方事务快照中重验目标账号资格、对象访问权与岗位分离。
@@ -382,8 +364,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         self.ensure_assignment_candidate_access_with_executor(item, &access, executor)
             .await
             .map_err(task_read_error)?;
-        self.ensure_assignment_separation(user_id, item, allow_current_owner, executor)
-            .await
+        self.ensure_assignment_separation(user_id, item, allow_current_owner, executor).await
     }
 
     /// 审批任务在形成个人责任前排除启动人、既往责任人、前序和当前决定人。
@@ -396,20 +377,19 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     ) -> Result<()> {
         match item.work_item_type.assignment_separation_policy() {
             WorkItemAssignmentSeparationPolicy::ApprovalHistory => {
-                self.ensure_approval_assignment_separation(user_id, item, allow_current_owner, executor)
-                    .await
-            }
+                self.ensure_approval_assignment_separation(user_id, item, allow_current_owner, executor).await
+            },
             WorkItemAssignmentSeparationPolicy::DomainActors => {
                 let excluded = self.domain_assignment_actors(item, executor).await?;
                 if excluded.iter().any(|actor_id| actor_id == user_id) {
                     return Err(Error::Forbidden("目标账号违反业务岗位分离约束".to_string()));
                 }
                 Ok(())
-            }
+            },
             WorkItemAssignmentSeparationPolicy::RoleAndParticipation => Ok(()),
             WorkItemAssignmentSeparationPolicy::FailClosed => {
                 Err(Error::Forbidden("任务类型未注册可证明的岗位分离策略".to_string()))
-            }
+            },
         }
     }
 
@@ -422,9 +402,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let _ = (user_id, item, allow_current_owner, executor);
-        Err(Error::Forbidden(
-            "单据审批任务不得通过通用责任入口改派".to_string(),
-        ))
+        Err(Error::Forbidden("单据审批任务不得通过通用责任入口改派".to_string()))
     }
 
     /// 读取非审批正式决定任务的权威提交人、经办人及历史决定人。
@@ -579,15 +557,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                         .await?
                     } else {
                         current.reassign(target_user_id.clone(), Instant::now())?;
-                        db.work_items()
-                            .update(&mut current, session)
-                            .await
-                            .map_err(|error| match error {
-                                persistence_core::Error::OptimisticLockingError => {
-                                    Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
-                                }
-                                error => Error::from(error),
-                            })?;
+                        db.work_items().update(&mut current, session).await.map_err(|error| match error {
+                            persistence_core::Error::OptimisticLockingError => {
+                                Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
+                            },
+                            error => Error::from(error),
+                        })?;
                         current
                     };
                     ensure_assignment_policy_in_transaction(
@@ -616,7 +591,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             Ok(item) => Ok(WorkItemWriteOutcome::Updated(Box::new(item))),
             Err(Error::ConflictError(message)) if message == REASSIGN_VERSION_CONFLICT => {
                 Ok(WorkItemWriteOutcome::VersionConflict)
-            }
+            },
             Err(error) => match self.idempotent_replay(&replay_receipt, &replay_item_id).await? {
                 Some(item) => Ok(WorkItemWriteOutcome::Updated(Box::new(item))),
                 None => Err(error),
@@ -794,17 +769,12 @@ async fn reassign_purchase_order_fulfillment_responsibility<A: crate::ports::Wor
     let mut selected_after = None;
     for task in &mut tasks {
         task.reassign(input.target_user_id.to_string(), reassigned_at)?;
-        service
-            .db
-            .work_items()
-            .update(task, executor)
-            .await
-            .map_err(|error| match error {
-                persistence_core::Error::OptimisticLockingError => {
-                    Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
-                }
-                error => Error::from(error),
-            })?;
+        service.db.work_items().update(task, executor).await.map_err(|error| match error {
+            persistence_core::Error::OptimisticLockingError => {
+                Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
+            },
+            error => Error::from(error),
+        })?;
         if task.base.id == input.selected.base.id {
             selected_after = Some(task.clone());
         }
@@ -826,14 +796,11 @@ async fn ensure_fulfillment_tasks_candidate<A: crate::ports::WorkflowAuthorizati
         actor_id: target_user_id.to_string(),
         permissions: permissions.to_vec(),
         participant_document_ids: HashSet::new(),
-        organization_ids: Vec::new(),
-        responsibility_scopes: Vec::new(),
+        managed_owner_ids: Some(Vec::new()),
         can_manage: false,
     };
     for task in tasks {
-        service
-            .ensure_assignment_candidate_access_with_executor(task, &target_access, executor)
-            .await?;
+        service.ensure_assignment_candidate_access_with_executor(task, &target_access, executor).await?;
     }
     Ok(())
 }
@@ -884,13 +851,8 @@ pub(super) fn audited_fact_operator_actors(
                     && audit.resource_id.as_deref() == Some(resource_id.as_str())
             })
             .collect::<Vec<_>>();
-        if !facts
-            .iter()
-            .any(|audit| matches_action(&audit.action, formal_actions))
-        {
-            return Err(Error::Forbidden(
-                "无法从审计事实证明票款已经正式登记，任务分派失败关闭".to_string(),
-            ));
+        if !facts.iter().any(|audit| matches_action(&audit.action, formal_actions)) {
+            return Err(Error::Forbidden("无法从审计事实证明票款已经正式登记，任务分派失败关闭".to_string()));
         }
         actors.extend(
             facts
@@ -909,9 +871,7 @@ pub(super) fn non_empty_assignment_actors(actors: Vec<String>) -> Result<HashSet
         .filter(|actor| !actor.is_empty() && actor != SYSTEM_OBJECT_OWNER)
         .collect::<HashSet<_>>();
     if actors.is_empty() {
-        return Err(Error::Forbidden(
-            "任务岗位分离所需的权威责任人事实缺失".to_string(),
-        ));
+        return Err(Error::Forbidden("任务岗位分离所需的权威责任人事实缺失".to_string()));
     }
     Ok(actors)
 }

@@ -1,30 +1,27 @@
 //! 阻塞审批管理接口的数据范围解析，以及定义管理的类型级可见范围。
 
-use std::collections::HashMap;
-
-use crate::entity::document_registry::DocumentType;
-use crate::entity::work_item::WorkItemType;
-use crate::ports::{DataScopeFact, DataScopeTypeFact, WorkflowAuthorizationPort};
+use application_core::AuditActor;
 use persistence_core::{Executor, NoTransaction};
 
-use crate::error::{Error, Result};
-use application_core::AuditActor;
-
 use super::dto::ApprovalRecoveryAuthorization;
-use super::policy::{policy_of, DocumentApprovalPolicy, ALL_DOCUMENT_TYPES};
+use super::policy::{ALL_DOCUMENT_TYPES, DocumentApprovalPolicy, policy_of};
+use crate::entity::document_registry::DocumentType;
+use crate::entity::work_item::WorkItemType;
+use crate::error::{Error, Result};
+use crate::ports::{WorkflowAuthorizationPort, WorkflowDataScope, WorkflowScopeObject};
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 
 /// 服务端计算的组织级诊断范围。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApprovalManagementScope {
-    /// 公司级，可查询全部组织。
-    Company,
-    /// 仅可查询显式授权的组织或团队标识。
-    Organizations(Vec<String>),
+    /// 公共解析器返回的当前对象范围。
+    Resolved(WorkflowDataScope),
+    /// 没有完整动作权限或正向范围。
+    Empty,
 }
 
-/// 定义管理的类型级可见范围。不是具体单据 DataScopeFact。
+/// 定义管理的类型级可见范围。不是具体单据 对象范围。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DefinitionManagementVisibility {
     definition_admin_types: Vec<DocumentType>,
@@ -39,15 +36,12 @@ impl DefinitionManagementVisibility {
     /// * `runtime_admin_types` - 具备运行管理权的类型
     ///
     /// # 返回
-    /// 返回类型级可见范围，不含单据 DataScopeFact。
+    /// 返回类型级可见范围，不含单据 对象范围。
     pub fn from_type_permissions(
         definition_admin_types: Vec<DocumentType>,
         runtime_admin_types: Vec<DocumentType>,
     ) -> Self {
-        Self {
-            definition_admin_types,
-            runtime_admin_types,
-        }
+        Self { definition_admin_types, runtime_admin_types }
     }
 
     /// 判断是否具备该类型的定义管理权。
@@ -97,11 +91,7 @@ impl DefinitionManagementVisibility {
     /// 返回两端都具备的类型集合。
     pub fn intersect(&self, other: &Self) -> Self {
         Self::from_type_permissions(
-            self.definition_admin_types
-                .iter()
-                .copied()
-                .filter(|item| other.can_define(*item))
-                .collect(),
+            self.definition_admin_types.iter().copied().filter(|item| other.can_define(*item)).collect(),
             self.runtime_admin_types
                 .iter()
                 .copied()
@@ -112,25 +102,20 @@ impl DefinitionManagementVisibility {
 }
 
 impl ApprovalManagementScope {
-    /// 返回 Repository 查询所需的可选组织切片。
-    pub fn organization_ids(&self) -> Option<&[String]> {
+    /// 对当前强业务对象执行公共范围判定；旧组织集合不得判定新对象。
+    pub fn covers_object(&self, object: &WorkflowScopeObject) -> bool {
         match self {
-            Self::Company => None,
-            Self::Organizations(ids) => Some(ids),
-        }
-    }
-
-    /// 判断冻结责任组织是否落在当前权限来源可证明的范围内。
-    pub fn covers(&self, organization_id: &str) -> bool {
-        match self {
-            Self::Company => true,
-            Self::Organizations(ids) => ids.iter().any(|id| id == organization_id),
+            Self::Resolved(scope) => scope.allows(object),
+            _ => false,
         }
     }
 
     /// 判断当前权限是否没有任何可证明的数据范围。
     pub fn is_empty(&self) -> bool {
-        matches!(self, Self::Organizations(ids) if ids.is_empty())
+        match self {
+            Self::Resolved(scope) => !scope.has_role_scope,
+            Self::Empty => true,
+        }
     }
 }
 
@@ -233,11 +218,9 @@ pub async fn definition_management_visibility_with_executor(
         .iter()
         .copied()
         .filter_map(|document_type| match policy_of(document_type) {
-            Ok(DocumentApprovalPolicy::ProcessRequired(policy)) => Some(Ok((
-                document_type,
-                policy.definition_admin_permission,
-                policy.runtime_admin_permission,
-            ))),
+            Ok(DocumentApprovalPolicy::ProcessRequired(policy)) => {
+                Some(Ok((document_type, policy.definition_admin_permission, policy.runtime_admin_permission)))
+            },
             Ok(DocumentApprovalPolicy::NoApproval(_)) => None,
             Err(error) => Some(Err(error)),
         })
@@ -247,12 +230,8 @@ pub async fn definition_management_visibility_with_executor(
         .flat_map(|(_, define, runtime)| [define.clone(), runtime.clone()])
         .collect::<Vec<_>>();
     let required = required_codes.iter().map(String::as_str).collect::<Vec<_>>();
-    let policy_snapshot = rbac
-        .role_permission_snapshot(actor.kind(), actor.id(), &required)
-        .await?;
-    let role_ids = rbac
-        .enabled_role_ids(policy_snapshot.role_ids(), executor)
-        .await?;
+    let policy_snapshot = rbac.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
+    let role_ids = rbac.enabled_role_ids(policy_snapshot.role_ids(), executor).await?;
     let mut enforced = Vec::new();
     for (document_type, definition_permission, runtime_permission) in policies {
         let can_define = policy_snapshot
@@ -265,8 +244,7 @@ pub async fn definition_management_visibility_with_executor(
             .any(|role_id| role_ids.contains(role_id));
         enforced.push((document_type, can_define, can_runtime));
     }
-    rbac.ensure_policy_snapshot_with_executor(policy_snapshot.policy_revision(), executor)
-        .await?;
+    rbac.ensure_policy_snapshot_with_executor(policy_snapshot.policy_revision(), executor).await?;
     Ok(visibility_from_enforced_permissions(enforced))
 }
 
@@ -293,7 +271,7 @@ fn visibility_from_enforced_permissions(
     DefinitionManagementVisibility::from_type_permissions(definition_admin_types, runtime_admin_types)
 }
 
-/// 计算指定审批单据类型的对象读取 DataScopeFact。
+/// 计算指定审批单据类型的对象读取 对象范围。
 ///
 /// # 参数
 /// * `db` - 当前 MongoDB 数据库
@@ -321,7 +299,7 @@ pub async fn approval_document_read_scope(
     approval_document_read_scope_with_executor(rbac, actor, document_type, &mut NoTransaction).await
 }
 
-/// 在调用方执行器的同一数据库快照内计算对象读取 DataScopeFact。
+/// 在调用方执行器的同一数据库快照内计算对象读取 对象范围。
 ///
 /// # 错误
 /// 单据类型未登记、权限格式非法或授权事实读取失败时返回服务错误。
@@ -334,13 +312,21 @@ pub async fn approval_document_read_scope_with_executor(
     let relation = WorkItemType::DocumentApproval
         .brief_relation(document_type.as_str())
         .ok_or_else(|| Error::from_approval_code(crate::error::ErrorCode::ApprovalPolicyNotRegistered))?;
-    permission_scope_with_executor(rbac, actor, relation.read_permission, executor).await
+    let snapshot =
+        rbac.role_permission_snapshot(actor.kind(), actor.id(), &[relation.read_permission]).await?;
+    let roles =
+        rbac.enabled_role_ids(&snapshot.granting_role_ids(relation.read_permission), executor).await?;
+    rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
+    if roles.is_empty() {
+        return Ok(ApprovalManagementScope::Empty);
+    }
+    permission_scope_with_executor(rbac, actor, "approval_instance:read", executor).await
 }
 
-/// 在调用方执行器的同一数据库快照内计算普通取消动作 DataScopeFact。
+/// 在调用方执行器的同一数据库快照内计算普通取消动作 对象范围。
 ///
 /// # 错误
-/// 账号角色、RBAC policy、权限代码或 DataScopeFact 事实读取失败时返回服务错误。
+/// 账号角色、RBAC policy、权限代码或 对象范围 事实读取失败时返回服务错误。
 #[allow(dead_code)]
 pub async fn approval_cancel_scope_with_executor(
     rbac: &impl WorkflowAuthorizationPort,
@@ -350,10 +336,10 @@ pub async fn approval_cancel_scope_with_executor(
     permission_scope_with_executor(rbac, actor, "approval_instance:cancel", executor).await
 }
 
-/// 在调用方执行器的同一数据库快照内计算受阻取消动作 DataScopeFact。
+/// 在调用方执行器的同一数据库快照内计算受阻取消动作 对象范围。
 ///
 /// # 错误
-/// 账号角色、RBAC policy、权限代码或 DataScopeFact 事实读取失败时返回服务错误。
+/// 账号角色、RBAC policy、权限代码或 对象范围 事实读取失败时返回服务错误。
 ///
 /// # 关键业务约束
 /// `cancel_blocked` 与普通 `cancel` 是两个独立动作权限，禁止以恢复或普通取消
@@ -366,10 +352,10 @@ pub async fn approval_cancel_blocked_scope_with_executor(
     permission_scope_with_executor(rbac, actor, "approval_instance:cancel_blocked", executor).await
 }
 
-/// 在调用方执行器的同一数据库快照内计算审批决定动作 DataScopeFact。
+/// 在调用方执行器的同一数据库快照内计算审批决定动作 对象范围。
 ///
 /// # 错误
-/// 账号角色、RBAC policy、权限代码或 DataScopeFact 事实读取失败时返回服务错误。
+/// 账号角色、RBAC policy、权限代码或 对象范围 事实读取失败时返回服务错误。
 ///
 /// # 关键业务约束
 /// 决定权限必须由同一个仍启用的角色授予，并与该角色及用户的组织范围求交；
@@ -382,7 +368,7 @@ pub async fn approval_decide_scope_with_executor(
     permission_scope_with_executor(rbac, actor, "approval_instance:decide", executor).await
 }
 
-/// 在调用方执行器的同一数据库快照内计算指定单据动作的 DataScopeFact。
+/// 在调用方执行器的同一数据库快照内计算指定单据动作的 对象范围。
 ///
 /// # 参数
 /// * `db` - 当前 MongoDB 数据库
@@ -392,15 +378,15 @@ pub async fn approval_decide_scope_with_executor(
 /// * `executor` - 调用方持有的事务或非事务执行器
 ///
 /// # 返回
-/// 返回仅由实际授予该动作的启用角色与用户范围共同证明的组织范围；没有有效
+/// 返回公共解析器证明的资源动作对象范围；没有有效
 /// 授权或范围时返回空组织集合。
 ///
 /// # 错误
-/// 账号角色、RBAC policy、权限代码或 DataScopeFact 事实读取失败时返回服务错误。
+/// 账号角色、RBAC policy、权限代码或 对象范围 事实读取失败时返回服务错误。
 ///
 /// # 关键业务约束
 /// 本方法仅供 Service 在具体单据事务内重验 actor-specific 动作权限。调用方仍
-/// 必须把返回范围与冻结单据组织精确比对；不得把权限字符串或授权判断下沉到
+/// 必须把返回范围与当前业务对象的身份维度精确比对；不得把权限字符串或授权判断下沉到
 /// Repository、Entity 或 BPM。
 #[allow(dead_code)]
 pub async fn approval_document_action_scope_with_executor(
@@ -420,9 +406,7 @@ pub async fn approval_recovery_scope(
     rbac: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
 ) -> Result<ApprovalManagementScope> {
-    Ok(approval_recovery_authorization_scope(
-        &approval_recovery_authorization(rbac, actor).await?,
-    ))
+    permission_scope_with_executor(rbac, actor, "approval_instance:resume", &mut NoTransaction).await
 }
 
 /// 在稳定 Casbin policy 版本下形成恢复授权锚点。
@@ -439,7 +423,7 @@ pub async fn approval_recovery_authorization(
             .await?
             .filter(|account| account.kind == actor.kind() && account.can_login)
             .ok_or_else(|| Error::Forbidden("恢复账号不存在、已停用或身份已变化".to_string()))?;
-        let (scope, granting_role_ids) =
+        let (_scope, granting_role_ids) =
             permission_scope_and_roles(rbac, actor, "approval_instance:resume").await?;
         let after = rbac.current_policy_revision().await?;
         if before == after {
@@ -447,13 +431,10 @@ pub async fn approval_recovery_authorization(
                 actor_kind: actor.kind(),
                 policy_revision: before,
                 granting_role_ids,
-                organization_ids: scope.organization_ids().map(ToOwned::to_owned),
             });
         }
     }
-    Err(Error::Rbac(
-        "审批恢复授权策略持续变化，无法形成稳定快照".to_string(),
-    ))
+    Err(Error::Rbac("审批恢复授权策略持续变化，无法形成稳定快照".to_string()))
 }
 
 /// 使用调用方执行器计算权限与组织范围交集。
@@ -463,12 +444,10 @@ async fn permission_scope_with_executor(
     permission: &str,
     executor: &mut dyn Executor,
 ) -> Result<ApprovalManagementScope> {
-    permission_scope_and_roles_with_executor(rbac, actor, permission, executor)
-        .await
-        .map(|(scope, _)| scope)
+    permission_scope_and_roles_with_executor(rbac, actor, permission, executor).await.map(|(scope, _)| scope)
 }
 
-/// 在当前 RBAC 与 DataScopeFact 事实上计算权限的组织范围与授权角色。
+/// 在当前 RBAC 与 对象范围 事实上计算权限的组织范围与授权角色。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
@@ -480,7 +459,7 @@ async fn permission_scope_with_executor(
 /// 返回不扩大用户/角色交集的组织范围与实际生效角色 ID。
 ///
 /// # 错误
-/// 角色、RBAC、权限解析或 DataScopeFact 事实读取失败时返回错误。
+/// 角色、RBAC、权限解析或 对象范围 事实读取失败时返回错误。
 ///
 /// # 关键业务约束
 /// Repository 批量返回事实；Service 必须逐角色完成权限与范围交集。
@@ -499,25 +478,13 @@ pub(crate) async fn permission_scope_and_roles_with_executor(
     permission: &str,
     executor: &mut dyn Executor,
 ) -> Result<(ApprovalManagementScope, Vec<String>)> {
-    let policy_snapshot = rbac
-        .role_permission_snapshot(actor.kind(), actor.id(), &[permission])
-        .await?;
-    let enabled_role_ids = rbac
-        .enabled_role_ids(policy_snapshot.role_ids(), executor)
-        .await?;
-    let user_scopes = rbac.load_data_scopes("user", actor.id(), executor).await?;
-    let permitted_role_ids = policy_snapshot
-        .granting_role_ids(permission)
-        .into_iter()
-        .filter(|role_id| enabled_role_ids.contains(role_id))
-        .collect::<Vec<_>>();
-    let role_scopes = rbac
-        .load_data_scopes_for_subjects("role", &permitted_role_ids, executor)
-        .await?;
-    let result = scope_from_role_facts(&user_scopes, permitted_role_ids, role_scopes);
-    rbac.ensure_policy_snapshot_with_executor(policy_snapshot.policy_revision(), executor)
-        .await?;
-    Ok(result)
+    match rbac.resolve_workflow_scope(actor, permission, executor).await? {
+        Some(scope) => {
+            let roles = scope.granting_role_ids.clone();
+            Ok((ApprovalManagementScope::Resolved(scope), roles))
+        },
+        None => Ok((ApprovalManagementScope::Empty, Vec::new())),
+    }
 }
 
 /// 绑定升级在同一授权快照中得到的服务端身份。
@@ -543,296 +510,49 @@ pub(crate) struct ApprovalBindingUpgradeAuthorization {
 /// 返回真正覆盖该组织的定义管理授权角色中确定性的 `actor_role`。
 ///
 /// # 错误
-/// 权限、角色、DataScopeFact、对象读取关系或 policy revision 任一无法证明时
+/// 权限、角色、对象范围、对象读取关系或 policy revision 任一无法证明时
 /// 失败关闭。
 ///
 /// # 关键业务约束
 /// 三项权限在一次 Enforcer 读锁中冻结，并共享一次事务内 revision
 /// fence。每项权限各自只能使用真正授予该权限的启用角色
-/// DataScopeFact；三项权限可以来自不同角色。
+/// 对象范围；三项权限可以来自不同角色。
 pub(crate) async fn approval_binding_upgrade_authorization_with_executor(
     rbac: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
     document_type: DocumentType,
     definition_admin_permission: &str,
-    responsible_org_id: &str,
+    object: &WorkflowScopeObject,
     executor: &mut dyn Executor,
 ) -> Result<ApprovalBindingUpgradeAuthorization> {
-    let upgrade_permission = "approval_instance:upgrade_binding";
-    let relation = WorkItemType::DocumentApproval
-        .brief_relation(document_type.as_str())
-        .ok_or_else(|| Error::from_approval_code(crate::error::ErrorCode::ApprovalPolicyNotRegistered))?;
-    let read_permission = relation.read_permission;
-    let required = [upgrade_permission, definition_admin_permission, read_permission];
-    let policy_snapshot = rbac
-        .role_permission_snapshot(actor.kind(), actor.id(), &required)
-        .await?;
-    let enabled_role_ids = rbac
-        .enabled_role_ids(policy_snapshot.role_ids(), executor)
-        .await?;
-    let enabled_grants = |permission: &str| {
-        policy_snapshot
-            .granting_role_ids(permission)
-            .into_iter()
-            .filter(|role_id| enabled_role_ids.contains(role_id))
-            .collect::<Vec<_>>()
-    };
-    let definition_admin_role_ids = enabled_grants(definition_admin_permission);
-    let upgrade_role_ids = enabled_grants(upgrade_permission);
-    let read_role_ids = enabled_grants(read_permission);
-    let user_scopes = rbac.load_data_scopes("user", actor.id(), executor).await?;
-    let mut scoped_role_ids = definition_admin_role_ids.clone();
-    scoped_role_ids.extend(upgrade_role_ids.iter().cloned());
-    scoped_role_ids.extend(read_role_ids.iter().cloned());
-    scoped_role_ids.sort();
-    scoped_role_ids.dedup();
-    let role_scopes = rbac
-        .load_data_scopes_for_subjects("role", &scoped_role_ids, executor)
-        .await?;
-    let authorization = binding_upgrade_authorization_from_facts(
-        &user_scopes,
-        definition_admin_role_ids,
-        upgrade_role_ids,
-        read_role_ids,
-        role_scopes,
-        responsible_org_id,
-    );
-    rbac.ensure_policy_snapshot_with_executor(policy_snapshot.policy_revision(), executor)
-        .await?;
-    authorization
-}
-
-/// 由已冻结的角色授权与 DataScopeFact 事实收敛绑定升级授权。
-fn binding_upgrade_authorization_from_facts(
-    user_scopes: &[DataScopeFact],
-    mut definition_admin_role_ids: Vec<String>,
-    upgrade_role_ids: Vec<String>,
-    read_role_ids: Vec<String>,
-    role_scopes: Vec<DataScopeFact>,
-    responsible_org_id: &str,
-) -> Result<ApprovalBindingUpgradeAuthorization> {
-    definition_admin_role_ids.sort();
-    definition_admin_role_ids.dedup();
-    let actor_role = roles_covering_organization(
-        user_scopes,
-        definition_admin_role_ids,
-        &role_scopes,
-        responsible_org_id,
-    )
-    .into_iter()
-    .next()
-    .ok_or_else(|| {
-        Error::Forbidden("没有该单据类型的审批定义管理权限或数据范围不覆盖当前单据组织".to_string())
-    })?;
-    let (upgrade_scope, _) = scope_from_role_facts(user_scopes, upgrade_role_ids, role_scopes.clone());
-    if !upgrade_scope.covers(responsible_org_id) {
-        return Err(Error::Forbidden(
-            "没有审批绑定升级动作权限或数据范围不覆盖当前单据组织".to_string(),
-        ));
+    let snapshot =
+        rbac.role_permission_snapshot(actor.kind(), actor.id(), &[definition_admin_permission]).await?;
+    let mut roles =
+        rbac.enabled_role_ids(&snapshot.granting_role_ids(definition_admin_permission), executor).await?;
+    roles.sort();
+    let actor_role =
+        roles.into_iter().next().ok_or_else(|| Error::Forbidden("没有该类型定义管理权".into()))?;
+    let upgrade =
+        permission_scope_with_executor(rbac, actor, "approval_instance:upgrade_binding", executor).await?;
+    let read = approval_document_read_scope_with_executor(rbac, actor, document_type, executor).await?;
+    if !upgrade.covers_object(object) || !read.covers_object(object) {
+        return Err(Error::Forbidden("审批绑定升级动作或读取范围不覆盖当前业务对象".into()));
     }
-    let (read_scope, _) = scope_from_role_facts(user_scopes, read_role_ids, role_scopes);
-    if !read_scope.covers(responsible_org_id) {
-        return Err(Error::Forbidden(
-            "不能读取当前业务单据或数据范围不覆盖当前单据组织".to_string(),
-        ));
-    }
+    rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
     Ok(ApprovalBindingUpgradeAuthorization { actor_role })
-}
-
-/// 按角色隔离计算真正覆盖目标组织的授权来源。
-fn roles_covering_organization(
-    user_scopes: &[DataScopeFact],
-    mut permitted_role_ids: Vec<String>,
-    role_scopes: &[DataScopeFact],
-    organization_id: &str,
-) -> Vec<String> {
-    permitted_role_ids.sort();
-    permitted_role_ids.dedup();
-    let scopes_by_role = scopes_by_subject(role_scopes.to_vec());
-    let Some(user) = organization_coverage(user_scopes, true) else {
-        return Vec::new();
-    };
-    permitted_role_ids
-        .into_iter()
-        .filter(|role_id| {
-            let Some(role) = scopes_by_role
-                .get(role_id)
-                .and_then(|scopes| organization_coverage(scopes, false))
-            else {
-                return false;
-            };
-            match intersect_coverage(role, user.clone()) {
-                OrganizationCoverage::All => true,
-                OrganizationCoverage::Targets(targets) => {
-                    targets.iter().any(|target| target == organization_id)
-                }
-            }
-        })
-        .collect()
-}
-
-/// 用批量读取的角色范围事实计算最终组织授权。
-///
-/// # 参数
-/// * `user_scopes` - 当前用户自身范围事实
-/// * `permitted_role_ids` - 实际授予目标权限的角色 ID
-/// * `role_scopes` - Repository 批量返回的角色范围事实
-///
-/// # 返回
-/// 返回用户/角色逐角色求交后的组织范围与真正生效的角色 ID。
-///
-/// # 错误
-/// 无；缺失角色事实按无可证明范围失败关闭。
-///
-/// # 关键业务约束
-/// 必须先对每个角色与用户范围求交，再合并结果；禁止跨角色拼接权限与范围。
-fn scope_from_role_facts(
-    user_scopes: &[DataScopeFact],
-    permitted_role_ids: Vec<String>,
-    role_scopes: Vec<DataScopeFact>,
-) -> (ApprovalManagementScope, Vec<String>) {
-    let mut scopes_by_role = scopes_by_subject(role_scopes);
-    let mut organizations = Vec::new();
-    let mut granting_role_ids = Vec::new();
-    for role_id in permitted_role_ids {
-        let role_scopes = scopes_by_role.remove(&role_id).unwrap_or_default();
-        let Some(role) = organization_coverage(&role_scopes, false) else {
-            continue;
-        };
-        let Some(user) = organization_coverage(user_scopes, true) else {
-            continue;
-        };
-        match intersect_coverage(role, user) {
-            OrganizationCoverage::All => {
-                granting_role_ids.push(role_id);
-                return (ApprovalManagementScope::Company, granting_role_ids);
-            }
-            OrganizationCoverage::Targets(targets) if !targets.is_empty() => {
-                organizations.extend(targets);
-                granting_role_ids.push(role_id);
-            }
-            OrganizationCoverage::Targets(_) => {}
-        }
-    }
-    organizations.sort();
-    organizations.dedup();
-    granting_role_ids.sort();
-    granting_role_ids.dedup();
-    (
-        ApprovalManagementScope::Organizations(organizations),
-        granting_role_ids,
-    )
-}
-
-/// 将 Repository 批量返回的 DataScopeFact 事实按主体 ID 分组。
-///
-/// # 参数
-/// * `scopes` - 同一主体类型的 DataScopeFact 事实
-///
-/// # 返回
-/// 返回主体 ID 到该主体范围事实的映射。
-///
-/// # 错误
-/// 无；本方法只对 Repository 事实分组，不执行授权判断。
-fn scopes_by_subject(scopes: Vec<DataScopeFact>) -> HashMap<String, Vec<DataScopeFact>> {
-    let mut grouped = HashMap::new();
-    for scope in scopes {
-        grouped
-            .entry(scope.subject_id.clone())
-            .or_insert_with(Vec::new)
-            .push(scope);
-    }
-    grouped
-}
-
-/// 从恢复授权锚点恢复 Repository/管理服务使用的组织范围。
-pub fn approval_recovery_authorization_scope(
-    authorization: &ApprovalRecoveryAuthorization,
-) -> ApprovalManagementScope {
-    authorization.organization_ids.clone().map_or(
-        ApprovalManagementScope::Company,
-        ApprovalManagementScope::Organizations,
-    )
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum OrganizationCoverage {
-    All,
-    Targets(Vec<String>),
-}
-
-fn organization_coverage(scopes: &[DataScopeFact], empty_is_all: bool) -> Option<OrganizationCoverage> {
-    if scopes
-        .iter()
-        .any(|scope| scope.scope_type == DataScopeTypeFact::Company)
-    {
-        return Some(OrganizationCoverage::All);
-    }
-    let mut organizations = scopes
-        .iter()
-        .filter(|scope| {
-            matches!(
-                scope.scope_type,
-                DataScopeTypeFact::Organization | DataScopeTypeFact::Team
-            )
-        })
-        .flat_map(|scope| scope.scope_targets.clone())
-        .collect::<Vec<_>>();
-    organizations.sort();
-    organizations.dedup();
-    if organizations.is_empty() {
-        return empty_is_all.then_some(OrganizationCoverage::All);
-    }
-    Some(OrganizationCoverage::Targets(organizations))
-}
-
-fn intersect_coverage(role: OrganizationCoverage, user: OrganizationCoverage) -> OrganizationCoverage {
-    match (role, user) {
-        (OrganizationCoverage::All, OrganizationCoverage::All) => OrganizationCoverage::All,
-        (OrganizationCoverage::Targets(targets), OrganizationCoverage::All)
-        | (OrganizationCoverage::All, OrganizationCoverage::Targets(targets)) => {
-            OrganizationCoverage::Targets(targets)
-        }
-        (OrganizationCoverage::Targets(role), OrganizationCoverage::Targets(user)) => {
-            OrganizationCoverage::Targets(
-                role.into_iter()
-                    .filter(|organization_id| user.contains(organization_id))
-                    .collect(),
-            )
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        approval_account_matches_actor, binding_upgrade_authorization_from_facts, intersect_coverage,
-        scope_from_role_facts, ApprovalManagementScope, DefinitionManagementVisibility, OrganizationCoverage,
-    };
-    use crate::entity::document_registry::DocumentType;
-    use crate::entity::work_item::WorkflowAccountFact;
-    use crate::ports::{DataScopeFact, DataScopeTypeFact};
     use application_core::AuditActor;
     use erp_core::AccountKind;
 
+    use super::{DefinitionManagementVisibility, approval_account_matches_actor};
+    use crate::entity::document_registry::DocumentType;
+    use crate::entity::work_item::WorkflowAccountFact;
+
     fn account(id: &str, can_login: bool) -> WorkflowAccountFact {
         WorkflowAccountFact::new(id, AccountKind::Admin, can_login).with_display_name(id)
-    }
-
-    /// 构造角色组织范围事实。
-    fn role_scope(_id: &str, role_id: &str, organization_id: &str) -> DataScopeFact {
-        DataScopeFact::new(
-            role_id,
-            DataScopeTypeFact::Organization,
-            vec![organization_id.to_string()],
-        )
-    }
-
-    #[test]
-    fn company_scope_has_no_repository_organization_filter() {
-        assert!(ApprovalManagementScope::Company.organization_ids().is_none());
-        let empty = ApprovalManagementScope::Organizations(Vec::new());
-        assert_eq!(empty.organization_ids(), Some([].as_slice()));
     }
 
     #[test]
@@ -840,165 +560,7 @@ mod tests {
         let actor = AuditActor::new("user-1".to_string(), "user-1".to_string(), AccountKind::Admin);
         assert!(approval_account_matches_actor(&account("user-1", true), &actor));
         assert!(!approval_account_matches_actor(&account("user-1", false), &actor));
-        assert!(!approval_account_matches_actor(
-            &account("guessed-user", true),
-            &actor
-        ));
-    }
-
-    #[test]
-    fn user_scope_restricts_role_company_scope() {
-        assert_eq!(
-            intersect_coverage(
-                OrganizationCoverage::All,
-                OrganizationCoverage::Targets(vec!["organization-1".to_string()]),
-            ),
-            OrganizationCoverage::Targets(vec!["organization-1".to_string()])
-        );
-    }
-
-    /// 批量角色事实仍逐角色授权：缺失角色失败关闭，未授权角色不得扩大范围。
-    #[test]
-    fn role_fact_batch_keeps_role_isolation_and_missing_semantics() {
-        let (scope, roles) = scope_from_role_facts(
-            &[],
-            vec!["role-a".to_string(), "missing-role".to_string()],
-            vec![
-                role_scope("scope-a", "role-a", "org-a"),
-                role_scope("scope-b", "role-b", "org-b"),
-            ],
-        );
-
-        assert_eq!(
-            scope,
-            ApprovalManagementScope::Organizations(vec!["org-a".to_string()])
-        );
-        assert_eq!(roles, vec!["role-a"]);
-    }
-
-    /// 空授权角色必须返回空组织范围，不得解读为公司级。
-    #[test]
-    fn empty_role_fact_batch_fails_closed() {
-        assert_eq!(
-            scope_from_role_facts(&[], Vec::new(), Vec::new()),
-            (ApprovalManagementScope::Organizations(Vec::new()), Vec::new())
-        );
-    }
-
-    /// 升级三项权限可来自不同启用角色，但动作/读取各自必须由授权角色范围覆盖。
-    #[test]
-    fn binding_upgrade_keeps_separate_permission_gates_without_same_role_requirement() {
-        let authorization = binding_upgrade_authorization_from_facts(
-            &[],
-            vec!["role-definition-z".to_string(), "role-definition-a".to_string()],
-            vec!["role-upgrade".to_string()],
-            vec!["role-read".to_string()],
-            vec![
-                role_scope("scope-definition-a", "role-definition-a", "org-1"),
-                role_scope("scope-definition-z", "role-definition-z", "org-1"),
-                role_scope("scope-upgrade", "role-upgrade", "org-1"),
-                role_scope("scope-read", "role-read", "org-1"),
-            ],
-            "org-1",
-        )
-        .expect("三个独立门禁均已证明");
-
-        assert_eq!(authorization.actor_role, "role-definition-a");
-    }
-
-    /// 非动作授权角色的范围不得与动作权跨角色拼接。
-    #[test]
-    fn binding_upgrade_action_scope_cannot_come_from_another_role() {
-        let error = binding_upgrade_authorization_from_facts(
-            &[],
-            vec!["role-definition".to_string()],
-            vec!["role-upgrade".to_string()],
-            vec!["role-read".to_string()],
-            vec![
-                role_scope("scope-definition", "role-definition", "org-1"),
-                role_scope("scope-other", "role-other", "org-1"),
-                role_scope("scope-read", "role-read", "org-1"),
-            ],
-            "org-1",
-        )
-        .unwrap_err();
-
-        assert!(matches!(
-            error,
-            crate::error::Error::Forbidden(message)
-                if message == "没有审批绑定升级动作权限或数据范围不覆盖当前单据组织"
-        ));
-    }
-
-    /// 定义管理权必须来自当前启用角色，不允许以动作或读取权替代。
-    #[test]
-    fn binding_upgrade_requires_definition_admin_role() {
-        let error = binding_upgrade_authorization_from_facts(
-            &[],
-            Vec::new(),
-            vec!["role-upgrade".to_string()],
-            vec!["role-read".to_string()],
-            vec![
-                role_scope("scope-upgrade", "role-upgrade", "org-1"),
-                role_scope("scope-read", "role-read", "org-1"),
-            ],
-            "org-1",
-        )
-        .unwrap_err();
-
-        assert!(matches!(
-            error,
-            crate::error::Error::Forbidden(message)
-                if message == "没有该单据类型的审批定义管理权限或数据范围不覆盖当前单据组织"
-        ));
-    }
-
-    /// 定义管理角色范围覆盖其它组织时必须失败关闭。
-    #[test]
-    fn binding_upgrade_definition_admin_wrong_organization_fails_closed() {
-        let error = binding_upgrade_authorization_from_facts(
-            &[],
-            vec!["role-definition".to_string()],
-            vec!["role-upgrade".to_string()],
-            vec!["role-read".to_string()],
-            vec![
-                role_scope("scope-definition", "role-definition", "org-other"),
-                role_scope("scope-upgrade", "role-upgrade", "org-1"),
-                role_scope("scope-read", "role-read", "org-1"),
-            ],
-            "org-1",
-        )
-        .unwrap_err();
-
-        assert!(matches!(
-            error,
-            crate::error::Error::Forbidden(message)
-                if message == "没有该单据类型的审批定义管理权限或数据范围不覆盖当前单据组织"
-        ));
-    }
-
-    /// 定义管理权与另一角色范围不得跨角色拼接。
-    #[test]
-    fn binding_upgrade_definition_admin_scope_cannot_come_from_another_role() {
-        let error = binding_upgrade_authorization_from_facts(
-            &[],
-            vec!["role-definition".to_string()],
-            vec!["role-upgrade".to_string()],
-            vec!["role-read".to_string()],
-            vec![
-                role_scope("scope-other", "role-other", "org-1"),
-                role_scope("scope-upgrade", "role-upgrade", "org-1"),
-                role_scope("scope-read", "role-read", "org-1"),
-            ],
-            "org-1",
-        )
-        .unwrap_err();
-
-        assert!(matches!(
-            error,
-            crate::error::Error::Forbidden(message)
-                if message == "没有该单据类型的审批定义管理权限或数据范围不覆盖当前单据组织"
-        ));
+        assert!(!approval_account_matches_actor(&account("guessed-user", true), &actor));
     }
 
     /// 类型级可见范围只认已登记权限，不把系统管理员角色当成全部类型管理权。
@@ -1013,10 +575,7 @@ mod tests {
         assert!(!visibility.can_define(DocumentType::SalesOrder));
         assert!(visibility.can_read_detail(DocumentType::SalesOrder));
         assert!(!visibility.can_read_detail(DocumentType::Invoice));
-        assert_eq!(
-            visibility.definition_admin_types(),
-            &[DocumentType::StockAdjustment]
-        );
+        assert_eq!(visibility.definition_admin_types(), &[DocumentType::StockAdjustment]);
     }
 
     /// 求交不能放大调用方范围。
@@ -1031,10 +590,7 @@ mod tests {
             vec![DocumentType::SalesOrder, DocumentType::CustomerReceipt],
         );
         let intersected = proven.intersect(&claimed);
-        assert_eq!(
-            intersected.definition_admin_types(),
-            &[DocumentType::StockAdjustment]
-        );
+        assert_eq!(intersected.definition_admin_types(), &[DocumentType::StockAdjustment]);
         assert_eq!(intersected.runtime_admin_types(), &[DocumentType::SalesOrder]);
         assert!(!intersected.can_define(DocumentType::SalesOrder));
         assert!(!intersected.can_read_detail(DocumentType::CustomerReceipt));

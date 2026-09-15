@@ -98,6 +98,8 @@ pub struct WorkItemHttpPageView {
     pub page_size: u32,
     /// 服务端形成的稳定队列上下文。
     pub queue_context_id: String,
+    /// 跨页授权及结果集版本，后续页必须回传。
+    pub scope_version: String,
 }
 
 /// 责任命令 HTTP 边界错误。
@@ -221,6 +223,7 @@ fn wrap_page(page: WorkItemPageView) -> WorkItemHttpPageView {
         page: page.page,
         page_size: page.page_size,
         queue_context_id: page.queue_context_id,
+        scope_version: page.scope_version,
     }
 }
 

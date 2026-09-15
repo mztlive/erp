@@ -2,14 +2,11 @@
 
 use std::sync::Arc;
 
-use crate::entity::approval_integration::ApprovalSubjectSnapshot;
-use crate::entity::document_registry::DocumentType;
-use crate::repository::{BpmExt, WorkItemExt};
+use application_core::AuditActor;
 use bpm::engine::CommitRequired;
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalBlockerCode, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalProcessInstance, IdempotencyKey, ParticipantId, Timestamp};
-
 use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
@@ -17,28 +14,29 @@ use persistence_core::{Executor, Transactional};
 
 use super::super::authorization::{converge_eligibility, hidden_forbidden, requires_blocked_cancel};
 use super::super::idempotency::{
-    cancel_blocked_identity, command_may_have_committed, command_recovery_delay,
-    map_receipt_first_write_error, normalize_idempotency_key, payload_conflict_error,
-    CancelBlockedIdentityParams, ReceiptBranch,
+    CancelBlockedIdentityParams, ReceiptBranch, cancel_blocked_identity, command_may_have_committed,
+    command_recovery_delay, map_receipt_first_write_error, normalize_idempotency_key, payload_conflict_error,
 };
-use super::super::runtime_query::{recovery_options_for, RuntimeRecoveryAction};
-use super::super::view::{map_command_view, ApprovalCommandView};
-use super::super::{prepare_cancel, CancelExecutionInput, ExecutionCommandInput, PreparedExecution};
-use super::notifications::{persist_cancel_notifications, CancelNotificationFacts};
+use super::super::runtime_query::{RuntimeRecoveryAction, recovery_options_for};
+use super::super::view::{ApprovalCommandView, map_command_view};
+use super::super::{CancelExecutionInput, ExecutionCommandInput, PreparedExecution, prepare_cancel};
+use super::notifications::{CancelNotificationFacts, persist_cancel_notifications};
 use super::read_auth::runtime_object_readable;
 use super::{
-    ensure_command_actor, ensure_expected_version, find_receipt_for_identity, hidden_not_found,
-    load_exact_runtime_snapshot, persisted_command_view_with_executor, ApprovalRuntimeService,
+    ApprovalRuntimeService, ensure_command_actor, ensure_expected_version, find_receipt_for_identity,
+    hidden_not_found, load_exact_runtime_snapshot, persisted_command_view_with_executor,
 };
+use crate::entity::approval_integration::ApprovalSubjectSnapshot;
+use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
 use crate::ports::{ApprovalObjectReadPort, PreparedWorkflowAudit};
-use crate::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
+use crate::repository::{BpmExt, WorkItemExt};
+use crate::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
 use crate::service::approval::{
+    ApprovalActionContext, ApprovalCancelBlockedCommand, ApprovalDomainActionPort, BlockedCancelActionParams,
     approval_actor_is_active_with_executor, approval_cancel_blocked_scope_with_executor,
     approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
-    ApprovalActionContext, ApprovalCancelBlockedCommand, ApprovalDomainActionPort, BlockedCancelActionParams,
 };
-use application_core::AuditActor;
 
 /// 已提交受阻取消的不可变终态事实；先证明原操作人，再允许比较请求摘要。
 pub(super) struct CancelBlockedTerminalFacts {
@@ -76,15 +74,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         }
         let idempotency_key = normalize_idempotency_key(&command.idempotency_key)?;
         command.idempotency_key = idempotency_key.as_str().to_string();
-        let outcome = self
-            .commit_cancel_blocked(actor, command.clone(), idempotency_key.clone())
-            .await;
+        let outcome = self.commit_cancel_blocked(actor, command.clone(), idempotency_key.clone()).await;
         match outcome {
             Ok(view) => Ok(view),
             Err(error) if command_may_have_committed(&error) => {
                 self.recover_cancel_blocked_after_competing_commit(actor, command, idempotency_key, error)
                     .await
-            }
+            },
             Err(error) => Err(error),
         }
     }
@@ -161,8 +157,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 .await;
             match recovered {
                 Ok(Some(view)) => return Ok(view),
-                Ok(None) => {}
-                Err(error) if command_may_have_committed(&error) => {}
+                Ok(None) => {},
+                Err(error) if command_may_have_committed(&error) => {},
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {
@@ -186,10 +182,7 @@ async fn replay_cancel_blocked_in_transaction(
 ) -> Result<Option<ApprovalCommandView>> {
     let instance = db
         .bpm_workflow()
-        .find_instance_by_id(
-            &ApprovalProcessInstanceId::new(&command.approval_process_instance_id),
-            session,
-        )
+        .find_instance_by_id(&ApprovalProcessInstanceId::new(&command.approval_process_instance_id), session)
         .await?
         .ok_or_else(hidden_not_found)?;
     if instance.base.id != command.approval_process_instance_id {
@@ -239,7 +232,7 @@ async fn replay_cancel_blocked_in_transaction(
         return Err(payload_conflict_error());
     }
     match identity.classify(Some(&receipt)) {
-        ReceiptBranch::SamePayload(_) => {}
+        ReceiptBranch::SamePayload(_) => {},
         ReceiptBranch::Fresh => unreachable!("receipt was loaded"),
         ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
     }
@@ -272,13 +265,8 @@ async fn load_cancel_blocked_terminal_facts(
         .filter_map(|audit| {
             let message = audit.message.as_deref()?;
             let (execution_id, reason) = message.strip_prefix("execution=")?.split_once(" reason=")?;
-            (!execution_id.is_empty()).then(|| {
-                (
-                    audit.actor_id.clone(),
-                    execution_id.to_string(),
-                    reason.to_string(),
-                )
-            })
+            (!execution_id.is_empty())
+                .then(|| (audit.actor_id.clone(), execution_id.to_string(), reason.to_string()))
         })
         .collect::<Vec<_>>();
     let [(actor_id, execution_id, reason)] = matching_audits.as_slice() else {
@@ -344,11 +332,7 @@ pub(super) fn ensure_cancel_blocked_instance_preconditions(
     instance: &ApprovalProcessInstance,
     command: &ApprovalCancelBlockedCommand,
 ) -> Result<()> {
-    ensure_expected_version(
-        "审批实例",
-        command.expected_instance_version,
-        instance.base.version,
-    )?;
+    ensure_expected_version("审批实例", command.expected_instance_version, instance.base.version)?;
     let blocked = instance.status == ApprovalProcessInstanceStatus::Blocked;
     if !recovery_options_for(blocked, instance.blocker_code).contains(&RuntimeRecoveryAction::CancelBlocked) {
         return Err(Error::ConflictError("当前 blocker 不允许该恢复动作".to_string()));
@@ -383,17 +367,13 @@ async fn cancel_blocked_in_transaction(
         return Ok(replay);
     }
     let instance_id = ApprovalProcessInstanceId::new(&command.approval_process_instance_id);
-    let instance = db
-        .bpm_workflow()
-        .find_instance_by_id(&instance_id, session)
-        .await?
-        .ok_or_else(hidden_not_found)?;
+    let instance =
+        db.bpm_workflow().find_instance_by_id(&instance_id, session).await?.ok_or_else(hidden_not_found)?;
     let (document_type, snapshot) = load_exact_runtime_snapshot(db, &instance, session, false).await?;
     ensure_cancel_blocked_authorized(db, rbac, object_read, actor, document_type, &snapshot, session).await?;
     ensure_cancel_blocked_instance_preconditions(&instance, command)?;
-    let task_policy = instance
-        .cancellation_task_policy()
-        .map_err(|error| Error::ConflictError(error.to_string()))?;
+    let task_policy =
+        instance.cancellation_task_policy().map_err(|error| Error::ConflictError(error.to_string()))?;
     if task_policy.closes_open_task() {
         return Err(Error::ConflictError("受阻取消不得处理运行中审批实例".to_string()));
     }
@@ -409,16 +389,9 @@ async fn cancel_blocked_in_transaction(
     {
         return Err(Error::ConflictError("受阻审批当前执行引用不一致".to_string()));
     }
-    ensure_expected_version(
-        "审批执行",
-        command.expected_execution_version,
-        current.base.version,
-    )?;
+    ensure_expected_version("审批执行", command.expected_execution_version, current.base.version)?;
     let execution_id = ApprovalNodeExecutionId::new(&current.base.id);
-    let open_tasks = db
-        .work_items()
-        .open_approval_tasks_for_execution(&execution_id, session)
-        .await?;
+    let open_tasks = db.work_items().open_approval_tasks_for_execution(&execution_id, session).await?;
     task_policy
         .ensure_open_task_count(open_tasks.len())
         .map_err(|error| Error::ConflictError(error.to_string()))?;
@@ -431,12 +404,8 @@ async fn cancel_blocked_in_transaction(
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))?;
     match (instance.blocker_code, current.blocker_code) {
-        (Some(instance_blocker), Some(execution_blocker)) if instance_blocker == execution_blocker => {}
-        _ => {
-            return Err(Error::ConflictError(
-                "受阻实例与当前执行 blocker 不一致".to_string(),
-            ))
-        }
+        (Some(instance_blocker), Some(execution_blocker)) if instance_blocker == execution_blocker => {},
+        _ => return Err(Error::ConflictError("受阻实例与当前执行 blocker 不一致".to_string())),
     };
     let eligibility = converge_eligibility(
         current.assignee_participant_id.as_str(),
@@ -493,9 +462,7 @@ async fn cancel_blocked_in_transaction(
         .insert_command_receipt(&writes.receipt, session)
         .await
         .map_err(map_receipt_first_write_error)?;
-    action_port
-        .execute(spec.cancel_action, &action_context, actor, session)
-        .await?;
+    action_port.execute(spec.cancel_action, &action_context, actor, session).await?;
     db.bpm_workflow()
         .persist_cancelled_runtime_after_receipt(&writes.instance, &writes.updated_executions, session)
         .await?;
@@ -515,15 +482,7 @@ async fn cancel_blocked_in_transaction(
     )
     .await?;
     audit_port.persist(&audit, session).await?;
-    Ok(map_command_view(
-        &writes.instance,
-        None,
-        None,
-        Some("DRAFT".to_string()),
-        None,
-        writes.commit,
-        false,
-    ))
+    Ok(map_command_view(&writes.instance, None, None, Some("DRAFT".to_string()), None, writes.commit, false))
 }
 
 /// 事务内重验受阻取消账号、动作权限、类型级运行管理、对象读取与 DataScopeFact。
@@ -544,14 +503,27 @@ async fn ensure_cancel_blocked_authorized(
     let visibility = definition_management_visibility_with_executor(rbac, actor, executor).await?;
     let spec = adapter_spec_of(document_type)?;
     let context = BindingRevalidationContext {
+        order_source: None,
+        customer_id: None,
+        business_org_unit_id: None,
+        scope_owner_user_id: None,
         organization_id: snapshot.payload.responsible_org_id.clone(),
         creator_id: snapshot.payload.submitted_by.clone(),
     };
-    let read_scope_covers = !read_scope.is_empty() && read_scope.covers(&snapshot.payload.responsible_org_id);
+    let read_scope_covers = !read_scope.is_empty()
+        && read_scope.covers_object(
+            &rbac
+                .approval_scope_object(snapshot.document_type, &snapshot.business_object_id, executor)
+                .await?,
+        );
     let object_readable =
         runtime_object_readable(&spec, &context, actor.id(), read_scope_covers, object_read)?;
     if action_scope.is_empty()
-        || !action_scope.covers(&snapshot.payload.responsible_org_id)
+        || !action_scope.covers_object(
+            &rbac
+                .approval_scope_object(snapshot.document_type, &snapshot.business_object_id, executor)
+                .await?,
+        )
         || !read_scope_covers
         || !visibility.runtime_admin_types().contains(&document_type)
         || !object_readable
@@ -571,10 +543,7 @@ async fn validate_cancel_task_version_with_executor(
     let Some(expected) = expected_task_version else {
         return Ok(());
     };
-    let tasks = db
-        .work_items()
-        .approval_tasks_for_execution(execution_id, executor)
-        .await?;
+    let tasks = db.work_items().approval_tasks_for_execution(execution_id, executor).await?;
     if tasks.len() != 1 {
         return Err(Error::ConflictError(
             "调用方声明了审批任务版本，但受阻执行未关联唯一历史任务".to_string(),

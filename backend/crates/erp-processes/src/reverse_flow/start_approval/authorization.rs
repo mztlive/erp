@@ -91,7 +91,11 @@ async fn authorize<P: ReplayAuthorizationPort>(
     ensure_active(port, actor, executor).await?;
     let action_scope = port.action_scope(actor, permission, executor).await?;
     let read_scope = port.read_scope(actor, document_type, executor).await?;
-    if !action_scope.covers(organization_id) || !read_scope.covers(organization_id) {
+    let object = erp_workflow::ports::WorkflowScopeObject {
+        settlement_party_id: Some(organization_id.into()),
+        ..Default::default()
+    };
+    if !action_scope.covers_object(&object) || !read_scope.covers_object(&object) {
         return Err(Error::Forbidden("无权提交该责任组织的退款或冲正单".to_string()));
     }
     Ok(())
@@ -212,7 +216,21 @@ mod tests {
         (result, port.calls.into_inner().unwrap())
     }
     fn organization(id: &str) -> ApprovalManagementScope {
-        ApprovalManagementScope::Organizations(vec![id.to_string()])
+        struct Party(String);
+        impl erp_workflow::ports::WorkflowScopePredicate for Party {
+            fn allows(&self, object: &erp_workflow::ports::WorkflowScopeObject) -> bool {
+                object.settlement_party_id.as_deref() == Some(self.0.as_str())
+            }
+        }
+        ApprovalManagementScope::Resolved(erp_workflow::ports::WorkflowDataScope::new(
+            "customer_refund".into(),
+            "submit".into(),
+            1,
+            id.into(),
+            vec!["finance".into()],
+            true,
+            std::sync::Arc::new(Party(id.into())),
+        ))
     }
     #[tokio::test]
     async fn replay_authorization_uses_one_executor_and_original_actor_action_read_order() {
@@ -225,8 +243,8 @@ mod tests {
         for index in 0..3 {
             let (result, calls) = invoke(
                 true,
-                ApprovalManagementScope::Company,
-                ApprovalManagementScope::Company,
+                ApprovalManagementScope::Empty,
+                ApprovalManagementScope::Empty,
                 Some(index),
             )
             .await;
@@ -240,8 +258,8 @@ mod tests {
     async fn disabled_actor_fails_before_action_or_object_scope() {
         let (result, calls) = invoke(
             false,
-            ApprovalManagementScope::Company,
-            ApprovalManagementScope::Company,
+            ApprovalManagementScope::Empty,
+            ApprovalManagementScope::Empty,
             None,
         )
         .await;

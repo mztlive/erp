@@ -1,19 +1,20 @@
 //! 将身份域权限与 policy 事务装配到工作流授权端口。
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_identity::access_control::{DataScope, DataScopeSubjectType, DataScopeType};
+use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_identity::{
     subject, AccessControlExt, MongoCasbinAdapter, Permission, PermissionSet, SharedRbacService,
 };
 use erp_read_models::sales_center::access::SalesAccess;
+use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::ports::{
-    DataScopeFact, DataScopeTypeFact, OrderTaskSource, RolePermissionSnapshotFact, WorkflowAccountFact,
-    WorkflowAuthorizationPort,
+    OrderTaskSource, RolePermissionSnapshotFact, WorkflowAccountFact, WorkflowAuthorizationPort,
+    WorkflowDataScope, WorkflowScopeObject, WorkflowScopeObjects,
 };
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult};
 use mongodb::{ClientSession, Database};
@@ -23,7 +24,6 @@ use super::order_access::{approval_readable, readable_sources};
 use super::{account_fact, map_service};
 use crate::adapters::purchase_access;
 use crate::errors::Error;
-use erp_workflow::entity::document_registry::DocumentType;
 
 /// Shared RBAC adapter consumed by workflow command and definition services.
 #[derive(Clone)]
@@ -53,32 +53,73 @@ impl WorkflowAuth {
     fn parse_permission(code: &str) -> WorkflowResult<Permission> {
         Permission::parse(code).map_err(|error| WorkflowError::ValidationError(error.to_string()))
     }
-
-    fn scope_type_fact(scope_type: DataScopeType) -> DataScopeTypeFact {
-        match scope_type {
-            DataScopeType::Company => DataScopeTypeFact::Company,
-            DataScopeType::Organization => DataScopeTypeFact::Organization,
-            DataScopeType::Team => DataScopeTypeFact::Team,
-            DataScopeType::SelfOwned => DataScopeTypeFact::SelfOwned,
-            DataScopeType::Collaborative => DataScopeTypeFact::Collaborative,
-        }
-    }
-
-    fn scope_facts(scopes: Vec<DataScope>) -> Vec<DataScopeFact> {
-        scopes
-            .into_iter()
-            .map(|scope| {
-                DataScopeFact::new(
-                    scope.subject_id,
-                    Self::scope_type_fact(scope.scope_type),
-                    scope.scope_targets,
-                )
-            })
-            .collect()
-    }
 }
 
 impl WorkflowAuthorizationPort for WorkflowAuth {
+    async fn resolve_workflow_scope(
+        &self,
+        actor: &AuditActor,
+        permission: &str,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<Option<WorkflowDataScope>> {
+        super::approval_scope::resolve(&self.db, &self.rbac, actor, permission, executor).await
+    }
+
+    async fn binding_order_readable(
+        &self,
+        actor: &AuditActor,
+        object: &WorkflowScopeObject,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<bool> {
+        super::order_access::binding_readable(&self.db, &self.rbac, actor, object, executor)
+            .await
+            .map_err(map_service)
+    }
+
+    async fn approval_scope_objects(
+        &self,
+        keys: &HashSet<(DocumentType, String)>,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<WorkflowScopeObjects> {
+        super::approval_objects::load(&self.db, keys, executor)
+            .await
+            .map_err(map_service)
+    }
+
+    async fn approval_scope_object(
+        &self,
+        document_type: DocumentType,
+        document_id: &str,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<WorkflowScopeObject> {
+        self.approval_scope_objects(
+            &HashSet::from([(document_type, document_id.to_string())]),
+            executor,
+        )
+        .await?
+        .remove(&(document_type, document_id.to_string()))
+        .ok_or_else(|| WorkflowError::NotFound("审批当前业务对象不存在".into()))
+    }
+
+    async fn managed_task_owners(
+        &self,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<Option<Vec<String>>> {
+        super::task_scope::managed_owners(&self.db, &self.rbac, actor, executor).await
+    }
+
+    async fn queue_scope_version(
+        &self,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<String> {
+        DataScopeService::new(self.db.clone(), self.rbac.clone())
+            .authorization_version(actor, executor)
+            .await
+            .map_err(Self::map_identity)
+    }
+
     async fn order_approval_readable(
         &self,
         actor: &AuditActor,
@@ -422,115 +463,6 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         }
     }
 
-    fn load_data_scopes(
-        &self,
-        subject_type: &str,
-        subject_id: &str,
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = WorkflowResult<Vec<DataScopeFact>>> + Send {
-        let db = self.db.clone();
-        let subject_type = subject_type.to_string();
-        let subject_id = subject_id.to_string();
-        async move {
-            let parsed = match subject_type.as_str() {
-                "user" => DataScopeSubjectType::User,
-                "role" => DataScopeSubjectType::Role,
-                _ => {
-                    return Err(WorkflowError::ValidationError(
-                        "数据范围主体类型不支持".to_string(),
-                    ))
-                }
-            };
-            Ok(Self::scope_facts(
-                db.data_scopes()
-                    .list_by_subjects(parsed, &[subject_id], executor)
-                    .await
-                    .map_err(Self::map_persistence)?,
-            ))
-        }
-    }
-
-    fn load_data_scopes_for_subjects(
-        &self,
-        subject_type: &str,
-        subject_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = WorkflowResult<Vec<DataScopeFact>>> + Send {
-        let db = self.db.clone();
-        let subject_type = subject_type.to_string();
-        let subject_ids = subject_ids.to_vec();
-        async move {
-            let parsed = match subject_type.as_str() {
-                "user" => DataScopeSubjectType::User,
-                "role" => DataScopeSubjectType::Role,
-                _ => {
-                    return Err(WorkflowError::ValidationError(
-                        "数据范围主体类型不支持".to_string(),
-                    ))
-                }
-            };
-            Ok(Self::scope_facts(
-                db.data_scopes()
-                    .list_by_subjects(parsed, &subject_ids, executor)
-                    .await
-                    .map_err(Self::map_persistence)?,
-            ))
-        }
-    }
-
-    fn organization_ids(
-        &self,
-        account_kind: AccountKind,
-        account_id: &str,
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = WorkflowResult<Vec<String>>> + Send {
-        let this = self.clone();
-        let account_id = account_id.to_string();
-        async move {
-            let pairs = this
-                .responsibility_scopes(account_kind, &account_id, executor)
-                .await?;
-            let mut ids = pairs
-                .into_iter()
-                .filter_map(|(_, organization_id)| organization_id)
-                .collect::<Vec<_>>();
-            ids.sort();
-            ids.dedup();
-            Ok(ids)
-        }
-    }
-
-    fn responsibility_scopes(
-        &self,
-        account_kind: AccountKind,
-        account_id: &str,
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = WorkflowResult<Vec<(String, Option<String>)>>> + Send {
-        let this = self.clone();
-        let account_id = account_id.to_string();
-        async move {
-            let role_ids = this
-                .role_ids_with_executor(account_kind, &account_id, executor)
-                .await?;
-            let user_scopes = this.load_data_scopes("user", &account_id, executor).await?;
-            let role_scopes = this
-                .load_data_scopes_for_subjects("role", &role_ids, executor)
-                .await?;
-            let mut grouped: HashMap<String, Vec<DataScopeFact>> = HashMap::new();
-            for scope in role_scopes {
-                grouped.entry(scope.subject_id.clone()).or_default().push(scope);
-            }
-            let mut pairs = Vec::new();
-            for role_id in role_ids {
-                let role_scopes = grouped.get(&role_id).map(Vec::as_slice).unwrap_or_default();
-                pairs.extend(responsibility_pairs(&role_id, role_scopes, &user_scopes));
-            }
-            pairs.sort();
-            pairs.dedup();
-            Ok(pairs)
-        }
-    }
-
     fn run_authorized_policy_transaction<T, E, F>(
         &self,
         policy_revision: u64,
@@ -627,52 +559,6 @@ where
 
 impl<E> std::error::Error for PolicyTxnError<E> where E: std::error::Error {}
 
-fn responsibility_pairs(
-    role_id: &str,
-    role_scopes: &[DataScopeFact],
-    user_scopes: &[DataScopeFact],
-) -> Vec<(String, Option<String>)> {
-    let role_coverage = organization_coverage(role_scopes);
-    let user_coverage = organization_coverage(user_scopes);
-    let coverage = match (role_coverage, user_coverage) {
-        (Some(role), Some(user)) => role.intersect(&user),
-        (Some(role), None) => Some(role),
-        (None, Some(user)) => Some(user),
-        (None, None) => None,
-    };
-    let Some(coverage) = coverage else {
-        return Vec::new();
-    };
-    coverage
-        .targets()
-        .into_iter()
-        .map(|organization_id| (role_id.to_string(), organization_id))
-        .collect()
-}
-
-fn organization_coverage(
-    scopes: &[DataScopeFact],
-) -> Option<erp_identity::access_control::OrganizationCoverage> {
-    use erp_identity::access_control::OrganizationCoverage;
-    if scopes
-        .iter()
-        .any(|scope| scope.scope_type == DataScopeTypeFact::Company)
-    {
-        return Some(OrganizationCoverage::All);
-    }
-    let targets = scopes
-        .iter()
-        .filter(|scope| {
-            matches!(
-                scope.scope_type,
-                DataScopeTypeFact::Organization | DataScopeTypeFact::Team
-            )
-        })
-        .flat_map(|scope| scope.scope_targets.iter().cloned())
-        .collect::<Vec<_>>();
-    OrganizationCoverage::from_targets(targets)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -747,29 +633,5 @@ mod tests {
             panic!("caller error kind changed")
         };
         assert_eq!(original, Caller { marker: 173 });
-    }
-
-    #[test]
-    fn responsibility_coverage_preserves_role_user_intersection_and_company() {
-        let scope = |kind, targets: &[&str]| {
-            DataScopeFact::new("subject", kind, targets.iter().map(|x| (*x).into()).collect())
-        };
-        let role = vec![scope(DataScopeTypeFact::Organization, &["a", "b"])];
-        let user = vec![scope(DataScopeTypeFact::Team, &["b", "c"])];
-        assert_eq!(
-            responsibility_pairs("role", &role, &user),
-            vec![("role".into(), Some("b".into()))]
-        );
-        let company = vec![scope(DataScopeTypeFact::Company, &[])];
-        assert_eq!(
-            responsibility_pairs("role", &company, &company),
-            vec![("role".into(), None)]
-        );
-        assert!(responsibility_pairs("role", &[], &[]).is_empty());
-        assert!(organization_coverage(&[
-            scope(DataScopeTypeFact::SelfOwned, &["a"]),
-            scope(DataScopeTypeFact::Collaborative, &["b"])
-        ])
-        .is_none());
     }
 }

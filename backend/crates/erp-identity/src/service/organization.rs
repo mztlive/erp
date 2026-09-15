@@ -230,7 +230,8 @@ impl OrganizationService {
                         &access,
                         &id,
                         actor.id(),
-                        Instant::now(),
+                        // 持久化按秒截断，同秒内重复调岗由实体守卫拒绝，避免纳秒精度截断后产生零长有效期。
+                        Instant::from_unix_secs(Instant::now().unix_secs()),
                     )?;
                     if persist {
                         repository.save(&mut receipt, session).await?;
