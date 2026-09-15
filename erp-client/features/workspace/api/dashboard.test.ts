@@ -411,4 +411,22 @@ describe("fetchWorkspaceDashboard managed queue", () => {
             expect.objectContaining({ scope: "mine" }),
         )
     })
+
+    it("keeps the blocked filter out of work-item stats but forwards it to the list", async () => {
+        mocks.listWorkItems.mockResolvedValue({ items: [], total: 0 })
+
+        await fetchWorkspaceDashboard(
+            { ...baseQuery, view: "managed", blocked: true },
+            manager,
+        )
+
+        // 服务端统计接口不接受 blocked（未知字段直接 400），只允许列表侧透传。
+        expect(mocks.getWorkItemStats).toHaveBeenCalledTimes(1)
+        expect(mocks.getWorkItemStats.mock.calls[0]?.[0]).not.toHaveProperty(
+            "blocked",
+        )
+        expect(mocks.listWorkItems).toHaveBeenCalledWith(
+            expect.objectContaining({ scope: "managed", blocked: true }),
+        )
+    })
 })
