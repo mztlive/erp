@@ -1,1 +1,38 @@
+# 按 Rust 2024 edition 解析代码，影响语法理解和部分格式化行为
+edition = "2024"
+
+# 按 Rust 2024 edition 控制格式化风格
+style_edition = "2024"
+
+# 单行最大宽度；超过后 rustfmt 会尽量换行
 max_width = 110
+
+# 小项布局启发式：Max 表示尽可能紧凑，能放一行就放一行
+use_small_heuristics = "Max"
+
+# 每个缩进层级使用 4 个空格
+tab_spaces = 4
+
+# 自动重排 use 导入顺序
+reorder_imports = true
+
+# 自动重排 mod 声明顺序
+reorder_modules = true
+
+# 换行符风格：Auto 表示自动选择/保留合适的换行风格
+newline_style = "Auto"
+
+# match 分支如果是块表达式，在块后加尾随逗号
+match_block_trailing_comma = true
+
+# 不合并多个 #[derive(...)]
+merge_derives = false
+
+# use 导入分组：标准库 / 外部 crate / 当前 crate 三组
+group_imports = "StdExternalCrate"
+
+# use 导入合并粒度：按模块合并
+imports_granularity = "Module"
+
+# 结构体字段初始化使用简写：Foo { x } 而不是 Foo { x: x }
+use_field_init_shorthand = true
