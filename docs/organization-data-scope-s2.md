@@ -293,6 +293,44 @@
 | 格式与差异检查 | 三个新增 example 的 `rustfmt --check` 通过；`git diff --check` 通过；回退了无关的 `backend/AGENTS.md` 改动，未混入无关文件 |
 | 真实数据库、HTTP／浏览器、并发、初始化重跑和业务验收 | 按第 5 章验证限制执行；§6.7—§6.9 三个新入口均为隔离随机库；浏览器真实账号验收未执行，不登记通过 |
 
+### 6.11 任务层隔离验收（2026-09-15）
+
+1. 本节工作区增量未提交。S2 保持“执行中”，不得将本节登记为全阶段完成或已验收；本节仅核销业务矩阵任务层条目的隔离库部分。
+2. 新增隔离入口 `backend/apps/web-api/examples/s2_task_acceptance.rs`；无生产代码变更。
+3. 执行命令为 `ERP_TEST_MONGO_URI='mongodb://127.0.0.1:27186/?replicaSet=erp_s2_acceptance' cargo run --example s2_task_acceptance`。仅允许显式隔离副本集；使用随机库并在结束后删除；未使用 `hint()`；未用内存解释器做通过依据。
+
+| 检查 | 本次结果及证据边界 |
+| --- | --- |
+| `cargo check -p web-api --example s2_task_acceptance` | 通过 |
+| `cargo clippy --example s2_task_acceptance --all-targets --all-features -- -D warnings` | 通过 |
+| `rustfmt --check backend/apps/web-api/examples/s2_task_acceptance.rs` | 通过 |
+| `s2_task_acceptance` 真实库断言 | 通过：`t1_candidate_bidirectional`（改派候选双向对照）、`t2_po_cascade_atomic`（采购级联原子性）、`t3_blocked_view_and_stats_excluded`（非审批阻塞视图与统计排除）。隔离随机库，非生产数据 |
+| `git diff --check` | 通过 |
+| 仍未验证边界 | 现有业务账号与浏览器真实账号验收按 §6.13 及浏览器计划另行核销；合成数据不等同生产规模，不得登记 S2 已完成或已验收 |
+
+### 6.12 审批管线隔离验收（2026-09-15）
+
+1. 本节工作区增量未提交。S2 保持“执行中”，不得将本节登记为全阶段完成或已验收；本节仅核销审批全管线聚合计划与审批 20000 超限的隔离库部分。
+2. 新增隔离入口 `backend/apps/web-api/examples/s2_approval_acceptance.rs`；无生产代码变更。
+3. 执行命令为 `ERP_TEST_MONGO_URI='mongodb://127.0.0.1:27186/?replicaSet=erp_s2_acceptance' cargo run --example s2_approval_acceptance`。仅允许显式隔离副本集；使用随机库并在结束后删除；未使用 `hint()`；未用内存解释器做通过依据。
+
+| 检查 | 本次结果及证据边界 |
+| --- | --- |
+| `cargo check -p web-api --example s2_approval_acceptance` | 通过 |
+| `cargo clippy --example s2_approval_acceptance --all-targets --all-features -- -D warnings` | 通过 |
+| `rustfmt --check backend/apps/web-api/examples/s2_approval_acceptance.rs` | 通过 |
+| `s2_approval_acceptance` 真实库断言 | 通过：`approval_full_pipeline_plan`（1200 条审批实例＋快照，与生产 Started 全管线同形 `$match＋$sort＋$lookup＋$facet`，首段 `$cursor` 执行计划为 `IXSCAN`（`idx_approval_process_instances_started_by`），未用 `hint`）、`approval_started_over_limit_20000_rejected`（20001 条实例＋快照＋库存调整，真实 `instance_list`（Started 视图）整体拒绝 `审批查询授权结果超过 20000 条，请增加类型或业务筛选`，零截断）。隔离随机库，非生产数据 |
+| `git diff --check` | 通过 |
+| 仍未验证边界 | 现有业务账号与浏览器真实账号验收按 §6.13 及浏览器计划另行核销；合成数据不等同生产规模，不得登记 S2 已完成或已验收 |
+
+### 6.13 新专用库业务账号验收（2026-09-15）
+
+1. 本节在新建专用库 `erp_s2_task_approval_20260915` 执行，不复用 `erp_s2_business_20260915` 与 10001 端口。S2 保持“执行中”；浏览器真实账号验收按用户选择暂缓，只做后端。
+2. 建库方式：`mongodump --db=erp_s2_business_20260915` 后 `mongorestore --nsFrom --nsTo` 到新库名（19494 个文档：11 个岗位账号、仓库、商品、库存余额 `s2-stock-zero` 及已发布审批定义，索引随恢复重建）；服务配置为 `/tmp/erp-s2-task-approval.toml`（端口 10002，隔离副本集 URI），本地构建产物启动，验收后已停止。
+3. 执行 `API_BASE=http://127.0.0.1:10002 S2_BALANCE_ID=s2-stock-zero node scripts/verify-org-data-scope-s2.mjs`，三行通过：`seeded_accounts_stock_binding_submit_manager_no_proxy_and_no_approval_transfer`、`seeded_accounts_current_member_scope_no_automatic_reassignment`、`seeded_accounts_dimension_isolation_revoked_approval_blocked_and_restored`，结果 JSON 为 `POSTED`。只读复核：11 个账号、2 个仓库、1 条余额，审批与任务生产索引齐备（含 `idx_approval_process_instances_started_by`）。
+4. 环境插曲：首次运行中途外接构建盘卸载，服务进程异常退出（`EXIT:138`）；改用 `CARGO_TARGET_DIR=/tmp/erp-target` 本地重新构建后完整重跑通过。插曲残留单据保留在新库专用数据中（新部门随机命名，无冲突），不影响断言。
+5. 生产规模：代表性计划、20000 超限与事务耗时以前述隔离证据（§6.9、§6.11、§6.12）为准，不在业务库重放，避免污染可核销单据；浏览器验收暂缓未执行。
+
 ## 8. 工作流与工作台统一迁移及验收执行规则
 
 ### 8.1 授权与查询规则
@@ -314,7 +352,7 @@ ERP_TEST_MONGO_URI='<验收专用副本集 URI>' cargo run -p web-api --example 
 ERP_TEST_MONGO_URI='<验收专用副本集 URI>' cargo run -p web-api --example s2_http_acceptance
 ```
 
-2. 两个入口必须使用随机数据库，结束后删除测试库。HTTP 入口必须启动真实环回监听、通过密码登录取得令牌；不得以直接构造登录态替代登录验收。新增的 `s2_a36_scope_change`、`s2_business_acceptance`、`s2_scale_evidence` 三个入口同样遵守随机库用后删除（§6.7—§6.9）。
+2. 两个入口必须使用随机数据库，结束后删除测试库。HTTP 入口必须启动真实环回监听、通过密码登录取得令牌；不得以直接构造登录态替代登录验收。新增的 `s2_a36_scope_change`、`s2_business_acceptance`、`s2_scale_evidence`、`s2_task_acceptance`、`s2_approval_acceptance` 五个入口同样遵守随机库用后删除（§6.7—§6.9、§6.11—§6.12）。
 3. `s2_database_acceptance` 必须验证并发初始化及重跑唯一性、组织同版本并发、审计原子性、幂等重放、真实范围解析和撤销留痕；索引计划必须使用实际解析查询条件，禁止用 `hint` 强迫索引。
 4. `s2_http_acceptance` 必须验证错误密码和未登录拒绝、缺范围账号失败关闭、真实两条任务的稳定分页、缺失／过期版本锚点、组织变更后的刷新，以及不合格接收人改派失败且责任未写入。
 
@@ -325,14 +363,14 @@ ERP_TEST_MONGO_URI='<验收专用副本集 URI>' cargo run -p web-api --example 
 | 静态架构 | 第 9 章总门禁扫描 2014 个活动源码文件，零阻断；BPM、领域边界通过（§6.10） | 不替代行为与业务验收 |
 | MongoDB 运行 | 隔离副本集随机库；并发初始化及重跑唯一性、组织同版本并发、审计原子性、幂等重放、真实范围解析和撤销留痕通过 | 隔离随机库，非生产数据 |
 | A36 解析层 | 四类资源读写动作独立解析、调岗后版本变化、历史只补读取、四类撤销失败关闭通过（§6.7） | 解析层真实库断言；HTTP 409 映射由各域单元测试与 `s2_http_acceptance` 覆盖 |
-| 业务矩阵授权核心 | 管理收窄可追溯、查询不写、维度隔离求交、失读失败关闭、上限收窄、成员结束变空、跨页版本刷新通过（§6.8） | 任务候选/级联/阻塞视图等任务层条目仍开放 |
-| 索引执行计划 | 5000 条合成范围规则主体查询 `IXSCAN`；2000 条任务管理队列生产条件真实扫描 `IXSCAN`；1000 条审批首段匹配 `IXSCAN`（§6.9） | 审批全管线聚合计划仍开放；合成数据不等同生产规模 |
-| 20000 超限 | 任务管理（20001 成员）与库存仓库（160×128 规则并集）整体拒绝通过（§6.9） | 审批 20000 超限仍开放 |
+| 业务矩阵授权核心 | 管理收窄可追溯、查询不写、维度隔离求交、失读失败关闭、上限收窄、成员结束变空、跨页版本刷新通过（§6.8）；任务层改派候选双向对照、采购级联原子性、阻塞视图与统计排除通过（§6.11） | 均为隔离随机库；业务账号部分见“现有业务验收”行 |
+| 索引执行计划 | 5000 条合成范围规则主体查询 `IXSCAN`；2000 条任务管理队列生产条件真实扫描 `IXSCAN`；1000 条审批首段匹配 `IXSCAN`（§6.9）；1200 条审批 Started 全管线 `$match＋$sort＋$lookup＋$facet` 首段 `IXSCAN`（§6.12） | 合成数据不等同生产规模 |
+| 20000 超限 | 任务管理（20001 成员）与库存仓库（160×128 规则并集）整体拒绝通过（§6.9）；审批 Started 视图 20001 候选整体拒绝通过（§6.12） | 均为隔离随机库整体拒绝，非截断 |
 | 事务耗时 | 组织调岗事务 `elapsed_ms=1748`（macos/aarch64/mongod 7.0.39），仅记录不判定（§6.9） | 不作达标判定 |
 | 真实 HTTP／账号 | 隔离夹具两个账号真实密码登录；绑定来源与订单独立读取、两条任务稳定分页、缺失／过期锚点、组织变更刷新、不合格改派无写入通过 | 测试账号与任务夹具，不等同现有业务账号或完整审批流程 |
-| 现有业务验收 | 专用验收服务三行通过：绑定提交与经理不代办、调岗不自动改派、维度隔离受阻恢复后 `POSTED`；恢复版本取自接口，新任务新 ID | 专用库 `erp_s2_business_20260915` 可撤销单据；任务层条目、审批全管线计划与超限、浏览器验收仍未执行，S2 保持“执行中” |
+| 现有业务验收 | 专用验收服务三行通过：绑定提交与经理不代办、调岗不自动改派、维度隔离受阻恢复后 `POSTED`；恢复版本取自接口，新任务新 ID。旧库 `erp_s2_business_20260915`（10001 端口）与新库 `erp_s2_task_approval_20260915`（10002 端口，备份恢复新建）各通过一次（§6.5、§6.13） | 专用库可撤销单据；浏览器验收暂缓未执行，S2 保持“执行中” |
 
 1. 业务验收使用 `e2e/helpers/accounts.ts` 与 `scripts/dev-seed-lib.mjs` 的岗位账号。已有开发种子可复制到验收专用副本集；不得清空用户开发数据库。使用可撤销测试单据核销 A21—A25：管理监督不代办、接收候选范围、原事务改派与采购级联、失效负责人阻断、审批禁止转交与恢复重验。
-2. 必须覆盖订单结算主体与内部部门不同、仓库 ID 与部门 ID 相同、审批人失去原订单读取范围、个人上限收窄、成员关系自然到期及跨页撤权；不得用名称相同或 ID 相同推导跨维度授权。其中审批失读、个人上限收窄、成员结束变空、跨页版本刷新已在隔离库核销授权核心（§6.8），结算主体≠部门、同值异维已核销公共判定语义（§6.8 `b3_b4`），审批全管线与任务层条目仍开放。
-3. 上线前必须使用代表性任务／审批数据检查查询计划、20000 条超限错误及事务耗时，并执行实际组织移动、成员及管理授权的并发场景。规则集合的单项计划不核销所有业务查询计划。其中任务队列计划、审批首段计划、任务与库存超限、调岗事务耗时已在隔离库记录（§6.9），审批全管线计划与审批超限仍开放。
-4. 当前仍未完成的业务矩阵任务层条目（候选双向对照、采购级联、阻塞视图与统计）、审批全管线计划与超限、浏览器真实账号验收不得登记通过；满足全部适用退出要求后方可核销 S2。
+2. 必须覆盖订单结算主体与内部部门不同、仓库 ID 与部门 ID 相同、审批人失去原订单读取范围、个人上限收窄、成员关系自然到期及跨页撤权；不得用名称相同或 ID 相同推导跨维度授权。其中审批失读、个人上限收窄、成员结束变空、跨页版本刷新已在隔离库核销授权核心（§6.8），结算主体≠部门、同值异维已核销公共判定语义（§6.8 `b3_b4`），任务层条目（§6.11）与审批全管线及超限（§6.12）已核销隔离库部分。
+3. 上线前必须使用代表性任务／审批数据检查查询计划、20000 条超限错误及事务耗时，并执行实际组织移动、成员及管理授权的并发场景。规则集合的单项计划不核销所有业务查询计划。其中任务队列计划、审批首段及全管线计划、任务／库存／审批超限、调岗事务耗时已在隔离库记录（§6.9、§6.11、§6.12），不在业务库重放。
+4. 浏览器真实账号验收按用户选择暂缓未执行；满足全部适用退出要求后方可核销 S2，当前状态保持“执行中”。
