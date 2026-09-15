@@ -23,9 +23,10 @@ export const purchaseReturnOrderKeys = {
 export function usePurchaseReturnOrdersQuery(purchaseOrderId: string) {
     const client = useQueryClient()
     const firstKey = purchaseReturnOrderKeys.list(purchaseOrderId)
-    const baseline = client.getQueryData<
-        Awaited<ReturnType<typeof fetchPurchaseReturnOrders>>
-    >(firstKey)
+    const baseline =
+        client.getQueryData<
+            Awaited<ReturnType<typeof fetchPurchaseReturnOrders>>
+        >(firstKey)
     const scopeVersion = baseline?.scopeVersion
     return useQuery({
         queryKey: purchaseReturnOrderKeys.list(purchaseOrderId, scopeVersion),

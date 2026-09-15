@@ -397,7 +397,11 @@ export const PublicSelectionClient = ({ token }: { token: string }) => {
             const choices = selectedIds.map((itemId) => ({
                 item_id: itemId,
                 ...(byQuantity
-                    ? { quantity: toWireQuantity(local[itemId] || DEFAULT_QUANTITY) }
+                    ? {
+                          quantity: toWireQuantity(
+                              local[itemId] || DEFAULT_QUANTITY,
+                          ),
+                      }
                     : {}),
             }))
             try {

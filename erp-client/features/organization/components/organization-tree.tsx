@@ -66,10 +66,7 @@ export function OrganizationTree({
     onSelect: (id: string) => void
 }) {
     return (
-        <nav
-            aria-label="组织树"
-            className="min-w-0 overflow-x-hidden"
-        >
+        <nav aria-label="组织树" className="min-w-0 overflow-x-hidden">
             <TreeItems
                 nodes={nodes}
                 depth={0}

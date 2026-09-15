@@ -333,7 +333,9 @@ const SelectionReviewCenter = ({
     const mall = page.submit_mode === "MALL_REDEEM"
     const [searchQuery, setSearchQuery] = React.useState("")
     const [activeCategory, setActiveCategory] = React.useState<string>("ALL")
-    const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({})
+    const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>(
+        {},
+    )
     const [removingId, setRemovingId] = React.useState<string | null>(null)
     const [optimisticRemoved, setOptimisticRemoved] = React.useState<
         Set<string>
@@ -661,7 +663,9 @@ const SelectionReviewCenter = ({
                                                                 {img ? (
                                                                     // eslint-disable-next-line @next/next/no-img-element
                                                                     <img
-                                                                        src={img}
+                                                                        src={
+                                                                            img
+                                                                        }
                                                                         alt=""
                                                                         className="h-full w-full object-cover"
                                                                         referrerPolicy="no-referrer"
@@ -678,7 +682,8 @@ const SelectionReviewCenter = ({
                                                                 <p className="text-xs font-semibold text-slate-900 leading-snug">
                                                                     {item.name}
                                                                 </p>
-                                                                {item.specification
+                                                                {item
+                                                                    .specification
                                                                     .length >
                                                                     0 && (
                                                                     <div className="mt-0.5 flex flex-wrap gap-1">
@@ -829,9 +834,7 @@ const SelectionReviewCenter = ({
                     <div className="flex items-center justify-between gap-3">
                         <div>
                             <p className="text-[11px] text-slate-500">
-                                {mall
-                                    ? "已选款式总计"
-                                    : "方案总计金额（含税）"}
+                                {mall ? "已选款式总计" : "方案总计金额（含税）"}
                             </p>
                             {page.total_amount != null && !mall ? (
                                 <div className="flex items-baseline text-blue-600 font-bold">
@@ -920,7 +923,9 @@ const SelectionForm = ({
     const rightContainerRef = React.useRef<HTMLDivElement>(null)
     const leftAsideRef = React.useRef<HTMLElement>(null)
     const sectionRefs = React.useRef<Record<string, HTMLDivElement | null>>({})
-    const leftTabRefs = React.useRef<Record<string, HTMLButtonElement | null>>({})
+    const leftTabRefs = React.useRef<Record<string, HTMLButtonElement | null>>(
+        {},
+    )
     const isManualScrolling = React.useRef(false)
     const manualScrollTimer = React.useRef<ReturnType<
         typeof setTimeout
@@ -1330,8 +1335,10 @@ const SelectionForm = ({
                                         disabled={
                                             locked ||
                                             conflict ||
-                                            Number.parseInt(pick.quantity, 10) <=
-                                                1
+                                            Number.parseInt(
+                                                pick.quantity,
+                                                10,
+                                            ) <= 1
                                         }
                                         onClick={(e) => {
                                             e.preventDefault()
@@ -1649,7 +1656,7 @@ const SelectionForm = ({
                                     <div className="flex items-center justify-between pb-1 border-b border-slate-100">
                                         <span className="text-xs font-bold text-slate-800">
                                             搜索结果 &quot;{searchQuery}&quot; (
-                                             {searchResults.length})
+                                            {searchResults.length})
                                         </span>
                                     </div>
                                     {searchResults.map(renderCard)}
@@ -1691,7 +1698,6 @@ const SelectionForm = ({
                                 ))
                             )}
                         </fieldset>
-
                     </section>
                 </div>
 
@@ -1806,7 +1812,10 @@ const SelectionForm = ({
 
                             {/* 大图预览 */}
                             <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-slate-50">
-                                {publicImageUrl(token, detailItem.cover_path) ? (
+                                {publicImageUrl(
+                                    token,
+                                    detailItem.cover_path,
+                                ) ? (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img
                                         src={publicImageUrl(
@@ -1841,7 +1850,7 @@ const SelectionForm = ({
                                 </div>
                                 {detailItem.tier_name && (
                                     <Badge className="bg-slate-900 text-white">
-                                         {detailItem.tier_name}
+                                        {detailItem.tier_name}
                                     </Badge>
                                 )}
                             </div>
@@ -1888,7 +1897,7 @@ const SelectionForm = ({
                                                     {m.specification
                                                         .map((s) => s.value)
                                                         .join("/")}{" "}
-                                                · 1{m.unit}
+                                                    · 1{m.unit}
                                                 </span>
                                             </div>
                                         ))}

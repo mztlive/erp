@@ -6,11 +6,7 @@ import type {
     OrgUnitKind,
 } from "@/features/organization/types"
 
-const KINDS: Array<OrganizationUrlState["kind"]> = [
-    "all",
-    "department",
-    "team",
-]
+const KINDS: Array<OrganizationUrlState["kind"]> = ["all", "department", "team"]
 const STATUSES: Array<OrganizationUrlState["status"]> = [
     "all",
     "enabled",
@@ -83,7 +79,11 @@ export function mergeOrganizationSearchParams(
     searchParams: { toString(): string },
     state: OrganizationUrlState,
 ): string {
-    return mergeManaged(searchParams, ORGANIZATION_KEYS, organizationCodec.buildParams(state))
+    return mergeManaged(
+        searchParams,
+        ORGANIZATION_KEYS,
+        organizationCodec.buildParams(state),
+    )
 }
 
 export function parseDataScopeSearchParams(
@@ -100,7 +100,11 @@ export function mergeDataScopeSearchParams(
     searchParams: { toString(): string },
     state: DataScopeUrlState,
 ): string {
-    return mergeManaged(searchParams, DATA_SCOPE_KEYS, dataScopeCodec.buildParams(state))
+    return mergeManaged(
+        searchParams,
+        DATA_SCOPE_KEYS,
+        dataScopeCodec.buildParams(state),
+    )
 }
 
 function mergeManaged(
@@ -120,6 +124,8 @@ export function isOrgKind(value: string): value is OrgUnitKind {
 }
 
 export function isDataScopeType(value: string): value is DataScopeType {
-    return SCOPE_TYPES.includes(value as DataScopeUrlState["scopeType"]) &&
+    return (
+        SCOPE_TYPES.includes(value as DataScopeUrlState["scopeType"]) &&
         value !== "all"
+    )
 }

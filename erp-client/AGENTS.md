@@ -260,13 +260,13 @@ export function CreateOrderForm() {
 
 ### 何时用、何时不用
 
-| 场景 | 用什么 |
-| --- | --- |
-| 列表里确认「这是谁、现在能不能用、关键数字是多少」，再决定要不要进对象中心 | 本节的轻预览 Sheet |
-| 正式单据纸质核对 | `PaperDocument` 浮层（销售单列表已如此，不要再挂 Sheet） |
-| 对照行项目、双栏或读完整主记录 | `QuickPreviewSheet size="detail"`（768px） |
-| 编辑、校验、提交 | 对象中心或 Dialog + TanStack Form |
-| 破坏性确认 | `FormalActionConfirmDialog` |
+| 场景                                                                       | 用什么                                                   |
+| -------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 列表里确认「这是谁、现在能不能用、关键数字是多少」，再决定要不要进对象中心 | 本节的轻预览 Sheet                                       |
+| 正式单据纸质核对                                                           | `PaperDocument` 浮层（销售单列表已如此，不要再挂 Sheet） |
+| 对照行项目、双栏或读完整主记录                                             | `QuickPreviewSheet size="detail"`（768px）               |
+| 编辑、校验、提交                                                           | 对象中心或 Dialog + TanStack Form                        |
+| 破坏性确认                                                                 | `FormalActionConfirmDialog`                              |
 
 轻预览成立的前提：列表行投影已经够回答上面三个问题。不要为了打开 Sheet 再打一枪详情接口，
 除非正文里确有列表没有的块（历史版本等），那时也只把该块做成可失败的局部状态，不要让整栏转圈。
@@ -287,7 +287,8 @@ export function CreateOrderForm() {
 业务调用方只声明所需宽度，例如：
 
 ```tsx
-contentClassName="data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460px]"
+contentClassName =
+    "data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460px]"
 ```
 
 原则（改 class 时先改原则，再改数字）：
@@ -302,12 +303,12 @@ contentClassName="data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460
 
 `QuickPreviewSheet` 的渲染顺序是 identity → title → description → summary。商品池把它用成「先编号、后品名」的对象头，不要把四个槽塞成同一段话。
 
-| 插槽 | 放什么 | 不放什么 |
-| --- | --- | --- |
-| `identity` | 稳定编号，带人类可读前缀，用 `.num`。例：`SKU 编号：A-001` | 名称、状态、价格、版本散文 |
-| `title` | 用户认得的对象名（商品名、类目名） | 「商品预览」「详情」这类页面功能名；把名字藏进正文再在标题写「预览」 |
-| `description` | **一条**次身份，例如规格。占位文案（「无规格」）则整个省略 | 多句说明、操作指引、「点击下方按钮…」 |
-| `summary` | **一个**状态 Badge + **一句**弱化限定（商品类型、`v3`、角色数） | Badge 堆、金额、按钮、筛选项 |
+| 插槽          | 放什么                                                          | 不放什么                                                             |
+| ------------- | --------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `identity`    | 稳定编号，带人类可读前缀，用 `.num`。例：`SKU 编号：A-001`      | 名称、状态、价格、版本散文                                           |
+| `title`       | 用户认得的对象名（商品名、类目名）                              | 「商品预览」「详情」这类页面功能名；把名字藏进正文再在标题写「预览」 |
+| `description` | **一条**次身份，例如规格。占位文案（「无规格」）则整个省略      | 多句说明、操作指引、「点击下方按钮…」                                |
+| `summary`     | **一个**状态 Badge + **一句**弱化限定（商品类型、`v3`、角色数） | Badge 堆、金额、按钮、筛选项                                         |
 
 状态用 `BusinessStatusBadge context="preview"` 或语义 `Badge`（如 `success` = 当前可售）。限定语用 `text-xs text-muted-foreground`，不要再做成第二个 Badge。
 

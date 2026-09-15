@@ -111,7 +111,9 @@ export function CustomerCenterDirectoryTable({
             layout="flush"
             rowLabel={(row) => row.shortName || row.legalName}
             defaultColumnVisibility={
-                isMobile ? { business: false, status: false } : { business: false }
+                isMobile
+                    ? { business: false, status: false }
+                    : { business: false }
             }
             defaultColumnPinning={{
                 left: ["customer"],

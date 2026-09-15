@@ -38,7 +38,8 @@ it("合同查询传递已生效条件和真实页码，并保留服务端总数�
         scope_version: "v1",
         policy_version: 3,
         organization_version: 4,
-        scope_summary: "合同当前客户主负责人、协作关系、负责人所属组织及合法单据参与",
+        scope_summary:
+            "合同当前客户主负责人、协作关系、负责人所属组织及合法单据参与",
         as_of: "2026-09-14T08:00:00Z",
         ownership_basis: "current_customer_owner",
     } as never)
@@ -96,7 +97,8 @@ it("空关键词清除后仍用真实第一页，默认采用将到期优先排�
         scope_version: "v2",
         policy_version: 1,
         organization_version: 1,
-        scope_summary: "合同当前客户主负责人、协作关系、负责人所属组织及合法单据参与",
+        scope_summary:
+            "合同当前客户主负责人、协作关系、负责人所属组织及合法单据参与",
         as_of: "2026-09-14T08:00:00Z",
         ownership_basis: "current_customer_owner",
     } as never)

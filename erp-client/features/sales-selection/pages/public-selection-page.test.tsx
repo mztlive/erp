@@ -197,9 +197,7 @@ it("在核对中心移除单项不返回上一页，自动保存并可直接提�
     expect(removeButtons.length).toBeGreaterThan(0)
     fireEvent.click(removeButtons[0])
     await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2))
-    expect(
-        screen.getByRole("button", { name: "确认并提交选品" }),
-    ).toBeTruthy()
+    expect(screen.getByRole("button", { name: "确认并提交选品" })).toBeTruthy()
     fireEvent.click(screen.getByRole("button", { name: "确认并提交选品" }))
     await waitFor(() => expect(mocks.submit).toHaveBeenCalledTimes(1))
     expect(mocks.save.mock.calls[1][1].choices).toEqual([
