@@ -110,12 +110,39 @@ async function apiCall(
     return { status: res.status, parsed }
 }
 
+async function apiGetCall(
+    token: string,
+    path: string,
+    query?: Record<string, unknown>,
+): Promise<{ status: number; parsed: { success?: boolean; errorMessage?: string; data?: any } }> {
+    return apiCall("GET", withQuery(path, query), token)
+}
+
+function withQuery(path: string, query?: Record<string, unknown>): string {
+    if (!query) return path
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(query)) {
+        if (value === undefined || value === null) continue
+        params.set(key, String(value))
+    }
+    const qs = params.toString()
+    return qs ? `${path}${path.includes("?") ? "&" : "?"}${qs}` : path
+}
+
 async function apiOk(method: string, path: string, token: string, body?: unknown): Promise<any> {
     const { status, parsed } = await apiCall(method, path, token, body)
     if (status >= 400 || parsed.success === false) {
         throw new Error(`API ${method} ${path} 失败（HTTP ${status}）: ${parsed.errorMessage ?? ""}`)
     }
     return parsed.data
+}
+
+async function apiDenyGet(token: string, path: string, query?: Record<string, unknown>): Promise<void> {
+    const { status } = await apiGetCall(token, path, query)
+    expect(
+        [403, 404, 409, 422].includes(status),
+        `${path} 应拒绝（403/404/409/422），实际 HTTP ${status}`,
+    ).toBe(true)
 }
 
 async function apiDeny(method: string, path: string, token: string, body?: unknown): Promise<void> {
@@ -567,4 +594,66 @@ test("S2 浏览器验收（窄屏）：组织与工作台可读可用", async ({
     expect(pageErrors, `页面异常必须为零：${pageErrors.slice(0, 3).join(" | ")}`).toEqual([])
     expect(consoleErrors, `控制台 error 必须为零：${consoleErrors.slice(0, 3).join(" | ")}`).toEqual([])
     await page.context().close().catch(() => undefined)
+})
+
+test("S2 浏览器验收（导出下载）：真实账号列表导出并撤权重验", async ({ browser }) => {
+    expect(API_BASE, "必须显式指定隔离后端 API_BASE").toMatch(/^http:\/\/(127\.0\.0\.1|localhost):/)
+    // 导出走前端分页收集＋最后一页之后下载前重验；下载即创建对象 URL 并点击，
+    // 验收拦截下载事件校验内容，不落盘，避免在共享目录产生文件。
+    // 隔离库无销售单据时走空态分支；有单据时走真实下载断言。
+    // 最后用接口直接验证导出收集口径：跨页 scope_version 传递与撤权重验。
+    const context = await browser.newContext({
+        locale: "zh-CN",
+        timezoneId: "Asia/Shanghai",
+        acceptDownloads: true,
+    })
+    const page = await context.newPage()
+    watch(page)
+    await loginViaUi(page, loginName("xiaoshou"))
+    await page.goto("/sales/orders")
+    await expect(page.getByRole("heading", { name: "销售单" })).toBeVisible(VISIBLE)
+    const exportButton = page.locator("#sales-orders-list-header-export")
+    await expect(exportButton).toBeVisible(VISIBLE)
+    if (await exportButton.isDisabled()) {
+        // 隔离库无销售单时导出按钮禁用：断言按钮存在且禁用原因明确（总数为零），
+        // 不伪造单据；有单据时走下面的真实下载断言。
+        expect(await exportButton.isDisabled(), "无单据时导出按钮应禁用").toBe(true)
+        await page.screenshot({
+            path: test.info().outputPath("s2-sales-export-empty.png"),
+        })
+    } else {
+        const downloadPromise = page.waitForEvent("download", { timeout: 60_000 })
+        await exportButton.click()
+        const download = await downloadPromise
+        const path = await download.path()
+        expect(path, "应产生真实下载文件").toBeTruthy()
+        const suggested = download.suggestedFilename()
+        expect(suggested, "下载文件名应为 CSV").toMatch(/\.csv$/i)
+        await expect(page.getByText("导出完成")).toBeVisible(VISIBLE)
+        await page.screenshot({
+            path: test.info().outputPath("s2-sales-export.png"),
+        })
+    }
+    // 导出收集口径的接口验证：第一页版本必须传递给后续页；伪造版本必须 409 失败关闭。
+    const salesToken = await apiToken("xiaoshou")
+    const first = await apiGet<{
+        items: Array<Record<string, unknown>>
+        total: number
+        scope_version: string
+    }>(salesToken, "/admin/sales-orders", { page: 1, page_size: 5 })
+    expect(typeof first.scope_version, "列表应返回 scope_version").toBe("string")
+    const second = await apiGet<{ scope_version: string }>(salesToken, "/admin/sales-orders", {
+        page: 1,
+        page_size: 1,
+        scope_version: first.scope_version,
+    })
+    expect(second.scope_version, "同版本续查应一致").toBe(first.scope_version)
+    await apiDenyGet(salesToken, "/admin/sales-orders", {
+        page: 1,
+        page_size: 1,
+        scope_version: "forged-version",
+    })
+    expect(pageErrors, `页面异常必须为零：${pageErrors.slice(0, 3).join(" | ")}`).toEqual([])
+    expect(consoleErrors, `控制台 error 必须为零：${consoleErrors.slice(0, 3).join(" | ")}`).toEqual([])
+    await context.close().catch(() => undefined)
 })

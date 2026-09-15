@@ -22,10 +22,9 @@ pub(super) fn login_rate_keys(realm: &str, peer_ip: IpAddr, account: &str) -> (S
 
 /// 按领域规则规范化账号，并为无效输入提供有界的限流标识。
 fn normalized_rate_account(account: &str) -> String {
-    let account = LoginAccount::new(account)
+    LoginAccount::new(account)
         .map(LoginAccount::into_string)
-        .unwrap_or_else(|_| account.trim().chars().take(MAX_LOGIN_RATE_KEY_CHARS).collect());
-    account
+        .unwrap_or_else(|_| account.trim().chars().take(MAX_LOGIN_RATE_KEY_CHARS).collect())
 }
 
 #[cfg(test)]
