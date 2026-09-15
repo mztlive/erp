@@ -11,7 +11,7 @@
 //!   （回款单号/规范化发票号码）与状态迁移构成去重机制，重复提交只产生一条
 //!   正式事实。回款过账只能作为审批最终通过动作。
 //!
-//! 跨域只经 `DatabaseExt` 调对方域 Repository：D13 `sales_orders()` 校验来源
+//! 跨域只经各领域 `*Ext` 扩展 trait 调对方域 Repository：D13 `sales_orders()` 校验来源
 //! 销售单存在；D18 拥有 `invoice` 实体与仓储，D19 经 `invoices()` 复用。
 
 use mongodb::Database;

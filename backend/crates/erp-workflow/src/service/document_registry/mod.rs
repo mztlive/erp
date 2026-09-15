@@ -6,7 +6,7 @@
 //!   （仓库尚无 `run_audited_transaction` 模板，与 source_registry 同款写法）；
 //! - 查询一律 `&mut NoTransaction`。
 //!
-//! 跨域：只经 `DatabaseExt` 调对方域 Repository（P3-service-api §2）。本域依赖
+//! 跨域：只经各领域 `*Ext` 扩展 trait 调对方域 Repository（P3-service-api §2）。本域依赖
 //! D01：登记外部来源单据时，经 `db.external_identity_maps()` 校验来源身份映射
 //! 已登记（读取对方仓储，不经过对方 Service）。
 

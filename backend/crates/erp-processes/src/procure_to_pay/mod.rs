@@ -9,7 +9,7 @@
 //! - 采购变更生效（§8.1.3 采购部分）在单事务内：基准版本校验 → 新版本/版本行/
 //!   分配 → 应付与成本差额 → 当前版本指针推进，不修改已发生事实。
 //!
-//! 跨域协作（只经 DatabaseExt 调对方 Repository，禁止 Service 依赖 Service）：
+//! 跨域协作（只经各领域 `*Ext` 扩展 trait 调对方 Repository，禁止 Service 依赖 Service）：
 //! - D09 `supplier`：供应商角色与商务结算版本（提交快照）；
 //! - D14 `sales_review`：采购二次确认及其分行（创建依据）；
 //! - D13 `sales_order`：销售提交行快照（商品名/规格/单位/SKU）与销售版本行

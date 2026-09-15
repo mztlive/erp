@@ -14,7 +14,7 @@
 //! 同事务创建 W26 正式 `work_item` 与审计，失败降级为可观测错误并记录
 //! `account` 上下文。
 //!
-//! 跨域协作只经 DatabaseExt 调对方域 Repository（P3 §2）：D25 `supplier_api`
+//! 跨域协作只经各领域 `*Ext` 扩展 trait 调对方域 Repository（P3 §2）：D25 `supplier_api`
 //! （连接与能力）、D24 `supplier_offering`（供给修订）、
 //! D34 `integration_ops`（inbox_message / integration_error_task）。
 //!

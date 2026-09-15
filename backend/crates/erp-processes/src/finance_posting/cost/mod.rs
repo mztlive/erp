@@ -5,7 +5,7 @@
 //!   `persistence_core::Transactional::with_transaction`；
 //! - 列表查询单集合 → `&mut NoTransaction`。
 //!
-//! 跨域只经 `DatabaseExt` 调对方域 Repository：D13 `sales_order()`
+//! 跨域只经各领域 `*Ext` 扩展 trait 调对方域 Repository：D13 `sales_order()`
 //! 按 ID 集合批量校验成本归属销售单存在（D20 依赖域 D15/D16/D13，本期 P3
 //! 只落地 D13 校验与查询编排，D15/D16 的采购/履约来源由对方域在 P3 经
 //! `CostExt` 直接写入）。
