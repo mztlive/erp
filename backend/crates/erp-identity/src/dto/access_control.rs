@@ -329,6 +329,10 @@ pub struct DataScopeListParams {
     pub scope_type: Option<DataScopeType>,
     /// 范围主体 ID 筛选（与 `subject_type` 成对使用，走按主体查询）。
     pub subject_id: Option<String>,
+    /// 资源筛选（已注册标识，禁止通配与显示名）。
+    pub resource: Option<String>,
+    /// 动作筛选（已注册标识，禁止通配与显示名）。
+    pub action: Option<String>,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
@@ -350,6 +354,10 @@ pub(crate) struct DataScopeListQuery {
     pub scope_type: Option<DataScopeType>,
     /// 范围主体 ID 筛选。
     pub subject_id: Option<String>,
+    /// 资源筛选。
+    pub resource: Option<String>,
+    /// 动作筛选。
+    pub action: Option<String>,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -358,14 +366,14 @@ impl DataScopeListParams {
     /// 归一化数据范围列表查询参数。
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验；按主体查询
-    /// 时必须同时提供 `subject_type`。
+    /// 时必须同时提供 `subject_type`。资源与动作必须是注册标识。
     ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
     /// # 错误
-    /// 排序字段不在白名单、方向非法，或按主体查询缺少 `subject_type` 时返回
-    /// `ValidationError`。
+    /// 排序字段不在白名单、方向非法、按主体查询缺少 `subject_type`，或资源
+    /// 动作使用通配/显示名时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<DataScopeListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, DATA_SCOPE_SORT_FIELDS)?;
         let subject_id = normalized_text(self.subject_id.as_deref());
@@ -378,6 +386,8 @@ impl DataScopeListParams {
             subject_type: self.subject_type,
             scope_type: self.scope_type,
             subject_id,
+            resource: registered_identifier(self.resource.as_deref(), "资源")?,
+            action: registered_identifier(self.action.as_deref(), "动作")?,
             paging: PageParams {
                 page: page_or_default(self.page),
                 page_size: page_size_or_default(self.page_size),
@@ -386,6 +396,34 @@ impl DataScopeListParams {
             },
         })
     }
+}
+
+/// 规范化范围配置使用的注册标识。
+///
+/// # 参数
+/// * `value` - 原始筛选文本
+/// * `field` - 字段中文名，用于错误提示
+///
+/// # 返回
+/// 空白视为未筛选；非空时返回去空白后的标识。
+///
+/// # 错误
+/// 通配符、显示名或非法字符时返回校验错误。
+fn registered_identifier(value: Option<&str>, field: &str) -> Result<Option<String>> {
+    let Some(text) = normalized_text(value) else {
+        return Ok(None);
+    };
+    if text.is_empty()
+        || text.len() > 128
+        || !text
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+    {
+        return Err(Error::ValidationError(format!(
+            "{field}必须使用已注册标识，禁止通配符和显示名"
+        )));
+    }
+    Ok(Some(text))
 }
 
 /// 用户角色绑定响应视图（W19 用户授权；含撤权历史字段，只读展示）。
@@ -732,6 +770,8 @@ mod tests {
             subject_type: Some(DataScopeSubjectType::Role),
             scope_type: None,
             subject_id: Some(" role-sales ".to_string()),
+            resource: Some(" sales_order ".to_string()),
+            action: Some(" list ".to_string()),
             page: None,
             page_size: None,
             sort_by: None,
@@ -739,17 +779,34 @@ mod tests {
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.subject_id.as_deref(), Some("role-sales"));
+        assert_eq!(query.resource.as_deref(), Some("sales_order"));
+        assert_eq!(query.action.as_deref(), Some("list"));
 
         let missing = DataScopeListParams {
             subject_type: None,
             scope_type: None,
             subject_id: Some("role-sales".to_string()),
+            resource: None,
+            action: None,
             page: None,
             page_size: None,
             sort_by: None,
             sort_dir: None,
         };
         assert!(missing.normalized().is_err());
+
+        let wildcard = DataScopeListParams {
+            subject_type: None,
+            scope_type: None,
+            subject_id: None,
+            resource: Some("*".to_string()),
+            action: None,
+            page: None,
+            page_size: None,
+            sort_by: None,
+            sort_dir: None,
+        };
+        assert!(wildcard.normalized().is_err());
     }
 
     #[test]

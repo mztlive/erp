@@ -53,6 +53,7 @@ const SYSTEM_GROUP_NAMES = new Set([
     "批量任务",
     "文件资产",
     "权限与审计",
+    "组织管理",
     "集成治理",
 ])
 
@@ -188,6 +189,7 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
     user_role: "用户角色",
     permission: "权限定义",
     data_scope: "数据范围",
+    org_unit: "内部组织",
     approval_process: "审批流程",
     work_item: "待办",
     customer_scope: "客户范围",

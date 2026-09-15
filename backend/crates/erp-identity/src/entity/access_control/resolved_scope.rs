@@ -104,6 +104,23 @@ impl ResolvedScope {
             || (allow_history && object.historical_read_participant);
         granted && self.user_limit.as_ref().is_none_or(|limit| limit.covers(object))
     }
+
+    /// 判断角色是否贡献该资源动作的正向范围。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 至少一条角色条款时为 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 个人上限只收窄已有角色结果，不构成授权，也不得补 Company。
+    pub fn has_role_scope(&self) -> bool {
+        !self.role_clauses.is_empty()
+    }
 }
 
 impl ScopeResolution<'_> {

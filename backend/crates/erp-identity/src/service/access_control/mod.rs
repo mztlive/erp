@@ -272,7 +272,8 @@ impl AccessControlService {
 
     /// 分页查询数据范围列表。
     ///
-    /// 携带 `subject_id`（与 `subject_type` 成对）时按主体批量取回。
+    /// 携带 `subject_id`（与 `subject_type` 成对）时按主体批量取回；可按资源
+    /// 与动作收窄，禁止通配筛选。
     ///
     /// # 参数
     /// * `params` - 查询参数
@@ -281,9 +282,12 @@ impl AccessControlService {
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
     /// # 错误
-    /// * `ValidationError` - 分页参数非法、排序字段不在白名单或按主体查询缺
-    ///   少主体类型
+    /// * `ValidationError` - 分页参数非法、排序字段不在白名单、按主体查询缺
+    ///   少主体类型，或资源动作不是注册标识
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// # 关键业务约束
+    /// 范围配置按资源、动作解释；筛选不得使用通配符或显示名身份。
     pub async fn data_scope_list(&self, params: &DataScopeListParams) -> Result<PageView<DataScopeView>> {
         params.validate()?;
         let query = params.normalized()?;
@@ -291,6 +295,8 @@ impl AccessControlService {
             subject_type: query.subject_type,
             subject_id: query.subject_id,
             scope_type: query.scope_type,
+            resource: query.resource,
+            action: query.action,
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),

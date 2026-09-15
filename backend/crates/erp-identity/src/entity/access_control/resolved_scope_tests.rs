@@ -211,6 +211,29 @@ fn company_scope_from_unqualified_role_cannot_supply_a_qualified_role() {
     participated.historical_read_participant = true;
     assert!(scope.allows(&participated, true));
     assert!(!scope.allows(&participated, false));
+    assert!(!scope.has_role_scope());
+}
+
+#[test]
+fn missing_role_scope_stays_empty_and_is_not_company() {
+    let tree = OrgTree::new(&[]).unwrap();
+    let roles = vec!["reader".into()];
+    let scope = ScopeResolution {
+        user_id: "alice",
+        eligible_role_ids: &roles,
+        resource: "org_unit",
+        action: "list",
+        required_dimensions: &[ScopeDimension::InternalOrg],
+        rules: &[],
+        memberships: &[],
+        management: &[],
+        tree: &tree,
+        as_of: Instant::from_unix_secs(10),
+    }
+    .resolve()
+    .unwrap();
+    assert!(!scope.has_role_scope());
+    assert!(!scope.allows(&object("one"), false));
 }
 
 #[test]

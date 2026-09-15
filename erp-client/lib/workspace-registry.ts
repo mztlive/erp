@@ -667,6 +667,20 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     requiredPermissions: ["admin:list"],
                 },
                 {
+                    routeId: "W19",
+                    href: "/system/organization",
+                    label: "组织架构",
+                    icon: FolderTreeIcon,
+                    requiredPermissions: ["org_unit:list"],
+                },
+                {
+                    routeId: "W19",
+                    href: "/system/organization/scopes",
+                    label: "范围配置",
+                    icon: ScaleIcon,
+                    requiredPermissions: ["data_scope:list"],
+                },
+                {
                     routeId: "W24",
                     icon: WorkflowIcon,
                 },

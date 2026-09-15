@@ -196,6 +196,10 @@ pub struct DataScopeFilter {
     pub subject_id: Option<String>,
     /// 范围类型；`None` 表示不筛选。
     pub scope_type: Option<DataScopeType>,
+    /// 资源；`None` 表示不筛选。
+    pub resource: Option<String>,
+    /// 动作；`None` 表示不筛选，匹配 `actions` 数组包含该值。
+    pub action: Option<String>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -209,8 +213,17 @@ pub struct DataScopeFilter {
 impl QueryFilter for DataScopeFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 资源按字段精确匹配；动作匹配 `actions` 数组包含该标识，禁止通配。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(subject_type) = self.subject_type {
@@ -221,6 +234,12 @@ impl QueryFilter for DataScopeFilter {
         }
         if let Some(scope_type) = self.scope_type {
             filter.insert("scope_type", scope_type.as_str());
+        }
+        if let Some(resource) = &self.resource {
+            filter.insert("resource", resource);
+        }
+        if let Some(action) = &self.action {
+            filter.insert("actions", action);
         }
         filter
     }
@@ -743,6 +762,8 @@ mod tests {
             subject_type: Some(DataScopeSubjectType::Role),
             subject_id: Some("role-sales".to_string()),
             scope_type: Some(DataScopeType::Team),
+            resource: Some("sales_order".to_string()),
+            action: Some("list".to_string()),
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -753,6 +774,8 @@ mod tests {
         assert_eq!(document.get_str("subject_type").unwrap(), "role");
         assert_eq!(document.get_str("subject_id").unwrap(), "role-sales");
         assert_eq!(document.get_str("scope_type").unwrap(), "team");
+        assert_eq!(document.get_str("resource").unwrap(), "sales_order");
+        assert_eq!(document.get_str("actions").unwrap(), "list");
     }
 
     /// 批量主体查询保留正常与可能缺失的 ID，由 MongoDB 只返回实际事实。

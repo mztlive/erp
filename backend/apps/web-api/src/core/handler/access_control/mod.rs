@@ -147,10 +147,16 @@ pub async fn permission_delete(
 ///
 /// # 参数
 /// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`subject_type`/`scope_type`/`subject_id`）
+/// * `query` - 分页与筛选参数（`subject_type`/`scope_type`/`subject_id`/`resource`/`action`）
 ///
 /// # 返回
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+///
+/// # 错误
+/// 参数非法或仓储失败时返回统一错误。
+///
+/// # 关键业务约束
+/// 范围按资源、动作筛选；禁止通配符和显示名身份。
 pub async fn data_scope_list(
     State(state): State<AppState>,
     Query(params): Query<DataScopeListParams>,
