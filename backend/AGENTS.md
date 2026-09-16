@@ -88,7 +88,6 @@ backend/
 - Service：模块只有一个服务时实现写 `mod.rs`，多个时拆文件；查询方法用名词（`role_list`），操作用动词（`create/update/delete`）。
 - 方法长度：生产方法硬上限 50 有效行（空行和纯注释不计），用 `./scripts/check-rust-size.sh` 检查；handler、领域 `service/repository/entity`、Process、ReadModel 仍优先 30 有效行，超限拆私有 helper。测试、`build.rs`、宏实现除外。
 - 文件体积：单个生产源文件不超过 800 物理行（扣除 `#[cfg(test)]` / `#[test]` / `tests/`）。
-- 空行：按语义步骤分段，段间只空一行。提前返回（`let ... else { return ... }`、`if ... { return ... }`）、每次外部查询或权限判定、集合构造与转换、最终返回各自成段；无语义切换的连续 `let` 不拆。
 
 ## 逻辑归属
 
@@ -160,6 +159,7 @@ env -u ERP_TEST_MONGO_URI cargo test -p <crate> --lib [<测试过滤>]
 ```
 
 - 改公开类型或方法签名：追加 `cargo check --workspace`。
+- 一项功能完成时：`cargo clippy -p <crate> --all-targets`。
 - 改 `Cargo.toml` 依赖、跨 crate 引用、Service/Process/Repository 数据访问：`./scripts/check-domain-boundaries.sh --cutover`。
 - 改 `bpm` 或 `erp-workflow`：`./scripts/check-bpm-boundaries.sh`。
 - 改 `permission` 标注：`./scripts/check-permissions-drift.sh`，并提交 `erp-client/lib/permissions.generated.ts`。
@@ -172,6 +172,7 @@ env -u ERP_TEST_MONGO_URI cargo test -p <crate> --lib [<测试过滤>]
 ```bash
 cargo fmt --all -- --check
 cargo check --workspace --locked
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
 ./scripts/check-bpm-boundaries.sh
 ./scripts/check-domain-boundaries.sh --cutover
