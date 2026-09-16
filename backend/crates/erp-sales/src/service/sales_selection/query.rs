@@ -15,62 +15,6 @@ use crate::repository::sales_selection::{SelectionBookFilter, validate_book_sort
 use crate::{Error, Result};
 
 impl SalesSelectionService {
-    /// 分页列出选品册。
-    ///
-    /// 兼容旧调用的非授权入口；HTTP 授权路径必须使用
-    /// [`SalesSelectionService::list_booklets_with`] 并传入已解析范围。
-    ///
-    /// # 参数
-    /// * `params` - 筛选与分页参数
-    ///
-    /// # 返回
-    /// 返回列表页。
-    ///
-    /// # 错误
-    /// 查询失败时返回仓储错误。
-    pub async fn list_booklets(
-        &self,
-        params: SalesSelectionBookletListParams,
-    ) -> Result<SalesSelectionBookletPage> {
-        let mut executor = NoTransaction;
-        let scope = crate::repository::sales_selection::SelectionReadScope {
-            roles: vec![crate::repository::sales_selection::SelectionScopeClause {
-                company: true,
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-        self.list_booklets_with(&params, &scope, &mut executor).await
-    }
-
-    /// 查询方案列表。
-    ///
-    /// 兼容旧调用的非授权入口；HTTP 授权路径必须使用
-    /// [`SalesSelectionService::proposal_list_with`] 并传入已解析范围。
-    ///
-    /// # 参数
-    /// * `params` - 筛选
-    ///
-    /// # 返回
-    /// 返回分页。
-    ///
-    /// # 错误
-    /// 查询失败。
-    pub async fn proposal_list(
-        &self,
-        params: crate::dto::sales_selection::SalesSelectionProposalListParams,
-    ) -> Result<crate::dto::sales_selection::SalesSelectionProposalPage> {
-        let mut executor = NoTransaction;
-        let scope = crate::repository::sales_selection::SelectionReadScope {
-            roles: vec![crate::repository::sales_selection::SelectionScopeClause {
-                company: true,
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-        self.proposal_list_with(&params, &scope, &mut executor).await
-    }
-
     /// 查询方案列表（执行器与已解析范围注入）。
     ///
     /// 调用方必须先经 DataScope v2 解析动作范围；计数与取数同一条件。
@@ -105,7 +49,7 @@ impl SalesSelectionService {
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
         let result = domain.search_proposals(&filter, executor).await?;
         Ok(crate::dto::sales_selection::SalesSelectionProposalPage {
-            items: result.items.iter().map(|item| Self::proposal_list_item(item)).collect(),
+            items: result.items.iter().map(Self::proposal_list_item).collect(),
             total: result.total,
             page: filter.page,
             page_size: filter.page_size,

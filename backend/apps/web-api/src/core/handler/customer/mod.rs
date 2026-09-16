@@ -145,7 +145,7 @@ pub async fn customer_center_related(
     ensure_customer_access(&state, &actor, "detail", &id).await?;
     ensure_permission(&state, &subject, "contract:list").await?;
     ensure_permission(&state, &subject, "sales_order:list").await?;
-    let view = CustomerCenterReadService::new(state.db()).related(&id).await?;
+    let view = CustomerCenterReadService::new(state.db()).related(&id, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -165,7 +165,7 @@ pub async fn customer_center_receivable(
 ) -> Result<CustomerCenterReceivableView> {
     ensure_customer_access(&state, &actor, "detail", &id).await?;
     ensure_permission(&state, &subject, "receivable_account:list").await?;
-    let view = CustomerCenterReadService::new(state.db()).receivable(&id).await?;
+    let view = CustomerCenterReadService::new(state.db()).receivable(&id, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 

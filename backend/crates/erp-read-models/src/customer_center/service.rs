@@ -2,6 +2,7 @@
 //!
 //! 页面只接收最近摘要和跨页指标；Service 不返回可诱导客户端继续拉全量的分页游标。
 
+use application_core::AuditActor;
 use erp_contract::ContractStatus;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::money::Amount;
@@ -67,9 +68,19 @@ impl CustomerCenterReadService {
 
     /// 查询合同/销售单最近摘要与跨页指标。
     ///
+    /// # 参数
+    /// * `customer_id` - 客户 ID
+    /// * `actor` - 已认证操作人；存在性以外不做任何授权推导
+    ///
     /// # 错误
     /// 客户不存在或聚合读取失败时返回错误。
-    pub async fn related(&self, customer_id: &str) -> Result<CustomerCenterRelatedView> {
+    ///
+    /// # 关键业务约束
+    /// 调用链授权由 Handler 侧完成：
+    /// 客户对象 `customer:detail`、合同 `contract:list`、销售 `sales_order:list` 三项
+    /// 缺一不可；本方法不根据登录态补任何范围，不得复用于其他入口而不经过同等重验。
+    pub async fn related(&self, customer_id: &str, actor: &AuditActor) -> Result<CustomerCenterRelatedView> {
+        let _ = actor;
         let row = super::repository::CustomerCenterRepository::new(&self.db)
             .customer_center_related(customer_id, RECENT_RELATED_LIMIT, &mut NoTransaction)
             .await?
@@ -103,9 +114,23 @@ impl CustomerCenterReadService {
 
     /// 查询跨应收账户的余额、逾期和可开票汇总。
     ///
+    /// # 参数
+    /// * `customer_id` - 客户 ID
+    /// * `actor` - 已认证操作人；存在性以外不做任何授权推导
+    ///
     /// # 错误
     /// 客户不存在或聚合读取失败时返回错误。
-    pub async fn receivable(&self, customer_id: &str) -> Result<CustomerCenterReceivableView> {
+    ///
+    /// # 关键业务约束
+    /// 调用链授权由 Handler 侧完成：
+    /// 客户对象 `customer:detail` 与应收 `receivable_account:list` 缺一不可；
+    /// 本方法不根据登录态补任何范围。
+    pub async fn receivable(
+        &self,
+        customer_id: &str,
+        actor: &AuditActor,
+    ) -> Result<CustomerCenterReceivableView> {
+        let _ = actor;
         self.ensure_customer_exists(customer_id).await?;
         let row = self
             .db
