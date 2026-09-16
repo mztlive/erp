@@ -14,7 +14,7 @@
 2. 当前代码包含组织与范围后端基础、组织接口、S1 四类资源 v2 接入、销售和采购业务组织采集及销售生效快照。任务消费者已迁移到公共解析 Port，种子业务账号三行验收（§6.5／§6.13／§6.14／§8.3）与浏览器真实账号验收（§6.14、导出下载 §6.15）均已通过，S2 核销。
 3. 本批代码不得作为正式业务上线依据。禁止将单个领域编译或单元测试通过等同于部门数据隔离、任务资格或导出撤权保证已经交付。
 4. 首次业务开放继续执行上位合同第 10 章；不回填旧业务数据，不提供旧范围版本兼容读取。
-5. 功能接入与架构符合性必须分别登记。客户已接入的查询、版本与写入校验不得登记为尚未实施；其跨域直连整改已完成，公共单对象判定和条件等价性已分别验证，其中 A34 真实库等价已按 §6.6 执行，A36 解析层已按 §6.7 核销。尚未迁移的工作流等消费者列为待接入项，不得归因为本批接入错误。
+5. 功能接入与架构符合性必须分别登记。客户已接入的查询、版本与写入校验不得登记为尚未实施；其跨域直连整改已完成，公共单对象判定和条件等价性已分别验证，其中 A34 真实库等价已按 §6.6 执行，A36 解析层已按 §6.7 核销。S2 范围内工作流／工作台消费者已迁移（S2-05／S2-10／S2-13）。S3／S4 尚未接入的资源列为待接入项，不得归因为本批接入错误，也不得将 S2 核销视为这些资源已接入。
 
 ## 2. 已实施的后端规则
 
@@ -26,7 +26,7 @@
 | 预览、提交与审计 | `erp-identity/src/service/organization.rs` | 共用状态校验；提交独立重验权限、版本与未结业务；回执记录操作人、原因和前后值；不改派任务 |
 | DataScope v2 模型 | `erp-identity/src/entity/access_control/{data_scope,scope_binding}.rs` | 必需版本、资源、动作与目标维度；动态模式只适用于内部组织；禁止目标通配符和显示名身份 |
 | 范围集合解析 | `erp-identity/src/entity/access_control/resolved_scope.rs` | 同角色授权、逐维求交、角色并集与个人上限分别保留；合法历史参与仍受个人上限限制 |
-| 应用解析入口 | `erp-identity/src/service/access_control/resolve.rs` | 复用现有账号、角色、RBAC policy 版本；缺动作拒绝、缺范围保持空集；当前尚未替换全部业务消费者 |
+| 应用解析入口 | `erp-identity/src/service/access_control/resolve.rs` | 复用现有账号、角色、RBAC policy 版本；缺动作拒绝、缺范围保持空集；S2 范围内消费者已替换；S3／S4 未接入资源不得将 v2 配置作为已生效授权 |
 | 范围配置写入 | `erp-identity/src/service/access_control/mod.rs` | 同角色证明组织配置及范围配置动作；写入和审计在同一事务推进 policy 版本 |
 | 显式初始化 | `erp-identity/src/service/iam/predefined_data_scopes.rs` | 按角色、资源、动作列出规则；保留已有配置及软删除留痕；取消缺范围补 Company 的初始化逻辑；清单与消费者准入仍须按 S2-13 同步，不得将列入清单视为已接入 |
 | 组织与范围索引 | `erp-identity/src/indexes.rs` | 新增组织集合身份与有效期索引；范围按稳定 ID 唯一，取消旧主体与范围类型唯一约束 |
@@ -53,17 +53,17 @@
 | --- | --- | --- |
 | S2-01 | M01 客户：统一范围、主责及协作、组织筛选、列表与详情、候选及导出 | 功能已接入；跨域直连已改为本域 Port + 组合层 adapter。列表、详情、全量授权、导出、写命令与归属变更消费 v2；主责与协作分开；组织筛选按当前主负责人所属组织；跨页与 CSV 携带 scope_version。S2-12 的 A34 真实库等价已按 §6.6 执行，A36 解析层已按 §6.7 核销，隔离业务矩阵／任务层／审批管线见 §6.8／§6.11／§6.12，种子业务与浏览器真实账号见 §6.14；代表性业务数据已按 §6.15 核销；本项完成 |
 | S2-02 | M02 合同：当前客户归属及合法单据参与、组织筛选、附件、候选与导出 | 功能已接入；Port／adapter 已按第 9.4 节接线。列表、详情、附件、候选、导出与写命令消费 v2；当前跟进负责人取客户当前主负责人；合法单据参与仅补充读取；组织筛选按当前主负责人所属组织；跨页与 CSV 携带 scope_version。S2-12 的 A34 真实库等价已按 §6.6 执行，A36 解析层已按 §6.7 核销，隔离业务矩阵／任务层／审批管线见 §6.8／§6.11／§6.12，种子业务与浏览器真实账号见 §6.14；代表性业务数据已按 §6.15 核销；本项完成 |
-| S2-03 | M04 销售：业务组织范围、列表与详情、打印、候选、导出和写命令范围 | 业务组织与快照已采集；销售列表、详情、候选、跨页与 CSV 版本复核及主单创建／保存／提交／撤回／作废事务范围已接入；组织筛选按单据 `business_org_unit_id` 启用 `org_unit_ids`／`include_descendants`；关联客户／合同读取走 v2，create／save／submit 原写入事务内分别 `ContractAccess.require_with` 与 `CustomerAccess.require_with`，handler 事前检查不是唯一凭证；变更单沿原单业务归属且独立重验，前端变更列表回传 `scope_version`，`no_scope` 按空集、`DATA_SCOPE_CHANGED` 刷新，详情失败不得用列表行顶替；附件与独立打印／合同 PDF 消费者重验。任务命令仍归 S2-10。A34 真实库等价已按 §6.6 执行，A36 解析层已按 §6.7 核销，隔离业务矩阵／任务层／审批管线见 §6.8／§6.11／§6.12，种子业务与浏览器真实账号见 §6.14；代表性业务数据已按 §6.15 核销；本项完成 |
+| S2-03 | M04 销售：业务组织范围、列表与详情、打印、候选、导出和写命令范围 | 业务组织与快照已采集；销售列表、详情、候选、跨页与 CSV 版本复核及主单创建／保存／提交／撤回／作废事务范围已接入；组织筛选按单据 `business_org_unit_id` 启用 `org_unit_ids`／`include_descendants`；关联客户／合同读取走 v2，create／save／submit 原写入事务内分别 `ContractAccess.require_with` 与 `CustomerAccess.require_with`，handler 事前检查不是唯一凭证；变更单沿原单业务归属且独立重验，前端变更列表回传 `scope_version`，`no_scope` 按空集、`DATA_SCOPE_CHANGED` 刷新，详情失败不得用列表行顶替；附件与独立打印／合同 PDF 消费者重验。任务命令已按 S2-10 核销。A34 真实库等价已按 §6.6 执行，A36 解析层已按 §6.7 核销，隔离业务矩阵／任务层／审批管线见 §6.8／§6.11／§6.12，种子业务与浏览器真实账号见 §6.14；代表性业务数据已按 §6.15 核销；本项完成 |
 | S2-04 | M05 采购：业务组织范围、列表与详情、候选、导出和写命令范围 | 业务组织已采集；采购列表、详情、候选、跨页与 CSV 版本复核及主单创建／保存／提交／撤回／作废事务范围已接入；采购变更单及退货入口已沿来源采购单当前负责人和 `business_org_unit_id` 接入同一解析器；采购变更列表使用创建时间及稳定 ID 排序。变更 start／submit／cancel 在状态、版本、进行中校验前按来源采购单动作 `require_object`／`command_access.current`，不可见对象一律 NotFound。退货授权空集与越界原单保持 `$expr:false`。前端变更列表回传 `scope_version`，`no_scope` 按空集、`DATA_SCOPE_CHANGED` 刷新，详情失败不得用列表行顶替。`PurchaseDataScopePort` 归 `erp-procurement`，生产 adapter `erp-processes/src/adapters/purchase_data_scope.rs` 调用 `DataScopeService`。A34 真实库等价已按 §6.6 执行，A36 解析层已按 §6.7 核销，隔离业务矩阵／任务层／审批管线见 §6.8／§6.11／§6.12，种子业务与浏览器真实账号见 §6.14；代表性业务数据已按 §6.15 核销；本项完成 |
-| S2-05 | 全部既有 DataScope 读取器与工作流事实适配器按资源、动作和身份维度解释 v2 | 代码已迁移：工作流／工作台经 `WorkflowAuthorizationPort` 消费资源动作绑定的公共判定；原始 DataScope 事实端口及旧覆盖算法已删除。静态总门禁零阻断；运行及业务证据按第 8 章分别核销 |
+| S2-05 | 全部既有 DataScope 读取器与工作流事实适配器按资源、动作和身份维度解释 v2 | 代码已迁移：工作流／工作台经 `WorkflowAuthorizationPort` 消费资源动作绑定的公共判定；原始 DataScope 事实端口及旧覆盖算法已删除。静态总门禁零阻断；运行及业务证据按第 8 章分别核销；本项完成 |
 | S2-06 | 统一 `scope_summary`、`as_of`、权限、组织及业务归属版本；跨页变化错误 | 四类资源的列表摘要、授权时点、策略／组织／范围版本及跨页变化检查已接入。客户和合同按当前客户归属指纹，销售和采购按单据责任及版本校验；真实范围变化与种子业务／浏览器跨页已按 §6.14 核销，代表性业务数据已按 §6.15 核销；本项完成 |
 | S2-07 | 跨页查询与完整导出的版本一致性、最后一页之后及下载前的撤权重验 | 四类资源 CSV 已接入范围版本与完整结果收集后的再次校验；客户、合同导出及采购、销售范围元信息的前端模拟测试已通过。真实 HTTP 撤权已按 §6.5／§6.14 核销（隔离夹具＋种子业务库＋浏览器跨页）；导出下载已按 §6.15 在浏览器核销（空态禁用分支或真实 CSV 下载＋“导出完成”，另加接口验证版本传递与伪造版本 409 失败关闭）；代表性业务数据已按 §6.15 核销；本项完成 |
 | S2-08 | 组织页面、影响预览、范围配置页面、URL 与 Query 缓存同步及窄屏交互 | 功能已接入并完成评审整改：主体/范围类型可见筛选与芯片、范围列表信封版本与 `empty_reason`、成员与管理授权按 `as_of` 过滤、权限未决加载与 403/无范围空态分离、预览命令与提交载荷一致、仅已接线资源动作可配置、组织筛选客户端裁剪故 Query key 不含筛选。组织／范围页跨页可见与窄屏（390×844）已按 §6.14 在浏览器核销；种子单据链的业务验收见 §6.14；本项完成 |
 | S2-09 | 已建设的订单导入与商城入口：明确责任映射、缺映射处理及首次生效来源证明 | 条件适用。商城尚未建设，当前登记不适用，不阻断 S2 退出；本阶段不要求新增商城或订单导入入口。已建设的订单导入入口须按实际建单链路纳入校验；未建设入口登记不适用。后续建设时必须同步交付本项规则并在正式业务开放前验收，不得将 ERP 建单规则视为这些入口已经接入 |
-| S2-10 | A21—A25 关联任务管理边界、改派接收候选、执行资格失效及采购级联 | 部分接入：S2 订单及变更、采购入库、发货、电子／服务履约任务增加独立订单详情范围检查；工作台列表／统计／详情在分页前过滤，改派操作人与接收人、采购全部开放履约任务在原执行器重验；订单审批决定与恢复资格、详情及历史增加当前订单读取重验。管理视图增加 `EXECUTION_BLOCKED` 与负责人失效摘要，保留原责任和非审批受控管理动作。任务管理范围、审批绑定／升级／决定／恢复与管理读取已迁移，管理条件按当前负责人内部组织形成；队列跨页已校验范围版本。A21—A25 的隔离库部分（§6.11 任务层、§6.12 审批管线）、代表性业务数据（§6.15）与种子业务账号全链路（§6.5／§6.13／§6.14，含管理监督不代办、禁止转交、受阻恢复至 `POSTED`）已核销；本项完成 |
+| S2-10 | A21—A25 关联任务管理边界、改派接收候选、执行资格失效及采购级联 | 已完成：S2 订单及变更、采购入库、发货、电子／服务履约任务增加独立订单详情范围检查；工作台列表／统计／详情在分页前过滤，改派操作人与接收人、采购全部开放履约任务在原执行器重验；订单审批决定与恢复资格、详情及历史增加当前订单读取重验。管理视图增加 `EXECUTION_BLOCKED` 与负责人失效摘要，保留原责任和非审批受控管理动作。任务管理范围、审批绑定／升级／决定／恢复与管理读取已迁移，管理条件按当前负责人内部组织形成；队列跨页已校验范围版本。A21—A25 的隔离库部分（§6.11 任务层、§6.12 审批管线）、代表性业务数据（§6.15）与种子业务账号全链路（§6.5／§6.13／§6.14，含管理监督不代办、禁止转交、受阻恢复至 `POSTED`）已核销；本项完成 |
 | S2-11 | 初始化重跑、真实范围解析、数据库并发、索引执行计划和真实账号验收 | 隔离 MongoDB 副本集及真实环回 HTTP 验证已执行；并发、重跑、撤销留痕和合成数据索引计划通过。种子业务账号三行验收（§6.5／§6.13／§6.14）、浏览器真实账号验收（§6.14、导出下载 §6.15）与代表性业务数据（§6.15：管理队列计划、审批全管线计划、20001 超限、6 账号并发调岗）已执行；本项完成，执行第 8 章留档 |
 | S2-12 | 客户消费方 Port、组合层 adapter、窄组织事实、公共单对象判定及条件等价验证 | 客户、合同、采购均经本域 `DataScopePort::allows` 调用 adapter 和身份域 `ResolvedScope::allows`；销售命名用例直接复用公共判定。创建及主要单对象访问校验已接线；仓储创建政策不再进入生产构建。四类资源的条件编译须与公共单对象判定对拍；A34 的真实数据库等价性已按 §6.6 执行，A36 解析层已按 §6.7 核销，种子业务与浏览器见 §6.14，代表性业务数据见 §6.15；本项完成 |
-| S2-13 | 资源动作接入登记、适用维度、配置与初始化准入、旧消费者阻断及架构门禁 | 配置、解析与初始化已共用 `consumers::registration`／`validate_binding`；初始化在 I/O 前校验主体、资源、全部动作和维度，事务内重查撤销留痕并推进策略版本。消费者登记已独立于种子清单；工作流／工作台旧读取器已清理，新增动作已同步配置、解析与初始化准入；静态总门禁零阻断。不得以静态通过替代 A35 的逐入口业务验收 |
+| S2-13 | 资源动作接入登记、适用维度、配置与初始化准入、旧消费者阻断及架构门禁 | 配置、解析与初始化已共用 `consumers::registration`／`validate_binding`；初始化在 I/O 前校验主体、资源、全部动作和维度，事务内重查撤销留痕并推进策略版本。消费者登记已独立于种子清单；工作流／工作台旧读取器已清理，新增动作已同步配置、解析与初始化准入；静态总门禁零阻断。不得以静态通过替代 A35 的逐入口业务验收；本项完成 |
 
 1. S2-01—S2-13 的全部适用要求已完成（S2-09 未建设入口按不适用登记），本阶段状态为“已完成”。S2-09 中未建设的入口按不适用登记，不作为 S2 未完成项，也不得登记为已实施或已验收。
 2. S2 不包含 S3 的销售责任交接与验收责任来源切换；不得因本批增加业务组织字段而开放销售改派命令。
@@ -71,21 +71,21 @@
 
 ### 4.1 公共解析接入登记
 
-本表按 `b2cf10fb` 及本次工作区增量登记已知接入位置和缺口；属于服务端静态登记，不是可配置或上线放行清单。每批实施必须按上位合同第 9.5 节补齐逐资源动作、必需维度、历史参与动作及全部适用入口，不得只登记资源名称。
+本表按 S2 核销基线 `3c4ed851` 登记已知接入位置；S2 适用缺口已关闭。属于服务端静态登记，不是可配置或上线放行清单。S3／S4 新增资源仍须按上位合同第 9.5 节补齐逐资源动作、必需维度、历史参与动作及全部适用入口，不得只登记资源名称。
 
 | 资源／消费方 | 已有公共解析与对象映射 | Port／adapter 状态 | 必须关闭的缺口 |
 | --- | --- | --- | --- |
-| 身份域组织与范围 | `erp-identity/src/service/access_control/resolve.rs`；`entity/access_control/resolved_scope.rs` | 身份域内部调用无需跨域 Port | 资源维度与准入登记；公共结果转换合同；单对象判定与条件编译的基准 |
+| 身份域组织与范围 | `erp-identity/src/service/access_control/resolve.rs`；`entity/access_control/resolved_scope.rs` | 身份域内部调用无需跨域 Port | S2-13 已完成资源维度与准入登记；公共判定与条件编译基准已按 §6.6／§6.7 核销。后续资源仍须按第 9.5 节补登记 |
 | 客户 | `erp-customer/src/service/customer/{access,scope}.rs`；`ports/data_scope.rs`；`repository/scope.rs` | `CustomerDataScopePort` 已定义；生产 adapter `erp-processes/src/adapters/customer_data_scope.rs` 调用 `DataScopeService` | S2-12 已完成：A36 解析层见 §6.7；A34 真实库等价已按 §6.6 执行；同事务和时点的窄组织事实已由 Port 暴露；列表／详情／候选／导出／命令共同验证已按 §6.14（种子业务）／§6.15（导出下载）核销 |
-| 销售及关联成本 | `erp-read-models/src/sales_center/access.rs` 调用公共入口，销售 Repository 编译对象条件；命令由 `erp-processes/src/order_to_cash/authorization.rs` 复用；变更单由 `erp-processes/src/sales_change` 沿原单重验 | 命名组合用例可调用身份域；不得据此要求业务域反向依赖组合层 | 按 S3 第 6 章核对公共判定、条件等价、事务与动作；任务命令仍归 S2-10 |
+| 销售及关联成本 | `erp-read-models/src/sales_center/access.rs` 调用公共入口，销售 Repository 编译对象条件；命令由 `erp-processes/src/order_to_cash/authorization.rs` 复用；变更单由 `erp-processes/src/sales_change` 沿原单重验 | 命名组合用例可调用身份域；不得据此要求业务域反向依赖组合层 | S2-10 已完成；销售／成本新增入口按 S3 第 6 章核对公共判定、条件等价、事务与动作 |
 | 合同／采购 | 合同：`erp-contract/src/service/contract/{access,scope,query}.rs`；`ports/data_scope.rs`；`repository/scope.rs`。采购：`erp-procurement/src/service/purchase_order/access.rs`；`ports/data_scope.rs`；`repository/purchase_order/scope.rs`；读模型与变更／退货入口映射当前采购负责人和 `business_org_unit_id` | 合同 `ContractDataScopePort` 已定义；生产 adapter `erp-processes/src/adapters/contract_data_scope.rs` 调用 `DataScopeService`。采购 `PurchaseDataScopePort` 已定义；生产 adapter `erp-processes/src/adapters/purchase_data_scope.rs` 调用 `DataScopeService` | S2-13；A34 真实库等价已按 §6.6 执行，A36 解析层见 §6.7，种子业务与浏览器真实账号见 §6.14，代表性业务数据见 §6.15；接入前拒绝将初始化目录作为授权生效依据；本项完成 |
-| 工作台／工作流 | `WorkflowAuthorizationPort` → `erp-processes/src/adapters/workflow/{authorization,task_scope,approval_scope,approval_objects,order_access}.rs` | Port 只返回已解析范围及强业务对象事实；生产 adapter 调用 `DataScopeService`，保留调用方 Executor | S2-05／S2-10／S2-13；当前负责人管理范围、审批各动作独立解析及订单独立读取；S3 的责任交接仍单独执行 |
+| 工作台／工作流 | `WorkflowAuthorizationPort` → `erp-processes/src/adapters/workflow/{authorization,task_scope,approval_scope,approval_objects,order_access}.rs` | Port 只返回已解析范围及强业务对象事实；生产 adapter 调用 `DataScopeService`，保留调用方 Executor | S2-05／S2-10／S2-13 已完成（当前负责人管理范围、审批各动作独立解析及订单独立读取）；S3-04 履约／工作台业务功能与 S3-07 责任交接仍单独执行 |
 
 ### 4.2 实施与退出顺序
 
 1. S2-12 的消费方 Port 与 adapter 已按第 9.4 节接线，须用领域边界门禁复验 A33；并核对 S2-13 的接入登记。后续领域必须复用该样例，不得再复制跨域直连接法。
 2. 客户整改已保留主责／协作口径、组织条件、版本与 CSV 行为；代表性业务数据已按 §6.15 核销，S2-01、S2-12 的剩余缺口已关闭。A34 真实库等价已按 §6.6 执行，A36 解析层已按 §6.7 核销，不替代代表性业务验收（§6.15 已执行）。
-3. 合同、采购及工作流按当前实施批次接入，补齐资源动作登记和配置／初始化准入；每批移除自身旧授权解释。工作台仍按 S3-04 登记尚未接入，不因修改本文件改变其实施状态。
+3. 合同、采购及工作流已按本阶段接入并补齐资源动作登记和配置／初始化准入。S2 工作流／工作台授权基础已迁移；S3-04 的履约来源、处理人查询、改派候选等业务功能仍未实施，不因 S2 核销改变其状态。
 4. 退出证据必须分别列功能结果与 A33—A36 架构结果；命令、代码基线、入口覆盖和未执行验证必须可核对。范围基础通过不替代消费者验收。
 
 
@@ -128,6 +128,8 @@
 7. A34 必须核对公共单对象范围判定与本域数据库条件编译在相同事实、动作、业务边界和筛选下的对象集合；A36 必须覆盖同资源各入口的动作独立解析。未验证项不得记为通过；代码批次必须登记本次实际执行结果。
 
 ## 6. 历史本地检查记录与当前复核边界
+
+§6.1—§6.13 为历史批次记录，其中的「S2 保持执行中」仅描述该节时点；当前阶段状态以文首及 §6.15／§8.3 为准。
 
 ### 6.1 S2 基础批次历史记录
 
@@ -327,6 +329,9 @@
 
 1. 本节在新建专用库 `erp_s2_task_approval_20260915` 执行，不复用 `erp_s2_business_20260915` 与 10001 端口。S2 保持“执行中”；浏览器真实账号验收按用户选择暂缓，只做后端。
 2. 建库方式：`mongodump --db=erp_s2_business_20260915` 后 `mongorestore --nsFrom --nsTo` 到新库名（19494 个文档：11 个岗位账号、仓库、商品、库存余额 `s2-stock-zero` 及已发布审批定义，索引随恢复重建）；服务配置为 `/tmp/erp-s2-task-approval.toml`（端口 10002，隔离副本集 URI），本地构建产物启动，验收后已停止。
+3. 执行 `API_BASE=http://127.0.0.1:10002 S2_BALANCE_ID=s2-stock-zero node scripts/verify-org-data-scope-s2.mjs`，三行通过：`seeded_accounts_stock_binding_submit_manager_no_proxy_and_no_approval_transfer`、`seeded_accounts_current_member_scope_no_automatic_reassignment`、`seeded_accounts_dimension_isolation_revoked_approval_blocked_and_restored`，结果 JSON 为 `POSTED`。只读复核：11 个账号、2 个仓库、1 条余额，审批与任务生产索引齐备（含 `idx_approval_process_instances_started_by`）。
+4. 环境插曲：首次运行中途外接构建盘卸载，服务进程异常退出（`EXIT:138`）；改用 `CARGO_TARGET_DIR=/tmp/erp-target` 本地重新构建后完整重跑通过。插曲残留单据保留在新库专用数据中（新部门随机命名，无冲突），不影响断言。
+5. 本节时点浏览器验收暂缓，只做后端；生产规模不在业务库重放。浏览器随后由 §6.14／§6.15 核销。
 
 ### 6.14 工作台统计参数修复、种子业务复验与浏览器真实账号验收（2026-09-16）
 
@@ -347,9 +352,6 @@
 5. 本批门禁：`cargo check --workspace --locked` 通过；BPM／领域／组织范围静态总门禁（`STATIC_CHECKS_PASSED`，零阻断）维持通过；权限生成物无漂移；`cargo test --workspace --lib` 维持 3891 通过、0 失败；前端 `dashboard.test.ts` 21 项通过，e2e `tsc` 通过。
 6. 前端 `oxlint --deny-warnings`（含 fixed-decimal 与 feature-cycles）已清零（`LINT_EXIT=0`）：修复 6 个 S2 范围内文件的真实问题（label 关联 control、无用变量、冗余 Boolean），行为不变；`npm run format:check` 既有 22 文件漂移已按评审要求全量排版对齐（独立提交 `6fbc34b7`，无行为变更），现全绿。`dashboard.test.ts` 21 项、vitest 205 文件／876 项、node 76 项全过（`frontend-test3.log`）。
 7. 终轮全门禁复扫与 S2 核销：`cargo fmt --check`（`FMT_EXIT=0`）、`cargo check --workspace --locked`（`CHECK_EXIT=0`）、严格 clippy（`CLIPPY_EXIT=0`）、BPM／领域／组织范围静态总门禁（`STATIC_CHECKS_PASSED`，2017 文件零阻断）、权限生成物无漂移、`cargo test --workspace --lib` 3891 通过 0 失败、前端 lint／format／vitest（205 文件／876 项）全绿；9 个隔离入口共 42 项 PASS、随机库用后删除（仅剩命名浏览器库）；种子脚本三行通过＋`POSTED`（`seeded-verify2.log`）；浏览器 3 用例通过零页面错误（`browser-pass3.log`＋4 截图）。S2-01—S2-13 适用项全部完成，S2 核销。
-3. 执行 `API_BASE=http://127.0.0.1:10002 S2_BALANCE_ID=s2-stock-zero node scripts/verify-org-data-scope-s2.mjs`，三行通过：`seeded_accounts_stock_binding_submit_manager_no_proxy_and_no_approval_transfer`、`seeded_accounts_current_member_scope_no_automatic_reassignment`、`seeded_accounts_dimension_isolation_revoked_approval_blocked_and_restored`，结果 JSON 为 `POSTED`。只读复核：11 个账号、2 个仓库、1 条余额，审批与任务生产索引齐备（含 `idx_approval_process_instances_started_by`）。
-4. 环境插曲：首次运行中途外接构建盘卸载，服务进程异常退出（`EXIT:138`）；改用 `CARGO_TARGET_DIR=/tmp/erp-target` 本地重新构建后完整重跑通过。插曲残留单据保留在新库专用数据中（新部门随机命名，无冲突），不影响断言。
-5. 生产规模：代表性计划、20000 超限与事务耗时以前述隔离证据（§6.9、§6.11、§6.12）为准，不在业务库重放，避免污染可核销单据；浏览器验收暂缓未执行。
 
 ## 8. 工作流与工作台统一迁移及验收执行规则
 
@@ -380,7 +382,7 @@ ERP_TEST_MONGO_URI='<验收专用副本集 URI>' cargo run -p web-api --example 
 
 | 证据层 | 已执行结果 | 适用边界 |
 | --- | --- | --- |
-| 静态架构 | 第 9 章总门禁扫描 2014 个活动源码文件，零阻断；BPM、领域边界通过（§6.10） | 不替代行为与业务验收 |
+| 静态架构 | 第 9 章总门禁扫描 2017 个活动源码文件，零阻断；BPM、领域边界通过（§6.15 第 7 条；§6.10 为中间记录） | 不替代行为与业务验收 |
 | MongoDB 运行 | 隔离副本集随机库；并发初始化及重跑唯一性、组织同版本并发、审计原子性、幂等重放、真实范围解析和撤销留痕通过 | 隔离随机库，非生产数据 |
 | A36 解析层 | 四类资源读写动作独立解析、调岗后版本变化、历史只补读取、四类撤销失败关闭通过（§6.7） | 解析层真实库断言；HTTP 409 映射由各域单元测试与 `s2_http_acceptance` 覆盖 |
 | 业务矩阵授权核心 | 管理收窄可追溯、查询不写、维度隔离求交、失读失败关闭、上限收窄、成员结束变空、跨页版本刷新通过（§6.8）；任务层改派候选双向对照、采购级联原子性、阻塞视图与统计排除通过（§6.11） | 均为隔离随机库；业务账号部分见“现有业务验收”行 |

@@ -15,7 +15,7 @@
 // 全仓 STATIC_CHECKS_PASSED 只作为 s2-adapters / S2-05 清零条件。不得白名单/忽略路径/把失败改警告。
 // 选批：读 S2/S3 合同状态表，对照 catalog id。open/partial 才自动开做；
 // blocked_acceptance（仅 A34/A36/真实库/业务验收）与 S2-11/第10章自动跳过。
-// S2 未关闭（非本地检查通过/已验收）时不自动进入 S3/S4。
+// S2 未关闭（非本地检查通过/已完成/已验收）时不自动进入 S3/S4。
 
 let meta = #{
     name: "implement-org-data-scope",
