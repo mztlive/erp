@@ -28,6 +28,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   ./scripts/check-domain-boundaries.sh --cutover
   ./scripts/check-permissions-drift.sh
   ```
+  源码体积：`./scripts/check-rust-size.sh`（生产文件 ≤800 行、方法 ≤50 有效行，不含测试）。存量超限清零前不列入提交阶段全量清单。
 - 单个 crate 或单个测试：`env -u ERP_TEST_MONGO_URI cargo test -p erp-sales --lib <测试名过滤>`。
 - **只跑库单元测试**：不新增、不修改、不执行集成测试。不要跑 `--test`、`--include-ignored`、各 crate 的 `tests/`，也不要跑依赖真实 MongoDB/S3 的命令。
 

@@ -86,7 +86,8 @@ backend/
 - 导入：禁在代码中写完整路径（如 `erp_workflow::service::...`），顶部 `use` 后用短名，冲突用 `as`；`<Type as Trait>::item` 消歧除外。
 - 注释：所有公共方法写多行文档注释，含 `# 参数`、`# 返回`、`# 错误` 段。
 - Service：模块只有一个服务时实现写 `mod.rs`，多个时拆文件；查询方法用名词（`role_list`），操作用动词（`create/update/delete`）。
-- 方法长度：handler、领域 `service/repository/entity`、Process、ReadModel 方法限 30 有效行，超限拆私有 helper；测试、`build.rs`、宏实现除外。
+- 方法长度：生产方法硬上限 50 有效行（空行和纯注释不计），用 `./scripts/check-rust-size.sh` 检查；handler、领域 `service/repository/entity`、Process、ReadModel 仍优先 30 有效行，超限拆私有 helper。测试、`build.rs`、宏实现除外。
+- 文件体积：单个生产源文件不超过 800 物理行（扣除 `#[cfg(test)]` / `#[test]` / `tests/`）。
 
 ## 逻辑归属
 
@@ -162,6 +163,7 @@ env -u ERP_TEST_MONGO_URI cargo test -p <crate> --lib [<测试过滤>]
 - 改 `Cargo.toml` 依赖、跨 crate 引用、Service/Process/Repository 数据访问：`./scripts/check-domain-boundaries.sh --cutover`。
 - 改 `bpm` 或 `erp-workflow`：`./scripts/check-bpm-boundaries.sh`。
 - 改 `permission` 标注：`./scripts/check-permissions-drift.sh`，并提交 `erp-client/lib/permissions.generated.ts`。
+- 新增或扩大 Rust 文件/方法：`./scripts/check-rust-size.sh`（生产文件 ≤800 行、方法 ≤50 有效行；不含测试）。
 - 仅改文档：不编译、不测试，只跑 `git diff --check`。
 
 ### 提交阶段
@@ -178,6 +180,8 @@ env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
 ./scripts/check-permissions-drift.sh
 git diff --check
 ```
+
+源码体积脚本 `./scripts/check-rust-size.sh` 已落地（生产文件 800 物理行、方法 50 有效行，不含测试）。存量超限清零前不列入提交阶段全量清单与 Jenkins。
 
 ## 运行
 
