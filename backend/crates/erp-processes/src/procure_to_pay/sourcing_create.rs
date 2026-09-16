@@ -632,12 +632,14 @@ async fn replay_sourcing(
         orders: receipt
             .orders
             .into_iter()
-            .map(|order| CreatePurchaseOrderResult {
-                purchase_order_id: order.purchase_order_id.clone(),
-                purchase_no: order.purchase_no,
-                lock_version: order.lock_version,
-                replayed: true,
-                reference: order.purchase_order_id,
+            .map(|order| {
+                CreatePurchaseOrderResult::new(
+                    order.purchase_order_id.clone(),
+                    order.purchase_no,
+                    order.purchase_order_id,
+                )
+                .with_lock_version(order.lock_version)
+                .with_replayed(true)
             })
             .collect(),
         stock_reservations: receipt.stock_reservations,

@@ -658,12 +658,12 @@ impl CreationReceipt {
     /// # 关键业务约束
     /// 业务引用恒为原采购单 ID。
     fn into_result(self, replayed: bool) -> CreatePurchaseOrderResult {
-        CreatePurchaseOrderResult {
-            purchase_order_id: self.purchase_order_id.clone(),
-            purchase_no: self.purchase_no,
-            lock_version: self.lock_version,
-            replayed,
-            reference: self.purchase_order_id,
-        }
+        CreatePurchaseOrderResult::new(
+            self.purchase_order_id.clone(),
+            self.purchase_no,
+            self.purchase_order_id,
+        )
+        .with_lock_version(self.lock_version)
+        .with_replayed(replayed)
     }
 }

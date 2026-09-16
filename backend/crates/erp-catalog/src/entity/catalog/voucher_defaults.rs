@@ -140,13 +140,11 @@ impl VoucherCatalogDefaults {
     pub fn unit(id: UnitOfMeasureId, created_by: impl Into<String>) -> Result<UnitOfMeasure> {
         UnitOfMeasure::new(
             id,
-            UnitOfMeasureData {
-                unit_code: VOUCHER_DEFAULT_UNIT_CODE.to_string(),
-                name: VOUCHER_DEFAULT_UNIT_CODE.to_string(),
-                symbol: VOUCHER_DEFAULT_UNIT_CODE.to_string(),
-                quantity_scale: 0,
-                status: EnableStatus::Active,
-            },
+            UnitOfMeasureData::new(
+                VOUCHER_DEFAULT_UNIT_CODE.to_string(),
+                VOUCHER_DEFAULT_UNIT_CODE.to_string(),
+                VOUCHER_DEFAULT_UNIT_CODE.to_string(),
+            ),
             created_by,
         )
     }

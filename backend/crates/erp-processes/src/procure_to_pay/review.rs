@@ -75,18 +75,18 @@ impl PurchaseOrderProcess {
         let payable = self.build_payable(&order, &submission, &submission_lines, actor.id()).await?;
         let cost_entries =
             self.build_confirmed_cost_entries(&submission, &submission_lines, revision_no).await?;
-        let result = PurchaseReviewResult {
-            work_item_id: String::new(),
-            work_item_status: WorkItemStatus::Completed.as_str().to_string(),
-            task_version: "0".to_string(),
-            subject_version: order.approval_subject_version.to_string(),
-            review_result: "APPROVED".to_string(),
-            revision_id: Some(revision.base.id.clone()),
-            revision_no: Some(revision_no),
-            payable_entry_id: Some(payable.1.base.id.clone()),
-            lock_version: order.base.version,
-            reference: format!("PO-V{revision_no}"),
-        };
+        let result = PurchaseReviewResult::new(
+            String::new(),
+            WorkItemStatus::Completed.as_str().to_string(),
+            "0".to_string(),
+            order.approval_subject_version.to_string(),
+            "APPROVED".to_string(),
+            format!("PO-V{revision_no}"),
+        )
+        .with_revision_id(revision.base.id.clone())
+        .with_revision_no(revision_no)
+        .with_payable_entry_id(payable.1.base.id.clone())
+        .with_lock_version(order.base.version);
         Ok(PreparedFormalizedOrder {
             persist: FormalizedOrderPersist {
                 order,

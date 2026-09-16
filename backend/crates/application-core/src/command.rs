@@ -91,7 +91,7 @@ impl CommandIdentity {
 }
 
 /// Repository 返回的命令收据最小事实。
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandReceiptFact {
     pub id: String,
     pub actor_id: String,
@@ -148,6 +148,21 @@ impl CommandReceiptFact {
         self
     }
 
+    /// 设置目标资源 ID（`None` 保持缺省）。
+    ///
+    /// # 参数
+    /// * `resource_id` - 目标资源 ID
+    ///
+    /// # 返回
+    /// 返回更新后的收据事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_resource_id_opt(mut self, resource_id: Option<String>) -> Self {
+        self.resource_id = resource_id;
+        self
+    }
+
     /// 设置执行结果。
     ///
     /// # 参数
@@ -175,6 +190,21 @@ impl CommandReceiptFact {
     /// 无。
     pub fn with_message(mut self, message: impl Into<String>) -> Self {
         self.message = Some(message.into());
+        self
+    }
+
+    /// 设置收据消息（`None` 保持缺省）。
+    ///
+    /// # 参数
+    /// * `message` - 收据消息
+    ///
+    /// # 返回
+    /// 返回更新后的收据事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_message_opt(mut self, message: Option<String>) -> Self {
+        self.message = message;
         self
     }
 }
@@ -511,9 +541,6 @@ mod tests {
         assert_eq!(complete.resource_id.as_deref(), Some("payment-1"));
         assert!(complete.success);
         assert!(complete.message.is_some());
-        let empty = CommandReceiptFact::default();
-        assert!(empty.id.is_empty());
-        assert!(!empty.success);
     }
 
     #[test]

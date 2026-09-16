@@ -271,15 +271,10 @@ mod tests {
 
         assert!(!audit.base.id.contains("raw-operation-key"));
         assert!(!audit.message.as_deref().unwrap().contains("raw-operation-key"));
-        let fact = CommandReceiptFact {
-            id: audit.base.id,
-            actor_id: audit.actor_id,
-            action: audit.action,
-            resource_type: audit.resource_type,
-            resource_id: audit.resource_id,
-            success: audit.success,
-            message: audit.message,
-        };
+        let fact = CommandReceiptFact::new(audit.base.id, audit.actor_id, audit.action, audit.resource_type)
+            .with_resource_id_opt(audit.resource_id)
+            .with_success(audit.success)
+            .with_message_opt(audit.message);
         assert_eq!(receipt.match_fact(&fact), CommandReceiptMatch::SamePayload("receipt-1".to_string()));
     }
 
@@ -308,15 +303,10 @@ mod tests {
         )
         .unwrap();
 
-        let fact = CommandReceiptFact {
-            id: audit.base.id,
-            actor_id: audit.actor_id,
-            action: audit.action,
-            resource_type: audit.resource_type,
-            resource_id: audit.resource_id,
-            success: audit.success,
-            message: audit.message,
-        };
+        let fact = CommandReceiptFact::new(audit.base.id, audit.actor_id, audit.action, audit.resource_type)
+            .with_resource_id_opt(audit.resource_id)
+            .with_success(audit.success)
+            .with_message_opt(audit.message);
         assert_eq!(changed_receipt.match_fact(&fact), CommandReceiptMatch::DifferentPayload);
     }
 }

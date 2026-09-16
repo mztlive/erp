@@ -74,6 +74,21 @@ impl UnitOfMeasureData {
         self.quantity_scale = quantity_scale;
         self
     }
+
+    /// 设置启停状态。
+    ///
+    /// # 参数
+    /// * `status` - 启停状态
+    ///
+    /// # 返回
+    /// 返回更新后的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_status(mut self, status: EnableStatus) -> Self {
+        self.status = status;
+        self
+    }
 }
 
 /// 计量单位更新数据。

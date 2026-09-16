@@ -37,12 +37,13 @@ pub async fn create_unit_of_measure(
     let id = UnitOfMeasureId::new(next_id());
     let unit = UnitOfMeasure::new(
         id.clone(),
-        UnitOfMeasureData {
-            unit_code: req.unit_code,
-            name: req.name,
-            symbol: req.symbol,
-            quantity_scale: req.quantity_scale,
-            status: req.status.unwrap_or(EnableStatus::Active),
+        {
+            let data = UnitOfMeasureData::new(req.unit_code, req.name, req.symbol)
+                .with_quantity_scale(req.quantity_scale);
+            match req.status {
+                Some(status) => data.with_status(status),
+                None => data,
+            }
         },
         actor.id(),
     )?;

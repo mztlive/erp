@@ -94,12 +94,8 @@ impl ProductImportProcess {
         }
         let created = catalog_service(self.db.clone())
             .product_brand_create(
-                CreateProductBrandRequest {
-                    brand_code,
-                    name: name.to_string(),
-                    status: Some(EnableStatus::Active),
-                    logo_file_asset_id: None,
-                },
+                CreateProductBrandRequest::new(brand_code, name.to_string())
+                    .with_status(EnableStatus::Active),
                 actor,
             )
             .await;
