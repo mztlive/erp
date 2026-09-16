@@ -7,6 +7,9 @@
 
 import * as React from "react"
 import { useAppForm } from "@/components/form"
+import { OwnerCombobox } from "@/components/business"
+import { Input } from "@/components/ui/input"
+import { useOwnerOptionsQuery } from "@/hooks/use-options"
 import { CustomerSearchCombobox } from "@/features/entity-selectors/components/customer-search-combobox"
 import { Button } from "@/components/ui/button"
 import {
@@ -69,10 +72,13 @@ export const BookCreateDialog = ({
     onLaunched?: (result: BookLaunchResult) => void
 }) => {
     const operations = useBookOperations()
+    const ownerOptionsQuery = useOwnerOptionsQuery()
 
     const form = useAppForm({
         defaultValues: {
             customer_id: "",
+            sales_owner_user_id: "",
+            business_org_unit_id: "",
             selection_form: "SINGLE_SKU",
             submit_mode: "BY_QUANTITY",
             source_kind: sourceKind,
@@ -91,6 +97,8 @@ export const BookCreateDialog = ({
             })
             const created = await operations.create.mutateAsync({
                 customer_id: parsed.customer_id.trim(),
+                sales_owner_user_id: parsed.sales_owner_user_id.trim(),
+                business_org_unit_id: parsed.business_org_unit_id.trim(),
                 selection_form: parsed.selection_form,
                 submit_mode: parsed.submit_mode,
                 source_kind: sourceKind,
@@ -123,6 +131,8 @@ export const BookCreateDialog = ({
         if (open && !wasOpen.current) {
             form.reset({
                 customer_id: "",
+                sales_owner_user_id: "",
+                business_org_unit_id: "",
                 selection_form: "SINGLE_SKU",
                 submit_mode: "BY_QUANTITY",
                 source_kind: sourceKind,
@@ -180,6 +190,68 @@ export const BookCreateDialog = ({
                             </div>
                         )}
                     />
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <form.AppField
+                            name="sales_owner_user_id"
+                            children={(field) => (
+                                <div className="grid gap-1.5">
+                                    <Label htmlFor="sales-selection-create-owner">
+                                        负责销售 *
+                                    </Label>
+                                    <OwnerCombobox
+                                        id="sales-selection-create-owner"
+                                        owners={ownerOptionsQuery.data ?? []}
+                                        loading={ownerOptionsQuery.isFetching}
+                                        value={field.state.value || undefined}
+                                        onValueChange={(next) =>
+                                            field.handleChange(next ?? "")
+                                        }
+                                        placeholder="搜索负责人或工号"
+                                    />
+                                    {field.state.meta.isTouched &&
+                                    !field.state.meta.isValid ? (
+                                        <p
+                                            className="text-xs text-destructive"
+                                            role="alert"
+                                        >
+                                            请选择负责销售
+                                        </p>
+                                    ) : null}
+                                </div>
+                            )}
+                        />
+                        <form.AppField
+                            name="business_org_unit_id"
+                            children={(field) => (
+                                <div className="grid gap-1.5">
+                                    <Label htmlFor="sales-selection-create-org">
+                                        业务组织 *
+                                    </Label>
+                                    <Input
+                                        id="sales-selection-create-org"
+                                        value={field.state.value}
+                                        onChange={(event) =>
+                                            field.handleChange(
+                                                event.target.value,
+                                            )
+                                        }
+                                        onBlur={field.handleBlur}
+                                        placeholder="负责人有效主属组织 ID"
+                                        aria-label="业务组织"
+                                    />
+                                    {field.state.meta.isTouched &&
+                                    !field.state.meta.isValid ? (
+                                        <p
+                                            className="text-xs text-destructive"
+                                            role="alert"
+                                        >
+                                            请填写业务组织
+                                        </p>
+                                    ) : null}
+                                </div>
+                            )}
+                        />
+                    </div>
                     <div className="grid gap-1.5 rounded-lg border bg-muted/40 px-3 py-2">
                         <p className="text-xs text-muted-foreground">
                             商品来源

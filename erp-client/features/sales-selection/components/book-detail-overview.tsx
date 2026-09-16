@@ -183,6 +183,18 @@ export function BookDetailOverview({
                 columns="two"
                 items={[
                     {
+                        id: "owner",
+                        label: "负责销售",
+                        value:
+                            detail.sales_owner_name ||
+                            detail.sales_owner_user_id,
+                    },
+                    {
+                        id: "org",
+                        label: "业务组织",
+                        value: detail.business_org_unit_id,
+                    },
+                    {
                         id: "source",
                         label: "商品来源",
                         value: POOL_SOURCE_LABEL[detail.source_kind],

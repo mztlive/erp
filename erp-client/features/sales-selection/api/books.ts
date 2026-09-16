@@ -11,6 +11,7 @@ import {
 } from "@/features/sales-selection/lib/actionable-books"
 import type {
     BookListQuery,
+    BookListResult,
     CreateBookInput,
     PoolFilterSnapshot,
     SelectionBook,
@@ -20,14 +21,24 @@ import type {
 /** 列表行 wire 形态（后端 snake_case 直接透传）。 */
 type BookListWire = SelectionBook
 
+/** 列表视图 wire 形态：分页、候选、范围版本与无范围标记。 */
+type BookListViewWire = {
+    page: Page<BookListWire>
+    owner_options: Array<{ value: string; label: string }>
+    scope_version: string
+    policy_version: number
+    organization_version: number
+    no_scope: boolean
+}
+
 /**
  * 查询选品册列表。
- * @param query 客户/形态/状态/关键字与分页
+ * @param query 客户/形态/状态/关键字、负责人与组织范围、分页与跨页版本
  */
 export const fetchBooks = async (
     query: BookListQuery,
-): Promise<{ rows: SelectionBook[]; total: number }> => {
-    const page = await apiGet<Page<BookListWire>>(
+): Promise<BookListResult> => {
+    const view = await apiGet<BookListViewWire>(
         "/admin/sales-selection-books",
         {
             q: query.q || undefined,
@@ -44,11 +55,23 @@ export const fetchBooks = async (
                 query.status && query.status !== "ALL"
                     ? query.status
                     : undefined,
+            owner_user_ids: query.owner_user_ids || undefined,
+            org_unit_ids: query.org_unit_ids || undefined,
+            include_descendants: query.include_descendants ? true : undefined,
+            scope_version: query.scope_version || undefined,
             page: query.page ?? 1,
             page_size: query.page_size ?? 20,
         },
     )
-    return { rows: page.items, total: page.total }
+    return {
+        rows: view.page.items,
+        total: view.page.total,
+        ownerOptions: view.owner_options ?? [],
+        scopeVersion: view.scope_version,
+        policyVersion: view.policy_version,
+        organizationVersion: view.organization_version,
+        noScope: view.no_scope ?? false,
+    }
 }
 
 /**
@@ -82,6 +105,8 @@ export const createBook = async (
 ): Promise<SelectionBookDetail> =>
     apiPost<SelectionBookDetail>("/admin/sales-selection-books", {
         customer_id: input.customer_id,
+        sales_owner_user_id: input.sales_owner_user_id,
+        business_org_unit_id: input.business_org_unit_id,
         form: input.selection_form,
         submit_mode: input.submit_mode,
         pool_source_kind: input.source_kind,

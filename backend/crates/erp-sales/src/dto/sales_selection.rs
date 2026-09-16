@@ -19,6 +19,10 @@ pub struct CreateSalesSelectionBookletRequest {
     pub idempotency_key: String,
     /// 客户身份。
     pub customer_id: String,
+    /// 显式销售负责人；必填，客户提交人不成为负责人。
+    pub sales_owner_user_id: String,
+    /// 业务组织；必填，取负责人有效主属组织。
+    pub business_org_unit_id: String,
     /// 选品形态。
     #[serde(alias = "selection_form")]
     pub form: SelectionForm,
@@ -147,6 +151,17 @@ pub struct SalesSelectionBookletListParams {
     /// 服务端注入的客户访问范围，拒绝客户端覆盖。
     #[serde(skip)]
     pub authorized_customer_ids: Option<Vec<String>>,
+    /// 服务端注入的选品责任范围版本；跨页必须原样回传。
+    #[serde(default, deserialize_with = "deserialize_optional_csv")]
+    pub scope_version: Option<String>,
+    /// 当前业务负责人；去重后的稳定人员 ID，最多 100 个。
+    #[serde(default, deserialize_with = "deserialize_optional_csv_vec")]
+    pub owner_user_ids: Option<Vec<String>>,
+    /// 当前组织筛选；与册业务组织口径一致，最多 100 个。
+    #[serde(default, deserialize_with = "deserialize_optional_csv_vec")]
+    pub org_unit_ids: Option<Vec<String>>,
+    /// 是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
     /// 客户。
     pub customer_id: Option<String>,
     /// 形态。
@@ -172,6 +187,17 @@ pub struct SalesSelectionProposalListParams {
     /// 服务端注入的客户访问范围，拒绝客户端覆盖。
     #[serde(skip)]
     pub authorized_customer_ids: Option<Vec<String>>,
+    /// 服务端注入的方案责任范围版本；跨页必须原样回传。
+    #[serde(default, deserialize_with = "deserialize_optional_csv")]
+    pub scope_version: Option<String>,
+    /// 当前业务负责人；去重后的稳定人员 ID，最多 100 个。
+    #[serde(default, deserialize_with = "deserialize_optional_csv_vec")]
+    pub owner_user_ids: Option<Vec<String>>,
+    /// 当前组织筛选；与方案业务组织口径一致，最多 100 个。
+    #[serde(default, deserialize_with = "deserialize_optional_csv_vec")]
+    pub org_unit_ids: Option<Vec<String>>,
+    /// 是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
     /// 客户。
     pub customer_id: Option<String>,
     /// 选品册；指定时只返回该册唯一方案。
@@ -230,6 +256,10 @@ pub struct SalesSelectionBookletListItemView {
     pub customer_id: String,
     /// 客户名称。
     pub customer_name: String,
+    /// 显式销售负责人。
+    pub sales_owner_user_id: String,
+    /// 业务组织。
+    pub business_org_unit_id: String,
     /// 形态。
     pub form: SelectionForm,
     /// 与 `form` 相同，兼容内部列表字段。
@@ -262,6 +292,12 @@ pub struct SalesSelectionBookletView {
     pub customer_id: String,
     /// 客户名称。
     pub customer_name: String,
+    /// 显式销售负责人。
+    pub sales_owner_user_id: String,
+    /// 负责人显示名；候选只回 ID 与显示名，不回全量身份。
+    pub sales_owner_name: Option<String>,
+    /// 业务组织。
+    pub business_org_unit_id: String,
     /// 形态。
     pub form: SelectionForm,
     /// 与 `form` 相同。
@@ -396,6 +432,10 @@ pub struct SalesSelectionProposalListItemView {
     pub customer_name: String,
     /// 选品册。
     pub booklet_id: String,
+    /// 继承所属册的显式销售负责人。
+    pub sales_owner_user_id: String,
+    /// 继承所属册的业务组织。
+    pub business_org_unit_id: String,
     /// 形态。
     pub form: SelectionForm,
     /// 提交方式。
@@ -417,6 +457,10 @@ pub struct SalesSelectionProposalView {
     pub customer_name: String,
     /// 选品册。
     pub booklet_id: String,
+    /// 继承所属册的显式销售负责人。
+    pub sales_owner_user_id: String,
+    /// 继承所属册的业务组织。
+    pub business_org_unit_id: String,
     /// 形态。
     pub form: SelectionForm,
     /// 提交方式。
@@ -587,6 +631,78 @@ mod tests {
 pub type SalesSelectionBookletPage = PageView<SalesSelectionBookletListItemView>;
 /// 方案分页。
 pub type SalesSelectionProposalPage = PageView<SalesSelectionProposalListItemView>;
+
+/// 解析可选单值 CSV；空串视为未提供，未知姓名参数已在路由层拒绝。
+///
+/// # 参数
+/// * `deserializer` - serde 反序列化器
+///
+/// # 返回
+/// 返回单值或 `None`。
+///
+/// # 错误
+/// 类型不符时返回反序列化错误。
+fn deserialize_optional_csv<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize as _;
+    let raw = Option::<String>::deserialize(deserializer)?;
+    Ok(raw.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()))
+}
+
+/// 解析可选多值 CSV；去空白去重，最多 100 个。
+///
+/// # 参数
+/// * `deserializer` - serde 反序列化器
+///
+/// # 返回
+/// 返回去重后的 ID 或 `None`。
+///
+/// # 错误
+/// 超限或类型不符时返回反序列化错误。
+fn deserialize_optional_csv_vec<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize as _;
+    let raw = Option::<serde_json::Value>::deserialize(deserializer)?;
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+    let mut ids = match raw {
+        serde_json::Value::String(text) => {
+            text.split(',').map(str::trim).filter(|item| !item.is_empty()).map(str::to_string).collect()
+        },
+        serde_json::Value::Array(items) => {
+            let mut ids = Vec::new();
+            for item in items {
+                match item {
+                    serde_json::Value::String(text) => {
+                        let text = text.trim();
+                        if !text.is_empty() {
+                            ids.push(text.to_string());
+                        }
+                    },
+                    other => {
+                        return Err(serde::de::Error::custom(format!("人员或组织条件非法: {other}")));
+                    },
+                }
+            }
+            ids
+        },
+        serde_json::Value::Null => return Ok(None),
+        other => {
+            return Err(serde::de::Error::custom(format!("人员或组织条件非法: {other}")));
+        },
+    };
+    ids.sort();
+    ids.dedup();
+    if ids.len() > 100 {
+        return Err(serde::de::Error::custom("人员或组织条件最多 100 个，请缩小条件"));
+    }
+    Ok((!ids.is_empty()).then_some(ids))
+}
 
 /// 复制链接结果。只返回当前有效相对路径，不含完整令牌日志字段。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

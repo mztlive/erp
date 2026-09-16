@@ -6,10 +6,17 @@ import { FixedOptionRadioFilter } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
     listWorkspaceFilterStatusText,
     type ListWorkspaceFilterChip,
 } from "@/components/business/list-workspace"
-import type { BookListQuery } from "@/features/sales-selection/types"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import type {
+    BookListQuery,
+    SelectionOwnerOption,
+} from "@/features/sales-selection/types"
 import {
     SELECTION_FORM_LABEL,
     SUBMIT_MODE_LABEL,
@@ -21,6 +28,9 @@ type FilterDraft = {
     q: string
     selection_form: NonNullable<BookListQuery["selection_form"]>
     submit_mode: NonNullable<BookListQuery["submit_mode"]>
+    owner_user_ids: string
+    org_unit_ids: string
+    include_descendants: boolean
 }
 
 function draftFromQuery(query: BookListQuery): FilterDraft {
@@ -28,6 +38,9 @@ function draftFromQuery(query: BookListQuery): FilterDraft {
         q: query.q ?? "",
         selection_form: query.selection_form ?? "ALL",
         submit_mode: query.submit_mode ?? "ALL",
+        owner_user_ids: query.owner_user_ids ?? "",
+        org_unit_ids: query.org_unit_ids ?? "",
+        include_descendants: query.include_descendants ?? false,
     }
 }
 
@@ -35,7 +48,10 @@ function draftsEqual(left: FilterDraft, right: FilterDraft): boolean {
     return (
         left.q.trim() === right.q.trim() &&
         left.selection_form === right.selection_form &&
-        left.submit_mode === right.submit_mode
+        left.submit_mode === right.submit_mode &&
+        left.owner_user_ids === right.owner_user_ids &&
+        left.org_unit_ids.trim() === right.org_unit_ids.trim() &&
+        left.include_descendants === right.include_descendants
     )
 }
 
@@ -49,6 +65,7 @@ export function BooksListFilterBar({
     resultCount,
     loading,
     failed,
+    ownerOptions = [],
 }: {
     query: BookListQuery
     onApply: (next: BookListQuery) => void
@@ -56,6 +73,8 @@ export function BooksListFilterBar({
     resultCount?: number
     loading: boolean
     failed: boolean
+    /** 同一授权快照内的负责人候选；只含 ID 与显示名。 */
+    ownerOptions?: readonly SelectionOwnerOption[]
 }) {
     const [draft, setDraft] = React.useState<FilterDraft>(() =>
         draftFromQuery(query),
@@ -67,6 +86,9 @@ export function BooksListFilterBar({
 
     const applied = draftFromQuery(query)
     const hasPendingChanges = !draftsEqual(draft, applied)
+    const [moreOpen, setMoreOpen] = React.useState(false)
+    const moreCount =
+        (applied.owner_user_ids ? 1 : 0) + (applied.org_unit_ids ? 1 : 0)
 
     const handleApply = React.useCallback(() => {
         onApply({
@@ -74,6 +96,9 @@ export function BooksListFilterBar({
             q: draft.q.trim() || undefined,
             selection_form: draft.selection_form,
             submit_mode: draft.submit_mode,
+            owner_user_ids: draft.owner_user_ids || undefined,
+            org_unit_ids: draft.org_unit_ids.trim() || undefined,
+            include_descendants: draft.include_descendants || undefined,
             page: 1,
         })
     }, [draft, onApply, query])
@@ -105,6 +130,27 @@ export function BooksListFilterBar({
                 label: `提交 ${SUBMIT_MODE_LABEL[query.submit_mode]}`,
                 onClear: () =>
                     onApply({ ...query, submit_mode: "ALL", page: 1 }),
+            })
+        }
+        if (query.owner_user_ids) {
+            next.push({
+                key: "owner_user_ids",
+                label: `负责人 ${query.owner_user_ids}`,
+                onClear: () =>
+                    onApply({ ...query, owner_user_ids: undefined, page: 1 }),
+            })
+        }
+        if (query.org_unit_ids) {
+            next.push({
+                key: "org_unit_ids",
+                label: `组织 ${query.org_unit_ids}${query.include_descendants ? "（含下级）" : ""}`,
+                onClear: () =>
+                    onApply({
+                        ...query,
+                        org_unit_ids: undefined,
+                        include_descendants: undefined,
+                        page: 1,
+                    }),
             })
         }
         return next
@@ -167,6 +213,57 @@ export function BooksListFilterBar({
             onClearAll={onReset}
             hasPendingChanges={hasPendingChanges}
             pendingHint="条件已修改，待查询"
+            moreCount={moreCount}
+            moreOpen={moreOpen}
+            onToggleMore={() => setMoreOpen((open) => !open)}
+            morePanelId={`${prefix}-more`}
+            moreButtonId={`${prefix}-more-toggle`}
+            morePanel={
+                <div className="grid min-w-0 gap-4">
+                    <ResponsibleUserFilter
+                        id={`${prefix}-owner`}
+                        label="负责销售"
+                        value={draft.owner_user_ids}
+                        onChange={(owner_user_ids) =>
+                            setDraft((prev) => ({ ...prev, owner_user_ids }))
+                        }
+                        options={ownerOptions}
+                    />
+                    <ListWorkspaceFilterField
+                        htmlFor={`${prefix}-org`}
+                        label="业务组织"
+                    >
+                        <Input
+                            id={`${prefix}-org`}
+                            value={draft.org_unit_ids}
+                            onChange={(event) =>
+                                setDraft((prev) => ({
+                                    ...prev,
+                                    org_unit_ids: event.target.value,
+                                }))
+                            }
+                            placeholder="组织 ID，逗号分隔"
+                            aria-label="按选品册业务组织筛选"
+                        />
+                        <label
+                            htmlFor={`${prefix}-org-descendants`}
+                            className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                        >
+                            <Checkbox
+                                id={`${prefix}-org-descendants`}
+                                checked={draft.include_descendants}
+                                onCheckedChange={(checked) =>
+                                    setDraft((prev) => ({
+                                        ...prev,
+                                        include_descendants: checked === true,
+                                    }))
+                                }
+                            />
+                            包含下级
+                        </label>
+                    </ListWorkspaceFilterField>
+                </div>
+            }
             queryButtonId={`${prefix}-apply`}
             clearButtonId={`${prefix}-reset`}
         />

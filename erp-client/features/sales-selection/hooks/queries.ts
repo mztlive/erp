@@ -35,6 +35,7 @@ import {
 } from "@/features/sales-selection/api/public"
 import type {
     BookListQuery,
+    BookListResult,
     CreateBookInput,
     PoolFilterSnapshot,
 } from "@/features/sales-selection/types"
@@ -71,12 +72,33 @@ const invalidateBookCaches = async (
     ])
 }
 
-/** 选品册列表查询。 */
-export const useBooks = (query: BookListQuery) =>
-    useQuery({
-        queryKey: salesSelectionKeys.list(query),
-        queryFn: () => fetchBooks(query),
+/** 选品册列表查询；第二页起自动携带第一页的范围版本。 */
+export const useBooks = (query: BookListQuery) => {
+    const queryClient = useQueryClient()
+    const firstPage = { ...query, page: 1, scope_version: undefined }
+    const baseline = queryClient.getQueryData<BookListResult>(
+        salesSelectionKeys.list(firstPage),
+    )
+    const scopeVersion =
+        query.scope_version ??
+        ((query.page ?? 1) > 1 ? baseline?.scopeVersion : undefined)
+    const scoped = { ...query, scope_version: scopeVersion }
+    return useQuery({
+        queryKey: salesSelectionKeys.list(scoped),
+        queryFn: async () => {
+            if ((query.page ?? 1) === 1 || scopeVersion)
+                return fetchBooks(scoped)
+            const first = await queryClient.fetchQuery({
+                queryKey: salesSelectionKeys.list(firstPage),
+                queryFn: () => fetchBooks(firstPage),
+            })
+            return fetchBooks({
+                ...query,
+                scope_version: first.scopeVersion,
+            })
+        },
     })
+}
 
 /**
  * 侧栏「选品册」待处理角标。

@@ -48,6 +48,12 @@ export const ProposalDetail = ({
                         </dd>
                     </div>
                     <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">负责销售</dt>
+                        <dd className="num text-right">
+                            {proposal.sales_owner_user_id}
+                        </dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
                         <dt className="text-muted-foreground">选品册</dt>
                         <dd className="num text-right">
                             {proposal.booklet_id}

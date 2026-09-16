@@ -13,7 +13,10 @@ import { listWorkspaceEmptyStateClassName } from "@/components/business/list-wor
 import { Button } from "@/components/ui/button"
 import { buildBooksListColumns } from "@/features/sales-selection/components/books-list-columns"
 import { bookIdentity } from "@/features/sales-selection/lib/presentation"
-import type { SelectionBook } from "@/features/sales-selection/types"
+import type {
+    SelectionBook,
+    SelectionOwnerOption,
+} from "@/features/sales-selection/types"
 
 /**
  * 选品册结果表：贴齐工作区表格框架，失败与空态走统一组件。
@@ -27,6 +30,8 @@ export function BooksListTable({
     onRetry,
     filtersActive,
     onClearFilters,
+    noScope = false,
+    ownerOptions = [],
     page,
     pageSize,
     onPaginationChange,
@@ -40,12 +45,25 @@ export function BooksListTable({
     onRetry: () => void
     filtersActive: boolean
     onClearFilters: () => void
+    /** 无数据范围：与筛空区分展示，不提示创建解决。 */
+    noScope?: boolean
+    /** 同一授权快照内的负责人候选，用于解析显示名。 */
+    ownerOptions?: readonly SelectionOwnerOption[]
     page: number
     pageSize: number
     onPaginationChange: (next: PaginationState) => void
     onRowNavigate: (bookId: string) => void
 }) {
-    const columns = React.useMemo(() => buildBooksListColumns(), [])
+    const ownerLabels = React.useMemo(() => {
+        const labels = new Map<string, string>()
+        for (const option of ownerOptions)
+            labels.set(option.value, option.label)
+        return labels
+    }, [ownerOptions])
+    const columns = React.useMemo(
+        () => buildBooksListColumns((ownerId) => ownerLabels.get(ownerId)),
+        [ownerLabels],
+    )
     const pagination = React.useMemo<PaginationState>(
         () => ({
             pageIndex: Math.max(0, page - 1),
@@ -66,16 +84,24 @@ export function BooksListTable({
     const emptyState =
         !loading && rows.length === 0 ? (
             <BusinessEmptyState
-                kind={filtersActive ? "filter" : "no-data"}
+                kind={noScope || filtersActive ? "filter" : "no-data"}
                 className={listWorkspaceEmptyStateClassName}
-                title={filtersActive ? "当前筛选无结果" : "还没有选品册"}
+                title={
+                    noScope
+                        ? "当前没有可查询的数据范围"
+                        : filtersActive
+                          ? "当前筛选无结果"
+                          : "还没有选品册"
+                }
                 description={
-                    filtersActive
-                        ? "换一个关键词或清除筛选后再试。"
-                        : "从公司商品池筛选或勾选商品后发起选品，选品册会显示在这里。"
+                    noScope
+                        ? "账号具备查询权限，但当前授权范围未包含可读取的选品册，请联系权限管理员核对范围。"
+                        : filtersActive
+                          ? "换一个关键词或清除筛选后再试。"
+                          : "从公司商品池筛选或勾选商品后发起选品，选品册会显示在这里。"
                 }
                 action={
-                    filtersActive ? (
+                    noScope ? undefined : filtersActive ? (
                         <Button
                             id="sales-selection-list-empty-clear"
                             type="button"

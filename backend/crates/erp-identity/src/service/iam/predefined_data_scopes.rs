@@ -25,6 +25,23 @@ pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[
     ("contract", &["list", "detail", "create", "update"]),
     ("sales_order", &["list", "detail", "create", "update", "delete", "submit", "cancel_approval"]),
     ("purchase_order", &["list", "detail", "create", "update", "delete", "submit", "cancel_approval"]),
+    (
+        "sales_selection_booklet",
+        &[
+            "list",
+            "get",
+            "create",
+            "maintain",
+            "prepare",
+            "publish",
+            "copy_link",
+            "rotate_link",
+            "close",
+            "revoke",
+            "void",
+        ],
+    ),
+    ("sales_selection_proposal", &["list", "get"]),
 ];
 
 /// 首次初始化显式岗位清单；没有条目的岗位不获得兜底范围。

@@ -391,6 +391,8 @@ mod tests {
                 customer_id: CustomerAccountId::new("customer"),
                 customer_no: "C1".into(),
                 customer_name: "客户".into(),
+                sales_owner_user_id: "sales-1".into(),
+                business_org_unit_id: "org-1".into(),
                 form: SelectionForm::SingleSku,
                 submit_mode: SubmitMode::ByQuantity,
                 pool_source: PoolSource::new(

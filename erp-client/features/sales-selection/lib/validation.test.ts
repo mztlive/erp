@@ -11,6 +11,8 @@ describe("sales selection validation", () => {
     it("accepts a single-sku by-quantity book from filter source", () => {
         const parsed = createBookSchema.safeParse({
             customer_id: "cust_1",
+            sales_owner_user_id: "user_1",
+            business_org_unit_id: "org_1",
             selection_form: "SINGLE_SKU",
             submit_mode: "BY_QUANTITY",
             source_kind: "FILTER",
@@ -18,6 +20,29 @@ describe("sales selection validation", () => {
             tiers: [],
         })
         expect(parsed.success).toBe(true)
+    })
+
+    it("rejects books without explicit sales responsibility", () => {
+        expect(
+            createBookSchema.safeParse({
+                customer_id: "cust_1",
+                sales_owner_user_id: "",
+                business_org_unit_id: "org_1",
+                selection_form: "SINGLE_SKU",
+                submit_mode: "BY_QUANTITY",
+                source_kind: "FILTER",
+            }).success,
+        ).toBe(false)
+        expect(
+            createBookSchema.safeParse({
+                customer_id: "cust_1",
+                sales_owner_user_id: "user_1",
+                business_org_unit_id: "",
+                selection_form: "SINGLE_SKU",
+                submit_mode: "BY_QUANTITY",
+                source_kind: "FILTER",
+            }).success,
+        ).toBe(false)
     })
 
     it("rejects books without customer, form or mode", () => {
@@ -41,6 +66,8 @@ describe("sales selection validation", () => {
         expect(
             createBookSchema.safeParse({
                 customer_id: "cust_1",
+                sales_owner_user_id: "user_1",
+                business_org_unit_id: "org_1",
                 selection_form: "PACKAGE",
                 submit_mode: "BY_QUANTITY",
                 source_kind: "FILTER",
@@ -50,6 +77,8 @@ describe("sales selection validation", () => {
         expect(
             createBookSchema.safeParse({
                 customer_id: "cust_1",
+                sales_owner_user_id: "user_1",
+                business_org_unit_id: "org_1",
                 selection_form: "PACKAGE",
                 submit_mode: "BY_QUANTITY",
                 source_kind: "FILTER",
@@ -59,6 +88,8 @@ describe("sales selection validation", () => {
         expect(
             createBookSchema.safeParse({
                 customer_id: "cust_1",
+                sales_owner_user_id: "user_1",
+                business_org_unit_id: "org_1",
                 selection_form: "PACKAGE",
                 submit_mode: "MALL_REDEEM",
                 source_kind: "SELECTION",

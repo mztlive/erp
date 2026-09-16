@@ -61,12 +61,16 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
     Ok(())
 }
 
-/// 选品册索引：列表筛选、令牌查找、一册一方案。
+/// 选品册索引：列表筛选、责任范围、令牌查找、一册一方案。
 fn booklet_indexes() -> Vec<IndexModel> {
     vec![
         named_index(
             "idx_sales_selection_booklets_list",
             doc! { "customer_id": 1, "status": 1, "form": 1, "submit_mode": 1, "created_at": -1 },
+        ),
+        named_index(
+            "idx_sales_selection_booklets_owner_org",
+            doc! { "sales_owner_user_id": 1, "business_org_unit_id": 1, "created_at": -1 },
         ),
         unique_partial_index(
             "uk_sales_selection_booklets_token_hash",
@@ -113,12 +117,16 @@ fn session_indexes() -> Vec<IndexModel> {
     vec![unique_index("uk_sales_selection_sessions_booklet", doc! { "booklet_id": 1 })]
 }
 
-/// 方案编号与一册一份方案。
+/// 方案编号、一册一份方案、责任范围与客户查询。
 fn proposal_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_selection_proposals_no", doc! { "proposal_no": 1 }),
         unique_index("uk_sales_selection_proposals_booklet", doc! { "booklet_id": 1 }),
         named_index("idx_sales_selection_proposals_customer", doc! { "customer_id": 1, "submitted_at": -1 }),
+        named_index(
+            "idx_sales_selection_proposals_owner_org",
+            doc! { "sales_owner_user_id": 1, "business_org_unit_id": 1, "submitted_at": -1 },
+        ),
     ]
 }
 
@@ -184,6 +192,16 @@ fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Documen
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn owner_org_indexes_cover_scope_queries() {
+        let booklets = booklet_indexes();
+        assert!(booklets.iter().any(|index| index.keys
+            == doc! { "sales_owner_user_id": 1, "business_org_unit_id": 1, "created_at": -1 }));
+        let proposals = proposal_indexes();
+        assert!(proposals.iter().any(|index| index.keys
+            == doc! { "sales_owner_user_id": 1, "business_org_unit_id": 1, "submitted_at": -1 }));
+    }
 
     #[test]
     fn rate_windows_use_ttl_without_redeclaring_builtin_id() {

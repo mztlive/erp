@@ -37,6 +37,10 @@ export type BookletListItem = {
     version: number
     customer_id: string
     customer_name: string
+    /** 显式销售负责人；方案沿所属册继承，客户提交人不成为负责人。 */
+    sales_owner_user_id: string
+    /** 单据业务组织；范围按该口径解释。 */
+    business_org_unit_id: string
     form: SelectionForm
     submit_mode: SubmitMode
     status: BookletStatus
@@ -99,6 +103,12 @@ export type BookletView = {
     version: number
     customer_id: string
     customer_name: string
+    /** 显式销售负责人。 */
+    sales_owner_user_id: string
+    /** 负责人显示名；缺失账号时省略。 */
+    sales_owner_name?: string | null
+    /** 单据业务组织。 */
+    business_org_unit_id: string
     form: SelectionForm
     submit_mode: SubmitMode
     status: BookletStatus
@@ -160,6 +170,10 @@ export type ProposalView = {
     customer_id: string
     customer_name: string
     booklet_id: string
+    /** 继承所属册的显式销售负责人。 */
+    sales_owner_user_id: string
+    /** 继承所属册的业务组织。 */
+    business_org_unit_id: string
     form: SelectionForm
     submit_mode: SubmitMode
     submitted_at: number
@@ -218,6 +232,35 @@ export type BookListQuery = {
     status?: BookletStatus | "ALL"
     page?: number
     page_size?: number
+    /** 当前业务负责人；逗号分隔的稳定人员 ID，进入 URL 与 QueryKey。 */
+    owner_user_ids?: string
+    /** 当前组织筛选；逗号分隔的组织 ID，进入 URL 与 QueryKey。 */
+    org_unit_ids?: string
+    /** 是否包含有效下级；缺省为 false。 */
+    include_descendants?: boolean
+    /** 跨页范围版本；由列表基线自动携带，不手填。 */
+    scope_version?: string
+}
+
+/**
+ * 负责人候选：只含稳定 ID 与显示名（含账号状态后缀）。
+ * 来自当页同一授权快照，不授予命令资格。
+ */
+export type SelectionOwnerOption = {
+    value: string
+    label: string
+}
+
+/** 选品册列表结果：分页、候选、范围版本与无范围标记。 */
+export type BookListResult = {
+    rows: SelectionBook[]
+    total: number
+    ownerOptions: SelectionOwnerOption[]
+    scopeVersion: string
+    policyVersion: number
+    organizationVersion: number
+    /** 无范围时为 true；前端据此与筛空区分展示。 */
+    noScope: boolean
 }
 
 export type SelectionBook = BookletListItem & {
@@ -236,6 +279,10 @@ export type SelectionBookDetail = BookletView & {
 
 export type CreateBookInput = {
     customer_id: string
+    /** 显式销售负责人；必填，客户提交人不成为负责人。 */
+    sales_owner_user_id: string
+    /** 业务组织；必填，取负责人有效主属组织。 */
+    business_org_unit_id: string
     selection_form: SelectionForm
     submit_mode: SubmitMode
     source_kind: PoolSourceKind

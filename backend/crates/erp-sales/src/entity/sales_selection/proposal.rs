@@ -75,6 +75,10 @@ pub struct SalesSelectionProposalData {
     pub customer_name: String,
     /// 选品册。
     pub booklet_id: SalesSelectionBookletId,
+    /// 继承所属册的显式销售负责人；客户提交人不成为负责人。
+    pub sales_owner_user_id: String,
+    /// 继承所属册的业务组织。
+    pub business_org_unit_id: String,
     /// 准备批次。
     pub batch_id: String,
     /// 选品形态。
@@ -102,6 +106,10 @@ pub struct SalesSelectionProposal {
     pub customer_name: String,
     /// 选品册。
     pub booklet_id: SalesSelectionBookletId,
+    /// 继承所属册的显式销售负责人；客户提交人不成为负责人。
+    pub sales_owner_user_id: String,
+    /// 继承所属册的业务组织。
+    pub business_org_unit_id: String,
     /// 准备批次。
     pub batch_id: String,
     /// 选品形态。
@@ -138,12 +146,20 @@ impl SalesSelectionProposal {
         if data.submit_mode.requires_quantity() != data.total_amount.is_some() {
             return Err(Error::from("方案合计必须与提交方式一致"));
         }
+        if data.sales_owner_user_id.trim().is_empty() {
+            return Err(Error::from("销售负责人不能为空"));
+        }
+        if data.business_org_unit_id.trim().is_empty() {
+            return Err(Error::from("业务组织不能为空"));
+        }
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             proposal_no: proposal_no.to_string(),
             customer_id: data.customer_id,
             customer_name: data.customer_name,
             booklet_id: data.booklet_id,
+            sales_owner_user_id: data.sales_owner_user_id.trim().to_string(),
+            business_org_unit_id: data.business_org_unit_id.trim().to_string(),
             batch_id: data.batch_id,
             form: data.form,
             submit_mode: data.submit_mode,

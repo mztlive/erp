@@ -16,12 +16,18 @@ use crate::entity::sales_selection::{
 };
 use crate::repository::extensions::SalesSelectionExt;
 
+pub mod scope;
+
+pub use scope::{SelectionReadScope, SelectionScopeClause};
+
 /// 选品册集合名（单一来源）。
 const BOOKLETS: &str = <mongodb::Database as SalesSelectionExt>::SALES_SELECTION_BOOKLETS;
 /// 陈列项集合名。
 const ITEMS: &str = <mongodb::Database as SalesSelectionExt>::SALES_SELECTION_DISPLAY_ITEMS;
 /// 商品池成员集合名。
 const POOL: &str = <mongodb::Database as SalesSelectionExt>::SALES_SELECTION_POOL_MEMBERS;
+/// 方案集合名（单一来源）。
+const PROPOSALS: &str = <mongodb::Database as SalesSelectionExt>::SALES_SELECTION_PROPOSALS;
 /// 方案陈列行集合名。
 const PROPOSAL_DISPLAY_LINES: &str =
     <mongodb::Database as SalesSelectionExt>::SALES_SELECTION_PROPOSAL_DISPLAY_LINES;
@@ -36,6 +42,12 @@ pub const BOOK_SORT_FIELDS: &[&str] = &["created_at", "status"];
 pub struct SelectionBookFilter {
     /// 入口授权后的客户集合。None 表示全量，空集合表示无权查看任何客户。
     pub authorized_customer_ids: Option<Vec<String>>,
+    /// 已证明的选品责任范围；仓储只执行条件，不推断权限。
+    pub authorized_scope: SelectionReadScope,
+    /// 负责人筛选；`None` 表示不筛选。
+    pub owner_user_ids: Option<Vec<String>>,
+    /// 业务组织筛选；`None` 表示不筛选。
+    pub org_unit_ids: Option<Vec<String>>,
     /// 客户；`None` 表示不筛选。
     pub customer_id: Option<String>,
     /// 形态；`None` 表示不筛选。
@@ -62,10 +74,19 @@ impl QueryFilter for SelectionBookFilter {
     /// # 返回
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        let mut and: Vec<Document> = Vec::new();
+        and.push(doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON });
+        and.push(self.authorized_scope.document());
         if let Some(ids) = &self.authorized_customer_ids {
-            filter.insert("$and", vec![doc! { "customer_id": { "$in": ids } }]);
+            and.push(doc! { "customer_id": { "$in": ids } });
         }
+        if let Some(owners) = &self.owner_user_ids {
+            and.push(doc! { "sales_owner_user_id": { "$in": owners } });
+        }
+        if let Some(orgs) = &self.org_unit_ids {
+            and.push(doc! { "business_org_unit_id": { "$in": orgs } });
+        }
+        let mut filter = doc! { "$and": and };
         if let Some(customer_id) = &self.customer_id {
             filter.insert("customer_id", customer_id);
         }
@@ -86,6 +107,66 @@ impl QueryFilter for SelectionBookFilter {
 }
 
 impl Pagination for SelectionBookFilter {
+    /// 返回页码与单页条数。
+    ///
+    /// # 返回
+    /// 返回 `(page, page_size)` 元组。
+    fn page_and_size(&self) -> (u64, u64) {
+        (self.page, u64::from(self.page_size))
+    }
+}
+
+/// 方案列表筛选条件；方案沿所属册责任解释，不读提交人。
+#[derive(Debug, Clone)]
+pub struct SelectionProposalFilter {
+    /// 入口授权后的客户集合。None 表示全量，空集合表示无权查看任何客户。
+    pub authorized_customer_ids: Option<Vec<String>>,
+    /// 已证明的方案责任范围；仓储只执行条件，不推断权限。
+    pub authorized_scope: SelectionReadScope,
+    /// 负责人筛选；`None` 表示不筛选。
+    pub owner_user_ids: Option<Vec<String>>,
+    /// 业务组织筛选；`None` 表示不筛选。
+    pub org_unit_ids: Option<Vec<String>>,
+    /// 客户；`None` 表示不筛选。
+    pub customer_id: Option<String>,
+    /// 选品册；指定时只返回该册唯一方案。
+    pub booklet_id: Option<String>,
+    /// 页码（1 起）。
+    pub page: u64,
+    /// 单页条数。
+    pub page_size: u32,
+}
+
+impl QueryFilter for SelectionProposalFilter {
+    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    ///
+    /// # 返回
+    /// 返回查询条件文档。
+    fn to_doc(&self) -> Document {
+        let mut and: Vec<Document> = Vec::new();
+        and.push(doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON });
+        and.push(self.authorized_scope.document());
+        if let Some(ids) = &self.authorized_customer_ids {
+            and.push(doc! { "customer_id": { "$in": ids } });
+        }
+        if let Some(owners) = &self.owner_user_ids {
+            and.push(doc! { "sales_owner_user_id": { "$in": owners } });
+        }
+        if let Some(orgs) = &self.org_unit_ids {
+            and.push(doc! { "business_org_unit_id": { "$in": orgs } });
+        }
+        let mut filter = doc! { "$and": and };
+        if let Some(customer_id) = &self.customer_id {
+            filter.insert("customer_id", customer_id);
+        }
+        if let Some(booklet_id) = &self.booklet_id {
+            filter.insert("booklet_id", booklet_id);
+        }
+        filter
+    }
+}
+
+impl Pagination for SelectionProposalFilter {
     /// 返回页码与单页条数。
     ///
     /// # 返回
@@ -138,6 +219,23 @@ fn regex_escape(value: &str) -> String {
     escaped
 }
 
+/// 合并并集条件；空集合返回恒假，缺范围不得变全量。
+///
+/// # 参数
+/// * `conditions` - 并集条件
+///
+/// # 返回
+/// 返回 `$or` 或恒假条件。
+///
+/// # 错误
+/// 无。
+pub(crate) fn scope_union(conditions: Vec<Document>) -> Document {
+    if conditions.is_empty() {
+        return doc! { "$expr": false };
+    }
+    doc! { "$or": conditions }
+}
+
 /// 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入与列表查询。
 pub struct SalesSelectionDomainRepository<'a> {
     db: &'a Database,
@@ -180,20 +278,94 @@ impl<'a> SalesSelectionDomainRepository<'a> {
             .skip(filter.skip())
             .limit(filter.limit())
             .build();
+        let condition = filter.to_doc();
         let items = mongo_ops::find_many(
             &self.db.collection::<SalesSelectionBooklet>(BOOKLETS),
-            filter.to_doc(),
+            condition.clone(),
             options,
             executor,
         )
         .await?;
         let total = mongo_ops::count_documents(
             &self.db.collection::<SalesSelectionBooklet>(BOOKLETS),
-            filter.to_doc(),
+            condition,
             executor,
         )
         .await?;
         Ok(PageResult { items, total: total as i64 })
+    }
+
+    /// 分页检索方案（整文档）；计数与取数使用同一授权条件。
+    ///
+    /// # 参数
+    /// * `filter` - 筛选与分页条件
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回当前页与总数，稳定排序含 ID。
+    ///
+    /// # 错误
+    /// 查询或计数失败时返回仓储错误。
+    pub async fn search_proposals(
+        &self,
+        filter: &SelectionProposalFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SalesSelectionProposal>> {
+        let options = FindOptions::builder()
+            .sort(doc! { "submitted_at": -1, "id": -1 })
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .build();
+        let condition = filter.to_doc();
+        let items = mongo_ops::find_many(
+            &self.db.collection::<SalesSelectionProposal>(PROPOSALS),
+            condition.clone(),
+            options,
+            executor,
+        )
+        .await?;
+        let total = mongo_ops::count_documents(
+            &self.db.collection::<SalesSelectionProposal>(PROPOSALS),
+            condition,
+            executor,
+        )
+        .await?;
+        Ok(PageResult { items, total: total as i64 })
+    }
+
+    /// 列出某批次当前有效陈列。
+    ///
+    /// # 参数
+    /// * `booklet_id` - 选品册
+    /// * `batch_id` - 准备批次
+    /// * `executor` - 执行器
+    ///
+    /// # 返回
+    /// 返回有效且未删除的陈列项。
+    ///
+    /// # 错误
+    /// 查询失败时返回仓储错误。
+    pub async fn distinct_owner_ids(
+        &self,
+        booklet: bool,
+        scope: &SelectionReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let name = if booklet { BOOKLETS } else { PROPOSALS };
+        let collection = self.db.collection::<Document>(name);
+        let mut query = collection.distinct(
+            "sales_owner_user_id",
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$and": [scope.document()] },
+        );
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        let values = query.await?;
+        let mut ids: Vec<String> =
+            values.into_iter().filter_map(|value| value.as_str().map(str::to_owned)).collect();
+        ids.sort();
+        ids.dedup();
+        Ok(ids)
     }
 
     /// 列出某批次当前有效陈列。
@@ -482,6 +654,12 @@ mod tests {
     fn filter() -> SelectionBookFilter {
         SelectionBookFilter {
             authorized_customer_ids: None,
+            authorized_scope: super::SelectionReadScope {
+                roles: vec![super::SelectionScopeClause { company: true, ..Default::default() }],
+                ..Default::default()
+            },
+            owner_user_ids: None,
+            org_unit_ids: None,
             customer_id: Some("cust-1".into()),
             form: None,
             status: Some(crate::entity::sales_selection::BookletStatus::Draft),
@@ -499,7 +677,8 @@ mod tests {
         let document = filter().to_doc();
         assert_eq!(document.get_str("customer_id").unwrap(), "cust-1");
         assert_eq!(document.get_str("status").unwrap(), "DRAFT");
-        assert!(document.contains_key("deleted_at"));
+        let and = document.get_array("$and").unwrap();
+        assert!(and.iter().any(|item| item.as_document().unwrap().contains_key("deleted_at")));
         assert_eq!(filter().page_and_size(), (1, 20));
     }
 
@@ -509,15 +688,30 @@ mod tests {
         scoped.authorized_customer_ids = Some(vec!["allowed".into()]);
         let doc = scoped.to_doc();
         assert_eq!(doc.get_str("customer_id").unwrap(), "cust-1");
-        assert_eq!(
-            doc.get_array("$and").unwrap()[0].as_document().unwrap(),
-            &mongodb::bson::doc! { "customer_id": { "$in": ["allowed"] } }
-        );
+        let and = doc.get_array("$and").unwrap();
+        assert!(and.iter().any(|item| item.as_document().unwrap()
+            == &mongodb::bson::doc! { "customer_id": { "$in": ["allowed"] } }));
         scoped.authorized_customer_ids = Some(vec![]);
-        assert_eq!(
-            scoped.to_doc().get_array("$and").unwrap()[0].as_document().unwrap(),
-            &mongodb::bson::doc! { "customer_id": { "$in": [] } }
+        let doc = scoped.to_doc();
+        let and = doc.get_array("$and").unwrap();
+        assert!(
+            and.iter()
+                .any(|item| item.as_document().unwrap()
+                    == &mongodb::bson::doc! { "customer_id": { "$in": [] } })
         );
+    }
+
+    #[test]
+    fn owner_and_org_filters_intersect_authorized_scope() {
+        let mut scoped = filter();
+        scoped.owner_user_ids = Some(vec!["sales-a".into()]);
+        scoped.org_unit_ids = Some(vec!["org-a".into()]);
+        let doc = scoped.to_doc();
+        let and = doc.get_array("$and").unwrap();
+        assert!(and.iter().any(|item| item.as_document().unwrap()
+            == &mongodb::bson::doc! { "sales_owner_user_id": { "$in": ["sales-a"] } }));
+        assert!(and.iter().any(|item| item.as_document().unwrap()
+            == &mongodb::bson::doc! { "business_org_unit_id": { "$in": ["org-a"] } }));
     }
 
     #[test]
