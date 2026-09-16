@@ -1,12 +1,14 @@
 # S1 负责人基础查询交付与验收合同
 
-状态：本地检查通过；业务验收未执行
+状态：已完成（本地检查通过；真实验收转上线准入跟踪，不阻塞完成）
 
 实施日期：2026-09-13
 
-修订日期：2026-09-14
+修订日期：2026-09-16
 
-上位合同：[组织架构、数据范围与负责人查询执行合同](organization-data-scope-contract.md) v1.2，第 11 章及第 9.2—9.5 节阶段衔接要求。
+完成度口径：S1 完成只要求 §8 本地检查通过；§7“MongoDB 与业务验收”行及 §9—§10 的真实库、真实打印、真实账号、业务验收统一转上线准入跟踪，未执行不阻塞 S1 已完成登记。“已验收”单列，仍须单独核销。
+
+上位合同：[组织架构、数据范围与负责人查询执行合同](organization-data-scope-contract.md) v1.3，第 11 章及第 9.2—9.5 节阶段衔接要求。
 
 ## 1. 生效范围
 
@@ -14,7 +16,7 @@
 2. 人员筛选仅收窄既有读取结果，不授予动作权限，不写入任务，不开放销售责任改派。
 3. S1 不作为正式业务上线依据。组织树、成员与管理关系、DataScope v2、业务组织归属、首次生效人员与组织快照必须在 S2 完成。
 4. 不提供旧姓名筛选、旧销售负责人推导或旧业务数据回填。开发环境必须使用符合新字段要求的测试数据；不得通过读取时补创建人绕过责任字段要求。
-5. 本文“本地检查通过”只覆盖 S1 负责人基础查询批次。S2、S3 的公共解析、消费方 Port、组合层 adapter、资源接入登记及 A33—A36 按上位合同执行；不得以 S1 记录证明后续 DataScope 接入符合架构要求。后续资源新增的组织参数、范围元信息及导出重验，以对应 S2、S3 合同为准，不得将本阶段未支持字段永久判为非法。
+5. 本文“已完成（本地检查通过）”只覆盖 S1 负责人基础查询批次。S2、S3 的公共解析、消费方 Port、组合层 adapter、资源接入登记及 A33—A36 按上位合同执行；不得以 S1 记录证明后续 DataScope 接入符合架构要求。后续资源新增的组织参数、范围元信息及导出重验，以对应 S2、S3 合同为准，不得将本阶段未支持字段永久判为非法。
 
 ## 2. 责任事实与显示
 
@@ -82,22 +84,22 @@
 
 ## 7. 验收要求与记录
 
-以下为 2026-09-13 S1 批次历史记录，交付参考提交为 `c9fd41e8`；保留原测试计数及验证边界。后续代码变更必须单独登记执行基线和结果，不得将本表视为当前 HEAD 或主合同 v1.2 新增架构检查已经通过。
+以下为 2026-09-13 S1 批次历史记录，交付参考提交为 `c9fd41e8`；保留原测试计数及验证边界。后续代码变更必须单独登记执行基线和结果，不得将本表视为当前 HEAD 或主合同 v1.3 新增架构检查已经通过。
 
 | 验收项 | 要求 | 当前记录 |
 | --- | --- | --- |
 | A07 同名与参数 | 两个同名账号按 ID 分开；旧姓名、空值、超限和未注册参数拒绝 | HTTP Query 与 ID 值对象单元检查通过；四页模拟候选和筛选通过 |
-| A10 一致性 | 修改编辑人不改变负责销售；列表、详情、打印和 CSV 同源 | 实体、BSON 合同与前端投影单元检查通过；真实业务打印未执行 |
+| A10 一致性 | 修改编辑人不改变负责销售；列表、详情、打印和 CSV 同源 | 实体、BSON 合同与前端投影单元检查通过；真实业务打印转上线准入跟踪，不阻塞完成 |
 | A15 跨页与导出 | 跨页总数和人员条件一致；201 条结果完整导出；中途失败不下载部分文件 | 前端单元检查通过 |
 | A21 查询与任务 | 查询链路不调用任务写入，责任改派与审批资格保持 | 差异核对通过：查询接线无任务写入；未增加销售改派入口 |
 | 前端回归 | 四个功能目录单元测试、类型检查、Lint | 157 项单元测试、TypeScript 与 Lint 通过 |
 | 后端回归 | workspace lib 单元、编译、Clippy、格式、BPM 与领域边界 | workspace：3775 通过、64 忽略；最终客户域复验 54 通过；编译、Clippy、格式、BPM、领域边界和权限生成物漂移检查通过 |
 | 浏览器 | 同名候选、多选、应用、清除、刷新、分页与窄屏 | 四类同名／停用候选筛选、四类导出通过；销售刷新、清除、102 条跨页导出通过；销售与采购 390px 页面无横向溢出 |
-| MongoDB 与业务验收 | 数据库执行计划、真实归属交接、权限与并发、实际导出核对 | 未执行；按仓库约束不运行真实数据库集成测试 |
+| MongoDB 与业务验收（转上线准入跟踪，不阻塞完成） | 数据库执行计划、真实归属交接、权限与并发、实际导出核对 | 转跟踪；按仓库约束不运行真实数据库集成测试，不计入 S1 完成度 |
 
-1. 本地检查通过后，开发执行者仅可登记“本地检查通过”，不得登记“已验收”。
-2. 浏览器模拟数据仅证明页面请求、呈现和交互，不作为数据库权限或生产验收证据。
-3. 首发清单必须继续关闭尚未满足上位合同第 10 章准入条件的资源。
+1. 本地检查通过后，开发执行者可登记“本地检查通过”或“已完成”；“已验收”单列，仍须单独核销。真实验收未执行不得作为 S1 未完成的依据。
+2. 浏览器模拟数据仅证明页面请求、呈现和交互，不作为数据库权限或生产验收证据；该限制不阻塞 S1 完成，仅限制“已验收／上线准入”的登记。
+3. 首发清单必须继续关闭尚未满足上位合同第 10 章准入条件的资源（正式开放限制，不阻塞 S1 完成）。
 
 ## 8. 本地检查执行命令
 
@@ -122,7 +124,7 @@ npm run lint
 npx vitest run features/contracts features/customers features/purchase-orders features/sales-orders features/entity-selectors/components/responsible-user-filter.test.tsx tests/list-export.test.ts tests/owner-query-state.test.ts
 ```
 
-浏览器检查使用独立本地前端与模拟 API：105 条对象中，两个同名负责人分别关联 102 条和 3 条；四类列表须按所选 ID 请求并显示 3 条对应对象。销售选择 102 条的一方后，刷新保留条件，第 6 页仅显示最后 2 条，导出必须重新读取全部 102 条。390px 检查覆盖销售、采购的已选人员和筛选菜单。模拟环境不得登记真实数据库、组织范围或业务验收通过。
+浏览器检查使用独立本地前端与模拟 API：105 条对象中，两个同名负责人分别关联 102 条和 3 条；四类列表须按所选 ID 请求并显示 3 条对应对象。销售选择 102 条的一方后，刷新保留条件，第 6 页仅显示最后 2 条，导出必须重新读取全部 102 条。390px 检查覆盖销售、采购的已选人员和筛选菜单。模拟环境不得登记真实数据库、组织范围或业务验收通过（该限制仅针对“已验收／上线准入”，不阻塞 S1 完成）。
 
 ## 9. HEAD 本地重验补登记（2026-09-15，基线 8b3fc1e4）
 
@@ -144,11 +146,11 @@ npx vitest run features/contracts features/customers features/purchase-orders fe
    - `features/sales-orders/lib/sales-orders-list-filters.ts`：no-extra-boolean-cast 错误。
    - `features/organization/lib/impact.ts`：no-unused-vars（`afterUnits`）错误。
    - `features/organization/components/organization-layout.test.tsx`：no-unused-vars（`container`）错误。
-5. 仍未执行项：真实 MongoDB 集成测试、业务验收、浏览器真实账号验证、全仓 workspace 门禁均未执行。S1 状态仍为“本地检查通过”，未验收；不声称 S2 或 A33—A36 通过。
+5. 仍未执行项（转上线准入跟踪，不阻塞完成）：真实 MongoDB 集成测试、业务验收、浏览器真实账号验证、全仓 workspace 门禁均未执行。S1 状态为“已完成（本地检查通过）”，未验收；不声称 S2 或 A33—A36 通过。
 
 ## 10. HEAD 全量本地重验（2026-09-16，基线 ceb0fdb0）
 
-本节为 2026-09-16 在工作区路径 `/Users/huangjiajiang/Development/erp`、分支 `main`、基线 `ceb0fdb0`（`docs(org-scope): S1 补登记 HEAD 本地重验`）上执行的 S1 §8 全量本地重验。不改写 §7、§9 历史表。状态仍为“本地检查通过”，不得登记“已验收”。
+本节为 2026-09-16 在工作区路径 `/Users/huangjiajiang/Development/erp`、分支 `main`、基线 `ceb0fdb0`（`docs(org-scope): S1 补登记 HEAD 本地重验`）上执行的 S1 §8 全量本地重验。不改写 §7、§9 历史表。状态为“已完成（本地检查通过）”，“已验收”单列；真实验收未执行不阻塞完成。
 
 1. 本批为打通 §8 全仓门禁与模拟浏览器检查而做的修复（不含 S1 查询语义变更）：
    - 前端 lint：`sales-orders-list-filter-panel.tsx`、`customer-center-directory-toolbar.tsx`、`contracts-table-panel.tsx` 为包含下级 Checkbox 补 `htmlFor`；`sales-orders-list-filters.ts` 去掉多余 `Boolean()`；`organization/lib/impact.ts`、`organization-layout.test.tsx` 删除未使用变量。
@@ -156,5 +158,5 @@ npx vitest run features/contracts features/customers features/purchase-orders fe
    - 浏览器：新增 `e2e/tests/s1-owner-query-mock.spec.ts`。登录真实本地 web-api 后拦截客户/合同/销售单/采购单列表，105 条中同名负责人分别 102 与 3 条。
 2. 后端命令与结果（从 `backend/` 执行）：`cargo fmt --all -- --check` exit 0；`cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` exit 0；`env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked` 3891 通过、64 忽略、0 失败；`env -u ERP_TEST_MONGO_URI cargo test -p erp-customer --lib --locked` 70 通过；BPM 边界、`check-domain-boundaries.sh --cutover`、权限漂移、`git diff --check` 均 exit 0。
 3. 前端命令与结果（从 `erp-client/` 执行）：`npx tsc --noEmit` exit 0；全量 `npm run lint` exit 0；§8 vitest 53 文件 183 通过。
-4. 浏览器：`cd e2e && npx playwright test tests/s1-owner-query-mock.spec.ts` 1/1 通过。覆盖四类列表按 `owner_user_ids` 显示 3 条、销售 102 条刷新保留条件、第 6 页 2 条、`page_size=100` 重读 102 条导出、销售/采购 390px 已选人员与筛选菜单无横向溢出。模拟环境不得登记真实数据库、组织范围或业务验收通过。
-5. 仍未执行：真实 MongoDB 集成测试（仓库禁止）、真实业务打印、真实账号权限/并发/执行计划核对、业务验收。不声称 S2 或 A33—A36 通过。
+4. 浏览器：`cd e2e && npx playwright test tests/s1-owner-query-mock.spec.ts` 1/1 通过。覆盖四类列表按 `owner_user_ids` 显示 3 条、销售 102 条刷新保留条件、第 6 页 2 条、`page_size=100` 重读 102 条导出、销售/采购 390px 已选人员与筛选菜单无横向溢出。模拟环境不得登记真实数据库、组织范围或业务验收通过（该限制仅针对“已验收／上线准入”，不阻塞 S1 完成）。
+5. 仍未执行（转上线准入跟踪，不阻塞完成）：真实 MongoDB 集成测试（仓库禁止）、真实业务打印、真实账号权限/并发/执行计划核对、业务验收。不声称 S2 或 A33—A36 通过。
