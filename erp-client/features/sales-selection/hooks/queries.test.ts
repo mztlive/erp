@@ -41,4 +41,24 @@ describe("sales selection query keys", () => {
             "actionable-count",
         ])
     })
+
+    it("separates list keys by scope filters and scope version", () => {
+        const base = { status: "PUBLISHED", page: 2 } as const
+        expect(salesSelectionKeys.list(base)).not.toEqual(
+            salesSelectionKeys.list({
+                ...base,
+                owner_user_ids: "user-1",
+            }),
+        )
+        expect(salesSelectionKeys.list(base)).not.toEqual(
+            salesSelectionKeys.list({
+                ...base,
+                org_unit_ids: "org-1",
+                include_descendants: true,
+            }),
+        )
+        expect(salesSelectionKeys.list(base)).not.toEqual(
+            salesSelectionKeys.list({ ...base, scope_version: "v1" }),
+        )
+    })
 })

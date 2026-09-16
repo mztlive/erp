@@ -37,6 +37,24 @@ const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     ),
     ("cost_entry", &["list", "detail"], &[ScopeDimension::InternalOrg]),
     ("cost_allocation", &["list"], &[ScopeDimension::InternalOrg]),
+    (
+        "sales_selection_booklet",
+        &[
+            "list",
+            "get",
+            "create",
+            "maintain",
+            "prepare",
+            "publish",
+            "copy_link",
+            "rotate_link",
+            "close",
+            "revoke",
+            "void",
+        ],
+        &[ScopeDimension::InternalOrg],
+    ),
+    ("sales_selection_proposal", &["list", "get"], &[ScopeDimension::InternalOrg]),
 ];
 
 /// 已接线消费者的资源动作登记。
@@ -138,6 +156,11 @@ mod tests {
         assert!(registration("purchase_order", "delete").is_ok());
         assert!(registration("purchase_order", "submit").is_ok());
         assert!(registration("purchase_order", "cancel_approval").is_ok());
+        assert!(registration("sales_selection_booklet", "list").is_ok());
+        assert!(registration("sales_selection_booklet", "create").is_ok());
+        assert!(registration("sales_selection_proposal", "list").is_ok());
+        assert!(registration("sales_selection_proposal", "get").is_ok());
+        assert!(registration("sales_selection_proposal", "detail").is_err());
         assert!(registration("purchase_change_order", "list").is_err());
         assert!(registration("purchase_return_order", "list").is_err());
         assert!(registration("contract", "delete").is_err());

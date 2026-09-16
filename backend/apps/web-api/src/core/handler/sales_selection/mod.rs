@@ -11,13 +11,15 @@ use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, REFERRER_POLICY, X_CONTENT
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::{Extension, Json};
-use erp_processes::sales_selection::SalesSelectionProcess;
+use erp_processes::sales_selection::{
+    SalesSelectionProcess, SelectionBookletListView, SelectionProposalListView,
+};
 use erp_sales::dto::sales_selection::{
     CopyLinkView, CreateSalesSelectionBookletRequest, DeleteDisplayItemRequest, PrepareSalesSelectionRequest,
     PublicSelectionPageView, PublishSalesSelectionRequest, SalesSelectionBookletListParams,
-    SalesSelectionBookletPage, SalesSelectionBookletView, SalesSelectionCommandRequest,
-    SalesSelectionProposalListParams, SalesSelectionProposalPage, SalesSelectionProposalView,
-    SalesSelectionSessionView, SaveSelectionSessionRequest, SubmitSelectionSessionRequest,
+    SalesSelectionBookletView, SalesSelectionCommandRequest, SalesSelectionProposalListParams,
+    SalesSelectionProposalView, SalesSelectionSessionView, SaveSelectionSessionRequest,
+    SubmitSelectionSessionRequest,
 };
 use serde::Deserialize;
 
@@ -34,6 +36,7 @@ fn process(state: &AppState) -> SalesSelectionProcess {
         state.storage().clone(),
         state.config_snapshot().app.secret.as_bytes(),
     )
+    .with_rbac(state.rbac())
 }
 
 #[permission_macros::permission(
@@ -54,11 +57,12 @@ fn process(state: &AppState) -> SalesSelectionProcess {
 pub async fn booklet_list(
     State(state): State<AppState>,
     Extension(subject): Extension<RbacSubject>,
+    Extension(actor): Extension<AuditActor>,
     Extension(UserID(user_id)): Extension<UserID>,
     Query(mut params): Query<SalesSelectionBookletListParams>,
-) -> Result<SalesSelectionBookletPage> {
+) -> Result<SelectionBookletListView> {
     params.authorized_customer_ids = access::customer_ids(&state, &subject, &user_id).await?;
-    Ok(ApiResponse::ok_with_data(process(&state).booklet_list(params).await?))
+    Ok(ApiResponse::ok_with_data(process(&state).booklet_list(params, actor).await?))
 }
 
 #[permission_macros::permission(
@@ -81,8 +85,9 @@ pub async fn booklet_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(process(&state).booklet_detail(&id).await?))
+    let view = process(&state).booklet_detail(&id, &actor).await?;
+    ensure_customer_access(&state, &actor, "detail", &view.customer_id).await?;
+    Ok(ApiResponse::ok_with_data(view))
 }
 
 #[permission_macros::permission(
@@ -107,7 +112,7 @@ pub async fn booklet_create(
     Json(req): Json<CreateSalesSelectionBookletRequest>,
 ) -> Result<SalesSelectionBookletView> {
     ensure_customer_access(&state, &actor, "detail", &req.customer_id).await?;
-    Ok(ApiResponse::ok_with_data(process(&state).create(req, actor.id().to_string()).await?))
+    Ok(ApiResponse::ok_with_data(process(&state).create(req, actor).await?))
 }
 
 #[permission_macros::permission(
@@ -134,7 +139,7 @@ pub async fn booklet_prepare(
     Json(req): Json<PrepareSalesSelectionRequest>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(process(&state).start_prepare(id, req, actor.id().to_string()).await?))
+    Ok(ApiResponse::ok_with_data(process(&state).start_prepare(id, req, actor).await?))
 }
 
 #[permission_macros::permission(
@@ -161,9 +166,7 @@ pub async fn booklet_delete_item(
     Query(req): Query<DeleteDisplayItemRequest>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(
-        process(&state).delete_display_item(id, item_id, req, actor.id().to_string()).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).delete_display_item(id, item_id, req, actor).await?))
 }
 
 #[permission_macros::permission(
@@ -190,9 +193,7 @@ pub async fn booklet_delete_item_post(
     Json(req): Json<DeleteDisplayItemRequest>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(
-        process(&state).delete_display_item(id, item_id, req, actor.id().to_string()).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(process(&state).delete_display_item(id, item_id, req, actor).await?))
 }
 
 #[permission_macros::permission(
@@ -219,7 +220,7 @@ pub async fn booklet_publish(
     Json(req): Json<PublishSalesSelectionRequest>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(process(&state).publish(id, req, actor.id().to_string()).await?))
+    Ok(ApiResponse::ok_with_data(process(&state).publish(id, req, actor).await?))
 }
 
 #[permission_macros::permission(
@@ -243,7 +244,7 @@ pub async fn booklet_copy_link(
     Path(id): Path<String>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(process(&state).copy_link(&id).await?))
+    Ok(ApiResponse::ok_with_data(process(&state).copy_link(&id, &actor).await?))
 }
 
 #[permission_macros::permission(
@@ -267,7 +268,7 @@ pub async fn booklet_copy_link_url(
     Path(id): Path<String>,
 ) -> Result<CopyLinkView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(process(&state).copy_link_url(&id).await?))
+    Ok(ApiResponse::ok_with_data(process(&state).copy_link_url(&id, &actor).await?))
 }
 
 #[permission_macros::permission(
@@ -291,7 +292,7 @@ pub async fn booklet_session(
     Path(id): Path<String>,
 ) -> Result<SalesSelectionSessionView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(process(&state).admin_session(&id).await?))
+    Ok(ApiResponse::ok_with_data(process(&state).admin_session(&id, &actor).await?))
 }
 
 #[permission_macros::permission(
@@ -318,7 +319,7 @@ pub async fn booklet_rotate_link(
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(process(&state).rotate_link(id, req, actor.id().to_string()).await?))
+    Ok(ApiResponse::ok_with_data(process(&state).rotate_link(id, req, actor).await?))
 }
 
 #[permission_macros::permission(
@@ -345,7 +346,7 @@ pub async fn booklet_close(
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(process(&state).close(id, req, actor.id().to_string()).await?))
+    Ok(ApiResponse::ok_with_data(process(&state).close(id, req, actor).await?))
 }
 
 #[permission_macros::permission(
@@ -372,7 +373,7 @@ pub async fn booklet_revoke(
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(process(&state).revoke(id, req, actor.id().to_string()).await?))
+    Ok(ApiResponse::ok_with_data(process(&state).revoke(id, req, actor).await?))
 }
 
 #[permission_macros::permission(
@@ -399,7 +400,7 @@ pub async fn booklet_void(
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
     access::booklet(&state, &actor, &id).await?;
-    Ok(ApiResponse::ok_with_data(process(&state).void(id, req, actor.id().to_string()).await?))
+    Ok(ApiResponse::ok_with_data(process(&state).void(id, req, actor).await?))
 }
 
 #[permission_macros::permission(
@@ -420,11 +421,12 @@ pub async fn booklet_void(
 pub async fn proposal_list(
     State(state): State<AppState>,
     Extension(subject): Extension<RbacSubject>,
+    Extension(actor): Extension<AuditActor>,
     Extension(UserID(user_id)): Extension<UserID>,
     Query(mut params): Query<SalesSelectionProposalListParams>,
-) -> Result<SalesSelectionProposalPage> {
+) -> Result<SelectionProposalListView> {
     params.authorized_customer_ids = access::customer_ids(&state, &subject, &user_id).await?;
-    Ok(ApiResponse::ok_with_data(process(&state).proposal_list(params).await?))
+    Ok(ApiResponse::ok_with_data(process(&state).proposal_list(params, actor).await?))
 }
 
 #[permission_macros::permission(
@@ -447,7 +449,7 @@ pub async fn proposal_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesSelectionProposalView> {
-    let proposal = process(&state).proposal_detail(&id).await?;
+    let proposal = process(&state).proposal_detail(&id, &actor).await?;
     ensure_customer_access(&state, &actor, "detail", &proposal.customer_id).await?;
     Ok(ApiResponse::ok_with_data(proposal))
 }
@@ -469,7 +471,7 @@ pub async fn admin_image(
     Query(query): Query<PublicImageQuery>,
 ) -> std::result::Result<Response, Error> {
     access::booklet(&state, &actor, &id).await?;
-    let (bytes, content_type) = process(&state).admin_image(&id, &query.asset_id).await?;
+    let (bytes, content_type) = process(&state).admin_image(&id, &query.asset_id, &actor).await?;
     let mut response = Response::new(Body::from(bytes));
     response.headers_mut().insert(
         CONTENT_TYPE,

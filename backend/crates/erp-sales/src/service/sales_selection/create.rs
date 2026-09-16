@@ -75,6 +75,8 @@ impl SalesSelectionService {
                 customer_id: CustomerAccountId::new(customer.id),
                 customer_no: customer.customer_no,
                 customer_name: customer.display_name,
+                sales_owner_user_id: req.sales_owner_user_id.clone(),
+                business_org_unit_id: req.business_org_unit_id.clone(),
                 form: req.form,
                 submit_mode: req.submit_mode,
                 pool_source,

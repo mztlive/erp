@@ -17,6 +17,9 @@ use crate::{Error, Result};
 impl SalesSelectionService {
     /// 分页列出选品册。
     ///
+    /// 兼容旧调用的非授权入口；HTTP 授权路径必须使用
+    /// [`SalesSelectionService::list_booklets_with`] 并传入已解析范围。
+    ///
     /// # 参数
     /// * `params` - 筛选与分页参数
     ///
@@ -30,10 +33,20 @@ impl SalesSelectionService {
         params: SalesSelectionBookletListParams,
     ) -> Result<SalesSelectionBookletPage> {
         let mut executor = NoTransaction;
-        self.list_booklets_with(&params, &mut executor).await
+        let scope = crate::repository::sales_selection::SelectionReadScope {
+            roles: vec![crate::repository::sales_selection::SelectionScopeClause {
+                company: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        self.list_booklets_with(&params, &scope, &mut executor).await
     }
 
     /// 查询方案列表。
+    ///
+    /// 兼容旧调用的非授权入口；HTTP 授权路径必须使用
+    /// [`SalesSelectionService::proposal_list_with`] 并传入已解析范围。
     ///
     /// # 参数
     /// * `params` - 筛选
@@ -48,39 +61,64 @@ impl SalesSelectionService {
         params: crate::dto::sales_selection::SalesSelectionProposalListParams,
     ) -> Result<crate::dto::sales_selection::SalesSelectionProposalPage> {
         let mut executor = NoTransaction;
-        let mut items = self
-            .db
-            .sales_selection_proposals()
-            .list_authorized(
-                params.customer_id.as_deref(),
-                params.booklet_id.as_deref(),
-                params.authorized_customer_ids.as_deref(),
-                &mut executor,
-            )
-            .await?;
-        items.sort_by(|a, b| b.submitted_at.cmp(&a.submitted_at).then_with(|| b.base.id.cmp(&a.base.id)));
-        let total = i64::try_from(items.len()).unwrap_or(i64::MAX);
-        let page = params.page.unwrap_or(1);
-        let page_size = params.page_size.unwrap_or(20);
-        let skip = ((page.saturating_sub(1)) * u64::from(page_size)) as usize;
-        let page_items = items
-            .into_iter()
-            .skip(skip)
-            .take(page_size as usize)
-            .map(|item| Self::proposal_list_item(&item))
-            .collect();
+        let scope = crate::repository::sales_selection::SelectionReadScope {
+            roles: vec![crate::repository::sales_selection::SelectionScopeClause {
+                company: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        self.proposal_list_with(&params, &scope, &mut executor).await
+    }
+
+    /// 查询方案列表（执行器与已解析范围注入）。
+    ///
+    /// 调用方必须先经 DataScope v2 解析动作范围；计数与取数同一条件。
+    ///
+    /// # 参数
+    /// * `params` - 筛选
+    /// * `authorized_scope` - 已解析的方案责任范围
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回分页。
+    ///
+    /// # 错误
+    /// 查询失败。
+    pub async fn proposal_list_with(
+        &self,
+        params: &crate::dto::sales_selection::SalesSelectionProposalListParams,
+        authorized_scope: &crate::repository::sales_selection::SelectionReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<crate::dto::sales_selection::SalesSelectionProposalPage> {
+        use application_core::{page_or_default, page_size_or_default};
+        let filter = crate::repository::sales_selection::SelectionProposalFilter {
+            authorized_customer_ids: params.authorized_customer_ids.clone(),
+            authorized_scope: authorized_scope.clone(),
+            owner_user_ids: params.owner_user_ids.clone(),
+            org_unit_ids: params.org_unit_ids.clone(),
+            customer_id: params.customer_id.clone(),
+            booklet_id: params.booklet_id.clone(),
+            page: page_or_default(params.page),
+            page_size: page_size_or_default(params.page_size),
+        };
+        let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
+        let result = domain.search_proposals(&filter, executor).await?;
         Ok(crate::dto::sales_selection::SalesSelectionProposalPage {
-            items: page_items,
-            total,
-            page,
-            page_size,
+            items: result.items.iter().map(|item| Self::proposal_list_item(item)).collect(),
+            total: result.total,
+            page: filter.page,
+            page_size: filter.page_size,
         })
     }
 
-    /// 分页列出选品册（执行器注入）。
+    /// 分页列出选品册（执行器与已解析范围注入）。
+    ///
+    /// 调用方必须先经 DataScope v2 解析动作范围；本方法只执行条件。
     ///
     /// # 参数
     /// * `params` - 筛选与分页参数
+    /// * `authorized_scope` - 已解析的选品责任范围
     /// * `executor` - 数据访问执行器
     ///
     /// # 返回
@@ -91,9 +129,10 @@ impl SalesSelectionService {
     pub async fn list_booklets_with(
         &self,
         params: &SalesSelectionBookletListParams,
+        authorized_scope: &crate::repository::sales_selection::SelectionReadScope,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionBookletPage> {
-        let filter = booklet_filter(params)?;
+        let filter = booklet_filter(params, authorized_scope)?;
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
         let result = domain.search_booklets(&filter, executor).await?;
         Ok(SalesSelectionBookletPage {
@@ -143,6 +182,8 @@ impl SalesSelectionService {
 
     /// 组装详情视图。
     ///
+    /// 组合层授权快照与写命令经本入口复用同一映射；公开页不走本入口。
+    ///
     /// # 参数
     /// * `booklet` - 选品册
     /// * `batch_id` - 指定批次；为空使用当前批次
@@ -153,7 +194,7 @@ impl SalesSelectionService {
     ///
     /// # 错误
     /// 无可预览批次时拒绝。
-    pub(super) async fn detail_view(
+    pub async fn detail_view(
         &self,
         booklet: &SalesSelectionBooklet,
         batch_id: Option<String>,
@@ -233,6 +274,27 @@ impl SalesSelectionService {
 
     /// 读取内部会话快照。
     ///
+    /// 组合层已在调用方事务内完成对象重验；本方法只组装视图。
+    ///
+    /// # 参数
+    /// * `booklet_id` - 选品册
+    /// * `executor` - 执行器
+    ///
+    /// # 返回
+    /// 返回当前会话选择。
+    ///
+    /// # 错误
+    /// 无会话时返回未找到。
+    pub async fn session_of(
+        &self,
+        booklet_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<SalesSelectionSessionView> {
+        self.session_view(booklet_id, executor).await
+    }
+
+    /// 读取内部会话快照。
+    ///
     /// # 参数
     /// * `booklet_id` - 选品册
     ///
@@ -243,11 +305,30 @@ impl SalesSelectionService {
     /// 无会话时返回未找到。
     pub async fn admin_session(&self, booklet_id: &str) -> Result<SalesSelectionSessionView> {
         let mut executor = NoTransaction;
-        let booklet = self.load_booklet(booklet_id, &mut executor).await?;
+        self.session_view(booklet_id, &mut executor).await
+    }
+
+    /// 组装内部会话视图。
+    ///
+    /// # 参数
+    /// * `booklet_id` - 选品册
+    /// * `executor` - 执行器
+    ///
+    /// # 返回
+    /// 返回当前会话选择。
+    ///
+    /// # 错误
+    /// 无会话时返回未找到。
+    async fn session_view(
+        &self,
+        booklet_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<SalesSelectionSessionView> {
+        let booklet = self.load_booklet(booklet_id, executor).await?;
         let session = self
             .db
             .sales_selection_sessions()
-            .find_by_booklet(booklet_id, &mut executor)
+            .find_by_booklet(booklet_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("该选品册尚无选品会话".into()))?;
         let selections: Vec<PublicChoiceView> = session
@@ -270,6 +351,8 @@ impl SalesSelectionService {
 
     /// 组装方案视图。
     ///
+    /// 组合层授权快照与写命令经本入口复用同一映射。
+    ///
     /// # 参数
     /// * `proposal` - 方案表头
     /// * `executor` - 执行器
@@ -279,7 +362,7 @@ impl SalesSelectionService {
     ///
     /// # 错误
     /// 查询失败时返回仓储错误。
-    pub(super) async fn proposal_view_of(
+    pub async fn proposal_view_of(
         &self,
         proposal: &SalesSelectionProposal,
         executor: &mut dyn Executor,
@@ -433,20 +516,27 @@ impl SalesSelectionService {
     }
 }
 
-/// 由列表参数构造仓储过滤。
+/// 由列表参数与已解析范围构造仓储过滤。
 ///
 /// # 参数
 /// * `params` - 列表参数
+/// * `authorized_scope` - 调用方事务内已证明的责任范围
 ///
 /// # 返回
 /// 返回仓储过滤，排序默认创建时间倒序。
 ///
 /// # 错误
 /// 排序字段非法时拒绝。
-fn booklet_filter(params: &SalesSelectionBookletListParams) -> Result<SelectionBookFilter> {
+fn booklet_filter(
+    params: &SalesSelectionBookletListParams,
+    authorized_scope: &crate::repository::sales_selection::SelectionReadScope,
+) -> Result<SelectionBookFilter> {
     use application_core::{page_or_default, page_size_or_default};
     let (sort_by, ascending) = validate_book_sort(None, false)?;
     Ok(SelectionBookFilter {
+        authorized_scope: authorized_scope.clone(),
+        owner_user_ids: params.owner_user_ids.clone(),
+        org_unit_ids: params.org_unit_ids.clone(),
         authorized_customer_ids: params.authorized_customer_ids.clone(),
         customer_id: params.customer_id.clone(),
         form: params.form,
@@ -482,6 +572,8 @@ fn ended_booklet() -> SalesSelectionBooklet {
             customer_id: CustomerAccountId::new("ended"),
             customer_no: "ended".into(),
             customer_name: "ended".into(),
+            sales_owner_user_id: "sales-1".into(),
+            business_org_unit_id: "org-1".into(),
             form: SelectionForm::SingleSku,
             submit_mode: SubmitMode::MallRedeem,
             pool_source: PoolSource {
@@ -520,6 +612,10 @@ mod tests {
     fn list_filter_defaults_to_created_desc() {
         let params = SalesSelectionBookletListParams {
             authorized_customer_ids: None,
+            scope_version: None,
+            owner_user_ids: None,
+            org_unit_ids: None,
+            include_descendants: None,
             customer_id: Some("cust-1".into()),
             form: None,
             status: None,
@@ -528,7 +624,14 @@ mod tests {
             page: None,
             page_size: None,
         };
-        let filter = booklet_filter(&params).unwrap();
+        let scope = crate::repository::sales_selection::SelectionReadScope {
+            roles: vec![crate::repository::sales_selection::SelectionScopeClause {
+                company: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let filter = booklet_filter(&params, &scope).unwrap();
         assert_eq!(filter.customer_id.as_deref(), Some("cust-1"));
         assert_eq!(filter.page, 1);
         assert_eq!(filter.sort_by.as_deref(), Some("created_at"));

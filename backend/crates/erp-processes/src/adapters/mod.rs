@@ -10,6 +10,7 @@ mod inventory;
 mod organization;
 mod party;
 mod purchase_data_scope;
+mod selection_data_scope;
 mod supplier;
 mod warehouse;
 use std::sync::Arc;
@@ -32,6 +33,7 @@ use mongodb::Database;
 pub use organization::organization_service;
 pub use party::{MongoPartyAudit, MongoSupplierRole};
 pub use purchase_data_scope::{MongoPurchaseDataScope, purchase_access};
+pub use selection_data_scope::{MongoSelectionDataScope, selection_access};
 pub use supplier::{MongoSupplierFileAssets, MongoSupplierPartyFacts, MongoSupplierSensitiveTokens};
 pub use warehouse::warehouse_service;
 

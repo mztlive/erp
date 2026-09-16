@@ -1,5 +1,6 @@
 //! 销售选品用例编排。
 
+pub mod access;
 mod create;
 mod lifecycle;
 mod mapper;
@@ -9,6 +10,7 @@ mod publish;
 mod query;
 mod session;
 
+pub use access::{SelectionAccess, selection_scope};
 use erp_core::ids::SalesSelectionBookletId;
 use mongodb::Database;
 

@@ -247,6 +247,8 @@ impl SalesSelectionService {
                 customer_id: booklet.customer_id.clone(),
                 customer_name: booklet.customer_name.clone(),
                 booklet_id: SalesSelectionBookletId::new(booklet.base.id.clone()),
+                sales_owner_user_id: booklet.sales_owner_user_id.clone(),
+                business_org_unit_id: booklet.business_org_unit_id.clone(),
                 batch_id: booklet.current_batch_id.clone().unwrap_or_default(),
                 form: booklet.form,
                 submit_mode: booklet.submit_mode,
@@ -322,16 +324,39 @@ impl SalesSelectionService {
     }
 
     /// 管理端历史图片授权。入口已校验客户归属，资产必须由该册的历史陈列引用。
+    ///
+    /// 组合层已在调用方事务内完成对象重验；本方法只映射对象键。
+    ///
+    /// # 参数
+    /// * `booklet_id` - 选品册
+    /// * `asset_id` - 文件资产
+    /// * `executor` - 执行器
+    ///
+    /// # 返回
+    /// 返回快照对象键。
+    ///
     /// # 错误
     /// 任意文件身份、其他册资产或不存在的册均拒绝。
-    pub async fn admin_image_key(&self, booklet_id: &str, asset_id: &str) -> Result<String> {
-        let mut tx = persistence_core::NoTransaction;
-        self.load_booklet(booklet_id, &mut tx).await?;
-        let items = self.db.sales_selection_display_items().list_by_booklet(booklet_id, &mut tx).await?;
+    pub async fn image_key_of(
+        &self,
+        booklet_id: &str,
+        asset_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<String> {
+        self.load_booklet(booklet_id, executor).await?;
+        let items = self.db.sales_selection_display_items().list_by_booklet(booklet_id, executor).await?;
         items
             .iter()
             .find_map(|item| image_key_if_authorized(item, asset_id))
             .ok_or_else(|| Error::Forbidden("无权查看该图片".into()))
+    }
+
+    /// 管理端历史图片授权。入口已校验客户归属，资产必须由该册的历史陈列引用。
+    /// # 错误
+    /// 任意文件身份、其他册资产或不存在的册均拒绝。
+    pub async fn admin_image_key(&self, booklet_id: &str, asset_id: &str) -> Result<String> {
+        let mut tx = persistence_core::NoTransaction;
+        self.image_key_of(booklet_id, asset_id, &mut tx).await
     }
 
     /// 拒绝 P1 换品/自组。

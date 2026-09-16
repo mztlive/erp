@@ -25,6 +25,6 @@ pub(super) async fn customer_ids(
 /// # 错误
 /// 册不存在、无客户权限或查询失败时拒绝请求。
 pub(super) async fn booklet(state: &AppState, actor: &AuditActor, id: &str) -> Result<(), Error> {
-    let view = super::process(state).booklet_detail(id).await?;
+    let view = super::process(state).booklet_detail(id, actor).await?;
     ensure_customer_access(state, actor, "detail", &view.customer_id).await
 }

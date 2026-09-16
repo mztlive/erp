@@ -24,6 +24,10 @@ pub struct SalesSelectionBookletData {
     pub customer_no: String,
     /// 客户展示名称快照。
     pub customer_name: String,
+    /// 显式销售负责人；册建立时必填，客户提交人不成为负责人。
+    pub sales_owner_user_id: String,
+    /// 业务组织；册建立时必填，取负责人有效主属组织。
+    pub business_org_unit_id: String,
     /// 选品形态。
     pub form: SelectionForm,
     /// 提交方式。
@@ -47,6 +51,10 @@ pub struct SalesSelectionBooklet {
     pub customer_no: String,
     /// 客户展示名称快照。
     pub customer_name: String,
+    /// 显式销售负责人；创建后不随提交人或编辑人变化，改派走 S3-07。
+    pub sales_owner_user_id: String,
+    /// 业务组织；当前单据团队口径，调岗不自动改写。
+    pub business_org_unit_id: String,
     /// 选品形态。
     pub form: SelectionForm,
     /// 提交方式。
@@ -114,12 +122,17 @@ impl SalesSelectionBooklet {
         let customer_no = normalize_required_text(data.customer_no, "客户编号不能为空", 64, "客户编号过长")?;
         let customer_name =
             normalize_required_text(data.customer_name, "客户名称不能为空", 128, "客户名称过长")?;
+        let owner =
+            normalize_required_text(data.sales_owner_user_id, "销售负责人不能为空", 64, "销售负责人过长")?;
+        let org = normalize_required_text(data.business_org_unit_id, "业务组织不能为空", 64, "业务组织过长")?;
         let tiers = normalize_form_tiers(data.form, data.tiers)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             customer_id: data.customer_id,
             customer_no,
             customer_name,
+            sales_owner_user_id: owner,
+            business_org_unit_id: org,
             form: data.form,
             submit_mode: data.submit_mode,
             pool_source: data.pool_source,
@@ -627,6 +640,8 @@ mod tests {
                 customer_id: CustomerAccountId::new("cust-1"),
                 customer_no: "C1".into(),
                 customer_name: "客户甲".into(),
+                sales_owner_user_id: "sales-1".into(),
+                business_org_unit_id: "org-1".into(),
                 form: SelectionForm::SingleSku,
                 submit_mode: SubmitMode::ByQuantity,
                 pool_source: PoolSource::new(
