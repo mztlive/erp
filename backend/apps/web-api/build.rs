@@ -163,7 +163,12 @@ fn main() {
     }
 }
 
-/// 记录 build.rs 的文件依赖。
+/// 记录 build.rs 的文件依赖，路径不存在时跳过。
+///
+/// cargo 把指向不存在路径的 `rerun-if-changed` 永久判定为脏，会导致 build script
+/// 与 web-api 每次 `cargo test` / `cargo build` 无条件重编译。`DOMAIN_MODULES` 中
+/// 存在没有独立路由文件的域（如 organization 的路由挂在 `routes/access_control.rs`），
+/// 故此处按存在性过滤。新增路由文件必然伴随 `routes/mod.rs` 改动，该文件已被监听。
 ///
 /// # 参数
 /// * `path` - 路径
@@ -171,6 +176,9 @@ fn main() {
 /// # 返回
 /// 不返回数据，仅表示执行结果。
 fn rerun_if_changed(path: &Path) {
+    if !path.exists() {
+        return;
+    }
     println!("cargo:rerun-if-changed={}", path.display());
 }
 
