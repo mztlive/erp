@@ -238,6 +238,54 @@ pub struct CancelSalesOrderApprovalRequest {
     pub idempotency_key: String,
 }
 
+/// 显式销售责任交接请求（S3-07）。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct HandoverSalesOrderRequest {
+    /// 期望的单据乐观锁版本；与当前版本不一致时拒绝（409）。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub expected_version: u64,
+    /// 目标负责销售；必须为有效后台账号。
+    #[validate(custom(function = "non_blank", message = "目标负责销售不能为空"))]
+    pub target_owner_user_id: String,
+    /// 显式目标业务组织；省略表示保留原组织，禁随接收人部门隐式变化。
+    pub target_business_org_unit_id: Option<String>,
+    /// 非空交接原因。
+    #[validate(length(min = 1, max = 512, message = "交接原因不能为空"))]
+    pub reason: String,
+    /// 业务请求幂等键。
+    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
+
+/// 显式销售责任交接结果。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HandoverSalesOrderView {
+    /// 销售单 ID。
+    pub sales_order_id: String,
+    /// 交接后负责销售。
+    pub sales_owner_user_id: String,
+    /// 交接后业务组织。
+    pub business_org_unit_id: String,
+    /// 交接后单据版本。
+    pub version: u64,
+    /// 随交接转交的开放验收任务 ID。
+    pub transferred_acceptance_task_ids: Vec<String>,
+    /// 未改动的开放审批任务数。
+    pub kept_approval_task_count: usize,
+}
+
+/// 销售交接待选目标。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HandoverCandidateView {
+    /// 目标账号 ID。
+    pub user_id: String,
+    /// 显示名。
+    pub display_name: String,
+    /// 登录账号。
+    pub account: String,
+}
+
 /// 销售单列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]

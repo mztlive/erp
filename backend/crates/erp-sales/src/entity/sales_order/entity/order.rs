@@ -595,4 +595,50 @@ impl SalesOrder {
             },
         }
     }
+
+    /// 显式交接单据负责销售与业务组织（S3-07）。
+    ///
+    /// 业务组织不随接收人部门隐式变化；调用方必须显式传入目标组织，
+    /// `None` 表示保留原业务组织。普通编辑、调岗或客户换任不得调用本方法。
+    ///
+    /// # 参数
+    /// * `target_owner_user_id` - 目标负责销售
+    /// * `target_business_org_unit_id` - 显式目标业务组织；`None` 保留原组织
+    /// * `updated_by` - 本次交接执行人
+    ///
+    /// # 返回
+    /// 责任确有变化并已更新时返回 `true`。
+    ///
+    /// # 错误
+    /// 已作废、目标为空或与当前完全一致时拒绝；归属快照与状态字段保持不变。
+    ///
+    /// # 关键业务约束
+    /// 只改负责人与业务组织，不改归属快照、状态或审批任务。
+    pub fn handover(
+        &mut self,
+        target_owner_user_id: String,
+        target_business_org_unit_id: Option<String>,
+        updated_by: impl Into<String>,
+    ) -> Result<bool> {
+        if self.commercial_status == CommercialStatus::Voided {
+            return Err(Error::from("已作废的销售单不允许交接"));
+        }
+        let target_owner = normalize_required_text(
+            target_owner_user_id,
+            "目标负责销售不能为空",
+            128,
+            "目标负责销售 ID 过长",
+        )?;
+        let next_org = match target_business_org_unit_id {
+            Some(org) => normalize_required_text(org, "目标业务组织不能为空", 128, "目标业务组织过长")?,
+            None => self.business_org_unit_id.clone(),
+        };
+        if target_owner == self.sales_owner_user_id && next_org == self.business_org_unit_id {
+            return Err(Error::from("目标已是当前负责人，无需交接"));
+        }
+        self.sales_owner_user_id = target_owner;
+        self.business_org_unit_id = next_org;
+        self.stable.touch(updated_by);
+        Ok(true)
+    }
 }

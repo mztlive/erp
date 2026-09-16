@@ -2291,6 +2291,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                     action: "delete",
                 },
             },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-orders/{id}/handover",
+                description: "交接销售单责任",
+                permission: {
+                    resource: "sales_order",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-orders/{id}/handover-candidates",
+                description: "查询销售交接待选目标",
+                permission: {
+                    resource: "sales_order",
+                    action: "list",
+                },
+            },
         ],
     },
     {

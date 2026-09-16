@@ -106,7 +106,7 @@ async fn create_customer_acceptance_task(
     reason: CustomerAcceptanceTaskReason,
     executor: &mut dyn Executor,
 ) -> Result<WorkItem> {
-    let owner_user_id = order.stable.created_by.clone();
+    let owner_user_id = order.sales_owner_user_id.clone();
     let rbac = crate::adapters::identity::shared_rbac_service(db.clone());
     ensure_customer_acceptance_owner_eligible(db, &rbac, &owner_user_id, executor).await?;
     let task = WorkItem::new_with_responsibility_key(
@@ -166,11 +166,14 @@ fn ensure_task_identity(task: &WorkItem, order: &SalesOrder) -> Result<()> {
         && task.matches_business_object(OBJECT_TYPE, &order.base.id)
         && task.owner_role == OWNER_ROLE
         && task.owner_organization_id == order.settlement_party_id.to_string()
+        && task.owner_user_id.as_deref() == Some(order.sales_owner_user_id.as_str())
         && task.responsibility_key() == Some(responsibility_key(&order.base.id).as_str());
     if matches {
         return Ok(());
     }
-    Err(Error::BusinessLogicError("客户验收任务责任身份与销售单不一致，请联系管理员修复后重试".to_string()))
+    Err(Error::BusinessLogicError(
+        "客户验收任务责任与销售单当前负责销售不一致，请先完成销售责任交接后再重试".to_string(),
+    ))
 }
 
 fn ensure_command_identity(
