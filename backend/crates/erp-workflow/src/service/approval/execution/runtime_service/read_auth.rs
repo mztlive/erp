@@ -163,14 +163,10 @@ pub(super) async fn revalidate_decision_approver(
                 ) {
                     Some(AuthorizationFailure::OutOfDataScope)
                 } else {
-                    let context = BindingRevalidationContext {
-                        order_source: None,
-                        customer_id: None,
-                        business_org_unit_id: None,
-                        scope_owner_user_id: None,
-                        organization_id: snapshot.payload.responsible_org_id.clone(),
-                        creator_id: snapshot.payload.submitted_by.clone(),
-                    };
+                    let context = BindingRevalidationContext::new(
+                        snapshot.payload.responsible_org_id.clone(),
+                        snapshot.payload.submitted_by.clone(),
+                    );
                     match runtime_object_readable(spec, &context, assignee_id, true, object_read)? {
                         true => {
                             if ensure_separation_of_duties(

@@ -161,14 +161,10 @@ impl PayableService {
                         document_type: DocumentType::SupplierPayment,
                         business_object_id: payment.base.id.clone(),
                         business_object_version: payment.base.version,
-                        context: BindingRevalidationContext {
-                            order_source: None,
-                            customer_id: None,
-                            business_org_unit_id: None,
-                            scope_owner_user_id: None,
-                            organization_id: supplier.party_id.to_string(),
-                            creator_id: actor_owned.id().to_string(),
-                        },
+                        context: BindingRevalidationContext::new(
+                            supplier.party_id.to_string(),
+                            actor_owned.id().to_string(),
+                        ),
                     };
                     let document = new_registered_document(
                         &payment.base.id,

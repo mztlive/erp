@@ -502,14 +502,10 @@ async fn ensure_cancel_blocked_authorized(
     let read_scope = approval_document_read_scope_with_executor(rbac, actor, document_type, executor).await?;
     let visibility = definition_management_visibility_with_executor(rbac, actor, executor).await?;
     let spec = adapter_spec_of(document_type)?;
-    let context = BindingRevalidationContext {
-        order_source: None,
-        customer_id: None,
-        business_org_unit_id: None,
-        scope_owner_user_id: None,
-        organization_id: snapshot.payload.responsible_org_id.clone(),
-        creator_id: snapshot.payload.submitted_by.clone(),
-    };
+    let context = BindingRevalidationContext::new(
+        snapshot.payload.responsible_org_id.clone(),
+        snapshot.payload.submitted_by.clone(),
+    );
     let read_scope_covers = !read_scope.is_empty()
         && read_scope.covers_object(
             &rbac

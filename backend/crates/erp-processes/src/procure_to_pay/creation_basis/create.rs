@@ -408,14 +408,10 @@ async fn write_prepared_draft(
         document_type: DocumentType::PurchaseOrder,
         business_object_id: write.order.base.id.clone(),
         business_object_version: write.order.base.version,
-        context: BindingRevalidationContext {
-            order_source: Some(OrderTaskSource::Purchase(write.order.base.id.clone())),
-            customer_id: None,
-            business_org_unit_id: Some(write.order.business_org_unit_id.clone()),
-            scope_owner_user_id: Some(write.order.current_owner_user_id()?.to_string()),
-            organization_id,
-            creator_id: write.actor.id().to_string(),
-        },
+        context: BindingRevalidationContext::new(organization_id, write.actor.id().to_string())
+            .with_order_source(Some(OrderTaskSource::Purchase(write.order.base.id.clone())))
+            .with_business_org_unit_id(Some(write.order.business_org_unit_id.clone()))
+            .with_scope_owner_user_id(Some(write.order.current_owner_user_id()?.to_string())),
     };
     let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,

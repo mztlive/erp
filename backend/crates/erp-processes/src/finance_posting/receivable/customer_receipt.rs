@@ -175,14 +175,10 @@ impl ReceivableProcess {
                                 document_type: DocumentType::CustomerReceipt,
                                 business_object_id: candidate.base.id.clone(),
                                 business_object_version: candidate.base.version,
-                                context: BindingRevalidationContext {
-                                    order_source: None,
-                                    customer_id: None,
-                                    business_org_unit_id: None,
-                                    scope_owner_user_id: None,
+                                context: BindingRevalidationContext::new(
                                     organization_id,
-                                    creator_id: actor_owned.id().to_string(),
-                                },
+                                    actor_owned.id().to_string(),
+                                ),
                             };
                             let document = new_registered_document(
                                 &candidate.base.id,
@@ -700,14 +696,7 @@ async fn persist_created_customer_receipt(
         document_type: DocumentType::CustomerReceipt,
         business_object_id: receipt.base.id.clone(),
         business_object_version: receipt.base.version,
-        context: BindingRevalidationContext {
-            order_source: None,
-            customer_id: None,
-            business_org_unit_id: None,
-            scope_owner_user_id: None,
-            organization_id,
-            creator_id: actor.id().to_string(),
-        },
+        context: BindingRevalidationContext::new(organization_id, actor.id().to_string()),
     };
     let document =
         new_registered_document(&receipt.base.id, DocumentType::CustomerReceipt, receipt.receipt_no.clone())

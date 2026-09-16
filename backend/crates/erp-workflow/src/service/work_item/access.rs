@@ -99,6 +99,21 @@ impl ActorAccess {
         self.can_manage = can_manage;
         self
     }
+
+    /// 设置参与单据范围。
+    ///
+    /// # 参数
+    /// * `ids` - 参与人关联单据
+    ///
+    /// # 返回
+    /// 返回更新后的快照。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_participant_document_ids(mut self, ids: std::collections::HashSet<String>) -> Self {
+        self.participant_document_ids = ids;
+        self
+    }
 }
 
 impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
@@ -143,13 +158,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                 &mut NoTransaction,
             )
             .await?;
-        Ok(ActorAccess {
-            actor_id: actor_id.to_string(),
-            permissions,
-            participant_document_ids,
-            can_manage: !manage_role_ids.is_empty(),
-            managed_owner_ids,
-        })
+        Ok(ActorAccess::new(actor_id.to_string())
+            .with_permissions(permissions)
+            .with_participant_document_ids(participant_document_ids)
+            .with_managed_owner_ids(managed_owner_ids)
+            .with_can_manage(!manage_role_ids.is_empty()))
     }
 
     /// 定位实际授予指定权限的角色，使管理数据范围与权限来源关联。
@@ -226,13 +239,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                 executor,
             )
             .await?;
-        Ok(ActorAccess {
-            actor_id: actor_id.to_string(),
-            permissions,
-            participant_document_ids,
-            can_manage: !active_manage_roles.is_empty(),
-            managed_owner_ids,
-        })
+        Ok(ActorAccess::new(actor_id.to_string())
+            .with_permissions(permissions)
+            .with_participant_document_ids(participant_document_ids)
+            .with_managed_owner_ids(managed_owner_ids)
+            .with_can_manage(!active_manage_roles.is_empty()))
     }
 
     /// 使用调用方 executor 读取固定注册表对象事实并重验参与权。

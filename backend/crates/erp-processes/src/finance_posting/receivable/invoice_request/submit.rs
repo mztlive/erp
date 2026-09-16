@@ -146,14 +146,10 @@ async fn bind(
         document_type: DocumentType::SalesInvoiceRequest,
         business_object_id: request.base.id.clone(),
         business_object_version: request.base.version,
-        context: BindingRevalidationContext {
-            order_source: None,
-            customer_id: None,
-            business_org_unit_id: None,
-            scope_owner_user_id: None,
-            organization_id: request.counterparty_party_id.to_string(),
-            creator_id: actor.id().into(),
-        },
+        context: BindingRevalidationContext::new(
+            request.counterparty_party_id.to_string(),
+            actor.id().into(),
+        ),
     };
     let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,

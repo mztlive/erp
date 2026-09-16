@@ -93,14 +93,10 @@ fn customer_acceptance_bind_command(
         document_type: DocumentType::CustomerAcceptance,
         business_object_id: acceptance.base.id.clone(),
         business_object_version: acceptance.base.version,
-        context: BindingRevalidationContext {
-            order_source: None,
-            customer_id: None,
-            business_org_unit_id: None,
-            scope_owner_user_id: None,
-            organization_id: customer_acceptance_binding_organization_id(acceptance)?,
-            creator_id: creator_id.to_string(),
-        },
+        context: BindingRevalidationContext::new(
+            customer_acceptance_binding_organization_id(acceptance)?,
+            creator_id.to_string(),
+        ),
     })
 }
 

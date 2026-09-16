@@ -78,14 +78,14 @@ impl SalesChangeProcess {
             document_type: erp_workflow::entity::document_registry::DocumentType::SalesChangeOrder,
             business_object_id: change_id.clone(),
             business_object_version: sales_write.version(),
-            context: BindingRevalidationContext {
-                order_source: Some(OrderTaskSource::Sales(source_order.base.id.clone())),
-                customer_id: Some(source_order.customer_id.to_string()),
-                business_org_unit_id: Some(source_order.business_org_unit_id.clone()),
-                scope_owner_user_id: Some(source_order.sales_owner_user_id.clone()),
-                organization_id: sales_change_responsible_org_id(sales_write.settlement_party_id())?,
-                creator_id: actor.id().to_string(),
-            },
+            context: BindingRevalidationContext::new(
+                sales_change_responsible_org_id(sales_write.settlement_party_id())?,
+                actor.id().to_string(),
+            )
+            .with_order_source(Some(OrderTaskSource::Sales(source_order.base.id.clone())))
+            .with_customer_id(Some(source_order.customer_id.to_string()))
+            .with_business_org_unit_id(Some(source_order.business_org_unit_id.clone()))
+            .with_scope_owner_user_id(Some(source_order.sales_owner_user_id.clone())),
         };
         let document = new_registered_document(
             change_id.clone(),

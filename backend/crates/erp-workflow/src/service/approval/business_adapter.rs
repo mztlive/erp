@@ -347,14 +347,11 @@ mod tests {
 
     #[test]
     fn scope_facts_keep_business_org_warehouse_and_settlement_separate() {
-        let context = super::BindingRevalidationContext {
-            order_source: Some(super::OrderTaskSource::Sales("order".into())),
-            customer_id: Some("customer".into()),
-            business_org_unit_id: Some("department".into()),
-            scope_owner_user_id: Some("sales-owner".into()),
-            organization_id: "responsibility-id".into(),
-            creator_id: "creator".into(),
-        };
+        let context = super::BindingRevalidationContext::new("responsibility-id".into(), "creator".into())
+            .with_order_source(Some(super::OrderTaskSource::Sales("order".into())))
+            .with_customer_id(Some("customer".into()))
+            .with_business_org_unit_id(Some("department".into()))
+            .with_scope_owner_user_id(Some("sales-owner".into()));
         let sales = context.scope_object(super::DocumentType::SalesOrder);
         assert_eq!(sales.business_org_unit_id.as_deref(), Some("department"));
         assert_eq!(sales.owner_user_id, "sales-owner");
@@ -429,14 +426,7 @@ mod tests {
     /// 读取权未接线或显式拒绝必须失败关闭。
     #[test]
     fn object_read_unwired_and_denied_fail_closed() {
-        let context = BindingRevalidationContext {
-            order_source: None,
-            customer_id: None,
-            business_org_unit_id: None,
-            scope_owner_user_id: None,
-            organization_id: "org-1".to_string(),
-            creator_id: "creator-1".to_string(),
-        };
+        let context = BindingRevalidationContext::new("org-1".to_string(), "creator-1".to_string());
         let pilot = adapter_spec_of(DocumentType::StockAdjustment).expect("试点必须有适配器");
         assert_eq!(
             adapter_object_read_decision(&pilot, &context, "creator-1")

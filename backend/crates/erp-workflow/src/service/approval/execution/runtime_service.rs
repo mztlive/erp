@@ -978,14 +978,7 @@ mod tests {
     #[test]
     fn stock_adjustment_runtime_object_read_uses_registered_permission_scope() {
         let spec = adapter_spec_of(DocumentType::StockAdjustment).expect("库存调整适配器");
-        let context = BindingRevalidationContext {
-            order_source: None,
-            customer_id: None,
-            business_org_unit_id: None,
-            scope_owner_user_id: None,
-            organization_id: "org-1".to_string(),
-            creator_id: "submitter".to_string(),
-        };
+        let context = BindingRevalidationContext::new("org-1".to_string(), "submitter".to_string());
         let port = crate::ports::FailClosedObjectReadPort;
         assert!(
             runtime_object_readable(&spec, &context, "approver", true, &port).expect("已登记读权且范围覆盖")

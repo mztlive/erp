@@ -77,14 +77,10 @@ impl InventoryAdjustmentService {
             document_type: DocumentType::StockAdjustment,
             business_object_id: id.to_string(),
             business_object_version: adjustment.base.version,
-            context: BindingRevalidationContext {
-                order_source: None,
-                customer_id: None,
-                business_org_unit_id: None,
-                scope_owner_user_id: None,
-                organization_id: adjustment.warehouse_id.to_string(),
-                creator_id: actor.id().to_string(),
-            },
+            context: BindingRevalidationContext::new(
+                adjustment.warehouse_id.to_string(),
+                actor.id().to_string(),
+            ),
         };
         persist_created_adjustment(
             &self.db,

@@ -137,14 +137,7 @@ mod tests {
     /// 已迁出的领域读取分支对有效组织/审批人返回显式 true。
     #[test]
     fn wired_domain_types_return_explicit_read_decision() {
-        let context = BindingRevalidationContext {
-            order_source: None,
-            customer_id: None,
-            business_org_unit_id: None,
-            scope_owner_user_id: None,
-            organization_id: "org-1".to_string(),
-            creator_id: "creator-1".to_string(),
-        };
+        let context = BindingRevalidationContext::new("org-1".to_string(), "creator-1".to_string());
         let sales = adapter_spec_of(DocumentType::SalesOrder).expect("销售单必须有适配器");
         assert_eq!(
             adapter_object_read_decision(&sales, &context, "u1").expect("销售单读取权已接线"),

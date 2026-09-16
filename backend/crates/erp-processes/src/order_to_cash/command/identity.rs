@@ -25,14 +25,14 @@ pub(super) fn sales_create_bind_command(
         document_type: crate::order_to_cash::document_type_of_sales_business(order.business_type),
         business_object_id: order.base.id.clone(),
         business_object_version: order.base.version,
-        context: BindingRevalidationContext {
-            order_source: Some(OrderTaskSource::Sales(order.base.id.clone())),
-            customer_id: Some(order.customer_id.to_string()),
-            business_org_unit_id: Some(order.business_org_unit_id.clone()),
-            scope_owner_user_id: Some(order.sales_owner_user_id.clone()),
-            organization_id: sales_order_responsible_org_id(order)?,
-            creator_id: actor.id().to_string(),
-        },
+        context: BindingRevalidationContext::new(
+            sales_order_responsible_org_id(order)?,
+            actor.id().to_string(),
+        )
+        .with_order_source(Some(OrderTaskSource::Sales(order.base.id.clone())))
+        .with_customer_id(Some(order.customer_id.to_string()))
+        .with_business_org_unit_id(Some(order.business_org_unit_id.clone()))
+        .with_scope_owner_user_id(Some(order.sales_owner_user_id.clone())),
     })
 }
 

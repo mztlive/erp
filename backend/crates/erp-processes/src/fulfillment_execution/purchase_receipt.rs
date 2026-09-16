@@ -187,14 +187,10 @@ fn purchase_receipt_bind_command(
         document_type: DocumentType::PurchaseReceipt,
         business_object_id: receipt.base.id.clone(),
         business_object_version: receipt.base.version,
-        context: BindingRevalidationContext {
-            order_source: None,
-            customer_id: None,
-            business_org_unit_id: None,
-            scope_owner_user_id: None,
-            organization_id: purchase_receipt_binding_organization_id(receipt)?,
-            creator_id: creator_id.to_string(),
-        },
+        context: BindingRevalidationContext::new(
+            purchase_receipt_binding_organization_id(receipt)?,
+            creator_id.to_string(),
+        ),
     })
 }
 

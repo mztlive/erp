@@ -147,14 +147,10 @@ fn purchase_return_bind_command(
         document_type: DocumentType::PurchaseReturnOrder,
         business_object_id: order.base.id.clone(),
         business_object_version: order.base.version,
-        context: BindingRevalidationContext {
-            order_source: None,
-            customer_id: None,
-            business_org_unit_id: None,
-            scope_owner_user_id: None,
-            organization_id: purchase_return_binding_organization_id(order)?,
-            creator_id: creator_id.to_string(),
-        },
+        context: BindingRevalidationContext::new(
+            purchase_return_binding_organization_id(order)?,
+            creator_id.to_string(),
+        ),
     })
 }
 

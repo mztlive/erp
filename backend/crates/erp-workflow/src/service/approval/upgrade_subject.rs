@@ -29,13 +29,9 @@ pub async fn ensure_initial_unsubmitted_approval_upgrade_subject(
 impl ApprovalUpgradeSubjectFacts {
     /// Binding revalidation context from strong-subject facts.
     pub fn binding_context(&self) -> crate::service::approval::business_adapter::BindingRevalidationContext {
-        crate::service::approval::business_adapter::BindingRevalidationContext {
-            order_source: None,
-            customer_id: None,
-            business_org_unit_id: None,
-            scope_owner_user_id: None,
-            organization_id: self.responsible_org_id.clone(),
-            creator_id: self.creator_id.clone(),
-        }
+        crate::service::approval::business_adapter::BindingRevalidationContext::new(
+            self.responsible_org_id.clone(),
+            self.creator_id.clone(),
+        )
     }
 }

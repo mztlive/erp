@@ -104,13 +104,9 @@ mod tests {
     use crate::error::{Error, ErrorCode};
 
     fn w13_access() -> ActorAccess {
-        ActorAccess {
-            actor_id: "finance-user".to_string(),
-            permissions: vec!["receivable_account:detail".to_string()],
-            participant_document_ids: HashSet::from(["sales-order-1".to_string()]),
-            managed_owner_ids: None,
-            can_manage: false,
-        }
+        ActorAccess::new("finance-user".to_string())
+            .with_permissions(vec!["receivable_account:detail".to_string()])
+            .with_participant_document_ids(HashSet::from(["sales-order-1".to_string()]))
     }
 
     fn audit(
@@ -187,13 +183,9 @@ mod tests {
     }
 
     fn procurement_access(actor_id: &str) -> ActorAccess {
-        ActorAccess {
-            actor_id: actor_id.to_string(),
-            permissions: vec!["purchase_order:create".to_string()],
-            participant_document_ids: HashSet::new(),
-            managed_owner_ids: Some(Vec::new()),
-            can_manage: false,
-        }
+        ActorAccess::new(actor_id.to_string())
+            .with_permissions(vec!["purchase_order:create".to_string()])
+            .with_managed_owner_ids(Some(Vec::new()))
     }
 
     fn procurement_facts() -> ObjectFactMap {
@@ -297,26 +289,17 @@ mod tests {
         } else {
             &["receivable_account:detail"]
         };
-        ActorAccess {
-            actor_id: actor_id.to_string(),
-            permissions: codes.iter().map(|code| (*code).to_string()).collect(),
-            participant_document_ids: HashSet::new(),
-            managed_owner_ids: Some(Vec::new()),
-            can_manage: false,
-        }
+        ActorAccess::new(actor_id.to_string())
+            .with_permissions(codes.iter().map(|code| (*code).to_string()).collect())
+            .with_managed_owner_ids(Some(Vec::new()))
     }
 
     fn managed_action_access() -> ActorAccess {
-        ActorAccess {
-            actor_id: "manager-1".to_string(),
-            permissions: ["work_item:reassign", "work_item:close"]
-                .into_iter()
-                .map(|code| code.to_string())
-                .collect(),
-            participant_document_ids: HashSet::new(),
-            managed_owner_ids: None,
-            can_manage: true,
-        }
+        ActorAccess::new("manager-1".to_string())
+            .with_permissions(
+                ["work_item:reassign", "work_item:close"].into_iter().map(|code| code.to_string()).collect(),
+            )
+            .with_can_manage(true)
     }
 
     fn managed_w29_item() -> WorkItem {
@@ -393,13 +376,9 @@ mod tests {
     fn current_owner_does_not_bypass_revoked_object_participation() {
         let mut item = w13_delta_item();
         item.reassign("finance-user", Instant::from_unix_secs(101)).unwrap();
-        let access = ActorAccess {
-            actor_id: "finance-user".to_string(),
-            permissions: vec!["receivable_account:detail".to_string()],
-            participant_document_ids: HashSet::new(),
-            managed_owner_ids: Some(Vec::new()),
-            can_manage: false,
-        };
+        let access = ActorAccess::new("finance-user".to_string())
+            .with_permissions(vec!["receivable_account:detail".to_string()])
+            .with_managed_owner_ids(Some(Vec::new()));
 
         assert_eq!(item.owner_user_id.as_deref(), Some("finance-user"));
         assert!(authorized_item_fields(item, &access, &w13_facts()).is_none());

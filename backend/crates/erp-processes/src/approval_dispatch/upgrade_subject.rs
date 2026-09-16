@@ -105,14 +105,7 @@ impl ApprovalUpgradeSubjectFacts {
     /// # 返回
     /// 返回责任组织与不可变创建人；不读取或注入当前操作人。
     pub fn binding_context(&self) -> BindingRevalidationContext {
-        BindingRevalidationContext {
-            order_source: None,
-            customer_id: None,
-            business_org_unit_id: None,
-            scope_owner_user_id: None,
-            organization_id: self.responsible_org_id.clone(),
-            creator_id: self.creator_id.clone(),
-        }
+        BindingRevalidationContext::new(self.responsible_org_id.clone(), self.creator_id.clone())
     }
 
     /// 校验客户端期望版本仍等于强业务对象版本。
@@ -862,14 +855,7 @@ mod tests {
         assert_eq!(facts.business_object_version, 7);
         assert_eq!(
             facts.binding_context(),
-            BindingRevalidationContext {
-                order_source: None,
-                customer_id: None,
-                business_org_unit_id: None,
-                scope_owner_user_id: None,
-                organization_id: "warehouse-1".to_string(),
-                creator_id: "creator-1".to_string(),
-            }
+            BindingRevalidationContext::new("warehouse-1".to_string(), "creator-1".to_string())
         );
         facts.ensure_expected_business_object_version(7).expect("强对象版本一致");
         assert!(facts.ensure_expected_business_object_version(8).is_err());

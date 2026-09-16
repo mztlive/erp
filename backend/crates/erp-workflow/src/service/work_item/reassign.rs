@@ -792,13 +792,9 @@ async fn ensure_fulfillment_tasks_candidate<A: crate::ports::WorkflowAuthorizati
     permissions: &[String],
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let target_access = ActorAccess {
-        actor_id: target_user_id.to_string(),
-        permissions: permissions.to_vec(),
-        participant_document_ids: HashSet::new(),
-        managed_owner_ids: Some(Vec::new()),
-        can_manage: false,
-    };
+    let target_access = ActorAccess::new(target_user_id.to_string())
+        .with_permissions(permissions.to_vec())
+        .with_managed_owner_ids(Some(Vec::new()));
     for task in tasks {
         service.ensure_assignment_candidate_access_with_executor(task, &target_access, executor).await?;
     }

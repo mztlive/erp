@@ -124,17 +124,13 @@ fn service_fulfillment_bind_command(
         document_type: DocumentType::ServiceFulfillment,
         business_object_id: record.base.id.clone(),
         business_object_version: record.base.version,
-        context: BindingRevalidationContext {
-            order_source: None,
-            customer_id: None,
-            business_org_unit_id: None,
-            scope_owner_user_id: None,
-            organization_id: record
+        context: BindingRevalidationContext::new(
+            record
                 .registration_context_id()
                 .map_err(|error| Error::ValidationError(error.to_string()))?
                 .to_string(),
-            creator_id: creator_id.to_string(),
-        },
+            creator_id.to_string(),
+        ),
     })
 }
 

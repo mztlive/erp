@@ -124,14 +124,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                     )
                     .await?
                 {
-                    let context = BindingRevalidationContext {
-                        order_source: None,
-                        customer_id: None,
-                        business_org_unit_id: None,
-                        scope_owner_user_id: None,
-                        organization_id: snapshot.payload.responsible_org_id.clone(),
-                        creator_id: String::new(),
-                    };
+                    let context = BindingRevalidationContext::new(
+                        snapshot.payload.responsible_org_id.clone(),
+                        String::new(),
+                    );
                     match adapter_object_read_decision_with(
                         spec,
                         &context,

@@ -169,17 +169,13 @@ fn delivery_bind_command(delivery: &Delivery, creator_id: &str) -> Result<BindPu
         document_type: DocumentType::Delivery,
         business_object_id: delivery.base.id.clone(),
         business_object_version: delivery.base.version,
-        context: BindingRevalidationContext {
-            order_source: None,
-            customer_id: None,
-            business_org_unit_id: None,
-            scope_owner_user_id: None,
-            organization_id: delivery
+        context: BindingRevalidationContext::new(
+            delivery
                 .registration_context_id()
                 .map_err(|error| Error::ValidationError(error.to_string()))?
                 .to_string(),
-            creator_id: creator_id.to_string(),
-        },
+            creator_id.to_string(),
+        ),
     })
 }
 

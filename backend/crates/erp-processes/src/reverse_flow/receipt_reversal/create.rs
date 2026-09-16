@@ -74,14 +74,7 @@ async fn persist_created_receipt_reversal(
         document_type: DocumentType::ReceiptReversal,
         business_object_id: reversal.base.id.clone(),
         business_object_version: reversal.base.version,
-        context: BindingRevalidationContext {
-            order_source: None,
-            customer_id: None,
-            business_org_unit_id: None,
-            scope_owner_user_id: None,
-            organization_id,
-            creator_id: actor.id().to_string(),
-        },
+        context: BindingRevalidationContext::new(organization_id, actor.id().to_string()),
     };
     let document = new_registered_document(
         &reversal.base.id,
