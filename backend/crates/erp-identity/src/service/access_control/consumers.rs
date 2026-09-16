@@ -37,7 +37,8 @@ const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     ),
     ("cost_entry", &["list", "detail"], &[ScopeDimension::InternalOrg]),
     ("cost_allocation", &["list"], &[ScopeDimension::InternalOrg]),
-    ("sales_selection_booklet",
+    (
+        "sales_selection_booklet",
         &[
             "list",
             "get",

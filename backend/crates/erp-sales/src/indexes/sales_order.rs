@@ -61,6 +61,10 @@ pub(crate) const SALES_ORDER_VOUCHER_LINE_REVISIONS: &str =
 ///   来源、合同和各进度筛选均为低选择性可选组合，不为每种组合建立索引，避免
 ///   写放大与索引爆炸；后续依据慢查询样本补充高频组合。若需回滚，删除该普通
 ///   索引即可，不影响字段兼容性和查询正确性。
+/// - 实际经营盈亏按当前负责销售和业务组织做期间查询，分别由
+///   `idx_sales_orders_profit_owner`（`sales_owner_user_id` 首列）与
+///   `idx_sales_orders_profit_org`（`business_org_unit_id` 首列）覆盖；
+///   两者均为普通索引，回滚时仅移除这两个索引，不改动单据或历史快照。
 ///
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
@@ -275,6 +279,35 @@ mod tests {
                 && index.options.as_ref().and_then(|options| options.name.as_deref())
                     == Some("idx_sales_orders_created_by_created")
         }));
+    }
+
+    #[test]
+    fn profit_owner_and_org_indexes_cover_effective_period_query() {
+        let indexes = sales_order_indexes();
+
+        let owner = indexes
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("idx_sales_orders_profit_owner")
+            })
+            .unwrap();
+        assert_eq!(
+            owner.keys,
+            doc! { "sales_owner_user_id": 1, "business_type": 1, "commercial_status": 1, "deleted_at": 1, "effective_at": 1, "id": 1 }
+        );
+
+        let org = indexes
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("idx_sales_orders_profit_org")
+            })
+            .unwrap();
+        assert_eq!(
+            org.keys,
+            doc! { "business_org_unit_id": 1, "business_type": 1, "commercial_status": 1, "deleted_at": 1, "effective_at": 1, "id": 1 }
+        );
     }
 
     #[test]
