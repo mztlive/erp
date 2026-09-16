@@ -94,7 +94,7 @@ async fn organization_state(
     db: &Database,
     executor: &mut dyn Executor,
 ) -> erp_finance::Result<OrganizationState> {
-    Ok(OrganizationRepository::new(db).state(executor).await.map_err(erp_finance::Error::RepositoryError)?)
+    OrganizationRepository::new(db).state(executor).await.map_err(erp_finance::Error::RepositoryError)
 }
 
 /// 展开启用组织及其可选下级。
@@ -168,19 +168,18 @@ fn map_identity_error(error: erp_identity::Error) -> erp_finance::Error {
 }
 
 /// 将本域已解析事实无损转回公共判定输入，不读取或重解释原始规则。
+///
+/// # 参数
+/// * `scope` - 当前动作已解析事实
+/// * `object` - 本域提供的关联责任事实
+///
+/// # 返回
+/// 返回角色范围和个人上限共同允许的判定。
+///
+/// # 错误
+/// 资源不符或未接线动作拒绝。
 fn evaluate_object(scope: &FundsResolvedScope, object: &FundsScopeObject) -> erp_finance::Result<bool> {
-    if !matches!(
-        scope.resource.as_str(),
-        "receivable_account"
-            | "customer_receipt"
-            | "invoice"
-            | "sales_invoice_request"
-            | "payable_account"
-            | "supplier_payment"
-            | "purchase_invoice_allocation"
-    ) {
-        return Err(erp_finance::Error::ValidationError("范围资源与资金消费方不一致".into()));
-    }
+    ensure_funds_resource(&scope.resource)?;
     let consumer = registration(&scope.resource, &scope.action).map_err(map_identity_error)?;
     let resolved = ResolvedScope {
         role_clauses: scope.role_clauses.iter().map(public_clause).collect(),
@@ -197,6 +196,32 @@ fn evaluate_object(scope: &FundsResolvedScope, object: &FundsScopeObject) -> erp
         },
         consumer.allows_history,
     ))
+}
+
+/// 校验资金资源名；采购关联仍按资金资源动作证明。
+///
+/// # 参数
+/// * `resource` - 请求资源
+///
+/// # 返回
+/// 资金往来七资源时通过。
+///
+/// # 错误
+/// 其他资源返回校验错误。
+fn ensure_funds_resource(resource: &str) -> erp_finance::Result<()> {
+    if matches!(
+        resource,
+        "receivable_account"
+            | "customer_receipt"
+            | "invoice"
+            | "sales_invoice_request"
+            | "payable_account"
+            | "supplier_payment"
+            | "purchase_invoice_allocation"
+    ) {
+        return Ok(());
+    }
+    Err(erp_finance::Error::ValidationError("范围资源与资金消费方不一致".into()))
 }
 
 /// 转换已解析条款，保留本人、协作、组织及空集。
@@ -220,7 +245,145 @@ pub fn funds_access_with_rbac(
 }
 
 #[cfg(test)]
-mod tests {
+mod equivalence_tests {
+    use erp_finance::ports::funds_scope::FundsResolvedScope;
+    use erp_read_models::finance::funds_scope::{FundsAccess, FundsLinkedFacts};
+    use erp_sales::repository::sales_order::scope::{SalesReadScope, SalesScopeClause};
+    use serde_json::json;
+    use test_support::matches_filter as matches;
+
+    use super::*;
+
+    fn clause(mask: u8) -> FundsResolvedClause {
+        FundsResolvedClause {
+            company: mask & 1 != 0,
+            self_owned: mask & 2 != 0,
+            collaborative: mask & 4 != 0,
+            org_unit_ids: if mask & 8 != 0 { vec!["org-a".into()] } else { vec![] },
+        }
+    }
+
+    fn scope_clause(mask: u8, actor: &str) -> SalesScopeClause {
+        SalesScopeClause {
+            company: mask & 1 != 0,
+            owner_user_id: (mask & 2 != 0).then(|| actor.to_string()),
+            business_org_unit_ids: if mask & 8 != 0 { vec!["org-a".into()] } else { vec![] },
+            collaborative_customer_ids: Vec::new(),
+        }
+    }
+
+    /// S3-08 A34：资金公共单对象判定与销售条件编译集合等价。
+    ///
+    /// # 参数
+    /// 无；16 对象×多角色×个人上限全组合内存断言。
+    ///
+    /// # 返回
+    /// 无；等价时通过。
+    ///
+    /// # 错误
+    /// 不等价时失败。
+    ///
+    /// # 关键业务约束
+    /// 以公共判定为基准；非真实库执行等价，真实库对拍转上线准入跟踪。
+    #[test]
+    fn public_object_decision_matches_compiled_conditions() {
+        use erp_finance::ports::funds_scope::FundsScopeObject;
+        let ids = (0..16).map(|i| format!("o-{i}")).collect::<Vec<_>>();
+        for action in ["list", "detail"] {
+            for role in 0..16 {
+                for second in [0, 2, 8] {
+                    for limit in -1_i32..16 {
+                        let access = FundsResolvedScope {
+                            user_id: "actor".into(),
+                            resource: "customer_receipt".into(),
+                            action: action.into(),
+                            role_clauses: vec![clause(role), clause(second)],
+                            user_limit: (limit >= 0).then(|| clause(limit as u8)),
+                            policy_version: 1,
+                            organization_version: 1,
+                            scope_version: "v1".into(),
+                            as_of: Instant::from_unix_secs(0),
+                        };
+                        let compiled = SalesReadScope {
+                            roles: vec![scope_clause(role, "actor"), scope_clause(second, "actor")],
+                            user_limit: (limit >= 0).then(|| scope_clause(limit as u8, "actor")),
+                            historical_order_ids: vec![],
+                            required_scopes: vec![],
+                        };
+                        for (index, id) in ids.iter().enumerate() {
+                            let facts = FundsLinkedFacts {
+                                owner_user_id: (index & 1 != 0).then(|| "actor".into()),
+                                business_org_unit_id: Some(
+                                    (if index & 4 != 0 { "org-a" } else { "org-b" }).into(),
+                                ),
+                                linked_document_id: id.clone(),
+                                ..FundsLinkedFacts::default()
+                            };
+                            let object = FundsScopeObject {
+                                owned: index & 1 != 0,
+                                collaborating: false,
+                                org_unit_id: facts.business_org_unit_id.clone(),
+                            };
+                            let owner = if index & 1 != 0 { "actor" } else { "other" };
+                            let org = facts.business_org_unit_id.as_deref().unwrap();
+                            let document = json!({ "id": id,
+                            "sales_owner_user_id": owner,
+                            "business_org_unit_id": org });
+                            assert_eq!(
+                                FundsAccess::allows(&access, &facts).unwrap(),
+                                matches(&compiled.document(), &document),
+                                "action={action}, role={role}, second={second}, limit={limit}, object={index}"
+                            );
+                            assert_eq!(
+                                evaluate_object(&access, &object).unwrap(),
+                                FundsAccess::allows(&access, &facts).unwrap(),
+                                "adapter 与唯一对象映射一致 action={action}, object={index}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// S3-08 A35：未装配 Port 与资源不符失败关闭，不补 Company。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无；关闭时通过。
+    ///
+    /// # 错误
+    /// 回退或放行时失败。
+    ///
+    /// # 关键业务约束
+    /// 禁止捕获错误后回退旧读取器或 Company。
+    #[test]
+    fn unwired_port_and_mismatched_resource_fail_closed() {
+        use erp_finance::ports::funds_scope::{FailClosedFundsDataScopePort, FundsScopeObject};
+        let mut scope = FundsResolvedScope {
+            user_id: "actor".into(),
+            resource: "customer_receipt".into(),
+            action: "list".into(),
+            role_clauses: vec![clause(1)],
+            user_limit: None,
+            policy_version: 1,
+            organization_version: 1,
+            scope_version: "v1".into(),
+            as_of: Instant::from_unix_secs(0),
+        };
+        let object = FundsScopeObject::default();
+        assert!(FailClosedFundsDataScopePort.allows(&scope, &object).is_err());
+        assert!(ensure_funds_resource(&scope.resource).is_ok());
+        scope.resource = "work_item".into();
+        assert!(ensure_funds_resource(&scope.resource).is_err());
+        assert!(evaluate_object(&scope, &object).is_err());
+    }
+}
+
+#[cfg(test)]
+mod adapter_tests {
     use std::collections::BTreeSet;
 
     use super::*;

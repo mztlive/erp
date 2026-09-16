@@ -81,11 +81,12 @@ pub async fn instance_list(
     headers: HeaderMap,
     PreparedInstanceListQuery { view, query }: PreparedInstanceListQuery,
 ) -> ApprovalResult<serde_json::Value> {
+    let mut executor = persistence_core::NoTransaction;
     let page = erp_read_models::workbench::WorkbenchReadService::new(
         state.db(),
         erp_processes::adapters::workflow::workflow_auth(state.db(), state.rbac()),
     )
-    .approval_instance_list(&runtime_service(&state), &actor, query)
+    .approval_instance_list(&runtime_service(&state), &actor, query, &mut executor)
     .await
     .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     let next_cursor = page.next_cursor.map(|cursor| InstanceListCursor::from_runtime(view, cursor).encode());

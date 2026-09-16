@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use erp_identity::AccessControlExt;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::dto::WorkItemSummarySection;
 use super::presentation::resolve_owner_display_name;
@@ -18,20 +18,6 @@ use crate::errors::Result;
 const SUBMITTER_LABEL: &str = "提交人";
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
-    /// 把投影中的处理人占位名替换为账号姓名。
-    ///
-    /// # 参数
-    /// * `items` - 待补齐姓名的任务投影
-    ///
-    /// # 返回
-    /// 成功时就地更新 `owner_user.display_name`。
-    ///
-    /// # 错误
-    /// 账号查询失败时返回仓储错误。
-    pub(super) async fn apply_party_names(&self, items: &mut [WorkItemView]) -> Result<()> {
-        self.apply_party_names_with(&mut NoTransaction, items).await
-    }
-
     /// 在指定执行器上批量解析处理人姓名。
     ///
     /// # 参数
@@ -73,6 +59,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     pub(super) async fn apply_approval_party_names(
         &self,
         items: &mut [super::ApprovalListItem],
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let mut ids = items
             .iter()
@@ -86,7 +73,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let names = self.load_account_names(&ids, &mut NoTransaction).await?;
+        let names = self.load_account_names(&ids, executor).await?;
         for summary in items.iter_mut().filter_map(|item| item.document_summary.as_mut()) {
             apply_submitter_name(&mut summary.summary_sections, &names);
         }

@@ -1,13 +1,12 @@
 //! 责任队列授权快照、范围过滤与允许动作。
 
 use std::collections::HashSet;
-use std::future::Future;
 
 use application_core::AuditActor;
 use erp_identity::{Permission, PermissionSet};
 use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::facts::{WorkbenchObjectFact, WorkbenchObjectFactMap, apply_object_display, object_policy};
 use super::{
@@ -29,26 +28,6 @@ pub(super) struct ActorAccess {
 }
 
 impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
-    /// 读取当前操作人的责任队列授权快照。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回权限、参与单据、组织与责任范围事实。
-    ///
-    /// # 错误
-    /// 授权 Port 或参与关系读取失败时返回错误。
-    pub(super) fn actor_access(
-        &self,
-        actor: &AuditActor,
-    ) -> impl Future<Output = Result<ActorAccess>> + Send + 'static {
-        let this = self.clone();
-        let kind = actor.kind();
-        let actor_id = actor.id().to_string();
-        async move { this.actor_access_for(kind, &actor_id, &mut NoTransaction).await }
-    }
-
     /// 按账号类型与稳定 ID 构造责任队列授权快照。
     ///
     /// # 参数

@@ -85,6 +85,33 @@ impl OrderTaskSource {
                 | ObjectKind::ServiceFulfillment
         )
     }
+
+    /// 按请求销售/采购 ID 判定权威来源是否命中列表收窄条件。
+    ///
+    /// # 参数
+    /// * `source` - 业务实体证明的权威订单来源；缺失表示无来源事实
+    /// * `sales_ids` - 请求的销售单 ID，已去重排序；空表示不过滤
+    /// * `purchase_ids` - 请求的采购单 ID，已去重排序；空表示不过滤
+    ///
+    /// # 返回
+    /// 两组均为空时返回 `true`；否则同字段 OR、不同字段 AND，缺来源或类型错配返回 `false`。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn matches_requested_sources(
+        source: Option<&Self>,
+        sales_ids: &[String],
+        purchase_ids: &[String],
+    ) -> bool {
+        if sales_ids.is_empty() && purchase_ids.is_empty() {
+            return true;
+        }
+        let sales_ok = sales_ids.is_empty()
+            || matches!(source, Some(Self::Sales(id)) if sales_ids.iter().any(|want| want == id));
+        let purchase_ok = purchase_ids.is_empty()
+            || matches!(source, Some(Self::Purchase(id)) if purchase_ids.iter().any(|want| want == id));
+        sales_ok && purchase_ok
+    }
 }
 
 /// Subject-level brief overlay.
@@ -320,5 +347,38 @@ impl ObjectFactPort for FailClosedObjectFactPort {
         _executor: &mut dyn Executor,
     ) -> Result<()> {
         Err(crate::error::Error::Internal("W29 关闭适配未接线".to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::OrderTaskSource;
+
+    fn ids(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    #[test]
+    fn requested_sources_match_by_field_or_and_across_fields() {
+        let sales = Some(OrderTaskSource::Sales("so-1".to_string()));
+        let purchase = Some(OrderTaskSource::Purchase("po-1".to_string()));
+        assert!(OrderTaskSource::matches_requested_sources(None, &[], &[]));
+        assert!(OrderTaskSource::matches_requested_sources(sales.as_ref(), &ids(&["so-1"]), &[]));
+        assert!(OrderTaskSource::matches_requested_sources(purchase.as_ref(), &[], &ids(&["po-1"])));
+        assert!(!OrderTaskSource::matches_requested_sources(sales.as_ref(), &ids(&["so-2"]), &[]));
+        assert!(!OrderTaskSource::matches_requested_sources(purchase.as_ref(), &[], &ids(&["po-2"])));
+    }
+
+    #[test]
+    fn requested_sources_fail_closed_on_missing_or_mismatched_source() {
+        let sales = Some(OrderTaskSource::Sales("so-1".to_string()));
+        assert!(!OrderTaskSource::matches_requested_sources(None, &[], &ids(&["po-1"])));
+        assert!(!OrderTaskSource::matches_requested_sources(None, &ids(&["so-1"]), &[]));
+        assert!(!OrderTaskSource::matches_requested_sources(
+            sales.as_ref(),
+            &ids(&["so-1"]),
+            &ids(&["po-1"])
+        ));
+        assert!(!OrderTaskSource::matches_requested_sources(sales.as_ref(), &[], &ids(&["po-1"])));
     }
 }

@@ -479,7 +479,7 @@ mod equivalence_tests {
     #[test]
     fn public_object_decision_matches_compiled_conditions() {
         let ids = (0..16).map(|i| format!("o-{i}")).collect::<Vec<_>>();
-        for action in ["list", "detail", "create"] {
+        for action in ["list", "get", "create"] {
             for role in 0..16 {
                 for second in [0, 2, 8] {
                     for limit in -1..16 {

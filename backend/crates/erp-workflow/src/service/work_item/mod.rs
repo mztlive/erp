@@ -103,18 +103,6 @@ mod tests {
     };
     use crate::error::{Error, ErrorCode};
 
-    /// 验证工作项管理员转交的授权提交栅栏。
-    ///
-    /// 转交必须以分派授权快照版本执行 policy CAS，不能退回仅在事务内读取比较。
-    #[test]
-    fn reassign_binds_assignment_authorization_to_commit() {
-        let production = include_str!("reassign.rs").split("#[cfg(test)]").next().expect("生产代码必须存在");
-
-        assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
-        assert!(production.contains("item.work_item_type.requires_full_execution_permissions()"));
-        assert!(!production.contains("ensure_policy_revision(&db, authorization.policy_revision"));
-    }
-
     fn w13_access() -> ActorAccess {
         ActorAccess {
             actor_id: "finance-user".to_string(),

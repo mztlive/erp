@@ -117,8 +117,8 @@ mod tests {
         assert_ne!(quality_current_permission_key(), quality_history_permission_key());
         let current = quality_current_permission_key();
         let history = quality_history_permission_key();
-        assert!(current.contains("customer"));
-        assert!(history.contains("sales_order"));
+        assert_eq!(current.resource(), "customer");
+        assert_eq!(history.resource(), "sales_order");
     }
 
     #[test]

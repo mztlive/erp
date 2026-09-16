@@ -165,8 +165,7 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<(FundsResolvedScope, FundsAuthorization)> {
         let access = self.scope.resolve(actor, resource, action, executor).await.map_err(Error::from)?;
-        let (sales_access, sales) =
-            self.linked_sales_scope(actor, &access, executor).await.map_err(Error::from)?;
+        let (sales_access, sales) = self.linked_sales_scope(actor, &access, executor).await?;
         let mut authorization = FundsAuthorization {
             sales,
             funds: sales_scope(&access_output(&access)?, actor.id(), &[], Vec::new()),
@@ -205,7 +204,7 @@ impl FundsAccess {
     ) -> Result<(FundsResolvedScope, FundsAuthorization)> {
         let access = self.scope.resolve(actor, resource, action, executor).await.map_err(Error::from)?;
         let (purchase_resolved, purchase_scope) =
-            self.linked_purchase_scope(actor, purchase_access, executor).await.map_err(Error::from)?;
+            self.linked_purchase_scope(actor, purchase_access, executor).await?;
         let mut authorization = FundsAuthorization {
             sales: SalesReadScope {
                 required_scopes: vec![],
@@ -525,7 +524,7 @@ pub fn summarize_matched_shares(
             Some(owner) => {
                 let total = grouped
                     .remove(&owner)
-                    .unwrap_or_else(|| erp_finance::service::receivable::mapping::zero_amount());
+                    .unwrap_or_else(erp_finance::service::receivable::mapping::zero_amount);
                 grouped.insert(owner, total.checked_add(*amount));
             },
             None => {
@@ -882,7 +881,7 @@ impl FundsAccess {
                     let order = this
                         .db
                         .sales_orders()
-                        .find_by_id(&account.sales_order_id.to_string(), executor)
+                        .find_by_id(account.sales_order_id.as_ref(), executor)
                         .await
                         .map_err(Error::from)?
                         .ok_or_else(|| Error::NotFound("应收账户来源销售单不存在".into()))?;
@@ -987,7 +986,7 @@ impl FundsAccess {
         }
         let expanded_orgs = match (&query.org_unit_ids, query.include_descendants) {
             (Some(ids), _) => {
-                let list = ids.as_slice().iter().cloned().collect::<Vec<_>>();
+                let list = ids.as_slice().to_vec();
                 let expanded = self
                     .expand_org_units(&list, query.include_descendants.unwrap_or(false), executor)
                     .await?;
@@ -1044,14 +1043,8 @@ impl FundsAccess {
             }
         }
         let condition = FundsLinkedCondition {
-            owner_user_ids: query
-                .sales_owner_user_ids
-                .as_ref()
-                .map(|ids| ids.as_slice().iter().cloned().collect()),
-            operator_user_ids: query
-                .operator_user_ids
-                .as_ref()
-                .map(|ids| ids.as_slice().iter().cloned().collect()),
+            owner_user_ids: query.sales_owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
+            operator_user_ids: query.operator_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
             secondary_operator_user_ids: None,
             org_unit_ids: expanded_orgs,
         };
@@ -1494,7 +1487,7 @@ impl FundsAccess {
 /// 单据行关联的多个责任事实中任一通过公共判定即该行可见。
 fn row_visible(
     access: &FundsResolvedScope,
-    orders: &[(LinkedOrderId, Option<String>, Option<String>, String, u64)],
+    orders: &[LinkedOrderRow],
     operators: &[String],
     secondary: &[String],
 ) -> Result<bool> {
@@ -1529,7 +1522,7 @@ fn row_visible(
 
 /// 多关联单据行的条件匹配：负责人与组织任一关联命中，操作人按单据事实判定。
 fn matches_multi_condition(
-    orders: &[(LinkedOrderId, Option<String>, Option<String>, String, u64)],
+    orders: &[LinkedOrderRow],
     operators: &[String],
     secondary: &[String],
     condition: &FundsLinkedCondition,
@@ -1699,10 +1692,11 @@ impl FundsAccess {
         let facts = self.db.audit_logs().list_separation_facts_by_resources(&pairs, executor).await?;
         let mut operators: HashMap<String, Vec<String>> = HashMap::new();
         for fact in facts {
-            if fact.resource_type == resource && keep(&fact.action) {
-                if let Some(id) = fact.resource_id {
-                    operators.entry(id).or_default().push(fact.actor_id);
-                }
+            if fact.resource_type == resource
+                && keep(&fact.action)
+                && let Some(id) = fact.resource_id
+            {
+                operators.entry(id).or_default().push(fact.actor_id);
             }
         }
         for list in operators.values_mut() {
@@ -1751,10 +1745,10 @@ impl FundsAccess {
             if id.is_empty() {
                 continue;
             }
-            if let Some(item) = self.db.work_items().find_work_item(&id, executor).await? {
-                if let Some(handler) = item.owner_user_id.clone().or(item.completed_by.clone()) {
-                    handlers.insert(id.clone(), handler);
-                }
+            if let Some(item) = self.db.work_items().find_work_item(&id, executor).await?
+                && let Some(handler) = item.owner_user_id.clone().or(item.completed_by.clone())
+            {
+                handlers.insert(id.clone(), handler);
             }
         }
         Ok(handlers)
@@ -1831,6 +1825,9 @@ fn sales_invoice_allocation_view(
 
 /// 单据行关联责任元组：关联单据、负责人、组织、事实主键与版本。
 type OrderTuple = (LinkedOrderId, Option<String>, Option<String>, String, u64);
+
+/// 关联责任行：关联单据、负责人、组织、事实主键与版本。
+type LinkedOrderRow = (LinkedOrderId, Option<String>, Option<String>, String, u64);
 
 /// 回款行关联元组；缺失订单的分配保留未分配归属，不丢份额。
 fn receipt_tuples(
@@ -2082,7 +2079,7 @@ impl FundsAccess {
     ) -> Result<FundsLinkedCondition> {
         let org_unit_ids = match &query.org_unit_ids {
             Some(ids) => {
-                let list = ids.as_slice().iter().cloned().collect::<Vec<_>>();
+                let list = ids.as_slice().to_vec();
                 let expanded = self
                     .expand_org_units(&list, query.include_descendants.unwrap_or(false), executor)
                     .await?;
@@ -2091,14 +2088,8 @@ impl FundsAccess {
             None => None,
         };
         Ok(FundsLinkedCondition {
-            owner_user_ids: query
-                .sales_owner_user_ids
-                .as_ref()
-                .map(|ids| ids.as_slice().iter().cloned().collect()),
-            operator_user_ids: query
-                .operator_user_ids
-                .as_ref()
-                .map(|ids| ids.as_slice().iter().cloned().collect()),
+            owner_user_ids: query.sales_owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
+            operator_user_ids: query.operator_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
             secondary_operator_user_ids: None,
             org_unit_ids,
         })
@@ -2147,6 +2138,8 @@ impl FundsAccess {
 
 impl FundsAccess {
     /// 回款候选分页裁剪与汇总装配；明细、汇总与导出复用同一已决集合。
+    // 查询+分页+执行器参数为既有签名，保持调用方一致不拆。
+    #[allow(clippy::too_many_arguments)]
     async fn finish_customer_receipts(
         &self,
         params: &erp_finance::dto::receivable::CustomerReceiptListParams,
@@ -2325,10 +2318,9 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<(FundsResolvedScope, FundsAuthorization)> {
         let access = self.scope.resolve(actor, resource, action, executor).await.map_err(Error::from)?;
-        let (sales_access, sales) =
-            self.linked_sales_scope(actor, &access, executor).await.map_err(Error::from)?;
+        let (sales_access, sales) = self.linked_sales_scope(actor, &access, executor).await?;
         let (purchase_resolved, purchase_scope) =
-            self.linked_purchase_scope(actor, purchase_access, executor).await.map_err(Error::from)?;
+            self.linked_purchase_scope(actor, purchase_access, executor).await?;
         let mut authorization = FundsAuthorization {
             sales,
             funds: sales_scope(&access_output(&access)?, actor.id(), &[], Vec::new()),
@@ -2645,7 +2637,7 @@ impl FundsAccess {
     ) -> Result<FundsLinkedCondition> {
         let org_unit_ids = match &query.org_unit_ids {
             Some(ids) => {
-                let list = ids.as_slice().iter().cloned().collect::<Vec<_>>();
+                let list = ids.as_slice().to_vec();
                 let expanded = self
                     .expand_org_units(&list, query.include_descendants.unwrap_or(false), executor)
                     .await?;
@@ -2654,18 +2646,12 @@ impl FundsAccess {
             None => None,
         };
         Ok(FundsLinkedCondition {
-            owner_user_ids: query
-                .sales_owner_user_ids
-                .as_ref()
-                .map(|ids| ids.as_slice().iter().cloned().collect()),
-            operator_user_ids: query
-                .operator_user_ids
-                .as_ref()
-                .map(|ids| ids.as_slice().iter().cloned().collect()),
+            owner_user_ids: query.sales_owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
+            operator_user_ids: query.operator_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
             secondary_operator_user_ids: query
                 .procurement_owner_user_ids
                 .as_ref()
-                .map(|ids| ids.as_slice().iter().cloned().collect()),
+                .map(|ids| ids.as_slice().to_vec()),
             org_unit_ids,
         })
     }
@@ -3272,7 +3258,7 @@ impl FundsAccess {
     ) -> Result<FundsLinkedCondition> {
         let org_unit_ids = match &query.org_unit_ids {
             Some(ids) => {
-                let list = ids.as_slice().iter().cloned().collect::<Vec<_>>();
+                let list = ids.as_slice().to_vec();
                 let expanded = self
                     .expand_org_units(&list, query.include_descendants.unwrap_or(false), executor)
                     .await?;
@@ -3281,18 +3267,9 @@ impl FundsAccess {
             None => None,
         };
         Ok(FundsLinkedCondition {
-            owner_user_ids: query
-                .sales_owner_user_ids
-                .as_ref()
-                .map(|ids| ids.as_slice().iter().cloned().collect()),
-            operator_user_ids: query
-                .applicant_user_ids
-                .as_ref()
-                .map(|ids| ids.as_slice().iter().cloned().collect()),
-            secondary_operator_user_ids: query
-                .handler_user_ids
-                .as_ref()
-                .map(|ids| ids.as_slice().iter().cloned().collect()),
+            owner_user_ids: query.sales_owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
+            operator_user_ids: query.applicant_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
+            secondary_operator_user_ids: query.handler_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
             org_unit_ids,
         })
     }
@@ -3318,6 +3295,8 @@ impl FundsAccess {
     }
 
     /// 开票申请候选分页裁剪与汇总装配；申请金额为行级事实，始终返回。
+    // 查询+分页+执行器参数为既有签名，保持调用方一致不拆。
+    #[allow(clippy::too_many_arguments)]
     async fn finish_requests(
         &self,
         query: &erp_finance::dto::receivable::InvoiceRequestQuery,
@@ -3642,7 +3621,7 @@ impl FundsAccess {
     ) -> Result<FundsLinkedCondition> {
         let org_unit_ids = match &query.org_unit_ids {
             Some(ids) => {
-                let list = ids.as_slice().iter().cloned().collect::<Vec<_>>();
+                let list = ids.as_slice().to_vec();
                 let expanded = self
                     .expand_org_units(&list, query.include_descendants.unwrap_or(false), executor)
                     .await?;
@@ -3651,10 +3630,7 @@ impl FundsAccess {
             None => None,
         };
         Ok(FundsLinkedCondition {
-            owner_user_ids: query
-                .procurement_owner_user_ids
-                .as_ref()
-                .map(|ids| ids.as_slice().iter().cloned().collect()),
+            owner_user_ids: query.procurement_owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
             operator_user_ids: None,
             secondary_operator_user_ids: None,
             org_unit_ids,
@@ -4020,7 +3996,7 @@ impl FundsAccess {
     ) -> Result<FundsLinkedCondition> {
         let org_unit_ids = match &query.org_unit_ids {
             Some(ids) => {
-                let list = ids.as_slice().iter().cloned().collect::<Vec<_>>();
+                let list = ids.as_slice().to_vec();
                 let expanded = self
                     .expand_org_units(&list, query.include_descendants.unwrap_or(false), executor)
                     .await?;
@@ -4029,14 +4005,8 @@ impl FundsAccess {
             None => None,
         };
         Ok(FundsLinkedCondition {
-            owner_user_ids: query
-                .procurement_owner_user_ids
-                .as_ref()
-                .map(|ids| ids.as_slice().iter().cloned().collect()),
-            operator_user_ids: query
-                .operator_user_ids
-                .as_ref()
-                .map(|ids| ids.as_slice().iter().cloned().collect()),
+            owner_user_ids: query.procurement_owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
+            operator_user_ids: query.operator_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
             secondary_operator_user_ids: None,
             org_unit_ids,
         })
@@ -4085,6 +4055,8 @@ impl FundsAccess {
     }
 
     /// 付款候选分页裁剪与汇总装配；明细、汇总与导出复用同一已决集合。
+    // 查询+分页+执行器参数为既有签名，保持调用方一致不拆。
+    #[allow(clippy::too_many_arguments)]
     async fn finish_supplier_payments(
         &self,
         params: &erp_finance::dto::payable::SupplierPaymentListParams,
@@ -4597,7 +4569,7 @@ impl FundsAccess {
     ) -> Result<FundsLinkedCondition> {
         let org_unit_ids = match &query.org_unit_ids {
             Some(ids) => {
-                let list = ids.as_slice().iter().cloned().collect::<Vec<_>>();
+                let list = ids.as_slice().to_vec();
                 let expanded = self
                     .expand_org_units(&list, query.include_descendants.unwrap_or(false), executor)
                     .await?;
@@ -4606,14 +4578,8 @@ impl FundsAccess {
             None => None,
         };
         Ok(FundsLinkedCondition {
-            owner_user_ids: query
-                .procurement_owner_user_ids
-                .as_ref()
-                .map(|ids| ids.as_slice().iter().cloned().collect()),
-            operator_user_ids: query
-                .operator_user_ids
-                .as_ref()
-                .map(|ids| ids.as_slice().iter().cloned().collect()),
+            owner_user_ids: query.procurement_owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
+            operator_user_ids: query.operator_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
             secondary_operator_user_ids: None,
             org_unit_ids,
         })
@@ -4744,7 +4710,7 @@ impl FundsAccess {
         let order = self
             .db
             .sales_orders()
-            .find_by_id(&account.sales_order_id.to_string(), executor)
+            .find_by_id(account.sales_order_id.as_ref(), executor)
             .await
             .map_err(Error::from)?
             .ok_or_else(|| Error::NotFound("应收往来子账不存在".into()))?;

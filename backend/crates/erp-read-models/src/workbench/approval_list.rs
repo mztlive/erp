@@ -6,7 +6,7 @@ use erp_workflow::entity::work_item::WorkItemType;
 use erp_workflow::service::approval::execution::runtime_service::{
     ApprovalRuntimeService, RuntimeInstanceListCursor, RuntimeInstanceListItem, RuntimeInstanceListQuery,
 };
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 use serde::Serialize;
 
 use super::WorkbenchReadService;
@@ -50,6 +50,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         runtime: &ApprovalRuntimeService<A>,
         actor: &AuditActor,
         query: RuntimeInstanceListQuery,
+        executor: &mut dyn Executor,
     ) -> Result<ApprovalListPage> {
         let page = runtime.instance_list(actor, query).await?;
         let keys = page
@@ -60,7 +61,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 Some((policy.object_kind, item.document_id.clone()?))
             })
             .collect::<HashSet<_>>();
-        let facts = self.load_object_facts(&keys, &mut NoTransaction).await?;
+        let facts = self.load_object_facts(&keys, executor).await?;
         let mut items = page
             .items
             .into_iter()
@@ -74,7 +75,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 ApprovalListItem { instance, document_summary }
             })
             .collect::<Vec<_>>();
-        self.apply_approval_party_names(&mut items).await?;
+        self.apply_approval_party_names(&mut items, executor).await?;
         Ok(ApprovalListPage { items, total: page.total, next_cursor: page.next_cursor })
     }
 }

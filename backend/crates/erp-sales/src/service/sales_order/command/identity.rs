@@ -69,11 +69,65 @@ pub fn sales_handover_fingerprint(
     Ok(hex::encode(Sha256::digest(payload)))
 }
 
+/// 构造销售责任交接审计收据的消息体。
+///
+/// 收据绑定完整交接指纹、目标负责人、交接原因与本次转交的验收任务清单；
+/// 回放时凭指纹前缀判定同一幂等键是否重放同一载荷。
+///
+/// # 参数
+/// * `fingerprint` - 本次交接请求的完整载荷指纹
+/// * `target` - 目标负责销售
+/// * `reason` - 交接原因
+/// * `transferred` - 本次原子转交的开放验收任务 ID 清单
+///
+/// # 返回
+/// 返回写入审计收据 `message` 字段的稳定消息体。
+///
+/// # 错误
+/// 无。
+pub fn sales_handover_audit_message(
+    fingerprint: &str,
+    target: &str,
+    reason: &str,
+    transferred: &[String],
+) -> String {
+    format!(
+        "command_sha256={fingerprint};target={target};reason={reason};acceptance={}",
+        transferred.join(",")
+    )
+}
+
+/// 校验已存交接审计收据是否绑定同一交接指纹。
+///
+/// 接受携带扩展段的新格式（指纹前缀加 `;` 后续段）与仅指纹的旧格式；
+/// 指纹不同、缺失或前后空白不一致时拒绝，为异载荷同幂等键冲突。
+///
+/// # 参数
+/// * `message` - 已存审计收据的 `message` 字段
+/// * `expected_fingerprint` - 本次回放期望的完整载荷指纹
+///
+/// # 返回
+/// 同一载荷重放时返回 `true`，否则返回 `false`。
+///
+/// # 错误
+/// 无。
+pub fn sales_handover_fingerprint_matches(message: Option<&str>, expected_fingerprint: &str) -> bool {
+    let Some(message) = message else {
+        return false;
+    };
+    let exact = format!("command_sha256={expected_fingerprint}");
+    message == exact || message.starts_with(&format!("{exact};"))
+}
+
 #[cfg(test)]
 mod compile_probe_equivalence_tests {
     use sha2::{Digest, Sha256};
 
-    use super::{SubmitSalesOrderRequest, sales_submission_fingerprint};
+    use super::{
+        HandoverSalesOrderRequest, SubmitSalesOrderRequest, sales_handover_audit_id,
+        sales_handover_audit_message, sales_handover_fingerprint, sales_handover_fingerprint_matches,
+        sales_submission_fingerprint,
+    };
 
     #[test]
     fn complete_submission_payload_and_hash_match_frozen_goods_and_voucher_bytes() {
@@ -106,5 +160,73 @@ mod compile_probe_equivalence_tests {
                 "{label}: actual submission fingerprint"
             );
         }
+    }
+
+    fn handover_request(
+        target: &str,
+        org: Option<&str>,
+        reason: &str,
+        key: &str,
+    ) -> HandoverSalesOrderRequest {
+        HandoverSalesOrderRequest {
+            expected_version: 3,
+            target_owner_user_id: target.to_string(),
+            target_business_org_unit_id: org.map(str::to_string),
+            reason: reason.to_string(),
+            idempotency_key: key.to_string(),
+        }
+    }
+
+    /// 同一交接载荷可幂等重放：指纹与收据稳定。
+    #[test]
+    fn same_handover_payload_replays_to_same_receipt_identity() {
+        let request = handover_request("sales-b", None, "轮换", "key-1");
+        assert_eq!(
+            sales_handover_fingerprint("actor-1", "so-1", &request).unwrap(),
+            sales_handover_fingerprint("actor-1", "so-1", &request.clone()).unwrap()
+        );
+        assert_eq!(
+            sales_handover_audit_id("actor-1", "so-1", "key-1"),
+            sales_handover_audit_id("actor-1", "so-1", "key-1")
+        );
+    }
+
+    /// 交接审计收据往返：构造的消息体必须被同一指纹回放接受，
+    /// 异指纹、空收据必须拒绝；写入格式与回放判定由同一对函数承载。
+    #[test]
+    fn handover_audit_message_round_trips_through_replay_match() {
+        let transferred = vec!["accept-1".to_string()];
+        let stored = sales_handover_audit_message("fp-1", "sales-b", "轮换", &transferred);
+        assert!(sales_handover_fingerprint_matches(Some(&stored), "fp-1"));
+        assert!(!sales_handover_fingerprint_matches(Some(&stored), "fp-2"));
+        assert!(!sales_handover_fingerprint_matches(None, "fp-1"));
+    }
+
+    /// 异载荷同幂等键必须拒绝：目标、组织、原因任一变化指纹即不同；
+    /// 收据按操作人、单据与幂等键隔离。
+    #[test]
+    fn different_handover_payload_rejects_replay_under_same_key() {
+        let base = handover_request("sales-b", None, "轮换", "key-1");
+        let base_fingerprint = sales_handover_fingerprint("actor-1", "so-1", &base).unwrap();
+        for altered in [
+            handover_request("sales-c", None, "轮换", "key-1"),
+            handover_request("sales-b", Some("org-b"), "轮换", "key-1"),
+            handover_request("sales-b", None, "其他原因", "key-1"),
+            handover_request("sales-b", None, "轮换", "key-2"),
+        ] {
+            assert_ne!(sales_handover_fingerprint("actor-1", "so-1", &altered).unwrap(), base_fingerprint);
+        }
+        assert_ne!(
+            sales_handover_audit_id("actor-1", "so-1", "key-1"),
+            sales_handover_audit_id("actor-1", "so-1", "key-2")
+        );
+        assert_ne!(
+            sales_handover_audit_id("actor-1", "so-1", "key-1"),
+            sales_handover_audit_id("actor-2", "so-1", "key-1")
+        );
+        assert_ne!(
+            sales_handover_audit_id("actor-1", "so-1", "key-1"),
+            sales_handover_audit_id("actor-1", "so-2", "key-1")
+        );
     }
 }

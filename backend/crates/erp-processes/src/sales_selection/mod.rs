@@ -173,9 +173,7 @@ impl SalesSelectionProcess {
                 let db = db.clone();
                 let params = params.clone();
                 let actor = actor.clone();
-                Box::pin(async move {
-                    booklet_list_snapshot(&access, &db, &params, &actor, executor).await.map_err(Error::from)
-                })
+                Box::pin(async move { booklet_list_snapshot(&access, &db, &params, &actor, executor).await })
             })
             .await
     }
@@ -456,9 +454,7 @@ impl SalesSelectionProcess {
                 let db = db.clone();
                 let params = params.clone();
                 let actor = actor.clone();
-                Box::pin(async move {
-                    proposal_list_snapshot(&access, &db, &params, &actor, executor).await.map_err(Error::from)
-                })
+                Box::pin(async move { proposal_list_snapshot(&access, &db, &params, &actor, executor).await })
             })
             .await
     }

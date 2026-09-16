@@ -1,13 +1,13 @@
 //! 责任队列列表与单条详情查询。
 
 use std::collections::{HashMap, HashSet};
-use std::future::Future;
 use std::num::NonZeroU32;
 
 use application_core::AuditActor;
 use erp_workflow::entity::work_item::{QueueContextField, QueueContextIdentity, WorkItem};
+use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::{BpmExt, WorkItemExt};
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::access::{ActorAccess, authorized_fields, authorized_item_fields, detail_scope};
@@ -235,8 +235,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         &self,
         items: Vec<WorkItem>,
         access: &ActorAccess,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<dto::WorkItemFields>> {
-        self.authorized_fields_with_executor(items, access, &mut NoTransaction).await
+        self.authorized_fields_with_executor(items, access, executor).await
     }
 
     /// 焦点和详情读取沿用调用方事务，不重新建立对象授权时点。
@@ -343,45 +344,61 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     /// # 错误
     /// 任务不存在或当前用户不在任一安全责任范围时返回错误。
     pub async fn work_item_detail(self, id: String, actor: AuditActor) -> Result<WorkItemView> {
-        let item = self.load(id.clone()).await?;
+        let this = self.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.detail_page(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一事务快照内重验详情授权、对象事实与展示补齐。
+    ///
+    /// # 参数
+    /// * `id` - 工作项稳定 ID
+    /// * `actor` - 已认证操作人
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 返回已授权的单条任务投影。
+    ///
+    /// # 错误
+    /// 任务不存在、不可见或授权事实读取失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 授权快照、对象事实与展示读取共用同一执行器，不得换成 `NoTransaction`。
+    async fn detail_page(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<WorkItemView> {
+        let item = self
+            .db
+            .work_items()
+            .find_work_item(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("任务不存在".to_string()))?;
         let item_id = item.base.id.clone();
-        let access = self.actor_access(&actor).await?;
+        let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
         let scope = detail_scope(&item, actor.id(), &access)?;
-        let fields = self.authorized_fields_for_items(vec![item], &access).await?;
+        let fields = self.authorized_fields_for_items(vec![item], &access, executor).await?;
         let fields =
             fields.into_iter().next().ok_or_else(|| Error::NotFound("任务或业务对象不可见".to_string()))?;
         let queue_context_id = single_item_context_id(actor.id(), &item_id);
-        let view_access = self.view_access(&fields, scope, &actor, &access)?;
+        let view_access = self.view_access(&fields, scope, actor, &access)?;
         let mut view = WorkItemView::from_fields(fields, queue_context_id)?.with_access(
             view_access.processing_state,
             view_access.processing_blocker,
             view_access.allowed_actions,
             view_access.action_blockers,
         );
-        self.apply_party_names(std::slice::from_mut(&mut view)).await?;
-        self.apply_approval_contexts(std::slice::from_mut(&mut view), &mut NoTransaction).await?;
-        self.apply_owner_qualification(std::slice::from_mut(&mut view), &mut NoTransaction).await?;
+        self.apply_party_names_with(executor, std::slice::from_mut(&mut view)).await?;
+        self.apply_approval_contexts(std::slice::from_mut(&mut view), executor).await?;
+        self.apply_owner_qualification(std::slice::from_mut(&mut view), executor).await?;
         Ok(view)
-    }
-
-    /// 按稳定 ID 加载未删除工作项。
-    ///
-    /// # 参数
-    /// * `id` - 工作项稳定 ID
-    ///
-    /// # 返回
-    /// 返回当前工作项实体。
-    ///
-    /// # 错误
-    /// 工作项不存在或仓储查询失败时返回错误。
-    pub(super) fn load(&self, id: String) -> impl Future<Output = Result<WorkItem>> + Send + 'static {
-        let db = self.db.clone();
-        async move {
-            db.work_items()
-                .find_work_item(&id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::NotFound("任务不存在".to_string()))
-        }
     }
 }
 
@@ -585,18 +602,13 @@ pub(super) fn matches_order_sources(
     order_source_matches(&fact.authority.order_scope_source, sales_ids, purchase_ids)
 }
 
-/// 按订单来源判定销售/采购业务筛选；缺来源时失败关闭。
+/// 按订单来源判定销售/采购业务筛选；缺来源时失败关闭，判定复用拥有域纯函数。
 fn order_source_matches(
-    source: &Option<erp_workflow::ports::OrderTaskSource>,
+    source: &Option<OrderTaskSource>,
     sales_ids: &[String],
     purchase_ids: &[String],
 ) -> bool {
-    use erp_workflow::ports::OrderTaskSource as Source;
-    let sales_ok = sales_ids.is_empty()
-        || matches!(source, Some(Source::Sales(id)) if sales_ids.iter().any(|want| want == id));
-    let purchase_ok = purchase_ids.is_empty()
-        || matches!(source, Some(Source::Purchase(id)) if purchase_ids.iter().any(|want| want == id));
-    sales_ok && purchase_ok
+    OrderTaskSource::matches_requested_sources(source.as_ref(), sales_ids, purchase_ids)
 }
 
 /// 为焦点任务的来源复核构造单键事实查询。
@@ -799,6 +811,66 @@ mod tests {
             super::super::dto::WorkItemListParams::normalized(&work_item_params_with_ids(Some(&overflow)))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn queue_context_binds_handler_and_order_filters_for_cross_page_version() {
+        use std::collections::HashSet;
+
+        use super::super::access::ActorAccess;
+
+        fn query_with(
+            handler: &[&str],
+            sales: &[&str],
+            purchase: &[&str],
+        ) -> super::super::dto::WorkItemListQuery {
+            super::super::dto::WorkItemListQuery {
+                scope: super::super::dto::WorkItemScope::Mine,
+                work_item_types: Vec::new(),
+                statuses: Vec::new(),
+                due: None,
+                priorities: Vec::new(),
+                query: None,
+                handler_user_ids: handler.iter().map(|value| value.to_string()).collect(),
+                sales_order_ids: sales.iter().map(|value| value.to_string()).collect(),
+                purchase_order_ids: purchase.iter().map(|value| value.to_string()).collect(),
+                current_work_item_id: None,
+                sort_by: "created_at",
+                sort_ascending: false,
+                page: 1,
+                page_size: 20,
+                queue_context_id: None,
+                scope_version: None,
+            }
+        }
+
+        fn access() -> ActorAccess {
+            ActorAccess {
+                actor_id: "actor".to_string(),
+                permissions: Vec::new(),
+                participant_document_ids: HashSet::new(),
+                managed_owner_ids: Some(vec!["owner-1".to_string()]),
+                can_manage: true,
+            }
+        }
+
+        let access = access();
+        let base = query_with(&[], &[], &[]);
+        let base_context = super::queue_context_id("actor", &base, &access);
+        assert_eq!(base_context, super::queue_context_id("actor", &query_with(&[], &[], &[]), &access));
+        for varied in [
+            query_with(&["handler-1"], &[], &[]),
+            query_with(&[], &["so-1"], &[]),
+            query_with(&[], &[], &["po-1"]),
+        ] {
+            let varied_context = super::queue_context_id("actor", &varied, &access);
+            assert_ne!(base_context, varied_context);
+            assert!(super::ensure_queue_context(&Some(base_context.clone()), &varied_context).is_err());
+            let base_version = super::queue_scope_version("identity", &base_context, "result");
+            let varied_version = super::queue_scope_version("identity", &varied_context, "result");
+            assert_ne!(base_version, varied_version);
+            assert!(super::ensure_scope_version(2, Some(&base_version), &varied_version).is_err());
+        }
     }
 
     fn work_item_params_with_ids(handler_user_ids: Option<&str>) -> super::super::dto::WorkItemListParams {

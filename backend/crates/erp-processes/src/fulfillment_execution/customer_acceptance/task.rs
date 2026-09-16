@@ -240,11 +240,12 @@ async fn ensure_current_owner_execution_access(
 
 #[cfg(test)]
 mod tests {
-    use erp_core::ids::WorkItemId;
+    use erp_core::ids::{ContractId, CustomerAccountId, PartyId, SalesOrderId, WorkItemId};
+    use erp_sales::entity::sales_order::{OriginSystem, SalesOrderData};
 
     use super::*;
 
-    fn task() -> WorkItem {
+    fn task_owned_by(owner: &str) -> WorkItem {
         WorkItem::new_with_responsibility_key(
             WorkItemId::new("wi-1"),
             WorkItemData {
@@ -254,7 +255,7 @@ mod tests {
                 subject_version: "1".to_string(),
                 owner_role: OWNER_ROLE.to_string(),
                 owner_organization_id: "party-1".to_string(),
-                owner_user_id: "sales-1".to_string(),
+                owner_user_id: owner.to_string(),
                 assignment_source: AssignmentSource::SystemRule,
                 priority: WorkItemPriority::Normal,
                 due_at: None,
@@ -266,6 +267,30 @@ mod tests {
         .expect("客户验收任务应合法")
     }
 
+    fn task() -> WorkItem {
+        task_owned_by("sales-1")
+    }
+
+    fn order_owned_by(owner: &str) -> SalesOrder {
+        SalesOrder::new(
+            SalesOrderId::new("so-1"),
+            SalesOrderData {
+                sales_owner_user_id: owner.to_string(),
+                business_org_unit_id: "org-a".to_string(),
+                order_no: "SO-1".to_string(),
+                business_type: BusinessType::GoodsService,
+                origin_system: OriginSystem::Erp,
+                source_identity_id: None,
+                customer_id: CustomerAccountId::new("cust-1"),
+                contract_id: Some(ContractId::new("contract-1")),
+                settlement_party_id: PartyId::new("party-1"),
+                source_status_code: None,
+            },
+            "creator-legacy",
+        )
+        .expect("销售单应合法")
+    }
+
     #[test]
     fn command_context_requires_matching_task_and_version() {
         let task = task();
@@ -274,5 +299,17 @@ mod tests {
         assert!(ensure_command_identity(&task, Some("wi-2"), Some(task.base.version)).is_err());
         assert!(ensure_command_identity(&task, Some("wi-1"), Some(task.base.version + 1)).is_err());
         assert!(ensure_command_identity(&task, Some("wi-1"), None).is_err());
+    }
+
+    /// 验收任务责任来源为显式销售负责人：与当前负责人一致放行，
+    /// 沿用旧创建人来源的任务必须拒绝（S3-07 来源切换一致性门控）。
+    #[test]
+    fn task_identity_requires_current_sales_owner_not_creator() {
+        let order = order_owned_by("sales-1");
+        assert!(ensure_task_identity(&task_owned_by("sales-1"), &order).is_ok());
+        assert!(ensure_task_identity(&task_owned_by("creator-legacy"), &order).is_err());
+        let moved = order_owned_by("sales-2");
+        assert!(ensure_task_identity(&task_owned_by("sales-1"), &moved).is_err());
+        assert!(ensure_task_identity(&task_owned_by("sales-2"), &moved).is_ok());
     }
 }

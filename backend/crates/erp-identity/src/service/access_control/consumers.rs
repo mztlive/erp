@@ -199,4 +199,36 @@ mod tests {
         assert!(!allocation.allows_history);
         assert!(registration("purchase_invoice_allocation", "detail").is_err());
     }
+
+    /// S3-08 新增消费动作已接线可解析；未接线动作与资源必须失败关闭。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无；接线与关闭均符合登记时通过。
+    ///
+    /// # 关键业务约束
+    /// 不得以初始化清单代替本登记；历史参与仅四类读取动作。
+    #[test]
+    fn wired_s3_actions_admit_reads_unwired_actions_fail_closed() {
+        for action in ["list", "get", "create", "maintain", "prepare", "publish", "copy_link"] {
+            assert!(registration("sales_selection_booklet", action).is_ok());
+        }
+        for action in ["list", "get"] {
+            assert!(registration("sales_selection_proposal", action).is_ok());
+            assert!(!registration("sales_selection_proposal", action).unwrap().allows_history);
+        }
+        assert!(registration("sales_selection_proposal", "create").is_err());
+        assert!(registration("sales_selection_booklet", "approve").is_err());
+        for action in ["list", "detail"] {
+            assert!(registration("cost_entry", action).is_ok());
+            assert!(!registration("cost_entry", action).unwrap().allows_history);
+        }
+        assert!(registration("cost_allocation", "list").is_ok());
+        assert!(registration("cost_allocation", "detail").is_err());
+        assert!(registration("fulfillment_queue", "list").is_err());
+        assert!(registration("customer_quality", "list").is_err());
+        assert!(registration("handover", "update").is_err());
+    }
 }

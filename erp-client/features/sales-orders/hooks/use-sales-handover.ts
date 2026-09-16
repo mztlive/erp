@@ -39,6 +39,7 @@ export function useSalesHandoverCandidatesQuery(
 export function useSubmitSalesHandoverMutation() {
     const queryClient = useQueryClient()
     return useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: submitSalesHandover,
         onSuccess: async (data) => {
             await Promise.all([

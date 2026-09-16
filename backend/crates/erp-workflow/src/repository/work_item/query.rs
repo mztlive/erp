@@ -192,7 +192,7 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
         Some("closed_at") => "closed_at",
         _ => "created_at",
     };
-    doc! { field: direction }
+    doc! { field: direction, "id": 1 }
 }
 
 fn work_item_projection() -> Document {
@@ -238,10 +238,19 @@ mod tests {
 
     #[test]
     fn sort_doc_is_whitelisted() {
-        assert_eq!(sort_doc(None, false), doc! { "created_at": -1 });
-        assert_eq!(sort_doc(Some("last_activity_at"), true), doc! { "last_activity_at": 1 });
-        assert_eq!(sort_doc(Some("assigned_at"), false), doc! { "assigned_at": -1 });
-        assert_eq!(sort_doc(Some("business_object_id"), false), doc! { "created_at": -1 });
+        assert_eq!(sort_doc(None, false), doc! { "created_at": -1, "id": 1 });
+        assert_eq!(sort_doc(Some("last_activity_at"), true), doc! { "last_activity_at": 1, "id": 1 });
+        assert_eq!(sort_doc(Some("assigned_at"), false), doc! { "assigned_at": -1, "id": 1 });
+        assert_eq!(sort_doc(Some("business_object_id"), false), doc! { "created_at": -1, "id": 1 });
+    }
+
+    #[test]
+    fn sort_doc_always_carries_id_tie_breaker_for_stable_paging() {
+        for (sort, ascending) in [(None, false), (Some("due_at"), true), (Some("created_at"), false)] {
+            let sorted = sort_doc(sort, ascending);
+            assert_eq!(sorted.get_i32("id").expect("稳定排序必须含ID"), 1);
+            assert_eq!(sorted.keys().count(), 2);
+        }
     }
 
     #[test]

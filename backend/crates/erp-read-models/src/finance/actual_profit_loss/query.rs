@@ -15,6 +15,7 @@ pub struct PeriodBounds {
 }
 impl ProfitLossQuery {
     /// 单次最多一年；分页和所有枚举在读取事实前验证。
+    /// 第二页起缺范围版本按范围变化冲突拒绝，与销售／成本列表一致。
     pub fn validate(&self) -> Result<PeriodBounds> {
         if self.period_basis != PERIOD_BASIS {
             return invalid("请选择销售单生效日口径");
@@ -31,7 +32,9 @@ impl ProfitLossQuery {
             return invalid("分页参数无效");
         }
         if self.page > 1 && self.scope_version.as_deref().is_none_or(str::is_empty) {
-            return invalid("跨页查询必须携带范围版本，请从第一页刷新");
+            return Err(Error::ConflictError(
+                "DATA_SCOPE_CHANGED：跨页查询必须携带范围版本，请从第一页刷新".into(),
+            ));
         }
         if self.scope_version.as_ref().is_some_and(|version| version.len() > 128) {
             return invalid("范围版本无效");
@@ -168,5 +171,28 @@ mod tests {
         q.to = "2026-09-30".into();
         q.cost_types = Some("$where".into());
         assert!(q.validate().is_err());
+    }
+
+    #[test]
+    fn second_page_without_scope_version_is_data_scope_changed_conflict() {
+        let mut q = ProfitLossQuery {
+            from: "2026-09-01".into(),
+            to: "2026-09-30".into(),
+            period_basis: PERIOD_BASIS.into(),
+            coverage: "all".into(),
+            dimension: "sales_order".into(),
+            sort: "actualProfitLossNet:asc".into(),
+            page: 2,
+            page_size: 20,
+            ..Default::default()
+        };
+        match q.validate() {
+            Err(crate::Error::ConflictError(message)) => {
+                assert!(message.starts_with("DATA_SCOPE_CHANGED"));
+            },
+            Err(_) | Ok(_) => panic!("expected DATA_SCOPE_CHANGED conflict"),
+        }
+        q.scope_version = Some("v1".into());
+        assert!(q.validate().is_ok());
     }
 }
