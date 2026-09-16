@@ -28,6 +28,7 @@ const DOMAIN_MODULES: &[&str] = &[
     "access_control",
     "party",
     "customer",
+    "customer_quality",
     "supplier",
     "catalog",
     "warehouse",

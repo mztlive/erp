@@ -1400,6 +1400,52 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
+        name: "客户经营质量",
+        description: "当前负责与历史贡献双口径（M10）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-quality/current",
+                description: "查询当前负责客户经营情况",
+                permission: {
+                    resource: "customer",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-quality/history",
+                description: "查询历史负责订单贡献",
+                permission: {
+                    resource: "sales_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-quality/current/exports",
+                description: "导出当前负责客户经营情况",
+                permission: {
+                    resource: "customer",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-quality/history/exports",
+                description: "导出历史负责订单贡献",
+                permission: {
+                    resource: "sales_order",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
         name: "供应商",
         description: "供应商角色、商务结算版本、能力与资质管理",
         permissions: [

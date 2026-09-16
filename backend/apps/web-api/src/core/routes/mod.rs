@@ -28,6 +28,7 @@ mod catalog;
 mod contract;
 mod cost;
 mod customer;
+mod customer_quality;
 mod document_registry;
 mod file_asset;
 mod fulfillment;

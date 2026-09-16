@@ -5,6 +5,7 @@ mod errors;
 pub use errors::{Error, Result};
 
 pub mod customer_center;
+pub mod customer_quality;
 pub mod fulfillment_queue;
 pub mod workbench;
 

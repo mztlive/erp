@@ -23,6 +23,7 @@ import type {
 import type { CustomerQualityPatch } from "../hooks/use-customer-quality-navigation-state"
 import { BusinessTagDialog } from "./business-tag-dialog"
 import { ChartFilterSummaryAlert } from "./chart-filter-summary-alert"
+import { DualQualitySection } from "./dual-quality-section"
 import { CustomerQualityCharts } from "./customer-quality-charts"
 import { CustomerQualityCoveragePanels } from "./customer-quality-coverage-panels"
 import { CustomerQualityDetailTable } from "./customer-quality-detail-table"
@@ -143,6 +144,8 @@ export function CustomerQualityMainView({
                     freshness={data.freshness}
                 />
             ) : null}
+
+            <DualQualitySection from={resolvedFrom} to={resolvedTo} />
 
             <CustomerQualityPeriodBar
                 resolvedFrom={resolvedFrom}
