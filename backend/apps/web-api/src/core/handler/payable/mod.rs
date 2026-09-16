@@ -11,16 +11,17 @@ use axum::http::{HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::{Extension, Json};
 use erp_finance::dto::payable::{
-    CommitSupplierPaymentRequest, CreatePayableAccountRequest, PageView, PayableAccountListParams,
-    PayableAccountSummaryView, PayableAccountView, PaymentRecipientRevealView,
-    PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView,
+    CommitSupplierPaymentRequest, CreatePayableAccountRequest, PayableAccountListParams, PayableAccountView,
+    PaymentRecipientRevealView, PurchaseInvoiceAllocationListParams, PurchaseInvoiceRegisteredView,
     RegisterPurchaseInvoiceRequest, RevealPaymentRecipientRequest, SupplierPaymentListParams,
     SupplierPaymentView,
 };
 use erp_finance::dto::payment_merge::{PaymentMergeCandidatesParams, PaymentMergeCandidatesView};
-use erp_finance::service::payable::PayableService as PayableQueryService;
 use erp_processes::finance_posting::payable::PayableService;
-use erp_read_models::finance::payable::PayableReadService;
+use erp_read_models::finance::funds_scope::{
+    FundsScopedPage, FundsScopedResult, ScopedPayableAccountRow, ScopedPurchaseInvoiceAllocationRow,
+    ScopedSupplierPaymentRow,
+};
 use erp_support::{SecurityScanStatus, SensitivityClass};
 use tracing::error;
 
@@ -41,17 +42,25 @@ use crate::core::response::ApiResponse;
 )]
 /// 查询应付往来子账列表。
 ///
+/// DataScope v2：按来源采购单当前采购负责人查询，同一事务快照；
+/// 部分授权仅返获授权份额，整单金额为 null，跨页原样回传 `scope_version`。
+///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的当前操作人
 /// * `query` - 分页与筛选参数（扁平传递）
 ///
 /// # 返回
-/// 返回契约形状的分页视图。
+/// 返回范围分页视图（`items`/`total`/`summary`/`owner_options`/`scope_version`）。
 pub async fn payable_account_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<PayableAccountListParams>,
-) -> Result<PageView<PayableAccountSummaryView>> {
-    let page = PayableReadService::new(state.db()).payable_account_list(&params).await?;
+) -> Result<FundsScopedPage<ScopedPayableAccountRow>> {
+    let purchase_access = erp_processes::adapters::purchase_access(state.db(), state.rbac());
+    let page = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+        .payable_account_list_scoped(&params, &actor, &purchase_access)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -63,19 +72,24 @@ pub async fn payable_account_list(
     resource = "payable_account",
     action = "detail"
 )]
-/// 查询应付往来子账详情（子账 + 分录）。
+/// 查询应付往来子账详情（DataScope v2 范围裁剪行）。
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的当前操作人
 /// * `id` - 应付往来子账 ID
 ///
 /// # 返回
-/// 返回完整应付台账视图。
+/// 返回范围裁剪后的子账行；不可见与不存在统一为 NotFound。
 pub async fn payable_account_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-) -> Result<PayableAccountView> {
-    let view = PayableReadService::new(state.db()).payable_account_detail(&id).await?;
+) -> Result<FundsScopedResult<ScopedPayableAccountRow>> {
+    let purchase_access = erp_processes::adapters::purchase_access(state.db(), state.rbac());
+    let view = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+        .payable_account_detail_scoped(&id, &actor, &purchase_access)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -150,17 +164,25 @@ pub async fn payable_account_create(
 )]
 /// 查询供应商付款单列表。
 ///
+/// DataScope v2：按核销关联采购当前负责人与付款经办人分别查询；
+/// 付款金额按分配事实只算匹配份额，未分配单列。
+///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的当前操作人
 /// * `query` - 分页与筛选参数（扁平传递）
 ///
 /// # 返回
-/// 返回契约形状的分页视图。
+/// 返回范围分页视图（`items`/`total`/`summary`/`owner_options`/`scope_version`）。
 pub async fn supplier_payment_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierPaymentListParams>,
-) -> Result<PageView<SupplierPaymentView>> {
-    let page = PayableReadService::new(state.db()).supplier_payment_list(&params).await?;
+) -> Result<FundsScopedPage<ScopedSupplierPaymentRow>> {
+    let purchase_access = erp_processes::adapters::purchase_access(state.db(), state.rbac());
+    let page = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+        .supplier_payment_list_scoped(&params, &actor, &purchase_access)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -172,19 +194,24 @@ pub async fn supplier_payment_list(
     resource = "supplier_payment",
     action = "detail"
 )]
-/// 查询供应商付款单详情（含核销分配行）。
+/// 查询供应商付款单详情（DataScope v2 范围裁剪行）。
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的当前操作人
 /// * `id` - 付款单 ID
 ///
 /// # 返回
-/// 返回付款单视图。
+/// 返回范围裁剪后的付款行；不可见与不存在统一为 NotFound。
 pub async fn supplier_payment_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-) -> Result<SupplierPaymentView> {
-    let view = PayableReadService::new(state.db()).supplier_payment_detail(&id).await?;
+) -> Result<FundsScopedResult<ScopedSupplierPaymentRow>> {
+    let purchase_access = erp_processes::adapters::purchase_access(state.db(), state.rbac());
+    let view = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+        .supplier_payment_detail_scoped(&id, &actor, &purchase_access)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -379,17 +406,25 @@ pub async fn purchase_invoice_allocation_post(
 )]
 /// 查询进项发票分配列表（按应付子账筛选）。
 ///
+/// DataScope v2：按应付子账来源采购当前负责人与收票经办人分别查询；
+/// 部分授权仅返获授权份额，整单分配金额为 null。
+///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的当前操作人
 /// * `query` - 分页与筛选参数（`payable_account_id` 必填）
 ///
 /// # 返回
-/// 返回契约形状的分页视图。
+/// 返回范围分页视图（`items`/`total`/`summary`/`owner_options`/`scope_version`）。
 pub async fn purchase_invoice_allocation_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<PurchaseInvoiceAllocationListParams>,
-) -> Result<PageView<PurchaseInvoiceAllocationView>> {
-    let page = PayableQueryService::new(state.db()).purchase_invoice_allocation_list(&params).await?;
+) -> Result<FundsScopedPage<ScopedPurchaseInvoiceAllocationRow>> {
+    let purchase_access = erp_processes::adapters::purchase_access(state.db(), state.rbac());
+    let page = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+        .purchase_invoice_allocation_list_scoped(&params, &actor, &purchase_access)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }

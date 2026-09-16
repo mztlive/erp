@@ -21,6 +21,13 @@ pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[
     ("org_unit", &["list", "manage"]),
     ("cost_entry", &["list", "detail"]),
     ("cost_allocation", &["list"]),
+    ("receivable_account", &["list", "detail"]),
+    ("customer_receipt", &["list", "detail"]),
+    ("invoice", &["list", "detail"]),
+    ("sales_invoice_request", &["list", "detail"]),
+    ("payable_account", &["list", "detail"]),
+    ("supplier_payment", &["list", "detail"]),
+    ("purchase_invoice_allocation", &["list"]),
     ("customer", &["list", "detail", "create", "update", "delete"]),
     ("contract", &["list", "detail", "create", "update"]),
     ("sales_order", &["list", "detail", "create", "update", "delete", "submit", "cancel_approval"]),
@@ -118,10 +125,20 @@ fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeDat
             scope_types = vec![DataScopeType::Team];
             granted_actions.retain(|action| matches!(*action, "list" | "detail"));
         },
-        "role-sales" if resource != "purchase_order" => {
+        "role-sales"
+            if !matches!(
+                resource,
+                "purchase_order" | "payable_account" | "supplier_payment" | "purchase_invoice_allocation"
+            ) =>
+        {
             scope_types = vec![DataScopeType::SelfOwned, DataScopeType::Collaborative]
         },
         "role-procurement" if resource == "purchase_order" => scope_types = vec![DataScopeType::SelfOwned],
+        "role-procurement"
+            if matches!(resource, "payable_account" | "supplier_payment" | "purchase_invoice_allocation") =>
+        {
+            scope_types = vec![DataScopeType::SelfOwned]
+        },
         _ => return Vec::new(),
     }
     scope_types
@@ -191,5 +208,22 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn funds_defaults_follow_sales_or_procurement_responsibility() {
+        for resource in ["receivable_account", "customer_receipt", "invoice", "sales_invoice_request"] {
+            let sales = definitions("role-sales", resource, &["list", "detail"]);
+            assert_eq!(sales.len(), 2, "{resource} 销售默认本人加协作");
+            assert!(definitions("role-procurement", resource, &["list", "detail"]).is_empty());
+        }
+        for resource in ["payable_account", "supplier_payment", "purchase_invoice_allocation"] {
+            let procurement = definitions("role-procurement", resource, &["list", "detail"]);
+            assert_eq!(procurement.len(), 1, "{resource} 采购默认本人");
+            assert_eq!(procurement[0].scope_type, DataScopeType::SelfOwned);
+            assert!(definitions("role-sales", resource, &["list", "detail"]).is_empty());
+        }
+        let finance = definitions("role-finance", "supplier_payment", &["list", "detail"]);
+        assert!(finance.iter().all(|rule| rule.scope_type == DataScopeType::Company));
     }
 }

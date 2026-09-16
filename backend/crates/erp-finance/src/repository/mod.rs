@@ -15,12 +15,13 @@ pub use owned::{
     ReceivableAccountRepository, ReceivableEntryOffsetRepository, ReceivableEntryRepository,
 };
 pub use payable::{
-    PayableAccountFilter, PayableRepository, PurchaseInvoiceAllocationFilter, SupplierPaymentFilter,
+    PayableAccountFilter, PayableAccountRow, PayableRepository, PurchaseInvoiceAllocationFilter,
+    SupplierPaymentFilter, SupplierPaymentRow,
 };
 pub use receivable::customer_center::CustomerCenterReceivableRow;
 pub use receivable::{
-    CustomerReceiptFilter, InvoiceFilter, ReceivableAccountFilter, ReceivableListScope, ReceivableRepository,
-    ScopedCustomerReceiptQuery, ScopedInvoiceQuery,
+    CustomerReceiptFilter, CustomerReceiptRow, InvoiceFilter, InvoiceRow, ReceivableAccountFilter,
+    ReceivableListScope, ReceivableRepository, ScopedCustomerReceiptQuery, ScopedInvoiceQuery,
 };
 
 #[cfg(test)]

@@ -1,0 +1,285 @@
+//! 资金往来范围授权 adapter：调用身份域公共解析器，转换成资金 Port 事实。
+
+use std::collections::BTreeSet;
+use std::sync::Arc;
+
+use application_core::AuditActor;
+use async_trait::async_trait;
+use erp_core::common::time::Instant;
+use erp_finance::ports::funds_scope::{
+    FundsDataScopePort, FundsResolvedClause, FundsResolvedScope, FundsScopeObject,
+};
+use erp_identity::SharedRbacService;
+use erp_identity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
+use erp_identity::entity::organization::OrgTree;
+use erp_identity::entity::organization_change::OrganizationState;
+use erp_identity::repository::OrganizationRepository;
+use erp_identity::service::access_control::consumers::registration;
+use erp_identity::service::access_control::resolve::DataScopeService;
+use mongodb::Database;
+use persistence_core::Executor;
+
+/// 组合层资金范围 adapter，持有身份域解析所需依赖。
+#[derive(Clone)]
+pub struct MongoFundsDataScope {
+    db: Database,
+    rbac: SharedRbacService,
+}
+
+impl MongoFundsDataScope {
+    /// 绑定身份数据库及现有 RBAC 实例。
+    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+        Self { db, rbac }
+    }
+
+    /// 包装为资金域可注入的共享 Port。
+    pub fn shared(db: Database, rbac: SharedRbacService) -> Arc<dyn FundsDataScopePort> {
+        Arc::new(Self::new(db, rbac))
+    }
+}
+
+#[async_trait]
+impl FundsDataScopePort for MongoFundsDataScope {
+    fn allows(&self, scope: &FundsResolvedScope, object: &FundsScopeObject) -> erp_finance::Result<bool> {
+        evaluate_object(scope, object)
+    }
+
+    async fn resolve(
+        &self,
+        actor: &AuditActor,
+        resource: &str,
+        action: &str,
+        executor: &mut dyn Executor,
+    ) -> erp_finance::Result<FundsResolvedScope> {
+        let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
+            .resolve(actor, resource, action, executor)
+            .await
+            .map_err(map_identity_error)?;
+        Ok(FundsResolvedScope {
+            user_id: access.user_id,
+            resource: access.resource,
+            action: access.action,
+            role_clauses: map_clauses(&access.scope.role_clauses)?,
+            user_limit: access.scope.user_limit.as_ref().map(map_clause).transpose()?,
+            policy_version: access.policy_version,
+            organization_version: access.organizations.version,
+            scope_version: access.scope_version,
+            as_of: access.as_of,
+        })
+    }
+
+    async fn expand_org_units(
+        &self,
+        org_unit_ids: &[String],
+        include_descendants: bool,
+        executor: &mut dyn Executor,
+    ) -> erp_finance::Result<BTreeSet<String>> {
+        let state = organization_state(&self.db, executor).await?;
+        expand_org_units(&state, org_unit_ids, include_descendants)
+    }
+
+    async fn org_member_ids(
+        &self,
+        org_unit_ids: &BTreeSet<String>,
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> erp_finance::Result<Vec<String>> {
+        let state = organization_state(&self.db, executor).await?;
+        Ok(member_ids(&state, org_unit_ids, at))
+    }
+}
+
+/// 在调用方事务内读取组织快照。
+async fn organization_state(
+    db: &Database,
+    executor: &mut dyn Executor,
+) -> erp_finance::Result<OrganizationState> {
+    Ok(OrganizationRepository::new(db).state(executor).await.map_err(erp_finance::Error::RepositoryError)?)
+}
+
+/// 展开启用组织及其可选下级。
+fn expand_org_units(
+    state: &OrganizationState,
+    org_ids: &[String],
+    include_descendants: bool,
+) -> erp_finance::Result<BTreeSet<String>> {
+    let tree = OrgTree::new(&state.units).map_err(map_identity_error)?;
+    let mut expanded = BTreeSet::new();
+    for id in org_ids {
+        expanded.extend(tree.expand(id, include_descendants).map_err(map_identity_error)?);
+    }
+    Ok(expanded)
+}
+
+/// 读取指定组织在给定时点的有效主属成员。
+fn member_ids(state: &OrganizationState, org_ids: &BTreeSet<String>, at: Instant) -> Vec<String> {
+    let mut ids = state
+        .memberships
+        .iter()
+        .filter(|membership| {
+            !membership.base.is_deleted()
+                && org_ids.contains(&membership.org_unit_id)
+                && membership.validity.contains(at)
+        })
+        .map(|membership| membership.user_id.clone())
+        .collect::<Vec<_>>();
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+/// 转换全部角色条款；任一不支持维度即失败。
+fn map_clauses(clauses: &[ScopeClause]) -> erp_finance::Result<Vec<FundsResolvedClause>> {
+    clauses.iter().map(map_clause).collect()
+}
+
+/// 将身份域条款转为资金已解析条款。
+fn map_clause(clause: &ScopeClause) -> erp_finance::Result<FundsResolvedClause> {
+    if !clause.settlement_party_ids.is_empty() || !clause.warehouse_ids.is_empty() {
+        return Err(erp_finance::Error::ValidationError("资金范围不支持结算主体或仓库维度".into()));
+    }
+    Ok(FundsResolvedClause {
+        company: clause.company,
+        self_owned: clause.self_owned,
+        collaborative: clause.collaborative,
+        org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
+    })
+}
+
+/// 将身份域错误映射为资金领域错误。
+fn map_identity_error(error: erp_identity::Error) -> erp_finance::Error {
+    match error {
+        erp_identity::Error::Internal(payload) => erp_finance::Error::Internal(payload),
+        erp_identity::Error::NotFound(payload) => erp_finance::Error::NotFound(payload),
+        erp_identity::Error::ValidationError(payload) => erp_finance::Error::ValidationError(payload),
+        erp_identity::Error::BusinessLogicError(payload) => erp_finance::Error::BusinessLogicError(payload),
+        erp_identity::Error::ConflictError(payload) => erp_finance::Error::ConflictError(payload),
+        erp_identity::Error::ReceiptDuplicate(payload) => erp_finance::Error::ReceiptDuplicate(payload),
+        erp_identity::Error::TransientTransaction(payload) => {
+            erp_finance::Error::TransientTransaction(payload)
+        },
+        erp_identity::Error::Forbidden(payload) => erp_finance::Error::Forbidden(payload),
+        erp_identity::Error::Unauthenticated(payload) => erp_finance::Error::Unauthenticated(payload),
+        erp_identity::Error::Logic(payload) => erp_finance::Error::Logic(payload),
+        erp_identity::Error::Rbac(payload) => erp_finance::Error::Internal(payload),
+        erp_identity::Error::OutcomeUnknown(payload) => erp_finance::Error::OutcomeUnknown(payload),
+        erp_identity::Error::RepositoryError(payload) => erp_finance::Error::RepositoryError(payload),
+    }
+}
+
+/// 将本域已解析事实无损转回公共判定输入，不读取或重解释原始规则。
+fn evaluate_object(scope: &FundsResolvedScope, object: &FundsScopeObject) -> erp_finance::Result<bool> {
+    if !matches!(
+        scope.resource.as_str(),
+        "receivable_account"
+            | "customer_receipt"
+            | "invoice"
+            | "sales_invoice_request"
+            | "payable_account"
+            | "supplier_payment"
+            | "purchase_invoice_allocation"
+    ) {
+        return Err(erp_finance::Error::ValidationError("范围资源与资金消费方不一致".into()));
+    }
+    let consumer = registration(&scope.resource, &scope.action).map_err(map_identity_error)?;
+    let resolved = ResolvedScope {
+        role_clauses: scope.role_clauses.iter().map(public_clause).collect(),
+        user_limit: scope.user_limit.as_ref().map(public_clause),
+    };
+    Ok(resolved.allows(
+        &ScopedObject {
+            owned: object.owned,
+            collaborating: object.collaborating,
+            historical_read_participant: false,
+            org_unit_id: object.org_unit_id.as_deref(),
+            settlement_party_id: None,
+            warehouse_id: None,
+        },
+        consumer.allows_history,
+    ))
+}
+
+/// 转换已解析条款，保留本人、协作、组织及空集。
+fn public_clause(clause: &FundsResolvedClause) -> ScopeClause {
+    ScopeClause {
+        company: clause.company,
+        self_owned: clause.self_owned,
+        collaborative: clause.collaborative,
+        org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
+        ..ScopeClause::default()
+    }
+}
+
+/// 构造绑定同一 RBAC 的资金访问器；HTTP 与命名 Process 必须经此入口。
+pub fn funds_access_with_rbac(
+    db: Database,
+    rbac: SharedRbacService,
+) -> erp_read_models::finance::funds_scope::FundsAccess {
+    let scope = MongoFundsDataScope::shared(db.clone(), rbac.clone());
+    erp_read_models::finance::funds_scope::FundsAccess::new(db, rbac, scope)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::*;
+
+    #[test]
+    fn funds_adapter_rejects_unsupported_scope_dimensions() {
+        let warehouse =
+            ScopeClause { warehouse_ids: BTreeSet::from(["wh-1".into()]), ..ScopeClause::default() };
+        match map_clause(&warehouse) {
+            Err(erp_finance::Error::ValidationError(message)) => {
+                assert!(message.contains("仓库"));
+            },
+            other => panic!("expected validation error, got {other:?}"),
+        }
+        let settlement = ScopeClause {
+            settlement_party_ids: BTreeSet::from(["party-1".into()]),
+            ..ScopeClause::default()
+        };
+        assert!(matches!(map_clause(&settlement), Err(erp_finance::Error::ValidationError(_))));
+    }
+
+    #[test]
+    fn funds_adapter_keeps_owner_collab_and_org_dimensions() {
+        let clause = ScopeClause {
+            company: false,
+            self_owned: true,
+            collaborative: true,
+            org_unit_ids: BTreeSet::from(["org-b".into(), "org-a".into()]),
+            ..ScopeClause::default()
+        };
+        let mapped = map_clause(&clause).unwrap();
+        assert!(mapped.self_owned);
+        assert!(mapped.collaborative);
+        assert_eq!(mapped.org_unit_ids, vec!["org-a".to_string(), "org-b".to_string()]);
+    }
+
+    #[test]
+    fn identity_forbidden_stays_forbidden() {
+        match map_identity_error(erp_identity::Error::Forbidden("没有该资源动作权限".into())) {
+            erp_finance::Error::Forbidden(message) => {
+                assert_eq!(message, "没有该资源动作权限");
+            },
+            other => panic!("expected forbidden, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn mismatched_resource_fails_closed() {
+        let scope = FundsResolvedScope {
+            user_id: "actor".into(),
+            resource: "work_item".into(),
+            action: "list".into(),
+            role_clauses: vec![FundsResolvedClause { company: true, ..FundsResolvedClause::default() }],
+            user_limit: None,
+            policy_version: 1,
+            organization_version: 1,
+            scope_version: "v1".into(),
+            as_of: Instant::from_unix_secs(0),
+        };
+        assert!(evaluate_object(&scope, &FundsScopeObject::default()).is_err());
+    }
+}

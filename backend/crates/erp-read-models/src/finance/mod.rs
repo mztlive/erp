@@ -10,3 +10,4 @@ mod search;
 pub mod actual_profit_loss;
 
 pub mod cost;
+pub mod funds_scope;

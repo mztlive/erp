@@ -43,8 +43,9 @@ pub use self::invoice::{
 };
 pub use self::query::{
     CustomerReceiptListParams, CustomerReceiptListQuery, InvoiceListParams, InvoiceListQuery, InvoiceView,
-    PageParams, ReceiptAllocationView, ReceivableAccountListParams, ReceivableAccountListQuery,
-    ReceivableAccountSummaryView, ReceivableEntryView, SalesInvoiceAllocationView,
+    PageParams, ReceiptAllocationView, ReceiptOperatorKind, ReceivableAccountListParams,
+    ReceivableAccountListQuery, ReceivableAccountSummaryView, ReceivableEntryView,
+    SalesInvoiceAllocationView,
 };
 
 #[cfg(test)]
@@ -81,6 +82,11 @@ mod tests {
     #[test]
     fn receivable_account_list_params_normalize_filters_and_paging() {
         let params = ReceivableAccountListParams {
+            scope_version: None,
+            sales_owner_user_ids: None,
+            operator_user_ids: None,
+            org_unit_ids: None,
+            include_descendants: None,
             q: Some(" SO ".to_string()),
             account_id: None,
             customer_id: None,
@@ -105,6 +111,11 @@ mod tests {
     #[test]
     fn list_params_reject_unbounded_page_size() {
         let params = ReceivableAccountListParams {
+            scope_version: None,
+            sales_owner_user_ids: None,
+            operator_user_ids: None,
+            org_unit_ids: None,
+            include_descendants: None,
             q: None,
             account_id: None,
             customer_id: None,
@@ -122,6 +133,12 @@ mod tests {
     #[test]
     fn receipt_and_invoice_list_params_normalize() {
         let receipt = CustomerReceiptListParams {
+            scope_version: None,
+            sales_owner_user_ids: None,
+            operator_user_ids: None,
+            operator_kind: None,
+            org_unit_ids: None,
+            include_descendants: None,
             q: None,
             receipt_no: Some(" RC-1 ".to_string()),
             counterparty_party_id: None,
@@ -138,6 +155,12 @@ mod tests {
         assert_eq!(query.status, Some(CustomerReceiptStatus::Posted));
 
         let invoice = InvoiceListParams {
+            scope_version: None,
+            sales_owner_user_ids: None,
+            procurement_owner_user_ids: None,
+            operator_user_ids: None,
+            org_unit_ids: None,
+            include_descendants: None,
             q: None,
             invoice_direction: Some(InvoiceDirection::Sales),
             invoice_kind: None,
@@ -154,6 +177,44 @@ mod tests {
         let query = invoice.normalized().unwrap();
         assert_eq!(query.invoice_direction, Some(InvoiceDirection::Sales));
         assert_eq!(query.paging.page_size, 99);
+    }
+
+    #[test]
+    fn receipt_operator_requires_explicit_kind_and_org_needs_scope() {
+        let missing_kind = CustomerReceiptListParams {
+            scope_version: None,
+            sales_owner_user_ids: None,
+            operator_user_ids: serde_json::from_value(serde_json::json!("u-1")).unwrap(),
+            operator_kind: None,
+            org_unit_ids: None,
+            include_descendants: None,
+            q: None,
+            receipt_no: None,
+            counterparty_party_id: None,
+            status: None,
+            sales_order_id: None,
+            receivable_account_id: None,
+            page: None,
+            page_size: None,
+            sort_by: None,
+            sort_dir: None,
+        };
+        assert!(missing_kind.normalized().is_err());
+
+        let missing_org =
+            CustomerReceiptListParams { include_descendants: Some(true), ..missing_kind.clone() };
+        assert!(missing_org.normalized().is_err());
+
+        assert!(
+            serde_json::from_value::<CustomerReceiptListParams>(serde_json::json!({"owner": "someone"}))
+                .is_err()
+        );
+        assert!(
+            serde_json::from_value::<ReceivableAccountListParams>(
+                serde_json::json!({"owner_user_ids": "someone"})
+            )
+            .is_err()
+        );
     }
 
     /// 发票创建请求拒绝定义 ID / 审批人；视图不暴露审批区。

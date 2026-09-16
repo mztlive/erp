@@ -162,6 +162,17 @@ export function nextActionHintForWorkItemType(
     )
 }
 
+// ─── 数据范围（M07/M08/M09 资金往来范围行共用） ─────────────────────────────
+
+export const scopeText = {
+    visibleShare: "获授权份额",
+    limitedOnlyVisibleShare: "部分金额权限受限，仅显示获授权份额",
+    wholeRestricted: "整单金额权限受限",
+    unassignedShare: "未分配业务归属",
+    scopeChangedRetry: "数据范围已变化，请从第一页重新查询",
+    candidateUnavailable: "已选人员（当前不可见）",
+} as const
+
 // ─── 接口错误类指引 ──────────────────────────────────────────────────────────
 
 export const interfaceText = {

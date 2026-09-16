@@ -30,8 +30,8 @@ mod sales_order_summary;
 
 pub use account::{ReceivableAccountFilter, SettlementBatchResult};
 pub use command::{ReceivableListScope, ScopedCustomerReceiptQuery, ScopedInvoiceQuery};
-pub use invoice::InvoiceFilter;
-pub use receipt::CustomerReceiptFilter;
+pub use invoice::{InvoiceFilter, InvoiceRow};
+pub use receipt::{CustomerReceiptFilter, CustomerReceiptRow};
 
 /// `receivable_entry` 集合名（单一来源：`ReceivableExt` 关联常量）。
 const RECEIVABLE_ENTRIES: &str = <mongodb::Database as ReceivableExt>::RECEIVABLE_ENTRIES;

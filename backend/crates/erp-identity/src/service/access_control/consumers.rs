@@ -37,6 +37,13 @@ const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     ),
     ("cost_entry", &["list", "detail"], &[ScopeDimension::InternalOrg]),
     ("cost_allocation", &["list"], &[ScopeDimension::InternalOrg]),
+    ("receivable_account", &["list", "detail"], &[ScopeDimension::InternalOrg]),
+    ("customer_receipt", &["list", "detail"], &[ScopeDimension::InternalOrg]),
+    ("invoice", &["list", "detail"], &[ScopeDimension::InternalOrg]),
+    ("sales_invoice_request", &["list", "detail"], &[ScopeDimension::InternalOrg]),
+    ("payable_account", &["list", "detail"], &[ScopeDimension::InternalOrg]),
+    ("supplier_payment", &["list", "detail"], &[ScopeDimension::InternalOrg]),
+    ("purchase_invoice_allocation", &["list"], &[ScopeDimension::InternalOrg]),
 ];
 
 /// 已接线消费者的资源动作登记。
@@ -145,5 +152,28 @@ mod tests {
         assert!(registration("work_item", "list").is_err());
         assert!(registration("approval_instance", "decide").is_ok());
         assert!(registration("work_item", "manage").is_ok());
+    }
+
+    /// S3-03 资金资源已接线可解析；写动作与历史参与均不在本次接线内。
+    #[test]
+    fn wired_funds_resources_admit_reads_without_history_or_commands() {
+        for resource in [
+            "receivable_account",
+            "customer_receipt",
+            "invoice",
+            "sales_invoice_request",
+            "payable_account",
+            "supplier_payment",
+        ] {
+            let list = registration(resource, "list").unwrap();
+            assert!(!list.allows_history);
+            let detail = registration(resource, "detail").unwrap();
+            assert!(!detail.allows_history);
+            assert!(registration(resource, "submit").is_err());
+            assert!(registration(resource, "commit").is_err());
+        }
+        let allocation = registration("purchase_invoice_allocation", "list").unwrap();
+        assert!(!allocation.allows_history);
+        assert!(registration("purchase_invoice_allocation", "detail").is_err());
     }
 }

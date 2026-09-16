@@ -5,6 +5,7 @@ mod contract;
 mod contract_data_scope;
 mod customer;
 mod customer_data_scope;
+mod funds_data_scope;
 mod import;
 mod inventory;
 mod organization;
@@ -26,6 +27,7 @@ use erp_party::{
     SensitiveDataCodec,
 };
 use erp_supplier::SupplierService;
+pub use funds_data_scope::{MongoFundsDataScope, funds_access_with_rbac};
 pub use import::{MongoImportBulkJobs, import_apply_service, legacy_import_service};
 pub use inventory::{authorize_inventory, inventory_adjustment_service, inventory_service};
 use mongodb::Database;
