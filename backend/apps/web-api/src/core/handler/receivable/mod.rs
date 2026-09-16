@@ -9,14 +9,16 @@ use axum::{Extension, Json};
 use erp_finance::dto::receivable::{
     CancelCustomerReceiptApprovalRequest, CommitCustomerReceiptRequest, CommitInvoiceRequest,
     CommitRedInvoiceRequest, CreateCustomerReceiptRequest, CreateInvoiceRequest,
-    CreateReceivableAccountRequest, CustomerReceiptListParams, InvoiceListParams, InvoiceView, PageView,
+    CreateReceivableAccountRequest, CustomerReceiptListParams, InvoiceListParams, InvoiceView,
     PostCustomerReceiptRequest, PostInvoiceRequest, ReceivableAccountListParams,
-    ReceivableAccountSummaryView, SubmitCustomerReceiptRequest,
+    SubmitCustomerReceiptRequest,
 };
-use erp_finance::service::receivable::ReceivableService;
 use erp_processes::finance_posting::receivable::ReceivableProcess;
 use erp_read_models::finance::dto::{CustomerReceiptView, ReceivableAccountView};
-use erp_read_models::finance::receivable::ReceivableReadService;
+use erp_read_models::finance::funds_scope::{
+    FundsScopedPage, FundsScopedResult, ScopedCustomerReceiptRow, ScopedInvoiceRow,
+    ScopedReceivableAccountRow,
+};
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
@@ -31,17 +33,24 @@ use crate::core::response::ApiResponse;
 )]
 /// 查询应收往来子账列表。
 ///
+/// DataScope v2：按关联销售单当前负责人与登记经办人分别查询，同一事务快照；
+/// 部分授权仅返获授权份额，整单金额为 null，跨页原样回传 `scope_version`。
+///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的当前操作人
 /// * `query` - 分页与筛选参数（扁平传递）
 ///
 /// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 返回范围分页视图（`items`/`total`/`summary`/`owner_options`/`scope_version`）。
 pub async fn receivable_account_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<ReceivableAccountListParams>,
-) -> Result<PageView<ReceivableAccountSummaryView>> {
-    let page = ReceivableReadService::new(state.db()).receivable_account_list(&params).await?;
+) -> Result<FundsScopedPage<ScopedReceivableAccountRow>> {
+    let page = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+        .receivable_account_list_scoped(&params, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -53,7 +62,7 @@ pub async fn receivable_account_list(
     resource = "receivable_account",
     action = "detail"
 )]
-/// 查询应收往来子账详情（子账 + 分录 + 抵销 + 复核链）。
+/// 查询应收往来子账详情（DataScope v2 范围裁剪行）。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -61,12 +70,15 @@ pub async fn receivable_account_list(
 /// * `id` - 应收往来子账 ID
 ///
 /// # 返回
-/// 返回完整台账视图。
+/// 返回范围裁剪后的台账行；不可见与不存在统一为 NotFound。
 pub async fn receivable_account_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-) -> Result<ReceivableAccountView> {
-    let view = ReceivableReadService::new(state.db()).receivable_account_detail(&id).await?;
+) -> Result<FundsScopedResult<ScopedReceivableAccountRow>> {
+    let view = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+        .receivable_account_detail_scoped(&id, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -109,17 +121,24 @@ pub async fn receivable_account_create(
 )]
 /// 查询客户回款单列表。
 ///
+/// DataScope v2：按核销关联销售当前负责人与登记/核销经办人分别查询；
+/// 回款金额按分配事实只算匹配份额，未分配单列。
+///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的当前操作人
 /// * `query` - 分页与筛选参数（扁平传递）
 ///
 /// # 返回
-/// 返回契约形状的分页视图。
+/// 返回范围分页视图（`items`/`total`/`summary`/`owner_options`/`scope_version`）。
 pub async fn customer_receipt_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<CustomerReceiptListParams>,
-) -> Result<PageView<CustomerReceiptView>> {
-    let page = ReceivableReadService::new(state.db()).customer_receipt_list(&params).await?;
+) -> Result<FundsScopedPage<ScopedCustomerReceiptRow>> {
+    let page = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+        .customer_receipt_list_scoped(&params, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -131,19 +150,23 @@ pub async fn customer_receipt_list(
     resource = "customer_receipt",
     action = "detail"
 )]
-/// 查询客户回款单详情（含核销分配行）。
+/// 查询客户回款单详情（DataScope v2 范围裁剪行）。
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的当前操作人
 /// * `id` - 回款单 ID
 ///
 /// # 返回
-/// 返回回款单视图。
+/// 返回范围裁剪后的回款行；不可见与不存在统一为 NotFound。
 pub async fn customer_receipt_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-) -> Result<CustomerReceiptView> {
-    let view = ReceivableReadService::new(state.db()).customer_receipt_detail(&id).await?;
+) -> Result<FundsScopedResult<ScopedCustomerReceiptRow>> {
+    let view = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+        .customer_receipt_detail_scoped(&id, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -306,17 +329,25 @@ pub async fn customer_receipt_post(
 )]
 /// 查询发票列表（销项/进项共用，`invoice_direction` 筛选）。
 ///
+/// DataScope v2：销项按负责销售与登记经办，进项按采购负责人与登记经办；
+/// 双方向同一事务快照，部分授权仅返获授权份额。
+///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的当前操作人
 /// * `query` - 分页与筛选参数（扁平传递）
 ///
 /// # 返回
-/// 返回契约形状的分页视图。
+/// 返回范围分页视图（`items`/`total`/`summary`/`owner_options`/`scope_version`）。
 pub async fn invoice_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<InvoiceListParams>,
-) -> Result<PageView<InvoiceView>> {
-    let page = ReceivableReadService::new(state.db()).invoice_list(&params).await?;
+) -> Result<FundsScopedPage<ScopedInvoiceRow>> {
+    let purchase_access = erp_processes::adapters::purchase_access(state.db(), state.rbac());
+    let page = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+        .invoice_list_scoped(&params, &actor, &purchase_access)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -328,16 +359,24 @@ pub async fn invoice_list(
     resource = "invoice",
     action = "detail"
 )]
-/// 查询发票详情（含分配行）。
+/// 查询发票详情（DataScope v2 范围裁剪行）。
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的当前操作人
 /// * `id` - 发票 ID
 ///
 /// # 返回
-/// 返回发票视图。
-pub async fn invoice_detail(State(state): State<AppState>, Path(id): Path<String>) -> Result<InvoiceView> {
-    let view = ReceivableService::new(state.db()).invoice_detail(&id).await?;
+/// 返回范围裁剪后的发票行；不可见与不存在统一为 NotFound。
+pub async fn invoice_detail(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<FundsScopedResult<ScopedInvoiceRow>> {
+    let purchase_access = erp_processes::adapters::purchase_access(state.db(), state.rbac());
+    let view = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+        .invoice_detail_scoped(&id, &actor, &purchase_access)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

@@ -22,7 +22,7 @@ pub enum PaymentReversalStatus {
     /// 已冲正。
     Reversed,
 }
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{QueryIds, normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{FileAssetId, PayableAccountId, PayableEntryId, SupplierAccountId, WorkItemId};
 use erp_core::money::Amount;
@@ -254,7 +254,17 @@ pub struct PaymentRecipientRevealView {
 
 /// 应付往来子账列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct PayableAccountListParams {
+    /// 跨页必须携带当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
+    /// 来源采购单当前采购负责人，逗号分隔，最多 100 项；只收窄授权结果。
+    pub procurement_owner_user_ids: Option<QueryIds>,
+    /// 来源采购单当前业务组织，逗号分隔，最多 100 项；只收窄授权结果。
+    pub org_unit_ids: Option<QueryIds>,
+    /// 组织筛选是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
     /// 应付来源单据稳定身份。
     pub source_document_id: Option<String>,
     /// 主体名称与关联单据号字面量关键词。
@@ -281,6 +291,14 @@ pub struct PayableAccountListParams {
 /// 归一化后的应付往来子账列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PayableAccountListQuery {
+    /// 跨页授权和业务版本。
+    pub scope_version: Option<String>,
+    /// 来源采购单当前采购负责人精确身份条件。
+    pub procurement_owner_user_ids: Option<QueryIds>,
+    /// 来源采购单当前业务组织，只收窄授权结果。
+    pub org_unit_ids: Option<QueryIds>,
+    /// 组织筛选是否包含有效下级。
+    pub include_descendants: Option<bool>,
     /// 应付来源单据稳定身份。
     pub source_document_id: Option<String>,
     /// 主体名称与关联单据号字面量关键词。
@@ -305,7 +323,14 @@ impl PayableAccountListParams {
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub fn normalized(&self) -> Result<PayableAccountListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, PAYABLE_ACCOUNT_SORT_FIELDS)?;
+        if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
+            return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
+        }
         Ok(PayableAccountListQuery {
+            scope_version: self.scope_version.clone(),
+            procurement_owner_user_ids: self.procurement_owner_user_ids.clone(),
+            org_unit_ids: self.org_unit_ids.clone(),
+            include_descendants: self.include_descendants,
             source_document_id: normalized_text(self.source_document_id.as_deref()),
             q: normalized_text(self.q.as_deref()),
             supplier_id: self.supplier_id.clone(),
@@ -541,7 +566,19 @@ pub struct SupplierPaymentBankReceiptView {
 
 /// 供应商付款单列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct SupplierPaymentListParams {
+    /// 跨页必须携带当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
+    /// 核销来源采购单的当前采购负责人，逗号分隔，最多 100 项；只收窄授权结果。
+    pub procurement_owner_user_ids: Option<QueryIds>,
+    /// 付款经办人（付款提交执行人），逗号分隔，最多 100 项；只收窄授权结果。
+    pub operator_user_ids: Option<QueryIds>,
+    /// 核销来源采购单的当前业务组织，逗号分隔，最多 100 项；只收窄授权结果。
+    pub org_unit_ids: Option<QueryIds>,
+    /// 组织筛选是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
     /// 付款单号或供应商名称关键词。
     #[validate(length(max = 200))]
     pub q: Option<String>,
@@ -566,6 +603,16 @@ pub struct SupplierPaymentListParams {
 /// 归一化后的供应商付款单列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SupplierPaymentListQuery {
+    /// 跨页授权和业务版本。
+    pub scope_version: Option<String>,
+    /// 核销来源采购单的当前采购负责人精确身份条件。
+    pub procurement_owner_user_ids: Option<QueryIds>,
+    /// 付款经办人精确身份条件。
+    pub operator_user_ids: Option<QueryIds>,
+    /// 核销来源采购单的当前业务组织，只收窄授权结果。
+    pub org_unit_ids: Option<QueryIds>,
+    /// 组织筛选是否包含有效下级。
+    pub include_descendants: Option<bool>,
     /// 付款单号或供应商名称关键词。
     pub q: Option<String>,
     /// 付款单号模糊筛选。
@@ -589,7 +636,15 @@ impl SupplierPaymentListParams {
     pub fn normalized(&self) -> Result<SupplierPaymentListQuery> {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, SUPPLIER_PAYMENT_SORT_FIELDS)?;
+        if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
+            return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
+        }
         Ok(SupplierPaymentListQuery {
+            scope_version: self.scope_version.clone(),
+            procurement_owner_user_ids: self.procurement_owner_user_ids.clone(),
+            operator_user_ids: self.operator_user_ids.clone(),
+            org_unit_ids: self.org_unit_ids.clone(),
+            include_descendants: self.include_descendants,
             q: normalized_text(self.q.as_deref()),
             payment_no: normalized_text(self.payment_no.as_deref()),
             supplier_id: self.supplier_id.clone(),
@@ -685,7 +740,19 @@ pub struct PurchaseInvoiceRegisteredView {
 
 /// 进项发票分配列表查询参数（按应付子账筛选）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct PurchaseInvoiceAllocationListParams {
+    /// 跨页必须携带当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
+    /// 应付子账来源采购单的当前采购负责人，逗号分隔，最多 100 项。
+    pub procurement_owner_user_ids: Option<QueryIds>,
+    /// 收票经办人（进项发票登记人），逗号分隔，最多 100 项；只收窄授权结果。
+    pub operator_user_ids: Option<QueryIds>,
+    /// 应付子账来源采购单的当前业务组织，逗号分隔，最多 100 项；只收窄授权结果。
+    pub org_unit_ids: Option<QueryIds>,
+    /// 组织筛选是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
     /// 应付往来子账筛选。
     pub payable_account_id: Option<PayableAccountId>,
     /// 页码（1 起）。
@@ -703,6 +770,16 @@ pub struct PurchaseInvoiceAllocationListParams {
 /// 归一化后的进项发票分配列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PurchaseInvoiceAllocationListQuery {
+    /// 跨页授权和业务版本。
+    pub scope_version: Option<String>,
+    /// 应付子账来源采购单的当前采购负责人精确身份条件。
+    pub procurement_owner_user_ids: Option<QueryIds>,
+    /// 收票经办人精确身份条件。
+    pub operator_user_ids: Option<QueryIds>,
+    /// 应付子账来源采购单的当前业务组织，只收窄授权结果。
+    pub org_unit_ids: Option<QueryIds>,
+    /// 组织筛选是否包含有效下级。
+    pub include_descendants: Option<bool>,
     /// 应付往来子账筛选。
     pub payable_account_id: Option<PayableAccountId>,
     /// 分页与排序参数。
@@ -720,7 +797,15 @@ impl PurchaseInvoiceAllocationListParams {
     pub fn normalized(&self) -> Result<PurchaseInvoiceAllocationListQuery> {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, PURCHASE_INVOICE_ALLOCATION_SORT_FIELDS)?;
+        if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
+            return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
+        }
         Ok(PurchaseInvoiceAllocationListQuery {
+            scope_version: self.scope_version.clone(),
+            procurement_owner_user_ids: self.procurement_owner_user_ids.clone(),
+            operator_user_ids: self.operator_user_ids.clone(),
+            org_unit_ids: self.org_unit_ids.clone(),
+            include_descendants: self.include_descendants,
             payable_account_id: self.payable_account_id.clone(),
             paging: PageParams {
                 page: page_or_default(self.page),
@@ -781,6 +866,10 @@ mod tests {
     #[test]
     fn payable_account_list_params_normalize_filters_and_paging() {
         let params = PayableAccountListParams {
+            scope_version: None,
+            procurement_owner_user_ids: None,
+            org_unit_ids: None,
+            include_descendants: None,
             source_document_id: None,
             q: None,
             supplier_id: None,
@@ -803,6 +892,11 @@ mod tests {
     #[test]
     fn payment_and_allocation_list_params_normalize() {
         let payment = SupplierPaymentListParams {
+            scope_version: None,
+            procurement_owner_user_ids: None,
+            operator_user_ids: None,
+            org_unit_ids: None,
+            include_descendants: None,
             q: Some(" 狮峰 ".to_string()),
             payment_no: Some(" PAY-1 ".to_string()),
             supplier_id: None,
@@ -818,6 +912,11 @@ mod tests {
         assert_eq!(query.status, Some(SupplierPaymentStatus::Posted));
 
         let allocations = PurchaseInvoiceAllocationListParams {
+            scope_version: None,
+            procurement_owner_user_ids: None,
+            operator_user_ids: None,
+            org_unit_ids: None,
+            include_descendants: None,
             payable_account_id: None,
             page: Some(1),
             page_size: Some(25),
@@ -947,6 +1046,10 @@ mod tests {
     #[test]
     fn list_params_reject_unbounded_page_size() {
         let params = PayableAccountListParams {
+            scope_version: None,
+            procurement_owner_user_ids: None,
+            org_unit_ids: None,
+            include_descendants: None,
             source_document_id: None,
             q: None,
             supplier_id: None,

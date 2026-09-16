@@ -1,6 +1,6 @@
 //! 应收查询参数、列表/详情视图与分页归一化。
 
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{QueryIds, normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{CustomerAccountId, PartyId, ReceivableAccountId};
 use erp_core::money::Amount;
@@ -108,7 +108,19 @@ pub struct ReceivableAccountSummaryView {
 
 /// 应收往来子账列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct ReceivableAccountListParams {
+    /// 跨页必须携带当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
+    /// 关联销售单当前负责销售，逗号分隔，最多 100 项；只收窄授权结果。
+    pub sales_owner_user_ids: Option<QueryIds>,
+    /// 子账登记经办人，逗号分隔，最多 100 项；只收窄授权结果。
+    pub operator_user_ids: Option<QueryIds>,
+    /// 关联销售单当前业务组织，逗号分隔，最多 100 项；只收窄授权结果。
+    pub org_unit_ids: Option<QueryIds>,
+    /// 组织筛选是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
     /// 子账、销售单、客户或往来主体关键字。
     #[validate(length(max = 200))]
     pub q: Option<String>,
@@ -137,6 +149,16 @@ pub struct ReceivableAccountListParams {
 /// 归一化后的应收往来子账列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReceivableAccountListQuery {
+    /// 跨页授权和业务版本。
+    pub scope_version: Option<String>,
+    /// 关联销售单当前负责销售精确身份条件。
+    pub sales_owner_user_ids: Option<QueryIds>,
+    /// 子账登记经办人精确身份条件。
+    pub operator_user_ids: Option<QueryIds>,
+    /// 关联销售单当前业务组织，只收窄授权结果。
+    pub org_unit_ids: Option<QueryIds>,
+    /// 组织筛选是否包含有效下级。
+    pub include_descendants: Option<bool>,
     /// 子账、销售单、客户或往来主体关键字。
     pub q: Option<String>,
     /// 子账主键筛选。
@@ -166,7 +188,15 @@ impl ReceivableAccountListParams {
     pub fn normalized(&self) -> Result<ReceivableAccountListQuery> {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, RECEIVABLE_ACCOUNT_SORT_FIELDS)?;
+        if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
+            return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
+        }
         Ok(ReceivableAccountListQuery {
+            scope_version: self.scope_version.clone(),
+            sales_owner_user_ids: self.sales_owner_user_ids.clone(),
+            operator_user_ids: self.operator_user_ids.clone(),
+            org_unit_ids: self.org_unit_ids.clone(),
+            include_descendants: self.include_descendants,
             q: normalized_text(self.q.as_deref()),
             account_id: self.account_id.clone(),
             customer_id: self.customer_id.clone(),
@@ -202,9 +232,33 @@ pub struct ReceiptAllocationView {
     pub reverses_allocation_id: Option<String>,
 }
 
+/// 回款经办人角色；登记与核销分别查询，不得混用。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReceiptOperatorKind {
+    /// 登记经办人（回款单创建人）。
+    Register,
+    /// 核销经办人（提交核销分配的执行人）。
+    Settle,
+}
+
 /// 客户回款单列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct CustomerReceiptListParams {
+    /// 跨页必须携带当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
+    /// 核销关联销售单的当前负责销售，逗号分隔，最多 100 项；只收窄授权结果。
+    pub sales_owner_user_ids: Option<QueryIds>,
+    /// 回款经办人，逗号分隔，最多 100 项；动作类型由 `operator_kind` 显式选择。
+    pub operator_user_ids: Option<QueryIds>,
+    /// 经办人动作类型；提供经办人条件时必填。
+    pub operator_kind: Option<ReceiptOperatorKind>,
+    /// 核销关联销售单的当前业务组织，逗号分隔，最多 100 项；只收窄授权结果。
+    pub org_unit_ids: Option<QueryIds>,
+    /// 组织筛选是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
     /// 主体名称与关联单据号字面量关键词。
     #[validate(length(max = 200))]
     pub q: Option<String>,
@@ -233,6 +287,18 @@ pub struct CustomerReceiptListParams {
 /// 归一化后的客户回款单列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CustomerReceiptListQuery {
+    /// 跨页授权和业务版本。
+    pub scope_version: Option<String>,
+    /// 核销关联销售单的当前负责销售精确身份条件。
+    pub sales_owner_user_ids: Option<QueryIds>,
+    /// 回款经办人精确身份条件。
+    pub operator_user_ids: Option<QueryIds>,
+    /// 经办人动作类型。
+    pub operator_kind: Option<ReceiptOperatorKind>,
+    /// 核销关联销售单的当前业务组织，只收窄授权结果。
+    pub org_unit_ids: Option<QueryIds>,
+    /// 组织筛选是否包含有效下级。
+    pub include_descendants: Option<bool>,
     /// 主体名称与关联单据号字面量关键词。
     pub q: Option<String>,
     /// 回款单号模糊筛选。
@@ -260,7 +326,19 @@ impl CustomerReceiptListParams {
     pub fn normalized(&self) -> Result<CustomerReceiptListQuery> {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, CUSTOMER_RECEIPT_SORT_FIELDS)?;
+        if self.operator_user_ids.is_some() && self.operator_kind.is_none() {
+            return Err(crate::Error::ValidationError("查询经办人时必须显式选择登记或核销".into()));
+        }
+        if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
+            return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
+        }
         Ok(CustomerReceiptListQuery {
+            scope_version: self.scope_version.clone(),
+            sales_owner_user_ids: self.sales_owner_user_ids.clone(),
+            operator_user_ids: self.operator_user_ids.clone(),
+            operator_kind: self.operator_kind,
+            org_unit_ids: self.org_unit_ids.clone(),
+            include_descendants: self.include_descendants,
             q: normalized_text(self.q.as_deref()),
             receipt_no: normalized_text(self.receipt_no.as_deref()),
             counterparty_party_id: self.counterparty_party_id.clone(),
@@ -345,7 +423,21 @@ pub struct InvoiceView {
 
 /// 发票列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct InvoiceListParams {
+    /// 跨页必须携带当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
+    /// 分配关联销售单的当前负责销售，逗号分隔，最多 100 项；只收窄授权结果。
+    pub sales_owner_user_ids: Option<QueryIds>,
+    /// 分配关联采购单的当前采购负责人，逗号分隔，最多 100 项；只收窄授权结果。
+    pub procurement_owner_user_ids: Option<QueryIds>,
+    /// 发票登记经办人（发票创建人），逗号分隔，最多 100 项；只收窄授权结果。
+    pub operator_user_ids: Option<QueryIds>,
+    /// 分配关联销售单的当前业务组织，逗号分隔，最多 100 项；只收窄授权结果。
+    pub org_unit_ids: Option<QueryIds>,
+    /// 组织筛选是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
     /// 主体名称与关联单据号字面量关键词。
     #[validate(length(max = 200))]
     pub q: Option<String>,
@@ -378,6 +470,18 @@ pub struct InvoiceListParams {
 /// 归一化后的发票列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceListQuery {
+    /// 跨页授权和业务版本。
+    pub scope_version: Option<String>,
+    /// 分配关联销售单的当前负责销售精确身份条件。
+    pub sales_owner_user_ids: Option<QueryIds>,
+    /// 分配关联采购单的当前采购负责人精确身份条件。
+    pub procurement_owner_user_ids: Option<QueryIds>,
+    /// 发票登记经办人精确身份条件。
+    pub operator_user_ids: Option<QueryIds>,
+    /// 分配关联销售单的当前业务组织，只收窄授权结果。
+    pub org_unit_ids: Option<QueryIds>,
+    /// 组织筛选是否包含有效下级。
+    pub include_descendants: Option<bool>,
     /// 主体名称与关联单据号字面量关键词。
     pub q: Option<String>,
     /// 发票方向筛选。
@@ -408,7 +512,16 @@ impl InvoiceListParams {
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub fn normalized(&self) -> Result<InvoiceListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, INVOICE_SORT_FIELDS)?;
+        if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
+            return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
+        }
         Ok(InvoiceListQuery {
+            scope_version: self.scope_version.clone(),
+            sales_owner_user_ids: self.sales_owner_user_ids.clone(),
+            procurement_owner_user_ids: self.procurement_owner_user_ids.clone(),
+            operator_user_ids: self.operator_user_ids.clone(),
+            org_unit_ids: self.org_unit_ids.clone(),
+            include_descendants: self.include_descendants,
             q: normalized_text(self.q.as_deref()),
             invoice_direction: self.invoice_direction,
             invoice_kind: self.invoice_kind,
