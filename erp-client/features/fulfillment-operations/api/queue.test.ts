@@ -169,6 +169,7 @@ describe("fetchFulfillmentQueue server pagination", () => {
                     page: 2,
                     page_size: 20,
                     queue_context_id: "queue-context-1",
+                    scope_version: "scope-version-1",
                     visible_types: ["RECEIPT", "WAREHOUSE_SHIP"],
                     metrics: [
                         { operation_type: "RECEIPT", count: 21 },

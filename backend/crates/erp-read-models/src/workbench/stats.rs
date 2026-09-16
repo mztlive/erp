@@ -7,7 +7,7 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::access::{ActorAccess, ViewAccess, authorized_fields};
-use super::query::{AUTHORIZED_SCAN_BATCH_SIZE, matches_keyword, next_candidate_offset};
+use super::query::{AUTHORIZED_SCAN_BATCH_SIZE, next_candidate_offset};
 use super::{
     ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView,
     WorkItemFilter, WorkItemScope, WorkItemStatsParams, WorkItemStatsView, WorkbenchReadService, dto,
@@ -109,7 +109,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ) -> Result<Vec<dto::WorkItemFields>> {
         let mut filter = self.scope_filter(query, actor, access)?;
         apply_due_filter(&mut filter, query.due)?;
-        self.authorized_stat_fields(filter, access, executor).await
+        self.authorized_stat_fields(filter, query, access, executor).await
     }
 
     async fn stats_fields_for_open_scope(
@@ -159,6 +159,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     async fn authorized_stat_fields(
         &self,
         filter: WorkItemFilter,
+        query: &dto::WorkItemListQuery,
         access: &ActorAccess,
         executor: &mut dyn Executor,
     ) -> Result<Vec<dto::WorkItemFields>> {
@@ -175,8 +176,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             let mut facts = self.object_facts_for_rows(&rows, executor).await?;
             self.filter_order_access(&access.actor_id, &mut facts, executor).await?;
             let authorized = authorized_fields(rows, access, &facts);
-            fields
-                .extend(authorized.into_iter().filter(|item| matches_keyword(item, filter.query.as_deref())));
+            fields.extend(authorized.into_iter().filter(|item| {
+                super::query::matches_keyword(item, filter.query.as_deref())
+                    && super::query::matches_handler(item, &query.handler_user_ids)
+                    && super::query::matches_order_sources(
+                        item,
+                        &facts,
+                        &query.sales_order_ids,
+                        &query.purchase_order_ids,
+                    )
+            }));
             candidate_offset = next_candidate_offset(candidate_offset, candidate_count)?;
             if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {
                 break;

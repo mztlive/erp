@@ -26,6 +26,9 @@ export const WORKSPACE_LEGAL_QUERY_KEYS = [
     "family",
     "type",
     "q",
+    "handlerUserIds",
+    "salesOrderIds",
+    "purchaseOrderIds",
     "sort",
     "currentWorkItemId",
 ] as const
@@ -37,6 +40,9 @@ export type WorkspaceUrlState = {
     family?: WorkspaceFamilyFilter
     workItemType?: string
     query?: string
+    handlerUserIds?: string
+    salesOrderIds?: string
+    purchaseOrderIds?: string
     sort: WorkspaceSort
     currentWorkItemId?: string
 }
@@ -54,6 +60,24 @@ const codec = createUrlStateCodec<WorkspaceUrlState>([
     { key: "type", name: "workItemType", type: "string", trim: true },
     { key: "q", name: "query", type: "string", trim: true },
     {
+        key: "handlerUserIds",
+        type: "custom",
+        parse: (get) => parseIdListParam(get("handlerUserIds")),
+        build: (value) => buildIdListParam(value),
+    },
+    {
+        key: "salesOrderIds",
+        type: "custom",
+        parse: (get) => parseIdListParam(get("salesOrderIds")),
+        build: (value) => buildIdListParam(value),
+    },
+    {
+        key: "purchaseOrderIds",
+        type: "custom",
+        parse: (get) => parseIdListParam(get("purchaseOrderIds")),
+        build: (value) => buildIdListParam(value),
+    },
+    {
         key: "sort",
         type: "enum",
         values: SORT_VALUES,
@@ -64,6 +88,24 @@ const codec = createUrlStateCodec<WorkspaceUrlState>([
 
 export const parseWorkspaceSearchParams = codec.parse
 export const buildWorkspaceSearchParams = codec.build
+
+/**
+ * 处理人／来源订单筛选：逗号分隔的稳定 ID，只收窄授权结果。
+ * 去重排序并上限 100 项，与服务端校验对齐；非法输入回未筛选。
+ */
+function parseIdListParam(raw: string | null): string | undefined {
+    if (!raw) return undefined
+    const ids = [...new Set(raw.split(",").map((part) => part.trim()))]
+        .filter(Boolean)
+        .sort()
+        .slice(0, 100)
+    return ids.length > 0 ? ids.join(",") : undefined
+}
+
+function buildIdListParam(value: unknown): string | undefined {
+    if (typeof value !== "string") return undefined
+    return parseIdListParam(value)
+}
 
 /**
  * 从旧 `/workspace/tasks` 查询中只保留本页仍合法的键。
@@ -100,6 +142,14 @@ export const pickLegalWorkspaceQuery = (
     if (type) next.set("type", type)
     const query = get("q")
     if (query) next.set("q", query)
+    for (const key of [
+        "handlerUserIds",
+        "salesOrderIds",
+        "purchaseOrderIds",
+    ] as const) {
+        const ids = parseIdListParam(get(key))
+        if (ids) next.set(key, ids)
+    }
     const sort = get("sort")
     if (sort && SORT_VALUES.includes(sort as WorkspaceSort))
         next.set("sort", sort)
@@ -189,6 +239,9 @@ export function toTodayWorkspaceQuery(
         family: state.family,
         workItemType: state.workItemType,
         query: state.query,
+        handlerUserIds: state.handlerUserIds,
+        salesOrderIds: state.salesOrderIds,
+        purchaseOrderIds: state.purchaseOrderIds,
         sort: state.sort,
         timezone,
     }

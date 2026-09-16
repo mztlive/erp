@@ -59,6 +59,8 @@ const fulfillmentQueuePageSchema = z
         page: z.number().int().positive(),
         page_size: z.number().int().positive().max(100),
         queue_context_id: z.string().min(1),
+        /** 完整授权结果及身份授权版本；后续页必须回传。 */
+        scope_version: z.string().min(1).optional(),
         visible_types: z.array(operationTypeSchema),
         metrics: z.array(
             z

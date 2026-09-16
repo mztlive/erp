@@ -670,8 +670,17 @@ paths:
         `work_item_type`、目标路由摘要和 `allowed_actions`。
         `PERSONAL_APPROVAL` 必须对应 `DocumentApproval`。任何 `OPEN` 任务的 `owner_user_id` 必填。
         前端不得根据历史责任模式或卡券类型推断路由。
+        管理范围（`scope=managed`）按 `work_item:manage` 解析为当前具体负责人集合：
+        以任务当前负责人的有效内部组织成员关系形成条件，`owner_organization_id`
+        只保留责任语义，不得用作部门授权事实。
+        查看他人待办不显示可代办按钮；管理可见不授予代办权，任务动作仍由服务端
+        `allowed_actions` 决定。受阻任务（`EXECUTION_BLOCKED`）保留原负责人与原因，
+        不计入可处理统计。
       parameters:
         - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/HandlerUserIds"
+        - $ref: "#/components/parameters/SalesOrderIds"
+        - $ref: "#/components/parameters/PurchaseOrderIds"
         - name: scope_version
           in: query
           description: 首次查询返回的范围版本。page 大于 1 时必须携带；版本缺失或变化返回 409 DATA_SCOPE_CHANGED，必须从第一页刷新。
@@ -706,9 +715,12 @@ paths:
       tags: [WorkItem]
       operationId: getWorkItemStats
       summary: 查询与列表同一授权快照的待办统计
-      description: 动作级权限 `work_item:list`。不得由前端对已加载条目求和。
+      description: 动作级权限 `work_item:list`。不得由前端对已加载条目求和。处理人、来源销售单、来源采购单筛选与列表复用同一收窄语义；受阻任务不计入可处理数。
       parameters:
         - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/HandlerUserIds"
+        - $ref: "#/components/parameters/SalesOrderIds"
+        - $ref: "#/components/parameters/PurchaseOrderIds"
       responses:
         "200":
           description: 统计快照。
@@ -879,6 +891,24 @@ components:
         type: string
         minLength: 1
       description: 必须编码当前 view 名称及该 view 的两个排序字段。跨 view 使用必须 422。
+    HandlerUserIds:
+      name: handler_user_ids
+      in: query
+      description: 逗号分隔的当前开放任务处理人稳定 ID，最多 100 项。同字段多值按 OR，不同筛选字段按 AND。只收窄授权结果，不扩大可见范围；未知处理人不产生匹配。
+      schema:
+        type: string
+    SalesOrderIds:
+      name: sales_order_ids
+      in: query
+      description: 逗号分隔的来源销售单稳定 ID，最多 100 项。只收窄授权结果；任务无订单来源事实或来源不可读时不匹配。
+      schema:
+        type: string
+    PurchaseOrderIds:
+      name: purchase_order_ids
+      in: query
+      description: 逗号分隔的来源采购单稳定 ID，最多 100 项。只收窄授权结果；任务无订单来源事实或来源不可读时不匹配。
+      schema:
+        type: string
   responses:
     Unauthenticated:
       description: 未认证。

@@ -11,12 +11,12 @@ use erp_core::common::time::Instant;
 use erp_workflow::entity::work_item::{
     QueueContextField, QueueContextIdentity, WorkItemPriority, WorkItemType,
 };
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::access::{ActorAccess, has_execution_permissions};
-use super::query::ensure_queue_context;
+use super::query::{ensure_queue_context, ensure_scope_version, queue_scope_version};
 use super::{WorkItemDueFilter, WorkbenchReadService};
 use crate::errors::{Error, Result};
 use crate::fulfillment_queue::{
@@ -151,6 +151,9 @@ pub struct FulfillmentQueueListParams {
     /// 服务端返回的稳定队列上下文。
     #[validate(length(max = 128, message = "队列上下文不能超过128个字符"))]
     pub queue_context_id: Option<String>,
+    /// 首次查询返回的范围版本；后续页必须原样回传。
+    #[validate(length(max = 128))]
+    pub scope_version: Option<String>,
     /// IANA 时区；当前固定为 Asia/Shanghai。
     pub timezone: Option<String>,
     /// 页码（1 起）。
@@ -172,6 +175,7 @@ struct FulfillmentQueueQuery {
     due: Option<WorkItemDueFilter>,
     gate: Option<FulfillmentQueueGateFilter>,
     queue_context_id: Option<String>,
+    scope_version: Option<String>,
     page: u64,
     page_size: u32,
 }
@@ -189,6 +193,7 @@ impl FulfillmentQueueListParams {
             due: self.due,
             gate: self.gate,
             queue_context_id: normalized_text(self.queue_context_id.as_deref()),
+            scope_version: normalized_text(self.scope_version.as_deref()),
             page: page_or_default(self.page),
             page_size: page_size_or_default(self.page_size),
         })
@@ -303,6 +308,8 @@ pub struct FulfillmentQueuePageView {
     pub page_size: u32,
     /// 服务端形成的稳定队列上下文。
     pub queue_context_id: String,
+    /// 当前完整授权结果及身份授权版本；后续页必须回传。
+    pub scope_version: String,
     /// 当前账号具备完整执行权限的作业类型。
     pub visible_types: Vec<FulfillmentQueueOperationType>,
     /// 当前筛选内按类型汇总的跨页指标。
@@ -332,13 +339,33 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ) -> Result<FulfillmentQueuePageView> {
         params.validate()?;
         let query = params.normalized()?;
-        let access = self.actor_access(&actor).await?;
+        let this = self.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |session| {
+                Box::pin(async move { this.fulfillment_queue_page(query, actor, session).await })
+            })
+            .await
+    }
+
+    /// 授权快照、聚合读取、指标和分页共享原事务快照。
+    async fn fulfillment_queue_page(
+        &self,
+        query: FulfillmentQueueQuery,
+        actor: AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<FulfillmentQueuePageView> {
+        let identity_version = self.auth.queue_scope_version(&actor, executor).await?;
+        let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
         let visible_types = visible_operation_types(&query.operation_types, &access);
         let context_id = fulfillment_queue_context_id(actor.id(), &query, &visible_types);
         ensure_queue_context(&query.queue_context_id, &context_id)?;
 
         if visible_types.is_empty() {
-            return Ok(empty_page(query.page, query.page_size, context_id));
+            let scope_version = queue_scope_version(&identity_version, &context_id, "");
+            ensure_scope_version(query.page, query.scope_version.as_deref(), &scope_version)?;
+            return Ok(empty_page(query.page, query.page_size, context_id, scope_version));
         }
 
         let offset = query
@@ -366,11 +393,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                     offset,
                     page_size: query.page_size,
                 },
-                &mut NoTransaction,
+                executor,
             )
             .await?;
 
         let items = repository_page.items.into_iter().map(map_item).collect::<Result<Vec<_>>>()?;
+        let result_version = items.iter().fold(String::new(), |version, item| {
+            queue_scope_version(&version, &item.work_item_id, &item.task_version)
+        });
+        let scope_version = queue_scope_version(&identity_version, &context_id, &result_version);
+        ensure_scope_version(query.page, query.scope_version.as_deref(), &scope_version)?;
         let counts: HashMap<_, _> =
             repository_page.metrics.into_iter().map(|metric| (metric.operation_type, metric.count)).collect();
         let metrics = visible_types
@@ -386,6 +418,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             .into_iter()
             .map(|warehouse| FulfillmentQueueWarehouseView { id: warehouse.id, label: warehouse.label })
             .collect();
+        let current_version = self.auth.queue_scope_version(&actor, executor).await?;
+        ensure_scope_version(1, Some(&identity_version), &current_version)?;
 
         Ok(FulfillmentQueuePageView {
             items,
@@ -393,6 +427,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             page: query.page,
             page_size: query.page_size,
             queue_context_id: context_id,
+            scope_version,
             visible_types,
             metrics,
             warehouse_options,
@@ -519,13 +554,19 @@ fn map_item(row: FulfillmentQueueItemRow) -> Result<FulfillmentQueueItemView> {
     })
 }
 
-fn empty_page(page: u64, page_size: u32, context_id: String) -> FulfillmentQueuePageView {
+fn empty_page(
+    page: u64,
+    page_size: u32,
+    context_id: String,
+    scope_version: String,
+) -> FulfillmentQueuePageView {
     FulfillmentQueuePageView {
         items: Vec::new(),
         total: 0,
         page,
         page_size,
         queue_context_id: context_id,
+        scope_version,
         visible_types: Vec::new(),
         metrics: Vec::new(),
         warehouse_options: Vec::new(),

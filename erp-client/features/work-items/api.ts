@@ -19,6 +19,12 @@ export type WorkItemListParams = Readonly<{
     blocked?: boolean
     priorities?: readonly number[]
     query?: string
+    /** 逗号分隔的当前处理人稳定 ID；只收窄授权结果。 */
+    handlerUserIds?: string
+    /** 逗号分隔的来源销售单稳定 ID；只收窄授权结果。 */
+    salesOrderIds?: string
+    /** 逗号分隔的来源采购单稳定 ID；只收窄授权结果。 */
+    purchaseOrderIds?: string
     sort?: "priority_due" | "due_asc" | "created_desc"
     cursor?: string
     queueContextId?: string
@@ -40,6 +46,12 @@ export type WorkItemStatsParams = Readonly<{
     workItemType?: string
     due?: "today" | "overdue"
     blocked?: boolean
+    /** 逗号分隔的当前处理人稳定 ID；只收窄授权结果。 */
+    handlerUserIds?: string
+    /** 逗号分隔的来源销售单稳定 ID；只收窄授权结果。 */
+    salesOrderIds?: string
+    /** 逗号分隔的来源采购单稳定 ID；只收窄授权结果。 */
+    purchaseOrderIds?: string
     timezone: string
 }>
 
@@ -140,6 +152,9 @@ export function listWorkItems(
         blocked: params.blocked ? "1" : undefined,
         priorities: params.priorities?.join(","),
         q: params.query,
+        handler_user_ids: params.handlerUserIds,
+        sales_order_ids: params.salesOrderIds,
+        purchase_order_ids: params.purchaseOrderIds,
         sort: params.sort ?? "priority_due",
         cursor: params.cursor,
         queue_context_id: params.queueContextId,
@@ -161,6 +176,9 @@ export function getWorkItemStats(
         work_item_type: params.workItemType,
         due: params.due,
         blocked: params.blocked ? "1" : undefined,
+        handler_user_ids: params.handlerUserIds,
+        sales_order_ids: params.salesOrderIds,
+        purchase_order_ids: params.purchaseOrderIds,
         timezone: params.timezone,
     })
 }
