@@ -9,6 +9,7 @@ pub mod catalog;
 pub mod contract;
 pub mod cost;
 pub mod customer;
+pub mod customer_quality;
 pub mod document_registry;
 pub mod file_asset;
 pub mod fulfillment;

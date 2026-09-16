@@ -15,6 +15,7 @@
 
 mod order;
 pub mod profit_loss;
+pub mod quality;
 mod revision;
 pub mod scope;
 mod submission;
