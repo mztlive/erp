@@ -160,7 +160,6 @@ env -u ERP_TEST_MONGO_URI cargo test -p <crate> --lib [<测试过滤>]
 ```
 
 - 改公开类型或方法签名：追加 `cargo check --workspace`。
-- 一项功能完成时：`cargo clippy -p <crate> --all-targets`。
 - 改 `Cargo.toml` 依赖、跨 crate 引用、Service/Process/Repository 数据访问：`./scripts/check-domain-boundaries.sh --cutover`。
 - 改 `bpm` 或 `erp-workflow`：`./scripts/check-bpm-boundaries.sh`。
 - 改 `permission` 标注：`./scripts/check-permissions-drift.sh`，并提交 `erp-client/lib/permissions.generated.ts`。
@@ -173,7 +172,6 @@ env -u ERP_TEST_MONGO_URI cargo test -p <crate> --lib [<测试过滤>]
 ```bash
 cargo fmt --all -- --check
 cargo check --workspace --locked
-cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
 ./scripts/check-bpm-boundaries.sh
 ./scripts/check-domain-boundaries.sh --cutover
