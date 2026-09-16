@@ -91,14 +91,14 @@ backend/
 
 ## 逻辑归属
 
-| 逻辑 | 归属 |
-| --- | --- |
-| 不依赖 I/O 的判定：状态、可用性、权限覆盖、范围包含 | 拥有领域的实体/值对象方法 |
-| 输入规范化：trim、去重、非空、类型化 | 值对象构造函数；下游只接收值对象 |
-| 由实体确定性生成 DTO | DTO 的 `from_*` 关联函数 |
-| 依赖仓储结果的判断：唯一冲突、关联存在性 | 本域 Service；跨域放 Process |
-| 多步写入、事务边界 | 本域 Service；跨域放 Process |
-| 查询条件与分页 | Service 组装参数，Repository 实现查询 |
+| 逻辑                                                | 归属                                  |
+| --------------------------------------------------- | ------------------------------------- |
+| 不依赖 I/O 的判定：状态、可用性、权限覆盖、范围包含 | 拥有领域的实体/值对象方法             |
+| 输入规范化：trim、去重、非空、类型化                | 值对象构造函数；下游只接收值对象      |
+| 由实体确定性生成 DTO                                | DTO 的 `from_*` 关联函数              |
+| 依赖仓储结果的判断：唯一冲突、关联存在性            | 本域 Service；跨域放 Process          |
+| 多步写入、事务边界                                  | 本域 Service；跨域放 Process          |
+| 查询条件与分页                                      | Service 组装参数，Repository 实现查询 |
 
 - 纯规则禁写成 Handler、Service、Process 的私有 helper。
 - 范例：`Permission::covers`、`RoleIdSet`、`AdminItem::from_account`。
@@ -180,8 +180,6 @@ env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
 ./scripts/check-permissions-drift.sh
 git diff --check
 ```
-
-源码体积脚本 `./scripts/check-rust-size.sh` 已落地（生产文件 800 物理行、方法 50 有效行，不含测试）。存量超限清零前不列入提交阶段全量清单与 Jenkins。
 
 ## 运行
 
