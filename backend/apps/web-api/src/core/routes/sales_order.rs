@@ -76,6 +76,22 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 sales_order::sales_order_void_permission_key(),
             ),
         )
+        .route(
+            "/sales-orders/{id}/handover",
+            with_permission(
+                post(sales_order::sales_order_handover),
+                rbac,
+                sales_order::sales_order_handover_permission_key(),
+            ),
+        )
+        .route(
+            "/sales-orders/{id}/handover-candidates",
+            with_permission(
+                get(sales_order::sales_order_handover_candidates),
+                rbac,
+                sales_order::sales_order_handover_candidates_permission_key(),
+            ),
+        )
 }
 
 #[cfg(test)]

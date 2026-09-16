@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { SalesOrderCancelApprovalButton } from "@/features/sales-orders/components/sales-order-cancel-approval-button"
+import { SalesOrderHandoverButton } from "@/features/sales-orders/components/sales-order-handover-button"
 import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
 import type { ActionBlocker } from "@/features/sales-orders/types"
@@ -51,6 +52,7 @@ export function SalesOrderDetailSecondaryActions({
                 order={order}
                 onResult={onApprovalResult}
             />
+            <SalesOrderHandoverButton order={order} onResult={onApprovalResult} />
             <Button
                 id="sales-orders-detail-start-change"
                 type="button"

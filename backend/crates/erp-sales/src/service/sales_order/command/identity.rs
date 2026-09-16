@@ -1,7 +1,7 @@
 //! Stable sales command receipt identities and payload fingerprints.
 use sha2::{Digest, Sha256};
 
-use crate::dto::sales_order::SubmitSalesOrderRequest;
+use crate::dto::sales_order::{HandoverSalesOrderRequest, SubmitSalesOrderRequest};
 use crate::{Error, Result};
 
 /// 为销售提交幂等命令生成不泄露原始幂等键的稳定收据 ID。
@@ -44,6 +44,28 @@ pub fn sales_order_create_audit_id(actor_id: &str, idempotency_key: &str) -> Str
 pub fn sales_order_create_fingerprint<T: serde::Serialize>(actor_id: &str, request: &T) -> Result<String> {
     let payload = serde_json::to_vec(&(actor_id, request))
         .map_err(|error| Error::Internal(format!("销售建单命令序列化失败: {error}")))?;
+    Ok(hex::encode(Sha256::digest(payload)))
+}
+
+/// 为销售责任交接幂等命令生成不泄露原始幂等键的稳定收据 ID。
+pub fn sales_handover_audit_id(actor_id: &str, sales_order_id: &str, idempotency_key: &str) -> String {
+    format!(
+        "sales-order-handover-{}",
+        hex::encode(Sha256::digest(format!("{actor_id}|{sales_order_id}|{idempotency_key}").as_bytes()))
+    )
+}
+
+/// 锁定同一幂等键可重放的完整交接请求身份。
+///
+/// # 错误
+/// 请求序列化失败时返回内部错误。
+pub fn sales_handover_fingerprint(
+    actor_id: &str,
+    sales_order_id: &str,
+    request: &HandoverSalesOrderRequest,
+) -> Result<String> {
+    let payload = serde_json::to_vec(&(actor_id, sales_order_id, request))
+        .map_err(|error| Error::Internal(format!("销售交接命令序列化失败: {error}")))?;
     Ok(hex::encode(Sha256::digest(payload)))
 }
 

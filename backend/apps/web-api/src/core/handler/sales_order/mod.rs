@@ -10,7 +10,8 @@ use erp_processes::order_to_cash::SalesOrderCommandProcess;
 use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
 use erp_read_models::sales_center::order::{SalesListParams, SalesListView, SalesOrderReadService};
 use erp_sales::dto::sales_order::{
-    CancelSalesOrderApprovalRequest, CreateSalesOrderRequest, SaveWorkingCopyRequest, SubmissionView,
+    CancelSalesOrderApprovalRequest, CreateSalesOrderRequest, HandoverCandidateView,
+    HandoverSalesOrderRequest, HandoverSalesOrderView, SaveWorkingCopyRequest, SubmissionView,
     SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
 };
 
@@ -248,6 +249,69 @@ pub async fn sales_order_void(
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "销售单",
+    group_desc = "销售单（W05）管理",
+    desc = "交接销售单责任",
+    resource = "sales_order",
+    action = "update"
+)]
+/// 显式交接销售单负责销售与业务组织，并原子转交开放验收任务。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 销售单 ID
+/// * `req` - 交接请求（含期望版本、目标、原因与幂等键）
+///
+/// # 返回
+/// 返回交接后责任与转交任务清单。
+///
+/// # 关键业务约束
+/// 开放审批任务、已完成验收与历史归属保持不变；新验收任务取交接后负责人。
+pub async fn sales_order_handover(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<HandoverSalesOrderRequest>,
+) -> Result<HandoverSalesOrderView> {
+    let view = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read())
+        .handover_sales_order(&id, req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "销售单",
+    group_desc = "销售单（W05）管理",
+    desc = "查询销售交接待选目标",
+    resource = "sales_order",
+    action = "list"
+)]
+/// 查询当前销售单可交接的合格目标候选。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 销售单 ID
+///
+/// # 返回
+/// 返回有效且具备验收执行资格的账号；只作交互提示，提交仍重验。
+pub async fn sales_order_handover_candidates(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<Vec<HandoverCandidateView>> {
+    let candidates = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read())
+        .handover_candidates(&id, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(candidates))
 }
 
 #[cfg(test)]
