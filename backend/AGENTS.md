@@ -88,6 +88,7 @@ backend/
 - Service：模块只有一个服务时实现写 `mod.rs`，多个时拆文件；查询方法用名词（`role_list`），操作用动词（`create/update/delete`）。
 - 方法长度：生产方法硬上限 50 有效行（空行和纯注释不计），用 `./scripts/check-rust-size.sh` 检查；handler、领域 `service/repository/entity`、Process、ReadModel 仍优先 30 有效行，超限拆私有 helper。测试、`build.rs`、宏实现除外。
 - 文件体积：单个生产源文件不超过 800 物理行（扣除 `#[cfg(test)]` / `#[test]` / `tests/`）。
+- 空行：按语义步骤分段，段间只空一行。提前返回（`let ... else { return ... }`、`if ... { return ... }`）、每次外部查询或权限判定、集合构造与转换、最终返回各自成段；无语义切换的连续 `let` 不拆。
 
 ## 逻辑归属
 
