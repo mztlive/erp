@@ -28,6 +28,15 @@ pub struct WorkItemListParams {
     /// 在授权结果内按固定安全摘要字段检索。
     #[validate(length(max = 128, message = "检索词不能超过128个字符"))]
     pub q: Option<String>,
+    /// 逗号分隔的当前处理人稳定 ID，最多 100 项；只收窄授权结果。
+    #[validate(length(max = 8000, message = "处理人筛选不能超过8000个字符"))]
+    pub handler_user_ids: Option<String>,
+    /// 逗号分隔的来源销售单 ID，最多 100 项；只收窄授权结果。
+    #[validate(length(max = 8000, message = "来源销售单筛选不能超过8000个字符"))]
+    pub sales_order_ids: Option<String>,
+    /// 逗号分隔的来源采购单 ID，最多 100 项；只收窄授权结果。
+    #[validate(length(max = 8000, message = "来源采购单筛选不能超过8000个字符"))]
+    pub purchase_order_ids: Option<String>,
     /// 排序方式。
     pub sort: Option<WorkItemSort>,
     /// 服务端返回的队列上下文；当前实现只接受同查询重算值。
@@ -57,6 +66,9 @@ pub(crate) struct WorkItemListQuery {
     pub due: Option<WorkItemDueFilter>,
     pub priorities: Vec<WorkItemPriority>,
     pub query: Option<String>,
+    pub handler_user_ids: Vec<String>,
+    pub sales_order_ids: Vec<String>,
+    pub purchase_order_ids: Vec<String>,
     pub current_work_item_id: Option<String>,
     pub sort_by: &'static str,
     pub sort_ascending: bool,
@@ -88,6 +100,9 @@ impl WorkItemListParams {
             due: self.due,
             priorities,
             query: normalized_text(self.q.as_deref()),
+            handler_user_ids: parse_id_list(self.handler_user_ids.as_deref(), "处理人")?,
+            sales_order_ids: parse_id_list(self.sales_order_ids.as_deref(), "来源销售单")?,
+            purchase_order_ids: parse_id_list(self.purchase_order_ids.as_deref(), "来源采购单")?,
             current_work_item_id: normalized_text(self.current_work_item_id.as_deref()),
             sort_by,
             sort_ascending,
@@ -119,7 +134,7 @@ pub struct WorkItemPageView {
 /// 待办统计查询参数。
 ///
 /// 统计与正式列表复用同一责任范围、任务族、类型、时限和工作时区语义；
-/// 不接受分页、自由检索或客户端责任人条件。
+/// 处理人与来源订单筛选只收窄授权结果，不接受分页、自由检索。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct WorkItemStatsParams {
@@ -131,6 +146,12 @@ pub struct WorkItemStatsParams {
     pub work_item_type: Option<WorkItemType>,
     /// 可选时限筛选。
     pub due: Option<WorkItemDueFilter>,
+    /// 逗号分隔的当前处理人稳定 ID，最多 100 项；只收窄授权结果。
+    pub handler_user_ids: Option<String>,
+    /// 逗号分隔的来源销售单 ID，最多 100 项；只收窄授权结果。
+    pub sales_order_ids: Option<String>,
+    /// 逗号分隔的来源采购单 ID，最多 100 项；只收窄授权结果。
+    pub purchase_order_ids: Option<String>,
     /// IANA 时区；当前版本固定支持 `Asia/Shanghai`。
     pub timezone: Option<String>,
 }
@@ -149,6 +170,9 @@ impl WorkItemStatsParams {
             due: self.due,
             priorities: None,
             q: None,
+            handler_user_ids: self.handler_user_ids.clone(),
+            sales_order_ids: self.sales_order_ids.clone(),
+            purchase_order_ids: self.purchase_order_ids.clone(),
             sort: Some(WorkItemSort::CreatedDesc),
             queue_context_id: None,
             scope_version: None,
@@ -242,6 +266,41 @@ pub(super) fn parse_priorities(value: Option<&str>) -> Result<Vec<WorkItemPriori
             _ => Err(Error::ValidationError("优先级必须是1至4".to_string())),
         })
         .collect()
+}
+
+/// 解析逗号分隔的稳定 ID 列表，同字段 OR；只收窄授权结果。
+///
+/// # 参数
+/// * `value` - 逗号分隔的原始查询值
+/// * `label` - 字段中文名，用于错误提示
+///
+/// # 返回
+/// 返回去重排序后的稳定 ID；空输入返回空集。
+///
+/// # 错误
+/// 单项为空、超长或总数超过 100 时返回校验错误。
+fn parse_id_list(value: Option<&str>, label: &str) -> Result<Vec<String>> {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(Vec::new());
+    };
+    let mut ids = Vec::new();
+    for part in value.split(',') {
+        let id = part.trim();
+        if id.is_empty() {
+            return Err(Error::ValidationError(format!("{label}筛选包含空 ID")));
+        }
+        if id.len() > 128 {
+            return Err(Error::ValidationError(format!("{label}筛选 ID 过长")));
+        }
+        if !ids.contains(&id.to_string()) {
+            ids.push(id.to_string());
+        }
+    }
+    if ids.len() > 100 {
+        return Err(Error::ValidationError(format!("{label}筛选最多 100 项")));
+    }
+    ids.sort();
+    Ok(ids)
 }
 
 fn ensure_supported_query(params: &WorkItemListParams) -> Result<()> {

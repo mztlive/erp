@@ -99,7 +99,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let mut filter = self.scope_filter(&query, &actor, &access)?;
         apply_due_filter(&mut filter, query.due)?;
         let (authorized_page, result_version) =
-            self.authorized_page_fields(&filter, query.page, query.page_size, &access, executor).await?;
+            self.authorized_page_fields(&filter, &query, &access, executor).await?;
         let scope_version = queue_scope_version(&identity_version, &queue_context_id, &result_version);
         ensure_scope_version(query.page, query.scope_version.as_deref(), &scope_version)?;
         let fields = self
@@ -107,6 +107,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                 authorized_page.items,
                 query.current_work_item_id.as_deref(),
                 &filter,
+                &query,
                 FocusedQueueContext { page_size: query.page_size, access: &access },
                 executor,
             )
@@ -134,6 +135,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         mut fields: Vec<dto::WorkItemFields>,
         current_work_item_id: Option<&str>,
         filter: &WorkItemFilter,
+        query: &dto::WorkItemListQuery,
         context: FocusedQueueContext<'_>,
         executor: &mut dyn Executor,
     ) -> Result<Vec<dto::WorkItemFields>> {
@@ -154,11 +156,17 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             .await?
             .ok_or_else(|| Error::NotFound("当前焦点任务不在授权队列中".to_string()))?;
         let current = self.authorized_fields_with_executor(vec![current], context.access, executor).await?;
-        let Some(current) =
-            current.into_iter().find(|fields| matches_keyword(fields, filter.query.as_deref()))
-        else {
+        let Some(current) = current.into_iter().find(|fields| {
+            matches_keyword(fields, filter.query.as_deref())
+                && matches_handler(fields, &query.handler_user_ids)
+        }) else {
             return Err(Error::NotFound("当前焦点任务不在授权队列中".to_string()));
         };
+        let keys = current_order_keys(&current);
+        let facts = self.load_object_facts(&keys, executor).await?;
+        if !matches_order_sources(&current, &facts, &query.sales_order_ids, &query.purchase_order_ids) {
+            return Err(Error::NotFound("当前焦点任务不在授权队列中".to_string()));
+        }
         fields.insert(0, current);
         fields.truncate(context.page_size as usize);
         Ok(fields)
@@ -168,14 +176,13 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     async fn authorized_page_fields(
         &self,
         filter: &WorkItemFilter,
-        page: u64,
-        page_size: u32,
+        query: &dto::WorkItemListQuery,
         access: &ActorAccess,
         executor: &mut dyn Executor,
     ) -> Result<(AuthorizedPage<dto::WorkItemFields>, String)> {
         let mut candidates = filter.clone();
         candidates.query = None;
-        let mut collector = AuthorizedPageCollector::new(page, page_size)?;
+        let mut collector = AuthorizedPageCollector::new(query.page, query.page_size)?;
         let mut result_version = String::new();
         let mut candidate_offset = 0_u64;
         loop {
@@ -187,8 +194,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             let mut facts = self.object_facts_for_rows(&rows, executor).await?;
             self.filter_order_access(&access.actor_id, &mut facts, executor).await?;
             let fields = authorized_fields(rows, access, &facts);
-            for fields in fields.into_iter().filter(|fields| matches_keyword(fields, filter.query.as_deref()))
-            {
+            for fields in fields.into_iter().filter(|fields| {
+                matches_keyword(fields, filter.query.as_deref())
+                    && matches_handler(fields, &query.handler_user_ids)
+                    && matches_order_sources(
+                        fields,
+                        &facts,
+                        &query.sales_order_ids,
+                        &query.purchase_order_ids,
+                    )
+            }) {
                 result_version =
                     queue_scope_version(&result_version, &fields.id, &fields.task_version.to_string());
                 collector.extend([fields]);
@@ -427,6 +442,9 @@ fn queue_context_id(actor_id: &str, query: &dto::WorkItemListQuery, access: &Act
                 query.priorities.iter().map(|value| value.as_str().to_string()),
             ),
             QueueContextField::optional("query", query.query.as_deref()),
+            QueueContextField::set("handlers", query.handler_user_ids.iter().cloned()),
+            QueueContextField::set("sales_orders", query.sales_order_ids.iter().cloned()),
+            QueueContextField::set("purchase_orders", query.purchase_order_ids.iter().cloned()),
             QueueContextField::scalar("sort", query.sort_by),
             QueueContextField::scalar("ascending", query.sort_ascending.to_string()),
             QueueContextField::scalar("all_owners", access.managed_owner_ids.is_none().to_string()),
@@ -438,7 +456,7 @@ fn queue_context_id(actor_id: &str, query: &dto::WorkItemListQuery, access: &Act
 }
 
 /// 完整结果使用有界滚动指纹；页码不进入版本，跨页共享同一授权锚点。
-fn queue_scope_version(identity: &str, query: &str, result: &str) -> String {
+pub(super) fn queue_scope_version(identity: &str, query: &str, result: &str) -> String {
     QueueContextIdentity::new(
         "work-item-scope",
         [
@@ -451,7 +469,7 @@ fn queue_scope_version(identity: &str, query: &str, result: &str) -> String {
 }
 
 /// 后续页无版本或版本漂移必须失败关闭，禁止拼接不同范围结果。
-fn ensure_scope_version(page: u64, provided: Option<&str>, expected: &str) -> Result<()> {
+pub(super) fn ensure_scope_version(page: u64, provided: Option<&str>, expected: &str) -> Result<()> {
     if (page > 1 && provided.is_none()) || provided.is_some_and(|value| value != expected) {
         return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
     }
@@ -538,6 +556,55 @@ pub(super) fn matches_keyword(fields: &dto::WorkItemFields, q: Option<&str>) -> 
     .into_iter()
     .flatten()
     .any(|text| text.to_lowercase().contains(&needle))
+}
+
+/// 当前处理人筛选只收窄授权结果；空集表示不过滤。
+pub(super) fn matches_handler(fields: &dto::WorkItemFields, handler_ids: &[String]) -> bool {
+    if handler_ids.is_empty() {
+        return true;
+    }
+    fields.owner_user_id.as_deref().is_some_and(|owner| handler_ids.iter().any(|id| id == owner))
+}
+
+/// 来源销售/采购筛选只收窄授权结果；不同字段按 AND 求交。
+pub(super) fn matches_order_sources(
+    fields: &dto::WorkItemFields,
+    facts: &super::WorkbenchObjectFactMap,
+    sales_ids: &[String],
+    purchase_ids: &[String],
+) -> bool {
+    if sales_ids.is_empty() && purchase_ids.is_empty() {
+        return true;
+    }
+    let Some(policy) = object_policy(fields.work_item_type, &fields.business_object_type) else {
+        return false;
+    };
+    let Some(fact) = facts.get(&(policy.object_kind, fields.business_object_id.clone())) else {
+        return false;
+    };
+    order_source_matches(&fact.authority.order_scope_source, sales_ids, purchase_ids)
+}
+
+/// 按订单来源判定销售/采购业务筛选；缺来源时失败关闭。
+fn order_source_matches(
+    source: &Option<erp_workflow::ports::OrderTaskSource>,
+    sales_ids: &[String],
+    purchase_ids: &[String],
+) -> bool {
+    use erp_workflow::ports::OrderTaskSource as Source;
+    let sales_ok = sales_ids.is_empty()
+        || matches!(source, Some(Source::Sales(id)) if sales_ids.iter().any(|want| want == id));
+    let purchase_ok = purchase_ids.is_empty()
+        || matches!(source, Some(Source::Purchase(id)) if purchase_ids.iter().any(|want| want == id));
+    sales_ok && purchase_ok
+}
+
+/// 为焦点任务的来源复核构造单键事实查询。
+fn current_order_keys(fields: &dto::WorkItemFields) -> HashSet<(super::ObjectKind, String)> {
+    let Some(policy) = object_policy(fields.work_item_type, &fields.business_object_type) else {
+        return HashSet::new();
+    };
+    HashSet::from([(policy.object_kind, fields.business_object_id.clone())])
 }
 
 #[cfg(test)]
@@ -657,5 +724,102 @@ mod tests {
     fn candidate_offset_advances_by_batch_len() {
         assert_eq!(next_candidate_offset(0, 100).unwrap(), 100);
         assert!(next_candidate_offset(u64::MAX, 1).is_err());
+    }
+
+    #[test]
+    fn handler_and_order_filters_only_narrow_authorized_results() {
+        use erp_core::ids::WorkItemId;
+        use erp_workflow::entity::work_item::{
+            AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
+        };
+        use erp_workflow::ports::{ObjectFact, OrderTaskSource};
+
+        use super::super::{WorkbenchObjectFact, WorkbenchObjectFactMap};
+
+        let fields: super::dto::WorkItemFields = WorkItem::new_with_responsibility_key(
+            WorkItemId::new("task"),
+            WorkItemData {
+                work_item_type: WorkItemType::FulfillmentOperation,
+                business_object_type: "purchase_receipt".into(),
+                business_object_id: "receipt-1".into(),
+                subject_version: "1".into(),
+                owner_role: "warehouse_inbound_handler".into(),
+                owner_organization_id: "warehouse-1".into(),
+                owner_user_id: "handler-1".into(),
+                assignment_source: AssignmentSource::SystemRule,
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+                reason_code: None,
+                impact_summary: None,
+            },
+            "purchase_order:po-1",
+        )
+        .unwrap()
+        .into();
+
+        assert!(super::matches_handler(&fields, &[]));
+        assert!(super::matches_handler(&fields, &["handler-1".to_string()]));
+        assert!(!super::matches_handler(&fields, &["handler-2".to_string()]));
+
+        let policy = super::super::facts::object_policy(fields.work_item_type, &fields.business_object_type)
+            .expect("履约任务必须已注册");
+        let mut facts = WorkbenchObjectFactMap::new();
+        facts.insert(
+            (policy.object_kind, "receipt-1".to_string()),
+            WorkbenchObjectFact::from_authority(
+                ObjectFact::new("po-1", "采购入库 · 采购单 PO-1", "__system__")
+                    .with_order_source(OrderTaskSource::Purchase("po-1".to_string())),
+            ),
+        );
+        let ids = |values: &[&str]| values.iter().map(|value| value.to_string()).collect::<Vec<_>>();
+        assert!(super::matches_order_sources(&fields, &facts, &[], &[]));
+        assert!(super::matches_order_sources(&fields, &facts, &[], &ids(&["po-1"])));
+        assert!(!super::matches_order_sources(&fields, &facts, &[], &ids(&["po-2"])));
+        assert!(!super::matches_order_sources(&fields, &facts, &ids(&["so-1"]), &[]));
+        assert!(!super::matches_order_sources(&fields, &facts, &ids(&["so-1"]), &ids(&["po-1"])));
+        assert!(super::matches_order_sources(&fields, &WorkbenchObjectFactMap::new(), &[], &[]));
+        assert!(!super::matches_order_sources(&fields, &WorkbenchObjectFactMap::new(), &[], &ids(&["po-1"])));
+    }
+
+    #[test]
+    fn id_list_params_deduplicate_sort_and_reject_overflow() {
+        let normalized = super::super::dto::WorkItemListParams::normalized(&work_item_params_with_ids(Some(
+            "handler-2, handler-1,handler-2",
+        )))
+        .unwrap();
+        assert_eq!(normalized.handler_user_ids, vec!["handler-1".to_string(), "handler-2".to_string()]);
+        assert!(
+            super::super::dto::WorkItemListParams::normalized(&work_item_params_with_ids(Some(
+                "handler-1,,handler-2"
+            )))
+            .is_err()
+        );
+        let overflow = (0..101).map(|index| format!("user-{index}")).collect::<Vec<_>>().join(",");
+        assert!(
+            super::super::dto::WorkItemListParams::normalized(&work_item_params_with_ids(Some(&overflow)))
+                .is_err()
+        );
+    }
+
+    fn work_item_params_with_ids(handler_user_ids: Option<&str>) -> super::super::dto::WorkItemListParams {
+        super::super::dto::WorkItemListParams {
+            scope: super::super::dto::WorkItemScope::Mine,
+            family: None,
+            work_item_type: None,
+            status: None,
+            due: None,
+            priorities: None,
+            q: None,
+            handler_user_ids: handler_user_ids.map(str::to_string),
+            sales_order_ids: None,
+            purchase_order_ids: None,
+            sort: None,
+            queue_context_id: None,
+            scope_version: None,
+            current_work_item_id: None,
+            timezone: Some("Asia/Shanghai".to_string()),
+            page: None,
+            page_size: None,
+        }
     }
 }

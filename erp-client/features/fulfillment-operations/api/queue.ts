@@ -56,6 +56,8 @@ export type FulfillmentQueueFilters = {
     pageSize?: number
     /** 可选稳定快照身份；不匹配时服务端要求刷新。 */
     queueContextId?: string
+    /** 完整授权结果范围版本；后续页必须回传。 */
+    scopeVersion?: string
 }
 
 function filterSummary(
@@ -383,6 +385,7 @@ export async function fetchFulfillmentQueue(
             sales_order_id: filters.salesOrderId,
             purchase_order_id: filters.purchaseOrderId,
             queue_context_id: filters.queueContextId,
+            scope_version: filters.scopeVersion,
             timezone: "Asia/Shanghai",
             page,
             page_size: pageSize,
@@ -459,6 +462,7 @@ export async function fetchFulfillmentQueue(
             pageSize: response.page_size,
             totalPages,
             queueContextId: response.queue_context_id,
+            scopeVersion: response.scope_version,
             currentOperationId: current?.operationId,
             previousOperationId: operations[positionInPage - 1]?.operationId,
             nextOperationId: operations[positionInPage + 1]?.operationId,

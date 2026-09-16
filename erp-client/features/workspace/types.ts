@@ -150,6 +150,12 @@ export type TodayWorkspaceQuery = Readonly<{
     family?: WorkspaceFamilyFilter
     workItemType?: string
     query?: string
+    /** 逗号分隔的当前处理人稳定 ID；只收窄授权结果。 */
+    handlerUserIds?: string
+    /** 逗号分隔的来源销售单稳定 ID；只收窄授权结果。 */
+    salesOrderIds?: string
+    /** 逗号分隔的来源采购单稳定 ID；只收窄授权结果。 */
+    purchaseOrderIds?: string
     sort: WorkspaceSort
     cursor?: string
     timezone: string

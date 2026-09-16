@@ -285,6 +285,8 @@ export type FulfillmentQueueView = Readonly<{
         pageSize: number
         totalPages: number
         queueContextId?: string
+        /** 完整授权结果范围版本；翻页时原样回传。 */
+        scopeVersion?: string
         currentOperationId?: string
         previousOperationId?: string
         nextOperationId?: string

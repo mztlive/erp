@@ -74,7 +74,10 @@ export function useWorkspaceHome() {
         urlState.blocked ||
         urlState.family ||
         urlState.workItemType ||
-        urlState.query,
+        urlState.query ||
+        urlState.handlerUserIds ||
+        urlState.salesOrderIds ||
+        urlState.purchaseOrderIds,
     )
 
     const replaceUrl = React.useCallback(

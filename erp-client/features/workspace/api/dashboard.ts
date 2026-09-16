@@ -327,6 +327,9 @@ async function listManagedWorkItems(
         | "due"
         | "blocked"
         | "query"
+        | "handlerUserIds"
+        | "salesOrderIds"
+        | "purchaseOrderIds"
         | "sort"
         | "cursor"
         | "timezone"
@@ -341,6 +344,9 @@ async function listManagedWorkItems(
             due: query.due,
             blocked: query.blocked,
             query: query.query,
+            handlerUserIds: query.handlerUserIds,
+            salesOrderIds: query.salesOrderIds,
+            purchaseOrderIds: query.purchaseOrderIds,
             sort: query.sort,
             cursor: query.cursor,
             timezone: query.timezone,
@@ -364,6 +370,9 @@ function listMineWorkItems(query: TodayWorkspaceQuery) {
         due: query.due,
         blocked: query.blocked,
         query: query.query,
+        handlerUserIds: query.handlerUserIds,
+        salesOrderIds: query.salesOrderIds,
+        purchaseOrderIds: query.purchaseOrderIds,
         sort: query.sort,
         cursor: query.cursor,
         timezone: query.timezone,
@@ -453,6 +462,9 @@ export async function fetchWorkspaceDashboard(
             family: query.family,
             workItemType: query.workItemType,
             due: query.due,
+            handlerUserIds: query.handlerUserIds,
+            salesOrderIds: query.salesOrderIds,
+            purchaseOrderIds: query.purchaseOrderIds,
             timezone: query.timezone,
         }),
         startedMetricPromise,
