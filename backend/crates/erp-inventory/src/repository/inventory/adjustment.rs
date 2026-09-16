@@ -66,6 +66,30 @@ pub struct StockAdjustmentFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for StockAdjustmentFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            search: super::InventorySearch::default(),
+            warehouse_ids: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for StockAdjustmentFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -465,15 +489,7 @@ mod filter_tests {
     use super::{StockAdjustmentFilter, stock_adjustment_sort};
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockAdjustmentFilter {
-        StockAdjustmentFilter {
-            search: Default::default(),
-            warehouse_ids,
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        }
+        StockAdjustmentFilter { warehouse_ids, ..Default::default() }
     }
 
     #[test]

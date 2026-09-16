@@ -216,25 +216,10 @@ fn group_history_rows(
             let (_, gross, unpriced) = aggregate_orders(&values, &sources.revision_gross);
             let (label, user_id, user_name, org_id, org_name, path) =
                 group_identity(dimension, &key, &values);
-            HistoryQualityRow {
-                row_id: format!("{dimension}:{key}"),
-                kind: dimension.into(),
-                group_id: Some(key.clone()),
-                label: Some(label),
-                attribution_user_id: user_id,
-                attribution_user_name: user_name,
-                attribution_org_unit_id: org_id,
-                attribution_org_unit_name: org_name,
-                attribution_path: path,
-                order_id: None,
-                order_no: None,
-                customer_id: None,
-                customer_name: None,
-                effective_at: None,
-                order_count: Some(values.len()),
-                gross_total: money(gross),
-                unpriced_count: unpriced,
-            }
+            HistoryQualityRow::new(format!("{dimension}:{key}"), dimension.into(), money(gross))
+                .with_group(Some(key.clone()), Some(label))
+                .with_attribution(user_id, user_name, org_id, org_name, path)
+                .with_counts(Some(values.len()), unpriced)
         })
         .collect()
 }
@@ -370,11 +355,7 @@ fn assemble_history(
         policy_version: 0,
         organization_version: 0,
         scope_version: String::new(),
-        scope: QualityScope {
-            id: "authorized".into(),
-            label: "历史负责订单".into(),
-            permission_version: String::new(),
-        },
+        scope: QualityScope::new("authorized".into(), "历史负责订单".into(), String::new()),
         period: QualityPeriod {
             from: query.from.clone(),
             to: query.to.clone(),

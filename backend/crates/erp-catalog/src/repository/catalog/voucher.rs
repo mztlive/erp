@@ -44,6 +44,36 @@ pub struct VoucherCategoryProfileRevisionRow {
     pub created_at: u64,
 }
 
+impl VoucherCategoryProfileRevisionRow {
+    /// 以稳定身份构造投影行，关联展示字段保持空条件。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键
+    /// * `sku_id` - 卡券类目使用的 VOUCHER SKU 稳定身份
+    /// * `description` - 卡券类目描述
+    ///
+    /// # 返回
+    /// 返回待装配关联展示字段的投影行。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(id: impl Into<String>, sku_id: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            sku_id: sku_id.into(),
+            revision_no: 0,
+            description: description.into(),
+            sku_no: None,
+            product_id: None,
+            product_version: None,
+            name: None,
+            status: EnableStatus::Active,
+            version: 0,
+            created_at: 0,
+        }
+    }
+}
+
 /// 卡券类目扩展修订列表筛选条件（修订表追加写入，无软删除过滤）。
 #[derive(Debug, Clone)]
 pub struct VoucherCategoryProfileRevisionFilter {
@@ -193,19 +223,16 @@ impl<'a> CatalogRepository<'a> {
         revision: &VoucherCategoryProfileRevision,
         executor: &mut dyn Executor,
     ) -> Result<VoucherCategoryProfileRevisionRow> {
-        let mut rows = vec![VoucherCategoryProfileRevisionRow {
-            id: revision.base.id.clone(),
-            sku_id: revision.sku_id.to_string(),
-            revision_no: revision.revision.revision_no,
-            description: revision.description.clone(),
-            sku_no: None,
-            product_id: None,
-            product_version: None,
-            name: None,
-            status: revision.status,
-            version: revision.base.version,
-            created_at: revision.base.created_at,
-        }];
+        let mut row = VoucherCategoryProfileRevisionRow::new(
+            revision.base.id.clone(),
+            revision.sku_id.to_string(),
+            revision.description.clone(),
+        );
+        row.revision_no = revision.revision.revision_no;
+        row.status = revision.status;
+        row.version = revision.base.version;
+        row.created_at = revision.base.created_at;
+        let mut rows = vec![row];
         self.attach_voucher_profile_context(&mut rows, executor).await?;
         Ok(rows.remove(0))
     }
@@ -396,5 +423,28 @@ fn voucher_revision_projection() -> Document {
         "status": 1,
         "version": 1,
         "created_at": 1,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::VoucherCategoryProfileRevisionRow;
+    use crate::entity::catalog::EnableStatus;
+
+    #[test]
+    fn voucher_row_new_carries_identity_fields() {
+        let row = VoucherCategoryProfileRevisionRow::new("rev-1", "sku-1", "类目描述");
+        assert_eq!(row.id, "rev-1");
+        assert_eq!(row.sku_id, "sku-1");
+        assert_eq!(row.description, "类目描述");
+        assert_eq!(row.sku_no, None);
+        assert_eq!(row.status, EnableStatus::Active);
+    }
+
+    #[test]
+    fn voucher_row_new_boundary_empty_description() {
+        let row = VoucherCategoryProfileRevisionRow::new("rev-2", "sku-2", "");
+        assert_eq!(row.description, "");
+        assert_eq!(row.revision_no, 0);
     }
 }

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use super::LineStatus;
 
 /// 稳定明细行创建数据。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SalesOrderLineData {
     /// 单内稳定行号（从 1 递增，变更不复用历史行号）。
     pub line_no: u32,

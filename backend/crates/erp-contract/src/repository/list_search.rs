@@ -10,6 +10,7 @@ use super::contract::{ContractDomainRepository, ContractFilter, ContractRow};
 use crate::dto::contract::{ContractFilterOption, ContractMetric, ContractMetrics};
 
 /// 可见合同引用的客户搜索事实，外域数据由端口提供。
+#[derive(Debug, Clone)]
 pub struct ContractCustomer {
     /// 当前负责人 ID；未分配时为空。
     pub owner_id: Option<String>,
@@ -18,6 +19,7 @@ pub struct ContractCustomer {
     pub owner: String,
 }
 /// 列表新增筛选，精确字段与关键词按交集执行。
+#[derive(Debug, Clone, Default)]
 pub struct ContractSearch {
     pub q: Option<String>,
     pub metric: Option<ContractMetric>,

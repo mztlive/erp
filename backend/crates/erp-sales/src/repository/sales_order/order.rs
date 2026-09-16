@@ -111,6 +111,35 @@ pub struct SalesOrderFilter {
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
 }
+impl Default for SalesOrderFilter {
+    fn default() -> Self {
+        Self {
+            search: SalesOrderSearch::default(),
+            order_no: None,
+            customer_id: None,
+            contract_id: None,
+            origin_system: None,
+            commercial_status: None,
+            review_status: None,
+            business_type: None,
+            fulfillment_progress: None,
+            collection_progress: None,
+            invoice_progress: None,
+            close_status: None,
+            created_from: None,
+            created_to: None,
+            created_by: None,
+            owner_user_ids: None,
+            business_org_unit_ids: None,
+            my_todo: false,
+            exception_only: false,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
 
 impl QueryFilter for SalesOrderFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
@@ -598,6 +627,14 @@ impl SalesOrderRepository<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sales_order_filter_default_uses_first_page() {
+        let filter = SalesOrderFilter::default();
+        assert_eq!(filter.page, 1);
+        assert_eq!(filter.page_size, 20);
+        assert!(filter.search.q.is_none());
+    }
 
     #[test]
     fn sales_order_filter_applies_optional_fields_and_deleted_filter() {

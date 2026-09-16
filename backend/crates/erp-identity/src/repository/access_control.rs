@@ -76,6 +76,30 @@ pub struct PermissionFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for PermissionFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            resource: None,
+            disabled: None,
+            system: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for PermissionFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -199,6 +223,32 @@ pub struct DataScopeFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl Default for DataScopeFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            subject_type: None,
+            subject_id: None,
+            scope_type: None,
+            resource: None,
+            action: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
 }
 
 impl QueryFilter for DataScopeFilter {
@@ -496,6 +546,38 @@ pub struct AuditEventFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl Default for AuditEventFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            q: None,
+            keyword_actions: None,
+            event_id: None,
+            trace_id: None,
+            created_from: None,
+            created_before: None,
+            actor_id: None,
+            action_type: None,
+            object_type: None,
+            object_id: None,
+            result: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
 }
 
 impl QueryFilter for AuditEventFilter {

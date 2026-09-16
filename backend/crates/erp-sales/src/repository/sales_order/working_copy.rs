@@ -38,6 +38,20 @@ pub struct WorkingCopyFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for WorkingCopyFilter {
+    fn default() -> Self {
+        Self {
+            sales_order_id: None,
+            working_purpose: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for WorkingCopyFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///

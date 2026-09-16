@@ -66,6 +66,34 @@ pub struct StockMovementFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for StockMovementFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            search: super::InventorySearch::default(),
+            warehouse_ids: None,
+            sku_id: None,
+            movement_type: None,
+            direction: None,
+            occurred_from: None,
+            occurred_to: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for StockMovementFilter {
     /// 转换为 MongoDB 查询条件（正式事实恒为未删除）。
     ///
@@ -281,35 +309,19 @@ mod tests {
     use crate::entity::inventory::{MovementDirection, MovementType};
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockMovementFilter {
-        StockMovementFilter {
-            search: Default::default(),
-            warehouse_ids,
-            sku_id: None,
-            movement_type: None,
-            direction: None,
-            occurred_from: None,
-            occurred_to: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        }
+        StockMovementFilter { warehouse_ids, ..Default::default() }
     }
 
     #[test]
     fn movement_filter_applies_dimensions_type_range_and_deleted_filter() {
         let filter = StockMovementFilter {
-            search: Default::default(),
             warehouse_ids: Some(vec![WarehouseId::new("wh-1")]),
             sku_id: Some(SkuId::new("sku-1")),
             movement_type: Some(MovementType::PurchaseReceiptIn),
             direction: Some(MovementDirection::Increase),
             occurred_from: Some(Instant::from_unix_secs(1_700_000_000)),
             occurred_to: Some(Instant::from_unix_secs(1_700_000_100)),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();

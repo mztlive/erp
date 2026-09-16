@@ -59,7 +59,7 @@ pub enum DocumentApprovalWorkItemIntegrityConflict {
     },
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 struct DocumentApprovalWorkItemFacet {
     #[serde(default)]
     items: Vec<WorkItem>,

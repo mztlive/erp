@@ -64,6 +64,19 @@ pub struct BusinessDocumentFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for BusinessDocumentFilter {
+    fn default() -> Self {
+        Self {
+            document_type: None,
+            document_no: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 /// 单据审批绑定窄投影的三态查询事实。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApprovalBindingLookup {
@@ -593,6 +606,20 @@ pub struct WorkflowActionFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for WorkflowActionFilter {
+    fn default() -> Self {
+        Self {
+            document_id: None,
+            actor_id: None,
+            action_type: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for WorkflowActionFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -814,6 +841,13 @@ mod tests {
     use crate::repository::bpm::{
         AssignDocumentNoOutcome, assign_document_no_filter, classify_assign_document_no_miss,
     };
+
+    #[test]
+    fn business_document_filter_default_uses_first_page() {
+        let filter = BusinessDocumentFilter::default();
+        assert_eq!(filter.page, 1);
+        assert_eq!(filter.page_size, 20);
+    }
 
     #[test]
     fn business_document_filter_applies_type_and_no_regex() {

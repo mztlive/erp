@@ -107,7 +107,7 @@ impl From<BusinessDocument> for BusinessDocumentView {
 }
 
 /// 单据注册列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct BusinessDocumentListParams {
     /// 单据类型筛选。
     pub document_type: Option<DocumentType>,
@@ -244,7 +244,7 @@ impl From<WorkflowAction> for WorkflowActionView {
 }
 
 /// 工作流动作列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct WorkflowActionListParams {
     /// 业务单据 ID 筛选。
     pub document_id: Option<BusinessDocumentId>,

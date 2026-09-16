@@ -171,6 +171,20 @@ impl ObjectFact {
         self.order_scope_source = Some(source);
         self
     }
+    /// 设置交易对手展示名。
+    ///
+    /// # 参数
+    /// * `counterparty_label` - 交易对手展示名
+    ///
+    /// # 返回
+    /// 返回更新后的对象事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_counterparty_label(mut self, counterparty_label: Option<String>) -> Self {
+        self.counterparty_label = counterparty_label;
+        self
+    }
 }
 
 /// Normalized W29 close decision returned by the domain adapter.

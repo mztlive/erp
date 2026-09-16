@@ -27,6 +27,53 @@ pub struct CreateProductBrandRequest {
     pub logo_file_asset_id: Option<FileAssetId>,
 }
 
+impl CreateProductBrandRequest {
+    /// 以稳定品牌代码与品牌名称构造创建请求。
+    ///
+    /// # 参数
+    /// * `brand_code` - 稳定品牌代码
+    /// * `name` - 品牌名称
+    ///
+    /// # 返回
+    /// 返回待补齐可选字段的创建请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(brand_code: impl Into<String>, name: impl Into<String>) -> Self {
+        Self { brand_code: brand_code.into(), name: name.into(), status: None, logo_file_asset_id: None }
+    }
+
+    /// 设置启停状态。
+    ///
+    /// # 参数
+    /// * `status` - 启停状态
+    ///
+    /// # 返回
+    /// 返回更新后的创建请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_status(mut self, status: EnableStatus) -> Self {
+        self.status = Some(status);
+        self
+    }
+
+    /// 设置品牌 Logo。
+    ///
+    /// # 参数
+    /// * `logo_file_asset_id` - 已登记受控文件
+    ///
+    /// # 返回
+    /// 返回更新后的创建请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_logo_file_asset_id(mut self, logo_file_asset_id: FileAssetId) -> Self {
+        self.logo_file_asset_id = Some(logo_file_asset_id);
+        self
+    }
+}
+
 /// 商品品牌更新请求（携带乐观锁版本）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateProductBrandRequest {
@@ -283,5 +330,32 @@ impl UnitOfMeasureListParams {
                 sort_dir,
             },
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use validator::Validate;
+
+    use super::CreateProductBrandRequest;
+    use crate::entity::catalog::EnableStatus;
+
+    #[test]
+    fn brand_request_new_carries_required_fields() {
+        let request = CreateProductBrandRequest::new("BR-001", "品牌");
+        assert_eq!(request.brand_code, "BR-001");
+        assert_eq!(request.name, "品牌");
+        assert_eq!(request.status, None);
+        assert!(request.validate().is_ok());
+    }
+
+    #[test]
+    fn brand_request_chainable_setters_fill_optional_fields() {
+        let request = CreateProductBrandRequest::new("BR-002", "品牌二").with_status(EnableStatus::Disabled);
+        assert_eq!(request.status, Some(EnableStatus::Disabled));
+        assert!(request.validate().is_ok());
+
+        let empty = CreateProductBrandRequest::new("   ", "品牌");
+        assert!(empty.validate().is_err());
     }
 }

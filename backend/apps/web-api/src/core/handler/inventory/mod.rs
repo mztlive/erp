@@ -67,6 +67,21 @@ pub struct UpdateStockAdjustmentHttpRequest {
     pub note: Option<String>,
     pub occurred_at: Option<i64>,
 }
+impl UpdateStockAdjustmentHttpRequest {
+    /// 以必填版本构造更新请求；可选维度默认为空。
+    ///
+    /// # 参数
+    /// * `version` - 期望库存调整单版本
+    ///
+    /// # 返回
+    /// 返回无变更内容的请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(version: String) -> Self {
+        Self { version, reason_type: None, lines: None, note: None, occurred_at: None }
+    }
+}
 
 impl UpdateStockAdjustmentHttpRequest {
     fn into_service(
@@ -501,6 +516,44 @@ pub struct CancelStockAdjustmentApprovalHttpRequest {
 }
 
 impl CancelStockAdjustmentApprovalHttpRequest {
+    /// 以必填版本构造撤回请求；开放任务版本默认为空。
+    ///
+    /// # 参数
+    /// * `expected_version` - 期望库存调整单版本
+    /// * `approval_process_instance_id` - 审批实例 ID
+    /// * `expected_subject_version` - 冻结提交版本
+    /// * `expected_instance_version` - 期望实例版本
+    /// * `expected_execution_version` - 期望执行版本
+    /// * `reason` - 非空撤回原因
+    /// * `idempotency_key` - 幂等键
+    ///
+    /// # 返回
+    /// 返回无开放任务版本的请求。
+    ///
+    /// # 错误
+    /// 无。
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        expected_version: String,
+        approval_process_instance_id: String,
+        expected_subject_version: String,
+        expected_instance_version: String,
+        expected_execution_version: String,
+        reason: String,
+        idempotency_key: String,
+    ) -> Self {
+        Self {
+            expected_version,
+            approval_process_instance_id,
+            expected_subject_version,
+            expected_instance_version,
+            expected_execution_version,
+            expected_task_version: None,
+            reason,
+            idempotency_key,
+        }
+    }
+
     fn into_service(
         self,
         headers: &HeaderMap,

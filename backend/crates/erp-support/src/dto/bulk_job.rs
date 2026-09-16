@@ -93,7 +93,7 @@ impl From<BulkSelectionSnapshot> for BulkSelectionSnapshotView {
 }
 
 /// 选择快照列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct BulkSelectionSnapshotListParams {
     /// 选择类型筛选。
     pub selection_type: Option<SelectionType>,
@@ -306,7 +306,7 @@ impl From<BackgroundJob> for BackgroundJobView {
 }
 
 /// 后台任务列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct BackgroundJobListParams {
     /// 任务编号模糊筛选（忽略大小写）。
     pub job_no: Option<String>,
@@ -475,7 +475,7 @@ pub struct CancelAllBackgroundJobsRequest {
 }
 
 /// 批量停止并取消后台任务响应。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct CancelAllBackgroundJobsResponse {
     /// 成功取消的任务数。
     pub cancelled_count: u64,
@@ -509,8 +509,7 @@ mod tests {
             created_by: Some(" admin-1 ".to_string()),
             page: Some(2),
             page_size: Some(50),
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.selection_type, Some(SelectionType::Export));
@@ -525,13 +524,8 @@ mod tests {
         let params = BackgroundJobListParams {
             job_no: Some(" JOB-1 ".to_string()),
             job_type: Some(JobType::Import),
-            domain_job_type: None,
             status: Some(JobStatus::Running),
-            requested_by: None,
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.job_no.as_deref(), Some("JOB-1"));
@@ -539,17 +533,7 @@ mod tests {
         assert_eq!(query.status, Some(JobStatus::Running));
         assert_eq!(query.paging.page_size, 20);
 
-        let invalid = BackgroundJobListParams {
-            job_no: None,
-            job_type: None,
-            domain_job_type: None,
-            status: None,
-            requested_by: None,
-            page: Some(0),
-            page_size: Some(0),
-            sort_by: None,
-            sort_dir: None,
-        };
+        let invalid = BackgroundJobListParams { page: Some(0), page_size: Some(0), ..Default::default() };
         assert!(invalid.validate().is_err());
     }
 }

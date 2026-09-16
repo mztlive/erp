@@ -153,12 +153,10 @@ impl WarehouseService {
         let revision_id = WarehouseRevisionId::new(next_id());
         let mut warehouse = Warehouse::new(
             id.clone(),
-            WarehouseData {
-                warehouse_code: req.warehouse_code,
-                status: req.status.unwrap_or(EnableStatus::Active),
-                inbound_handler_user_id: Some(req.inbound_handler_user_id),
-                outbound_handler_user_id: Some(req.outbound_handler_user_id),
-            },
+            WarehouseData::new(req.warehouse_code)
+                .with_status(req.status.unwrap_or(EnableStatus::Active))
+                .with_inbound_handler_user_id(req.inbound_handler_user_id)
+                .with_outbound_handler_user_id(req.outbound_handler_user_id),
             actor.id(),
         )?;
         let revision = build_warehouse_revision(
@@ -751,12 +749,10 @@ mod tests {
     fn disabled_warehouse_fail_closes_fulfillment_handler_and_version_conflicts() {
         let mut warehouse = Warehouse::new(
             WarehouseId::new("wh-1"),
-            WarehouseData {
-                warehouse_code: "WH-1".to_string(),
-                status: EnableStatus::Active,
-                inbound_handler_user_id: Some("inbound-1".to_string()),
-                outbound_handler_user_id: Some("outbound-1".to_string()),
-            },
+            WarehouseData::new("WH-1")
+                .with_status(EnableStatus::Active)
+                .with_inbound_handler_user_id("inbound-1")
+                .with_outbound_handler_user_id("outbound-1"),
             "admin-1",
         )
         .unwrap();

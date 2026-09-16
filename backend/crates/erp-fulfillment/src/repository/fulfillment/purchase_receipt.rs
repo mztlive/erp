@@ -53,6 +53,29 @@ pub struct PurchaseReceiptFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for PurchaseReceiptFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            purchase_order_id: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for PurchaseReceiptFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -176,8 +199,7 @@ mod tests {
             status: Some(PurchaseReceiptState::Posted),
             page: 2,
             page_size: 10,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();
@@ -186,6 +208,13 @@ mod tests {
         assert_eq!(document.get_str("status").unwrap(), "POSTED");
         assert_eq!(filter.skip(), 10);
         assert_eq!(filter.limit(), 10);
+    }
+
+    #[test]
+    fn receipt_filter_default_is_first_page_size_20() {
+        let filter = PurchaseReceiptFilter::default();
+        assert_eq!((filter.page, filter.page_size), (1, 20));
+        assert!(filter.purchase_order_id.is_none());
     }
 
     #[test]

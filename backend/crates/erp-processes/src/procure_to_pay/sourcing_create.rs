@@ -65,7 +65,7 @@ struct SourcingOrderReceipt {
 }
 
 /// 选源命令幂等收据。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 struct SourcingReceipt {
     /// 本次创建并已提交审批的全部采购单。
     orders: Vec<SourcingOrderReceipt>,

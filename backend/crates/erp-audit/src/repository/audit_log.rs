@@ -372,6 +372,22 @@ pub struct AuditLogFilter {
     pub page_size: u32,
 }
 
+impl Default for AuditLogFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self { actor_account: None, action: None, resource_type: None, success: None, page: 1, page_size: 20 }
+    }
+}
+
 impl QueryFilter for AuditLogFilter {
     /// 转换为 MongoDB 查询条件。
     ///
@@ -407,21 +423,24 @@ impl Pagination for AuditLogFilter {
 
 #[cfg(test)]
 mod tests {
-    use persistence_core::QueryFilter;
+    use persistence_core::{Pagination, QueryFilter};
 
     use super::AuditLogFilter;
 
     #[test]
+    fn audit_log_filter_default_starts_at_page_one_size_twenty() {
+        let filter = AuditLogFilter::default();
+        assert_eq!(filter.page, 1);
+        assert_eq!(filter.page_size, 20);
+        assert_eq!(filter.actor_account, None);
+        assert_eq!(filter.success, None);
+        assert_eq!(filter.page_and_size(), (1, 20));
+    }
+
+    #[test]
     fn action_filter_treats_regex_metacharacters_as_literal_text() {
-        let filter = AuditLogFilter {
-            actor_account: None,
-            action: Some("audit.create+".to_string()),
-            resource_type: None,
-            success: None,
-            page: 1,
-            page_size: 20,
-        }
-        .to_doc();
+        let filter =
+            AuditLogFilter { action: Some("audit.create+".to_string()), ..Default::default() }.to_doc();
 
         assert_eq!(filter.get_document("action").unwrap().get_str("$regex").unwrap(), r"audit\.create\+");
     }

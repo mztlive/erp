@@ -222,15 +222,14 @@ impl PurchaseOrderProcess {
                 object_scope: Some(self.command_access(actor, "submit")?),
                 receipt: Some((
                     fingerprint.clone(),
-                    PurchaseSubmitReceipt {
-                        purchase_no: order.purchase_no.clone(),
-                        submission_id: submission.base.id.clone(),
-                        submission_no: submission.submission_no.clone(),
-                        work_item_id: String::new(),
-                        task_version: 0,
-                        subject_version: order.approval_subject_version.to_string(),
-                        lock_version: order.base.version,
-                    },
+                    PurchaseSubmitReceipt::new(
+                        order.purchase_no.clone(),
+                        submission.base.id.clone(),
+                        submission.submission_no.clone(),
+                        String::new(),
+                        order.approval_subject_version.to_string(),
+                    )
+                    .with_versions(0, order.base.version),
                 )),
             },
         )
@@ -427,6 +426,54 @@ pub(super) struct PurchaseSubmitReceipt {
 }
 
 impl PurchaseSubmitReceipt {
+    /// 构造采购提交命令收据。
+    ///
+    /// # 参数
+    /// * `purchase_no` - 采购单号
+    /// * `submission_id` - 形成的不可变提交
+    /// * `submission_no` - 提交序号
+    /// * `work_item_id` - 审核待办
+    /// * `subject_version` - 待办锁定的不可变采购提交版本
+    ///
+    /// # 返回
+    /// 返回任务版本为零的收据。
+    ///
+    /// # 错误
+    /// 无。
+    pub(super) fn new(
+        purchase_no: String,
+        submission_id: String,
+        submission_no: String,
+        work_item_id: String,
+        subject_version: String,
+    ) -> Self {
+        Self {
+            purchase_no,
+            submission_id,
+            submission_no,
+            work_item_id,
+            task_version: 0,
+            subject_version,
+            lock_version: 0,
+        }
+    }
+
+    /// 设置审核待办乐观锁版本与采购单版本。
+    ///
+    /// # 参数
+    /// * `task_version` - 审核待办乐观锁版本
+    /// * `lock_version` - 采购单新乐观锁版本
+    ///
+    /// # 返回
+    /// 返回更新后的收据。
+    ///
+    /// # 错误
+    /// 无。
+    pub(super) fn with_versions(mut self, task_version: u64, lock_version: u64) -> Self {
+        self.task_version = task_version;
+        self.lock_version = lock_version;
+        self
+    }
     /// 回填首个入口任务身份，保证回放与首次响应一致。
     ///
     /// # 参数
@@ -554,15 +601,14 @@ mod tests {
     #[test]
     fn submit_receipt_round_trips_and_hides_raw_key() {
         let fingerprint = "b".repeat(64);
-        let receipt = PurchaseSubmitReceipt {
-            purchase_no: "PO-1".to_string(),
-            submission_id: "submission-1".to_string(),
-            submission_no: "SUB-000001".to_string(),
-            work_item_id: "wi-1".to_string(),
-            task_version: 1,
-            subject_version: "1".to_string(),
-            lock_version: 2,
-        };
+        let receipt = PurchaseSubmitReceipt::new(
+            "PO-1".to_string(),
+            "submission-1".to_string(),
+            "SUB-000001".to_string(),
+            "wi-1".to_string(),
+            "1".to_string(),
+        )
+        .with_versions(1, 2);
         let message =
             PurchaseCommandReceipt::new(fingerprint.clone(), receipt.clone()).encode_message().unwrap();
         let audit = submit_audit_fixture(message.clone());
@@ -642,15 +688,14 @@ mod tests {
     /// 首次响应与回放的任务身份不一致时测试失败。
     #[test]
     fn submit_receipt_backfills_first_task_identity() {
-        let receipt = PurchaseSubmitReceipt {
-            purchase_no: "PO-1".to_string(),
-            submission_id: "submission-1".to_string(),
-            submission_no: "SUB-000001".to_string(),
-            work_item_id: String::new(),
-            task_version: 0,
-            subject_version: "1".to_string(),
-            lock_version: 2,
-        };
+        let receipt = PurchaseSubmitReceipt::new(
+            "PO-1".to_string(),
+            "submission-1".to_string(),
+            "SUB-000001".to_string(),
+            String::new(),
+            "1".to_string(),
+        )
+        .with_versions(0, 2);
         let filled = receipt.clone().with_first_task(Some(&("wi-9".to_string(), 7)));
         assert_eq!(filled.work_item_id, "wi-9");
         assert_eq!(filled.task_version, 7);

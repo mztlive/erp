@@ -96,6 +96,34 @@ pub struct PurchaseOrderFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for PurchaseOrderFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            owner_user_ids: None,
+            purchase_no: None,
+            keyword_sales_order_ids: Vec::new(),
+            keyword_supplier_ids: Vec::new(),
+            sales_order_id: None,
+            supplier_id: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for PurchaseOrderFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -448,17 +476,10 @@ mod tests {
     #[test]
     fn filter_applies_optional_fields_and_deleted_filter() {
         let filter = PurchaseOrderFilter {
-            owner_user_ids: None,
-            keyword_sales_order_ids: Vec::new(),
-            keyword_supplier_ids: Vec::new(),
             purchase_no: Some("PO-2026".to_string()),
-            sales_order_id: None,
             supplier_id: Some(SupplierAccountId::new("sup-1")),
             status: Some(PurchaseOrderStatus::PendingFinanceReview),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();
@@ -551,20 +572,16 @@ mod tests {
     }
 
     #[test]
+    fn filter_default_is_first_page_size_20() {
+        let filter = PurchaseOrderFilter::default();
+        assert_eq!((filter.page, filter.page_size), (1, 20));
+        assert!(filter.purchase_no.is_none());
+        assert!(!filter.sort_ascending);
+    }
+
+    #[test]
     fn filter_omits_absent_fields() {
-        let filter = PurchaseOrderFilter {
-            owner_user_ids: None,
-            keyword_sales_order_ids: Vec::new(),
-            keyword_supplier_ids: Vec::new(),
-            purchase_no: None,
-            sales_order_id: None,
-            supplier_id: None,
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        };
+        let filter = PurchaseOrderFilter::default();
 
         assert_eq!(filter.to_doc(), doc! { "deleted_at": 0i64 });
     }

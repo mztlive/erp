@@ -65,6 +65,50 @@ pub struct DecisionActionParams {
 }
 
 /// 受阻取消领域动作上下文的构造参数。
+impl DecisionActionParams {
+    /// 以必填身份构造决定参数；原因默认为空。
+    ///
+    /// # 参数
+    /// * `approval_process_instance_id` - 审批流程实例 ID
+    /// * `approval_node_execution_id` - 当前节点执行 ID
+    /// * `work_item_id` - 当前待办 ID
+    /// * `business_object_type` - 业务对象类型稳定码
+    /// * `business_object_id` - 业务对象主键
+    /// * `subject_version` - 冻结业务版本十进制字符串
+    /// * `actor_id` - 已认证操作人
+    /// * `idempotency_key` - 调用方幂等键
+    ///
+    /// # 返回
+    /// 返回无原因的决定参数。
+    ///
+    /// # 错误
+    /// 无。
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        approval_process_instance_id: String,
+        approval_node_execution_id: String,
+        work_item_id: String,
+        business_object_type: String,
+        business_object_id: String,
+        subject_version: String,
+        actor_id: String,
+        idempotency_key: String,
+    ) -> Self {
+        Self {
+            approval_process_instance_id,
+            approval_node_execution_id,
+            work_item_id,
+            business_object_type,
+            business_object_id,
+            subject_version,
+            actor_id,
+            reason: None,
+            idempotency_key,
+        }
+    }
+}
+
+/// 受阻取消领域动作上下文的构造参数。
 ///
 /// # 用途
 /// 打包 [`ApprovalActionContext::for_blocked_cancel`] 所需身份字段。
@@ -100,6 +144,49 @@ pub struct BlockedCancelActionParams {
     pub reason: String,
     /// 调用方幂等键。
     pub idempotency_key: String,
+}
+
+impl BlockedCancelActionParams {
+    /// 以必填身份构造受阻取消参数；误带任务默认为空。
+    ///
+    /// # 参数
+    /// * `approval_process_instance_id` - 审批流程实例 ID
+    /// * `approval_node_execution_id` - 当前节点执行 ID
+    /// * `business_object_type` - 业务对象类型稳定码
+    /// * `business_object_id` - 业务对象主键
+    /// * `subject_version` - 冻结业务版本十进制字符串
+    /// * `actor_id` - 已认证操作人
+    /// * `reason` - 非空取消原因
+    /// * `idempotency_key` - 调用方幂等键
+    ///
+    /// # 返回
+    /// 返回无误带任务的参数。
+    ///
+    /// # 错误
+    /// 无。
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        approval_process_instance_id: String,
+        approval_node_execution_id: String,
+        business_object_type: String,
+        business_object_id: String,
+        subject_version: String,
+        actor_id: String,
+        reason: String,
+        idempotency_key: String,
+    ) -> Self {
+        Self {
+            approval_process_instance_id,
+            approval_node_execution_id,
+            work_item_id: None,
+            business_object_type,
+            business_object_id,
+            subject_version,
+            actor_id,
+            reason,
+            idempotency_key,
+        }
+    }
 }
 
 impl ApprovalActionContext {

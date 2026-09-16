@@ -43,6 +43,72 @@ pub struct WarehouseData {
     pub outbound_handler_user_id: Option<String>,
 }
 
+impl WarehouseData {
+    /// 由必填仓库代码构造仓库创建数据。
+    ///
+    /// # 参数
+    /// * `warehouse_code` - ERP 仓库稳定代码（唯一）
+    ///
+    /// # 返回
+    /// 返回启用状态、经办人为空的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(warehouse_code: impl Into<String>) -> Self {
+        Self {
+            warehouse_code: warehouse_code.into(),
+            status: EnableStatus::Active,
+            inbound_handler_user_id: None,
+            outbound_handler_user_id: None,
+        }
+    }
+
+    /// 设置启停状态。
+    ///
+    /// # 参数
+    /// * `status` - 启停状态
+    ///
+    /// # 返回
+    /// 返回更新后的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_status(mut self, status: EnableStatus) -> Self {
+        self.status = status;
+        self
+    }
+
+    /// 设置入库经办人。
+    ///
+    /// # 参数
+    /// * `inbound_handler_user_id` - 入库经办人账号 ID
+    ///
+    /// # 返回
+    /// 返回更新后的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_inbound_handler_user_id(mut self, inbound_handler_user_id: impl Into<String>) -> Self {
+        self.inbound_handler_user_id = Some(inbound_handler_user_id.into());
+        self
+    }
+
+    /// 设置仓发经办人。
+    ///
+    /// # 参数
+    /// * `outbound_handler_user_id` - 仓发经办人账号 ID
+    ///
+    /// # 返回
+    /// 返回更新后的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_outbound_handler_user_id(mut self, outbound_handler_user_id: impl Into<String>) -> Self {
+        self.outbound_handler_user_id = Some(outbound_handler_user_id.into());
+        self
+    }
+}
+
 /// 仓库更新数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct WarehouseUpdate {
@@ -231,12 +297,9 @@ mod tests {
     use super::*;
 
     fn data() -> WarehouseData {
-        WarehouseData {
-            warehouse_code: " WH-BJ-001 ".to_string(),
-            status: EnableStatus::Active,
-            inbound_handler_user_id: Some(" inbound-1 ".to_string()),
-            outbound_handler_user_id: Some(" outbound-1 ".to_string()),
-        }
+        WarehouseData::new(" WH-BJ-001 ")
+            .with_inbound_handler_user_id(" inbound-1 ")
+            .with_outbound_handler_user_id(" outbound-1 ")
     }
 
     fn revision(warehouse_id: &str) -> WarehouseRevision {
@@ -271,11 +334,37 @@ mod tests {
     /// 失败路径：必填空与超长各一条。
     #[test]
     fn new_rejects_empty_and_overlong_code() {
-        let empty = WarehouseData { warehouse_code: "  ".to_string(), ..data() };
+        let empty = WarehouseData::new("  ")
+            .with_inbound_handler_user_id("inbound-1")
+            .with_outbound_handler_user_id("outbound-1");
         assert!(Warehouse::new(WarehouseId::new("wh-1"), empty, "admin-1").is_err());
 
-        let overlong = WarehouseData { warehouse_code: "w".repeat(65), ..data() };
+        let overlong = WarehouseData::new("w".repeat(65))
+            .with_inbound_handler_user_id("inbound-1")
+            .with_outbound_handler_user_id("outbound-1");
         assert!(Warehouse::new(WarehouseId::new("wh-1"), overlong, "admin-1").is_err());
+    }
+
+    /// 创建构造器默认启用且经办人为空。
+    #[test]
+    fn warehouse_data_constructor_sets_code_only() {
+        let data = WarehouseData::new("WH-BJ-001");
+        assert_eq!(data.warehouse_code, "WH-BJ-001");
+        assert_eq!(data.status, EnableStatus::Active);
+        assert!(data.inbound_handler_user_id.is_none());
+        let staffed = WarehouseData::new("WH-BJ-001").with_inbound_handler_user_id("inbound-1");
+        assert_eq!(staffed.inbound_handler_user_id.as_deref(), Some("inbound-1"));
+    }
+
+    /// 仓储筛选默认首页 20 条。
+    #[test]
+    fn tier_c_warehouse_filters_default_to_first_page_size_20() {
+        use crate::repository::{WarehouseFilter, WarehouseRevisionFilter};
+        assert_eq!((WarehouseFilter::default().page, WarehouseFilter::default().page_size), (1, 20));
+        assert_eq!(
+            (WarehouseRevisionFilter::default().page, WarehouseRevisionFilter::default().page_size),
+            (1, 20)
+        );
     }
 
     /// update 修改状态并 touch 审计人；稳定代码不可修改。
@@ -314,11 +403,7 @@ mod tests {
 
         let missing = Warehouse::new(
             WarehouseId::new("wh-2"),
-            WarehouseData {
-                inbound_handler_user_id: None,
-                outbound_handler_user_id: Some("same-user".to_string()),
-                ..data()
-            },
+            WarehouseData::new(" WH-BJ-001 ").with_outbound_handler_user_id("same-user"),
             "admin-1",
         )
         .unwrap();

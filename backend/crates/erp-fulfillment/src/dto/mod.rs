@@ -117,26 +117,20 @@ mod tests {
     #[test]
     fn list_params_normalize_paging_and_reject_unbounded_page_size() {
         let receipt = PurchaseReceiptListParams {
-            purchase_order_id: None,
             status: Some(PurchaseReceiptState::Posted),
             page: Some(2),
             page_size: Some(50),
             sort_by: Some("created_at".to_string()),
             sort_dir: Some("asc".to_string()),
+            ..Default::default()
         };
         let query = receipt.normalized().unwrap();
         assert_eq!(query.status, Some(PurchaseReceiptState::Posted));
         assert_eq!(query.paging.page, 2);
         assert_eq!(query.paging.page_size, 50);
 
-        let invalid = PurchaseReceiptListParams {
-            purchase_order_id: None,
-            status: None,
-            page: Some(0),
-            page_size: Some(u32::MAX),
-            sort_by: None,
-            sort_dir: None,
-        };
+        let invalid =
+            PurchaseReceiptListParams { page: Some(0), page_size: Some(u32::MAX), ..Default::default() };
         assert!(invalid.validate().is_err());
 
         let delivery = DeliveryListParams {
@@ -144,12 +138,26 @@ mod tests {
             status: Some(DeliveryState::Shipped),
             page: Some(1),
             page_size: Some(30),
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         let query = delivery.normalized().unwrap();
         assert_eq!(query.sales_order_id.as_deref(), Some("so-1"));
         assert_eq!(query.paging.page_size, 30);
+    }
+
+    #[test]
+    fn tier_a_list_params_default_to_empty() {
+        assert!(PurchaseReceiptListParams::default().status.is_none());
+        assert!(DeliveryListParams::default().sales_order_id.is_none());
+    }
+
+    #[test]
+    fn tier_c_receipt_filter_defaults_to_first_page_size_20() {
+        use crate::repository::fulfillment::PurchaseReceiptFilter;
+        assert_eq!(
+            (PurchaseReceiptFilter::default().page, PurchaseReceiptFilter::default().page_size),
+            (1, 20)
+        );
     }
 
     /// 采购收货创建请求拒绝定义 ID / 审批人；视图不暴露审批区。

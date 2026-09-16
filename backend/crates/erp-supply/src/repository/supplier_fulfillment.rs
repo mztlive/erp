@@ -126,6 +126,21 @@ pub struct SupplierFulfillmentOrderFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for SupplierFulfillmentOrderFilter {
+    fn default() -> Self {
+        Self {
+            q: None,
+            supplier_id: None,
+            fulfillment_status: None,
+            external_order_no: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for SupplierFulfillmentOrderFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///

@@ -23,6 +23,52 @@ pub struct RowImportOutcome {
     pub skipped: bool,
 }
 
+impl RowImportOutcome {
+    /// 构造单行导入结果。
+    ///
+    /// # 参数
+    /// * `message` - 结果说明
+    ///
+    /// # 返回
+    /// 返回未跳过、商品为空的结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(message: String) -> Self {
+        Self { product_id: None, message, skipped: false }
+    }
+
+    /// 设置商品 ID。
+    ///
+    /// # 参数
+    /// * `product_id` - 成功或跳过时的商品 ID
+    ///
+    /// # 返回
+    /// 返回更新后的结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_product_id(mut self, product_id: Option<String>) -> Self {
+        self.product_id = product_id;
+        self
+    }
+
+    /// 设置是否跳过。
+    ///
+    /// # 参数
+    /// * `skipped` - 是否跳过
+    ///
+    /// # 返回
+    /// 返回更新后的结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_skipped(mut self, skipped: bool) -> Self {
+        self.skipped = skipped;
+        self
+    }
+}
+
 impl ProductImportProcess {
     /// 导入报价表中的一行商品。
     ///
@@ -58,11 +104,8 @@ impl ProductImportProcess {
         if let Some(barcode) = &row.barcode {
             let owners = self.db.catalog().barcode_owner_sku_ids(barcode, &mut NoTransaction).await?;
             if !owners.is_empty() {
-                return Ok(RowImportOutcome {
-                    product_id: None,
-                    message: format!("条码 {barcode} 已被其他商品使用，本行未写入"),
-                    skipped: true,
-                });
+                return Ok(RowImportOutcome::new(format!("条码 {barcode} 已被其他商品使用，本行未写入"))
+                    .with_skipped(true));
             }
         }
         let unit_id = self.resolve_unit(cache).await?;
@@ -111,11 +154,7 @@ impl ProductImportProcess {
         let created =
             crate::product_create_with_assets(self.db.clone(), request, media.pending, actor.clone()).await;
         match created {
-            Ok(view) => Ok(RowImportOutcome {
-                product_id: Some(view.id),
-                message: "商品已导入".into(),
-                skipped: false,
-            }),
+            Ok(view) => Ok(RowImportOutcome::new("商品已导入".into()).with_product_id(Some(view.id))),
             Err(Error::ConflictError(_)) => {
                 let existing = self
                     .db
@@ -125,11 +164,9 @@ impl ProductImportProcess {
                         &mut NoTransaction,
                     )
                     .await?;
-                Ok(RowImportOutcome {
-                    product_id: existing.map(|item| item.base.id),
-                    message: "商品已存在，本行未重复写入".into(),
-                    skipped: true,
-                })
+                Ok(RowImportOutcome::new("商品已存在，本行未重复写入".into())
+                    .with_product_id(existing.map(|item| item.base.id))
+                    .with_skipped(true))
             },
             Err(error) => Err(error),
         }

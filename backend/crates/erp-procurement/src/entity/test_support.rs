@@ -17,16 +17,14 @@ pub(crate) fn payment_term(raw: &str) -> Result<PaymentTermFact> {
             return Err(Error::from("付款条件缺少可计算规则，请在供应商资料中选择具体付款条件"));
         },
     };
-    Ok(PaymentTermFact {
-        canonical_code: canonical_code.to_string(),
-        prepay_gate,
-        prepay_minimum_ratio: match canonical_code {
-            "PREPAY_100" => Some("1.0".parse().unwrap()),
-            "PREPAY_50" => Some("0.5".parse().unwrap()),
-            "PREPAY_30" => Some("0.3".parse().unwrap()),
-            _ => None,
-        },
-        days_after_delivery,
-        calendar_due: None,
-    })
+    let mut fact = PaymentTermFact::new(canonical_code).with_prepay_gate(prepay_gate);
+    if let Some(days) = days_after_delivery {
+        fact = fact.with_days_after_delivery(days);
+    }
+    match canonical_code {
+        "PREPAY_100" => Ok(fact.with_prepay_minimum_ratio("1.0".parse().unwrap())),
+        "PREPAY_50" => Ok(fact.with_prepay_minimum_ratio("0.5".parse().unwrap())),
+        "PREPAY_30" => Ok(fact.with_prepay_minimum_ratio("0.3".parse().unwrap())),
+        _ => Ok(fact),
+    }
 }

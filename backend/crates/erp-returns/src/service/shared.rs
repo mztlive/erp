@@ -41,11 +41,30 @@ pub fn ensure_posted_source(
 mod tests {
     use super::ensure_posted_source;
     use crate::Error;
+    use crate::repository::returns::{
+        CustomerRefundFilter, PurchaseReturnOrderFilter, SalesReturnCaseFilter,
+    };
 
     #[test]
     fn correction_source_requires_same_posted_fact() {
         assert!(ensure_posted_source(3, 3, true, "必须已过账").is_ok());
         assert!(matches!(ensure_posted_source(4, 3, true, "必须已过账"), Err(Error::ConflictError(_))));
         assert!(matches!(ensure_posted_source(3, 3, false, "必须已过账"), Err(Error::BusinessLogicError(_))));
+    }
+
+    #[test]
+    fn tier_c_return_filters_default_to_first_page_size_20() {
+        assert_eq!(
+            (SalesReturnCaseFilter::default().page, SalesReturnCaseFilter::default().page_size),
+            (1, 20)
+        );
+        assert_eq!(
+            (PurchaseReturnOrderFilter::default().page, PurchaseReturnOrderFilter::default().page_size),
+            (1, 20)
+        );
+        assert_eq!(
+            (CustomerRefundFilter::default().page, CustomerRefundFilter::default().page_size),
+            (1, 20)
+        );
     }
 }

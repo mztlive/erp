@@ -57,6 +57,19 @@ pub struct SupplierSettlementDifferenceFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for SupplierSettlementDifferenceFilter {
+    fn default() -> Self {
+        Self {
+            statement_item_id: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for SupplierSettlementDifferenceFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///

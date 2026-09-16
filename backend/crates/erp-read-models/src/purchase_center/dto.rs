@@ -176,6 +176,53 @@ pub struct DocumentApprovalDefinitionView {
     pub nodes: Vec<DocumentApprovalNodeView>,
 }
 
+impl DocumentApprovalDefinitionView {
+    /// 构造绑定定义只读摘要。
+    ///
+    /// # 参数
+    /// * `id` - 定义主键
+    /// * `name` - 定义名称
+    ///
+    /// # 返回
+    /// 返回版本为零、节点为空的摘要；调用方按需追加版本与节点。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(id: String, name: String) -> Self {
+        Self { id, name, version: 0, nodes: Vec::new() }
+    }
+
+    /// 设置定义业务版本。
+    ///
+    /// # 参数
+    /// * `version` - 定义业务版本
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_version(mut self, version: u32) -> Self {
+        self.version = version;
+        self
+    }
+
+    /// 设置节点摘要。
+    ///
+    /// # 参数
+    /// * `nodes` - 节点摘要
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_nodes(mut self, nodes: Vec<DocumentApprovalNodeView>) -> Self {
+        self.nodes = nodes;
+        self
+    }
+}
+
 /// 定义节点只读摘要。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct DocumentApprovalNodeView {
@@ -210,6 +257,154 @@ pub struct DocumentApprovalInstanceView {
     pub blocker_code: Option<String>,
 }
 
+impl DocumentApprovalInstanceView {
+    /// 构造运行实例只读摘要。
+    ///
+    /// # 参数
+    /// * `id` - 实例主键
+    /// * `status` - 实例状态
+    ///
+    /// # 返回
+    /// 返回首轮、可选字段全空的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(id: String, status: String) -> Self {
+        Self {
+            id,
+            status,
+            current_round_no: 1,
+            current_node: None,
+            current_node_name: None,
+            current_assignee: None,
+            current_assignee_name: None,
+            latest_rejection: None,
+            process_version: None,
+            blocker_code: None,
+        }
+    }
+
+    /// 设置当前轮次。
+    ///
+    /// # 参数
+    /// * `round_no` - 当前轮次
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_current_round_no(mut self, round_no: u32) -> Self {
+        self.current_round_no = round_no;
+        self
+    }
+
+    /// 设置当前节点。
+    ///
+    /// # 参数
+    /// * `node` - 当前节点键
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_current_node(mut self, node: Option<String>) -> Self {
+        self.current_node = node;
+        self
+    }
+
+    /// 设置当前节点名称。
+    ///
+    /// # 参数
+    /// * `node_name` - 当前节点名称
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_current_node_name(mut self, node_name: Option<String>) -> Self {
+        self.current_node_name = node_name;
+        self
+    }
+
+    /// 设置当前审批人。
+    ///
+    /// # 参数
+    /// * `assignee` - 当前审批人
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_current_assignee(mut self, assignee: Option<String>) -> Self {
+        self.current_assignee = assignee;
+        self
+    }
+
+    /// 设置当前审批人显示名。
+    ///
+    /// # 参数
+    /// * `assignee_name` - 当前审批人显示名
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_current_assignee_name(mut self, assignee_name: Option<String>) -> Self {
+        self.current_assignee_name = assignee_name;
+        self
+    }
+
+    /// 设置最近驳回原因。
+    ///
+    /// # 参数
+    /// * `reason` - 最近驳回原因
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_latest_rejection(mut self, reason: Option<String>) -> Self {
+        self.latest_rejection = reason;
+        self
+    }
+
+    /// 设置绑定定义业务版本。
+    ///
+    /// # 参数
+    /// * `version` - 绑定定义业务版本
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_process_version(mut self, version: Option<u32>) -> Self {
+        self.process_version = version;
+        self
+    }
+
+    /// 设置受阻代码。
+    ///
+    /// # 参数
+    /// * `code` - 受阻代码
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_blocker_code(mut self, code: Option<String>) -> Self {
+        self.blocker_code = code;
+        self
+    }
+}
+
 /// 有界历史项。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct DocumentApprovalHistoryItemView {
@@ -235,8 +430,128 @@ pub struct DocumentApprovalHistoryItemView {
     pub decided_at: Option<i64>,
 }
 
+impl DocumentApprovalHistoryItemView {
+    /// 构造有界历史项。
+    ///
+    /// # 参数
+    /// * `execution_id` - 执行主键
+    /// * `node_key` - 节点键
+    /// * `node_name` - 节点名称
+    /// * `result` - 结束结果
+    ///
+    /// # 返回
+    /// 返回首轮、可选字段全空的历史项。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(execution_id: String, node_key: String, node_name: String, result: String) -> Self {
+        Self {
+            execution_id,
+            round_no: 1,
+            execution_no: 1,
+            node_key,
+            node_name,
+            result,
+            assignee_name: None,
+            decided_by: None,
+            decision_reason: None,
+            decided_at: None,
+        }
+    }
+
+    /// 设置轮次。
+    ///
+    /// # 参数
+    /// * `round_no` - 轮次
+    ///
+    /// # 返回
+    /// 返回更新后的历史项。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_round_no(mut self, round_no: u32) -> Self {
+        self.round_no = round_no;
+        self
+    }
+
+    /// 设置实例内执行序号。
+    ///
+    /// # 参数
+    /// * `execution_no` - 实例内执行序号
+    ///
+    /// # 返回
+    /// 返回更新后的历史项。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_execution_no(mut self, execution_no: u32) -> Self {
+        self.execution_no = execution_no;
+        self
+    }
+
+    /// 设置审批人显示名。
+    ///
+    /// # 参数
+    /// * `name` - 审批人显示名
+    ///
+    /// # 返回
+    /// 返回更新后的历史项。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_assignee_name(mut self, name: Option<String>) -> Self {
+        self.assignee_name = name;
+        self
+    }
+
+    /// 设置决定人。
+    ///
+    /// # 参数
+    /// * `decided_by` - 决定人
+    ///
+    /// # 返回
+    /// 返回更新后的历史项。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_decided_by(mut self, decided_by: Option<String>) -> Self {
+        self.decided_by = decided_by;
+        self
+    }
+
+    /// 设置决定原因。
+    ///
+    /// # 参数
+    /// * `reason` - 决定原因
+    ///
+    /// # 返回
+    /// 返回更新后的历史项。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_decision_reason(mut self, reason: Option<String>) -> Self {
+        self.decision_reason = reason;
+        self
+    }
+
+    /// 设置决定时间。
+    ///
+    /// # 参数
+    /// * `decided_at` - 决定时间（unix 秒）
+    ///
+    /// # 返回
+    /// 返回更新后的历史项。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_decided_at(mut self, decided_at: Option<i64>) -> Self {
+        self.decided_at = decided_at;
+        self
+    }
+}
+
 /// 完整历史分页。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
 pub struct DocumentApprovalHistoryPageView {
     /// 下一页游标。
     pub next_cursor: Option<String>,
@@ -294,6 +609,143 @@ pub struct CreationBasisLineView {
     pub gross_amount: String,
 }
 
+impl CreationBasisLineView {
+    /// 构造采购创建依据行视图。
+    ///
+    /// # 参数
+    /// * `sales_order_line_id` - 销售稳定行身份
+    /// * `sales_order_revision_line_id` - 销售当前版本行身份
+    /// * `supplier_id` - 确认供应商
+    /// * `sales_quantity` - 销售当前版本目标数量
+    /// * `covered_quantity` - 当前采购覆盖数量
+    /// * `remaining_quantity` - 当前采购剩余数量
+    /// * `max_create_quantity` - 本供应商当前最大可创建数量
+    /// * `confirmed_quantity` - 兼容展示数量
+    /// * `latest_cost_gross` - 最新含税成本
+    /// * `input_tax_rate` - 进项税率
+    /// * `expected_delivery_date` - 采购预计交付日预填值
+    /// * `sales_delivery_deadline` - 销售对客户承诺的最晚交付日
+    /// * `gross_amount` - 含税行金额
+    ///
+    /// # 返回
+    /// 返回行号为零、可选快照全空的行视图。
+    ///
+    /// # 错误
+    /// 无。
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        sales_order_line_id: String,
+        sales_order_revision_line_id: String,
+        supplier_id: String,
+        sales_quantity: String,
+        covered_quantity: String,
+        remaining_quantity: String,
+        max_create_quantity: String,
+        confirmed_quantity: String,
+        latest_cost_gross: String,
+        input_tax_rate: String,
+        expected_delivery_date: String,
+        sales_delivery_deadline: String,
+        gross_amount: String,
+    ) -> Self {
+        Self {
+            quantity_scale: None,
+            sales_order_line_id,
+            sales_order_revision_line_id,
+            sales_line_no: 0,
+            supplier_id,
+            sales_quantity,
+            covered_quantity,
+            remaining_quantity,
+            max_create_quantity,
+            confirmed_quantity,
+            latest_cost_gross,
+            input_tax_rate,
+            expected_delivery_date,
+            sales_delivery_deadline,
+            product_name: None,
+            specification: None,
+            unit: None,
+            gross_amount,
+        }
+    }
+
+    /// 设置基础单位允许数量小数位。
+    ///
+    /// # 参数
+    /// * `scale` - 数量小数位
+    ///
+    /// # 返回
+    /// 返回更新后的行视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_quantity_scale(mut self, scale: Option<u8>) -> Self {
+        self.quantity_scale = scale;
+        self
+    }
+
+    /// 设置销售当前版本内的业务行号。
+    ///
+    /// # 参数
+    /// * `line_no` - 业务行号
+    ///
+    /// # 返回
+    /// 返回更新后的行视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_sales_line_no(mut self, line_no: u32) -> Self {
+        self.sales_line_no = line_no;
+        self
+    }
+
+    /// 设置商品名称快照。
+    ///
+    /// # 参数
+    /// * `name` - 商品名称快照
+    ///
+    /// # 返回
+    /// 返回更新后的行视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_product_name(mut self, name: Option<String>) -> Self {
+        self.product_name = name;
+        self
+    }
+
+    /// 设置规格快照。
+    ///
+    /// # 参数
+    /// * `specification` - 规格快照
+    ///
+    /// # 返回
+    /// 返回更新后的行视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_specification(mut self, specification: Option<String>) -> Self {
+        self.specification = specification;
+        self
+    }
+
+    /// 设置销售单位快照。
+    ///
+    /// # 参数
+    /// * `unit` - 销售单位快照
+    ///
+    /// # 返回
+    /// 返回更新后的行视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_unit(mut self, unit: Option<String>) -> Self {
+        self.unit = unit;
+        self
+    }
+}
+
 /// 采购创建依据视图（已生效销售单 × 合格供给供应商，§7.4 选源建单入口）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreationBasisView {
@@ -339,6 +791,171 @@ pub struct CreationBasisView {
     pub lines: Vec<CreationBasisLineView>,
     /// 含税行汇总（只汇总已舍入行金额）。
     pub estimated_gross: String,
+}
+
+impl CreationBasisView {
+    /// 构造采购创建依据视图。
+    ///
+    /// # 参数
+    /// * `work_item_id` - 冻结本依据责任范围的开放供给分配任务
+    /// * `basis_id` - 精确创建依据
+    /// * `sales_order_id` - 被确认的销售单
+    /// * `sales_order_no` - 销售单号
+    /// * `customer_name` - 销售当前版本冻结的客户名称
+    /// * `sales_order_revision_id` - 目标销售当前版本
+    /// * `supplier_id` - 供应商
+    /// * `supplier_name` - 供应商名称
+    /// * `purchase_type` - 采购类型
+    /// * `fulfillment_responsibility` - 履约责任
+    /// * `payment_term_code` - 付款条件
+    /// * `estimated_gross` - 含税行汇总
+    ///
+    /// # 返回
+    /// 返回采购来源、行与快照全空的依据视图。
+    ///
+    /// # 错误
+    /// 无。
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        work_item_id: String,
+        basis_id: String,
+        sales_order_id: String,
+        sales_order_no: String,
+        customer_name: String,
+        sales_order_revision_id: String,
+        supplier_id: String,
+        supplier_name: String,
+        purchase_type: String,
+        fulfillment_responsibility: String,
+        payment_term_code: String,
+        estimated_gross: String,
+    ) -> Self {
+        Self {
+            work_item_id,
+            basis_id,
+            source_type: SupplySourceType::Purchase,
+            sales_order_id,
+            sales_order_no,
+            customer_name,
+            contract_no: None,
+            sales_owner_name: None,
+            sales_order_revision_id,
+            supplier_id,
+            supplier_name,
+            stock_balance_id: None,
+            warehouse_id: None,
+            warehouse_name: None,
+            source_available_quantity: None,
+            purchase_type,
+            fulfillment_responsibility,
+            payment_term_code,
+            business_category: None,
+            lines: Vec::new(),
+            estimated_gross,
+        }
+    }
+
+    /// 设置供给来源。
+    ///
+    /// # 参数
+    /// * `source_type` - 供给来源
+    ///
+    /// # 返回
+    /// 返回更新后的依据视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_source_type(mut self, source_type: SupplySourceType) -> Self {
+        self.source_type = source_type;
+        self
+    }
+
+    /// 设置合同编号。
+    ///
+    /// # 参数
+    /// * `contract_no` - 销售当前版本冻结的合同编号
+    ///
+    /// # 返回
+    /// 返回更新后的依据视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_contract_no(mut self, contract_no: Option<String>) -> Self {
+        self.contract_no = contract_no;
+        self
+    }
+
+    /// 设置销售单负责人展示名。
+    ///
+    /// # 参数
+    /// * `name` - 销售单负责人展示名
+    ///
+    /// # 返回
+    /// 返回更新后的依据视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_sales_owner_name(mut self, name: Option<String>) -> Self {
+        self.sales_owner_name = name;
+        self
+    }
+
+    /// 设置现有库存来源字段。
+    ///
+    /// # 参数
+    /// * `stock_balance_id` - 余额主键
+    /// * `warehouse_id` - 仓库主键
+    /// * `warehouse_name` - 仓库名称
+    /// * `source_available_quantity` - 来源当前总可供量
+    ///
+    /// # 返回
+    /// 返回更新后的依据视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_stock_source(
+        mut self,
+        stock_balance_id: Option<String>,
+        warehouse_id: Option<String>,
+        warehouse_name: Option<String>,
+        source_available_quantity: Option<String>,
+    ) -> Self {
+        self.stock_balance_id = stock_balance_id;
+        self.warehouse_id = warehouse_id;
+        self.warehouse_name = warehouse_name;
+        self.source_available_quantity = source_available_quantity;
+        self
+    }
+
+    /// 设置供应商经营类目。
+    ///
+    /// # 参数
+    /// * `category` - 供应商经营类目
+    ///
+    /// # 返回
+    /// 返回更新后的依据视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_business_category(mut self, category: Option<String>) -> Self {
+        self.business_category = category;
+        self
+    }
+
+    /// 设置可拆入本单的已确认分行。
+    ///
+    /// # 参数
+    /// * `lines` - 已确认分行
+    ///
+    /// # 返回
+    /// 返回更新后的依据视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_lines(mut self, lines: Vec<CreationBasisLineView>) -> Self {
+        self.lines = lines;
+        self
+    }
 }
 
 /// 采购变更单视图。
@@ -388,5 +1005,87 @@ mod wire_tests {
                 "purchase_invoice_allocated_amount": "7.30"
             })
         );
+    }
+
+    #[test]
+    fn history_page_default_is_closed_cursor() {
+        let page = DocumentApprovalHistoryPageView::default();
+        assert_eq!(page.next_cursor, None);
+        assert!(!page.has_more);
+    }
+
+    #[test]
+    fn definition_view_builder_keeps_identity_and_version() {
+        let view = DocumentApprovalDefinitionView::new("def-1".to_string(), "采购审批".to_string())
+            .with_version(3)
+            .with_nodes(vec![DocumentApprovalNodeView {
+                key: "node-1".to_string(),
+                name: "节点一".to_string(),
+            }]);
+        assert_eq!(view.id, "def-1");
+        assert_eq!(view.name, "采购审批");
+        assert_eq!(view.version, 3);
+        assert_eq!(view.nodes.len(), 1);
+    }
+
+    #[test]
+    fn instance_and_history_builders_preserve_mandatory_fields() {
+        let instance = DocumentApprovalInstanceView::new("inst-1".to_string(), "RUNNING".to_string())
+            .with_current_round_no(2)
+            .with_process_version(Some(4));
+        assert_eq!(instance.id, "inst-1");
+        assert_eq!(instance.current_round_no, 2);
+        assert_eq!(instance.process_version, Some(4));
+        let item = DocumentApprovalHistoryItemView::new(
+            "exec-1".to_string(),
+            "node-1".to_string(),
+            "节点一".to_string(),
+            "APPROVED".to_string(),
+        )
+        .with_round_no(2)
+        .with_execution_no(3);
+        assert_eq!(item.execution_id, "exec-1");
+        assert_eq!((item.round_no, item.execution_no), (2, 3));
+        assert_eq!(item.result, "APPROVED");
+    }
+
+    #[test]
+    fn creation_basis_builders_preserve_mandatory_fields() {
+        let line = CreationBasisLineView::new(
+            "line-1".to_string(),
+            "rev-line-1".to_string(),
+            "supplier-1".to_string(),
+            "10".to_string(),
+            "4".to_string(),
+            "6".to_string(),
+            "6".to_string(),
+            "6".to_string(),
+            "11.30".to_string(),
+            "0.13".to_string(),
+            "2026-09-01".to_string(),
+            "2026-09-05".to_string(),
+            "67.80".to_string(),
+        )
+        .with_sales_line_no(1);
+        assert_eq!(line.sales_order_line_id, "line-1");
+        assert_eq!(line.max_create_quantity, "6");
+        let basis = CreationBasisView::new(
+            "wi-1".to_string(),
+            "basis-1".to_string(),
+            "so-1".to_string(),
+            "SO-1".to_string(),
+            "测试客户".to_string(),
+            "rev-1".to_string(),
+            "supplier-1".to_string(),
+            "供应商".to_string(),
+            "PHYSICAL".to_string(),
+            "WAREHOUSE".to_string(),
+            "NET-30".to_string(),
+            "67.80".to_string(),
+        )
+        .with_lines(vec![line]);
+        assert_eq!(basis.work_item_id, "wi-1");
+        assert_eq!(basis.lines.len(), 1);
+        assert_eq!(basis.estimated_gross, "67.80");
     }
 }

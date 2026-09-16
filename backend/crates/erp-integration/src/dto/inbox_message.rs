@@ -75,7 +75,7 @@ pub enum WriteBackOutcome {
 }
 
 /// 入站消息列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct InboxMessageListParams {
     /// 来源系统 ID 筛选。
     pub source_system_id: Option<crate::entity::integration_ops::SourceSystemId>,

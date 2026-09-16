@@ -21,6 +21,23 @@ pub struct PaymentTermSnapshotParts {
 }
 
 /// 把历史编码的付款条件快照拆成付款条件与经营类目。
+impl PaymentTermSnapshotParts {
+    /// 以必填付款条件构造快照拆分结果；经营类目默认为空。
+    ///
+    /// # 参数
+    /// * `payment_term_code` - 付款条件代码
+    ///
+    /// # 返回
+    /// 返回无经营类目的拆分结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(payment_term_code: String) -> Self {
+        Self { payment_term_code, business_category: None }
+    }
+}
+
+/// 把历史编码的付款条件快照拆成付款条件与经营类目。
 ///
 /// 同时识别全角 `｜` 与半角 `|`，并容忍标记前后空白。无标记时整串视为付款条件。
 ///

@@ -32,6 +32,38 @@ pub struct RuntimeHistoryItem {
 }
 
 /// 执行历史分页。
+impl RuntimeHistoryItem {
+    /// 以必填执行身份构造历史项；决定维度默认为空。
+    ///
+    /// # 参数
+    /// * `execution_id` - 执行主键
+    /// * `node_key` - 节点键
+    /// * `node_name` - 节点名称
+    /// * `result` - 执行结果
+    ///
+    /// # 返回
+    /// 返回首轮的历史项。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(execution_id: String, node_key: String, node_name: String, result: String) -> Self {
+        Self {
+            execution_id,
+            round_no: 1,
+            execution_no: 1,
+            node_key,
+            node_name,
+            result,
+            assignee_name: None,
+            decided_by: None,
+            decision_reason: None,
+            decided_at: None,
+        }
+    }
+}
+
+/// 执行历史分页。
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeHistoryPage {
     /// 当前页，按 `execution_no` 升序。

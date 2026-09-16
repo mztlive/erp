@@ -76,6 +76,32 @@ pub struct ContractFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for ContractFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            contract_no: None,
+            customer_id: None,
+            customer_ids: None,
+            historical_contract_ids: Vec::new(),
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for ContractFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -465,13 +491,8 @@ mod tests {
         let filter = ContractFilter {
             contract_no: Some("HT-2026".to_string()),
             customer_id: Some("cust-1".to_string()),
-            customer_ids: None,
-            historical_contract_ids: vec![],
             status: Some(crate::entity::contract::ContractStatus::Effective),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();
@@ -483,17 +504,7 @@ mod tests {
 
     #[test]
     fn contract_filter_without_optional_fields_only_applies_deleted_filter() {
-        let filter = ContractFilter {
-            contract_no: None,
-            customer_id: None,
-            customer_ids: None,
-            historical_contract_ids: vec![],
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        };
+        let filter = ContractFilter::default();
 
         assert_eq!(filter.to_doc(), doc! { "deleted_at": 0_i64 });
     }
@@ -501,15 +512,8 @@ mod tests {
     #[test]
     fn contract_filter_customer_ids_use_in_and_intersect_with_single_id() {
         let in_scope = ContractFilter {
-            contract_no: None,
-            customer_id: None,
             customer_ids: Some(vec!["cust-1".to_string(), "cust-2".to_string()]),
-            historical_contract_ids: vec![],
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
         assert_eq!(
             in_scope.to_doc().get_document("customer_id").unwrap(),

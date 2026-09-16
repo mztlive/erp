@@ -12,8 +12,8 @@ use crate::dto::{
     CreateProductBrandRequest, PageView, ProductBrandListParams, ProductBrandView, SortDir,
     UpdateProductBrandRequest,
 };
+use crate::entity::catalog::ProductBrandId;
 use crate::entity::catalog::product_brand::{ProductBrand, ProductBrandData, ProductBrandUpdate};
-use crate::entity::catalog::{EnableStatus, ProductBrandId};
 use crate::error::Result;
 use crate::ports::{EmptyPendingAttachments, PendingAttachmentBatch};
 use crate::repository::CatalogExt;
@@ -113,11 +113,13 @@ impl CatalogService {
         let id = ProductBrandId::new(next_id());
         let brand = ProductBrand::new(
             id.clone(),
-            ProductBrandData {
-                brand_code: req.brand_code,
-                name: req.name,
-                status: req.status.unwrap_or(EnableStatus::Active),
-                logo_file_asset_id: req.logo_file_asset_id,
+            {
+                let mut data = ProductBrandData::new(req.brand_code, req.name);
+                if let Some(status) = req.status {
+                    data.status = status;
+                }
+                data.logo_file_asset_id = req.logo_file_asset_id;
+                data
             },
             actor.id(),
         )?;

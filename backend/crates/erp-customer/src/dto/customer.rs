@@ -202,7 +202,7 @@ pub struct CustomerDetailView {
 }
 
 /// 客户角色列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CustomerListParams {
     /// 跨页与导出必须使用前一页的当前授权和业务版本。
@@ -286,6 +286,60 @@ pub struct CustomerProfileContactInput {
     pub email: Option<String>,
     /// 是否默认联系人。
     pub is_default: bool,
+}
+
+impl CustomerProfileContactInput {
+    /// 以联系人姓名构造联系人输入，其余可选字段保持空条件。
+    ///
+    /// # 参数
+    /// * `contact_name` - 联系人姓名
+    ///
+    /// # 返回
+    /// 返回仅携带姓名的联系人输入。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(contact_name: impl Into<String>) -> Self {
+        Self {
+            existing_id: None,
+            contact_name: contact_name.into(),
+            title: None,
+            mobile: None,
+            telephone: None,
+            email: None,
+            is_default: false,
+        }
+    }
+
+    /// 设置手机号明文。
+    ///
+    /// # 参数
+    /// * `mobile` - 手机号明文
+    ///
+    /// # 返回
+    /// 返回更新后的联系人输入。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_mobile(mut self, mobile: impl Into<String>) -> Self {
+        self.mobile = Some(mobile.into());
+        self
+    }
+
+    /// 设置是否默认联系人。
+    ///
+    /// # 参数
+    /// * `is_default` - 是否默认联系人
+    ///
+    /// # 返回
+    /// 返回更新后的联系人输入。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_is_default(mut self, is_default: bool) -> Self {
+        self.is_default = is_default;
+        self
+    }
 }
 
 /// 客户资料根命令中的地址输入。
@@ -694,8 +748,9 @@ pub struct CustomerAssignmentListParams {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+    use validator::Validate;
 
-    use super::{AssignmentAction, CustomerListParams, SortDir, normalize_sort};
+    use super::{AssignmentAction, CustomerListParams, CustomerProfileContactInput, SortDir, normalize_sort};
     use crate::entity::customer::{AssignmentRole, CustomerAssignmentCommand};
 
     #[test]
@@ -714,18 +769,9 @@ mod tests {
     #[test]
     fn list_params_normalize_paging_filters_and_sort_defaults() {
         let params = CustomerListParams {
-            scope_version: None,
-            owner_user_ids: None,
-            org_unit_ids: None,
-            include_descendants: None,
             keyword: Some(" C-20 ".to_string()),
-            party_id: None,
-            status: None,
             scope: super::CustomerScope::Mine,
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.keyword.as_deref(), Some("C-20"));
@@ -733,6 +779,22 @@ mod tests {
         assert_eq!(query.paging.page_size, 20);
         assert_eq!(query.paging.sort_by, "created_at");
         assert_eq!(query.paging.sort_dir, SortDir::Desc);
+    }
+
+    #[test]
+    fn contact_input_new_carries_only_name() {
+        let input = CustomerProfileContactInput::new("测试联系人");
+        assert_eq!(input.contact_name, "测试联系人");
+        assert_eq!(input.existing_id, None);
+        assert_eq!(input.mobile, None);
+        assert!(!input.is_default);
+        assert!(input.validate().is_ok());
+
+        let chained = CustomerProfileContactInput::new("联系人").with_mobile("13800000000");
+        assert_eq!(chained.mobile.as_deref(), Some("13800000000"));
+
+        let empty = CustomerProfileContactInput::new("   ");
+        assert!(empty.validate().is_err());
     }
 
     #[test]
@@ -750,18 +812,9 @@ mod tests {
         assert_eq!(query.include_descendants, Some(true));
         assert!(
             CustomerListParams {
-                scope_version: None,
-                owner_user_ids: None,
-                org_unit_ids: None,
                 include_descendants: Some(true),
-                keyword: None,
-                party_id: None,
-                status: None,
                 scope: super::CustomerScope::Mine,
-                page: None,
-                page_size: None,
-                sort_by: None,
-                sort_dir: None,
+                ..Default::default()
             }
             .normalized()
             .is_err()

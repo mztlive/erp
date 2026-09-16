@@ -214,15 +214,8 @@ mod compile_probe_equivalence_tests {
     #[test]
     fn contact_required_value_preserves_none_empty_and_unicode() {
         for expected in [None, Some(""), Some("联系人－☎️𠮷")] {
-            let input = CustomerProfileContactInput {
-                existing_id: None,
-                contact_name: "测试联系人".to_string(),
-                title: None,
-                mobile: expected.map(str::to_string),
-                telephone: None,
-                email: None,
-                is_default: false,
-            };
+            let mut input = CustomerProfileContactInput::new("测试联系人");
+            input.mobile = expected.map(str::to_string);
             assert_eq!(input.required_value(), expected);
             let borrowed = input.mobile.as_ref();
             assert_eq!(borrowed.map(String::as_str), expected);

@@ -68,6 +68,33 @@ pub struct CustomerReceiptFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for CustomerReceiptFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            keyword_ids: None,
+            receipt_ids: None,
+            pending_entry_ids: Vec::new(),
+            receipt_no: None,
+            counterparty_party_id: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for CustomerReceiptFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -260,24 +287,24 @@ fn customer_receipt_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use persistence_core::QueryFilter;
+    use persistence_core::{Pagination, QueryFilter};
 
     use super::CustomerReceiptFilter;
 
     #[test]
+    fn customer_receipt_filter_default_starts_at_page_one_size_twenty() {
+        let filter = CustomerReceiptFilter::default();
+        assert_eq!(filter.page, 1);
+        assert_eq!(filter.page_size, 20);
+        assert_eq!(filter.keyword_ids, None);
+        assert!(filter.pending_entry_ids.is_empty());
+        assert!(!filter.sort_ascending);
+        assert_eq!(filter.page_and_size(), (1, 20));
+    }
+
+    #[test]
     fn receipt_filter_escapes_regex_literals() {
-        let filter = CustomerReceiptFilter {
-            keyword_ids: None,
-            receipt_ids: None,
-            pending_entry_ids: Vec::new(),
-            receipt_no: Some("RC-1.2".to_string()),
-            counterparty_party_id: None,
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        };
+        let filter = CustomerReceiptFilter { receipt_no: Some("RC-1.2".to_string()), ..Default::default() };
 
         let document = filter.to_doc();
         let regex = document.get_document("receipt_no").unwrap();
@@ -287,34 +314,18 @@ mod tests {
 
     #[test]
     fn scope_filters_with_empty_ids_match_nothing() {
-        let receipt_filter = CustomerReceiptFilter {
-            keyword_ids: None,
-            receipt_ids: Some(Vec::new()),
-            pending_entry_ids: Vec::new(),
-            receipt_no: None,
-            counterparty_party_id: None,
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        };
+        let receipt_filter = CustomerReceiptFilter { receipt_ids: Some(Vec::new()), ..Default::default() };
         let receipt_doc = receipt_filter.to_doc();
         assert_eq!(receipt_doc.get_document("id").unwrap().get_array("$in").unwrap().len(), 0);
     }
     #[test]
     fn scope_includes_pending_allocations_and_keeps_structural_filters() {
         let filter = CustomerReceiptFilter {
-            keyword_ids: None,
             receipt_ids: Some(vec!["posted-1".into()]),
             pending_entry_ids: vec!["entry-1".into()],
-            receipt_no: None,
             counterparty_party_id: Some(erp_core::ids::PartyId::new("party-1")),
             status: Some(crate::entity::receivable::CustomerReceiptStatus::InApproval),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
         let document = filter.to_doc();
         let alternatives = document.get_array("$or").unwrap();
@@ -338,20 +349,7 @@ mod keyword_regression_tests {
     use super::*;
     #[test]
     fn keyword_preserves_structural_scope() {
-        let mut filter = CustomerReceiptFilter {
-            keyword_ids: None,
-            receipt_ids: None,
-            pending_entry_ids: Vec::new(),
-            receipt_no: None,
-            counterparty_party_id: None,
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        };
-
-        filter.keyword_ids = Some(Vec::new());
+        let filter = CustomerReceiptFilter { keyword_ids: Some(Vec::new()), ..Default::default() };
         let query = filter.to_doc();
         let clauses = query.get_array("$and").unwrap();
         let ids = clauses[1].as_document().unwrap().get_document("id").unwrap().get_array("$in").unwrap();

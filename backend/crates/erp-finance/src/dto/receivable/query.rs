@@ -107,7 +107,7 @@ pub struct ReceivableAccountSummaryView {
 }
 
 /// 应收往来子账列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct ReceivableAccountListParams {
     /// 跨页必须携带当前授权和业务版本。
@@ -243,7 +243,7 @@ pub enum ReceiptOperatorKind {
 }
 
 /// 客户回款单列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CustomerReceiptListParams {
     /// 跨页必须携带当前授权和业务版本。
@@ -422,7 +422,7 @@ pub struct InvoiceView {
 }
 
 /// 发票列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct InvoiceListParams {
     /// 跨页必须携带当前授权和业务版本。

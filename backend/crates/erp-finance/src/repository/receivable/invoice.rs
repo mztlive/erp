@@ -84,6 +84,34 @@ pub struct InvoiceFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for InvoiceFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            keyword_ids: None,
+            invoice_ids: None,
+            invoice_direction: None,
+            invoice_kind: None,
+            party_id: None,
+            invoice_no: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for InvoiceFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -303,19 +331,7 @@ mod tests {
 
     #[test]
     fn scope_filters_with_empty_ids_match_nothing() {
-        let invoice_filter = InvoiceFilter {
-            keyword_ids: None,
-            invoice_ids: Some(Vec::new()),
-            invoice_direction: None,
-            invoice_kind: None,
-            party_id: None,
-            invoice_no: None,
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        };
+        let invoice_filter = InvoiceFilter { invoice_ids: Some(Vec::new()), ..Default::default() };
         let invoice_doc = invoice_filter.to_doc();
         assert_eq!(invoice_doc.get_document("id").unwrap().get_array("$in").unwrap().len(), 0);
     }

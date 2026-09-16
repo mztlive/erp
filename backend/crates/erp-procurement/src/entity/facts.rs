@@ -181,7 +181,7 @@ pub struct ProductRevisionFact {
 }
 
 /// 责任解析所需的分类父级引用。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProductCategoryFact {
     /// 父分类；None 表示根。
     pub parent_category_id: Option<ProductCategoryId>,
@@ -242,7 +242,7 @@ pub struct AvailabilityFact {
 }
 
 /// 供应商角色的当前商务修订引用。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SupplierRoleFact {
     /// 当前商务修订指针。
     pub current_commercial_profile_revision_id: Option<SupplierCommercialProfileRevisionId>,
@@ -258,6 +258,35 @@ pub struct SupplierCommercialFact {
 }
 
 impl SupplierCommercialFact {
+    /// 由必填付款代码构造商务事实。
+    ///
+    /// # 参数
+    /// * `payment_term_code` - 供应商领域解释后的付款代码
+    ///
+    /// # 返回
+    /// 返回经营类目为空的商务事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(payment_term_code: impl Into<String>) -> Self {
+        Self { payment_term_code: payment_term_code.into(), business_category: None }
+    }
+
+    /// 设置供应商经营类目。
+    ///
+    /// # 参数
+    /// * `business_category` - 供应商领域解释后的经营类目
+    ///
+    /// # 返回
+    /// 返回更新后的商务事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_business_category(mut self, business_category: impl Into<String>) -> Self {
+        self.business_category = Some(business_category.into());
+        self
+    }
+
     /// 返回提供方已经解释的付款条件原值。
     pub fn effective_payment_term_code(&self) -> String {
         self.payment_term_code.clone()
@@ -305,6 +334,53 @@ pub struct IdentityOwnerFact {
     pub is_admin: bool,
 }
 
+impl IdentityOwnerFact {
+    /// 由必填账号身份与姓名构造资格事实。
+    ///
+    /// # 参数
+    /// * `id` - 账号身份
+    /// * `name` - 当前姓名
+    ///
+    /// # 返回
+    /// 返回不可登录、非管理员的资格事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
+        Self { id: id.into(), name: name.into(), can_login: false, is_admin: false }
+    }
+
+    /// 设置账号是否可登录。
+    ///
+    /// # 参数
+    /// * `can_login` - 账号当前是否可登录
+    ///
+    /// # 返回
+    /// 返回更新后的资格事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_can_login(mut self, can_login: bool) -> Self {
+        self.can_login = can_login;
+        self
+    }
+
+    /// 设置是否为后台管理员类型。
+    ///
+    /// # 参数
+    /// * `is_admin` - 是否后台管理员类型
+    ///
+    /// # 返回
+    /// 返回更新后的资格事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_is_admin(mut self, is_admin: bool) -> Self {
+        self.is_admin = is_admin;
+        self
+    }
+}
+
 /// 审计记录中采购幂等回放所需字段。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuditReceiptFact {
@@ -337,9 +413,94 @@ pub struct PaymentTermFact {
     pub calendar_due: Option<(erp_core::common::calendar::CalendarPeriod, u16)>,
 }
 
+impl PaymentTermFact {
+    /// 由必填规范化代码构造付款事实。
+    ///
+    /// # 参数
+    /// * `canonical_code` - 提供方规范化的受控代码
+    ///
+    /// # 返回
+    /// 返回无先款门禁、无比例、无账期的付款事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(canonical_code: impl Into<String>) -> Self {
+        Self {
+            canonical_code: canonical_code.into(),
+            prepay_gate: false,
+            prepay_minimum_ratio: None,
+            days_after_delivery: None,
+            calendar_due: None,
+        }
+    }
+
+    /// 设置先款门禁。
+    ///
+    /// # 参数
+    /// * `prepay_gate` - 先款门禁
+    ///
+    /// # 返回
+    /// 返回更新后的付款事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_prepay_gate(mut self, prepay_gate: bool) -> Self {
+        self.prepay_gate = prepay_gate;
+        self
+    }
+
+    /// 设置受控先款最低比例。
+    ///
+    /// # 参数
+    /// * `prepay_minimum_ratio` - 先款最低比例
+    ///
+    /// # 返回
+    /// 返回更新后的付款事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_prepay_minimum_ratio(mut self, prepay_minimum_ratio: Rate) -> Self {
+        self.prepay_minimum_ratio = Some(prepay_minimum_ratio);
+        self
+    }
+
+    /// 设置预计交期后付款天数。
+    ///
+    /// # 参数
+    /// * `days_after_delivery` - 预计交期后付款天数
+    ///
+    /// # 返回
+    /// 返回更新后的付款事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_days_after_delivery(mut self, days_after_delivery: u64) -> Self {
+        self.days_after_delivery = Some(days_after_delivery);
+        self
+    }
+
+    /// 设置自然周期到期规则。
+    ///
+    /// # 参数
+    /// * `calendar_due` - 自然周期及期末后付款天数
+    ///
+    /// # 返回
+    /// 返回更新后的付款事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_calendar_due(
+        mut self,
+        calendar_due: (erp_core::common::calendar::CalendarPeriod, u16),
+    ) -> Self {
+        self.calendar_due = Some(calendar_due);
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::ProductKind;
+    use super::{ProductCategoryFact, ProductKind, SupplierCommercialFact, SupplierRoleFact};
 
     /// 已冻结的采购责任 selector 必须沿用商品类型 wire 代码。
     #[test]
@@ -355,5 +516,20 @@ mod tests {
             assert_eq!(serde_json::from_value::<ProductKind>(value).unwrap(), kind);
             assert_eq!(kind.as_str(), code);
         }
+    }
+
+    #[test]
+    fn optional_fact_wrappers_default_to_empty() {
+        assert!(ProductCategoryFact::default().parent_category_id.is_none());
+        assert!(SupplierRoleFact::default().current_commercial_profile_revision_id.is_none());
+    }
+
+    #[test]
+    fn supplier_commercial_fact_constructor_sets_code_only() {
+        let fact = SupplierCommercialFact::new("NET-30");
+        assert_eq!(fact.payment_term_code, "NET-30");
+        assert!(fact.business_category.is_none());
+        let categorized = SupplierCommercialFact::new("NET-30").with_business_category("茶叶");
+        assert_eq!(categorized.business_category.as_deref(), Some("茶叶"));
     }
 }

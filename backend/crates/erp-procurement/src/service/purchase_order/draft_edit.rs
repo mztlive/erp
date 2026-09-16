@@ -227,10 +227,10 @@ mod tests {
     /// # 错误
     /// 无。
     fn save_request(quantity: &str) -> SavePurchaseOrderDraftRequest {
-        SavePurchaseOrderDraftRequest {
-            expected_lock_version: 3,
-            payment_term_code: Some(" NET-30 ".to_string()),
-            lines: vec![SavePurchaseOrderLine {
+        SavePurchaseOrderDraftRequest::new("save-key-1")
+            .with_expected_lock_version(3)
+            .with_payment_term_code(" NET-30 ")
+            .with_lines(vec![SavePurchaseOrderLine {
                 line_type: PurchaseLineType::ItemService,
                 procurement_confirmation_line_id: None,
                 sku_id: Some("sku-1".to_string()),
@@ -247,10 +247,7 @@ mod tests {
                 sales_order_submission_line_id: Some("sales-submission-line-1".to_string()),
                 allocated_quantity: Some(quantity.to_string()),
                 gross_amount: None,
-            }],
-            line_patches: vec![],
-            idempotency_key: "save-key-1".to_string(),
-        }
+            }])
     }
     /// 验证非创建人无法观察目标采购单的版本或状态错误。
     ///

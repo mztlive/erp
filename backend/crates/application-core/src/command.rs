@@ -91,7 +91,7 @@ impl CommandIdentity {
 }
 
 /// Repository 返回的命令收据最小事实。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CommandReceiptFact {
     pub id: String,
     pub actor_id: String,
@@ -100,6 +100,83 @@ pub struct CommandReceiptFact {
     pub resource_id: Option<String>,
     pub success: bool,
     pub message: Option<String>,
+}
+
+impl CommandReceiptFact {
+    /// 由必填收据身份字段构造最小事实。
+    ///
+    /// # 参数
+    /// * `id` - 收据主键
+    /// * `actor_id` - 操作人身份
+    /// * `action` - 动作名称
+    /// * `resource_type` - 资源类型
+    ///
+    /// # 返回
+    /// 返回资源、结果与消息为空的收据事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(
+        id: impl Into<String>,
+        actor_id: impl Into<String>,
+        action: impl Into<String>,
+        resource_type: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            actor_id: actor_id.into(),
+            action: action.into(),
+            resource_type: resource_type.into(),
+            resource_id: None,
+            success: false,
+            message: None,
+        }
+    }
+
+    /// 设置目标资源 ID。
+    ///
+    /// # 参数
+    /// * `resource_id` - 目标资源 ID
+    ///
+    /// # 返回
+    /// 返回更新后的收据事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_resource_id(mut self, resource_id: impl Into<String>) -> Self {
+        self.resource_id = Some(resource_id.into());
+        self
+    }
+
+    /// 设置执行结果。
+    ///
+    /// # 参数
+    /// * `success` - 是否执行成功
+    ///
+    /// # 返回
+    /// 返回更新后的收据事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_success(mut self, success: bool) -> Self {
+        self.success = success;
+        self
+    }
+
+    /// 设置收据消息。
+    ///
+    /// # 参数
+    /// * `message` - 收据消息
+    ///
+    /// # 返回
+    /// 返回更新后的收据事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_message(mut self, message: impl Into<String>) -> Self {
+        self.message = Some(message.into());
+        self
+    }
 }
 
 /// 已提交收据与当前请求的纯匹配结果。
@@ -362,15 +439,10 @@ mod tests {
         .unwrap();
         assert!(!receipt.id().contains(&first.idempotency_key));
         assert!(!receipt.message(None).contains(&first.idempotency_key));
-        let fact = CommandReceiptFact {
-            id: receipt.id().to_string(),
-            actor_id: "actor-1".to_string(),
-            action: "payment.commit".to_string(),
-            resource_type: "payment".to_string(),
-            resource_id: Some("payment-1".to_string()),
-            success: true,
-            message: Some(receipt.message(None)),
-        };
+        let fact = CommandReceiptFact::new(receipt.id().to_string(), "actor-1", "payment.commit", "payment")
+            .with_resource_id("payment-1")
+            .with_success(true)
+            .with_message(receipt.message(None));
         assert_eq!(receipt.match_fact(&fact), CommandReceiptMatch::SamePayload("payment-1".to_string()));
         let changed_receipt = CommandReceipt::from_payload(
             "receipt-",
@@ -416,17 +488,32 @@ mod tests {
             legacy_digest_parts(&["actor-1", "payment.commit", "payment", "legacy-key"])
         );
         let legacy_fingerprint = legacy_digest_parts(&["payment.commit", "payment", &legacy_payload]);
-        let fact = CommandReceiptFact {
-            id: legacy_id.clone(),
-            actor_id: "actor-1".to_string(),
-            action: "payment.commit".to_string(),
-            resource_type: "payment".to_string(),
-            resource_id: Some("payment-1".to_string()),
-            success: true,
-            message: Some(format!("command_sha256={legacy_fingerprint}")),
-        };
+        let fact = CommandReceiptFact::new(legacy_id.clone(), "actor-1", "payment.commit", "payment")
+            .with_resource_id("payment-1")
+            .with_success(true)
+            .with_message(format!("command_sha256={legacy_fingerprint}"));
         assert!(receipt.id_candidates().contains(&legacy_id));
         assert_eq!(receipt.match_fact(&fact), CommandReceiptMatch::SamePayload("payment-1".to_string()));
+    }
+
+    #[test]
+    fn receipt_fact_constructor_sets_identity_only() {
+        let fact = CommandReceiptFact::new("receipt-1", "actor-1", "payment.commit", "payment");
+        assert_eq!(fact.id, "receipt-1");
+        assert_eq!(fact.actor_id, "actor-1");
+        assert!(fact.resource_id.is_none());
+        assert!(!fact.success);
+        assert!(fact.message.is_none());
+        let complete = CommandReceiptFact::new("receipt-1", "actor-1", "payment.commit", "payment")
+            .with_resource_id("payment-1")
+            .with_success(true)
+            .with_message("command_fingerprint=sha256-v1:abc");
+        assert_eq!(complete.resource_id.as_deref(), Some("payment-1"));
+        assert!(complete.success);
+        assert!(complete.message.is_some());
+        let empty = CommandReceiptFact::default();
+        assert!(empty.id.is_empty());
+        assert!(!empty.success);
     }
 
     #[test]
@@ -446,15 +533,10 @@ mod tests {
             hex::encode(Sha256::digest(b"actor-1|work_item.reassign|wi-1|legacy-key"))
         );
         let legacy_fingerprint = legacy_digest_parts(&["3", "user-2", "reason"]);
-        let fact = CommandReceiptFact {
-            id: legacy_id.clone(),
-            actor_id: "actor-1".to_string(),
-            action: "work_item.reassign".to_string(),
-            resource_type: "work_item".to_string(),
-            resource_id: Some("wi-1".to_string()),
-            success: true,
-            message: Some(format!("command_sha256={legacy_fingerprint}; reason=safe")),
-        };
+        let fact = CommandReceiptFact::new(legacy_id.clone(), "actor-1", "work_item.reassign", "work_item")
+            .with_resource_id("wi-1")
+            .with_success(true)
+            .with_message(format!("command_sha256={legacy_fingerprint}; reason=safe"));
         assert!(receipt.id_candidates().contains(&legacy_id));
         assert_eq!(receipt.match_fact(&fact), CommandReceiptMatch::SamePayload("wi-1".to_string()));
         assert_ne!(

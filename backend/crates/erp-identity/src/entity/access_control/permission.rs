@@ -29,6 +29,60 @@ pub struct PermissionData {
     pub system: bool,
 }
 
+impl PermissionData {
+    /// 由必填资源、动作与展示名称构造权限创建数据。
+    ///
+    /// # 参数
+    /// * `resource` - 权限资源（如 `sales_order`）
+    /// * `action` - 权限动作（如 `approve`）
+    /// * `name` - 展示名称
+    ///
+    /// # 返回
+    /// 返回描述为空、非系统权限的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(resource: impl Into<String>, action: impl Into<String>, name: impl Into<String>) -> Self {
+        Self {
+            resource: resource.into(),
+            action: action.into(),
+            name: name.into(),
+            description: None,
+            system: false,
+        }
+    }
+
+    /// 设置权限描述。
+    ///
+    /// # 参数
+    /// * `description` - 权限描述
+    ///
+    /// # 返回
+    /// 返回更新后的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    /// 设置是否为系统内建权限。
+    ///
+    /// # 参数
+    /// * `system` - 系统内建标记
+    ///
+    /// # 返回
+    /// 返回更新后的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_system(mut self, system: bool) -> Self {
+        self.system = system;
+        self
+    }
+}
+
 /// 权限定义更新数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct PermissionUpdate {
@@ -143,13 +197,7 @@ mod tests {
     use super::{Permission, PermissionData, PermissionUpdate};
 
     fn data() -> PermissionData {
-        PermissionData {
-            resource: " SalesOrder".to_string(),
-            action: "APPROVE".to_string(),
-            name: " 销售单审批 ".to_string(),
-            description: Some(" 审批销售单 ".to_string()),
-            system: false,
-        }
+        PermissionData::new(" SalesOrder", "APPROVE", " 销售单审批 ").with_description(" 审批销售单 ")
     }
 
     /// happy path：resource:action 小写规范化，name/description trim。
@@ -206,11 +254,19 @@ mod tests {
     /// 系统权限删除保护。
     #[test]
     fn system_permission_is_not_deletable() {
-        let system =
-            Permission::new(PermissionId::new("perm-2"), PermissionData { system: true, ..data() }).unwrap();
+        let system = Permission::new(PermissionId::new("perm-2"), data().with_system(true)).unwrap();
         assert!(system.ensure_deletable().is_err());
         let custom = Permission::new(PermissionId::new("perm-3"), data()).unwrap();
         assert!(custom.ensure_deletable().is_ok());
+    }
+
+    #[test]
+    fn permission_data_constructor_sets_required_fields() {
+        let data = PermissionData::new("sales_order", "approve", "销售单审批").with_description("审批销售单");
+        assert_eq!(data.resource, "sales_order");
+        assert_eq!(data.action, "approve");
+        assert_eq!(data.description.as_deref(), Some("审批销售单"));
+        assert!(!data.system);
     }
 
     /// JSON 往返。

@@ -34,6 +34,72 @@ pub struct ActorAccess {
     pub managed_owner_ids: Option<Vec<String>>,
     pub can_manage: bool,
 }
+impl ActorAccess {
+    /// 以必填身份构造访问快照；权限与范围默认为空。
+    ///
+    /// # 参数
+    /// * `actor_id` - 已认证操作人
+    ///
+    /// # 返回
+    /// 返回空权限的访问快照。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(actor_id: String) -> Self {
+        Self {
+            actor_id,
+            permissions: Vec::new(),
+            participant_document_ids: HashSet::new(),
+            managed_owner_ids: None,
+            can_manage: false,
+        }
+    }
+
+    /// 设置权限代码。
+    ///
+    /// # 参数
+    /// * `permissions` - 权限代码
+    ///
+    /// # 返回
+    /// 返回更新后的快照。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_permissions(mut self, permissions: Vec<String>) -> Self {
+        self.permissions = permissions;
+        self
+    }
+
+    /// 设置管理数据范围。
+    ///
+    /// # 参数
+    /// * `managed_owner_ids` - 管理范围内负责人
+    ///
+    /// # 返回
+    /// 返回更新后的快照。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_managed_owner_ids(mut self, ids: Option<Vec<String>>) -> Self {
+        self.managed_owner_ids = ids;
+        self
+    }
+
+    /// 设置管理权限标记。
+    ///
+    /// # 参数
+    /// * `can_manage` - 是否具备管理权限
+    ///
+    /// # 返回
+    /// 返回更新后的快照。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_can_manage(mut self, can_manage: bool) -> Self {
+        self.can_manage = can_manage;
+        self
+    }
+}
 
 impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
     /// 写命令执行前重验对象存在、阅读权限和参与依据。

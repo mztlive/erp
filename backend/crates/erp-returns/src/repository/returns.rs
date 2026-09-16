@@ -87,6 +87,30 @@ pub struct SalesReturnCaseFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for SalesReturnCaseFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            return_no: None,
+            sales_order_id: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for SalesReturnCaseFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -156,6 +180,31 @@ pub struct PurchaseReturnOrderFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl Default for PurchaseReturnOrderFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            purchase_return_no: None,
+            purchase_order_id: None,
+            authorized_purchase_order_ids: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
 }
 
 impl QueryFilter for PurchaseReturnOrderFilter {
@@ -260,6 +309,30 @@ pub struct CustomerRefundFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl Default for CustomerRefundFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            refund_no: None,
+            customer_id: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
 }
 
 impl QueryFilter for CustomerRefundFilter {
@@ -816,10 +889,7 @@ mod tests {
             return_no: Some("RT-2026".to_string()),
             sales_order_id: Some(erp_core::ids::SalesOrderId::new("so-1")),
             status: Some(crate::entity::returns::SalesReturnCaseStatus::Processing),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();
@@ -833,14 +903,9 @@ mod tests {
     #[test]
     fn purchase_return_filter_filters_by_order_and_status() {
         let filter = PurchaseReturnOrderFilter {
-            purchase_return_no: None,
             purchase_order_id: Some(erp_core::ids::PurchaseOrderId::new("po-1")),
-            authorized_purchase_order_ids: None,
             status: Some(PurchaseReturnStatus::Returned),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();
@@ -865,38 +930,22 @@ mod tests {
     fn purchase_return_missing_authorized_source_ids_stay_empty() {
         use entity_core::NOT_DELETED_TIMESTAMP_BSON;
         let empty = PurchaseReturnOrderFilter {
-            purchase_return_no: None,
-            purchase_order_id: None,
             authorized_purchase_order_ids: Some(Vec::new()),
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
         assert_eq!(empty.to_doc(), doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false });
 
         let out_of_scope = PurchaseReturnOrderFilter {
-            purchase_return_no: None,
             purchase_order_id: Some(erp_core::ids::PurchaseOrderId::new("po-1")),
             authorized_purchase_order_ids: Some(vec!["po-2".into()]),
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
         assert_eq!(out_of_scope.to_doc(), doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false });
 
         let in_scope = PurchaseReturnOrderFilter {
-            purchase_return_no: None,
             purchase_order_id: Some(erp_core::ids::PurchaseOrderId::new("po-1")),
             authorized_purchase_order_ids: Some(vec!["po-1".into()]),
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
         assert_eq!(
             in_scope.to_doc(),
@@ -908,12 +957,9 @@ mod tests {
     fn refund_filter_escapes_regex_and_sort_whitelist_falls_back() {
         let filter = CustomerRefundFilter {
             refund_no: Some("RF-1.1".to_string()),
-            customer_id: None,
             status: Some(CustomerRefundStatus::Posted),
-            page: 1,
-            page_size: 20,
             sort_by: Some("handled_by".to_string()),
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();

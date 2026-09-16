@@ -21,6 +21,22 @@ pub struct ProcurementResponsibilityRuleFilter {
     pub page_size: u32,
 }
 
+impl Default for ProcurementResponsibilityRuleFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self { rule_type: None, owner_user_id: None, status: None, page: 1, page_size: 20 }
+    }
+}
+
 impl QueryFilter for ProcurementResponsibilityRuleFilter {
     /// 构造包含软删除约束的 MongoDB 查询文档。
     ///

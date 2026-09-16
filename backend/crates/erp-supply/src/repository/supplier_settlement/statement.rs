@@ -121,6 +121,24 @@ pub struct SupplierSettlementStatementFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for SupplierSettlementStatementFilter {
+    fn default() -> Self {
+        Self {
+            q: None,
+            keyword_supplier_ids: Vec::new(),
+            statement_no: None,
+            supplier_id: None,
+            status: None,
+            period_from: None,
+            period_to: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 /// 与结算单列表同一筛选水位计算的服务端汇总。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SupplierSettlementStatementStatsRow {

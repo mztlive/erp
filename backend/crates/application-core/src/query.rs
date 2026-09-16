@@ -49,6 +49,22 @@ pub struct PageView<T> {
     pub page_size: u32,
 }
 
+impl<T> Default for PageView<T> {
+    /// 返回首屏空页（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回条目为空、总数为零的首页视图。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self { items: Vec::new(), total: 0, page: 1, page_size: 20 }
+    }
+}
+
 /// 校验文本去除首尾空白后非空。
 pub fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationError> {
     if value.trim().is_empty() {
@@ -74,7 +90,7 @@ pub fn page_size_or_default(page_size: Option<u32>) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::page_size_or_default;
+    use super::{PageView, page_size_or_default};
 
     #[test]
     fn page_size_is_bounded_for_non_http_callers() {
@@ -82,5 +98,14 @@ mod tests {
         assert_eq!(page_size_or_default(Some(0)), 1);
         assert_eq!(page_size_or_default(Some(100)), 100);
         assert_eq!(page_size_or_default(Some(u32::MAX)), 100);
+    }
+
+    #[test]
+    fn page_view_default_is_first_page_size_20() {
+        let view: PageView<String> = PageView::default();
+        assert!(view.items.is_empty());
+        assert_eq!(view.total, 0);
+        assert_eq!(view.page, 1);
+        assert_eq!(view.page_size, 20);
     }
 }

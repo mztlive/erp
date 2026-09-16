@@ -244,12 +244,7 @@ mod tests {
     }
 
     fn section(label: &str, value: &str) -> WorkItemSummarySection {
-        WorkItemSummarySection {
-            label: label.to_string(),
-            value: value.to_string(),
-            numeric: None,
-            object_id: None,
-        }
+        WorkItemSummarySection::new(label.to_string(), value.to_string())
     }
 
     fn dummy_view(owner_id: Option<&str>) -> WorkItemView {

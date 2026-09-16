@@ -32,19 +32,18 @@ pub fn document_approval_view(
         definition: binding.map(definition_view_from_binding),
         instance,
         recent_history: Vec::new(),
-        history_page: DocumentApprovalHistoryPageView { next_cursor: None, has_more: false },
+        history_page: DocumentApprovalHistoryPageView::default(),
         allowed_actions: allowed_document_actions(status),
     }
 }
 
 /// 由冻结绑定投影定义摘要。节点详情不在单据详情展开。
 fn definition_view_from_binding(binding: &ApprovalDefinitionBinding) -> DocumentApprovalDefinitionView {
-    DocumentApprovalDefinitionView {
-        id: binding.approval_process_definition_id.as_ref().to_string(),
-        name: String::new(),
-        version: binding.approval_definition_version,
-        nodes: Vec::new(),
-    }
+    DocumentApprovalDefinitionView::new(
+        binding.approval_process_definition_id.as_ref().to_string(),
+        String::new(),
+    )
+    .with_version(binding.approval_definition_version)
 }
 
 /// 单据详情允许的审批相关动作。不含选择定义或审批人。

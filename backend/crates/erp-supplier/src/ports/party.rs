@@ -75,6 +75,30 @@ pub struct PartyListFact {
 }
 
 /// 主体当前修订的法定名称事实。
+impl PartyListFact {
+    /// 以必填身份构造主体稳定事实；可选维度默认为空。
+    ///
+    /// # 参数
+    /// * `id` - 主体稳定 ID
+    /// * `party_no` - 主体编号
+    ///
+    /// # 返回
+    /// 返回启用状态的事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(id: String, party_no: String) -> Self {
+        Self {
+            id,
+            party_no,
+            status: PartyStatusFact::Active,
+            unified_credit_code: None,
+            version: 1,
+            current_revision_id: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PartyRevisionFact {
     /// 修订稳定 ID。
@@ -116,6 +140,46 @@ pub struct PartyContactFact {
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+}
+
+impl PartyContactFact {
+    /// 以必填身份构造联系人事实；可选维度默认为空。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键
+    /// * `party_id` - 所属企业主体 ID
+    /// * `contact_name` - 联系人姓名
+    /// * `mobile_masked` - 手机号掩码
+    /// * `valid_from` - 生效开始日期
+    ///
+    /// # 返回
+    /// 返回启用状态的联系人事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(
+        id: String,
+        party_id: String,
+        contact_name: String,
+        mobile_masked: String,
+        valid_from: String,
+    ) -> Self {
+        Self {
+            id,
+            party_id,
+            contact_name,
+            title: None,
+            telephone: None,
+            mobile_masked,
+            email: None,
+            valid_from,
+            valid_to: None,
+            is_default: false,
+            status: EffectiveRecordStatusFact::Active,
+            version: 1,
+            created_at: 0,
+        }
+    }
 }
 
 /// 地址响应事实；字段与原 `PartyAddressView` JSON 对齐。

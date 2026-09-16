@@ -150,6 +150,64 @@ pub struct CreatePurchaseOrderResult {
     pub reference: String,
 }
 
+impl CreatePurchaseOrderResult {
+    /// 由必填采购单身份与业务引用构造创建结果。
+    ///
+    /// # 参数
+    /// * `purchase_order_id` - 采购单主键
+    /// * `purchase_no` - 采购单号
+    /// * `reference` - 业务引用
+    ///
+    /// # 返回
+    /// 返回零版本、非重放的创建结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(
+        purchase_order_id: impl Into<String>,
+        purchase_no: impl Into<String>,
+        reference: impl Into<String>,
+    ) -> Self {
+        Self {
+            purchase_order_id: purchase_order_id.into(),
+            purchase_no: purchase_no.into(),
+            lock_version: 0,
+            replayed: false,
+            reference: reference.into(),
+        }
+    }
+
+    /// 设置乐观锁版本。
+    ///
+    /// # 参数
+    /// * `lock_version` - 乐观锁版本
+    ///
+    /// # 返回
+    /// 返回更新后的创建结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_lock_version(mut self, lock_version: u64) -> Self {
+        self.lock_version = lock_version;
+        self
+    }
+
+    /// 设置是否为幂等重放。
+    ///
+    /// # 参数
+    /// * `replayed` - 是否复用已有创建结果
+    ///
+    /// # 返回
+    /// 返回更新后的创建结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_replayed(mut self, replayed: bool) -> Self {
+        self.replayed = replayed;
+        self
+    }
+}
+
 /// 供给分配的一条精确来源与数量。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
@@ -173,6 +231,67 @@ pub struct SourcingLineAssignment {
     /// 预计交付日；采购来源不得晚于销售承诺期限，库存来源保留同一请求形状。
     #[validate(custom(function = "non_blank", message = "预计交付日不能为空"))]
     pub expected_delivery_date: String,
+}
+
+impl SourcingLineAssignment {
+    /// 由必填销售行、依据、数量与预计交付日构造选源分配。
+    ///
+    /// # 参数
+    /// * `sales_order_line_id` - 销售稳定行身份
+    /// * `basis_id` - 本行选用的精确依据
+    /// * `quantity` - 本次分配数量
+    /// * `expected_delivery_date` - 预计交付日
+    ///
+    /// # 返回
+    /// 返回供应商采购来源、目标仓为空的选源分配。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(
+        sales_order_line_id: impl Into<String>,
+        basis_id: impl Into<String>,
+        quantity: impl Into<String>,
+        expected_delivery_date: impl Into<String>,
+    ) -> Self {
+        Self {
+            sales_order_line_id: sales_order_line_id.into(),
+            basis_id: basis_id.into(),
+            source_type: SupplySourceType::Purchase,
+            target_warehouse_id: None,
+            quantity: quantity.into(),
+            expected_delivery_date: expected_delivery_date.into(),
+        }
+    }
+
+    /// 设置供给来源。
+    ///
+    /// # 参数
+    /// * `source_type` - 供给来源
+    ///
+    /// # 返回
+    /// 返回更新后的选源分配。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_source_type(mut self, source_type: SupplySourceType) -> Self {
+        self.source_type = source_type;
+        self
+    }
+
+    /// 设置采购且由仓库履约时的目标收货仓。
+    ///
+    /// # 参数
+    /// * `target_warehouse_id` - 目标收货仓
+    ///
+    /// # 返回
+    /// 返回更新后的选源分配。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_target_warehouse_id(mut self, target_warehouse_id: impl Into<String>) -> Self {
+        self.target_warehouse_id = Some(target_warehouse_id.into());
+        self
+    }
 }
 
 /// 一次确认库存与采购供给分配的请求。
@@ -279,6 +398,77 @@ pub struct CreatePurchaseOrdersFromSourcingResult {
     pub reference: String,
 }
 
+impl CreatePurchaseOrdersFromSourcingResult {
+    /// 由必填任务状态与业务引用构造选源确认结果。
+    ///
+    /// # 参数
+    /// * `work_item_status` - 本次同步后的供给分配任务状态
+    /// * `reference` - 业务引用（来源销售单）
+    ///
+    /// # 返回
+    /// 返回订单与预占为空、非重放的确认结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(work_item_status: impl Into<String>, reference: impl Into<String>) -> Self {
+        Self {
+            orders: Vec::new(),
+            stock_reservations: Vec::new(),
+            work_item_status: work_item_status.into(),
+            replayed: false,
+            reference: reference.into(),
+        }
+    }
+
+    /// 设置本次创建的采购单。
+    ///
+    /// # 参数
+    /// * `orders` - 本次创建并提交或幂等回放的采购单
+    ///
+    /// # 返回
+    /// 返回更新后的确认结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_orders(mut self, orders: Vec<CreatePurchaseOrderResult>) -> Self {
+        self.orders = orders;
+        self
+    }
+
+    /// 设置本次建立的库存预占。
+    ///
+    /// # 参数
+    /// * `stock_reservations` - 本次建立或幂等回放的现有库存销售预占
+    ///
+    /// # 返回
+    /// 返回更新后的确认结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_stock_reservations(
+        mut self,
+        stock_reservations: Vec<ExistingStockReservationResult>,
+    ) -> Self {
+        self.stock_reservations = stock_reservations;
+        self
+    }
+
+    /// 设置是否为幂等重放。
+    ///
+    /// # 参数
+    /// * `replayed` - 是否复用已有供给分配结果
+    ///
+    /// # 返回
+    /// 返回更新后的确认结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_replayed(mut self, replayed: bool) -> Self {
+        self.replayed = replayed;
+        self
+    }
+}
+
 /// 现有库存供给分配结果。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ExistingStockReservationResult {
@@ -315,6 +505,86 @@ pub struct SavePurchaseOrderDraftRequest {
 }
 
 impl SavePurchaseOrderDraftRequest {
+    /// 由必填幂等键构造保存草稿请求。
+    ///
+    /// # 参数
+    /// * `idempotency_key` - 幂等键（同内容重复保存返回同一结果）
+    ///
+    /// # 返回
+    /// 返回零版本、行载荷为空的保存请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(idempotency_key: impl Into<String>) -> Self {
+        Self {
+            expected_lock_version: 0,
+            payment_term_code: None,
+            lines: Vec::new(),
+            line_patches: Vec::new(),
+            idempotency_key: idempotency_key.into(),
+        }
+    }
+
+    /// 设置期望的乐观锁版本。
+    ///
+    /// # 参数
+    /// * `expected_lock_version` - 期望的乐观锁版本
+    ///
+    /// # 返回
+    /// 返回更新后的保存请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_expected_lock_version(mut self, expected_lock_version: u64) -> Self {
+        self.expected_lock_version = expected_lock_version;
+        self
+    }
+
+    /// 设置付款条件。
+    ///
+    /// # 参数
+    /// * `payment_term_code` - 付款条件
+    ///
+    /// # 返回
+    /// 返回更新后的保存请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_payment_term_code(mut self, payment_term_code: impl Into<String>) -> Self {
+        self.payment_term_code = Some(payment_term_code.into());
+        self
+    }
+
+    /// 设置完整行集合。
+    ///
+    /// # 参数
+    /// * `lines` - 完整行集合
+    ///
+    /// # 返回
+    /// 返回更新后的保存请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_lines(mut self, lines: Vec<SavePurchaseOrderLine>) -> Self {
+        self.lines = lines;
+        self
+    }
+
+    /// 设置草稿行补丁集合。
+    ///
+    /// # 参数
+    /// * `line_patches` - 草稿行可编辑字段快照
+    ///
+    /// # 返回
+    /// 返回更新后的保存请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_line_patches(mut self, line_patches: Vec<SavePurchaseOrderLinePatch>) -> Self {
+        self.line_patches = line_patches;
+        self
+    }
+
     /// 校验保存请求只使用一种行载荷。
     ///
     /// # 参数
@@ -778,4 +1048,103 @@ pub struct PurchaseReviewResult {
     pub lock_version: u64,
     /// 业务引用。
     pub reference: String,
+}
+
+impl PurchaseReviewResult {
+    /// 由必填待办身份、版本与审核结论构造财务审核结果。
+    ///
+    /// # 参数
+    /// * `work_item_id` - 已完成的审核待办
+    /// * `work_item_status` - 待办终态
+    /// * `task_version` - 完成后的待办版本
+    /// * `subject_version` - 本次审核锁定的采购提交版本
+    /// * `review_result` - 审核结论（`APPROVED`/`REJECTED`）
+    /// * `reference` - 业务引用
+    ///
+    /// # 返回
+    /// 返回生效版本与应付分录为空、零锁版本的审核结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(
+        work_item_id: impl Into<String>,
+        work_item_status: impl Into<String>,
+        task_version: impl Into<String>,
+        subject_version: impl Into<String>,
+        review_result: impl Into<String>,
+        reference: impl Into<String>,
+    ) -> Self {
+        Self {
+            work_item_id: work_item_id.into(),
+            work_item_status: work_item_status.into(),
+            task_version: task_version.into(),
+            subject_version: subject_version.into(),
+            review_result: review_result.into(),
+            revision_id: None,
+            revision_no: None,
+            payable_entry_id: None,
+            lock_version: 0,
+            reference: reference.into(),
+        }
+    }
+
+    /// 设置通过时形成的生效版本。
+    ///
+    /// # 参数
+    /// * `revision_id` - 生效版本 ID
+    ///
+    /// # 返回
+    /// 返回更新后的审核结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_revision_id(mut self, revision_id: impl Into<String>) -> Self {
+        self.revision_id = Some(revision_id.into());
+        self
+    }
+
+    /// 设置通过时形成的版本号。
+    ///
+    /// # 参数
+    /// * `revision_no` - 版本号
+    ///
+    /// # 返回
+    /// 返回更新后的审核结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_revision_no(mut self, revision_no: u32) -> Self {
+        self.revision_no = Some(revision_no);
+        self
+    }
+
+    /// 设置通过时形成的应付分录。
+    ///
+    /// # 参数
+    /// * `payable_entry_id` - 应付分录 ID
+    ///
+    /// # 返回
+    /// 返回更新后的审核结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_payable_entry_id(mut self, payable_entry_id: impl Into<String>) -> Self {
+        self.payable_entry_id = Some(payable_entry_id.into());
+        self
+    }
+
+    /// 设置新乐观锁版本。
+    ///
+    /// # 参数
+    /// * `lock_version` - 新乐观锁版本
+    ///
+    /// # 返回
+    /// 返回更新后的审核结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_lock_version(mut self, lock_version: u64) -> Self {
+        self.lock_version = lock_version;
+        self
+    }
 }

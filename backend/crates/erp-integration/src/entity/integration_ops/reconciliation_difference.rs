@@ -42,6 +42,44 @@ pub struct ReconciliationDifferenceData {
     /// 右侧不可变证据引用。
     pub right_fact_reference: Option<String>,
 }
+impl ReconciliationDifferenceData {
+    /// 以必填三元组构造差异创建数据；证据引用默认为空。
+    ///
+    /// # 参数
+    /// * `business_object_type` - 差异对象类型
+    /// * `business_object_id` - 差异对象 ID
+    /// * `difference_type` - 差异分类
+    ///
+    /// # 返回
+    /// 返回无证据引用的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(business_object_type: String, business_object_id: String, difference_type: String) -> Self {
+        Self {
+            business_object_type,
+            business_object_id,
+            difference_type,
+            left_fact_reference: None,
+            right_fact_reference: None,
+        }
+    }
+
+    /// 设置左侧不可变证据引用。
+    ///
+    /// # 参数
+    /// * `left_fact_reference` - 左侧不可变证据引用
+    ///
+    /// # 返回
+    /// 返回更新后的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_left_fact_reference(mut self, left_fact_reference: Option<String>) -> Self {
+        self.left_fact_reference = left_fact_reference;
+        self
+    }
+}
 
 /// 对账差异实体（数据模型 §6.21，正式差异事实，创建后不可修改）。
 ///

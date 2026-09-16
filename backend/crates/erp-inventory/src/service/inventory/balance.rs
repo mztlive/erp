@@ -188,17 +188,11 @@ impl InventoryService {
             })
             .await?;
         let filter = StockMovementFilter {
-            search: Default::default(),
             warehouse_ids: Some(vec![balance.warehouse_id.clone()]),
             sku_id: Some(balance.sku_id.clone()),
-            movement_type: None,
-            direction: None,
-            occurred_from: None,
-            occurred_to: None,
-            page: 1,
             page_size: 8,
             sort_by: Some("occurred_at".to_string()),
-            sort_ascending: false,
+            ..Default::default()
         };
         let movements = self.db.stock_movements().search_stock_movements(&filter, &mut NoTransaction).await?;
         let reservations = self

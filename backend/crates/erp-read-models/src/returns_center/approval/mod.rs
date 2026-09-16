@@ -17,10 +17,9 @@ pub const RECENT_HISTORY_LIMIT: usize = 8;
 
 /// 由冻结绑定投影定义摘要。节点详情不在单据详情展开。
 fn definition_view_from_binding(binding: &ApprovalDefinitionBinding) -> DocumentApprovalDefinitionView {
-    DocumentApprovalDefinitionView {
-        id: binding.approval_process_definition_id.as_ref().to_string(),
-        name: String::new(),
-        version: binding.approval_definition_version,
-        nodes: Vec::new(),
-    }
+    DocumentApprovalDefinitionView::new(
+        binding.approval_process_definition_id.as_ref().to_string(),
+        String::new(),
+    )
+    .with_version(binding.approval_definition_version)
 }

@@ -31,7 +31,7 @@ impl RbacService {
         let audit = self.audit.resource_log(actor, "role.create", "role", id.clone())?;
         self.create_role_with_id(
             id,
-            RoleData { name: params.name, description: None, system: false },
+            RoleData::new(params.name),
             authorized.permissions.into_vec(),
             Some(audit),
             Some(authorized.policy_revision),

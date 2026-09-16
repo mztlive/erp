@@ -109,11 +109,10 @@ pub(super) fn document_summary(
         summary_sections: brief
             .sections
             .into_iter()
-            .map(|section| WorkItemSummarySection {
-                label: section.label,
-                value: section.value,
-                numeric: section.numeric.then_some(true),
-                object_id: section.object_id,
+            .map(|section| {
+                WorkItemSummarySection::new(section.label, section.value)
+                    .with_numeric(section.numeric.then_some(true))
+                    .with_object_id(section.object_id)
             })
             .collect(),
         brief_lines: brief

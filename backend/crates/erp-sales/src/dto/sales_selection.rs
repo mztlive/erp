@@ -146,7 +146,7 @@ pub struct SalesSelectionCommandRequest {
 }
 
 /// 列表筛选。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct SalesSelectionBookletListParams {
     /// 服务端注入的客户访问范围，拒绝客户端覆盖。
     #[serde(skip)]
@@ -594,6 +594,24 @@ pub struct PublicChoiceView {
 }
 
 /// 公开回执。
+impl PublicChoiceView {
+    /// 以必填项身份构造公开已选；份数与金额默认为空。
+    ///
+    /// # 参数
+    /// * `item_id` - 项身份
+    ///
+    /// # 返回
+    /// 返回空份数的公开已选。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(item_id: String) -> Self {
+        Self { item_id, quantity: None, line_amount: None }
+    }
+}
+
+/// 公开回执。
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PublicReceiptView {
     /// 方案编号。
@@ -611,6 +629,13 @@ pub struct PublicReceiptView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn public_choice_view_new_defaults_options_to_none() {
+        let view = PublicChoiceView::new("item-1".into());
+        assert_eq!(view.item_id, "item-1");
+        assert!(view.quantity.is_none());
+    }
 
     #[test]
     fn first_prepare_reuses_book_rules_and_create_key() {

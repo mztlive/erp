@@ -66,6 +66,20 @@ pub struct SalesChangeOrderFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for SalesChangeOrderFilter {
+    fn default() -> Self {
+        Self {
+            sales_order_id: None,
+            authorized_sales_order_ids: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for SalesChangeOrderFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///

@@ -360,7 +360,7 @@ pub enum StockAvailability {
 }
 
 /// 库存余额列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct StockBalanceListParams {
     /// SKU 编码、当前名称或规格的字面量关键词。
     #[validate(length(max = 200))]
@@ -433,7 +433,7 @@ impl StockBalanceListParams {
 }
 
 /// 库存流水列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct StockMovementListParams {
     /// SKU 编码、当前名称或规格的字面量关键词。
     #[validate(length(max = 200))]
@@ -521,7 +521,7 @@ impl StockMovementListParams {
 }
 
 /// 库存预占列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct StockReservationListParams {
     /// SKU 编码、当前名称或规格的字面量关键词。
     #[validate(length(max = 200))]
@@ -595,7 +595,7 @@ impl StockReservationListParams {
 }
 
 /// 库存调整单列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct StockAdjustmentListParams {
     /// SKU 编码、当前名称或规格的字面量关键词。
     #[validate(length(max = 200))]
@@ -734,6 +734,38 @@ pub struct StockAdjustmentLineUpdateInput {
     pub direction: Option<MovementDirection>,
 }
 
+impl StockAdjustmentLineUpdateInput {
+    /// 由必填明细行主键与调整数量构造明细更新。
+    ///
+    /// # 参数
+    /// * `line_id` - 明细行主键
+    /// * `quantity` - 调整数量（正数）
+    ///
+    /// # 返回
+    /// 返回方向为空的明细更新。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(line_id: impl Into<String>, quantity: impl Into<String>) -> Self {
+        Self { line_id: line_id.into(), quantity: quantity.into(), direction: None }
+    }
+
+    /// 设置调整方向。
+    ///
+    /// # 参数
+    /// * `direction` - 调整方向
+    ///
+    /// # 返回
+    /// 返回更新后的明细更新。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_direction(mut self, direction: MovementDirection) -> Self {
+        self.direction = Some(direction);
+        self
+    }
+}
+
 /// 库存调整提交时冻结的余额版本。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ExpectedStockBalanceVersion {
@@ -829,11 +861,12 @@ mod tests {
     use validator::Validate;
 
     use super::{
-        SortDir, StockAdjustmentListParams, StockAdjustmentView, StockBalanceListParams, StockBalanceView,
-        StockMovementListParams, StockReservationListParams, normalize_sort,
+        SortDir, StockAdjustmentLineUpdateInput, StockAdjustmentListParams, StockAdjustmentView,
+        StockBalanceListParams, StockBalanceView, StockMovementListParams, StockReservationListParams,
+        normalize_sort,
     };
     use crate::entity::inventory::{
-        AdjustmentReasonType, MovementType, ReservationStatus, StockAdjustmentState,
+        AdjustmentReasonType, MovementDirection, MovementType, ReservationStatus, StockAdjustmentState,
     };
 
     #[test]
@@ -858,15 +891,13 @@ mod tests {
     #[test]
     fn balance_list_params_normalize_paging_and_filters() {
         let params = StockBalanceListParams {
-            q: None,
-            balance_id: None,
-            availability: None,
             warehouse_id: Some(WarehouseId::new("wh-1")),
             sku_id: Some(SkuId::new("sku-1")),
             page: Some(2),
             page_size: Some(50),
             sort_by: Some("sku_id".to_string()),
             sort_dir: Some("asc".to_string()),
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.warehouse_id.as_deref(), Some("wh-1"));
@@ -877,61 +908,71 @@ mod tests {
     }
 
     #[test]
+    fn tier_a_list_params_default_to_empty() {
+        assert!(StockBalanceListParams::default().warehouse_id.is_none());
+        assert!(StockMovementListParams::default().movement_type.is_none());
+        assert!(StockReservationListParams::default().status.is_none());
+        assert!(StockAdjustmentListParams::default().status.is_none());
+    }
+
+    #[test]
+    fn tier_c_inventory_filters_default_to_first_page_size_20() {
+        use crate::repository::{
+            StockAdjustmentFilter, StockBalanceFilter, StockMovementFilter, StockReservationFilter,
+        };
+        assert_eq!((StockMovementFilter::default().page, StockMovementFilter::default().page_size), (1, 20));
+        assert_eq!(
+            (StockReservationFilter::default().page, StockReservationFilter::default().page_size),
+            (1, 20)
+        );
+        assert_eq!(
+            (StockAdjustmentFilter::default().page, StockAdjustmentFilter::default().page_size),
+            (1, 20)
+        );
+        assert_eq!((StockBalanceFilter::default().page, StockBalanceFilter::default().page_size), (1, 20));
+    }
+
+    #[test]
+    fn tier_b_line_update_constructor_sets_identity_only() {
+        let input = StockAdjustmentLineUpdateInput::new("line-1", "10");
+        assert_eq!(input.line_id, "line-1");
+        assert!(input.direction.is_none());
+        let directed =
+            StockAdjustmentLineUpdateInput::new("line-1", "10").with_direction(MovementDirection::Increase);
+        assert!(directed.direction.is_some());
+    }
+
+    #[test]
     fn movement_list_params_reject_inverted_time_range() {
         let params = StockMovementListParams {
-            q: None,
-            warehouse_id: None,
-            sku_id: None,
             movement_type: Some(MovementType::PurchaseReceiptIn),
-            direction: None,
             occurred_from: Some(1_800_000_000),
             occurred_to: Some(1_700_000_000),
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         assert!(params.normalized().is_err(), "时间区间倒挂必须拒绝");
     }
 
     #[test]
     fn list_params_reject_unbounded_page_size() {
-        let balance = StockBalanceListParams {
-            q: None,
-            balance_id: None,
-            availability: None,
-            warehouse_id: None,
-            sku_id: None,
-            page: Some(0),
-            page_size: Some(u32::MAX),
-            sort_by: None,
-            sort_dir: None,
-        };
+        let balance =
+            StockBalanceListParams { page: Some(0), page_size: Some(u32::MAX), ..Default::default() };
         assert!(balance.validate().is_err());
 
         let reservation = StockReservationListParams {
-            q: None,
-            warehouse_id: None,
-            sku_id: None,
             status: Some(ReservationStatus::Active),
             sales_order_line_id: Some(SalesOrderLineId::new("so-line-1")),
             page: Some(1),
             page_size: Some(u32::MAX),
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         assert!(reservation.validate().is_err());
 
         let adjustment = StockAdjustmentListParams {
-            q: None,
-            adjustment_id: None,
-            sku_id: None,
-            warehouse_id: None,
             status: Some(StockAdjustmentState::InApproval),
             page: Some(1),
             page_size: Some(u32::MAX),
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         assert!(adjustment.validate().is_err());
     }

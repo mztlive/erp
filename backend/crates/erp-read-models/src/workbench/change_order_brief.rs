@@ -41,6 +41,62 @@ pub(super) struct DiffLineState {
     due: Option<String>,
 }
 
+impl DiffLineState {
+    /// 构造行比较状态。
+    ///
+    /// # 参数
+    /// * `title` - 行标题
+    /// * `amount` - 行金额
+    ///
+    /// # 返回
+    /// 返回首行、可选字段全空的状态。
+    ///
+    /// # 错误
+    /// 无。
+    pub(super) fn new(title: String, amount: String) -> Self {
+        Self { line_no: 1, title, amount, quantity: None, unit_price: None, due: None }
+    }
+
+    /// 设置业务行号。
+    ///
+    /// # 参数
+    /// * `line_no` - 业务行号
+    ///
+    /// # 返回
+    /// 返回更新后的状态。
+    ///
+    /// # 错误
+    /// 无。
+    pub(super) fn with_line_no(mut self, line_no: u32) -> Self {
+        self.line_no = line_no;
+        self
+    }
+
+    /// 设置数量、单价与交期。
+    ///
+    /// # 参数
+    /// * `quantity` - 数量展示
+    /// * `unit_price` - 单价展示
+    /// * `due` - 交期展示
+    ///
+    /// # 返回
+    /// 返回更新后的状态。
+    ///
+    /// # 错误
+    /// 无。
+    pub(super) fn with_details(
+        mut self,
+        quantity: Option<String>,
+        unit_price: Option<String>,
+        due: Option<String>,
+    ) -> Self {
+        self.quantity = quantity;
+        self.unit_price = unit_price;
+        self.due = due;
+        self
+    }
+}
+
 #[derive(Default)]
 struct SalesChangeBriefContext {
     base_revisions: HashMap<String, SalesOrderRevision>,
@@ -554,14 +610,12 @@ fn sales_base_line_states(
         let due = goods_line.map(|item| format_instant_date(item.fulfillment_due_at));
         grouped.entry(line.sales_order_revision_id.to_string()).or_default().insert(
             line.sales_order_line_id.to_string(),
-            DiffLineState {
-                line_no: line.line_no,
-                title: line_title(&line.item_name_snapshot, line.spec_snapshot.as_deref()),
-                amount: format_yuan(&line.gross_amount),
-                quantity,
-                unit_price,
-                due,
-            },
+            DiffLineState::new(
+                line_title(&line.item_name_snapshot, line.spec_snapshot.as_deref()),
+                format_yuan(&line.gross_amount),
+            )
+            .with_line_no(line.line_no)
+            .with_details(quantity, unit_price, due),
         );
     }
     grouped
@@ -581,14 +635,12 @@ fn sales_target_line_states(lines: &[SalesChangeSubmissionLine]) -> HashMap<Stri
         let unit_price = line.unit_price_gross.map(|value| format_unit_price(value.to_decimal()));
         grouped.entry(line.sales_change_submission_id.to_string()).or_default().insert(
             line.sales_order_line_id.to_string(),
-            DiffLineState {
-                line_no: line.line_no,
-                title: line_title(&line.item_name_snapshot, line.spec_snapshot.as_deref()),
-                amount: format_yuan(&line.gross_amount),
-                quantity,
-                unit_price,
-                due: line.fulfillment_due_at.map(format_instant_date),
-            },
+            DiffLineState::new(
+                line_title(&line.item_name_snapshot, line.spec_snapshot.as_deref()),
+                format_yuan(&line.gross_amount),
+            )
+            .with_line_no(line.line_no)
+            .with_details(quantity, unit_price, line.fulfillment_due_at.map(format_instant_date)),
         );
     }
     grouped
@@ -641,20 +693,19 @@ pub(super) fn purchase_order_submission_line_states(
                 line.sku_id.as_ref().map(AsRef::as_ref),
                 line.line_no,
             ),
-            DiffLineState {
-                line_no: line.line_no,
-                title: line_title(
+            DiffLineState::new(
+                line_title(
                     line.product_name_snapshot.as_deref().unwrap_or("未命名采购明细"),
                     line.specification_snapshot.as_deref(),
                 ),
-                amount: format_yuan(&line.gross_amount),
-                quantity: line
-                    .quantity
-                    .as_ref()
-                    .map(|value| format_quantity(value, line.base_unit_code.as_deref())),
-                unit_price: line.unit_cost_gross.map(|value| format_unit_price(value.to_decimal())),
-                due: line.expected_delivery_date.map(|value| value.to_string()),
-            },
+                format_yuan(&line.gross_amount),
+            )
+            .with_line_no(line.line_no)
+            .with_details(
+                line.quantity.as_ref().map(|value| format_quantity(value, line.base_unit_code.as_deref())),
+                line.unit_cost_gross.map(|value| format_unit_price(value.to_decimal())),
+                line.expected_delivery_date.map(|value| value.to_string()),
+            ),
         );
     }
     grouped
@@ -685,32 +736,36 @@ fn purchase_line_key(
 
 /// 组装采购基准版本行的比较状态。
 fn purchase_revision_line_state(line: &PurchaseOrderRevisionLine) -> DiffLineState {
-    DiffLineState {
-        line_no: line.line_no,
-        title: line_title(
+    DiffLineState::new(
+        line_title(
             line.product_name_snapshot.as_deref().unwrap_or("未命名采购明细"),
             line.specification_snapshot.as_deref(),
         ),
-        amount: format_yuan(&line.gross_amount),
-        quantity: line.quantity.as_ref().map(|value| format_quantity(value, line.base_unit_code.as_deref())),
-        unit_price: line.unit_cost_gross.map(|value| format_unit_price(value.to_decimal())),
-        due: line.expected_delivery_date.map(|value| value.to_string()),
-    }
+        format_yuan(&line.gross_amount),
+    )
+    .with_line_no(line.line_no)
+    .with_details(
+        line.quantity.as_ref().map(|value| format_quantity(value, line.base_unit_code.as_deref())),
+        line.unit_cost_gross.map(|value| format_unit_price(value.to_decimal())),
+        line.expected_delivery_date.map(|value| value.to_string()),
+    )
 }
 
 /// 组装采购目标提交行的比较状态。
 fn purchase_submission_line_state(line: &PurchaseChangeSubmissionLine) -> DiffLineState {
-    DiffLineState {
-        line_no: line.line_no,
-        title: line_title(
+    DiffLineState::new(
+        line_title(
             line.product_name_snapshot.as_deref().unwrap_or("未命名采购明细"),
             line.specification_snapshot.as_deref(),
         ),
-        amount: format_yuan(&line.gross_amount),
-        quantity: line.quantity.as_ref().map(|value| format_quantity(value, line.base_unit_code.as_deref())),
-        unit_price: line.unit_cost_gross.map(|value| format_unit_price(value.to_decimal())),
-        due: line.expected_delivery_date.map(|value| value.to_string()),
-    }
+        format_yuan(&line.gross_amount),
+    )
+    .with_line_no(line.line_no)
+    .with_details(
+        line.quantity.as_ref().map(|value| format_quantity(value, line.base_unit_code.as_deref())),
+        line.unit_cost_gross.map(|value| format_unit_price(value.to_decimal())),
+        line.expected_delivery_date.map(|value| value.to_string()),
+    )
 }
 
 /// 把单位价格格式化为人民币展示。
@@ -816,14 +871,11 @@ mod tests {
         price: Option<&str>,
         due: Option<&str>,
     ) -> DiffLineState {
-        DiffLineState {
-            line_no: 1,
-            title: title.to_string(),
-            amount: amount.to_string(),
-            quantity: quantity.map(str::to_string),
-            unit_price: price.map(str::to_string),
-            due: due.map(str::to_string),
-        }
+        DiffLineState::new(title.to_string(), amount.to_string()).with_details(
+            quantity.map(str::to_string),
+            price.map(str::to_string),
+            due.map(str::to_string),
+        )
     }
 
     #[test]

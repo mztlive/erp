@@ -36,6 +36,35 @@ pub struct SupplierAccountRow {
 }
 
 /// 供应商编号窄投影行。
+impl SupplierAccountRow {
+    /// 以必填身份构造供应商投影行；可选引用默认为空。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键
+    /// * `party_id` - 共用企业主体 ID
+    /// * `supplier_no` - 供应商编号
+    ///
+    /// # 返回
+    /// 返回启用状态的投影行。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(id: String, party_id: String, supplier_no: String) -> Self {
+        Self {
+            id,
+            party_id,
+            supplier_no,
+            default_payment_term_id: None,
+            current_commercial_profile_revision_id: None,
+            status: SupplierAccountStatus::Active,
+            version: 1,
+            created_at: 0,
+        }
+    }
+}
+
+/// 供应商编号窄投影行。
+
 #[derive(Debug, Clone, Deserialize)]
 struct SupplierNumberRow {
     /// 供应商稳定 ID。
@@ -85,6 +114,23 @@ pub struct SupplierAccountFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl Default for SupplierAccountFilter {
+    fn default() -> Self {
+        Self {
+            keyword: None,
+            party_id: None,
+            party_ids: None,
+            status: None,
+            supplier_ids: None,
+            excluded_supplier_ids: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
 }
 
 impl QueryFilter for SupplierAccountFilter {

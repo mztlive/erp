@@ -34,6 +34,70 @@ pub(crate) struct WorkbenchObjectDisplay {
     pub(super) subject_briefs: HashMap<String, WorkbenchSubjectDisplay>,
 }
 
+impl WorkbenchObjectDisplay {
+    /// 构造对象展示。
+    ///
+    /// # 参数
+    /// * `root_document_id` - 页面跳转的父单据
+    /// * `label` - 对象标题
+    ///
+    /// # 返回
+    /// 返回展示覆盖全空的显示。
+    ///
+    /// # 错误
+    /// 无。
+    pub(crate) fn new(root_document_id: String, label: String) -> Self {
+        Self {
+            root_document_id,
+            approval_subject_version: None,
+            label,
+            counterparty_label: None,
+            impact_summary: None,
+            brief_source: None,
+            subject_briefs: HashMap::new(),
+        }
+    }
+
+    /// 设置往来方与影响覆盖。
+    ///
+    /// # 参数
+    /// * `counterparty_label` - 往来方覆盖
+    /// * `impact_summary` - 影响覆盖
+    ///
+    /// # 返回
+    /// 返回更新后的显示。
+    ///
+    /// # 错误
+    /// 无。
+    pub(crate) fn with_counterparty_and_impact(
+        mut self,
+        counterparty_label: Option<String>,
+        impact_summary: Option<String>,
+    ) -> Self {
+        self.counterparty_label = counterparty_label;
+        self.impact_summary = impact_summary;
+        self
+    }
+
+    /// 设置提交版本展示。
+    ///
+    /// # 参数
+    /// * `subject_briefs` - 提交版本展示
+    ///
+    /// # 返回
+    /// 返回更新后的显示。
+    ///
+    /// # 错误
+    /// 无。
+    pub(crate) fn with_subject_briefs(
+        mut self,
+        subject_briefs: HashMap<String, WorkbenchSubjectDisplay>,
+    ) -> Self {
+        self.subject_briefs = subject_briefs;
+        self
+    }
+}
+
 /// 权限只消费 authority；明确存在的 display 保存原显示覆盖，包括 None。
 #[derive(Debug, Clone)]
 pub(crate) struct WorkbenchObjectFact {
@@ -42,28 +106,28 @@ pub(crate) struct WorkbenchObjectFact {
 }
 impl WorkbenchObjectFact {
     pub(super) fn from_authority(authority: erp_workflow::ports::ObjectFact) -> Self {
-        let display = WorkbenchObjectDisplay {
-            root_document_id: authority.root_document_id.clone(),
-            approval_subject_version: None,
-            label: authority.label.clone(),
-            counterparty_label: authority.counterparty_label.clone(),
-            impact_summary: authority.impact_summary.clone(),
-            brief_source: None,
-            subject_briefs: authority
-                .subject_briefs
-                .iter()
-                .map(|(key, value)| {
-                    (
-                        key.clone(),
-                        WorkbenchSubjectDisplay {
-                            counterparty_label: value.counterparty_label.clone(),
-                            impact_summary: value.impact_summary.clone(),
-                            brief_source: None,
-                        },
-                    )
-                })
-                .collect(),
-        };
+        let display =
+            WorkbenchObjectDisplay::new(authority.root_document_id.clone(), authority.label.clone())
+                .with_counterparty_and_impact(
+                    authority.counterparty_label.clone(),
+                    authority.impact_summary.clone(),
+                )
+                .with_subject_briefs(
+                    authority
+                        .subject_briefs
+                        .iter()
+                        .map(|(key, value)| {
+                            (
+                                key.clone(),
+                                WorkbenchSubjectDisplay {
+                                    counterparty_label: value.counterparty_label.clone(),
+                                    impact_summary: value.impact_summary.clone(),
+                                    brief_source: None,
+                                },
+                            )
+                        })
+                        .collect(),
+                );
         Self { authority, display }
     }
 }
@@ -610,13 +674,9 @@ mod authority_display_tests {
             "display-is-not-an-organization",
             "creator",
         ));
-        let mut access = ActorAccess {
-            actor_id: "reader".to_string(),
-            permissions: Vec::new(),
-            participant_document_ids: HashSet::from(["root".to_string()]),
-            managed_owner_ids: Some(Vec::new()),
-            can_manage: false,
-        };
+        let mut access = ActorAccess::new("reader".to_string())
+            .with_participant_document_ids(HashSet::from(["root".to_string()]))
+            .with_managed_scope(Some(Vec::new()), false);
         assert!(has_object_participation(&access, "role", "company", &fact));
         access.participant_document_ids.clear();
         assert!(!has_object_participation(&access, "role", "company", &fact));

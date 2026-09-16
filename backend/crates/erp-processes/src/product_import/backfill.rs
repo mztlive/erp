@@ -52,11 +52,10 @@ impl ProductImportProcess {
         )
         .await
         {
-            Ok(_) => Ok(RowImportOutcome {
-                product_id: Some(product.base.id),
-                message: "商品已存在，已补齐图片".into(),
-                skipped: false,
-            }),
+            Ok(_) => {
+                Ok(RowImportOutcome::new("商品已存在，已补齐图片".into())
+                    .with_product_id(Some(product.base.id)))
+            },
             Err(Error::ConflictError(_)) => Ok(already_imported(product.base.id)),
             Err(error) => Err(error),
         }
@@ -129,11 +128,9 @@ impl ProductImportProcess {
 }
 
 fn already_imported(product_id: String) -> RowImportOutcome {
-    RowImportOutcome {
-        product_id: Some(product_id),
-        message: "商品已存在，本行未重复写入".into(),
-        skipped: true,
-    }
+    RowImportOutcome::new("商品已存在，本行未重复写入".into())
+        .with_product_id(Some(product_id))
+        .with_skipped(true)
 }
 
 /// 把当前启用 SKU 转成编辑请求中的保留行。

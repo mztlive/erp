@@ -25,6 +25,7 @@ pub struct ProfitLossOrder {
 }
 
 /// 生效日期区间为左闭右开，客户授权集合与显式筛选取交集。
+#[derive(Debug, Clone, Default)]
 pub struct ProfitLossOrderFilter {
     pub from: i64,
     pub until: i64,

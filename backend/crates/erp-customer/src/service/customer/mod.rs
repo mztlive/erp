@@ -489,16 +489,10 @@ mod tests {
 
     #[test]
     fn assemble_views_hydrates_party_and_scope_tags() {
-        let row = CustomerAccountRow {
-            id: "customer-1".to_string(),
-            party_id: "party-1".to_string(),
-            customer_no: "C-1".to_string(),
-            default_payment_term_id: None,
-            status: CustomerAccountStatus::Active,
-            version: 1,
-            created_at: 1,
-            updated_at: 1,
-        };
+        let mut row = CustomerAccountRow::new("customer-1", "party-1", "C-1");
+        row.version = 1;
+        row.created_at = 1;
+        row.updated_at = 1;
         let identity = PartyIdentityFact {
             party_id: "party-1".to_string(),
             party_no: "P-1".to_string(),

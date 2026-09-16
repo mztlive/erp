@@ -104,6 +104,23 @@ pub struct SupplierApiConnectionFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for SupplierApiConnectionFilter {
+    fn default() -> Self {
+        Self {
+            q: None,
+            keyword_supplier_ids: Vec::new(),
+            supplier_id: None,
+            connection_code: None,
+            environment: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for SupplierApiConnectionFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -216,6 +233,20 @@ pub struct SupplierApiCapabilityFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl Default for SupplierApiCapabilityFilter {
+    fn default() -> Self {
+        Self {
+            connection_id: None,
+            capability_code: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
 }
 
 impl QueryFilter for SupplierApiCapabilityFilter {
@@ -870,6 +901,13 @@ mod tests {
         ConnectionEnvironment, SupplierApiCapabilityCode, SupplierApiCapabilityStatus,
         SupplierApiConnectionStatus,
     };
+
+    #[test]
+    fn connection_filter_default_uses_first_page() {
+        let filter = SupplierApiConnectionFilter::default();
+        assert_eq!(filter.page, 1);
+        assert_eq!(filter.page_size, 20);
+    }
 
     #[test]
     fn connection_filter_applies_optional_fields_and_deleted_filter() {

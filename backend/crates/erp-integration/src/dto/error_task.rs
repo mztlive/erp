@@ -27,7 +27,7 @@ pub struct CreateErrorTaskRequest {
 }
 
 /// 错误任务列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct ErrorTaskListParams {
     /// 编号、业务对象、事件或差异摘要的字面量关键词。
     #[validate(length(max = 200))]
@@ -204,6 +204,12 @@ mod tests {
     use super::super::common::SortDir;
     use super::ErrorTaskListParams;
     use crate::entity::integration_ops::{ErrorClass, ErrorTaskStatus};
+
+    #[test]
+    fn error_task_list_params_default_is_empty() {
+        let params = ErrorTaskListParams::default();
+        assert!(params.q.is_none() && params.page.is_none());
+    }
 
     #[test]
     fn error_task_list_params_normalize_flat_filters() {

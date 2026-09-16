@@ -662,7 +662,7 @@ impl SalesOrderReadService {
 /// # 关键业务约束
 /// 禁止分支不得泄露任何开放任务数量，避免把未授权任务事实下发给调用方。
 fn blocked_purchase_creation_access(message: &str) -> PurchaseCreationAccessView {
-    PurchaseCreationAccessView { allowed: false, task_count: 0, blocker: Some(message.to_string()) }
+    PurchaseCreationAccessView { blocker: Some(message.to_string()), ..Default::default() }
 }
 
 impl SalesOrderReadService {

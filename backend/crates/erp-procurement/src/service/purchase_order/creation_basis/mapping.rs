@@ -391,10 +391,7 @@ mod tests {
         assert_eq!(settlement_terms_for(&facts, &id), SupplierSettlementTerms::net30());
         facts.commercial_profiles.insert(
             "profile-1".to_string(),
-            SupplierCommercialFact {
-                payment_term_code: String::new(),
-                business_category: Some("茶叶".to_string()),
-            },
+            SupplierCommercialFact::new(String::new()).with_business_category("茶叶"),
         );
         let terms = settlement_terms_for(&facts, &id);
         assert_eq!(terms.payment_term_code, "NET-30");

@@ -22,6 +22,22 @@ pub struct PurchaseInvoiceAllocationFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for PurchaseInvoiceAllocationFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self { payable_account_id: None, invoice_id: None, page: 1, page_size: 20, sort_ascending: false }
+    }
+}
+
 impl QueryFilter for PurchaseInvoiceAllocationFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -205,13 +221,7 @@ mod tests {
 
     #[test]
     fn invoice_allocation_filter_supports_unscoped_pagination() {
-        let filter = PurchaseInvoiceAllocationFilter {
-            payable_account_id: None,
-            invoice_id: None,
-            page: 1,
-            page_size: 10,
-            sort_ascending: false,
-        };
+        let filter = PurchaseInvoiceAllocationFilter { page: 1, page_size: 10, ..Default::default() };
         let document = filter.to_doc();
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert!(!document.contains_key("payable_account_id"));

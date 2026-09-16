@@ -121,9 +121,7 @@ mod tests {
             match self.outcome {
                 SupplierOutcome::Failure => Err(Error::Internal("supplier read failed".to_string())),
                 SupplierOutcome::Missing => Ok(None),
-                SupplierOutcome::NoRevision => {
-                    Ok(Some(SupplierRoleFact { current_commercial_profile_revision_id: None }))
-                },
+                SupplierOutcome::NoRevision => Ok(Some(SupplierRoleFact::default())),
                 SupplierOutcome::Ready => Ok(Some(SupplierRoleFact {
                     current_commercial_profile_revision_id: Some(SupplierCommercialProfileRevisionId::new(
                         "profile-1",
@@ -136,13 +134,7 @@ mod tests {
             if code == "INVALID" {
                 return Err(erp_core::Error::from("invalid supplier payment term"));
             }
-            Ok(PaymentTermFact {
-                canonical_code: "POSTPAY_NET30".to_string(),
-                prepay_gate: false,
-                prepay_minimum_ratio: None,
-                days_after_delivery: Some(30),
-                calendar_due: None,
-            })
+            Ok(PaymentTermFact::new("POSTPAY_NET30").with_days_after_delivery(30))
         }
         fn payment_snapshot(&self, code: &str) -> erp_core::Result<PaymentTermFact> {
             self.payment_term(code)

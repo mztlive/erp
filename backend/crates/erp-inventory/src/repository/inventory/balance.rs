@@ -52,6 +52,30 @@ pub struct StockBalanceFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for StockBalanceFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            search: super::InventorySearch::default(),
+            warehouse_ids: None,
+            sku_id: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for StockBalanceFilter {
     /// 转换为 MongoDB 查询条件（余额不设业务软删除，恒为未删除）。
     ///
@@ -497,15 +521,7 @@ mod filter_tests {
     use super::{StockBalanceFilter, stock_balance_sort};
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockBalanceFilter {
-        StockBalanceFilter {
-            search: Default::default(),
-            warehouse_ids,
-            sku_id: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        }
+        StockBalanceFilter { warehouse_ids, ..Default::default() }
     }
 
     #[test]

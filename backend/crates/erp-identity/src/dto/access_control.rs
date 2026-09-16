@@ -125,12 +125,10 @@ impl CreatePermissionRequest {
     /// # 返回
     /// 返回实体层创建数据。
     pub fn into_data(self) -> PermissionData {
-        PermissionData {
-            resource: self.resource,
-            action: self.action,
-            name: self.name,
-            description: self.description,
-            system: self.system,
+        let data = PermissionData::new(self.resource, self.action, self.name).with_system(self.system);
+        match self.description {
+            Some(description) => data.with_description(description),
+            None => data,
         }
     }
 }
@@ -182,7 +180,7 @@ impl UpdatePermissionRequest {
 }
 
 /// 权限定义列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct PermissionListParams {
     /// 权限资源模糊筛选（忽略大小写）。
     pub resource: Option<String>,
@@ -315,6 +313,74 @@ pub struct DataScopeListMeta {
     pub no_scope: bool,
 }
 
+impl DataScopeListMeta {
+    /// 由必填范围版本与解析时点构造列表元数据。
+    ///
+    /// # 参数
+    /// * `scope_version` - 本次列表范围版本
+    /// * `as_of` - 解析时点（RFC3339 UTC）
+    ///
+    /// # 返回
+    /// 返回策略/组织版本为零、非空集的列表元数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(scope_version: impl Into<String>, as_of: impl Into<String>) -> Self {
+        Self {
+            scope_version: scope_version.into(),
+            policy_version: 0,
+            organization_version: 0,
+            as_of: as_of.into(),
+            no_scope: false,
+        }
+    }
+
+    /// 设置当前权限策略版本。
+    ///
+    /// # 参数
+    /// * `policy_version` - 当前权限策略版本
+    ///
+    /// # 返回
+    /// 返回更新后的列表元数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_policy_version(mut self, policy_version: u64) -> Self {
+        self.policy_version = policy_version;
+        self
+    }
+
+    /// 设置当前组织版本。
+    ///
+    /// # 参数
+    /// * `organization_version` - 当前组织版本
+    ///
+    /// # 返回
+    /// 返回更新后的列表元数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_organization_version(mut self, organization_version: u64) -> Self {
+        self.organization_version = organization_version;
+        self
+    }
+
+    /// 设置角色缺范围标记。
+    ///
+    /// # 参数
+    /// * `no_scope` - 角色是否缺少该动作范围
+    ///
+    /// # 返回
+    /// 返回更新后的列表元数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_no_scope(mut self, no_scope: bool) -> Self {
+        self.no_scope = no_scope;
+        self
+    }
+}
+
 impl DataScopeListView {
     /// 组合范围配置列表信封。
     ///
@@ -380,7 +446,7 @@ impl CreateDataScopeRequest {
 }
 
 /// 数据范围列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct DataScopeListParams {
     /// 范围主体类型筛选。
     pub subject_type: Option<DataScopeSubjectType>,
@@ -599,9 +665,10 @@ impl RevokeUserRoleRequest {
     /// # 返回
     /// 返回实体层撤权数据。
     pub fn into_revoke_data(self) -> UserRoleRevokeData {
-        UserRoleRevokeData {
-            revoke_reason_code: self.revoke_reason_code,
-            revoke_reason_text: self.revoke_reason_text,
+        let data = UserRoleRevokeData::new(self.revoke_reason_code);
+        match self.revoke_reason_text {
+            Some(text) => data.with_revoke_reason_text(text),
+            None => data,
         }
     }
 }
@@ -668,7 +735,7 @@ impl From<AuditEvent> for AuditEventView {
 }
 
 /// 审计事件列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct AuditEventListParams {
     /// 操作者、动作、对象或追踪号字面量关键词。
     #[validate(length(max = 200))]
@@ -799,8 +866,7 @@ mod tests {
             system: Some(true),
             page: Some(2),
             page_size: Some(50),
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.resource.as_deref(), Some("sales_order"));
@@ -808,31 +874,35 @@ mod tests {
         assert_eq!(query.paging.page, 2);
         assert_eq!(query.paging.page_size, 50);
 
-        let invalid = PermissionListParams {
-            resource: None,
-            disabled: None,
-            system: None,
-            page: Some(0),
-            page_size: Some(u32::MAX),
-            sort_by: None,
-            sort_dir: None,
-        };
+        let invalid = PermissionListParams { page: Some(0), page_size: Some(u32::MAX), ..Default::default() };
         assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn tier_a_list_params_default_to_empty() {
+        assert!(PermissionListParams::default().resource.is_none());
+        assert!(DataScopeListParams::default().subject_id.is_none());
+        assert!(AuditEventListParams::default().actor_id.is_none());
+    }
+
+    #[test]
+    fn tier_c_repository_filters_default_to_first_page_size_20() {
+        use crate::repository::{AuditEventFilter, DataScopeFilter, PermissionFilter};
+        assert_eq!((PermissionFilter::default().page, PermissionFilter::default().page_size), (1, 20));
+        assert_eq!((DataScopeFilter::default().page, DataScopeFilter::default().page_size), (1, 20));
+        assert_eq!((AuditEventFilter::default().page, AuditEventFilter::default().page_size), (1, 20));
+        assert!(!PermissionFilter::default().sort_ascending);
     }
 
     #[test]
     fn data_scope_list_params_require_subject_type_for_subject_query() {
         let params = DataScopeListParams {
             subject_type: Some(DataScopeSubjectType::Role),
-            scope_type: None,
             subject_id: Some(" role-sales ".to_string()),
             resource: Some(" sales_order ".to_string()),
             action: Some(" list ".to_string()),
             scope_version: Some(" scope-v ".to_string()),
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.subject_id.as_deref(), Some("role-sales"));
@@ -840,32 +910,11 @@ mod tests {
         assert_eq!(query.action.as_deref(), Some("list"));
         assert_eq!(query.scope_version.as_deref(), Some("scope-v"));
 
-        let missing = DataScopeListParams {
-            subject_type: None,
-            scope_type: None,
-            subject_id: Some("role-sales".to_string()),
-            resource: None,
-            action: None,
-            scope_version: None,
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
-        };
+        let missing =
+            DataScopeListParams { subject_id: Some("role-sales".to_string()), ..Default::default() };
         assert!(missing.normalized().is_err());
 
-        let wildcard = DataScopeListParams {
-            subject_type: None,
-            scope_type: None,
-            subject_id: None,
-            resource: Some("*".to_string()),
-            action: None,
-            scope_version: None,
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
-        };
+        let wildcard = DataScopeListParams { resource: Some("*".to_string()), ..Default::default() };
         assert!(wildcard.normalized().is_err());
     }
 
@@ -873,13 +922,10 @@ mod tests {
     fn data_scope_list_envelope_keeps_versions_off_items() {
         let view = DataScopeListView::compose(
             PageView { items: Vec::new(), total: 0, page: 1, page_size: 20 },
-            DataScopeListMeta {
-                scope_version: "scope-v".into(),
-                policy_version: 3,
-                organization_version: 4,
-                as_of: "2026-09-15T00:00:00Z".into(),
-                no_scope: true,
-            },
+            DataScopeListMeta::new("scope-v", "2026-09-15T00:00:00Z")
+                .with_policy_version(3)
+                .with_organization_version(4)
+                .with_no_scope(true),
         );
         let json = serde_json::to_value(&view).unwrap();
         assert_eq!(json["empty_reason"], "no_scope");
@@ -953,21 +999,10 @@ mod tests {
     #[test]
     fn audit_event_list_params_normalize() {
         let params = AuditEventListParams {
-            q: None,
-            keyword_actions: None,
-            event_id: None,
-            trace_id: None,
-            created_from: None,
-            created_before: None,
             actor_id: Some(" user-1 ".to_string()),
             action_type: Some("permission.create".to_string()),
-            object_type: None,
-            object_id: None,
             result: Some(AuditEventResult::Denied),
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.actor_id.as_deref(), Some("user-1"));

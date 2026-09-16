@@ -56,11 +56,9 @@ impl ProductImportProcess {
         if let Some(barcode) = &row.barcode {
             let owners = self.db.catalog().barcode_owner_sku_ids(barcode, &mut NoTransaction).await?;
             if !owners.is_empty() {
-                return Ok(RowImportOutcome {
-                    product_id: Some(product.base.id),
-                    message: format!("条码 {barcode} 已被其他 SKU 使用，本行未写入"),
-                    skipped: true,
-                });
+                return Ok(RowImportOutcome::new(format!("条码 {barcode} 已被其他 SKU 使用，本行未写入"))
+                    .with_product_id(Some(product.base.id))
+                    .with_skipped(true));
             }
         }
         let media = resolve_row_media(&self.storage, &self.secret, cells, media_source).await?;
@@ -75,16 +73,13 @@ impl ProductImportProcess {
         )
         .await
         {
-            Ok(_) => Ok(RowImportOutcome {
-                product_id: Some(product.base.id),
-                message: "已并入同一商品编码并新增 SKU".into(),
-                skipped: false,
-            }),
-            Err(Error::ConflictError(_)) => Ok(RowImportOutcome {
-                product_id: Some(product.base.id),
-                message: "商品正在被他人修改，本行未写入".into(),
-                skipped: true,
-            }),
+            Ok(_) => Ok(RowImportOutcome::new("已并入同一商品编码并新增 SKU".into())
+                .with_product_id(Some(product.base.id))),
+            Err(Error::ConflictError(_)) => {
+                Ok(RowImportOutcome::new("商品正在被他人修改，本行未写入".into())
+                    .with_product_id(Some(product.base.id))
+                    .with_skipped(true))
+            },
             Err(error) => Err(error),
         }
     }

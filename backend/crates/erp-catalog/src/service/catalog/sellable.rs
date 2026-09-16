@@ -19,7 +19,7 @@ use crate::repository::CatalogExt;
 type SellableSkuFilter = <mongodb::Database as CatalogExt>::SellableSkuFilter;
 
 /// 公司商品池列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct SellableSkuListParams {
     /// SKU 编码、SKU 名称、商品编码/名称、规格或条码的字面量搜索。
     pub q: Option<String>,
@@ -236,20 +236,7 @@ mod tests {
     /// 公司商品池分页上限固定为一百，阻止无界销售查询。
     #[test]
     fn sellable_sku_page_size_is_bounded() {
-        let params = SellableSkuListParams {
-            q: None,
-            product_kind: None,
-            category_id: None,
-            brand_id: None,
-            supplier_id: None,
-            supply_region: None,
-            max_supplier_count: None,
-            sales_price_min: None,
-            sales_price_max: None,
-            eligibility_as_of: None,
-            page: Some(1),
-            page_size: Some(101),
-        };
+        let params = SellableSkuListParams { page: Some(1), page_size: Some(101), ..Default::default() };
 
         assert!(params.validate().is_err());
     }
@@ -258,18 +245,10 @@ mod tests {
     #[test]
     fn sellable_sku_max_supplier_count_rejects_zero() {
         let params = SellableSkuListParams {
-            q: None,
-            product_kind: None,
-            category_id: None,
-            brand_id: None,
-            supplier_id: None,
-            supply_region: None,
             max_supplier_count: Some(0),
-            sales_price_min: None,
-            sales_price_max: None,
-            eligibility_as_of: None,
             page: Some(1),
             page_size: Some(20),
+            ..Default::default()
         };
 
         assert!(params.validate().is_err());

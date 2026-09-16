@@ -59,6 +59,32 @@ pub struct ScopedCustomerReceiptQuery {
     pub sort_ascending: bool,
 }
 
+impl Default for ScopedCustomerReceiptQuery {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            keyword_ids: None,
+            receipt_no: None,
+            counterparty_party_id: None,
+            status: None,
+            scope: ReceivableListScope::default(),
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 /// 发票作用域分页查询（FIN-R08）。
 ///
 /// 作用域解析与分页搜索合并在仓储内完成；禁止向 Service 返回无界中间 ID。
@@ -86,6 +112,34 @@ pub struct ScopedInvoiceQuery {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl Default for ScopedInvoiceQuery {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            keyword_ids: None,
+            invoice_direction: None,
+            invoice_kind: None,
+            party_id: None,
+            invoice_no: None,
+            status: None,
+            scope: ReceivableListScope::default(),
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
 }
 
 impl<'a> ReceivableRepository<'a> {

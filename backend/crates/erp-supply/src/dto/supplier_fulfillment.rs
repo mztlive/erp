@@ -62,7 +62,7 @@ pub use application_core::PageView;
 pub(crate) use application_core::normalize_sort;
 
 /// 供应商履约订单列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct SupplierFulfillmentOrderListParams {
     /// 多业务字段字面量关键词，空白不筛选。
     #[validate(length(max = 200))]
@@ -427,7 +427,7 @@ pub struct SupplierFulfillmentOrderDetailParams {
 }
 
 /// W26 详情的地址安全投影。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
 pub struct SupplierOrderAddressView {
     /// 权限安全的脱敏地址；当前无权威脱敏器时为空。
     pub masked: Option<String>,
@@ -683,6 +683,25 @@ pub struct SupplierOrderActionBlockerView {
     pub message: String,
     /// 可选目标工作面。
     pub destination_workspace_id: Option<String>,
+}
+
+/// 供应商取消/退款动作提交请求
+impl SupplierOrderActionBlockerView {
+    /// 以必填阻断三元组构造视图；目标工作面默认为空。
+    ///
+    /// # 参数
+    /// * `action` - 被阻断动作
+    /// * `code` - 稳定阻断码
+    /// * `message` - 权限安全的业务说明
+    ///
+    /// # 返回
+    /// 返回无目标工作面的视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(action: String, code: String, message: String) -> Self {
+        Self { action, code, message, destination_workspace_id: None }
+    }
 }
 
 /// 供应商取消/退款动作提交请求（动作行冻结实际提交给供应商的范围）。

@@ -134,7 +134,7 @@ impl From<FileAsset> for FileAssetView {
 }
 
 /// 文件资产列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct FileAssetListParams {
     /// 文件名模糊筛选（忽略大小写）。
     pub file_name: Option<String>,
@@ -371,13 +371,9 @@ mod tests {
     fn list_params_normalize_paging_and_filters() {
         let params = FileAssetListParams {
             file_name: Some(" 导入.xlsx ".to_string()),
-            security_scan_status: None,
             retention_class: Some(RetentionClass::ThirtyDays),
             sensitivity_class: Some(SensitivityClass::Sensitive),
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.file_name.as_deref(), Some("导入.xlsx"));

@@ -53,6 +53,31 @@ pub struct PartyFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for PartyFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            keyword: None,
+            matching_name_ids: Vec::new(),
+            party_kind: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for PartyFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -263,14 +288,10 @@ mod tests {
     #[test]
     fn party_filter_applies_keyword_regex_and_status() {
         let mut filter = PartyFilter {
-            matching_name_ids: Vec::new(),
             keyword: Some("P-20".to_string()),
             party_kind: Some(PartyKind::Enterprise),
             status: Some(PartyStatus::Active),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();

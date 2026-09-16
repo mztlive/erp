@@ -33,6 +33,30 @@ pub struct PurchaseOrderSubmissionFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for PurchaseOrderSubmissionFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            purchase_order_id: None,
+            supplier_id: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for PurchaseOrderSubmissionFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -272,12 +296,8 @@ mod tests {
     fn submission_filter_applies_order_supplier_and_status() {
         let filter = PurchaseOrderSubmissionFilter {
             purchase_order_id: Some(PurchaseOrderId::new("po-1")),
-            supplier_id: None,
             status: Some(SubmissionStatus::Pending),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         assert_eq!(
@@ -288,5 +308,12 @@ mod tests {
                 "status": "PENDING",
             }
         );
+    }
+
+    #[test]
+    fn submission_filter_default_is_first_page_size_20() {
+        let filter = PurchaseOrderSubmissionFilter::default();
+        assert_eq!((filter.page, filter.page_size), (1, 20));
+        assert!(filter.purchase_order_id.is_none());
     }
 }

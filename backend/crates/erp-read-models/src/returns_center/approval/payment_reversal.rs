@@ -32,7 +32,7 @@ pub fn payment_reversal_approval_view(
         definition: binding.map(definition_view_from_binding),
         instance,
         recent_history: Vec::new(),
-        history_page: DocumentApprovalHistoryPageView { next_cursor: None, has_more: false },
+        history_page: DocumentApprovalHistoryPageView::default(),
         allowed_actions: payment_reversal_allowed_actions(status),
     }
 }

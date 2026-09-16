@@ -68,6 +68,26 @@ pub struct SelectionBookFilter {
     pub q: Option<String>,
 }
 
+impl Default for SelectionBookFilter {
+    fn default() -> Self {
+        Self {
+            authorized_customer_ids: None,
+            authorized_scope: SelectionReadScope::default(),
+            owner_user_ids: None,
+            org_unit_ids: None,
+            customer_id: None,
+            form: None,
+            status: None,
+            submit_mode: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+            q: None,
+        }
+    }
+}
+
 impl QueryFilter for SelectionBookFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///

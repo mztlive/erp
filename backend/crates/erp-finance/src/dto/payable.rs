@@ -253,7 +253,7 @@ pub struct PaymentRecipientRevealView {
 }
 
 /// 应付往来子账列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct PayableAccountListParams {
     /// 跨页必须携带当前授权和业务版本。
@@ -565,7 +565,7 @@ pub struct SupplierPaymentBankReceiptView {
 }
 
 /// 供应商付款单列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SupplierPaymentListParams {
     /// 跨页必须携带当前授权和业务版本。
@@ -739,7 +739,7 @@ pub struct PurchaseInvoiceRegisteredView {
 }
 
 /// 进项发票分配列表查询参数（按应付子账筛选）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct PurchaseInvoiceAllocationListParams {
     /// 跨页必须携带当前授权和业务版本。
@@ -866,19 +866,13 @@ mod tests {
     #[test]
     fn payable_account_list_params_normalize_filters_and_paging() {
         let params = PayableAccountListParams {
-            scope_version: None,
-            procurement_owner_user_ids: None,
-            org_unit_ids: None,
-            include_descendants: None,
-            source_document_id: None,
-            q: None,
-            supplier_id: None,
             source_type: Some(PayableSourceType::PurchaseOrder),
             status: Some(PayableAccountStatus::Open),
             page: Some(2),
             page_size: Some(50),
             sort_by: Some("open_total".to_string()),
             sort_dir: Some("asc".to_string()),
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.source_type, Some(PayableSourceType::PurchaseOrder));
@@ -892,19 +886,10 @@ mod tests {
     #[test]
     fn payment_and_allocation_list_params_normalize() {
         let payment = SupplierPaymentListParams {
-            scope_version: None,
-            procurement_owner_user_ids: None,
-            operator_user_ids: None,
-            org_unit_ids: None,
-            include_descendants: None,
             q: Some(" 狮峰 ".to_string()),
             payment_no: Some(" PAY-1 ".to_string()),
-            supplier_id: None,
             status: Some(SupplierPaymentStatus::Posted),
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         let query = payment.normalized().unwrap();
         assert_eq!(query.payment_no.as_deref(), Some("PAY-1"));
@@ -912,16 +897,10 @@ mod tests {
         assert_eq!(query.status, Some(SupplierPaymentStatus::Posted));
 
         let allocations = PurchaseInvoiceAllocationListParams {
-            scope_version: None,
-            procurement_owner_user_ids: None,
-            operator_user_ids: None,
-            org_unit_ids: None,
-            include_descendants: None,
-            payable_account_id: None,
             page: Some(1),
             page_size: Some(25),
             sort_by: Some("created_at".to_string()),
-            sort_dir: None,
+            ..Default::default()
         };
         let query = allocations.normalized().unwrap();
         assert_eq!(query.paging.page_size, 25);
@@ -1045,21 +1024,8 @@ mod tests {
 
     #[test]
     fn list_params_reject_unbounded_page_size() {
-        let params = PayableAccountListParams {
-            scope_version: None,
-            procurement_owner_user_ids: None,
-            org_unit_ids: None,
-            include_descendants: None,
-            source_document_id: None,
-            q: None,
-            supplier_id: None,
-            source_type: None,
-            status: None,
-            page: Some(0),
-            page_size: Some(u32::MAX),
-            sort_by: None,
-            sort_dir: None,
-        };
+        let params =
+            PayableAccountListParams { page: Some(0), page_size: Some(u32::MAX), ..Default::default() };
         assert!(params.validate().is_err());
     }
 

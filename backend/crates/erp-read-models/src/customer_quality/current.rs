@@ -266,31 +266,29 @@ fn project_current(
         let orders = orders_by_customer.get(&customer.id).map(Vec::as_slice).unwrap_or(&[]);
         let (order_count, gross_total, unpriced, first, latest) =
             summarize_orders(orders, &sources.revision_gross);
-        rows.push(CurrentQualityRow {
-            row_id: format!("customer:{}", customer.id),
-            kind: "customer".into(),
-            customer_id: Some(customer.id.clone()),
-            customer_no: Some(customer.customer_no.clone()),
-            customer_name: Some(customer.name.clone()),
-            group_id: None,
-            label: None,
-            owner_user_id: customer.owner_user_id.clone(),
-            owner_user_name: customer
-                .owner_user_id
-                .as_ref()
-                .and_then(|id| sources.account_names.get(id).cloned()),
-            owner_org_unit_id: customer.owner_org_unit_id.clone(),
-            owner_org_unit_name: customer
-                .owner_org_unit_id
-                .as_ref()
-                .and_then(|id| sources.org_names.get(id).cloned()),
-            customer_count: None,
-            order_count,
-            gross_total: money(gross_total),
-            unpriced_count: unpriced,
-            first_effective_at: first.and_then(|at| effective_label(Some(at))),
-            latest_effective_at: latest.and_then(|at| effective_label(Some(at))),
-        });
+        rows.push(
+            CurrentQualityRow::new(
+                format!("customer:{}", customer.id),
+                "customer".into(),
+                money(gross_total),
+            )
+            .with_customer(
+                Some(customer.id.clone()),
+                Some(customer.customer_no.clone()),
+                Some(customer.name.clone()),
+            )
+            .with_ownership(
+                customer.owner_user_id.clone(),
+                customer.owner_user_id.as_ref().and_then(|id| sources.account_names.get(id).cloned()),
+                customer.owner_org_unit_id.clone(),
+                customer.owner_org_unit_id.as_ref().and_then(|id| sources.org_names.get(id).cloned()),
+            )
+            .with_counts(order_count, unpriced)
+            .with_effective_range(
+                first.and_then(|at| effective_label(Some(at))),
+                latest.and_then(|at| effective_label(Some(at))),
+            ),
+        );
     }
     let grouped = group_current_rows(rows, &query.dimension, &sources);
     let totals = totals_for(&grouped);
@@ -391,25 +389,23 @@ fn group_current_rows(
         .map(|(key, values)| {
             let (order_count, gross, unpriced, customer_count) = aggregate_group(&values);
             let (label, user_name, org_name) = group_labels(dimension, &key, &values, sources);
-            CurrentQualityRow {
-                row_id: format!("{dimension}:{key}"),
-                kind: if dimension == "owner_user" { "owner_user".into() } else { "owner_org".into() },
-                customer_id: None,
-                customer_no: None,
-                customer_name: None,
-                group_id: Some(key.clone()),
-                label: Some(label),
-                owner_user_id: (dimension == "owner_user" && !key.is_empty()).then(|| key.clone()),
-                owner_user_name: user_name,
-                owner_org_unit_id: (dimension == "owner_org" && !key.is_empty()).then(|| key.clone()),
-                owner_org_unit_name: org_name,
-                customer_count: Some(customer_count),
-                order_count,
-                gross_total: money(gross),
-                unpriced_count: unpriced,
-                first_effective_at: values.iter().filter_map(|r| r.first_effective_at.clone()).min(),
-                latest_effective_at: values.iter().filter_map(|r| r.latest_effective_at.clone()).max(),
-            }
+            CurrentQualityRow::new(
+                format!("{dimension}:{key}"),
+                if dimension == "owner_user" { "owner_user".into() } else { "owner_org".into() },
+                money(gross),
+            )
+            .with_group(Some(key.clone()), Some(label), Some(customer_count))
+            .with_ownership(
+                (dimension == "owner_user" && !key.is_empty()).then(|| key.clone()),
+                user_name,
+                (dimension == "owner_org" && !key.is_empty()).then(|| key.clone()),
+                org_name,
+            )
+            .with_counts(order_count, unpriced)
+            .with_effective_range(
+                values.iter().filter_map(|r| r.first_effective_at.clone()).min(),
+                values.iter().filter_map(|r| r.latest_effective_at.clone()).max(),
+            )
         })
         .collect()
 }
@@ -523,11 +519,7 @@ fn assemble_current(
         policy_version: 0,
         organization_version: 0,
         scope_version: String::new(),
-        scope: QualityScope {
-            id: "authorized".into(),
-            label: "当前负责客户".into(),
-            permission_version: String::new(),
-        },
+        scope: QualityScope::new("authorized".into(), "当前负责客户".into(), String::new()),
         period: QualityPeriod {
             from: query.from.clone(),
             to: query.to.clone(),

@@ -77,6 +77,32 @@ pub struct SkuFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for SkuFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            sku_no: None,
+            ids: None,
+            product_id: None,
+            status: None,
+            listing_status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for SkuFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -290,6 +316,31 @@ pub struct SkuRevisionFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl Default for SkuRevisionFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            sku_id: None,
+            name: None,
+            barcode: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
 }
 
 impl QueryFilter for SkuRevisionFilter {
@@ -1052,13 +1103,9 @@ mod tests {
     fn sku_revision_filter_normalizes_barcode_for_exact_query() {
         let filter = SkuRevisionFilter {
             sku_id: Some("sku-1".to_string()),
-            name: None,
             barcode: Some(" 6901234567890 ".to_string()),
             status: Some(EnableStatus::Active),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();
@@ -1069,15 +1116,10 @@ mod tests {
     #[test]
     fn sku_filter_applies_listing_status() {
         let filter = SkuFilter {
-            sku_no: None,
-            ids: None,
             product_id: Some("product-1".to_string()),
             status: Some(EnableStatus::Active),
             listing_status: Some(ListingStatus::Listed),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();

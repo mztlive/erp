@@ -106,6 +106,23 @@ pub struct InboxMessageFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for InboxMessageFilter {
+    fn default() -> Self {
+        Self {
+            source_system_id: None,
+            message_type: None,
+            status: None,
+            source_event_id: None,
+            received_at_from: None,
+            received_at_to: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for InboxMessageFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -199,6 +216,24 @@ pub struct IntegrationErrorTaskFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for IntegrationErrorTaskFilter {
+    fn default() -> Self {
+        Self {
+            q: None,
+            message_id: None,
+            business_object_id: None,
+            error_class: None,
+            status: None,
+            owner_role: None,
+            owner_user_id: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for IntegrationErrorTaskFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -286,6 +321,23 @@ pub struct ReconciliationDifferenceFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl Default for ReconciliationDifferenceFilter {
+    fn default() -> Self {
+        Self {
+            q: None,
+            business_object_type: None,
+            business_object_id: None,
+            difference_type: None,
+            created_at_from: None,
+            created_at_to: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
 }
 
 impl QueryFilter for ReconciliationDifferenceFilter {

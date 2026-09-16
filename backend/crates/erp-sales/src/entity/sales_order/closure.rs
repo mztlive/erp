@@ -47,7 +47,7 @@ pub enum SalesOrderFulfillmentBlocker {
 }
 
 /// 结案资格纯事实结果（不含中文文案）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct SalesOrderClosureAssessment {
     /// 交付是否已完成。
     pub fulfillment_complete: bool,
@@ -312,6 +312,12 @@ mod tests {
         assert!(assessment.receivable_settled);
         assert!(!assessment.fulfillment_complete);
         assert!(!assessment.eligible_to_close);
+    }
+
+    #[test]
+    fn closure_assessment_default_is_not_eligible() {
+        let assessment = super::SalesOrderClosureAssessment::default();
+        assert!(!assessment.eligible_to_close && assessment.terminal.is_none());
     }
 
     #[test]

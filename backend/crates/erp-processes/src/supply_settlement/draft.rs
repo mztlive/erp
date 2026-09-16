@@ -23,6 +23,36 @@ struct RefreshReceipt {
     difference_count: usize,
 }
 
+impl RefreshReceipt {
+    /// 构造刷新命令收据。
+    ///
+    /// # 参数
+    /// * `request_id` - 幂等请求身份
+    /// * `source_snapshot_hash` - 来源快照哈希
+    ///
+    /// # 返回
+    /// 返回版本为一、明细为空的收据。
+    fn new(request_id: String, source_snapshot_hash: String) -> Self {
+        Self { request_id, statement_version: 1, source_snapshot_hash, item_count: 0, difference_count: 0 }
+    }
+
+    /// 设置结算单版本与明细计数。
+    ///
+    /// # 参数
+    /// * `statement_version` - 结算单版本
+    /// * `item_count` - 结算明细数
+    /// * `difference_count` - 结算差异数
+    ///
+    /// # 返回
+    /// 返回更新后的收据。
+    fn with_counts(mut self, statement_version: u64, item_count: usize, difference_count: usize) -> Self {
+        self.statement_version = statement_version;
+        self.item_count = item_count;
+        self.difference_count = difference_count;
+        self
+    }
+}
+
 impl SupplierSettlementProcess {
     /// 从服务端最新的不可变来源批次创建结算草稿。
     ///
@@ -129,24 +159,15 @@ impl SupplierSettlementProcess {
         let snapshot = match snapshot {
             Some(snapshot) => snapshot,
             None => {
-                let receipt = RefreshReceipt {
-                    request_id: req.request_id.clone(),
-                    statement_version: statement.base.version,
-                    source_snapshot_hash: statement.source_snapshot_hash.clone(),
-                    item_count,
-                    difference_count,
-                };
+                let receipt =
+                    RefreshReceipt::new(req.request_id.clone(), statement.source_snapshot_hash.clone())
+                        .with_counts(statement.base.version, item_count, difference_count);
                 self.persist_refresh_audit(audit_id, fingerprint, &statement, &receipt, actor).await?;
                 return Ok(refresh_result(statement, receipt, "UNCHANGED", "当前已是最新权威来源快照"));
             },
         };
-        let receipt = RefreshReceipt {
-            request_id: req.request_id.clone(),
-            statement_version: statement.base.version + 1,
-            source_snapshot_hash: statement.source_snapshot_hash.clone(),
-            item_count: snapshot.items.len(),
-            difference_count: snapshot.differences.len(),
-        };
+        let receipt = RefreshReceipt::new(req.request_id.clone(), statement.source_snapshot_hash.clone())
+            .with_counts(statement.base.version + 1, snapshot.items.len(), snapshot.differences.len());
         let audit = refresh_audit(audit_id.clone(), &fingerprint, &statement, &receipt, actor)?;
         let db = self.db.clone();
         let client = db.client().clone();
@@ -324,13 +345,8 @@ mod replay_tests {
     #[test]
     fn refresh_receipt_rejects_both_older_and_newer_versions_and_replaced_hash() {
         let mut statement = super::super::tests::sample_statement();
-        let receipt = RefreshReceipt {
-            request_id: "req-1".into(),
-            statement_version: 2,
-            source_snapshot_hash: statement.source_snapshot_hash.clone(),
-            item_count: 1,
-            difference_count: 0,
-        };
+        let receipt =
+            RefreshReceipt::new("req-1".into(), statement.source_snapshot_hash.clone()).with_counts(2, 1, 0);
         for version in [1, 2, 3] {
             statement.base.version = version;
             assert_eq!(ensure_refresh_replay(&statement, &receipt).is_ok(), version == 2);

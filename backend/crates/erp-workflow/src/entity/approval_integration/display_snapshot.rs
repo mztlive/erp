@@ -10,6 +10,26 @@ pub struct ApprovalDisplaySnapshot {
     pub impact_summary: Option<String>,
     pub source: ApprovalBriefSource,
 }
+impl ApprovalDisplaySnapshot {
+    /// 以必填根单据构造展示快照；展示维度默认为空。
+    ///
+    /// # 参数
+    /// * `root_document_id` - 根单据 ID
+    ///
+    /// # 返回
+    /// 返回空展示来源的快照。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(root_document_id: String) -> Self {
+        Self {
+            root_document_id,
+            counterparty_label: None,
+            impact_summary: None,
+            source: ApprovalBriefSource::default(),
+        }
+    }
+}
 
 /// 经业务读模型筛选的固定展示字段。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -38,6 +58,22 @@ pub struct ApprovalBriefSection {
     pub value: String,
     pub numeric: bool,
     pub object_id: Option<String>,
+}
+impl ApprovalBriefSection {
+    /// 以必填键值构造展示节；关联默认为空。
+    ///
+    /// # 参数
+    /// * `label` - 业务键
+    /// * `value` - 业务值
+    ///
+    /// # 返回
+    /// 返回非数值型的展示节。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(label: String, value: String) -> Self {
+        Self { label, value, numeric: false, object_id: None }
+    }
 }
 
 impl ApprovalDisplaySnapshot {
@@ -81,6 +117,11 @@ impl ApprovalDisplaySnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn brief_section_new_defaults_to_non_numeric() {
+        let section = ApprovalBriefSection::new("k".into(), "v".into());
+        assert!(!section.numeric && section.object_id.is_none());
+    }
 
     /// 有界快照持久化后按原值还原；拒绝无界文本、字段和空关联。
     #[test]

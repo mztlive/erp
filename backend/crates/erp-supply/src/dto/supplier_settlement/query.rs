@@ -24,7 +24,7 @@ const ITEM_SORT_FIELDS: &[&str] = &["created_at", "erp_calculated_amount", "supp
 const DIFFERENCE_SORT_FIELDS: &[&str] = &["created_at", "difference_amount", "resolved_at"];
 
 /// 供应商结算单列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct SupplierSettlementStatementListParams {
     /// 编号或供应商当前名称字面量关键词。
     #[validate(length(max = 200))]
@@ -225,7 +225,7 @@ impl From<SupplierSettlementStatement> for SupplierSettlementStatementView {
 }
 
 /// 结算明细列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct SupplierSettlementItemListParams {
     /// 所属结算单筛选。
     pub statement_id: Option<SupplierSettlementStatementId>,
@@ -312,7 +312,7 @@ pub struct SupplierSettlementItemView {
 }
 
 /// 结算差异列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct SupplierSettlementDifferenceListParams {
     /// 所属结算明细筛选。
     pub statement_item_id: Option<SupplierSettlementItemId>,

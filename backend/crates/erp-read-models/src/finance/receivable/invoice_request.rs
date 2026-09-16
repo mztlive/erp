@@ -122,14 +122,15 @@ impl ReceivableReadService {
                     &mut NoTransaction,
                 )
                 .await?;
-            approval.instance = Some(crate::finance::dto::DocumentApprovalInstanceView {
-                id: instance.base.id,
-                status: instance.status.as_str().into(),
-                current_round_no: instance.current_round_no,
-                current_node: current.as_ref().map(|e| e.node_name.clone()),
-                current_assignee: current.as_ref().map(|e| e.assignee_name_snapshot.clone()),
-                latest_rejection: None,
-            });
+            approval.instance = Some(
+                crate::finance::dto::DocumentApprovalInstanceView::new(
+                    instance.base.id,
+                    instance.status.as_str().into(),
+                )
+                .with_current_round_no(instance.current_round_no)
+                .with_current_node(current.as_ref().map(|e| e.node_name.clone()))
+                .with_current_assignee(current.as_ref().map(|e| e.assignee_name_snapshot.clone())),
+            );
         }
         let creator = self
             .db

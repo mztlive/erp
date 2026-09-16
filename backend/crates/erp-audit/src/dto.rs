@@ -6,7 +6,7 @@ use validator::Validate;
 use crate::entity::AuditLog;
 
 /// 审计日志列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct AuditLogListParams {
     pub actor_account: Option<String>,
     pub action: Option<String>,
@@ -99,8 +99,7 @@ mod tests {
             action: Some("   ".into()),
             resource_type: Some(" customer ".into()),
             success: Some(true),
-            page: None,
-            page_size: None,
+            ..Default::default()
         };
 
         let normalized = params.normalized();
@@ -146,15 +145,20 @@ mod tests {
     }
 
     #[test]
+    fn list_params_default_is_all_empty() {
+        let params = AuditLogListParams::default();
+        assert_eq!(params.actor_account, None);
+        assert_eq!(params.action, None);
+        assert_eq!(params.resource_type, None);
+        assert_eq!(params.success, None);
+        assert_eq!(params.page, None);
+        assert_eq!(params.page_size, None);
+        assert!(params.validate().is_ok());
+    }
+
+    #[test]
     fn list_params_reject_unbounded_page_size_and_clamp_internal_normalization() {
-        let params = AuditLogListParams {
-            actor_account: None,
-            action: None,
-            resource_type: None,
-            success: None,
-            page: Some(1),
-            page_size: Some(u32::MAX),
-        };
+        let params = AuditLogListParams { page: Some(1), page_size: Some(u32::MAX), ..Default::default() };
 
         assert!(params.validate().is_err());
         assert_eq!(params.normalized().page_size, 100);

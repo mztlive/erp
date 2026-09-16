@@ -132,7 +132,7 @@ pub struct DeliveryDetailView {
 }
 
 /// 发货单列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct DeliveryListParams {
     /// 销售单筛选。
     pub sales_order_id: Option<SalesOrderId>,

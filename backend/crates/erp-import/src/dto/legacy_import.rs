@@ -232,7 +232,7 @@ pub struct LegacyImportBatchListItem {
 }
 
 /// 导入批次列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct LegacyImportBatchListParams {
     /// 批次号模糊筛选（字面量、忽略大小写）。
     pub batch_no: Option<String>,
@@ -870,14 +870,8 @@ mod tests {
     fn batch_list_params_normalize_paging_filters_and_sort_defaults() {
         let params = LegacyImportBatchListParams {
             batch_no: Some(" IMP-1 ".to_string()),
-            source_system_id: None,
-            status: None,
             baseline_date_from: Some(BusinessDate::from_ymd(2026, 1, 1).unwrap()),
-            baseline_date_to: None,
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.batch_no.as_deref(), Some("IMP-1"));
@@ -889,17 +883,8 @@ mod tests {
 
     #[test]
     fn list_params_reject_unbounded_page_size() {
-        let params = LegacyImportBatchListParams {
-            batch_no: None,
-            source_system_id: None,
-            status: None,
-            baseline_date_from: None,
-            baseline_date_to: None,
-            page: Some(0),
-            page_size: Some(u32::MAX),
-            sort_by: None,
-            sort_dir: None,
-        };
+        let params =
+            LegacyImportBatchListParams { page: Some(0), page_size: Some(u32::MAX), ..Default::default() };
         assert!(params.validate().is_err());
     }
 

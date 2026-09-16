@@ -39,7 +39,7 @@ pub(super) struct RowManifest {
 }
 
 /// 清单中的一行。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(super) struct RowManifestRow {
     /// Excel 行号（1 起，含表头）。
     pub row_number: u32,
@@ -112,13 +112,8 @@ pub(super) async fn build_row_manifest(
     let mut rows = Vec::with_capacity(parsed.rows.len());
     let mut uploaded_object_keys = Vec::new();
     for row in &parsed.rows {
-        let mut entry = RowManifestRow {
-            row_number: row.row_number,
-            cells: row.cells.clone(),
-            main_image: None,
-            carousel: Vec::new(),
-            media_error: None,
-        };
+        let mut entry =
+            RowManifestRow { row_number: row.row_number, cells: row.cells.clone(), ..Default::default() };
         let mut sort_order = 0;
         for (index, cell) in row.cells.iter().enumerate().take(5).skip(2) {
             let Some(image_id) = dispimg_id(cell) else {

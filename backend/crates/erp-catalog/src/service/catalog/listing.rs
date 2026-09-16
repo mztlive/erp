@@ -202,12 +202,8 @@ impl CatalogService {
     pub(super) async fn product_view(&self, product: Product) -> Result<ProductView> {
         let product_id = ProductId::new(product.base.id.clone());
         let mut summaries = self.product_listing_views(std::slice::from_ref(&product_id)).await?;
-        let summary = summaries.remove(product_id.as_ref()).unwrap_or(ProductListingView {
-            product_id: product_id.to_string(),
-            listing_status: ProductListingStatus::Unlisted,
-            listed_sku_count: 0,
-            sku_count: 0,
-        });
+        let summary =
+            summaries.remove(product_id.as_ref()).unwrap_or(ProductListingView::new(product_id.to_string()));
         Ok(ProductView {
             id: product.base.id,
             product_no: product.product_no,
@@ -309,6 +305,15 @@ mod tests {
 
     fn summary(product_id: &str, listed_sku_count: u32, sku_count: u32) -> ProductListingSummary {
         ProductListingSummary::new(product_id, listed_sku_count, sku_count)
+    }
+
+    #[test]
+    fn product_listing_view_new_starts_unlisted_with_zero_counts() {
+        let view = ProductListingView::new("product-1");
+        assert_eq!(view.product_id, "product-1");
+        assert_eq!(view.listing_status, ProductListingStatus::Unlisted);
+        assert_eq!(view.listed_sku_count, 0);
+        assert_eq!(view.sku_count, 0);
     }
 
     #[test]

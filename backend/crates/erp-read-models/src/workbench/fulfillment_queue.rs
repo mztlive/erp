@@ -376,23 +376,26 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let (due_from, due_before) = due_bounds(query.due)?;
         let repository_page = FulfillmentQueueRepository::new(&self.db)
             .search_fulfillment_queue(
-                &RepositoryFilter {
-                    owner_user_id: actor.id().to_string(),
-                    operation_types: visible_types
-                        .iter()
-                        .map(|operation_type| operation_type.as_str().to_string())
-                        .collect(),
-                    operation_id: query.operation_id,
-                    sales_order_id: query.sales_order_id,
-                    purchase_order_id: query.purchase_order_id,
-                    warehouse_id: query.warehouse_id,
-                    query: query.query,
-                    due_from,
-                    due_before,
-                    gate: query.gate.map(|gate| gate.as_repository_str().to_string()),
-                    offset,
-                    page_size: query.page_size,
-                },
+                &RepositoryFilter::new(actor.id().to_string())
+                    .with_operation_types(
+                        visible_types
+                            .iter()
+                            .map(|operation_type| operation_type.as_str().to_string())
+                            .collect(),
+                    )
+                    .with_scope(
+                        query.operation_id,
+                        query.sales_order_id,
+                        query.purchase_order_id,
+                        query.warehouse_id,
+                    )
+                    .with_conditions(
+                        query.query,
+                        due_from,
+                        due_before,
+                        query.gate.map(|gate| gate.as_repository_str().to_string()),
+                    )
+                    .with_paging(offset, query.page_size),
                 executor,
             )
             .await?;

@@ -97,6 +97,39 @@ pub struct ProductFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for ProductFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            ids: None,
+            product_no: None,
+            keyword: None,
+            product_kind: None,
+            category_id: None,
+            brand_id: None,
+            supplier_id: None,
+            status: None,
+            listing_status: None,
+            supply_coverage: None,
+            sales_price_min: None,
+            sales_price_max: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for ProductFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -652,5 +685,30 @@ fn product_revision_projection() -> Document {
         "effective_to": 1,
         "version": 1,
         "created_at": 1,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use persistence_core::Pagination;
+
+    use super::ProductFilter;
+
+    #[test]
+    fn product_filter_default_starts_at_page_one_size_twenty() {
+        let filter = ProductFilter::default();
+        assert_eq!(filter.page, 1);
+        assert_eq!(filter.page_size, 20);
+        assert_eq!(filter.ids, None);
+        assert_eq!(filter.sales_price_min, None);
+        assert!(!filter.sort_ascending);
+        assert_eq!(filter.page_and_size(), (1, 20));
+    }
+
+    #[test]
+    fn product_filter_default_matches_empty_pagination() {
+        let filter = ProductFilter::default();
+        assert_eq!(filter.skip(), 0);
+        assert_eq!(filter.limit(), 20);
     }
 }

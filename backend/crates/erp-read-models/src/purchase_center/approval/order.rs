@@ -60,7 +60,7 @@ pub fn document_approval_view_with_definition(
         definition: binding.map(|item| definition_view_from_binding(item, graph)),
         instance,
         recent_history: Vec::new(),
-        history_page: DocumentApprovalHistoryPageView { next_cursor: None, has_more: false },
+        history_page: DocumentApprovalHistoryPageView::default(),
         allowed_actions: allowed_document_actions(status),
     }
 }
@@ -79,15 +79,17 @@ pub(in crate::purchase_center) fn definition_view_from_binding(
 ) -> DocumentApprovalDefinitionView {
     let mut nodes = graph.map(|item| item.nodes.iter().collect::<Vec<_>>()).unwrap_or_default();
     nodes.sort_by_key(|node| node.display_order);
-    DocumentApprovalDefinitionView {
-        id: binding.approval_process_definition_id.as_ref().to_string(),
-        name: graph.map(|item| item.definition.name.clone()).unwrap_or_default(),
-        version: binding.approval_definition_version,
-        nodes: nodes
+    DocumentApprovalDefinitionView::new(
+        binding.approval_process_definition_id.as_ref().to_string(),
+        graph.map(|item| item.definition.name.clone()).unwrap_or_default(),
+    )
+    .with_version(binding.approval_definition_version)
+    .with_nodes(
+        nodes
             .into_iter()
             .map(|node| DocumentApprovalNodeView { key: node.node_key.clone(), name: node.node_name.clone() })
             .collect(),
-    }
+    )
 }
 
 /// 单据详情允许的审批相关动作。不含选择定义或审批人。

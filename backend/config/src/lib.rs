@@ -129,6 +129,97 @@ pub struct S3Config {
     pub force_path_style: bool,
 }
 
+impl S3Config {
+    /// 由必填 bucket、签名与访问参数构造 S3 启动配置。
+    ///
+    /// # 参数
+    ///
+    /// * `bucket` - 存放上传对象的 bucket
+    /// * `region` - 签名 region
+    /// * `access_key_id` - S3 访问密钥 ID
+    /// * `secret_access_key` - S3 访问密钥
+    /// * `public_base_url` - 对外返回的公开访问基础 URL
+    ///
+    /// # 返回
+    ///
+    /// * `S3Config` - 端点、前缀与 path-style 均为空/关闭的启动配置
+    pub fn new(
+        bucket: impl Into<String>,
+        region: impl Into<String>,
+        access_key_id: impl Into<String>,
+        secret_access_key: impl Into<String>,
+        public_base_url: impl Into<String>,
+    ) -> Self {
+        Self {
+            bucket: bucket.into(),
+            region: region.into(),
+            endpoint: None,
+            access_key_id: access_key_id.into(),
+            secret_access_key: secret_access_key.into(),
+            session_token: None,
+            key_prefix: None,
+            public_base_url: public_base_url.into(),
+            force_path_style: false,
+        }
+    }
+
+    /// 设置自定义 endpoint。
+    ///
+    /// # 参数
+    ///
+    /// * `endpoint` - 自定义 endpoint
+    ///
+    /// # 返回
+    ///
+    /// * `S3Config` - 更新后的启动配置
+    pub fn with_endpoint(mut self, endpoint: impl Into<String>) -> Self {
+        self.endpoint = Some(endpoint.into());
+        self
+    }
+
+    /// 设置临时凭证的 session token。
+    ///
+    /// # 参数
+    ///
+    /// * `session_token` - 临时凭证的 session token
+    ///
+    /// # 返回
+    ///
+    /// * `S3Config` - 更新后的启动配置
+    pub fn with_session_token(mut self, session_token: impl Into<String>) -> Self {
+        self.session_token = Some(session_token.into());
+        self
+    }
+
+    /// 设置对象键前缀。
+    ///
+    /// # 参数
+    ///
+    /// * `key_prefix` - 对象键前缀
+    ///
+    /// # 返回
+    ///
+    /// * `S3Config` - 更新后的启动配置
+    pub fn with_key_prefix(mut self, key_prefix: impl Into<String>) -> Self {
+        self.key_prefix = Some(key_prefix.into());
+        self
+    }
+
+    /// 设置是否强制 path-style URL。
+    ///
+    /// # 参数
+    ///
+    /// * `force_path_style` - 是否强制 path-style URL
+    ///
+    /// # 返回
+    ///
+    /// * `S3Config` - 更新后的启动配置
+    pub fn with_force_path_style(mut self, force_path_style: bool) -> Self {
+        self.force_path_style = force_path_style;
+        self
+    }
+}
+
 impl fmt::Debug for S3Config {
     /// 输出不包含密钥正文的调试信息。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

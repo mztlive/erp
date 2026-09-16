@@ -31,7 +31,7 @@ pub struct CategoryParentLink {
 ///
 /// Repository 只投影 ID、父 ID，并标出缺失、成环或深度截断；父节点不存在、
 /// 命中自身和成环的错误适配仍由 Service 承担。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CategoryParentChainFact {
     /// 待校验的起始父分类；`None` 表示新节点本身提升为根，无需读取。
     pub start_parent_id: Option<String>,

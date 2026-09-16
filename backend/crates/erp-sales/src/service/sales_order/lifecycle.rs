@@ -56,7 +56,7 @@ use crate::entity::sales_order::{
 use crate::repository::SalesOrderExt;
 
 /// Sales-owned write plan for replacing or creating the submission's working copy.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct SalesOrderWorkingCopyPersistPlan {
     /// New stable line identities, persisted before working-copy rows.
     pub created_stable_lines: Vec<SalesOrderLine>,

@@ -79,6 +79,32 @@ pub struct WarehouseFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for WarehouseFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            warehouse_id: None,
+            require_inbound_handler: false,
+            q: None,
+            warehouse_code: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for WarehouseFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -188,6 +214,22 @@ pub struct WarehouseRevisionFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl Default for WarehouseRevisionFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self { warehouse_id: None, name: None, page: 1, page_size: 20, sort_by: None, sort_ascending: false }
+    }
 }
 
 impl QueryFilter for WarehouseRevisionFilter {
@@ -677,15 +719,9 @@ mod tests {
     #[test]
     fn warehouse_filter_applies_optional_fields_and_deleted_filter() {
         let filter = WarehouseFilter {
-            warehouse_id: None,
-            require_inbound_handler: false,
-            q: None,
             warehouse_code: Some("WH-BJ-001".to_string()),
             status: Some(EnableStatus::Active),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();
@@ -699,10 +735,7 @@ mod tests {
         let filter = WarehouseRevisionFilter {
             warehouse_id: Some("wh-1".to_string()),
             name: Some("北京".to_string()),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();

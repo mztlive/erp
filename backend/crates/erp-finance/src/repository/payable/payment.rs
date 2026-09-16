@@ -60,6 +60,33 @@ pub struct SupplierPaymentFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for SupplierPaymentFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            keyword_ids: None,
+            keyword: None,
+            keyword_supplier_ids: Vec::new(),
+            payment_no: None,
+            supplier_id: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for SupplierPaymentFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -208,16 +235,10 @@ mod tests {
     #[test]
     fn payment_filter_escapes_regex_literals() {
         let filter = SupplierPaymentFilter {
-            keyword_ids: None,
             keyword: Some("狮峰.茶".into()),
             keyword_supplier_ids: vec![erp_core::ids::SupplierAccountId::new("supplier-1")],
             payment_no: Some("PAY-9.9".to_string()),
-            supplier_id: None,
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();

@@ -66,7 +66,7 @@ pub struct ApprovalRuntimeReadRow {
 }
 
 /// 经不可变快照范围过滤后的审批实例页。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ApprovalRuntimeReadPage {
     /// 当前稳定游标页。
     pub items: Vec<ApprovalRuntimeReadRow>,

@@ -49,7 +49,7 @@ pub struct CreateDifferenceRequest {
 }
 
 /// 对账差异列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct DifferenceListParams {
     /// 编号、业务对象、事件或差异摘要的字面量关键词。
     #[validate(length(max = 200))]

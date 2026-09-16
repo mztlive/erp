@@ -249,6 +249,51 @@ pub struct ProductListingView {
     pub sku_count: u32,
 }
 
+impl ProductListingView {
+    /// 以商品稳定 ID 构造未上架的继承状态视图。
+    ///
+    /// # 参数
+    /// * `product_id` - 商品稳定 ID
+    ///
+    /// # 返回
+    /// 返回计数为零的未上架视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(product_id: impl Into<String>) -> Self {
+        Self {
+            product_id: product_id.into(),
+            listing_status: ProductListingStatus::Unlisted,
+            listed_sku_count: 0,
+            sku_count: 0,
+        }
+    }
+
+    /// 设置继承的上架状态与 SKU 计数。
+    ///
+    /// # 参数
+    /// * `listing_status` - 从当前启用 SKU 继承的状态
+    /// * `listed_sku_count` - 当前已上架 SKU 数
+    /// * `sku_count` - 当前启用 SKU 总数
+    ///
+    /// # 返回
+    /// 返回更新后的状态视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_counts(
+        mut self,
+        listing_status: ProductListingStatus,
+        listed_sku_count: u32,
+        sku_count: u32,
+    ) -> Self {
+        self.listing_status = listing_status;
+        self.listed_sku_count = listed_sku_count;
+        self.sku_count = sku_count;
+        self
+    }
+}
+
 /// 商品列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ProductListParams {
@@ -428,7 +473,7 @@ impl From<ProductRevision> for ProductRevisionView {
 }
 
 /// 商品修订列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct ProductRevisionListParams {
     /// 所属商品 SPU 筛选。
     pub product_id: Option<ProductId>,
@@ -536,7 +581,7 @@ impl From<Sku> for SkuView {
 }
 
 /// SKU 列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct SkuListParams {
     /// 关键字：SKU 编号或当前修订名称（模糊、忽略大小写）。
     pub q: Option<String>,
@@ -676,7 +721,7 @@ impl From<SkuRevision> for SkuRevisionView {
 }
 
 /// SKU 修订列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct SkuRevisionListParams {
     /// 所属稳定 SKU 筛选。
     pub sku_id: Option<SkuId>,

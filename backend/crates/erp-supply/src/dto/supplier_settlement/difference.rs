@@ -29,6 +29,41 @@ pub struct SettlementDifferenceEvidenceRequest {
 }
 
 /// 差异补证命令结果。
+impl SettlementDifferenceEvidenceRequest {
+    /// 以必填身份构造补证命令；意见与说明默认为空。
+    ///
+    /// # 参数
+    /// * `statement_id` - 结算单ID
+    /// * `difference_id` - 差异ID
+    /// * `request_id` - 请求ID
+    /// * `idempotency_key` - 幂等键
+    ///
+    /// # 返回
+    /// 返回首版的补证命令。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(
+        statement_id: String,
+        difference_id: String,
+        request_id: String,
+        idempotency_key: String,
+    ) -> Self {
+        Self {
+            statement_id,
+            difference_id,
+            expected_difference_version: 1,
+            evidence_reference_ids: Vec::new(),
+            opinion_code: None,
+            comment: None,
+            request_id,
+            idempotency_key,
+        }
+    }
+}
+
+/// 差异补证命令结果。
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SettlementDifferenceEvidenceResult {
     pub result_status: String,

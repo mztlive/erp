@@ -74,9 +74,7 @@ fn sources() -> Sources {
         }],
         revisions: vec![revision],
         lines: vec![line],
-        goods: vec![],
-        allocations: vec![],
-        entries: vec![],
+        ..Default::default()
     };
     cost(&mut result, "purchase", CostStage::Actual, CostType::Product, "60");
     cost(&mut result, "delivery", CostStage::Actual, CostType::Delivery, "10");

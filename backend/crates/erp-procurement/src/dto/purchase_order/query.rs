@@ -23,7 +23,7 @@ pub struct PageParams {
 }
 
 /// 采购单列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct PurchaseOrderListParams {
     /// 跨页与导出必须使用前一页的当前授权和业务版本。

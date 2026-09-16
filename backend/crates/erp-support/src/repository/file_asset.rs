@@ -73,6 +73,31 @@ pub struct FileAssetFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for FileAssetFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            file_name: None,
+            security_scan_status: None,
+            retention_class: None,
+            sensitivity_class: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for FileAssetFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -301,10 +326,7 @@ mod tests {
             security_scan_status: Some(SecurityScanStatus::Pending),
             retention_class: Some(RetentionClass::ThirtyDays),
             sensitivity_class: Some(SensitivityClass::Sensitive),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();

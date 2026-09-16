@@ -57,6 +57,31 @@ pub struct ProductBrandFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for ProductBrandFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            q: None,
+            brand_code: None,
+            name: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for ProductBrandFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -397,19 +422,11 @@ mod keyword_regression_tests {
     use super::*;
     #[test]
     fn keyword_preserves_structural_scope() {
-        let mut filter = ProductBrandFilter {
-            q: None,
-            brand_code: None,
-            name: None,
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+        let filter = ProductBrandFilter {
+            q: Some("B.[1]".into()),
+            brand_code: Some("EXACT".into()),
+            ..Default::default()
         };
-
-        filter.q = Some("B.[1]".into());
-        filter.brand_code = Some("EXACT".into());
         let query = filter.to_doc();
         assert_eq!(query.get_str("brand_code").unwrap(), "EXACT");
         let fields = query.get_array("$or").unwrap();

@@ -144,7 +144,7 @@ pub struct ReplaceCapabilitiesRequest {
 }
 
 /// 连接列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct SupplierApiConnectionListParams {
     /// 编号或供应商当前名称字面量关键词。
     #[validate(length(max = 200))]
@@ -364,6 +364,36 @@ pub struct SafeReferenceView {
     pub alias: Option<String>,
     pub version: Option<String>,
     pub visible: bool,
+}
+impl SafeReferenceView {
+    /// 以必填状态构造安全引用投影；别名与版本默认为空。
+    ///
+    /// # 参数
+    /// * `state` - 引用绑定状态
+    ///
+    /// # 返回
+    /// 返回不可见的引用投影。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(state: &'static str) -> Self {
+        Self { state, alias: None, version: None, visible: false }
+    }
+
+    /// 设置是否可见。
+    ///
+    /// # 参数
+    /// * `visible` - 是否可见
+    ///
+    /// # 返回
+    /// 返回更新后的投影。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_visible(mut self, visible: bool) -> Self {
+        self.visible = visible;
+        self
+    }
 }
 
 /// 地址与密钥引用的安全状态集合；不包含底层引用正文。
@@ -626,6 +656,13 @@ mod tests {
 
     use super::{SortDir, SupplierApiConnectionListParams, normalize_sort};
     use crate::entity::supplier_api::{ConnectionEnvironment, SupplierApiConnectionStatus};
+
+    #[test]
+    fn safe_reference_view_new_defaults_to_hidden() {
+        let view = super::SafeReferenceView::new("BOUND");
+        assert_eq!(view.state, "BOUND");
+        assert!(!view.visible && view.alias.is_none());
+    }
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {

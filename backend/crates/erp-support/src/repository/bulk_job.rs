@@ -90,6 +90,30 @@ pub struct BulkSelectionSnapshotFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for BulkSelectionSnapshotFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            selection_type: None,
+            status: None,
+            created_by: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for BulkSelectionSnapshotFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -289,6 +313,32 @@ pub struct BackgroundJobFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl Default for BackgroundJobFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            job_no: None,
+            job_type: None,
+            domain_job_type: None,
+            status: None,
+            requested_by: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
 }
 
 impl QueryFilter for BackgroundJobFilter {
@@ -714,10 +764,7 @@ mod tests {
             selection_type: Some(SelectionType::Export),
             status: Some(SelectionStatus::Confirmed),
             created_by: Some("admin-1".to_string()),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();
@@ -732,13 +779,8 @@ mod tests {
         let filter = BackgroundJobFilter {
             job_no: Some("job-001".to_string()),
             job_type: Some(JobType::Import),
-            domain_job_type: None,
             status: Some(JobStatus::Running),
-            requested_by: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();

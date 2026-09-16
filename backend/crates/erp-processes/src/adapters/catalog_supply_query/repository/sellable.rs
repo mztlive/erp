@@ -21,7 +21,7 @@ const SUPPLIER_OFFERING_AVAILABILITIES: &str =
     <mongodb::Database as SupplierOfferingExt>::SUPPLIER_OFFERING_AVAILABILITIES;
 
 /// 公司商品池聚合分页结果。
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 struct SellableSkuFacet {
     /// 当前页数据。
     items: Vec<SellableSkuRow>,
@@ -145,7 +145,7 @@ impl CatalogSupplyRepository<'_> {
                     .await?
             },
         };
-        Ok(rows.into_iter().next().unwrap_or(SellableSkuFacet { items: Vec::new(), total: Vec::new() }))
+        Ok(rows.into_iter().next().unwrap_or_default())
     }
 }
 

@@ -51,12 +51,14 @@ mod tests {
 
     use super::command::submit_request_shape;
     use super::{
-        CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest,
-        CreatePurchaseOrdersFromSourcingRequest, PurchaseOrderListParams, SavePurchaseOrderDraftRequest,
-        SavePurchaseOrderLine, SavePurchaseOrderLinePatch, SortDir, SourcingLineAssignment,
-        SubmitPurchaseOrderRequest, SupplySourceType, VoidPurchaseOrderRequest, normalize_sort,
+        CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult,
+        CreatePurchaseOrdersFromSourcingRequest, CreatePurchaseOrdersFromSourcingResult,
+        PurchaseOrderListParams, PurchaseReviewResult, SavePurchaseOrderDraftRequest, SavePurchaseOrderLine,
+        SavePurchaseOrderLinePatch, SortDir, SourcingLineAssignment, SubmitPurchaseOrderRequest,
+        SupplySourceType, VoidPurchaseOrderRequest, normalize_sort,
     };
     use crate::Error;
+    use crate::dto::procurement_responsibility::ProcurementResponsibilityResolveLineView;
     use crate::entity::purchase_order::{
         PurchaseLineType, PurchaseOrderStatus, PurchaseOrderSubmissionLine, RequestedLine, SourcingAssignment,
     };
@@ -96,10 +98,10 @@ mod tests {
     /// 指纹算法或载荷形态变化导致摘要漂移时测试失败。
     #[test]
     fn save_fingerprint_golden() {
-        let request = SavePurchaseOrderDraftRequest {
-            expected_lock_version: 3,
-            payment_term_code: Some(" NET-30 ".to_string()),
-            lines: vec![SavePurchaseOrderLine {
+        let request = SavePurchaseOrderDraftRequest::new("save-key-1")
+            .with_expected_lock_version(3)
+            .with_payment_term_code(" NET-30 ")
+            .with_lines(vec![SavePurchaseOrderLine {
                 line_type: PurchaseLineType::ItemService,
                 procurement_confirmation_line_id: None,
                 sku_id: Some("sku-1".to_string()),
@@ -116,10 +118,7 @@ mod tests {
                 sales_order_submission_line_id: Some("sales-submission-line-1".to_string()),
                 allocated_quantity: Some("1".to_string()),
                 gross_amount: None,
-            }],
-            line_patches: vec![],
-            idempotency_key: "save-key-1".to_string(),
-        };
+            }]);
         assert_eq!(
             request.request_fingerprint("po-1").unwrap(),
             "28ffd5720e0a0bd90a07358d39f81a313c3b10746c037a927ceb4b635068a8f5"
@@ -178,22 +177,10 @@ mod tests {
             work_item_id: "wi-1".to_string(),
             sales_order_id: "so-1".to_string(),
             lines: vec![
-                SourcingLineAssignment {
-                    sales_order_line_id: "sol-1".to_string(),
-                    basis_id: "basis-1".to_string(),
-                    source_type: SupplySourceType::Purchase,
-                    target_warehouse_id: Some("wh-1".to_string()),
-                    quantity: "10".to_string(),
-                    expected_delivery_date: "2026-08-25".to_string(),
-                },
-                SourcingLineAssignment {
-                    sales_order_line_id: "sol-2".to_string(),
-                    basis_id: "basis-2".to_string(),
-                    source_type: SupplySourceType::ExistingStock,
-                    target_warehouse_id: None,
-                    quantity: "5".to_string(),
-                    expected_delivery_date: "2026-08-26".to_string(),
-                },
+                SourcingLineAssignment::new("sol-1", "basis-1", "10", "2026-08-25")
+                    .with_target_warehouse_id("wh-1"),
+                SourcingLineAssignment::new("sol-2", "basis-2", "5", "2026-08-26")
+                    .with_source_type(SupplySourceType::ExistingStock),
             ],
             idempotency_key: "sourcing-key-1".to_string(),
         };
@@ -313,17 +300,10 @@ mod tests {
     #[test]
     fn list_params_normalize_paging_filters_and_sort_defaults() {
         let params = PurchaseOrderListParams {
-            scope_version: None,
-            owner_user_ids: None,
             q: Some(" PO-2026 ".to_string()),
-            sales_order_id: None,
             supplier_id: Some(" sup-1 ".to_string()),
             status: Some(PurchaseOrderStatus::PendingFinanceReview),
-            review_status: None,
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.q.as_deref(), Some("PO-2026"));
@@ -333,22 +313,74 @@ mod tests {
         assert_eq!(query.paging.page_size, 20);
         assert_eq!(query.paging.sort_by, "created_at");
         assert_eq!(query.paging.sort_dir, SortDir::Desc);
+        assert!(PurchaseOrderListParams::default().q.is_none());
+    }
+
+    #[test]
+    fn tier_b_draft_request_constructor_sets_key_only() {
+        let request = SavePurchaseOrderDraftRequest::new("save-key-1").with_expected_lock_version(3);
+        assert_eq!(request.idempotency_key, "save-key-1");
+        assert_eq!(request.expected_lock_version, 3);
+        assert!(request.lines.is_empty());
+        let priced = SavePurchaseOrderDraftRequest::new("save-key-1")
+            .with_payment_term_code("NET-30")
+            .with_expected_lock_version(1);
+        assert_eq!(priced.payment_term_code.as_deref(), Some("NET-30"));
+    }
+
+    #[test]
+    fn tier_b_result_constructors_set_required_fields() {
+        let order = CreatePurchaseOrderResult::new("po-1", "PO-1", "so-1").with_lock_version(3);
+        assert_eq!(order.purchase_order_id, "po-1");
+        assert_eq!(order.lock_version, 3);
+        assert!(!order.replayed);
+        let sourcing = CreatePurchaseOrdersFromSourcingResult::new("OPEN", "so-1")
+            .with_orders(vec![order])
+            .with_replayed(true);
+        assert_eq!(sourcing.work_item_status, "OPEN");
+        assert!(sourcing.replayed);
+        let assignment = SourcingLineAssignment::new("sol-1", "basis-1", "10", "2026-08-25")
+            .with_target_warehouse_id("wh-1");
+        assert_eq!(assignment.source_type, SupplySourceType::Purchase);
+        assert_eq!(assignment.target_warehouse_id.as_deref(), Some("wh-1"));
+        let review =
+            PurchaseReviewResult::new("wi-1", "COMPLETED", "3", "2", "APPROVED", "so-1").with_lock_version(4);
+        assert_eq!(review.work_item_id, "wi-1");
+        assert_eq!(review.lock_version, 4);
+        assert!(review.revision_id.is_none());
+        let resolve = ProcurementResponsibilityResolveLineView::new("line-1").with_resolved(true);
+        assert_eq!(resolve.line_key, "line-1");
+        assert!(resolve.resolved);
+    }
+
+    #[test]
+    fn tier_c_purchase_filters_default_to_first_page_size_20() {
+        use crate::repository::procurement_responsibility::ProcurementResponsibilityRuleFilter;
+        use crate::repository::purchase_order::{PurchaseOrderFilter, PurchaseOrderSubmissionFilter};
+        assert_eq!((PurchaseOrderFilter::default().page, PurchaseOrderFilter::default().page_size), (1, 20));
+        assert_eq!(
+            (
+                PurchaseOrderSubmissionFilter::default().page,
+                PurchaseOrderSubmissionFilter::default().page_size
+            ),
+            (1, 20)
+        );
+        assert_eq!(
+            (
+                ProcurementResponsibilityRuleFilter::default().page,
+                ProcurementResponsibilityRuleFilter::default().page_size
+            ),
+            (1, 20)
+        );
     }
 
     #[test]
     fn list_params_reject_unbounded_page_size() {
         let params = PurchaseOrderListParams {
             scope_version: Some("v1".to_string()),
-            owner_user_ids: None,
-            q: None,
-            sales_order_id: None,
-            supplier_id: None,
-            status: None,
-            review_status: None,
             page: Some(0),
             page_size: Some(u32::MAX),
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         assert!(params.validate().is_err());
     }
@@ -428,13 +460,9 @@ mod tests {
 
     /// 构造空行载荷的保存请求。
     fn draft_request(line_patches: Vec<SavePurchaseOrderLinePatch>) -> SavePurchaseOrderDraftRequest {
-        SavePurchaseOrderDraftRequest {
-            expected_lock_version: 1,
-            payment_term_code: None,
-            lines: vec![],
-            line_patches,
-            idempotency_key: "save-key-1".to_string(),
-        }
+        SavePurchaseOrderDraftRequest::new("save-key-1")
+            .with_expected_lock_version(1)
+            .with_line_patches(line_patches)
     }
 
     /// 完整行与行补丁必须且只能提供一种。

@@ -23,6 +23,22 @@ pub struct InitializeSuperAdminParams {
 }
 
 impl InitializeSuperAdminParams {
+    /// 由必填账号、密码与名称构造超级管理员初始化参数。
+    ///
+    /// # 参数
+    /// * `account` - 超级管理员账号
+    /// * `password` - 明文密码
+    /// * `name` - 管理员名称
+    ///
+    /// # 返回
+    /// 返回待校验的初始化参数。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(account: impl Into<String>, password: impl Into<String>, name: impl Into<String>) -> Self {
+        Self { account: account.into(), password: password.into(), name: name.into() }
+    }
+
     /// 校验并规范化超级管理员初始化参数。
     ///
     /// 账号与名称会按各自领域规则去除首尾空白，密码保持原值。
@@ -54,6 +70,21 @@ pub struct ResetAdminPasswordParams {
 }
 
 impl ResetAdminPasswordParams {
+    /// 由必填账号与密码构造管理员密码重置参数。
+    ///
+    /// # 参数
+    /// * `account` - 管理员账号
+    /// * `password` - 明文密码
+    ///
+    /// # 返回
+    /// 返回待校验的密码重置参数。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(account: impl Into<String>, password: impl Into<String>) -> Self {
+        Self { account: account.into(), password: password.into() }
+    }
+
     /// 校验并规范化管理员密码重置参数。
     ///
     /// 账号按登录账号规则去除首尾空白，密码保持原值。
@@ -101,12 +132,104 @@ pub struct UpdateAdminParams {
     pub role_ids: Option<Vec<String>>,
 }
 
+impl UpdateAdminParams {
+    /// 由必填管理员 ID 构造更新参数。
+    ///
+    /// # 参数
+    /// * `id` - 管理员 ID
+    ///
+    /// # 返回
+    /// 返回字段均为空的更新参数。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(id: impl Into<String>) -> Self {
+        Self { id: id.into(), name: None, password: None, role_ids: None }
+    }
+
+    /// 设置管理员名称。
+    ///
+    /// # 参数
+    /// * `name` - 管理员名称
+    ///
+    /// # 返回
+    /// 返回更新后的参数。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    /// 设置登录密码。
+    ///
+    /// # 参数
+    /// * `password` - 明文密码
+    ///
+    /// # 返回
+    /// 返回更新后的参数。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_password(mut self, password: impl Into<String>) -> Self {
+        self.password = Some(password.into());
+        self
+    }
+
+    /// 设置角色 ID 集合。
+    ///
+    /// # 参数
+    /// * `role_ids` - 角色 ID 集合
+    ///
+    /// # 返回
+    /// 返回更新后的参数。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_role_ids(mut self, role_ids: Vec<String>) -> Self {
+        self.role_ids = Some(role_ids);
+        self
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UpdateAdminRoleParams {
     #[serde(default, skip_deserializing)]
     pub id: String,
     #[validate(length(min = 1, message = "至少选择一个角色"))]
     pub role_ids: Vec<String>,
+}
+
+impl UpdateAdminRoleParams {
+    /// 由必填管理员 ID 构造角色更新参数。
+    ///
+    /// # 参数
+    /// * `id` - 管理员 ID
+    ///
+    /// # 返回
+    /// 返回角色为空的更新参数。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(id: impl Into<String>) -> Self {
+        Self { id: id.into(), role_ids: Vec::new() }
+    }
+
+    /// 设置角色 ID 集合。
+    ///
+    /// # 参数
+    /// * `role_ids` - 角色 ID 集合
+    ///
+    /// # 返回
+    /// 返回更新后的参数。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_role_ids(mut self, role_ids: Vec<String>) -> Self {
+        self.role_ids = role_ids;
+        self
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -181,11 +304,7 @@ mod tests {
 
     #[test]
     fn super_admin_params_normalize_account_and_name_but_preserve_password() {
-        let params = InitializeSuperAdminParams {
-            account: " root ".to_string(),
-            password: " secret ".to_string(),
-            name: " Platform Admin ".to_string(),
-        };
+        let params = InitializeSuperAdminParams::new(" root ", " secret ", " Platform Admin ");
 
         let (account, password, name) = params.into_validated_parts().unwrap();
 
@@ -197,21 +316,9 @@ mod tests {
     #[test]
     fn super_admin_params_reject_invalid_required_values() {
         for params in [
-            InitializeSuperAdminParams {
-                account: " ".to_string(),
-                password: "password".to_string(),
-                name: "Platform Admin".to_string(),
-            },
-            InitializeSuperAdminParams {
-                account: "root".to_string(),
-                password: String::new(),
-                name: "Platform Admin".to_string(),
-            },
-            InitializeSuperAdminParams {
-                account: "root".to_string(),
-                password: "password".to_string(),
-                name: " ".to_string(),
-            },
+            InitializeSuperAdminParams::new(" ", "password", "Platform Admin"),
+            InitializeSuperAdminParams::new("root", String::new(), "Platform Admin"),
+            InitializeSuperAdminParams::new("root", "password", " "),
         ] {
             assert!(params.into_validated_parts().is_err());
         }
@@ -220,16 +327,14 @@ mod tests {
     #[test]
     fn reset_admin_password_params_preserve_password_and_reject_invalid_values() {
         let (account, password) =
-            ResetAdminPasswordParams { account: " admin01 ".to_string(), password: " secret ".to_string() }
-                .into_validated_parts()
-                .unwrap();
+            ResetAdminPasswordParams::new(" admin01 ", " secret ").into_validated_parts().unwrap();
 
         assert_eq!(account.as_str(), "admin01");
         assert_eq!(password, " secret ");
 
         for params in [
-            ResetAdminPasswordParams { account: " ".to_string(), password: "password".to_string() },
-            ResetAdminPasswordParams { account: "admin01".to_string(), password: String::new() },
+            ResetAdminPasswordParams::new(" ", "password"),
+            ResetAdminPasswordParams::new("admin01", String::new()),
         ] {
             assert!(params.into_validated_parts().is_err());
         }
@@ -243,16 +348,26 @@ mod tests {
             name: "Admin".to_string(),
             role_ids: vec!["role-1".to_string()],
         };
-        let update = UpdateAdminParams {
-            id: "admin-1".to_string(),
-            name: None,
-            password: Some("short".to_string()),
-            role_ids: None,
-        };
-        let roles = UpdateAdminRoleParams { id: "admin-1".to_string(), role_ids: Vec::new() };
+        let update = UpdateAdminParams::new("admin-1").with_password("short");
+        let roles = UpdateAdminRoleParams::new("admin-1");
 
         assert!(create.validate().is_err());
         assert!(update.validate().is_err());
         assert!(roles.validate().is_err());
+    }
+
+    #[test]
+    fn admin_params_constructors_set_required_fields() {
+        let init = InitializeSuperAdminParams::new("root", "password", "Platform Admin");
+        assert_eq!(init.account, "root");
+        let reset = ResetAdminPasswordParams::new("admin01", "password");
+        assert_eq!(reset.account, "admin01");
+        let update =
+            UpdateAdminParams::new("admin-1").with_name("Admin").with_role_ids(vec!["r-1".to_string()]);
+        assert_eq!(update.id, "admin-1");
+        assert_eq!(update.name.as_deref(), Some("Admin"));
+        assert_eq!(update.role_ids, Some(vec!["r-1".to_string()]));
+        let roles = UpdateAdminRoleParams::new("admin-1").with_role_ids(vec!["r-1".to_string()]);
+        assert_eq!(roles.role_ids, vec!["r-1".to_string()]);
     }
 }

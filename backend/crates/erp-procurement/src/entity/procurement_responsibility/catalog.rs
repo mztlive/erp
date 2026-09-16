@@ -29,7 +29,7 @@ pub struct ProcurementCatalogFact {
 ///
 /// 包含解析所需 SKU、商品、当前修订及全部可达分类的原始持久化事实；
 /// 完整性、分类链顺序与成环校验由 Entity 值对象负责。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ProcurementCatalogBundle {
     /// SKU ID 到 SKU 事实的映射。
     pub skus: HashMap<String, Sku>,

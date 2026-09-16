@@ -31,7 +31,7 @@ fn document_approval_view(
         binding,
         instance,
         Vec::new(),
-        DocumentApprovalHistoryPageView { next_cursor: None, has_more: false },
+        DocumentApprovalHistoryPageView::default(),
         commercial,
         review,
     )
@@ -79,12 +79,11 @@ pub(super) fn document_approval_view_with_history(
 
 /// 由冻结绑定投影定义摘要。节点详情不在单据详情展开。
 fn definition_view_from_binding(binding: &ApprovalDefinitionBinding) -> DocumentApprovalDefinitionView {
-    DocumentApprovalDefinitionView {
-        id: binding.approval_process_definition_id.as_ref().to_string(),
-        name: String::new(),
-        version: binding.approval_definition_version,
-        nodes: Vec::new(),
-    }
+    DocumentApprovalDefinitionView::new(
+        binding.approval_process_definition_id.as_ref().to_string(),
+        String::new(),
+    )
+    .with_version(binding.approval_definition_version)
 }
 
 /// 单据详情允许的审批相关动作。不含选择定义或审批人。
@@ -125,31 +124,24 @@ mod tests {
         assert_eq!(running.allowed_actions, vec!["CANCEL".to_string()]);
         let with_history = document_approval_view_with_history(
             Some(&binding),
-            Some(DocumentApprovalInstanceView {
-                id: "inst-1".into(),
-                status: "RUNNING".into(),
-                current_round_no: 1,
-                current_node: Some("procurement_confirm".into()),
-                current_node_name: Some("采购确认".into()),
-                current_assignee: Some("u1".into()),
-                current_assignee_name: Some("李思勇".into()),
-                latest_rejection: None,
-                process_version: Some(2),
-                blocker_code: None,
-            }),
-            vec![DocumentApprovalHistoryItemView {
-                execution_id: "exec-1".into(),
-                round_no: 1,
-                execution_no: 1,
-                node_key: "procurement_confirm".into(),
-                node_name: "采购确认".into(),
-                result: "ACTIVE".into(),
-                assignee_name: Some("李思勇".into()),
-                decided_by: None,
-                decision_reason: None,
-                decided_at: None,
-            }],
-            DocumentApprovalHistoryPageView { next_cursor: None, has_more: false },
+            Some(
+                DocumentApprovalInstanceView::new("inst-1".into(), "RUNNING".into())
+                    .with_current_node(Some("procurement_confirm".into()))
+                    .with_current_node_name(Some("采购确认".into()))
+                    .with_current_assignee(Some("u1".into()))
+                    .with_current_assignee_name(Some("李思勇".into()))
+                    .with_process_version(Some(2)),
+            ),
+            vec![
+                DocumentApprovalHistoryItemView::new(
+                    "exec-1".into(),
+                    "procurement_confirm".into(),
+                    "采购确认".into(),
+                    "ACTIVE".into(),
+                )
+                .with_assignee_name(Some("李思勇".into())),
+            ],
+            DocumentApprovalHistoryPageView::default(),
             CommercialStatus::PendingReview,
             ReviewStatus::InApproval,
         );

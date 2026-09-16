@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 pub(crate) const OFFERING_SORT_FIELDS: &[&str] = &["created_at", "supplier_sku_code", "status"];
 /// 供给列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct SupplierOfferingListParams {
     /// 关键字：供应商订货编码、公司 SKU 编号或 SKU 名称。
     pub q: Option<String>,
@@ -248,18 +248,9 @@ mod tests {
     #[test]
     fn typed_list_ids_trim_and_omit_blank() {
         let params = SupplierOfferingListParams {
-            q: None,
             sku_id: Some("  ".to_string()),
-            sku_no: None,
-            product_no: None,
             supplier_id: Some(" supplier-1 ".to_string()),
-            status: None,
-            source_type: None,
-            availability_status: None,
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         assert!(params.typed_sku_id().is_none());
         assert_eq!(params.typed_supplier_id().unwrap().to_string(), "supplier-1");

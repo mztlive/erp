@@ -56,6 +56,121 @@ pub struct FulfillmentQueueFilter {
     pub page_size: u32,
 }
 
+impl FulfillmentQueueFilter {
+    /// 构造履约责任队列仓储筛选。
+    ///
+    /// # 参数
+    /// * `owner_user_id` - 当前已认证个人责任人
+    ///
+    /// # 返回
+    /// 返回作业类型、分页全空的筛选。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(owner_user_id: String) -> Self {
+        Self {
+            owner_user_id,
+            operation_types: Vec::new(),
+            operation_id: None,
+            sales_order_id: None,
+            purchase_order_id: None,
+            warehouse_id: None,
+            query: None,
+            due_from: None,
+            due_before: None,
+            gate: None,
+            offset: 0,
+            page_size: 20,
+        }
+    }
+
+    /// 设置作业类型。
+    ///
+    /// # 参数
+    /// * `operation_types` - 服务端允许且调用方请求的作业类型稳定代码
+    ///
+    /// # 返回
+    /// 返回更新后的筛选。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_operation_types(mut self, operation_types: Vec<String>) -> Self {
+        self.operation_types = operation_types;
+        self
+    }
+
+    /// 设置精确履约对象与来源单据。
+    ///
+    /// # 参数
+    /// * `operation_id` - 精确履约对象
+    /// * `sales_order_id` - 来源销售单
+    /// * `purchase_order_id` - 来源采购单
+    /// * `warehouse_id` - 履约仓库
+    ///
+    /// # 返回
+    /// 返回更新后的筛选。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_scope(
+        mut self,
+        operation_id: Option<String>,
+        sales_order_id: Option<String>,
+        purchase_order_id: Option<String>,
+        warehouse_id: Option<String>,
+    ) -> Self {
+        self.operation_id = operation_id;
+        self.sales_order_id = sales_order_id;
+        self.purchase_order_id = purchase_order_id;
+        self.warehouse_id = warehouse_id;
+        self
+    }
+
+    /// 设置检索与先决条件。
+    ///
+    /// # 参数
+    /// * `query` - 单号/摘要字面量检索
+    /// * `due_from` - 作业日期下界
+    /// * `due_before` - 作业日期上界
+    /// * `gate` - 先决条件筛选
+    ///
+    /// # 返回
+    /// 返回更新后的筛选。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_conditions(
+        mut self,
+        query: Option<String>,
+        due_from: Option<i64>,
+        due_before: Option<i64>,
+        gate: Option<String>,
+    ) -> Self {
+        self.query = query;
+        self.due_from = due_from;
+        self.due_before = due_before;
+        self.gate = gate;
+        self
+    }
+
+    /// 设置分页。
+    ///
+    /// # 参数
+    /// * `offset` - 已检查的分页偏移
+    /// * `page_size` - 单页条数
+    ///
+    /// # 返回
+    /// 返回更新后的筛选。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_paging(mut self, offset: u64, page_size: u32) -> Self {
+        self.offset = offset;
+        self.page_size = page_size;
+        self
+    }
+}
+
 /// 履约责任队列当前页的一行。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct FulfillmentQueueItemRow {
@@ -119,7 +234,7 @@ struct CountRow {
     count: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 struct FulfillmentQueueFacetRow {
     #[serde(default)]
     items: Vec<FulfillmentQueueItemRow>,
@@ -200,12 +315,7 @@ impl<'a> FulfillmentQueueRepository<'a> {
                     .await?
             },
         };
-        let facet = rows.into_iter().next().unwrap_or(FulfillmentQueueFacetRow {
-            items: Vec::new(),
-            total: Vec::new(),
-            metrics: Vec::new(),
-            warehouses: Vec::new(),
-        });
+        let facet = rows.into_iter().next().unwrap_or_default();
         Ok(FulfillmentQueueRepositoryPage {
             items: facet.items,
             total: facet.total.first().map_or(0, |row| row.count),
@@ -766,26 +876,24 @@ mod tests {
 
     #[test]
     fn pipeline_starts_from_owned_open_work_items_and_returns_one_facet() {
-        let pipeline = fulfillment_queue_pipeline(&FulfillmentQueueFilter {
-            owner_user_id: "user-1".to_string(),
-            operation_types: vec![
-                "RECEIPT".to_string(),
-                "WAREHOUSE_SHIP".to_string(),
-                "SUPPLIER_DIRECT".to_string(),
-                "ELECTRONIC".to_string(),
-                "SERVICE".to_string(),
-            ],
-            operation_id: None,
-            sales_order_id: Some("sales-1".to_string()),
-            purchase_order_id: None,
-            warehouse_id: Some("warehouse-1".to_string()),
-            query: Some("SO.1".to_string()),
-            due_from: Some(1_700_000_000),
-            due_before: Some(1_800_000_000),
-            gate: Some("SATISFIED".to_string()),
-            offset: 20,
-            page_size: 20,
-        })
+        let pipeline = fulfillment_queue_pipeline(
+            &FulfillmentQueueFilter::new("user-1".to_string())
+                .with_operation_types(vec![
+                    "RECEIPT".to_string(),
+                    "WAREHOUSE_SHIP".to_string(),
+                    "SUPPLIER_DIRECT".to_string(),
+                    "ELECTRONIC".to_string(),
+                    "SERVICE".to_string(),
+                ])
+                .with_scope(None, Some("sales-1".to_string()), None, Some("warehouse-1".to_string()))
+                .with_conditions(
+                    Some("SO.1".to_string()),
+                    Some(1_700_000_000),
+                    Some(1_800_000_000),
+                    Some("SATISFIED".to_string()),
+                )
+                .with_paging(20, 20),
+        )
         .expect("测试分页应有效");
         let rendered = format!("{pipeline:?}");
 
@@ -818,20 +926,10 @@ mod tests {
 
     #[test]
     fn unknown_operation_type_fails_closed_in_initial_match() {
-        let pipeline = fulfillment_queue_pipeline(&FulfillmentQueueFilter {
-            owner_user_id: "user-1".to_string(),
-            operation_types: vec!["UNKNOWN".to_string()],
-            operation_id: None,
-            sales_order_id: None,
-            purchase_order_id: None,
-            warehouse_id: None,
-            query: None,
-            due_from: None,
-            due_before: None,
-            gate: None,
-            offset: 0,
-            page_size: 20,
-        })
+        let pipeline = fulfillment_queue_pipeline(
+            &FulfillmentQueueFilter::new("user-1".to_string())
+                .with_operation_types(vec!["UNKNOWN".to_string()]),
+        )
         .expect("测试分页应有效");
         let rendered = format!("{pipeline:?}");
         assert!(rendered.contains("Array([])"));

@@ -110,6 +110,51 @@ pub struct ApprovalNotificationTemplateParams {
     /// 驳回原因摘要。
     pub reject_reason_summary: Option<String>,
 }
+impl ApprovalNotificationTemplateParams {
+    /// 以必填展示字段构造模板参数；驳回摘要默认为空。
+    ///
+    /// # 参数
+    /// * `document_type_label` - 单据类型中文名
+    /// * `document_no` - 单据业务编号
+    /// * `current_node_name` - 当前节点名称
+    /// * `current_approver_display_name` - 当前审批人显示名
+    ///
+    /// # 返回
+    /// 返回首轮的模板参数。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(
+        document_type_label: String,
+        document_no: String,
+        current_node_name: String,
+        current_approver_display_name: String,
+    ) -> Self {
+        Self {
+            document_type_label,
+            document_no,
+            current_node_name,
+            current_approver_display_name,
+            round_no: 1,
+            reject_reason_summary: None,
+        }
+    }
+
+    /// 设置轮次号。
+    ///
+    /// # 参数
+    /// * `round_no` - 轮次号
+    ///
+    /// # 返回
+    /// 返回更新后的参数。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_round_no(mut self, round_no: u32) -> Self {
+        self.round_no = round_no;
+        self
+    }
+}
 
 /// 审批通知 outbox 记录。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
@@ -362,14 +407,12 @@ mod tests {
     };
 
     fn params() -> ApprovalNotificationTemplateParams {
-        ApprovalNotificationTemplateParams {
-            document_type_label: "库存调整单".into(),
-            document_no: "ADJ-1".into(),
-            current_node_name: "仓储复核".into(),
-            current_approver_display_name: "张三".into(),
-            round_no: 1,
-            reject_reason_summary: None,
-        }
+        ApprovalNotificationTemplateParams::new(
+            "库存调整单".into(),
+            "ADJ-1".into(),
+            "仓储复核".into(),
+            "张三".into(),
+        )
     }
 
     fn pending() -> ApprovalNotificationOutbox {

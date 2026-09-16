@@ -50,6 +50,31 @@ pub struct SkuAttributeFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for SkuAttributeFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            attribute_code: None,
+            name: None,
+            value_type: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for SkuAttributeFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -155,6 +180,31 @@ pub struct SkuAttributeValueFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl Default for SkuAttributeValueFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            attribute_id: None,
+            value_code: None,
+            display_value: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
 }
 
 impl QueryFilter for SkuAttributeValueFilter {
@@ -283,10 +333,7 @@ mod tests {
             name: Some("尺".to_string()),
             value_type: Some(AttributeValueType::Enum),
             status: Some(EnableStatus::Active),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();
@@ -302,11 +349,7 @@ mod tests {
             attribute_id: Some("attr-1".to_string()),
             value_code: Some("L".to_string()),
             display_value: Some("大号".to_string()),
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();

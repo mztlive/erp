@@ -13,6 +13,7 @@ use crate::entity::sales_order::{
 };
 use crate::repository::SalesOrderExt;
 /// Existing and newly allocated stable line identities for one draft.
+#[derive(Debug, Clone, Default)]
 pub struct DraftStableLines {
     /// All aligned identities.
     pub all: Vec<SalesOrderLine>,

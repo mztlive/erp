@@ -47,6 +47,25 @@ pub struct SupplierImportResult {
     pub supplier_no: Option<String>,
 }
 
+impl SupplierImportResult {
+    /// 以必填行结果构造导入结果；关联身份默认为空。
+    ///
+    /// # 参数
+    /// * `row_number` - 模板行号
+    /// * `name` - 业务名称
+    /// * `status` - 处理结果
+    /// * `message` - 结果说明
+    ///
+    /// # 返回
+    /// 返回无关联身份的导入结果。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(row_number: u32, name: String, status: String, message: String) -> Self {
+        Self { row_number, name, status, message, supplier_id: None, supplier_no: None }
+    }
+}
+
 impl SupplierImportRow {
     /// 读取去掉前后空白的模板列。
     pub fn cell(&self, index: usize) -> &str {

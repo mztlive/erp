@@ -61,6 +61,32 @@ pub struct StockReservationFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for StockReservationFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            search: super::InventorySearch::default(),
+            warehouse_ids: None,
+            sku_id: None,
+            status: None,
+            sales_order_line_id: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for StockReservationFilter {
     /// 转换为 MongoDB 查询条件。
     ///
@@ -502,17 +528,7 @@ mod filter_tests {
     use super::{StockReservationFilter, stock_reservation_sort};
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockReservationFilter {
-        StockReservationFilter {
-            search: Default::default(),
-            warehouse_ids,
-            sku_id: None,
-            status: None,
-            sales_order_line_id: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        }
+        StockReservationFilter { warehouse_ids, ..Default::default() }
     }
 
     #[test]

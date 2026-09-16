@@ -182,7 +182,7 @@ pub struct SupplierSensitiveRevealView {
 }
 
 /// 供应商角色列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct SupplierListParams {
     /// 供应商编号模糊搜索。
     pub keyword: Option<String>,
@@ -568,7 +568,25 @@ pub struct SupplierProfileContactInput {
     pub email: Option<String>,
 }
 
+impl SupplierProfileContactInput {
+    /// 以必填联系人构造资料输入；固话与邮箱默认为空。
+    ///
+    /// # 参数
+    /// * `contact_name` - 联系人姓名
+    /// * `mobile` - 手机号明文
+    ///
+    /// # 返回
+    /// 返回无固话邮箱的输入。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(contact_name: String, mobile: String) -> Self {
+        Self { contact_name, mobile, telephone: None, email: None }
+    }
+}
+
 /// 根级供应商资料中的默认经营地址输入。
+
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SupplierProfileAddressInput {
     /// 地址明文；仅在请求处理期间存在。

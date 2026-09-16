@@ -79,7 +79,7 @@ async fn ensure_root_role_once(rbac: &SharedRbacService, root_permission: &Permi
         return rbac.repair_root_role(role, root_permission.clone()).await;
     }
 
-    let data = RoleData { name: ROOT_ROLE_NAME.to_string(), description: None, system: true };
+    let data = RoleData::new(ROOT_ROLE_NAME.to_string()).with_system(true);
     rbac.create_role_with_id(ROOT_ROLE_ID.to_string(), data, vec![root_permission.clone()], None, None).await
 }
 

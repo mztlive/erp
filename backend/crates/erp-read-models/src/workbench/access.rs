@@ -27,6 +27,79 @@ pub(super) struct ActorAccess {
     pub(super) can_manage: bool,
 }
 
+impl ActorAccess {
+    /// 构造责任队列授权快照。
+    ///
+    /// # 参数
+    /// * `actor_id` - 账号稳定 ID
+    ///
+    /// # 返回
+    /// 返回权限、参与与管理范围全空的快照。
+    ///
+    /// # 错误
+    /// 无。
+    pub(super) fn new(actor_id: String) -> Self {
+        Self {
+            actor_id,
+            permissions: Vec::new(),
+            participant_document_ids: HashSet::new(),
+            managed_owner_ids: None,
+            can_manage: false,
+        }
+    }
+
+    /// 设置已授予权限。
+    ///
+    /// # 参数
+    /// * `permissions` - 已授予权限
+    ///
+    /// # 返回
+    /// 返回更新后的快照。
+    ///
+    /// # 错误
+    /// 无。
+    pub(super) fn with_permissions(mut self, permissions: Vec<Permission>) -> Self {
+        self.permissions = permissions;
+        self
+    }
+
+    /// 设置参与单据。
+    ///
+    /// # 参数
+    /// * `participant_document_ids` - 参与单据集合
+    ///
+    /// # 返回
+    /// 返回更新后的快照。
+    ///
+    /// # 错误
+    /// 无。
+    pub(super) fn with_participant_document_ids(mut self, participant_document_ids: HashSet<String>) -> Self {
+        self.participant_document_ids = participant_document_ids;
+        self
+    }
+
+    /// 设置管理范围。
+    ///
+    /// # 参数
+    /// * `managed_owner_ids` - 管理组织下的任务负责人
+    /// * `can_manage` - 是否具备管理范围
+    ///
+    /// # 返回
+    /// 返回更新后的快照。
+    ///
+    /// # 错误
+    /// 无。
+    pub(super) fn with_managed_scope(
+        mut self,
+        managed_owner_ids: Option<Vec<String>>,
+        can_manage: bool,
+    ) -> Self {
+        self.managed_owner_ids = managed_owner_ids;
+        self.can_manage = can_manage;
+        self
+    }
+}
+
 impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
     /// 按账号类型与稳定 ID 构造责任队列授权快照。
     ///
@@ -72,13 +145,10 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                 executor,
             )
             .await?;
-        Ok(ActorAccess {
-            actor_id: actor_id.to_string(),
-            permissions,
-            participant_document_ids,
-            can_manage: !manage_role_ids.is_empty(),
-            managed_owner_ids,
-        })
+        Ok(ActorAccess::new(actor_id.to_string())
+            .with_permissions(permissions)
+            .with_participant_document_ids(participant_document_ids)
+            .with_managed_scope(managed_owner_ids, !manage_role_ids.is_empty()))
     }
 
     /// 定位实际授予指定权限的角色，使管理数据范围与权限来源关联。

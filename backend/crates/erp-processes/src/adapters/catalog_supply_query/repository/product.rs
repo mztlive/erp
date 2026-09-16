@@ -10,7 +10,7 @@ use super::CatalogSupplyRepository;
 use super::product_pipeline::product_list_pipeline;
 
 /// 商品列表聚合分页结果。
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 struct ProductFacet {
     /// 当前页数据。
     items: Vec<ProductRow>,
@@ -95,6 +95,6 @@ impl CatalogSupplyRepository<'_> {
                     .await?
             },
         };
-        Ok(rows.into_iter().next().unwrap_or(ProductFacet { items: Vec::new(), total: Vec::new() }))
+        Ok(rows.into_iter().next().unwrap_or_default())
     }
 }

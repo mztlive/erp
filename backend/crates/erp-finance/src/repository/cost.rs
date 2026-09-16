@@ -94,6 +94,32 @@ pub struct CostEntryFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for CostEntryFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            cost_type: None,
+            cost_stage: None,
+            cost_scope: None,
+            supplier_id: None,
+            source_document_id: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for CostEntryFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -166,6 +192,29 @@ pub struct CostAllocationFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl Default for CostAllocationFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            cost_entry_id: None,
+            sales_order_id: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
 }
 
 impl QueryFilter for CostAllocationFilter {
@@ -423,17 +472,23 @@ mod tests {
     use crate::entity::cost::{CostScope, CostStage, CostType};
 
     #[test]
+    fn cost_filters_default_to_page_one_size_twenty() {
+        let entry = CostEntryFilter::default();
+        assert_eq!((entry.page, entry.page_size), (1, 20));
+        assert_eq!(entry.cost_type, None);
+        let allocation = CostAllocationFilter::default();
+        assert_eq!((allocation.page, allocation.page_size), (1, 20));
+        assert_eq!(allocation.cost_entry_id, None);
+    }
+
+    #[test]
     fn entry_filter_applies_optional_fields_and_deleted_filter() {
         let filter = CostEntryFilter {
             cost_type: Some(CostType::Product),
             cost_stage: Some(CostStage::Actual),
             cost_scope: Some(CostScope::NonVoucherFulfillment),
             supplier_id: Some(SupplierAccountId::new("sup-1")),
-            source_document_id: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();
@@ -447,12 +502,10 @@ mod tests {
     #[test]
     fn allocation_filter_escapes_regex_and_filters_by_target() {
         let filter = CostAllocationFilter {
-            cost_entry_id: None,
             sales_order_id: Some(erp_core::ids::SalesOrderId::new("so-1")),
-            page: 1,
-            page_size: 20,
             sort_by: Some("$where".to_string()),
             sort_ascending: true,
+            ..Default::default()
         };
 
         let document = filter.to_doc();

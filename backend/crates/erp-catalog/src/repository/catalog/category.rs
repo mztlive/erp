@@ -56,6 +56,32 @@ pub struct ProductCategoryFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for ProductCategoryFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            q: None,
+            category_code: None,
+            name: None,
+            parent_category_id: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for ProductCategoryFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///

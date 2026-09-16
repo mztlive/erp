@@ -50,11 +50,13 @@ pub async fn load_runtime(
     view.recent_history = page
         .items
         .iter()
-        .map(|item| DocumentApprovalHistoryItemView {
-            execution_id: item.execution_id.clone(),
-            round_no: item.round_no,
-            node_key: item.node_key.clone(),
-            result: item.result.clone(),
+        .map(|item| {
+            DocumentApprovalHistoryItemView::new(
+                item.execution_id.clone(),
+                item.node_key.clone(),
+                item.result.clone(),
+            )
+            .with_round_no(item.round_no)
         })
         .collect();
     view.history_page =
@@ -68,19 +70,16 @@ fn instance_view(
     current: Option<&ApprovalNodeExecution>,
     latest_rejection: Option<String>,
 ) -> DocumentApprovalInstanceView {
-    DocumentApprovalInstanceView {
-        id: instance.base.id.clone(),
-        status: instance.status.as_str().to_string(),
-        current_round_no: instance.current_round_no,
-        current_node: current.map(|item| item.node_key.clone()),
-        current_node_name: current.map(|item| item.node_name.clone()),
-        current_assignee: current.map(|item| item.assignee_participant_id.as_str().to_string()),
-        current_assignee_name: current.and_then(|item| {
+    DocumentApprovalInstanceView::new(instance.base.id.clone(), instance.status.as_str().to_string())
+        .with_current_round_no(instance.current_round_no)
+        .with_current_node(current.map(|item| item.node_key.clone()))
+        .with_current_node_name(current.map(|item| item.node_name.clone()))
+        .with_current_assignee(current.map(|item| item.assignee_participant_id.as_str().to_string()))
+        .with_current_assignee_name(current.and_then(|item| {
             let name = item.assignee_name_snapshot.trim();
             (!name.is_empty()).then(|| name.to_string())
-        }),
-        latest_rejection,
-    }
+        }))
+        .with_latest_rejection(latest_rejection)
 }
 
 #[cfg(test)]

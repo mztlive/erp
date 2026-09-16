@@ -66,6 +66,88 @@ pub struct BindingRevalidationContext {
 
 impl BindingRevalidationContext {
     /// 按固定业务类型映射授权事实；身份维度不得混用。
+    /// 以必填身份构造绑定重验上下文；可选维度默认为空。
+    ///
+    /// # 参数
+    /// * `organization_id` - 当前单据责任组织
+    /// * `creator_id` - 单据创建人或提交人
+    ///
+    /// # 返回
+    /// 返回可选维度均为 `None` 的上下文。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(organization_id: String, creator_id: String) -> Self {
+        Self {
+            order_source: None,
+            customer_id: None,
+            business_org_unit_id: None,
+            scope_owner_user_id: None,
+            organization_id,
+            creator_id,
+        }
+    }
+
+    /// 设置订单来源。
+    ///
+    /// # 参数
+    /// * `order_source` - 当前或拟创建订单来源
+    ///
+    /// # 返回
+    /// 返回更新后的上下文。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_order_source(mut self, order_source: Option<OrderTaskSource>) -> Self {
+        self.order_source = order_source;
+        self
+    }
+
+    /// 设置销售订单当前客户。
+    ///
+    /// # 参数
+    /// * `customer_id` - 销售订单当前客户
+    ///
+    /// # 返回
+    /// 返回更新后的上下文。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_customer_id(mut self, customer_id: Option<String>) -> Self {
+        self.customer_id = customer_id;
+        self
+    }
+
+    /// 设置内部业务部门。
+    ///
+    /// # 参数
+    /// * `business_org_unit_id` - 订单及变更沿当前原单取得的内部业务部门
+    ///
+    /// # 返回
+    /// 返回更新后的上下文。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_business_org_unit_id(mut self, business_org_unit_id: Option<String>) -> Self {
+        self.business_org_unit_id = business_org_unit_id;
+        self
+    }
+
+    /// 设置当前业务负责人。
+    ///
+    /// # 参数
+    /// * `scope_owner_user_id` - 当前业务负责人
+    ///
+    /// # 返回
+    /// 返回更新后的上下文。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_scope_owner_user_id(mut self, scope_owner_user_id: Option<String>) -> Self {
+        self.scope_owner_user_id = scope_owner_user_id;
+        self
+    }
+
     pub fn scope_object(&self, document_type: DocumentType) -> WorkflowScopeObject {
         let order = OrderTaskSource::approval_kind(document_type).is_some();
         WorkflowScopeObject {
@@ -253,6 +335,16 @@ pub fn ensure_object_readable(can_read: bool) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn binding_revalidation_context_new_defaults_options_to_none() {
+        let context = super::BindingRevalidationContext::new("org-1".into(), "creator-1".into())
+            .with_customer_id(Some("customer-1".into()));
+        assert_eq!(context.organization_id, "org-1");
+        assert_eq!(context.creator_id, "creator-1");
+        assert_eq!(context.customer_id.as_deref(), Some("customer-1"));
+        assert!(context.order_source.is_none() && context.business_org_unit_id.is_none());
+    }
+
     #[test]
     fn scope_facts_keep_business_org_warehouse_and_settlement_separate() {
         let context = super::BindingRevalidationContext {

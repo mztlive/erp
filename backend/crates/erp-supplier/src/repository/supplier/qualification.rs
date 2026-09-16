@@ -28,6 +28,20 @@ pub struct SupplierQualificationFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for SupplierQualificationFilter {
+    fn default() -> Self {
+        Self {
+            supplier_id: None,
+            qualification_type: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 /// 可核实日期的资质；合同不能把未知截止日期当作长期有效。
 fn verified_window_filter() -> Document {
     doc! { "valid_from": { "$type": "string" }, "$or": [

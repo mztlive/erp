@@ -154,6 +154,98 @@ pub struct ProcurementResponsibilityResolveLineView {
     pub error: Option<String>,
 }
 
+impl ProcurementResponsibilityResolveLineView {
+    /// 由必填行键构造解析行视图。
+    ///
+    /// # 参数
+    /// * `line_key` - 调用方行键
+    ///
+    /// # 返回
+    /// 返回未解析、成功与失败字段为空的行视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(line_key: impl Into<String>) -> Self {
+        Self {
+            line_key: line_key.into(),
+            resolved: false,
+            owner_user_id: None,
+            owner_name: None,
+            rule_id: None,
+            rule_type: None,
+            error: None,
+        }
+    }
+
+    /// 设置是否解析成功。
+    ///
+    /// # 参数
+    /// * `resolved` - 是否解析成功
+    ///
+    /// # 返回
+    /// 返回更新后的行视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_resolved(mut self, resolved: bool) -> Self {
+        self.resolved = resolved;
+        self
+    }
+
+    /// 设置解析成功的负责人。
+    ///
+    /// # 参数
+    /// * `owner_user_id` - 负责人账号 ID
+    /// * `owner_name` - 负责人名称
+    ///
+    /// # 返回
+    /// 返回更新后的行视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_owner(mut self, owner_user_id: impl Into<String>, owner_name: impl Into<String>) -> Self {
+        self.owner_user_id = Some(owner_user_id.into());
+        self.owner_name = Some(owner_name.into());
+        self
+    }
+
+    /// 设置命中规则。
+    ///
+    /// # 参数
+    /// * `rule_id` - 命中规则 ID
+    /// * `rule_type` - 命中规则类型
+    ///
+    /// # 返回
+    /// 返回更新后的行视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_rule(
+        mut self,
+        rule_id: impl Into<String>,
+        rule_type: ProcurementResponsibilityRuleType,
+    ) -> Self {
+        self.rule_id = Some(rule_id.into());
+        self.rule_type = Some(rule_type);
+        self
+    }
+
+    /// 设置失败时的稳定诊断文案。
+    ///
+    /// # 参数
+    /// * `error` - 稳定诊断文案
+    ///
+    /// # 返回
+    /// 返回更新后的行视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_error(mut self, error: impl Into<String>) -> Self {
+        self.error = Some(error.into());
+        self
+    }
+}
+
 /// 逐行责任预览响应。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ProcurementResponsibilityResolveView {

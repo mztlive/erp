@@ -1067,12 +1067,8 @@ async fn upgrade_exact(
 /// 权限解析失败，或创建角色/policy 失败（并发冲突除外，冲突视为已由其他实例写入）时返回错误。
 async fn seed_one(rbac: &SharedRbacService, role: &PredefinedRoleDef) -> Result<()> {
     let permissions = parse_permissions(role.permissions)?;
-    let data = RoleData {
-        name: role.name.to_string(),
-        description: Some(role.description.to_string()),
-        // 可分配、可后续由管理员调整；仅 `role-root` 使用 system=true 的强保护边界。
-        system: false,
-    };
+    // 可分配、可后续由管理员调整；仅 `role-root` 使用 system=true 的强保护边界。
+    let data = RoleData::new(role.name.to_string()).with_description(role.description.to_string());
     let created = rbac.seed_role_if_absent(role.id, data, permissions).await?;
     if created {
         tracing::info!(role_id = role.id, role_name = role.name, "predefined role seeded");

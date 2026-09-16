@@ -57,7 +57,7 @@ pub struct InvoicingBatchResult {
 }
 
 /// 批量条件核销结果：按账户逐个报告命中情况，由 Service 转译业务错误。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SettlementBatchResult {
     /// 条件命中并完成核销的账户（输入顺序）。
     pub applied: Vec<ReceivableAccountId>,
@@ -94,6 +94,36 @@ pub struct ReceivableAccountFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl Default for ReceivableAccountFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            keyword_ids: None,
+            keyword: None,
+            keyword_sales_order_ids: Vec::new(),
+            keyword_party_ids: Vec::new(),
+            account_id: None,
+            customer_id: None,
+            counterparty_party_id: None,
+            status: None,
+            sales_order_id: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
 }
 
 impl QueryFilter for ReceivableAccountFilter {
@@ -777,19 +807,10 @@ mod tests {
     #[test]
     fn account_filter_applies_optional_fields_and_deleted_filter() {
         let mut filter = ReceivableAccountFilter {
-            keyword_ids: None,
-            keyword: None,
-            keyword_sales_order_ids: Vec::new(),
-            keyword_party_ids: Vec::new(),
-            account_id: None,
             customer_id: Some(CustomerAccountId::new("cust-1")),
             counterparty_party_id: Some(PartyId::new("party-1")),
             status: Some(ReceivableAccountStatus::Open),
-            sales_order_id: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();

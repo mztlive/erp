@@ -24,7 +24,7 @@ use crate::repository::owned::{ReceivableAccountRepository, ReceivableEntryRepos
 ///
 /// 固定次数读取：分录、回款分配、发票分配、回款、发票。
 /// 缺失回款／发票由 Service 按 `expected_*_count` 解释首错；本类型不裁决业务。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ReceivableSnapshotFacts {
     /// 账户分录（按 `source_sequence` 升序）。
     pub entries: Vec<ReceivableEntry>,

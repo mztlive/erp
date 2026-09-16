@@ -20,6 +20,25 @@ pub struct ReplaceNodesHttpRequest {
 }
 
 /// 发布或退役草稿的 HTTP 请求。
+impl ReplaceNodesHttpRequest {
+    /// 以必填版本与幂等键构造替换请求；节点默认为空。
+    ///
+    /// # 参数
+    /// * `expected_definition_lock_version` - 期望的定义锁版本
+    /// * `idempotency_key` - 幂等键
+    ///
+    /// # 返回
+    /// 返回无节点的替换请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(expected_definition_lock_version: String, idempotency_key: String) -> Self {
+        Self { expected_definition_lock_version, nodes: Vec::new(), idempotency_key }
+    }
+}
+
+/// 发布或退役草稿的 HTTP 请求。
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct DefinitionLockHttpRequest {
@@ -30,7 +49,7 @@ pub struct DefinitionLockHttpRequest {
 }
 
 /// 定义期可选审批人查询。
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct EligibleAssigneesQuery {
     /// 姓名或账号检索。

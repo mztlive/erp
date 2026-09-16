@@ -111,7 +111,7 @@ pub struct PurchaseReceiptDetailView {
 }
 
 /// 采购入库单列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct PurchaseReceiptListParams {
     /// 来源采购单筛选。
     pub purchase_order_id: Option<PurchaseOrderId>,

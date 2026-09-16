@@ -52,6 +52,35 @@ pub struct SupplierOfferingListQuery {
     pub sort_ascending: bool,
 }
 
+impl Default for SupplierOfferingListQuery {
+    /// 构造首页默认查询条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回过滤全空、取第一页、每页 20 条的查询条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            availability_status: None,
+            keyword: None,
+            product_no: None,
+            sku_no: None,
+            sku_id: None,
+            supplier_id: None,
+            status: None,
+            source_type: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 /// 供给列表一页的最小展示事实束。
 ///
 /// 行投影沿当前修订指针返回；缺失指针或修订时对应映射不生成条目，
@@ -241,15 +270,8 @@ mod tests {
             availability_status: Some(erp_supply::entity::supplier_offering::AvailabilityStatus::Available),
             keyword: Some("SUP-1".to_string()),
             product_no: Some("SPU-1".to_string()),
-            sku_no: None,
-            sku_id: None,
-            supplier_id: None,
-            status: None,
             source_type: Some(erp_supply::entity::supplier_offering::OfferingSourceType::Excel),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
         assert!(query.availability_status.is_some());
         assert_eq!(query.keyword.as_deref(), Some("SUP-1"));
@@ -260,18 +282,11 @@ mod tests {
     #[test]
     fn list_query_pagination_fields_are_preserved() {
         let query = SupplierOfferingListQuery {
-            availability_status: None,
-            keyword: None,
-            product_no: None,
-            sku_no: None,
-            sku_id: None,
-            supplier_id: None,
-            status: None,
-            source_type: None,
             page: 3,
             page_size: 50,
             sort_by: Some("status".to_string()),
             sort_ascending: true,
+            ..Default::default()
         };
         assert_eq!(query.page, 3);
         assert_eq!(query.page_size, 50);
@@ -310,6 +325,14 @@ mod tests {
         assert_eq!((query.page, query.page_size), (2, 15));
         assert_eq!(query.sort_by.as_deref(), Some("supplier_sku_code"));
         assert!(query.sort_ascending);
+    }
+
+    #[test]
+    fn list_query_default_applies_first_page_defaults() {
+        let query = SupplierOfferingListQuery::default();
+        assert_eq!((query.page, query.page_size), (1, 20));
+        assert!(query.keyword.is_none());
+        assert!(!query.sort_ascending);
     }
 }
 
@@ -492,17 +515,7 @@ mod isolation_tests {
             assert!(bundle.availabilities.contains_key("offering-1"));
             let filtered_query = super::SupplierOfferingListQuery {
                 availability_status: Some(AvailabilityStatus::Stale),
-                keyword: None,
-                product_no: None,
-                sku_no: None,
-                sku_id: None,
-                supplier_id: None,
-                status: None,
-                source_type: None,
-                page: 1,
-                page_size: 20,
-                sort_by: None,
-                sort_ascending: false,
+                ..Default::default()
             };
             let filtered = super::SupplierOfferingReadRepository::new(fixture.db())
                 .load_offering_list_page(&filtered_query, &mut NoTransaction)
@@ -548,20 +561,7 @@ mod isolation_tests {
                                 session,
                             )
                             .await?;
-                        let query = super::SupplierOfferingListQuery {
-                            availability_status: None,
-                            keyword: None,
-                            product_no: None,
-                            sku_no: None,
-                            sku_id: None,
-                            supplier_id: None,
-                            status: None,
-                            source_type: None,
-                            page: 1,
-                            page_size: 20,
-                            sort_by: None,
-                            sort_ascending: false,
-                        };
+                        let query = super::SupplierOfferingListQuery::default();
                         let bundle = super::SupplierOfferingReadRepository::new(&db)
                             .load_offering_list_page(&query, session)
                             .await?;

@@ -113,6 +113,88 @@ pub struct CommitCustomerReceiptRequest {
     pub idempotency_key: String,
 }
 
+impl CommitCustomerReceiptRequest {
+    /// 以幂等键构造原子提交请求，其余字段保持空条件由链式方法补齐。
+    ///
+    /// # 参数
+    /// * `idempotency_key` - 业务请求幂等键
+    ///
+    /// # 返回
+    /// 返回仅携带幂等键的提交请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(idempotency_key: impl Into<String>) -> Self {
+        Self {
+            receipt_id: None,
+            expected_version: None,
+            receipt: None,
+            allocations: Vec::new(),
+            idempotency_key: idempotency_key.into(),
+        }
+    }
+
+    /// 设置已有回款草稿主键。
+    ///
+    /// # 参数
+    /// * `receipt_id` - 已有回款草稿主键
+    ///
+    /// # 返回
+    /// 返回更新后的提交请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_receipt_id(mut self, receipt_id: impl Into<String>) -> Self {
+        self.receipt_id = Some(receipt_id.into());
+        self
+    }
+
+    /// 设置已有草稿期望乐观锁版本。
+    ///
+    /// # 参数
+    /// * `expected_version` - 期望乐观锁版本
+    ///
+    /// # 返回
+    /// 返回更新后的提交请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_expected_version(mut self, expected_version: u64) -> Self {
+        self.expected_version = Some(expected_version);
+        self
+    }
+
+    /// 设置新回款完整字段。
+    ///
+    /// # 参数
+    /// * `receipt` - 新回款完整字段
+    ///
+    /// # 返回
+    /// 返回更新后的提交请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_receipt(mut self, receipt: CreateCustomerReceiptRequest) -> Self {
+        self.receipt = Some(receipt);
+        self
+    }
+
+    /// 设置提交时冻结的待过账核销分配。
+    ///
+    /// # 参数
+    /// * `allocations` - 待过账核销分配行
+    ///
+    /// # 返回
+    /// 返回更新后的提交请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_allocations(mut self, allocations: Vec<ReceiptAllocationLineRequest>) -> Self {
+        self.allocations = allocations;
+        self
+    }
+}
+
 /// 撤回客户回款审批请求。原因必填。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
@@ -126,4 +208,31 @@ pub struct CancelCustomerReceiptApprovalRequest {
     /// 业务请求幂等键。
     #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
     pub idempotency_key: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use validator::Validate;
+
+    use super::CommitCustomerReceiptRequest;
+
+    #[test]
+    fn commit_request_new_carries_only_idempotency_key() {
+        let request = CommitCustomerReceiptRequest::new("idem-1");
+        assert_eq!(request.idempotency_key, "idem-1");
+        assert_eq!(request.receipt_id, None);
+        assert_eq!(request.expected_version, None);
+        assert!(request.receipt.is_none());
+        assert!(request.allocations.is_empty());
+        assert!(request.validate().is_err());
+    }
+
+    #[test]
+    fn commit_request_chainable_setters_fill_optional_fields() {
+        let request =
+            CommitCustomerReceiptRequest::new("idem-2").with_receipt_id("cr-1").with_expected_version(2);
+        assert_eq!(request.receipt_id.as_deref(), Some("cr-1"));
+        assert_eq!(request.expected_version, Some(2));
+        assert_eq!(request.idempotency_key, "idem-2");
+    }
 }

@@ -19,6 +19,7 @@ use super::query::PeriodBounds;
 use crate::{Error, Result};
 
 /// 单次分析装载的正式事实，均属于同一事务快照。
+#[derive(Debug, Default)]
 pub(super) struct Sources {
     pub orders: Vec<ProfitLossOrder>,
     pub revisions: Vec<SalesOrderRevision>,

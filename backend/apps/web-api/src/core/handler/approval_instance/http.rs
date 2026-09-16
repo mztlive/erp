@@ -175,7 +175,7 @@ impl InstanceListQuery {
 }
 
 /// 历史查询。
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct InstanceHistoryQuery {
     /// 稳定游标。
@@ -271,6 +271,38 @@ pub struct ResumeApproverHttpRequest {
 }
 
 /// 受阻取消请求。
+impl ResumeApproverHttpRequest {
+    /// 以必填版本构造恢复请求；已关闭任务版本默认为空。
+    ///
+    /// # 参数
+    /// * `expected_instance_version` - 期望实例版本
+    /// * `expected_execution_version` - 期望执行版本
+    /// * `expected_assignment_version` - 期望绑定版本
+    /// * `idempotency_key` - 幂等键
+    ///
+    /// # 返回
+    /// 返回无已关闭任务版本的请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(
+        expected_instance_version: String,
+        expected_execution_version: String,
+        expected_assignment_version: String,
+        idempotency_key: String,
+    ) -> Self {
+        Self {
+            expected_instance_version,
+            expected_execution_version,
+            expected_assignment_version,
+            expected_closed_task_version: None,
+            idempotency_key,
+        }
+    }
+}
+
+/// 受阻取消请求。
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct CancelBlockedHttpRequest {

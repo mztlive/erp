@@ -27,6 +27,26 @@ pub struct EvidenceSubject {
 }
 
 impl EvidenceSubject {
+    /// 以必填业务项构造证据上下文；关联维度默认为空。
+    ///
+    /// # 参数
+    /// * `item_id` - W29 业务项 ID
+    ///
+    /// # 返回
+    /// 返回无关联的证据上下文。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(item_id: String) -> Self {
+        Self {
+            item_id,
+            message_id: None,
+            business_object_type: None,
+            business_object_id: None,
+            fact_references: Vec::new(),
+        }
+    }
+
     /// 从错误任务构造证据上下文。
     pub fn error(task: &IntegrationErrorTask) -> Self {
         Self {

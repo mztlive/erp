@@ -41,6 +41,37 @@ pub struct UserRoleRevokeData {
     pub revoke_reason_text: Option<String>,
 }
 
+impl UserRoleRevokeData {
+    /// 由必填撤权原因代码构造撤权数据。
+    ///
+    /// # 参数
+    /// * `revoke_reason_code` - 撤权原因代码
+    ///
+    /// # 返回
+    /// 返回说明为空的撤权数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(revoke_reason_code: impl Into<String>) -> Self {
+        Self { revoke_reason_code: revoke_reason_code.into(), revoke_reason_text: None }
+    }
+
+    /// 设置撤权原因说明。
+    ///
+    /// # 参数
+    /// * `revoke_reason_text` - 撤权原因说明
+    ///
+    /// # 返回
+    /// 返回更新后的撤权数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_revoke_reason_text(mut self, revoke_reason_text: impl Into<String>) -> Self {
+        self.revoke_reason_text = Some(revoke_reason_text.into());
+        self
+    }
+}
+
 /// 用户角色绑定实体（数据模型 §5.1）。
 ///
 /// 已有记录按当前、未来、已过期分开只读展示（W19 §5.1）；角色 ID 使用既有
@@ -232,20 +263,13 @@ mod tests {
         let mut binding = UserRole::new(UserRoleId::new("ur-1"), data()).unwrap();
         assert!(
             binding
-                .revoke(
-                    UserRoleRevokeData { revoke_reason_code: "  ".to_string(), revoke_reason_text: None },
-                    "admin-2",
-                    Instant::from_unix_secs(1_700_100_000),
-                )
+                .revoke(UserRoleRevokeData::new("  "), "admin-2", Instant::from_unix_secs(1_700_100_000),)
                 .is_err()
         );
 
         binding
             .revoke(
-                UserRoleRevokeData {
-                    revoke_reason_code: "EMERGENCY_REVOKE".to_string(),
-                    revoke_reason_text: Some(" 紧急撤权 ".to_string()),
-                },
+                UserRoleRevokeData::new("EMERGENCY_REVOKE").with_revoke_reason_text(" 紧急撤权 "),
                 "admin-2",
                 Instant::from_unix_secs(1_700_100_000),
             )
@@ -257,16 +281,22 @@ mod tests {
         assert!(
             binding
                 .revoke(
-                    UserRoleRevokeData {
-                        revoke_reason_code: "EMERGENCY_REVOKE".to_string(),
-                        revoke_reason_text: None,
-                    },
+                    UserRoleRevokeData::new("EMERGENCY_REVOKE"),
                     "admin-3",
                     Instant::from_unix_secs(1_700_200_000),
                 )
                 .is_err(),
             "已撤权绑定不可重复撤权"
         );
+    }
+
+    #[test]
+    fn revoke_data_constructor_sets_code_only() {
+        let data = UserRoleRevokeData::new("EMERGENCY_REVOKE");
+        assert_eq!(data.revoke_reason_code, "EMERGENCY_REVOKE");
+        assert!(data.revoke_reason_text.is_none());
+        let noted = UserRoleRevokeData::new("EMERGENCY_REVOKE").with_revoke_reason_text("紧急撤权");
+        assert_eq!(noted.revoke_reason_text.as_deref(), Some("紧急撤权"));
     }
 
     /// JSON 往返。

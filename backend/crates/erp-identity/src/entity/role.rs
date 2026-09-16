@@ -17,6 +17,52 @@ pub struct RoleData {
     pub system: bool,
 }
 
+impl RoleData {
+    /// 由必填名称构造角色创建数据。
+    ///
+    /// # 参数
+    /// * `name` - 角色展示名称
+    ///
+    /// # 返回
+    /// 返回描述为空、非系统角色的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into(), description: None, system: false }
+    }
+
+    /// 设置角色描述。
+    ///
+    /// # 参数
+    /// * `description` - 角色描述
+    ///
+    /// # 返回
+    /// 返回更新后的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    /// 设置是否为系统角色。
+    ///
+    /// # 参数
+    /// * `system` - 系统角色标记
+    ///
+    /// # 返回
+    /// 返回更新后的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_system(mut self, system: bool) -> Self {
+        self.system = system;
+        self
+    }
+}
+
 /// 角色更新数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct RoleUpdate {
@@ -114,42 +160,38 @@ mod tests {
     use super::{Role, RoleData, RoleUpdate};
 
     #[test]
+    fn constructor_builds_non_system_data_by_default() {
+        let data = RoleData::new("测试角色");
+        assert_eq!(data.name, "测试角色");
+        assert!(data.description.is_none());
+        assert!(!data.system);
+        let system = RoleData::new("系统角色").with_system(true).with_description("内建");
+        assert!(system.system);
+        assert_eq!(system.description.as_deref(), Some("内建"));
+    }
+
+    #[test]
     fn role_should_normalize_name() {
-        let role = Role::new(
-            "role-a".to_string(),
-            RoleData { name: " 运营管理员 ".to_string(), description: None, system: false },
-        )
-        .unwrap();
+        let role = Role::new("role-a".to_string(), RoleData::new(" 运营管理员 ")).unwrap();
         assert_eq!(role.name, "运营管理员");
     }
 
     #[test]
     fn role_should_reject_empty_name() {
-        let result = Role::new(
-            "role-a".to_string(),
-            RoleData { name: " ".to_string(), description: None, system: false },
-        );
+        let result = Role::new("role-a".to_string(), RoleData::new(" "));
         assert!(result.is_err());
     }
 
     #[test]
     fn role_update_should_change_disabled_state() {
-        let mut role = Role::new(
-            "role-a".to_string(),
-            RoleData { name: "角色".to_string(), description: None, system: false },
-        )
-        .unwrap();
+        let mut role = Role::new("role-a".to_string(), RoleData::new("角色")).unwrap();
         role.update(RoleUpdate { disabled: Some(true), ..Default::default() }).unwrap();
         assert!(role.disabled);
     }
 
     #[test]
     fn system_role_should_not_be_deletable() {
-        let role = Role::new(
-            "role-system".to_string(),
-            RoleData { name: "系统角色".to_string(), description: None, system: true },
-        )
-        .unwrap();
+        let role = Role::new("role-system".to_string(), RoleData::new("系统角色").with_system(true)).unwrap();
 
         assert!(role.ensure_deletable().is_err());
         assert!(role.ensure_mutable().is_err());
@@ -157,27 +199,16 @@ mod tests {
 
     #[test]
     fn custom_role_should_be_deletable() {
-        let role = Role::new(
-            "role-custom".to_string(),
-            RoleData { name: "自定义角色".to_string(), description: None, system: false },
-        )
-        .unwrap();
+        let role = Role::new("role-custom".to_string(), RoleData::new("自定义角色")).unwrap();
 
         assert!(role.ensure_deletable().is_ok());
     }
 
     #[test]
     fn only_enabled_custom_role_should_be_assignable() {
-        let custom = Role::new(
-            "role-custom".to_string(),
-            RoleData { name: "自定义角色".to_string(), description: None, system: false },
-        )
-        .unwrap();
-        let system = Role::new(
-            "role-system".to_string(),
-            RoleData { name: "系统角色".to_string(), description: None, system: true },
-        )
-        .unwrap();
+        let custom = Role::new("role-custom".to_string(), RoleData::new("自定义角色")).unwrap();
+        let system =
+            Role::new("role-system".to_string(), RoleData::new("系统角色").with_system(true)).unwrap();
         let mut disabled = custom.clone();
         disabled.update(RoleUpdate { disabled: Some(true), ..Default::default() }).unwrap();
 

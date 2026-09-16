@@ -28,6 +28,43 @@ pub struct ProductBrandData {
     pub logo_file_asset_id: Option<FileAssetId>,
 }
 
+impl ProductBrandData {
+    /// 以稳定品牌代码与品牌名称构造创建数据，状态缺省为启用。
+    ///
+    /// # 参数
+    /// * `brand_code` - 稳定品牌代码
+    /// * `name` - 品牌名称
+    ///
+    /// # 返回
+    /// 返回待补齐 Logo 引用的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(brand_code: impl Into<String>, name: impl Into<String>) -> Self {
+        Self {
+            brand_code: brand_code.into(),
+            name: name.into(),
+            status: EnableStatus::Active,
+            logo_file_asset_id: None,
+        }
+    }
+
+    /// 设置品牌 Logo。
+    ///
+    /// # 参数
+    /// * `logo_file_asset_id` - 已登记受控文件
+    ///
+    /// # 返回
+    /// 返回更新后的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_logo_file_asset_id(mut self, logo_file_asset_id: FileAssetId) -> Self {
+        self.logo_file_asset_id = Some(logo_file_asset_id);
+        self
+    }
+}
+
 /// 商品品牌更新数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct ProductBrandUpdate {

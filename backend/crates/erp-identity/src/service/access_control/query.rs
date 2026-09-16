@@ -97,13 +97,9 @@ impl AccessControlService {
                         .collect();
                     Ok::<_, Error>(DataScopeListView::compose(
                         PageView { items, total: page.total, page: filter.page, page_size: filter.page_size },
-                        DataScopeListMeta {
-                            scope_version,
-                            policy_version,
-                            organization_version: organizations.version,
-                            as_of: as_of.as_utc().to_rfc3339(),
-                            no_scope: false,
-                        },
+                        DataScopeListMeta::new(scope_version, as_of.as_utc().to_rfc3339())
+                            .with_policy_version(policy_version)
+                            .with_organization_version(organizations.version),
                     ))
                 })
             })

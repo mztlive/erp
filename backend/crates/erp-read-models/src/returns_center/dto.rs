@@ -105,7 +105,7 @@ pub struct SalesReturnCaseView {
 }
 
 /// 销售退货/拒收处理单列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct SalesReturnCaseListParams {
     /// 退货处理号模糊筛选。
     pub return_no: Option<String>,
@@ -203,7 +203,7 @@ pub struct PurchaseReturnOrderView {
 }
 
 /// 采购退货单列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct PurchaseReturnOrderListParams {
     /// 跨页必须使用前一页的当前授权和业务版本。
     #[validate(length(min = 1, max = 256))]
@@ -334,6 +334,53 @@ pub struct DocumentApprovalDefinitionView {
     pub nodes: Vec<DocumentApprovalNodeView>,
 }
 
+impl DocumentApprovalDefinitionView {
+    /// 构造绑定定义只读摘要。
+    ///
+    /// # 参数
+    /// * `id` - 定义主键
+    /// * `name` - 定义名称
+    ///
+    /// # 返回
+    /// 返回版本为零、节点为空的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(id: String, name: String) -> Self {
+        Self { id, name, version: 0, nodes: Vec::new() }
+    }
+
+    /// 设置定义业务版本。
+    ///
+    /// # 参数
+    /// * `version` - 定义业务版本
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_version(mut self, version: u32) -> Self {
+        self.version = version;
+        self
+    }
+
+    /// 设置节点摘要。
+    ///
+    /// # 参数
+    /// * `nodes` - 节点摘要
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_nodes(mut self, nodes: Vec<DocumentApprovalNodeView>) -> Self {
+        self.nodes = nodes;
+        self
+    }
+}
+
 /// 定义节点只读摘要。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct DocumentApprovalNodeView {
@@ -364,6 +411,122 @@ pub struct DocumentApprovalInstanceView {
     pub latest_rejection: Option<String>,
 }
 
+impl DocumentApprovalInstanceView {
+    /// 构造运行实例只读摘要。
+    ///
+    /// # 参数
+    /// * `id` - 实例主键
+    /// * `status` - 实例状态
+    ///
+    /// # 返回
+    /// 返回首轮、可选字段全空的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(id: String, status: String) -> Self {
+        Self {
+            id,
+            status,
+            current_round_no: 1,
+            current_node: None,
+            current_node_name: None,
+            current_assignee_name: None,
+            current_assignee: None,
+            latest_rejection: None,
+        }
+    }
+
+    /// 设置当前轮次。
+    ///
+    /// # 参数
+    /// * `round_no` - 当前轮次
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_current_round_no(mut self, round_no: u32) -> Self {
+        self.current_round_no = round_no;
+        self
+    }
+
+    /// 设置当前节点。
+    ///
+    /// # 参数
+    /// * `node` - 当前节点键
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_current_node(mut self, node: Option<String>) -> Self {
+        self.current_node = node;
+        self
+    }
+
+    /// 设置当前节点显示名。
+    ///
+    /// # 参数
+    /// * `node_name` - 当前节点显示名
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_current_node_name(mut self, node_name: Option<String>) -> Self {
+        self.current_node_name = node_name;
+        self
+    }
+
+    /// 设置当前审批人显示名。
+    ///
+    /// # 参数
+    /// * `name` - 当前审批人显示名
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_current_assignee_name(mut self, name: Option<String>) -> Self {
+        self.current_assignee_name = name;
+        self
+    }
+
+    /// 设置当前审批人。
+    ///
+    /// # 参数
+    /// * `assignee` - 当前审批人
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_current_assignee(mut self, assignee: Option<String>) -> Self {
+        self.current_assignee = assignee;
+        self
+    }
+
+    /// 设置最近驳回原因。
+    ///
+    /// # 参数
+    /// * `reason` - 最近驳回原因
+    ///
+    /// # 返回
+    /// 返回更新后的摘要。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_latest_rejection(mut self, reason: Option<String>) -> Self {
+        self.latest_rejection = reason;
+        self
+    }
+}
+
 /// 有界历史项。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct DocumentApprovalHistoryItemView {
@@ -377,8 +540,41 @@ pub struct DocumentApprovalHistoryItemView {
     pub result: String,
 }
 
+impl DocumentApprovalHistoryItemView {
+    /// 构造有界历史项。
+    ///
+    /// # 参数
+    /// * `execution_id` - 执行主键
+    /// * `node_key` - 节点键
+    /// * `result` - 结束结果
+    ///
+    /// # 返回
+    /// 返回首轮的历史项。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(execution_id: String, node_key: String, result: String) -> Self {
+        Self { execution_id, round_no: 1, node_key, result }
+    }
+
+    /// 设置轮次。
+    ///
+    /// # 参数
+    /// * `round_no` - 轮次
+    ///
+    /// # 返回
+    /// 返回更新后的历史项。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_round_no(mut self, round_no: u32) -> Self {
+        self.round_no = round_no;
+        self
+    }
+}
+
 /// 完整历史分页。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
 pub struct DocumentApprovalHistoryPageView {
     /// 下一页游标。
     pub next_cursor: Option<String>,
@@ -387,7 +583,7 @@ pub struct DocumentApprovalHistoryPageView {
 }
 
 /// 客户退款列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct CustomerRefundListParams {
     /// 退款单号模糊筛选。
     pub refund_no: Option<String>,
@@ -572,12 +768,12 @@ mod tests {
     fn sales_return_case_list_params_normalize_filters() {
         let params = SalesReturnCaseListParams {
             return_no: Some(" RT-1 ".to_string()),
-            sales_order_id: None,
             status: Some(SalesReturnCaseStatus::Processing),
             page: Some(2),
             page_size: Some(50),
             sort_by: Some("discovered_at".to_string()),
             sort_dir: Some("asc".to_string()),
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.return_no.as_deref(), Some("RT-1"));
@@ -590,26 +786,54 @@ mod tests {
     #[test]
     fn return_and_refund_list_params_normalize() {
         let purchase = PurchaseReturnOrderListParams {
-            scope_version: None,
             purchase_return_no: Some("PR-1".to_string()),
-            purchase_order_id: None,
             status: Some(PurchaseReturnStatus::Draft),
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         assert_eq!(purchase.normalized().unwrap().status, Some(PurchaseReturnStatus::Draft));
 
         let refund = CustomerRefundListParams {
-            refund_no: None,
-            customer_id: None,
             status: Some(CustomerRefundStatus::Posted),
-            page: None,
             page_size: Some(25),
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         assert_eq!(refund.normalized().unwrap().paging.page_size, 25);
+    }
+}
+
+#[cfg(test)]
+mod wire_tests {
+    use super::*;
+
+    #[test]
+    fn history_page_default_is_closed_cursor() {
+        let page = DocumentApprovalHistoryPageView::default();
+        assert!(page.next_cursor.is_none());
+        assert!(!page.has_more);
+    }
+
+    #[test]
+    fn definition_view_builder_keeps_identity_and_version() {
+        let view =
+            DocumentApprovalDefinitionView::new("def-1".to_string(), "退货审批".to_string()).with_version(2);
+        assert_eq!(view.id, "def-1");
+        assert_eq!(view.name, "退货审批");
+        assert_eq!(view.version, 2);
+        assert!(view.nodes.is_empty());
+    }
+
+    #[test]
+    fn instance_and_history_builders_preserve_mandatory_fields() {
+        let instance = DocumentApprovalInstanceView::new("inst-1".to_string(), "RUNNING".to_string());
+        assert_eq!(instance.id, "inst-1");
+        assert_eq!(instance.status, "RUNNING");
+        let item = DocumentApprovalHistoryItemView::new(
+            "exec-1".to_string(),
+            "node-1".to_string(),
+            "APPROVED".to_string(),
+        )
+        .with_round_no(2);
+        assert_eq!(item.execution_id, "exec-1");
+        assert_eq!(item.round_no, 2);
     }
 }

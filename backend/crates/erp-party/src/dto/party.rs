@@ -181,7 +181,7 @@ impl From<PartyRevision> for PartyRevisionView {
 }
 
 /// 主体列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct PartyListParams {
     /// 主体编号模糊搜索。
     pub keyword: Option<String>,
@@ -705,12 +705,8 @@ mod tests {
     fn party_list_params_normalize_paging_filters_and_sort_defaults() {
         let params = PartyListParams {
             keyword: Some(" P-20 ".to_string()),
-            party_kind: None,
             status: Some(PartyStatus::Active),
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.keyword.as_deref(), Some("P-20"));
@@ -722,16 +718,19 @@ mod tests {
     }
 
     #[test]
+    fn list_params_default_is_all_empty() {
+        let params = PartyListParams::default();
+        assert_eq!(params.keyword, None);
+        assert_eq!(params.party_kind, None);
+        assert_eq!(params.status, None);
+        assert_eq!(params.page, None);
+        assert_eq!(params.page_size, None);
+        assert!(params.validate().is_ok());
+    }
+
+    #[test]
     fn list_params_reject_unbounded_page_size() {
-        let params = PartyListParams {
-            keyword: None,
-            party_kind: None,
-            status: None,
-            page: Some(0),
-            page_size: Some(u32::MAX),
-            sort_by: None,
-            sort_dir: None,
-        };
+        let params = PartyListParams { page: Some(0), page_size: Some(u32::MAX), ..Default::default() };
         assert!(params.validate().is_err());
     }
 

@@ -112,6 +112,38 @@ pub struct ApprovalCancelBlockedCommand {
     pub actor_id: String,
 }
 
+impl ApprovalCancelBlockedCommand {
+    /// 以必填身份构造受阻取消命令；任务版本默认为空。
+    ///
+    /// # 参数
+    /// * `approval_process_instance_id` - 实例 ID
+    /// * `reason` - 非空原因
+    /// * `idempotency_key` - 幂等键
+    /// * `actor_id` - 已认证管理员
+    ///
+    /// # 返回
+    /// 返回首版的受阻取消命令。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(
+        approval_process_instance_id: String,
+        reason: String,
+        idempotency_key: String,
+        actor_id: String,
+    ) -> Self {
+        Self {
+            approval_process_instance_id,
+            expected_instance_version: 1,
+            expected_execution_version: 1,
+            expected_task_version: None,
+            reason,
+            idempotency_key,
+            actor_id,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;

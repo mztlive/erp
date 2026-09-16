@@ -57,6 +57,43 @@ pub struct SupplierOfferingTermsWrite {
     /// 服务费。
     pub service_fee_amount: Option<String>,
 }
+impl SupplierOfferingTermsWrite {
+    /// 以必填商业条款构造写入字段；可选维度默认为空。
+    ///
+    /// # 参数
+    /// * `dropship_supply_price_gross` - 一件代发含税价
+    /// * `bulk_supply_price_gross` - 集采含税价
+    /// * `input_tax_rate` - 进项税率
+    /// * `bulk_minimum_order_quantity` - 集采起订量
+    /// * `valid_from` - 生效日期
+    ///
+    /// # 返回
+    /// 返回区域为空的可写条款。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(
+        dropship_supply_price_gross: String,
+        bulk_supply_price_gross: String,
+        input_tax_rate: String,
+        bulk_minimum_order_quantity: String,
+        valid_from: String,
+    ) -> Self {
+        Self {
+            dropship_supply_price_gross,
+            bulk_supply_price_gross,
+            input_tax_rate,
+            bulk_minimum_order_quantity,
+            supply_region: Vec::new(),
+            product_capabilities: Vec::new(),
+            valid_from,
+            valid_to: None,
+            dropship_express: None,
+            freight_amount: None,
+            service_fee_amount: None,
+        }
+    }
+}
 
 /// 新增供给请求。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]

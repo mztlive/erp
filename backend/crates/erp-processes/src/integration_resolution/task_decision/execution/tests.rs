@@ -5,6 +5,7 @@ use std::collections::VecDeque;
 use super::*;
 use crate::Error;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct TestExecutor {
     _identity: u8,
 }

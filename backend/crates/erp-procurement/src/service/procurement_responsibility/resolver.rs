@@ -236,10 +236,7 @@ mod tests {
                         "revision-1".into(),
                         ProductRevisionFact { category_id: ProductCategoryId::new("category-1") },
                     )]),
-                    categories: HashMap::from([(
-                        "category-1".into(),
-                        ProductCategoryFact { parent_category_id: None },
-                    )]),
+                    categories: HashMap::from([("category-1".into(), ProductCategoryFact::default())]),
                 },
                 rules: vec![
                     ProcurementResponsibilityRule::new(
@@ -257,12 +254,9 @@ mod tests {
                     )
                     .unwrap(),
                 ],
-                owners: vec![IdentityOwnerFact {
-                    id: "owner-1".into(),
-                    name: "张三".into(),
-                    can_login: true,
-                    is_admin: true,
-                }],
+                owners: vec![
+                    IdentityOwnerFact::new("owner-1", "张三").with_can_login(true).with_is_admin(true),
+                ],
                 failure: None,
             }
         }

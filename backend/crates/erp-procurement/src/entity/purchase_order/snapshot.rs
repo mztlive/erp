@@ -318,15 +318,7 @@ mod tests {
             (CalendarPeriod::HalfYear, (2027, 1, 15)),
             (CalendarPeriod::Year, (2027, 1, 15)),
         ] {
-            let resolve = |_: &str| {
-                Ok(PaymentTermFact {
-                    canonical_code: "period".into(),
-                    prepay_gate: false,
-                    prepay_minimum_ratio: None,
-                    days_after_delivery: None,
-                    calendar_due: Some((period, 15)),
-                })
-            };
+            let resolve = |_: &str| Ok(PaymentTermFact::new("period").with_calendar_due((period, 15)));
             let snapshot = PaymentTermSnapshot::new("period".into(), false, None, None, resolve).unwrap();
             assert_eq!(
                 snapshot.payable_due_date(approved, Some(delivery), resolve).unwrap(),

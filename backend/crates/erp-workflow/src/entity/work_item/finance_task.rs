@@ -87,6 +87,39 @@ pub struct PayablePurchaseAdmissionFact<'a> {
     pub entry_source_document_id: &'a str,
 }
 
+/// 销项开票任务创建规格
+impl<'a> PayablePurchaseAdmissionFact<'a> {
+    /// 以必填引用身份构造应付准入事实；布尔维度默认为假。
+    ///
+    /// # 参数
+    /// * `account_id` - 应付子账 ID
+    /// * `source_document_id` - 子账来源单据 ID
+    /// * `entry_payable_account_id` - 分录应付子账 ID
+    /// * `entry_source_document_id` - 分录来源单据 ID
+    ///
+    /// # 返回
+    /// 返回全假布尔的准入事实。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(
+        account_id: &'a str,
+        source_document_id: &'a str,
+        entry_payable_account_id: &'a str,
+        entry_source_document_id: &'a str,
+    ) -> Self {
+        Self {
+            account_id,
+            source_type_is_purchase_order: false,
+            source_document_id,
+            is_settled: false,
+            entry_payable_account_id,
+            entry_direction_is_increase: false,
+            entry_source_document_id,
+        }
+    }
+}
+
 /// 销项开票任务创建规格（Service 已解析责任人/组织后传入）。
 pub struct SalesInvoiceTaskSpec {
     /// 应收子账主键。

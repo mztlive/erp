@@ -37,7 +37,7 @@ pub(super) struct RuntimeReadSubject {
 }
 
 /// 纯授权矩阵输入；I/O 与政策解析由 Service 先完成。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(super) struct RuntimeReadAuthorizationFacts {
     pub(super) actor_active: bool,
     pub(super) initiator: bool,
@@ -398,4 +398,18 @@ where
         }
     }
     Ok(by_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_authorization_facts_default_denies_by_default() {
+        let facts = RuntimeReadAuthorizationFacts::default();
+        assert!(!facts.actor_active && !facts.initiator);
+        assert!(!ordinary_runtime_read_allowed(facts));
+        assert!(!management_runtime_read_allowed(facts));
+        assert!(!started_runtime_read_allowed(facts));
+    }
 }

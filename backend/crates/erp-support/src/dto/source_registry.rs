@@ -140,7 +140,7 @@ impl From<SourceSystem> for SourceSystemView {
 }
 
 /// 来源系统列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct SourceSystemListParams {
     /// 代码精确筛选。
     pub code: Option<String>,
@@ -354,10 +354,7 @@ mod tests {
             code: Some(" ERP ".to_string()),
             system_type: Some(SourceSystemType::Mall),
             status: Some(SourceSystemStatus::Active),
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.code.as_deref(), Some("ERP"));
@@ -370,15 +367,8 @@ mod tests {
 
     #[test]
     fn list_params_reject_unbounded_page_size() {
-        let params = SourceSystemListParams {
-            code: None,
-            system_type: None,
-            status: None,
-            page: Some(0),
-            page_size: Some(u32::MAX),
-            sort_by: None,
-            sort_dir: None,
-        };
+        let params =
+            SourceSystemListParams { page: Some(0), page_size: Some(u32::MAX), ..Default::default() };
         assert!(params.validate().is_err());
     }
 

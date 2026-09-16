@@ -14,14 +14,7 @@ fn entity<T: DeserializeOwned>(id: &str, fields: serde_json::Value) -> T {
 fn target(title: &str, amount: &str) -> LineStateMap {
     HashMap::from([(
         "line-1".into(),
-        DiffLineState {
-            line_no: 1,
-            title: title.into(),
-            amount: amount.into(),
-            quantity: Some("1 盒".into()),
-            unit_price: None,
-            due: None,
-        },
+        DiffLineState::new(title.into(), amount.into()).with_details(Some("1 盒".into()), None, None),
     )])
 }
 

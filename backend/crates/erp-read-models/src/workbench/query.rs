@@ -815,8 +815,6 @@ mod tests {
 
     #[test]
     fn queue_context_binds_handler_and_order_filters_for_cross_page_version() {
-        use std::collections::HashSet;
-
         use super::super::access::ActorAccess;
 
         fn query_with(
@@ -845,13 +843,7 @@ mod tests {
         }
 
         fn access() -> ActorAccess {
-            ActorAccess {
-                actor_id: "actor".to_string(),
-                permissions: Vec::new(),
-                participant_document_ids: HashSet::new(),
-                managed_owner_ids: Some(vec!["owner-1".to_string()]),
-                can_manage: true,
-            }
+            ActorAccess::new("actor".to_string()).with_managed_scope(Some(vec!["owner-1".to_string()]), true)
         }
 
         let access = access();

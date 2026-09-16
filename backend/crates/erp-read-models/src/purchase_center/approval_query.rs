@@ -179,7 +179,7 @@ fn empty_runtime() -> LoadedRuntime {
     LoadedRuntime {
         instance: None,
         recent_history: Vec::new(),
-        history_page: DocumentApprovalHistoryPageView { next_cursor: None, has_more: false },
+        history_page: DocumentApprovalHistoryPageView::default(),
     }
 }
 
@@ -197,18 +197,15 @@ fn instance_view(
     current: Option<&ApprovalNodeExecution>,
     latest_rejection: Option<String>,
 ) -> DocumentApprovalInstanceView {
-    DocumentApprovalInstanceView {
-        id: instance.base.id.clone(),
-        status: instance.status.as_str().to_string(),
-        current_round_no: instance.current_round_no,
-        current_node: current.map(|item| item.node_key.clone()),
-        current_node_name: current.map(|item| item.node_name.clone()),
-        current_assignee: current.map(|item| item.assignee_participant_id.as_str().to_string()),
-        current_assignee_name: current.and_then(|item| optional_text(&item.assignee_name_snapshot)),
-        latest_rejection,
-        process_version: Some(instance.definition_version),
-        blocker_code: instance.blocker_code.map(|code| code.as_str().to_string()),
-    }
+    DocumentApprovalInstanceView::new(instance.base.id.clone(), instance.status.as_str().to_string())
+        .with_current_round_no(instance.current_round_no)
+        .with_current_node(current.map(|item| item.node_key.clone()))
+        .with_current_node_name(current.map(|item| item.node_name.clone()))
+        .with_current_assignee(current.map(|item| item.assignee_participant_id.as_str().to_string()))
+        .with_current_assignee_name(current.and_then(|item| optional_text(&item.assignee_name_snapshot)))
+        .with_latest_rejection(latest_rejection)
+        .with_process_version(Some(instance.definition_version))
+        .with_blocker_code(instance.blocker_code.map(|code| code.as_str().to_string()))
 }
 
 /// 把运行历史项转为采购单详情 DTO。
@@ -219,18 +216,18 @@ fn instance_view(
 /// # 返回
 /// 返回单据详情 `recent_history` 项。
 fn history_item_view(item: &RuntimeHistoryItem) -> DocumentApprovalHistoryItemView {
-    DocumentApprovalHistoryItemView {
-        execution_id: item.execution_id.clone(),
-        round_no: item.round_no,
-        execution_no: item.execution_no,
-        node_key: item.node_key.clone(),
-        node_name: item.node_name.clone(),
-        result: item.result.clone(),
-        assignee_name: item.assignee_name.clone(),
-        decided_by: item.decided_by.clone(),
-        decision_reason: item.decision_reason.clone(),
-        decided_at: item.decided_at,
-    }
+    DocumentApprovalHistoryItemView::new(
+        item.execution_id.clone(),
+        item.node_key.clone(),
+        item.node_name.clone(),
+        item.result.clone(),
+    )
+    .with_round_no(item.round_no)
+    .with_execution_no(item.execution_no)
+    .with_assignee_name(item.assignee_name.clone())
+    .with_decided_by(item.decided_by.clone())
+    .with_decision_reason(item.decision_reason.clone())
+    .with_decided_at(item.decided_at)
 }
 
 /// 去掉空白显示名。

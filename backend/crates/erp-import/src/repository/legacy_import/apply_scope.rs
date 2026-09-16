@@ -14,7 +14,7 @@ use crate::entity::legacy_import::{ImportStatus, LegacyImportRow};
 use crate::repository::owned::LegacyImportRowRepository;
 
 /// 一次应用请求对应的导入行持久化范围。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LegacyImportApplyScope {
     /// 命中目标批次且未软删除的请求行（按 ID 索引；缺失 ID 不出现）。
     pub rows: HashMap<String, LegacyImportRow>,

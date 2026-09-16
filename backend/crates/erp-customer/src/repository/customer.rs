@@ -49,6 +49,33 @@ pub struct CustomerAccountRow {
     pub updated_at: u64,
 }
 
+impl CustomerAccountRow {
+    /// 以稳定身份构造列表投影行，版本与时间戳从零开始。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键
+    /// * `party_id` - 共用企业主体 ID
+    /// * `customer_no` - 客户编号
+    ///
+    /// # 返回
+    /// 返回启用状态的投影行。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(id: impl Into<String>, party_id: impl Into<String>, customer_no: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            party_id: party_id.into(),
+            customer_no: customer_no.into(),
+            default_payment_term_id: None,
+            status: CustomerAccountStatus::Active,
+            version: 0,
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+}
+
 /// 客户编号窄投影行。
 #[derive(Debug, Clone, Deserialize)]
 struct CustomerNumberRow {
@@ -81,6 +108,33 @@ pub struct CustomerAccountFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl Default for CustomerAccountFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回第 1 页、每页 20 条的空筛选条件。
+    ///
+    /// # 错误
+    /// 无。
+    fn default() -> Self {
+        Self {
+            keyword: None,
+            keyword_party_ids: None,
+            party_id: None,
+            party_ids: None,
+            customer_ids: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
 }
 
 impl QueryFilter for CustomerAccountFilter {
@@ -826,18 +880,22 @@ mod tests {
     }
 
     #[test]
+    fn customer_account_row_new_carries_identity_fields() {
+        let row = super::CustomerAccountRow::new("customer-1", "party-1", "C-1");
+        assert_eq!(row.id, "customer-1");
+        assert_eq!(row.party_id, "party-1");
+        assert_eq!(row.customer_no, "C-1");
+        assert_eq!(row.default_payment_term_id, None);
+        assert_eq!(row.status, CustomerAccountStatus::Active);
+        assert_eq!(row.version, 0);
+    }
+
+    #[test]
     fn customer_account_filter_applies_keyword_and_status() {
         let filter = CustomerAccountFilter {
             keyword: Some("C-".to_string()),
-            keyword_party_ids: None,
-            party_id: None,
-            party_ids: None,
-            customer_ids: None,
             status: Some(CustomerAccountStatus::Active),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         let document = filter.to_doc();

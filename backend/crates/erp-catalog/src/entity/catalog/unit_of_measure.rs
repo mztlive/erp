@@ -37,6 +37,45 @@ pub struct UnitOfMeasureData {
     pub status: EnableStatus,
 }
 
+impl UnitOfMeasureData {
+    /// 以稳定单位代码、名称与符号构造创建数据。
+    ///
+    /// # 参数
+    /// * `unit_code` - 稳定单位代码
+    /// * `name` - 单位名称
+    /// * `symbol` - 单位符号
+    ///
+    /// # 返回
+    /// 返回小数位为 0、状态为启用的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(unit_code: impl Into<String>, name: impl Into<String>, symbol: impl Into<String>) -> Self {
+        Self {
+            unit_code: unit_code.into(),
+            name: name.into(),
+            symbol: symbol.into(),
+            quantity_scale: 0,
+            status: EnableStatus::Active,
+        }
+    }
+
+    /// 设置允许数量小数位。
+    ///
+    /// # 参数
+    /// * `quantity_scale` - 允许数量小数位（`0..=6`）
+    ///
+    /// # 返回
+    /// 返回更新后的创建数据。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_quantity_scale(mut self, quantity_scale: u8) -> Self {
+        self.quantity_scale = quantity_scale;
+        self
+    }
+}
+
 /// 计量单位更新数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct UnitOfMeasureUpdate {

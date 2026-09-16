@@ -59,6 +59,21 @@ pub struct DefinitionNodeRequest {
 }
 
 impl DefinitionNodeRequest {
+    /// 以必填字段构造草稿节点写请求；编辑主键默认为空。
+    ///
+    /// # 参数
+    /// * `node_name` - 节点名称
+    /// * `assignee_user_id` - 指定审批人账号
+    ///
+    /// # 返回
+    /// 返回展示顺序为 1 的节点请求。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(node_name: String, assignee_user_id: String) -> Self {
+        Self { node_id: None, node_name, display_order: 1, assignee_user_id }
+    }
+
     /// 清洗客户端提交的节点文本，供命令摘要与 BPM 草稿构造共用。
     ///
     /// # 参数

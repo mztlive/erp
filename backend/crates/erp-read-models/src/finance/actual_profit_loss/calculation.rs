@@ -154,26 +154,17 @@ fn order_row(
     scenarios: BTreeSet<String>,
     drill: bool,
 ) -> ProfitLossRow {
-    ProfitLossRow {
-        row_id: order.id.clone(),
-        object_type: "sales_order".into(),
-        object_id: Some(order.id.clone()),
-        identity_label: order.order_no.clone(),
-        customer_id: Some(order.customer_id.clone()),
-        customer_label: Some(customer.into()),
-        attribution_user_id: order.attribution.as_ref().map(|a| a.attribution_user_id.clone()),
-        attribution_user_name: order.attribution.as_ref().map(|a| a.attribution_user_name.clone()),
-        attribution_org_unit_id: order.attribution.as_ref().map(|a| a.attribution_org_unit_id.clone()),
-        attribution_org_unit_name: order.attribution.as_ref().map(|a| a.attribution_org_unit_name.clone()),
-        benefit_scenarios: scenarios.into_iter().collect(),
-        fulfillment_modes: vec![],
-        totals: Totals::default(),
-        coverage_state: String::new(),
-        coverage_blockers: vec![],
-        latest_cost_occurred_at: None,
-        allowed_drilldowns: if drill { vec!["cost_entry".into()] } else { vec![] },
-        cost_entry_ids: vec![],
-    }
+    ProfitLossRow::new(order.id.clone(), "sales_order".into(), order.order_no.clone(), String::new())
+        .with_object_id(Some(order.id.clone()))
+        .with_customer(Some(order.customer_id.clone()), Some(customer.into()))
+        .with_attribution(
+            order.attribution.as_ref().map(|a| a.attribution_user_id.clone()),
+            order.attribution.as_ref().map(|a| a.attribution_user_name.clone()),
+            order.attribution.as_ref().map(|a| a.attribution_org_unit_id.clone()),
+            order.attribution.as_ref().map(|a| a.attribution_org_unit_name.clone()),
+        )
+        .with_modes(scenarios.into_iter().collect(), vec![])
+        .with_drilldown(None, if drill { vec!["cost_entry".into()] } else { vec![] }, vec![])
 }
 /// 按订单和版本索引归集，数据库读取次数及内存遍历不随单据数平方增长。
 pub(super) fn calculate(source: &Sources, as_of: i64, drill: bool) -> Result<Vec<OrderResult>> {

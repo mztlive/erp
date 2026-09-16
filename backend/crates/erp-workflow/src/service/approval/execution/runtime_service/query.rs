@@ -192,8 +192,25 @@ pub struct RuntimeInstanceListCursor {
     pub id: String,
 }
 
+impl RuntimeInstanceListCursor {
+    /// 以必填实例构造稳定游标；排序时间默认为 0。
+    ///
+    /// # 参数
+    /// * `id` - 并列时的实例主键
+    ///
+    /// # 返回
+    /// 返回零排序时间的游标。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(id: String) -> Self {
+        Self { sort_time: 0, id }
+    }
+}
+
 #[cfg(test)]
 mod runtime_instance_list_query_tests {
+
     use super::{
         DEFAULT_RUNTIME_INSTANCE_LIST_LIMIT, MAX_RUNTIME_INSTANCE_LIST_LIMIT,
         RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN, RuntimeInstanceListCursor, RuntimeInstanceListQuery,

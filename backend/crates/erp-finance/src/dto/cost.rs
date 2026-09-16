@@ -224,7 +224,7 @@ pub struct ScopedCostEntryView {
 }
 
 /// 成本事实列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CostEntryListParams {
     /// 跨页必须携带当前授权和业务版本。
@@ -296,7 +296,7 @@ impl CostEntryListParams {
 }
 
 /// 成本分配列表查询参数（按成本事实筛选）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CostAllocationListParams {
     /// 跨页必须携带当前授权和业务版本。
@@ -375,16 +375,13 @@ mod tests {
     #[test]
     fn cost_entry_list_params_normalize_filters_and_paging() {
         let params = CostEntryListParams {
-            scope_version: None,
-            cost_type: None,
             cost_stage: Some(CostStage::Actual),
-            cost_scope: None,
-            supplier_id: None,
             source_document_id: Some(" PO-1 ".to_string()),
             page: Some(2),
             page_size: Some(50),
             sort_by: Some("occurred_at".to_string()),
             sort_dir: Some("asc".to_string()),
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.cost_stage, Some(CostStage::Actual));
@@ -395,29 +392,30 @@ mod tests {
     }
 
     #[test]
+    fn list_params_default_is_all_empty() {
+        let params = CostEntryListParams::default();
+        assert_eq!(params.scope_version, None);
+        assert_eq!(params.cost_type, None);
+        assert_eq!(params.page, None);
+        assert_eq!(params.page_size, None);
+        assert!(params.validate().is_ok());
+
+        let allocations = CostAllocationListParams::default();
+        assert_eq!(allocations.cost_entry_id, None);
+        assert_eq!(allocations.page, None);
+        assert!(allocations.validate().is_ok());
+    }
+
+    #[test]
     fn list_params_reject_unbounded_page_size() {
-        let params = CostEntryListParams {
-            scope_version: None,
-            cost_type: None,
-            cost_stage: None,
-            cost_scope: None,
-            supplier_id: None,
-            source_document_id: None,
-            page: Some(0),
-            page_size: Some(u32::MAX),
-            sort_by: None,
-            sort_dir: None,
-        };
+        let params = CostEntryListParams { page: Some(0), page_size: Some(u32::MAX), ..Default::default() };
         assert!(params.validate().is_err());
 
         let allocations = CostAllocationListParams {
-            scope_version: None,
-            cost_entry_id: None,
-            sales_order_id: None,
             page: Some(1),
             page_size: Some(25),
             sort_by: Some("created_at".to_string()),
-            sort_dir: None,
+            ..Default::default()
         };
         assert!(allocations.normalized().is_ok());
     }

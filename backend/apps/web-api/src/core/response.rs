@@ -101,6 +101,28 @@ impl ApiResponse<()> {
 }
 
 impl<T> ApiResponse<T> {
+    /// 以必填消息构造响应；可选维度默认为空。
+    ///
+    /// # 参数
+    /// * `message` - 响应消息
+    ///
+    /// # 返回
+    /// 返回默认状态的响应。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(message: String) -> Self {
+        Self {
+            status: 200,
+            message,
+            code: None,
+            field_errors: None,
+            retryable: None,
+            data: None,
+            success: true,
+        }
+    }
+
     /// 构造携带数据的成功响应。
     ///
     /// # 参数
