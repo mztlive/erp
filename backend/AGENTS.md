@@ -163,7 +163,6 @@ env -u ERP_TEST_MONGO_URI cargo test -p <crate> --lib [<测试过滤>]
 - 改 `Cargo.toml` 依赖、跨 crate 引用、Service/Process/Repository 数据访问：`./scripts/check-domain-boundaries.sh --cutover`。
 - 改 `bpm` 或 `erp-workflow`：`./scripts/check-bpm-boundaries.sh`。
 - 改 `permission` 标注：`./scripts/check-permissions-drift.sh`，并提交 `erp-client/lib/permissions.generated.ts`。
-- 新增或扩大 Rust 文件/方法：`./scripts/check-rust-size.sh`（生产文件 ≤800 行、方法 ≤50 有效行；不含测试）。
 - 仅改文档：不编译、不测试，只跑 `git diff --check`。
 
 ### 提交阶段
