@@ -26,6 +26,10 @@ pub struct CustomerResolvedClause {
 impl CustomerResolvedClause {
     /// 判断条款是否构成有效客户范围规则。
     ///
+    /// 与仓储侧 [`crate::repository::scope::CustomerScopeClause::has_scope_rules`]
+    /// 同语义（erp-customer-005）：两套条款的谓词已对齐，`is_empty` 为其取反；
+    /// Port→仓储映射只经 `access::customer_scope/map_clause` 单一入口。
+    ///
     /// # 参数
     /// 无。
     ///
@@ -39,6 +43,22 @@ impl CustomerResolvedClause {
     /// 规则存在但当前无对象不得标为无范围；空条款保持空集且不得补公司。
     pub fn has_scope_rules(&self) -> bool {
         self.company || self.self_owned || self.collaborative || !self.org_unit_ids.is_empty()
+    }
+
+    /// 判断条款是否确定不产生可见对象。
+    ///
+    /// 与仓储侧 `is_empty` 同语义，为 `has_scope_rules` 取反（erp-customer-005）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无公司、主责、协作与组织条件时为 true。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn is_empty(&self) -> bool {
+        !self.has_scope_rules()
     }
 }
 
@@ -81,6 +101,22 @@ impl CustomerResolvedScope {
     /// 只看角色条款；个人上限不单独构成“有范围规则”。
     pub fn has_scope_rules(&self) -> bool {
         self.role_clauses.iter().any(CustomerResolvedClause::has_scope_rules)
+    }
+
+    /// 判断角色正向范围是否确定为空。
+    ///
+    /// 为 `has_scope_rules` 取反，与仓储侧空授权语义对齐（erp-customer-005）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无角色有效规则时为 true。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn is_empty(&self) -> bool {
+        !self.has_scope_rules()
     }
 }
 

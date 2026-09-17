@@ -9,6 +9,7 @@ use super::common::{PageParams, non_blank, normalize_sort};
 use super::product::ProductSkuInput;
 use crate::entity::catalog::{EnableStatus, VoucherCategoryProfileRevision};
 use crate::error::Result;
+use crate::repository::VoucherCategoryProfileRevisionRow;
 
 /// 卡券类目扩展修订列表允许的排序字段白名单。
 pub(crate) const VOUCHER_PROFILE_SORT_FIELDS: &[&str] = &["created_at", "revision_no"];
@@ -229,6 +230,31 @@ impl From<VoucherCategoryProfileRevision> for VoucherCategoryProfileView {
             status: revision.status,
             created_at: revision.base.created_at,
             version: revision.base.version,
+        }
+    }
+}
+
+impl From<VoucherCategoryProfileRevisionRow> for VoucherCategoryProfileView {
+    /// 从投影行构造响应视图，与 `From<VoucherCategoryProfileRevision>` 同语义（erp-catalog-002）。
+    ///
+    /// # 参数
+    /// * `row` - 已装配关联展示字段的投影行
+    ///
+    /// # 返回
+    /// 返回响应视图。
+    fn from(row: VoucherCategoryProfileRevisionRow) -> Self {
+        Self {
+            id: row.id,
+            sku_id: row.sku_id,
+            sku_no: row.sku_no,
+            product_id: row.product_id,
+            product_version: row.product_version,
+            name: row.name,
+            revision_no: row.revision_no,
+            description: row.description,
+            status: row.status,
+            created_at: row.created_at,
+            version: row.version,
         }
     }
 }

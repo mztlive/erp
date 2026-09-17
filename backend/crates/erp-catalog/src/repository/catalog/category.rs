@@ -7,7 +7,8 @@ use persistence_core::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::shared::{in_filter, sort_doc};
+use super::shared::{default_paging, in_filter, sort_doc, whitelisted_sort};
+use crate::dto::catalog::PRODUCT_CATEGORY_SORT_FIELDS;
 use crate::entity::catalog::{EnableStatus, ProductCategory, ProductKind};
 use crate::repository::owned::ProductCategoryRepository;
 
@@ -68,16 +69,17 @@ impl Default for ProductCategoryFilter {
     /// # 错误
     /// 无。
     fn default() -> Self {
+        let (page, page_size, sort_by, sort_ascending) = default_paging();
         Self {
             q: None,
             category_code: None,
             name: None,
             parent_category_id: None,
             status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            page,
+            page_size,
+            sort_by,
+            sort_ascending,
         }
     }
 }
@@ -337,12 +339,7 @@ impl Pagination for ProductCategoryAttributeFilter {
 /// # 返回
 /// 返回排序条件文档。
 fn product_category_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
-    let field = match sort_by {
-        Some("category_code") => "category_code",
-        Some("name") => "name",
-        _ => "created_at",
-    };
-    sort_doc(field, sort_ascending)
+    sort_doc(whitelisted_sort(sort_by, PRODUCT_CATEGORY_SORT_FIELDS), sort_ascending)
 }
 
 /// 商品分类列表投影字段。

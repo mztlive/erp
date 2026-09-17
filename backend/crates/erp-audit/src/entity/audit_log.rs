@@ -55,21 +55,16 @@ impl AuditLog {
     /// # 返回值
     /// 返回新的审计日志实体
     pub fn new(id: String, data: AuditLogData) -> Result<Self> {
-        let actor_id = normalize_required_text(
-            data.actor_id,
-            "操作人ID不能为空",
-            ACTOR_ID_MAX_LEN,
-            "操作人ID长度不符合要求",
-        )?;
-        let actor_account = normalize_required_text(
+        let actor_id =
+            required_text(data.actor_id, "操作人ID不能为空", ACTOR_ID_MAX_LEN, "操作人ID长度不符合要求")?;
+        let actor_account = required_text(
             data.actor_account,
             "操作人账号不能为空",
             ACTOR_ACCOUNT_MAX_LEN,
             "操作人账号长度不符合要求",
         )?;
-        let action =
-            normalize_required_text(data.action, "动作不能为空", ACTION_MAX_LEN, "动作长度不符合要求")?;
-        let resource_type = normalize_required_text(
+        let action = required_text(data.action, "动作不能为空", ACTION_MAX_LEN, "动作长度不符合要求")?;
+        let resource_type = required_text(
             data.resource_type,
             "资源类型不能为空",
             RESOURCE_TYPE_MAX_LEN,
@@ -90,6 +85,18 @@ impl AuditLog {
             message,
         })
     }
+}
+
+/// 实体内规范化必填文本的唯一入口（erp-audit-007）。
+///
+/// 仅收敛四个字段的重复调用形状；校验语义与错误文案由调用方传入。
+fn required_text(
+    value: String,
+    empty_message: &'static str,
+    max_len: usize,
+    too_long_message: &'static str,
+) -> Result<String> {
+    normalize_required_text(value, empty_message, max_len, too_long_message)
 }
 
 #[cfg(test)]

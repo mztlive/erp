@@ -57,6 +57,13 @@ pub enum Error {
 
 impl Error {
     /// Stable error class used by HTTP mapping; do not parse display text.
+    ///
+    /// 归类理由（erp-supplier-010）：
+    /// * `Logic` → Internal：实体不变式被绕过属程序缺陷，非用户可纠正输入；
+    /// * `OutcomeUnknown` → Internal：提交结果未知，调用方须凭幂等键重试，
+    ///   不得按冲突语义自动重试写入；
+    /// * `TransientTransaction` → Conflict：瞬态事务冲突可由调用方重试；
+    /// * `NotFound` → BusinessRule：读取不可见对象不泄露存在性差异。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
@@ -95,6 +102,10 @@ impl From<persistence_core::Error> for Error {
 }
 
 /// 将唯一键冲突映射为面向用户的冲突提示。
+///
+/// 冲突文案映射内聚在此处（erp-supplier-010）：`From` 只做三类分流
+/// （唯一键→ConflictError、乐观锁→ConflictError、瞬态/未知→透传），
+/// 索引名→文案的明细在 [`duplicate_index_conflict_message`] 旁维护。
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
     duplicate_index_conflict_message(error.duplicate_index_name())
 }

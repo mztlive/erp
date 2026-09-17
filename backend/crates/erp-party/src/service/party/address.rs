@@ -14,11 +14,11 @@ use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
+use super::clear_default_marks;
 use super::sensitive::SensitiveDataCodec;
-use super::{clear_default_marks, page_or_default, page_size_or_default};
 use crate::dto::party::{
     CreatePartyAddressRequest, PARTY_ADDRESS_SORT_FIELDS, PageView, PartyAddressListParams, PartyAddressView,
-    SortDir, UpdatePartyAddressRequest, normalize_sort,
+    SortDir, UpdatePartyAddressRequest, normalize_paging,
 };
 use crate::entity::party::{
     EffectiveRecordStatus, PartyAddress, PartyAddressData, PartyAddressId, PartyAddressUpdate, PartyId,
@@ -76,17 +76,22 @@ impl PartyAddressService {
     ) -> Result<PageView<PartyAddressView>> {
         params.validate()?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(party_id)).await?;
-        let (sort_by, sort_dir) =
-            normalize_sort(&params.sort_by, &params.sort_dir, PARTY_ADDRESS_SORT_FIELDS)?;
+        let paging = normalize_paging(
+            params.page,
+            params.page_size,
+            &params.sort_by,
+            &params.sort_dir,
+            PARTY_ADDRESS_SORT_FIELDS,
+        )?;
         let filter = PartyAddressFilter {
             party_id: Some(PartyId::new(party_id)),
             address_type: params.address_type,
             status: params.status,
             is_default: params.is_default,
-            page: page_or_default(params.page),
-            page_size: page_size_or_default(params.page_size),
-            sort_by: Some(sort_by.to_string()),
-            sort_ascending: matches!(sort_dir, SortDir::Asc),
+            page: paging.page,
+            page_size: paging.page_size,
+            sort_by: Some(paging.sort_by.to_string()),
+            sort_ascending: matches!(paging.sort_dir, SortDir::Asc),
         };
         let page = self.db.party_addresses().search_party_addresses(&filter, &mut NoTransaction).await?;
         let items = page
@@ -129,7 +134,7 @@ impl PartyAddressService {
         actor: &AuditActor,
     ) -> Result<PartyAddressView> {
         req.validate()?;
-        self.ensure_party_exists(party_id).await?;
+        super::ensure_party_exists(&self.db, party_id).await?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(party_id)).await?;
         let address_plaintext = req.address.clone();
         let mut address = PartyAddress::new(
@@ -203,9 +208,7 @@ impl PartyAddressService {
             .await?
             .ok_or_else(|| Error::NotFound("地址不存在".to_string()))?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &address.party_id).await?;
-        if address.base.version != req.version {
-            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
-        }
+        address.ensure_version(req.version).map_err(|error| Error::ConflictError(error.to_string()))?;
         address.update(
             PartyAddressUpdate {
                 status: req.status,
@@ -247,24 +250,5 @@ impl PartyAddressService {
             .await?;
 
         Ok(updated.into())
-    }
-
-    /// 校验主体存在。
-    ///
-    /// # 参数
-    /// * `party_id` - 主体 ID
-    ///
-    /// # 返回
-    /// 主体存在返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// * `NotFound` - 主体不存在
-    async fn ensure_party_exists(&self, party_id: &str) -> Result<()> {
-        self.db
-            .parties()
-            .find_by_id(party_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("主体不存在".to_string()))?;
-        Ok(())
     }
 }

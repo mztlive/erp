@@ -36,6 +36,7 @@ pub use handover_identity::{
     capability_handover_audit_id, capability_handover_fingerprint, supplier_handover_audit_id,
     supplier_handover_audit_message, supplier_handover_fingerprint, supplier_handover_fingerprint_matches,
 };
+pub(crate) use list_view::commercial_party_ids as commercial_party_ids_for_repository;
 pub use profile::command_view;
 pub use scope::SupplierListView;
 
@@ -134,6 +135,23 @@ impl SupplierService {
 
     /// 装载详情展示字段，不解释数据范围。
     pub async fn load_supplier_detail(&self, id: &str) -> Result<SupplierDetailView> {
+        let loaded = self.load_detail_facts(id).await?;
+        let current_profiles = current_profile_subset(&loaded.bundle);
+        let account = self.assemble_detail_account(&loaded, current_profiles).await?;
+        self.finish_detail_view(loaded, account).await
+    }
+
+    /// 一次性装载详情所需的事实束与主体事实（erp-supplier-003）。
+    ///
+    /// # 参数
+    /// * `id` - 供应商角色 ID
+    ///
+    /// # 返回
+    /// 返回未经装配的详情事实束。
+    ///
+    /// # 错误
+    /// 供应商或关联主体缺失时返回 `NotFound`。
+    async fn load_detail_facts(&self, id: &str) -> Result<LoadedSupplierDetail> {
         let supplier_id = SupplierAccountId::new(id);
         let bundle = self
             .db
@@ -154,82 +172,99 @@ impl SupplierService {
             .party
             .current_legal_names_by_party_ids(&bundle.commercial_party_ids, &mut NoTransaction)
             .await?;
-        let row = SupplierAccountRow {
-            id: bundle.supplier.base.id.clone(),
-            party_id: bundle.supplier.party_id.to_string(),
-            supplier_no: bundle.supplier.supplier_no.clone(),
-            maintainer_user_id: bundle.supplier.maintainer_user_id.clone(),
-            business_org_unit_id: bundle.supplier.business_org_unit_id.clone(),
-            default_payment_term_id: bundle.supplier.default_payment_term_id.clone(),
-            current_commercial_profile_revision_id: bundle
-                .supplier
-                .current_commercial_profile_revision_id
-                .as_ref()
-                .map(ToString::to_string),
-            status: bundle.supplier.stable.status,
-            version: bundle.supplier.base.version,
-            created_at: bundle.supplier.base.created_at,
-        };
-        let party_for_view = party.clone();
-        let current_profiles = bundle
-            .commercial_profiles
-            .iter()
-            .find(|profile| {
-                Some(profile.base.id.as_str())
-                    == bundle
-                        .supplier
-                        .current_commercial_profile_revision_id
-                        .as_ref()
-                        .map(ToString::to_string)
-                        .as_deref()
-            })
-            .cloned()
-            .into_iter()
-            .collect();
-        let mut account = assemble_supplier_views(SupplierViewAssembleInput {
+        Ok(LoadedSupplierDetail {
+            id: id.to_string(),
+            bundle,
+            party,
+            party_revision: party_revision.into_iter().collect(),
+            contacts,
+            addresses,
+            tax_profiles,
+            bank_accounts,
+            commercial_party_names,
+        })
+    }
+
+    /// 装配详情账户视图（erp-supplier-003）。
+    ///
+    /// # 参数
+    /// * `loaded` - 已装载的详情事实
+    /// * `current_profiles` - 当前商务版本子集
+    ///
+    /// # 返回
+    /// 返回已水合主体与商务名称的账户视图。
+    ///
+    /// # 错误
+    /// 装配结果为空时返回 `NotFound`。
+    async fn assemble_detail_account(
+        &self,
+        loaded: &LoadedSupplierDetail,
+        current_profiles: Vec<crate::entity::supplier::SupplierCommercialProfileRevision>,
+    ) -> Result<crate::dto::supplier::SupplierView> {
+        let row = account_row_from(&loaded.bundle.supplier);
+        let maintainer_names = self
+            .accounts
+            .names_by_ids(std::slice::from_ref(&loaded.bundle.supplier.maintainer_user_id))
+            .await?;
+        assemble_supplier_views(SupplierViewAssembleInput {
             rows: vec![row],
-            parties: vec![party],
-            revisions: party_revision.into_iter().collect(),
+            parties: vec![loaded.party.clone()],
+            revisions: loaded.party_revision.clone(),
             profiles: current_profiles,
-            capabilities: bundle.capabilities.clone(),
-            qualifications: bundle.qualifications.clone(),
-            entity_names: commercial_party_names.clone(),
-            maintainer_names: self
-                .accounts
-                .names_by_ids(std::slice::from_ref(&bundle.supplier.maintainer_user_id))
-                .await?,
+            capabilities: loaded.bundle.capabilities.clone(),
+            qualifications: loaded.bundle.qualifications.clone(),
+            entity_names: loaded.commercial_party_names.clone(),
+            maintainer_names,
             as_of: BusinessDate::today(),
         })
         .into_iter()
         .next()
-        .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
+        .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))
+    }
+
+    /// 完成资质/评级/商务与敏感字段装配（erp-supplier-003）。
+    ///
+    /// # 参数
+    /// * `loaded` - 已装载的详情事实
+    /// * `account` - 已装配的账户视图
+    ///
+    /// # 返回
+    /// 返回完整详情视图。
+    ///
+    /// # 错误
+    /// 敏感令牌签发失败时返回错误。
+    async fn finish_detail_view(
+        &self,
+        loaded: LoadedSupplierDetail,
+        mut account: crate::dto::supplier::SupplierView,
+    ) -> Result<SupplierDetailView> {
+        let LoadedSupplierDetail {
+            id,
+            bundle,
+            party,
+            contacts,
+            addresses,
+            tax_profiles,
+            bank_accounts,
+            commercial_party_names,
+            ..
+        } = loaded;
         let capabilities: Vec<SupplierCapabilityView> =
             bundle.capabilities.into_iter().map(Into::into).collect();
         let qualifications = assemble_qualification_views(bundle.qualifications, bundle.qualification_links);
         let ratings = bundle.ratings.into_iter().map(Into::into).collect();
         let mut commercial_profiles: Vec<CommercialProfileView> =
             bundle.commercial_profiles.into_iter().map(Into::into).collect();
-        for profile in &mut commercial_profiles {
-            profile.signing_entity_name = profile
-                .signing_entity_party_id
-                .as_ref()
-                .and_then(|party_id| commercial_party_names.get(party_id))
-                .cloned();
-            profile.payment_entity_name = profile
-                .payment_entity_party_id
-                .as_ref()
-                .and_then(|party_id| commercial_party_names.get(party_id))
-                .cloned();
-        }
+        fill_commercial_names(&mut commercial_profiles, &commercial_party_names);
         if let Some(current_id) = account.current_commercial_profile_revision_id.as_deref() {
             account.current_profile =
                 commercial_profiles.iter().find(|profile| profile.id == current_id).cloned();
         }
-        let sensitive_fields = self.sensitive_field_views(id, &contacts, &addresses, &bank_accounts)?;
+        let sensitive_fields = self.sensitive_field_views(&id, &contacts, &addresses, &bank_accounts)?;
         Ok(SupplierDetailView {
             account,
-            party_status: party_for_view.status,
-            unified_credit_code: party_for_view.unified_credit_code,
+            party_status: party.status,
+            unified_credit_code: party.unified_credit_code,
             contacts,
             addresses,
             tax_profiles,
@@ -241,7 +276,106 @@ impl SupplierService {
             sensitive_fields,
         })
     }
+}
 
+/// 详情装载的事实束（erp-supplier-003）。
+///
+/// `load_detail_facts` 一次性装载，后续装配只引用或移动其字段；
+///
+/// # 参数
+/// 各字段均为装载时的快照，不再发起 I/O。
+struct LoadedSupplierDetail {
+    /// 供应商角色 ID。
+    id: String,
+    /// 仓储返回的详情事实束。
+    bundle: crate::repository::SupplierDetailBundle,
+    /// 主体列表事实。
+    party: crate::ports::PartyListFact,
+    /// 主体当前修订。
+    party_revision: Vec<crate::ports::PartyRevisionFact>,
+    /// 联系人事实行。
+    contacts: Vec<crate::ports::PartyContactFact>,
+    /// 地址事实行。
+    addresses: Vec<crate::ports::PartyAddressFact>,
+    /// 税务事实行。
+    tax_profiles: Vec<crate::ports::PartyTaxProfileFact>,
+    /// 银行账户摘要。
+    bank_accounts: Vec<crate::ports::PartyBankAccountFact>,
+    /// 商务签约/付款主体名称。
+    commercial_party_names: HashMap<String, String>,
+}
+
+/// 由供应商实体构造投影行（erp-supplier-003）。
+///
+/// 生产装配一律从实体取值，避免整束克隆；字段与原内联构造一致。
+///
+/// # 参数
+/// * `supplier` - 供应商角色实体
+///
+/// # 返回
+/// 返回列表投影行。
+fn account_row_from(supplier: &SupplierAccount) -> SupplierAccountRow {
+    SupplierAccountRow {
+        id: supplier.base.id.clone(),
+        party_id: supplier.party_id.to_string(),
+        supplier_no: supplier.supplier_no.clone(),
+        maintainer_user_id: supplier.maintainer_user_id.clone(),
+        business_org_unit_id: supplier.business_org_unit_id.clone(),
+        default_payment_term_id: supplier.default_payment_term_id.clone(),
+        current_commercial_profile_revision_id: supplier
+            .current_commercial_profile_revision_id
+            .as_ref()
+            .map(ToString::to_string),
+        status: supplier.stable.status,
+        version: supplier.base.version,
+        created_at: supplier.base.created_at,
+    }
+}
+
+/// 取出当前商务版本子集（erp-supplier-003）。
+///
+/// 只克隆命中的单个版本，避免整束 `commercial_profiles` 克隆。
+///
+/// # 参数
+/// * `bundle` - 详情事实束
+///
+/// # 返回
+/// 返回当前版本（命中时单个元素），未命中时为空。
+fn current_profile_subset(
+    bundle: &crate::repository::SupplierDetailBundle,
+) -> Vec<crate::entity::supplier::SupplierCommercialProfileRevision> {
+    bundle
+        .commercial_profiles
+        .iter()
+        .find(|profile| {
+            Some(profile.base.id.as_str())
+                == bundle
+                    .supplier
+                    .current_commercial_profile_revision_id
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .as_deref()
+        })
+        .cloned()
+        .into_iter()
+        .collect()
+}
+
+/// 回填商务版本的签约/付款主体名称（erp-supplier-003）。
+///
+/// # 参数
+/// * `profiles` - 已映射的商务视图
+/// * `names` - 主体名称映射
+fn fill_commercial_names(profiles: &mut [CommercialProfileView], names: &HashMap<String, String>) {
+    for profile in profiles {
+        profile.signing_entity_name =
+            profile.signing_entity_party_id.as_ref().and_then(|party_id| names.get(party_id)).cloned();
+        profile.payment_entity_name =
+            profile.payment_entity_party_id.as_ref().and_then(|party_id| names.get(party_id)).cloned();
+    }
+}
+
+impl SupplierService {
     /// 为当前默认敏感事实签发一分钟有效的字段级令牌。
     fn sensitive_field_views(
         &self,

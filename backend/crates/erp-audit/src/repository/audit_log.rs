@@ -48,9 +48,7 @@ impl<'a> AuditLogRepository<'a> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        let mut ids = ids.to_vec();
-        ids.sort();
-        ids.dedup();
+        let ids = sorted_dedup(ids.to_vec());
         let collection = self.collection().clone_with_type::<CommandReceiptRow>();
         let rows = mongo_ops::find_many(
             &collection,
@@ -182,9 +180,7 @@ impl<'a> AuditLogRepository<'a> {
         if pairs.is_empty() {
             return Ok(Vec::new());
         }
-        let mut sorted = pairs.to_vec();
-        sorted.sort();
-        sorted.dedup();
+        let sorted = sorted_dedup(pairs.to_vec());
         let alternatives = sorted
             .into_iter()
             .map(|(resource_type, resource_id)| {
@@ -236,12 +232,11 @@ impl<'a> AuditLogRepository<'a> {
         mapping_task_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<AuditLog>> {
-        self.find_many_sorted(
+        self.find_mapping_task_history(
             doc! {
-                "resource_type": "MASTER_MAPPING_TASK",
+                "resource_type": MASTER_MAPPING_TASK_RESOURCE,
                 "resource_id": mapping_task_id,
             },
-            doc! { "created_at": 1, "id": 1 },
             executor,
         )
         .await
@@ -272,12 +267,11 @@ impl<'a> AuditLogRepository<'a> {
         if mapping_task_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many_sorted(
+        self.find_mapping_task_history(
             doc! {
-                "resource_type": "MASTER_MAPPING_TASK",
+                "resource_type": MASTER_MAPPING_TASK_RESOURCE,
                 "resource_id": { "$in": mapping_task_ids },
             },
-            doc! { "created_at": 1, "id": 1 },
             executor,
         )
         .await
@@ -311,12 +305,7 @@ impl<'a> AuditLogRepository<'a> {
             return Ok(Vec::new());
         }
         self.find_many(
-            doc! {
-                "resource_type": resource_type,
-                "resource_id": { "$in": resource_ids },
-                "action": format!("{resource_type}.create"),
-                "success": true,
-            },
+            work_item_resource_filter(resource_type, resource_ids, Some(format!("{resource_type}.create"))),
             executor,
         )
         .await
@@ -349,16 +338,63 @@ impl<'a> AuditLogRepository<'a> {
         if resource_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(
-            doc! {
-                "resource_type": resource_type,
-                "resource_id": { "$in": resource_ids },
-                "success": true,
-            },
-            executor,
-        )
-        .await
+        self.find_many(work_item_resource_filter(resource_type, resource_ids, None), executor).await
     }
+}
+
+/// 映射任务审计的资源类型稳定代码（erp-audit-002）。
+///
+/// 四个资源审计查询的 `MASTER_MAPPING_TASK` 字面量唯一来源。
+const MASTER_MAPPING_TASK_RESOURCE: &str = "MASTER_MAPPING_TASK";
+
+impl<'a> AuditLogRepository<'a> {
+    /// 按过滤条件返回映射任务审计时间线（erp-audit-002）。
+    ///
+    /// # 参数
+    /// * `filter` - 资源引用过滤条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按创建时间与 ID 升序排列的审计记录。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_mapping_task_history(
+        &self,
+        filter: Document,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AuditLog>> {
+        self.find_many_sorted(filter, doc! { "created_at": 1, "id": 1 }, executor).await
+    }
+}
+
+/// 组装工作项资源审计过滤条件（erp-audit-002）。
+///
+/// 成功审计约束与 `$in` 资源集合只在此一处实现；`action` 为 `Some` 时
+/// 限定固定创建动作，为 `None` 时返回全部成功事实。
+fn work_item_resource_filter(
+    resource_type: &str,
+    resource_ids: &[String],
+    action: Option<String>,
+) -> Document {
+    let mut filter = doc! {
+        "resource_type": resource_type,
+        "resource_id": { "$in": resource_ids },
+        "success": true,
+    };
+    if let Some(action) = action {
+        filter.insert("action", action);
+    }
+    filter
+}
+
+/// 排序去重向量的唯一入口（erp-audit-008）。
+///
+/// 用于候选 ID 与资源 pair 的查询前归一化；空输入返回空集合。
+fn sorted_dedup<T: Ord>(mut values: Vec<T>) -> Vec<T> {
+    values.sort();
+    values.dedup();
+    values
 }
 
 /// 审计日志列表过滤条件。

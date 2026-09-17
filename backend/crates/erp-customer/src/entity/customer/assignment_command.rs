@@ -232,7 +232,10 @@ impl EndCustomerAssignment {
     }
 }
 
-/// 校验生效区间：结束日必须晚于开始日。
+/// 校验生效区间：结束日必须晚于开始日（权威实现见 [`super::customer_assignment::ensure_window_valid`]）。
+///
+/// 本模块复用归属实体的同一窗口不变式；命令层与实体构造共用一处语义，
+/// DTO 只做字段组合分流（erp-customer-002）。
 ///
 /// # 参数
 /// * `valid_from` - 生效开始日期
@@ -244,12 +247,7 @@ impl EndCustomerAssignment {
 /// # 错误
 /// 结束日期不晚于开始日期时返回 [`Error::LogicError`]。
 fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> Result<()> {
-    if let Some(valid_to) = valid_to
-        && valid_to <= valid_from
-    {
-        return Err(Error::from("生效结束日期必须晚于生效开始日期"));
-    }
-    Ok(())
+    super::customer_assignment::ensure_window_valid(valid_from, valid_to)
 }
 
 #[cfg(test)]

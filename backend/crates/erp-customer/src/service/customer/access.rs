@@ -1,7 +1,6 @@
 //! 客户对象读取与写入范围；主责、协作与负责人组织分别解释。
 
 use std::collections::BTreeSet;
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use application_core::AuditActor;
@@ -91,12 +90,13 @@ impl CustomerAccess {
         ensure_limit(owned.len(), "主责范围超过查询上限")?;
         ensure_limit(collaborating.len(), "协作范围超过查询上限")?;
         let org_owned = self.org_owned_customers(&access, as_of, executor).await?;
-        let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-        owned.hash(&mut fingerprint);
-        collaborating.hash(&mut fingerprint);
-        history.hash(&mut fingerprint);
-        org_owned.hash(&mut fingerprint);
-        access.scope_version = format!("{}:{:x}", access.scope_version, fingerprint.finish());
+        access.scope_version = crate::service::customer::scope::fingerprint_scope_version(
+            &access.scope_version,
+            &owned,
+            &collaborating,
+            &history,
+            &org_owned,
+        );
         let scope = customer_scope(&access, actor.id(), &owned, &collaborating, history, &org_owned);
         Ok((access, scope))
     }
@@ -396,6 +396,10 @@ pub(super) fn business_date(at: Instant) -> Result<BusinessDate> {
 
 /// 映射同角色正向范围和独立个人上限。
 ///
+/// Port→仓储的唯一转换入口（erp-customer-005）：新增维度时只改此处与
+/// [`map_clause`]，不得在 Service/Repository 另写逐字段搬运；两套条款的
+/// `has_scope_rules/is_empty` 语义已对齐。
+///
 /// # 参数
 /// * `access` - 已解析的客户范围事实
 /// * `user` - 当前账号
@@ -445,6 +449,8 @@ pub fn customer_scope(
 }
 
 /// 将已解析条款映射为客户责任条款。
+///
+/// 唯一逐字段搬运点（erp-customer-005），由 [`customer_scope`] 统一调用。
 ///
 /// # 参数
 /// * `clause` - Port 返回的正向范围

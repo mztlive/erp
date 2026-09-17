@@ -131,20 +131,27 @@ impl CatalogService {
         if skus.is_empty() {
             return Ok(PageView { items: Vec::new(), total: 0, page: 1, page_size: 100 });
         }
-        let mut merged: Vec<SkuRevisionView> = Vec::new();
-        let mut total: i64 = 0;
-        for sku in &skus {
-            let page = self.sku_revision_list(&sku_revision_params(sku.base.id.clone())).await?;
-            total += page.total;
-            merged.extend(page.items);
-        }
-        merged.sort_by(|left, right| {
-            right.revision_no.cmp(&left.revision_no).then_with(|| right.created_at.cmp(&left.created_at))
+        let sku_ids = skus.iter().map(|sku| SkuId::new(sku.base.id.clone())).collect::<Vec<_>>();
+        let mut revisions = self.db.sku_revisions().find_by_sku_ids(&sku_ids, &mut NoTransaction).await?;
+        let total = revisions.len() as i64;
+        revisions.sort_by(|left, right| {
+            right
+                .revision
+                .revision_no
+                .cmp(&left.revision.revision_no)
+                .then_with(|| right.base.created_at.cmp(&left.base.created_at))
         });
-        merged.truncate(100);
-        Ok(PageView { items: merged, total, page: 1, page_size: 100 })
+        revisions.truncate(MERGED_SKU_REVISION_LIMIT);
+        let items = revisions.into_iter().map(SkuRevisionView::from).collect();
+        Ok(PageView { items, total, page: 1, page_size: 100 })
     }
 }
+
+/// 合并 SKU 修订明细返回上限（erp-catalog-009）。
+///
+/// `merged_product_sku_revisions` 一次 `$in` 拉回该商品全部 SKU 修订，
+/// `total` 累计全量，`items` 仅返回排序前 100 条明细。
+const MERGED_SKU_REVISION_LIMIT: usize = 100;
 
 fn sku_revision_params(sku_id: String) -> SkuRevisionListParams {
     SkuRevisionListParams {

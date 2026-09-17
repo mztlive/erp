@@ -104,9 +104,7 @@ async fn write_disabled_product(
 ) -> Result<Product> {
     let DisableWrite { db, access, audit_port, id, req, actor, audit } = input;
     let scoped = access.require_product(actor, "update", id, session).await?;
-    if !scoped.has_responsibility() {
-        return Err(Error::BusinessLogicError("商品缺少维护人或主属组织，请先交接".into()));
-    }
+    scoped.ensure_has_responsibility()?;
     ensure_version(scoped.base.version, req.version)?;
     let snapshot = db
         .catalog()

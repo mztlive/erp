@@ -10,6 +10,7 @@ use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::status::SymmetricActiveStatus;
 use super::{PartyOwned, PartyRevision};
 
 /// 主体编号最大长度。
@@ -64,10 +65,7 @@ impl PartyStatus {
     /// # 返回
     /// 返回面向用户的中文标签。
     pub fn label(&self) -> &'static str {
-        match self {
-            Self::Active => "启用",
-            Self::Disabled => "停用",
-        }
+        SymmetricActiveStatus::status_label(self)
     }
 
     /// 返回状态的稳定代码。
@@ -75,10 +73,7 @@ impl PartyStatus {
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
     pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Active => "active",
-            Self::Disabled => "disabled",
-        }
+        SymmetricActiveStatus::status_code(self)
     }
 
     /// 判断是否处于启用状态。
@@ -86,6 +81,16 @@ impl PartyStatus {
     /// # 返回
     /// 处于 `Active` 时返回 `true`。
     pub fn is_active(&self) -> bool {
+        SymmetricActiveStatus::is_enabled(self)
+    }
+}
+
+impl SymmetricActiveStatus for PartyStatus {
+    /// 是否处于启用状态。
+    ///
+    /// # 返回
+    /// 处于 `Active` 时返回 `true`。
+    fn is_enabled(&self) -> bool {
         matches!(self, Self::Active)
     }
 }
@@ -233,10 +238,7 @@ impl Party {
     /// # 错误
     /// 当前版本与期望版本不一致时返回错误。
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
-        if self.base.version == expected {
-            return Ok(());
-        }
-        Err(Error::from("数据已被其他请求修改，请刷新后重试"))
+        super::ensure_base_version(&self.base, expected)
     }
 
     /// 从已加载修订中解析当前生效修订。

@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use erp_core::ids::{PartyId, SupplierAccountId};
 use persistence_core::{Executor, Result};
 
@@ -64,14 +62,9 @@ impl<'a> SupplierRepository<'a> {
 }
 
 /// 收集商务版本引用的签约与付款主体 ID。
+///
+/// 转调 Service 侧 `list_view::commercial_party_ids` 唯一实现
+/// （erp-supplier-005），语义一致；仓储内不再保留第二份去重逻辑。
 fn commercial_party_ids(profiles: &[SupplierCommercialProfileRevision]) -> Vec<PartyId> {
-    profiles
-        .iter()
-        .flat_map(|profile| {
-            [profile.signing_entity_party_id.to_string(), profile.payment_entity_party_id.to_string()]
-        })
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .map(PartyId::new)
-        .collect()
+    crate::service::supplier::commercial_party_ids_for_repository(profiles)
 }

@@ -1,9 +1,46 @@
 //! 供应商交接幂等收据身份。
 
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::dto::handover::{HandoverSupplierCapabilityRequest, HandoverSupplierRequest};
 use crate::{Error, Result};
+
+/// 交接审计收据 ID 与载荷指纹的通用构造（erp-supplier-009）。
+///
+/// 供应商与能力两套交接仅前缀与字段名不同；收据 ID 格式与指纹算法保持不变。
+///
+/// # 参数
+/// * `prefix` - 收据 ID 前缀
+/// * `actor_id` - 操作人
+/// * `target_id` - 交接目标（供应商或能力）
+/// * `idempotency_key` - 客户端幂等键
+///
+/// # 返回
+/// 返回 `{prefix}-{sha256hex}` 格式的收据 ID。
+fn handover_audit_id(prefix: &str, actor_id: &str, target_id: &str, idempotency_key: &str) -> String {
+    format!(
+        "{prefix}-{}",
+        hex::encode(Sha256::digest(format!("{actor_id}|{target_id}|{idempotency_key}").as_bytes()))
+    )
+}
+
+/// 序列化载荷并计算指纹（erp-supplier-009）。
+///
+/// # 参数
+/// * `label` - 序列化失败时的命令标签
+/// * `payload` - 待指纹的载荷元组
+///
+/// # 返回
+/// 返回载荷 SHA-256 hex 指纹。
+///
+/// # 错误
+/// 请求序列化失败时返回内部错误。
+fn handover_fingerprint(label: &str, payload: &impl Serialize) -> Result<String> {
+    let bytes = serde_json::to_vec(payload)
+        .map_err(|error| Error::Internal(format!("{label}序列化失败: {error}")))?;
+    Ok(hex::encode(Sha256::digest(bytes)))
+}
 
 /// 为供应商维护人交接生成不泄露原始幂等键的稳定收据 ID。
 ///
@@ -18,10 +55,7 @@ use crate::{Error, Result};
 /// # 错误
 /// 无。
 pub fn supplier_handover_audit_id(actor_id: &str, supplier_id: &str, idempotency_key: &str) -> String {
-    format!(
-        "supplier-handover-{}",
-        hex::encode(Sha256::digest(format!("{actor_id}|{supplier_id}|{idempotency_key}").as_bytes()))
-    )
+    handover_audit_id("supplier-handover", actor_id, supplier_id, idempotency_key)
 }
 
 /// 锁定同一幂等键可重放的完整交接请求身份。
@@ -41,9 +75,7 @@ pub fn supplier_handover_fingerprint(
     supplier_id: &str,
     request: &HandoverSupplierRequest,
 ) -> Result<String> {
-    let payload = serde_json::to_vec(&(actor_id, supplier_id, request))
-        .map_err(|error| Error::Internal(format!("供应商交接命令序列化失败: {error}")))?;
-    Ok(hex::encode(Sha256::digest(payload)))
+    handover_fingerprint("供应商交接命令", &(actor_id, supplier_id, request))
 }
 
 /// 为能力负责人交接生成稳定收据 ID。
@@ -59,10 +91,7 @@ pub fn supplier_handover_fingerprint(
 /// # 错误
 /// 无。
 pub fn capability_handover_audit_id(actor_id: &str, capability_id: &str, idempotency_key: &str) -> String {
-    format!(
-        "supplier-capability-handover-{}",
-        hex::encode(Sha256::digest(format!("{actor_id}|{capability_id}|{idempotency_key}").as_bytes()))
-    )
+    handover_audit_id("supplier-capability-handover", actor_id, capability_id, idempotency_key)
 }
 
 /// 锁定同一幂等键可重放的能力交接请求身份。
@@ -82,9 +111,7 @@ pub fn capability_handover_fingerprint(
     capability_id: &str,
     request: &HandoverSupplierCapabilityRequest,
 ) -> Result<String> {
-    let payload = serde_json::to_vec(&(actor_id, capability_id, request))
-        .map_err(|error| Error::Internal(format!("供应商能力交接命令序列化失败: {error}")))?;
-    Ok(hex::encode(Sha256::digest(payload)))
+    handover_fingerprint("供应商能力交接命令", &(actor_id, capability_id, request))
 }
 
 /// 构造交接审计收据的消息体。

@@ -12,7 +12,11 @@ use persistence_core::{
 use serde::{Deserialize, Serialize};
 
 use super::CatalogRepository;
-use super::shared::{PRODUCT_REVISIONS, in_filter, sort_doc};
+use super::shared::{
+    PRODUCT_REVISIONS, batch_ids_filter, default_paging, in_filter, max_revision_no, select_current_revision,
+    sort_doc, whitelisted_sort,
+};
+use crate::dto::catalog::PRODUCT_REVISION_SORT_FIELDS;
 use crate::entity::catalog::{
     EnableStatus, Product, ProductKind, ProductListingStatus, ProductRevision, ProductRevisionMedia,
     SkuCoverageStatus,
@@ -121,6 +125,7 @@ impl Default for ProductFilter {
     /// # 错误
     /// 无。
     fn default() -> Self {
+        let (page, page_size, sort_by, sort_ascending) = default_paging();
         Self {
             ids: None,
             scope: None,
@@ -137,10 +142,10 @@ impl Default for ProductFilter {
             supply_coverage: None,
             sales_price_min: None,
             sales_price_max: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            page,
+            page_size,
+            sort_by,
+            sort_ascending,
         }
     }
 }
@@ -198,10 +203,10 @@ impl<'a> ProductRepository<'a> {
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn find_by_ids(&self, ids: &[ProductId], executor: &mut dyn Executor) -> Result<Vec<Product>> {
-        if ids.is_empty() {
+        let Some(filter) = batch_ids_filter("id", ids) else {
             return Ok(Vec::new());
-        }
-        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor).await
+        };
+        self.find_many(filter, executor).await
     }
 
     /// 列出当前范围内的商品主键，供采购负责人批量解析。
@@ -387,10 +392,7 @@ impl<'a> ProductRevisionRepository<'a> {
             .projection(product_revision_projection())
             .build();
         let collection = self.collection().clone_with_type::<ProductRevisionRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        super::shared::search_projected(&collection, &self.collection(), filter, options, executor).await
     }
 
     /// 按稳定主键批量查询商品修订。
@@ -409,10 +411,10 @@ impl<'a> ProductRevisionRepository<'a> {
         ids: &[ProductRevisionId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<ProductRevision>> {
-        if ids.is_empty() {
+        let Some(filter) = batch_ids_filter("id", ids) else {
             return Ok(Vec::new());
-        }
-        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor).await
+        };
+        self.find_many(filter, executor).await
     }
 
     /// 批量查询一组商品的修订（`$in`，一次取回）。
@@ -433,11 +435,10 @@ impl<'a> ProductRevisionRepository<'a> {
         product_ids: &[ProductId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<ProductRevision>> {
-        if product_ids.is_empty() {
+        let Some(filter) = batch_ids_filter("product_id", product_ids) else {
             return Ok(Vec::new());
-        }
-        let ids: Vec<String> = product_ids.iter().map(|id| id.to_string()).collect();
-        self.find_many(doc! { "product_id": { "$in": ids } }, executor).await
+        };
+        self.find_many(filter, executor).await
     }
 }
 
@@ -458,14 +459,10 @@ impl<'a> ProductRevisionMediaRepository<'a> {
         revision_ids: &[ProductRevisionId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<ProductRevisionMedia>> {
-        if revision_ids.is_empty() {
+        let Some(filter) = batch_ids_filter("product_revision_id", revision_ids) else {
             return Ok(Vec::new());
-        }
-        self.find_many(
-            in_filter("product_revision_id", revision_ids.iter().map(|id| id.to_string())),
-            executor,
-        )
-        .await
+        };
+        self.find_many(filter, executor).await
     }
 }
 
@@ -507,12 +504,12 @@ impl<'a> CatalogRepository<'a> {
         product_id: &ProductId,
         executor: &mut dyn Executor,
     ) -> Result<Option<u32>> {
-        let revisions = self
-            .db
-            .product_revisions()
-            .find_by_product_ids(std::slice::from_ref(product_id), executor)
-            .await?;
-        Ok(revisions.iter().map(|revision| revision.revision.revision_no).max())
+        max_revision_no(
+            &self.db.product_revisions().collection().clone_with_type(),
+            doc! { "product_id": product_id.to_string() },
+            executor,
+        )
+        .await
     }
 
     /// 读取商品停用事务所需的关系快照。
@@ -687,12 +684,12 @@ fn select_current_product_revision<'a>(
     product: &Product,
     revisions: &'a [ProductRevision],
 ) -> Option<&'a ProductRevision> {
-    product
-        .stable
-        .current_revision_id
-        .as_deref()
-        .and_then(|current_id| revisions.iter().find(|revision| revision.base.id == current_id))
-        .or_else(|| revisions.iter().max_by_key(|revision| revision.revision.revision_no))
+    select_current_revision(
+        product.stable.current_revision_id.as_deref(),
+        revisions,
+        |revision| revision.base.id.as_str(),
+        |revision| revision.revision.revision_no,
+    )
 }
 
 /// 批量解析商品当前修订映射。
@@ -750,11 +747,7 @@ fn group_product_revision_media(
 
 /// 构建商品修订排序文档（白名单：`created_at`/`revision_no`）。
 fn product_revision_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
-    let field = match sort_by {
-        Some("revision_no") => "revision_no",
-        _ => "created_at",
-    };
-    sort_doc(field, sort_ascending)
+    sort_doc(whitelisted_sort(sort_by, PRODUCT_REVISION_SORT_FIELDS), sort_ascending)
 }
 
 /// 商品修订列表投影字段。

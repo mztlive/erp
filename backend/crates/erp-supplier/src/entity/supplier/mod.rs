@@ -15,6 +15,7 @@
 
 pub mod business_category;
 pub mod creation_plan;
+pub mod display;
 pub mod eligibility;
 pub mod payment_term;
 pub mod profile_change;

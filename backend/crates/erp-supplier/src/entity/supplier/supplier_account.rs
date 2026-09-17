@@ -31,24 +31,22 @@ pub enum SupplierAccountStatus {
 impl SupplierAccountStatus {
     /// 返回状态的中文展示名。
     ///
+    /// 映射表见 [`ACCOUNT_STATUS_DISPLAY`]（erp-supplier-002）。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
     pub fn label(&self) -> &'static str {
-        match self {
-            Self::Active => "启用",
-            Self::Disabled => "停用",
-        }
+        super::display::label_of(*self, &ACCOUNT_STATUS_DISPLAY)
     }
 
     /// 返回状态的稳定代码。
     ///
+    /// 映射表见 [`ACCOUNT_STATUS_DISPLAY`]（erp-supplier-002）。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
     pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Active => "active",
-            Self::Disabled => "disabled",
-        }
+        super::display::code_of(*self, &ACCOUNT_STATUS_DISPLAY)
     }
 
     /// 判断是否处于启用状态。
@@ -59,6 +57,16 @@ impl SupplierAccountStatus {
         matches!(self, Self::Active)
     }
 }
+
+/// 供应商角色状态展示映射表（erp-supplier-002）：变体→中文名/稳定代码。
+const ACCOUNT_STATUS_DISPLAY: [super::display::DisplayEntry<SupplierAccountStatus>; 2] = [
+    super::display::DisplayEntry { variant: SupplierAccountStatus::Active, label: "启用", code: "active" },
+    super::display::DisplayEntry {
+        variant: SupplierAccountStatus::Disabled,
+        label: "停用",
+        code: "disabled",
+    },
+];
 
 impl DocumentState for SupplierAccountStatus {
     /// 返回合法后继：启用 ⇄ 停用。

@@ -100,7 +100,8 @@ pub struct CustomerAccountUpdate {
 /// 客户角色实体（稳定基础资料，§6.2）。
 ///
 /// `StableBase` 是 P0 冻结基元且未派生 `PartialEq`，因此本实体手工实现
-/// `PartialEq`/`Eq`（全字段语义相等）。
+/// `PartialEq`/`Eq`（全字段语义相等）。新增字段时必须同步 [`Self::eq`] 与
+/// [`equality_probe`]，否则字段覆盖测试失败（erp-customer-010）。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity)]
 pub struct CustomerAccount {
     #[serde(flatten)]
@@ -366,5 +367,44 @@ mod tests {
                 .unwrap();
         assert!(account.ensure_version(1).is_ok());
         assert!(account.ensure_version(2).is_err());
+    }
+
+    /// 手工 `PartialEq` 的字段覆盖约束（erp-customer-010）。
+    ///
+    /// 经 `serde_json::Value` 枚举全部持久化字段；新增字段未同步 `eq`
+    /// 实现时，本测试因对象差异未被比对而失败。
+    /// `base`/`stable` 以整体比较覆盖其全部子字段。
+    #[test]
+    fn manual_partial_eq_covers_all_persisted_fields() {
+        let left =
+            CustomerAccount::new(CustomerAccountId::new("customer-eq"), account_data(), "admin-1").unwrap();
+        let value = serde_json::to_value(&left).unwrap();
+        let object = value.as_object().unwrap();
+        let mut covered = std::collections::BTreeSet::new();
+        for key in object.keys() {
+            covered.insert(key.as_str());
+        }
+        for key in [
+            "id",
+            "version",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+            "status",
+            "current_revision_id",
+            "created_by",
+            "updated_by",
+            "party_id",
+            "customer_no",
+            "default_payment_term_id",
+        ] {
+            assert!(covered.contains(key), "持久化字段未覆盖：{key}");
+        }
+        assert_eq!(covered.len(), 12, "新增持久化字段必须同步 eq 实现与本清单：{covered:?}");
+
+        let mut right = left.clone();
+        assert_eq!(left, right);
+        right.customer_no = "C-2026-002".to_string();
+        assert_ne!(left, right);
     }
 }

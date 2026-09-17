@@ -1,6 +1,7 @@
 //! Customer MongoDB repositories and accessors.
 
 pub mod customer;
+pub mod customer_shared;
 pub mod extensions;
 pub mod owned;
 pub mod scope;

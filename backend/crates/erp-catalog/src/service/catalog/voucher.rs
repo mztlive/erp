@@ -6,6 +6,7 @@ use validator::Validate;
 
 use super::CatalogService;
 use super::sku_edit::{NewSkuContext, SkuEditItem};
+use super::support::ensure_version;
 use crate::dto::{
     CreateVoucherCategoryRequest, NewVoucherCategoryInput, PageView, SortDir, UpdateVoucherCategoryRequest,
     VoucherCategoryProfileListParams, VoucherCategoryProfileView, VoucherSkuInput,
@@ -55,6 +56,16 @@ struct VoucherCategoryUpdateDraft {
     voucher_revision: VoucherCategoryProfileRevision,
 }
 
+/// 卡券类目更新依赖的三个当前修订。
+struct VoucherUpdateCurrents {
+    /// 当前商品修订。
+    product: ProductRevision,
+    /// 当前 SKU 修订。
+    sku: SkuRevision,
+    /// 当前类目扩展修订。
+    voucher: VoucherCategoryProfileRevision,
+}
+
 /// 已解析字典与缺省值的卡券类目创建输入。
 struct ResolvedVoucherCategoryInput {
     voucher_no: String,
@@ -97,23 +108,7 @@ impl CatalogService {
         };
         let page = self.db.catalog().voucher_profile_page(&filter, &mut NoTransaction).await?;
         Ok(PageView {
-            items: page
-                .items
-                .into_iter()
-                .map(|row| VoucherCategoryProfileView {
-                    id: row.id,
-                    sku_id: row.sku_id,
-                    sku_no: row.sku_no,
-                    product_id: row.product_id,
-                    product_version: row.product_version,
-                    name: row.name,
-                    revision_no: row.revision_no,
-                    description: row.description,
-                    status: row.status,
-                    created_at: row.created_at,
-                    version: row.version,
-                })
-                .collect(),
+            items: page.items.into_iter().map(VoucherCategoryProfileView::from).collect(),
             total: page.total,
             page: query.paging.page,
             page_size: query.paging.page_size,
@@ -485,28 +480,85 @@ impl CatalogService {
         if product.product_kind != ProductKind::Voucher {
             return Err(Error::BusinessLogicError("目标 SKU 不属于卡券类目商品".to_string()));
         }
-        ensure_product_version(&product, req.version)?;
-        let current_product_revision = self
+        ensure_version(product.base.version, req.version)?;
+        let typed_sku_id = SkuId::new(sku_id);
+        let current = self.load_voucher_update_currents(&sku, &product, &typed_sku_id).await?;
+        let effective_from = req.effective_from.unwrap_or_else(BusinessDate::today);
+        let product_revision = self
+            .next_voucher_product_revision(&mut product, &current.product, &req, effective_from, actor)
+            .await?;
+        let sku_revision = self
+            .next_voucher_sku_revision(&mut sku, &typed_sku_id, &current.sku, &req, effective_from, actor)
+            .await?;
+        let voucher_revision =
+            self.next_voucher_profile_revision(&typed_sku_id, &current.voucher, &req).await?;
+        Ok(VoucherCategoryUpdateDraft { product, product_revision, sku, sku_revision, voucher_revision })
+    }
+
+    /// 加载卡券类目更新依赖的三个当前修订：商品、SKU 与类目扩展。
+    ///
+    /// # 参数
+    /// * `sku` - 已加载的卡券类目 SKU
+    /// * `product` - 已加载的所属商品
+    /// * `sku_id` - SKU 稳定 ID
+    ///
+    /// # 返回
+    /// 返回三个当前修订；任一缺失由调用方映射为 `NotFound`。
+    ///
+    /// # 错误
+    /// 任一当前修订缺失或仓储读取失败时返回错误。
+    async fn load_voucher_update_currents(
+        &self,
+        sku: &Sku,
+        product: &Product,
+        sku_id: &SkuId,
+    ) -> Result<VoucherUpdateCurrents> {
+        let product_revision = self
             .db
             .catalog()
-            .current_product_revision(&product, &mut NoTransaction)
+            .current_product_revision(product, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("商品修订不存在".to_string()))?;
-        let current_sku_revision = self
+        let sku_revision = self
             .db
             .catalog()
-            .current_sku_revision(&sku, &mut NoTransaction)
+            .current_sku_revision(sku, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("SKU 修订不存在".to_string()))?;
-        let sku_id = SkuId::new(sku_id);
-        let current_voucher_revision = self
+        let voucher_revision = self
             .db
             .catalog()
-            .current_voucher_profile_revision(&sku_id, &mut NoTransaction)
+            .current_voucher_profile_revision(sku_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("卡券类目扩展修订不存在".to_string()))?;
-        let effective_from = req.effective_from.unwrap_or_else(BusinessDate::today);
-        let mut product_revision = current_product_revision.content_successor(
+        Ok(VoucherUpdateCurrents { product: product_revision, sku: sku_revision, voucher: voucher_revision })
+    }
+
+    /// 构造下个商品后继修订并挂到 SPU 当前指针。
+    ///
+    /// 只设置尚未落库的后继修订，历史快照保持不可变。
+    ///
+    /// # 参数
+    /// * `product` - 待更新 SPU（可变，修订挂载更新其状态）
+    /// * `current` - 当前商品修订
+    /// * `req` - 更新请求（名称、描述、状态与有效期来源）
+    /// * `effective_from` - 修订生效开始日
+    /// * `actor` - 审计操作人
+    ///
+    /// # 返回
+    /// 返回新商品后继修订。
+    ///
+    /// # 错误
+    /// 修订号分配或实体校验失败时返回对应错误。
+    async fn next_voucher_product_revision(
+        &self,
+        product: &mut Product,
+        current: &ProductRevision,
+        req: &UpdateVoucherCategoryRequest,
+        effective_from: BusinessDate,
+        actor: &AuditActor,
+    ) -> Result<ProductRevision> {
+        let mut revision = current.content_successor(
             ProductRevisionId::new(next_id()),
             self.next_product_revision_no(&ProductId::new(product.base.id.clone())).await?,
             req.name.clone(),
@@ -514,35 +566,83 @@ impl CatalogService {
             effective_from,
             req.effective_to,
         )?;
-        // 只设置尚未落库的后继修订，历史快照保持不可变。
         if let Some(status) = req.status {
-            product_revision.status = status;
+            revision.status = status;
         }
-        product.attach_revision(&product_revision, actor.id())?;
-        let mut sku_revision = current_sku_revision.content_successor(
+        product.attach_revision(&revision, actor.id())?;
+        Ok(revision)
+    }
+
+    /// 构造下个 SKU 后继修订并挂到 SKU 当前指针。
+    ///
+    /// `attach_revision` 统一同步稳定状态，并执行停用即下架的 SKU 约束。
+    ///
+    /// # 参数
+    /// * `sku` - 待更新 SKU（可变，修订挂载更新其状态）
+    /// * `sku_id` - SKU 稳定 ID（修订号分配用）
+    /// * `current` - 当前 SKU 修订
+    /// * `req` - 更新请求（名称、描述、状态与有效期来源）
+    /// * `effective_from` - 修订生效开始日
+    /// * `actor` - 审计操作人
+    ///
+    /// # 返回
+    /// 返回新 SKU 后继修订。
+    ///
+    /// # 错误
+    /// 修订号分配或实体校验失败时返回对应错误。
+    async fn next_voucher_sku_revision(
+        &self,
+        sku: &mut Sku,
+        sku_id: &SkuId,
+        current: &SkuRevision,
+        req: &UpdateVoucherCategoryRequest,
+        effective_from: BusinessDate,
+        actor: &AuditActor,
+    ) -> Result<SkuRevision> {
+        let mut revision = current.content_successor(
             SkuRevisionId::new(next_id()),
-            self.next_sku_revision_no(&sku_id).await?,
-            req.name,
+            self.next_sku_revision_no(sku_id).await?,
+            req.name.clone(),
             Some(req.description.clone()),
             effective_from,
             req.effective_to,
         )?;
         if let Some(status) = req.status {
-            sku_revision.status = status;
+            revision.status = status;
         }
-        // attach_revision 统一同步稳定状态，并执行停用即下架的 SKU 约束。
-        sku.attach_revision(&sku_revision, actor.id())?;
-        let latest_voucher_revision_no =
-            self.db.catalog().latest_voucher_profile_revision_no(&sku_id, &mut NoTransaction).await?;
-        let mut voucher_revision = current_voucher_revision.content_successor(
+        sku.attach_revision(&revision, actor.id())?;
+        Ok(revision)
+    }
+
+    /// 构造下个卡券类目扩展后继修订。
+    ///
+    /// # 参数
+    /// * `sku_id` - SKU 稳定 ID（最新修订号查询用）
+    /// * `current` - 当前类目扩展修订
+    /// * `req` - 更新请求（描述与状态来源）
+    ///
+    /// # 返回
+    /// 返回新类目扩展后继修订。
+    ///
+    /// # 错误
+    /// 修订号分配或实体校验失败时返回对应错误。
+    async fn next_voucher_profile_revision(
+        &self,
+        sku_id: &SkuId,
+        current: &VoucherCategoryProfileRevision,
+        req: &UpdateVoucherCategoryRequest,
+    ) -> Result<VoucherCategoryProfileRevision> {
+        let latest_no =
+            self.db.catalog().latest_voucher_profile_revision_no(sku_id, &mut NoTransaction).await?;
+        let mut revision = current.content_successor(
             VoucherCategoryProfileRevisionId::new(next_id()),
-            next_revision_no(latest_voucher_revision_no)?,
-            req.description,
+            next_revision_no(latest_no)?,
+            req.description.clone(),
         )?;
         if let Some(status) = req.status {
-            voucher_revision.status = status;
+            revision.status = status;
         }
-        Ok(VoucherCategoryUpdateDraft { product, product_revision, sku, sku_revision, voucher_revision })
+        Ok(revision)
     }
 
     /// 在事务内写入卡券类目更新草稿。
@@ -619,22 +719,4 @@ fn new_voucher_profile(
             status,
         },
     )?)
-}
-
-/// 校验商品乐观锁版本。
-///
-/// # 参数
-/// * `product` - 当前商品稳定实体
-/// * `expected` - 客户端读取时看到的期望版本
-///
-/// # 返回
-/// 当前版本与期望版本一致时返回 `Ok(())`。
-///
-/// # 错误
-/// 版本不一致时返回稳定的 409 冲突错误。
-fn ensure_product_version(product: &Product, expected: u64) -> Result<()> {
-    if !product.has_version(expected) {
-        return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
-    }
-    Ok(())
 }

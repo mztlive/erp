@@ -93,67 +93,16 @@ impl SupplierProfileChangePlan {
             requested_capability_codes.iter().map(|code| code.as_str().to_string()).collect();
         let capability_index: HashMap<String, &SupplierCapability> =
             capabilities.iter().map(|cap| (cap.capability_code.as_str().to_string(), cap)).collect();
-        let mut capability_toggles = Vec::new();
-        for cap in capabilities {
-            let wanted = requested_set.contains(cap.capability_code.as_str());
-            if wanted == cap.is_active() {
-                continue;
-            }
-            let target_status = if wanted { CapabilityStatus::Active } else { CapabilityStatus::Disabled };
-            capability_toggles.push(CapabilityToggle {
-                capability_id: SupplierCapabilityId::new(&cap.base.id),
-                code: cap.capability_code,
-                target_status,
-            });
-        }
-        let mut capability_creates = Vec::new();
-        for code in requested_capability_codes {
-            if !capability_index.contains_key(code.as_str()) && !capability_creates.contains(code) {
-                capability_creates.push(*code);
-            }
-        }
+        let capability_toggles = plan_capability_toggles(capabilities, &requested_set);
+        let capability_creates = plan_capability_creates(requested_capability_codes, &capability_index);
         let requested_map: HashMap<String, &PlannedQualificationInput> = requested_qualifications
             .iter()
             .map(|input| (qualification_identity_key(input.qualification_type, &input.certificate_no), input))
             .collect();
         let existing_keys: HashSet<String> = qualifications.iter().map(|q| q.identity_key()).collect();
-        let mut qualification_updates = Vec::new();
-        let mut qualification_disables = Vec::new();
-        for qual in qualifications {
-            let key = qual.identity_key();
-            if let Some(input) = requested_map.get(&key) {
-                let desired_links: HashSet<String> = input
-                    .capability_codes
-                    .iter()
-                    .map(|code| {
-                        capability_ids
-                            .get(code.as_str())
-                            .map(ToString::to_string)
-                            .ok_or_else(|| erp_core::Error::from("资质适用能力不存在"))
-                    })
-                    .collect::<erp_core::Result<_>>()?;
-                let current_links = linked_capabilities.get(&qual.base.id).cloned().unwrap_or_default();
-                if qual.matches_profile_fields(
-                    input.issuer.as_deref(),
-                    input.valid_from,
-                    input.valid_to,
-                    input.attachment_id.as_ref(),
-                ) && current_links == desired_links
-                {
-                    continue;
-                }
-                qualification_updates.push(key);
-            } else if qual.stable.status == QualificationStatus::Active {
-                qualification_disables.push(key);
-            }
-        }
-        let mut qualification_creates = Vec::new();
-        for input in requested_qualifications {
-            let key = qualification_identity_key(input.qualification_type, &input.certificate_no);
-            if !existing_keys.contains(&key) {
-                qualification_creates.push(input.clone());
-            }
-        }
+        let (qualification_updates, qualification_disables) =
+            plan_qualification_updates(qualifications, &requested_map, linked_capabilities, capability_ids)?;
+        let qualification_creates = plan_qualification_creates(requested_qualifications, &existing_keys);
         Ok(Self {
             capability_toggles,
             capability_creates,
@@ -162,4 +111,131 @@ impl SupplierProfileChangePlan {
             qualification_creates,
         })
     }
+}
+
+/// 计算能力启停切换项：请求包含与当前启停不一致时才需切换。
+///
+/// # 参数
+/// * `capabilities` - 已加载的既有能力集合
+/// * `requested_set` - 请求能力代码集合
+///
+/// # 返回
+/// 返回需切换状态的既有能力。
+fn plan_capability_toggles(
+    capabilities: &[SupplierCapability],
+    requested_set: &std::collections::HashSet<String>,
+) -> Vec<CapabilityToggle> {
+    let mut toggles = Vec::new();
+    for cap in capabilities {
+        let wanted = requested_set.contains(cap.capability_code.as_str());
+        if wanted == cap.is_active() {
+            continue;
+        }
+        let target_status = if wanted { CapabilityStatus::Active } else { CapabilityStatus::Disabled };
+        toggles.push(CapabilityToggle {
+            capability_id: SupplierCapabilityId::new(&cap.base.id),
+            code: cap.capability_code,
+            target_status,
+        });
+    }
+    toggles
+}
+
+/// 计算需新建的能力代码：请求中有、既有中无且去重后保留。
+///
+/// # 参数
+/// * `requested_capability_codes` - 根资料请求中的能力代码集合
+/// * `capability_index` - 既有能力按代码的索引
+///
+/// # 返回
+/// 返回需新建的能力代码。
+fn plan_capability_creates(
+    requested_capability_codes: &[CapabilityCode],
+    capability_index: &std::collections::HashMap<String, &SupplierCapability>,
+) -> Vec<CapabilityCode> {
+    let mut creates = Vec::new();
+    for code in requested_capability_codes {
+        if !capability_index.contains_key(code.as_str()) && !creates.contains(code) {
+            creates.push(*code);
+        }
+    }
+    creates
+}
+
+/// 计算资质字段/关联更新项与停用项。
+///
+/// 既有资质命中请求但字段或适用能力关联不一致时需更新；
+/// 未命中请求且仍为启用时需停用。
+///
+/// # 参数
+/// * `qualifications` - 已加载的既有资质集合
+/// * `requested_map` - 请求资质按稳定身份键的索引
+/// * `linked_capabilities` - 资质 ID 到适用能力 ID 集合的映射
+/// * `capability_ids` - 请求能力代码到稳定能力 ID 的映射
+///
+/// # 返回
+/// 返回 `(需更新的稳定身份键, 需停用的稳定身份键)`。
+///
+/// # 错误
+/// 资质适用能力不存在时返回校验错误。
+fn plan_qualification_updates(
+    qualifications: &[SupplierQualification],
+    requested_map: &std::collections::HashMap<String, &PlannedQualificationInput>,
+    linked_capabilities: &std::collections::HashMap<String, std::collections::HashSet<String>>,
+    capability_ids: &std::collections::HashMap<String, SupplierCapabilityId>,
+) -> erp_core::Result<(Vec<String>, Vec<String>)> {
+    use std::collections::HashSet;
+    let mut updates = Vec::new();
+    let mut disables = Vec::new();
+    for qual in qualifications {
+        let key = qual.identity_key();
+        if let Some(input) = requested_map.get(&key) {
+            let desired_links: HashSet<String> = input
+                .capability_codes
+                .iter()
+                .map(|code| {
+                    capability_ids
+                        .get(code.as_str())
+                        .map(ToString::to_string)
+                        .ok_or_else(|| erp_core::Error::from("资质适用能力不存在"))
+                })
+                .collect::<erp_core::Result<_>>()?;
+            let current_links = linked_capabilities.get(&qual.base.id).cloned().unwrap_or_default();
+            if qual.matches_profile_fields(
+                input.issuer.as_deref(),
+                input.valid_from,
+                input.valid_to,
+                input.attachment_id.as_ref(),
+            ) && current_links == desired_links
+            {
+                continue;
+            }
+            updates.push(key);
+        } else if qual.stable.status == QualificationStatus::Active {
+            disables.push(key);
+        }
+    }
+    Ok((updates, disables))
+}
+
+/// 计算需新建的资质输入：请求中有、既有中无稳定身份键时需新建。
+///
+/// # 参数
+/// * `requested_qualifications` - 根资料请求中的资质输入视图
+/// * `existing_keys` - 既有资质的稳定身份键集合
+///
+/// # 返回
+/// 返回需新建的资质输入。
+fn plan_qualification_creates(
+    requested_qualifications: &[PlannedQualificationInput],
+    existing_keys: &std::collections::HashSet<String>,
+) -> Vec<PlannedQualificationInput> {
+    let mut creates = Vec::new();
+    for input in requested_qualifications {
+        let key = qualification_identity_key(input.qualification_type, &input.certificate_no);
+        if !existing_keys.contains(&key) {
+            creates.push(input.clone());
+        }
+    }
+    creates
 }

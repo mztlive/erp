@@ -96,9 +96,7 @@ impl CatalogService {
         actor: &AuditActor,
     ) -> Result<ProductListingChange> {
         let product = self.access().require_product(actor, "update", product_id, &mut NoTransaction).await?;
-        if !product.has_responsibility() {
-            return Err(Error::BusinessLogicError("商品缺少维护人或主属组织，请先交接".into()));
-        }
+        product.ensure_has_responsibility()?;
         if target.is_listed() && !product.is_active() {
             return Err(Error::BusinessLogicError("停用的商品不能上架".to_string()));
         }
@@ -176,9 +174,7 @@ impl CatalogService {
             .access()
             .require_product(actor, "update", sku.product_id.as_ref(), &mut NoTransaction)
             .await?;
-        if !product.has_responsibility() {
-            return Err(Error::BusinessLogicError("商品缺少维护人或主属组织，请先交接".into()));
-        }
+        product.ensure_has_responsibility()?;
         if target.is_listed() && !product.is_active() {
             return Err(Error::BusinessLogicError("停用商品下的 SKU 不能上架".to_string()));
         }

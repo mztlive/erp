@@ -11,7 +11,7 @@ pub use owned::{
     SupplierProfileCommandRepository, SupplierQualificationCapabilityRepository,
     SupplierQualificationRepository,
 };
-pub use scope::{SupplierReadScope, SupplierScopeClause};
+pub use scope::{SupplierReadScope, SupplierScopeClause, SupplierVersion};
 pub use supplier::{
     SupplierAccountFilter, SupplierAccountRow, SupplierCapabilityFilter, SupplierCommercialProfileFilter,
     SupplierDetailBundle, SupplierListBundle, SupplierListSearchInput, SupplierQualificationFilter,

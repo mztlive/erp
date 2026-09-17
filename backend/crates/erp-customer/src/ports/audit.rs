@@ -8,6 +8,31 @@ use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 
+/// `from_validated` 的参数对象（erp-customer-012）。
+///
+/// 九个调用参数收敛为整体输入，避免调用方传参顺序易错且难以扩展。
+/// `base` 保持引用：调用方（组合层 adapter）在转换后仍需使用原实体。
+pub struct ValidatedAuditSnapshot<'a> {
+    /// 已构造审计的持久化元数据。
+    pub base: &'a BaseModel,
+    /// 操作人 ID。
+    pub actor_id: String,
+    /// 操作人登录账号。
+    pub actor_account: String,
+    /// 操作人类型。
+    pub actor_type: AccountKind,
+    /// 业务动作名。
+    pub action: String,
+    /// 资源类型。
+    pub resource_type: String,
+    /// 资源 ID。
+    pub resource_id: Option<String>,
+    /// 成功标记。
+    pub success: bool,
+    /// 业务说明。
+    pub message: Option<String>,
+}
+
 /// Prepared successful resource audit that customer can persist through a port.
 ///
 /// Customer never depends on `erp-audit` types. Composition-root adapters convert
@@ -45,19 +70,50 @@ pub struct PreparedCustomerAudit {
 impl PreparedCustomerAudit {
     /// Capture customer-side fields from an already-validated audit entity snapshot.
     ///
-    /// # Parameters
-    /// * `base` - persistence metadata of the constructed audit
-    /// * `actor_id` - actor id
-    /// * `actor_account` - actor login
-    /// * `actor_type` - actor kind
-    /// * `action` - action name
-    /// * `resource_type` - resource type
-    /// * `resource_id` - resource id
-    /// * `success` - success flag
-    /// * `message` - optional message
+    /// 参数对象 [`ValidatedAuditSnapshot`] 收敛九个调用参数（erp-customer-012），
+    /// 避免调用方传参顺序易错且难以扩展；本函数为新代码的参数对象入口。
     ///
-    /// # Returns
-    /// Opaque prepared audit facts for later persistence.
+    /// # 参数
+    /// * `snapshot` - 已校验的审计实体快照
+    ///
+    /// # 返回
+    /// 返回稍后持久化的不透明审计事实。
+    pub fn from_snapshot(snapshot: ValidatedAuditSnapshot) -> Self {
+        Self {
+            id: snapshot.base.id.clone(),
+            version: snapshot.base.version,
+            created_at: snapshot.base.created_at,
+            updated_at: snapshot.base.updated_at,
+            deleted_at: snapshot.base.deleted_at,
+            actor_id: snapshot.actor_id,
+            actor_account: snapshot.actor_account,
+            actor_type: snapshot.actor_type,
+            action: snapshot.action,
+            resource_type: snapshot.resource_type,
+            resource_id: snapshot.resource_id,
+            success: snapshot.success,
+            message: snapshot.message,
+        }
+    }
+
+    /// Capture customer-side fields from an already-validated audit entity snapshot.
+    ///
+    /// 组合层存量调用方仍使用本九参入口（与 erp-processes adapters 保持兼容）；
+    /// 新代码优先使用参数对象入口 [`PreparedCustomerAudit::from_snapshot`]。
+    ///
+    /// # 参数
+    /// * `base` - 已构造审计的持久化元数据
+    /// * `actor_id` - 操作人 ID
+    /// * `actor_account` - 操作人登录账号
+    /// * `actor_type` - 操作人类型
+    /// * `action` - 业务动作名
+    /// * `resource_type` - 资源类型
+    /// * `resource_id` - 资源 ID
+    /// * `success` - 成功标记
+    /// * `message` - 业务说明
+    ///
+    /// # 返回
+    /// 返回稍后持久化的不透明审计事实。
     #[allow(clippy::too_many_arguments)]
     pub fn from_validated(
         base: &BaseModel,
@@ -70,12 +126,8 @@ impl PreparedCustomerAudit {
         success: bool,
         message: Option<String>,
     ) -> Self {
-        Self {
-            id: base.id.clone(),
-            version: base.version,
-            created_at: base.created_at,
-            updated_at: base.updated_at,
-            deleted_at: base.deleted_at,
+        Self::from_snapshot(ValidatedAuditSnapshot {
+            base,
             actor_id,
             actor_account,
             actor_type,
@@ -84,13 +136,22 @@ impl PreparedCustomerAudit {
             resource_id,
             success,
             message,
-        }
+        })
     }
 
     /// Build a success resource audit from an authenticated actor.
     ///
-    /// # Errors
-    /// Empty resource id.
+    /// # 参数
+    /// * `actor` - 已通过鉴权的审计操作人
+    /// * `action` - 业务动作名
+    /// * `resource_type` - 资源类型
+    /// * `resource_id` - 资源业务 ID，空白视为缺失
+    ///
+    /// # 返回
+    /// 返回已校验的成功资源审计预制事实。
+    ///
+    /// # 错误
+    /// 资源 ID 为空时返回校验错误。
     pub fn resource(
         actor: AuditActor,
         action: &str,
@@ -103,17 +164,17 @@ impl PreparedCustomerAudit {
         let (actor_id, actor_account, actor_type) = actor.into_parts();
         let id = id_generator::next_id();
         let base = BaseModel::new(id);
-        Ok(Self::from_validated(
-            &base,
+        Ok(Self::from_snapshot(ValidatedAuditSnapshot {
+            base: &base,
             actor_id,
             actor_account,
             actor_type,
-            action.to_string(),
-            resource_type.to_string(),
-            Some(resource_id),
-            true,
-            None,
-        ))
+            action: action.to_string(),
+            resource_type: resource_type.to_string(),
+            resource_id: Some(resource_id),
+            success: true,
+            message: None,
+        }))
     }
 }
 

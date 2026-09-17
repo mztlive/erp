@@ -56,6 +56,9 @@ pub(crate) const SUPPLIER_PROFILE_COMMANDS: &str =
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
+    // 九集合相互独立，顺序执行保证失败定位稳定（erp-supplier-007）：
+    // 曾评估 join! 并发，但任一集合失败时的错误归属与幂等命名断言
+    // 在串行下更易定位；部署耗时为 9 次串行之和，保持现状不优化。
     create_indexes(db, SUPPLIER_ACCOUNTS, supplier_account_indexes()).await?;
     create_indexes(db, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS, commercial_profile_indexes()).await?;
     create_indexes(db, SUPPLIER_CAPABILITIES, capability_indexes()).await?;

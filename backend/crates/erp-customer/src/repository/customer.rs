@@ -21,6 +21,10 @@ use persistence_core::{
 };
 use serde::{Deserialize, Serialize};
 
+use super::customer_shared::{
+    active_customer_user_assignment_filter, active_window_filter, current_owner_pipeline,
+    customer_account_projection, customer_assignment_projection, distinct_sorted_customer_ids, sort_doc,
+};
 use crate::entity::customer::{
     AssignmentRole, CustomerAccount, CustomerAccountStatus, CustomerAssignment, CustomerProfileCommand,
 };
@@ -530,16 +534,8 @@ impl<'a> CustomerAssignmentRepository<'a> {
         if customer_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let as_of = as_of.to_string();
         self.find_many(
-            doc! {
-                "customer_id": { "$in": customer_ids },
-                "valid_from": { "$lte": &as_of },
-                "$or": [
-                    { "valid_to": null },
-                    { "valid_to": { "$gt": &as_of } },
-                ],
-            },
+            active_window_filter(&as_of, Some(doc! { "customer_id": { "$in": customer_ids } }), None),
             executor,
         )
         .await
@@ -563,18 +559,16 @@ impl<'a> CustomerAssignmentRepository<'a> {
         as_of: BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Option<CustomerAssignment>> {
-        let as_of = as_of.to_string();
         Ok(self
             .find_many_sorted(
-                doc! {
-                    "customer_id": customer_id.to_string(),
-                    "assignment_role": AssignmentRole::Owner.as_str(),
-                    "valid_from": { "$lte": &as_of },
-                    "$or": [
-                        { "valid_to": null },
-                        { "valid_to": { "$gt": &as_of } },
-                    ],
-                },
+                active_window_filter(
+                    &as_of,
+                    Some(doc! {
+                        "customer_id": customer_id.to_string(),
+                        "assignment_role": AssignmentRole::Owner.as_str(),
+                    }),
+                    None,
+                ),
                 doc! { "valid_from": -1, "created_at": -1 },
                 executor,
             )
@@ -640,19 +634,7 @@ impl<'a> CustomerAssignmentRepository<'a> {
         as_of: BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<CustomerAssignment>> {
-        let as_of = as_of.to_string();
-        self.find_many(
-            doc! {
-                "user_id": user_id,
-                "valid_from": { "$lte": &as_of },
-                "$or": [
-                    { "valid_to": null },
-                    { "valid_to": { "$gt": &as_of } },
-                ],
-            },
-            executor,
-        )
-        .await
+        self.find_many(active_window_filter(&as_of, Some(doc! { "user_id": user_id }), None), executor).await
     }
 
     /// 去重后的生效客户 ID 投影（INT-R22）。
@@ -688,48 +670,6 @@ impl<'a> CustomerAssignmentRepository<'a> {
     }
 }
 
-/// 对客户 ID 迭代器排序去重（INT-R22 投影归一化）。
-///
-/// # 参数
-/// * `ids` - 原始客户 ID 迭代器（可含重复、无序）
-///
-/// # 返回
-/// 返回升序去重后的客户 ID；空输入返回空集合。
-///
-/// # 错误
-/// 无错误返回。
-///
-/// # 约束
-/// 纯内存函数；固定升序保证投影顺序稳定，与业务日期边界无关。
-fn distinct_sorted_customer_ids(ids: impl IntoIterator<Item = String>) -> Vec<String> {
-    let mut sorted: Vec<String> = ids.into_iter().collect();
-    sorted.sort();
-    sorted.dedup();
-    sorted
-}
-
-/// 构造用户对目标客户的当前有效归属查询条件。
-///
-/// 有效期采用半开区间 `[valid_from, valid_to)`；`valid_to = null` 表示长期有效。
-fn active_customer_user_assignment_filter(customer_id: &str, user_id: &str, as_of: BusinessDate) -> Document {
-    let as_of = as_of.to_string();
-    doc! {
-        "customer_id": customer_id,
-        "user_id": user_id,
-        "assignment_role": {
-            "$in": [
-                AssignmentRole::Owner.as_str(),
-                AssignmentRole::Collaborator.as_str(),
-            ],
-        },
-        "valid_from": { "$lte": &as_of },
-        "$or": [
-            { "valid_to": null },
-            { "valid_to": { "$gt": &as_of } },
-        ],
-    }
-}
-
 impl<'a> CustomerProfileCommandRepository<'a> {
     /// 按客户端幂等键读取已成功命令结果。
     ///
@@ -748,80 +688,6 @@ impl<'a> CustomerProfileCommandRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<Option<CustomerProfileCommand>> {
         self.find_one(doc! { "idempotency_key": idempotency_key }, executor).await
-    }
-}
-
-/// 构建排序文档（仓储白名单）。
-///
-/// `sort_by` 不在 `allowed` 白名单内时回落默认 `created_at`，禁止透传任意
-/// 字段名（P2 §2.3）。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或不在白名单时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-/// * `allowed` - 允许的排序字段白名单
-///
-/// # 返回
-/// 构造当前主责查询：未删除归属和未删除客户共同受有效期及可见边界限制。
-fn current_owner_pipeline(
-    customer_ids: Option<&[String]>,
-    owner_ids: Option<&[String]>,
-    as_of: BusinessDate,
-) -> Vec<Document> {
-    let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "assignment_role": "OWNER", "valid_from": { "$lte": as_of.to_string() }, "$or": [{ "valid_to": null }, { "valid_to": { "$gt": as_of.to_string() } }] };
-    if let Some(ids) = customer_ids {
-        filter.insert("customer_id", doc! { "$in": ids });
-    }
-    if let Some(ids) = owner_ids {
-        filter.insert("user_id", doc! { "$in": ids });
-    }
-    vec![
-        doc! { "$match": filter },
-        doc! { "$lookup": { "from": <mongodb::Database as crate::repository::CustomerExt>::CUSTOMER_ACCOUNTS, "localField": "customer_id", "foreignField": "id", "as": "visible_customer" } },
-        doc! { "$match": { "visible_customer": { "$elemMatch": { "deleted_at": NOT_DELETED_TIMESTAMP_BSON } } } },
-        doc! { "$unset": "visible_customer" },
-    ]
-}
-
-/// 返回排序条件文档。
-fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
-    let direction = if sort_ascending { 1 } else { -1 };
-    let field = sort_by.filter(|candidate| allowed.contains(candidate)).unwrap_or("created_at");
-    doc! { field: direction, "id": direction }
-}
-
-/// 客户角色列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
-fn customer_account_projection() -> Document {
-    doc! {
-        "id": 1,
-        "party_id": 1,
-        "customer_no": 1,
-        "default_payment_term_id": 1,
-        "status": 1,
-        "version": 1,
-        "created_at": 1,
-        "updated_at": 1,
-    }
-}
-
-/// 客户归属列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
-fn customer_assignment_projection() -> Document {
-    doc! {
-        "id": 1,
-        "customer_id": 1,
-        "user_id": 1,
-        "assignment_role": 1,
-        "valid_from": 1,
-        "valid_to": 1,
-        "change_reason": 1,
-        "version": 1,
-        "created_at": 1,
     }
 }
 
@@ -853,10 +719,11 @@ mod tests {
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
 
-    use super::{
-        CustomerAccountFilter, active_customer_user_assignment_filter, current_owner_pipeline,
-        distinct_sorted_customer_ids, sort_doc,
+    use super::super::customer_shared::{
+        active_customer_user_assignment_filter, current_owner_pipeline, distinct_sorted_customer_ids,
+        sort_doc,
     };
+    use super::CustomerAccountFilter;
     use crate::entity::customer::CustomerAccountStatus;
 
     #[test]
