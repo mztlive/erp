@@ -409,6 +409,16 @@ mod tests {
     fn domain_conversions_preserve_all_declared_payload_variants() {
         macro_rules! check_domain {
             ($provider:ident) => {
+                check_domain!($provider, include_receipt_duplicate);
+            };
+            ($provider:ident, include_receipt_duplicate) => {
+                check_domain!($provider, common_variants);
+                let source = persistence_core::Error::DuplicateKey(MongoError::custom("receipt payload"));
+                let error = Error::from($provider::Error::ReceiptDuplicate(source));
+                assert!(std::error::Error::source(&error).is_some());
+                assert!(matches!(error, Error::ReceiptDuplicate(persistence_core::Error::DuplicateKey(_))));
+            };
+            ($provider:ident, common_variants) => {
                 assert!(matches!(Error::from($provider::Error::Internal("payload".to_string())), Error::Internal(value) if value == "payload"));
                 assert!(matches!(Error::from($provider::Error::NotFound("payload".to_string())), Error::NotFound(value) if value == "payload"));
                 assert!(matches!(Error::from($provider::Error::ValidationError("payload".to_string())), Error::ValidationError(value) if value == "payload"));
@@ -417,10 +427,6 @@ mod tests {
                 assert!(matches!(Error::from($provider::Error::Forbidden("payload".to_string())), Error::Forbidden(value) if value == "payload"));
                 assert!(matches!(Error::from($provider::Error::Unauthenticated("payload".to_string())), Error::Unauthenticated(value) if value == "payload"));
                 assert!(matches!(Error::from($provider::Error::Logic(erp_core::Error::from("logic"))), Error::Logic(_)));
-                let source = persistence_core::Error::DuplicateKey(MongoError::custom("receipt payload"));
-                let error = Error::from($provider::Error::ReceiptDuplicate(source));
-                assert!(std::error::Error::source(&error).is_some());
-                assert!(matches!(error, Error::ReceiptDuplicate(persistence_core::Error::DuplicateKey(_))));
                 let source = persistence_core::Error::TransientTransactionConflict(MongoError::custom("transient payload"));
                 let error = Error::from($provider::Error::TransientTransaction(source));
                 assert!(std::error::Error::source(&error).is_some());
@@ -451,7 +457,9 @@ mod tests {
         check_domain!(erp_integration);
         check_domain!(erp_supply);
         check_domain!(erp_returns);
-        check_domain!(erp_fulfillment);
+        // 履约域已删除 `ReceiptDuplicate`（唯一冲突按 `uk_*` 索引名细化为 `ConflictError` 并携带具体文案），
+        // 只覆盖其余同构变体；冲突文案路径由仓储单测覆盖。
+        check_domain!(erp_fulfillment, common_variants);
         check_domain!(erp_procurement);
         check_domain!(erp_import);
         assert!(

@@ -170,7 +170,16 @@ mod supplier_payment_execution_tests {
         assert!(!production.contains("fn pending_allocations_from_request"));
         assert!(!production.contains("fn pending_allocated_total"));
         assert!(!production.contains("fn net_payment_allocated"));
-        let dto = include_str!("../../../../erp-finance/src/dto/payable.rs");
+        let dto_production: String = [
+            include_str!("../../../../erp-finance/src/dto/payable.rs"),
+            include_str!("../../../../erp-finance/src/dto/payable/account.rs"),
+            include_str!("../../../../erp-finance/src/dto/payable/payment.rs"),
+            include_str!("../../../../erp-finance/src/dto/payable/invoice.rs"),
+        ]
+        .iter()
+        .map(|content| content.split("#[cfg(test)]").next().expect("生产代码"))
+        .collect();
+        let dto = dto_production.as_str();
         assert!(dto.contains("pub fn pending_allocations("));
         assert!(dto.contains("PaymentAllocationLineRequest::to_pending"));
         assert!(!dto.contains("fn pending_allocated_total"));

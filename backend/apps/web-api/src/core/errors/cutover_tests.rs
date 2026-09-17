@@ -99,6 +99,22 @@ fn transient() -> persistence_core::Error {
 /// 每个条目直接构造实际提供方的 variant，黄金预期与生产 Error 映射解耦。
 macro_rules! common_cases {
     ($provider:ident) => {{
+        common_cases!($provider, include_receipt_duplicate)
+    }};
+    ($provider:ident, include_receipt_duplicate) => {{
+        use $provider::Error as Source;
+        let mut cases = common_cases!($provider, common_variants);
+        cases.insert(
+            5,
+            (
+                "ReceiptDuplicate",
+                Error::from(Source::ReceiptDuplicate(duplicate(None))),
+                Expected::conflict(DUPLICATE_MESSAGE),
+            ),
+        );
+        cases
+    }};
+    ($provider:ident, common_variants) => {{
         use $provider::Error as Source;
         vec![
             (
@@ -132,11 +148,6 @@ macro_rules! common_cases {
                 "ConflictError",
                 Error::from(Source::ConflictError("资料已更新，请刷新后重试".into())),
                 Expected::conflict("资料已更新，请刷新后重试"),
-            ),
-            (
-                "ReceiptDuplicate",
-                Error::from(Source::ReceiptDuplicate(duplicate(None))),
-                Expected::conflict(DUPLICATE_MESSAGE),
             ),
             // 原瞬态冲突文案含技术术语“事务”，实际 HTTP 使用既有安全 fallback。
             (
@@ -195,14 +206,17 @@ async fn all_nineteen_domain_common_variants_keep_http_contract() {
         ("finance", common_cases!(erp_finance)),
         ("sales", common_cases!(erp_sales)),
         ("procurement", common_cases!(erp_procurement)),
-        ("fulfillment", common_cases!(erp_fulfillment)),
+        // 履约域已删除 `ReceiptDuplicate`（唯一冲突按 `uk_*` 索引名细化为 `ConflictError` 并携带具体文案，
+        // 由 `ConflictError` 用例覆盖）；其余同构变体照常覆盖。
+        ("fulfillment", common_cases!(erp_fulfillment, common_variants)),
         ("returns", common_cases!(erp_returns)),
         ("integration", common_cases!(erp_integration)),
         ("supply", common_cases!(erp_supply)),
         ("import", common_cases!(erp_import)),
     ];
     for (domain, cases) in domains {
-        assert_eq!(cases.len(), 12, "{domain}: common variant count");
+        let expected_len = if domain == "fulfillment" { 11 } else { 12 };
+        assert_eq!(cases.len(), expected_len, "{domain}: common variant count");
         for (variant, error, expected) in cases {
             assert_response(&format!("{domain}::{variant}"), error, expected).await;
         }
