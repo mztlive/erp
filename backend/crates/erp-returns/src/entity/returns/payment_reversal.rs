@@ -10,7 +10,7 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use super::customer_refund::validate_actor_pair;
+use super::common::validate_actor_pair;
 
 /// 冲正单号最大长度。
 const REVERSAL_NO_MAX_LEN: usize = 64;

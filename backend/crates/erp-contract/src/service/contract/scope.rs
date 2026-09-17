@@ -1,7 +1,5 @@
 //! 合同列表与候选的一致授权快照；范围与业务版本跨页携带。
 
-use std::hash::{Hash, Hasher};
-
 use application_core::AuditActor;
 use persistence_core::Transactional;
 
@@ -98,9 +96,13 @@ impl ContractService {
                             "合同查询超过上限，请收窄组织或负责人条件".into(),
                         ));
                     }
-                    let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-                    versions.hash(&mut fingerprint);
-                    context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
+                    let fingerprint =
+                        super::access::scope_fingerprint_input(&[], &[], versions.as_slice(), &[]);
+                    context.scope_version = format!(
+                        "{}:{:x}",
+                        context.scope_version,
+                        super::access::stable_fingerprint(&fingerprint)
+                    );
                     let owner_options = accounts
                         .filter_options(
                             &search.customers.iter().filter_map(|c| c.owner_id.clone()).collect::<Vec<_>>(),

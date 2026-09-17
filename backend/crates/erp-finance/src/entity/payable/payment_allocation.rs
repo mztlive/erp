@@ -44,6 +44,38 @@ impl AllocationAction {
             Self::Reverse => "reverse",
         }
     }
+
+    /// 将本动作应用于净额累计（`APPLY` 加、`REVERSE` 减）。
+    ///
+    /// 与回款侧 [`crate::entity::receivable::AllocationAction::apply_to_net`] 同语义；
+    /// 两枚举经 [`From`] 双向转换后复用同一求和，溢出语义与 [`Amount::checked_add`] /
+    /// [`Amount::checked_sub`] 一致。
+    ///
+    /// # 参数
+    /// * `total` - 当前净额
+    /// * `amount` - 本次分配金额（正数）
+    ///
+    /// # 返回
+    /// 返回更新后的净额。
+    pub fn apply_to_net(self, total: Amount, amount: Amount) -> Amount {
+        crate::entity::receivable::AllocationAction::from(self).apply_to_net(total, amount)
+    }
+}
+
+impl From<crate::entity::receivable::AllocationAction> for AllocationAction {
+    /// 将回款分配动作转为付款分配动作（变体逐一对应，枚举定义本身不动）。
+    ///
+    /// # 参数
+    /// * `action` - 回款侧分配动作
+    ///
+    /// # 返回
+    /// 返回语义相同的付款侧分配动作。
+    fn from(action: crate::entity::receivable::AllocationAction) -> Self {
+        match action {
+            crate::entity::receivable::AllocationAction::Apply => Self::Apply,
+            crate::entity::receivable::AllocationAction::Reverse => Self::Reverse,
+        }
+    }
 }
 
 /// 付款核销分配创建数据。
@@ -322,6 +354,29 @@ mod tests {
         let allocation = PaymentAllocation::new(PaymentAllocationId::new("pa-1"), data()).unwrap();
         assert_eq!(allocation.allocation_action, AllocationAction::Apply);
         assert_eq!(allocation.allocated_amount, Amount::from_str("1000.00").unwrap());
+    }
+
+    #[test]
+    fn allocation_action_converts_both_directions_and_shares_net_fold() {
+        use crate::entity::receivable::AllocationAction as ReceivableAction;
+
+        for (payable, receivable) in [
+            (AllocationAction::Apply, ReceivableAction::Apply),
+            (AllocationAction::Reverse, ReceivableAction::Reverse),
+        ] {
+            assert_eq!(AllocationAction::from(receivable), payable);
+            assert_eq!(ReceivableAction::from(payable), receivable);
+        }
+        let total = Amount::from_str("100.00").unwrap();
+        let delta = Amount::from_str("30.00").unwrap();
+        assert_eq!(
+            AllocationAction::Apply.apply_to_net(total, delta),
+            ReceivableAction::Apply.apply_to_net(total, delta)
+        );
+        assert_eq!(
+            AllocationAction::Reverse.apply_to_net(total, delta),
+            ReceivableAction::Reverse.apply_to_net(total, delta)
+        );
     }
 
     #[test]

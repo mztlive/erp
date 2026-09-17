@@ -13,7 +13,7 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::facts::PaymentTermFact;
-use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
+use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseType, status_display};
 
 /// 采购单号最大长度。
 const PURCHASE_NO_MAX_LEN: usize = 64;
@@ -51,39 +51,17 @@ pub enum PurchaseOrderStatus {
     InApproval,
 }
 
+status_display!(PurchaseOrderStatus, {
+    Draft => ("草稿", "DRAFT"),
+    PendingFinanceReview => ("待财务审核", "PENDING_FINANCE_REVIEW"),
+    Effective => ("已生效", "EFFECTIVE"),
+    PartiallyExecuted => ("部分执行", "PARTIALLY_EXECUTED"),
+    Completed => ("已完成", "COMPLETED"),
+    Voided => ("已作废", "VOIDED"),
+    InApproval => ("审批中", "IN_APPROVAL"),
+});
+
 impl PurchaseOrderStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Draft => "草稿",
-            Self::PendingFinanceReview => "待财务审核",
-            Self::Effective => "已生效",
-            Self::PartiallyExecuted => "部分执行",
-            Self::Completed => "已完成",
-            Self::Voided => "已作废",
-            Self::InApproval => "审批中",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Draft => "DRAFT",
-            Self::PendingFinanceReview => "PENDING_FINANCE_REVIEW",
-            Self::Effective => "EFFECTIVE",
-            Self::PartiallyExecuted => "PARTIALLY_EXECUTED",
-            Self::Completed => "COMPLETED",
-            Self::Voided => "VOIDED",
-            Self::InApproval => "IN_APPROVAL",
-        }
-    }
-
     /// 判断当前状态是否允许发起采购变更。
     ///
     /// # 返回
@@ -119,31 +97,11 @@ pub enum PurchaseReviewStatus {
     Rejected,
 }
 
-impl PurchaseReviewStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Pending => "待审核",
-            Self::Approved => "通过",
-            Self::Rejected => "驳回",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Pending => "PENDING",
-            Self::Approved => "APPROVED",
-            Self::Rejected => "REJECTED",
-        }
-    }
-}
+status_display!(PurchaseReviewStatus, {
+    Pending => ("待审核", "PENDING"),
+    Approved => ("通过", "APPROVED"),
+    Rejected => ("驳回", "REJECTED"),
+});
 
 /// 独立进度（§6.6 付款/收票/履约三条独立进度：未开始、部分、已完成）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -157,31 +115,11 @@ pub enum ProgressStatus {
     Completed,
 }
 
-impl ProgressStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::None => "未开始",
-            Self::Partial => "部分",
-            Self::Completed => "已完成",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::None => "NONE",
-            Self::Partial => "PARTIAL",
-            Self::Completed => "COMPLETED",
-        }
-    }
-}
+status_display!(ProgressStatus, {
+    None => ("未开始", "NONE"),
+    Partial => ("部分", "PARTIAL"),
+    Completed => ("已完成", "COMPLETED"),
+});
 
 /// 采购单创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

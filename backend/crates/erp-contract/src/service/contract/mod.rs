@@ -30,7 +30,7 @@ use crate::entity::contract::{
 use crate::error::{Error, Result};
 use crate::ports::{
     AccountNamePort, ContractAuditPort, ContractDataScopePort, ContractParticipantPort, CustomerAccountFact,
-    CustomerAssignmentFactsPort, CustomerFactsPort, FileAssetFact, FileAssetFactsPort,
+    CustomerAssignmentFactsPort, CustomerFactsPort, FileAssetFact, FileAssetFactsPort, PreparedContractAudit,
 };
 use crate::repository::ContractExt;
 
@@ -139,6 +139,9 @@ impl ContractService {
     /// 跨集合事务写入 `contract`、`contract_revision` 与审计日志；客户存在性
     /// 经客户事实 Port 校验；contract_no 唯一性由唯一索引兜底（重复提交映射 409）。
     ///
+    /// 编排经 [`execute_authorized_transaction`] 统一接入授权事务执行、
+    /// 审计落盘与详情回读；动作闭包只声明本命令的仓储写入。
+    ///
     /// # 参数
     /// * `req` - 创建请求（含 PDF 文件资产 ID 与版本快照）
     /// * `actor` - 已通过鉴权的审计操作人
@@ -168,24 +171,28 @@ impl ContractService {
         )?;
 
         let db = self.db.clone();
-        let client = db.client().clone();
         let audit_port = self.audit.clone();
         let access = self.access();
         let actor_for_tx = actor.clone();
         let mut contract_for_tx = planned.contract.clone();
         let revision = planned.revision.clone();
-        client
-            .with_transaction(move |session| {
+        execute_authorized_transaction(
+            &db,
+            &audit_port,
+            &audit,
+            TxAuthorization::Create(customer_id),
+            access,
+            actor_for_tx,
+            Box::new(move |db, session| {
                 Box::pin(async move {
-                    access.require_create(&actor_for_tx, &customer_id, session).await?;
                     db.contract()
                         .create_contract_with_revision(&mut contract_for_tx, &revision, session)
                         .await?;
-                    audit_port.persist(&audit, session).await?;
                     Ok::<(), crate::error::Error>(())
                 })
-            })
-            .await?;
+            }),
+        )
+        .await?;
 
         Ok(planned.contract.into())
     }
@@ -309,6 +316,8 @@ impl ContractService {
     /// 期望版本 `req.version` 与当前版本不一致时直接返回冲突（409）；仓储层
     /// `update` 同时以 `id + version` CAS 兜底并发竞争。
     ///
+    /// 编排经 [`execute_authorized_transaction`]；范围重验仍在事务内先执行。
+    ///
     /// # 参数
     /// * `id` - 合同 ID
     /// * `req` - 追加版本请求（含期望版本与 PDF 关联）
@@ -348,23 +357,27 @@ impl ContractService {
         )?;
 
         let db = self.db.clone();
-        let client = db.client().clone();
         let audit_port = self.audit.clone();
         let access = self.access();
         let actor_for_tx = actor.clone();
         let contract_id = id.to_string();
         let mut contract_for_tx = planned.contract.clone();
         let revision = planned.revision;
-        client
-            .with_transaction(move |session| {
+        execute_authorized_transaction(
+            &db,
+            &audit_port,
+            &audit,
+            TxAuthorization::Use(contract_id),
+            access,
+            actor_for_tx,
+            Box::new(move |db, session| {
                 Box::pin(async move {
-                    access.require_with(actor_for_tx, "update", &contract_id, session).await?;
                     db.contract().archive_contract_revision(&mut contract_for_tx, &revision, session).await?;
-                    audit_port.persist(&audit, session).await?;
                     Ok::<(), crate::error::Error>(())
                 })
-            })
-            .await?;
+            }),
+        )
+        .await?;
 
         self.contract_detail(id, actor).await
     }
@@ -389,6 +402,8 @@ impl ContractService {
     }
 
     /// 终止合同（乐观锁语义；历史销售引用保持不变，W04 授权终止）。
+    ///
+    /// 编排经 [`execute_authorized_transaction`]；终止状态机仍在事务外先执行。
     ///
     /// # 参数
     /// * `id` - 合同 ID
@@ -425,21 +440,25 @@ impl ContractService {
         )?;
 
         let db = self.db.clone();
-        let client = db.client().clone();
         let audit_port = self.audit.clone();
         let access = self.access();
         let actor_for_tx = actor.clone();
         let contract_id = id.to_string();
-        client
-            .with_transaction(move |session| {
+        execute_authorized_transaction(
+            &db,
+            &audit_port,
+            &audit,
+            TxAuthorization::Use(contract_id),
+            access,
+            actor_for_tx,
+            Box::new(move |db, session| {
                 Box::pin(async move {
-                    access.require_with(actor_for_tx, "update", &contract_id, session).await?;
                     db.contracts().update(&mut contract, session).await?;
-                    audit_port.persist(&audit, session).await?;
                     Ok::<(), crate::error::Error>(())
                 })
-            })
-            .await?;
+            }),
+        )
+        .await?;
 
         self.contract_detail(id, actor).await
     }
@@ -777,6 +796,79 @@ fn conflict_if_stale_version(matched: bool) -> Result<()> {
         return Ok(());
     }
     Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))
+}
+
+/// 写命令事务内的授权目标：新建客户或既有合同。
+enum TxAuthorization {
+    /// 新建归档：证明按指定客户创建的资格。
+    Create(String),
+    /// 既有合同：重验 `update` 对象资格。
+    Use(String),
+}
+
+/// 本命令的仓储写入闭包：事务内执行，失败整事务回滚。
+type TxAction = Box<
+    dyn for<'a> FnOnce(
+            &'a Database,
+            &'a mut mongodb::ClientSession,
+        ) -> std::pin::Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>
+        + Send,
+>;
+
+/// 授权事务执行 + 审计落盘的统一编排（三写命令共用）。
+///
+/// 范围重验始终在事务内先执行（`Create` 走 `require_create`，
+/// `Use` 走 `require_with(..., "update", ...)`），再执行动作闭包的仓储写入，
+/// 最后落盘审计；任一步失败整事务回滚。
+///
+/// # 参数
+/// * `db` - 合同数据库
+/// * `audit_port` - 审计写入端口
+/// * `audit` - 已规划的审计记录
+/// * `authorization` - 事务内授权目标
+/// * `access` - 合同范围访问器
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `action` - 本命令的仓储写入闭包
+///
+/// # 返回
+/// 事务提交成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 授权拒绝、仓储写入或审计落盘失败时返回原错误。
+async fn execute_authorized_transaction(
+    db: &Database,
+    audit_port: &Arc<dyn ContractAuditPort>,
+    audit: &PreparedContractAudit,
+    authorization: TxAuthorization,
+    access: access::ContractAccess,
+    actor: AuditActor,
+    action: TxAction,
+) -> Result<()> {
+    let client = db.client().clone();
+    let db = db.clone();
+    client
+        .with_transaction(move |session| {
+            let db = db.clone();
+            let audit_port = audit_port.clone();
+            let audit = audit.clone();
+            let access = access.clone();
+            let actor = actor.clone();
+            let action = action;
+            Box::pin(async move {
+                match authorization {
+                    TxAuthorization::Create(customer_id) => {
+                        access.require_create(&actor, &customer_id, session).await?;
+                    },
+                    TxAuthorization::Use(contract_id) => {
+                        access.require_with(actor, "update", &contract_id, session).await?;
+                    },
+                }
+                action(&db, session).await?;
+                audit_port.persist(&audit, session).await?;
+                Ok::<(), crate::error::Error>(())
+            })
+        })
+        .await
 }
 
 #[cfg(test)]

@@ -174,8 +174,10 @@ impl SalesOrderService {
             created_by: query.created_by,
             owner_user_ids: query.owner_user_ids,
             business_org_unit_ids,
-            my_todo: query.my_todo,
-            exception_only: query.exception_only,
+            view: crate::repository::sales_order::SalesOrderListView::from_flags(
+                query.my_todo,
+                query.exception_only,
+            )?,
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),

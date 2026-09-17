@@ -7,7 +7,7 @@ use persistence_core::Executor;
 
 use crate::entity::sales_order::{
     FormalRevisionContext, FormalRevisionIdentities, FormalRevisionLineIdentity,
-    FormalRevisionSubtypeIdentity, RevisionSource, SalesOrder, SalesOrderRevisionAggregate,
+    FormalRevisionSubtypeIdentity, LineType, RevisionSource, SalesOrder, SalesOrderRevisionAggregate,
     SalesOrderSubmission, SalesOrderSubmissionLine,
 };
 use crate::repository::SalesOrderExt;
@@ -40,9 +40,17 @@ fn allocate_formal_revision_identities(lines: &[SalesOrderSubmissionLine]) -> Fo
         lines
             .iter()
             .map(|line| {
+                let subtype = match line.line_type {
+                    LineType::GoodsService => FormalRevisionSubtypeIdentity::goods(
+                        erp_core::ids::SalesOrderGoodsServiceLineRevisionId::new(next_id()),
+                    ),
+                    LineType::Voucher => FormalRevisionSubtypeIdentity::voucher(
+                        erp_core::ids::SalesOrderVoucherLineRevisionId::new(next_id()),
+                    ),
+                };
                 FormalRevisionLineIdentity::new(
                     erp_core::ids::SalesOrderRevisionLineId::new(next_id()),
-                    FormalRevisionSubtypeIdentity::from_line_type(line.line_type, next_id()),
+                    subtype,
                 )
             })
             .collect(),

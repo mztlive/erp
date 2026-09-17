@@ -23,9 +23,8 @@ use super::purchase_revision::PurchaseOrderRevisionLine;
 use super::purchase_submission::PurchaseOrderSubmissionLine;
 use super::types::PurchaseLineType;
 use crate::entity::facts::{
-    ExistingStockReservationFact as StockReservation, ProductFact as Product, ProductKind,
-    SalesGoodsLineFact as SalesOrderGoodsServiceLineRevision, SalesLineType as LineType,
-    SalesRevisionFact as SalesOrderRevision, SalesRevisionLineFact as SalesOrderRevisionLine, SkuFact as Sku,
+    ExistingStockReservationFact, ProductFact, ProductKind, SalesGoodsLineFact, SalesLineType,
+    SalesRevisionFact, SalesRevisionLineFact, SkuFact,
 };
 
 /// 当前销售版本单行的采购覆盖信息。
@@ -34,9 +33,9 @@ pub struct SalesProcurementCoverageLine {
     /// 基础单位允许的数量小数位；缺失时禁止提交供给数量。
     pub quantity_scale: Option<u8>,
     /// 销售当前版本公共行。
-    pub revision_line: SalesOrderRevisionLine,
+    pub revision_line: SalesRevisionLineFact,
     /// 销售当前版本商品/服务子类型行。
-    pub goods_line: SalesOrderGoodsServiceLineRevision,
+    pub goods_line: SalesGoodsLineFact,
     /// SKU 所属商品的稳定业务类型。
     pub product_kind: ProductKind,
     /// 单行目标、覆盖、剩余与进度。
@@ -47,7 +46,7 @@ pub struct SalesProcurementCoverageLine {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SalesProcurementCoverage {
     /// 销售当前版本头。
-    pub revision: SalesOrderRevision,
+    pub revision: SalesRevisionFact,
     /// 当前版本商品/服务行及逐行覆盖。
     pub lines: Vec<SalesProcurementCoverageLine>,
     /// 当前版本全部商品/服务行汇总。
@@ -63,15 +62,15 @@ pub struct ProcurementCoverageFacts {
     /// SKU 基础单位的小数位；按稳定单位身份查询，不以单位名称猜测。
     pub quantity_scales: HashMap<String, u8>,
     /// 销售单当前版本文档；指针缺失或版本文档缺失时为空。
-    pub revision: Option<SalesOrderRevision>,
+    pub revision: Option<SalesRevisionFact>,
     /// 销售当前版本全部公共行（Repository 已按行号升序返回）。
-    pub revision_lines: Vec<SalesOrderRevisionLine>,
+    pub revision_lines: Vec<SalesRevisionLineFact>,
     /// 销售当前版本商品/服务子类型行。
-    pub goods_lines: Vec<SalesOrderGoodsServiceLineRevision>,
+    pub goods_lines: Vec<SalesGoodsLineFact>,
     /// SKU 稳定 ID 到 SKU 事实的映射。
-    pub skus: HashMap<String, Sku>,
+    pub skus: HashMap<String, SkuFact>,
     /// 商品 ID 到商品事实的映射。
-    pub products: HashMap<String, Product>,
+    pub products: HashMap<String, ProductFact>,
     /// 未作废且参与覆盖的采购单。
     pub purchase_orders: Vec<PurchaseOrder>,
     /// 草稿类采购单当前提交行（Repository 已按当前提交指针批量读取）。
@@ -81,7 +80,7 @@ pub struct ProcurementCoverageFacts {
     /// 正式采购版本行的销售分配。
     pub allocations: Vec<PurchaseLineSalesAllocation>,
     /// 现有库存直接分配形成的预占（Repository 已排除采购入库预占）。
-    pub reservations: Vec<StockReservation>,
+    pub reservations: Vec<ExistingStockReservationFact>,
 }
 
 /// 由采购覆盖事实构造逐行与总体采购覆盖结果。
@@ -133,16 +132,16 @@ pub fn build_procurement_coverage(facts: ProcurementCoverageFacts) -> Result<Sal
 /// # 关键业务约束
 /// 连接键为当前销售版本行 ID，不按 SKU 猜测。
 fn join_target_lines(
-    lines: Vec<SalesOrderRevisionLine>,
-    goods: Vec<SalesOrderGoodsServiceLineRevision>,
-) -> Result<Vec<(SalesOrderRevisionLine, SalesOrderGoodsServiceLineRevision)>> {
+    lines: Vec<SalesRevisionLineFact>,
+    goods: Vec<SalesGoodsLineFact>,
+) -> Result<Vec<(SalesRevisionLineFact, SalesGoodsLineFact)>> {
     let mut goods_by_line = goods
         .into_iter()
         .map(|goods_line| (goods_line.revision_line_id.to_string(), goods_line))
         .collect::<HashMap<_, _>>();
     lines
         .into_iter()
-        .filter(|line| line.line_type == LineType::GoodsService)
+        .filter(|line| line.line_type == SalesLineType::GoodsService)
         .map(|line| {
             let goods_line = goods_by_line
                 .remove(&line.base.id)
@@ -168,9 +167,9 @@ fn join_target_lines(
 /// # 关键业务约束
 /// 采购类型只读取商品稳定主表的 `product_kind`，不得从销售字段或分类名称推导。
 fn resolve_product_kinds(
-    targets: &[(SalesOrderRevisionLine, SalesOrderGoodsServiceLineRevision)],
-    skus: &HashMap<String, Sku>,
-    products: &HashMap<String, Product>,
+    targets: &[(SalesRevisionLineFact, SalesGoodsLineFact)],
+    skus: &HashMap<String, SkuFact>,
+    products: &HashMap<String, ProductFact>,
 ) -> Result<HashMap<String, ProductKind>> {
     targets
         .iter()
@@ -204,7 +203,7 @@ fn resolve_product_kinds(
 /// # 关键业务约束
 /// 禁止读取同一采购单的历史提交行；已从销售当前版本移除的目标行不参与。
 fn accumulate_submission_coverage(
-    targets: &[(SalesOrderRevisionLine, SalesOrderGoodsServiceLineRevision)],
+    targets: &[(SalesRevisionLineFact, SalesGoodsLineFact)],
     orders: &[PurchaseOrder],
     lines: &[PurchaseOrderSubmissionLine],
     covered: &mut HashMap<String, Quantity>,
@@ -246,7 +245,7 @@ fn accumulate_submission_coverage(
 /// 禁止累计历史采购版本或脱离 allocation 直接使用采购行数量；正式覆盖必须同时
 /// 由采购当前版本行和 allocation 指向同一销售当前版本行。
 fn accumulate_revision_coverage(
-    targets: &[(SalesOrderRevisionLine, SalesOrderGoodsServiceLineRevision)],
+    targets: &[(SalesRevisionLineFact, SalesGoodsLineFact)],
     orders: &[PurchaseOrder],
     purchase_lines: &[PurchaseOrderRevisionLine],
     allocations: &[PurchaseLineSalesAllocation],
@@ -331,7 +330,7 @@ fn add_current_allocation(
 /// 预占按 `reserved + consumed` 计入：仍锁定和已经仓发的数量都已满足供给；释放
 /// 数量不再覆盖，释放后任务同步会重新出现缺口。
 fn accumulate_stock_coverage(
-    reservations: &[StockReservation],
+    reservations: &[ExistingStockReservationFact],
     covered: &mut HashMap<String, Quantity>,
 ) -> Result<()> {
     for reservation in reservations {
@@ -345,7 +344,7 @@ fn accumulate_stock_coverage(
 }
 
 /// 返回一条现有库存预占仍然满足销售供给的数量。
-fn reservation_covered_quantity(reservation: &StockReservation) -> Result<Quantity> {
+fn reservation_covered_quantity(reservation: &ExistingStockReservationFact) -> Result<Quantity> {
     quantity_of(reservation.reserved_quantity.to_decimal() + reservation.consumed_quantity.to_decimal())
 }
 
@@ -431,9 +430,7 @@ fn current_revision_ids(orders: &[PurchaseOrder]) -> Result<Vec<PurchaseOrderRev
 ///
 /// # 关键业务约束
 /// 稳定销售行是跨销售版本关联采购覆盖的唯一键。
-fn target_stable_ids(
-    targets: &[(SalesOrderRevisionLine, SalesOrderGoodsServiceLineRevision)],
-) -> HashMap<String, String> {
+fn target_stable_ids(targets: &[(SalesRevisionLineFact, SalesGoodsLineFact)]) -> HashMap<String, String> {
     targets.iter().map(|(line, _)| (line.sales_order_line_id.to_string(), line.base.id.clone())).collect()
 }
 
@@ -481,8 +478,8 @@ fn add_covered(
 /// # 关键业务约束
 /// `remaining = current sales quantity - covered`，不得截断负数。
 fn build_coverage(
-    revision: SalesOrderRevision,
-    targets: Vec<(SalesOrderRevisionLine, SalesOrderGoodsServiceLineRevision)>,
+    revision: SalesRevisionFact,
+    targets: Vec<(SalesRevisionLineFact, SalesGoodsLineFact)>,
     covered: HashMap<String, Quantity>,
     product_kinds: HashMap<String, ProductKind>,
     quantity_scales: HashMap<String, u8>,
@@ -585,11 +582,9 @@ mod tests {
         current_revision_ids, current_submission_ids, reservation_covered_quantity, zero_quantity,
     };
     use crate::entity::facts::{
-        CurrentRevisionFact, ExistingStockReservationFact as StockReservation, FactIdentity,
-        ProductFact as Product, ProductKind, SalesCustomerSnapshotFact,
-        SalesGoodsLineFact as SalesOrderGoodsServiceLineRevision, SalesLineType as LineType,
-        SalesRevisionFact as SalesOrderRevision, SalesRevisionLineFact as SalesOrderRevisionLine,
-        SkuFact as Sku,
+        CurrentRevisionFact, ExistingStockReservationFact, FactIdentity, ProductFact, ProductKind,
+        SalesCustomerSnapshotFact, SalesGoodsLineFact, SalesLineType, SalesRevisionFact,
+        SalesRevisionLineFact, SkuFact,
     };
     use crate::entity::purchase_order::allocation::{
         PurchaseLineSalesAllocation, PurchaseLineSalesAllocationData,
@@ -638,8 +633,8 @@ mod tests {
     }
 
     /// 构造销售当前版本头。
-    fn revision(id: &str) -> SalesOrderRevision {
-        SalesOrderRevision {
+    fn revision(id: &str) -> SalesRevisionFact {
+        SalesRevisionFact {
             base: FactIdentity { id: format!("rev-{id}") },
             customer_snapshot: SalesCustomerSnapshotFact { customer_name: "客户".to_string() },
             contract_snapshot: None,
@@ -647,12 +642,12 @@ mod tests {
     }
 
     /// 构造销售当前版本公共行。
-    fn revision_line(id: &str, stable_line_id: &str, line_no: u32) -> SalesOrderRevisionLine {
-        SalesOrderRevisionLine {
+    fn revision_line(id: &str, stable_line_id: &str, line_no: u32) -> SalesRevisionLineFact {
+        SalesRevisionLineFact {
             base: FactIdentity { id: id.to_string() },
             sales_order_line_id: erp_core::ids::SalesOrderLineId::new(stable_line_id),
             line_no,
-            line_type: LineType::GoodsService,
+            line_type: SalesLineType::GoodsService,
             item_name_snapshot: "商品".to_string(),
             spec_snapshot: Some("规格".to_string()),
             unit_snapshot: Some("件".to_string()),
@@ -660,12 +655,8 @@ mod tests {
     }
 
     /// 构造销售当前版本商品/服务子类型行。
-    fn goods_line(
-        revision_line_id: &str,
-        sku_id: &str,
-        quantity: &str,
-    ) -> SalesOrderGoodsServiceLineRevision {
-        SalesOrderGoodsServiceLineRevision {
+    fn goods_line(revision_line_id: &str, sku_id: &str, quantity: &str) -> SalesGoodsLineFact {
+        SalesGoodsLineFact {
             revision_line_id: SalesOrderRevisionLineId::new(revision_line_id),
             sku_id: SkuId::new(sku_id),
             sku_revision_id: erp_core::ids::SkuRevisionId::new(format!("skur-{sku_id}")),
@@ -676,13 +667,16 @@ mod tests {
     }
 
     /// 构造 SKU 事实。
-    fn sku(id: &str) -> Sku {
-        Sku { base: FactIdentity { id: id.to_string() }, product_id: ProductId::new(format!("product-{id}")) }
+    fn sku(id: &str) -> SkuFact {
+        SkuFact {
+            base: FactIdentity { id: id.to_string() },
+            product_id: ProductId::new(format!("product-{id}")),
+        }
     }
 
     /// 构造商品事实。
-    fn product(id: &str) -> Product {
-        Product {
+    fn product(id: &str) -> ProductFact {
+        ProductFact {
             base: FactIdentity { id: id.to_string() },
             stable: CurrentRevisionFact::default(),
             product_kind: ProductKind::Physical,
@@ -783,8 +777,13 @@ mod tests {
     }
 
     /// 构造一条现有库存预占。
-    fn reservation(_id: &str, stable_line_id: &str, reserved: &str, consumed: &str) -> StockReservation {
-        StockReservation {
+    fn reservation(
+        _id: &str,
+        stable_line_id: &str,
+        reserved: &str,
+        consumed: &str,
+    ) -> ExistingStockReservationFact {
+        ExistingStockReservationFact {
             sales_order_line_id: SalesOrderLineId::new(stable_line_id),
             reserved_quantity: Quantity::from_str(reserved).unwrap(),
             consumed_quantity: Quantity::from_str(consumed).unwrap(),

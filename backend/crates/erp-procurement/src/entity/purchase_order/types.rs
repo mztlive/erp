@@ -2,6 +2,38 @@
 
 use serde::{Deserialize, Serialize};
 
+/// 由 `(变体 => (中文标签, 稳定代码))` 映射表生成 `label()`/`as_str()`。
+///
+/// 各状态与固定枚举只声明一行数据的映射表，不再手写两套平行 `match`；
+/// 新增变体只加一行，避免标签与代码漂移。生成的方法签名与手写版本一致。
+macro_rules! status_display {
+    ($type:ty, { $($variant:ident => ($label:literal, $code:literal)),* $(,)? }) => {
+        impl $type {
+            /// 返回中文展示名。
+            ///
+            /// # 返回
+            /// 返回面向用户的中文标签。
+            pub fn label(&self) -> &'static str {
+                match self {
+                    $(Self::$variant => $label,)*
+                }
+            }
+
+            /// 返回稳定代码。
+            ///
+            /// # 返回
+            /// 返回用于持久化与查询的稳定字符串。
+            pub fn as_str(&self) -> &'static str {
+                match self {
+                    $(Self::$variant => $code,)*
+                }
+            }
+        }
+    };
+}
+
+pub(crate) use status_display;
+
 /// 采购类型（§6.6：实物、虚拟、线下服务）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -14,31 +46,11 @@ pub enum PurchaseType {
     Service,
 }
 
-impl PurchaseType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Physical => "实物",
-            Self::Virtual => "虚拟",
-            Self::Service => "线下服务",
-        }
-    }
-
-    /// 返回类型的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Physical => "PHYSICAL",
-            Self::Virtual => "VIRTUAL",
-            Self::Service => "SERVICE",
-        }
-    }
-}
+status_display!(PurchaseType, {
+    Physical => ("实物", "PHYSICAL"),
+    Virtual => ("虚拟", "VIRTUAL"),
+    Service => ("线下服务", "SERVICE"),
+});
 
 /// 履约责任（§6.6：入仓、供应商直发、电子交付、线下服务）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -55,33 +67,14 @@ pub enum FulfillmentResponsibility {
     Service,
 }
 
+status_display!(FulfillmentResponsibility, {
+    Warehouse => ("入仓", "WAREHOUSE"),
+    SupplierDirect => ("供应商直发", "SUPPLIER_DIRECT"),
+    Electronic => ("电子交付", "ELECTRONIC"),
+    Service => ("线下服务", "SERVICE"),
+});
+
 impl FulfillmentResponsibility {
-    /// 返回责任的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Warehouse => "入仓",
-            Self::SupplierDirect => "供应商直发",
-            Self::Electronic => "电子交付",
-            Self::Service => "线下服务",
-        }
-    }
-
-    /// 返回责任的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Warehouse => "WAREHOUSE",
-            Self::SupplierDirect => "SUPPLIER_DIRECT",
-            Self::Electronic => "ELECTRONIC",
-            Self::Service => "SERVICE",
-        }
-    }
-
     /// 返回采购单责任人后续直接执行的履约对象类型。
     ///
     /// # 返回
@@ -114,29 +107,10 @@ pub enum PurchaseLineType {
     LogisticsFee,
 }
 
-impl PurchaseLineType {
-    /// 返回行类型的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::ItemService => "商品/服务成本",
-            Self::LogisticsFee => "物流费用",
-        }
-    }
-
-    /// 返回行类型的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::ItemService => "ITEM_SERVICE",
-            Self::LogisticsFee => "LOGISTICS_FEE",
-        }
-    }
-}
+status_display!(PurchaseLineType, {
+    ItemService => ("商品/服务成本", "ITEM_SERVICE"),
+    LogisticsFee => ("物流费用", "LOGISTICS_FEE"),
+});
 
 #[cfg(test)]
 mod tests {

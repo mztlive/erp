@@ -377,6 +377,52 @@ mod tests {
     }
 
     #[test]
+    fn manual_eq_covers_every_compared_field() {
+        // 手工 PartialEq 锚点：下述每个断言对应 eq 内一行比较；新增字段必须同步加断言。
+        let base = Contract::new(ContractId::new("c-1"), data(), "admin-1").unwrap();
+        assert_eq!(base.clone(), base);
+
+        let other_id = Contract::new(ContractId::new("c-2"), data(), "admin-1").unwrap();
+        assert_ne!(base, other_id);
+
+        let mut terminated = base.clone();
+        terminated.terminate("admin-2").unwrap();
+        assert_ne!(base, terminated);
+
+        let mut pointed = base.clone();
+        pointed.attach_revision("rev-1", "admin-1");
+        assert_ne!(base, pointed);
+
+        let mut touched = base.clone();
+        touched.update(ContractUpdate { customer_id: None, settlement_party_id: None }, "admin-2").unwrap();
+        assert_ne!(base, touched);
+
+        let renumbered = Contract::new(
+            ContractId::new("c-1"),
+            ContractData { contract_no: "HT-OTHER".into(), ..data() },
+            "admin-1",
+        )
+        .unwrap();
+        assert_ne!(base, renumbered);
+
+        let other_customer = Contract::new(
+            ContractId::new("c-1"),
+            ContractData { customer_id: CustomerAccountId::new("cust-9"), ..data() },
+            "admin-1",
+        )
+        .unwrap();
+        assert_ne!(base, other_customer);
+
+        let other_party = Contract::new(
+            ContractId::new("c-1"),
+            ContractData { settlement_party_id: PartyId::new("party-9"), ..data() },
+            "admin-1",
+        )
+        .unwrap();
+        assert_ne!(base, other_party);
+    }
+
+    #[test]
     fn terminal_states_have_no_outgoing_edges() {
         // 终态（TERMINATED/EXPIRED）用逐边定向断言：不允许任何出发边。
         assert!(ContractStatus::Terminated.allowed_next().is_empty());

@@ -22,12 +22,12 @@ mod submission;
 mod working_copy;
 
 use mongodb::Database;
-use mongodb::bson::{Document, doc};
-pub use order::{SalesOrderFilter, SalesOrderRow, SalesOrderSearch};
+pub use order::{SalesOrderFilter, SalesOrderListView, SalesOrderRow, SalesOrderSearch};
 pub use submission::SubmissionFilter;
 pub use working_copy::WorkingCopyFilter;
 
 use super::extensions::SalesOrderExt;
+pub(crate) use crate::repository::filter::sort_doc;
 
 /// `sales_order` 集合名（单一来源：`SalesOrderExt` 关联常量）。
 const SALES_ORDERS: &str = <mongodb::Database as SalesOrderExt>::SALES_ORDERS;
@@ -70,17 +70,4 @@ impl<'a> SalesOrderDomainRepository<'a> {
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
-}
-
-/// 构建排序文档。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
-fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
-    let direction = if sort_ascending { 1 } else { -1 };
-    doc! { sort_by.unwrap_or("created_at"): direction, "id": direction }
 }

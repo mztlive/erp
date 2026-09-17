@@ -74,11 +74,12 @@ impl Error {
     /// Stable error class used by HTTP mapping; do not parse display text.
     pub fn class(&self) -> ErrorClass {
         match self {
-            Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
-            Self::ConflictError(_)
-            | Self::ReceiptDuplicate(_)
-            | Self::TransientTransaction(_)
-            | Self::SelectionConflict(_) => ErrorClass::Conflict,
+            Self::Internal(_) | Self::Logic(_) => ErrorClass::Internal,
+            Self::RepositoryError(error) => persistence_error_class(error),
+            Self::ConflictError(_) | Self::SelectionConflict(_) => ErrorClass::Conflict,
+            Self::ReceiptDuplicate(error) | Self::TransientTransaction(error) => {
+                persistence_error_class(error)
+            },
             Self::BusinessLogicError(_)
             | Self::ValidationError(_)
             | Self::NotFound(_)
@@ -86,7 +87,8 @@ impl Error {
             | Self::SelectionLimitExceeded(_)
             | Self::SelectionPrepareFailed(_) => ErrorClass::BusinessRule,
             Self::Forbidden(_) | Self::Unauthenticated(_) => ErrorClass::Forbidden,
-            Self::OutcomeUnknown(_) | Self::SelectionPendingCheck(_) => ErrorClass::Internal,
+            Self::OutcomeUnknown(error) => persistence_error_class(error),
+            Self::SelectionPendingCheck(_) => ErrorClass::Internal,
         }
     }
 
@@ -168,6 +170,20 @@ impl From<persistence_core::Error> for Error {
     }
 }
 
+/// 将持久化源错误映射为稳定错误分类（唯一分类入口）。
+///
+/// 唯一键冲突、乐观锁与瞬态事务冲突为可重试/冲突语义；未知提交结果与其它
+/// 仓储失败为内部错误。`Logic(erp_core::Error)` 不经过本函数：领域基元错误
+/// 无稳定分类（字符串负载或状态迁移），保持 `Internal`。
+fn persistence_error_class(error: &persistence_core::Error) -> ErrorClass {
+    match error {
+        persistence_core::Error::DuplicateKey(_)
+        | persistence_core::Error::OptimisticLockingError
+        | persistence_core::Error::TransientTransactionConflict(_) => ErrorClass::Conflict,
+        _ => ErrorClass::Internal,
+    }
+}
+
 /// 将唯一键冲突映射为面向用户的冲突提示。
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
     duplicate_index_conflict_message(error.duplicate_index_name())
@@ -218,6 +234,23 @@ mod tests {
             super::duplicate_index_conflict_message(Some("uk_sales_change_orders_active_per_order_base")),
             "数据已存在，请勿重复提交"
         );
+    }
+
+    #[test]
+    fn persistence_wrappers_delegate_source_classification() {
+        let duplicate = persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key"));
+        assert_eq!(Error::ReceiptDuplicate(duplicate).class(), ErrorClass::Conflict);
+
+        let transient = persistence_core::Error::TransientTransactionConflict(MongoError::custom("t"));
+        assert_eq!(Error::TransientTransaction(transient).class(), ErrorClass::Conflict);
+
+        let unknown = persistence_core::Error::CommitOutcomeUnknown(MongoError::custom("u"));
+        assert_eq!(Error::OutcomeUnknown(unknown).class(), ErrorClass::Internal);
+
+        let database = persistence_core::Error::DatabaseError(MongoError::custom("db"));
+        assert_eq!(Error::RepositoryError(database).class(), ErrorClass::Internal);
+        let conflict_source = persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key"));
+        assert_eq!(Error::RepositoryError(conflict_source).class(), ErrorClass::Conflict);
     }
 
     #[test]

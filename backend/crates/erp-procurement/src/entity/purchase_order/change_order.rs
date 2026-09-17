@@ -22,7 +22,9 @@ use serde::{Deserialize, Serialize};
 use crate::entity::purchase_order::line_common::{PurchaseLineDataRef, normalize_and_validate_line};
 use crate::entity::purchase_order::purchase_submission::SubmissionStatus;
 use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
-use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
+use crate::entity::purchase_order::types::{
+    FulfillmentResponsibility, PurchaseLineType, PurchaseType, status_display,
+};
 
 /// 变更原因最大长度。
 const REASON_MAX_LEN: usize = 500;
@@ -52,33 +54,14 @@ pub enum PurchaseChangeOrderStatus {
     Voided,
 }
 
+status_display!(PurchaseChangeOrderStatus, {
+    Draft => ("草稿", "DRAFT"),
+    InApproval => ("审批中", "IN_APPROVAL"),
+    Effective => ("已生效", "EFFECTIVE"),
+    Voided => ("作废", "VOIDED"),
+});
+
 impl PurchaseChangeOrderStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Draft => "草稿",
-            Self::InApproval => "审批中",
-            Self::Effective => "已生效",
-            Self::Voided => "作废",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Draft => "DRAFT",
-            Self::InApproval => "IN_APPROVAL",
-            Self::Effective => "EFFECTIVE",
-            Self::Voided => "VOIDED",
-        }
-    }
-
     /// 判断状态是否代表尚未结束的采购变更。
     ///
     /// # 返回

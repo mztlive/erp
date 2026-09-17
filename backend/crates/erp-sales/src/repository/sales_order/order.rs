@@ -14,6 +14,7 @@ use super::{SALES_ORDERS, SalesOrderDomainRepository, sort_doc};
 use crate::entity::sales_order::{
     BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderId, SalesOrderLine,
 };
+use crate::repository::filter::undeleted_condition;
 use crate::repository::owned::{SalesOrderLineRepository, SalesOrderRepository};
 
 /// 销售单列表投影行（列表接口只取必要字段，禁止返回整文档）。
@@ -59,6 +60,45 @@ pub struct SalesOrderRow {
     pub sales_owner_user_id: String,
 }
 
+/// 销售单列表视图（`my_todo`/`exception_only` 互斥，非法组合不可表示）。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SalesOrderListView {
+    /// 全量视图。
+    #[default]
+    All,
+    /// "待我处理"视图：仅草稿或被驳回/低毛利待处理回销售的单
+    /// （`commercial_status=DRAFT` 或 `review_status IN [REJECTED, PENDING_LOW_MARGIN_SUPERIOR]`）。
+    /// 与 `commercial_status`/`review_status` 互斥，调用方不应同时传两者。
+    MyTodo,
+    /// "异常"视图：审核轨被驳回（与 `review_status` 互斥）。
+    ExceptionOnly,
+}
+
+impl SalesOrderListView {
+    /// 由线协议互斥 bool 折叠为单一视图枚举。
+    ///
+    /// DTO 的 `my_todo`/`exception_only` 是 HTTP 线协议字段（保持 bool 形态兼容），
+    /// 进入仓储前必须经本函数收敛；两者同传为非法组合，直接拒绝而非叠加过滤。
+    ///
+    /// # 参数
+    /// * `my_todo` - 是否为"待我处理"视图
+    /// * `exception_only` - 是否为"异常"视图
+    ///
+    /// # 返回
+    /// 返回与输入对应的单一视图。
+    ///
+    /// # 错误
+    /// 两者同时为 `true` 时返回参数验证失败。
+    pub fn from_flags(my_todo: bool, exception_only: bool) -> crate::Result<Self> {
+        match (my_todo, exception_only) {
+            (false, false) => Ok(Self::All),
+            (true, false) => Ok(Self::MyTodo),
+            (false, true) => Ok(Self::ExceptionOnly),
+            (true, true) => Err(crate::Error::ValidationError("待我处理与异常视图互斥，不可同时启用".into())),
+        }
+    }
+}
+
 /// 销售单列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct SalesOrderFilter {
@@ -96,12 +136,8 @@ pub struct SalesOrderFilter {
     pub owner_user_ids: Option<application_core::QueryIds>,
     /// 已展开的单据业务组织；`None` 表示不额外收窄，空集合保持空结果。
     pub business_org_unit_ids: Option<Vec<String>>,
-    /// "待我处理"视图：仅草稿或被驳回/低毛利待处理回销售的单
-    /// （`commercial_status=DRAFT` 或 `review_status IN [REJECTED, PENDING_LOW_MARGIN_SUPERIOR]`）。
-    /// 与 `commercial_status`/`review_status` 互斥，调用方不应同时传两者。
-    pub my_todo: bool,
-    /// "异常"视图：审核轨被驳回（与 `review_status` 互斥）。
-    pub exception_only: bool,
+    /// 列表视图（互斥，构造期只允许一种）。
+    pub view: SalesOrderListView,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -131,8 +167,7 @@ impl Default for SalesOrderFilter {
             created_by: None,
             owner_user_ids: None,
             business_org_unit_ids: None,
-            my_todo: false,
-            exception_only: false,
+            view: SalesOrderListView::All,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -147,7 +182,7 @@ impl QueryFilter for SalesOrderFilter {
     /// # 返回
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        let mut filter = undeleted_condition();
         insert_literal_regex_filter(&mut filter, "order_no", self.order_no.as_deref());
         if let Some(customer_id) = &self.customer_id {
             filter.insert("customer_id", customer_id);
@@ -202,24 +237,27 @@ impl QueryFilter for SalesOrderFilter {
         if let Some(created_by) = &self.created_by {
             filter.insert("created_by", created_by);
         }
-        if self.my_todo {
-            filter.insert(
-                "$or",
-                vec![
-                    doc! { "commercial_status": CommercialStatus::Draft.as_str() },
-                    doc! {
-                        "review_status": {
-                            "$in": [
-                                ReviewStatus::Rejected.as_str(),
-                                ReviewStatus::PendingLowMarginSuperior.as_str(),
-                            ]
-                        }
-                    },
-                ],
-            );
-        }
-        if self.exception_only {
-            filter.insert("review_status", ReviewStatus::Rejected.as_str());
+        match self.view {
+            SalesOrderListView::All => {},
+            SalesOrderListView::MyTodo => {
+                filter.insert(
+                    "$or",
+                    vec![
+                        doc! { "commercial_status": CommercialStatus::Draft.as_str() },
+                        doc! {
+                            "review_status": {
+                                "$in": [
+                                    ReviewStatus::Rejected.as_str(),
+                                    ReviewStatus::PendingLowMarginSuperior.as_str(),
+                                ]
+                            }
+                        },
+                    ],
+                );
+            },
+            SalesOrderListView::ExceptionOnly => {
+                filter.insert("review_status", ReviewStatus::Rejected.as_str());
+            },
         }
         if let Some(q) = &self.search.q {
             let mut number = Document::new();
@@ -585,7 +623,7 @@ impl SalesOrderRepository<'_> {
         if keyword.trim().is_empty() {
             return Ok(Vec::new());
         }
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        let mut filter = undeleted_condition();
         insert_literal_regex_filter(&mut filter, "order_no", Some(keyword));
         let rows = mongo_ops::find_many(
             &self.collection().clone_with_type::<SalesSearchId>(),
@@ -634,6 +672,21 @@ mod tests {
         assert_eq!(filter.page, 1);
         assert_eq!(filter.page_size, 20);
         assert!(filter.search.q.is_none());
+        assert_eq!(filter.view, SalesOrderListView::All);
+    }
+
+    #[test]
+    fn list_view_flags_fold_to_single_view_and_reject_both() {
+        assert_eq!(SalesOrderListView::from_flags(false, false).unwrap(), SalesOrderListView::All);
+        assert_eq!(SalesOrderListView::from_flags(true, false).unwrap(), SalesOrderListView::MyTodo);
+        assert_eq!(SalesOrderListView::from_flags(false, true).unwrap(), SalesOrderListView::ExceptionOnly);
+        assert!(SalesOrderListView::from_flags(true, true).is_err());
+
+        let mut filter = SalesOrderFilter::default();
+        filter.view = SalesOrderListView::MyTodo;
+        assert!(filter.to_doc().contains_key("$or"), "待我处理 OR 必须保留");
+        filter.view = SalesOrderListView::ExceptionOnly;
+        assert_eq!(filter.to_doc().get_str("review_status").unwrap(), "REJECTED");
     }
 
     #[test]
@@ -656,8 +709,7 @@ mod tests {
             created_from: Some(1_700_000_000),
             created_to: Some(1_800_000_000),
             created_by: Some("user-1".to_string()),
-            my_todo: false,
-            exception_only: false,
+            view: SalesOrderListView::All,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -706,8 +758,7 @@ mod tests {
             created_from: None,
             created_to: None,
             created_by: None,
-            my_todo: false,
-            exception_only: false,
+            view: SalesOrderListView::All,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -741,8 +792,7 @@ mod tests {
             created_from: None,
             created_to: None,
             created_by: None,
-            my_todo: false,
-            exception_only: false,
+            view: SalesOrderListView::All,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -796,8 +846,7 @@ mod keyword_regression_tests {
             created_from: None,
             created_to: None,
             created_by: None,
-            my_todo: false,
-            exception_only: false,
+            view: SalesOrderListView::All,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -810,7 +859,7 @@ mod keyword_regression_tests {
             contract_ids: vec!["contract-hit".into()],
         };
         filter.customer_id = Some("selected-customer".into());
-        filter.my_todo = true;
+        filter.view = SalesOrderListView::MyTodo;
         let query = filter.to_doc();
         assert_eq!(query.get_str("customer_id").unwrap(), "selected-customer");
         assert!(query.contains_key("$or"), "待我处理 OR 必须保留");

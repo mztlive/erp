@@ -59,16 +59,54 @@ impl Error {
     /// Stable error class used by HTTP mapping; do not parse display text.
     pub fn class(&self) -> ErrorClass {
         match self {
-            Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
-            Self::ConflictError(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_) => {
-                ErrorClass::Conflict
+            Self::Internal(_) | Self::Logic(_) => ErrorClass::Internal,
+            Self::RepositoryError(error) => persistence_error_class(error),
+            Self::ConflictError(_) => ErrorClass::Conflict,
+            Self::ReceiptDuplicate(error) | Self::TransientTransaction(error) => {
+                persistence_error_class(error)
             },
             Self::BusinessLogicError(_) | Self::ValidationError(_) | Self::NotFound(_) => {
                 ErrorClass::BusinessRule
             },
             Self::Forbidden(_) | Self::Unauthenticated(_) => ErrorClass::Forbidden,
-            Self::OutcomeUnknown(_) => ErrorClass::Internal,
+            Self::OutcomeUnknown(error) => persistence_error_class(error),
         }
+    }
+
+    /// 采购类型与创建依据不一致。
+    ///
+    /// # 返回
+    /// 返回依据不一致校验错误（文案与历史调用点一致）。
+    ///
+    /// # 错误
+    /// 本身即为错误值，不再失败。
+    pub fn basis_purchase_type_mismatch() -> Self {
+        Self::ValidationError("采购类型与创建依据不一致".to_string())
+    }
+
+    /// 付款条件与创建依据不一致。
+    ///
+    /// # 返回
+    /// 返回依据不一致校验错误（文案与历史调用点一致）。
+    ///
+    /// # 错误
+    /// 本身即为错误值，不再失败。
+    pub fn basis_payment_term_mismatch() -> Self {
+        Self::ValidationError("付款条件与创建依据不一致".to_string())
+    }
+
+    /// 采购预计交付日晚于销售承诺期限。
+    ///
+    /// # 参数
+    /// * `sales_due` - 销售对客户承诺的最晚交付日
+    ///
+    /// # 返回
+    /// 返回交付日越界校验错误（文案与历史调用点一致）。
+    ///
+    /// # 错误
+    /// 本身即为错误值，不再失败。
+    pub fn delivery_beyond_sales_due(sales_due: impl std::fmt::Display) -> Self {
+        Self::ValidationError(format!("预计交付日不能晚于销售承诺期限 {sales_due}"))
     }
 }
 
@@ -91,6 +129,22 @@ impl From<persistence_core::Error> for Error {
             error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
             other => Self::RepositoryError(other),
         }
+    }
+}
+
+/// 将持久化源错误映射为稳定错误分类（唯一分类入口）。
+///
+/// 唯一键冲突、乐观锁与瞬态事务冲突为可重试/冲突语义；未知提交结果与其它
+/// 仓储失败为内部错误。`Logic(erp_core::Error)` 不经过本函数：领域基元错误
+/// 无稳定分类（字符串负载或状态迁移），保持 `Internal`。
+/// 不新增错误变体：`web-api` 的 `boundary_error!` 按变体穷举映射，
+/// 新增变体会破坏其穷举性（该 crate 不在本组可改范围）。
+fn persistence_error_class(error: &persistence_core::Error) -> ErrorClass {
+    match error {
+        persistence_core::Error::DuplicateKey(_)
+        | persistence_core::Error::OptimisticLockingError
+        | persistence_core::Error::TransientTransactionConflict(_) => ErrorClass::Conflict,
+        _ => ErrorClass::Internal,
     }
 }
 
@@ -174,6 +228,38 @@ mod tests {
         let error = Error::from(persistence_core::Error::OptimisticLockingError);
         assert_eq!(error.class(), ErrorClass::Conflict);
         assert_eq!(error.to_string(), "数据冲突: 数据已被其他请求修改，请刷新后重试");
+    }
+
+    #[test]
+    fn persistence_wrappers_delegate_source_classification() {
+        let duplicate = persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key"));
+        assert_eq!(Error::ReceiptDuplicate(duplicate).class(), ErrorClass::Conflict);
+
+        let transient = persistence_core::Error::TransientTransactionConflict(MongoError::custom("t"));
+        assert_eq!(Error::TransientTransaction(transient).class(), ErrorClass::Conflict);
+
+        let unknown = persistence_core::Error::CommitOutcomeUnknown(MongoError::custom("u"));
+        assert_eq!(Error::OutcomeUnknown(unknown).class(), ErrorClass::Internal);
+
+        let database = persistence_core::Error::DatabaseError(MongoError::custom("db"));
+        assert_eq!(Error::RepositoryError(database).class(), ErrorClass::Internal);
+        let conflict_source = persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key"));
+        assert_eq!(Error::RepositoryError(conflict_source).class(), ErrorClass::Conflict);
+    }
+
+    #[test]
+    fn named_basis_constructors_keep_original_texts_and_classes() {
+        let type_mismatch = Error::basis_purchase_type_mismatch();
+        assert_eq!(type_mismatch.to_string(), "参数验证失败: 采购类型与创建依据不一致");
+        assert_eq!(type_mismatch.class(), ErrorClass::BusinessRule);
+
+        let term_mismatch = Error::basis_payment_term_mismatch();
+        assert_eq!(term_mismatch.to_string(), "参数验证失败: 付款条件与创建依据不一致");
+        assert_eq!(term_mismatch.class(), ErrorClass::BusinessRule);
+
+        let delivery = Error::delivery_beyond_sales_due("2026-10-31");
+        assert_eq!(delivery.to_string(), "参数验证失败: 预计交付日不能晚于销售承诺期限 2026-10-31");
+        assert_eq!(delivery.class(), ErrorClass::BusinessRule);
     }
 
     #[test]

@@ -10,7 +10,7 @@ use super::super::creation_basis::{
 use super::super::types::FulfillmentResponsibility;
 use super::assignment::{SourcingAssignment, SourcingAssignmentSet, SupplySourceType};
 use super::stock::{RequestedStockLine, StockAllocationPlan, StockBasisGroup, stock_basis_id_for};
-use crate::entity::facts::SalesOrderBasisFact as SalesOrder;
+use crate::entity::facts::SalesOrderBasisFact;
 
 /// 已归入一张采购单的选源计划。
 #[derive(Debug, Clone)]
@@ -68,7 +68,7 @@ impl SourcingPlan {
     /// 命令的合计不得突破同一份最新剩余量；本方法只基于当前快照校验，事务
     /// 内必须由调用方以最新依据再次验证。
     pub fn plan(
-        order: &SalesOrder,
+        order: &SalesOrderBasisFact,
         purchase_groups: &[BasisGroup],
         stock_groups: &[StockBasisGroup],
         work_item_id: &str,
@@ -236,7 +236,7 @@ impl SourcingPlan {
 /// # 关键业务约束
 /// 同一拆分维度的选源行合并为一张采购单；不同目标仓必须拆分。
 fn plan_sourcing_drafts(
-    order: &SalesOrder,
+    order: &SalesOrderBasisFact,
     groups: &[BasisGroup],
     work_item_id: &str,
     assignments: &SourcingAssignmentSet,
@@ -324,7 +324,7 @@ fn target_warehouse_for_assignment(
 /// # 关键业务约束
 /// 同一余额的选源行合并为一次预占；同一依据不得被重复分配。
 fn plan_stock_allocations(
-    order: &SalesOrder,
+    order: &SalesOrderBasisFact,
     groups: &[StockBasisGroup],
     work_item_id: &str,
     assignments: &SourcingAssignmentSet,
@@ -481,7 +481,7 @@ fn latest_stock_group<'a>(
 /// # 关键业务约束
 /// 不以供应商或 SKU 猜测路线，只接受当前开放任务生成的精确依据。
 fn find_assignment_group<'a>(
-    order: &SalesOrder,
+    order: &SalesOrderBasisFact,
     groups: &'a [BasisGroup],
     work_item_id: &str,
     assignment: &SourcingAssignment,

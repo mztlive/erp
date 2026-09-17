@@ -283,10 +283,12 @@ fn map_red_invoice_allocation_plan_error(error: RedInvoiceAllocationPlanError) -
 mod red_invoice_reversal_tests {
     use std::str::FromStr;
 
+    use application_core::ErrorClass;
     use erp_core::money::Amount;
 
-    use super::aggregate_reversal_deltas;
-    use crate::entity::receivable::RedInvoiceAllocationLine;
+    use super::{aggregate_reversal_deltas, map_red_invoice_allocation_plan_error};
+    use crate::Error;
+    use crate::entity::receivable::{RedInvoiceAllocationLine, RedInvoiceAllocationPlanError};
 
     fn line(account: &str, gross: &str) -> RedInvoiceAllocationLine {
         RedInvoiceAllocationLine {
@@ -319,5 +321,48 @@ mod red_invoice_reversal_tests {
     #[test]
     fn empty_plan_aggregates_to_empty() {
         assert!(aggregate_reversal_deltas(&[]).is_empty());
+    }
+
+    /// 领域红票规划错误到服务错误的分类与文案对照表（转译集中前先锁定）。
+    #[test]
+    fn plan_error_mapping_keeps_external_class_and_message() {
+        for (error, class, message) in [
+            (
+                RedInvoiceAllocationPlanError::SalesHistoricalOverReversal,
+                ErrorClass::BusinessRule,
+                "销项发票历史红冲累计超过原分配",
+            ),
+            (
+                RedInvoiceAllocationPlanError::PurchaseHistoricalOverReversal,
+                ErrorClass::BusinessRule,
+                "进项发票历史红冲累计超过原分配",
+            ),
+            (
+                RedInvoiceAllocationPlanError::NoRemainingAllocation,
+                ErrorClass::BusinessRule,
+                "原蓝票没有可红冲的有效分配",
+            ),
+            (
+                RedInvoiceAllocationPlanError::InvalidRequestedAmount,
+                ErrorClass::BusinessRule,
+                "红冲金额必须大于零且不超过原蓝票剩余有效分配",
+            ),
+        ] {
+            let mapped = map_red_invoice_allocation_plan_error(error);
+            assert_eq!(mapped.class(), class);
+            assert!(mapped.to_string().contains(message), "实际：{mapped}");
+        }
+        let uncovered =
+            map_red_invoice_allocation_plan_error(RedInvoiceAllocationPlanError::UncoveredRequest);
+        assert_eq!(uncovered.class(), ErrorClass::Internal);
+        assert!(matches!(uncovered, Error::Internal(_)));
+        assert!(uncovered.to_string().contains("红票反向分配计划未覆盖请求金额"));
+
+        let invalid = map_red_invoice_allocation_plan_error(RedInvoiceAllocationPlanError::InvalidAmount(
+            erp_core::Error::from("舍入溢出"),
+        ));
+        assert_eq!(invalid.class(), ErrorClass::Internal);
+        assert!(matches!(invalid, Error::Logic(_)));
+        assert!(invalid.to_string().contains("舍入溢出"));
     }
 }

@@ -212,7 +212,54 @@ impl ContractReadScope {
     }
 }
 
+/// 将请求客户与授权客户集合收窄为单一授权集合（交集收窄唯一入口）。
+///
+/// 真值表（`customer_id` × `customer_ids` → `narrowed`，历史合同不参与本函数，
+/// 由 [`authorization_document`] 并入读取条件）：
+///
+/// | 请求客户 | 授权集合 | 结果 |
+/// |---|---|---|
+/// | `None` | `None` | `None`（公司范围） |
+/// | `None` | `Some(ids)` | `Some(ids)`（含空集，空集保持空结果） |
+/// | `Some(id)` | `None` | `Some([id])` |
+/// | `Some(id)` | `Some(ids)` ∋ `id` | `Some([id])` |
+/// | `Some(id)` | `Some(ids)` ∌ `id` | `Some([])`（空结果，不退回全量） |
+///
+/// # 参数
+/// * `customer_id` - 调用方显式指定的单个客户；`None` 表示未指定
+/// * `customer_ids` - 授权客户集合；`None` 表示公司范围
+///
+/// # 返回
+/// 返回收窄后的授权集合；`None` 表示公司范围。
+pub fn narrow_authorized_customers(
+    customer_id: Option<&str>,
+    customer_ids: Option<&[String]>,
+) -> Option<Vec<String>> {
+    match (customer_id, customer_ids) {
+        (None, ids) => ids.map(Vec::from),
+        (Some(id), None) => Some(vec![id.to_string()]),
+        (Some(id), Some(ids)) => {
+            if ids.iter().any(|existing| existing == id) {
+                Some(vec![id.to_string()])
+            } else {
+                Some(Vec::new())
+            }
+        },
+    }
+}
+
 /// 将已证明的客户集合与历史合同编译为仓储条件。
+///
+/// 真值表（`narrowed` × `historical` → 文档；`narrowed` 由
+/// [`narrow_authorized_customers`] 唯一产生）：
+///
+/// | 授权集合 | 历史合同 | 结果 |
+/// |---|---|---|
+/// | `None` | 任意 | `{}`（恒真，公司范围） |
+/// | `Some([])` | 空 | `{"$expr": false}`（恒假） |
+/// | `Some(ids)` 非空 | 空 | `{"customer_id": {"$in": ids}}` |
+/// | `Some([])` | 非空 | `{"id": {"$in": history}}` |
+/// | `Some(ids)` 非空 | 非空 | `{"$or": [customer条件, 历史条件]}` |
 ///
 /// # 参数
 /// * `customer_ids` - 授权客户；`None` 表示公司范围
@@ -238,9 +285,7 @@ pub fn authorization_document(
         Some(customers) if historical_contract_ids.is_empty() => {
             doc! { "customer_id": { "$in": customers } }
         },
-        Some([]) => {
-            doc! { "id": { "$in": historical_contract_ids } }
-        },
+        Some([]) => doc! { "id": { "$in": historical_contract_ids } },
         Some(customers) => doc! {
             "$or": [
                 { "customer_id": { "$in": customers } },

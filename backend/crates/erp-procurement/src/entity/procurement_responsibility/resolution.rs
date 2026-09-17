@@ -9,7 +9,7 @@ use erp_core::{Error, Result};
 use super::rule::{
     ProcurementResponsibilityRule, ProcurementResponsibilityRuleType, normalize_service_region,
 };
-use crate::entity::facts::{IdentityOwnerFact as AccountCore, ProductKind};
+use crate::entity::facts::{IdentityOwnerFact, ProductKind};
 
 const LINE_KEY_MAX_LEN: usize = 128;
 const RESOLUTION_BATCH_MAX_LINES: usize = 200;
@@ -118,7 +118,7 @@ impl EligibleProcurementOwner {
     ///
     /// # 错误
     /// 账号不可登录或不是后台管理员时返回错误。
-    pub fn from_account(account: &AccountCore) -> Result<Self> {
+    pub fn from_account(account: &IdentityOwnerFact) -> Result<Self> {
         if !account.can_login || !account.is_admin {
             return Err(Error::from("采购负责人必须为可登录后台账号"));
         }
@@ -397,7 +397,7 @@ mod tests {
     use erp_core::ids::ProcurementResponsibilityRuleId;
 
     use super::*;
-    use crate::entity::facts::{IdentityOwnerFact as AccountCore, ProductKind};
+    use crate::entity::facts::{IdentityOwnerFact, ProductKind};
     use crate::entity::procurement_responsibility::{EnableStatus, ProcurementResponsibilityRuleData};
 
     fn rule(
@@ -435,8 +435,10 @@ mod tests {
         .unwrap()
     }
 
-    fn owner_account(can_login: bool) -> AccountCore {
-        AccountCore { id: "owner-1".to_string(), name: "采购员".to_string(), can_login, is_admin: true }
+    fn owner_account(can_login: bool) -> IdentityOwnerFact {
+        IdentityOwnerFact {
+            id: "owner-1".to_string(), name: "采购员".to_string(), can_login, is_admin: true
+        }
     }
 
     #[test]

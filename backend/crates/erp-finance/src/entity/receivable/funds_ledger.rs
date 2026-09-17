@@ -10,9 +10,10 @@ use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerReceiptId, ReceiptAllocationId, ReceivableAccountId};
 use erp_core::{Error, Result};
 
-use super::allocation_amount::{checked_add_amount, checked_sub_amount, net_receipt_allocated, zero_amount};
+use super::allocation_amount::net_receipt_allocated;
 use super::{
     AllocationAction, PendingReceiptAllocation, ReceiptAllocation, ReceiptAllocationData, ReceivableEntry,
+    checked_add_amount, checked_sub_amount, zero_amount,
 };
 
 /// 回款核销账本：按冻结待过账行完成净额、余额、序号与实体构造。

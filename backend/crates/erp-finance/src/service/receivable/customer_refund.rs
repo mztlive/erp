@@ -7,7 +7,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::receipt_reversal::{OffsetFacts, load_receivable_offset_facts};
+use super::receipt_reversal::load_receivable_offset_facts;
 use crate::entity::receivable::{
     AllocationAction as ReceivableAllocationAction, CustomerReceipt, CustomerReceiptStatus,
     EntryDirection as ReceivableEntryDirection, ReceiptAllocation, ReceiptAllocationData,
@@ -15,6 +15,7 @@ use crate::entity::receivable::{
     ReceivableEntryOffsetData, ReceivableEntryType,
 };
 use crate::repository::ReceivableExt;
+use crate::service::offset_index::OffsetFacts;
 use crate::{Error, Result};
 /// 客户退款实际消费的财务仓储边界；生产算法保持全部事实构造时点。
 #[async_trait]

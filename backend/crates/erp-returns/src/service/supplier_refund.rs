@@ -8,7 +8,7 @@ use persistence_core::Executor;
 
 use super::ReturnsService;
 use super::approval::ensure_supplier_refund_final_approve_posting;
-use super::shared::return_command_no;
+use super::shared::{DEFAULT_FINANCE_REVIEWER, SUPPLIER_REFUND_COMMAND_PREFIX, return_command_no};
 use crate::dto::{CommitSupplierRefundRequest, CreateSupplierRefundRequest};
 use crate::entity::returns::{
     CumulativeAmountLimit, SupplierRefund, SupplierRefundData, SupplierRefundStatus,
@@ -58,7 +58,7 @@ pub fn new_supplier_refund_commit(
     let result = SupplierRefund::new(
         SupplierRefundId::new(next_id()),
         SupplierRefundData {
-            refund_no: return_command_no("GTK", actor_id, &req.idempotency_key),
+            refund_no: return_command_no(SUPPLIER_REFUND_COMMAND_PREFIX, actor_id, &req.idempotency_key),
             purchase_return_order_id: None,
             supplier_id: source.supplier_id.clone(),
             original_payment_id: Some(source.payment_id.clone()),
@@ -67,7 +67,7 @@ pub fn new_supplier_refund_commit(
             reason_text: req.reason.clone(),
             amount: req.amount.unwrap_or(source.amount),
             handled_by: actor_id.to_string(),
-            reviewed_by: "finance_reviewer".to_string(),
+            reviewed_by: DEFAULT_FINANCE_REVIEWER.to_string(),
             occurred_at: Instant::now(),
             evidence_attachment_id: None,
         },

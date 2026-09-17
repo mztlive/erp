@@ -10,8 +10,59 @@ use crate::dto::sales_selection::{
 use crate::entity::sales_selection::{
     BookletStatus, DisplayKind, SalesSelectionBooklet, SalesSelectionDisplayItem, SalesSelectionPrepareTask,
     SalesSelectionProposal, SalesSelectionProposalDisplayLine, SalesSelectionProposalSkuLine,
-    SalesSelectionSession, SkuSnapshot, TierSearchReport, abs_diff,
+    SalesSelectionSession, SelectionForm, SkuSnapshot, SubmitMode, TierSearchReport, abs_diff,
 };
+
+/// 两处选品册视图共用的表头字段组（新旧兼容双字段由本结构一次搬运）。
+struct BookletHead {
+    /// 身份（`id` 与兼容字段 `book_id` 同值）。
+    id: String,
+    /// 版本。
+    version: u64,
+    /// 客户。
+    customer_id: String,
+    /// 客户名称。
+    customer_name: String,
+    /// 显式销售负责人。
+    sales_owner_user_id: String,
+    /// 业务组织。
+    business_org_unit_id: String,
+    /// 形态（`form` 与兼容字段 `selection_form` 同值）。
+    form: SelectionForm,
+    /// 提交方式。
+    submit_mode: SubmitMode,
+    /// 状态。
+    status: BookletStatus,
+}
+
+/// 一次搬运两处视图共用的选品册表头（含新旧兼容双字段）。
+fn booklet_head(booklet: &SalesSelectionBooklet) -> BookletHead {
+    BookletHead {
+        id: booklet.base.id.clone(),
+        version: booklet.base.version,
+        customer_id: booklet.customer_id.to_string(),
+        customer_name: booklet.customer_name.clone(),
+        sales_owner_user_id: booklet.sales_owner_user_id.clone(),
+        business_org_unit_id: booklet.business_org_unit_id.clone(),
+        form: booklet.form,
+        submit_mode: booklet.submit_mode,
+        status: booklet.status,
+    }
+}
+
+/// 单遍统计陈列计数（可展示数、已删数、缺图数）。
+///
+/// 一次遍历同时累加三个计数；缺图仅统计可展示且无封面资产的行。
+fn booklet_item_counts(items: &[SalesSelectionDisplayItem]) -> (u32, u32, u32) {
+    items.iter().fold((0, 0, 0), |(display, removed, missing_image), item| {
+        let publishable = item.is_publishable();
+        (
+            display + u32::from(publishable),
+            removed + u32::from(item.removed),
+            missing_image + u32::from(publishable && item.cover_asset_id().is_none()),
+        )
+    })
+}
 
 impl SalesSelectionService {
     /// 映射列表行。
@@ -25,18 +76,19 @@ impl SalesSelectionService {
     /// # 错误
     /// 无。
     pub fn booklet_list_item(booklet: &SalesSelectionBooklet) -> SalesSelectionBookletListItemView {
+        let head = booklet_head(booklet);
         SalesSelectionBookletListItemView {
-            id: booklet.base.id.clone(),
-            book_id: booklet.base.id.clone(),
-            version: booklet.base.version,
-            customer_id: booklet.customer_id.to_string(),
-            customer_name: booklet.customer_name.clone(),
-            sales_owner_user_id: booklet.sales_owner_user_id.clone(),
-            business_org_unit_id: booklet.business_org_unit_id.clone(),
-            form: booklet.form,
-            selection_form: booklet.form,
-            submit_mode: booklet.submit_mode,
-            status: booklet.status,
+            book_id: head.id.clone(),
+            id: head.id,
+            version: head.version,
+            customer_id: head.customer_id,
+            customer_name: head.customer_name,
+            sales_owner_user_id: head.sales_owner_user_id,
+            business_org_unit_id: head.business_org_unit_id,
+            selection_form: head.form,
+            form: head.form,
+            submit_mode: head.submit_mode,
+            status: head.status,
             proposal_id: booklet.proposal_id.as_ref().map(ToString::to_string),
             created_at: booklet.base.created_at,
         }
@@ -61,26 +113,23 @@ impl SalesSelectionService {
         task: Option<&SalesSelectionPrepareTask>,
         public_path: Option<String>,
     ) -> SalesSelectionBookletView {
-        let display_count = items.iter().filter(|item| item.is_publishable()).count() as u32;
-        let removed_count = items.iter().filter(|item| item.removed).count() as u32;
-        let missing_image_count =
-            items.iter().filter(|item| item.is_publishable() && item.cover_asset_id().is_none()).count()
-                as u32;
+        let (display_count, removed_count, missing_image_count) = booklet_item_counts(items);
+        let head = booklet_head(booklet);
         SalesSelectionBookletView {
             pool_filter: booklet.pool_source.filter.clone(),
             sku_ids: booklet.pool_source.sku_ids.iter().flatten().map(ToString::to_string).collect(),
-            id: booklet.base.id.clone(),
-            book_id: booklet.base.id.clone(),
-            version: booklet.base.version,
-            customer_id: booklet.customer_id.to_string(),
-            customer_name: booklet.customer_name.clone(),
-            sales_owner_user_id: booklet.sales_owner_user_id.clone(),
+            book_id: head.id.clone(),
+            id: head.id,
+            version: head.version,
+            customer_id: head.customer_id,
+            customer_name: head.customer_name,
+            sales_owner_user_id: head.sales_owner_user_id,
             sales_owner_name: None,
-            business_org_unit_id: booklet.business_org_unit_id.clone(),
-            form: booklet.form,
-            selection_form: booklet.form,
-            submit_mode: booklet.submit_mode,
-            status: booklet.status,
+            business_org_unit_id: head.business_org_unit_id,
+            selection_form: head.form,
+            form: head.form,
+            submit_mode: head.submit_mode,
+            status: head.status,
             pool_source_kind: booklet.pool_source.kind,
             source_kind: booklet.pool_source.kind,
             tiers: booklet.tiers.clone(),
@@ -137,29 +186,8 @@ impl SalesSelectionService {
             submitted_at: proposal.submitted_at,
             source: proposal.source,
             total_amount: proposal.total_amount,
-            display_lines: display_lines
-                .iter()
-                .map(|line| ProposalDisplayLineView {
-                    display_item_id: line.display_item_id.to_string(),
-                    tier_id: line.tier_id.clone(),
-                    quantity: line.quantity,
-                    unit_price: line.unit_price,
-                    line_amount: line.line_amount,
-                    cover_asset_id: line.cover_asset_id.clone(),
-                })
-                .collect(),
-            sku_lines: sku_lines
-                .iter()
-                .map(|line| ProposalSkuLineView {
-                    display_item_id: line.display_item_id.to_string(),
-                    name: line.name.clone(),
-                    specification: line.specification.clone(),
-                    unit: line.unit.clone(),
-                    quantity: line.quantity,
-                    unit_price: line.unit_price,
-                    line_amount: line.line_amount,
-                })
-                .collect(),
+            display_lines: display_lines.iter().map(proposal_display_line_view).collect(),
+            sku_lines: sku_lines.iter().map(proposal_sku_line_view).collect(),
         }
     }
 
@@ -244,6 +272,49 @@ impl SalesSelectionService {
             total_amount: None,
             receipt,
         }
+    }
+}
+
+/// 映射方案陈列行。
+///
+/// # 参数
+/// * `line` - 方案陈列行
+///
+/// # 返回
+/// 返回行视图。
+///
+/// # 错误
+/// 无。
+fn proposal_display_line_view(line: &SalesSelectionProposalDisplayLine) -> ProposalDisplayLineView {
+    ProposalDisplayLineView {
+        display_item_id: line.display_item_id.to_string(),
+        tier_id: line.tier_id.clone(),
+        quantity: line.quantity,
+        unit_price: line.unit_price,
+        line_amount: line.line_amount,
+        cover_asset_id: line.cover_asset_id.clone(),
+    }
+}
+
+/// 映射方案 SKU 行。
+///
+/// # 参数
+/// * `line` - 方案 SKU 行
+///
+/// # 返回
+/// 返回行视图。
+///
+/// # 错误
+/// 无。
+fn proposal_sku_line_view(line: &SalesSelectionProposalSkuLine) -> ProposalSkuLineView {
+    ProposalSkuLineView {
+        display_item_id: line.display_item_id.to_string(),
+        name: line.name.clone(),
+        specification: line.specification.clone(),
+        unit: line.unit.clone(),
+        quantity: line.quantity,
+        unit_price: line.unit_price,
+        line_amount: line.line_amount,
     }
 }
 

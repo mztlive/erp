@@ -7,7 +7,9 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+};
 
 use crate::entity::sales_selection::{
     SalesSelectionBooklet, SalesSelectionDisplayItem, SalesSelectionIdempotency, SalesSelectionPoolMember,
@@ -15,6 +17,7 @@ use crate::entity::sales_selection::{
     SalesSelectionProposalSkuLine, SalesSelectionSession,
 };
 use crate::repository::extensions::SalesSelectionExt;
+use crate::repository::filter::push_undeleted;
 
 pub mod scope;
 
@@ -95,7 +98,7 @@ impl QueryFilter for SelectionBookFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut and: Vec<Document> = Vec::new();
-        and.push(doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON });
+        push_undeleted(&mut and);
         and.push(self.authorized_scope.document());
         if let Some(ids) = &self.authorized_customer_ids {
             and.push(doc! { "customer_id": { "$in": ids } });
@@ -120,7 +123,7 @@ impl QueryFilter for SelectionBookFilter {
             filter.insert("submit_mode", mode.as_str());
         }
         if let Some(q) = self.q.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
-            filter.insert("customer_name", doc! { "$regex": regex_escape(q), "$options": "i" });
+            insert_literal_regex_filter(&mut filter, "customer_name", Some(q));
         }
         filter
     }
@@ -164,7 +167,7 @@ impl QueryFilter for SelectionProposalFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut and: Vec<Document> = Vec::new();
-        and.push(doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON });
+        push_undeleted(&mut and);
         and.push(self.authorized_scope.document());
         if let Some(ids) = &self.authorized_customer_ids {
             and.push(doc! { "customer_id": { "$in": ids } });
@@ -216,27 +219,6 @@ pub fn validate_book_sort(sort_by: Option<&str>, sort_ascending: bool) -> crate:
         return Ok((field.to_string(), sort_ascending));
     }
     Err(crate::Error::ValidationError(format!("不支持的排序字段: {field}")))
-}
-
-/// 转义正则特殊字符，避免关键字被当作模式。
-///
-/// # 参数
-/// * `value` - 原始关键字
-///
-/// # 返回
-/// 返回可安全用于 `$regex` 的字面量。
-///
-/// # 错误
-/// 无。
-fn regex_escape(value: &str) -> String {
-    let mut escaped = String::with_capacity(value.len());
-    for ch in value.chars() {
-        if matches!(ch, '.' | '+' | '*' | '?' | '^' | '$' | '(' | ')' | '[' | ']' | '{' | '}' | '|' | '\\') {
-            escaped.push('\\');
-        }
-        escaped.push(ch);
-    }
-    escaped
 }
 
 /// 合并并集条件；空集合返回恒假，缺范围不得变全量。

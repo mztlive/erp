@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
 
-use crate::entity::facts::AuditReceiptFact as AuditLog;
+use crate::entity::facts::AuditReceiptFact;
 
 /// 收据消息的前缀；历史持久化形态，禁止变更。
 const COMMAND_FINGERPRINT_PREFIX: &str = "command_sha256=";
@@ -312,7 +312,7 @@ impl<T: PurchaseReceiptWire> PurchaseCommandReceipt<T> {
     /// 必须先校验身份，再比较指纹，最后解码结果；指纹不一致时不得读取结果载荷，
     /// 避免同键异载荷回放旧结果。
     pub fn decode(
-        audit: &AuditLog,
+        audit: &AuditReceiptFact,
         expected_actor_id: &str,
         expected_action: &str,
         expected_target_id: Option<&str>,
@@ -407,7 +407,7 @@ mod tests {
         LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseReceiptWire,
         digest_parts, payload_fingerprint,
     };
-    use crate::entity::facts::AuditReceiptFact as AuditLog;
+    use crate::entity::facts::AuditReceiptFact;
 
     /// 标准 JSON 形态的测试结果载荷。
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -456,8 +456,8 @@ mod tests {
     ///
     /// # 错误
     /// 测试数据固定有效，不返回错误。
-    fn audit_data(message: Option<String>) -> AuditLog {
-        AuditLog {
+    fn audit_data(message: Option<String>) -> AuditReceiptFact {
+        AuditReceiptFact {
             actor_id: "actor-1".to_string(),
             action: "purchase_order.update".to_string(),
             resource_type: "purchase_order".to_string(),
@@ -477,7 +477,7 @@ mod tests {
     ///
     /// # 错误
     /// 测试数据固定有效，不返回错误。
-    fn audit_fixture(message: String) -> AuditLog {
+    fn audit_fixture(message: String) -> AuditReceiptFact {
         audit_data(Some(message))
     }
 
@@ -916,7 +916,8 @@ mod tests {
         .encode_message()
         .unwrap();
 
-        let wrong_actor = AuditLog { actor_id: "actor-2".to_string(), ..audit_data(Some(message.clone())) };
+        let wrong_actor =
+            AuditReceiptFact { actor_id: "actor-2".to_string(), ..audit_data(Some(message.clone())) };
         assert_eq!(
             PurchaseCommandReceipt::<TestReceipt>::decode(
                 &wrong_actor,
@@ -948,7 +949,7 @@ mod tests {
             Err(PurchaseCommandReceiptError::IdentityMismatch)
         );
 
-        let failed = AuditLog { success: false, ..audit_data(Some(message)) };
+        let failed = AuditReceiptFact { success: false, ..audit_data(Some(message)) };
         assert_eq!(
             PurchaseCommandReceipt::<TestReceipt>::decode(
                 &failed,
