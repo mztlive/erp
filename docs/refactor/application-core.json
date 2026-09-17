@@ -1,0 +1,177 @@
+{
+  "crate": "application-core",
+  "generated_at": "2026-09-17",
+  "source": "只读重构分析，不改变功能行为",
+  "stats": {
+    "file_count": 8,
+    "approx_loc": 1007,
+    "largest_files": [
+      "src/command.rs",
+      "src/query.rs",
+      "src/owned_task.rs"
+    ]
+  },
+  "top3": [
+    "长度前缀哈希逻辑重复：统一from_parts与legacy_digest_parts的哈希内核，消除指纹漂移风险",
+    "match_fact职责过多：拆分身份校验与指纹比对，明确Corrupted与DifferentPayload语义",
+    "指纹藏于自由文本消息：收据指纹结构化承载，避免分号拼接解析脆弱性"
+  ],
+  "items": [
+    {
+      "id": "application-core-001",
+      "file": "src/command.rs",
+      "lines": "19-27,418-425",
+      "category": "重复",
+      "severity": "高",
+      "title": "长度前缀哈希逻辑重复",
+      "current": "CommandFingerprint::from_parts与legacy_digest_parts各自实现长度前缀SHA-256循环，仅输出包装不同。",
+      "proposal": "抽取共享长度前缀哈希内核，版本化与历史路径只做薄包装。",
+      "status": "pending",
+      "updated_at": "2026-09-17",
+      "note": ""
+    },
+    {
+      "id": "application-core-002",
+      "file": "src/command.rs",
+      "lines": "348-375",
+      "category": "复杂度",
+      "severity": "高",
+      "title": "match_fact职责过多",
+      "current": "match_fact单方法内做候选ID包含检查、成功标志、身份比对、消息前缀解析与新旧指纹分支判断。",
+      "proposal": "拆分为身份校验、指纹提取、指纹比对三个私有步骤，主方法只做编排。",
+      "status": "pending",
+      "updated_at": "2026-09-17",
+      "note": ""
+    },
+    {
+      "id": "application-core-003",
+      "file": "src/command.rs",
+      "lines": "341-375",
+      "category": "类型建模",
+      "severity": "高",
+      "title": "指纹藏于自由文本消息",
+      "current": "收据指纹以command_fingerprint=前缀拼入自由文本message，靠分号切分与strip_prefix解析回读。",
+      "proposal": "用结构化字段承载指纹与说明文本，message只做展示拼接。",
+      "status": "pending",
+      "updated_at": "2026-09-17",
+      "note": ""
+    },
+    {
+      "id": "application-core-004",
+      "file": "src/command.rs",
+      "lines": "237-316",
+      "category": "重复",
+      "severity": "中",
+      "title": "双构造入口键校验重复",
+      "current": "from_payload与from_resource_parts重复实现幂等键trim与空值拒绝，以及CommandIdentity组装模式。",
+      "proposal": "抽取键规范化与身份构造helper，两入口复用。",
+      "status": "pending",
+      "updated_at": "2026-09-17",
+      "note": ""
+    },
+    {
+      "id": "application-core-005",
+      "file": "src/command.rs",
+      "lines": "349-356",
+      "category": "错误处理",
+      "severity": "中",
+      "title": "Corrupted语义过载",
+      "current": "身份不符、success为false、消息缺失统一返回Corrupted，调用方无法区分重试与数据损坏。",
+      "proposal": "为未成功回放与身份不符定义独立分类，Corrupted只保留形态损坏。",
+      "status": "pending",
+      "updated_at": "2026-09-17",
+      "note": ""
+    },
+    {
+      "id": "application-core-006",
+      "file": "src/page.rs",
+      "lines": "1-26",
+      "category": "类型建模",
+      "severity": "中",
+      "title": "双分页信封并存易混",
+      "current": "Page与query.rs的PageView两套分页信封并存，FilteredPage又flatten其中之一，调用方易选错。",
+      "proposal": "明确两信封适用边界，长期收敛为单一信封并标注弃用方向。",
+      "status": "pending",
+      "updated_at": "2026-09-17",
+      "note": ""
+    },
+    {
+      "id": "application-core-007",
+      "file": "src/error.rs",
+      "lines": "1-31",
+      "category": "错误处理",
+      "severity": "中",
+      "title": "错误变体与分类未对齐",
+      "current": "Error仅有Internal与ValidationError两变体，ErrorClass却定义四分类，冲突与权限映射散落上层。",
+      "proposal": "补齐错误变体与ErrorClass的映射关系，统一上层转换入口。",
+      "status": "pending",
+      "updated_at": "2026-09-17",
+      "note": ""
+    },
+    {
+      "id": "application-core-008",
+      "file": "src/command.rs",
+      "lines": "249-270,294-311",
+      "category": "边界分层",
+      "severity": "中",
+      "title": "历史兼容常驻核心合同",
+      "current": "历史身份与无版本指纹的兼容候选逻辑与核心v1路径交织在同一构造方法内。",
+      "proposal": "将历史兼容下沉为独立版本适配模块，核心路径只保留v1语义。",
+      "status": "pending",
+      "updated_at": "2026-09-17",
+      "note": ""
+    },
+    {
+      "id": "application-core-009",
+      "file": "src/command.rs",
+      "lines": "87-90",
+      "category": "性能隐患",
+      "severity": "低",
+      "title": "candidates高频克隆分配",
+      "current": "candidates每次调用克隆全部ID生成Vec，match_fact仅为contains检查即分配一次。",
+      "proposal": "提供contains式查询或迭代器视图，避免纯检查场景分配。",
+      "status": "pending",
+      "updated_at": "2026-09-17",
+      "note": ""
+    },
+    {
+      "id": "application-core-010",
+      "file": "src/command.rs",
+      "lines": "30-48",
+      "category": "错误处理",
+      "severity": "低",
+      "title": "digest_hex用expect断言",
+      "current": "digest_hex用expect假设前缀必然存在，parse静默将摘要转小写归一化。",
+      "proposal": "digest_hex改为返回Option或debug断言，大小写归一化策略写入文档显式声明。",
+      "status": "pending",
+      "updated_at": "2026-09-17",
+      "note": ""
+    },
+    {
+      "id": "application-core-011",
+      "file": "src/owned_task.rs",
+      "lines": "16-50",
+      "category": "测试性",
+      "severity": "低",
+      "title": "await_owned错误界耦合",
+      "current": "await_owned要求E同时满足From<Error>与Display，通用辅助与本crate错误类型耦合，单测需真实tokio运行时。",
+      "proposal": "收窄泛型约束或分离映射层，使转换逻辑可独立单测。",
+      "status": "pending",
+      "updated_at": "2026-09-17",
+      "note": ""
+    },
+    {
+      "id": "application-core-012",
+      "file": "src/query.rs",
+      "lines": "15-35",
+      "category": "可读性",
+      "severity": "低",
+      "title": "排序默认值隐式约定",
+      "current": "默认排序字段created_at硬编码且不在白名单校验内，sort_dir缺省静默降序，调用方不易察觉。",
+      "proposal": "将默认排序声明为具名常量并在文档显式说明缺省方向。",
+      "status": "pending",
+      "updated_at": "2026-09-17",
+      "note": ""
+    }
+  ]
+}
