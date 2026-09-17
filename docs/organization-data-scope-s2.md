@@ -4,7 +4,7 @@
 
 实施日期：2026-09-13
 
-修订日期：2026-09-16
+修订日期：2026-09-17（仅同步 S3 已完成后的交叉引用，不改变 S2 退出结论）
 
 完成度口径：S2“已完成”按主合同 v1.3 口径核销，不受真实验收阻塞；生产业务验收、生产规模验证统一转第 10 章上线准入跟踪。§6.1—§6.13 中的“不得登记已完成”仅描述该节时点，不追溯阻塞当前已完成状态。
 
@@ -16,7 +16,7 @@
 2. 当前代码包含组织与范围后端基础、组织接口、S1 四类资源 v2 接入、销售和采购业务组织采集及销售生效快照。任务消费者已迁移到公共解析 Port，种子业务账号三行验收（§6.5／§6.13／§6.14／§8.3）与浏览器真实账号验收（§6.14、导出下载 §6.15）均已通过，S2 核销。
 3. 本批代码不得作为正式业务上线依据（正式开放限制，不阻塞 S2 已完成）。禁止将单个领域编译或单元测试通过登记为“已验收”或部门数据隔离、任务资格、导出撤权保证已经验收通过。
 4. 首次业务开放继续执行上位合同第 10 章；不回填旧业务数据，不提供旧范围版本兼容读取。
-5. 功能接入与架构符合性必须分别登记。客户已接入的查询、版本与写入校验不得登记为尚未实施；其跨域直连整改已完成，公共单对象判定和条件等价性已分别验证，其中 A34 真实库等价已按 §6.6 执行，A36 解析层已按 §6.7 核销。S2 范围内工作流／工作台消费者已迁移（S2-05／S2-10／S2-13）。S3／S4 尚未接入的资源列为待接入项，不得归因为本批接入错误，也不得将 S2 核销视为这些资源已接入。
+5. 功能接入与架构符合性必须分别登记。客户已接入的查询、版本与写入校验不得登记为尚未实施；其跨域直连整改已完成，公共单对象判定和条件等价性已分别验证，其中 A34 真实库等价已按 §6.6 执行，A36 解析层已按 §6.7 核销。S2 范围内工作流／工作台消费者已迁移（S2-05／S2-10／S2-13）。S3 已按 S3 合同接入并核销阶段退出；S4 尚未接入的资源列为待接入项，不得归因为本批接入错误，也不得将 S2 核销视为 S3／S4 资源已接入。
 
 ## 2. 已实施的后端规则
 
@@ -28,7 +28,7 @@
 | 预览、提交与审计 | `erp-identity/src/service/organization.rs` | 共用状态校验；提交独立重验权限、版本与未结业务；回执记录操作人、原因和前后值；不改派任务 |
 | DataScope v2 模型 | `erp-identity/src/entity/access_control/{data_scope,scope_binding}.rs` | 必需版本、资源、动作与目标维度；动态模式只适用于内部组织；禁止目标通配符和显示名身份 |
 | 范围集合解析 | `erp-identity/src/entity/access_control/resolved_scope.rs` | 同角色授权、逐维求交、角色并集与个人上限分别保留；合法历史参与仍受个人上限限制 |
-| 应用解析入口 | `erp-identity/src/service/access_control/resolve.rs` | 复用现有账号、角色、RBAC policy 版本；缺动作拒绝、缺范围保持空集；S2 范围内消费者已替换；S3／S4 未接入资源不得将 v2 配置作为已生效授权 |
+| 应用解析入口 | `erp-identity/src/service/access_control/resolve.rs` | 复用现有账号、角色、RBAC policy 版本；缺动作拒绝、缺范围保持空集；S2 范围内消费者已替换；S3 已接入资源按 S3 合同登记；S4 未接入资源不得将 v2 配置作为已生效授权 |
 | 范围配置写入 | `erp-identity/src/service/access_control/mod.rs` | 同角色证明组织配置及范围配置动作；写入和审计在同一事务推进 policy 版本 |
 | 显式初始化 | `erp-identity/src/service/iam/predefined_data_scopes.rs` | 按角色、资源、动作列出规则；保留已有配置及软删除留痕；取消缺范围补 Company 的初始化逻辑；清单与消费者准入仍须按 S2-13 同步，不得将列入清单视为已接入 |
 | 组织与范围索引 | `erp-identity/src/indexes.rs` | 新增组织集合身份与有效期索引；范围按稳定 ID 唯一，取消旧主体与范围类型唯一约束 |
@@ -68,26 +68,26 @@
 | S2-13 | 资源动作接入登记、适用维度、配置与初始化准入、旧消费者阻断及架构门禁 | 配置、解析与初始化已共用 `consumers::registration`／`validate_binding`；初始化在 I/O 前校验主体、资源、全部动作和维度，事务内重查撤销留痕并推进策略版本。消费者登记已独立于种子清单；工作流／工作台旧读取器已清理，新增动作已同步配置、解析与初始化准入；静态总门禁零阻断。不得以静态通过替代 A35 的逐入口业务验收；本项完成 |
 
 1. S2-01—S2-13 的全部适用要求已完成（S2-09 未建设入口按不适用登记），本阶段状态为“已完成”。S2-09 中未建设的入口按不适用登记，不作为 S2 未完成项，也不得登记为已实施或已验收。
-2. S2 不包含 S3 的销售责任交接与验收责任来源切换；不得因本批增加业务组织字段而开放销售改派命令。
+2. S2 不包含销售责任交接与验收责任来源切换；不得因本批增加业务组织字段而开放销售改派命令。S3-07 已按 S3 合同实施交接命令并核销本地检查；本条只约束 S2 批次，不表示交接仍未建设。
 3. 不得将未接入资源登记为首发资源。已注册或已初始化 v2 规则不构成业务入口已经正确消费这些规则的证据。
 
 ### 4.1 公共解析接入登记
 
-本表按 S2 核销基线 `3c4ed851` 登记已知接入位置；S2 适用缺口已关闭。属于服务端静态登记，不是可配置或上线放行清单。S3／S4 新增资源仍须按上位合同第 9.5 节补齐逐资源动作、必需维度、历史参与动作及全部适用入口，不得只登记资源名称。
+本表按 S2 核销基线 `3c4ed851` 登记已知接入位置；S2 适用缺口已关闭。属于服务端静态登记，不是可配置或上线放行清单。S3 新增资源已按 S3 合同第 6 章补登记；S4 新增资源仍须按上位合同第 9.5 节补齐逐资源动作、必需维度、历史参与动作及全部适用入口，不得只登记资源名称。
 
 | 资源／消费方 | 已有公共解析与对象映射 | Port／adapter 状态 | 必须关闭的缺口 |
 | --- | --- | --- | --- |
 | 身份域组织与范围 | `erp-identity/src/service/access_control/resolve.rs`；`entity/access_control/resolved_scope.rs` | 身份域内部调用无需跨域 Port | S2-13 已完成资源维度与准入登记；公共判定与条件编译基准已按 §6.6／§6.7 核销。后续资源仍须按第 9.5 节补登记 |
 | 客户 | `erp-customer/src/service/customer/{access,scope}.rs`；`ports/data_scope.rs`；`repository/scope.rs` | `CustomerDataScopePort` 已定义；生产 adapter `erp-processes/src/adapters/customer_data_scope.rs` 调用 `DataScopeService` | S2-12 已完成：A36 解析层见 §6.7；A34 真实库等价已按 §6.6 执行；同事务和时点的窄组织事实已由 Port 暴露；列表／详情／候选／导出／命令共同验证已按 §6.14（种子业务）／§6.15（导出下载）核销 |
-| 销售及关联成本 | `erp-read-models/src/sales_center/access.rs` 调用公共入口，销售 Repository 编译对象条件；命令由 `erp-processes/src/order_to_cash/authorization.rs` 复用；变更单由 `erp-processes/src/sales_change` 沿原单重验 | 命名组合用例可调用身份域；不得据此要求业务域反向依赖组合层 | S2-10 已完成；销售／成本新增入口按 S3 第 6 章核对公共判定、条件等价、事务与动作 |
+| 销售及关联成本 | `erp-read-models/src/sales_center/access.rs` 调用公共入口，销售 Repository 编译对象条件；命令由 `erp-processes/src/order_to_cash/authorization.rs` 复用；变更单由 `erp-processes/src/sales_change` 沿原单重验 | 命名组合用例可调用身份域；不得据此要求业务域反向依赖组合层 | S2-10 已完成；销售／成本新增入口已按 S3 第 6 章核销本地检查（真实验收转跟踪） |
 | 合同／采购 | 合同：`erp-contract/src/service/contract/{access,scope,query}.rs`；`ports/data_scope.rs`；`repository/scope.rs`。采购：`erp-procurement/src/service/purchase_order/access.rs`；`ports/data_scope.rs`；`repository/purchase_order/scope.rs`；读模型与变更／退货入口映射当前采购负责人和 `business_org_unit_id` | 合同 `ContractDataScopePort` 已定义；生产 adapter `erp-processes/src/adapters/contract_data_scope.rs` 调用 `DataScopeService`。采购 `PurchaseDataScopePort` 已定义；生产 adapter `erp-processes/src/adapters/purchase_data_scope.rs` 调用 `DataScopeService` | S2-13；A34 真实库等价已按 §6.6 执行，A36 解析层见 §6.7，种子业务与浏览器真实账号见 §6.14，代表性业务数据见 §6.15；接入前拒绝将初始化目录作为授权生效依据；本项完成 |
-| 工作台／工作流 | `WorkflowAuthorizationPort` → `erp-processes/src/adapters/workflow/{authorization,task_scope,approval_scope,approval_objects,order_access}.rs` | Port 只返回已解析范围及强业务对象事实；生产 adapter 调用 `DataScopeService`，保留调用方 Executor | S2-05／S2-10／S2-13 已完成（当前负责人管理范围、审批各动作独立解析及订单独立读取）；S3-04 履约／工作台业务功能与 S3-07 责任交接仍单独执行 |
+| 工作台／工作流 | `WorkflowAuthorizationPort` → `erp-processes/src/adapters/workflow/{authorization,task_scope,approval_scope,approval_objects,order_access}.rs` | Port 只返回已解析范围及强业务对象事实；生产 adapter 调用 `DataScopeService`，保留调用方 Executor | S2-05／S2-10／S2-13 已完成（当前负责人管理范围、审批各动作独立解析及订单独立读取）；S3-04 履约／工作台业务功能与 S3-07 责任交接已按 S3 合同核销本地检查 |
 
 ### 4.2 实施与退出顺序
 
 1. S2-12 的消费方 Port 与 adapter 已按第 9.4 节接线，须用领域边界门禁复验 A33；并核对 S2-13 的接入登记。后续领域必须复用该样例，不得再复制跨域直连接法。
 2. 客户整改已保留主责／协作口径、组织条件、版本与 CSV 行为；代表性业务数据已按 §6.15 核销，S2-01、S2-12 的剩余缺口已关闭。A34 真实库等价已按 §6.6 执行，A36 解析层已按 §6.7 核销，不替代代表性业务验收（§6.15 已执行）。
-3. 合同、采购及工作流已按本阶段接入并补齐资源动作登记和配置／初始化准入。S2 工作流／工作台授权基础已迁移；S3-04 的履约来源、处理人查询、改派候选等业务功能仍未实施，不因 S2 核销改变其状态。
+3. 合同、采购及工作流已按本阶段接入并补齐资源动作登记和配置／初始化准入。S2 工作流／工作台授权基础已迁移；S3-04 的履约来源、处理人查询、改派候选等业务功能已按 S3 合同实施，不因 S2 核销推定，也不再登记为未实施。
 4. 退出证据必须分别列功能结果与 A33—A36 架构结果；命令、代码基线、入口覆盖和未执行验证必须可核对。范围基础通过不替代消费者验收。
 
 
@@ -95,7 +95,7 @@
 
 1. 下表资源只支持 `internal_org`；该维度为必需维度。结算主体、仓库维度必须明确拒绝，不得丢弃后执行。Company 仍受个人上限与业务强制条件限制。
 2. 历史参与只允许下表的 `list`、`detail`，写动作不得使用参与事实补授权。每个命令必须在原事务内按自身动作解析。
-3. `org_unit:list/manage` 只用于组织配置边界，不开放历史参与。`cost_entry:list/detail` 与 `cost_allocation:list` 沿销售责任解释，仍执行 S3 独立资源检查，不因本表开放新能力。
+3. `org_unit:list/manage` 只用于组织配置边界，不开放历史参与。`cost_entry:list/detail` 与 `cost_allocation:list` 沿销售责任解释，已按 S3 独立资源检查接入；不因本表单独开放新能力。
 
 | 资源 | 准入动作 | 公共单对象入口 | 权威对象事实与条件编译 |
 | --- | --- | --- | --- |
