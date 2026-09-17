@@ -9,3 +9,9 @@ pub mod repository;
 pub mod service;
 
 pub use error::{Error, Result, known_duplicate_index_message};
+pub use ports::{
+    FailClosedSettlementDataScopePort, SettlementDataScopePort, SettlementResolvedClause,
+    SettlementResolvedScope, SettlementScopeObject,
+};
+pub use repository::supplier_settlement::{SettlementReadScope, SettlementScopeClause};
+pub use service::supplier_settlement::{SettlementAccess, settlement_scope};

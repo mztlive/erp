@@ -81,6 +81,8 @@ type EmptyReason =
     | "NO_STATEMENTS"
     | "FILTER_NO_RESULT"
 
+export type SettlementFilterOption = { value: string; label: string }
+
 type ActionBlocker = {
     action: string
     code: string
@@ -110,8 +112,10 @@ export type SettlementListRow = {
     differenceDirectionLabel?: string
     unresolvedDifferenceCount: number
     preparedBy?: ActorView
+    differenceHandler?: ActorView
     reviewedBy?: ActorView
     preparedByLabel: string
+    differenceHandlerLabel: string
     reviewedByLabel: string
     updatedAt: string
     allowedActions: string[]
@@ -141,11 +145,14 @@ export type SettlementListView = {
     suppliers: Array<{ supplierId: string; supplierName: string }>
     emptyReason?: EmptyReason
     hasModulePermission: boolean
-    hasDataScope: boolean
     permissionVersion: string
     sourceAsOf: string
     queriedAt: string
     filterSummary: string
+    scopeVersion?: string
+    ownerOptions: SettlementFilterOption[]
+    operatorOptions: SettlementFilterOption[]
+    handlerOptions: SettlementFilterOption[]
 }
 
 type SettlementItemView = {
@@ -282,6 +289,7 @@ export type SettlementDetailView = {
         statusLabel: string
         statusTone: StatusTone
         preparedBy?: ActorView
+        differenceHandler?: ActorView
         reviewedBy?: ActorView
         lockVersion: number
         subjectHash?: string

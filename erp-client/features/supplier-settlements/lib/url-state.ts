@@ -14,6 +14,12 @@ export type SettlementsUrlState = {
     status?: string
     differenceType?: DifferenceType
     q?: string
+    ownerUserIds?: string
+    operatorUserIds?: string
+    handlerUserIds?: string
+    orgUnitIds?: string
+    includeDescendants?: boolean
+    scopeVersion?: string
     page: number
     preview?: string
     statementId?: string
@@ -53,6 +59,24 @@ const codec = createUrlStateCodec<SettlementsUrlState>([
     { key: "status", type: "string" },
     { key: "differenceType", type: "enum", values: DIFF_VALUES },
     { key: "q", type: "string", trim: true },
+    { key: "ownerUserIds", type: "string", aliases: ["owner_user_ids"] },
+    {
+        key: "operatorUserIds",
+        type: "string",
+        aliases: ["operator_user_ids"],
+    },
+    {
+        key: "handlerUserIds",
+        type: "string",
+        aliases: ["handler_user_ids"],
+    },
+    { key: "orgUnitIds", type: "string", aliases: ["org_unit_ids"] },
+    {
+        key: "includeDescendants",
+        type: "boolean",
+        defaultValue: false,
+    },
+    { key: "scopeVersion", type: "string", aliases: ["scope_version"] },
     { key: "page", type: "number", defaultValue: 1 },
     { key: "preview", type: "string" },
     { key: "statementId", type: "string", aliases: ["id"] },

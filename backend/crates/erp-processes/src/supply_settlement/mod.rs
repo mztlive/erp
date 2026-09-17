@@ -17,6 +17,8 @@
 mod difference;
 mod draft;
 mod evidence;
+mod handover;
+mod list;
 mod review;
 mod reviewers;
 pub use reviewers::SettlementReviewerOption;
@@ -25,9 +27,13 @@ mod review_preparation;
 mod shared;
 mod source;
 mod void;
+use std::sync::Arc;
+
+use erp_identity::SharedRbacService;
 use erp_read_models::supplier_center::settlement::dto::SettlementReviewDecisionResult;
 use erp_supply::dto::supplier_settlement as dto;
 use erp_supply::dto::supplier_settlement::*;
+use erp_supply::ports::{FailClosedSettlementDataScopePort, SettlementDataScopePort};
 use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply::service::supplier_settlement::shared::*;
 use mongodb::Database;
@@ -35,14 +41,32 @@ use shared::*;
 /// 供应商结算跨工作流、审计与财务的唯一命令入口。
 pub struct SupplierSettlementProcess {
     db: Database,
+    data_scope: Arc<dyn SettlementDataScopePort>,
+    rbac: Option<SharedRbacService>,
 }
 impl SupplierSettlementProcess {
-    /// 使用原数据库依赖构造结算流程。
+    /// 使用原数据库依赖构造结算流程；范围 Port 缺省失败关闭。
     pub fn new(db: Database) -> Self {
-        Self { db }
+        Self { db, data_scope: FailClosedSettlementDataScopePort::shared(), rbac: None }
     }
+
+    /// 注入结算范围 Port 与 RBAC。
+    pub fn with_scope(
+        mut self,
+        data_scope: Arc<dyn SettlementDataScopePort>,
+        rbac: SharedRbacService,
+    ) -> Self {
+        self.data_scope = data_scope;
+        self.rbac = Some(rbac);
+        self
+    }
+
     fn domain(&self) -> SupplierSettlementService {
-        SupplierSettlementService::new(self.db.clone())
+        SupplierSettlementService::new(self.db.clone()).with_data_scope(self.data_scope.clone())
+    }
+
+    fn require_rbac(&self) -> crate::Result<&SharedRbacService> {
+        self.rbac.as_ref().ok_or_else(|| crate::Error::Internal("结算范围 RBAC 未接线".into()))
     }
 }
 

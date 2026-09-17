@@ -96,8 +96,8 @@ impl SupplierSettlementService {
         statement
             .ensure_version(req.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
-        if !statement.is_prepared_by(actor_id) {
-            return Err(Error::Forbidden("只有当前结算经办人可以登记正式差异结论".to_string()));
+        if !statement.is_difference_handler(actor_id) {
+            return Err(Error::Forbidden("只有当前差异处理人可以登记正式差异结论".to_string()));
         }
         if !statement.is_editable() {
             return Err(Error::BusinessLogicError("当前结算状态禁止处理差异".to_string()));

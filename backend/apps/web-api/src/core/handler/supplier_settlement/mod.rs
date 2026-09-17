@@ -15,7 +15,9 @@ use erp_read_models::supplier_center::settlement::dto::{
     SettlementReviewDecisionResult, SupplierSettlementStatementDetailView,
 };
 use erp_supply::dto::supplier_settlement::{
-    CreateSettlementStatementRequest, RecordSettlementSourceEvidenceRequest,
+    CreateSettlementStatementRequest, HandoverCandidateView, HandoverSettlementRequest,
+    HandoverSettlementView, ReassignSettlementDifferenceHandlerRequest,
+    ReassignSettlementDifferenceHandlerView, RecordSettlementSourceEvidenceRequest,
     RefreshSettlementStatementRequest, SettlementDifferenceDecisionRequest,
     SettlementDifferenceDecisionResult, SettlementDifferenceEvidenceRequest,
     SettlementDifferenceEvidenceResult, SettlementDraftCommandResult, SettlementPageView,
@@ -30,6 +32,10 @@ use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::response::ApiResponse;
+
+fn settlement_process(state: &AppState) -> SupplierSettlementProcess {
+    erp_processes::adapters::scoped_settlement_process(state.db(), state.rbac())
+}
 
 #[permission_macros::permission(
     group = "供应商结算",
@@ -48,12 +54,10 @@ use crate::core::response::ApiResponse;
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn supplier_settlement_statement_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierSettlementStatementListParams>,
 ) -> Result<SupplierSettlementStatementListView> {
-    let page = erp_read_models::supplier_center::settlement::SupplierSettlementReadService::new(state.db())
-        .supplier_settlement_statement_list(&params)
-        .await?;
-
+    let page = settlement_process(&state).statement_list(&params, &actor).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -77,6 +81,7 @@ pub async fn supplier_settlement_statement_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SupplierSettlementStatementDetailView> {
+    settlement_process(&state).require_detail(&actor, &id).await?;
     let view = SupplierSettlementReadService::new(state.db())
         .supplier_settlement_statement_detail(&id, &actor)
         .await?;
@@ -105,7 +110,7 @@ pub async fn supplier_settlement_statement_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSettlementStatementRequest>,
 ) -> Result<SettlementDraftCommandResult> {
-    let view = SupplierSettlementProcess::new(state.db()).create_statement(req, &actor).await?;
+    let view = settlement_process(&state).create_statement(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -124,7 +129,7 @@ pub async fn supplier_settlement_statement_refresh(
     Path(id): Path<String>,
     Json(req): Json<RefreshSettlementStatementRequest>,
 ) -> Result<SettlementDraftCommandResult> {
-    let view = SupplierSettlementProcess::new(state.db()).refresh_statement(&id, req, &actor).await?;
+    let view = settlement_process(&state).refresh_statement(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -157,7 +162,7 @@ pub async fn supplier_settlement_source_evidence_record(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<RecordSettlementSourceEvidenceRequest>,
 ) -> Result<SupplierSettlementSourceEvidenceView> {
-    let view = SupplierSettlementProcess::new(state.db()).record_source_evidence(req, &actor).await?;
+    let view = settlement_process(&state).record_source_evidence(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -184,7 +189,7 @@ pub async fn supplier_settlement_statement_submit_review(
     Path(id): Path<String>,
     Json(req): Json<SubmitSettlementReviewRequest>,
 ) -> Result<SubmitSettlementReviewResult> {
-    let view = SupplierSettlementProcess::new(state.db()).submit_review(&id, req, &actor).await?;
+    let view = settlement_process(&state).submit_review(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -212,7 +217,7 @@ pub async fn supplier_settlement_statement_review_decide(
     Path(id): Path<String>,
     Json(req): Json<SettlementReviewCommand>,
 ) -> Result<SettlementReviewDecisionResult> {
-    let view = SupplierSettlementProcess::new(state.db()).decide_review(&id, req, &actor).await?;
+    let view = settlement_process(&state).decide_review(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -240,7 +245,7 @@ pub async fn supplier_settlement_statement_void(
     Path(id): Path<String>,
     Json(req): Json<VoidSettlementRequest>,
 ) -> Result<SupplierSettlementStatementView> {
-    let view = SupplierSettlementProcess::new(state.db()).void_statement(&id, req, &actor).await?;
+    let view = settlement_process(&state).void_statement(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -317,7 +322,7 @@ pub async fn supplier_settlement_difference_decide(
     Path(id): Path<String>,
     Json(req): Json<SettlementDifferenceDecisionRequest>,
 ) -> Result<SettlementDifferenceDecisionResult> {
-    let view = SupplierSettlementProcess::new(state.db()).decide_difference(&id, req, &actor).await?;
+    let view = settlement_process(&state).decide_difference(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -336,7 +341,59 @@ pub async fn supplier_settlement_difference_evidence_append(
     Path(id): Path<String>,
     Json(req): Json<SettlementDifferenceEvidenceRequest>,
 ) -> Result<SettlementDifferenceEvidenceResult> {
-    let view =
-        SupplierSettlementProcess::new(state.db()).append_difference_evidence(&id, req, &actor).await?;
+    let view = settlement_process(&state).append_difference_evidence(&id, req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商结算",
+    group_desc = "供应商周期结算单、明细与差异管理",
+    desc = "交接供应商结算对账负责人",
+    resource = "supplier_settlement_statement",
+    action = "update"
+)]
+/// 显式交接对账负责人；开放复核任务不改派。
+pub async fn supplier_settlement_statement_handover(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<HandoverSettlementRequest>,
+) -> Result<HandoverSettlementView> {
+    let view = settlement_process(&state).handover_statement(&id, req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商结算",
+    group_desc = "供应商周期结算单、明细与差异管理",
+    desc = "查询供应商结算交接待选",
+    resource = "supplier_settlement_statement",
+    action = "update"
+)]
+/// 返回可交接的合格有效人员。
+pub async fn supplier_settlement_statement_handover_candidates(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<Vec<HandoverCandidateView>> {
+    let view = settlement_process(&state).handover_candidates(&id, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商结算",
+    group_desc = "供应商周期结算单、明细与差异管理",
+    desc = "改派供应商结算差异处理人",
+    resource = "supplier_settlement_statement",
+    action = "update"
+)]
+/// 独立改派差异处理人，不得强制等于对账负责人。
+pub async fn supplier_settlement_statement_reassign_difference_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<ReassignSettlementDifferenceHandlerRequest>,
+) -> Result<ReassignSettlementDifferenceHandlerView> {
+    let view = settlement_process(&state).reassign_difference_handler(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }

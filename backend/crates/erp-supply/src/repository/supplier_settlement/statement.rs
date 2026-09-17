@@ -63,9 +63,15 @@ pub struct SupplierSettlementStatementRow {
     pub refresh_cutoff_policy_id: String,
     /// 刷新截止策略冻结版本。
     pub refresh_cutoff_policy_version: String,
-    /// 经办人。
+    /// 对账负责人。
     pub prepared_by: String,
-    /// 复核人。
+    /// 业务组织。
+    #[serde(default)]
+    pub business_org_unit_id: String,
+    /// 差异处理人。
+    #[serde(default)]
+    pub difference_handler_user_id: String,
+    /// 实际复核人。
     pub reviewed_by: Option<String>,
     /// 最近一次正式复核决定。
     pub review_result: Option<SettlementReviewResult>,
@@ -111,6 +117,18 @@ pub struct SupplierSettlementStatementFilter {
     pub period_from: Option<BusinessDate>,
     /// 结算期间结束上界（含）。
     pub period_to: Option<BusinessDate>,
+    /// 已证明的授权条件；`None` 表示调用方尚未接入范围。
+    pub authorized_scope: Option<super::SettlementReadScope>,
+    /// 对账负责人筛选，只收窄授权结果。
+    pub owner_user_ids: Option<Vec<String>>,
+    /// 差异处理人筛选，只收窄授权结果。
+    pub operator_user_ids: Option<Vec<String>>,
+    /// 实际复核人筛选，只收窄授权结果。
+    pub handler_user_ids: Option<Vec<String>>,
+    /// 当前开放复核任务命中的结算单，与 `handler_user_ids` 组成 OR。
+    pub handler_open_statement_ids: Vec<String>,
+    /// 业务组织筛选，只收窄授权结果。
+    pub business_org_unit_ids: Option<Vec<String>>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -131,6 +149,12 @@ impl Default for SupplierSettlementStatementFilter {
             status: None,
             period_from: None,
             period_to: None,
+            authorized_scope: None,
+            owner_user_ids: None,
+            operator_user_ids: None,
+            handler_user_ids: None,
+            handler_open_statement_ids: Vec::new(),
+            business_org_unit_ids: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -168,19 +192,76 @@ impl QueryFilter for SupplierSettlementStatementFilter {
             filter.insert("period_end", doc! { "$lte": period_to.to_string() });
         }
         insert_literal_regex_filter(&mut filter, "statement_no", self.statement_no.as_deref());
-        if let Some(q) = &self.q {
-            let mut clauses = ["statement_no", "external_bill_no"]
-                .into_iter()
-                .map(|field| {
-                    let mut clause = Document::new();
-                    insert_literal_regex_filter(&mut clause, field, Some(q));
-                    clause
-                })
-                .collect::<Vec<_>>();
-            clauses.push(doc! { "supplier_id": { "$in": self.keyword_supplier_ids.iter().map(ToString::to_string).collect::<Vec<_>>() } });
-            filter.insert("$and", vec![doc! { "$or": clauses }]);
+        let ands = self.narrowing_conditions();
+        if !ands.is_empty() {
+            filter.insert("$and", ands);
         }
         filter
+    }
+}
+
+impl SupplierSettlementStatementFilter {
+    fn narrowing_conditions(&self) -> Vec<Document> {
+        let mut ands = Vec::new();
+        if let Some(q) = &self.q {
+            ands.push(keyword_clause(q, &self.keyword_supplier_ids));
+        }
+        if let Some(scope) = &self.authorized_scope {
+            ands.push(scope.document());
+        }
+        if let Some(ids) = &self.owner_user_ids {
+            ands.push(doc! { "prepared_by": { "$in": ids } });
+        }
+        if let Some(ids) = &self.operator_user_ids {
+            ands.push(operator_clause(ids));
+        }
+        if self.handler_user_ids.is_some() {
+            ands.push(handler_clause(&self.handler_open_statement_ids));
+        }
+        if let Some(ids) = &self.business_org_unit_ids {
+            ands.push(doc! { "business_org_unit_id": { "$in": ids } });
+        }
+        ands
+    }
+}
+
+fn keyword_clause(q: &str, supplier_ids: &[erp_core::ids::SupplierAccountId]) -> Document {
+    let mut clauses = ["statement_no", "external_bill_no"]
+        .into_iter()
+        .map(|field| {
+            let mut clause = Document::new();
+            insert_literal_regex_filter(&mut clause, field, Some(q));
+            clause
+        })
+        .collect::<Vec<_>>();
+    clauses.push(doc! {
+        "supplier_id": { "$in": supplier_ids.iter().map(ToString::to_string).collect::<Vec<_>>() }
+    });
+    doc! { "$or": clauses }
+}
+
+fn operator_clause(ids: &[String]) -> Document {
+    doc! {
+        "$or": [
+            { "difference_handler_user_id": { "$in": ids } },
+            {
+                "$and": [
+                    { "$or": [
+                        { "difference_handler_user_id": "" },
+                        { "difference_handler_user_id": { "$exists": false } },
+                    ]},
+                    { "prepared_by": { "$in": ids } },
+                ]
+            },
+        ]
+    }
+}
+
+fn handler_clause(open_ids: &[String]) -> Document {
+    if open_ids.is_empty() {
+        doc! { "$expr": false }
+    } else {
+        doc! { "id": { "$in": open_ids } }
     }
 }
 
@@ -195,6 +276,27 @@ impl Pagination for SupplierSettlementStatementFilter {
 }
 
 impl<'a> SupplierSettlementStatementRepository<'a> {
+    /// 按明确授权条件读取单个结算单。
+    ///
+    /// # 参数
+    /// * `id` - 结算单稳定主键
+    /// * `scope` - 已证明的授权条件
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 不存在或不在范围内均返回 `None`。
+    ///
+    /// # 关键业务约束
+    /// ID 条件不能替换范围交集；空授权不得返回文档。
+    pub async fn find_authorized(
+        &self,
+        id: &str,
+        scope: &super::SettlementReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierSettlementStatement>> {
+        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
+    }
+
     /// 按结算单 ID 集合批量读取结算单。
     ///
     /// # 参数
@@ -535,10 +637,7 @@ mod keyword_regression_tests {
             status: None,
             period_from: None,
             period_to: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
 
         filter.q = Some("BILL.[1]".into());

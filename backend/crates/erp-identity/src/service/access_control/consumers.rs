@@ -20,7 +20,11 @@ const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     ("stock_reservation", &["list"], &[ScopeDimension::Warehouse]),
     ("customer_refund", &["submit"], &[ScopeDimension::SettlementParty]),
     ("supplier_refund", &["submit"], &[ScopeDimension::SettlementParty]),
-    ("supplier_settlement_statement", &["confirm"], &[ScopeDimension::InternalOrg]),
+    (
+        "supplier_settlement_statement",
+        &["list", "detail", "create", "update", "submit", "confirm"],
+        &[ScopeDimension::InternalOrg],
+    ),
     ("work_item", &["manage"], &[ScopeDimension::InternalOrg]),
     ("org_unit", &["list", "manage"], &[ScopeDimension::InternalOrg]),
     ("customer", &["list", "detail", "create", "update", "delete"], &[ScopeDimension::InternalOrg]),

@@ -126,6 +126,22 @@ fn supplier_settlement_statement_indexes() -> Vec<IndexModel> {
             "idx_supplier_settlement_statements_supplier_period_status",
             doc! { "supplier_id": 1, "period_start": 1, "period_end": 1, "status": 1 },
         ),
+        named_index(
+            "idx_supplier_settlement_statements_prepared_by",
+            doc! { "prepared_by": 1, "created_at": -1, "id": -1 },
+        ),
+        named_index(
+            "idx_supplier_settlement_statements_business_org",
+            doc! { "business_org_unit_id": 1, "created_at": -1, "id": -1 },
+        ),
+        named_index(
+            "idx_supplier_settlement_statements_difference_handler",
+            doc! { "difference_handler_user_id": 1, "created_at": -1, "id": -1 },
+        ),
+        named_index(
+            "idx_supplier_settlement_statements_reviewed_by",
+            doc! { "reviewed_by": 1, "created_at": -1, "id": -1 },
+        ),
     ]
 }
 

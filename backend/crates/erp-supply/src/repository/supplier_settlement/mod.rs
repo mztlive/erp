@@ -20,6 +20,7 @@ mod command;
 mod difference;
 mod item;
 mod projection;
+mod scope;
 mod source_scope;
 mod statement;
 
@@ -32,6 +33,7 @@ pub use command::SupplierSettlementRepository;
 pub use detail_snapshot::SupplierSettlementStatementDetailSnapshot;
 pub use difference::{SupplierSettlementDifferenceFilter, SupplierSettlementDifferenceRow};
 pub use item::{SupplierSettlementItemFilter, SupplierSettlementItemRow};
+pub use scope::{SettlementReadScope, SettlementScopeClause};
 pub use source_scope::SupplierSettlementSourceScope;
 pub use statement::{
     SupplierSettlementStatementFilter, SupplierSettlementStatementRow, SupplierSettlementStatementStatsRow,

@@ -26,6 +26,10 @@ impl SupplierSettlementProcess {
         req: VoidSettlementRequest,
         actor: &AuditActor,
     ) -> Result<SupplierSettlementStatementView> {
+        self.domain()
+            .access()
+            .require_statement(actor, "update", id, &mut persistence_core::NoTransaction)
+            .await?;
         let (mut statement, replayed) =
             self.domain().prepare_void(id, &req, actor.id(), &mut persistence_core::NoTransaction).await?;
         if replayed {

@@ -6,6 +6,10 @@ import {
     FixedOptionRadioFilter,
     MultiOptionCombobox,
 } from "@/components/business"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import type { SettlementFilterOption } from "@/features/supplier-settlements/types"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
@@ -39,6 +43,9 @@ const STATUS_FILTER_OPTIONS = SETTLEMENT_STATUS_VALUES.map((value) => ({
 export function SettlementListToolbar({
     urlState,
     suppliers,
+    ownerOptions,
+    operatorOptions,
+    handlerOptions,
     searchInputRef,
     searchDraft,
     setSearchDraft,
@@ -58,6 +65,16 @@ export function SettlementListToolbar({
     setPeriodFromDraft,
     periodToDraft,
     setPeriodToDraft,
+    ownerUserIdsDraft,
+    setOwnerUserIdsDraft,
+    operatorUserIdsDraft,
+    setOperatorUserIdsDraft,
+    handlerUserIdsDraft,
+    setHandlerUserIdsDraft,
+    orgUnitIdsDraft,
+    setOrgUnitIdsDraft,
+    includeDescendantsDraft,
+    setIncludeDescendantsDraft,
     periodError,
     setPeriodError,
     hasPendingChanges,
@@ -67,6 +84,9 @@ export function SettlementListToolbar({
 }: {
     urlState: SettlementsUrlState
     suppliers: readonly { supplierId: string; supplierName: string }[]
+    ownerOptions: readonly SettlementFilterOption[]
+    operatorOptions: readonly SettlementFilterOption[]
+    handlerOptions: readonly SettlementFilterOption[]
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: SetState<string>
@@ -86,6 +106,16 @@ export function SettlementListToolbar({
     setPeriodFromDraft: SetState<string>
     periodToDraft: string
     setPeriodToDraft: SetState<string>
+    ownerUserIdsDraft: string
+    setOwnerUserIdsDraft: SetState<string>
+    operatorUserIdsDraft: string
+    setOperatorUserIdsDraft: SetState<string>
+    handlerUserIdsDraft: string
+    setHandlerUserIdsDraft: SetState<string>
+    orgUnitIdsDraft: string
+    setOrgUnitIdsDraft: SetState<string>
+    includeDescendantsDraft: boolean
+    setIncludeDescendantsDraft: SetState<boolean>
     periodError: string | null
     setPeriodError: SetState<string | null>
     hasPendingChanges: boolean
@@ -99,7 +129,15 @@ export function SettlementListToolbar({
         [suppliers, urlState],
     )
     const moreCount = appliedChips.filter(({ key }) =>
-        ["supplierId", "status", "period"].includes(key),
+        [
+            "supplierId",
+            "status",
+            "period",
+            "ownerUserIds",
+            "operatorUserIds",
+            "handlerUserIds",
+            "orgUnitIds",
+        ].includes(key),
     ).length
 
     return (
@@ -141,6 +179,54 @@ export function SettlementListToolbar({
             }
             morePanel={
                 <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)]">
+                    <ResponsibleUserFilter
+                        id={`${prefix}-filter-owner`}
+                        label="对账负责人"
+                        value={ownerUserIdsDraft}
+                        onChange={setOwnerUserIdsDraft}
+                        options={ownerOptions}
+                    />
+                    <ResponsibleUserFilter
+                        id={`${prefix}-filter-operator`}
+                        label="差异处理人"
+                        value={operatorUserIdsDraft}
+                        onChange={setOperatorUserIdsDraft}
+                        options={operatorOptions}
+                    />
+                    <ResponsibleUserFilter
+                        id={`${prefix}-filter-handler`}
+                        label="当前复核人"
+                        value={handlerUserIdsDraft}
+                        onChange={setHandlerUserIdsDraft}
+                        options={handlerOptions}
+                    />
+                    <ListWorkspaceFilterField
+                        htmlFor={`${prefix}-filter-org`}
+                        label="业务组织"
+                    >
+                        <Input
+                            id={`${prefix}-filter-org`}
+                            value={orgUnitIdsDraft}
+                            onChange={(event) =>
+                                setOrgUnitIdsDraft(event.target.value)
+                            }
+                            placeholder="组织 ID，逗号分隔"
+                            aria-label="按结算业务组织筛选"
+                        />
+                        <label
+                            htmlFor={`${prefix}-filter-org-descendants`}
+                            className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                        >
+                            <Checkbox
+                                id={`${prefix}-filter-org-descendants`}
+                                checked={includeDescendantsDraft}
+                                onCheckedChange={(checked) =>
+                                    setIncludeDescendantsDraft(checked === true)
+                                }
+                            />
+                            包含下级
+                        </label>
+                    </ListWorkspaceFilterField>
                     <ListWorkspaceFilterField
                         htmlFor={`${prefix}-filter-supplier`}
                         label="供应商"

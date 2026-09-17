@@ -36,6 +36,8 @@ pub(super) fn sample_statement() -> SupplierSettlementStatement {
             refresh_cutoff_policy_id: REVIEW_CUTOFF_POLICY_ID.to_string(),
             refresh_cutoff_policy_version: REVIEW_CUTOFF_POLICY_VERSION.to_string(),
             prepared_by: "preparer-1".to_string(),
+            business_org_unit_id: "org-finance".to_string(),
+            difference_handler_user_id: String::new(),
         },
     )
     .unwrap();

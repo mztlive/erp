@@ -64,6 +64,7 @@ export function useCreateDraftMutation() {
     const invalidate = useInvalidateAll()
     return useMutation({
         mutationFn: createSettlementDraft,
+        meta: { affectsDataScope: true },
         onSuccess: async (result) => {
             if (result.status === "succeeded") await invalidate()
         },
@@ -74,6 +75,7 @@ export function useRefreshTrialMutation() {
     const invalidate = useInvalidateAll()
     return useMutation({
         mutationFn: refreshSettlementTrial,
+        meta: { affectsDataScope: true },
         onSuccess: async (result) => {
             if (result.status === "succeeded") await invalidate()
         },
@@ -94,6 +96,7 @@ export function useResolveDifferenceMutation() {
     const invalidate = useInvalidateAll()
     return useMutation({
         mutationFn: resolveDifference,
+        meta: { affectsDataScope: true },
         onSuccess: async (result) => {
             if (result.status === "succeeded") await invalidate()
         },
@@ -104,6 +107,7 @@ export function useSubmitReviewMutation() {
     const invalidate = useInvalidateAll()
     return useMutation({
         mutationFn: submitSettlementReview,
+        meta: { affectsDataScope: true },
         onSuccess: async (result) => {
             if (result.status === "succeeded") await invalidate()
         },
@@ -114,6 +118,7 @@ export function useReviewDecisionMutation() {
     const invalidate = useInvalidateAll()
     return useMutation({
         mutationFn: decideSettlementReview,
+        meta: { affectsDataScope: true },
         onSuccess: async (result) => {
             if (
                 result.status === "succeeded" ||

@@ -6,9 +6,7 @@ use erp_workflow::ports::{WorkflowAccountFact, WorkflowAuthorizationPort, permis
 use persistence_core::NoTransaction;
 use serde::Serialize;
 
-use super::{
-    SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID, SETTLEMENT_REVIEW_OWNER_ROLE, SupplierSettlementProcess,
-};
+use super::{SETTLEMENT_REVIEW_OWNER_ROLE, SupplierSettlementProcess};
 use crate::{Error, Result};
 
 /// 可执行当前结算复核的人员，协议只暴露选择所需信息。
@@ -38,10 +36,7 @@ fn eligible(
         ]
         .iter()
         .all(|required| permissions.iter().any(|owned| permission_covers(owned, required)))
-        && scopes.iter().any(|(role, organization)| {
-            role == SETTLEMENT_REVIEW_OWNER_ROLE
-                && organization.as_deref().is_none_or(|id| id == SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID)
-        })
+        && scopes.iter().any(|(role, _)| role == SETTLEMENT_REVIEW_OWNER_ROLE)
 }
 
 /// 岗位资格保留原财务角色；范围由 confirm 动作及经办人的当前部门独立证明。
@@ -62,11 +57,7 @@ async fn reviewer_scopes(
     if !scope.allows_role(SETTLEMENT_REVIEW_OWNER_ROLE, &object) {
         return Ok(Vec::new());
     }
-    Ok(scope
-        .granting_role_ids
-        .into_iter()
-        .map(|role| (role, Some(SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID.into())))
-        .collect())
+    Ok(scope.granting_role_ids.into_iter().map(|role| (role, None)).collect())
 }
 
 impl SupplierSettlementProcess {
@@ -76,7 +67,8 @@ impl SupplierSettlementProcess {
         id: &str,
         actor: &AuditActor,
     ) -> Result<Vec<SettlementReviewerOption>> {
-        let statement = self.domain().load_statement(id, &mut NoTransaction).await?;
+        let statement =
+            self.domain().access().require_statement(actor, "submit", id, &mut NoTransaction).await?;
         if !statement.is_prepared_by(actor.id()) || !statement.is_editable() {
             return Err(Error::Forbidden("仅当前经办人可为待提交的结算单选择复核人".into()));
         }
@@ -140,9 +132,14 @@ mod tests {
     fn reviewer_requires_available_separate_account_permissions_and_finance_scope() {
         let account = WorkflowAccountFact::new("reviewer", AccountKind::Admin, true);
         let permissions = vec!["supplier_settlement_statement:*".into(), "work_item:detail".into()];
-        let scopes = vec![(SETTLEMENT_REVIEW_OWNER_ROLE.into(), Some("company".into()))];
+        let scopes = vec![(SETTLEMENT_REVIEW_OWNER_ROLE.into(), None)];
         assert!(eligible(&account, "preparer", &permissions, &scopes));
-        assert!(eligible(&account, "preparer", &permissions, &[(SETTLEMENT_REVIEW_OWNER_ROLE.into(), None)]));
+        assert!(eligible(
+            &account,
+            "preparer",
+            &permissions,
+            &[(SETTLEMENT_REVIEW_OWNER_ROLE.into(), Some("team".into()))]
+        ));
         assert!(!eligible(&account, "reviewer", &permissions, &scopes));
         assert!(!eligible(
             &WorkflowAccountFact::new("reviewer", AccountKind::Admin, false),
@@ -152,11 +149,5 @@ mod tests {
         ));
         assert!(!eligible(&account, "preparer", &["supplier_settlement_statement:detail".into()], &scopes));
         assert!(!eligible(&account, "preparer", &permissions, &[("role-other".into(), None)]));
-        assert!(!eligible(
-            &account,
-            "preparer",
-            &permissions,
-            &[(SETTLEMENT_REVIEW_OWNER_ROLE.into(), Some("team".into()))]
-        ));
     }
 }

@@ -15,6 +15,7 @@ pub mod difference;
 pub mod draft_snapshot;
 pub mod evidence;
 pub mod item;
+mod ownership;
 pub mod review_reason;
 pub mod source_evidence;
 pub mod statement;

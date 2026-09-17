@@ -6,6 +6,7 @@
 
 mod difference;
 mod draft;
+mod handover;
 mod query;
 mod review;
 mod source;
@@ -18,6 +19,10 @@ pub use self::difference::{
 pub use self::draft::{
     CreateSettlementStatementRequest, RefreshSettlementStatementRequest, SettlementDraftAction,
     SettlementDraftCommandResult, VoidSettlementRequest,
+};
+pub use self::handover::{
+    HandoverCandidateView, HandoverSettlementRequest, HandoverSettlementView,
+    ReassignSettlementDifferenceHandlerRequest, ReassignSettlementDifferenceHandlerView,
 };
 pub(crate) use self::query::StatementListQuery;
 pub use self::query::{
@@ -77,16 +82,9 @@ mod tests {
     #[test]
     fn statement_list_params_normalize_paging_filters_and_sort_defaults() {
         let params = SupplierSettlementStatementListParams {
-            q: None,
             statement_no: Some(" ST-2026 ".to_string()),
-            supplier_id: None,
             status: Some(SettlementStatus::PendingReview),
-            period_from: None,
-            period_to: None,
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..Default::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.statement_no.as_deref(), Some("ST-2026"));
@@ -95,6 +93,15 @@ mod tests {
         assert_eq!(query.paging.page_size, 20);
         assert_eq!(query.paging.sort_by, "created_at");
         assert_eq!(query.paging.sort_dir, SortDir::Desc);
+    }
+
+    #[test]
+    fn statement_list_params_reject_me_identity() {
+        let params: SupplierSettlementStatementListParams = serde_json::from_value(serde_json::json!({
+            "owner_user_ids": "me"
+        }))
+        .unwrap();
+        assert!(format!("{:?}", params.normalized().unwrap_err()).contains("me"));
     }
 
     #[test]

@@ -26,6 +26,8 @@ export type BackendStatement = {
     difference_amount: string
     status: string
     prepared_by: string
+    business_org_unit_id?: string | null
+    difference_handler_user_id?: string | null
     reviewed_by?: string | null
     confirmed_at?: number | null
     payable_account_id?: string | null
@@ -148,6 +150,13 @@ export type BackendStatementPage = Page<BackendStatement> & {
         confirmed_amount: string
     }
     processing_state: "READY" | "EMPTY"
+    empty_reason?: "no_scope" | null
+    scope_version?: string
+    scope_summary?: string
+    ownership_basis?: string
+    owner_options?: Array<{ value: string; label: string }>
+    operator_options?: Array<{ value: string; label: string }>
+    handler_options?: Array<{ value: string; label: string }>
 }
 
 export type BackendReviewActionBlocker = {

@@ -1,4 +1,5 @@
 //! 供应商结算单域准备、查询和事务内写入；跨域根事务由 supply_settlement 组合。
+pub mod access;
 pub mod difference;
 pub mod draft;
 pub mod evidence;
@@ -8,6 +9,9 @@ pub mod review;
 pub mod shared;
 pub mod source;
 mod void;
+use std::sync::Arc;
+
+pub use access::{SettlementAccess, settlement_scope};
 use mongodb::Database;
 use persistence_core::Executor;
 use shared::*;
@@ -17,14 +21,17 @@ use crate::dto::supplier_settlement::*;
 use crate::entity::supplier_settlement::{
     SupplierSettlementDifference, SupplierSettlementItem, SupplierSettlementStatement,
 };
+use crate::ports::{FailClosedSettlementDataScopePort, SettlementDataScopePort};
 use crate::repository::SupplierSettlementExt;
 use crate::{Error, Result};
+
 /// 供应商结算本域服务，调用者提供原事务执行器。
 pub struct SupplierSettlementService {
     db: Database,
+    data_scope: Arc<dyn SettlementDataScopePort>,
 }
 impl SupplierSettlementService {
-    /// 创建供应商结算服务实例。
+    /// 创建供应商结算服务实例；范围 Port 缺省失败关闭。
     ///
     /// # 参数
     /// * `db` - 数据库实例
@@ -32,7 +39,24 @@ impl SupplierSettlementService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
-        Self { db }
+        Self { db, data_scope: FailClosedSettlementDataScopePort::shared() }
+    }
+
+    /// 注入结算范围 Port。
+    ///
+    /// # 参数
+    /// * `data_scope` - 组合层装配的公共解析 adapter
+    ///
+    /// # 返回
+    /// 返回绑定范围 Port 的服务。
+    pub fn with_data_scope(mut self, data_scope: Arc<dyn SettlementDataScopePort>) -> Self {
+        self.data_scope = data_scope;
+        self
+    }
+
+    /// 构造本域范围访问器。
+    pub fn access(&self) -> SettlementAccess {
+        SettlementAccess::new(self.db.clone(), self.data_scope.clone())
     }
     /// 按 ID 加载未删除结算单。
     ///

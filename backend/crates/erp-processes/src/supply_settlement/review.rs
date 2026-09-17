@@ -8,7 +8,6 @@ use erp_core::money::Amount;
 use erp_supply::entity::supplier_settlement::{
     SettlementReviewResult, SettlementStatus, SupplierSettlementStatement,
 };
-use erp_supply::repository::SupplierSettlementExt;
 use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply::service::supplier_settlement::review::{
     ensure_current_subject_and_resolved_differences, ensure_review_submission_ready,
@@ -53,9 +52,10 @@ impl SupplierSettlementProcess {
         if let Some(result) = self.replay_review_submission(&audit_id, &fingerprint, id).await? {
             return Ok(result);
         }
-        let statement = self.domain().load_statement(id, &mut NoTransaction).await?;
+        let statement =
+            self.domain().access().require_statement(actor, "submit", id, &mut NoTransaction).await?;
         if !statement.is_prepared_by(actor.id()) {
-            return Err(Error::Forbidden("只有当前结算经办人可以提交财务复核".to_string()));
+            return Err(Error::Forbidden("只有当前对账负责人可以提交财务复核".to_string()));
         }
         statement
             .ensure_version(req.expected_lock_version)
@@ -84,7 +84,7 @@ impl SupplierSettlementProcess {
             },
         )?;
         let db = self.db.clone();
-
+        let data_scope = self.data_scope.clone();
         let actor_id = actor.id().to_string();
         let expected_subject_hash = statement.subject_hash.clone();
         let audit_actor = actor.clone();
@@ -95,11 +95,9 @@ impl SupplierSettlementProcess {
         let transaction_result = auth
             .run_authorized_policy_transaction(policy_revision, move |session| {
                 Box::pin(async move {
-                    let mut current = db
-                        .supplier_settlement_statements()
-                        .find_by_id(&statement.base.id, session)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("供应商结算单不存在".to_string()))?;
+                    let mut current = erp_supply::SettlementAccess::new(db.clone(), data_scope)
+                        .require_statement(&audit_actor, "submit", &statement.base.id, session)
+                        .await?;
                     if current.base.version != statement.base.version
                         || current.subject_hash != expected_subject_hash
                     {

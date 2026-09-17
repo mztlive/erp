@@ -30,6 +30,8 @@ mod statement {
             refresh_cutoff_policy_id: "supplier-settlement-review-cutoff".to_string(),
             refresh_cutoff_policy_version: "1".to_string(),
             prepared_by: " 经办人-a ".to_string(),
+            business_org_unit_id: "org-finance".to_string(),
+            difference_handler_user_id: String::new(),
         }
     }
 

@@ -16,7 +16,7 @@ pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[
     ("stock_reservation", &["list"]),
     ("customer_refund", &["submit"]),
     ("supplier_refund", &["submit"]),
-    ("supplier_settlement_statement", &["confirm"]),
+    ("supplier_settlement_statement", &["list", "detail", "create", "update", "submit", "confirm"]),
     ("work_item", &["manage"]),
     ("org_unit", &["list", "manage"]),
     ("cost_entry", &["list", "detail"]),

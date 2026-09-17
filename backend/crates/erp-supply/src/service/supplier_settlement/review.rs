@@ -8,7 +8,7 @@ use crate::entity::supplier_settlement::{SupplierSettlementDifference, SupplierS
 use crate::{Error, Result};
 /// 结算复核的固定财务责任角色。
 pub const SETTLEMENT_REVIEW_OWNER_ROLE: &str = "role-finance";
-/// 当前结算模型尚无更细组织上下文，使用明确的最小公司根并在资格校验中重验。
+/// WorkItem 责任组织身份；不是内部组织 DataScope 事实，不得当作业务组织。
 pub const SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID: &str = "company";
 pub async fn ensure_review_submission_ready(
     db: &Database,

@@ -27,6 +27,7 @@ import { CrossEntryBanner } from "@/features/supplier-settlements/components/cro
 import { SettlementMetricsStrip } from "@/features/supplier-settlements/components/settlement-list-metrics"
 import { SettlementListPreviewSheet } from "@/features/supplier-settlements/components/settlement-list-preview"
 import { SettlementListToolbar } from "@/features/supplier-settlements/components/settlement-list-toolbar"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useSettlementListQuery } from "@/features/supplier-settlements/hooks/queries"
 import { useSettlementListColumns } from "@/features/supplier-settlements/hooks/use-settlement-list-columns"
 import { useSettlementListSearchHotkey } from "@/features/supplier-settlements/hooks/use-settlement-list-search-hotkey"
@@ -60,6 +61,7 @@ function SettlementList({
         right: ["actions"],
     })
 
+    const profileQuery = useAccountProfileQuery()
     const listQuery = useSettlementListQuery({
         view: urlState.view,
         supplierId: urlState.supplierId,
@@ -71,6 +73,13 @@ function SettlementList({
         ),
         differenceType: urlState.differenceType,
         q: urlState.q,
+        ownerUserIds: urlState.ownerUserIds,
+        operatorUserIds: urlState.operatorUserIds,
+        handlerUserIds: urlState.handlerUserIds,
+        orgUnitIds: urlState.orgUnitIds,
+        includeDescendants: urlState.includeDescendants,
+        scopeVersion: urlState.scopeVersion,
+        currentUserId: profileQuery.data?.userid,
         page: urlState.page,
         pageSize: 50,
     })
@@ -87,7 +96,14 @@ function SettlementList({
 
     const columns = useSettlementListColumns(patchUrl, onOpen)
 
-    const canCreate = data?.hasModulePermission && data?.hasDataScope
+    React.useEffect(() => {
+        if (data?.scopeVersion && data.scopeVersion !== urlState.scopeVersion) {
+            patchUrl({ scopeVersion: data.scopeVersion })
+        }
+    }, [data?.scopeVersion, patchUrl, urlState.scopeVersion])
+
+    const canCreate =
+        data?.hasModulePermission && data.emptyReason !== "NO_SCOPE"
     const listLoadFailed = listQuery.isError || !listQuery.data
 
     if (listQuery.isPending) {
@@ -200,7 +216,7 @@ function SettlementList({
                 />
             ) : null}
 
-            {data?.hasModulePermission && data.hasDataScope ? (
+            {data?.hasModulePermission && data.emptyReason !== "NO_SCOPE" ? (
                 <SettlementMetricsStrip
                     pendingReconcile={data.totals.pendingReconcile}
                     hasDifference={data.metrics.hasDifference}
@@ -241,6 +257,9 @@ function SettlementList({
                     <SettlementListToolbar
                         urlState={urlState}
                         suppliers={data?.suppliers ?? []}
+                        ownerOptions={data?.ownerOptions ?? []}
+                        operatorOptions={data?.operatorOptions ?? []}
+                        handlerOptions={data?.handlerOptions ?? []}
                         searchInputRef={searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}
@@ -260,6 +279,22 @@ function SettlementList({
                         setPeriodFromDraft={filters.setPeriodFromDraft}
                         periodToDraft={filters.periodToDraft}
                         setPeriodToDraft={filters.setPeriodToDraft}
+                        ownerUserIdsDraft={filters.ownerUserIdsDraft}
+                        setOwnerUserIdsDraft={filters.setOwnerUserIdsDraft}
+                        operatorUserIdsDraft={filters.operatorUserIdsDraft}
+                        setOperatorUserIdsDraft={
+                            filters.setOperatorUserIdsDraft
+                        }
+                        handlerUserIdsDraft={filters.handlerUserIdsDraft}
+                        setHandlerUserIdsDraft={filters.setHandlerUserIdsDraft}
+                        orgUnitIdsDraft={filters.orgUnitIdsDraft}
+                        setOrgUnitIdsDraft={filters.setOrgUnitIdsDraft}
+                        includeDescendantsDraft={
+                            filters.includeDescendantsDraft
+                        }
+                        setIncludeDescendantsDraft={
+                            filters.setIncludeDescendantsDraft
+                        }
                         periodError={filters.periodError}
                         setPeriodError={filters.setPeriodError}
                         hasPendingChanges={filters.hasPendingChanges}
@@ -307,7 +342,16 @@ function SettlementList({
                         }
                         emptyState={
                             !listLoadFailed && total === 0 ? (
-                                empty === "FILTER_NO_RESULT" ? (
+                                empty === "NO_SCOPE" ? (
+                                    <BusinessEmptyState
+                                        kind="no-scope"
+                                        className={
+                                            listWorkspaceEmptyStateClassName
+                                        }
+                                        title="当前账号没有可查看的结算范围"
+                                        description="角色未配置结算数据范围时列表为空，不会回退为全公司。"
+                                    />
+                                ) : empty === "FILTER_NO_RESULT" ? (
                                     <BusinessEmptyState
                                         kind="filter"
                                         className={

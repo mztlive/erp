@@ -25,8 +25,8 @@ use super::review_reason::SettlementReviewRejectReason;
 const STATEMENT_NO_MAX_LEN: usize = 64;
 /// 外部账单号/版本最大长度。
 const EXTERNAL_BILL_NO_MAX_LEN: usize = 64;
-/// 经办人/复核人标识最大长度。
-const ACTOR_MAX_LEN: usize = 128;
+/// 对账负责人/差异处理人/复核人标识最大长度。
+pub(crate) const ACTOR_MAX_LEN: usize = 128;
 /// SHA-256 十六进制摘要长度。
 const HASH_LEN: usize = 64;
 /// 冻结策略标识/版本最大长度。
@@ -155,8 +155,12 @@ pub struct SupplierSettlementStatementData {
     pub refresh_cutoff_policy_id: String,
     /// 刷新截止策略冻结版本。
     pub refresh_cutoff_policy_version: String,
-    /// 经办人。
+    /// 对账负责人。
     pub prepared_by: String,
+    /// 业务组织（内部组织 ID）。
+    pub business_org_unit_id: String,
+    /// 差异处理人；空则等于对账负责人。
+    pub difference_handler_user_id: String,
 }
 
 /// 草稿刷新所替换的服务端来源快照。
@@ -233,9 +237,15 @@ pub struct SupplierSettlementStatement {
     pub refresh_cutoff_policy_id: String,
     /// 刷新截止策略冻结版本。
     pub refresh_cutoff_policy_version: String,
-    /// 经办人。
+    /// 对账负责人。
     pub prepared_by: String,
-    /// 复核人。
+    /// 业务组织（内部组织 ID）；不得写入结算主体或 `"company"` 根。
+    #[serde(default)]
+    pub business_org_unit_id: String,
+    /// 差异处理人；缺省等于对账负责人，可独立改派。
+    #[serde(default)]
+    pub difference_handler_user_id: String,
+    /// 实际复核人。
     pub reviewed_by: Option<String>,
     /// 最近一次正式复核决定。
     pub review_result: Option<SettlementReviewResult>,
@@ -270,6 +280,7 @@ impl SupplierSettlementStatement {
     /// 单号为空/超长、期间倒挂、账单身份不完整、经办复核相同、金额为负或
     /// 确认状态字段不一致时返回错误。
     pub fn new(id: SupplierSettlementStatementId, data: SupplierSettlementStatementData) -> Result<Self> {
+        let (prepared_by, business_org_unit_id, difference_handler_user_id) = normalize_ownership(&data)?;
         let statement_no = normalize_required_text(
             data.statement_no,
             "结算单号不能为空",
@@ -283,8 +294,6 @@ impl SupplierSettlementStatement {
         if external_bill_no.is_some() != external_bill_version.is_some() {
             return Err(Error::from("外部账单号与版本必须同时提供或同时省略"));
         }
-        let prepared_by =
-            normalize_required_text(data.prepared_by, "经办人不能为空", ACTOR_MAX_LEN, "经办人过长")?;
         if data.period_end < data.period_start {
             return Err(Error::from("结算期间结束不得早于开始"));
         }
@@ -345,6 +354,8 @@ impl SupplierSettlementStatement {
             refresh_cutoff_policy_id,
             refresh_cutoff_policy_version,
             prepared_by,
+            business_org_unit_id,
+            difference_handler_user_id,
             reviewed_by: None,
             review_result: None,
             review_reason_code: None,
@@ -401,15 +412,38 @@ impl SupplierSettlementStatement {
         self.status == SettlementStatus::PendingReview
     }
 
-    /// 判断指定账号是否为当前结算经办人。
+    /// 判断指定账号是否为当前对账负责人。
     ///
     /// # 参数
     /// * `actor_id` - 当前账号标识
     ///
     /// # 返回
-    /// 经办人一致时返回 `true`。
+    /// 对账负责人一致时返回 `true`。
     pub fn is_prepared_by(&self, actor_id: &str) -> bool {
         self.prepared_by == actor_id
+    }
+
+    /// 返回当前差异处理人；存量空值回退对账负责人。
+    ///
+    /// # 返回
+    /// 返回差异处理人 ID。
+    pub fn difference_handler(&self) -> &str {
+        if self.difference_handler_user_id.is_empty() {
+            &self.prepared_by
+        } else {
+            &self.difference_handler_user_id
+        }
+    }
+
+    /// 判断指定账号是否为当前差异处理人。
+    ///
+    /// # 参数
+    /// * `actor_id` - 当前账号标识
+    ///
+    /// # 返回
+    /// 差异处理人一致时返回 `true`。
+    pub fn is_difference_handler(&self, actor_id: &str) -> bool {
+        self.difference_handler() == actor_id
     }
 
     /// 校验客户端提交的复核主题与刷新截止策略快照。
@@ -835,6 +869,36 @@ impl SupplierSettlementStatement {
     }
 }
 
+/// 规范化对账负责人、业务组织和差异处理人；禁止公司根。
+fn normalize_ownership(data: &SupplierSettlementStatementData) -> Result<(String, String, String)> {
+    let prepared_by = normalize_required_text(
+        data.prepared_by.clone(),
+        "对账负责人不能为空",
+        ACTOR_MAX_LEN,
+        "对账负责人过长",
+    )?;
+    let business_org_unit_id = normalize_required_text(
+        data.business_org_unit_id.clone(),
+        "业务组织不能为空",
+        ACTOR_MAX_LEN,
+        "业务组织过长",
+    )?;
+    if business_org_unit_id == "company" {
+        return Err(Error::from("业务组织不能使用公司根"));
+    }
+    let difference_handler_user_id = if data.difference_handler_user_id.trim().is_empty() {
+        prepared_by.clone()
+    } else {
+        normalize_required_text(
+            data.difference_handler_user_id.clone(),
+            "差异处理人不能为空",
+            ACTOR_MAX_LEN,
+            "差异处理人过长",
+        )?
+    };
+    Ok((prepared_by, business_org_unit_id, difference_handler_user_id))
+}
+
 /// 对字段逐项加入长度前缀后计算稳定摘要，消除字符串拼接歧义。
 fn digest_parts(parts: &[String]) -> String {
     let mut digest = Sha256::new();
@@ -927,6 +991,8 @@ mod tests {
             refresh_cutoff_policy_id: "supplier-settlement-review-cutoff".to_string(),
             refresh_cutoff_policy_version: "1".to_string(),
             prepared_by: " 经办人-a ".to_string(),
+            business_org_unit_id: " org-finance ".to_string(),
+            difference_handler_user_id: String::new(),
         }
     }
 
@@ -940,8 +1006,20 @@ mod tests {
 
         assert_eq!(statement.statement_no, "ST-2026-001");
         assert_eq!(statement.prepared_by, "经办人-a");
+        assert_eq!(statement.business_org_unit_id, "org-finance");
+        assert_eq!(statement.difference_handler(), "经办人-a");
         assert_eq!(statement.difference_amount, Amount::from_str("23.45").unwrap());
         assert_eq!(statement.status, SettlementStatus::Draft);
+    }
+
+    #[test]
+    fn new_rejects_company_root_as_business_org() {
+        let data =
+            SupplierSettlementStatementData { business_org_unit_id: "company".into(), ..sample_data() };
+        assert!(
+            SupplierSettlementStatement::new(SupplierSettlementStatementId::new("statement-company"), data)
+                .is_err()
+        );
     }
 
     #[test]

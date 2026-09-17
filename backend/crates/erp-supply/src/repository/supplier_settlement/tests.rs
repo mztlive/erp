@@ -19,16 +19,52 @@ fn statement_filter_applies_optional_fields_and_deleted_filter() {
         status: Some(SettlementStatus::Confirmed),
         period_from: None,
         period_to: None,
-        page: 1,
-        page_size: 20,
-        sort_by: None,
-        sort_ascending: false,
+        ..Default::default()
     };
 
     let document = filter.to_doc();
     assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
     assert_eq!(document.get_str("status").unwrap(), "CONFIRMED");
     assert_eq!(document.get_document("statement_no").unwrap().get_str("$regex").unwrap(), r"ST\-2026");
+}
+
+#[test]
+fn statement_filter_ands_three_role_conditions_without_expanding_scope() {
+    let filter = SupplierSettlementStatementFilter {
+        owner_user_ids: Some(vec!["owner-1".into()]),
+        operator_user_ids: Some(vec!["op-1".into()]),
+        handler_user_ids: Some(vec!["reviewer-1".into()]),
+        handler_open_statement_ids: vec!["st-open".into()],
+        authorized_scope: Some(super::SettlementReadScope {
+            roles: vec![super::SettlementScopeClause {
+                owner_user_id: Some("owner-1".into()),
+                ..super::SettlementScopeClause::default()
+            }],
+            user_limit: None,
+        }),
+        ..Default::default()
+    };
+    let text = format!("{:?}", filter.to_doc());
+    assert!(text.contains("prepared_by"));
+    assert!(text.contains("difference_handler_user_id"));
+    assert!(!text.contains("reviewed_by"));
+    assert!(text.contains("st-open"));
+}
+
+#[test]
+fn handler_filter_without_open_tasks_is_empty_and_operator_falls_back() {
+    let empty_handler = SupplierSettlementStatementFilter {
+        handler_user_ids: Some(vec!["reviewer-1".into()]),
+        ..Default::default()
+    };
+    assert!(format!("{:?}", empty_handler.to_doc()).contains("$expr"));
+    let operator = SupplierSettlementStatementFilter {
+        operator_user_ids: Some(vec!["op-1".into()]),
+        ..Default::default()
+    };
+    let text = format!("{:?}", operator.to_doc());
+    assert!(text.contains("difference_handler_user_id"));
+    assert!(text.contains("prepared_by"));
 }
 
 #[test]

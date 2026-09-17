@@ -80,6 +80,8 @@ pub(super) fn supplier_settlement_statement_projection() -> Document {
         "refresh_cutoff_policy_id": 1,
         "refresh_cutoff_policy_version": 1,
         "prepared_by": 1,
+        "business_org_unit_id": 1,
+        "difference_handler_user_id": 1,
         "reviewed_by": 1,
         "review_result": 1,
         "review_reason_code": 1,

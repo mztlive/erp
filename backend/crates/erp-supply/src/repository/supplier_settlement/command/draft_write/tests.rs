@@ -275,6 +275,8 @@ fn statement_fixture(id: &str) -> SupplierSettlementStatement {
             refresh_cutoff_policy_id: "supplier-settlement-review-cutoff".to_string(),
             refresh_cutoff_policy_version: "1".to_string(),
             prepared_by: "preparer-1".to_string(),
+            business_org_unit_id: "org-finance".to_string(),
+            difference_handler_user_id: String::new(),
         },
     )
     .unwrap()

@@ -14,6 +14,7 @@ mod organization;
 mod party;
 mod purchase_data_scope;
 mod selection_data_scope;
+mod settlement_data_scope;
 mod supplier;
 mod supplier_data_scope;
 mod warehouse;
@@ -223,3 +224,6 @@ mod scope_equivalence;
 
 mod scope_target_validation;
 pub use scope_target_validation::scope_configuration;
+pub use settlement_data_scope::{
+    MongoSettlementDataScope, scoped_settlement_process, scoped_settlement_service, settlement_access,
+};

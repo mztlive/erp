@@ -103,6 +103,31 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/supplier-settlement-statements/{id}/handover",
+            with_permission(
+                post(supplier_settlement::supplier_settlement_statement_handover),
+                rbac,
+                supplier_settlement::supplier_settlement_statement_handover_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-settlement-statements/{id}/handover-candidates",
+            with_permission(
+                get(supplier_settlement::supplier_settlement_statement_handover_candidates),
+                rbac,
+                supplier_settlement::supplier_settlement_statement_handover_candidates_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-settlement-statements/{id}/difference-handler",
+            with_permission(
+                post(supplier_settlement::supplier_settlement_statement_reassign_difference_handler),
+                rbac,
+                supplier_settlement::supplier_settlement_statement_reassign_difference_handler_permission_key(
+                ),
+            ),
+        )
+        .route(
             "/supplier-settlement-items",
             with_permission(
                 get(supplier_settlement::supplier_settlement_item_list),

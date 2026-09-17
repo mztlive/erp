@@ -142,12 +142,13 @@ export function useSettlementListColumns(
             {
                 id: "actors",
                 accessorFn: (row) =>
-                    `${row.preparedByLabel}/${row.reviewedByLabel}`,
-                header: "经办/复核",
-                meta: { label: "经办/复核" },
+                    `${row.preparedByLabel}/${row.differenceHandlerLabel}/${row.reviewedByLabel}`,
+                header: "对账/差异/复核",
+                meta: { label: "对账/差异/复核" },
                 cell: ({ row }) => (
                     <div className="text-xs text-muted-foreground">
-                        <div>经办 {row.original.preparedByLabel}</div>
+                        <div>对账 {row.original.preparedByLabel}</div>
+                        <div>差异 {row.original.differenceHandlerLabel}</div>
                         <div>复核 {row.original.reviewedByLabel}</div>
                     </div>
                 ),

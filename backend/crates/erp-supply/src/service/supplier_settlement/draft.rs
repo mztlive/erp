@@ -42,6 +42,7 @@ impl SupplierSettlementService {
         &self,
         req: &CreateSettlementStatementRequest,
         actor_id: &str,
+        business_org_unit_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<StatementPreparation> {
         req.validate()?;
@@ -108,6 +109,8 @@ impl SupplierSettlementService {
                 refresh_cutoff_policy_id: REVIEW_CUTOFF_POLICY_ID.to_string(),
                 refresh_cutoff_policy_version: REVIEW_CUTOFF_POLICY_VERSION.to_string(),
                 prepared_by: actor_id.to_string(),
+                business_org_unit_id: business_org_unit_id.to_string(),
+                difference_handler_user_id: actor_id.to_string(),
             },
         )?;
         statement.refresh_snapshot(SupplierSettlementSnapshotUpdate {

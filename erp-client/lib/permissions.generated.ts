@@ -4539,6 +4539,36 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/supplier-settlement-statements/{id}/handover",
+                description: "交接供应商结算对账负责人",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-settlement-statements/{id}/handover-candidates",
+                description: "查询供应商结算交接待选",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-settlement-statements/{id}/difference-handler",
+                description: "改派供应商结算差异处理人",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/supplier-settlement-items",
                 description: "查询供应商结算明细列表",

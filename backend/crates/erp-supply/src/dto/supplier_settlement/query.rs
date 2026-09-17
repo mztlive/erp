@@ -25,7 +25,21 @@ const DIFFERENCE_SORT_FIELDS: &[&str] = &["created_at", "difference_amount", "re
 
 /// 供应商结算单列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct SupplierSettlementStatementListParams {
+    /// 跨页与导出必须使用前一页的当前授权版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
+    /// 对账负责人 ID，逗号分隔，最多 100 项；只收窄授权结果。
+    pub owner_user_ids: Option<application_core::QueryIds>,
+    /// 差异处理人 ID，逗号分隔，最多 100 项；只收窄授权结果。
+    pub operator_user_ids: Option<application_core::QueryIds>,
+    /// 当前复核人 ID，逗号分隔，最多 100 项；只收窄授权结果。
+    pub handler_user_ids: Option<application_core::QueryIds>,
+    /// 当前业务组织，逗号分隔，最多 100 项；只收窄授权结果。
+    pub org_unit_ids: Option<application_core::QueryIds>,
+    /// 组织筛选是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
     /// 编号或供应商当前名称字面量关键词。
     #[validate(length(max = 200))]
     pub q: Option<String>,
@@ -54,6 +68,16 @@ pub struct SupplierSettlementStatementListParams {
 /// 归一化后的结算单列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct StatementListQuery {
+    /// 对账负责人精确身份条件。
+    pub owner_user_ids: Option<application_core::QueryIds>,
+    /// 差异处理人筛选，不扩大对账负责人授权。
+    pub operator_user_ids: Option<application_core::QueryIds>,
+    /// 当前复核人筛选，不扩大对账负责人授权。
+    pub handler_user_ids: Option<application_core::QueryIds>,
+    /// 当前业务组织，只收窄授权结果。
+    pub org_unit_ids: Option<application_core::QueryIds>,
+    /// 组织筛选是否包含有效下级。
+    pub include_descendants: bool,
     /// 编号或供应商当前名称字面量关键词。
     pub q: Option<String>,
     /// 结算单号模糊筛选。
@@ -87,7 +111,15 @@ impl SupplierSettlementStatementListParams {
         if period_from.zip(period_to).is_some_and(|(from, to)| from > to) {
             return Err(crate::Error::ValidationError("期间开始不得晚于期间结束".to_string()));
         }
+        reject_me_ids(self.owner_user_ids.as_ref())?;
+        reject_me_ids(self.operator_user_ids.as_ref())?;
+        reject_me_ids(self.handler_user_ids.as_ref())?;
         Ok(StatementListQuery {
+            owner_user_ids: self.owner_user_ids.clone(),
+            operator_user_ids: self.operator_user_ids.clone(),
+            handler_user_ids: self.handler_user_ids.clone(),
+            org_unit_ids: self.org_unit_ids.clone(),
+            include_descendants: self.include_descendants.unwrap_or(false),
             q: normalized_text(self.q.as_deref()),
             statement_no: normalized_text(self.statement_no.as_deref()),
             supplier_id: self.supplier_id.clone(),
@@ -102,6 +134,13 @@ impl SupplierSettlementStatementListParams {
             },
         })
     }
+}
+
+fn reject_me_ids(ids: Option<&application_core::QueryIds>) -> Result<()> {
+    if ids.is_some_and(|ids| ids.as_slice().iter().any(|id| id.eq_ignore_ascii_case("me"))) {
+        return Err(crate::Error::ValidationError("人员筛选必须为稳定 ID，不能使用 me".into()));
+    }
+    Ok(())
 }
 
 fn optional_business_date(value: Option<&str>, field: &str) -> Result<Option<BusinessDate>> {
@@ -158,9 +197,13 @@ pub struct SupplierSettlementStatementView {
     pub refresh_cutoff_policy_id: String,
     /// 刷新截止策略冻结版本。
     pub refresh_cutoff_policy_version: String,
-    /// 经办人。
+    /// 对账负责人。
     pub prepared_by: String,
-    /// 复核人。
+    /// 业务组织。
+    pub business_org_unit_id: String,
+    /// 差异处理人。
+    pub difference_handler_user_id: String,
+    /// 实际复核人。
     pub reviewed_by: Option<String>,
     /// 最近一次正式复核决定。
     pub review_result: Option<SettlementReviewResult>,
@@ -189,6 +232,7 @@ impl From<SupplierSettlementStatement> for SupplierSettlementStatementView {
     /// # 返回
     /// 返回响应视图。
     fn from(statement: SupplierSettlementStatement) -> Self {
+        let difference_handler_user_id = statement.difference_handler().to_string();
         Self {
             id: statement.base.id,
             statement_no: statement.statement_no,
@@ -211,6 +255,8 @@ impl From<SupplierSettlementStatement> for SupplierSettlementStatementView {
             refresh_cutoff_policy_id: statement.refresh_cutoff_policy_id,
             refresh_cutoff_policy_version: statement.refresh_cutoff_policy_version,
             prepared_by: statement.prepared_by,
+            business_org_unit_id: statement.business_org_unit_id,
+            difference_handler_user_id,
             reviewed_by: statement.reviewed_by,
             review_result: statement.review_result,
             review_reason_code: statement.review_reason_code,
@@ -459,6 +505,36 @@ pub struct SupplierSettlementStatementListView {
     pub page_size: u32,
     pub stats: SettlementStatementListStatsView,
     pub processing_state: String,
+    /// 跨页必须原样回传的范围版本。
+    #[serde(default)]
+    pub scope_version: String,
+    /// RBAC 策略版本。
+    #[serde(default)]
+    pub policy_version: u64,
+    /// 组织配置版本。
+    #[serde(default)]
+    pub organization_version: u64,
+    /// 授权解析时点。
+    #[serde(default)]
+    pub as_of: String,
+    /// 角色无有效范围时为 `no_scope`。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub empty_reason: Option<&'static str>,
+    /// 当前结算范围口径摘要。
+    #[serde(default)]
+    pub scope_summary: &'static str,
+    /// 当前负责人权威来源。
+    #[serde(default)]
+    pub ownership_basis: &'static str,
+    /// 对账负责人候选。
+    #[serde(default)]
+    pub owner_options: Vec<application_core::FilterOption>,
+    /// 差异处理人候选。
+    #[serde(default)]
+    pub operator_options: Vec<application_core::FilterOption>,
+    /// 当前复核人候选。
+    #[serde(default)]
+    pub handler_options: Vec<application_core::FilterOption>,
 }
 
 /// 供应商结算单分页视图（复用 D32 的契约形状）。

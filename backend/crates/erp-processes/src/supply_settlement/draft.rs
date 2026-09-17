@@ -63,7 +63,7 @@ impl SupplierSettlementProcess {
         req: CreateSettlementStatementRequest,
         actor: &AuditActor,
     ) -> Result<SettlementDraftCommandResult> {
-        let prepared = match self.domain().prepare_statement(&req, actor.id(), &mut NoTransaction).await? {
+        let prepared = match self.prepare_scoped_statement(&req, actor).await? {
             StatementPreparation::Replay(result) => return Ok(result),
             StatementPreparation::Ready(prepared) => prepared,
         };
@@ -86,12 +86,18 @@ impl SupplierSettlementProcess {
         )?;
         let db = self.db.clone();
         let client = db.client().clone();
+        let data_scope = self.data_scope.clone();
+        let actor_for_tx = actor.clone();
+        let owner_id = actor.id().to_string();
         let statement_for_tx = statement.clone();
         let items_for_tx = snapshot.items.clone();
         let differences_for_tx = snapshot.differences.clone();
         let transaction_result = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    erp_supply::SettlementAccess::new(db.clone(), data_scope)
+                        .require_create(&actor_for_tx, &owner_id, session)
+                        .await?;
                     SupplierSettlementService::new(db.clone())
                         .persist_statement_with_items(
                             &statement_for_tx,
@@ -125,6 +131,15 @@ impl SupplierSettlementProcess {
         })
     }
 
+    async fn prepare_scoped_statement(
+        &self,
+        req: &CreateSettlementStatementRequest,
+        actor: &AuditActor,
+    ) -> Result<StatementPreparation> {
+        let (_, org) = self.domain().access().require_create(actor, actor.id(), &mut NoTransaction).await?;
+        Ok(self.domain().prepare_statement(req, actor.id(), &org, &mut NoTransaction).await?)
+    }
+
     /// 使用同一供应商、期间和冻结策略下的最新来源批次刷新可编辑草稿。
     ///
     /// 命令要求结算单 CAS 与来源摘要同时匹配。相同来源为受审计的 no-op；新来源
@@ -147,6 +162,7 @@ impl SupplierSettlementProcess {
         if let Some(result) = self.replay_refresh(&audit_id, &fingerprint, id).await? {
             return Ok(result);
         }
+        self.domain().access().require_statement(actor, "update", id, &mut NoTransaction).await?;
         let prepared = self.domain().prepare_refresh(id, &req, actor.id(), &mut NoTransaction).await?;
         let erp_supply::service::supplier_settlement::draft::PreparedRefresh {
             statement,
@@ -171,11 +187,17 @@ impl SupplierSettlementProcess {
         let audit = refresh_audit(audit_id.clone(), &fingerprint, &statement, &receipt, actor)?;
         let db = self.db.clone();
         let client = db.client().clone();
+        let data_scope = self.data_scope.clone();
+        let actor_for_tx = actor.clone();
+        let id_for_tx = id.to_string();
         let mut statement_for_tx = statement.clone();
         let snapshot_for_tx = snapshot;
         let transaction_result = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    erp_supply::SettlementAccess::new(db.clone(), data_scope)
+                        .require_statement(&actor_for_tx, "update", &id_for_tx, session)
+                        .await?;
                     SupplierSettlementService::new(db.clone())
                         .persist_refreshed_statement(
                             &mut statement_for_tx,

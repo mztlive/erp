@@ -46,13 +46,19 @@ impl SupplierSettlementProcess {
         if let Some(result) = self.replay_difference_decision(&audit_id, &fingerprint, id).await? {
             return Ok(result);
         }
+        self.domain()
+            .access()
+            .require_statement(actor, "update", &req.statement_id, &mut NoTransaction)
+            .await?;
         let (mut statement, mut difference) = self
             .domain()
             .prepare_difference_decision(id, &req, &conclusion, actor.id(), &mut NoTransaction)
             .await?;
         let db = self.db.clone();
         let client = db.client().clone();
+        let data_scope = self.data_scope.clone();
         let audit_actor = actor.clone();
+        let statement_id = req.statement_id.clone();
         let operation_id = req.operation_id.clone();
         let operation_id_for_tx = operation_id.clone();
         let fingerprint_for_tx = fingerprint.clone();
@@ -60,6 +66,9 @@ impl SupplierSettlementProcess {
         let transaction_result = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    erp_supply::SettlementAccess::new(db.clone(), data_scope)
+                        .require_statement(&audit_actor, "update", &statement_id, session)
+                        .await?;
                     SupplierSettlementService::new(db.clone())
                         .persist_difference_decision(&mut statement, &mut difference, session)
                         .await?;

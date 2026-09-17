@@ -80,10 +80,20 @@ export function toListRow(s: BackendStatement): SettlementListRow {
         preparedBy: s.prepared_by
             ? { userId: s.prepared_by, displayName: s.prepared_by }
             : undefined,
+        differenceHandler:
+            s.difference_handler_user_id || s.prepared_by
+                ? {
+                      userId: s.difference_handler_user_id || s.prepared_by,
+                      displayName:
+                          s.difference_handler_user_id || s.prepared_by,
+                  }
+                : undefined,
         reviewedBy: s.reviewed_by
             ? { userId: s.reviewed_by, displayName: s.reviewed_by }
             : undefined,
         preparedByLabel: s.prepared_by || "—",
+        differenceHandlerLabel:
+            s.difference_handler_user_id || s.prepared_by || "—",
         reviewedByLabel: s.reviewed_by || "待复核人",
         updatedAt: tsToIso(s.created_at),
         allowedActions: allowed,
@@ -248,6 +258,14 @@ export function toDetail(
             preparedBy: s.prepared_by
                 ? { userId: s.prepared_by, displayName: s.prepared_by }
                 : undefined,
+            differenceHandler:
+                s.difference_handler_user_id || s.prepared_by
+                    ? {
+                          userId: s.difference_handler_user_id || s.prepared_by,
+                          displayName:
+                              s.difference_handler_user_id || s.prepared_by,
+                      }
+                    : undefined,
             reviewedBy: s.reviewed_by
                 ? { userId: s.reviewed_by, displayName: s.reviewed_by }
                 : undefined,

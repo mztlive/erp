@@ -51,6 +51,20 @@ export function useSettlementListState(
     const [periodToDraft, setPeriodToDraft] = React.useState(
         urlState.periodTo ?? "",
     )
+    const [ownerUserIdsDraft, setOwnerUserIdsDraft] = React.useState(
+        urlState.ownerUserIds ?? "",
+    )
+    const [operatorUserIdsDraft, setOperatorUserIdsDraft] = React.useState(
+        urlState.operatorUserIds ?? "",
+    )
+    const [handlerUserIdsDraft, setHandlerUserIdsDraft] = React.useState(
+        urlState.handlerUserIds ?? "",
+    )
+    const [orgUnitIdsDraft, setOrgUnitIdsDraft] = React.useState(
+        urlState.orgUnitIds ?? "",
+    )
+    const [includeDescendantsDraft, setIncludeDescendantsDraft] =
+        React.useState(Boolean(urlState.includeDescendants))
 
     // ---- UI 态 ----
     // 深链带结构化条件时展开面板；展开态本身不写 URL。
@@ -75,6 +89,11 @@ export function useSettlementListState(
                 differenceTypeDraft === "all" ? undefined : differenceTypeDraft,
             periodFrom: periodFromDraft.trim() || undefined,
             periodTo: periodToDraft.trim() || undefined,
+            ownerUserIds: ownerUserIdsDraft.trim() || undefined,
+            operatorUserIds: operatorUserIdsDraft.trim() || undefined,
+            handlerUserIds: handlerUserIdsDraft.trim() || undefined,
+            orgUnitIds: orgUnitIdsDraft.trim() || undefined,
+            includeDescendants: includeDescendantsDraft || undefined,
             page: 1,
         })
         setPanelOpen(false)
@@ -86,6 +105,11 @@ export function useSettlementListState(
         searchDraft,
         statusDraft,
         supplierIdDraft,
+        ownerUserIdsDraft,
+        operatorUserIdsDraft,
+        handlerUserIdsDraft,
+        orgUnitIdsDraft,
+        includeDescendantsDraft,
     ])
 
     /** 单个 chip 只移除自己的条件；期间上下界作为一个 chip 一起移除。 */
@@ -111,6 +135,31 @@ export function useSettlementListState(
                 patchUrl({ differenceType: undefined, page: 1 })
                 return
             }
+            if (key === "ownerUserIds") {
+                setOwnerUserIdsDraft("")
+                patchUrl({ ownerUserIds: undefined, page: 1 })
+                return
+            }
+            if (key === "operatorUserIds") {
+                setOperatorUserIdsDraft("")
+                patchUrl({ operatorUserIds: undefined, page: 1 })
+                return
+            }
+            if (key === "handlerUserIds") {
+                setHandlerUserIdsDraft("")
+                patchUrl({ handlerUserIds: undefined, page: 1 })
+                return
+            }
+            if (key === "orgUnitIds") {
+                setOrgUnitIdsDraft("")
+                setIncludeDescendantsDraft(false)
+                patchUrl({
+                    orgUnitIds: undefined,
+                    includeDescendants: undefined,
+                    page: 1,
+                })
+                return
+            }
             setPeriodFromDraft("")
             setPeriodToDraft("")
             setPeriodError(null)
@@ -126,6 +175,11 @@ export function useSettlementListState(
         setPeriodFromDraft("")
         setPeriodToDraft("")
         setPeriodError(null)
+        setOwnerUserIdsDraft("")
+        setOperatorUserIdsDraft("")
+        setHandlerUserIdsDraft("")
+        setOrgUnitIdsDraft("")
+        setIncludeDescendantsDraft(false)
     }, [])
 
     const hasPendingChanges =
@@ -137,7 +191,12 @@ export function useSettlementListState(
             ) ?? "") ||
         differenceTypeDraft !== (urlState.differenceType ?? "all") ||
         periodFromDraft !== (urlState.periodFrom ?? "") ||
-        periodToDraft !== (urlState.periodTo ?? "")
+        periodToDraft !== (urlState.periodTo ?? "") ||
+        ownerUserIdsDraft !== (urlState.ownerUserIds ?? "") ||
+        operatorUserIdsDraft !== (urlState.operatorUserIds ?? "") ||
+        handlerUserIdsDraft !== (urlState.handlerUserIds ?? "") ||
+        orgUnitIdsDraft !== (urlState.orgUnitIds ?? "") ||
+        includeDescendantsDraft !== Boolean(urlState.includeDescendants)
 
     /**
      * 清除全部：重置 Draft、错误、面板、筛选参数与分页；
@@ -155,6 +214,11 @@ export function useSettlementListState(
             supplierId: undefined,
             status: undefined,
             differenceType: undefined,
+            ownerUserIds: undefined,
+            operatorUserIds: undefined,
+            handlerUserIds: undefined,
+            orgUnitIds: undefined,
+            includeDescendants: undefined,
             page: 1,
         })
     }, [patchUrl])
@@ -170,10 +234,20 @@ export function useSettlementListState(
         setDifferenceTypeDraft(urlState.differenceType ?? "all")
         setPeriodFromDraft(urlState.periodFrom ?? "")
         setPeriodToDraft(urlState.periodTo ?? "")
+        setOwnerUserIdsDraft(urlState.ownerUserIds ?? "")
+        setOperatorUserIdsDraft(urlState.operatorUserIds ?? "")
+        setHandlerUserIdsDraft(urlState.handlerUserIds ?? "")
+        setOrgUnitIdsDraft(urlState.orgUnitIds ?? "")
+        setIncludeDescendantsDraft(Boolean(urlState.includeDescendants))
         setPeriodError(null)
     }, [
         searchInputRef,
         urlState.differenceType,
+        urlState.handlerUserIds,
+        urlState.includeDescendants,
+        urlState.operatorUserIds,
+        urlState.orgUnitIds,
+        urlState.ownerUserIds,
         urlState.periodFrom,
         urlState.periodTo,
         urlState.q,
@@ -198,6 +272,16 @@ export function useSettlementListState(
         setPeriodFromDraft,
         periodToDraft,
         setPeriodToDraft,
+        ownerUserIdsDraft,
+        setOwnerUserIdsDraft,
+        operatorUserIdsDraft,
+        setOperatorUserIdsDraft,
+        handlerUserIdsDraft,
+        setHandlerUserIdsDraft,
+        orgUnitIdsDraft,
+        setOrgUnitIdsDraft,
+        includeDescendantsDraft,
+        setIncludeDescendantsDraft,
         periodError,
         setPeriodError,
         applyFilters,

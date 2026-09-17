@@ -19,10 +19,23 @@ export type SettlementFilterKey =
     | "status"
     | "differenceType"
     | "period"
+    | "ownerUserIds"
+    | "operatorUserIds"
+    | "handlerUserIds"
+    | "orgUnitIds"
 
 export type SettlementFilterState = Pick<
     SettlementsUrlState,
-    "q" | "supplierId" | "status" | "differenceType" | "periodFrom" | "periodTo"
+    | "q"
+    | "supplierId"
+    | "status"
+    | "differenceType"
+    | "periodFrom"
+    | "periodTo"
+    | "ownerUserIds"
+    | "operatorUserIds"
+    | "handlerUserIds"
+    | "orgUnitIds"
 >
 
 export const SETTLEMENT_STATUS_VALUES = Object.keys(
@@ -68,7 +81,14 @@ export function hasMoreSettlementFilters(
     state: SettlementFilterState,
 ): boolean {
     return Boolean(
-        state.supplierId || state.status || state.periodFrom || state.periodTo,
+        state.supplierId ||
+        state.status ||
+        state.periodFrom ||
+        state.periodTo ||
+        state.ownerUserIds ||
+        state.operatorUserIds ||
+        state.handlerUserIds ||
+        state.orgUnitIds,
     )
 }
 
@@ -143,6 +163,30 @@ export function buildSettlementFilterChips(
         chips.push({
             key: "period",
             label: `期间：${state.periodFrom ?? "不限"} 至 ${state.periodTo ?? "不限"}`,
+        })
+    }
+    if (state.ownerUserIds) {
+        chips.push({
+            key: "ownerUserIds",
+            label: `对账负责人：${state.ownerUserIds}`,
+        })
+    }
+    if (state.operatorUserIds) {
+        chips.push({
+            key: "operatorUserIds",
+            label: `差异处理人：${state.operatorUserIds}`,
+        })
+    }
+    if (state.handlerUserIds) {
+        chips.push({
+            key: "handlerUserIds",
+            label: `当前复核人：${state.handlerUserIds}`,
+        })
+    }
+    if (state.orgUnitIds) {
+        chips.push({
+            key: "orgUnitIds",
+            label: `业务组织：${state.orgUnitIds}`,
         })
     }
     return chips

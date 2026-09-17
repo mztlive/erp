@@ -16,6 +16,6 @@ pub async fn supplier_settlement_reviewer_options(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<SettlementReviewerOption>> {
-    let options = SupplierSettlementProcess::new(state.db()).reviewer_options(&id, &actor).await?;
+    let options = settlement_process(&state).reviewer_options(&id, &actor).await?;
     Ok(ApiResponse::ok_with_data(options))
 }
