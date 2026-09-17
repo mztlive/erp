@@ -58,13 +58,15 @@ impl CatalogService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     write_disabled_product(
-                        &db,
-                        &access,
-                        audit_port.as_ref(),
-                        &id,
-                        &req,
-                        &actor,
-                        &audit,
+                        DisableWrite {
+                            db: &db,
+                            access: &access,
+                            audit_port: audit_port.as_ref(),
+                            id: &id,
+                            req: &req,
+                            actor: &actor,
+                            audit: &audit,
+                        },
                         session,
                     )
                     .await
@@ -75,16 +77,20 @@ impl CatalogService {
     }
 }
 
+struct DisableWrite<'a> {
+    db: &'a Database,
+    access: &'a CatalogAccess,
+    audit_port: &'a dyn CatalogAuditPort,
+    id: &'a str,
+    req: &'a DisableProductRequest,
+    actor: &'a AuditActor,
+    audit: &'a PreparedCatalogAudit,
+}
+
 /// 在调用方事务内重验范围并写入停用修订。
 ///
 /// # 参数
-/// * `db` - 商品数据库
-/// * `access` - 商品范围访问器
-/// * `audit_port` - 审计端口
-/// * `id` - 商品稳定 ID
-/// * `req` - 已校验停用命令
-/// * `actor` - 操作人
-/// * `audit` - 已准备的审计记录
+/// * `input` - 停用写入所需的数据库、范围、审计与命令
 /// * `session` - 调用方执行器
 ///
 /// # 返回
@@ -93,15 +99,10 @@ impl CatalogService {
 /// # 错误
 /// 不可见、缺责任、版本冲突或已经停用时整事务回滚。
 async fn write_disabled_product(
-    db: &Database,
-    access: &CatalogAccess,
-    audit_port: &dyn CatalogAuditPort,
-    id: &str,
-    req: &DisableProductRequest,
-    actor: &AuditActor,
-    audit: &PreparedCatalogAudit,
+    input: DisableWrite<'_>,
     session: &mut dyn persistence_core::Executor,
 ) -> Result<Product> {
+    let DisableWrite { db, access, audit_port, id, req, actor, audit } = input;
     let scoped = access.require_product(actor, "update", id, session).await?;
     if !scoped.has_responsibility() {
         return Err(Error::BusinessLogicError("商品缺少维护人或主属组织，请先交接".into()));

@@ -175,10 +175,21 @@ export function hydrateSupplierEditor(
             fields.maintainerUserId ??
             "",
         capabilityOwnerUserId:
-            data.keyFacts.find((item) => item.label === "能力负责人")?.value ??
-            fields.capabilityOwnerUserId ??
+            labeledValue(data.currentRevision.fields, "能力负责人") ||
+            labeledValue(data.resourceFacts, "能力负责人") ||
+            fields.capabilityOwnerUserId ||
             "",
     }
+}
+
+function labeledValue(
+    facts: ReadonlyArray<{ label: string; value: string }> | undefined,
+    label: string,
+): string {
+    const value =
+        facts?.find((item) => item.label === label)?.value?.trim() ?? ""
+    if (!value || value === "—" || value === "****") return ""
+    return value
 }
 
 export function createSupplierEditorDefaults(

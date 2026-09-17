@@ -16,7 +16,7 @@ use erp_supply::entity::supplier_settlement::{
 };
 use erp_supply::repository::SupplierSettlementExt;
 use erp_supply::service::supplier_settlement::review::{
-    SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID, SETTLEMENT_REVIEW_OWNER_ROLE, settlement_review_access,
+    SETTLEMENT_REVIEW_OWNER_ROLE, settlement_review_access,
 };
 use erp_supply::service::supplier_settlement::shared::{
     REVIEW_CUTOFF_POLICY_ID, REVIEW_CUTOFF_POLICY_VERSION,
@@ -70,7 +70,7 @@ fn sample_work_item(statement: &SupplierSettlementStatement) -> WorkItem {
             business_object_id: statement.base.id.clone(),
             subject_version: statement.subject_hash.clone(),
             owner_role: SETTLEMENT_REVIEW_OWNER_ROLE.to_string(),
-            owner_organization_id: SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID.to_string(),
+            owner_organization_id: statement.business_org_unit_id.clone(),
             owner_user_id: "reviewer-1".to_string(),
             assignment_source: AssignmentSource::SystemRule,
             priority: WorkItemPriority::High,

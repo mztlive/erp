@@ -54,7 +54,7 @@ pub(super) fn sample_work_item(statement: &SupplierSettlementStatement) -> WorkI
             business_object_id: statement.base.id.clone(),
             subject_version: statement.subject_hash.clone(),
             owner_role: SETTLEMENT_REVIEW_OWNER_ROLE.to_string(),
-            owner_organization_id: SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID.to_string(),
+            owner_organization_id: statement.business_org_unit_id.clone(),
             owner_user_id: "reviewer-1".to_string(),
             assignment_source: AssignmentSource::SystemRule,
             priority: WorkItemPriority::High,
@@ -133,6 +133,29 @@ fn work_item_validation_requires_exact_three_versions_and_current_owner() {
             .is_err()
     );
     item.owner_user_id = Some("other-reviewer".to_string());
+    assert!(
+        validate_settlement_review_work_item(
+            &item,
+            &statement,
+            item.base.version,
+            &statement.subject_hash,
+            &actor,
+        )
+        .is_err()
+    );
+    item.owner_user_id = Some("reviewer-1".to_string());
+    item.owner_organization_id = "company".into();
+    assert!(
+        validate_settlement_review_work_item(
+            &item,
+            &statement,
+            item.base.version,
+            &statement.subject_hash,
+            &actor,
+        )
+        .is_err()
+    );
+    item.owner_organization_id = "other-org".into();
     assert!(
         validate_settlement_review_work_item(
             &item,

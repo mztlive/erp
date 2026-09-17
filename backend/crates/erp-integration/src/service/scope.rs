@@ -154,7 +154,7 @@ mod tests {
         let read = IntegrationReadScope::default();
         let meta = ScopedIntegrationList::from_access(&access(false), &read);
         assert_eq!(meta.empty_reason, Some("no_scope"));
-        assert_eq!(ensure_page(2, None).unwrap_err().to_string().contains("DATA_SCOPE_CHANGED"), true);
+        assert!(ensure_page(2, None).unwrap_err().to_string().contains("DATA_SCOPE_CHANGED"));
         assert!(ensure_scope_version(Some("v2"), "v1").is_err());
     }
 }

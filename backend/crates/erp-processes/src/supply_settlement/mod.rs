@@ -70,9 +70,7 @@ impl SupplierSettlementProcess {
     }
 }
 
-use erp_supply::service::supplier_settlement::review::{
-    SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID, SETTLEMENT_REVIEW_OWNER_ROLE,
-};
+use erp_supply::service::supplier_settlement::review::SETTLEMENT_REVIEW_OWNER_ROLE;
 
 #[cfg(test)]
 mod repository;

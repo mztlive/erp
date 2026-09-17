@@ -1409,10 +1409,11 @@ mod keyword_regression_tests {
     use super::*;
     #[test]
     fn keyword_preserves_structural_scope() {
-        let mut filter = SupplierFulfillmentOrderFilter::default();
-
-        filter.q = Some("ERP.[1]".into());
-        filter.external_order_no = Some("external".into());
+        let filter = SupplierFulfillmentOrderFilter {
+            q: Some("ERP.[1]".into()),
+            external_order_no: Some("external".into()),
+            ..Default::default()
+        };
         let query = filter.to_doc();
         assert!(query.contains_key("external_order_no"));
         let alternatives = query.get_array("$or").unwrap();

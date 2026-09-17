@@ -9,8 +9,7 @@ use erp_supply::service::supplier_settlement::difference::settlement_difference_
 use erp_supply::service::supplier_settlement::evidence::evidence_view;
 use erp_supply::service::supplier_settlement::query::{settlement_item_view, settlement_object_actions};
 use erp_supply::service::supplier_settlement::review::{
-    SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID, SETTLEMENT_REVIEW_OWNER_ROLE, review_blocker,
-    settlement_review_access,
+    review_blocker, review_task_identity_matches, settlement_review_access,
 };
 use erp_supply::service::supplier_settlement::shared::zero_amount;
 use erp_workflow::WorkItemExt;
@@ -162,8 +161,7 @@ impl SupplierSettlementReadService {
         if item.business_object_type != "supplier_settlement_statement"
             || item.business_object_id != statement.base.id
             || item.subject_version != statement.subject_hash
-            || item.owner_role != SETTLEMENT_REVIEW_OWNER_ROLE
-            || item.owner_organization_id != SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID
+            || !review_task_identity_matches(&item.owner_role, &item.owner_organization_id, statement)
         {
             return Ok((
                 None,

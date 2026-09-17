@@ -11,7 +11,7 @@ use erp_supply::entity::supplier_settlement::{
 use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply::service::supplier_settlement::review::{
     ensure_current_subject_and_resolved_differences, ensure_review_submission_ready,
-    validate_review_submission_snapshot,
+    review_owner_organization_id, review_task_identity_matches, validate_review_submission_snapshot,
 };
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
@@ -23,10 +23,10 @@ use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::{
-    COMMAND_FINGERPRINT_PREFIX, SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID, SETTLEMENT_REVIEW_OWNER_ROLE,
-    SettlementReviewCommand, SettlementReviewDecisionResult, SubmitSettlementReviewRequest,
-    SubmitSettlementReviewResult, SupplierSettlementProcess, command_audit_id, digest_parts, dto,
-    ensure_audit_resource, ensure_same_id, parse_receipt_number, receipt_result,
+    COMMAND_FINGERPRINT_PREFIX, SETTLEMENT_REVIEW_OWNER_ROLE, SettlementReviewCommand,
+    SettlementReviewDecisionResult, SubmitSettlementReviewRequest, SubmitSettlementReviewResult,
+    SupplierSettlementProcess, command_audit_id, digest_parts, dto, ensure_audit_resource, ensure_same_id,
+    parse_receipt_number, receipt_result,
 };
 use crate::{Error, Result};
 
@@ -66,23 +66,8 @@ impl SupplierSettlementProcess {
             crate::adapters::identity::shared_rbac_service(self.db.clone()),
         );
         let policy_revision = self.authorize_reviewer(&auth, &req.reviewer_user_id, actor.id()).await?;
-        let work_item = WorkItem::new(
-            WorkItemId::new(next_id()),
-            WorkItemData {
-                work_item_type: WorkItemType::SupplierSettlementReview,
-                business_object_type: "supplier_settlement_statement".to_string(),
-                business_object_id: statement.base.id.clone(),
-                subject_version: statement.subject_hash.clone(),
-                owner_role: SETTLEMENT_REVIEW_OWNER_ROLE.to_string(),
-                owner_organization_id: SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID.to_string(),
-                owner_user_id: req.reviewer_user_id.clone(),
-                assignment_source: AssignmentSource::SystemRule,
-                priority: WorkItemPriority::High,
-                due_at: None,
-                reason_code: Some("supplier_settlement_review_dispatched".to_string()),
-                impact_summary: Some(format!("复核供应商结算单 {}", statement.statement_no)),
-            },
-        )?;
+        let work_item =
+            create_review_work_item(WorkItemId::new(next_id()), &statement, &req.reviewer_user_id)?;
         let db = self.db.clone();
         let data_scope = self.data_scope.clone();
         let actor_id = actor.id().to_string();
@@ -330,6 +315,39 @@ impl SupplierSettlementProcess {
     }
 }
 
+/// 创建绑定结算单内部组织的正式复核任务；拒绝公司根。
+fn create_review_work_item(
+    work_item_id: WorkItemId,
+    statement: &SupplierSettlementStatement,
+    reviewer_user_id: &str,
+) -> Result<WorkItem> {
+    Ok(WorkItem::new(
+        work_item_id,
+        WorkItemData {
+            work_item_type: WorkItemType::SupplierSettlementReview,
+            business_object_type: "supplier_settlement_statement".to_string(),
+            business_object_id: statement.base.id.clone(),
+            subject_version: statement.subject_hash.clone(),
+            owner_role: SETTLEMENT_REVIEW_OWNER_ROLE.to_string(),
+            owner_organization_id: review_owner_organization_id(statement)?.to_string(),
+            owner_user_id: reviewer_user_id.to_string(),
+            assignment_source: AssignmentSource::SystemRule,
+            priority: WorkItemPriority::High,
+            due_at: None,
+            reason_code: Some("supplier_settlement_review_dispatched".to_string()),
+            impact_summary: Some(format!("复核供应商结算单 {}", statement.statement_no)),
+        },
+    )?)
+}
+
+fn review_work_item_binds_statement(item: &WorkItem, statement: &SupplierSettlementStatement) -> bool {
+    item.work_item_type == WorkItemType::SupplierSettlementReview
+        && item.business_object_type == "supplier_settlement_statement"
+        && item.business_object_id == statement.base.id
+        && item.subject_version == statement.subject_hash
+        && review_task_identity_matches(&item.owner_role, &item.owner_organization_id, statement)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReviewSubmissionReceipt {
     pub operation_id: String,
@@ -361,13 +379,7 @@ pub fn validate_settlement_review_work_item(
     if expected_subject_version != statement.subject_hash || item.subject_version != statement.subject_hash {
         return Err(Error::ConflictError("结算复核主题已变化，请刷新后重试".to_string()));
     }
-    if !statement.is_pending_review()
-        || item.work_item_type != WorkItemType::SupplierSettlementReview
-        || item.business_object_type != "supplier_settlement_statement"
-        || item.business_object_id != statement.base.id
-        || item.owner_role != SETTLEMENT_REVIEW_OWNER_ROLE
-        || item.owner_organization_id != SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID
-    {
+    if !statement.is_pending_review() || !review_work_item_binds_statement(item, statement) {
         return Err(Error::BusinessLogicError("待办与当前供应商结算复核不匹配".to_string()));
     }
     if !item.is_owned_by(actor.id()) {
@@ -541,12 +553,7 @@ fn ensure_submission_task(
     receipt: &ReviewSubmissionReceipt,
 ) -> Result<()> {
     if work_item.base.version < receipt.task_version
-        || work_item.work_item_type != WorkItemType::SupplierSettlementReview
-        || work_item.business_object_type != "supplier_settlement_statement"
-        || work_item.business_object_id != statement.base.id
-        || work_item.subject_version != statement.subject_hash
-        || work_item.owner_role != SETTLEMENT_REVIEW_OWNER_ROLE
-        || work_item.owner_organization_id != SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID
+        || !review_work_item_binds_statement(work_item, statement)
     {
         return Err(Error::ConflictError("提交复核幂等收据与当前正式任务不一致".to_string()));
     }
@@ -607,6 +614,20 @@ mod replay_tests {
         }
         task.subject_version = "c".repeat(64);
         assert!(ensure_submission_task(&statement, &task, &receipt).is_err());
+    }
+    #[test]
+    fn review_work_item_uses_statement_org_and_rejects_company() {
+        let statement = sample_statement();
+        let item = create_review_work_item(WorkItemId::new("work-item-1"), &statement, "reviewer-1").unwrap();
+        assert_eq!(item.owner_organization_id, "org-finance");
+        assert_eq!(item.owner_role, SETTLEMENT_REVIEW_OWNER_ROLE);
+        assert!(review_work_item_binds_statement(&item, &statement));
+        let mut company = sample_statement();
+        company.business_org_unit_id = "company".into();
+        assert!(create_review_work_item(WorkItemId::new("work-item-2"), &company, "reviewer-1").is_err());
+        let mut mismatched = sample_work_item(&statement);
+        mismatched.owner_organization_id = "company".into();
+        assert!(!review_work_item_binds_statement(&mismatched, &statement));
     }
     #[test]
     fn decision_receipt_requires_exact_versions_completion_and_business_result() {

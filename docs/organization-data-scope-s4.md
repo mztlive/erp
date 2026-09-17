@@ -1,10 +1,10 @@
 # S4 扩展管理实施及验收合同
 
-状态：执行中；S4-01—S4-07 已合入 main；S4-08 已登记九列；A36 对象级重验已接到集成详情与商品附属详情。结算复核任务身份仍用 `company` 字符串。领域边界与 `check-org-data-scope.sh` 通过。未登记已验收，非正式上线。
+状态：已完成（本地检查通过；真实验收转上线准入跟踪，不阻塞完成；未登记已验收，非正式上线）
 
 实施日期：2026-09-17
 
-修订日期：2026-09-17（A36 详情对象级重验）
+修订日期：2026-09-17（结算复核任务身份改写结算单内部组织；阶段退出重验）
 
 上位合同：[组织架构、数据范围与负责人查询执行合同](organization-data-scope-contract.md) v1.3 第 3、5—12 章。公共解析接入必须执行第 9.2—9.5 节及 A33—A36。门禁执行 [第 9 章门禁执行合同](organization-data-scope-gate.md)。
 
@@ -21,7 +21,7 @@
 3. 查询只收窄授权结果，不授予动作权，不改派任务。新增部门管理可见权不得自动授予 `work_item:manage`。
 4. 库存余额不建立虚构所有人。品牌、单位、分类、结算主体等公共字典不增加业务负责人。
 5. M15 内部跟进负责人在 `supplier_fulfillment_order`；异常处理人是该订单当前开放 W26 任务的 `owner_user_id`。M17 是 W29 `integration_error_task`／`reconciliation_difference` 自身的当前／历史处理人。派发失败写入的无主错误任务不得顶替 M15 跟进人。
-6. M16 结算单是整单责任模型。确认后应付／成本继续走 M09 已落地的部分授权，不得因「看得见结算单」泄露应付其他分配。不得把 `SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID = "company"` 继续当作组织事实。
+6. M16 结算单是整单责任模型。确认后应付／成本继续走 M09 已落地的部分授权，不得因「看得见结算单」泄露应付其他分配。复核 WorkItem `owner_organization_id` 取结算单 `business_org_unit_id`，禁止公司根，不得当作部门 ID。
 7. M18 仓库维 DataScope 与审批 `responsible_org_id = warehouse_id` 已由 S2 接入，本阶段只叠加人员查询，禁止改写仓库维度语义。
 8. 正式业务准入继续执行上位合同第 10 章。本阶段不得登记已验收。
 
@@ -117,7 +117,7 @@
 | S4-05 | M17 集成异常与差异 | 差异实体当前处理人、稳定 ID 列表、历史处理人筛选、Integration Port／adapter、去掉 `"me"` 与客户端假分页、W29 `owner_organization_id` 不再写死 company | `erp-integration/**`；`erp-processes/src/integration_resolution/**`；`adapters/integration_data_scope.rs`；integration_ops HTTP；`erp-client/features/integration-errors/**` |
 | S4-06 | M18 库存经办 | 流水／调整人员筛选与列表投影、申请人／当前审批人、导出重验、`scope_summary`；不改仓库维、不给余额加所有人 | `erp-inventory/**`；`erp-processes/src/adapters/inventory.rs`；`inventory_adjustment/**`；inventory HTTP；`erp-client/features/inventory/**` |
 | S4-07 | M16 供应商结算 | 业务组织、差异处理人独立、交接、扩展 list/detail/create/update/submit DataScope、三人员筛选、去掉 `hasDataScope` 占位与组织根 `company` | `erp-supply` 下 `supplier_settlement*`；`erp-processes/src/supply_settlement/**`；`adapters/settlement_data_scope.rs`；settlement HTTP；`erp-client/features/supplier-settlements/**` |
-| S4-08 | 架构闭合 | 已核对 `WIRED_CONSUMERS`／`RESOURCE_ACTIONS`／`adapters/mod.rs`／AppState 与实现一致（库存仓库维未改）；已填第 6 章九列与 A33—A36 本地证据；主合同第 3／11／12 章已同步。A36 详情重验已在后续增量闭合，阶段仍因结算复核 company 字符串保持执行中，见第 8 章 | 共享接线文件与本合同第 6、8 章 |
+| S4-08 | 架构闭合 | 已核对 `WIRED_CONSUMERS`／`RESOURCE_ACTIONS`／`adapters/mod.rs`／AppState 与实现一致（库存仓库维未改）；已填第 6 章九列与 A33—A36 本地证据；主合同第 3／11／12 章已同步。结算复核任务身份已改写结算单内部组织，阶段退出见第 8 章 | 共享接线文件与本合同第 6、8 章 |
 
 波次：
 
@@ -210,7 +210,7 @@ env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
 | `product:list/detail/create/update` | erp-catalog | 同上（`MongoCatalogDataScope`） | `erp-catalog::ports::CatalogDataScopePort`／`FailClosedCatalogDataScopePort`／`MongoCatalogDataScope`；`CatalogAccess::allows` | 适用 InternalOrg；必需 InternalOrg | 不允许 | 商品 `maintainer_user_id`＋`business_org_unit_id`；采购负责人由规则 `ProcurementResponsibilityRuleSet::resolve` 额外 AND，不落主档 | `erp-catalog::repository::catalog::scope::CatalogReadScope::document`；`catalog_scope`；等价 `catalog_data_scope::tests::a34_public_allows_matches_catalog_read_scope_document` | `GET /admin/products`、`GET /admin/products/{id}`（`CatalogCenterReadService::product_detail` → `require_product(detail)`）、create/update、`POST /admin/products/{id}/handover`、`GET …/handover-candidates`；附属 `GET …/revisions`、`…/skus`、`…/sku-revisions` 经 `CatalogService::product_detail_*` → `require_product(detail)`；装配 `catalog_center`＋`scoped_catalog_service` | 本地检查通过（S4-02／A36；附属子资源已按 detail 重验；真实验收转跟踪） |
 | `supplier_offering:list/create/update` | erp-supply | 同上（`MongoOfferingDataScope`） | `erp-supply::ports::OfferingDataScopePort`／`FailClosedOfferingDataScopePort`／`MongoOfferingDataScope`；`OfferingAccess::allows` | 适用 InternalOrg；必需 InternalOrg | 不允许 | 供给 `maintainer_user_id`＋`business_org_unit_id`；采购负责人筛选同商品，只收窄 | `erp-supply::repository::supplier_offering::scope::OfferingReadScope::document`；`offering_scope`；等价 `offering_data_scope::tests::a34_public_allows_matches_offering_read_scope_document` | `GET/POST /admin/supplier-offerings`、`POST …/{id}/revisions`（update）、`POST …/handover`、`GET …/handover-candidates`；列表 `SupplierOfferingReadService`＋`offering_access`；命令 `scoped_offering_process`。无独立 `detail` 动作（`WIRED` 拒绝） | 本地检查通过（S4-03；真实验收转跟踪） |
 | `supplier_fulfillment_order:list/detail/investigate/complete/submit/cancel/refund/reject/handover` | erp-supply | 同上（`MongoFulfillmentOrderDataScope`） | `erp-supply::ports::FulfillmentOrderDataScopePort`／`FailClosedFulfillmentOrderDataScopePort`／`MongoFulfillmentOrderDataScope`；开放 W26 处理人 `FulfillmentExceptionHandlerPort`／`MongoFulfillmentExceptionHandlers`；`FulfillmentOrderAccess::allows` | 适用 InternalOrg；必需 InternalOrg | 不允许（`consumers::allows_history=false`；读动作亦不补充历史参与） | 跟进人 `follow_up_user_id`＋`business_org_unit_id`；`handler_user_ids` 与当前开放 W26 `WorkItem.owner_user_id` 求交。W26 `owner_organization_id` 取订单业务组织，禁止 `"company"`；**不把该字段改成部门 ID 语义之外的新模型** | `erp-supply::repository::supplier_fulfillment_scope::FulfillmentOrderReadScope::document`；`fulfillment_order_scope`；等价 `fulfillment_order_data_scope::equivalence_tests::public_object_decision_matches_compiled_conditions` | `GET /admin/supplier-fulfillment-orders`、`GET …/{id}`（`require_scoped_order(detail)`）、investigate/complete/submit/cancel/refund/reject、`POST …/handover`、`GET …/handover-candidates`；装配 `scoped_fulfillment_service`＋`supplier_fulfillment_process` 注入 Port | 本地检查通过（S4-04；真实验收转跟踪） |
-| `supplier_settlement_statement:list/detail/create/update/submit/confirm` | erp-supply | `DataScopeService::resolve`；confirm 另走既有工作流资格，对象仍按本资源动作解析 | `erp-supply::ports::SettlementDataScopePort`／`FailClosedSettlementDataScopePort`／`MongoSettlementDataScope`；`SettlementAccess::allows`（对账负责人 `prepared_by`） | 适用 InternalOrg；必需 InternalOrg | 不允许 | 对账负责人 `prepared_by`＋`business_org_unit_id`（禁止结算主体／`"company"` 根）；差异处理人 `difference_handler_user_id`、复核人 `reviewed_by`／开放复核任务只收窄。整单责任，不因可见结算单泄露 M09 应付其他分配 | `erp-supply::repository::supplier_settlement::scope::SettlementReadScope::document`；`settlement_scope`；等价 `settlement_data_scope::equivalence_tests::public_object_decision_matches_compiled_conditions` | `GET/POST /admin/supplier-settlement-statements`、`GET …/{id}`（`require_detail`）、create/update/submit/confirm、`POST …/handover`、差异改派；装配 `scoped_settlement_process`。void 走 `update` 重验，未单独登记 void 消费者 | 本地检查通过（S4-07；结算复核 WorkItem 身份仍用 `SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID="company"`，见 §6.4；真实验收转跟踪） |
+| `supplier_settlement_statement:list/detail/create/update/submit/confirm` | erp-supply | `DataScopeService::resolve`；confirm 另走既有工作流资格，对象仍按本资源动作解析 | `erp-supply::ports::SettlementDataScopePort`／`FailClosedSettlementDataScopePort`／`MongoSettlementDataScope`；`SettlementAccess::allows`（对账负责人 `prepared_by`） | 适用 InternalOrg；必需 InternalOrg | 不允许 | 对账负责人 `prepared_by`＋`business_org_unit_id`（禁止结算主体／`"company"` 根）；差异处理人 `difference_handler_user_id`、复核人 `reviewed_by`／开放复核任务只收窄。整单责任，不因可见结算单泄露 M09 应付其他分配 | `erp-supply::repository::supplier_settlement::scope::SettlementReadScope::document`；`settlement_scope`；等价 `settlement_data_scope::equivalence_tests::public_object_decision_matches_compiled_conditions` | `GET/POST /admin/supplier-settlement-statements`、`GET …/{id}`（`require_detail`）、create/update/submit/confirm、`POST …/handover`、差异改派；装配 `scoped_settlement_process`。void 走 `update` 重验，未单独登记 void 消费者 | 本地检查通过（S4-07；复核 WorkItem `owner_organization_id` 取结算单 `business_org_unit_id`，禁止 `"company"`；真实验收转跟踪） |
 | `integration_error_task:list/detail/create` | erp-integration | 同上（`MongoIntegrationDataScope::resolve(resource, action)`） | `erp-integration::ports::IntegrationDataScopePort`／`FailClosedIntegrationDataScopePort`／`MongoIntegrationDataScope`；`IntegrationAccess::allows_handler`／`require_handler` | 适用 InternalOrg；必需 InternalOrg | 不允许（历史处理人只作 `operator_user_ids` 筛选，不授写、不进 `allows_history`） | 当前处理人 `owner_user_id` 及其内部组织 `owner_org_unit_id`；禁止 `"me"`、禁止组织根 `"company"` 回退。W29 任务身份取实体组织，改派同步实体与任务 | `erp-integration::repository::scope::IntegrationReadScope::document`；`integration_scope`；等价 `integration_data_scope::equivalence_tests::public_object_decision_matches_compiled_conditions` | `GET/POST /admin/integration/error-tasks`；`GET …/{id}`（`Extension<AuditActor>`，`IntegrationCenterReadService::error_task_detail` → `require_handler(detail)`，越权 NotFound）；列表／创建经 `scoped_integration_ops_service`；详情装配 `AppState::integration_center` → `MongoIntegrationDataScope::shared` | 本地检查通过（S4-05／A36；真实验收转跟踪） |
 | `reconciliation_difference:list/detail/create/decide` | erp-integration | 同上 | 同上 Port，按资源分支 | 适用 InternalOrg；必需 InternalOrg | 不允许（历史处理人仅筛选） | 差异实体当前 `owner_user_id`＋内部组织；改派同步任务与实体 | 同上 `IntegrationReadScope::document` | `GET/POST /admin/integration/differences`、`GET …/{id}`（actor + `require_handler(detail)`）、`POST …/{id}/decisions`；列表／创建经 `scoped_integration_ops_service`；详情同 `integration_center` | 本地检查通过（S4-05／A36；真实验收转跟踪） |
 | `stock_adjustment:list/detail/create/update/submit`；`stock_balance:list/detail`；`stock_movement:list`；`stock_reservation:list` | erp-inventory | 既有 `DataScopeService::resolve_permissions`（`MongoInventoryAuthorization::authorize` 按动作独立解析） | 既有 `erp-inventory::ports::authorization::AuthorizationPort`／`FailClosedAuthorizationPort`／`MongoInventoryAuthorization`；人员筛选 `AdjustmentPeopleFactsPort` | **Warehouse 必需（S2，本阶段未改维）**；内部组织参数不注册 | 不允许 | 仓库范围；流水／调整经办 `recorded_by`／`prepared_by`、申请人审批快照 `submitted_by`、当前审批人开放任务 `current_assignee` 为额外 AND。余额不按人员授权、不建虚构所有人 | 仓库：`WarehouseScope` → `repository_warehouse_ids`；人员：`StockMovementFilter.recorded_by_ids`、`StockAdjustmentFilter.prepared_by_ids`＋`id_in`（`intersect_object_ids`）。S2 仓库等价沿用；人员投影 `inventory::adjustment_query::people_projection_tests`、DTO `movement_and_adjustment_consume_registered_people_filters` | `GET /admin/stock-balances`、`…/{id}`、`GET /admin/stock-movements`、`GET /admin/stock-reservations`、`GET/POST/PUT /admin/stock-adjustments`；装配 `AppState::inventory_service` → `adapters::inventory_service` | 仓库维沿用 S2 本地检查通过；人员查询已接入（S4-06；真实验收转跟踪） |
@@ -273,12 +273,30 @@ A36 详情重验增量（工作区，基线 `a45e00e1` 之上未提交）：
 
 未跑 `--test`、未连真实 Mongo。未跑 workspace 全量 `cargo test`／`clippy --workspace`。
 
-### 6.4 已知偏差（不在本批修复）
+结算复核身份闭合与阶段退出重验（工作区，基线 `16d48158` 之上）：
 
-1. **WorkItem `owner_organization_id` 不改为部门 ID 模型。** 合同第 1.5 条与 S4 §1.1：禁止把部门 ID 写入 WorkItem 既有责任组织字段的新语义。W26 已用订单 `business_org_unit_id`（内部组织，拒绝 `"company"`）；W29 用实体 `owner_org_unit_id`。不得借 S4-08 把任务身份改成部门主键方案。
-2. **结算复核任务身份仍用 company 字符串。** `SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID = "company"`、`SETTLEMENT_REVIEW_OWNER_ROLE = "role-finance"` 仍写入复核 WorkItem。结算单 `business_org_unit_id` 已是内部组织且创建拒绝 `"company"`。不得把该任务字段继续解释为组织范围事实，也不得在本批改成部门 ID。
-3. 供给无独立 `detail` 动作（`WIRED` 拒绝），不是缺口。
-4. 真实验收、浏览器真实账号、代表性索引计划、导出撤权下载：上线准入跟踪。
+| 命令 | 退出码 | 结果 |
+| --- | --- | --- |
+| `cargo fmt --all -- --check` | 0 | 格式通过 |
+| `cargo check --workspace --locked` | 0 | 工作区检查通过 |
+| `env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked` | 0 | 33 个库目标 4148 passed、0 failed、64 ignored（未跑 `--test`／真实 Mongo） |
+| `./scripts/check-bpm-boundaries.sh` | 0 | BPM 边界通过 |
+| `./scripts/check-domain-boundaries.sh --cutover` | 0 | 夹具 18 项；工作区 0 错误 |
+| `./scripts/check-org-data-scope.sh` | 0 | `STATIC_CHECKS_PASSED`，扫描 2093 个活动源码文件，阻断 0 |
+| `cargo clippy -p erp-supply -p erp-catalog -p erp-integration -p erp-read-models --lib --locked -- -D warnings` | 0 | 本批触及的生产库通过；catalog 既有 `write_disabled_product` 参数已收束 |
+| `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` | 101 | `erp-processes` 既有 `supplier_profile::{create,handover}` `too_many_arguments`（9–10/7），非本批引入，未改该子树 |
+| `erp-client` oxlint | 0 | 供给列表 `useEffect` 依赖已收束 |
+| `erp-client` `npm run lint` | 1 | `lint:fixed-decimal` 与 `lint:feature-cycles` 为 S3 票款既有失败（`customer-receivables` ↔ `invoice-requests`），非本批引入 |
+| S4 相关 vitest（settlements／offerings／orders／integration-errors／inventory／master-data） | 0 | 52 files / 238 tests passed |
+
+本批新增单测：`review_owner_organization_rejects_company_and_empty`、`review_task_identity_binds_finance_role_and_statement_org`、`review_work_item_uses_statement_org_and_rejects_company`。
+
+### 6.4 已知偏差与约束
+
+1. **WorkItem `owner_organization_id` 不改为部门 ID 模型。** 合同第 1.5 条与 S4 §1.1：禁止把部门 ID 写入 WorkItem 既有责任组织字段的新语义。W26 用订单 `business_org_unit_id`，W29 用实体 `owner_org_unit_id`，结算复核用结算单 `business_org_unit_id`；三者均拒绝 `"company"`。`SETTLEMENT_REVIEW_OWNER_ROLE = "role-finance"` 仍是稳定语义标签，不是部门主键。
+2. 供给无独立 `detail` 动作（`WIRED` 拒绝），不是缺口。
+3. 真实验收、浏览器真实账号、代表性索引计划、导出撤权下载：上线准入跟踪。
+4. 全仓 `clippy --workspace --all-targets` 与前端 `npm run lint` 的既有失败不阻塞本阶段本地检查通过；不得据此登记已验收。
 
 ## 7. 验证分层
 
@@ -298,9 +316,6 @@ A33—A36 本地证据见第 6.1 节。真实验收转跟踪。
 - 第 6 章九列无「尚未接入」的本阶段资源动作（库存人员查询登记为已接入人员条件）。
 - `check-org-data-scope.sh` 与领域边界通过；本批活动路径不再自行解释原始范围。
 
-**当前时点：A36 对象级重验已闭合，静态 ODS／领域边界通过，阶段仍保持执行中。** 未闭合缺口：
+**当前时点：本地检查通过。** M13—M18 与 A33—A36 本地证据已闭合；结算复核任务身份取结算单内部组织并拒绝 `"company"`。余下仅真实验收转第 10 章跟踪。不得登记已验收。不得把 WorkItem `owner_organization_id` 改成部门 ID。不得以本阶段完成开放正式业务。
 
-1. 结算复核 WorkItem 身份仍为 `"company"` 字符串（已知偏差，不改任务组织字段模型）。
-2. 真实验收转跟踪。不得登记已验收，也不得把结算 company 字符串改成部门 ID。
-
-第 6 章已无「尚未接入」的本阶段资源动作；库存人员查询已登记为已接入人员条件。不得登记已验收。不得以本阶段完成开放正式业务。
+第 6 章已无「尚未接入」的本阶段资源动作；库存人员查询已登记为已接入人员条件。

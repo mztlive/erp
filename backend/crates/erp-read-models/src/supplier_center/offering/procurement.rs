@@ -100,7 +100,16 @@ impl OfferingProcurementOwners for MongoOfferingProcurementOwners {
         let products = load_products(&self.db, &skus, executor).await?;
         let revisions = load_revisions(&self.db, &products, executor).await?;
         match_authorized_offerings(
-            &self.db, &offerings, &skus, &products, &revisions, &rules, &wanted, executor,
+            &self.db,
+            OfferingMatchInput {
+                offerings: &offerings,
+                skus: &skus,
+                products: &products,
+                revisions: &revisions,
+                rules: &rules,
+                wanted: &wanted,
+            },
+            executor,
         )
         .await
     }
@@ -134,25 +143,32 @@ impl OfferingProcurementOwners for MapOfferingProcurementOwners {
     }
 }
 
+struct OfferingMatchInput<'a> {
+    offerings: &'a [erp_supply::entity::supplier_offering::SupplierOffering],
+    skus: &'a [erp_catalog::entity::catalog::Sku],
+    products: &'a HashMap<String, Product>,
+    revisions: &'a HashMap<String, ProductRevision>,
+    rules: &'a [erp_procurement::entity::procurement_responsibility::ProcurementResponsibilityRule],
+    wanted: &'a HashSet<&'a str>,
+}
+
 async fn match_authorized_offerings(
     db: &Database,
-    offerings: &[erp_supply::entity::supplier_offering::SupplierOffering],
-    skus: &[erp_catalog::entity::catalog::Sku],
-    products: &HashMap<String, Product>,
-    revisions: &HashMap<String, ProductRevision>,
-    rules: &[erp_procurement::entity::procurement_responsibility::ProcurementResponsibilityRule],
-    wanted: &HashSet<&str>,
+    input: OfferingMatchInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
-    let rule_set = ProcurementResponsibilityRuleSet::new(rules);
+    let rule_set = ProcurementResponsibilityRuleSet::new(input.rules);
     let sku_by_id: HashMap<&str, &erp_catalog::entity::catalog::Sku> =
-        skus.iter().map(|sku| (sku.base.id.as_str(), sku)).collect();
+        input.skus.iter().map(|sku| (sku.base.id.as_str(), sku)).collect();
     let mut matched = HashSet::new();
-    for offering in offerings {
+    for offering in input.offerings {
         let Some(sku) = sku_by_id.get(offering.sku_id.as_ref()) else {
             continue;
         };
-        if match_sku_owner(db, products, revisions, &rule_set, sku, wanted, executor).await?.is_some() {
+        if match_sku_owner(db, input.products, input.revisions, &rule_set, sku, input.wanted, executor)
+            .await?
+            .is_some()
+        {
             matched.insert(offering.base.id.clone());
         }
     }

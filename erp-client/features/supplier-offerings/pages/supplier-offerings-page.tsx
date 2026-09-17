@@ -61,9 +61,7 @@ export const SupplierOfferingsPage = () => {
         orgUnitIds: state.urlState.orgUnitIds,
         includeDescendants: state.urlState.includeDescendants,
         scopeVersion:
-            state.urlState.page > 1
-                ? state.urlState.scopeVersion
-                : undefined,
+            state.urlState.page > 1 ? state.urlState.scopeVersion : undefined,
         page: state.urlState.page,
         pageSize: PAGE_SIZE,
     })
@@ -106,21 +104,15 @@ export const SupplierOfferingsPage = () => {
     const showWorkspaceEmptyState =
         !query.isError && items.length === 0 && !query.isPending
 
+    const patchUrl = state.patchUrl
+    const listPage = state.urlState.page
+    const listScopeVersion = state.urlState.scopeVersion
     React.useEffect(() => {
         const next = query.data?.scope_version
-        if (
-            next &&
-            state.urlState.page === 1 &&
-            state.urlState.scopeVersion !== next
-        ) {
-            state.patchUrl({ scopeVersion: next })
+        if (next && listPage === 1 && listScopeVersion !== next) {
+            patchUrl({ scopeVersion: next })
         }
-    }, [
-        query.data?.scope_version,
-        state.patchUrl,
-        state.urlState.page,
-        state.urlState.scopeVersion,
-    ])
+    }, [query.data?.scope_version, patchUrl, listPage, listScopeVersion])
 
     return (
         <PageScaffold density="compact" className={styles.page}>
