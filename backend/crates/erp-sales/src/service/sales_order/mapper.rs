@@ -1,5 +1,7 @@
 //! DTO ↔ 实体/视图映射：构建稳定明细、工作副本、提交快照与视图转换。
 
+use std::collections::HashSet;
+
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
@@ -36,8 +38,9 @@ pub fn build_stable_lines(
     lines: &[SalesOrderDraftLineRequest],
 ) -> Result<Vec<SalesOrderLine>> {
     let mut stable = Vec::with_capacity(lines.len());
+    let mut seen_line_nos = HashSet::with_capacity(lines.len());
     for line in lines {
-        if stable.iter().any(|existing: &SalesOrderLine| existing.line_no == line.line_no) {
+        if !seen_line_nos.insert(line.line_no) {
             return Err(Error::ValidationError(format!("行号 {} 重复", line.line_no)));
         }
         stable.push(SalesOrderLine::new(

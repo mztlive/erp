@@ -13,6 +13,7 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ContractId, ContractRevisionId, CustomerAccountId, FileAssetId, PartyId};
 use id_generator::next_id;
 use mongodb::Database;
@@ -563,6 +564,65 @@ fn customer_eligibility(customer: Option<CustomerAccountFact>) -> Result<Custome
     Ok(customer)
 }
 
+/// 三类归档规划请求共用的版本内联快照字段组。
+struct ArchiveSnapshotFields {
+    /// 客户名称快照。
+    customer_name: String,
+    /// 结算主体名称快照。
+    settlement_party_name: String,
+    /// 付款条件代码。
+    payment_term_code: String,
+    /// 付款条件名称。
+    payment_term_name: String,
+    /// 开票类型。
+    invoice_type: String,
+    /// 税点。
+    tax_point: String,
+    /// 合同有效期起。
+    valid_from: BusinessDate,
+    /// 合同有效期止；`None` 表示长期。
+    valid_to: Option<BusinessDate>,
+    /// 签订日期。
+    signed_at: BusinessDate,
+}
+
+/// 由合同身份与快照组装不可变修订数据（三处规划函数共用）。
+///
+/// 版本号规则与默认来源回退由调用方完成，本函数只做字段搬运。
+///
+/// # 参数
+/// * `contract` - 合同实体（提供编号与结算主体）
+/// * `contract_pdf_file_id` - 本版本已签署合同 PDF 的文件资产
+/// * `archive_source` - 归档来源（调用方已完成默认回退）
+/// * `settlement_party_id` - 结算主体（调用方已按客户缺省补齐）
+/// * `snapshot` - 归档快照字段组
+///
+/// # 返回
+/// 返回尚未持久化的修订创建数据。
+fn revision_data(
+    contract: &Contract,
+    contract_pdf_file_id: FileAssetId,
+    archive_source: ArchiveSource,
+    settlement_party_id: PartyId,
+    snapshot: ArchiveSnapshotFields,
+) -> ContractRevisionData {
+    ContractRevisionData {
+        contract_no: contract.contract_no.clone(),
+        customer_name: snapshot.customer_name,
+        contract_pdf_file_id,
+        archive_source,
+        settlement_party_id,
+        settlement_party_name: snapshot.settlement_party_name,
+        payment_term_code: snapshot.payment_term_code,
+        payment_term_name: snapshot.payment_term_name,
+        invoice_type: snapshot.invoice_type,
+        tax_point: snapshot.tax_point,
+        valid_from: snapshot.valid_from,
+        valid_to: snapshot.valid_to,
+        signed_at: snapshot.signed_at,
+    }
+}
+
 /// 由首次归档请求构造合同身份与首个不可变修订。
 ///
 /// # 参数
@@ -592,21 +652,23 @@ pub fn plan_first_archive(
         ContractRevisionId::new(next_id()),
         contract.base.id.clone().into(),
         1,
-        ContractRevisionData {
-            contract_no: contract.contract_no.clone(),
-            customer_name: req.customer_name,
-            contract_pdf_file_id: req.contract_pdf_file_id,
-            archive_source: req.archive_source.unwrap_or(ArchiveSource::ContractCenter),
-            settlement_party_id: contract.settlement_party_id.clone(),
-            settlement_party_name: req.settlement_party_name,
-            payment_term_code: req.payment_term_code,
-            payment_term_name: req.payment_term_name,
-            invoice_type: req.invoice_type,
-            tax_point: req.tax_point,
-            valid_from: req.valid_from,
-            valid_to: req.valid_to,
-            signed_at: req.signed_at,
-        },
+        revision_data(
+            &contract,
+            req.contract_pdf_file_id,
+            req.archive_source.unwrap_or(ArchiveSource::ContractCenter),
+            contract.settlement_party_id.clone(),
+            ArchiveSnapshotFields {
+                customer_name: req.customer_name,
+                settlement_party_name: req.settlement_party_name,
+                payment_term_code: req.payment_term_code,
+                payment_term_name: req.payment_term_name,
+                invoice_type: req.invoice_type,
+                tax_point: req.tax_point,
+                valid_from: req.valid_from,
+                valid_to: req.valid_to,
+                signed_at: req.signed_at,
+            },
+        ),
     )?;
     Ok(PlannedContractArchive { contract, revision })
 }
@@ -644,21 +706,23 @@ pub fn plan_upload_archive(
         ContractRevisionId::new(next_id()),
         contract.base.id.clone().into(),
         1,
-        ContractRevisionData {
-            contract_no: contract.contract_no.clone(),
-            customer_name: req.customer_name,
-            contract_pdf_file_id: file_asset_id,
-            archive_source: ArchiveSource::ContractCenter,
+        revision_data(
+            &contract,
+            file_asset_id,
+            ArchiveSource::ContractCenter,
             settlement_party_id,
-            settlement_party_name: req.settlement_party_name,
-            payment_term_code: req.payment_term_code,
-            payment_term_name: req.payment_term_name,
-            invoice_type: req.invoice_type,
-            tax_point: req.tax_point,
-            valid_from: req.valid_from,
-            valid_to: req.valid_to,
-            signed_at: req.signed_at,
-        },
+            ArchiveSnapshotFields {
+                customer_name: req.customer_name,
+                settlement_party_name: req.settlement_party_name,
+                payment_term_code: req.payment_term_code,
+                payment_term_name: req.payment_term_name,
+                invoice_type: req.invoice_type,
+                tax_point: req.tax_point,
+                valid_from: req.valid_from,
+                valid_to: req.valid_to,
+                signed_at: req.signed_at,
+            },
+        ),
     )?;
     Ok(PlannedContractArchive { contract, revision })
 }
@@ -674,21 +738,23 @@ fn plan_next_revision(
         ContractRevisionId::new(next_id()),
         contract.base.id.clone().into(),
         next_no,
-        ContractRevisionData {
-            contract_no: contract.contract_no.clone(),
-            customer_name: req.customer_name,
-            contract_pdf_file_id: req.contract_pdf_file_id,
-            archive_source: req.archive_source.unwrap_or(ArchiveSource::ContractCenter),
-            settlement_party_id: contract.settlement_party_id.clone(),
-            settlement_party_name: req.settlement_party_name,
-            payment_term_code: req.payment_term_code,
-            payment_term_name: req.payment_term_name,
-            invoice_type: req.invoice_type,
-            tax_point: req.tax_point,
-            valid_from: req.valid_from,
-            valid_to: req.valid_to,
-            signed_at: req.signed_at,
-        },
+        revision_data(
+            contract,
+            req.contract_pdf_file_id,
+            req.archive_source.unwrap_or(ArchiveSource::ContractCenter),
+            contract.settlement_party_id.clone(),
+            ArchiveSnapshotFields {
+                customer_name: req.customer_name,
+                settlement_party_name: req.settlement_party_name,
+                payment_term_code: req.payment_term_code,
+                payment_term_name: req.payment_term_name,
+                invoice_type: req.invoice_type,
+                tax_point: req.tax_point,
+                valid_from: req.valid_from,
+                valid_to: req.valid_to,
+                signed_at: req.signed_at,
+            },
+        ),
     )?;
     Ok(PlannedContractArchive { contract: contract.clone(), revision })
 }

@@ -43,4 +43,4 @@ pub use sales_order_amount_summary::SalesOrderReceivableAmountSummary;
 
 pub mod money_progress_facts;
 
-mod allocation_amount;
+pub(crate) mod allocation_amount;

@@ -46,6 +46,24 @@ impl AllocationAction {
             Self::Reverse => "reverse",
         }
     }
+
+    /// 将本动作应用于净额累计（`APPLY` 加、`REVERSE` 减）。
+    ///
+    /// 投影与账本快照共用同一求和语义；溢出语义与 [`Amount::checked_add`] /
+    /// [`Amount::checked_sub`] 一致。
+    ///
+    /// # 参数
+    /// * `total` - 当前净额
+    /// * `amount` - 本次分配金额（正数）
+    ///
+    /// # 返回
+    /// 返回更新后的净额。
+    pub fn apply_to_net(self, total: Amount, amount: Amount) -> Amount {
+        match self {
+            Self::Apply => total.checked_add(amount),
+            Self::Reverse => total.checked_sub(amount),
+        }
+    }
 }
 
 /// 回款核销分配创建数据。

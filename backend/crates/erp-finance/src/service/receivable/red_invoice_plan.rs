@@ -38,6 +38,45 @@ pub fn sales_red_invoice_allocation_plan(
         .map_err(map_red_invoice_allocation_plan_error)
 }
 
+/// 将持久化分配事实批量转为领域原始基数输入（销项/进项共用）。
+///
+/// 只做字段复制与顺序保持，不扣减历史红冲、不执行金额计算；
+/// 动作判定与字段投影由调用方闭包提供，两方向语义逐行对等。
+///
+/// # 参数
+/// * `lines` - 原蓝票查询得到的全部某方向分配事实
+/// * `is_apply` - 正向分配判定
+/// * `to_basis` - 单行到基数的字段投影
+///
+/// # 返回
+/// 返回保持查询顺序的正向分配基数，非 `APPLY` 事实被忽略。
+fn allocation_bases<T>(
+    lines: &[T],
+    is_apply: impl Fn(&T) -> bool,
+    to_basis: impl Fn(&T) -> RedInvoiceAllocationBasis,
+) -> Vec<RedInvoiceAllocationBasis> {
+    lines.iter().filter(|line| is_apply(line)).map(to_basis).collect()
+}
+
+/// 将持久化反向分配事实批量转为领域红冲输入（销项/进项共用）。
+///
+/// 缺少反向引用的损坏事实沿用旧逻辑忽略，由领域计划只匹配原分配身份。
+///
+/// # 参数
+/// * `lines` - 同一批账户下的全部某方向相关分配事实
+/// * `is_reverse` - 反向分配判定
+/// * `to_reversal` - 单行到红冲事实的投影，无引用时返回 `None` 跳过
+///
+/// # 返回
+/// 返回所有携带原分配引用的 `REVERSE` 事实，保持查询顺序。
+fn allocation_reversals<T>(
+    lines: &[T],
+    is_reverse: impl Fn(&T) -> bool,
+    to_reversal: impl Fn(&T) -> Option<RedInvoiceAllocationReversal>,
+) -> Vec<RedInvoiceAllocationReversal> {
+    lines.iter().filter(|line| is_reverse(line)).filter_map(to_reversal).collect()
+}
+
 /// 将销项蓝票正向分配转换为领域原始基数输入。
 ///
 /// # 参数
@@ -52,17 +91,18 @@ pub fn sales_red_invoice_allocation_plan(
 /// # 约束
 /// 只复制事实字段，不扣减历史红冲或执行金额计算。
 fn sales_red_invoice_allocation_bases(blue: &[SalesInvoiceAllocation]) -> Vec<RedInvoiceAllocationBasis> {
-    blue.iter()
-        .filter(|line| line.allocation_action == AllocationAction::Apply)
-        .map(|line| RedInvoiceAllocationBasis {
+    allocation_bases(
+        blue,
+        |line| line.allocation_action == AllocationAction::Apply,
+        |line| RedInvoiceAllocationBasis {
             original_allocation_id: line.base.id.clone(),
             account_id: line.receivable_account_id.to_string(),
             allocation_seq: line.allocation_seq,
             gross: line.allocated_gross_amount,
             net: line.allocated_net_amount,
             tax: line.allocated_tax_amount,
-        })
-        .collect()
+        },
+    )
 }
 
 /// 将销项历史反向分配转换为领域红冲事实输入。
@@ -81,18 +121,18 @@ fn sales_red_invoice_allocation_bases(blue: &[SalesInvoiceAllocation]) -> Vec<Re
 fn sales_red_invoice_allocation_reversals(
     related: &[SalesInvoiceAllocation],
 ) -> Vec<RedInvoiceAllocationReversal> {
-    related
-        .iter()
-        .filter(|line| line.allocation_action == AllocationAction::Reverse)
-        .filter_map(|line| {
+    allocation_reversals(
+        related,
+        |line| line.allocation_action == AllocationAction::Reverse,
+        |line| {
             line.reverses_allocation_id.as_ref().map(|original_id| RedInvoiceAllocationReversal {
                 original_allocation_id: original_id.to_string(),
                 gross: line.allocated_gross_amount,
                 net: line.allocated_net_amount,
                 tax: line.allocated_tax_amount,
             })
-        })
-        .collect()
+        },
+    )
 }
 
 /// 按账户聚合红票 reversal 含税增量（FIN-R11）。
@@ -167,17 +207,18 @@ pub fn purchase_red_invoice_allocation_plan(
 fn purchase_red_invoice_allocation_bases(
     blue: &[PurchaseInvoiceAllocation],
 ) -> Vec<RedInvoiceAllocationBasis> {
-    blue.iter()
-        .filter(|line| line.allocation_action == crate::entity::payable::AllocationAction::Apply)
-        .map(|line| RedInvoiceAllocationBasis {
+    allocation_bases(
+        blue,
+        |line| line.allocation_action == crate::entity::payable::AllocationAction::Apply,
+        |line| RedInvoiceAllocationBasis {
             original_allocation_id: line.base.id.clone(),
             account_id: line.payable_account_id.to_string(),
             allocation_seq: line.allocation_seq,
             gross: line.allocated_gross_amount,
             net: line.allocated_net_amount,
             tax: line.allocated_tax_amount,
-        })
-        .collect()
+        },
+    )
 }
 
 /// 将进项历史反向分配转换为领域红冲事实输入。
@@ -196,18 +237,18 @@ fn purchase_red_invoice_allocation_bases(
 fn purchase_red_invoice_allocation_reversals(
     related: &[PurchaseInvoiceAllocation],
 ) -> Vec<RedInvoiceAllocationReversal> {
-    related
-        .iter()
-        .filter(|line| line.allocation_action == crate::entity::payable::AllocationAction::Reverse)
-        .filter_map(|line| {
+    allocation_reversals(
+        related,
+        |line| line.allocation_action == crate::entity::payable::AllocationAction::Reverse,
+        |line| {
             line.reverses_allocation_id.as_ref().map(|original_id| RedInvoiceAllocationReversal {
                 original_allocation_id: original_id.to_string(),
                 gross: line.allocated_gross_amount,
                 net: line.allocated_net_amount,
                 tax: line.allocated_tax_amount,
             })
-        })
-        .collect()
+        },
+    )
 }
 
 /// 将领域红票规划错误映射回冻结的服务错误分类和文案。

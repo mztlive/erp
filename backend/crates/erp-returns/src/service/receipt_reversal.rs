@@ -114,8 +114,6 @@ impl ReturnsService {
             return Err(Error::BusinessLogicError("已冲正单据不能再过账".to_string()));
         }
         ensure_receipt_reversal_final_approve_posting(&reversal)?;
-        // 原 ReceiptReversalPost 动作只重复最终通过守卫，不在财务成功前改变状态。
-        ensure_receipt_reversal_final_approve_posting(&reversal)?;
         Ok(reversal)
     }
 
