@@ -66,6 +66,22 @@ impl AllocationAction {
     }
 }
 
+impl From<crate::entity::payable::AllocationAction> for AllocationAction {
+    /// 将付款分配动作转为回款分配动作（变体逐一对应，枚举定义本身不动）。
+    ///
+    /// # 参数
+    /// * `action` - 付款侧分配动作
+    ///
+    /// # 返回
+    /// 返回语义相同的回款侧分配动作。
+    fn from(action: crate::entity::payable::AllocationAction) -> Self {
+        match action {
+            crate::entity::payable::AllocationAction::Apply => Self::Apply,
+            crate::entity::payable::AllocationAction::Reverse => Self::Reverse,
+        }
+    }
+}
+
 /// 回款核销分配创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReceiptAllocationData {

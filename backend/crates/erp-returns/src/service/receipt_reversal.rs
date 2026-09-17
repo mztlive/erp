@@ -9,7 +9,7 @@ use persistence_core::{Executor, NoTransaction};
 
 use super::ReturnsService;
 use super::approval::{ensure_receipt_reversal_final_approve_posting, start_receipt_reversal_approval};
-use super::shared::return_command_no;
+use super::shared::{DEFAULT_FINANCE_REVIEWER, RECEIPT_REVERSAL_COMMAND_PREFIX, return_command_no};
 use super::version_conflict::conflict_if_stale_version;
 use crate::dto::{CommitReceiptReversalRequest, CreateReceiptReversalRequest};
 use crate::entity::returns::{
@@ -49,13 +49,13 @@ pub fn build_commit(
     Ok(ReceiptReversal::new(
         ReceiptReversalId::new(next_id()),
         ReceiptReversalData {
-            reversal_no: return_command_no("CZ", actor_id, &req.idempotency_key),
+            reversal_no: return_command_no(RECEIPT_REVERSAL_COMMAND_PREFIX, actor_id, &req.idempotency_key),
             original_customer_receipt_id: source_fact_id,
             reason_code: None,
             reason_text: req.reason.clone(),
             amount: req.amount.unwrap_or(receipt_amount),
             handled_by: actor_id.to_string(),
-            reviewed_by: "finance_reviewer".to_string(),
+            reviewed_by: DEFAULT_FINANCE_REVIEWER.to_string(),
             occurred_at: Instant::now(),
             evidence_attachment_id: None,
         },
@@ -87,7 +87,7 @@ impl ReturnsService {
         Err(Error::ConflictError("回款冲正过账只能由审批最终通过动作执行，客户端不得直接过账".to_string()))
     }
 
-    /// 按主键读取回款冲正单。
+    /// 按主键读取回款冲正单（非事务快照：直读最新提交版本，不加入调用方事务）。
     ///
     /// # 错误
     /// 不存在时返回 `NotFound`。
@@ -103,11 +103,11 @@ impl ReturnsService {
     pub async fn prepare_receipt_reversal_post(
         db: &Database,
         reversal_id: &str,
-        session: &mut dyn Executor,
+        executor: &mut dyn Executor,
     ) -> Result<ReceiptReversal> {
         let reversal = db
             .receipt_reversals()
-            .find_by_id(reversal_id, session)
+            .find_by_id(reversal_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("回款冲正单不存在".to_string()))?;
         if reversal.status == ReceiptReversalStatus::Reversed {
@@ -122,14 +122,14 @@ impl ReturnsService {
         db: &Database,
         reversal: &ReceiptReversal,
         receipt_amount: Amount,
-        session: &mut dyn Executor,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let reversed_before = db
             .receipt_reversals()
             .posted_reversal_total_by_receipt(
                 &reversal.original_customer_receipt_id,
                 &reversal.base.id,
-                session,
+                executor,
             )
             .await?;
         CumulativeAmountLimit::ensure_within_limit(receipt_amount, reversed_before, reversal.amount)
@@ -140,10 +140,10 @@ impl ReturnsService {
     pub async fn persist_posted_receipt_reversal(
         db: &Database,
         reversal: &mut ReceiptReversal,
-        session: &mut dyn Executor,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         reversal.mark_posted()?;
-        Self::persist_receipt_reversal(db, reversal, session).await
+        Self::persist_receipt_reversal(db, reversal, executor).await
     }
 
     /// 在注册/审批编排的原写入时点创建本域冲正单，复用根事务。

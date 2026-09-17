@@ -105,8 +105,43 @@ fn posted_total_pipeline(original_field: &str, original_id: &str, exclude_id: &s
     ]
 }
 
+/// 以原单字段名为参数的单一已过账聚合入口（四单据共用）。
+///
+/// 四公开聚合（退款按回款/付款、冲正按回款/付款）除集合句柄与原单字段名外
+/// 完全相同，统一经本入口组装管道并求和；各公开名保留作薄转发，文档只写一份。
+///
+/// # 参数
+/// * `collection` - 目标集合句柄
+/// * `original_field` - 原单外键字段名
+/// * `original_id` - 原单 ID 字符串
+/// * `exclude_id` - 本次过账单据 ID，聚合中排除
+/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+///
+/// # 返回
+/// 返回已过账合计；无匹配时返回精确零。
+///
+/// # 错误
+/// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
+///
+/// # 关键业务约束
+/// 只统计 `posted`，草稿、审批中与已冲正不占额度；使用 Decimal128 `$sum`；
+/// 命中既有原单追溯索引前缀，无新增索引与迁移。
+async fn posted_total_by_original<T>(
+    collection: &mongodb::Collection<T>,
+    original_field: &str,
+    original_id: &str,
+    exclude_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Amount>
+where
+    T: Send + Sync,
+{
+    let pipeline = posted_total_pipeline(original_field, original_id, exclude_id);
+    posted_total(collection, pipeline, executor).await
+}
+
 impl<'a> CustomerRefundRepository<'a> {
-    /// 按原回款聚合已过账客户退款合计。
+    /// 按原回款聚合已过账客户退款合计（经共享入口，约束见该处）。
     ///
     /// # 参数
     /// * `receipt_id` - 原客户回款
@@ -118,24 +153,25 @@ impl<'a> CustomerRefundRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 只统计 `posted`，草稿、审批中与已冲正不占额度；使用 Decimal128 `$sum`；
-    /// 复用 `idx_customer_refunds_original` 前缀，无新增索引与迁移。
     pub async fn posted_refund_total_by_receipt(
         &self,
         receipt_id: &CustomerReceiptId,
         exclude_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Amount> {
-        let pipeline = posted_total_pipeline("original_receipt_id", receipt_id.as_ref(), exclude_id);
-
-        posted_total(&self.collection(), pipeline, executor).await
+        posted_total_by_original(
+            &self.collection(),
+            "original_receipt_id",
+            receipt_id.as_ref(),
+            exclude_id,
+            executor,
+        )
+        .await
     }
 }
 
 impl<'a> SupplierRefundRepository<'a> {
-    /// 按原付款聚合已过账供应商退款合计。
+    /// 按原付款聚合已过账供应商退款合计（经共享入口，约束见该处）。
     ///
     /// # 参数
     /// * `payment_id` - 原供应商付款
@@ -147,24 +183,25 @@ impl<'a> SupplierRefundRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 只统计 `posted`，草稿、审批中与已冲正不占额度；使用 Decimal128 `$sum`；
-    /// 复用 `idx_supplier_refunds_original` 前缀，无新增索引与迁移。
     pub async fn posted_refund_total_by_payment(
         &self,
         payment_id: &SupplierPaymentId,
         exclude_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Amount> {
-        let pipeline = posted_total_pipeline("original_payment_id", payment_id.as_ref(), exclude_id);
-
-        posted_total(&self.collection(), pipeline, executor).await
+        posted_total_by_original(
+            &self.collection(),
+            "original_payment_id",
+            payment_id.as_ref(),
+            exclude_id,
+            executor,
+        )
+        .await
     }
 }
 
 impl<'a> ReceiptReversalRepository<'a> {
-    /// 按原回款聚合已过账回款冲正合计。
+    /// 按原回款聚合已过账回款冲正合计（经共享入口，约束见该处）。
     ///
     /// # 参数
     /// * `receipt_id` - 原客户回款
@@ -176,24 +213,25 @@ impl<'a> ReceiptReversalRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 只统计 `posted`，草稿、审批中与已冲正不占额度；使用 Decimal128 `$sum`；
-    /// 命中 `idx_receipt_reversals_original`，无新增索引与迁移。
     pub async fn posted_reversal_total_by_receipt(
         &self,
         receipt_id: &CustomerReceiptId,
         exclude_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Amount> {
-        let pipeline = posted_total_pipeline("original_customer_receipt_id", receipt_id.as_ref(), exclude_id);
-
-        posted_total(&self.collection(), pipeline, executor).await
+        posted_total_by_original(
+            &self.collection(),
+            "original_customer_receipt_id",
+            receipt_id.as_ref(),
+            exclude_id,
+            executor,
+        )
+        .await
     }
 }
 
 impl<'a> PaymentReversalRepository<'a> {
-    /// 按原付款聚合已过账付款冲正合计。
+    /// 按原付款聚合已过账付款冲正合计（经共享入口，约束见该处）。
     ///
     /// # 参数
     /// * `payment_id` - 原供应商付款
@@ -205,19 +243,20 @@ impl<'a> PaymentReversalRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 只统计 `posted`，草稿、审批中与已冲正不占额度；使用 Decimal128 `$sum`；
-    /// 命中 `idx_payment_reversals_original`，无新增索引与迁移。
     pub async fn posted_reversal_total_by_payment(
         &self,
         payment_id: &SupplierPaymentId,
         exclude_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Amount> {
-        let pipeline = posted_total_pipeline("original_supplier_payment_id", payment_id.as_ref(), exclude_id);
-
-        posted_total(&self.collection(), pipeline, executor).await
+        posted_total_by_original(
+            &self.collection(),
+            "original_supplier_payment_id",
+            payment_id.as_ref(),
+            exclude_id,
+            executor,
+        )
+        .await
     }
 }
 

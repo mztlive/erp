@@ -60,3 +60,63 @@ fn invoice_bson_roundtrip_preserves_fields() {
         bson::deserialize_from_document(bson::serialize_to_document(&invoice).unwrap()).unwrap();
     assert_eq!(back, invoice);
 }
+
+/// 金额精度 wire 探针（原 lib.rs 入口测试下沉到序列化契约旁，lib.rs 只剩模块声明）。
+///
+/// 锁定 `zero_amount` 的 `0.00` 解析拼写、JSON 与 Decimal128 wire 形态。
+#[cfg(test)]
+mod zero_amount_wire_tests {
+    use erp_core::money::Amount;
+    use serde::Serialize;
+
+    use crate::entity::receivable::allocation_amount::zero_amount;
+
+    #[derive(Serialize)]
+    struct MoneyDocument {
+        amount: Amount,
+    }
+
+    #[test]
+    fn zero_amount_parse_spelling_preserves_value_json_and_decimal128_wire() {
+        let original = MoneyDocument { amount: zero_amount() };
+        let alternative = MoneyDocument { amount: "0.00".parse::<Amount>().unwrap() };
+        assert_eq!(original.amount, alternative.amount);
+        assert_eq!(original.amount.to_decimal().scale(), 2);
+        assert_eq!(alternative.amount.to_decimal().scale(), 2);
+        let original_json = serde_json::to_string(&original).unwrap();
+        assert_eq!(original_json, r#"{"amount":"0.00"}"#);
+        assert_eq!(serde_json::to_string(&alternative).unwrap(), original_json);
+
+        let original_wire = bson::serialize_to_vec(&original).unwrap();
+        assert_eq!(bson::serialize_to_vec(&alternative).unwrap(), original_wire);
+        let document: bson::Document = bson::deserialize_from_slice(&original_wire).unwrap();
+        match document.get("amount") {
+            Some(bson::Bson::Decimal128(value)) => assert_eq!(value.to_string(), "0.00"),
+            other => panic!("expected Decimal128 amount, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn former_zero_literal_probe_changes_scale_json_and_decimal128_wire() {
+        let original = MoneyDocument { amount: zero_amount() };
+        let invalid_probe = MoneyDocument { amount: "0".parse::<Amount>().unwrap() };
+        assert_eq!(original.amount, invalid_probe.amount);
+        assert_eq!(original.amount.to_decimal().scale(), 2);
+        assert_eq!(invalid_probe.amount.to_decimal().scale(), 0);
+        assert_eq!(serde_json::to_string(&invalid_probe).unwrap(), r#"{"amount":"0"}"#);
+        assert_ne!(serde_json::to_string(&original).unwrap(), serde_json::to_string(&invalid_probe).unwrap());
+        let original_wire = bson::serialize_to_vec(&original).unwrap();
+        let invalid_wire = bson::serialize_to_vec(&invalid_probe).unwrap();
+        assert_ne!(original_wire, invalid_wire);
+        let original_doc: bson::Document = bson::deserialize_from_slice(&original_wire).unwrap();
+        let invalid_doc: bson::Document = bson::deserialize_from_slice(&invalid_wire).unwrap();
+        match (original_doc.get("amount"), invalid_doc.get("amount")) {
+            (Some(bson::Bson::Decimal128(before)), Some(bson::Bson::Decimal128(after))) => {
+                assert_eq!(before.to_string(), "0.00");
+                assert_eq!(after.to_string(), "0");
+                assert_ne!(before.bytes(), after.bytes());
+            },
+            other => panic!("expected two Decimal128 amounts, got {other:?}"),
+        }
+    }
+}

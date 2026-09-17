@@ -314,14 +314,7 @@ impl<'a> ContractDomainRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(&self.db.collection::<Contract>(CONTRACTS), contract, executor).await?;
-        mongo_ops::insert_one(
-            &self.db.collection::<ContractRevision>(CONTRACT_REVISIONS),
-            revision,
-            executor,
-        )
-        .await?;
-        contract.attach_revision(&revision.base.id, contract.stable.updated_by.clone());
-        ContractRepository::new(self.db, CONTRACTS).update(contract, executor).await
+        self.attach_revision(contract, revision, executor).await
     }
 
     /// 归档合同新版本（插入版本 + 绑定当前版本指针）。
@@ -339,6 +332,24 @@ impl<'a> ContractDomainRepository<'a> {
     /// # 错误
     /// 当唯一索引冲突、乐观锁冲突或 MongoDB 写入失败时返回错误。
     pub async fn archive_contract_revision(
+        &self,
+        contract: &mut Contract,
+        revision: &ContractRevision,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.attach_revision(contract, revision, executor).await
+    }
+
+    /// 落不可变版本并切换合同当前版本指针（两方法共用后半段）。
+    ///
+    /// # 参数
+    /// * `contract` - 待绑定版本的合同（成功后内存中切换版本指针并递增版本）
+    /// * `revision` - 新不可变合同版本
+    /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 错误
+    /// 当唯一索引冲突、乐观锁冲突或 MongoDB 写入失败时返回错误。
+    async fn attach_revision(
         &self,
         contract: &mut Contract,
         revision: &ContractRevision,
@@ -370,6 +381,9 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
 
 /// 写入已证明的客户集合、请求客户与历史参与合同条件。
 ///
+/// 交集收窄唯一由 [`crate::repository::scope::narrow_authorized_customers`] 产生，
+/// 本函数只做文档拼接；`None`/空集/历史三态语义见两侧真值表注释。
+///
 /// # 参数
 /// * `filter` - 正在组装的查询文档
 /// * `customer_id` - 调用方显式指定的单个客户；`None` 表示未指定
@@ -390,17 +404,7 @@ fn insert_authorization_filter(
     customer_ids: Option<&[String]>,
     historical_contract_ids: &[String],
 ) {
-    let narrowed = match (customer_id, customer_ids) {
-        (None, ids) => ids.map(Vec::from),
-        (Some(id), None) => Some(vec![id.to_string()]),
-        (Some(id), Some(ids)) => {
-            if ids.iter().any(|existing| existing == id) {
-                Some(vec![id.to_string()])
-            } else {
-                Some(Vec::new())
-            }
-        },
-    };
+    let narrowed = crate::repository::scope::narrow_authorized_customers(customer_id, customer_ids);
     let auth = crate::repository::scope::authorization_document(narrowed.as_deref(), historical_contract_ids);
     if auth.is_empty() {
         return;

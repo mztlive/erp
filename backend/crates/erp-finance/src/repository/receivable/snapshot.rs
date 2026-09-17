@@ -17,6 +17,7 @@ use super::{ReceivableRepository, SettlementBatchResult};
 use crate::entity::receivable::{
     CustomerReceipt, Invoice, ReceiptAllocation, ReceivableEntry, SalesInvoiceAllocation,
 };
+use crate::ports::receivable::ReceivableSnapshot;
 use crate::repository::extensions::ReceivableExt;
 use crate::repository::owned::{ReceivableAccountRepository, ReceivableEntryRepository};
 
@@ -40,6 +41,48 @@ pub struct ReceivableSnapshotFacts {
     pub expected_receipt_count: usize,
     /// 去重后应存在的发票数量。
     pub expected_invoice_count: usize,
+}
+
+impl ReceivableSnapshotFacts {
+    /// 将有界持久化事实与销售版本头拼装为决策快照。
+    ///
+    /// 事实容器（读取形态）与 [`ReceivableSnapshot`]（决策快照）的边界：本转
+    /// 换只做字段搬运，不裁决缺失（`expected_*_count` 仍由调用方解释首错），
+    /// 字段与顺序语义不变。
+    ///
+    /// # 参数
+    /// * `current_sales_order_revision_id` - 当前正式销售版本
+    /// * `sales_order_no` - 来源销售单号
+    /// * `sales_order_revision_no` - 当前正式版本号
+    /// * `sales_order_snapshot_at` - 版本生效秒级时间戳
+    /// * `customer_name` - 销售快照客户名
+    /// * `counterparty_party_name` - 结算主体快照名（可空）
+    ///
+    /// # 返回
+    /// 返回字段搬运后的 [`ReceivableSnapshot`]。
+    pub fn into_snapshot(
+        self,
+        current_sales_order_revision_id: String,
+        sales_order_no: String,
+        sales_order_revision_no: u32,
+        sales_order_snapshot_at: u64,
+        customer_name: String,
+        counterparty_party_name: Option<String>,
+    ) -> ReceivableSnapshot {
+        ReceivableSnapshot {
+            current_sales_order_revision_id,
+            sales_order_no,
+            sales_order_revision_no,
+            sales_order_snapshot_at,
+            customer_name,
+            counterparty_party_name,
+            entries: self.entries,
+            receipt_allocations: self.receipt_allocations,
+            invoice_allocations: self.invoice_allocations,
+            receipts: self.receipts,
+            invoices: self.invoices,
+        }
+    }
 }
 
 impl<'a> ReceivableRepository<'a> {
@@ -391,6 +434,36 @@ mod tests {
         };
         assert_eq!(facts.expected_receipt_count, 0);
         assert_eq!(facts.expected_invoice_count, 0);
+    }
+
+    #[test]
+    fn snapshot_facts_convert_to_decision_snapshot_without_reordering() {
+        let facts = ReceivableSnapshotFacts {
+            entries: vec![test_entry("e-2", 2), test_entry("e-1", 1)],
+            receipt_allocations: Vec::new(),
+            invoice_allocations: Vec::new(),
+            receipts: Vec::new(),
+            invoices: Vec::new(),
+            expected_receipt_count: 0,
+            expected_invoice_count: 0,
+        };
+        let snapshot = facts.into_snapshot(
+            "sor-9".to_string(),
+            "SO-9".to_string(),
+            3,
+            1_700_000_000,
+            "客户九".to_string(),
+            Some("结算主体".to_string()),
+        );
+        assert_eq!(snapshot.current_sales_order_revision_id, "sor-9");
+        assert_eq!(snapshot.sales_order_no, "SO-9");
+        assert_eq!(snapshot.sales_order_revision_no, 3);
+        assert_eq!(snapshot.sales_order_snapshot_at, 1_700_000_000);
+        assert_eq!(snapshot.customer_name, "客户九");
+        assert_eq!(snapshot.counterparty_party_name.as_deref(), Some("结算主体"));
+        let ids: Vec<&str> = snapshot.entries.iter().map(|entry| entry.base.id.as_str()).collect();
+        assert_eq!(ids, vec!["e-2", "e-1"], "转换只搬运字段，不重排事实顺序");
+        assert!(snapshot.receipts.is_empty());
     }
 
     #[tokio::test]

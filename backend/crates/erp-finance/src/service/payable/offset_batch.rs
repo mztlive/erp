@@ -10,8 +10,8 @@ use persistence_core::Executor;
 
 use crate::entity::payable::{PayableAccount, PayableEntry};
 use crate::repository::PayableExt;
-pub use crate::service::receivable::receipt_reversal::OffsetFacts;
-use crate::service::receivable::receipt_reversal::{
+pub use crate::service::offset_index::OffsetFacts;
+use crate::service::offset_index::{
     index_required_by_id, unique_account_ids_for_entries, unique_ids_in_first_seen_order,
 };
 use crate::{Error, Result};

@@ -1,4 +1,8 @@
 //! 采购变更单拥有的提交、撤回与最终生效状态守卫。
+//!
+//! 本层保留原因：三个入口的调用方在组合层 `erp-processes`（跨组 crate，
+//! 本域不得改动），直接删除会跨组破坏调用；实体方法返回 `erp_core` 错误，
+//! 本层将其映射为本域 [`Error`]，并锁定对外冲突文案，故保留为薄守卫层。
 use crate::entity::purchase_order::{PurchaseChangeOrder, PurchaseChangeOrderStatus};
 use crate::{Error, Result};
 

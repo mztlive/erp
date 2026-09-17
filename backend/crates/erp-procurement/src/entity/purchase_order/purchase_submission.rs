@@ -20,7 +20,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::entity::purchase_order::line_common::{PurchaseLineDataRef, normalize_and_validate_line};
 use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
-use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
+use crate::entity::purchase_order::types::{
+    FulfillmentResponsibility, PurchaseLineType, PurchaseType, status_display,
+};
 
 /// 提交序号最大长度。
 const SUBMISSION_NO_MAX_LEN: usize = 64;
@@ -65,35 +67,13 @@ pub enum PurchaseOrderReviewDecision {
     },
 }
 
-impl SubmissionStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Draft => "草稿",
-            Self::Pending => "待审核",
-            Self::Approved => "已通过",
-            Self::Rejected => "已驳回",
-            Self::Superseded => "因重新提交失效",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Draft => "DRAFT",
-            Self::Pending => "PENDING",
-            Self::Approved => "APPROVED",
-            Self::Rejected => "REJECTED",
-            Self::Superseded => "SUPERSEDED",
-        }
-    }
-}
+status_display!(SubmissionStatus, {
+    Draft => ("草稿", "DRAFT"),
+    Pending => ("待审核", "PENDING"),
+    Approved => ("已通过", "APPROVED"),
+    Rejected => ("已驳回", "REJECTED"),
+    Superseded => ("因重新提交失效", "SUPERSEDED"),
+});
 
 /// 采购提交创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

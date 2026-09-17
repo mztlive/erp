@@ -8,7 +8,7 @@ use persistence_core::Executor;
 
 use super::ReturnsService;
 use super::approval::ensure_payment_reversal_final_approve_posting;
-use super::shared::return_command_no;
+use super::shared::{DEFAULT_FINANCE_REVIEWER, PAYMENT_REVERSAL_COMMAND_PREFIX, return_command_no};
 use crate::dto::{CommitPaymentReversalRequest, CreatePaymentReversalRequest};
 use crate::entity::returns::{
     CumulativeAmountLimit, PaymentReversal, PaymentReversalData, PaymentReversalStatus,
@@ -53,13 +53,13 @@ pub fn new_payment_reversal_commit(
     let result = PaymentReversal::new(
         PaymentReversalId::new(next_id()),
         PaymentReversalData {
-            reversal_no: return_command_no("PCZ", actor_id, &req.idempotency_key),
+            reversal_no: return_command_no(PAYMENT_REVERSAL_COMMAND_PREFIX, actor_id, &req.idempotency_key),
             original_supplier_payment_id: source.payment_id.clone(),
             reason_code: None,
             reason_text: req.reason.clone(),
             amount: req.amount.unwrap_or(source.amount),
             handled_by: actor_id.to_string(),
-            reviewed_by: "finance_reviewer".to_string(),
+            reviewed_by: DEFAULT_FINANCE_REVIEWER.to_string(),
             occurred_at: Instant::now(),
             evidence_attachment_id: None,
         },

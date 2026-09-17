@@ -3,6 +3,17 @@ use sha2::{Digest, Sha256};
 
 use crate::{Error, Result};
 
+/// 一次提交构造器的默认财务复核人（经办/复核分离，复核人固定）。
+pub const DEFAULT_FINANCE_REVIEWER: &str = "finance_reviewer";
+/// 客户退款一次提交单号前缀。
+pub const CUSTOMER_REFUND_COMMAND_PREFIX: &str = "TK";
+/// 供应商退款一次提交单号前缀。
+pub const SUPPLIER_REFUND_COMMAND_PREFIX: &str = "GTK";
+/// 回款冲正一次提交单号前缀。
+pub const RECEIPT_REVERSAL_COMMAND_PREFIX: &str = "CZ";
+/// 付款冲正一次提交单号前缀。
+pub const PAYMENT_REVERSAL_COMMAND_PREFIX: &str = "PCZ";
+
 /// 由操作者与幂等键生成不泄露原键的稳定纠错单号。
 pub fn return_command_no(prefix: &str, actor_id: &str, idempotency_key: &str) -> String {
     let digest = hex::encode(Sha256::digest(format!("{actor_id}|{}", idempotency_key.trim()).as_bytes()));

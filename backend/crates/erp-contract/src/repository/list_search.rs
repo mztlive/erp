@@ -116,6 +116,9 @@ impl ContractDomainRepository<'_> {
 
     /// 在拥有的合同与修订集合内完成分页；元数据基于同一可见范围。
     ///
+    /// 会话/非会话两分支的游标推进与反序列化经 `advance_search_cursor` 收敛；
+    /// 两分支只保留执行器接入差异，空命中返回默认值的行为不变。
+    ///
     /// # 错误
     /// MongoDB 聚合或反序列化失败。
     pub async fn search_list(
@@ -126,23 +129,60 @@ impl ContractDomainRepository<'_> {
     ) -> Result<ContractSearchResult> {
         let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
         let pipeline = list_pipeline(filter, search, BusinessDate::today());
-        if let Some(session) = executor.session() {
-            let mut cursor = collection
-                .aggregate(pipeline)
-                .with_type::<ContractSearchResult>()
-                .session(&mut *session)
-                .await?;
-            if cursor.advance(session).await? {
-                return Ok(cursor.deserialize_current()?);
-            }
-            return Ok(ContractSearchResult::default());
-        }
-        let mut cursor = collection.aggregate(pipeline).with_type::<ContractSearchResult>().await?;
-        if cursor.advance().await? {
-            return Ok(cursor.deserialize_current()?);
-        }
-        Ok(ContractSearchResult::default())
+        run_search_aggregate(&collection, pipeline, executor).await
     }
+}
+
+/// 执行合同搜索聚合：会话与非会话只差执行器接入，游标推进与反序列化共用。
+///
+/// # 参数
+/// * `collection` - 合同集合文档句柄
+/// * `pipeline` - 已组装的搜索流水线
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回聚合首文档；空命中返回默认值。
+///
+/// # 错误
+/// MongoDB 聚合或反序列化失败。
+async fn run_search_aggregate(
+    collection: &mongodb::Collection<Document>,
+    pipeline: Vec<Document>,
+    executor: &mut dyn Executor,
+) -> Result<ContractSearchResult> {
+    if let Some(session) = executor.session() {
+        let mut cursor =
+            collection.aggregate(pipeline).with_type::<ContractSearchResult>().session(&mut *session).await?;
+        let advanced = cursor.advance(session).await.map_err(persistence_core::Error::from)?;
+        return advance_search_result(advanced, || cursor.deserialize_current());
+    }
+    let mut cursor = collection.aggregate(pipeline).with_type::<ContractSearchResult>().await?;
+    let advanced = cursor.advance().await.map_err(persistence_core::Error::from)?;
+    advance_search_result(advanced, || cursor.deserialize_current())
+}
+
+/// 由游标推进结果反序列化首文档；空命中返回默认值（两分支共用）。
+///
+/// 会话/非会话游标类型不同，推进后的反序列化经本函数收敛：调用方只传
+/// `deserialize_current()` 闭包结果的映射入口，两分支的推进差异保留在调用点。
+///
+/// # 参数
+/// * `advanced` - 游标是否定位到首文档
+/// * `deserialize` - 首文档反序列化闭包（仅 `advanced` 为真时调用）
+///
+/// # 返回
+/// 有首文档时返回反序列化结果，否则返回默认值。
+///
+/// # 错误
+/// 反序列化失败时返回仓储错误。
+fn advance_search_result(
+    advanced: bool,
+    deserialize: impl FnOnce() -> mongodb::error::Result<ContractSearchResult>,
+) -> Result<ContractSearchResult> {
+    if advanced {
+        return Ok(deserialize().map_err(persistence_core::Error::from)?);
+    }
+    Ok(ContractSearchResult::default())
 }
 
 /// 查询流水线：范围 → 当前修订 → 统一派生字段 → 分面分页与统计。

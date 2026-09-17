@@ -1,6 +1,7 @@
 //! Returns-domain application errors with the original unique-index mapping.
 
 use application_core::ErrorClass;
+use tracing::debug;
 
 /// Returns-domain result alias.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -33,6 +34,8 @@ pub enum Error {
     #[error("数据冲突: {0}")]
     ConflictError(String),
 
+    /// 保留给 web-api 边界映射的回款重复变体：本域 `From<persistence_core::Error>`
+    /// 统一走 `ConflictError`（键上下文无法恢复资源语义），本变体不断言新的构造点。
     #[error("数据冲突: 数据已存在，请勿重复提交")]
     ReceiptDuplicate(#[source] persistence_core::Error),
 
@@ -101,8 +104,10 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
 
 /// 将退货逆向域唯一索引名称映射为面向用户的冲突提示。
 ///
-/// 退货逆向单号与明细唯一索引保持原通用冲突文案。
-fn duplicate_index_conflict_message(_index_name: Option<&str>) -> String {
+/// 退货逆向单号与明细唯一索引保持原通用冲突文案；用户文案不泄漏键细节，
+/// 索引名只进 tracing 日志上下文。
+fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
+    debug!(index_name = ?index_name, "唯一冲突保持通用用户文案");
     "数据已存在，请勿重复提交".to_string()
 }
 
@@ -144,5 +149,32 @@ mod tests {
         let error = Error::from(persistence_core::Error::OptimisticLockingError);
         assert_eq!(error.class(), ErrorClass::Conflict);
         assert_eq!(error.to_string(), "数据冲突: 数据已被其他请求修改，请刷新后重试");
+    }
+
+    /// 错误分类对照表：唯一冲突/乐观锁/瞬态事务恒为 Conflict，业务类恒为 BusinessRule。
+    #[test]
+    fn error_class_truth_table() {
+        use persistence_core::Error as StoreError;
+
+        let duplicate = Error::from(StoreError::DuplicateKey(MongoError::custom("duplicate key")));
+        assert_eq!(duplicate.class(), ErrorClass::Conflict);
+        assert!(matches!(duplicate, Error::ConflictError(_)));
+
+        let transient =
+            Error::from(StoreError::TransientTransactionConflict(MongoError::custom("transient")));
+        assert_eq!(transient.class(), ErrorClass::Conflict);
+        assert!(matches!(transient, Error::TransientTransaction(_)));
+
+        for error in [
+            Error::BusinessLogicError("规则".to_string()),
+            Error::ValidationError("参数".to_string()),
+            Error::NotFound("缺失".to_string()),
+        ] {
+            assert_eq!(error.class(), ErrorClass::BusinessRule);
+        }
+        for error in [Error::Forbidden("禁".to_string()), Error::Unauthenticated("未认证".to_string())] {
+            assert_eq!(error.class(), ErrorClass::Forbidden);
+        }
+        assert_eq!(Error::Internal("内部".to_string()).class(), ErrorClass::Internal);
     }
 }

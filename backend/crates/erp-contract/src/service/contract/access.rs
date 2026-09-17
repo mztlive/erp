@@ -1,7 +1,6 @@
 //! 合同对象读取与写入范围；当前客户主责、协作与负责人组织分别解释。
 
 use std::collections::BTreeSet;
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use application_core::AuditActor;
@@ -100,12 +99,8 @@ impl ContractAccess {
         } else {
             Vec::new()
         };
-        let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-        owned.hash(&mut fingerprint);
-        collaborating.hash(&mut fingerprint);
-        history.hash(&mut fingerprint);
-        org_owned.hash(&mut fingerprint);
-        access.scope_version = format!("{}:{:x}", access.scope_version, fingerprint.finish());
+        let fingerprint = scope_fingerprint_input(&owned, &collaborating, history.as_slice(), &org_owned);
+        access.scope_version = format!("{}:{:x}", access.scope_version, stable_fingerprint(&fingerprint));
         let scope = contract_scope(&access, actor.id(), &owned, &collaborating, history, &org_owned);
         Ok((access, scope))
     }
@@ -422,13 +417,13 @@ pub fn contract_scope(
     }
 }
 
-/// 将已解析条款映射为合同责任条款。
+/// 将已解析条款映射为合同责任条款（组织客户展开仍在 `clause_ids` 按组织回查）。
 ///
 /// # 参数
 /// * `clause` - Port 返回的正向范围
 /// * `user` - 当前账号
 /// * `collaborating` - 当前协作客户
-/// * `_org_owned` - 组织到客户的预计算结果
+/// * `org_owned` - 组织到客户的预计算结果（本函数只透传，展开在 `clause_ids` 内回查）
 ///
 /// # 返回
 /// 返回主责、协作与组织分别保留的合同条款。
@@ -442,7 +437,7 @@ fn map_clause(
     clause: &ContractResolvedClause,
     user: &str,
     collaborating: &[String],
-    _org_owned: &[(Vec<String>, Vec<String>)],
+    org_owned: &[(Vec<String>, Vec<String>)],
 ) -> ContractScopeClause {
     ContractScopeClause {
         company: clause.company,
@@ -613,6 +608,97 @@ fn ensure_limit(count: usize, message: &str) -> Result<()> {
     Ok(())
 }
 
+/// 范围指纹的稳定序列化输入：排序后 ID 做长度前缀拼接（跨工具链稳定）。
+///
+/// # 参数
+/// * `owned` - 当前主责客户
+/// * `collaborating` - 当前协作客户
+/// * `history` - 历史参与合同
+/// * `org_owned` - 各组织集合对应的当前主责客户
+///
+/// # 返回
+/// 返回带长度前缀的规范字节串，仅用于同版本内快照比对，不做持久化字段。
+pub(super) fn scope_fingerprint_input(
+    owned: &[String],
+    collaborating: &[String],
+    history: impl ScopeFingerprintHistory,
+    org_owned: &[(Vec<String>, Vec<String>)],
+) -> Vec<u8> {
+    let mut out = Vec::new();
+    push_str_section(&mut out, owned);
+    push_str_section(&mut out, collaborating);
+    history.push_section(&mut out);
+    let mut orgs: Vec<(&[String], &[String])> =
+        org_owned.iter().map(|(orgs, customers)| (orgs.as_slice(), customers.as_slice())).collect();
+    orgs.sort();
+    for (org_set, customers) in orgs {
+        push_str_section(&mut out, org_set);
+        push_str_section(&mut out, customers);
+    }
+    out
+}
+
+/// 范围指纹历史段的抽象：字符串列表或合同版本列表统一压入同一规范字节串。
+pub(super) trait ScopeFingerprintHistory {
+    /// 把历史段按规范编码追加到 `out`。
+    fn push_section(self, out: &mut Vec<u8>);
+}
+
+impl ScopeFingerprintHistory for &[String] {
+    fn push_section(self, out: &mut Vec<u8>) {
+        let mut sorted: Vec<&str> = self.iter().map(String::as_str).collect();
+        sorted.sort_unstable();
+        push_str_section(out, &sorted);
+    }
+}
+
+impl ScopeFingerprintHistory for &[crate::repository::scope::ContractVersion] {
+    fn push_section(self, out: &mut Vec<u8>) {
+        let mut pairs: Vec<(&str, u64)> =
+            self.iter().map(|version| (version.id.as_str(), version.version)).collect();
+        pairs.sort_unstable();
+        push_u64(out, pairs.len() as u64);
+        for (id, version) in pairs {
+            push_bytes(out, id.as_bytes());
+            push_u64(out, version);
+        }
+    }
+}
+
+fn push_str_section(out: &mut Vec<u8>, values: &[impl AsRef<str>]) {
+    let mut sorted: Vec<&str> = values.iter().map(AsRef::as_ref).collect();
+    sorted.sort_unstable();
+    push_u64(out, sorted.len() as u64);
+    for value in sorted {
+        push_bytes(out, value.as_bytes());
+    }
+}
+
+fn push_bytes(out: &mut Vec<u8>, bytes: &[u8]) {
+    push_u64(out, bytes.len() as u64);
+    out.extend_from_slice(bytes);
+}
+
+fn push_u64(out: &mut Vec<u8>, value: u64) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+/// 对规范字节串计算稳定指纹（FNV-1a 64 位固定算法，不随工具链漂移）。
+///
+/// # 参数
+/// * `input` - `scope_fingerprint_input` 输出的规范字节串
+///
+/// # 返回
+/// 返回 64 位指纹，仅用于同版本内快照比对。
+pub(super) fn stable_fingerprint(input: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in input {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -682,6 +768,31 @@ mod tests {
         assert!(matches!(deny_object("update"), Error::Forbidden(_)));
         assert!(matches!(deny_object("create"), Error::Forbidden(_)));
         assert!(matches!(deny_object("detail"), Error::NotFound(_)));
+    }
+
+    #[test]
+    fn scope_fingerprint_is_order_insensitive_and_stable_across_runs() {
+        let base = scope_fingerprint_input(
+            &["c-2".to_string(), "c-1".to_string()],
+            &["c-3".to_string()],
+            ["ht-2".to_string(), "ht-1".to_string()].as_slice(),
+            &[(vec!["org-b".to_string(), "org-a".to_string()], vec!["c-9".to_string(), "c-8".to_string()])],
+        );
+        let reordered = scope_fingerprint_input(
+            &["c-1".to_string(), "c-2".to_string()],
+            &["c-3".to_string()],
+            ["ht-1".to_string(), "ht-2".to_string()].as_slice(),
+            &[(vec!["org-a".to_string(), "org-b".to_string()], vec!["c-8".to_string(), "c-9".to_string()])],
+        );
+        assert_eq!(base, reordered);
+        assert_eq!(stable_fingerprint(&base), stable_fingerprint(&reordered));
+        let changed = scope_fingerprint_input(
+            &["c-1".to_string()],
+            &["c-3".to_string()],
+            ["ht-1".to_string(), "ht-2".to_string()].as_slice(),
+            &[],
+        );
+        assert_ne!(stable_fingerprint(&base), stable_fingerprint(&changed));
     }
 
     #[test]

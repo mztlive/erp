@@ -32,20 +32,18 @@ pub struct FormalRevisionIdentities {
 }
 
 impl FormalRevisionIdentities {
-    /// 用调用方已生成的稳定身份构造正式版本身份清单。
+    /// 用调用方已生成的稳定身份构造身份清单（仅分配，不校验对齐）。
     ///
     /// # 参数
     /// * `revision_id` - 正式版本头身份
     /// * `lines` - 与提交行顺序一致的行身份
     ///
     /// # 返回
-    /// 返回身份清单；本方法不校验数量或行类型。
+    /// 返回身份清单。
     ///
     /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 数量与行类型必须在聚合工厂内与提交行对齐，调用方不得事后改写。
+    /// 无。对齐失败由 `from_prepared` 经 `ensure_matches_lines` 返回，
+    /// 使半合法清单无法单独落库。
     pub fn new(revision_id: SalesOrderRevisionId, lines: Vec<FormalRevisionLineIdentity>) -> Self {
         Self { revision_id, lines }
     }
@@ -86,20 +84,17 @@ pub struct FormalRevisionLineIdentity {
 }
 
 impl FormalRevisionLineIdentity {
-    /// 用调用方已生成的公共行和子类型身份构造一行正式版本身份。
+    /// 用调用方已生成的公共行和子类型身份构造一行身份（不校验类型对齐）。
     ///
     /// # 参数
     /// * `revision_line_id` - 公共行版本身份
-    /// * `subtype` - 子类型身份
+    /// * `subtype` - 子类型身份（须与对应提交行的 `line_type` 一致，由 `ensure_matches_lines` 复核）
     ///
     /// # 返回
     /// 返回单行身份。
     ///
     /// # 错误
     /// 无。
-    ///
-    /// # 关键业务约束
-    /// 子类型必须与对应提交行的 `line_type` 一致。
     pub fn new(revision_line_id: SalesOrderRevisionLineId, subtype: FormalRevisionSubtypeIdentity) -> Self {
         Self { revision_line_id, subtype }
     }
@@ -115,42 +110,53 @@ pub enum FormalRevisionSubtypeIdentity {
 }
 
 impl FormalRevisionSubtypeIdentity {
-    /// 按行类型用调用方已生成的 ID 构造子类型身份。
+    /// 用实物及服务子行稳定身份构造子类型身份。
+    ///
+    /// # 参数
+    /// * `id` - 调用方已生成的实物子行身份
+    ///
+    /// # 返回
+    /// 返回实物子类型身份。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn goods(id: SalesOrderGoodsServiceLineRevisionId) -> Self {
+        Self::GoodsService(id)
+    }
+
+    /// 用卡券子行稳定身份构造子类型身份。
+    ///
+    /// # 参数
+    /// * `id` - 调用方已生成的卡券子行身份
+    ///
+    /// # 返回
+    /// 返回卡券子类型身份。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn voucher(id: SalesOrderVoucherLineRevisionId) -> Self {
+        Self::Voucher(id)
+    }
+
+    /// 按行类型用调用方已生成的 ID 构造子类型身份（兼容入口，委托 `goods`/`voucher`）。
     ///
     /// # 参数
     /// * `line_type` - 提交行类型
-    /// * `id` - 子类型行稳定身份
+    /// * `id` - 子类型行稳定身份（实物行不得持有卡券身份，反之亦然）
     ///
     /// # 返回
     /// 返回与行类型对应的子类型身份。
     ///
     /// # 错误
     /// 无。
-    ///
-    /// # 关键业务约束
-    /// 实物行不得持有卡券身份，卡券行不得持有实物身份。
     pub fn from_line_type(line_type: LineType, id: impl Into<String>) -> Self {
         match line_type {
-            LineType::GoodsService => {
-                Self::GoodsService(SalesOrderGoodsServiceLineRevisionId::new(id.into()))
-            },
-            LineType::Voucher => Self::Voucher(SalesOrderVoucherLineRevisionId::new(id.into())),
+            LineType::GoodsService => Self::goods(SalesOrderGoodsServiceLineRevisionId::new(id.into())),
+            LineType::Voucher => Self::voucher(SalesOrderVoucherLineRevisionId::new(id.into())),
         }
     }
 
     /// 判断子类型身份是否匹配给定行类型。
-    ///
-    /// # 参数
-    /// * `line_type` - 提交行类型
-    ///
-    /// # 返回
-    /// 身份与行类型一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 无。
     fn matches_line_type(&self, line_type: LineType) -> bool {
         matches!(
             (self, line_type),
@@ -175,7 +181,7 @@ pub struct FormalRevisionContext {
 }
 
 impl FormalRevisionContext {
-    /// 构造正式版本上下文。
+    /// 构造正式版本上下文（版本号与上一版本指针由调用方从仓储事实得到，工厂不查询）。
     ///
     /// # 参数
     /// * `revision_no` - 调用方确定的下一版本号
@@ -189,9 +195,6 @@ impl FormalRevisionContext {
     ///
     /// # 错误
     /// 无。
-    ///
-    /// # 关键业务约束
-    /// 版本号与上一版本指针由调用方从仓储事实得到，工厂不得查询 latest revision no。
     pub fn new(
         revision_no: u32,
         revision_source: RevisionSource,
@@ -407,20 +410,7 @@ impl SalesOrderRevisionAggregate {
     }
 }
 
-/// 校验销售单业务性质与提交业务性质一致。
-///
-/// # 参数
-/// * `expected` - 销售单业务性质
-/// * `actual` - 提交业务性质
-///
-/// # 返回
-/// 两者一致时返回 `Ok(())`。
-///
-/// # 错误
-/// 不一致时返回领域错误。
-///
-/// # 关键业务约束
-/// 正式版本行类型约束以销售单业务性质为准，提交不得漂移。
+/// 校验销售单业务性质与提交业务性质一致（正式版本行类型约束以销售单业务性质为准）。
 fn ensure_business_type(expected: BusinessType, actual: BusinessType) -> Result<()> {
     if expected != actual {
         return Err(Error::from("销售单业务性质与提交不一致"));
@@ -428,19 +418,7 @@ fn ensure_business_type(expected: BusinessType, actual: BusinessType) -> Result<
     Ok(())
 }
 
-/// 把已规范化行转换为行清单摘要。
-///
-/// # 参数
-/// * `lines` - 已规范化行
-///
-/// # 返回
-/// 返回供 `validate_line_list` 使用的摘要。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 摘要只含行号、稳定身份和行类型，不含金额。
+/// 把已规范化行转换为供 `validate_line_list` 使用的行清单摘要（仅行号/稳定身份/行类型）。
 fn line_summaries(lines: &[PreparedRevisionLine]) -> Vec<LineSummary> {
     lines
         .iter()
@@ -452,21 +430,7 @@ fn line_summaries(lines: &[PreparedRevisionLine]) -> Vec<LineSummary> {
         .collect()
 }
 
-/// 构造正式版本头。
-///
-/// # 参数
-/// * `revision_id` - 版本头身份
-/// * `context` - 版本号、来源、上一版本和时间
-/// * `header` - 表头快照与金额
-///
-/// # 返回
-/// 返回不可变版本头。
-///
-/// # 错误
-/// 版本号、指纹、快照或金额三元组不合法时返回领域错误。
-///
-/// # 关键业务约束
-/// `customer_revision_id` 与商城快照保持空值，与现行首次/变更生效路径一致。
+/// 构造正式版本头（`customer_revision_id` 与商城快照保持空值，与现行首次/变更生效路径一致）。
 fn build_revision_header(
     revision_id: &SalesOrderRevisionId,
     context: &FormalRevisionContext,
@@ -496,21 +460,7 @@ fn build_revision_header(
     )
 }
 
-/// 按身份顺序构造公共行与子类型行。
-///
-/// # 参数
-/// * `revision_id` - 版本头身份
-/// * `identities` - 行身份清单
-/// * `lines` - 已规范化行
-///
-/// # 返回
-/// 返回 `(公共行, 实物子行, 卡券子行)`。
-///
-/// # 错误
-/// 公共行或子类型行构造失败时返回领域错误。
-///
-/// # 关键业务约束
-/// 行顺序保持输入顺序，不得按行号重排。
+/// 按身份顺序构造公共行与子类型行（保持输入顺序，不按行号重排），返回 `(公共行, 实物子行, 卡券子行)`。
 fn build_revision_children(
     revision_id: &SalesOrderRevisionId,
     identities: &[FormalRevisionLineIdentity],
@@ -530,21 +480,7 @@ fn build_revision_children(
     Ok((revision_lines, goods_lines, voucher_lines))
 }
 
-/// 构造正式版本公共行。
-///
-/// # 参数
-/// * `revision_id` - 版本头身份
-/// * `identity` - 当前行身份
-/// * `line` - 已规范化行
-///
-/// # 返回
-/// 返回公共行版本。
-///
-/// # 错误
-/// 行号、名称快照或金额三元组不合法时返回领域错误。
-///
-/// # 关键业务约束
-/// 公共行金额必须来自提交行已舍入值，工厂不得重算。
+/// 构造正式版本公共行（金额取提交行已舍入值，工厂不重算）。
 fn build_common_line(
     revision_id: &SalesOrderRevisionId,
     identity: &FormalRevisionLineIdentity,
@@ -568,22 +504,7 @@ fn build_common_line(
     )
 }
 
-/// 按行类型追加实物或卡券子行。
-///
-/// # 参数
-/// * `identity` - 当前行身份
-/// * `line` - 已规范化行
-/// * `goods_lines` - 实物子行累加器
-/// * `voucher_lines` - 卡券子行累加器
-///
-/// # 返回
-/// 追加成功时返回 `Ok(())`。
-///
-/// # 错误
-/// 字段组与行类型不一致或子行构造失败时返回领域错误。
-///
-/// # 关键业务约束
-/// 子行必须一对一引用公共行身份。
+/// 按行类型把已还原字段组追加为实物或卡券子行（子行一对一引用公共行身份）。
 fn append_subtype_line(
     identity: &FormalRevisionLineIdentity,
     line: PreparedRevisionLine,
@@ -603,21 +524,7 @@ fn append_subtype_line(
     }
 }
 
-/// 构造实物及服务子行。
-///
-/// # 参数
-/// * `id` - 子行身份
-/// * `revision_line_id` - 对应公共行身份
-/// * `goods` - 已还原实物字段组
-///
-/// # 返回
-/// 返回实物子行。
-///
-/// # 错误
-/// 基础单位非法时返回领域错误。
-///
-/// # 关键业务约束
-/// 单价与数量快照保持提交值，不随后续 SKU 价格变化。
+/// 构造实物及服务子行（单价与数量快照保持提交值，不随后续 SKU 价格变化）。
 fn build_goods_line(
     id: &SalesOrderGoodsServiceLineRevisionId,
     revision_line_id: &SalesOrderRevisionLineId,
@@ -639,21 +546,7 @@ fn build_goods_line(
     )
 }
 
-/// 构造卡券子行。
-///
-/// # 参数
-/// * `id` - 子行身份
-/// * `revision_line_id` - 对应公共行身份
-/// * `voucher` - 已还原卡券字段组
-///
-/// # 返回
-/// 返回卡券子行。
-///
-/// # 错误
-/// 卡张数为零或成交金额为零时返回领域错误。
-///
-/// # 关键业务约束
-/// 面额小计、成交金额和配赠由卡券行实体按公式推导。
+/// 构造卡券子行（面额小计、成交金额和配赠由卡券行实体按公式推导）。
 fn build_voucher_line(
     id: &SalesOrderVoucherLineRevisionId,
     revision_line_id: &SalesOrderRevisionLineId,
@@ -852,6 +745,19 @@ mod tests {
 
     fn voucher_context() -> FormalRevisionContext {
         FormalRevisionContext::new(1, RevisionSource::ErpApproval, None, BusinessType::Voucher, at())
+    }
+
+    #[test]
+    fn typed_subtype_constructors_match_line_type_shim() {
+        let goods = FormalRevisionSubtypeIdentity::goods(SalesOrderGoodsServiceLineRevisionId::new("st-g"));
+        assert!(goods.matches_line_type(LineType::GoodsService));
+        assert!(!goods.matches_line_type(LineType::Voucher));
+        assert_eq!(goods, FormalRevisionSubtypeIdentity::from_line_type(LineType::GoodsService, "st-g"));
+
+        let voucher = FormalRevisionSubtypeIdentity::voucher(SalesOrderVoucherLineRevisionId::new("st-v"));
+        assert!(voucher.matches_line_type(LineType::Voucher));
+        assert!(!voucher.matches_line_type(LineType::GoodsService));
+        assert_eq!(voucher, FormalRevisionSubtypeIdentity::from_line_type(LineType::Voucher, "st-v"));
     }
 
     #[test]

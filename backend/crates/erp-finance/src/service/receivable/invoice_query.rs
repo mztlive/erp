@@ -246,11 +246,7 @@ fn purchase_allocation_view(
     let views = allocations
         .iter()
         .map(|allocation| {
-            // 进项/销项分配动作枚举跨域不共享（见 A-G7），此处显式转换。
-            let action = match allocation.allocation_action {
-                crate::entity::payable::AllocationAction::Apply => AllocationAction::Apply,
-                crate::entity::payable::AllocationAction::Reverse => AllocationAction::Reverse,
-            };
+            let action = AllocationAction::from(allocation.allocation_action);
             net = action.apply_to_net(net, allocation.allocated_gross_amount);
             crate::dto::receivable::SalesInvoiceAllocationView {
                 id: allocation.base.id.clone(),

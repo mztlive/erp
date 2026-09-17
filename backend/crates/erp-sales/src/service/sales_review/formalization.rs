@@ -12,7 +12,7 @@ use crate::entity::sales_order::{
     FormalRevisionContext, FormalRevisionIdentities, FormalRevisionLineIdentity,
     FormalRevisionSubtypeIdentity, RevisionSource, SalesOrder, SalesOrderRevisionAggregate,
 };
-use crate::entity::sales_review::{SalesChangeSubmission, SalesChangeSubmissionLine};
+use crate::entity::sales_review::{LineType, SalesChangeSubmission, SalesChangeSubmissionLine};
 use crate::{Error, Result};
 
 /// 销售版本聚合载体（版本头 + 公共行 + 子类型行）。
@@ -88,9 +88,17 @@ fn allocate_formal_revision_identities(lines: &[SalesChangeSubmissionLine]) -> F
         lines
             .iter()
             .map(|line| {
+                let subtype = match line.line_type {
+                    LineType::GoodsService => FormalRevisionSubtypeIdentity::goods(
+                        erp_core::ids::SalesOrderGoodsServiceLineRevisionId::new(next_id()),
+                    ),
+                    LineType::Voucher => FormalRevisionSubtypeIdentity::voucher(
+                        erp_core::ids::SalesOrderVoucherLineRevisionId::new(next_id()),
+                    ),
+                };
                 FormalRevisionLineIdentity::new(
                     erp_core::ids::SalesOrderRevisionLineId::new(next_id()),
-                    FormalRevisionSubtypeIdentity::from_line_type(line.line_type.into(), next_id()),
+                    subtype,
                 )
             })
             .collect(),

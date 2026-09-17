@@ -61,16 +61,19 @@ impl ReceivableAccountStatus {
 /// 历史票款复核状态，仅保留存量应收文档的反序列化兼容。
 ///
 /// 复核功能已退役；新建与变更应收统一使用 `NotApplicable`，不生成复核任务。
+/// `OpeningPending` / `Reviewed` / `SyncDeltaPending` 为历史兼容专用：反序列
+/// 化仍接受，既有单测锁定其编解码稳定；新建路径见 [`Self::resolve_initial`]，
+/// 任何显式携带退役状态的请求一律拒绝。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AccountReviewStatus {
-    /// 不适用（非卡券期初应收）。
+    /// 不适用（非卡券期初应收）；新建路径唯一合法状态。
     NotApplicable,
-    /// 卡券期初待复核。
+    /// 卡券期初待复核（已退役，仅存量解码）。
     OpeningPending,
-    /// 已复核。
+    /// 已复核（已退役，仅存量解码）。
     Reviewed,
-    /// 同步差额待复核。
+    /// 同步差额待复核（已退役，仅存量解码）。
     SyncDeltaPending,
 }
 
@@ -78,15 +81,12 @@ impl AccountReviewStatus {
     /// 按来源销售单业务性质返回新建应收账户的唯一合法初始状态。
     ///
     /// # 参数
-    /// * `business_type` - 来源销售单创建后不可变的业务性质
+    /// * `_business_type` - 来源销售单业务性质（各性质结论相同，保留参数仅为调用兼容）
     ///
     /// # 返回
-    /// 所有销售单新建应收均返回不适用；历史状态仅用于存量数据解码。
-    pub fn initial_for_sales_business_type(business_type: BusinessType) -> Self {
-        match business_type {
-            BusinessType::Voucher => Self::NotApplicable,
-            BusinessType::GoodsService => Self::NotApplicable,
-        }
+    /// 恒返回不适用；历史状态仅用于存量数据解码。
+    pub fn initial_for_sales_business_type(_business_type: BusinessType) -> Self {
+        Self::NotApplicable
     }
 
     /// 派生并校验新建应收账户的唯一合法票款复核初始状态。
@@ -95,19 +95,18 @@ impl AccountReviewStatus {
     ///
     /// # 参数
     /// * `requested` - 新建请求可选携带的复核状态
-    /// * `business_type` - 来源销售单创建后不可变的业务性质
+    /// * `_business_type` - 来源销售单业务性质（各性质结论相同，保留参数仅为调用兼容）
     ///
     /// # 返回
-    /// 返回不适用，拒绝从新建入口恢复已退役的复核状态。
+    /// 未携带或携带不适用时返回不适用。
     ///
     /// # 错误
-    /// 显式请求状态与业务性质派生状态不一致时返回错误。
-    pub fn resolve_initial(requested: Option<Self>, business_type: BusinessType) -> Result<Self> {
-        let expected = Self::initial_for_sales_business_type(business_type);
-        if requested.is_some_and(|status| status != expected) {
-            return Err(Error::from("新建应收账户不再支持票款复核状态"));
+    /// 携带任一已退役状态时返回错误。
+    pub fn resolve_initial(requested: Option<Self>, _business_type: BusinessType) -> Result<Self> {
+        match requested {
+            None | Some(Self::NotApplicable) => Ok(Self::NotApplicable),
+            Some(_) => Err(Error::from("新建应收账户不再支持票款复核状态")),
         }
-        Ok(expected)
     }
 
     /// 返回状态的中文展示名。
@@ -700,13 +699,16 @@ mod tests {
 
     #[test]
     fn initial_review_status_rejects_request_inconsistent_with_business_type() {
-        let error = AccountReviewStatus::resolve_initial(
-            Some(AccountReviewStatus::SyncDeltaPending),
-            BusinessType::Voucher,
-        )
-        .unwrap_err();
-
-        assert_eq!(error.to_string(), "新建应收账户不再支持票款复核状态");
+        for retired in [
+            AccountReviewStatus::OpeningPending,
+            AccountReviewStatus::Reviewed,
+            AccountReviewStatus::SyncDeltaPending,
+        ] {
+            for business_type in [BusinessType::Voucher, BusinessType::GoodsService] {
+                let error = AccountReviewStatus::resolve_initial(Some(retired), business_type).unwrap_err();
+                assert_eq!(error.to_string(), "新建应收账户不再支持票款复核状态");
+            }
+        }
     }
 
     #[test]

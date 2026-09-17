@@ -9,7 +9,6 @@
 //! 由 Service 注入。
 
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use erp_core::common::time::Instant;
 use erp_core::ids::{PayableAccountId, PaymentAllocationId, SupplierPaymentId};
@@ -19,6 +18,7 @@ use erp_core::{Error, Result};
 use crate::entity::payable::{
     AllocationAction, PayableEntry, PaymentAllocation, PaymentAllocationData, PendingPaymentAllocation,
 };
+use crate::entity::receivable::{checked_add_amount, zero_amount};
 
 /// 付款核销账本：以已装载分录事实逐行完成净额、余额、序号与实体构造。
 ///
@@ -81,13 +81,9 @@ impl PaymentAllocationLedger {
         existing: &[PaymentAllocation],
         pending: &[PendingPaymentAllocation],
     ) -> Result<Self> {
-        let existing_net = existing.iter().try_fold(zero_amount(), |sum, line| {
-            let delta = match line.allocation_action {
-                AllocationAction::Apply => line.allocated_amount,
-                AllocationAction::Reverse => negate_amount(line.allocated_amount)?,
-            };
-            checked_add_amount(sum, delta)
-        })?;
+        let existing_net = existing
+            .iter()
+            .try_fold(zero_amount(), |sum, line| checked_add_amount(sum, signed_existing_delta(line)?))?;
         let pending_total = pending
             .iter()
             .try_fold(zero_amount(), |sum, line| checked_add_amount(sum, line.allocated_amount))?;
@@ -99,11 +95,7 @@ impl PaymentAllocationLedger {
         for allocation in existing {
             let balance =
                 entry_allocated.entry(allocation.payable_entry_id.to_string()).or_insert_with(zero_amount);
-            let delta = match allocation.allocation_action {
-                AllocationAction::Apply => allocation.allocated_amount,
-                AllocationAction::Reverse => negate_amount(allocation.allocated_amount)?,
-            };
-            *balance = checked_add_amount(*balance, delta)?;
+            *balance = checked_add_amount(*balance, signed_existing_delta(allocation)?)?;
         }
         let seqs = PaymentAllocation::next_allocation_seq_range(existing, pending.len())?;
         Ok(Self {
@@ -266,12 +258,21 @@ impl PaymentAllocationLedger {
     }
 }
 
-/// 返回固定零金额。
+/// 既有分配行的符号化净额增量（`APPLY` 为正、`REVERSE` 为负），与回款账本同语义。
+///
+/// # 参数
+/// * `allocation` - 已持久化付款核销分配
 ///
 /// # 返回
-/// 返回金额 `0.00`。
-fn zero_amount() -> Amount {
-    Amount::from_str("0.00").expect("固定零金额必须可解析")
+/// 返回可直接累加的符号化金额。
+///
+/// # 错误
+/// 取反溢出时返回 [`Error::LogicError`]。
+fn signed_existing_delta(allocation: &PaymentAllocation) -> Result<Amount> {
+    match allocation.allocation_action {
+        AllocationAction::Apply => Ok(allocation.allocated_amount),
+        AllocationAction::Reverse => negate_amount(allocation.allocated_amount),
+    }
 }
 
 /// 返回金额的相反数（仅用于 `REVERSE` 方向的净额扣减）。
@@ -289,25 +290,10 @@ fn negate_amount(amount: Amount) -> Result<Amount> {
     Amount::try_from(negated).map_err(|_| Error::from("核销金额合计溢出"))
 }
 
-/// 精确相加两个金额（溢出时失败）。
-///
-/// # 参数
-/// * `left` - 加数
-/// * `right` - 加数
-///
-/// # 返回
-/// 返回精确和。
-///
-/// # 错误
-/// 定点运算溢出时返回 [`Error::LogicError`]。
-fn checked_add_amount(left: Amount, right: Amount) -> Result<Amount> {
-    let sum =
-        left.to_decimal().checked_add(right.to_decimal()).ok_or_else(|| Error::from("核销金额合计溢出"))?;
-    Amount::try_from(sum).map_err(|_| Error::from("核销金额合计溢出"))
-}
-
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use erp_core::ids::PayableEntryId;
     use rust_decimal::Decimal;
 

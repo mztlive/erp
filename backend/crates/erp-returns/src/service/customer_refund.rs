@@ -7,7 +7,7 @@ use persistence_core::Executor;
 use validator::Validate;
 
 use super::ReturnsService;
-use super::shared::return_command_no;
+use super::shared::{CUSTOMER_REFUND_COMMAND_PREFIX, DEFAULT_FINANCE_REVIEWER, return_command_no};
 use crate::dto::{CommitCustomerRefundRequest, CreateCustomerRefundRequest};
 use crate::entity::returns::{
     CumulativeAmountLimit, CustomerRefund, CustomerRefundData, CustomerRefundStatus,
@@ -68,7 +68,7 @@ impl ReturnsService {
         let refund = CustomerRefund::new(
             CustomerRefundId::new(next_id()),
             CustomerRefundData {
-                refund_no: return_command_no("TK", actor_id, &req.idempotency_key),
+                refund_no: return_command_no(CUSTOMER_REFUND_COMMAND_PREFIX, actor_id, &req.idempotency_key),
                 sales_return_case_id: None,
                 customer_id: customer_id.clone(),
                 original_receipt_id: Some(source_fact_id.clone()),
@@ -77,7 +77,7 @@ impl ReturnsService {
                 reason_text: req.reason.clone(),
                 amount: req.amount.unwrap_or(source.amount),
                 handled_by: actor_id.to_string(),
-                reviewed_by: "finance_reviewer".to_string(),
+                reviewed_by: DEFAULT_FINANCE_REVIEWER.to_string(),
                 occurred_at: Instant::now(),
                 evidence_attachment_id: None,
             },

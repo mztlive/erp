@@ -177,10 +177,10 @@ pub fn find_requested_group<'a>(
 /// 客户端不能把一个依据改造成另一拆分范围。
 pub fn ensure_request_scope(req: &CreatePurchaseOrderFromBasisRequest, scope: &BasisScope) -> Result<()> {
     if req.purchase_type != scope.purchase_type {
-        return Err(Error::ValidationError("采购类型与创建依据不一致".to_string()));
+        return Err(Error::basis_purchase_type_mismatch());
     }
     if req.payment_term_code.trim() != scope.payment_term_code {
-        return Err(Error::ValidationError("付款条件与创建依据不一致".to_string()));
+        return Err(Error::basis_payment_term_mismatch());
     }
     Ok(())
 }
@@ -247,7 +247,7 @@ pub fn ensure_expected_delivery_within_sales_due(
     sales_due: BusinessDate,
 ) -> Result<()> {
     if expected_delivery_date > sales_due {
-        return Err(Error::ValidationError(format!("预计交付日不能晚于销售承诺期限 {sales_due}")));
+        return Err(Error::delivery_beyond_sales_due(sales_due));
     }
     Ok(())
 }
