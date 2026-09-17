@@ -1,0 +1,199 @@
+openapi: 3.1.0
+info:
+  title: S4 扩展管理范围查询与交接增量合同
+  version: 0.1.0
+  description: |
+    规定 S4（M13—M18）增量查询参数、范围元信息、交接命令与错误语义。
+    原业务筛选及字段继续使用拥有领域 DTO。不得据此登记 S4 已完成或已验收。
+servers:
+  - url: http://localhost:10001
+security:
+  - bearerAuth: []
+paths:
+  /admin/suppliers:
+    get:
+      operationId: s4_supplier_list
+      summary: 授权范围内的供应商列表
+      parameters:
+        - $ref: '#/components/parameters/ScopeVersion'
+        - $ref: '#/components/parameters/OwnerUserIds'
+        - name: capability_owner_user_ids
+          in: query
+          schema: {type: string}
+          description: 供给能力负责人，逗号分隔稳定人员 ID，最多 100。
+        - $ref: '#/components/parameters/OrgUnitIds'
+        - $ref: '#/components/parameters/IncludeDescendants'
+      responses:
+        '200': {description: 分页加 ScopeMetadata；ownership_basis 为 supplier_maintainer。}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Changed'}
+  /admin/suppliers/{id}/handover:
+    post:
+      operationId: s4_supplier_handover
+      summary: 显式交接供应商整体维护人
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': {description: 更新维护人与可选业务组织；审批任务不改派。}
+        '409': {description: 版本冲突或幂等键载荷不一致。}
+  /admin/products:
+    get:
+      operationId: s4_product_list
+      summary: 授权范围内的商品列表
+      parameters:
+        - $ref: '#/components/parameters/ScopeVersion'
+        - $ref: '#/components/parameters/OwnerUserIds'
+        - $ref: '#/components/parameters/ProcurementOwnerUserIds'
+        - $ref: '#/components/parameters/OrgUnitIds'
+        - $ref: '#/components/parameters/IncludeDescendants'
+      responses:
+        '200': {description: ownership_basis 为 product_maintainer；采购负责人筛选为额外 AND。}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '409': {$ref: '#/components/responses/Changed'}
+  /admin/supplier-offerings:
+    get:
+      operationId: s4_offering_list
+      summary: 授权范围内的供给列表
+      parameters:
+        - $ref: '#/components/parameters/ScopeVersion'
+        - $ref: '#/components/parameters/OwnerUserIds'
+        - $ref: '#/components/parameters/ProcurementOwnerUserIds'
+        - $ref: '#/components/parameters/OrgUnitIds'
+      responses:
+        '200': {description: ownership_basis 为 offering_maintainer。}
+        '409': {$ref: '#/components/responses/Changed'}
+  /admin/supplier-fulfillment-orders:
+    get:
+      operationId: s4_fulfillment_order_list
+      summary: 授权范围内的 API 供应商订单
+      parameters:
+        - $ref: '#/components/parameters/ScopeVersion'
+        - $ref: '#/components/parameters/OwnerUserIds'
+        - $ref: '#/components/parameters/HandlerUserIds'
+        - $ref: '#/components/parameters/OrgUnitIds'
+      responses:
+        '200': {description: owner 为内部跟进人；handler 为当前开放 W26 处理人。}
+        '409': {$ref: '#/components/responses/Changed'}
+  /admin/supplier-settlement-statements:
+    get:
+      operationId: s4_settlement_list
+      summary: 授权范围内的供应商结算单
+      parameters:
+        - $ref: '#/components/parameters/ScopeVersion'
+        - $ref: '#/components/parameters/OwnerUserIds'
+        - $ref: '#/components/parameters/OperatorUserIds'
+        - $ref: '#/components/parameters/HandlerUserIds'
+        - $ref: '#/components/parameters/OrgUnitIds'
+      responses:
+        '200': {description: owner 对账负责人；operator 差异处理人；handler 当前复核人。}
+        '409': {$ref: '#/components/responses/Changed'}
+  /admin/integration/error-tasks:
+    get:
+      operationId: s4_error_task_list
+      summary: 授权范围内的集成异常任务
+      parameters:
+        - $ref: '#/components/parameters/ScopeVersion'
+        - $ref: '#/components/parameters/HandlerUserIds'
+        - $ref: '#/components/parameters/OperatorUserIds'
+      responses:
+        '200': {description: handler 当前处理人；operator 历史处理人。禁止 owner_user_id=me。}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '409': {$ref: '#/components/responses/Changed'}
+  /admin/integration/differences:
+    get:
+      operationId: s4_difference_list
+      summary: 授权范围内的业务差异
+      parameters:
+        - $ref: '#/components/parameters/ScopeVersion'
+        - $ref: '#/components/parameters/HandlerUserIds'
+        - $ref: '#/components/parameters/OperatorUserIds'
+      responses:
+        '200': {description: 列表必须投影当前处理人。}
+        '409': {$ref: '#/components/responses/Changed'}
+  /admin/stock-movements:
+    get:
+      operationId: s4_stock_movement_list
+      summary: 仓库范围内的库存流水，可按经办人收窄
+      parameters:
+        - $ref: '#/components/parameters/ScopeVersion'
+        - $ref: '#/components/parameters/OperatorUserIds'
+      responses:
+        '200': {description: 仓库维与经办人求交；无人员所有人。}
+        '409': {$ref: '#/components/responses/Changed'}
+  /admin/stock-adjustments:
+    get:
+      operationId: s4_stock_adjustment_list
+      summary: 仓库范围内的库存调整，可按经办／申请人／当前审批人收窄
+      parameters:
+        - $ref: '#/components/parameters/ScopeVersion'
+        - $ref: '#/components/parameters/OperatorUserIds'
+        - name: applicant_user_ids
+          in: query
+          schema: {type: string}
+        - $ref: '#/components/parameters/HandlerUserIds'
+      responses:
+        '200': {description: operator 经办；applicant 申请人 submitted_by；handler 当前审批人。}
+        '409': {$ref: '#/components/responses/Changed'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: {type: string}
+    ScopeVersion:
+      name: scope_version
+      in: query
+      schema: {type: string, minLength: 1, maxLength: 256}
+    OwnerUserIds:
+      name: owner_user_ids
+      in: query
+      schema: {type: string}
+      description: 逗号分隔稳定人员 ID，最多 100；同字段 OR。
+    ProcurementOwnerUserIds:
+      name: procurement_owner_user_ids
+      in: query
+      schema: {type: string}
+    HandlerUserIds:
+      name: handler_user_ids
+      in: query
+      schema: {type: string}
+    OperatorUserIds:
+      name: operator_user_ids
+      in: query
+      schema: {type: string}
+    OrgUnitIds:
+      name: org_unit_ids
+      in: query
+      schema: {type: string}
+    IncludeDescendants:
+      name: include_descendants
+      in: query
+      schema: {type: boolean, default: false}
+  responses:
+    Invalid: {description: 未知筛选字段、超限、类型不符或已废弃姓名参数。}
+    Forbidden: {description: 无动作权限。}
+    Changed: {description: DATA_SCOPE_CHANGED；从第一页刷新。}
+  schemas:
+    ScopeMetadata:
+      type: object
+      required: [scope_version, policy_version, organization_version, as_of, scope_summary, ownership_basis]
+      properties:
+        scope_version: {type: string}
+        policy_version: {type: integer}
+        organization_version: {type: integer}
+        as_of: {type: string, format: date-time}
+        scope_summary: {type: string}
+        ownership_basis: {type: string}
+        empty_reason: {type: [string, 'null'], enum: [no_scope, null]}
+    HandoverRequest:
+      type: object
+      required: [target_user_id, reason, expected_version, idempotency_key]
+      properties:
+        target_user_id: {type: string}
+        target_org_unit_id: {type: [string, 'null']}
+        reason: {type: string}
+        expected_version: {type: integer}
+        idempotency_key: {type: string}
