@@ -30,6 +30,8 @@ export type SupplierOfferingsTableProps = {
     isError: boolean
     error?: Error | null
     hasFilters: boolean
+    noScope?: boolean
+    ownerOptions?: ReadonlyArray<{ value: string; label: string }>
     taskMode: boolean
     taskBusinessObjectId?: string
     onRetry: () => void
@@ -50,6 +52,8 @@ export function SupplierOfferingsTable({
     isError,
     error,
     hasFilters,
+    noScope = false,
+    ownerOptions = [],
     taskMode,
     taskBusinessObjectId,
     onRetry,
@@ -72,14 +76,22 @@ export function SupplierOfferingsTable({
     if (items.length === 0 && !isPending) {
         return (
             <BusinessEmptyState
-                kind={hasFilters ? "filter" : "no-data"}
-                title={hasFilters ? undefined : "还没有供应商供给"}
+                kind={noScope ? "no-data" : hasFilters ? "filter" : "no-data"}
+                title={
+                    noScope
+                        ? "当前没有可查看的供给范围"
+                        : hasFilters
+                          ? undefined
+                          : "还没有供应商供给"
+                }
                 description={
-                    hasFilters
-                        ? "没有符合当前筛选的供给关系。"
-                        : taskMode
-                          ? "当前列表没有加载任务来源的供给行；来源身份以上方任务记录为准。"
-                          : "先添加公司商品，再为具体 SKU 添加第一条供给。"
+                    noScope
+                        ? "已授权动作但没有可见供给。请联系管理员配置数据范围，或清除筛选后重试。"
+                        : hasFilters
+                          ? "没有符合当前筛选的供给关系。"
+                          : taskMode
+                            ? "当前列表没有加载任务来源的供给行；来源身份以上方任务记录为准。"
+                            : "先添加公司商品，再为具体 SKU 添加第一条供给。"
                 }
                 action={
                     hasFilters ? (
@@ -115,6 +127,7 @@ export function SupplierOfferingsTable({
                     <TableHead>SKU 名称</TableHead>
                     <TableHead>公司商品 / SKU</TableHead>
                     <TableHead>供应商 / 订货编码</TableHead>
+                    <TableHead>维护人</TableHead>
                     <TableHead>供给价格</TableHead>
                     <TableHead>起订量 / 区域</TableHead>
                     <TableHead>当前可供</TableHead>
@@ -158,6 +171,16 @@ export function SupplierOfferingsTable({
                                 {item.supplier_sku_code} ·{" "}
                                 {SOURCE_TYPE_LABELS[item.source_type]}
                             </div>
+                        </TableCell>
+                        <TableCell>
+                            <span className="text-sm">
+                                {ownerOptions.find(
+                                    (option) =>
+                                        option.value === item.maintainer_user_id,
+                                )?.label ??
+                                    item.maintainer_user_id ??
+                                    "—"}
+                            </span>
                         </TableCell>
                         <TableCell>
                             <div className="text-sm">

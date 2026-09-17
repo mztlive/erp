@@ -183,8 +183,12 @@ mod tests {
             idempotency_key: "key".into(),
         };
         let id = SupplierOfferingId::new("offering");
-        let mut offering =
-            SupplierOffering::new(id.clone(), req.try_into_offering_data().unwrap(), "actor").unwrap();
+        let mut offering = SupplierOffering::new(
+            id.clone(),
+            req.try_into_offering_data("user-1".into(), "org-1".into()).unwrap(),
+            "actor",
+        )
+        .unwrap();
         let revision = SupplierOfferingRevision::new(
             SupplierOfferingRevisionId::new("revision"),
             req.terms.try_into_revision_data(id.clone(), 1).unwrap(),

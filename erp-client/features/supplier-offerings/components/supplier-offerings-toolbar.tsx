@@ -9,7 +9,9 @@ import {
     ListWorkspaceFilterField,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
+import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
 import {
     CompanySkuSearchCombobox,
     SupplierSearchCombobox,
@@ -47,6 +49,9 @@ const MORE_CHIP_KEYS: readonly SupplierOfferingFilterKey[] = [
     "skuNo",
     "productNo",
     "supplierId",
+    "ownerUserIds",
+    "procurementOwnerUserIds",
+    "orgUnitIds",
 ]
 
 export type SupplierOfferingsToolbarProps = {
@@ -73,6 +78,16 @@ export type SupplierOfferingsToolbarProps = {
     onProductNoDraftChange: (value: string) => void
     supplierIdDraft: string | null
     onSupplierIdDraftChange: (value: string | null) => void
+    ownerUserIdsDraft: string
+    onOwnerUserIdsDraftChange: (value: string) => void
+    ownerOptions: ReadonlyArray<{ value: string; label: string }>
+    procurementOwnerUserIdsDraft: string
+    onProcurementOwnerUserIdsDraftChange: (value: string) => void
+    procurementOwnerOptions: ReadonlyArray<{ value: string; label: string }>
+    orgUnitIdsDraft: string
+    onOrgUnitIdsDraftChange: (value: string) => void
+    includeDescendantsDraft: boolean
+    onIncludeDescendantsDraftChange: (value: boolean) => void
     hasPendingChanges?: boolean
     resultCount?: number
     loading?: boolean
@@ -103,6 +118,16 @@ export function SupplierOfferingsToolbar({
     onProductNoDraftChange,
     supplierIdDraft,
     onSupplierIdDraftChange,
+    ownerUserIdsDraft,
+    onOwnerUserIdsDraftChange,
+    ownerOptions,
+    procurementOwnerUserIdsDraft,
+    onProcurementOwnerUserIdsDraftChange,
+    procurementOwnerOptions,
+    orgUnitIdsDraft,
+    onOrgUnitIdsDraftChange,
+    includeDescendantsDraft,
+    onIncludeDescendantsDraftChange,
     hasPendingChanges = false,
     resultCount,
     loading,
@@ -138,6 +163,49 @@ export function SupplierOfferingsToolbar({
             resetMoreButtonId="supplier-offerings-toolbar-reset-more"
             morePanel={
                 <div className="grid min-w-0 gap-5">
+                    <ResponsibleUserFilter
+                        id="supplier-offerings-toolbar-owner"
+                        label="维护人"
+                        value={ownerUserIdsDraft}
+                        onChange={onOwnerUserIdsDraftChange}
+                        options={ownerOptions}
+                    />
+                    <ResponsibleUserFilter
+                        id="supplier-offerings-toolbar-procurement-owner"
+                        label="采购负责人"
+                        value={procurementOwnerUserIdsDraft}
+                        onChange={onProcurementOwnerUserIdsDraftChange}
+                        options={procurementOwnerOptions}
+                    />
+                    <ListWorkspaceFilterField
+                        htmlFor="supplier-offerings-toolbar-org"
+                        label="业务组织"
+                    >
+                        <Input
+                            id="supplier-offerings-toolbar-org"
+                            value={orgUnitIdsDraft}
+                            onChange={(event) =>
+                                onOrgUnitIdsDraftChange(event.target.value)
+                            }
+                            placeholder="组织 ID，逗号分隔"
+                            aria-label="按供给业务组织筛选"
+                        />
+                        <label
+                            htmlFor="supplier-offerings-toolbar-org-descendants"
+                            className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                        >
+                            <Checkbox
+                                id="supplier-offerings-toolbar-org-descendants"
+                                checked={includeDescendantsDraft}
+                                onCheckedChange={(checked) =>
+                                    onIncludeDescendantsDraftChange(
+                                        checked === true,
+                                    )
+                                }
+                            />
+                            包含下级组织
+                        </label>
+                    </ListWorkspaceFilterField>
                     <FixedOptionRadioFilter
                         idPrefix="supplier-offerings-toolbar-filter-source-type"
                         label="登记来源"

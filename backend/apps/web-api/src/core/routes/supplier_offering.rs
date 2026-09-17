@@ -53,4 +53,20 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 supplier_offering::complete_supply_exception_task_permission_key(),
             ),
         )
+        .route(
+            "/supplier-offerings/{id}/handover",
+            with_permission(
+                post(supplier_offering::offering_handover),
+                rbac,
+                supplier_offering::offering_handover_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-offerings/{id}/handover-candidates",
+            with_permission(
+                get(supplier_offering::offering_handover_candidates),
+                rbac,
+                supplier_offering::offering_handover_candidates_permission_key(),
+            ),
+        )
 }

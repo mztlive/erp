@@ -56,6 +56,14 @@ export const SupplierOfferingsPage = () => {
         status: state.urlState.status,
         sourceType: state.urlState.sourceType,
         availabilityStatus: state.urlState.availabilityStatus,
+        ownerUserIds: state.urlState.ownerUserIds,
+        procurementOwnerUserIds: state.urlState.procurementOwnerUserIds,
+        orgUnitIds: state.urlState.orgUnitIds,
+        includeDescendants: state.urlState.includeDescendants,
+        scopeVersion:
+            state.urlState.page > 1
+                ? state.urlState.scopeVersion
+                : undefined,
         page: state.urlState.page,
         pageSize: PAGE_SIZE,
     })
@@ -94,8 +102,25 @@ export const SupplierOfferingsPage = () => {
         : state.skuLocked
           ? "维护当前公司 SKU 的供应商、订货编码、商业条款与可供情况。"
           : "维护商品的供应商、供货价格、可供数量与配送范围。"
+    const noScope = query.data?.empty_reason === "no_scope"
     const showWorkspaceEmptyState =
         !query.isError && items.length === 0 && !query.isPending
+
+    React.useEffect(() => {
+        const next = query.data?.scope_version
+        if (
+            next &&
+            state.urlState.page === 1 &&
+            state.urlState.scopeVersion !== next
+        ) {
+            state.patchUrl({ scopeVersion: next })
+        }
+    }, [
+        query.data?.scope_version,
+        state.patchUrl,
+        state.urlState.page,
+        state.urlState.scopeVersion,
+    ])
 
     return (
         <PageScaffold density="compact" className={styles.page}>
@@ -177,6 +202,7 @@ export const SupplierOfferingsPage = () => {
                                     onClick: () =>
                                         state.patchUrl({
                                             status: undefined,
+                                            scopeVersion: undefined,
                                             page: 1,
                                         }),
                                 },
@@ -191,7 +217,11 @@ export const SupplierOfferingsPage = () => {
                                     label,
                                     active: state.urlState.status === status,
                                     onClick: () =>
-                                        state.patchUrl({ status, page: 1 }),
+                                        state.patchUrl({
+                                            status,
+                                            scopeVersion: undefined,
+                                            page: 1,
+                                        }),
                                 })),
                             ]}
                         />
@@ -225,6 +255,28 @@ export const SupplierOfferingsPage = () => {
                             onProductNoDraftChange={state.setProductNoDraft}
                             supplierIdDraft={state.supplierIdDraft}
                             onSupplierIdDraftChange={state.setSupplierIdDraft}
+                            ownerUserIdsDraft={state.ownerUserIdsDraft}
+                            onOwnerUserIdsDraftChange={
+                                state.setOwnerUserIdsDraft
+                            }
+                            ownerOptions={query.data?.owner_options ?? []}
+                            procurementOwnerUserIdsDraft={
+                                state.procurementOwnerUserIdsDraft
+                            }
+                            onProcurementOwnerUserIdsDraftChange={
+                                state.setProcurementOwnerUserIdsDraft
+                            }
+                            procurementOwnerOptions={
+                                query.data?.procurement_owner_options ?? []
+                            }
+                            orgUnitIdsDraft={state.orgUnitIdsDraft}
+                            onOrgUnitIdsDraftChange={state.setOrgUnitIdsDraft}
+                            includeDescendantsDraft={
+                                state.includeDescendantsDraft
+                            }
+                            onIncludeDescendantsDraftChange={
+                                state.setIncludeDescendantsDraft
+                            }
                             hasPendingChanges={state.hasPendingChanges}
                             resultCount={query.data?.total}
                             loading={query.isFetching}
@@ -249,6 +301,10 @@ export const SupplierOfferingsPage = () => {
                                     isError={query.isError}
                                     error={query.error}
                                     hasFilters={state.hasFilters}
+                                    noScope={noScope}
+                                    ownerOptions={
+                                        query.data?.owner_options ?? []
+                                    }
                                     taskMode={state.taskMode}
                                     taskBusinessObjectId={
                                         taskQuery.data?.businessObjectId

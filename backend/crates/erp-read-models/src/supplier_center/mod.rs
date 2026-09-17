@@ -11,7 +11,7 @@ pub mod repository;
 pub mod settlement;
 pub mod supplier_api;
 
-pub use offering::SupplierOfferingReadService;
+pub use offering::{MongoOfferingProcurementOwners, SupplierOfferingListView, SupplierOfferingReadService};
 
 /// 按供应商当前主体名称解析身份；空关键词不查询，失败整次返回错误。
 async fn keyword_supplier_ids(

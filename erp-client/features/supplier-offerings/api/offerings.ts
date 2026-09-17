@@ -88,6 +88,11 @@ export function fetchSupplierOfferings(
         status: query.status || undefined,
         source_type: query.sourceType || undefined,
         availability_status: query.availabilityStatus || undefined,
+        owner_user_ids: query.ownerUserIds || undefined,
+        procurement_owner_user_ids: query.procurementOwnerUserIds || undefined,
+        org_unit_ids: query.orgUnitIds || undefined,
+        include_descendants: query.includeDescendants || undefined,
+        scope_version: query.scopeVersion || undefined,
         page: query.page ?? 1,
         page_size: query.pageSize ?? 50,
         sort_by: "created_at",
@@ -105,14 +110,17 @@ export async function fetchSupplierOfferingsForSkus(
             const items: SupplierOfferingPage["items"][number][] = []
             let page = 1
             let total = Number.POSITIVE_INFINITY
+            let scopeVersion: string | undefined
             while (items.length < total) {
                 const result = await fetchSupplierOfferings({
                     skuId,
                     page,
                     pageSize: 100,
+                    scopeVersion: page > 1 ? scopeVersion : undefined,
                 })
                 items.push(...result.items)
                 total = result.total
+                scopeVersion = result.scope_version
                 if (result.items.length === 0) break
                 page += 1
             }

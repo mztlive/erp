@@ -28,7 +28,10 @@ use crate::repository::owned::{
 #[cfg(test)]
 mod command_tests;
 mod query;
+mod scope;
 pub(crate) mod write;
+
+pub use scope::{OfferingReadScope, OfferingScopeClause};
 
 const OFFERINGS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS;
 const OFFERING_REVISIONS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERING_REVISIONS;
@@ -81,6 +84,12 @@ pub struct SupplierOfferingRow {
     pub version: u64,
     /// 创建时间。
     pub created_at: u64,
+    /// 当前维护人。
+    #[serde(default)]
+    pub maintainer_user_id: String,
+    /// 当前业务组织。
+    #[serde(default)]
+    pub business_org_unit_id: String,
 }
 
 /// 供给列表筛选条件。
@@ -102,6 +111,12 @@ pub struct SupplierOfferingFilter {
     pub keyword_sku_ids: Option<Vec<SkuId>>,
     /// 按 SPU 编号 / SKU 编号命中的公司 SKU 主键（AND 条件；空集合表示无匹配）。
     pub sku_ids: Option<Vec<SkuId>>,
+    /// 已证明的维护人授权条件；`None` 表示调用方尚未注入范围。
+    pub scope: Option<OfferingReadScope>,
+    /// 维护人筛选，只收窄授权结果。
+    pub maintainer_user_ids: Option<Vec<String>>,
+    /// 业务组织筛选，只收窄授权结果。
+    pub business_org_unit_ids: Option<Vec<String>>,
     /// 页码。
     pub page: u64,
     /// 每页数量。
@@ -112,11 +127,43 @@ pub struct SupplierOfferingFilter {
     pub sort_ascending: bool,
 }
 
+impl Default for SupplierOfferingFilter {
+    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    fn default() -> Self {
+        Self {
+            offering_ids: None,
+            sku_id: None,
+            supplier_id: None,
+            status: None,
+            source_type: None,
+            supplier_sku_code: None,
+            keyword_sku_ids: None,
+            sku_ids: None,
+            scope: None,
+            maintainer_user_ids: None,
+            business_org_unit_ids: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl QueryFilter for SupplierOfferingFilter {
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(offering_ids) = &self.offering_ids {
             filter.extend(in_filter("id", offering_ids.iter().map(ToString::to_string)));
+        }
+        if let Some(scope) = &self.scope {
+            filter = doc! { "$and": [filter, scope.document()] };
+        }
+        if let Some(ids) = &self.maintainer_user_ids {
+            filter.extend(in_filter("maintainer_user_id", ids.iter().cloned()));
+        }
+        if let Some(ids) = &self.business_org_unit_ids {
+            filter.extend(in_filter("business_org_unit_id", ids.iter().cloned()));
         }
         if let Some(sku_id) = &self.sku_id {
             filter.insert("sku_id", sku_id.to_string());
@@ -264,6 +311,70 @@ impl<'a> SupplierOfferingRepository<'a> {
             executor,
         )
         .await
+    }
+
+    /// 列出当前范围内的供给主键，供采购负责人批量解析。
+    ///
+    /// # 参数
+    /// * `scope` - 已证明的对象范围
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 最多 10001 个主键；调用方必须整体拒绝超限。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 仓储不得按登录用户自行推断权限；公司范围应由调用方跳过本方法。
+    pub async fn list_authorized_ids(
+        &self,
+        scope: &OfferingReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        #[derive(serde::Deserialize)]
+        struct OfferingIdRow {
+            id: String,
+        }
+        let rows = mongo_ops::find_many(
+            &self.collection().clone_with_type::<OfferingIdRow>(),
+            doc! {
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+                "$and": [scope.document()]
+            },
+            FindOptions::builder().projection(doc! { "id": 1 }).sort(doc! { "id": 1 }).limit(10001).build(),
+            executor,
+        )
+        .await?;
+        Ok(rows.into_iter().map(|row| row.id).collect())
+    }
+
+    /// 列出未删除供给主键，供公司范围采购负责人筛选。
+    ///
+    /// # 参数
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 最多 10001 个主键；调用方必须整体拒绝超限。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 仅用于已证明的公司范围；不得替代授权条件。
+    pub async fn list_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>> {
+        #[derive(serde::Deserialize)]
+        struct OfferingIdRow {
+            id: String,
+        }
+        let rows = mongo_ops::find_many(
+            &self.collection().clone_with_type::<OfferingIdRow>(),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            FindOptions::builder().projection(doc! { "id": 1 }).sort(doc! { "id": 1 }).limit(10001).build(),
+            executor,
+        )
+        .await?;
+        Ok(rows.into_iter().map(|row| row.id).collect())
     }
 }
 
@@ -544,6 +655,8 @@ fn supplier_offering_projection() -> Document {
         "current_revision_id": 1,
         "version": 1,
         "created_at": 1,
+        "maintainer_user_id": 1,
+        "business_org_unit_id": 1,
     }
 }
 
@@ -567,6 +680,9 @@ mod tests {
                 supplier_sku_code: None,
                 keyword_sku_ids: None,
                 sku_ids: Some(candidates.clone()),
+                scope: None,
+                maintainer_user_ids: None,
+                business_org_unit_ids: None,
                 page: 1,
                 page_size: 20,
                 sort_by: None,
@@ -592,6 +708,9 @@ mod tests {
             supplier_sku_code: Some("SKU-1".to_string()),
             keyword_sku_ids: None,
             sku_ids: None,
+            scope: None,
+            maintainer_user_ids: None,
+            business_org_unit_ids: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -612,6 +731,9 @@ mod tests {
             supplier_sku_code: None,
             keyword_sku_ids: None,
             sku_ids: None,
+            scope: None,
+            maintainer_user_ids: None,
+            business_org_unit_ids: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -633,6 +755,9 @@ mod tests {
             supplier_sku_code: Some("SUP-1".to_string()),
             keyword_sku_ids: Some(vec![erp_core::ids::SkuId::new("sku-1")]),
             sku_ids: None,
+            scope: None,
+            maintainer_user_ids: None,
+            business_org_unit_ids: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -662,6 +787,9 @@ mod tests {
             supplier_sku_code: None,
             keyword_sku_ids: None,
             sku_ids: Some(vec![]),
+            scope: None,
+            maintainer_user_ids: None,
+            business_org_unit_ids: None,
             page: 999,
             page_size: 100,
             sort_by: Some("created_at".to_string()),
@@ -671,6 +799,42 @@ mod tests {
         assert_eq!(doc.get_document("id").unwrap(), &doc! { "$in": [] });
         assert_eq!(doc.get_document("sku_id").unwrap(), &doc! { "$in": [] });
         assert_eq!(filter.page_and_size(), (999, 100));
+    }
+
+    #[test]
+    fn maintainer_filter_ands_with_scope_and_ignores_created_by() {
+        use super::{OfferingReadScope, OfferingScopeClause};
+
+        let filter = SupplierOfferingFilter {
+            offering_ids: None,
+            sku_id: None,
+            supplier_id: None,
+            status: None,
+            source_type: None,
+            supplier_sku_code: None,
+            keyword_sku_ids: None,
+            sku_ids: None,
+            scope: Some(OfferingReadScope {
+                roles: vec![OfferingScopeClause {
+                    owner_user_id: Some("user-1".into()),
+                    business_org_unit_ids: vec!["org-a".into()],
+                    ..OfferingScopeClause::default()
+                }],
+                user_limit: None,
+            }),
+            maintainer_user_ids: Some(vec!["user-2".into()]),
+            business_org_unit_ids: Some(vec!["org-b".into()]),
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+        .to_doc();
+        let encoded = filter.to_string();
+        assert!(!encoded.contains("created_by"));
+        assert_eq!(filter.get_document("maintainer_user_id").unwrap(), &doc! { "$in": ["user-2"] });
+        assert_eq!(filter.get_document("business_org_unit_id").unwrap(), &doc! { "$in": ["org-b"] });
+        assert!(filter.contains_key("$and"));
     }
 
     #[test]
@@ -684,6 +848,9 @@ mod tests {
             supplier_sku_code: Some("SUP-1".to_string()),
             keyword_sku_ids: Some(vec![]),
             sku_ids: None,
+            scope: None,
+            maintainer_user_ids: None,
+            business_org_unit_ids: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -710,6 +877,8 @@ mod tests {
                 current_revision_id: None,
                 version: 1,
                 created_at: 1,
+                maintainer_user_id: "user-1".to_string(),
+                business_org_unit_id: "org-1".to_string(),
             },
             super::SupplierOfferingRow {
                 id: "offering-2".to_string(),
@@ -723,6 +892,8 @@ mod tests {
                 current_revision_id: Some("missing-revision".to_string()),
                 version: 1,
                 created_at: 2,
+                maintainer_user_id: "user-1".to_string(),
+                business_org_unit_id: "org-1".to_string(),
             },
         ];
         let current_by_revision = rows

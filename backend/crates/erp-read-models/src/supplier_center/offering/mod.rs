@@ -1,25 +1,34 @@
 //! 供应商供给的跨域只读列表。查询、当前指针与成本脱敏 wire 保持原合同。
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_catalog::{Product, Sku, SkuRevision};
 use erp_party::{Party, PartyRevision};
 use erp_supplier::SupplierAccount;
+use erp_supply::OfferingDataScopePort;
 use erp_supply::entity::supplier_offering::{SupplierOfferingAvailability, SupplierOfferingRevision};
 use mongodb::Database;
-use persistence_core::NoTransaction;
 use validator::Validate;
 
 use super::repository::offering::{
-    SupplierOfferingListQuery as OfferingListQuery, SupplierOfferingReadRepository,
+    SupplierOfferingListBundle, SupplierOfferingListQuery as OfferingListQuery,
+    SupplierOfferingReadRepository,
 };
 use crate::Result;
 pub mod dto;
+mod procurement;
+mod scope;
 use dto::{OFFERING_SORT_FIELDS, SortDir};
-pub use dto::{PageView, SupplierOfferingListParams, SupplierOfferingView};
+pub use dto::{PageView, SupplierOfferingListParams, SupplierOfferingListView, SupplierOfferingView};
+pub use procurement::{
+    MapOfferingProcurementOwners, MongoOfferingProcurementOwners, OfferingProcurementOwners,
+};
 /// 供给列表只读服务。
 pub struct SupplierOfferingReadService {
     db: Database,
+    data_scope: Arc<dyn OfferingDataScopePort>,
+    procurement: Arc<dyn OfferingProcurementOwners>,
 }
 #[derive(Default)]
 struct OfferingListContext {
@@ -36,75 +45,78 @@ impl SupplierOfferingReadService {
     ///
     /// # 参数
     /// * `db` - 数据库
+    /// * `data_scope` - 供给范围 Port
+    /// * `procurement` - 采购负责人规则解析
     ///
     /// # 返回
     /// 返回服务实例。
-    pub fn new(db: Database) -> Self {
-        Self { db }
+    pub fn new(
+        db: Database,
+        data_scope: Arc<dyn OfferingDataScopePort>,
+        procurement: Arc<dyn OfferingProcurementOwners>,
+    ) -> Self {
+        Self { db, data_scope, procurement }
     }
-    /// 分页查询供应商供给。
-    ///
-    /// # 参数
-    /// * `params` - 筛选与分页参数
-    ///
-    /// # 返回
-    /// 返回包含公司 SKU、供应商、当前商业条款和实时可供状态的列表。
-    ///
-    /// # 错误
-    /// 参数或数据库查询失败时返回错误。
-    pub async fn list(&self, params: &SupplierOfferingListParams) -> Result<PageView<SupplierOfferingView>> {
-        params.validate()?;
-        let (sort_by, sort_dir) =
-            dto::normalize_sort(&params.sort_by, &params.sort_dir, OFFERING_SORT_FIELDS)?;
-        let keyword = normalized_text(params.q.as_deref());
-        let product_no = normalized_text(params.product_no.as_deref());
-        let sku_no = normalized_text(params.sku_no.as_deref());
-        let query = OfferingListQuery {
-            availability_status: params.availability_status,
-            keyword,
-            product_no,
-            sku_no,
-            sku_id: params.typed_sku_id(),
-            supplier_id: params.typed_supplier_id(),
-            status: params.status,
-            source_type: params.source_type,
-            page: page_or_default(params.page),
-            page_size: page_size_or_default(params.page_size),
-            sort_by: Some(sort_by.to_string()),
-            sort_ascending: sort_dir == SortDir::Asc,
-        };
-        let bundle = SupplierOfferingReadRepository::new(&self.db)
-            .load_offering_list_page(&query, &mut NoTransaction)
-            .await?;
-        let context = OfferingListContext {
-            skus: by_id(bundle.skus),
-            sku_revisions: by_id(bundle.sku_revisions),
-            products: by_id(bundle.products),
-            suppliers: by_id(bundle.suppliers),
-            parties: by_id(bundle.parties),
-            party_revisions: by_id(bundle.party_revisions),
-        };
-        let items = bundle
-            .page
-            .items
-            .into_iter()
-            .map(|row| {
-                let id = row.id.clone();
-                build_view(
-                    row,
-                    bundle.revisions.get(&id).cloned(),
-                    bundle.availabilities.get(&id).cloned(),
-                    &context,
-                )
-            })
-            .collect();
-        Ok(PageView {
-            items,
-            total: bundle.page.total,
-            page: page_or_default(params.page),
-            page_size: page_size_or_default(params.page_size),
+}
+
+pub(super) fn prepare_list_query(params: &SupplierOfferingListParams) -> Result<OfferingListQuery> {
+    params.validate()?;
+    let (sort_by, sort_dir) = dto::normalize_sort(&params.sort_by, &params.sort_dir, OFFERING_SORT_FIELDS)?;
+    Ok(OfferingListQuery {
+        availability_status: params.availability_status,
+        keyword: normalized_text(params.q.as_deref()),
+        product_no: normalized_text(params.product_no.as_deref()),
+        sku_no: normalized_text(params.sku_no.as_deref()),
+        sku_id: params.typed_sku_id(),
+        supplier_id: params.typed_supplier_id(),
+        status: params.status,
+        source_type: params.source_type,
+        page: page_or_default(params.page),
+        page_size: page_size_or_default(params.page_size),
+        sort_by: Some(sort_by.to_string()),
+        sort_ascending: sort_dir == SortDir::Asc,
+        scope: None,
+        maintainer_user_ids: params.owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
+        business_org_unit_ids: params.org_unit_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
+        offering_ids: None,
+    })
+}
+
+pub(super) async fn repository_page(
+    db: &Database,
+    query: &OfferingListQuery,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<SupplierOfferingListBundle> {
+    SupplierOfferingReadRepository::new(db).load_offering_list_page(query, executor).await.map_err(Into::into)
+}
+
+pub(super) fn page_view(
+    bundle: SupplierOfferingListBundle,
+    query: &OfferingListQuery,
+) -> Result<PageView<SupplierOfferingView>> {
+    let context = OfferingListContext {
+        skus: by_id(bundle.skus),
+        sku_revisions: by_id(bundle.sku_revisions),
+        products: by_id(bundle.products),
+        suppliers: by_id(bundle.suppliers),
+        parties: by_id(bundle.parties),
+        party_revisions: by_id(bundle.party_revisions),
+    };
+    let items = bundle
+        .page
+        .items
+        .into_iter()
+        .map(|row| {
+            let id = row.id.clone();
+            build_view(
+                row,
+                bundle.revisions.get(&id).cloned(),
+                bundle.availabilities.get(&id).cloned(),
+                &context,
+            )
         })
-    }
+        .collect();
+    Ok(PageView { items, total: bundle.page.total, page: query.page, page_size: query.page_size })
 }
 fn build_view(
     row: erp_supply::repository::supplier_offering::SupplierOfferingRow,
@@ -173,6 +185,8 @@ fn build_view(
         availability_version: availability.as_ref().map(|value| value.base.version),
         version: row.version,
         created_at: row.created_at,
+        maintainer_user_id: row.maintainer_user_id,
+        business_org_unit_id: row.business_org_unit_id,
     }
 }
 
@@ -213,4 +227,24 @@ impl HasId for PartyRevision {
 
 fn by_id<T: HasId>(values: Vec<T>) -> HashMap<String, T> {
     values.into_iter().map(|value| (value.id().to_string(), value)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prepare_list_query_maps_owner_ids_not_created_by() {
+        let params: SupplierOfferingListParams = serde_json::from_value(serde_json::json!({
+            "owner_user_ids": "user-1",
+            "procurement_owner_user_ids": "buyer-1",
+            "org_unit_ids": "org-1"
+        }))
+        .unwrap();
+        let query = prepare_list_query(&params).unwrap();
+        assert_eq!(query.maintainer_user_ids.as_deref(), Some(["user-1".to_string()].as_slice()));
+        assert_eq!(query.business_org_unit_ids.as_deref(), Some(["org-1".to_string()].as_slice()));
+        assert!(query.offering_ids.is_none());
+        assert!(query.scope.is_none());
+    }
 }

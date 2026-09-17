@@ -44,6 +44,10 @@ pub struct SupplierOfferingData {
     pub source_type: OfferingSourceType,
     /// API 来源连接；只有 API 来源允许填写。
     pub source_connection_id: Option<SupplierApiConnectionId>,
+    /// 供给维护人；禁止用创建人兜底。
+    pub maintainer_user_id: String,
+    /// 维护人主属内部组织；缺主属组织不得创建。
+    pub business_org_unit_id: String,
 }
 
 /// 公司 SKU 的供应商供给稳定身份。
@@ -65,6 +69,12 @@ pub struct SupplierOffering {
     pub source_type: OfferingSourceType,
     /// API 来源连接。
     pub source_connection_id: Option<SupplierApiConnectionId>,
+    /// 当前维护人；交接前不得为空。
+    #[serde(default)]
+    pub maintainer_user_id: String,
+    /// 当前业务组织；交接前不得为空。
+    #[serde(default)]
+    pub business_org_unit_id: String,
 }
 
 impl PartialEq for SupplierOffering {
@@ -80,6 +90,8 @@ impl PartialEq for SupplierOffering {
             && self.supplier_sku_code == other.supplier_sku_code
             && self.source_type == other.source_type
             && self.source_connection_id == other.source_connection_id
+            && self.maintainer_user_id == other.maintainer_user_id
+            && self.business_org_unit_id == other.business_org_unit_id
     }
 }
 
@@ -98,6 +110,7 @@ impl SupplierOffering {
     ///
     /// # 错误
     /// SKU 编码为空/超长，或非 API 来源携带连接时返回错误。
+    /// 维护人与主属组织创建必填，禁止用 `created_by` 回填。
     pub fn new(
         id: SupplierOfferingId,
         data: SupplierOfferingData,
@@ -111,6 +124,14 @@ impl SupplierOffering {
         )?;
         let supplier_product_code =
             normalize_optional_text(data.supplier_product_code, "供应商商品编码", SUPPLIER_CODE_MAX_LEN)?;
+        let maintainer_user_id =
+            normalize_required_text(data.maintainer_user_id, "供给维护人不能为空", 128, "供给维护人过长")?;
+        let business_org_unit_id = normalize_required_text(
+            data.business_org_unit_id,
+            "维护人缺少有效主属组织，请先维护组织成员关系",
+            128,
+            "供给业务组织过长",
+        )?;
         ensure_source_connection(data.source_type, data.source_connection_id.is_some())?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -121,6 +142,8 @@ impl SupplierOffering {
             supplier_sku_code,
             source_type: data.source_type,
             source_connection_id: data.source_connection_id,
+            maintainer_user_id,
+            business_org_unit_id,
         })
     }
 
@@ -188,6 +211,63 @@ impl SupplierOffering {
     /// 当前版本已达到 `u64` 上限时返回领域错误。
     pub fn next_persisted_version(&self) -> Result<u64> {
         self.base.version.checked_add(1).ok_or_else(|| Error::from("供给版本已达到上限"))
+    }
+
+    /// 判断供给是否已具备可查询、可交接的维护责任事实。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 维护人与业务组织均非空时返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 空维护人不得用创建人顶替；写命令须在交接前阻断。
+    pub fn has_responsibility(&self) -> bool {
+        !self.maintainer_user_id.trim().is_empty() && !self.business_org_unit_id.trim().is_empty()
+    }
+
+    /// 显式交接供给维护人与可选业务组织。
+    ///
+    /// 业务组织不随接收人部门隐式变化；`None` 表示保留原组织。
+    ///
+    /// # 参数
+    /// * `target_user_id` - 目标维护人
+    /// * `target_org_unit_id` - 显式目标组织；`None` 保留原组织
+    /// * `updated_by` - 本次交接执行人
+    ///
+    /// # 返回
+    /// 责任确有变化时返回 `true`。
+    ///
+    /// # 错误
+    /// 目标为空或与当前完全一致时拒绝。
+    ///
+    /// # 关键业务约束
+    /// 只改维护人与业务组织，不改创建人、SKU 或审批任务。
+    pub fn handover(
+        &mut self,
+        target_user_id: String,
+        target_org_unit_id: Option<String>,
+        updated_by: impl Into<String>,
+    ) -> Result<bool> {
+        let target = normalize_required_text(target_user_id, "目标维护人不能为空", 128, "目标维护人过长")?;
+        let next_org = match target_org_unit_id {
+            Some(org) => normalize_required_text(org, "目标业务组织不能为空", 128, "目标业务组织过长")?,
+            None => self.business_org_unit_id.clone(),
+        };
+        if next_org.is_empty() {
+            return Err(Error::from("维护人缺少有效主属组织，请先维护组织成员关系"));
+        }
+        if target == self.maintainer_user_id && next_org == self.business_org_unit_id {
+            return Err(Error::from("目标已是当前维护人，无需交接"));
+        }
+        self.maintainer_user_id = target;
+        self.business_org_unit_id = next_org;
+        self.stable.touch(updated_by);
+        Ok(true)
     }
 }
 
@@ -567,6 +647,8 @@ mod tests {
             supplier_sku_code: " SKU-1 ".to_string(),
             source_type: OfferingSourceType::Manual,
             source_connection_id: None,
+            maintainer_user_id: "user-1".to_string(),
+            business_org_unit_id: "org-1".to_string(),
         }
     }
 
@@ -597,6 +679,10 @@ mod tests {
             SupplierOffering::new(SupplierOfferingId::new("offering-1"), offering_data(), "admin-1").unwrap();
         assert_eq!(offering.supplier_sku_code, "SKU-1");
         assert_eq!(offering.supplier_product_code.as_deref(), Some("SPU-1"));
+        assert_eq!(offering.maintainer_user_id, "user-1");
+        assert_eq!(offering.business_org_unit_id, "org-1");
+        assert!(offering.has_responsibility());
+        assert_eq!(offering.stable.created_by, "admin-1");
 
         let invalid = SupplierOfferingData {
             source_type: OfferingSourceType::Api,
@@ -623,6 +709,48 @@ mod tests {
         assert_eq!(offering.next_revision_no(1, 1).unwrap(), 2);
         assert!(offering.next_revision_no(2, 1).is_err());
         assert_eq!(offering.next_persisted_version().unwrap(), offering.base.version + 1);
+    }
+
+    #[test]
+    fn new_rejects_missing_maintainer_and_org() {
+        let missing_owner = SupplierOfferingData { maintainer_user_id: "  ".to_string(), ..offering_data() };
+        assert!(
+            SupplierOffering::new(SupplierOfferingId::new("offering-1"), missing_owner, "admin-1").is_err()
+        );
+        let missing_org = SupplierOfferingData { business_org_unit_id: String::new(), ..offering_data() };
+        assert!(
+            SupplierOffering::new(SupplierOfferingId::new("offering-1"), missing_org, "admin-1").is_err()
+        );
+    }
+
+    #[test]
+    fn handover_repairs_empty_responsibility_without_created_by() {
+        let mut offering: SupplierOffering = serde_json::from_value(serde_json::json!({
+            "id": "offering-legacy",
+            "created_at": 1,
+            "updated_at": 1,
+            "deleted_at": 0,
+            "version": 1,
+            "status": "ACTIVE",
+            "current_revision_id": null,
+            "created_by": "admin-1",
+            "updated_by": "admin-1",
+            "sku_id": "sku-1",
+            "supplier_id": "supplier-1",
+            "supplier_sku_code": "SKU-1",
+            "source_type": "MANUAL",
+            "maintainer_user_id": "",
+            "business_org_unit_id": ""
+        }))
+        .unwrap();
+        assert!(!offering.has_responsibility());
+        assert_eq!(offering.stable.created_by, "admin-1");
+        assert!(offering.handover("user-2".into(), None, "admin-2").is_err());
+        assert!(offering.handover("user-2".into(), Some("org-2".into()), "admin-2").unwrap());
+        assert_eq!(offering.maintainer_user_id, "user-2");
+        assert_eq!(offering.business_org_unit_id, "org-2");
+        assert_ne!(offering.stable.created_by, offering.maintainer_user_id);
+        assert!(offering.handover("user-2".into(), Some("org-2".into()), "admin-3").is_err());
     }
 
     #[test]

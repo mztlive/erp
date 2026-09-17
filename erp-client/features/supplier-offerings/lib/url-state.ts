@@ -15,6 +15,11 @@ export type SupplierOfferingsUrlState = Readonly<{
     status?: OfferingStatus
     sourceType?: OfferingSourceType
     availabilityStatus?: AvailabilityStatus
+    ownerUserIds?: string
+    procurementOwnerUserIds?: string
+    orgUnitIds?: string
+    includeDescendants?: boolean
+    scopeVersion?: string
     page: number
     returnTo?: string
     workItemId?: string
@@ -43,6 +48,21 @@ const codec = createUrlStateCodec<SupplierOfferingsUrlState>([
         type: "enum",
         values: ["AVAILABLE", "UNAVAILABLE", "STOPPED", "STALE"],
     },
+    { key: "owner_user_ids", name: "ownerUserIds", type: "string", trim: true },
+    {
+        key: "procurement_owner_user_ids",
+        name: "procurementOwnerUserIds",
+        type: "string",
+        trim: true,
+    },
+    { key: "org_unit_ids", name: "orgUnitIds", type: "string", trim: true },
+    {
+        key: "include_descendants",
+        name: "includeDescendants",
+        type: "boolean",
+        defaultValue: false,
+    },
+    { key: "scope_version", name: "scopeVersion", type: "string", trim: true },
     { key: "page", type: "number", defaultValue: 1, min: 1 },
     { key: "returnTo", type: "string" },
     { key: "workItemId", type: "string", trim: true },

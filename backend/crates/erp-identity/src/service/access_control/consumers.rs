@@ -70,6 +70,7 @@ const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     ("reconciliation_difference", &["list", "detail", "create", "decide"], &[ScopeDimension::InternalOrg]),
     ("supplier", &["list", "detail", "create", "update", "delete"], &[ScopeDimension::InternalOrg]),
     ("product", &["list", "detail", "create", "update"], &[ScopeDimension::InternalOrg]),
+    ("supplier_offering", &["list", "create", "update"], &[ScopeDimension::InternalOrg]),
 ];
 
 /// 已接线消费者的资源动作登记。
@@ -258,5 +259,16 @@ mod tests {
         }
         assert!(registration("integration_error_task", "decide").is_err());
         assert!(registration("reconciliation_difference", "update").is_err());
+    }
+
+    #[test]
+    fn wired_supplier_offering_admits_list_and_writes_without_history() {
+        for action in ["list", "create", "update"] {
+            let consumer = registration("supplier_offering", action).unwrap();
+            assert!(!consumer.allows_history);
+            assert_eq!(consumer.required_dimensions, &[ScopeDimension::InternalOrg]);
+        }
+        assert!(registration("supplier_offering", "detail").is_err());
+        assert!(registration("supplier_offering", "delete").is_err());
     }
 }

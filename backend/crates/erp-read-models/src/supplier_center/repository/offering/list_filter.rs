@@ -50,6 +50,14 @@ pub struct SupplierOfferingListQuery {
     pub sort_by: Option<String>,
     /// 是否升序。
     pub sort_ascending: bool,
+    /// 已证明的维护人授权条件。
+    pub scope: Option<erp_supply::OfferingReadScope>,
+    /// 维护人筛选，只收窄授权结果。
+    pub maintainer_user_ids: Option<Vec<String>>,
+    /// 业务组织筛选，只收窄授权结果。
+    pub business_org_unit_ids: Option<Vec<String>>,
+    /// 采购负责人命中的供给主键；与可供状态求交。
+    pub offering_ids: Option<Vec<SupplierOfferingId>>,
 }
 
 impl Default for SupplierOfferingListQuery {
@@ -77,6 +85,10 @@ impl Default for SupplierOfferingListQuery {
             page_size: 20,
             sort_by: None,
             sort_ascending: false,
+            scope: None,
+            maintainer_user_ids: None,
+            business_org_unit_ids: None,
+            offering_ids: None,
         }
     }
 }
@@ -129,7 +141,7 @@ impl<'a> SupplierOfferingReadRepository<'a> {
         query: &SupplierOfferingListQuery,
         executor: &mut dyn Executor,
     ) -> Result<SupplierOfferingFilter> {
-        let offering_ids = match query.availability_status {
+        let availability_ids = match query.availability_status {
             Some(status) => Some(
                 self.db
                     .supplier_offering_availabilities()
@@ -138,6 +150,7 @@ impl<'a> SupplierOfferingReadRepository<'a> {
             ),
             None => None,
         };
+        let offering_ids = intersect_offering_ids(availability_ids, query.offering_ids.clone());
         let keyword_sku_ids = match query.keyword.as_deref() {
             Some(keyword) => Some(self.db.catalog().resolve_sku_ids_by_keyword(keyword, executor).await?),
             None => None,
@@ -156,6 +169,9 @@ impl<'a> SupplierOfferingReadRepository<'a> {
             supplier_sku_code: query.keyword.clone(),
             keyword_sku_ids,
             sku_ids,
+            scope: query.scope.clone(),
+            maintainer_user_ids: query.maintainer_user_ids.clone(),
+            business_org_unit_ids: query.business_org_unit_ids.clone(),
             page: query.page,
             page_size: query.page_size,
             sort_by: query.sort_by.clone(),
@@ -260,6 +276,19 @@ impl<'a> SupplierOfferingReadRepository<'a> {
     }
 }
 
+fn intersect_offering_ids(
+    left: Option<Vec<SupplierOfferingId>>,
+    right: Option<Vec<SupplierOfferingId>>,
+) -> Option<Vec<SupplierOfferingId>> {
+    match (left, right) {
+        (None, None) => None,
+        (Some(ids), None) | (None, Some(ids)) => Some(ids),
+        (Some(left), Some(right)) => {
+            Some(left.into_iter().filter(|id| right.iter().any(|other| other == id)).collect())
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::SupplierOfferingListQuery;
@@ -310,6 +339,10 @@ mod tests {
             page_size: 15,
             sort_by: Some("supplier_sku_code".to_string()),
             sort_ascending: true,
+            scope: None,
+            maintainer_user_ids: None,
+            business_org_unit_ids: None,
+            offering_ids: None,
         };
         assert_eq!(
             query.availability_status,
@@ -372,6 +405,8 @@ mod isolation_tests {
                 supplier_sku_code: "SKU-001".to_string(),
                 source_type: erp_supply::entity::supplier_offering::OfferingSourceType::Manual,
                 source_connection_id: None,
+                maintainer_user_id: "user-1".to_string(),
+                business_org_unit_id: "org-1".to_string(),
             },
             "tester",
         )
@@ -447,6 +482,10 @@ mod isolation_tests {
                 page_size: 20,
                 sort_by: None,
                 sort_ascending: false,
+                scope: None,
+                maintainer_user_ids: None,
+                business_org_unit_ids: None,
+                offering_ids: None,
             };
             let bundle = super::SupplierOfferingReadRepository::new(fixture.db())
                 .load_offering_list_page(&query, &mut NoTransaction)
@@ -505,6 +544,10 @@ mod isolation_tests {
                 page_size: 20,
                 sort_by: None,
                 sort_ascending: false,
+                scope: None,
+                maintainer_user_ids: None,
+                business_org_unit_ids: None,
+                offering_ids: None,
             };
             let bundle = super::SupplierOfferingReadRepository::new(fixture.db())
                 .load_offering_list_page(&query, &mut NoTransaction)

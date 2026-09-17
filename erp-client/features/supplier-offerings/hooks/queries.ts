@@ -85,6 +85,7 @@ export function useCreateSupplierOfferingMutation() {
     return useMutation({
         mutationFn: (input: CreateSupplierOfferingInput) =>
             createSupplierOffering(input),
+        meta: { affectsDataScope: true },
         onSuccess: invalidate,
     })
 }
@@ -94,6 +95,7 @@ export function useReviseSupplierOfferingMutation() {
     return useMutation({
         mutationFn: (input: ReviseSupplierOfferingInput) =>
             reviseSupplierOffering(input),
+        meta: { affectsDataScope: true },
         onSuccess: invalidate,
     })
 }
@@ -103,6 +105,7 @@ export function useUpdateOfferingAvailabilityMutation() {
     return useMutation({
         mutationFn: (input: UpdateOfferingAvailabilityInput) =>
             updateSupplierOfferingAvailability(input),
+        meta: { affectsDataScope: true },
         onSuccess: invalidate,
     })
 }

@@ -8,7 +8,19 @@ use validator::Validate;
 pub(crate) const OFFERING_SORT_FIELDS: &[&str] = &["created_at", "supplier_sku_code", "status"];
 /// 供给列表查询参数。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct SupplierOfferingListParams {
+    /// 跨页与导出必须使用前一页的当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
+    /// 当前维护人 ID，逗号分隔，最多 100 项；只收窄授权结果。
+    pub owner_user_ids: Option<application_core::QueryIds>,
+    /// 规则解析出的采购负责人，逗号分隔，最多 100 项；额外 AND。
+    pub procurement_owner_user_ids: Option<application_core::QueryIds>,
+    /// 当前业务组织，逗号分隔，最多 100 项；只收窄授权结果。
+    pub org_unit_ids: Option<application_core::QueryIds>,
+    /// 组织筛选是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
     /// 关键字：供应商订货编码、公司 SKU 编号或 SKU 名称。
     pub q: Option<String>,
     /// 公司 SKU。
@@ -110,6 +122,35 @@ pub struct SupplierOfferingView {
     pub version: u64,
     /// 创建时间。
     pub created_at: u64,
+    /// 当前维护人。
+    #[serde(default)]
+    pub maintainer_user_id: String,
+    /// 当前业务组织。
+    #[serde(default)]
+    pub business_org_unit_id: String,
+}
+
+/// 列表响应保持现有字段并声明独立的授权时点及版本。
+#[derive(Debug, Clone, Serialize)]
+pub struct SupplierOfferingListView {
+    /// 分页结果、维护人候选与归属口径。
+    #[serde(flatten)]
+    pub data: application_core::FilteredPage<SupplierOfferingView>,
+    /// 采购负责人候选；不授予维护资格。
+    #[serde(default)]
+    pub procurement_owner_options: Vec<application_core::FilterOption>,
+    /// 跨页与导出必须原样回传的范围版本。
+    pub scope_version: String,
+    /// RBAC 策略版本。
+    pub policy_version: u64,
+    /// 组织配置版本。
+    pub organization_version: u64,
+    /// 授权解析时点。
+    pub as_of: String,
+    /// 角色无有效范围时为 `no_scope`；有规则但对象为空时不设置。
+    pub empty_reason: Option<&'static str>,
+    /// 当前供给范围口径摘要，不含内部授权证明。
+    pub scope_summary: &'static str,
 }
 
 impl SupplierOfferingView {
@@ -201,6 +242,32 @@ mod tests {
         assert_eq!(params.source_type, Some(OfferingSourceType::Excel));
         assert_eq!(params.availability_status, Some(AvailabilityStatus::Available));
     }
+
+    #[test]
+    fn list_params_split_maintainer_and_procurement_owner_ids() {
+        let params: SupplierOfferingListParams = serde_json::from_value(serde_json::json!({
+            "owner_user_ids": "user-2,user-1,user-2",
+            "procurement_owner_user_ids": "buyer-1",
+            "org_unit_ids": "org-1",
+            "include_descendants": true,
+            "scope_version": "v1"
+        }))
+        .unwrap();
+        assert_eq!(
+            params.owner_user_ids.as_ref().unwrap().as_slice(),
+            &["user-1".to_string(), "user-2".to_string()]
+        );
+        assert_eq!(params.procurement_owner_user_ids.as_ref().unwrap().as_slice(), &["buyer-1".to_string()]);
+        assert_eq!(params.org_unit_ids.as_ref().unwrap().as_slice(), &["org-1".to_string()]);
+        assert_eq!(params.include_descendants, Some(true));
+        assert_eq!(params.scope_version.as_deref(), Some("v1"));
+        assert!(
+            serde_json::from_value::<SupplierOfferingListParams>(serde_json::json!({
+                "created_by_user_ids": "user-1"
+            }))
+            .is_err()
+        );
+    }
     #[test]
     fn cost_redaction_keeps_identity_and_availability() {
         let mut view = SupplierOfferingView {
@@ -239,6 +306,8 @@ mod tests {
             availability_version: None,
             version: 1,
             created_at: 1,
+            maintainer_user_id: "user-1".to_string(),
+            business_org_unit_id: "org-1".to_string(),
         };
         view.redact_costs();
         assert!(view.dropship_supply_price_gross.is_none());

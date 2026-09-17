@@ -25,10 +25,15 @@ use crate::entity::supplier_offering::{
     SupplierOfferingRevision,
 };
 use crate::ports::offering_qualification::QualificationPort;
+use crate::ports::{FailClosedOfferingDataScopePort, OfferingDataScopePort};
 use crate::repository::{SupplierApiExt, SupplierOfferingExt};
 use crate::{Error, Result};
+mod access;
+mod handover;
 mod recovery;
 mod write;
+
+pub use access::{OfferingAccess, offering_scope};
 
 /// 单域命令准备结果；回放不继续读取当前事实。
 pub enum CommandPreparation<P, R> {
@@ -65,6 +70,7 @@ pub struct PreparedAvailability {
 /// 只持有本域Database；外部资格由消费方Port提供。
 pub struct SupplierOfferingService {
     db: Database,
+    data_scope: std::sync::Arc<dyn OfferingDataScopePort>,
 }
 impl SupplierOfferingService {
     /// 创建供应商供给服务。
@@ -73,16 +79,48 @@ impl SupplierOfferingService {
     /// * `db` - 数据库
     ///
     /// # 返回
-    /// 返回服务实例。
+    /// 返回服务实例；范围 Port 缺省失败关闭。
     pub fn new(db: Database) -> Self {
-        Self { db }
+        Self { db, data_scope: FailClosedOfferingDataScopePort::shared() }
+    }
+
+    /// 注入供给范围 Port。
+    ///
+    /// # 参数
+    /// * `data_scope` - 组合层装配的公共解析 adapter
+    ///
+    /// # 返回
+    /// 返回绑定范围 Port 的服务。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// HTTP 与写命令必须注入生产 adapter，不得保留失败关闭端口。
+    pub fn with_data_scope(mut self, data_scope: std::sync::Arc<dyn OfferingDataScopePort>) -> Self {
+        self.data_scope = data_scope;
+        self
+    }
+
+    /// 构造本域范围访问器。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回绑定当前数据库与范围 Port 的访问器。
+    ///
+    /// # 错误
+    /// 无。
+    pub(crate) fn access(&self) -> OfferingAccess {
+        OfferingAccess::new(self.db.clone(), self.data_scope.clone())
     }
     /// 按原validate/replay/identity/source/terms/qualification顺序准备创建。
     /// 回放返回原结果；任何错误停止后续读取，执行器由调用方决定。
     pub async fn prepare_create<P: QualificationPort + ?Sized>(
         &self,
         req: &CreateSupplierOfferingRequest,
-        actor_id: &str,
+        actor: &application_core::AuditActor,
         qualification: &P,
         executor: &mut dyn Executor,
     ) -> std::result::Result<CommandPreparation<PreparedCreate, CreateSupplierOfferingResult>, P::Error> {
@@ -97,9 +135,14 @@ impl SupplierOfferingService {
                 .map(CommandPreparation::Replay)
                 .map_err(|e| Error::Internal(e.to_string()).into());
         }
+        let (maintainer, org) = self.access().maintainer_org(None, actor, executor).await?;
+        self.access().ensure_writable(actor, "create", &maintainer, &org, executor).await?;
         let offering_id = SupplierOfferingId::new(next_id());
-        let mut offering =
-            SupplierOffering::new(offering_id.clone(), req.try_into_offering_data()?, actor_id)?;
+        let mut offering = SupplierOffering::new(
+            offering_id.clone(),
+            req.try_into_offering_data(maintainer, org)?,
+            actor.id(),
+        )?;
         self.ensure_identity_available(&offering, executor).await?;
         self.ensure_source_connection(&offering, executor).await?;
         let revision_data = req.terms.try_into_revision_data(offering_id.clone(), 1)?;
@@ -114,7 +157,7 @@ impl SupplierOfferingService {
             offering_id.clone(),
             source_updated_at,
             received_at,
-            actor_id.to_string(),
+            actor.id().to_string(),
         )?;
         let availability = SupplierOfferingAvailability::new(
             SupplierOfferingAvailabilityId::new(next_id()),
@@ -162,7 +205,7 @@ impl SupplierOfferingService {
         &self,
         id: &str,
         req: &ReviseSupplierOfferingRequest,
-        actor_id: &str,
+        actor: &application_core::AuditActor,
         qualification: &P,
         executor: &mut dyn Executor,
     ) -> std::result::Result<CommandPreparation<PreparedRevision, ReviseSupplierOfferingResult>, P::Error>
@@ -178,12 +221,10 @@ impl SupplierOfferingService {
                 .map(CommandPreparation::Replay)
                 .map_err(|e| Error::Internal(e.to_string()).into());
         }
-        let mut offering = self
-            .db
-            .supplier_offerings()
-            .find_by_id(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("供给不存在".to_string()))?;
+        let mut offering = self.access().require_offering(actor, "update", id, executor).await?;
+        if !offering.has_responsibility() {
+            return Err(Error::BusinessLogicError("供给缺少维护人或主属组织，请先交接".into()).into());
+        }
         let current_no = self.current_revision_no(&offering, executor).await?;
         let next_no = offering
             .next_revision_no(current_no, req.expected_revision_no)
@@ -198,7 +239,7 @@ impl SupplierOfferingService {
                 .ensure_qualified(&offering.supplier_id, &offering.sku_id, revision.valid_from, executor)
                 .await?;
         }
-        offering.update_status(next_status, actor_id)?;
+        offering.update_status(next_status, actor.id())?;
         offering.stable.current_revision_id = Some(revision.base.id.clone());
         let expected_version = offering.next_persisted_version()?;
         Ok(CommandPreparation::Apply(PreparedRevision {
@@ -229,7 +270,7 @@ impl SupplierOfferingService {
         &self,
         id: &str,
         req: &UpdateSupplierOfferingAvailabilityRequest,
-        actor_id: &str,
+        actor: &application_core::AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<CommandPreparation<PreparedAvailability, UpdateSupplierOfferingAvailabilityResult>> {
         req.validate()?;
@@ -243,12 +284,11 @@ impl SupplierOfferingService {
                 .map(CommandPreparation::Replay)
                 .map_err(|e| Error::Internal(e.to_string()));
         }
+        let offering = self.access().require_offering(actor, "update", id, executor).await?;
+        if !offering.has_responsibility() {
+            return Err(Error::BusinessLogicError("供给缺少维护人或主属组织，请先交接".into()));
+        }
         let offering_id = SupplierOfferingId::new(id.trim());
-        self.db
-            .supplier_offerings()
-            .find_by_id(&offering_id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("供给不存在".to_string()))?;
         let mut availability = self
             .db
             .supplier_offering_availabilities()
@@ -266,7 +306,7 @@ impl SupplierOfferingService {
             offering_id.clone(),
             source_updated_at,
             received_at,
-            actor_id.to_string(),
+            actor.id().to_string(),
         )?;
         availability.apply(availability_data)?;
         let result_version = availability.next_persisted_version()?;

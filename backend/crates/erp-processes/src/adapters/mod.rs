@@ -10,6 +10,7 @@ mod funds_data_scope;
 mod import;
 mod integration_data_scope;
 mod inventory;
+mod offering_data_scope;
 mod organization;
 mod party;
 mod purchase_data_scope;
@@ -218,6 +219,9 @@ pub mod support_audit;
 pub mod support_documents;
 
 pub use catalog_data_scope::{MongoCatalogDataScope, catalog_access, scoped_catalog_service};
+pub use offering_data_scope::{
+    MongoOfferingDataScope, offering_access, scoped_offering_process, scoped_offering_service,
+};
 
 #[cfg(test)]
 mod scope_equivalence;

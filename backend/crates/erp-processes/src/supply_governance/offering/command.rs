@@ -26,7 +26,7 @@ impl SupplierOfferingProcess {
     ) -> Result<CreateSupplierOfferingResult> {
         let prepared = self
             .domain()
-            .prepare_create(&req, actor.id(), self.qualification.as_ref(), &mut NoTransaction)
+            .prepare_create(&req, actor, self.qualification.as_ref(), &mut NoTransaction)
             .await?;
         let CommandPreparation::Apply(prepared) = prepared else {
             let CommandPreparation::Replay(result) = prepared else { unreachable!() };
@@ -78,7 +78,7 @@ impl SupplierOfferingProcess {
     ) -> Result<ReviseSupplierOfferingResult> {
         let prepared = self
             .domain()
-            .prepare_revise(id, &req, actor.id(), self.qualification.as_ref(), &mut NoTransaction)
+            .prepare_revise(id, &req, actor, self.qualification.as_ref(), &mut NoTransaction)
             .await?;
         let CommandPreparation::Apply(mut prepared) = prepared else {
             let CommandPreparation::Replay(result) = prepared else { unreachable!() };
@@ -126,7 +126,7 @@ impl SupplierOfferingProcess {
         req: UpdateSupplierOfferingAvailabilityRequest,
         actor: &AuditActor,
     ) -> Result<UpdateSupplierOfferingAvailabilityResult> {
-        let prepared = self.domain().prepare_availability(id, &req, actor.id(), &mut NoTransaction).await?;
+        let prepared = self.domain().prepare_availability(id, &req, actor, &mut NoTransaction).await?;
         let CommandPreparation::Apply(mut prepared) = prepared else {
             let CommandPreparation::Replay(result) = prepared else { unreachable!() };
             return Ok(result);

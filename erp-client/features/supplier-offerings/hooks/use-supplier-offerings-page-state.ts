@@ -27,6 +27,9 @@ export type SupplierOfferingFilterKey =
     | "supplierId"
     | "sourceType"
     | "availabilityStatus"
+    | "ownerUserIds"
+    | "procurementOwnerUserIds"
+    | "orgUnitIds"
 
 export type SupplierOfferingAppliedChip = Readonly<{
     key: SupplierOfferingFilterKey
@@ -82,6 +85,24 @@ export function buildSupplierOfferingAppliedChips(
             label: `当前可供：${AVAILABILITY_STATUS_LABELS[urlState.availabilityStatus]}`,
         })
     }
+    if (urlState.ownerUserIds) {
+        chips.push({
+            key: "ownerUserIds",
+            label: `维护人：${urlState.ownerUserIds}`,
+        })
+    }
+    if (urlState.procurementOwnerUserIds) {
+        chips.push({
+            key: "procurementOwnerUserIds",
+            label: `采购负责人：${urlState.procurementOwnerUserIds}`,
+        })
+    }
+    if (urlState.orgUnitIds) {
+        chips.push({
+            key: "orgUnitIds",
+            label: `业务组织：${urlState.orgUnitIds}`,
+        })
+    }
     return chips
 }
 
@@ -115,7 +136,11 @@ export function useSupplierOfferingsPageState() {
         urlState.supplierId ||
         urlState.status ||
         urlState.sourceType ||
-        urlState.availabilityStatus,
+        urlState.availabilityStatus ||
+        urlState.ownerUserIds ||
+        urlState.procurementOwnerUserIds ||
+        urlState.orgUnitIds ||
+        urlState.includeDescendants,
     )
     const hasMoreFilters = Boolean(
         (!skuLocked && urlState.skuId) ||
@@ -123,7 +148,11 @@ export function useSupplierOfferingsPageState() {
         urlState.productNo ||
         urlState.supplierId ||
         urlState.sourceType ||
-        urlState.availabilityStatus,
+        urlState.availabilityStatus ||
+        urlState.ownerUserIds ||
+        urlState.procurementOwnerUserIds ||
+        urlState.orgUnitIds ||
+        urlState.includeDescendants,
     )
     /** 已生效筛选包含来源锁定条件：查询消费的全部参数都计入（§12.6）。 */
     const hasFilters = Boolean(
@@ -134,7 +163,11 @@ export function useSupplierOfferingsPageState() {
         urlState.supplierId ||
         urlState.status ||
         urlState.sourceType ||
-        urlState.availabilityStatus,
+        urlState.availabilityStatus ||
+        urlState.ownerUserIds ||
+        urlState.procurementOwnerUserIds ||
+        urlState.orgUnitIds ||
+        urlState.includeDescendants,
     )
     const [searchDraft, setSearchDraft] = React.useState(urlState.q ?? "")
     const [skuIdDraft, setSkuIdDraft] = React.useState<string | null>(
@@ -153,6 +186,16 @@ export function useSupplierOfferingsPageState() {
         React.useState<AvailabilityStatusFilter>(
             urlState.availabilityStatus ?? "all",
         )
+    const [ownerUserIdsDraft, setOwnerUserIdsDraft] = React.useState(
+        urlState.ownerUserIds ?? "",
+    )
+    const [procurementOwnerUserIdsDraft, setProcurementOwnerUserIdsDraft] =
+        React.useState(urlState.procurementOwnerUserIds ?? "")
+    const [orgUnitIdsDraft, setOrgUnitIdsDraft] = React.useState(
+        urlState.orgUnitIds ?? "",
+    )
+    const [includeDescendantsDraft, setIncludeDescendantsDraft] =
+        React.useState(Boolean(urlState.includeDescendants))
     /** 初始深链带结构化条件时展开；此后展开态只由用户与提交结果控制（§5.5）。 */
     const [filterPanelOpen, setFilterPanelOpen] = React.useState(hasMoreFilters)
 
@@ -181,12 +224,22 @@ export function useSupplierOfferingsPageState() {
                 availabilityStatusDraft === "all"
                     ? undefined
                     : availabilityStatusDraft,
+            ownerUserIds: ownerUserIdsDraft.trim() || undefined,
+            procurementOwnerUserIds:
+                procurementOwnerUserIdsDraft.trim() || undefined,
+            orgUnitIds: orgUnitIdsDraft.trim() || undefined,
+            includeDescendants: includeDescendantsDraft || undefined,
+            scopeVersion: undefined,
             page: 1,
         })
         setFilterPanelOpen(false)
     }, [
         availabilityStatusDraft,
+        includeDescendantsDraft,
+        orgUnitIdsDraft,
+        ownerUserIdsDraft,
         patchUrl,
+        procurementOwnerUserIdsDraft,
         productNoDraft,
         searchDraft,
         skuIdDraft,
@@ -230,11 +283,36 @@ export function useSupplierOfferingsPageState() {
             }
             if (key === "sourceType") {
                 setSourceTypeDraft("all")
-                patchUrl({ sourceType: undefined, page: 1 })
+                patchUrl({ sourceType: undefined, page: 1, scopeVersion: undefined })
+                return
+            }
+            if (key === "ownerUserIds") {
+                setOwnerUserIdsDraft("")
+                patchUrl({ ownerUserIds: undefined, page: 1, scopeVersion: undefined })
+                return
+            }
+            if (key === "procurementOwnerUserIds") {
+                setProcurementOwnerUserIdsDraft("")
+                patchUrl({
+                    procurementOwnerUserIds: undefined,
+                    page: 1,
+                    scopeVersion: undefined,
+                })
+                return
+            }
+            if (key === "orgUnitIds") {
+                setOrgUnitIdsDraft("")
+                setIncludeDescendantsDraft(false)
+                patchUrl({
+                    orgUnitIds: undefined,
+                    includeDescendants: undefined,
+                    page: 1,
+                    scopeVersion: undefined,
+                })
                 return
             }
             setAvailabilityStatusDraft("all")
-            patchUrl({ availabilityStatus: undefined, page: 1 })
+            patchUrl({ availabilityStatus: undefined, page: 1, scopeVersion: undefined })
         },
         [clearSkuLock, patchUrl],
     )
@@ -249,6 +327,10 @@ export function useSupplierOfferingsPageState() {
         setSupplierIdDraft(null)
         setSourceTypeDraft("all")
         setAvailabilityStatusDraft("all")
+        setOwnerUserIdsDraft("")
+        setProcurementOwnerUserIdsDraft("")
+        setOrgUnitIdsDraft("")
+        setIncludeDescendantsDraft(false)
         if (!skuLocked) setSkuIdDraft(null)
     }, [skuLocked])
 
@@ -263,6 +345,10 @@ export function useSupplierOfferingsPageState() {
         setSupplierIdDraft(null)
         setSourceTypeDraft("all")
         setAvailabilityStatusDraft("all")
+        setOwnerUserIdsDraft("")
+        setProcurementOwnerUserIdsDraft("")
+        setOrgUnitIdsDraft("")
+        setIncludeDescendantsDraft(false)
         setFilterPanelOpen(false)
         if (!skuLocked) setSkuIdDraft(null)
         patchUrl({
@@ -274,6 +360,11 @@ export function useSupplierOfferingsPageState() {
             status: undefined,
             sourceType: undefined,
             availabilityStatus: undefined,
+            ownerUserIds: undefined,
+            procurementOwnerUserIds: undefined,
+            orgUnitIds: undefined,
+            includeDescendants: undefined,
+            scopeVersion: undefined,
             page: 1,
         })
     }, [patchUrl, skuLocked])
@@ -316,6 +407,10 @@ export function useSupplierOfferingsPageState() {
         setSupplierIdDraft(urlState.supplierId ?? null)
         setSourceTypeDraft(urlState.sourceType ?? "all")
         setAvailabilityStatusDraft(urlState.availabilityStatus ?? "all")
+        setOwnerUserIdsDraft(urlState.ownerUserIds ?? "")
+        setProcurementOwnerUserIdsDraft(urlState.procurementOwnerUserIds ?? "")
+        setOrgUnitIdsDraft(urlState.orgUnitIds ?? "")
+        setIncludeDescendantsDraft(Boolean(urlState.includeDescendants))
     }, [urlState])
 
     const appliedFilterLabels = [
@@ -330,6 +425,11 @@ export function useSupplierOfferingsPageState() {
         urlState.availabilityStatus
             ? `当前可供：${AVAILABILITY_STATUS_LABELS[urlState.availabilityStatus]}`
             : null,
+        urlState.ownerUserIds ? `维护人：${urlState.ownerUserIds}` : null,
+        urlState.procurementOwnerUserIds
+            ? `采购负责人：${urlState.procurementOwnerUserIds}`
+            : null,
+        urlState.orgUnitIds ? `业务组织：${urlState.orgUnitIds}` : null,
     ].filter(Boolean)
 
     const hasPendingChanges =
@@ -339,7 +439,12 @@ export function useSupplierOfferingsPageState() {
         productNoDraft.trim() !== (urlState.productNo ?? "") ||
         supplierIdDraft !== (urlState.supplierId ?? null) ||
         sourceTypeDraft !== (urlState.sourceType ?? "all") ||
-        availabilityStatusDraft !== (urlState.availabilityStatus ?? "all")
+        availabilityStatusDraft !== (urlState.availabilityStatus ?? "all") ||
+        ownerUserIdsDraft !== (urlState.ownerUserIds ?? "") ||
+        procurementOwnerUserIdsDraft !==
+            (urlState.procurementOwnerUserIds ?? "") ||
+        orgUnitIdsDraft !== (urlState.orgUnitIds ?? "") ||
+        includeDescendantsDraft !== Boolean(urlState.includeDescendants)
 
     return {
         urlState,
@@ -362,6 +467,14 @@ export function useSupplierOfferingsPageState() {
         setSourceTypeDraft,
         availabilityStatusDraft,
         setAvailabilityStatusDraft,
+        ownerUserIdsDraft,
+        setOwnerUserIdsDraft,
+        procurementOwnerUserIdsDraft,
+        setProcurementOwnerUserIdsDraft,
+        orgUnitIdsDraft,
+        setOrgUnitIdsDraft,
+        includeDescendantsDraft,
+        setIncludeDescendantsDraft,
         filterPanelOpen,
         setFilterPanelOpen,
         patchUrl,

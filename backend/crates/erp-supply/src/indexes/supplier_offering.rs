@@ -47,6 +47,10 @@ fn offering_indexes() -> Vec<IndexModel> {
             doc! { "source_connection_id": 1, "status": 1 },
         ),
         named_index("idx_supplier_offerings_source_status", doc! { "source_type": 1, "status": 1 }),
+        named_index(
+            "idx_supplier_offerings_maintainer_org",
+            doc! { "maintainer_user_id": 1, "business_org_unit_id": 1, "created_at": -1, "id": 1 },
+        ),
     ]
 }
 
@@ -124,5 +128,9 @@ mod tests {
     #[test]
     fn offering_source_filter_has_an_index() {
         assert!(offering_indexes().iter().any(|index| index.keys == doc! { "source_type": 1, "status": 1 }));
+        assert!(offering_indexes().iter().any(|index| {
+            index.keys
+                == doc! { "maintainer_user_id": 1, "business_org_unit_id": 1, "created_at": -1, "id": 1 }
+        }));
     }
 }

@@ -188,6 +188,8 @@ mod isolation_tests {
                 supplier_sku_code: format!("SKU-{id}"),
                 source_type: OfferingSourceType::Manual,
                 source_connection_id: None,
+                maintainer_user_id: "user-1".to_string(),
+                business_org_unit_id: "org-1".to_string(),
             },
             "test",
         )

@@ -4239,6 +4239,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                     action: "resolve_supply_exception",
                 },
             },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-offerings/{id}/handover",
+                description: "交接供给维护人",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-offerings/{id}/handover-candidates",
+                description: "查询供给交接候选",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "update",
+                },
+            },
         ],
     },
     {

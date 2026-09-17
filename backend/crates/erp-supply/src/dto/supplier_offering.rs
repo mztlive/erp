@@ -433,9 +433,18 @@ impl CreateSupplierOfferingRequest {
     /// 当前仅做去空白与空值缺省，不做数值解析，故永不失败；
     /// 编码超长与来源约束由供给实体构造时拒绝。
     ///
+    /// # 参数
+    /// * `maintainer_user_id` - 已解析的供给维护人
+    /// * `business_org_unit_id` - 维护人主属组织
+    ///
     /// # 约束
     /// 纯内存转换，不分配 ID、不读取时钟、不触碰 I/O 或密钥。
-    pub fn try_into_offering_data(&self) -> Result<SupplierOfferingData> {
+    /// 维护人不得用创建人回填，须由调用方先解析主属组织。
+    pub fn try_into_offering_data(
+        &self,
+        maintainer_user_id: String,
+        business_org_unit_id: String,
+    ) -> Result<SupplierOfferingData> {
         Ok(SupplierOfferingData {
             sku_id: SkuId::new(self.sku_id.trim().to_string()),
             supplier_id: SupplierAccountId::new(self.supplier_id.trim().to_string()),
@@ -448,6 +457,8 @@ impl CreateSupplierOfferingRequest {
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .map(|value| SupplierApiConnectionId::new(value.to_string())),
+            maintainer_user_id,
+            business_org_unit_id,
         })
     }
 
