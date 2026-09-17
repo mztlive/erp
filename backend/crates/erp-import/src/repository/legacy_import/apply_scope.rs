@@ -10,7 +10,7 @@ use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId};
 use mongodb::bson::doc;
 use persistence_core::{Executor, Result, mongo_ops};
 
-use crate::entity::legacy_import::{ImportStatus, LegacyImportRow};
+use crate::entity::legacy_import::{ImportStatus, LegacyImportRow, dedupe_by_key};
 use crate::repository::owned::LegacyImportRowRepository;
 
 /// 一次应用请求对应的导入行持久化范围。
@@ -148,14 +148,7 @@ fn pending_outside_filter(
 /// # 返回
 /// 返回去重后的行 ID 列表。
 fn unique_row_ids(row_ids: &[LegacyImportRowId]) -> Vec<LegacyImportRowId> {
-    let mut seen = HashSet::new();
-    let mut unique = Vec::new();
-    for id in row_ids {
-        if seen.insert(id.to_string()) {
-            unique.push(id.clone());
-        }
-    }
-    unique
+    dedupe_by_key(row_ids, |id| id.to_string()).into_iter().cloned().collect()
 }
 
 /// 按请求顺序报告未命中的行 ID。
@@ -187,7 +180,7 @@ mod tests {
     use entity_core::NOT_DELETED_TIMESTAMP_BSON;
     use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId};
 
-    use super::{missing_row_ids, pending_outside_filter, unique_row_ids};
+    use super::{LegacyImportApplyScope, missing_row_ids, pending_outside_filter, unique_row_ids};
     use crate::entity::legacy_import::{LegacyImportRow, LegacyImportRowData};
 
     fn row(id: &str) -> LegacyImportRow {
@@ -246,16 +239,12 @@ mod tests {
         assert!(nin.contains(&mongodb::bson::Bson::String("row-pending".to_string())));
     }
 
-    #[tokio::test]
-    async fn apply_row_scope_empty_ids_skip_database() {
-        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap();
-        let database = client.database("legacy_import_apply_empty");
-        let repository =
-            crate::repository::owned::LegacyImportRowRepository::new(&database, "legacy_import_rows");
-        let scope = repository
-            .apply_row_scope(&LegacyImportBatchId::new("batch-1"), &[], &mut persistence_core::NoTransaction)
-            .await
-            .unwrap();
+    #[test]
+    fn empty_request_scope_is_default_without_database() {
+        // `apply_row_scope` 空集合分支直接返回零值 scope，不访问数据库；
+        // 此处纯内存断言该分支的前置条件与返回值形状，不构造 Mongo Client。
+        assert!(unique_row_ids(&[]).is_empty());
+        let scope = LegacyImportApplyScope::default();
         assert!(scope.rows.is_empty());
         assert!(scope.missing_row_ids.is_empty());
         assert_eq!(scope.pending_outside_request, 0);

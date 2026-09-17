@@ -1,8 +1,19 @@
 //! 原履约实体 JSON/BSON 数据形态测试；仅在内存运行。
 
+/// BSON 往返断言 helper（六节往返测试共用脚手架）。
+#[cfg(test)]
+fn assert_bson_roundtrip<T>(entity: &T)
+where
+    T: serde::Serialize + for<'de> serde::Deserialize<'de> + PartialEq + std::fmt::Debug,
+{
+    let roundtrip: T = bson::deserialize_from_document(bson::serialize_to_document(entity).unwrap()).unwrap();
+    assert_eq!(&roundtrip, entity);
+}
+
 mod purchase_receipt {
     use erp_core::common::time::Instant;
 
+    use super::assert_bson_roundtrip;
     use crate::entity::fulfillment::purchase_receipt::tests::receipt_data;
     use crate::entity::fulfillment::*;
 
@@ -15,15 +26,14 @@ mod purchase_receipt {
 
         let mut receipt = PurchaseReceipt::new(PurchaseReceiptId::new("receipt-3"), receipt_data()).unwrap();
         receipt.mark_posted(Instant::from_unix_secs(1_700_000_000), "operator-1").unwrap();
-        let roundtrip: PurchaseReceipt =
-            bson::deserialize_from_document(bson::serialize_to_document(&receipt).unwrap()).unwrap();
-        assert_eq!(roundtrip, receipt);
+        assert_bson_roundtrip(&receipt);
     }
 }
 
 mod delivery {
     use erp_core::common::time::Instant;
 
+    use super::assert_bson_roundtrip;
     use crate::entity::fulfillment::delivery::tests::delivery_data;
     use crate::entity::fulfillment::*;
 
@@ -36,13 +46,12 @@ mod delivery {
 
         let mut delivery = Delivery::new(DeliveryId::new("delivery-4"), delivery_data()).unwrap();
         delivery.mark_shipped(Instant::from_unix_secs(1_700_000_000)).unwrap();
-        let roundtrip: Delivery =
-            bson::deserialize_from_document(bson::serialize_to_document(&delivery).unwrap()).unwrap();
-        assert_eq!(roundtrip, delivery);
+        assert_bson_roundtrip(&delivery);
     }
 }
 
 mod electronic_delivery {
+    use super::assert_bson_roundtrip;
     use crate::entity::fulfillment::electronic_delivery::tests::data;
     use crate::entity::fulfillment::*;
 
@@ -54,13 +63,12 @@ mod electronic_delivery {
         assert_eq!(ElectronicDeliveryState::Confirmed.label(), "已确认");
 
         let delivery = ElectronicDelivery::new(ElectronicDeliveryId::new("ed-9"), data()).unwrap();
-        let roundtrip: ElectronicDelivery =
-            bson::deserialize_from_document(bson::serialize_to_document(&delivery).unwrap()).unwrap();
-        assert_eq!(roundtrip, delivery);
+        assert_bson_roundtrip(&delivery);
     }
 }
 
 mod service_fulfillment {
+    use super::assert_bson_roundtrip;
     use crate::entity::fulfillment::service_fulfillment::tests::data;
     use crate::entity::fulfillment::*;
 
@@ -71,13 +79,12 @@ mod service_fulfillment {
         assert_eq!(ServiceFulfillmentState::Reversed.label(), "已冲正");
 
         let fulfillment = ServiceFulfillment::new(ServiceFulfillmentId::new("sf-9"), data()).unwrap();
-        let roundtrip: ServiceFulfillment =
-            bson::deserialize_from_document(bson::serialize_to_document(&fulfillment).unwrap()).unwrap();
-        assert_eq!(roundtrip, fulfillment);
+        assert_bson_roundtrip(&fulfillment);
     }
 }
 
 mod customer_acceptance {
+    use super::assert_bson_roundtrip;
     use crate::entity::fulfillment::customer_acceptance::tests::data;
     use crate::entity::fulfillment::*;
 
@@ -90,13 +97,12 @@ mod customer_acceptance {
 
         let mut acceptance = CustomerAcceptance::new(CustomerAcceptanceId::new("a8"), data()).unwrap();
         acceptance.mark_posted().unwrap();
-        let roundtrip: CustomerAcceptance =
-            bson::deserialize_from_document(bson::serialize_to_document(&acceptance).unwrap()).unwrap();
-        assert_eq!(roundtrip, acceptance);
+        assert_bson_roundtrip(&acceptance);
     }
 }
 
 mod acceptance_fulfillment_allocation {
+    use super::assert_bson_roundtrip;
     use crate::entity::fulfillment::acceptance_fulfillment_allocation::tests::apply_data;
     use crate::entity::fulfillment::*;
 
@@ -115,8 +121,6 @@ mod acceptance_fulfillment_allocation {
             apply_data(),
         )
         .unwrap();
-        let roundtrip: AcceptanceFulfillmentAllocation =
-            bson::deserialize_from_document(bson::serialize_to_document(&allocation).unwrap()).unwrap();
-        assert_eq!(roundtrip, allocation);
+        assert_bson_roundtrip(&allocation);
     }
 }

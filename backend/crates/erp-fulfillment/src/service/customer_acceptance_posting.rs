@@ -11,7 +11,7 @@ use mongodb::Database;
 
 use super::customer_acceptance_lines::acceptance_line_specs;
 use crate::dto::{
-    AcceptanceAllocationInput, CommitCustomerAcceptanceRequest, PostAcceptanceLineInput,
+    AcceptanceAllocationInput, AcceptanceLineInput, CommitCustomerAcceptanceRequest, PostAcceptanceLineInput,
     PostCustomerAcceptanceRequest, ReverseCustomerAcceptanceRequest,
 };
 use crate::entity::fulfillment::{
@@ -110,32 +110,7 @@ impl super::FulfillmentService {
             db.customer_acceptances().update(acceptance, session).await?;
             db.fulfillment().replace_customer_acceptance_lines(&acceptance_id, final_lines, session).await?;
         }
-        for line in final_lines {
-            let allocations = req
-                .lines
-                .iter()
-                .find(|input| input.sales_order_line_id == line.sales_order_line_id)
-                .map(|input| input.allocations.as_slice())
-                .ok_or_else(|| Error::ValidationError("登记请求缺少验收行".to_string()))?;
-            if allocations.is_empty() {
-                return Err(Error::ValidationError("验收行缺少履约分配".to_string()));
-            }
-            line.ensure_allocation_conserved(
-                allocations.iter().map(|allocation| allocation.allocated_quantity),
-            )
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
-            for allocation in allocations {
-                write_acceptance_allocation(
-                    db,
-                    session,
-                    &line.base.id,
-                    allocation,
-                    line,
-                    &acceptance.sales_order_id,
-                )
-                .await?;
-            }
-        }
+        write_line_allocations(db, session, final_lines, &req.lines, &acceptance.sales_order_id).await?;
         acceptance.mark_posted()?;
         db.customer_acceptances().update(acceptance, session).await?;
         Ok(())
@@ -170,29 +145,7 @@ impl super::FulfillmentService {
             .await?;
         acceptance.ensure_posting_lines(&lines).map_err(|error| Error::ValidationError(error.to_string()))?;
         ensure_post_lines_match(&lines, &req.lines)?;
-        for line in &lines {
-            let allocations = req
-                .lines
-                .iter()
-                .find(|input| input.sales_order_line_id == line.sales_order_line_id)
-                .map(|input| input.allocations.clone())
-                .ok_or_else(|| Error::ValidationError("过账分配缺少验收行".to_string()))?;
-            line.ensure_allocation_conserved(
-                allocations.iter().map(|allocation| allocation.allocated_quantity),
-            )
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
-            for allocation in &allocations {
-                write_acceptance_allocation(
-                    db,
-                    session,
-                    &line.base.id,
-                    allocation,
-                    line,
-                    &acceptance.sales_order_id,
-                )
-                .await?;
-            }
-        }
+        write_post_line_allocations(db, session, &lines, &req.lines, &acceptance.sales_order_id).await?;
         acceptance.mark_posted()?;
         db.customer_acceptances().update(acceptance, session).await?;
         Ok(())
@@ -289,6 +242,101 @@ impl super::FulfillmentService {
         db.customer_acceptances().update(&mut original, session).await?;
         Ok((original, reverse_acceptance))
     }
+}
+
+/// 逐行校验分配守恒并写入分配（commit/post 共用；校验顺序与错误类型不变）。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `session` - 事务会话执行器
+/// * `lines` - 验收行集合
+/// * `inputs` - 每行请求分配（销售明细归属一致）
+///
+/// # 返回
+/// 全部行校验并写入完成后返回 `Ok(())`。
+///
+/// # 错误
+/// 行缺失、分配为空、守恒失败或单条写入失败时返回原错误。
+async fn write_line_allocations(
+    db: &Database,
+    session: &mut dyn persistence_core::Executor,
+    lines: &[CustomerAcceptanceLine],
+    inputs: &[AcceptanceLineInput],
+    sales_order_id: &SalesOrderId,
+) -> Result<()> {
+    for line in lines {
+        let allocations = inputs
+            .iter()
+            .find(|input| input.sales_order_line_id == line.sales_order_line_id)
+            .map(|input| input.allocations.as_slice())
+            .ok_or_else(|| Error::ValidationError("登记请求缺少验收行".to_string()))?;
+        write_single_line_allocations(db, session, line, allocations, sales_order_id).await?;
+    }
+    Ok(())
+}
+
+/// 逐行校验分配守恒并写入分配（post 请求形态；校验顺序与错误类型不变）。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `session` - 事务会话执行器
+/// * `lines` - 草稿验收行
+/// * `inputs` - 过账请求行
+/// * `sales_order_id` - 销售单（校验事实归属）
+///
+/// # 返回
+/// 全部行校验并写入完成后返回 `Ok(())`。
+///
+/// # 错误
+/// 行缺失、分配为空、守恒失败或单条写入失败时返回原错误。
+async fn write_post_line_allocations(
+    db: &Database,
+    session: &mut dyn persistence_core::Executor,
+    lines: &[CustomerAcceptanceLine],
+    inputs: &[PostAcceptanceLineInput],
+    sales_order_id: &SalesOrderId,
+) -> Result<()> {
+    for line in lines {
+        let allocations = inputs
+            .iter()
+            .find(|input| input.sales_order_line_id == line.sales_order_line_id)
+            .map(|input| input.allocations.as_slice())
+            .ok_or_else(|| Error::ValidationError("过账分配缺少验收行".to_string()))?;
+        write_single_line_allocations(db, session, line, allocations, sales_order_id).await?;
+    }
+    Ok(())
+}
+
+/// 校验单行分配守恒并逐条写入分配。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `session` - 事务会话执行器
+/// * `line` - 当前验收行
+/// * `allocations` - 当前行请求分配
+/// * `sales_order_id` - 销售单（校验事实归属）
+///
+/// # 返回
+/// 单行校验并写入完成后返回 `Ok(())`。
+///
+/// # 错误
+/// 分配为空、守恒失败或单条写入失败时返回原错误。
+async fn write_single_line_allocations(
+    db: &Database,
+    session: &mut dyn persistence_core::Executor,
+    line: &CustomerAcceptanceLine,
+    allocations: &[AcceptanceAllocationInput],
+    sales_order_id: &SalesOrderId,
+) -> Result<()> {
+    if allocations.is_empty() {
+        return Err(Error::ValidationError("验收行缺少履约分配".to_string()));
+    }
+    line.ensure_allocation_conserved(allocations.iter().map(|allocation| allocation.allocated_quantity))
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
+    for allocation in allocations {
+        write_acceptance_allocation(db, session, &line.base.id, allocation, line, sales_order_id).await?;
+    }
+    Ok(())
 }
 
 /// 校验显式提交的既有验收单仍是当前销售单的可编辑草稿。

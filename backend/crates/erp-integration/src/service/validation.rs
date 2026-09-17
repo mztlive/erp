@@ -2,7 +2,7 @@
 //!
 //! 仅限本域内部调用（`pub`），不对外暴露。
 
-use crate::{Error, Result};
+use crate::{Result, optimistic_lock_conflict};
 
 /// 校验期望乐观锁版本与当前版本一致（不一致返回 409）。
 ///
@@ -17,7 +17,7 @@ use crate::{Error, Result};
 /// 版本不一致时返回 `ConflictError`。
 pub fn ensure_version(current_version: u64, expected_version: u64) -> Result<()> {
     if current_version != expected_version {
-        return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
+        return Err(optimistic_lock_conflict());
     }
     Ok(())
 }

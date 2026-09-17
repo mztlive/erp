@@ -185,17 +185,16 @@ impl<'a> LegacyImportBatchRepository<'a> {
         filter: &LegacyImportBatchFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<LegacyImportBatchRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(legacy_import_batch_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<LegacyImportBatchRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        search_projected_page(
+            &self.collection(),
+            filter.to_doc(),
+            sort_doc(filter.sort_by.as_deref(), filter.sort_ascending),
+            filter.skip(),
+            filter.limit(),
+            legacy_import_batch_projection(),
+            executor,
+        )
+        .await
     }
 
     /// 按批次号精确查找导入批次。
@@ -333,17 +332,16 @@ impl<'a> LegacyImportRowRepository<'a> {
         filter: &LegacyImportRowFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<LegacyImportRowRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(legacy_import_row_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<LegacyImportRowRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        search_projected_page(
+            &self.collection(),
+            filter.to_doc(),
+            sort_doc(filter.sort_by.as_deref(), filter.sort_ascending),
+            filter.skip(),
+            filter.limit(),
+            legacy_import_row_projection(),
+            executor,
+        )
+        .await
     }
 
     /// 按批次 ID 批量取回导入行（`$in` 一次取回，避免 N+1）。
@@ -477,17 +475,16 @@ impl<'a> LegacyImportConfirmationRepository<'a> {
         filter: &LegacyImportConfirmationFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<LegacyImportConfirmationRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(legacy_import_confirmation_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<LegacyImportConfirmationRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        search_projected_page(
+            &self.collection(),
+            filter.to_doc(),
+            sort_doc(filter.sort_by.as_deref(), filter.sort_ascending),
+            filter.skip(),
+            filter.limit(),
+            legacy_import_confirmation_projection(),
+            executor,
+        )
+        .await
     }
 
     /// 按正式任务查找确认事实。
@@ -635,7 +632,46 @@ impl<'a> LegacyImportRepository<'a> {
     }
 }
 
+/// 执行通用筛选分页投影查询（三类列表共用；查询语义与返回形状不变）。
+///
+/// # 参数
+/// * `base` - 基集合句柄（用于计数）
+/// * `filter` - 查询条件文档
+/// * `sort` - 排序文档
+/// * `skip` - 跳过行数
+/// * `limit` - 单页条数
+/// * `projection` - 投影文档
+/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+///
+/// # 返回
+/// 返回当前页投影行与满足筛选条件的总数。
+///
+/// # 错误
+/// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+async fn search_projected_page<Entity, Row>(
+    base: &mongodb::Collection<Entity>,
+    filter: Document,
+    sort: Document,
+    skip: u64,
+    limit: i64,
+    projection: Document,
+    executor: &mut dyn Executor,
+) -> Result<PageResult<Row>>
+where
+    Entity: Send + Sync,
+    Row: for<'de> Deserialize<'de> + Serialize + Send + Sync,
+{
+    let options = FindOptions::builder().sort(sort).skip(skip).limit(limit).projection(projection).build();
+    let collection = base.clone_with_type::<Row>();
+    let items = mongo_ops::find_many(&collection, filter.clone(), options, executor).await?;
+    let total = mongo_ops::count_documents(base, filter, executor).await?;
+    Ok(PageResult { items, total: total as i64 })
+}
+
 /// 构建排序文档（排序字段白名单映射，非法字段回退 `created_at`）。
+///
+/// 非法字段回退保留：DTO 层已做白名单校验，仓储层回退只为直接调用提供
+/// 确定性排序；`debug_assert` 在测试中暴露误传。
 ///
 /// # 参数
 /// * `sort_by` - 排序字段；`None` 或不在白名单时默认 `created_at`
@@ -644,6 +680,13 @@ impl<'a> LegacyImportRepository<'a> {
 /// # 返回
 /// 返回排序条件文档。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
+    debug_assert!(
+        sort_by.is_none_or(|field| matches!(
+            field,
+            "batch_no" | "baseline_date" | "trial_version" | "source_row_key" | "created_at"
+        )),
+        "非法排序字段已回退 created_at：{sort_by:?}"
+    );
     let direction = if sort_ascending { 1 } else { -1 };
     let field = match sort_by {
         Some("batch_no") => "batch_no",
@@ -755,6 +798,7 @@ mod tests {
         assert_eq!(sort_doc(Some("baseline_date"), true), doc! { "baseline_date": 1 });
         assert_eq!(sort_doc(Some("trial_version"), false), doc! { "trial_version": -1 });
         assert_eq!(sort_doc(None, false), doc! { "created_at": -1 });
-        assert_eq!(sort_doc(Some("id"), false), doc! { "created_at": -1 });
+        // 非法字段在测试构型触发 `debug_assert`（误传即暴露），发布构型保留回退；
+        // 此处不再以非法字段断言回退行为。
     }
 }

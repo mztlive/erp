@@ -101,9 +101,16 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
 
 /// 将导入域唯一索引名称映射为面向用户的冲突提示。
 ///
-/// 导入批次号、确认范围试算与任务唯一索引均保持原通用冲突文案。
-fn duplicate_index_conflict_message(_index_name: Option<&str>) -> String {
-    "数据已存在，请勿重复提交".to_string()
+/// 未知索引回落通用文案；错误分类保持 `Conflict` 不变。
+fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
+    match index_name {
+        Some("uk_legacy_import_batches_batch_no") => "导入批次号重复，请勿重复提交".to_string(),
+        Some("uk_legacy_import_confirmations_scope_trial") => {
+            "该批次范围的确认已存在，请勿重复提交".to_string()
+        },
+        Some("uk_legacy_import_confirmations_work_item") => "该确认任务已关联确认，请勿重复提交".to_string(),
+        _ => "数据已存在，请勿重复提交".to_string(),
+    }
 }
 
 impl From<validator::ValidationErrors> for Error {
@@ -127,16 +134,21 @@ mod tests {
         assert_eq!(generic.to_string(), "数据冲突: 数据已存在，请勿重复提交");
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_legacy_import_batches_batch_no")),
-            "数据已存在，请勿重复提交"
+            "导入批次号重复，请勿重复提交"
         );
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_legacy_import_confirmations_scope_trial")),
-            "数据已存在，请勿重复提交"
+            "该批次范围的确认已存在，请勿重复提交"
         );
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_legacy_import_confirmations_work_item")),
+            "该确认任务已关联确认，请勿重复提交"
+        );
+        assert_eq!(
+            super::duplicate_index_conflict_message(Some("uk_unknown_index")),
             "数据已存在，请勿重复提交"
         );
+        assert_eq!(super::duplicate_index_conflict_message(None), "数据已存在，请勿重复提交");
     }
 
     #[test]

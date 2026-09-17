@@ -43,13 +43,13 @@ impl IntegrationScopeClause {
             || self.owner_org_unit_ids.iter().any(|id| id == org)
     }
 
-    /// 没有任何可匹配责任条件时，范围确定为空。
+    /// 没有任何可匹配责任条件时，范围确定为空（与 Port 侧 `has_scope_rules` 互为否定）。
     ///
     /// # 参数
     /// 无。
     ///
     /// # 返回
-    /// 非公司且没有处理人或组织条件时为空。
+    /// 非公司且没有处理人或组织条件时为空（即 Port 侧 `has_scope_rules() == false`）。
     ///
     /// # 错误
     /// 无。
@@ -57,7 +57,15 @@ impl IntegrationScopeClause {
     /// # 关键业务约束
     /// 空条款必须保持空集，不得补公司范围。
     pub fn is_empty(&self) -> bool {
-        !self.company && self.owner_user_id.is_none() && self.owner_org_unit_ids.is_empty()
+        !self.has_scope_rules()
+    }
+
+    /// 判断条款是否构成有效责任条件（与 [`is_empty`](Self::is_empty) 互为否定）。
+    ///
+    /// # 返回
+    /// 公司、本人处理或处理人组织任一命中条件存在时为 true。
+    pub fn has_scope_rules(&self) -> bool {
+        self.company || self.owner_user_id.is_some() || !self.owner_org_unit_ids.is_empty()
     }
 
     /// 将当前处理人责任转换为固定字段条件；空范围明确无结果。
@@ -191,8 +199,37 @@ fn scope_union(conditions: Vec<Document>) -> Document {
 }
 
 #[cfg(test)]
-mod tests {
+mod scope_parity_tests {
+    use mongodb::bson::doc;
+
     use super::*;
+    use crate::ports::IntegrationResolvedClause;
+
+    /// Port 侧条款与仓储侧条款的内存判定对拍（同一事实同一结论）。
+    #[test]
+    fn memory_decision_matches_across_layers() {
+        let cases = [
+            (IntegrationResolvedClause { company: true, ..Default::default() }, true),
+            (
+                IntegrationResolvedClause { self_owned: true, ..Default::default() },
+                // 仓储侧需要具体账号才能判定本人命中；此处只对拍"非空"口径。
+                true,
+            ),
+            (IntegrationResolvedClause { org_unit_ids: vec!["org-a".into()], ..Default::default() }, true),
+            (IntegrationResolvedClause::default(), false),
+        ];
+        for (clause, has_rules) in cases {
+            assert_eq!(clause.has_scope_rules(), has_rules, "Port 侧判定漂移");
+            assert_eq!(!clause.is_empty(), has_rules, "Port 侧正反语义不对称");
+            let repo = IntegrationScopeClause {
+                company: clause.company,
+                owner_user_id: clause.self_owned.then(|| "user-1".to_string()),
+                owner_org_unit_ids: clause.org_unit_ids.clone(),
+            };
+            assert_eq!(repo.has_scope_rules(), has_rules, "仓储侧判定漂移");
+            assert_eq!(!repo.is_empty(), has_rules, "仓储侧正反语义不对称");
+        }
+    }
 
     #[test]
     fn empty_scope_compiles_to_empty_id_set() {

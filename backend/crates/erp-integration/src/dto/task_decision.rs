@@ -443,6 +443,26 @@ pub enum IntegrationActionOutcome {
     ConfirmedValidDifference,
 }
 
+impl IntegrationActionOutcome {
+    /// 返回稳定的 wire 编码（与 `SCREAMING_SNAKE_CASE` 序列化形态一致）。
+    ///
+    /// # 返回
+    /// 返回持久化摘要与 wire 共用的稳定代码。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::TerminalEvidenceFound => "TERMINAL_EVIDENCE_FOUND",
+            Self::NoResultConfirmed => "NO_RESULT_CONFIRMED",
+            Self::ResultUnknown => "RESULT_UNKNOWN",
+            Self::ReplayAccepted => "REPLAY_ACCEPTED",
+            Self::Reattributed => "REATTRIBUTED",
+            Self::EvidenceLinked => "EVIDENCE_LINKED",
+            Self::EvidenceAdded => "EVIDENCE_ADDED",
+            Self::ConfirmedNoError => "CONFIRMED_NO_ERROR",
+            Self::ConfirmedValidDifference => "CONFIRMED_VALID_DIFFERENCE",
+        }
+    }
+}
+
 /// 单次非终结动作的证据结果。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IntegrationTaskActionEvidence {

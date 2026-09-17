@@ -1,5 +1,4 @@
 //! 履约delivery请求及单域查询 DTO。
-use application_core::{page_or_default, page_size_or_default};
 use erp_core::ids::{
     PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderId, SalesOrderLineId, StockReservationId,
     WarehouseId,
@@ -8,7 +7,7 @@ use erp_core::money::Quantity;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::{DELIVERY_SORT_FIELDS, PageParams, non_blank, normalize_sort};
+use super::{DELIVERY_SORT_FIELDS, PageParams, non_blank, normalize_paging};
 use crate::Result;
 use crate::entity::fulfillment::{DeliveryState, DeliveryType};
 
@@ -172,16 +171,16 @@ impl DeliveryListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<DeliveryListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, DELIVERY_SORT_FIELDS)?;
         Ok(DeliveryListQuery {
             sales_order_id: self.sales_order_id.clone(),
             status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: normalize_paging(
+                &self.sort_by,
+                &self.sort_dir,
+                self.page,
+                self.page_size,
+                DELIVERY_SORT_FIELDS,
+            )?,
         })
     }
 }

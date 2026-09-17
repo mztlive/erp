@@ -101,9 +101,17 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
 
 /// 将库存域唯一索引名称映射为面向用户的冲突提示。
 ///
-/// 流水来源、余额维度与预占来源唯一索引均保持原通用冲突文案。
-fn duplicate_index_conflict_message(_index_name: Option<&str>) -> String {
-    "数据已存在，请勿重复提交".to_string()
+/// 未知索引回落通用文案；错误分类保持 `Conflict` 不变。
+fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
+    match index_name {
+        Some("uk_stock_movements_source") => "库存流水来源重复，请勿重复提交".to_string(),
+        Some("uk_stock_balances_dimension") => "该仓库与 SKU 的库存余额已存在".to_string(),
+        Some(
+            "uk_stock_reservations_purchase_establish" | "uk_stock_reservations_existing_stock_establish",
+        ) => "库存预占来源重复，请勿重复提交".to_string(),
+        Some("uk_stock_adjustments_adjustment_no") => "库存调整单号重复，请勿重复提交".to_string(),
+        _ => "数据已存在，请勿重复提交".to_string(),
+    }
 }
 
 impl From<validator::ValidationErrors> for Error {
@@ -127,16 +135,25 @@ mod tests {
         assert_eq!(generic.to_string(), "数据冲突: 数据已存在，请勿重复提交");
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_stock_movements_source")),
-            "数据已存在，请勿重复提交"
+            "库存流水来源重复，请勿重复提交"
         );
         assert_eq!(
-            super::duplicate_index_conflict_message(Some("uk_stock_balances_warehouse_sku")),
-            "数据已存在，请勿重复提交"
+            super::duplicate_index_conflict_message(Some("uk_stock_balances_dimension")),
+            "该仓库与 SKU 的库存余额已存在"
         );
         assert_eq!(
-            super::duplicate_index_conflict_message(Some("uk_stock_reservations_source")),
+            super::duplicate_index_conflict_message(Some("uk_stock_reservations_purchase_establish")),
+            "库存预占来源重复，请勿重复提交"
+        );
+        assert_eq!(
+            super::duplicate_index_conflict_message(Some("uk_stock_adjustments_adjustment_no")),
+            "库存调整单号重复，请勿重复提交"
+        );
+        assert_eq!(
+            super::duplicate_index_conflict_message(Some("uk_unknown_index")),
             "数据已存在，请勿重复提交"
         );
+        assert_eq!(super::duplicate_index_conflict_message(None), "数据已存在，请勿重复提交");
     }
 
     #[test]

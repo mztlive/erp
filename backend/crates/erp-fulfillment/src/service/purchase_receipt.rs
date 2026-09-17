@@ -7,7 +7,7 @@ use validator::Validate;
 use super::FulfillmentService;
 use super::purchase_receipt_lines::receipt_line_specs;
 use crate::dto::{
-    CreatePurchaseReceiptRequest, PageView, PurchaseReceiptDetailView, PurchaseReceiptLineView,
+    CreatePurchaseReceiptRequest, PurchaseReceiptDetailView, PurchaseReceiptLineView,
     PurchaseReceiptListParams, PurchaseReceiptView, SortDir, UpdatePurchaseReceiptRequest,
 };
 use crate::entity::fulfillment::{
@@ -37,7 +37,7 @@ impl FulfillmentService {
     pub async fn purchase_receipt_list(
         &self,
         params: &PurchaseReceiptListParams,
-    ) -> Result<PageView<PurchaseReceiptView>> {
+    ) -> Result<crate::dto::PageView<PurchaseReceiptView>> {
         params.validate()?;
         let query = params.normalized()?;
         let filter = PurchaseReceiptFilter {
@@ -49,10 +49,9 @@ impl FulfillmentService {
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
         let page = self.db.purchase_receipts().search_purchase_receipts(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| PurchaseReceiptView {
+        super::map_search_page(
+            async { Ok(page) },
+            |row| PurchaseReceiptView {
                 id: row.id,
                 receipt_no: row.receipt_no,
                 purchase_order_id: row.purchase_order_id.to_string(),
@@ -61,9 +60,11 @@ impl FulfillmentService {
                 posted_at: row.posted_at.map(|instant| instant.unix_secs()),
                 version: row.version,
                 created_at: row.created_at,
-            })
-            .collect();
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+            },
+            filter.page,
+            filter.page_size,
+        )
+        .await
     }
     /// 查询采购入库单详情（表头 + 行）。
     ///
@@ -82,12 +83,11 @@ impl FulfillmentService {
         fields(layer = "service", domain = "fulfillment", operation = "purchase_receipt_detail")
     )]
     pub async fn purchase_receipt_detail(&self, id: &str) -> Result<PurchaseReceiptDetailView> {
-        let receipt = self
-            .db
-            .purchase_receipts()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("采购入库单不存在".to_string()))?;
+        let receipt = super::find_header_or_not_found(
+            self.db.purchase_receipts().find_by_id(id, &mut NoTransaction),
+            "采购入库单不存在",
+        )
+        .await?;
         let lines = self
             .db
             .fulfillment()

@@ -70,12 +70,8 @@ impl PreparedWarehouseAudit {
         success: bool,
         message: Option<String>,
     ) -> Self {
-        Self {
-            id: base.id.clone(),
-            version: base.version,
-            created_at: base.created_at,
-            updated_at: base.updated_at,
-            deleted_at: base.deleted_at,
+        Self::from_facts(&WarehouseAuditFacts {
+            base: base.clone(),
             actor_id,
             actor_account,
             actor_type,
@@ -84,6 +80,31 @@ impl PreparedWarehouseAudit {
             resource_id,
             success,
             message,
+        })
+    }
+
+    /// Capture warehouse-side fields from an audit facts struct.
+    ///
+    /// # 参数
+    /// * `facts` - 审计事实参数结构体
+    ///
+    /// # 返回
+    /// 返回稍后持久化的不透明审计事实。
+    pub fn from_facts(facts: &WarehouseAuditFacts) -> Self {
+        Self {
+            id: facts.base.id.clone(),
+            version: facts.base.version,
+            created_at: facts.base.created_at,
+            updated_at: facts.base.updated_at,
+            deleted_at: facts.base.deleted_at,
+            actor_id: facts.actor_id.clone(),
+            actor_account: facts.actor_account.clone(),
+            actor_type: facts.actor_type,
+            action: facts.action.clone(),
+            resource_type: facts.resource_type.clone(),
+            resource_id: facts.resource_id.clone(),
+            success: facts.success,
+            message: facts.message.clone(),
         }
     }
 
@@ -117,18 +138,41 @@ impl PreparedWarehouseAudit {
         let (actor_id, actor_account, actor_type) = actor.into_parts();
         let id = id_generator::next_id();
         let base = BaseModel::new(id);
-        Ok(Self::from_validated(
-            &base,
+        Ok(Self::from_facts(&WarehouseAuditFacts {
+            base,
             actor_id,
             actor_account,
             actor_type,
-            action.to_string(),
-            resource_type.to_string(),
-            Some(resource_id),
-            true,
+            action: action.to_string(),
+            resource_type: resource_type.to_string(),
+            resource_id: Some(resource_id),
+            success: true,
             message,
-        ))
+        }))
     }
+}
+
+/// 审计事实参数结构体（承接 `from_validated` 的字段组，调用点按字段名赋值避免顺序传错）。
+#[derive(Debug, Clone)]
+pub struct WarehouseAuditFacts {
+    /// 已构造审计的持久化元数据。
+    pub base: BaseModel,
+    /// 操作人 ID。
+    pub actor_id: String,
+    /// 操作人登录账号。
+    pub actor_account: String,
+    /// 操作人类型。
+    pub actor_type: AccountKind,
+    /// 业务动作名。
+    pub action: String,
+    /// 资源类型。
+    pub resource_type: String,
+    /// 资源 ID。
+    pub resource_id: Option<String>,
+    /// 成功标记；仓库只准备成功的资源审计。
+    pub success: bool,
+    /// 可选业务消息。
+    pub message: Option<String>,
 }
 
 /// Port warehouse uses to prepare and persist resource audits on a caller executor.

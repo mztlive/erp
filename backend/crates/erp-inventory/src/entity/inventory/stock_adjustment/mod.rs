@@ -8,14 +8,12 @@
 //! 第 3 条）。
 
 use std::collections::HashSet;
-use std::str::FromStr;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
-use erp_core::ids::{SkuId, StockAdjustmentId, StockAdjustmentLineId, WarehouseId};
-use erp_core::money::Quantity;
+use erp_core::ids::{StockAdjustmentId, WarehouseId};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -28,8 +26,6 @@ const ADJUSTMENT_NO_MAX_LEN: usize = 64;
 const ACTOR_MAX_LEN: usize = 128;
 /// 原因说明最大长度。
 const NOTE_MAX_LEN: usize = 512;
-/// 调整明细行主键最大长度。
-const LINE_ID_MAX_LEN: usize = 128;
 
 /// 库存调整单状态（数据模型 §6.7：草稿、待仓储复核、待财务确认、已过账、驳回）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -576,11 +572,53 @@ impl StockAdjustment {
         require_all: bool,
     ) -> Result<Vec<StockAdjustmentLine>> {
         let mut staged = lines.to_vec();
-        for line in &staged {
+        self.ensure_lines_belong(&staged)?;
+        let changed = self.apply_updates_to_staged(&mut staged, updates)?;
+        if require_all && updates.len() != staged.len() {
+            return Err(Error::from("提交必须包含全部调整明细"));
+        }
+        self.ensure_group_directions(&staged)?;
+        lines.clone_from_slice(&staged);
+        Ok(changed)
+    }
+
+    /// 校验全部既有明细行归属本调整单。
+    ///
+    /// # 参数
+    /// * `staged` - 当前持久化明细的内存副本
+    ///
+    /// # 返回
+    /// 全部归属一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 任一明细行不属于本调整单时返回错误。
+    fn ensure_lines_belong(&self, staged: &[StockAdjustmentLine]) -> Result<()> {
+        for line in staged {
             if line.stock_adjustment_id.as_ref() != self.base.id.as_str() {
                 return Err(Error::from("明细行不属于该调整单"));
             }
         }
+        Ok(())
+    }
+
+    /// 逐条应用明细更新并返回变更副本。
+    ///
+    /// 校验更新行去重、归属、数量正数与原因方向一致性。
+    ///
+    /// # 参数
+    /// * `staged` - 当前持久化明细的内存副本（就地更新）
+    /// * `updates` - 待应用的明细更新
+    ///
+    /// # 返回
+    /// 返回完成更新的明细副本，供调用方持久化。
+    ///
+    /// # 错误
+    /// 行重复、行不属于本调整单、数量非法或方向不一致时返回错误。
+    fn apply_updates_to_staged(
+        &self,
+        staged: &mut [StockAdjustmentLine],
+        updates: &[StockAdjustmentLineUpdate],
+    ) -> Result<Vec<StockAdjustmentLine>> {
         let mut seen = HashSet::with_capacity(updates.len());
         let mut changed = Vec::with_capacity(updates.len());
         for update in updates {
@@ -597,14 +635,24 @@ impl StockAdjustment {
             line.apply_update(self.reason_type, update.quantity, update.direction)?;
             changed.push(line.clone());
         }
-        if require_all && seen.len() != staged.len() {
-            return Err(Error::from("提交必须包含全部调整明细"));
-        }
-        for line in &staged {
+        Ok(changed)
+    }
+
+    /// 复验整组明细方向与当前原因一致。
+    ///
+    /// # 参数
+    /// * `staged` - 已应用更新的明细副本
+    ///
+    /// # 返回
+    /// 全部方向一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 任一明细方向与调整原因不一致时返回错误。
+    fn ensure_group_directions(&self, staged: &[StockAdjustmentLine]) -> Result<()> {
+        for line in staged {
             self.reason_type.ensure_direction(line.direction)?;
         }
-        lines.clone_from_slice(&staged);
-        Ok(changed)
+        Ok(())
     }
 
     /// 校验当前状态可编辑。
@@ -640,168 +688,12 @@ fn ensure_reviewer_separation(prepared_by: &str, reviewed_by: &str) -> Result<()
     Ok(())
 }
 
-/// 库存调整明细创建数据。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct StockAdjustmentLineData {
-    /// 调整单。
-    pub stock_adjustment_id: StockAdjustmentId,
-    /// 调整 SKU。
-    pub sku_id: SkuId,
-    /// 调整数量（正数）。
-    pub quantity: Quantity,
-    /// 调整方向。
-    pub direction: MovementDirection,
-}
+pub mod line;
 
-/// 已解析并完成基础校验的调整明细更新值对象。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct StockAdjustmentLineUpdate {
-    /// 明细行主键。
-    pub line_id: String,
-    /// 调整数量。
-    pub quantity: Quantity,
-    /// 调整方向；空表示保持原方向。
-    pub direction: Option<MovementDirection>,
-}
-
-impl StockAdjustmentLineUpdate {
-    /// 从服务输入构造调整明细更新值对象。
-    ///
-    /// # 参数
-    /// * `line_id` - 明细行主键
-    /// * `quantity` - 定点数量字符串
-    /// * `direction` - 可选调整方向
-    ///
-    /// # 返回
-    /// 返回完成主键规范化与数量解析的更新值对象。
-    ///
-    /// # 错误
-    /// 行主键为空/过长，或数量不是正数时返回错误。
-    pub fn new(
-        line_id: impl Into<String>,
-        quantity: &str,
-        direction: Option<MovementDirection>,
-    ) -> Result<Self> {
-        let line_id =
-            normalize_required_text(line_id.into(), "明细行主键不能为空", LINE_ID_MAX_LEN, "明细行主键过长")?;
-        let quantity = Quantity::from_str(quantity)?;
-        ensure_positive_quantity(quantity)?;
-        Ok(Self { line_id, quantity, direction })
-    }
-}
-
-/// 库存调整明细实体（数据模型 §6.7 明细）。
-///
-/// 数量必须为正数；方向单独表达。明细调整与原因类型的方向一致性
-/// （盘盈必增、盘亏/损坏必减）由 [`StockAdjustment::apply_line_updates`] 与
-/// [`StockAdjustmentLine::new_for_reason`] 校验；状态可编辑性由调整单实体把关。
-#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
-pub struct StockAdjustmentLine {
-    #[serde(flatten)]
-    pub base: BaseModel,
-    /// 调整单。
-    pub stock_adjustment_id: StockAdjustmentId,
-    /// 调整 SKU。
-    pub sku_id: SkuId,
-    /// 调整数量。
-    pub quantity: Quantity,
-    /// 调整方向。
-    pub direction: MovementDirection,
-}
-
-impl StockAdjustmentLine {
-    /// 创建库存调整明细。
-    ///
-    /// 完成调整数量正数校验。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::StockAdjustmentLineId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的调整明细实体。
-    ///
-    /// # 错误
-    /// 调整数量非正时返回错误。
-    pub fn new(id: StockAdjustmentLineId, data: StockAdjustmentLineData) -> Result<Self> {
-        ensure_positive_quantity(data.quantity)?;
-        Ok(Self {
-            base: BaseModel::new(id.to_string()),
-            stock_adjustment_id: data.stock_adjustment_id,
-            sku_id: data.sku_id,
-            quantity: data.quantity,
-            direction: data.direction,
-        })
-    }
-
-    /// 按调整原因创建库存调整明细。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键
-    /// * `reason_type` - 调整原因
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回数量与方向均符合原因约束的明细实体。
-    ///
-    /// # 错误
-    /// 数量非正，或方向与调整原因不一致时返回错误。
-    pub fn new_for_reason(
-        id: StockAdjustmentLineId,
-        reason_type: AdjustmentReasonType,
-        data: StockAdjustmentLineData,
-    ) -> Result<Self> {
-        reason_type.ensure_direction(data.direction)?;
-        Self::new(id, data)
-    }
-
-    /// 应用调整明细数量与可选方向。
-    ///
-    /// # 参数
-    /// * `reason_type` - 调整单当前原因
-    /// * `quantity` - 新的正数数量
-    /// * `direction` - 新方向；空表示保持现状
-    ///
-    /// # 返回
-    /// 校验并更新成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 数量非正，或最终方向与调整原因不一致时返回错误。
-    pub fn apply_update(
-        &mut self,
-        reason_type: AdjustmentReasonType,
-        quantity: Quantity,
-        direction: Option<MovementDirection>,
-    ) -> Result<()> {
-        ensure_positive_quantity(quantity)?;
-        let direction = direction.unwrap_or(self.direction);
-        reason_type.ensure_direction(direction)?;
-        self.quantity = quantity;
-        self.direction = direction;
-        Ok(())
-    }
-}
-
-/// 校验调整数量为正数。
-///
-/// # 参数
-/// * `quantity` - 待校验数量
-///
-/// # 返回
-/// 数量为正时返回 `Ok(())`。
-///
-/// # 错误
-/// 数量为零或负数时返回错误。
-fn ensure_positive_quantity(quantity: Quantity) -> Result<()> {
-    if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
-        return Err(Error::from("调整数量必须为正数"));
-    }
-    Ok(())
-}
+pub use line::{StockAdjustmentLine, StockAdjustmentLineData, StockAdjustmentLineUpdate};
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
 
     use erp_core::ids::StockAdjustmentId;
 
@@ -815,15 +707,6 @@ mod tests {
             prepared_by: " operator-1 ".to_string(),
             note: None,
             occurred_at: None,
-        }
-    }
-
-    fn line_data() -> StockAdjustmentLineData {
-        StockAdjustmentLineData {
-            stock_adjustment_id: StockAdjustmentId::new("adj-1"),
-            sku_id: SkuId::new("sku-1"),
-            quantity: Quantity::from_str("2").unwrap(),
-            direction: MovementDirection::Decrease,
         }
     }
 
@@ -1046,25 +929,6 @@ mod tests {
         assert!(ensure_transition(StockAdjustmentState::Draft, StockAdjustmentState::Draft).is_ok());
     }
 
-    /// happy path：调整明细创建成功。
-    #[test]
-    fn line_new_succeeds() {
-        let line = StockAdjustmentLine::new(StockAdjustmentLineId::new("al-1"), line_data()).unwrap();
-        assert_eq!(line.quantity, Quantity::from_str("2").unwrap());
-        assert_eq!(line.direction, MovementDirection::Decrease);
-    }
-
-    /// 失败路径：数量越界（非正）。
-    #[test]
-    fn line_rejects_quantity_violations() {
-        let zero_quantity =
-            StockAdjustmentLineData { quantity: Quantity::from_str("0").unwrap(), ..line_data() };
-        assert!(StockAdjustmentLine::new(StockAdjustmentLineId::new("al-2"), zero_quantity).is_err());
-
-        let negative = StockAdjustmentLineData { quantity: Quantity::from_str("-1").unwrap(), ..line_data() };
-        assert!(StockAdjustmentLine::new(StockAdjustmentLineId::new("al-3"), negative).is_err());
-    }
-
     /// 原因规则：方向与正式流水类型由原因实体统一决定。
     #[test]
     fn reason_owns_direction_and_movement_type_rules() {
@@ -1072,66 +936,6 @@ mod tests {
         assert_eq!(AdjustmentReasonType::StockLoss.movement_type(), MovementType::StockLoss);
         assert!(AdjustmentReasonType::Damage.ensure_direction(MovementDirection::Decrease).is_ok());
         assert!(AdjustmentReasonType::Damage.ensure_direction(MovementDirection::Increase).is_err());
-    }
-
-    /// 明细更新：整组校验失败不产生部分修改，完整合法输入一次应用。
-    #[test]
-    fn line_updates_are_validated_atomically() {
-        let mut adjustment =
-            StockAdjustment::new(StockAdjustmentId::new("adj-1"), data(), "creator-1").unwrap();
-        adjustment.base.version = 3;
-        assert!(adjustment.matches_version(3));
-        assert!(!adjustment.matches_version(2));
-
-        let mut lines = vec![
-            StockAdjustmentLine::new_for_reason(
-                StockAdjustmentLineId::new("al-1"),
-                adjustment.reason_type,
-                line_data(),
-            )
-            .unwrap(),
-            StockAdjustmentLine::new_for_reason(
-                StockAdjustmentLineId::new("al-2"),
-                adjustment.reason_type,
-                StockAdjustmentLineData { sku_id: SkuId::new("sku-2"), ..line_data() },
-            )
-            .unwrap(),
-        ];
-        let original = lines.clone();
-        let mut gain_adjustment = adjustment.clone();
-        gain_adjustment.reason_type = AdjustmentReasonType::StockGain;
-        assert!(gain_adjustment.apply_line_updates(&mut lines, &[], false).is_err());
-        assert_eq!(lines, original, "原因变更必须重验全部既有方向");
-
-        let gain_updates = vec![
-            StockAdjustmentLineUpdate::new("al-1", "3", Some(MovementDirection::Increase)).unwrap(),
-            StockAdjustmentLineUpdate::new("al-2", "4", Some(MovementDirection::Increase)).unwrap(),
-        ];
-        assert!(gain_adjustment.apply_line_updates(&mut lines, &gain_updates[..1], false).is_err());
-        assert_eq!(lines, original, "未更新行的方向仍须与新原因一致");
-        gain_adjustment.apply_line_updates(&mut lines, &gain_updates, true).unwrap();
-        assert!(lines.iter().all(|line| line.direction == MovementDirection::Increase));
-        assert_eq!(lines[0].quantity.to_string(), "3");
-        assert_eq!(lines[1].quantity.to_string(), "4");
-        lines.clone_from(&original);
-
-        let incomplete = vec![StockAdjustmentLineUpdate::new("al-1", "3", None).unwrap()];
-        assert!(adjustment.apply_line_updates(&mut lines, &incomplete, true).is_err());
-        assert_eq!(lines, original, "完整性失败不得留下部分更新");
-
-        let wrong_direction =
-            vec![StockAdjustmentLineUpdate::new("al-1", "3", Some(MovementDirection::Increase)).unwrap()];
-        assert!(adjustment.apply_line_updates(&mut lines, &wrong_direction, false).is_err());
-        assert_eq!(lines, original, "方向失败不得留下部分更新");
-
-        let updates = vec![
-            StockAdjustmentLineUpdate::new("al-1", "3", None).unwrap(),
-            StockAdjustmentLineUpdate::new("al-2", "4", Some(MovementDirection::Decrease)).unwrap(),
-        ];
-        let changed = adjustment.apply_line_updates(&mut lines, &updates, true).unwrap();
-        assert_eq!(changed.len(), 2);
-        assert_eq!(lines[0].quantity, Quantity::from_str("3").unwrap());
-        assert_eq!(lines[1].quantity, Quantity::from_str("4").unwrap());
     }
 
     /// 序列化：枚举稳定代码。

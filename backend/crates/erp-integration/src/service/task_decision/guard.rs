@@ -15,22 +15,43 @@ pub async fn load_error_task_for_association(
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<IntegrationErrorTask> {
-    db.integration_error_tasks()
-        .find_by_id(id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("集成错误任务不存在".to_string()))
+    load_error_task_record(db, id, executor).await
 }
 
+/// 加载错误任务并校验未终结（本域动作入口共用；终态与版本校验收敛于此）。
 pub(super) async fn load_error_task(
     db: &Database,
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<IntegrationErrorTask> {
-    let task = load_error_task_for_association(db, id, executor).await?;
+    let task = load_error_task_record(db, id, executor).await?;
     if task.is_terminal() {
         return Err(Error::ConflictError("集成错误任务已终结".to_string()));
     }
     Ok(task)
+}
+
+/// 按主键读取错误任务记录（加载层统一入口；终态与版本校验由调用方装配）。
+///
+/// # 参数
+/// * `db` - 数据库句柄
+/// * `id` - 错误任务主键
+/// * `executor` - 数据访问执行器
+///
+/// # 返回
+/// 返回错误任务记录。
+///
+/// # 错误
+/// 记录不存在时返回 `NotFound`。
+async fn load_error_task_record(
+    db: &Database,
+    id: &str,
+    executor: &mut dyn Executor,
+) -> Result<IntegrationErrorTask> {
+    db.integration_error_tasks()
+        .find_by_id(id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("集成错误任务不存在".to_string()))
 }
 
 pub(super) fn ensure_error_task_subject(task: &IntegrationErrorTask, expected: &str) -> Result<()> {
@@ -40,6 +61,18 @@ pub(super) fn ensure_error_task_subject(task: &IntegrationErrorTask, expected: &
     Ok(())
 }
 
+/// 按主键读取对账差异记录（加载层统一入口；终态与版本校验由调用方装配）。
+///
+/// # 参数
+/// * `db` - 数据库句柄
+/// * `id` - 对账差异主键
+/// * `executor` - 数据访问执行器
+///
+/// # 返回
+/// 返回对账差异记录。
+///
+/// # 错误
+/// 记录不存在时返回 `NotFound`。
 pub(super) async fn load_difference(
     db: &Database,
     id: &str,

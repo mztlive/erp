@@ -4,10 +4,10 @@ use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::FulfillmentService;
-use crate::dto::{PageView, ServiceFulfillmentListParams, ServiceFulfillmentView, SortDir};
+use crate::Result;
+use crate::dto::{ServiceFulfillmentListParams, ServiceFulfillmentView, SortDir};
 use crate::entity::fulfillment::ServiceFulfillment;
 use crate::repository::FulfillmentExt;
-use crate::{Error, Result};
 
 type ServiceFulfillmentFilter = <mongodb::Database as FulfillmentExt>::ServiceFulfillmentFilter;
 
@@ -33,7 +33,7 @@ impl FulfillmentService {
     pub async fn service_fulfillment_list(
         &self,
         params: &ServiceFulfillmentListParams,
-    ) -> Result<PageView<ServiceFulfillmentView>> {
+    ) -> Result<crate::dto::PageView<ServiceFulfillmentView>> {
         params.validate()?;
         let query = params.normalized()?;
         let filter = ServiceFulfillmentFilter {
@@ -46,10 +46,9 @@ impl FulfillmentService {
         };
         let page =
             self.db.service_fulfillments().search_service_fulfillments(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| ServiceFulfillmentView {
+        super::map_search_page(
+            async { Ok(page) },
+            |row| ServiceFulfillmentView {
                 id: row.id.clone(),
                 fulfillment_no: row.fulfillment_no,
                 sales_order_line_id: row.sales_order_line_id.to_string(),
@@ -61,9 +60,11 @@ impl FulfillmentService {
                 occurred_at: row.occurred_at.unix_secs(),
                 recorded_at: row.recorded_at.unix_secs(),
                 version: row.version,
-            })
-            .collect();
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+            },
+            filter.page,
+            filter.page_size,
+        )
+        .await
     }
 
     /// 按主键查询线下服务履约记录。
@@ -85,12 +86,11 @@ impl FulfillmentService {
         fields(layer = "service", domain = "fulfillment", operation = "service_fulfillment_detail")
     )]
     pub async fn service_fulfillment_detail(&self, id: &str) -> Result<ServiceFulfillmentView> {
-        let record = self
-            .db
-            .service_fulfillments()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("服务履约记录不存在".to_string()))?;
+        let record = super::find_header_or_not_found(
+            self.db.service_fulfillments().find_by_id(id, &mut NoTransaction),
+            "服务履约记录不存在",
+        )
+        .await?;
         Ok(record.into())
     }
 }

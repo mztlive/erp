@@ -55,6 +55,36 @@ use application_core::non_blank;
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
 
+/// 归一化分页与排序参数（白名单校验 + 默认值），五类列表查询共用。
+///
+/// # 参数
+/// * `sort_by` - 可选排序字段；空白视为未提供
+/// * `sort_dir` - 可选排序方向；空白视为未提供
+/// * `page` - 可选页码；缺省取首页
+/// * `page_size` - 可选单页条数；缺省取默认值
+/// * `allowed_fields` - 排序字段白名单
+///
+/// # 返回
+/// 返回归一化后的分页查询参数。
+///
+/// # 错误
+/// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+pub(crate) fn normalize_paging(
+    sort_by: &Option<String>,
+    sort_dir: &Option<String>,
+    page: Option<u64>,
+    page_size: Option<u32>,
+    allowed_fields: &'static [&'static str],
+) -> crate::Result<PageParams> {
+    let (sort_by, sort_dir) = normalize_sort(sort_by, sort_dir, allowed_fields)?;
+    Ok(PageParams {
+        page: application_core::page_or_default(page),
+        page_size: application_core::page_size_or_default(page_size),
+        sort_by,
+        sort_dir,
+    })
+}
+
 mod purchase_receipt;
 pub use purchase_receipt::{
     CreatePurchaseReceiptRequest, PostPurchaseReceiptRequest, PurchaseReceiptDetailView,

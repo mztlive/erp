@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use application_core::AuditActor;
+use erp_core::money::Quantity;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -104,45 +105,21 @@ impl InventoryService {
             .items
             .into_iter()
             .map(|row| {
-                let warehouse = enrichments.warehouses.get(&row.warehouse_id.to_string());
-                let warehouse_name = warehouse
-                    .and_then(|wh| wh.current_revision_id.as_deref())
-                    .and_then(|revision_id| enrichments.warehouse_revisions.get(revision_id))
-                    .map(|revision| revision.name.clone());
-                let sku = enrichments.skus.get(&row.sku_id.to_string());
-                let sku_revision = sku
-                    .and_then(|sku| sku.current_revision_id.as_deref())
-                    .and_then(|revision_id| enrichments.sku_revisions.get(revision_id));
-                StockBalanceView {
+                let balance = StockBalanceRef {
                     id: row.id,
                     warehouse_id: row.warehouse_id.to_string(),
-                    warehouse_code: warehouse.map(|wh| wh.warehouse_code.clone()).unwrap_or_default(),
-                    warehouse_name: warehouse_name.unwrap_or_default(),
                     sku_id: row.sku_id.to_string(),
-                    sku_code: sku.map(|sku| sku.sku_no.clone()).unwrap_or_default(),
-                    sku_name: sku_revision.map(|revision| revision.name.clone()).unwrap_or_default(),
-                    spec_summary: sku_revision.and_then(|revision| revision.specification.clone()),
                     on_hand_quantity: row.on_hand_quantity,
                     reserved_quantity: row.reserved_quantity,
                     available_quantity: row.available_quantity,
                     version: row.version.to_string(),
                     last_movement_id: row.last_movement_id.as_ref().map(ToString::to_string),
-                    last_movement_at: row
-                        .last_movement_id
-                        .as_ref()
-                        .and_then(|id| enrichments.movements.get(&id.to_string()))
-                        .map(|movement| movement.fact.occurred_at.unix_secs()),
-                    last_movement_type: row
-                        .last_movement_id
-                        .as_ref()
-                        .and_then(|id| enrichments.movements.get(&id.to_string()))
-                        .map(|movement| movement.movement_type),
-                    has_active_reservation: active_reservation_dims
-                        .contains(&(row.warehouse_id.to_string(), row.sku_id.to_string())),
-                    allowed_actions: balance_allowed_actions(
-                        warehouse.is_some() && authorization.can_create(row.warehouse_id.as_ref()),
-                    ),
-                }
+                };
+                let has_active_reservation =
+                    active_reservation_dims.contains(&(balance.warehouse_id.clone(), balance.sku_id.clone()));
+                let can_create_adjustment = enrichments.warehouses.contains_key(&balance.warehouse_id)
+                    && authorization.can_create(balance.warehouse_id.as_str());
+                enrich_balance_view(&balance, &enrichments, has_active_reservation, can_create_adjustment)
             })
             .collect();
         ensure_scope_version(
@@ -362,48 +339,100 @@ async fn load_movements_by_ids(db: &Database, ids: &[String]) -> Result<HashMap<
     Ok(movements.into_iter().map(|movement| (movement.base.id.clone(), movement)).collect())
 }
 
-fn build_balance_view(
-    balance: &StockBalance,
+/// 余额视图映射所需的最小余额事实（列表投影行与余额实体共用）。
+struct StockBalanceRef {
+    /// 余额主键。
+    id: String,
+    /// 仓库主键。
+    warehouse_id: String,
+    /// SKU 主键。
+    sku_id: String,
+    /// 账面现存。
+    on_hand_quantity: Quantity,
+    /// 有效预占。
+    reserved_quantity: Quantity,
+    /// 可用数量。
+    available_quantity: Quantity,
+    /// 乐观锁版本（十进制字符串）。
+    version: String,
+    /// 已应用最后流水。
+    last_movement_id: Option<String>,
+}
+/// 由余额事实与基础信息投影组装余额视图（列表与详情共用）。
+///
+/// # 参数
+/// * `balance` - 最小余额事实
+/// * `enrichments` - 仓库/SKU/流水基础信息投影
+/// * `has_active_reservation` - 是否存在有效预占
+/// * `can_create_adjustment` - 调用人是否可在该仓库创建调整
+///
+/// # 返回
+/// 返回契约形状的余额视图。
+fn enrich_balance_view(
+    balance: &StockBalanceRef,
     enrichments: &BalanceEnrichments,
     has_active_reservation: bool,
     can_create_adjustment: bool,
 ) -> StockBalanceView {
-    let warehouse = enrichments.warehouses.get(&balance.warehouse_id.to_string());
+    let warehouse = enrichments.warehouses.get(&balance.warehouse_id);
     let warehouse_name = warehouse
         .and_then(|wh| wh.current_revision_id.as_deref())
         .and_then(|revision_id| enrichments.warehouse_revisions.get(revision_id))
         .map(|revision| revision.name.clone());
-    let sku = enrichments.skus.get(&balance.sku_id.to_string());
+    let sku = enrichments.skus.get(&balance.sku_id);
     let sku_revision = sku
         .and_then(|sku| sku.current_revision_id.as_deref())
         .and_then(|revision_id| enrichments.sku_revisions.get(revision_id));
     StockBalanceView {
-        id: balance.base.id.clone(),
-        warehouse_id: balance.warehouse_id.to_string(),
+        id: balance.id.clone(),
+        warehouse_id: balance.warehouse_id.clone(),
         warehouse_code: warehouse.map(|wh| wh.warehouse_code.clone()).unwrap_or_default(),
         warehouse_name: warehouse_name.unwrap_or_default(),
-        sku_id: balance.sku_id.to_string(),
+        sku_id: balance.sku_id.clone(),
         sku_code: sku.map(|sku| sku.sku_no.clone()).unwrap_or_default(),
         sku_name: sku_revision.map(|revision| revision.name.clone()).unwrap_or_default(),
         spec_summary: sku_revision.and_then(|revision| revision.specification.clone()),
         on_hand_quantity: balance.on_hand_quantity,
         reserved_quantity: balance.reserved_quantity,
         available_quantity: balance.available_quantity,
-        version: balance.base.version.to_string(),
-        last_movement_id: balance.last_movement_id.as_ref().map(ToString::to_string),
+        version: balance.version.clone(),
+        last_movement_id: balance.last_movement_id.clone(),
         last_movement_at: balance
             .last_movement_id
             .as_ref()
-            .and_then(|id| enrichments.movements.get(&id.to_string()))
+            .and_then(|id| enrichments.movements.get(id))
             .map(|movement| movement.fact.occurred_at.unix_secs()),
         last_movement_type: balance
             .last_movement_id
             .as_ref()
-            .and_then(|id| enrichments.movements.get(&id.to_string()))
+            .and_then(|id| enrichments.movements.get(id))
             .map(|movement| movement.movement_type),
         has_active_reservation,
         allowed_actions: balance_allowed_actions(can_create_adjustment && warehouse.is_some()),
     }
+}
+
+fn build_balance_view(
+    balance: &StockBalance,
+    enrichments: &BalanceEnrichments,
+    has_active_reservation: bool,
+    can_create_adjustment: bool,
+) -> StockBalanceView {
+    enrich_balance_view(
+        &StockBalanceRef {
+            id: balance.base.id.clone(),
+            warehouse_id: balance.warehouse_id.to_string(),
+            sku_id: balance.sku_id.to_string(),
+            on_hand_quantity: balance.on_hand_quantity,
+            reserved_quantity: balance.reserved_quantity,
+            available_quantity: balance.available_quantity,
+            version: balance.base.version.to_string(),
+            last_movement_id: balance.last_movement_id.as_ref().map(ToString::to_string),
+        },
+        enrichments,
+        has_active_reservation,
+        can_create_adjustment,
+    )
 }
 
 fn balance_allowed_actions(can_create_adjustment: bool) -> Vec<String> {

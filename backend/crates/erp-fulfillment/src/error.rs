@@ -33,9 +33,6 @@ pub enum Error {
     #[error("数据冲突: {0}")]
     ConflictError(String),
 
-    #[error("数据冲突: 数据已存在，请勿重复提交")]
-    ReceiptDuplicate(#[source] persistence_core::Error),
-
     #[error("数据冲突: 并发事务冲突，请重试")]
     TransientTransaction(#[source] persistence_core::Error),
 
@@ -60,9 +57,7 @@ impl Error {
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
-            Self::ConflictError(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_) => {
-                ErrorClass::Conflict
-            },
+            Self::ConflictError(_) | Self::TransientTransaction(_) => ErrorClass::Conflict,
             Self::BusinessLogicError(_) | Self::ValidationError(_) | Self::NotFound(_) => {
                 ErrorClass::BusinessRule
             },
@@ -101,9 +96,17 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
 
 /// 将履约域唯一索引名称映射为面向用户的冲突提示。
 ///
-/// 履约单号与明细唯一索引保持原通用冲突文案。
-fn duplicate_index_conflict_message(_index_name: Option<&str>) -> String {
-    "数据已存在，请勿重复提交".to_string()
+/// 未知索引回落通用文案；错误分类保持 `Conflict` 不变。
+fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
+    match index_name {
+        Some("uk_purchase_receipts_receipt_no") => "采购入库单号重复，请勿重复提交".to_string(),
+        Some("uk_deliveries_delivery_no") => "发货单号重复，请勿重复提交".to_string(),
+        Some("uk_delivery_lines_header_line") => "发货行序号重复，请勿重复提交".to_string(),
+        Some("uk_electronic_deliveries_fulfillment_no") => "电子交付单号重复，请勿重复提交".to_string(),
+        Some("uk_service_fulfillments_fulfillment_no") => "服务履约单号重复，请勿重复提交".to_string(),
+        Some("uk_customer_acceptances_acceptance_no") => "客户验收单号重复，请勿重复提交".to_string(),
+        _ => "数据已存在，请勿重复提交".to_string(),
+    }
 }
 
 impl From<validator::ValidationErrors> for Error {
@@ -127,16 +130,21 @@ mod tests {
         assert_eq!(generic.to_string(), "数据冲突: 数据已存在，请勿重复提交");
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_purchase_receipts_receipt_no")),
-            "数据已存在，请勿重复提交"
+            "采购入库单号重复，请勿重复提交"
         );
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_deliveries_delivery_no")),
-            "数据已存在，请勿重复提交"
+            "发货单号重复，请勿重复提交"
         );
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_customer_acceptances_acceptance_no")),
+            "客户验收单号重复，请勿重复提交"
+        );
+        assert_eq!(
+            super::duplicate_index_conflict_message(Some("uk_unknown_index")),
             "数据已存在，请勿重复提交"
         );
+        assert_eq!(super::duplicate_index_conflict_message(None), "数据已存在，请勿重复提交");
     }
 
     #[test]

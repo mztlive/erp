@@ -1,19 +1,19 @@
 //! 仓发逐行消耗预占、释放后扣减余额并追加库存事实。
 
-use async_trait::async_trait;
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
-    SalesOrderLineId, SkuId, StockMovementId, StockReservationEntryId, StockReservationId, WarehouseId,
+    SalesOrderLineId, StockMovementId, StockReservationEntryId, StockReservationId, WarehouseId,
 };
 use erp_core::money::Quantity;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::{InventoryWriteStore, MongoInventoryStore};
 use crate::{
-    Error, InventoryExt, MovementDirection, MovementType, ReservationEntryType, Result, StockMovement,
-    StockMovementData, StockReservationEntry, StockReservationEntryData,
+    Error, MovementDirection, MovementType, ReservationEntryType, Result, StockMovement, StockMovementData,
+    StockReservationEntry, StockReservationEntryData,
 };
 
 /// 库存消费的单条仓发事实；可选来源必须在原逐行校验位置检查。
@@ -56,131 +56,12 @@ pub async fn post_warehouse_ship_line(
     occurred_at: Instant,
     actor_id: &str,
 ) -> Result<()> {
-    post_with_store(&mut MongoShipmentStore(db), executor, input, occurred_at, actor_id).await
-}
-
-/// 当前仓发实际消费的预占事实，查询顺序由生产过账函数控制。
-#[derive(Clone)]
-struct ReservationFact {
-    id: String,
-    sales_order_line_id: SalesOrderLineId,
-    reserved_quantity: Quantity,
-    warehouse_id: WarehouseId,
-    sku_id: SkuId,
-}
-
-/// 库存过账所需的原仓储操作边界；生产顺序由 post_with_store 唯一持有。
-#[async_trait]
-trait ShipmentStore: Send {
-    async fn reservation(&mut self, id: &str, executor: &mut dyn Executor)
-    -> Result<Option<ReservationFact>>;
-    async fn balance(
-        &mut self,
-        warehouse: &WarehouseId,
-        sku: &SkuId,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<String>>;
-    async fn consume(&mut self, id: &str, quantity: Quantity, executor: &mut dyn Executor) -> Result<bool>;
-    async fn reservation_entry(
-        &mut self,
-        entry: &StockReservationEntry,
-        executor: &mut dyn Executor,
-    ) -> Result<()>;
-    async fn release_reserved(
-        &mut self,
-        id: &str,
-        quantity: Quantity,
-        executor: &mut dyn Executor,
-    ) -> Result<bool>;
-    async fn deduct_available(
-        &mut self,
-        id: &str,
-        quantity: Quantity,
-        executor: &mut dyn Executor,
-    ) -> Result<bool>;
-    async fn movement(&mut self, movement: &StockMovement, executor: &mut dyn Executor) -> Result<()>;
-    async fn last_movement(
-        &mut self,
-        balance_id: &str,
-        movement_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<bool>;
-}
-
-struct MongoShipmentStore<'a>(&'a Database);
-
-#[async_trait]
-impl ShipmentStore for MongoShipmentStore<'_> {
-    async fn reservation(
-        &mut self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ReservationFact>> {
-        Ok(self.0.stock_reservations().find_by_id(id, executor).await?.map(|reservation| ReservationFact {
-            id: reservation.base.id,
-            sales_order_line_id: reservation.sales_order_line_id,
-            reserved_quantity: reservation.reserved_quantity,
-            warehouse_id: reservation.warehouse_id,
-            sku_id: reservation.sku_id,
-        }))
-    }
-    async fn balance(
-        &mut self,
-        warehouse: &WarehouseId,
-        sku: &SkuId,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<String>> {
-        Ok(self
-            .0
-            .stock_balances()
-            .find_by_dimensions(warehouse, sku, executor)
-            .await?
-            .map(|balance| balance.base.id))
-    }
-    async fn consume(&mut self, id: &str, quantity: Quantity, executor: &mut dyn Executor) -> Result<bool> {
-        Ok(self.0.stock_reservations().consume_quantity(id, quantity, executor).await?)
-    }
-    async fn reservation_entry(
-        &mut self,
-        entry: &StockReservationEntry,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.0.stock_reservation_entries().create(entry, executor).await?;
-        Ok(())
-    }
-    async fn release_reserved(
-        &mut self,
-        id: &str,
-        quantity: Quantity,
-        executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        Ok(self.0.stock_balances().release_reserved(id, quantity, executor).await?)
-    }
-    async fn deduct_available(
-        &mut self,
-        id: &str,
-        quantity: Quantity,
-        executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        Ok(self.0.stock_balances().deduct_available(id, quantity, executor).await?)
-    }
-    async fn movement(&mut self, movement: &StockMovement, executor: &mut dyn Executor) -> Result<()> {
-        self.0.stock_movements().create(movement, executor).await?;
-        Ok(())
-    }
-    async fn last_movement(
-        &mut self,
-        balance_id: &str,
-        movement_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        Ok(self.0.stock_balances().apply_last_movement(balance_id, movement_id, executor).await?)
-    }
+    post_with_store(&mut MongoInventoryStore(&db), executor, input, occurred_at, actor_id).await
 }
 
 /// 实际逐行过账算法；库存仓储和失败注入替身均从此入口执行。
 async fn post_with_store(
-    store: &mut impl ShipmentStore,
+    store: &mut impl InventoryWriteStore,
     executor: &mut dyn Executor,
     input: &WarehouseShipmentLine,
     occurred_at: Instant,
@@ -191,7 +72,7 @@ async fn post_with_store(
         .clone()
         .ok_or_else(|| Error::BusinessLogicError("仓发必须消耗有效预占".to_string()))?;
     let reservation = store
-        .reservation(reservation_id.as_ref(), executor)
+        .find_reservation(reservation_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::BusinessLogicError("库存预占不存在".to_string()))?;
     if reservation.sales_order_line_id != input.sales_order_line_id {
@@ -209,7 +90,7 @@ async fn post_with_store(
         .balance(&warehouse_id, &reservation.sku_id, executor)
         .await?
         .ok_or_else(|| Error::BusinessLogicError("库存余额不存在，无法发货".to_string()))?;
-    if !store.consume(&reservation.id, input.quantity, executor).await? {
+    if !store.consume_reservation(&reservation.id, input.quantity, executor).await? {
         return Err(Error::BusinessLogicError("预占数量不足或状态不符，无法消耗".to_string()));
     }
     let entry = StockReservationEntry::new(
@@ -221,7 +102,7 @@ async fn post_with_store(
             source_document_id: input.delivery_id.clone(),
         },
     )?;
-    store.reservation_entry(&entry, executor).await?;
+    store.create_entry(&entry, executor).await?;
     // 先释放预占再扣可用：预占建立时已扣减 available（reserved += q / available -= q），
     // 消耗本单预占发货时 available 已不含这部分，必须先释放（available += q）才能扣减
     if !store.release_reserved(&balance, input.quantity, executor).await? {
@@ -263,6 +144,10 @@ async fn post_with_store(
 mod tests {
     use std::str::FromStr;
 
+    use async_trait::async_trait;
+    use erp_core::ids::SkuId;
+
+    use super::super::ReservationFact;
     use super::*;
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -333,8 +218,8 @@ mod tests {
     }
 
     #[async_trait]
-    impl ShipmentStore for RecordingStore {
-        async fn reservation(
+    impl InventoryWriteStore for RecordingStore {
+        async fn find_reservation(
             &mut self,
             id: &str,
             executor: &mut dyn Executor,
@@ -354,13 +239,18 @@ mod tests {
             assert_eq!(sku.as_ref(), "sku-1");
             Ok(self.balance.clone())
         }
-        async fn consume(&mut self, id: &str, amount: Quantity, executor: &mut dyn Executor) -> Result<bool> {
+        async fn consume_reservation(
+            &mut self,
+            id: &str,
+            amount: Quantity,
+            executor: &mut dyn Executor,
+        ) -> Result<bool> {
             self.visit(Call::Consume, executor)?;
             assert_eq!(id, "reservation-1");
             assert_eq!(amount, quantity("2"));
             Ok(self.false_at != Some(Call::Consume))
         }
-        async fn reservation_entry(
+        async fn create_entry(
             &mut self,
             entry: &StockReservationEntry,
             executor: &mut dyn Executor,
@@ -368,6 +258,40 @@ mod tests {
             self.visit(Call::Entry, executor)?;
             self.entry = Some(entry.clone());
             Ok(())
+        }
+        async fn increase(
+            &mut self,
+            _id: &str,
+            _amount: Quantity,
+            executor: &mut dyn Executor,
+        ) -> Result<bool> {
+            self.visit(Call::Balance, executor)?;
+            Ok(false)
+        }
+        async fn create_balance(
+            &mut self,
+            _balance: &crate::StockBalance,
+            executor: &mut dyn Executor,
+        ) -> Result<()> {
+            self.visit(Call::Balance, executor)?;
+            Ok(())
+        }
+        async fn create_reservation(
+            &mut self,
+            _reservation: &crate::StockReservation,
+            executor: &mut dyn Executor,
+        ) -> Result<()> {
+            self.visit(Call::Reservation, executor)?;
+            Ok(())
+        }
+        async fn reserve(
+            &mut self,
+            _id: &str,
+            _amount: Quantity,
+            executor: &mut dyn Executor,
+        ) -> Result<bool> {
+            self.visit(Call::Balance, executor)?;
+            Ok(false)
         }
         async fn release_reserved(
             &mut self,

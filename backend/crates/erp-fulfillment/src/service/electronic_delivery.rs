@@ -4,7 +4,7 @@ use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::FulfillmentService;
-use crate::dto::{ElectronicDeliveryListParams, ElectronicDeliveryView, PageView, SortDir};
+use crate::dto::{ElectronicDeliveryListParams, ElectronicDeliveryView, SortDir};
 use crate::entity::fulfillment::ElectronicDelivery;
 use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
@@ -33,7 +33,7 @@ impl FulfillmentService {
     pub async fn electronic_delivery_list(
         &self,
         params: &ElectronicDeliveryListParams,
-    ) -> Result<PageView<ElectronicDeliveryView>> {
+    ) -> Result<crate::dto::PageView<ElectronicDeliveryView>> {
         params.validate()?;
         let query = params.normalized()?;
         let filter = ElectronicDeliveryFilter {
@@ -46,10 +46,9 @@ impl FulfillmentService {
         };
         let page =
             self.db.electronic_deliveries().search_electronic_deliveries(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| ElectronicDeliveryView {
+        super::map_search_page(
+            async { Ok(page) },
+            |row| ElectronicDeliveryView {
                 id: row.id.clone(),
                 fulfillment_no: row.fulfillment_no,
                 sales_order_line_id: row.sales_order_line_id.to_string(),
@@ -61,9 +60,11 @@ impl FulfillmentService {
                 occurred_at: row.occurred_at.unix_secs(),
                 recorded_at: row.recorded_at.unix_secs(),
                 version: row.version,
-            })
-            .collect();
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+            },
+            filter.page,
+            filter.page_size,
+        )
+        .await
     }
 
     /// 按主键查询电子交付记录。
@@ -85,12 +86,11 @@ impl FulfillmentService {
         fields(layer = "service", domain = "fulfillment", operation = "electronic_delivery_detail")
     )]
     pub async fn electronic_delivery_detail(&self, id: &str) -> Result<ElectronicDeliveryView> {
-        let record = self
-            .db
-            .electronic_deliveries()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("电子交付记录不存在".to_string()))?;
+        let record = super::find_header_or_not_found(
+            self.db.electronic_deliveries().find_by_id(id, &mut NoTransaction),
+            "电子交付记录不存在",
+        )
+        .await?;
         Ok(record.into())
     }
 }

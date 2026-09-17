@@ -19,9 +19,9 @@ use crate::{
     StockBalance, StockBalanceData, StockMovement, StockMovementData, StockReservation, StockReservationData,
     StockReservationEntry, StockReservationEntryData, StockReservationSourceType,
 };
-/// 收货实际库存仓储边界；事实构造与数量规则由库存服务唯一持有。
+/// 收货与仓发共用的库存写入仓储边界；事实构造与数量规则由库存服务唯一持有。
 #[async_trait]
-trait ReceiptInventoryStore: Send {
+pub(crate) trait InventoryWriteStore: Send {
     async fn balance(
         &mut self,
         warehouse: &WarehouseId,
@@ -37,13 +37,45 @@ trait ReceiptInventoryStore: Send {
         movement_id: &str,
         ex: &mut dyn Executor,
     ) -> Result<bool>;
-    async fn reservation(&mut self, reservation: &StockReservation, ex: &mut dyn Executor) -> Result<()>;
+    async fn create_reservation(
+        &mut self,
+        reservation: &StockReservation,
+        ex: &mut dyn Executor,
+    ) -> Result<()>;
     async fn reserve(&mut self, id: &str, quantity: Quantity, ex: &mut dyn Executor) -> Result<bool>;
-    async fn entry(&mut self, entry: &StockReservationEntry, ex: &mut dyn Executor) -> Result<()>;
+    async fn create_entry(&mut self, entry: &StockReservationEntry, ex: &mut dyn Executor) -> Result<()>;
+    async fn find_reservation(&mut self, id: &str, ex: &mut dyn Executor) -> Result<Option<ReservationFact>>;
+    async fn consume_reservation(
+        &mut self,
+        id: &str,
+        quantity: Quantity,
+        ex: &mut dyn Executor,
+    ) -> Result<bool>;
+    async fn release_reserved(&mut self, id: &str, quantity: Quantity, ex: &mut dyn Executor)
+    -> Result<bool>;
+    async fn deduct_available(&mut self, id: &str, quantity: Quantity, ex: &mut dyn Executor)
+    -> Result<bool>;
 }
-struct MongoReceiptStore<'a>(&'a Database);
+
+/// 当前实际消费的预占事实，查询顺序由生产过账函数控制。
+#[derive(Clone)]
+pub(crate) struct ReservationFact {
+    /// 预占主键。
+    pub(crate) id: String,
+    /// 归属稳定销售行。
+    pub(crate) sales_order_line_id: SalesOrderLineId,
+    /// 当前有效预占。
+    pub(crate) reserved_quantity: Quantity,
+    /// 预占仓库。
+    pub(crate) warehouse_id: WarehouseId,
+    /// 预占 SKU。
+    pub(crate) sku_id: SkuId,
+}
+
+pub(crate) struct MongoInventoryStore<'a>(pub(crate) &'a Database);
+
 #[async_trait]
-impl ReceiptInventoryStore for MongoReceiptStore<'_> {
+impl InventoryWriteStore for MongoInventoryStore<'_> {
     async fn balance(
         &mut self,
         warehouse: &WarehouseId,
@@ -76,16 +108,53 @@ impl ReceiptInventoryStore for MongoReceiptStore<'_> {
     ) -> Result<bool> {
         Ok(self.0.stock_balances().apply_last_movement(balance_id, movement_id, ex).await?)
     }
-    async fn reservation(&mut self, reservation: &StockReservation, ex: &mut dyn Executor) -> Result<()> {
+    async fn create_reservation(
+        &mut self,
+        reservation: &StockReservation,
+        ex: &mut dyn Executor,
+    ) -> Result<()> {
         self.0.stock_reservations().create(reservation, ex).await?;
         Ok(())
     }
     async fn reserve(&mut self, id: &str, quantity: Quantity, ex: &mut dyn Executor) -> Result<bool> {
         Ok(self.0.stock_balances().reserve_quantity(id, quantity, ex).await?)
     }
-    async fn entry(&mut self, entry: &StockReservationEntry, ex: &mut dyn Executor) -> Result<()> {
+    async fn create_entry(&mut self, entry: &StockReservationEntry, ex: &mut dyn Executor) -> Result<()> {
         self.0.stock_reservation_entries().create(entry, ex).await?;
         Ok(())
+    }
+    async fn find_reservation(&mut self, id: &str, ex: &mut dyn Executor) -> Result<Option<ReservationFact>> {
+        Ok(self.0.stock_reservations().find_by_id(id, ex).await?.map(|reservation| ReservationFact {
+            id: reservation.base.id,
+            sales_order_line_id: reservation.sales_order_line_id,
+            reserved_quantity: reservation.reserved_quantity,
+            warehouse_id: reservation.warehouse_id,
+            sku_id: reservation.sku_id,
+        }))
+    }
+    async fn consume_reservation(
+        &mut self,
+        id: &str,
+        quantity: Quantity,
+        ex: &mut dyn Executor,
+    ) -> Result<bool> {
+        Ok(self.0.stock_reservations().consume_quantity(id, quantity, ex).await?)
+    }
+    async fn release_reserved(
+        &mut self,
+        id: &str,
+        quantity: Quantity,
+        ex: &mut dyn Executor,
+    ) -> Result<bool> {
+        Ok(self.0.stock_balances().release_reserved(id, quantity, ex).await?)
+    }
+    async fn deduct_available(
+        &mut self,
+        id: &str,
+        quantity: Quantity,
+        ex: &mut dyn Executor,
+    ) -> Result<bool> {
+        Ok(self.0.stock_balances().deduct_available(id, quantity, ex).await?)
     }
 }
 /// 入库库存增加所需的消费事实；不携带履约或采购实体。
@@ -128,7 +197,7 @@ struct ReceiptStockPosting<'a, S> {
     actor_id: &'a str,
 }
 #[async_trait]
-impl<S: ReceiptInventoryStore> ReceiptStockSteps for ReceiptStockPosting<'_, S> {
+impl<S: InventoryWriteStore> ReceiptStockSteps for ReceiptStockPosting<'_, S> {
     async fn balance(&mut self, executor: &mut dyn Executor) -> Result<String> {
         ensure_or_create_balance(
             self.store,
@@ -186,7 +255,7 @@ pub async fn post_receipt_stock(
     actor_id: &str,
 ) -> Result<String> {
     execute_receipt_stock(
-        &mut ReceiptStockPosting { store: &mut MongoReceiptStore(db), fact, occurred_at, actor_id },
+        &mut ReceiptStockPosting { store: &mut MongoInventoryStore(db), fact, occurred_at, actor_id },
         executor,
     )
     .await
@@ -194,7 +263,7 @@ pub async fn post_receipt_stock(
 /// 建立/更新库存余额并返回余额主键（位于调用方事务内）。
 ///
 /// # 参数
-/// * `db` - 数据库实例
+/// * `store` - 库存写入仓储边界
 /// * `session` - 事务会话执行器
 /// * `warehouse_id` - 仓库
 /// * `sku_id` - SKU
@@ -206,7 +275,7 @@ pub async fn post_receipt_stock(
 /// # 错误
 /// 余额写入失败时返回错误。
 async fn ensure_or_create_balance(
-    store: &mut impl ReceiptInventoryStore,
+    store: &mut impl InventoryWriteStore,
     session: &mut dyn Executor,
     warehouse_id: &erp_core::ids::WarehouseId,
     sku_id: &erp_core::ids::SkuId,
@@ -270,7 +339,7 @@ struct ReceiptReservationPosting<'a, S> {
     fact: ReceiptReservationFact<'a>,
 }
 #[async_trait]
-impl<S: ReceiptInventoryStore> ReceiptReservationSteps for ReceiptReservationPosting<'_, S> {
+impl<S: InventoryWriteStore> ReceiptReservationSteps for ReceiptReservationPosting<'_, S> {
     async fn reservation(&mut self, session: &mut dyn Executor) -> Result<String> {
         let reservation = StockReservation::new(
             StockReservationId::new(next_id()),
@@ -288,7 +357,7 @@ impl<S: ReceiptInventoryStore> ReceiptReservationSteps for ReceiptReservationPos
                 status: ReservationStatus::Active,
             },
         )?;
-        self.store.reservation(&reservation, session).await?;
+        self.store.create_reservation(&reservation, session).await?;
         Ok(reservation.base.id)
     }
     async fn reserve(&mut self, session: &mut dyn Executor) -> Result<()> {
@@ -307,7 +376,7 @@ impl<S: ReceiptInventoryStore> ReceiptReservationSteps for ReceiptReservationPos
                 source_document_id: self.fact.receipt_id.to_string(),
             },
         )?;
-        self.store.entry(&entry, session).await?;
+        self.store.create_entry(&entry, session).await?;
         Ok(())
     }
 }
@@ -318,7 +387,7 @@ pub async fn establish_receipt_reservation(
     fact: ReceiptReservationFact<'_>,
 ) -> Result<()> {
     execute_receipt_reservation(
-        &mut ReceiptReservationPosting { store: &mut MongoReceiptStore(db), fact },
+        &mut ReceiptReservationPosting { store: &mut MongoInventoryStore(db), fact },
         executor,
     )
     .await
@@ -484,7 +553,7 @@ mod receipt_store_tests {
         }
     }
     #[async_trait]
-    impl ReceiptInventoryStore for RecordingStore {
+    impl InventoryWriteStore for RecordingStore {
         async fn balance(
             &mut self,
             warehouse: &WarehouseId,
@@ -523,7 +592,11 @@ mod receipt_store_tests {
             assert_eq!(movement_id, self.movement.as_ref().unwrap().base.id);
             Ok(self.false_at != Some("lastmovement"))
         }
-        async fn reservation(&mut self, reservation: &StockReservation, ex: &mut dyn Executor) -> Result<()> {
+        async fn create_reservation(
+            &mut self,
+            reservation: &StockReservation,
+            ex: &mut dyn Executor,
+        ) -> Result<()> {
             self.visit("reservation", ex)?;
             self.reservation = Some(reservation.clone());
             Ok(())
@@ -534,10 +607,45 @@ mod receipt_store_tests {
             assert_eq!(quantity, q("2"));
             Ok(self.false_at != Some("reserve"))
         }
-        async fn entry(&mut self, entry: &StockReservationEntry, ex: &mut dyn Executor) -> Result<()> {
+        async fn create_entry(&mut self, entry: &StockReservationEntry, ex: &mut dyn Executor) -> Result<()> {
             self.visit("entry", ex)?;
             self.entry = Some(entry.clone());
             Ok(())
+        }
+        async fn find_reservation(
+            &mut self,
+            _id: &str,
+            ex: &mut dyn Executor,
+        ) -> Result<Option<ReservationFact>> {
+            self.visit("find_reservation", ex)?;
+            Ok(None)
+        }
+        async fn consume_reservation(
+            &mut self,
+            _id: &str,
+            _quantity: Quantity,
+            ex: &mut dyn Executor,
+        ) -> Result<bool> {
+            self.visit("consume_reservation", ex)?;
+            Ok(false)
+        }
+        async fn release_reserved(
+            &mut self,
+            _id: &str,
+            _quantity: Quantity,
+            ex: &mut dyn Executor,
+        ) -> Result<bool> {
+            self.visit("release_reserved", ex)?;
+            Ok(false)
+        }
+        async fn deduct_available(
+            &mut self,
+            _id: &str,
+            _quantity: Quantity,
+            ex: &mut dyn Executor,
+        ) -> Result<bool> {
+            self.visit("deduct_available", ex)?;
+            Ok(false)
         }
     }
     fn q(value: &str) -> Quantity {

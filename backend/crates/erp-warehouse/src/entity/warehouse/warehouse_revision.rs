@@ -18,6 +18,8 @@ use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::warehouse_sku_policy::WarehouseSkuPolicyPeriod;
+
 /// 仓库名称最大长度。
 const NAME_MAX_LEN: usize = 128;
 /// 加密值最大长度。
@@ -162,11 +164,8 @@ impl WarehouseRevision {
         if data.revision_no == 0 {
             return Err(Error::from("修订序号必须从 1 开始"));
         }
-        if let Some(effective_to) = data.effective_to
-            && effective_to <= data.effective_from
-        {
-            return Err(Error::from("生效结束日必须晚于生效开始日"));
-        }
+        // 半开生效区间不倒挂（与策略区间同一规则、同一文案，见 `WarehouseSkuPolicyPeriod::new`）。
+        WarehouseSkuPolicyPeriod::new(data.effective_from, data.effective_to)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
