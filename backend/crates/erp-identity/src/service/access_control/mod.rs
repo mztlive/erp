@@ -117,23 +117,7 @@ impl AccessControlService {
             sort_ascending: matches!(query.paging.sort_dir, crate::dto::SortDir::Asc),
         };
         let page = self.db.permissions().search_permissions(&filter, &mut NoTransaction).await?;
-        // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结，无法命名），
-        // 此处按字段映射为响应视图，避免把仓储类型泄漏到接口层。
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| PermissionView {
-                id: row.id,
-                resource: row.resource,
-                action: row.action,
-                name: row.name,
-                description: row.description,
-                system: row.system,
-                disabled: row.disabled,
-                version: row.version,
-                created_at: row.created_at,
-            })
-            .collect();
+        let items = page.items.into_iter().map(PermissionView::from).collect();
 
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
@@ -537,28 +521,7 @@ impl AccessControlService {
             sort_ascending: matches!(query.paging.sort_dir, crate::dto::SortDir::Asc),
         };
         let page = self.db.audit_events().search_audit_events(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| AuditEventView {
-                id: row.id,
-                actor_id: row.actor_id,
-                actor_label: row.actor_label,
-                actor_role: row.actor_role,
-                action_type: row.action_type,
-                object_type: row.object_type,
-                object_id: row.object_id,
-                object_label: row.object_label,
-                request_id: row.request_id,
-                trace_id: None,
-                result: row.result,
-                changed_field_names: row.changed_field_names,
-                safe_digest: None,
-                source_ip: row.source_ip,
-                device_context: None,
-                created_at: row.created_at,
-            })
-            .collect();
+        let items = page.items.into_iter().map(AuditEventView::from).collect();
 
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }

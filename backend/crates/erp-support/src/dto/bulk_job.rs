@@ -3,10 +3,13 @@
 //! 字段名与 HTTP 契约一致（api-contract.md）：分页参数 `page`/`page_size`/
 //! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；本域无金额字段。
 
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use application_core::normalized_text;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::{PageParams, non_blank, normalize_sort};
+/// 契约分页形状与排序方向沿用 `dto` 共享定义，经本模块的既有路径继续可用。
+pub use super::{PageView, SortDir};
 use crate::entity::bulk_job::{
     BackgroundJob, BulkSelectionSnapshot, ItemStatus, JobStatus, JobType, SelectionItemStatus,
     SelectionStatus, SelectionType,
@@ -17,40 +20,6 @@ use crate::error::Result;
 pub(crate) const SNAPSHOT_SORT_FIELDS: &[&str] = &["created_at", "updated_at"];
 /// 后台任务列表允许的排序字段白名单。
 pub(crate) const BACKGROUND_JOB_SORT_FIELDS: &[&str] = &["created_at", "updated_at"];
-
-/// 排序方向。
-pub use application_core::SortDir;
-
-/// 归一化后的分页查询 DTO（Service → Repository 共用）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PageParams {
-    /// 页码（1 起）。
-    pub page: u64,
-    /// 单页条数（已 clamp 到 1–100）。
-    pub page_size: u32,
-    /// 排序字段（已过白名单校验，`&'static str` 保证来源只可能是白名单）。
-    pub sort_by: &'static str,
-    /// 排序方向。
-    pub sort_dir: SortDir,
-}
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-pub use application_core::PageView;
-/// 校验文本去除首尾空白后非空。
-use application_core::non_blank;
-/// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
-///
-/// # 参数
-/// * `sort_by` - 可选排序字段；空白视为未提供
-/// * `sort_dir` - 可选排序方向；空白视为未提供
-/// * `allowed_fields` - 白名单
-///
-/// # 返回
-/// 返回 `(排序字段, 方向)`；未提供时默认 `("created_at", Desc)`。
-///
-/// # 错误
-/// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use application_core::normalize_sort;
 
 /// 选择快照响应视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -88,6 +57,23 @@ impl From<BulkSelectionSnapshot> for BulkSelectionSnapshotView {
             status: snapshot.status,
             version: snapshot.base.version,
             created_at: snapshot.base.created_at,
+        }
+    }
+}
+
+impl From<crate::repository::BulkSelectionSnapshotRow> for BulkSelectionSnapshotView {
+    /// 从列表投影行构造响应视图（字段取值与实体转换一致）。
+    fn from(row: crate::repository::BulkSelectionSnapshotRow) -> Self {
+        Self {
+            id: row.id,
+            selection_type: row.selection_type,
+            data_cutoff_at: row.data_cutoff_at,
+            item_count: row.item_count,
+            created_by: row.created_by,
+            expires_at: row.expires_at,
+            status: row.status,
+            version: row.version,
+            created_at: row.created_at,
         }
     }
 }
@@ -142,12 +128,7 @@ impl BulkSelectionSnapshotListParams {
             selection_type: self.selection_type,
             status: self.status,
             created_by: normalized_text(self.created_by.as_deref()),
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: PageParams::normalized(self.page, self.page_size, sort_by, sort_dir),
         })
     }
 }
@@ -205,6 +186,22 @@ pub struct BulkSelectionItemView {
     pub result_status: Option<SelectionItemStatus>,
     /// 失败原因代码（适用时）。
     pub result_code: Option<String>,
+}
+
+impl From<crate::repository::BulkSelectionItemRow> for BulkSelectionItemView {
+    /// 从列表投影行构造响应视图（字段取值与逐项查询投影一致）。
+    fn from(row: crate::repository::BulkSelectionItemRow) -> Self {
+        Self {
+            id: row.id,
+            selection_snapshot_id: row.selection_snapshot_id,
+            object_type: row.object_type,
+            object_id: row.object_id,
+            expected_version: row.expected_version,
+            expected_hash: row.expected_hash,
+            result_status: row.result_status,
+            result_code: row.result_code,
+        }
+    }
 }
 
 /// 快照确认请求（携带乐观锁版本，冲突返回 409）。
@@ -305,6 +302,37 @@ impl From<BackgroundJob> for BackgroundJobView {
     }
 }
 
+impl From<crate::repository::BackgroundJobRow> for BackgroundJobView {
+    /// 从列表投影行构造响应视图（字段取值与实体转换一致）。
+    fn from(row: crate::repository::BackgroundJobRow) -> Self {
+        Self {
+            id: row.id,
+            job_no: row.job_no,
+            job_type: row.job_type,
+            domain_job_type: row.domain_job_type,
+            domain_job_id: row.domain_job_id,
+            selection_snapshot_id: row.selection_snapshot_id,
+            requested_by: row.requested_by,
+            request_id: row.request_id,
+            input_file_asset_id: row.input_file_asset_id,
+            result_file_asset_id: row.result_file_asset_id,
+            status: row.status,
+            total_count: row.total_count,
+            processed_count: row.processed_count,
+            success_count: row.success_count,
+            skipped_count: row.skipped_count,
+            failed_count: row.failed_count,
+            started_at: row.started_at,
+            finished_at: row.finished_at,
+            last_progress_at: row.last_progress_at,
+            result_expires_at: row.result_expires_at,
+            error_summary: row.error_summary,
+            version: row.version,
+            created_at: row.created_at,
+        }
+    }
+}
+
 /// 后台任务列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct BackgroundJobListParams {
@@ -365,12 +393,7 @@ impl BackgroundJobListParams {
             domain_job_type: normalized_text(self.domain_job_type.as_deref()),
             status: self.status,
             requested_by: normalized_text(self.requested_by.as_deref()),
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: PageParams::normalized(self.page, self.page_size, sort_by, sort_dir),
         })
     }
 }
@@ -459,6 +482,26 @@ pub struct BackgroundJobItemView {
     pub result_object_id: Option<String>,
 }
 
+impl From<crate::repository::BackgroundJobItemRow> for BackgroundJobItemView {
+    /// 从列表投影行构造响应视图（字段取值与逐项查询投影一致）。
+    fn from(row: crate::repository::BackgroundJobItemRow) -> Self {
+        Self {
+            id: row.id,
+            background_job_id: row.background_job_id,
+            item_no: row.item_no,
+            object_type: row.object_type,
+            object_id: row.object_id,
+            worksheet_name: row.worksheet_name,
+            source_row_no: row.source_row_no,
+            status: row.status,
+            result_code: row.result_code,
+            result_summary: row.result_summary,
+            result_object_type: row.result_object_type,
+            result_object_id: row.result_object_id,
+        }
+    }
+}
+
 /// 取消后台任务请求（携带乐观锁版本，冲突返回 409）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CancelBackgroundJobRequest {
@@ -483,6 +526,34 @@ pub struct CancelAllBackgroundJobsResponse {
     pub skipped_count: u64,
     /// 因并发冲突等失败、需重试的任务数。
     pub failed_count: u64,
+    /// 失败明细（任务 id + 错误分类），与 `failed_count` 同口径；取消语义不变。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failures: Vec<CancelBackgroundJobFailure>,
+}
+
+/// 单个后台任务批量取消失败的明细。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CancelBackgroundJobFailure {
+    /// 失败任务的后台任务 ID。
+    pub job_id: String,
+    /// 错误分类（`class()` 的稳定分类名，如 `Conflict`/`Internal`）。
+    pub error_class: String,
+    /// 面向排查的错误摘要（不含敏感原值）。
+    pub message: String,
+}
+
+impl CancelBackgroundJobFailure {
+    /// 从任务 ID 与领域错误构造失败明细。
+    ///
+    /// # 参数
+    /// * `job_id` - 失败任务的后台任务 ID
+    /// * `error` - 取消该任务时返回的领域错误
+    ///
+    /// # 返回
+    /// 返回携带稳定错误分类的失败明细。
+    pub fn from_error(job_id: String, error: &crate::error::Error) -> Self {
+        Self { job_id, error_class: format!("{:?}", error.class()), message: error.to_string() }
+    }
 }
 
 #[cfg(test)]

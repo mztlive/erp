@@ -3,8 +3,8 @@
 //! 单一集合 CRUD 与乐观锁直接复用 [`Repository`] 基类（base.rs：
 //! `update`/`soft_delete`/`restore` 比较 `id + version` 做 CAS，版本不匹配返回
 //! [`persistence_core::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
-//! 跨集合多步骤写入入口。集合名常量统一从 `extensions::BulkJobExt` 关联常量
-//! 导入（conventions §4.3）。
+//! 跨集合多步骤写入入口。集合名直接引用 `extensions::BulkJobExt` 关联常量
+//!（唯一来源，conventions §4.3），不做本地转存。
 //!
 //! 筛选/行类型定义在本文件，经 `BulkJobExt` 的关联类型对外暴露。
 
@@ -18,6 +18,7 @@ use persistence_core::{
 use serde::{Deserialize, Serialize};
 
 use super::extensions::BulkJobExt;
+use super::page::search_projected_page;
 use crate::entity::bulk_job::{
     BackgroundJob, BackgroundJobId, BackgroundJobItem, BulkSelectionItem, BulkSelectionSnapshot,
     BulkSelectionSnapshotId, ItemStatus, JobStatus, JobType, SelectionItemStatus, SelectionStatus,
@@ -38,15 +39,6 @@ pub enum BackgroundJobRegistration {
     /// 既有任务指纹不同，或为无指纹历史行。
     ConflictDifferentPayload(BackgroundJob),
 }
-
-/// `bulk_selection_snapshot` 集合名（单一来源：`BulkJobExt` 关联常量）。
-const BULK_SELECTION_SNAPSHOTS: &str = <mongodb::Database as BulkJobExt>::BULK_SELECTION_SNAPSHOTS;
-/// `bulk_selection_item` 集合名（单一来源：`BulkJobExt` 关联常量）。
-const BULK_SELECTION_ITEMS: &str = <mongodb::Database as BulkJobExt>::BULK_SELECTION_ITEMS;
-/// `background_job` 集合名（单一来源：`BulkJobExt` 关联常量）。
-const BACKGROUND_JOBS: &str = <mongodb::Database as BulkJobExt>::BACKGROUND_JOBS;
-/// `background_job_item` 集合名（单一来源：`BulkJobExt` 关联常量）。
-const BACKGROUND_JOB_ITEMS: &str = <mongodb::Database as BulkJobExt>::BACKGROUND_JOB_ITEMS;
 
 /// 选择快照列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -171,10 +163,7 @@ impl<'a> BulkSelectionSnapshotRepository<'a> {
             .projection(snapshot_projection())
             .build();
         let collection = self.collection().clone_with_type::<BulkSelectionSnapshotRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        search_projected_page(&self.collection(), &collection, filter, options, executor).await
     }
 }
 
@@ -183,6 +172,8 @@ impl<'a> BulkSelectionSnapshotRepository<'a> {
 pub struct BulkSelectionItemRow {
     /// 实体主键。
     pub id: String,
+    /// 所属选择快照 ID（与查询过滤一致，投影已覆盖）。
+    pub selection_snapshot_id: String,
     /// 目标对象类型代码。
     pub object_type: String,
     /// 目标对象 ID。
@@ -403,10 +394,7 @@ impl<'a> BackgroundJobRepository<'a> {
             .projection(background_job_projection())
             .build();
         let collection = self.collection().clone_with_type::<BackgroundJobRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        search_projected_page(&self.collection(), &collection, filter, options, executor).await
     }
 
     /// 按任务编号查找后台任务。
@@ -458,6 +446,8 @@ impl<'a> BackgroundJobRepository<'a> {
 pub struct BackgroundJobItemRow {
     /// 实体主键。
     pub id: String,
+    /// 所属后台任务 ID（与查询过滤一致，投影已覆盖）。
+    pub background_job_id: String,
     /// 稳定逐项序号。
     pub item_no: u32,
     /// 已有对象类型代码。
@@ -543,7 +533,7 @@ impl<'a> BulkJobRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<Option<BackgroundJobRegistration>> {
         let existing = mongo_ops::find_one(
-            &self.db.collection::<BackgroundJob>(BACKGROUND_JOBS),
+            &self.db.collection::<BackgroundJob>(<Database as BulkJobExt>::BACKGROUND_JOBS),
             doc! {
                 "request_id": &requested.request_id,
                 "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
@@ -596,13 +586,13 @@ impl<'a> BulkJobRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self.db.collection::<BulkSelectionSnapshot>(BULK_SELECTION_SNAPSHOTS),
+            &self.db.collection::<BulkSelectionSnapshot>(<Database as BulkJobExt>::BULK_SELECTION_SNAPSHOTS),
             snapshot,
             executor,
         )
         .await?;
         mongo_ops::insert_many(
-            &self.db.collection::<BulkSelectionItem>(BULK_SELECTION_ITEMS),
+            &self.db.collection::<BulkSelectionItem>(<Database as BulkJobExt>::BULK_SELECTION_ITEMS),
             items,
             executor,
         )
@@ -632,9 +622,14 @@ impl<'a> BulkJobRepository<'a> {
         items: Vec<BackgroundJobItem>,
         executor: &mut dyn Executor,
     ) -> Result<BackgroundJobRegistration> {
-        mongo_ops::insert_one(&self.db.collection::<BackgroundJob>(BACKGROUND_JOBS), job, executor).await?;
+        mongo_ops::insert_one(
+            &self.db.collection::<BackgroundJob>(<Database as BulkJobExt>::BACKGROUND_JOBS),
+            job,
+            executor,
+        )
+        .await?;
         mongo_ops::insert_many(
-            &self.db.collection::<BackgroundJobItem>(BACKGROUND_JOB_ITEMS),
+            &self.db.collection::<BackgroundJobItem>(<Database as BulkJobExt>::BACKGROUND_JOB_ITEMS),
             items,
             executor,
         )

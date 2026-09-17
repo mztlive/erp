@@ -41,37 +41,14 @@ pub enum JobType {
     Reconciliation,
 }
 
-impl JobType {
-    /// 返回任务类型的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Import => "导入",
-            Self::Export => "导出",
-            Self::Batch => "批量",
-            Self::Sync => "同步",
-            Self::Backfill => "回填",
-            Self::Reconciliation => "对账",
-        }
-    }
-
-    /// 返回任务类型的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Import => "import",
-            Self::Export => "export",
-            Self::Batch => "batch",
-            Self::Sync => "sync",
-            Self::Backfill => "backfill",
-            Self::Reconciliation => "reconciliation",
-        }
-    }
-}
+crate::entity::enum_str!(JobType {
+    Import => ("import", "导入"),
+    Export => ("export", "导出"),
+    Batch => ("batch", "批量"),
+    Sync => ("sync", "同步"),
+    Backfill => ("backfill", "回填"),
+    Reconciliation => ("reconciliation", "对账"),
+});
 
 /// 任务状态（数据模型 §6.1：等待执行、执行中、部分成功、成功、失败、已取消）。
 ///
@@ -98,37 +75,14 @@ pub enum JobStatus {
     Cancelled,
 }
 
-impl JobStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Pending => "等待执行",
-            Self::Running => "执行中",
-            Self::PartiallySucceeded => "部分成功",
-            Self::Succeeded => "成功",
-            Self::Failed => "失败",
-            Self::Cancelled => "已取消",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Running => "running",
-            Self::PartiallySucceeded => "partially_succeeded",
-            Self::Succeeded => "succeeded",
-            Self::Failed => "failed",
-            Self::Cancelled => "cancelled",
-        }
-    }
-}
+crate::entity::enum_str!(JobStatus {
+    Pending => ("pending", "等待执行"),
+    Running => ("running", "执行中"),
+    PartiallySucceeded => ("partially_succeeded", "部分成功"),
+    Succeeded => ("succeeded", "成功"),
+    Failed => ("failed", "失败"),
+    Cancelled => ("cancelled", "已取消"),
+});
 
 impl DocumentState for JobStatus {
     fn allowed_next(self) -> &'static [Self] {

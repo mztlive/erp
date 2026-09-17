@@ -1,8 +1,7 @@
 //! 域 D05 `file_asset` 的索引声明：file_asset、document_attachment。
 //!
-//! 集合名常量取 `FileAssetExt` 关联常量（唯一权威来源，conventions §4.3）：
-//! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
-//! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
+//! 集合名直接引用 `FileAssetExt` 关联常量（唯一权威来源，conventions §4.3），
+//! 不做本地转存。
 
 use mongodb::bson::{Document, doc};
 use mongodb::options::IndexOptions;
@@ -10,11 +9,6 @@ use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
 use crate::repository::extensions::FileAssetExt;
-
-/// `file_asset` 集合名。
-pub(crate) const FILE_ASSETS: &str = <mongodb::Database as FileAssetExt>::FILE_ASSETS;
-/// `document_attachment` 集合名。
-pub(crate) const DOCUMENT_ATTACHMENTS: &str = <mongodb::Database as FileAssetExt>::DOCUMENT_ATTACHMENTS;
 
 /// 创建本域集合的幂等命名索引。
 ///
@@ -39,8 +33,9 @@ pub(crate) const DOCUMENT_ATTACHMENTS: &str = <mongodb::Database as FileAssetExt
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
-    create_indexes(db, FILE_ASSETS, file_asset_indexes()).await?;
-    create_indexes(db, DOCUMENT_ATTACHMENTS, document_attachment_indexes()).await?;
+    create_indexes(db, <Database as FileAssetExt>::FILE_ASSETS, file_asset_indexes()).await?;
+    create_indexes(db, <Database as FileAssetExt>::DOCUMENT_ATTACHMENTS, document_attachment_indexes())
+        .await?;
     Ok(())
 }
 

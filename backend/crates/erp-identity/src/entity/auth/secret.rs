@@ -37,6 +37,9 @@ pub enum PasswordVerification {
 pub struct LoginAccount(String);
 
 impl LoginAccount {
+    /// 后台账号在通用区间上进一步收敛的最大长度（[`crate::entity::AccountCore`] 复用）。
+    pub const BACKOFFICE_MAX_LEN: usize = 32;
+
     /// 规范化并校验登录账号。
     ///
     /// # 参数

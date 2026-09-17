@@ -2,16 +2,17 @@
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use persistence_core::{NoTransaction, Transactional};
+use tracing::warn;
 use validator::Validate;
 
 use super::{BulkJobService, CancelAllBackgroundJobsRequest, CancelAllBackgroundJobsResponse};
-use crate::{BackgroundJob, BulkJobExt, Error, Result};
+use crate::{BackgroundJob, BulkJobExt, CancelBackgroundJobFailure, Error, Result};
 
 impl BulkJobService {
     /// 停止并取消全部未完成后台任务（仅管理员）。
     ///
     /// 逐个按最新版本取消，已进入终态的不再触碰；单个任务失败不阻塞其余任务，
-    /// 调用方可按 `failed_count` 决定是否重试。
+    /// 调用方可按 `failed_count`/`failures`（任务 id + 错误分类）决定是否重试。
     ///
     /// # 参数
     /// * `req` - 批量取消请求（可选 `job_type` 缩小范围）
@@ -19,7 +20,7 @@ impl BulkJobService {
     /// * `is_admin` - 是否为管理员（超级管理员或系统管理员）
     ///
     /// # 返回
-    /// 返回已取消、跳过与失败的任务数。
+    /// 返回已取消、跳过与失败的任务数及失败明细。
     ///
     /// # 错误
     /// * `Forbidden` - 非管理员调用
@@ -36,13 +37,22 @@ impl BulkJobService {
         req.validate()?;
         let candidates =
             self.db.background_jobs().cancellation_candidates(req.job_type, &mut NoTransaction).await?;
-        let mut result =
-            CancelAllBackgroundJobsResponse { cancelled_count: 0, skipped_count: 0, failed_count: 0 };
+        let mut result = CancelAllBackgroundJobsResponse {
+            cancelled_count: 0,
+            skipped_count: 0,
+            failed_count: 0,
+            failures: Vec::new(),
+        };
         for job in candidates {
+            let job_id = job.base.id.clone();
             match self.cancel_candidate(job, actor).await {
                 Ok(true) => result.cancelled_count += 1,
                 Ok(false) => result.skipped_count += 1,
-                Err(_) => result.failed_count += 1,
+                Err(error) => {
+                    warn!(job_id = %job_id, error = %error, "批量取消后台任务失败");
+                    result.failed_count += 1;
+                    result.failures.push(CancelBackgroundJobFailure::from_error(job_id, &error));
+                },
             }
         }
         Ok(result)

@@ -35,6 +35,14 @@ pub fn mongo_env_present() -> bool {
     std::env::var("ERP_TEST_MONGO_URI").map(|uri| !uri.trim().is_empty()).unwrap_or(false)
 }
 
+/// 需要真实 MongoDB 的集成测试门控宏使用的统一跳过提示前缀。
+///
+/// 各分支的动态部分（`module_path!()`）仍由宏在调用点展开，避免提示
+/// 指向本 crate 而非实际跳过的测试模块。
+#[doc(hidden)]
+pub const MONGO_SKIP_HINT: &str =
+    "SKIP: ERP_TEST_MONGO_URI 未设置（需要 mongo:7 单节点副本集），已跳过 MongoDB 集成测试";
+
 /// 需要真实 MongoDB 的集成测试门控宏。
 ///
 /// `ERP_TEST_MONGO_URI` 缺失或为空时打印跳过原因并从当前测试函数 `return`，
@@ -62,10 +70,7 @@ macro_rules! require_mongo {
         if $crate::mongo_env_present() {
             (async $body).await
         } else {
-            ::std::eprintln!(
-                "SKIP: ERP_TEST_MONGO_URI 未设置（需要 mongo:7 单节点副本集），已跳过 MongoDB 集成测试: {}",
-                ::std::module_path!()
-            );
+            ::std::eprintln!("{}: {}", $crate::MONGO_SKIP_HINT, ::std::module_path!());
             return;
         }
     }};
@@ -73,10 +78,7 @@ macro_rules! require_mongo {
         if $crate::mongo_env_present() {
             $body
         } else {
-            ::std::eprintln!(
-                "SKIP: ERP_TEST_MONGO_URI 未设置（需要 mongo:7 单节点副本集），已跳过 MongoDB 集成测试: {}",
-                ::std::module_path!()
-            );
+            ::std::eprintln!("{}: {}", $crate::MONGO_SKIP_HINT, ::std::module_path!());
             return;
         }
     }};

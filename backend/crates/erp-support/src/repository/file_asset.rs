@@ -19,6 +19,7 @@ use persistence_core::{
 };
 use serde::{Deserialize, Serialize};
 
+use super::page::search_projected_page;
 use crate::entity::file_asset::{
     DocumentAttachment, FileAsset, RetentionClass, SecurityScanStatus, SensitivityClass,
 };
@@ -239,10 +240,7 @@ impl<'a> FileAssetRepository<'a> {
             .projection(file_asset_projection())
             .build();
         let collection = self.collection().clone_with_type::<FileAssetRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        search_projected_page(&self.collection(), &collection, filter, options, executor).await
     }
 }
 

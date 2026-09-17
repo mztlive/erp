@@ -19,7 +19,6 @@ use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::dto::file_asset::{self as dto};
 pub use crate::dto::file_asset::{
     AttachToDocumentRequest, DestroyFileAssetRequest, DocumentAttachmentView, FileAssetListItemView,
     FileAssetListParams, FileAssetView, MarkScanResultRequest, PageView, PendingFileAssetRequest,
@@ -79,35 +78,19 @@ impl FileAssetService {
     ) -> Result<PageView<FileAssetListItemView>> {
         params.validate()?;
         let query = params.normalized()?;
+        let (page, page_size, sort_by, sort_ascending) = query.paging.into_filter_parts();
         let filter = FileAssetFilter {
             file_name: query.file_name,
             security_scan_status: query.security_scan_status,
             retention_class: query.retention_class,
             sensitivity_class: query.sensitivity_class,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, dto::SortDir::Asc),
+            page,
+            page_size,
+            sort_by,
+            sort_ascending,
         };
         let page = self.db.file_assets().search_file_assets(&filter, &mut NoTransaction).await?;
-        // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结，无法命名），
-        // 此处按字段映射为响应视图，避免把仓储类型泄漏到接口层。
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| FileAssetListItemView {
-                id: row.id,
-                file_name: row.file_name,
-                content_type: row.content_type,
-                byte_size: row.byte_size,
-                security_scan_status: row.security_scan_status,
-                sensitivity_class: row.sensitivity_class,
-                retention_class: row.retention_class,
-                expires_at: row.expires_at,
-                created_by: row.created_by,
-                created_at: row.created_at,
-            })
-            .collect();
+        let items = page.items.into_iter().map(FileAssetListItemView::from).collect();
 
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }

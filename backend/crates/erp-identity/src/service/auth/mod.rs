@@ -110,6 +110,13 @@ impl BackofficeAuthService {
         let is_authenticatable = secret.is_some();
         let password_check = password::verify_password(secret, request.password.clone()).await?;
         if !is_authenticatable || !password_check.is_match() {
+            tracing::info!(
+                account = request.account.as_str(),
+                account_kind = ?request.account_kind,
+                found = stored_account.is_some(),
+                authenticatable = is_authenticatable,
+                "backoffice authenticate rejected"
+            );
             return Err(invalid_credentials());
         }
 

@@ -22,31 +22,11 @@ pub enum AttachmentUsage {
     Manifest,
 }
 
-impl AttachmentUsage {
-    /// 返回用途的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Attachment => "附件",
-            Self::Image => "图片",
-            Self::Manifest => "清单",
-        }
-    }
-
-    /// 返回用途的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Attachment => "attachment",
-            Self::Image => "image",
-            Self::Manifest => "manifest",
-        }
-    }
-}
+crate::entity::enum_str!(AttachmentUsage {
+    Attachment => ("attachment", "附件"),
+    Image => ("image", "图片"),
+    Manifest => ("manifest", "清单"),
+});
 
 /// 附件关联创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

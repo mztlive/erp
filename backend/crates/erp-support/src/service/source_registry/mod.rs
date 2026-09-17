@@ -17,7 +17,6 @@ use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::dto::source_registry::*;
 pub use crate::dto::source_registry::{
     CreateExternalIdentityMapRequest, CreateSourceSystemRequest, ExternalIdentityMapListParams,
     ExternalIdentityMapView, PageView, SourceSystemListParams, SourceSystemView, UpdateSourceSystemRequest,
@@ -76,31 +75,18 @@ impl SourceRegistryService {
     ) -> Result<PageView<SourceSystemView>> {
         params.validate()?;
         let query = params.normalized()?;
+        let (page, page_size, sort_by, sort_ascending) = query.paging.into_filter_parts();
         let filter = SourceSystemFilter {
             code: query.code,
             system_type: query.system_type,
             status: query.status,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+            page,
+            page_size,
+            sort_by,
+            sort_ascending,
         };
         let page = self.db.source_systems().search_source_systems(&filter, &mut NoTransaction).await?;
-        // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结，无法命名），
-        // 此处按字段映射为响应视图，避免把仓储类型泄漏到接口层。
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| SourceSystemView {
-                id: row.id,
-                code: row.code,
-                name: row.name,
-                system_type: row.system_type,
-                status: row.status,
-                created_at: row.created_at,
-                version: row.version,
-            })
-            .collect();
+        let items = page.items.into_iter().map(SourceSystemView::from).collect();
 
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
@@ -192,31 +178,7 @@ impl SourceRegistryService {
             .await?
             .ok_or_else(|| Error::NotFound("来源系统不存在".to_string()))?;
 
-        let map = ExternalIdentityMap::new(
-            ExternalIdentityMapId::new(next_id()),
-            ExternalIdentityMapData {
-                source_system_id: req.source_system_id,
-                object_type: req.object_type,
-                external_id: req.external_id,
-                mapping_status: MappingStatus::Pending,
-                mapped_at: None,
-                mapped_by: None,
-            },
-        )?;
-        let target = ExternalIdentityTarget::new(
-            ExternalIdentityTargetId::new(next_id()),
-            ExternalIdentityTargetData {
-                external_identity_map_id: map.base.id.clone().into(),
-                internal_object_type: req.internal_object_type,
-                internal_object_id: req.internal_object_id,
-                relation_role: req.relation_role,
-                valid_from: req.valid_from,
-                valid_to: req.valid_to,
-                status: TargetStatus::Pending,
-                approved_at: None,
-                approved_by: None,
-            },
-        )?;
+        let (map, target) = build_identity_link(req)?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "external_identity_map.create",
@@ -264,36 +226,63 @@ impl SourceRegistryService {
     ) -> Result<PageView<ExternalIdentityMapView>> {
         params.validate()?;
         let query = params.normalized()?;
+        let (page, page_size, sort_by, sort_ascending) = query.paging.into_filter_parts();
         let filter = ExternalIdentityMapFilter {
             source_system_id: query.source_system_id,
             mapping_status: query.mapping_status,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+            page,
+            page_size,
+            sort_by,
+            sort_ascending,
         };
         let page = self
             .db
             .external_identity_maps()
             .search_external_identity_maps(&filter, &mut NoTransaction)
             .await?;
-        // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结，无法命名），
-        // 此处按字段映射为响应视图，避免把仓储类型泄漏到接口层。
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| ExternalIdentityMapView {
-                id: row.id,
-                source_system_id: row.source_system_id,
-                object_type: row.object_type,
-                external_id: row.external_id,
-                mapping_status: row.mapping_status,
-                mapped_at: row.mapped_at,
-                mapped_by: row.mapped_by,
-                created_at: row.created_at,
-            })
-            .collect();
+        let items = page.items.into_iter().map(ExternalIdentityMapView::from).collect();
 
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
+}
+
+/// 由创建请求组装外部身份映射与目标谱系两实体（初始状态均为待处理）。
+///
+/// # 参数
+/// * `req` - 创建请求（含来源系统、外部身份与内部对象指向）
+///
+/// # 返回
+/// 返回待写入同一事务的映射与目标实体。
+///
+/// # 错误
+/// 任一实体校验失败时返回错误。
+fn build_identity_link(
+    req: CreateExternalIdentityMapRequest,
+) -> Result<(ExternalIdentityMap, ExternalIdentityTarget)> {
+    let map = ExternalIdentityMap::new(
+        ExternalIdentityMapId::new(next_id()),
+        ExternalIdentityMapData {
+            source_system_id: req.source_system_id,
+            object_type: req.object_type,
+            external_id: req.external_id,
+            mapping_status: MappingStatus::Pending,
+            mapped_at: None,
+            mapped_by: None,
+        },
+    )?;
+    let target = ExternalIdentityTarget::new(
+        ExternalIdentityTargetId::new(next_id()),
+        ExternalIdentityTargetData {
+            external_identity_map_id: map.base.id.clone().into(),
+            internal_object_type: req.internal_object_type,
+            internal_object_id: req.internal_object_id,
+            relation_role: req.relation_role,
+            valid_from: req.valid_from,
+            valid_to: req.valid_to,
+            status: TargetStatus::Pending,
+            approved_at: None,
+            approved_by: None,
+        },
+    )?;
+    Ok((map, target))
 }

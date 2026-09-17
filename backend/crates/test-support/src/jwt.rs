@@ -14,6 +14,22 @@ use crate::{Error, Result};
 /// JWT 密钥最小字节数（与 web-api `JwtEngine::new` 一致）。
 const MIN_SECRET_LEN: usize = 32;
 
+/// JWT 私有声明键（取值与 web-api `TokenPayload::backoffice` 的序列化结果
+/// 一致；改动 web-api 侧须同步本 crate，反之亦然）。
+const CLAIM_ID: &str = "id";
+/// JWT 私有声明键：登录账号。
+const CLAIM_ACCOUNT: &str = "account";
+/// JWT 私有声明键：主体类型（固定为 `backoffice`）。
+const CLAIM_SUBJECT_KIND: &str = "subject_kind";
+/// JWT 私有声明键：账号类型（固定为 `admin`）。
+const CLAIM_ACCOUNT_KIND: &str = "account_kind";
+/// JWT 私有声明键：账号持久化版本。
+const CLAIM_ACCOUNT_VERSION: &str = "account_version";
+/// JWT 私有声明固定取值：后台主体。
+const SUBJECT_KIND_BACKOFFICE: &str = "backoffice";
+/// JWT 私有声明固定取值：管理员账号。
+const ACCOUNT_KIND_ADMIN: &str = "admin";
+
 /// 为种子账号签发后台 JWT。
 ///
 /// 复制 `apps/web-api/src/core/auth/jwt.rs` 的 token 结构与 HMAC-SHA256
@@ -37,7 +53,10 @@ pub fn mint_jwt(account_id: &str, secret: &str, exp_seconds: u64) -> Result<Stri
         return Err(Error::JwtSecretTooShort);
     }
     let key = Hmac::<Sha256>::new_from_slice(secret.as_bytes())?;
-    let expiration = u64::try_from(Utc::now().timestamp()).unwrap_or_default() + exp_seconds;
+    // 1970 年前的时间戳没有合法的 `exp` 语义，显式饱和到 0 再加有效期，
+    // 使边界行为可读（原 `unwrap_or_default` 隐含了同一语义）。
+    let now_secs = Utc::now().timestamp().max(0) as u64;
+    let expiration = now_secs + exp_seconds;
     let mut claims = Claims::new(RegisteredClaims {
         subject: Some(account_id.to_string()),
         expiration: Some(expiration),
@@ -56,11 +75,11 @@ pub fn mint_jwt(account_id: &str, secret: &str, exp_seconds: u64) -> Result<Stri
 /// 返回按稳定顺序排布的 JWT 私有声明映射。
 fn private_claims(account_id: &str) -> BTreeMap<String, Value> {
     let mut claims = BTreeMap::new();
-    claims.insert("id".to_string(), Value::String(account_id.to_string()));
-    claims.insert("account".to_string(), Value::String(seed_login(account_id)));
-    claims.insert("subject_kind".to_string(), Value::String("backoffice".to_string()));
-    claims.insert("account_kind".to_string(), Value::String("admin".to_string()));
-    claims.insert("account_version".to_string(), Value::from(ACCOUNT_VERSION));
+    claims.insert(CLAIM_ID.to_string(), Value::String(account_id.to_string()));
+    claims.insert(CLAIM_ACCOUNT.to_string(), Value::String(seed_login(account_id)));
+    claims.insert(CLAIM_SUBJECT_KIND.to_string(), Value::String(SUBJECT_KIND_BACKOFFICE.to_string()));
+    claims.insert(CLAIM_ACCOUNT_KIND.to_string(), Value::String(ACCOUNT_KIND_ADMIN.to_string()));
+    claims.insert(CLAIM_ACCOUNT_VERSION.to_string(), Value::from(ACCOUNT_VERSION));
     claims
 }
 

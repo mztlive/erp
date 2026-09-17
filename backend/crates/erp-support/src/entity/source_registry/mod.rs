@@ -44,31 +44,11 @@ pub enum SourceSystemType {
     Supplier,
 }
 
-impl SourceSystemType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Erp => "ERP",
-            Self::Mall => "商城",
-            Self::Supplier => "供应商",
-        }
-    }
-
-    /// 返回类型的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Erp => "ERP",
-            Self::Mall => "MALL",
-            Self::Supplier => "SUPPLIER",
-        }
-    }
-}
+crate::entity::enum_str!(SourceSystemType {
+    Erp => ("ERP", "ERP"),
+    Mall => ("MALL", "商城"),
+    Supplier => ("SUPPLIER", "供应商"),
+});
 
 /// 来源系统启停状态（数据模型 §6.1：启用/停用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -81,29 +61,12 @@ pub enum SourceSystemStatus {
     Disabled,
 }
 
+crate::entity::enum_str!(SourceSystemStatus {
+    Active => ("active", "启用"),
+    Disabled => ("disabled", "停用"),
+});
+
 impl SourceSystemStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Active => "启用",
-            Self::Disabled => "停用",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Active => "active",
-            Self::Disabled => "disabled",
-        }
-    }
-
     /// 判断是否处于启用状态。
     ///
     /// # 返回
@@ -140,43 +103,17 @@ pub enum ExternalObjectType {
     MallUser,
 }
 
-impl ExternalObjectType {
-    /// 返回对象类型的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Customer => "客户",
-            Self::Contract => "合同",
-            Self::Party => "企业主体",
-            Self::Supplier => "供应商",
-            Self::SalesOrder => "销售单",
-            Self::Product => "商品",
-            Self::Sku => "SKU",
-            Self::VoucherCategory => "卡券类目",
-            Self::MallUser => "商城用户",
-        }
-    }
-
-    /// 返回对象类型的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Customer => "customer",
-            Self::Contract => "contract",
-            Self::Party => "party",
-            Self::Supplier => "supplier",
-            Self::SalesOrder => "sales_order",
-            Self::Product => "product",
-            Self::Sku => "sku",
-            Self::VoucherCategory => "voucher_category",
-            Self::MallUser => "mall_user",
-        }
-    }
-}
+crate::entity::enum_str!(ExternalObjectType {
+    Customer => ("customer", "客户"),
+    Contract => ("contract", "合同"),
+    Party => ("party", "企业主体"),
+    Supplier => ("supplier", "供应商"),
+    SalesOrder => ("sales_order", "销售单"),
+    Product => ("product", "商品"),
+    Sku => ("sku", "SKU"),
+    VoucherCategory => ("voucher_category", "卡券类目"),
+    MallUser => ("mall_user", "商城用户"),
+});
 
 /// 映射状态（数据模型 §6.1：已映射、待确认、冲突、停用；固定枚举，无文档状态机）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -192,33 +129,12 @@ pub enum MappingStatus {
     Disabled,
 }
 
-impl MappingStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Mapped => "已映射",
-            Self::Pending => "待确认",
-            Self::Conflict => "冲突",
-            Self::Disabled => "停用",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Mapped => "mapped",
-            Self::Pending => "pending",
-            Self::Conflict => "conflict",
-            Self::Disabled => "disabled",
-        }
-    }
-}
+crate::entity::enum_str!(MappingStatus {
+    Mapped => ("mapped", "已映射"),
+    Pending => ("pending", "待确认"),
+    Conflict => ("conflict", "冲突"),
+    Disabled => ("disabled", "停用"),
+});
 
 /// 映射目标关系角色（数据模型 §6.1：`PRIMARY`、`COMPONENT`、`MERGED_INTO`、`REVISION_SOURCE`）。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -234,33 +150,12 @@ pub enum RelationRole {
     RevisionSource,
 }
 
-impl RelationRole {
-    /// 返回关系角色的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Primary => "主身份",
-            Self::Component => "组成部分",
-            Self::MergedInto => "合并入",
-            Self::RevisionSource => "修订来源",
-        }
-    }
-
-    /// 返回关系角色的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Primary => "PRIMARY",
-            Self::Component => "COMPONENT",
-            Self::MergedInto => "MERGED_INTO",
-            Self::RevisionSource => "REVISION_SOURCE",
-        }
-    }
-}
+crate::entity::enum_str!(RelationRole {
+    Primary => ("PRIMARY", "主身份"),
+    Component => ("COMPONENT", "组成部分"),
+    MergedInto => ("MERGED_INTO", "合并入"),
+    RevisionSource => ("REVISION_SOURCE", "修订来源"),
+});
 
 /// 映射目标状态（数据模型 §6.1：待确认、有效、失效、冲突；固定枚举，无文档状态机）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -276,33 +171,12 @@ pub enum TargetStatus {
     Conflict,
 }
 
-impl TargetStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Pending => "待确认",
-            Self::Active => "有效",
-            Self::Expired => "失效",
-            Self::Conflict => "冲突",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Active => "active",
-            Self::Expired => "expired",
-            Self::Conflict => "conflict",
-        }
-    }
-}
+crate::entity::enum_str!(TargetStatus {
+    Pending => ("pending", "待确认"),
+    Active => ("active", "有效"),
+    Expired => ("expired", "失效"),
+    Conflict => ("conflict", "冲突"),
+});
 
 /// 外部身份二进制比较键。
 ///

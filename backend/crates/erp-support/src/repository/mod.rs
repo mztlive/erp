@@ -6,6 +6,7 @@ pub mod extensions;
 pub mod file_asset;
 mod import_jobs;
 pub mod owned;
+mod page;
 pub mod source_registry;
 
 pub use bulk_job::{
