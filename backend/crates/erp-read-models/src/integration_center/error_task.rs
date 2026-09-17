@@ -1,3 +1,4 @@
+use application_core::AuditActor;
 use erp_integration::dto::*;
 use erp_integration::entity::integration_ops::{
     ErrorActionProjection, IntegrationErrorTask, error_terminal_policy, project_error_actions,
@@ -12,17 +13,31 @@ use super::IntegrationCenterReadService;
 use crate::{Error, Result};
 
 impl IntegrationCenterReadService {
-    /// 查询集成错误任务详情。
+    /// 查询集成错误任务详情，独立按 detail 动作解析。
+    ///
+    /// # 参数
+    /// * `id` - 任务稳定 ID
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 返回
+    /// 返回任务详情、开放动作与证据视图。
     ///
     /// # 错误
-    /// 任务不存在时返回错误。
-    pub async fn error_task_detail(&self, id: &str) -> Result<ErrorTaskDetailView> {
+    /// 任务不存在或不在范围内时返回 NotFound。
+    pub async fn error_task_detail(&self, id: &str, actor: &AuditActor) -> Result<ErrorTaskDetailView> {
         let task = self
             .db
             .integration_error_tasks()
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".to_string()))?;
+        self.require_visible(
+            actor,
+            "integration_error_task",
+            task.owner_user_id.as_deref().unwrap_or(""),
+            &task.owner_org_unit_id,
+        )
+        .await?;
         let resolution = task.resolution.clone();
         let work_item = self.find_task_work_item(&task.base.id).await?;
         let subject = EvidenceSubject::error(&task);

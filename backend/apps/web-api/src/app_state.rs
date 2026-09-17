@@ -358,9 +358,13 @@ impl AppState {
         )
     }
 
-    /// 返回使用同一权威证据提供方的集成详情读取入口。
+    /// 返回注入权威证据与范围 Port 的集成详情读取入口。
     pub fn integration_center(&self) -> IntegrationCenterReadService {
-        IntegrationCenterReadService::new(self.db(), Arc::clone(&self.integration_evidence))
+        IntegrationCenterReadService::new(
+            self.db(),
+            Arc::clone(&self.integration_evidence),
+            erp_processes::adapters::MongoIntegrationDataScope::shared(self.db(), self.rbac()),
+        )
     }
 
     /// 返回仅处理本域事实的供应商 API 服务。

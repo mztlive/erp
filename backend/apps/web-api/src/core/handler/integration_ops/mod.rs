@@ -162,15 +162,17 @@ pub async fn error_task_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 任务 ID
 ///
 /// # 返回
 /// 返回任务详情视图。
 pub async fn error_task_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<ErrorTaskDetailView> {
-    let view = state.integration_center().error_task_detail(&id).await?;
+    let view = state.integration_center().error_task_detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -273,15 +275,17 @@ pub async fn difference_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 差异 ID
 ///
 /// # 返回
 /// 返回差异详情视图。
 pub async fn difference_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<DifferenceDetailView> {
-    let view = state.integration_center().difference_detail(&id).await?;
+    let view = state.integration_center().difference_detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

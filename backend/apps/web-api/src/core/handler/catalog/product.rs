@@ -522,15 +522,17 @@ pub async fn product_handover_candidates(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 路径商品稳定 ID
 ///
 /// # 返回
 /// 返回该商品全部修订分页视图。
 pub async fn product_detail_revisions(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<PageView<ProductRevisionView>> {
-    let page = state.catalog_service().product_detail_revisions(&id).await?;
+    let page = state.catalog_service().product_detail_revisions(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -546,15 +548,17 @@ pub async fn product_detail_revisions(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 路径商品稳定 ID
 ///
 /// # 返回
 /// 返回该商品全部 SKU 分页视图。
 pub async fn product_detail_skus(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<PageView<SkuView>> {
-    let page = state.catalog_service().product_detail_skus(&id).await?;
+    let page = state.catalog_service().product_detail_skus(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -570,6 +574,7 @@ pub async fn product_detail_skus(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 路径商品稳定 ID
 /// * `query` - 可选 SKU 过滤
 ///
@@ -577,10 +582,12 @@ pub async fn product_detail_skus(
 /// 返回该商品下 SKU 修订分页视图。
 pub async fn product_detail_sku_revisions(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Query(query): Query<ProductDetailSkuRevisionQuery>,
 ) -> Result<PageView<SkuRevisionView>> {
-    let page = state.catalog_service().product_detail_sku_revisions(&id, query.sku_id.as_deref()).await?;
+    let page =
+        state.catalog_service().product_detail_sku_revisions(&id, query.sku_id.as_deref(), &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }

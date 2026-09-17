@@ -329,4 +329,13 @@ mod tests {
         assert!(scope.is_company());
         assert!(scope.allows_object("other", "org-z"));
     }
+
+    #[test]
+    fn detail_mapping_hides_out_of_scope_maintainer() {
+        let scope = catalog_scope(&access(true, &["org-a"], false), "actor");
+        assert!(in_scope(&scope, "actor", "org-b"));
+        assert!(in_scope(&scope, "other", "org-a"));
+        assert!(!in_scope(&scope, "other", "org-b"));
+        assert!(!in_scope(&catalog_scope(&access(false, &[], false), "actor"), "other", "org-a"));
+    }
 }

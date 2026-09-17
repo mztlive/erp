@@ -153,6 +153,43 @@ impl IntegrationAccess {
             },
         )
     }
+
+    /// 在调用方事务内按当前处理人事实重验对象资格。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证操作人
+    /// * `resource` - 错误任务或对账差异
+    /// * `action` - 已注册动作
+    /// * `owner_user_id` - 对象当前处理人
+    /// * `owner_org_unit_id` - 处理人内部组织
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 对象在范围内时成功。
+    ///
+    /// # 错误
+    /// 不可见对象返回 NotFound，不泄露存在性；未装配时失败关闭。
+    ///
+    /// # 关键业务约束
+    /// 列表授权不替代对象重验；历史处理人不构成详情可见。
+    pub async fn require_handler(
+        &self,
+        actor: &AuditActor,
+        resource: &str,
+        action: &str,
+        owner_user_id: &str,
+        owner_org_unit_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let (access, scope) = self.resolve(actor, resource, action, executor).await?;
+        if !scope.allows_object(owner_user_id, owner_org_unit_id) {
+            return Err(Error::NotFound(hidden_object(resource)));
+        }
+        if !self.allows_handler(&access, owner_user_id, owner_org_unit_id, false)? {
+            return Err(Error::NotFound(hidden_object(resource)));
+        }
+        Ok(())
+    }
 }
 
 /// 映射同角色正向范围和独立个人上限，保持交集关系。
@@ -188,4 +225,199 @@ fn map_clause(clause: &IntegrationResolvedClause, actor: &str) -> IntegrationSco
 /// 供测试与组合根绑定数据库的访问器。
 pub fn integration_access(_db: Database, scope: Arc<dyn IntegrationDataScopePort>) -> IntegrationAccess {
     IntegrationAccess::new(scope)
+}
+
+/// 越权详情与对象不存在同码，避免枚举他域任务或差异。
+fn hidden_object(resource: &str) -> String {
+    match resource {
+        "reconciliation_difference" => "差异不存在".into(),
+        _ => "任务不存在".into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+    use std::sync::Mutex;
+
+    use async_trait::async_trait;
+    use erp_core::common::time::Instant;
+    use persistence_core::NoTransaction;
+
+    use super::*;
+    use crate::ports::FailClosedIntegrationDataScopePort;
+
+    struct StubScope {
+        resolved: IntegrationResolvedScope,
+        allow: bool,
+        historical: Mutex<Option<bool>>,
+    }
+
+    #[async_trait]
+    impl IntegrationDataScopePort for StubScope {
+        fn allows(&self, _scope: &IntegrationResolvedScope, object: &IntegrationScopeObject) -> Result<bool> {
+            *self.historical.lock().expect("lock") = Some(object.historical_read_participant);
+            Ok(self.allow)
+        }
+
+        async fn resolve(
+            &self,
+            _actor: &AuditActor,
+            _resource: &str,
+            _action: &str,
+            _executor: &mut dyn Executor,
+        ) -> Result<IntegrationResolvedScope> {
+            Ok(self.resolved.clone())
+        }
+
+        async fn expand_org_units(
+            &self,
+            _org_unit_ids: &[String],
+            _include_descendants: bool,
+            _executor: &mut dyn Executor,
+        ) -> Result<BTreeSet<String>> {
+            Ok(BTreeSet::new())
+        }
+
+        async fn org_member_ids(
+            &self,
+            _org_unit_ids: &BTreeSet<String>,
+            _at: Instant,
+            _executor: &mut dyn Executor,
+        ) -> Result<Vec<String>> {
+            Ok(Vec::new())
+        }
+
+        async fn own_org(
+            &self,
+            _user_id: &str,
+            _at: Instant,
+            _executor: &mut dyn Executor,
+        ) -> Result<Option<String>> {
+            Ok(None)
+        }
+    }
+
+    fn actor() -> AuditActor {
+        AuditActor::new("actor".into(), "actor".into(), erp_core::AccountKind::Admin)
+    }
+
+    fn resolved(resource: &str, self_owned: bool, org: &[&str], company: bool) -> IntegrationResolvedScope {
+        IntegrationResolvedScope {
+            user_id: "actor".into(),
+            resource: resource.into(),
+            action: "detail".into(),
+            role_clauses: vec![IntegrationResolvedClause {
+                company,
+                self_owned,
+                org_unit_ids: org.iter().map(|id| (*id).to_string()).collect(),
+            }],
+            user_limit: None,
+            policy_version: 1,
+            organization_version: 1,
+            scope_version: "v1".into(),
+            as_of: Instant::from_unix_secs(0),
+        }
+    }
+
+    fn stub_access(resolved: IntegrationResolvedScope, allow: bool) -> IntegrationAccess {
+        IntegrationAccess::new(Arc::new(StubScope { resolved, allow, historical: Mutex::new(None) }))
+    }
+
+    #[tokio::test]
+    async fn fail_closed_require_handler_rejects_unwired() {
+        let access = IntegrationAccess::new(FailClosedIntegrationDataScopePort::shared());
+        let error = access
+            .require_handler(
+                &actor(),
+                "integration_error_task",
+                "detail",
+                "actor",
+                "org-a",
+                &mut NoTransaction,
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Internal(message) if message.contains("未接线")));
+    }
+
+    #[tokio::test]
+    async fn require_handler_hides_out_of_scope_as_not_found() {
+        let access = stub_access(resolved("integration_error_task", true, &[], false), true);
+        let error = access
+            .require_handler(
+                &actor(),
+                "integration_error_task",
+                "detail",
+                "other",
+                "org-b",
+                &mut NoTransaction,
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::NotFound(message) if message == "任务不存在"));
+        let access = stub_access(resolved("reconciliation_difference", true, &[], false), true);
+        let error = access
+            .require_handler(
+                &actor(),
+                "reconciliation_difference",
+                "detail",
+                "other",
+                "org-b",
+                &mut NoTransaction,
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::NotFound(message) if message == "差异不存在"));
+    }
+
+    #[tokio::test]
+    async fn require_handler_allows_current_handler_and_rejects_public_false() {
+        let access = stub_access(resolved("integration_error_task", true, &[], false), true);
+        access
+            .require_handler(
+                &actor(),
+                "integration_error_task",
+                "detail",
+                "actor",
+                "org-a",
+                &mut NoTransaction,
+            )
+            .await
+            .unwrap();
+        let access = stub_access(resolved("integration_error_task", false, &[], true), false);
+        let error = access
+            .require_handler(
+                &actor(),
+                "integration_error_task",
+                "detail",
+                "other",
+                "org-z",
+                &mut NoTransaction,
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn require_handler_detail_does_not_grant_historical_participation() {
+        let stub = Arc::new(StubScope {
+            resolved: resolved("integration_error_task", true, &[], false),
+            allow: true,
+            historical: Mutex::new(None),
+        });
+        IntegrationAccess::new(stub.clone())
+            .require_handler(
+                &actor(),
+                "integration_error_task",
+                "detail",
+                "actor",
+                "org-a",
+                &mut NoTransaction,
+            )
+            .await
+            .unwrap();
+        assert_eq!(*stub.historical.lock().expect("lock"), Some(false));
+    }
 }

@@ -1,3 +1,4 @@
+use application_core::AuditActor;
 use erp_core::ids::ReconciliationDifferenceId;
 use erp_integration::dto::*;
 use erp_integration::entity::integration_ops::{
@@ -6,6 +7,7 @@ use erp_integration::entity::integration_ops::{
 };
 use erp_integration::ports::evidence::EvidenceSubject;
 use erp_integration::repository::IntegrationOpsExt;
+use erp_integration::repository::integration_ops::ResolutionHistoryRow;
 use erp_integration::service::evidence::{
     blocker_view, difference_evidence_policy, domain_kinds, reconciliation_reason_registry,
 };
@@ -16,41 +18,63 @@ use super::IntegrationCenterReadService;
 use crate::{Error, Result};
 
 impl IntegrationCenterReadService {
-    /// 查询对账差异详情与不可变决定时间线。
+    /// 查询对账差异详情与不可变决定时间线，独立按 detail 动作解析。
+    ///
+    /// # 参数
+    /// * `id` - 差异稳定 ID
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 返回
+    /// 返回差异详情、处理时间线与证据视图。
     ///
     /// # 错误
-    /// 差异不存在或仓储查询失败时返回错误。
-    pub async fn difference_detail(&self, id: &str) -> Result<DifferenceDetailView> {
+    /// 差异不存在或不在范围内时返回 NotFound。
+    pub async fn difference_detail(&self, id: &str, actor: &AuditActor) -> Result<DifferenceDetailView> {
+        let difference = self.load_visible_difference(id, actor).await?;
+        let history = self
+            .db
+            .reconciliation_difference_resolutions()
+            .search_resolutions(
+                &ReconciliationDifferenceId::new(difference.base.id.clone()),
+                &mut NoTransaction,
+            )
+            .await?;
+        self.assemble_difference_detail(difference, history).await
+    }
+
+    async fn load_visible_difference(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+    ) -> Result<ReconciliationDifference> {
         let difference = self
             .db
             .reconciliation_differences()
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("差异不存在".to_string()))?;
-        let difference_id = ReconciliationDifferenceId::new(difference.base.id.clone());
-        let history = self
-            .db
-            .reconciliation_difference_resolutions()
-            .search_resolutions(&difference_id, &mut NoTransaction)
-            .await?;
+        self.require_visible(
+            actor,
+            "reconciliation_difference",
+            &difference.owner_user_id,
+            &difference.owner_org_unit_id,
+        )
+        .await?;
+        Ok(difference)
+    }
+
+    async fn assemble_difference_detail(
+        &self,
+        difference: ReconciliationDifference,
+        history: Vec<ResolutionHistoryRow>,
+    ) -> Result<DifferenceDetailView> {
         let subject = EvidenceSubject::difference(&difference);
         let mut view: DifferenceView = difference.clone().into();
         if let Some(latest) = history.last() {
             view.status = Some(latest.resulting_status);
             view.version = u64::from(latest.resolution_no);
         }
-        let resolutions = history
-            .into_iter()
-            .map(|row| ResolutionView {
-                id: row.id,
-                resolution_no: row.resolution_no,
-                resolution_action: row.resolution_action,
-                resulting_status: row.resulting_status,
-                evidence_reference: row.evidence_reference,
-                handled_by: row.handled_by,
-                handled_at: row.handled_at.unix_secs(),
-            })
-            .collect();
+        let resolutions = resolution_views(history);
         let terminal = view.status.is_some_and(|status| status.is_terminal());
         let has_work_item = self.has_difference_work_item(&view.id).await?;
         let linked_evidence = self.evidence.discover_evidence(&subject, &mut NoTransaction).await?;
@@ -80,6 +104,21 @@ impl IntegrationCenterReadService {
         }
         Ok(!items.is_empty())
     }
+}
+
+fn resolution_views(history: Vec<ResolutionHistoryRow>) -> Vec<ResolutionView> {
+    history
+        .into_iter()
+        .map(|row| ResolutionView {
+            id: row.id,
+            resolution_no: row.resolution_no,
+            resolution_action: row.resolution_action,
+            resulting_status: row.resulting_status,
+            evidence_reference: row.evidence_reference,
+            handled_by: row.handled_by,
+            handled_at: row.handled_at.unix_secs(),
+        })
+        .collect()
 }
 
 /// 推导对账差异开放动作与阻断视图（动作规则归领域，此处只做 view 映射）。
