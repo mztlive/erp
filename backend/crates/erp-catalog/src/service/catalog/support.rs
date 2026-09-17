@@ -10,6 +10,28 @@ use crate::error::{Error, Result};
 use crate::repository::CatalogExt;
 
 impl CatalogService {
+    /// 解析创建维护人及其主属组织，并校验写范围。
+    ///
+    /// # 参数
+    /// * `requested` - 请求维护人；空则使用操作人
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 返回
+    /// 返回维护人 ID 与业务组织。
+    ///
+    /// # 错误
+    /// 缺主属组织或当前范围不允许创建时拒绝。
+    pub(super) async fn bind_create_maintainer(
+        &self,
+        requested: Option<&str>,
+        actor: &application_core::AuditActor,
+    ) -> Result<(String, String)> {
+        let access = self.access();
+        let (maintainer, org) = access.maintainer_org(requested, actor, &mut NoTransaction).await?;
+        access.ensure_writable(actor, "create", &maintainer, &org, &mut NoTransaction).await?;
+        Ok((maintainer, org))
+    }
+
     // ---------- 私有加载与写入辅助 ----------
 
     /// 按 ID 加载未删除分类。

@@ -74,6 +74,7 @@ export function ProductsListPage() {
     })
     const hasActiveFilters =
         filters.q.trim() !== "" || filters.hasStructuredProductFilters
+    const noScope = state.listQuery.data?.emptyReason === "no_scope"
     const listLoadFailed = state.listQuery.isError || !state.listQuery.data
     const openCreate = () => router.push("/master-data/products/new")
     const openDetail = (stableId: string) => {
@@ -171,6 +172,10 @@ export function ProductsListPage() {
                         searchInputRef={searchInputRef}
                         filters={filters}
                         appliedChips={state.appliedChips}
+                        ownerOptions={state.listQuery.data?.ownerOptions ?? []}
+                        procurementOwnerOptions={
+                            state.listQuery.data?.procurementOwnerOptions ?? []
+                        }
                         productFilterOptionsQuery={
                             state.productFilterOptionsQuery
                         }
@@ -196,6 +201,7 @@ export function ProductsListPage() {
                         }}
                         defaultColumnOrder={[
                             "name",
+                            "maintainer",
                             "skuCount",
                             "skuPriceRange",
                             "supply",
@@ -242,18 +248,26 @@ export function ProductsListPage() {
                             !listLoadFailed && state.rows.length === 0 ? (
                                 <BusinessEmptyState
                                     kind={
-                                        hasActiveFilters ? "filter" : "no-data"
+                                        noScope
+                                            ? "no-data"
+                                            : hasActiveFilters
+                                              ? "filter"
+                                              : "no-data"
                                     }
                                     className={listWorkspaceEmptyStateClassName}
                                     title={
-                                        hasActiveFilters
-                                            ? "当前筛选无结果"
-                                            : "还没有商品列表资料"
+                                        noScope
+                                            ? "当前没有可查看的商品范围"
+                                            : hasActiveFilters
+                                              ? "当前筛选无结果"
+                                              : "还没有商品列表资料"
                                     }
                                     description={
-                                        hasActiveFilters
-                                            ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                            : "点击「新建」创建第一份资料；历史记录会随资料保留。"
+                                        noScope
+                                            ? "已授权动作但没有可见商品。请联系管理员配置数据范围，或清除筛选后重试。"
+                                            : hasActiveFilters
+                                              ? "没有记录符合当前筛选条件，可清除筛选后重试。"
+                                              : "点击「新建」创建第一份资料；历史记录会随资料保留。"
                                     }
                                     action={
                                         hasActiveFilters ? (

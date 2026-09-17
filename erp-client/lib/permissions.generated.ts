@@ -1967,6 +1967,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/products/{id}/handover",
+                description: "交接商品维护人",
+                permission: {
+                    resource: "product",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/products/{id}/handover-candidates",
+                description: "查询商品交接候选",
+                permission: {
+                    resource: "product",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/products/{id}/revisions",
                 description: "查询商品修订详情",

@@ -345,16 +345,8 @@ impl CatalogService {
         } = input;
         let effective_from = effective_from.unwrap_or_else(BusinessDate::today);
         let product_status = status.unwrap_or(EnableStatus::Active);
-        let product_id = ProductId::new(next_id());
-        let mut product = Product::new(
-            product_id.clone(),
-            ProductData {
-                product_no: voucher_no.clone(),
-                product_kind: ProductKind::Voucher,
-                status: product_status,
-            },
-            actor.id(),
-        )?;
+        let (product_id, mut product) =
+            self.new_voucher_product(voucher_no.clone(), product_status, actor).await?;
         let sku_item = self
             .build_new_sku_item(
                 NewSkuContext {
@@ -382,16 +374,42 @@ impl CatalogService {
             },
         )?;
         product.attach_revision(&revision, actor.id())?;
-        let voucher_revision = VoucherCategoryProfileRevision::new(
-            VoucherCategoryProfileRevisionId::new(next_id()),
-            crate::entity::catalog::voucher_category_profile_revision::VoucherCategoryProfileRevisionData {
-                sku_id: SkuId::new(sku_item.sku.base.id.clone()),
-                revision_no: 1,
-                description,
-                status: product_status,
-            },
-        )?;
+        let voucher_revision = new_voucher_profile(&sku_item.sku.base.id, description, product_status)?;
         Ok(VoucherCategoryDraft { new_category, product, revision, sku_item, voucher_revision })
+    }
+
+    /// 创建卡券类目对应的商品稳定身份并绑定维护责任。
+    ///
+    /// # 参数
+    /// * `voucher_no` - 卡券编号，同时作为商品编号
+    /// * `status` - 启停状态
+    /// * `actor` - 创建人
+    ///
+    /// # 返回
+    /// 返回商品 ID 与已绑定维护人的实体。
+    ///
+    /// # 错误
+    /// 维护人缺少主属组织或写范围不允许时拒绝。
+    async fn new_voucher_product(
+        &self,
+        voucher_no: String,
+        status: EnableStatus,
+        actor: &AuditActor,
+    ) -> Result<(ProductId, Product)> {
+        let product_id = ProductId::new(next_id());
+        let (maintainer_user_id, business_org_unit_id) = self.bind_create_maintainer(None, actor).await?;
+        let product = Product::new(
+            product_id.clone(),
+            ProductData {
+                product_no: voucher_no,
+                product_kind: ProductKind::Voucher,
+                status,
+                maintainer_user_id,
+                business_org_unit_id,
+            },
+            actor.id(),
+        )?;
+        Ok((product_id, product))
     }
 
     /// 在单个事务内写入卡券类目创建草稿。
@@ -573,6 +591,34 @@ impl CatalogService {
             })
             .await
     }
+}
+
+/// 构造卡券类目首个扩展修订。
+///
+/// # 参数
+/// * `sku_id` - 唯一 SKU
+/// * `description` - 类目描述
+/// * `status` - 启停状态
+///
+/// # 返回
+/// 返回已校验的扩展修订。
+///
+/// # 错误
+/// 实体不变式校验失败时拒绝。
+fn new_voucher_profile(
+    sku_id: &str,
+    description: String,
+    status: EnableStatus,
+) -> Result<VoucherCategoryProfileRevision> {
+    Ok(VoucherCategoryProfileRevision::new(
+        VoucherCategoryProfileRevisionId::new(next_id()),
+        crate::entity::catalog::voucher_category_profile_revision::VoucherCategoryProfileRevisionData {
+            sku_id: SkuId::new(sku_id.to_string()),
+            revision_no: 1,
+            description,
+            status,
+        },
+    )?)
 }
 
 /// 校验商品乐观锁版本。

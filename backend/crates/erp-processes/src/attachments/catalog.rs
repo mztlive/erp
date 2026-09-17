@@ -5,12 +5,13 @@ use erp_catalog::{
     CreateProductBrandRequest, CreateProductRequest, ProductBrandView, ProductView,
     UpdateProductBrandRequest, UpdateProductRequest,
 };
+use erp_identity::SharedRbacService;
 use erp_support::PendingFileAssetRequest;
 use mongodb::Database;
 
 use super::pending::PendingFileAssets;
 use crate::Result;
-use crate::adapters::{CatalogPendingAttachments, catalog_service};
+use crate::adapters::{CatalogPendingAttachments, catalog_service, scoped_catalog_service};
 
 /// Create a product brand and persist any uploaded logo in one transaction.
 pub async fn product_brand_create_with_assets(
@@ -40,18 +41,23 @@ pub async fn product_brand_update_with_assets(
 /// Create a product and persist uploaded media in one transaction.
 pub async fn product_create_with_assets(
     db: Database,
+    rbac: SharedRbacService,
     req: CreateProductRequest,
     asset_requests: Vec<PendingFileAssetRequest>,
     actor: AuditActor,
 ) -> Result<ProductView> {
     let pending =
         CatalogPendingAttachments::from_support(PendingFileAssets::prepare(asset_requests, &actor)?.shared());
-    catalog_service(db).product_create_with_assets(req, pending, &actor).await.map_err(Into::into)
+    scoped_catalog_service(db, rbac)
+        .product_create_with_assets(req, pending, &actor)
+        .await
+        .map_err(Into::into)
 }
 
 /// Update a product and persist uploaded media in one transaction.
 pub async fn product_update_with_assets(
     db: Database,
+    rbac: SharedRbacService,
     id: String,
     req: UpdateProductRequest,
     asset_requests: Vec<PendingFileAssetRequest>,
@@ -59,5 +65,8 @@ pub async fn product_update_with_assets(
 ) -> Result<ProductView> {
     let pending =
         CatalogPendingAttachments::from_support(PendingFileAssets::prepare(asset_requests, &actor)?.shared());
-    catalog_service(db).product_update_with_assets(&id, req, pending, &actor).await.map_err(Into::into)
+    scoped_catalog_service(db, rbac)
+        .product_update_with_assets(&id, req, pending, &actor)
+        .await
+        .map_err(Into::into)
 }

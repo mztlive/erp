@@ -45,6 +45,7 @@ impl ProductImportProcess {
         let request = self.update_request_with_images(&product, media).await?;
         match crate::product_update_with_assets(
             self.db.clone(),
+            self.rbac.clone(),
             product.base.id.clone(),
             request,
             pending,

@@ -327,6 +327,22 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/products/{id}/handover",
+            with_permission(
+                post(catalog::product::product_handover),
+                rbac,
+                catalog::product::product_handover_permission_key(),
+            ),
+        )
+        .route(
+            "/products/{id}/handover-candidates",
+            with_permission(
+                get(catalog::product::product_handover_candidates),
+                rbac,
+                catalog::product::product_handover_candidates_permission_key(),
+            ),
+        )
+        .route(
             "/products/{id}/revisions",
             with_permission(
                 get(catalog::product::product_detail_revisions),

@@ -27,6 +27,10 @@ pub struct ProductData {
     pub product_kind: ProductKind,
     /// 启停状态。
     pub status: EnableStatus,
+    /// 商品维护人；禁止用创建人兜底。
+    pub maintainer_user_id: String,
+    /// 维护人主属内部组织；缺主属组织不得创建。
+    pub business_org_unit_id: String,
 }
 
 /// 商品更新数据。
@@ -50,6 +54,12 @@ pub struct Product {
     pub product_no: String,
     /// 商品业务类型（创建后不可变）。
     pub product_kind: ProductKind,
+    /// 当前维护人；交接前不得为空。
+    #[serde(default)]
+    pub maintainer_user_id: String,
+    /// 当前业务组织；交接前不得为空。
+    #[serde(default)]
+    pub business_org_unit_id: String,
 }
 
 impl PartialEq for Product {
@@ -62,6 +72,8 @@ impl PartialEq for Product {
             && self.stable.updated_by == other.stable.updated_by
             && self.product_no == other.product_no
             && self.product_kind == other.product_kind
+            && self.maintainer_user_id == other.maintainer_user_id
+            && self.business_org_unit_id == other.business_org_unit_id
     }
 }
 
@@ -72,6 +84,7 @@ impl Product {
     ///
     /// 完成 product_no 的校验与规范化（去首尾空白、非空、长度上限）；
     /// `product_kind` 必须显式提交并永久保持不变（数据模型 §6.3）。
+    /// 维护人与主属组织创建必填，禁止用 `created_by` 回填。
     ///
     /// # 参数
     /// * `id` - 实体主键（`erp_core::ids::ProductId`）
@@ -82,16 +95,26 @@ impl Product {
     /// 返回新建的商品实体。
     ///
     /// # 错误
-    /// 当 product_no 为空或超长时返回错误。
+    /// 当 product_no、维护人或业务组织为空或超长时返回错误。
     pub fn new(id: ProductId, data: ProductData, created_by: impl Into<String>) -> Result<Self> {
         let product_no =
             normalize_required_text(data.product_no, "商品编号不能为空", PRODUCT_NO_MAX_LEN, "商品编号过长")?;
+        let maintainer_user_id =
+            normalize_required_text(data.maintainer_user_id, "商品维护人不能为空", 128, "商品维护人过长")?;
+        let business_org_unit_id = normalize_required_text(
+            data.business_org_unit_id,
+            "维护人缺少有效主属组织，请先维护组织成员关系",
+            128,
+            "商品业务组织过长",
+        )?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             stable: StableBase::new(data.status, created_by),
             product_no,
             product_kind: data.product_kind,
+            maintainer_user_id,
+            business_org_unit_id,
         })
     }
 
@@ -191,6 +214,63 @@ impl Product {
         }
         self.update(ProductUpdate { status: Some(EnableStatus::Disabled) }, updated_by)
     }
+
+    /// 判断商品是否已具备可查询、可交接的维护责任事实。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 维护人与业务组织均非空时返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 空维护人不得用创建人顶替；写命令须在交接前阻断。
+    pub fn has_responsibility(&self) -> bool {
+        !self.maintainer_user_id.trim().is_empty() && !self.business_org_unit_id.trim().is_empty()
+    }
+
+    /// 显式交接商品维护人与可选业务组织。
+    ///
+    /// 业务组织不随接收人部门隐式变化；`None` 表示保留原组织。
+    ///
+    /// # 参数
+    /// * `target_user_id` - 目标维护人
+    /// * `target_org_unit_id` - 显式目标组织；`None` 保留原组织
+    /// * `updated_by` - 本次交接执行人
+    ///
+    /// # 返回
+    /// 责任确有变化时返回 `true`。
+    ///
+    /// # 错误
+    /// 目标为空或与当前完全一致时拒绝。
+    ///
+    /// # 关键业务约束
+    /// 只改维护人与业务组织，不改创建人、SKU 或审批任务。
+    pub fn handover(
+        &mut self,
+        target_user_id: String,
+        target_org_unit_id: Option<String>,
+        updated_by: impl Into<String>,
+    ) -> Result<bool> {
+        let target = normalize_required_text(target_user_id, "目标维护人不能为空", 128, "目标维护人过长")?;
+        let next_org = match target_org_unit_id {
+            Some(org) => normalize_required_text(org, "目标业务组织不能为空", 128, "目标业务组织过长")?,
+            None => self.business_org_unit_id.clone(),
+        };
+        if next_org.is_empty() {
+            return Err("维护人缺少有效主属组织，请先维护组织成员关系".into());
+        }
+        if target == self.maintainer_user_id && next_org == self.business_org_unit_id {
+            return Err("目标已是当前维护人，无需交接".into());
+        }
+        self.maintainer_user_id = target;
+        self.business_org_unit_id = next_org;
+        self.stable.touch(updated_by);
+        Ok(true)
+    }
 }
 
 #[cfg(test)]
@@ -205,6 +285,8 @@ mod tests {
             product_no: " P-2025-001 ".to_string(),
             product_kind: ProductKind::Physical,
             status: EnableStatus::Active,
+            maintainer_user_id: "user-1".to_string(),
+            business_org_unit_id: "org-1".to_string(),
         }
     }
 
@@ -217,6 +299,9 @@ mod tests {
         assert_eq!(product.product_kind(), ProductKind::Physical);
         assert!(product.is_active());
         assert_eq!(product.stable.created_by, "admin-1");
+        assert_eq!(product.maintainer_user_id, "user-1");
+        assert_eq!(product.business_org_unit_id, "org-1");
+        assert!(product.has_responsibility());
     }
 
     /// 失败路径：必填空与超长各一条。
@@ -227,6 +312,58 @@ mod tests {
 
         let overlong = ProductData { product_no: "p".repeat(65), ..data() };
         assert!(Product::new(ProductId::new("prod-1"), overlong, "admin-1").is_err());
+    }
+
+    /// 创建缺维护人或主属组织必须阻断，不得用创建人兜底。
+    #[test]
+    fn new_rejects_missing_maintainer_and_org() {
+        let missing_owner = ProductData { maintainer_user_id: "  ".to_string(), ..data() };
+        assert!(Product::new(ProductId::new("prod-1"), missing_owner, "admin-1").is_err());
+        let missing_org = ProductData { business_org_unit_id: String::new(), ..data() };
+        assert!(Product::new(ProductId::new("prod-1"), missing_org, "admin-1").is_err());
+    }
+
+    /// 历史空维护人不得用创建人顶替，须通过显式交接补齐责任。
+    #[test]
+    fn handover_repairs_empty_responsibility_without_created_by() {
+        let mut product: Product = serde_json::from_value(serde_json::json!({
+            "id": "prod-legacy",
+            "created_at": 1,
+            "updated_at": 1,
+            "deleted_at": 0,
+            "version": 1,
+            "status": "active",
+            "current_revision_id": null,
+            "created_by": "admin-1",
+            "updated_by": "admin-1",
+            "product_no": "P-LEGACY",
+            "product_kind": "PHYSICAL",
+            "maintainer_user_id": "",
+            "business_org_unit_id": ""
+        }))
+        .unwrap();
+        assert!(!product.has_responsibility());
+        assert_eq!(product.stable.created_by, "admin-1");
+        assert!(product.handover("user-2".into(), None, "admin-2").is_err());
+        assert!(product.handover("user-2".into(), Some("org-2".into()), "admin-2").unwrap());
+        assert_eq!(product.maintainer_user_id, "user-2");
+        assert_eq!(product.business_org_unit_id, "org-2");
+        assert_ne!(product.maintainer_user_id, product.stable.created_by);
+        assert!(product.has_responsibility());
+    }
+
+    /// 交接推进维护人；省略组织时保留原业务组织，同人同组织拒绝。
+    #[test]
+    fn handover_updates_maintainer_and_optional_org() {
+        let mut product = Product::new(ProductId::new("prod-1"), data(), "admin-1").unwrap();
+        assert!(product.handover("user-2".into(), None, "admin-2").unwrap());
+        assert_eq!(product.maintainer_user_id, "user-2");
+        assert_eq!(product.business_org_unit_id, "org-1");
+        assert_eq!(product.stable.updated_by, "admin-2");
+        assert!(product.handover("user-2".into(), None, "admin-3").is_err());
+        assert!(product.handover("user-3".into(), Some("org-2".into()), "admin-4").unwrap());
+        assert_eq!(product.business_org_unit_id, "org-2");
+        assert!(product.handover("user-3".into(), Some("  ".into()), "admin-5").is_err());
     }
 
     /// update 只允许改状态：编号与商品类型保持不变。

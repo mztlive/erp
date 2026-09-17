@@ -58,6 +58,8 @@ export type ProductDto = {
     current_revision_id: string | null
     created_at: number
     version: number
+    maintainer_user_id?: string
+    business_org_unit_id?: string
 }
 
 export type ProductListingDto = {

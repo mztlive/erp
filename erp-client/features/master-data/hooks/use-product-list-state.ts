@@ -65,6 +65,10 @@ export function useProductListState(
         productSupplyCoverage: filters.productSupplyCoverage,
         productSalesPriceMin: filters.productSalesPriceMin,
         productSalesPriceMax: filters.productSalesPriceMax,
+        ownerUserIds: filters.ownerUserIds,
+        procurementOwnerUserIds: filters.procurementOwnerUserIds,
+        orgUnitIds: filters.orgUnitIds,
+        includeDescendants: filters.includeDescendants,
     })
     const productFilterOptionsQuery = useProductFilterOptionsQuery(true)
     const { exportMeta, handleExport } = useMasterDataListExport()
@@ -199,6 +203,24 @@ export function useProductListState(
                 label: `供应商：${selectedSupplierLabel}`,
             })
         }
+        if (filters.ownerUserIds) {
+            chips.push({
+                key: "ownerUserIds",
+                label: `维护人：${filters.ownerUserIds}`,
+            })
+        }
+        if (filters.procurementOwnerUserIds) {
+            chips.push({
+                key: "procurementOwnerUserIds",
+                label: `采购负责人：${filters.procurementOwnerUserIds}`,
+            })
+        }
+        if (filters.orgUnitIds) {
+            chips.push({
+                key: "orgUnitIds",
+                label: `业务组织：${filters.orgUnitIds}`,
+            })
+        }
         if (filters.productSalesPriceMin || filters.productSalesPriceMax) {
             const minimum = filters.productSalesPriceMin ?? "不限"
             const maximum = filters.productSalesPriceMax ?? "不限"
@@ -219,6 +241,9 @@ export function useProductListState(
         filters.productSupplyCoverage,
         filters.q,
         filters.revisionTiming,
+        filters.ownerUserIds,
+        filters.procurementOwnerUserIds,
+        filters.orgUnitIds,
         selectedBrandLabel,
         selectedCategoryLabel,
         selectedSupplierLabel,
@@ -303,6 +328,10 @@ export function useProductListState(
                 productSupplyCoverage: filters.productSupplyCoverage,
                 productSalesPriceMin: filters.productSalesPriceMin,
                 productSalesPriceMax: filters.productSalesPriceMax,
+                ownerUserIds: filters.ownerUserIds,
+                procurementOwnerUserIds: filters.procurementOwnerUserIds,
+                orgUnitIds: filters.orgUnitIds,
+                includeDescendants: filters.includeDescendants,
             },
             filterSnapshotLabel,
             resourceLabel("products"),

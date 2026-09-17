@@ -60,6 +60,18 @@ export function useProductListColumns({
         () => [
             stableNoColumn(),
             nameColumn({ showNumber: true }),
+            {
+                id: "maintainer",
+                header: "维护人",
+                meta: { label: "维护人" },
+                cell: ({ row }) => (
+                    <span className="text-sm">
+                        {row.original.ownerName ??
+                            row.original.ownerUserId ??
+                            "—"}
+                    </span>
+                ),
+            },
             revisionNoColumn(),
             lifecycleColumn(),
             {

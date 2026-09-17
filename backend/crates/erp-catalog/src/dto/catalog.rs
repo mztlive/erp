@@ -14,6 +14,7 @@ mod category;
 mod common;
 mod import;
 mod product;
+mod product_scope;
 mod voucher;
 
 pub use attribute::{
@@ -40,10 +41,13 @@ pub use import::{
     ProductImportItemView, ProductImportJobListParams, ProductImportJobView, ensure_product_import_headers,
 };
 pub use product::{
-    CreateProductRequest, DisableProductRequest, ProductListParams, ProductListingView, ProductMediaInput,
+    CreateProductRequest, DisableProductRequest, ProductListingView, ProductMediaInput,
     ProductRevisionListParams, ProductRevisionMediaView, ProductRevisionView, ProductSkuInput, ProductView,
     SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView, SpecEntryInput,
     UpdateProductListingRequest, UpdateProductRequest, UpdateSkuListingRequest,
+};
+pub use product_scope::{
+    HandoverCandidateView, HandoverProductRequest, HandoverProductView, ProductListParams, ProductListView,
 };
 pub use voucher::{
     CreateVoucherCategoryRequest, NewVoucherCategoryInput, UpdateVoucherCategoryRequest,
@@ -97,6 +101,8 @@ mod tests {
     #[test]
     fn product_params_normalize_filters_and_defaults() {
         let params: super::ProductListParams = serde_json::from_value(serde_json::json!({
+            "scope_version": "v1",
+            "owner_user_ids": "user-1,user-2",
             "product_no": " P-1 ",
             "keyword": " 礼盒 ",
             "product_kind": "PHYSICAL",
@@ -125,6 +131,10 @@ mod tests {
         assert_eq!(query.paging.page_size, 20);
         assert_eq!(query.paging.sort_by, "created_at");
         assert_eq!(query.paging.sort_dir, SortDir::Desc);
+        assert_eq!(query.owner_user_ids.unwrap().as_slice(), &["user-1".to_string(), "user-2".to_string()]);
+        assert!(
+            serde_json::from_value::<super::ProductListParams>(serde_json::json!({"owner": "张三"})).is_err()
+        );
     }
 
     #[test]

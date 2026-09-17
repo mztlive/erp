@@ -182,6 +182,9 @@ export function mapProductRow(
         selectorEligibility: [],
         ...commonActions("products", lifecycle),
         lockVersion: dto.version,
+        ownerUserId: dto.maintainer_user_id || undefined,
+        businessOrgUnitId: dto.business_org_unit_id || undefined,
+        ownerName: dto.maintainer_user_id || undefined,
         metricTags: [
             lifecycle === "ENABLED" ? "enabled" : "disabled",
             ...(future ? (["pending"] as const) : []),

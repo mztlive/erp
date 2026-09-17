@@ -65,6 +65,7 @@ const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     ("integration_error_task", &["list", "detail", "create"], &[ScopeDimension::InternalOrg]),
     ("reconciliation_difference", &["list", "detail", "create", "decide"], &[ScopeDimension::InternalOrg]),
     ("supplier", &["list", "detail", "create", "update", "delete"], &[ScopeDimension::InternalOrg]),
+    ("product", &["list", "detail", "create", "update"], &[ScopeDimension::InternalOrg]),
 ];
 
 /// 已接线消费者的资源动作登记。

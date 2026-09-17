@@ -125,6 +125,7 @@ impl ProductImportProcess {
             change_reason: Some(format!("产品报价表导入 第{}行", row.row_number)),
             product_no: row.product_no,
             product_kind: ProductKind::Physical,
+            maintainer_user_id: None,
             name: row.name.clone(),
             description: None,
             specification: row.specification,
@@ -151,8 +152,14 @@ impl ProductImportProcess {
                 spec_entries: row.spec_entries,
             }],
         };
-        let created =
-            crate::product_create_with_assets(self.db.clone(), request, media.pending, actor.clone()).await;
+        let created = crate::product_create_with_assets(
+            self.db.clone(),
+            self.rbac.clone(),
+            request,
+            media.pending,
+            actor.clone(),
+        )
+        .await;
         match created {
             Ok(view) => Ok(RowImportOutcome::new("商品已导入".into()).with_product_id(Some(view.id))),
             Err(Error::ConflictError(_)) => {

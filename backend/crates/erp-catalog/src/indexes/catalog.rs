@@ -150,6 +150,10 @@ fn product_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_products_product_no", doc! { "product_no": 1 }),
         named_index("idx_products_status_kind", doc! { "status": 1, "product_kind": 1 }),
+        named_index(
+            "idx_products_maintainer_org",
+            doc! { "maintainer_user_id": 1, "business_org_unit_id": 1, "created_at": -1, "id": 1 },
+        ),
     ]
 }
 

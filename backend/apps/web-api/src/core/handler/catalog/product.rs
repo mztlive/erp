@@ -8,7 +8,8 @@ use application_core::AuditActor;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::{Extension, Json};
 use erp_catalog::{
-    CreateProductRequest, CreateVoucherCategoryRequest, DisableProductRequest, PageView, ProductListParams,
+    CreateProductRequest, CreateVoucherCategoryRequest, DisableProductRequest, HandoverCandidateView,
+    HandoverProductRequest, HandoverProductView, PageView, ProductListParams, ProductListView,
     ProductListingView, ProductRevisionListParams, ProductRevisionView, ProductView, SellableSkuListParams,
     SellableSkuView, SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView,
     UpdateProductListingRequest, UpdateProductRequest, UpdateSkuListingRequest, UpdateVoucherCategoryRequest,
@@ -65,9 +66,10 @@ pub async fn sellable_sku_list(
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn product_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<ProductListParams>,
-) -> Result<PageView<ProductView>> {
-    let page = state.catalog_center().product_list(&params).await?;
+) -> Result<ProductListView> {
+    let page = state.catalog_center().product_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -116,7 +118,9 @@ pub async fn product_create_with_assets(
 ) -> Result<ProductView> {
     let (req, files) = extract_command_with_asset_files::<CreateProductRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
-    let result = erp_processes::product_create_with_assets(state.db(), req, pending.clone(), actor).await;
+    let result =
+        erp_processes::product_create_with_assets(state.db(), state.rbac(), req, pending.clone(), actor)
+            .await;
     match result {
         Ok(view) => Ok(ApiResponse::ok_with_data(view)),
         Err(error) => {
@@ -175,7 +179,9 @@ pub async fn product_update_with_assets(
 ) -> Result<ProductView> {
     let (req, files) = extract_command_with_asset_files::<UpdateProductRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
-    let result = erp_processes::product_update_with_assets(state.db(), id, req, pending.clone(), actor).await;
+    let result =
+        erp_processes::product_update_with_assets(state.db(), state.rbac(), id, req, pending.clone(), actor)
+            .await;
     match result {
         Ok(view) => Ok(ApiResponse::ok_with_data(view)),
         Err(error) => {
@@ -443,9 +449,65 @@ pub struct ProductDetailSkuRevisionQuery {
 ///
 /// # 返回
 /// 返回与列表同构的单个商品视图。
-pub async fn product_detail(State(state): State<AppState>, Path(id): Path<String>) -> Result<ProductView> {
-    let view = state.catalog_center().product_detail(&id).await?;
+pub async fn product_detail(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<ProductView> {
+    let view = state.catalog_center().product_detail(&id, &actor).await?;
 
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "交接商品维护人",
+    resource = "product",
+    action = "update"
+)]
+/// 显式交接商品维护人与可选业务组织。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 商品稳定 ID
+/// * `req` - 交接请求（目标、原因、版本与幂等键）
+///
+/// # 返回
+/// 返回交接后的维护人、组织与版本。
+pub async fn product_handover(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<HandoverProductRequest>,
+) -> Result<HandoverProductView> {
+    let view = erp_processes::handover_product(state.db(), state.rbac(), &id, req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "查询商品交接候选",
+    resource = "product",
+    action = "update"
+)]
+/// 查询合格有效的商品维护人交接候选。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 商品稳定 ID
+///
+/// # 返回
+/// 返回有效且具备 `product:update` 的账号。
+pub async fn product_handover_candidates(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<Vec<HandoverCandidateView>> {
+    let view = erp_processes::product_handover_candidates(state.db(), state.rbac(), &id, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 

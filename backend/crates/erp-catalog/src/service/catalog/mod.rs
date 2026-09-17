@@ -21,13 +21,18 @@ use std::sync::Arc;
 
 use mongodb::Database;
 
-use crate::ports::{CatalogAuditPort, FileAssetFactsPort};
+use crate::ports::{
+    CatalogAuditPort, CatalogDataScopePort, FailClosedCatalogDataScopePort, FileAssetFactsPort,
+};
 
+mod access;
 mod attribute;
 mod brand;
 mod category;
+mod handover;
 mod listing;
 mod product_detail;
+mod product_disable;
 mod product_query;
 mod product_workflow;
 mod sellable;
@@ -64,6 +69,7 @@ pub struct CatalogService {
     db: Database,
     audit: Arc<dyn CatalogAuditPort>,
     file_assets: Arc<dyn FileAssetFactsPort>,
+    data_scope: Arc<dyn CatalogDataScopePort>,
 }
 
 impl CatalogService {
@@ -75,15 +81,48 @@ impl CatalogService {
     /// * `file_assets` - 媒体/Logo 文件存在性端口
     ///
     /// # 返回
-    /// 返回服务实例。
+    /// 返回服务实例；范围 Port 缺省失败关闭。
     pub fn new(
         db: Database,
         audit: Arc<dyn CatalogAuditPort>,
         file_assets: Arc<dyn FileAssetFactsPort>,
     ) -> Self {
-        Self { db, audit, file_assets }
+        Self { db, audit, file_assets, data_scope: FailClosedCatalogDataScopePort::shared() }
+    }
+
+    /// 注入商品范围 Port。
+    ///
+    /// # 参数
+    /// * `data_scope` - 组合层装配的公共解析 adapter
+    ///
+    /// # 返回
+    /// 返回绑定范围 Port 的服务。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// HTTP 与写命令必须注入生产 adapter，不得保留失败关闭端口。
+    pub fn with_data_scope(mut self, data_scope: Arc<dyn CatalogDataScopePort>) -> Self {
+        self.data_scope = data_scope;
+        self
+    }
+
+    /// 构造本域范围访问器。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回绑定当前数据库与范围 Port 的访问器。
+    ///
+    /// # 错误
+    /// 无。
+    pub(crate) fn access(&self) -> CatalogAccess {
+        CatalogAccess::new(self.db.clone(), self.data_scope.clone())
     }
 }
 
+pub use access::{CatalogAccess, catalog_scope};
 pub use product_query::{prepare_product_list, product_page_view};
 pub use sellable::{prepare_sellable_sku_list, sellable_sku_page_view};

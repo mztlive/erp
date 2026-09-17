@@ -31,6 +31,9 @@ export type ProductFilterKey =
     | "productBrandId"
     | "productSupplierId"
     | "salesPrice"
+    | "ownerUserIds"
+    | "procurementOwnerUserIds"
+    | "orgUnitIds"
 
 /** 商品列表：搜索 + 类型 / 启停 / 版本 / 上架 / 供给 / 归属 / 售价。 */
 export function useProductListFilters(
@@ -72,6 +75,11 @@ export function useProductListFilters(
         searchParams.get("productSalesPriceMin")?.trim() || undefined
     const productSalesPriceMax =
         searchParams.get("productSalesPriceMax")?.trim() || undefined
+    const ownerUserIds = searchParams.get("ownerUserIds")?.trim() || undefined
+    const procurementOwnerUserIds =
+        searchParams.get("procurementOwnerUserIds")?.trim() || undefined
+    const orgUnitIds = searchParams.get("orgUnitIds")?.trim() || undefined
+    const includeDescendants = searchParams.get("includeDescendants") === "true"
     const metricKey = lifecycleStatus
     const hasStructuredProductFilters = Boolean(
         productKind ||
@@ -83,7 +91,11 @@ export function useProductListFilters(
         productListingStatus ||
         productSupplyCoverage ||
         productSalesPriceMin ||
-        productSalesPriceMax,
+        productSalesPriceMax ||
+        ownerUserIds ||
+        procurementOwnerUserIds ||
+        orgUnitIds ||
+        includeDescendants,
     )
 
     const [productFilterPanelOpen, setProductFilterPanelOpen] = React.useState(
@@ -118,6 +130,16 @@ export function useProductListFilters(
     const [productSalesPriceError, setProductSalesPriceError] = React.useState<
         string | null
     >(null)
+    const [ownerUserIdsDraft, setOwnerUserIdsDraft] = React.useState(
+        ownerUserIds ?? "",
+    )
+    const [procurementOwnerUserIdsDraft, setProcurementOwnerUserIdsDraft] =
+        React.useState(procurementOwnerUserIds ?? "")
+    const [orgUnitIdsDraft, setOrgUnitIdsDraft] = React.useState(
+        orgUnitIds ?? "",
+    )
+    const [includeDescendantsDraft, setIncludeDescendantsDraft] =
+        React.useState(includeDescendants)
 
     const commitSearch = React.useCallback(() => {
         const next = searchDraft.trim()
@@ -166,6 +188,11 @@ export function useProductListFilters(
             productSupplierId: productSupplierIdDraft,
             productSalesPriceMin: minimum || null,
             productSalesPriceMax: maximum || null,
+            ownerUserIds: ownerUserIdsDraft.trim() || null,
+            procurementOwnerUserIds:
+                procurementOwnerUserIdsDraft.trim() || null,
+            orgUnitIds: orgUnitIdsDraft.trim() || null,
+            includeDescendants: includeDescendantsDraft ? "true" : null,
             page: null,
         })
         resetPagination()
@@ -180,6 +207,10 @@ export function useProductListFilters(
         productSalesPriceMinDraft,
         productSupplierIdDraft,
         productSupplyCoverageDraft,
+        ownerUserIdsDraft,
+        procurementOwnerUserIdsDraft,
+        orgUnitIdsDraft,
+        includeDescendantsDraft,
         resetPagination,
         revisionTimingDraft,
         searchDraft,
@@ -205,6 +236,14 @@ export function useProductListFilters(
                 setProductSalesPriceMaxDraft("")
                 setProductSalesPriceError(null)
             }
+            if (key === "ownerUserIds") setOwnerUserIdsDraft("")
+            if (key === "procurementOwnerUserIds") {
+                setProcurementOwnerUserIdsDraft("")
+            }
+            if (key === "orgUnitIds") {
+                setOrgUnitIdsDraft("")
+                setIncludeDescendantsDraft(false)
+            }
             patchUrl(
                 key === "salesPrice"
                     ? {
@@ -212,7 +251,13 @@ export function useProductListFilters(
                           productSalesPriceMax: null,
                           page: null,
                       }
-                    : { [key]: null, page: null },
+                    : key === "orgUnitIds"
+                      ? {
+                            orgUnitIds: null,
+                            includeDescendants: null,
+                            page: null,
+                        }
+                      : { [key]: null, page: null },
             )
             resetPagination()
         },
@@ -229,6 +274,10 @@ export function useProductListFilters(
         setProductSalesPriceMinDraft("")
         setProductSalesPriceMaxDraft("")
         setProductSalesPriceError(null)
+        setOwnerUserIdsDraft("")
+        setProcurementOwnerUserIdsDraft("")
+        setOrgUnitIdsDraft("")
+        setIncludeDescendantsDraft(false)
     }, [])
 
     const hasPendingChanges =
@@ -241,7 +290,11 @@ export function useProductListFilters(
         productBrandIdDraft !== (productBrandId ?? null) ||
         productSupplierIdDraft !== (productSupplierId ?? null) ||
         productSalesPriceMinDraft.trim() !== (productSalesPriceMin ?? "") ||
-        productSalesPriceMaxDraft.trim() !== (productSalesPriceMax ?? "")
+        productSalesPriceMaxDraft.trim() !== (productSalesPriceMax ?? "") ||
+        ownerUserIdsDraft !== (ownerUserIds ?? "") ||
+        procurementOwnerUserIdsDraft !== (procurementOwnerUserIds ?? "") ||
+        orgUnitIdsDraft !== (orgUnitIds ?? "") ||
+        includeDescendantsDraft !== includeDescendants
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -255,6 +308,10 @@ export function useProductListFilters(
         setProductSalesPriceMinDraft("")
         setProductSalesPriceMaxDraft("")
         setProductSalesPriceError(null)
+        setOwnerUserIdsDraft("")
+        setProcurementOwnerUserIdsDraft("")
+        setOrgUnitIdsDraft("")
+        setIncludeDescendantsDraft(false)
         setProductFilterPanelOpen(false)
         patchUrl({
             q: null,
@@ -269,6 +326,10 @@ export function useProductListFilters(
             productSupplyCoverage: null,
             productSalesPriceMin: null,
             productSalesPriceMax: null,
+            ownerUserIds: null,
+            procurementOwnerUserIds: null,
+            orgUnitIds: null,
+            includeDescendants: null,
             page: null,
         })
         resetPagination()
@@ -285,6 +346,10 @@ export function useProductListFilters(
         setProductSalesPriceMinDraft(productSalesPriceMin ?? "")
         setProductSalesPriceMaxDraft(productSalesPriceMax ?? "")
         setProductSalesPriceError(null)
+        setOwnerUserIdsDraft(ownerUserIds ?? "")
+        setProcurementOwnerUserIdsDraft(procurementOwnerUserIds ?? "")
+        setOrgUnitIdsDraft(orgUnitIds ?? "")
+        setIncludeDescendantsDraft(includeDescendants)
     }, [
         lifecycleStatus,
         productBrandId,
@@ -295,6 +360,10 @@ export function useProductListFilters(
         productSalesPriceMin,
         productSupplierId,
         productSupplyCoverage,
+        ownerUserIds,
+        procurementOwnerUserIds,
+        orgUnitIds,
+        includeDescendants,
         revisionTiming,
     ])
 
@@ -310,6 +379,10 @@ export function useProductListFilters(
         productSupplyCoverage,
         productSalesPriceMin,
         productSalesPriceMax,
+        ownerUserIds,
+        procurementOwnerUserIds,
+        orgUnitIds,
+        includeDescendants,
         metricKey,
         hasStructuredProductFilters,
         searchDraft,
@@ -336,6 +409,14 @@ export function useProductListFilters(
         setProductSalesPriceMaxDraft,
         productSalesPriceError,
         setProductSalesPriceError,
+        ownerUserIdsDraft,
+        setOwnerUserIdsDraft,
+        procurementOwnerUserIdsDraft,
+        setProcurementOwnerUserIdsDraft,
+        orgUnitIdsDraft,
+        setOrgUnitIdsDraft,
+        includeDescendantsDraft,
+        setIncludeDescendantsDraft,
         hasPendingChanges,
         pagination,
         setPagination,

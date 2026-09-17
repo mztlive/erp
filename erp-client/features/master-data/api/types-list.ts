@@ -50,6 +50,8 @@ export type MasterDataListItem = Readonly<{
     actionBlockers: readonly ActionBlocker[]
     lockVersion: number
     ownerName?: string
+    ownerUserId?: string
+    businessOrgUnitId?: string
     /** 仓库专用：新履约任务的收发责任配置。 */
     warehouseFulfillmentHandlers?: Readonly<{
         inboundUserId?: string
@@ -128,6 +130,10 @@ export type MasterDataListQuery = Readonly<{
     productSupplyCoverage?: ProductSkuCoverageFilter
     productSalesPriceMin?: string
     productSalesPriceMax?: string
+    ownerUserIds?: string
+    procurementOwnerUserIds?: string
+    orgUnitIds?: string
+    includeDescendants?: boolean
     supplierCapabilityCodes?: readonly string[]
     supplierQualificationTypes?: readonly string[]
     supplierQualificationHealth?: SupplierQualificationHealth
@@ -147,15 +153,16 @@ export type MasterDataListResult = Readonly<{
     effectiveAsOf: string
     eligibilityAsOf: string
     queriedAt: string
+    emptyReason?: "no_scope" | string | null
+    ownerOptions?: ReadonlyArray<{ value: string; label: string }>
+    capabilityOwnerOptions?: ReadonlyArray<{ value: string; label: string }>
+    procurementOwnerOptions?: ReadonlyArray<{ value: string; label: string }>
     metrics: readonly {
         key: string
         label: string
         value: number
         detail?: string
     }[]
-    emptyReason?: "no_scope" | null
-    ownerOptions?: readonly { value: string; label: string }[]
-    capabilityOwnerOptions?: readonly { value: string; label: string }[]
 }>
 
 /** 商品列表的当前启用 SKU 摘要；销售价来自 SKU 当前修订。 */

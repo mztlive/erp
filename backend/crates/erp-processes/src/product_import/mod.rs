@@ -14,6 +14,7 @@ mod row_manifest;
 mod submit;
 mod views;
 
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 use storage::S3Storage;
 
@@ -21,6 +22,7 @@ use storage::S3Storage;
 #[derive(Clone)]
 pub struct ProductImportProcess {
     db: Database,
+    rbac: SharedRbacService,
     storage: S3Storage,
     secret: Vec<u8>,
 }
@@ -38,7 +40,12 @@ impl ProductImportProcess {
     ///
     /// # 错误
     /// 无。
-    pub fn new(db: Database, storage: S3Storage, secret: impl Into<Vec<u8>>) -> Self {
-        Self { db, storage, secret: secret.into() }
+    pub fn new(
+        db: Database,
+        rbac: SharedRbacService,
+        storage: S3Storage,
+        secret: impl Into<Vec<u8>>,
+    ) -> Self {
+        Self { db, rbac, storage, secret: secret.into() }
     }
 }

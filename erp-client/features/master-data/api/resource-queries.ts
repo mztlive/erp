@@ -45,7 +45,10 @@ function wrapListResult(
     rows: MasterDataListItem[],
     extra: Pick<
         MasterDataListResult,
-        "emptyReason" | "ownerOptions" | "capabilityOwnerOptions"
+        | "emptyReason"
+        | "ownerOptions"
+        | "capabilityOwnerOptions"
+        | "procurementOwnerOptions"
     > = {},
 ): MasterDataListResult {
     const now = isoNow()
@@ -71,7 +74,10 @@ export async function fetchMasterDataList(
     let rows: MasterDataListItem[]
     let extra: Pick<
         MasterDataListResult,
-        "emptyReason" | "ownerOptions" | "capabilityOwnerOptions"
+        | "emptyReason"
+        | "ownerOptions"
+        | "capabilityOwnerOptions"
+        | "procurementOwnerOptions"
     > = {}
     switch (query.resource) {
         case "categories":
@@ -83,9 +89,16 @@ export async function fetchMasterDataList(
         case "unit-of-measures":
             rows = await listUnitOfMeasures(query)
             break
-        case "products":
-            rows = await listProducts(query)
+        case "products": {
+            const page = await listProducts(query)
+            rows = page.rows
+            extra = {
+                emptyReason: page.emptyReason,
+                ownerOptions: page.ownerOptions,
+                procurementOwnerOptions: page.procurementOwnerOptions,
+            }
             break
+        }
         case "sellable-items":
             rows = await listSellableItems(query)
             break

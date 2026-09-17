@@ -66,6 +66,7 @@ impl ProductImportProcess {
         let request = self.append_sku_request(&product, &row, &skus, media).await?;
         match crate::product_update_with_assets(
             self.db.clone(),
+            self.rbac.clone(),
             product.base.id.clone(),
             request,
             pending,

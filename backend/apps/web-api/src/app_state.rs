@@ -398,7 +398,12 @@ impl AppState {
 
     /// 商品列表和销售资格共用同一查询提供方实现。
     pub fn catalog_center(&self) -> erp_read_models::catalog_center::CatalogCenterReadService {
-        erp_read_models::catalog_center::CatalogCenterReadService::new(Arc::clone(&self.catalog_supply_query))
+        erp_read_models::catalog_center::CatalogCenterReadService::new(
+            self.db(),
+            Arc::clone(&self.catalog_supply_query),
+            erp_processes::adapters::MongoCatalogDataScope::shared(self.db(), self.rbac()),
+            erp_read_models::catalog_center::MongoProductProcurementOwners::shared(self.db()),
+        )
     }
 
     /// 返回保留意图提交与外部调用分离的供应商连接执行入口。
@@ -548,7 +553,7 @@ impl AppState {
 
     /// Catalog domain service with audit and file-asset adapters.
     pub fn catalog_service(&self) -> erp_catalog::CatalogService {
-        erp_processes::adapters::catalog_service(self.db())
+        erp_processes::adapters::scoped_catalog_service(self.db(), self.rbac())
     }
 
     /// 产品报价表异步导入流程。
@@ -561,6 +566,7 @@ impl AppState {
     pub fn product_import_process(&self) -> erp_processes::ProductImportProcess {
         erp_processes::ProductImportProcess::new(
             self.db(),
+            self.rbac(),
             self.storage().clone(),
             self.config_snapshot().app.secret.as_bytes(),
         )

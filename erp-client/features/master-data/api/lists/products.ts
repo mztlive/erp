@@ -20,18 +20,22 @@ import type {
     ProductListSkuSummary,
     ProductListingStatus,
 } from "@/features/master-data/types"
+import { fetchCompleteList } from "@/lib/collect-pages"
 import { fetchAllPages } from "./fetch-all"
 
-export async function listProducts(
-    query: MasterDataListQuery,
-): Promise<MasterDataListItem[]> {
+export async function listProducts(query: MasterDataListQuery): Promise<{
+    rows: MasterDataListItem[]
+    emptyReason?: string | null
+    ownerOptions: ReadonlyArray<{ value: string; label: string }>
+    procurementOwnerOptions: ReadonlyArray<{ value: string; label: string }>
+}> {
     const status =
         query.lifecycleStatus === "enabled"
             ? "active"
             : query.lifecycleStatus === "disabled"
               ? "disabled"
               : undefined
-    const products = await fetchAllPages<ProductDto>("/admin/products", {
+    const page = await fetchCompleteList<ProductDto>("/admin/products", {
         status,
         keyword: query.q || undefined,
         product_kind: query.productKind,
@@ -42,8 +46,17 @@ export async function listProducts(
         supply_coverage: query.productSupplyCoverage,
         sales_price_min: query.productSalesPriceMin,
         sales_price_max: query.productSalesPriceMax,
+        owner_user_ids: query.ownerUserIds || undefined,
+        procurement_owner_user_ids: query.procurementOwnerUserIds || undefined,
+        org_unit_ids: query.orgUnitIds || undefined,
+        include_descendants: query.includeDescendants || undefined,
     })
-    return products.map((product) => mapProductRow(product))
+    return {
+        rows: page.items.map((product) => mapProductRow(product)),
+        emptyReason: page.empty_reason,
+        ownerOptions: page.owner_options ?? [],
+        procurementOwnerOptions: page.procurement_owner_options ?? [],
+    }
 }
 
 /** 读取商品筛选使用的启用分类、品牌与供应商选项。 */

@@ -39,6 +39,8 @@ fn test_product(id: &str, revision_id: Option<&str>) -> Product {
             product_no: format!("P-{id}"),
             product_kind: erp_catalog::ProductKind::Physical,
             status: EnableStatus::Active,
+            maintainer_user_id: "user-1".into(),
+            business_org_unit_id: "org-1".into(),
         },
         "test",
     )

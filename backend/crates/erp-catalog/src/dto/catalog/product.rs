@@ -7,11 +7,10 @@ use erp_core::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::common::{PageParams, non_blank, normalize_sort, validate_sales_price_range};
+use super::common::{PageParams, non_blank, normalize_sort};
 use crate::entity::catalog::product_revision_media::MediaRole;
 use crate::entity::catalog::{
-    EnableStatus, ListingStatus, ProductKind, ProductListingStatus, ProductRevision, Sku, SkuCoverageStatus,
-    SkuRevision,
+    EnableStatus, ListingStatus, ProductKind, ProductListingStatus, ProductRevision, Sku, SkuRevision,
 };
 use crate::error::Result;
 
@@ -99,6 +98,9 @@ pub struct CreateProductRequest {
     pub product_no: String,
     /// 商品业务类型（独立必填稳定属性，创建后不可变）。
     pub product_kind: ProductKind,
+    /// 商品维护人；缺省为操作人。禁止用创建人字段兜底。
+    #[serde(default)]
+    pub maintainer_user_id: Option<String>,
     /// 公司审核后的商品名称。
     #[validate(custom(function = "non_blank", message = "商品名称不能为空"))]
     pub name: String,
@@ -217,6 +219,12 @@ pub struct ProductView {
     pub created_at: u64,
     /// 乐观锁版本。
     pub version: u64,
+    /// 当前维护人。
+    #[serde(default)]
+    pub maintainer_user_id: String,
+    /// 当前业务组织。
+    #[serde(default)]
+    pub business_org_unit_id: String,
 }
 
 /// SPU 下全部当前启用 SKU 的上/下架请求。
@@ -291,107 +299,6 @@ impl ProductListingView {
         self.listed_sku_count = listed_sku_count;
         self.sku_count = sku_count;
         self
-    }
-}
-
-/// 商品列表查询参数。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct ProductListParams {
-    /// 商品编号字面量筛选（忽略大小写）。
-    pub product_no: Option<String>,
-    /// 商品与 SKU 统一关键字（商品编号/名称、SKU 编号/名称/规格/条码）。
-    pub keyword: Option<String>,
-    /// 商品业务类型筛选。
-    pub product_kind: Option<ProductKind>,
-    /// 当前商品分类筛选。
-    pub category_id: Option<String>,
-    /// 当前商品品牌筛选。
-    pub brand_id: Option<String>,
-    /// 当前启用 SKU 的有效供给供应商筛选。
-    pub supplier_id: Option<String>,
-    /// 启停状态筛选。
-    pub status: Option<EnableStatus>,
-    /// 从当前启用 SKU 继承的上架状态筛选。
-    pub listing_status: Option<ProductListingStatus>,
-    /// 当前启用 SKU 的有效供给覆盖状态。
-    pub supply_coverage: Option<SkuCoverageStatus>,
-    /// 当前启用 SKU 销售价下限（含）。
-    pub sales_price_min: Option<Amount>,
-    /// 当前启用 SKU 销售价上限（含）。
-    pub sales_price_max: Option<Amount>,
-    /// 页码（1 起）。
-    #[validate(range(min = 1, message = "页码必须大于0"))]
-    pub page: Option<u64>,
-    /// 单页条数（1–100）。
-    #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
-    pub page_size: Option<u32>,
-    /// 排序字段（白名单：`created_at`/`product_no`）。
-    pub sort_by: Option<String>,
-    /// 排序方向（`asc`/`desc`）。
-    pub sort_dir: Option<String>,
-}
-
-/// 归一化后的商品列表查询参数。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ProductListQuery {
-    /// 商品编号筛选。
-    pub product_no: Option<String>,
-    /// 商品与 SKU 统一关键字。
-    pub keyword: Option<String>,
-    /// 商品业务类型筛选。
-    pub product_kind: Option<ProductKind>,
-    /// 当前商品分类筛选。
-    pub category_id: Option<String>,
-    /// 当前商品品牌筛选。
-    pub brand_id: Option<String>,
-    /// 有效供给供应商筛选。
-    pub supplier_id: Option<String>,
-    /// 启停状态筛选。
-    pub status: Option<EnableStatus>,
-    /// SKU 继承上架状态筛选。
-    pub listing_status: Option<ProductListingStatus>,
-    /// 有效供给覆盖筛选。
-    pub supply_coverage: Option<SkuCoverageStatus>,
-    /// 销售价下限（含）。
-    pub sales_price_min: Option<Amount>,
-    /// 销售价上限（含）。
-    pub sales_price_max: Option<Amount>,
-    /// 分页与排序参数。
-    pub paging: PageParams,
-}
-
-impl ProductListParams {
-    /// 归一化商品列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-    pub(crate) fn normalized(&self) -> Result<ProductListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, PRODUCT_SORT_FIELDS)?;
-        validate_sales_price_range(self.sales_price_min, self.sales_price_max)?;
-        Ok(ProductListQuery {
-            product_no: normalized_text(self.product_no.as_deref()),
-            keyword: normalized_text(self.keyword.as_deref()),
-            product_kind: self.product_kind,
-            category_id: normalized_text(self.category_id.as_deref()),
-            brand_id: normalized_text(self.brand_id.as_deref()),
-            supplier_id: normalized_text(self.supplier_id.as_deref()),
-            status: self.status,
-            listing_status: self.listing_status,
-            supply_coverage: self.supply_coverage,
-            sales_price_min: self.sales_price_min,
-            sales_price_max: self.sales_price_max,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
-        })
     }
 }
 

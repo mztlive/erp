@@ -7,6 +7,8 @@ import {
     FixedOptionRadioFilter,
     OptionCombobox,
 } from "@/components/business"
+import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
@@ -33,6 +35,9 @@ const MORE_CHIP_KEYS = [
     "productBrandId",
     "productSupplierId",
     "salesPrice",
+    "ownerUserIds",
+    "procurementOwnerUserIds",
+    "orgUnitIds",
 ] as const
 
 export function ProductListToolbar({
@@ -41,6 +46,8 @@ export function ProductListToolbar({
     filters: f,
     appliedChips,
     productFilterOptionsQuery,
+    ownerOptions,
+    procurementOwnerOptions,
     resultCount,
     loading,
     failed,
@@ -50,6 +57,8 @@ export function ProductListToolbar({
     filters: ReturnType<typeof useProductListFilters>
     appliedChips: readonly ProductAppliedChip[]
     productFilterOptionsQuery: ReturnType<typeof useProductFilterOptionsQuery>
+    ownerOptions: ReadonlyArray<{ value: string; label: string }>
+    procurementOwnerOptions: ReadonlyArray<{ value: string; label: string }>
     resultCount?: number
     loading: boolean
     failed: boolean
@@ -125,6 +134,49 @@ export function ProductListToolbar({
             }
             morePanel={
                 <div className="grid min-w-0 gap-5">
+                    <ResponsibleUserFilter
+                        id={`${prefix}-owner`}
+                        label="维护人"
+                        value={f.ownerUserIdsDraft}
+                        onChange={f.setOwnerUserIdsDraft}
+                        options={ownerOptions}
+                    />
+                    <ResponsibleUserFilter
+                        id={`${prefix}-procurement-owner`}
+                        label="采购负责人"
+                        value={f.procurementOwnerUserIdsDraft}
+                        onChange={f.setProcurementOwnerUserIdsDraft}
+                        options={procurementOwnerOptions}
+                    />
+                    <ListWorkspaceFilterField
+                        htmlFor={`${prefix}-org`}
+                        label="业务组织"
+                    >
+                        <Input
+                            id={`${prefix}-org`}
+                            value={f.orgUnitIdsDraft}
+                            onChange={(event) =>
+                                f.setOrgUnitIdsDraft(event.target.value)
+                            }
+                            placeholder="组织 ID，逗号分隔"
+                            aria-label="按商品业务组织筛选"
+                        />
+                        <label
+                            htmlFor={`${prefix}-org-descendants`}
+                            className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                        >
+                            <Checkbox
+                                id={`${prefix}-org-descendants`}
+                                checked={f.includeDescendantsDraft}
+                                onCheckedChange={(checked) =>
+                                    f.setIncludeDescendantsDraft(
+                                        checked === true,
+                                    )
+                                }
+                            />
+                            包含下级组织
+                        </label>
+                    </ListWorkspaceFilterField>
                     <fieldset className="min-w-0">
                         <legend className="mb-3 text-xs font-medium">
                             状态

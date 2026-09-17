@@ -52,6 +52,7 @@ pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[
     ("integration_error_task", &["list", "detail", "create"]),
     ("reconciliation_difference", &["list", "detail", "create", "decide"]),
     ("supplier", &["list", "detail", "create", "update", "delete"]),
+    ("product", &["list", "detail", "create", "update"]),
 ];
 
 /// 首次初始化显式岗位清单；没有条目的岗位不获得兜底范围。

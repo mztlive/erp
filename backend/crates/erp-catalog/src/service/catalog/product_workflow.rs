@@ -12,8 +12,7 @@ use super::sku_edit::{
     NewSkuContext, SkuEditItem, existing_sku_edit_identity, map_sku_edit_error, specification_signature_for,
 };
 use crate::dto::{
-    CreateProductRequest, DisableProductRequest, ProductMediaInput, ProductSkuInput, ProductView,
-    UpdateProductRequest,
+    CreateProductRequest, ProductMediaInput, ProductSkuInput, ProductView, UpdateProductRequest,
 };
 use crate::entity::catalog::product::{Product, ProductData};
 use crate::entity::catalog::product_revision::{ProductRevision, ProductRevisionData};
@@ -171,92 +170,14 @@ impl CatalogService {
             &pending_assets,
         )?;
         pending_assets.ensure_all_used(&used)?;
-        let mut product = self.load_product(id).await?;
+        let mut product = self.access().require_product(actor, "update", id, &mut NoTransaction).await?;
+        if !product.has_responsibility() {
+            return Err(Error::BusinessLogicError("商品缺少维护人或主属组织，请先交接".into()));
+        }
         ensure_product_version(&product, req.version)?;
         let plan = self.build_spec_edit_plan(&mut product, req, actor, &pending_assets).await?;
         let product = self.write_spec_edit_plan(plan, actor, pending_assets).await?;
         self.product_view(product).await
-    }
-
-    /// 停用商品并生成一份服务端派生的不可变商品修订。
-    ///
-    /// 客户端只提交商品身份、已见版本、原因和生效日。服务端在同一事务内
-    /// 读取当前商品及修订、复制当前媒体、写入停用修订、更新稳定主表并记录
-    /// 审计，避免客户端为拼装完整更新请求而发起额外读取。
-    ///
-    /// # 参数
-    /// * `id` - 商品稳定 ID
-    /// * `req` - 停用命令
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回停用后的商品视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 商品或当前修订不存在
-    /// * `ConflictError` - 页面版本已过期或并发写入冲突
-    /// * `BusinessLogicError` - 商品已经停用
-    pub async fn product_disable(
-        &self,
-        id: &str,
-        req: DisableProductRequest,
-        actor: &AuditActor,
-    ) -> Result<ProductView> {
-        req.validate()?;
-        let audit = self.audit.resource_log_with_message(
-            actor.clone(),
-            "product.disable",
-            "product",
-            id.to_string(),
-            req.change_reason.clone(),
-        )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let id = id.to_string();
-        let actor_id = actor.id().to_string();
-        let updated = client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    let snapshot = db
-                        .catalog()
-                        .product_disable_snapshot(&id, session)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("商品不存在".to_string()))?;
-                    let mut product = snapshot.product;
-                    ensure_product_version(&product, req.version)?;
-                    product
-                        .disable(&actor_id)
-                        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-                    let revision_no = next_revision_no(snapshot.latest_revision_no)?;
-                    let current_revision = snapshot
-                        .current_revision
-                        .ok_or_else(|| Error::NotFound("商品当前修订不存在".to_string()))?;
-                    let revision = current_revision.disabled_successor(
-                        ProductRevisionId::new(next_id()),
-                        revision_no,
-                        req.effective_from,
-                    )?;
-                    let media = snapshot
-                        .media
-                        .iter()
-                        .map(|row| {
-                            row.copy_to_revision(
-                                ProductRevisionMediaId::new(next_id()),
-                                ProductRevisionId::new(revision.base.id.clone()),
-                            )
-                        })
-                        .collect::<std::result::Result<Vec<_>, _>>()?;
-                    product.attach_revision(&revision, &actor_id)?;
-                    db.products().update(&mut product, session).await?;
-                    db.catalog().create_product_revision_with_media(&revision, &media, session).await?;
-                    audit_port.persist(&audit, session).await?;
-                    Ok::<Product, crate::error::Error>(product)
-                })
-            })
-            .await?;
-
-        self.product_view(updated).await
     }
 
     /// 构造商品创建草稿（全部 ID 预生成，事务外完成全部业务校验）。
@@ -287,38 +208,23 @@ impl CatalogService {
         let product_id = ProductId::new(next_id());
         let revision_id = ProductRevisionId::new(next_id());
         let status = req.status.unwrap_or(EnableStatus::Active);
+        let media = self.build_spu_media(&revision_id, &req, pending_assets).await?;
+        let (maintainer_user_id, business_org_unit_id) =
+            self.bind_create_maintainer(req.maintainer_user_id.as_deref(), actor).await?;
         let product = Product::new(
             product_id.clone(),
-            ProductData { product_no: req.product_no, product_kind: req.product_kind, status },
+            ProductData {
+                product_no: req.product_no,
+                product_kind: req.product_kind,
+                status,
+                maintainer_user_id,
+                business_org_unit_id,
+            },
             actor.id(),
         )?;
-        let media = self
-            .build_media_rows(&revision_id, &req.carousel_media, MediaRole::Carousel, pending_assets)
-            .await?
-            .into_iter()
-            .chain(
-                self.build_media_rows(&revision_id, &req.detail_media, MediaRole::Detail, pending_assets)
-                    .await?,
-            )
-            .collect::<Vec<_>>();
-        let mut sku_items = Vec::with_capacity(req.skus.len());
-        let mut signatures = SpecificationSignatureSet::new();
-        for sku_input in req.skus {
-            let signature = specification_signature_for(&sku_input.spec_entries)?;
-            signatures.register_signature(signature)?;
-            let item = self
-                .build_new_sku_item(
-                    NewSkuContext {
-                        product_id: &product_id,
-                        effective_from: req.effective_from,
-                        effective_to: req.effective_to,
-                        created_by: actor.id(),
-                    },
-                    sku_input,
-                )
-                .await?;
-            sku_items.push(item);
-        }
+        let sku_items = self
+            .build_create_sku_items(&product_id, req.effective_from, req.effective_to, actor.id(), req.skus)
+            .await?;
         let mut product = product;
         let revision = ProductRevision::new(
             revision_id.clone(),
@@ -337,6 +243,69 @@ impl CatalogService {
         )?;
         product.attach_revision(&revision, actor.id())?;
         Ok(ProductDraft { change_reason: req.change_reason, product, revision, media, sku_items })
+    }
+
+    /// 构造 SPU 轮播图与详情图媒体行。
+    ///
+    /// # 参数
+    /// * `revision_id` - 所属商品修订
+    /// * `req` - 创建请求中的媒体输入
+    /// * `pending_assets` - 本次命令携带的临时文件
+    ///
+    /// # 返回
+    /// 返回轮播图与详情图拼接后的媒体行。
+    ///
+    /// # 错误
+    /// 媒体文件不存在或同用途顺序重复时拒绝。
+    async fn build_spu_media(
+        &self,
+        revision_id: &ProductRevisionId,
+        req: &CreateProductRequest,
+        pending_assets: &dyn PendingAttachmentBatch,
+    ) -> Result<Vec<ProductRevisionMedia>> {
+        let carousel = self
+            .build_media_rows(revision_id, &req.carousel_media, MediaRole::Carousel, pending_assets)
+            .await?;
+        let detail =
+            self.build_media_rows(revision_id, &req.detail_media, MediaRole::Detail, pending_assets).await?;
+        Ok(carousel.into_iter().chain(detail).collect())
+    }
+
+    /// 构造创建草稿中的 SKU 行并登记规格签名。
+    ///
+    /// # 参数
+    /// * `product_id` - 所属商品
+    /// * `effective_from` / `effective_to` - 生效区间
+    /// * `created_by` - 创建人
+    /// * `skus` - SKU 输入行
+    ///
+    /// # 返回
+    /// 返回待写入的 SKU 编辑项。
+    ///
+    /// # 错误
+    /// 规格签名冲突或 SKU 实体校验失败时拒绝。
+    async fn build_create_sku_items(
+        &self,
+        product_id: &ProductId,
+        effective_from: BusinessDate,
+        effective_to: Option<BusinessDate>,
+        created_by: &str,
+        skus: Vec<ProductSkuInput>,
+    ) -> Result<Vec<SkuEditItem>> {
+        let mut sku_items = Vec::with_capacity(skus.len());
+        let mut signatures = SpecificationSignatureSet::new();
+        for sku_input in skus {
+            let signature = specification_signature_for(&sku_input.spec_entries)?;
+            signatures.register_signature(signature)?;
+            sku_items.push(
+                self.build_new_sku_item(
+                    NewSkuContext { product_id, effective_from, effective_to, created_by },
+                    sku_input,
+                )
+                .await?,
+            );
+        }
+        Ok(sku_items)
     }
 
     /// 校验商品创建/编辑引用的字典（分类/品牌/基础单位）与分类-商品类型兼容性。
@@ -464,9 +433,20 @@ impl CatalogService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
+        let access = self.access();
+        let actor = actor.clone();
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    access
+                        .ensure_writable(
+                            &actor,
+                            "create",
+                            &product.maintainer_user_id,
+                            &product.business_org_unit_id,
+                            session,
+                        )
+                        .await?;
                     pending_assets.persist(&db, session).await?;
                     db.products().create(&product, session).await?;
                     db.catalog().create_product_revision_with_media(&revision, &media, session).await?;
@@ -628,9 +608,20 @@ impl CatalogService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
+        let access = self.access();
+        let actor = actor.clone();
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    access
+                        .ensure_writable(
+                            &actor,
+                            "update",
+                            &product.maintainer_user_id,
+                            &product.business_org_unit_id,
+                            session,
+                        )
+                        .await?;
                     pending_assets.persist(&db, session).await?;
                     db.products().update(&mut product, session).await?;
                     db.catalog().create_product_revision_with_media(&revision, &media, session).await?;

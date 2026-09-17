@@ -11,15 +11,16 @@ pub mod service;
 pub use dto::{
     CreateProductBrandRequest, CreateProductCategoryRequest, CreateProductRequest, CreateSkuAttributeRequest,
     CreateSkuAttributeValueRequest, CreateUnitOfMeasureRequest, CreateVoucherCategoryRequest,
-    DisableProductRequest, MAX_PRODUCT_IMPORT_FILE_BYTES, MoveProductCategoryRequest,
-    NewVoucherCategoryInput, PRODUCT_IMPORT_DIRECT_PART_BYTES, PRODUCT_IMPORT_DIRECT_PART_URL_TTL_SECS,
-    PRODUCT_IMPORT_HEADERS, PRODUCT_IMPORT_NAME_COLUMN, PRODUCT_IMPORT_SHEET_NAME, PRODUCT_IMPORT_UNIT_CODE,
+    DisableProductRequest, HandoverCandidateView, HandoverProductRequest, HandoverProductView,
+    MAX_PRODUCT_IMPORT_FILE_BYTES, MoveProductCategoryRequest, NewVoucherCategoryInput,
+    PRODUCT_IMPORT_DIRECT_PART_BYTES, PRODUCT_IMPORT_DIRECT_PART_URL_TTL_SECS, PRODUCT_IMPORT_HEADERS,
+    PRODUCT_IMPORT_NAME_COLUMN, PRODUCT_IMPORT_SHEET_NAME, PRODUCT_IMPORT_UNIT_CODE,
     PRODUCT_IMPORT_UNIT_NAME, PRODUCT_IMPORT_XLSX_MIME, PageView, ProductBrandListParams, ProductBrandView,
     ProductCategoryListParams, ProductCategoryParentChange, ProductCategoryView,
     ProductImportDirectUploadCompleteRequest, ProductImportDirectUploadInitRequest,
     ProductImportDirectUploadInitView, ProductImportDirectUploadPartView, ProductImportDirectUploadedPart,
     ProductImportItemListParams, ProductImportItemView, ProductImportJobListParams, ProductImportJobView,
-    ProductListParams, ProductListingView, ProductMediaInput, ProductRevisionListParams,
+    ProductListParams, ProductListView, ProductListingView, ProductMediaInput, ProductRevisionListParams,
     ProductRevisionMediaView, ProductRevisionView, ProductSkuInput, ProductView, SkuAttributeListParams,
     SkuAttributeValueListParams, SkuAttributeValueView, SkuAttributeView, SkuListParams,
     SkuRevisionListParams, SkuRevisionView, SkuView, SpecEntryInput, UnitOfMeasureListParams,
@@ -36,14 +37,16 @@ pub use entity::catalog::{
 };
 pub use error::{Error, Result};
 pub use ports::{
-    CatalogAuditPort, EmptyFileAssetFacts, EmptyPendingAttachments, FailClosedAuditPort, FileAssetFact,
-    FileAssetFactsPort, PendingAttachmentBatch, PreparedCatalogAudit,
+    CatalogAuditPort, CatalogDataScopePort, CatalogResolvedClause, CatalogResolvedScope, CatalogScopeObject,
+    EmptyFileAssetFacts, EmptyPendingAttachments, FailClosedAuditPort, FailClosedCatalogDataScopePort,
+    FileAssetFact, FileAssetFactsPort, PendingAttachmentBatch, PreparedCatalogAudit,
 };
 pub use repository::{
-    CatalogExt, CatalogRepository, ProductBrandRepository, ProductCategoryRepository, ProductRepository,
-    SellableSkuFilter, SkuRepository, UnitOfMeasureRepository,
+    CatalogExt, CatalogReadScope, CatalogRepository, CatalogScopeClause, ProductBrandRepository,
+    ProductCategoryRepository, ProductFilter, ProductRepository, ProductRow, SellableSkuFilter,
+    SkuRepository, UnitOfMeasureRepository,
 };
 pub use service::{
-    CatalogService, SellableSkuListParams, SellableSkuSpecificationAttributeView, SellableSkuView,
-    sellable_sku_invalid_error,
+    CatalogAccess, CatalogService, SellableSkuListParams, SellableSkuSpecificationAttributeView,
+    SellableSkuView, catalog_scope, sellable_sku_invalid_error,
 };

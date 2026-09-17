@@ -12,6 +12,8 @@ const ENVELOPE_KEYS = [
     "ownership_basis",
 ] as const
 
+type FilterOption = { value: string; label: string }
+
 type ListEnvelope = {
     empty_reason?: string | null
     scope_version?: string
@@ -20,8 +22,9 @@ type ListEnvelope = {
     as_of?: string
     scope_summary?: string
     ownership_basis?: string
-    owner_options?: { value: string; label: string }[]
-    capability_owner_options?: { value: string; label: string }[]
+    owner_options?: FilterOption[]
+    capability_owner_options?: FilterOption[]
+    procurement_owner_options?: FilterOption[]
 }
 
 type CompletePage<T> = Page<T> & ListEnvelope
@@ -52,6 +55,10 @@ function takeEnvelope(
     next.capability_owner_options = mergeOptions(
         seen.capability_owner_options,
         page.capability_owner_options,
+    )
+    next.procurement_owner_options = mergeOptions(
+        seen.procurement_owner_options,
+        page.procurement_owner_options,
     )
     return next
 }

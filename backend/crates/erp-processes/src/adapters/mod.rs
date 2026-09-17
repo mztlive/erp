@@ -1,6 +1,7 @@
 //! Composition adapters that bind consumer ports to providing domains.
 
 mod catalog;
+mod catalog_data_scope;
 mod contract;
 mod contract_data_scope;
 mod customer;
@@ -214,6 +215,8 @@ pub mod identity;
 pub mod identity_audit;
 pub mod support_audit;
 pub mod support_documents;
+
+pub use catalog_data_scope::{MongoCatalogDataScope, catalog_access, scoped_catalog_service};
 
 #[cfg(test)]
 mod scope_equivalence;

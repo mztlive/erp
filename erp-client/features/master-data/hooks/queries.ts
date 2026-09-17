@@ -167,6 +167,7 @@ async function invalidateMasterDataCaches(
 export function useCreateMasterDataMutation() {
     const queryClient = useQueryClient()
     return useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: (input: CreateMasterDataInput) =>
             createMasterDataObject(input),
         onSuccess: async (result) => {
@@ -180,6 +181,7 @@ export function useCreateMasterDataMutation() {
 export function useCreateRevisionMutation() {
     const queryClient = useQueryClient()
     return useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: (input: CreateRevisionInput) =>
             createMasterDataRevision(input),
         onSuccess: async (result) => {
@@ -219,6 +221,7 @@ export function useVoucherCategoryStatusMutation() {
 export function useDisableMasterDataMutation() {
     const queryClient = useQueryClient()
     return useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: (input: DisableMasterDataInput) =>
             disableMasterDataObject(input),
         onSuccess: async (result) => {
@@ -248,6 +251,7 @@ export function useFileAssetQuery(assetId: string | undefined) {
 export function useProductListingMutation() {
     const queryClient = useQueryClient()
     return useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: (input: {
             productId: string
             listingStatus: Exclude<ProductListingStatus, "PARTIALLY_LISTED">

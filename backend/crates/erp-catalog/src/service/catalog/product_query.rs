@@ -183,6 +183,9 @@ pub fn prepare_product_list(params: &ProductListParams) -> Result<ProductFilter>
     let query = params.normalized()?;
     Ok(ProductFilter {
         ids: None,
+        scope: None,
+        maintainer_user_ids: query.owner_user_ids.map(|ids| ids.as_slice().to_vec()),
+        business_org_unit_ids: query.org_unit_ids.map(|ids| ids.as_slice().to_vec()),
         product_no: query.product_no,
         keyword: query.keyword,
         product_kind: query.product_kind,
@@ -225,6 +228,8 @@ pub fn product_page_view(
             current_revision_id: row.current_revision_id,
             created_at: row.created_at,
             version: row.version,
+            maintainer_user_id: row.maintainer_user_id,
+            business_org_unit_id: row.business_org_unit_id,
         })
         .collect();
     Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })

@@ -40,6 +40,12 @@ pub struct ProductRow {
     pub category_id: Option<String>,
     /// 当前商品品牌 ID。
     pub brand_id: Option<String>,
+    /// 当前维护人。
+    #[serde(default)]
+    pub maintainer_user_id: String,
+    /// 当前业务组织。
+    #[serde(default)]
+    pub business_org_unit_id: String,
     /// 启停状态。
     pub status: EnableStatus,
     /// 从当前启用 SKU 继承的上架状态。
@@ -65,6 +71,12 @@ pub struct ProductRow {
 pub struct ProductFilter {
     /// 稳定主键集合（`$in` 精确匹配）；`None` 表示不筛选。
     pub ids: Option<Vec<String>>,
+    /// 已证明的维护人授权条件；`None` 表示调用方尚未注入范围。
+    pub scope: Option<super::scope::CatalogReadScope>,
+    /// 维护人筛选，只收窄授权结果。
+    pub maintainer_user_ids: Option<Vec<String>>,
+    /// 业务组织筛选，只收窄授权结果。
+    pub business_org_unit_ids: Option<Vec<String>>,
     /// 商品编号字面量正则（忽略大小写）；`None` 表示不筛选。
     pub product_no: Option<String>,
     /// 商品与 SKU 统一关键字；`None` 表示不筛选。
@@ -111,6 +123,9 @@ impl Default for ProductFilter {
     fn default() -> Self {
         Self {
             ids: None,
+            scope: None,
+            maintainer_user_ids: None,
+            business_org_unit_ids: None,
             product_no: None,
             keyword: None,
             product_kind: None,
@@ -139,6 +154,15 @@ impl QueryFilter for ProductFilter {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(ids) = &self.ids {
             filter.extend(in_filter("id", ids.iter().cloned()));
+        }
+        if let Some(scope) = &self.scope {
+            filter = doc! { "$and": [filter, scope.document()] };
+        }
+        if let Some(ids) = &self.maintainer_user_ids {
+            filter.extend(in_filter("maintainer_user_id", ids.iter().cloned()));
+        }
+        if let Some(ids) = &self.business_org_unit_ids {
+            filter.extend(in_filter("business_org_unit_id", ids.iter().cloned()));
         }
         insert_literal_regex_filter(&mut filter, "product_no", self.product_no.as_deref());
         if let Some(product_kind) = self.product_kind {
@@ -178,6 +202,70 @@ impl<'a> ProductRepository<'a> {
             return Ok(Vec::new());
         }
         self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor).await
+    }
+
+    /// 列出当前范围内的商品主键，供采购负责人批量解析。
+    ///
+    /// # 参数
+    /// * `scope` - 已证明的对象范围
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 最多 10001 个主键；调用方必须整体拒绝超限。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 仓储不得按登录用户自行推断权限；公司范围应由调用方跳过本方法。
+    pub async fn list_authorized_ids(
+        &self,
+        scope: &super::scope::CatalogReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        #[derive(serde::Deserialize)]
+        struct ProductIdRow {
+            id: String,
+        }
+        let rows = mongo_ops::find_many(
+            &self.collection().clone_with_type::<ProductIdRow>(),
+            doc! {
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+                "$and": [scope.document()]
+            },
+            FindOptions::builder().projection(doc! { "id": 1 }).sort(doc! { "id": 1 }).limit(10001).build(),
+            executor,
+        )
+        .await?;
+        Ok(rows.into_iter().map(|row| row.id).collect())
+    }
+
+    /// 列出未删除商品主键，供公司范围采购负责人筛选。
+    ///
+    /// # 参数
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 最多 10001 个主键；调用方必须整体拒绝超限。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 仅用于已证明的公司范围；不得替代授权条件。
+    pub async fn list_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>> {
+        #[derive(serde::Deserialize)]
+        struct ProductIdRow {
+            id: String,
+        }
+        let rows = mongo_ops::find_many(
+            &self.collection().clone_with_type::<ProductIdRow>(),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            FindOptions::builder().projection(doc! { "id": 1 }).sort(doc! { "id": 1 }).limit(10001).build(),
+            executor,
+        )
+        .await?;
+        Ok(rows.into_iter().map(|row| row.id).collect())
     }
 }
 
