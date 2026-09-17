@@ -7,8 +7,10 @@ use validator::Validate;
 
 use super::InventoryService;
 use super::movement::load_movement_source_document_nos;
+use crate::dto::scope::{BALANCE_OWNERSHIP_BASIS, BALANCE_SCOPE_SUMMARY};
 use crate::dto::{
-    PageView, SortDir, StockBalanceDetailView, StockBalanceListParams, StockBalanceView, StockMovementView,
+    InventoryListPage, PageView, SortDir, StockBalanceDetailView, StockBalanceListParams, StockBalanceView,
+    StockMovementView, ensure_scope_version,
 };
 use crate::entity::inventory::{StockBalance, StockMovement};
 use crate::error::{Error, Result};
@@ -40,11 +42,12 @@ impl InventoryService {
         &self,
         params: &StockBalanceListParams,
         actor: &AuditActor,
-    ) -> Result<PageView<StockBalanceView>> {
+    ) -> Result<InventoryListPage<StockBalanceView>> {
         params.validate()?;
         let query = params.normalized()?;
         let page_no = query.paging.page;
         let page_size = query.paging.page_size;
+        let scope_version = query.scope_version.clone();
         let db = self.db.clone();
         let authorization_port = std::sync::Arc::clone(&self.authorization);
         let catalog = std::sync::Arc::clone(&self.catalog_facts);
@@ -142,8 +145,18 @@ impl InventoryService {
                 }
             })
             .collect();
-
-        Ok(PageView { items, total: page.total, page: page_no, page_size })
+        ensure_scope_version(
+            page_no,
+            scope_version.as_deref(),
+            authorization.balance_list_meta().scope_version(),
+        )?;
+        Ok(InventoryListPage::from_page(
+            PageView { items, total: page.total, page: page_no, page_size },
+            authorization.balance_list_meta(),
+            authorization.balance_list_scope().is_empty(),
+            BALANCE_SCOPE_SUMMARY,
+            BALANCE_OWNERSHIP_BASIS,
+        ))
     }
 
     /// 查询库存余额详情（W10 详情：余额 + 最近流水 + 有效预占 + 未过账调整）。

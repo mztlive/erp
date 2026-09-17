@@ -25,6 +25,10 @@ export type InventoryQuery = {
     sort: string[]
     adjustmentId?: string
     balanceId?: string
+    operatorUserIds?: string
+    applicantUserIds?: string
+    handlerUserIds?: string
+    scopeVersion?: string
 }
 
 type AllowedAction = "CREATE_ADJUSTMENT"
@@ -132,6 +136,7 @@ export type StockAdjustmentRow = Readonly<{
     statusLabel: string
     statusTone: "neutral" | "warning" | "info" | "success" | "destructive"
     operatorLabel: string
+    applicantLabel?: string
     currentNodeLabel?: string
     currentAssigneeLabel?: string
     postedAt?: string
@@ -173,6 +178,7 @@ export type InventoryListView = Readonly<{
     queriedAt: string
     /** 仅由目标库存视图请求成功与否确认，不得从仓库选项目录推断。 */
     hasWarehouseScope: boolean
+    scopeVersion?: string
     moduleAllowed: boolean
     canExport: boolean
     emptyReason?: InventoryEmptyReason

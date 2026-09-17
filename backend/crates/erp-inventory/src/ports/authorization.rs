@@ -72,10 +72,80 @@ impl WarehouseCoverage {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WarehouseScope(Option<WarehouseCoverage>);
 
+/// 列表动作的授权指纹；不含内部证明或全量人员集合。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InventoryScopeMeta {
+    scope_version: String,
+    policy_version: u64,
+    organization_version: u64,
+    as_of: String,
+}
+
+impl InventoryScopeMeta {
+    /// 无授权快照时的空元信息。
+    pub fn empty() -> Self {
+        Self {
+            scope_version: String::new(),
+            policy_version: 0,
+            organization_version: 0,
+            as_of: String::new(),
+        }
+    }
+
+    /// 由公共解析结果构造列表元信息。
+    ///
+    /// # 参数
+    /// * `scope_version` - 授权指纹
+    /// * `policy_version` - 权限策略版本
+    /// * `organization_version` - 组织关系版本
+    /// * `as_of` - 授权时点
+    ///
+    /// # 返回
+    /// 返回可写入列表信封的元信息。
+    pub fn new(
+        scope_version: impl Into<String>,
+        policy_version: u64,
+        organization_version: u64,
+        as_of: impl Into<String>,
+    ) -> Self {
+        Self {
+            scope_version: scope_version.into(),
+            policy_version,
+            organization_version,
+            as_of: as_of.into(),
+        }
+    }
+
+    /// 当前资源动作的范围指纹。
+    pub fn scope_version(&self) -> &str {
+        &self.scope_version
+    }
+
+    /// 权限策略版本。
+    pub fn policy_version(&self) -> u64 {
+        self.policy_version
+    }
+
+    /// 组织关系版本。
+    pub fn organization_version(&self) -> u64 {
+        self.organization_version
+    }
+
+    /// 授权时点。
+    pub fn as_of(&self) -> &str {
+        &self.as_of
+    }
+}
+
 impl WarehouseScope {
     /// 判断目标仓库是否落在已证明范围内。
     pub fn covers(&self, warehouse_id: &str) -> bool {
         self.0.as_ref().is_some_and(|coverage| coverage.covers(warehouse_id))
+    }
+
+    /// 缺仓库维或空目标时不贡献对象。
+    pub fn is_empty(&self) -> bool {
+        self.0.is_none()
     }
 
     /// 把调用方精确筛选与授权范围求交，形成 Repository 查询过滤。
@@ -122,6 +192,9 @@ pub struct InventoryAuthorization {
     read_scope: WarehouseScope,
     create_scope: WarehouseScope,
     update_scope: WarehouseScope,
+    balance_list_meta: InventoryScopeMeta,
+    movement_list_meta: InventoryScopeMeta,
+    adjustment_list_meta: InventoryScopeMeta,
 }
 
 impl InventoryAuthorization {
@@ -137,6 +210,9 @@ impl InventoryAuthorization {
             read_scope: WarehouseScope::empty(),
             create_scope: WarehouseScope::empty(),
             update_scope: WarehouseScope::empty(),
+            balance_list_meta: InventoryScopeMeta::empty(),
+            movement_list_meta: InventoryScopeMeta::empty(),
+            adjustment_list_meta: InventoryScopeMeta::empty(),
         }
     }
 
@@ -163,7 +239,31 @@ impl InventoryAuthorization {
             read_scope,
             create_scope,
             update_scope,
+            balance_list_meta: InventoryScopeMeta::empty(),
+            movement_list_meta: InventoryScopeMeta::empty(),
+            adjustment_list_meta: InventoryScopeMeta::empty(),
         }
+    }
+
+    /// 绑定列表动作的授权指纹；人员筛选不改变仓库维。
+    ///
+    /// # 参数
+    /// * `balance_list_meta` - 余额列表元信息
+    /// * `movement_list_meta` - 流水列表元信息
+    /// * `adjustment_list_meta` - 调整列表元信息
+    ///
+    /// # 返回
+    /// 返回带范围信封的授权快照。
+    pub fn with_list_meta(
+        mut self,
+        balance_list_meta: InventoryScopeMeta,
+        movement_list_meta: InventoryScopeMeta,
+        adjustment_list_meta: InventoryScopeMeta,
+    ) -> Self {
+        self.balance_list_meta = balance_list_meta;
+        self.movement_list_meta = movement_list_meta;
+        self.adjustment_list_meta = adjustment_list_meta;
+        self
     }
 
     /// 判断认证身份在事务快照内是否仍对应可登录账号。
@@ -209,6 +309,21 @@ impl InventoryAuthorization {
     /// 判断当前账号是否可更新目标仓库的库存调整。
     pub fn can_update(&self, warehouse_id: &str) -> bool {
         self.update_scope.covers(warehouse_id)
+    }
+
+    /// 余额列表授权指纹。
+    pub fn balance_list_meta(&self) -> &InventoryScopeMeta {
+        &self.balance_list_meta
+    }
+
+    /// 流水列表授权指纹。
+    pub fn movement_list_meta(&self) -> &InventoryScopeMeta {
+        &self.movement_list_meta
+    }
+
+    /// 调整列表授权指纹。
+    pub fn adjustment_list_meta(&self) -> &InventoryScopeMeta {
+        &self.adjustment_list_meta
     }
 }
 
@@ -286,5 +401,14 @@ mod tests {
         assert!(!authorization.movement_list_scope().covers("warehouse-2"));
         assert!(authorization.reservation_list_scope().covers("warehouse-2"));
         assert!(!authorization.reservation_list_scope().covers("warehouse-1"));
+    }
+
+    #[test]
+    fn missing_warehouse_dimension_does_not_contribute_objects() {
+        let empty = WarehouseScope::empty();
+        assert!(empty.is_empty());
+        assert!(!empty.covers("warehouse-1"));
+        assert_eq!(empty.repository_warehouse_ids(None), Some(Vec::new()));
+        assert_eq!(empty.repository_warehouse_ids(Some(WarehouseId::new("warehouse-1"))), Some(Vec::new()));
     }
 }

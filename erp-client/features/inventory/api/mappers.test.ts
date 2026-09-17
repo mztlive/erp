@@ -165,6 +165,18 @@ describe("inventory warehouse label fallback", () => {
         ])
         expect(labels.join(" ")).not.toContain(internalWarehouseId)
     })
+
+    it("projects snapshot applicant instead of created_by", () => {
+        const row = mapAdjustment({
+            ...adjustment,
+            submitted_by: "applicant-1",
+            current_assignee: "handler-1",
+        })
+        expect(row.applicantLabel).toBe("applicant-1")
+        expect(row.currentAssigneeLabel).toBe("handler-1")
+        expect(row.operatorLabel).toBe("operator-1")
+        expect(row.applicantLabel).not.toBe("creator-1")
+    })
 })
 
 describe("stock adjustment approval detail mapping", () => {

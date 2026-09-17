@@ -7,23 +7,29 @@ use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::InventoryService;
-use crate::dto::{PageView, SortDir, StockMovementListParams, StockMovementView};
+use crate::dto::scope::{MOVEMENT_OWNERSHIP_BASIS, MOVEMENT_SCOPE_SUMMARY};
+use crate::dto::{
+    InventoryListPage, PageView, SortDir, StockMovementListParams, StockMovementListQuery, StockMovementView,
+    ensure_scope_version,
+};
 use crate::entity::inventory::{MovementType, StockMovement};
 use crate::error::{Error, Result};
-use crate::repository::{InventoryExt, StockMovementFilter};
+use crate::ports::InventoryAuthorization;
+use crate::repository::{InventoryExt, StockMovementFilter, StockMovementRow};
 
 impl InventoryService {
     /// 分页查询库存流水台账（W10 流水视图，正式事实）。
     ///
     /// # 参数
-    /// * `params` - 查询参数（仓库/SKU/类型/方向/发生时间区间筛选）
+    /// * `params` - 查询参数（仓库/SKU/类型/方向/发生时间区间/经办人筛选）
     /// * `actor` - 当前认证操作人，用于计算库存流水读取范围
     ///
     /// # 返回
-    /// 返回契约形状的分页视图。
+    /// 返回带范围信封的分页视图。
     ///
     /// # 错误
-    /// * `ValidationError` - 分页/时间区间/排序参数非法
+    /// * `ValidationError` - 分页/时间区间/排序/人员参数非法
+    /// * `ConflictError` - 跨页 `scope_version` 不一致
     /// * `RepositoryError` - 数据库查询失败
     #[tracing::instrument(
         name = "inventory.stock_movement_list",
@@ -34,17 +40,40 @@ impl InventoryService {
         &self,
         params: &StockMovementListParams,
         actor: &AuditActor,
-    ) -> Result<PageView<StockMovementView>> {
+    ) -> Result<InventoryListPage<StockMovementView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let page_no = query.paging.page;
-        let page_size = query.paging.page_size;
+        let (page, authorization) = self.search_stock_movements(&query, actor).await?;
+        let meta = authorization.movement_list_meta();
+        ensure_scope_version(query.paging.page, query.scope_version.as_deref(), meta.scope_version())?;
+        let mut items = page.items.into_iter().map(movement_row_view).collect::<Vec<_>>();
+        let source_document_nos =
+            load_movement_source_document_nos(&self.db, self.fulfillment_facts.as_ref(), &items).await?;
+        for item in &mut items {
+            item.source_document_no = source_document_nos.get(&item.source_document_id).cloned();
+        }
+        Ok(InventoryListPage::from_page(
+            PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size },
+            meta,
+            authorization.movement_list_scope().is_empty(),
+            MOVEMENT_SCOPE_SUMMARY,
+            MOVEMENT_OWNERSHIP_BASIS,
+        ))
+    }
+
+    async fn search_stock_movements(
+        &self,
+        query: &StockMovementListQuery,
+        actor: &AuditActor,
+    ) -> Result<(persistence_core::PageResult<StockMovementRow>, InventoryAuthorization)> {
         let db = self.db.clone();
         let authorization_port = std::sync::Arc::clone(&self.authorization);
         let catalog = std::sync::Arc::clone(&self.catalog_facts);
+        let query = query.clone();
         let actor = actor.clone();
-        let client = db.client().clone();
-        let page = client
+        self.db
+            .client()
+            .clone()
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let authorization = authorization_port.authorize(&actor, session).await?;
@@ -58,49 +87,52 @@ impl InventoryService {
                         session,
                     )
                     .await?;
-                    let filter = StockMovementFilter {
-                        search,
-                        warehouse_ids: authorization
-                            .movement_list_scope()
-                            .repository_warehouse_ids(query.warehouse_id),
-                        sku_id: query.sku_id,
-                        movement_type: query.movement_type,
-                        direction: query.direction,
-                        occurred_from: query.occurred_from.map(Instant::from_unix_secs),
-                        occurred_to: query.occurred_to.map(Instant::from_unix_secs),
-                        page: query.paging.page,
-                        page_size: query.paging.page_size,
-                        sort_by: Some(query.paging.sort_by.to_string()),
-                        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-                    };
-                    Ok::<_, Error>(db.stock_movements().search_stock_movements(&filter, session).await?)
+                    let filter = movement_filter(&query, &authorization, search);
+                    let page = db.stock_movements().search_stock_movements(&filter, session).await?;
+                    Ok::<_, Error>((page, authorization))
                 })
             })
-            .await?;
-        let mut items: Vec<StockMovementView> = page
-            .items
-            .into_iter()
-            .map(|row| StockMovementView {
-                id: row.id,
-                warehouse_id: row.warehouse_id.to_string(),
-                sku_id: row.sku_id.to_string(),
-                movement_type: row.movement_type,
-                direction: row.direction,
-                quantity: row.quantity,
-                source_document_id: row.source_document_id,
-                source_document_no: None,
-                source_line_id: row.source_line_id,
-                occurred_at: row.occurred_at.unix_secs(),
-                recorded_at: row.recorded_at.unix_secs(),
-                recorded_by: row.recorded_by.clone(),
-            })
-            .collect();
-        let source_document_nos =
-            load_movement_source_document_nos(&self.db, self.fulfillment_facts.as_ref(), &items).await?;
-        for item in &mut items {
-            item.source_document_no = source_document_nos.get(&item.source_document_id).cloned();
-        }
-        Ok(PageView { items, total: page.total, page: page_no, page_size })
+            .await
+    }
+}
+
+fn movement_filter(
+    query: &StockMovementListQuery,
+    authorization: &InventoryAuthorization,
+    search: crate::repository::InventorySearch,
+) -> StockMovementFilter {
+    StockMovementFilter {
+        search,
+        warehouse_ids: authorization
+            .movement_list_scope()
+            .repository_warehouse_ids(query.warehouse_id.clone()),
+        sku_id: query.sku_id.clone(),
+        movement_type: query.movement_type,
+        direction: query.direction,
+        occurred_from: query.occurred_from.map(Instant::from_unix_secs),
+        occurred_to: query.occurred_to.map(Instant::from_unix_secs),
+        recorded_by_ids: query.operator_user_ids.clone(),
+        page: query.paging.page,
+        page_size: query.paging.page_size,
+        sort_by: Some(query.paging.sort_by.to_string()),
+        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+    }
+}
+
+fn movement_row_view(row: StockMovementRow) -> StockMovementView {
+    StockMovementView {
+        id: row.id,
+        warehouse_id: row.warehouse_id.to_string(),
+        sku_id: row.sku_id.to_string(),
+        movement_type: row.movement_type,
+        direction: row.direction,
+        quantity: row.quantity,
+        source_document_id: row.source_document_id,
+        source_document_no: None,
+        source_line_id: row.source_line_id,
+        occurred_at: row.occurred_at.unix_secs(),
+        recorded_at: row.recorded_at.unix_secs(),
+        recorded_by: row.recorded_by,
     }
 }
 

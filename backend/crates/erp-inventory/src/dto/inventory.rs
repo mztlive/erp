@@ -6,8 +6,7 @@
 //! page/page_size）与 D01 source_registry 保持一致，本域按域内对象名提供
 //! 各列表视图。
 
-use application_core::{page_or_default, page_size_or_default};
-use erp_core::ids::{SalesOrderLineId, SkuId, WarehouseId};
+use erp_core::ids::{SkuId, WarehouseId};
 use erp_core::money::Quantity;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -15,7 +14,6 @@ use validator::Validate;
 use crate::entity::inventory::{
     AdjustmentReasonType, MovementDirection, MovementType, ReservationStatus, StockAdjustmentState,
 };
-use crate::error::{Error, Result};
 
 /// 库存余额列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub const STOCK_BALANCE_SORT_FIELDS: &[&str] = &["sku_id", "created_at"];
@@ -164,6 +162,10 @@ pub struct StockAdjustmentView {
     pub status: StockAdjustmentState,
     /// 仓储经办人。
     pub prepared_by: String,
+    /// 审批快照申请人；未提交时为空，不得用 `created_by` 顶替。
+    pub submitted_by: Option<String>,
+    /// 当前开放审批人。
+    pub current_assignee: Option<String>,
     /// 仓储复核人。
     pub reviewed_by: Option<String>,
     /// 成本影响确认人。
@@ -343,329 +345,6 @@ pub struct StockBalanceDetailView {
     pub active_reservations: Vec<StockReservationView>,
     /// 未过账的调整单（草稿/待复核/待确认/驳回）。
     pub pending_adjustments: Vec<StockAdjustmentView>,
-}
-
-/// 余额可用量筛选；所有条件均在分页前应用。
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum StockAvailability {
-    /// 不限制数量。
-    All,
-    /// 可用量等于零。
-    Zero,
-    /// 可用量严格大于零。
-    Positive,
-    /// 存在有效预占。
-    Reserved,
-}
-
-/// 库存余额列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
-pub struct StockBalanceListParams {
-    /// SKU 编码、当前名称或规格的字面量关键词。
-    #[validate(length(max = 200))]
-    pub q: Option<String>,
-    /// 精确定位余额。
-    pub balance_id: Option<String>,
-    /// 可用量条件，在分页和计数前执行。
-    pub availability: Option<StockAvailability>,
-
-    /// 仓库筛选。
-    pub warehouse_id: Option<WarehouseId>,
-    /// SKU 筛选。
-    pub sku_id: Option<SkuId>,
-    /// 页码（1 起）。
-    #[validate(range(min = 1, message = "页码必须大于0"))]
-    pub page: Option<u64>,
-    /// 单页条数（1–100）。
-    #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
-    pub page_size: Option<u32>,
-    /// 排序字段（白名单：`sku_id`/`created_at`）。
-    pub sort_by: Option<String>,
-    /// 排序方向（`asc`/`desc`）。
-    pub sort_dir: Option<String>,
-}
-
-/// 归一化后的库存余额列表查询参数。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct StockBalanceListQuery {
-    /// SKU 编码、当前名称或规格的字面量关键词。
-    pub q: Option<String>,
-    /// 精确定位余额。
-    pub balance_id: Option<String>,
-    /// 可用量条件，在分页和计数前执行。
-    pub availability: Option<StockAvailability>,
-
-    /// 仓库筛选。
-    pub warehouse_id: Option<WarehouseId>,
-    /// SKU 筛选。
-    pub sku_id: Option<SkuId>,
-    /// 分页与排序参数。
-    pub paging: PageParams,
-}
-
-impl StockBalanceListParams {
-    /// 归一化库存余额列表查询参数。
-    ///
-    /// 分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-    pub(crate) fn normalized(&self) -> Result<StockBalanceListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, STOCK_BALANCE_SORT_FIELDS)?;
-        Ok(StockBalanceListQuery {
-            q: application_core::normalized_text(self.q.as_deref()),
-            balance_id: application_core::normalized_text(self.balance_id.as_deref()),
-            availability: self.availability,
-            warehouse_id: self.warehouse_id.clone(),
-            sku_id: self.sku_id.clone(),
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
-        })
-    }
-}
-
-/// 库存流水列表查询参数。
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
-pub struct StockMovementListParams {
-    /// SKU 编码、当前名称或规格的字面量关键词。
-    #[validate(length(max = 200))]
-    pub q: Option<String>,
-
-    /// 仓库筛选。
-    pub warehouse_id: Option<WarehouseId>,
-    /// SKU 筛选。
-    pub sku_id: Option<SkuId>,
-    /// 流水类型筛选。
-    pub movement_type: Option<MovementType>,
-    /// 流水方向筛选。
-    pub direction: Option<MovementDirection>,
-    /// 发生时间下界（含，秒级时间戳）。
-    pub occurred_from: Option<i64>,
-    /// 发生时间上界（含，秒级时间戳）。
-    pub occurred_to: Option<i64>,
-    /// 页码（1 起）。
-    #[validate(range(min = 1, message = "页码必须大于0"))]
-    pub page: Option<u64>,
-    /// 单页条数（1–100）。
-    #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
-    pub page_size: Option<u32>,
-    /// 排序字段（白名单：`occurred_at`/`recorded_at`/`created_at`）。
-    pub sort_by: Option<String>,
-    /// 排序方向（`asc`/`desc`）。
-    pub sort_dir: Option<String>,
-}
-
-/// 归一化后的库存流水列表查询参数。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct StockMovementListQuery {
-    /// SKU 编码、当前名称或规格的字面量关键词。
-    pub q: Option<String>,
-
-    /// 仓库筛选。
-    pub warehouse_id: Option<WarehouseId>,
-    /// SKU 筛选。
-    pub sku_id: Option<SkuId>,
-    /// 流水类型筛选。
-    pub movement_type: Option<MovementType>,
-    /// 流水方向筛选。
-    pub direction: Option<MovementDirection>,
-    /// 发生时间下界。
-    pub occurred_from: Option<i64>,
-    /// 发生时间上界。
-    pub occurred_to: Option<i64>,
-    /// 分页与排序参数。
-    pub paging: PageParams,
-}
-
-impl StockMovementListParams {
-    /// 归一化库存流水列表查询参数。
-    ///
-    /// 时间区间校验（下界不晚于上界）、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 时间区间倒挂、排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-    pub(crate) fn normalized(&self) -> Result<StockMovementListQuery> {
-        if let (Some(from), Some(to)) = (self.occurred_from, self.occurred_to)
-            && from > to
-        {
-            return Err(Error::ValidationError("发生时间区间下界不得晚于上界".to_string()));
-        }
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, STOCK_MOVEMENT_SORT_FIELDS)?;
-        Ok(StockMovementListQuery {
-            q: application_core::normalized_text(self.q.as_deref()),
-            warehouse_id: self.warehouse_id.clone(),
-            sku_id: self.sku_id.clone(),
-            movement_type: self.movement_type,
-            direction: self.direction,
-            occurred_from: self.occurred_from,
-            occurred_to: self.occurred_to,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
-        })
-    }
-}
-
-/// 库存预占列表查询参数。
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
-pub struct StockReservationListParams {
-    /// SKU 编码、当前名称或规格的字面量关键词。
-    #[validate(length(max = 200))]
-    pub q: Option<String>,
-
-    /// 仓库筛选。
-    pub warehouse_id: Option<WarehouseId>,
-    /// SKU 筛选。
-    pub sku_id: Option<SkuId>,
-    /// 预占状态筛选。
-    pub status: Option<ReservationStatus>,
-    /// 唯一归属销售明细筛选。
-    pub sales_order_line_id: Option<SalesOrderLineId>,
-    /// 页码（1 起）。
-    #[validate(range(min = 1, message = "页码必须大于0"))]
-    pub page: Option<u64>,
-    /// 单页条数（1–100）。
-    #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
-    pub page_size: Option<u32>,
-    /// 排序字段（白名单：`created_at`/`updated_at`）。
-    pub sort_by: Option<String>,
-    /// 排序方向（`asc`/`desc`）。
-    pub sort_dir: Option<String>,
-}
-
-/// 归一化后的库存预占列表查询参数。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct StockReservationListQuery {
-    /// SKU 编码、当前名称或规格的字面量关键词。
-    pub q: Option<String>,
-
-    /// 仓库筛选。
-    pub warehouse_id: Option<WarehouseId>,
-    /// SKU 筛选。
-    pub sku_id: Option<SkuId>,
-    /// 预占状态筛选。
-    pub status: Option<ReservationStatus>,
-    /// 唯一归属销售明细筛选。
-    pub sales_order_line_id: Option<SalesOrderLineId>,
-    /// 分页与排序参数。
-    pub paging: PageParams,
-}
-
-impl StockReservationListParams {
-    /// 归一化库存预占列表查询参数。
-    ///
-    /// 分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-    pub(crate) fn normalized(&self) -> Result<StockReservationListQuery> {
-        let (sort_by, sort_dir) =
-            normalize_sort(&self.sort_by, &self.sort_dir, STOCK_RESERVATION_SORT_FIELDS)?;
-        Ok(StockReservationListQuery {
-            q: application_core::normalized_text(self.q.as_deref()),
-            warehouse_id: self.warehouse_id.clone(),
-            sku_id: self.sku_id.clone(),
-            status: self.status,
-            sales_order_line_id: self.sales_order_line_id.clone(),
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
-        })
-    }
-}
-
-/// 库存调整单列表查询参数。
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
-pub struct StockAdjustmentListParams {
-    /// SKU 编码、当前名称或规格的字面量关键词。
-    #[validate(length(max = 200))]
-    pub q: Option<String>,
-    /// 精确定位调整单。
-    pub adjustment_id: Option<String>,
-    /// 任一明细包含该 SKU。
-    pub sku_id: Option<SkuId>,
-
-    /// 仓库筛选。
-    pub warehouse_id: Option<WarehouseId>,
-    /// 单据状态筛选。
-    pub status: Option<StockAdjustmentState>,
-    /// 页码（1 起）。
-    #[validate(range(min = 1, message = "页码必须大于0"))]
-    pub page: Option<u64>,
-    /// 单页条数（1–100）。
-    #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
-    pub page_size: Option<u32>,
-    /// 排序字段（白名单：`created_at`/`adjustment_no`）。
-    pub sort_by: Option<String>,
-    /// 排序方向（`asc`/`desc`）。
-    pub sort_dir: Option<String>,
-}
-
-/// 归一化后的库存调整单列表查询参数。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct StockAdjustmentListQuery {
-    /// SKU 编码、当前名称或规格的字面量关键词。
-    pub q: Option<String>,
-    /// 精确定位调整单。
-    pub adjustment_id: Option<String>,
-    /// 任一明细包含该 SKU。
-    pub sku_id: Option<SkuId>,
-
-    /// 仓库筛选。
-    pub warehouse_id: Option<WarehouseId>,
-    /// 单据状态筛选。
-    pub status: Option<StockAdjustmentState>,
-    /// 分页与排序参数。
-    pub paging: PageParams,
-}
-
-impl StockAdjustmentListParams {
-    /// 归一化库存调整单列表查询参数。
-    ///
-    /// 分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-    pub(crate) fn normalized(&self) -> Result<StockAdjustmentListQuery> {
-        let (sort_by, sort_dir) =
-            normalize_sort(&self.sort_by, &self.sort_dir, STOCK_ADJUSTMENT_SORT_FIELDS)?;
-        Ok(StockAdjustmentListQuery {
-            q: application_core::normalized_text(self.q.as_deref()),
-            adjustment_id: application_core::normalized_text(self.adjustment_id.as_deref()),
-            sku_id: self.sku_id.clone(),
-            warehouse_id: self.warehouse_id.clone(),
-            status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
-        })
-    }
 }
 
 /// 库存调整明细输入（创建时随调整单提交）。
@@ -861,9 +540,11 @@ mod tests {
     use validator::Validate;
 
     use super::{
-        SortDir, StockAdjustmentLineUpdateInput, StockAdjustmentListParams, StockAdjustmentView,
-        StockBalanceListParams, StockBalanceView, StockMovementListParams, StockReservationListParams,
-        normalize_sort,
+        SortDir, StockAdjustmentLineUpdateInput, StockAdjustmentView, StockBalanceView, normalize_sort,
+    };
+    use crate::dto::{
+        StockAdjustmentListParams, StockBalanceListParams, StockMovementListParams,
+        StockReservationListParams,
     };
     use crate::entity::inventory::{
         AdjustmentReasonType, MovementDirection, MovementType, ReservationStatus, StockAdjustmentState,
@@ -1071,6 +752,8 @@ mod tests {
             reason_type: AdjustmentReasonType::StockGain,
             status: StockAdjustmentState::Draft,
             prepared_by: "operator-1".to_string(),
+            submitted_by: Some("applicant-1".to_string()),
+            current_assignee: Some("handler-1".to_string()),
             reviewed_by: None,
             finance_reviewed_by: None,
             note: None,
@@ -1080,5 +763,62 @@ mod tests {
         })
         .unwrap();
         assert_eq!(value["version"], serde_json::json!("9007199254740993"));
+        assert_eq!(value["submitted_by"], serde_json::json!("applicant-1"));
+        assert_ne!(value["submitted_by"], serde_json::json!("creator-1"));
+    }
+
+    #[test]
+    fn balance_list_rejects_personnel_owner_params() {
+        for raw in [
+            serde_json::json!({"owner_user_ids": "user-1"}),
+            serde_json::json!({"operator_user_ids": "user-1"}),
+            serde_json::json!({"handler_user_ids": "user-1"}),
+            serde_json::json!({"applicant_user_ids": "user-1"}),
+            serde_json::json!({"org_unit_ids": "org-1"}),
+        ] {
+            assert!(serde_json::from_value::<StockBalanceListParams>(raw).is_err());
+        }
+        let ok: StockBalanceListParams =
+            serde_json::from_value(serde_json::json!({"page": 1, "scope_version": "v1"})).unwrap();
+        assert_eq!(ok.scope_version.as_deref(), Some("v1"));
+    }
+
+    #[test]
+    fn movement_and_adjustment_consume_registered_people_filters() {
+        let movement: StockMovementListParams = serde_json::from_value(serde_json::json!({
+            "operator_user_ids": "op-2,op-1",
+            "scope_version": "v1"
+        }))
+        .unwrap();
+        let query = movement.normalized().unwrap();
+        assert_eq!(
+            query.operator_user_ids.as_deref(),
+            Some(["op-1".to_string(), "op-2".to_string()].as_slice())
+        );
+        assert!(
+            serde_json::from_value::<StockMovementListParams>(serde_json::json!({
+                "applicant_user_ids": "user-1"
+            }))
+            .is_err()
+        );
+        let adjustment: StockAdjustmentListParams = serde_json::from_value(serde_json::json!({
+            "operator_user_ids": "op-1",
+            "applicant_user_ids": "app-1",
+            "handler_user_ids": "h-1"
+        }))
+        .unwrap();
+        let query = adjustment.normalized().unwrap();
+        assert_eq!(query.operator_user_ids.as_deref(), Some(["op-1".to_string()].as_slice()));
+        assert_eq!(query.applicant_user_ids.as_deref(), Some(["app-1".to_string()].as_slice()));
+        assert_eq!(query.handler_user_ids.as_deref(), Some(["h-1".to_string()].as_slice()));
+        assert!(
+            serde_json::from_value::<StockAdjustmentListParams>(serde_json::json!({
+                "owner_user_ids": "user-1"
+            }))
+            .is_err()
+        );
+        let me: StockMovementListParams =
+            serde_json::from_value(serde_json::json!({"operator_user_ids": "me"})).unwrap();
+        assert!(me.normalized().is_err());
     }
 }

@@ -6,7 +6,15 @@
 import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
 import type { Page } from "@/lib/api"
 
-export type BackendPage<T> = Page<T>
+export type BackendPage<T> = Page<T> & {
+    scope_version?: string
+    policy_version?: number
+    organization_version?: number
+    as_of?: string
+    empty_reason?: string | null
+    scope_summary?: string
+    ownership_basis?: string
+}
 
 export type BackendStockBalance = {
     id: string
@@ -63,6 +71,8 @@ export type BackendStockAdjustment = {
     reason_type: string
     status: string
     prepared_by: string
+    submitted_by?: string | null
+    current_assignee?: string | null
     reviewed_by?: string | null
     finance_reviewed_by?: string | null
     note?: string | null

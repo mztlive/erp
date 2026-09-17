@@ -4,6 +4,7 @@ import * as React from "react"
 
 import type { InventoryExportJob } from "@/features/inventory/api/inventory"
 import { useStartInventoryExportMutation } from "@/features/inventory/hooks/queries"
+import type { InventoryQuery } from "@/features/inventory/types"
 
 export function useInventoryExportJob() {
     const exportMutation = useStartInventoryExportMutation()
@@ -12,7 +13,11 @@ export function useInventoryExportJob() {
     )
 
     const startExport = React.useCallback(
-        (input: { total: number; filterSummary: string }) => {
+        (input: {
+            total: number
+            filterSummary: string
+            query?: InventoryQuery
+        }) => {
             void exportMutation
                 .mutateAsync(input)
                 .then((job) => setExportJob(job))

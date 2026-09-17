@@ -240,6 +240,9 @@ export function filterSummary(
             : "全部状态",
     ]
     if (query.q?.trim()) parts.push(`搜索「${query.q.trim()}」`)
+    if (query.operatorUserIds) parts.push("经办人已筛选")
+    if (query.applicantUserIds) parts.push("申请人已筛选")
+    if (query.handlerUserIds) parts.push("当前审批人已筛选")
     if (query.skuId) parts.push(`SKU ${query.skuId}`)
     if (query.movementType?.length) {
         parts.push(

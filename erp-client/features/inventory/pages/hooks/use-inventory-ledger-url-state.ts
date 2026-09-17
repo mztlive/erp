@@ -37,6 +37,9 @@ export interface InventoryLedgerUrlState {
     pageSize: number
     cursorParam: string | undefined
     cursorOffset: number
+    operatorUserIds: string | undefined
+    applicantUserIds: string | undefined
+    handlerUserIds: string | undefined
     hasActiveFilters: boolean
     patchUrl: LedgerPatchUrl
 }
@@ -73,6 +76,9 @@ export function useInventoryLedgerUrlState(): InventoryLedgerUrlState {
             : 20
     const cursorParam = searchParams.get("cursor") ?? undefined
     const cursorOffset = decodeInventoryCursor(cursorParam, view)
+    const operatorUserIds = searchParams.get("operatorUserIds") ?? undefined
+    const applicantUserIds = searchParams.get("applicantUserIds") ?? undefined
+    const handlerUserIds = searchParams.get("handlerUserIds") ?? undefined
 
     const patchUrl = React.useCallback<LedgerPatchUrl>(
         (patch, options) =>
@@ -96,7 +102,10 @@ export function useInventoryLedgerUrlState(): InventoryLedgerUrlState {
         adjustmentIdParam ||
         (view === "balance" && availability !== "all") ||
         (view === "movement" && movementType.length > 0) ||
-        (view === "movement" && (hasOccurredFromParam || hasOccurredToParam)),
+        (view === "movement" && (hasOccurredFromParam || hasOccurredToParam)) ||
+        (view === "movement" && operatorUserIds) ||
+        (view === "adjustment" &&
+            (operatorUserIds || applicantUserIds || handlerUserIds)),
     )
 
     return {
@@ -116,6 +125,9 @@ export function useInventoryLedgerUrlState(): InventoryLedgerUrlState {
         pageSize,
         cursorParam,
         cursorOffset,
+        operatorUserIds,
+        applicantUserIds,
+        handlerUserIds,
         hasActiveFilters,
         patchUrl,
     }

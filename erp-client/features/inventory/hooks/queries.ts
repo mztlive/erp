@@ -14,7 +14,11 @@ import {
     startInventoryExport,
     submitAdjustment,
 } from "@/features/inventory/api/inventory"
-import type { InventoryQuery } from "@/features/inventory/types"
+import { pageFromCursor } from "@/features/inventory/api/pagination"
+import type {
+    InventoryListView,
+    InventoryQuery,
+} from "@/features/inventory/types"
 
 export const inventoryKeys = {
     all: ["inventory"] as const,
@@ -40,9 +44,32 @@ export function useAdjustmentDetailQuery(stockAdjustmentId: string | null) {
 }
 
 export function useInventoryListQuery(query: InventoryQuery, enabled = true) {
+    const client = useQueryClient()
+    const firstPage = {
+        ...query,
+        cursor: undefined,
+        scopeVersion: undefined,
+    }
+    const baseline = client.getQueryData<InventoryListView>(
+        inventoryKeys.list(firstPage),
+    )
+    const page = pageFromCursor(query.cursor, query.view, query.pageSize)
+    const scopeVersion =
+        query.scopeVersion ?? (page > 1 ? baseline?.scopeVersion : undefined)
+    const scoped = { ...query, scopeVersion }
     return useQuery({
-        queryKey: inventoryKeys.list(query),
-        queryFn: () => fetchInventoryList(query),
+        queryKey: inventoryKeys.list(scoped),
+        queryFn: async () => {
+            if (page === 1 || scopeVersion) return fetchInventoryList(scoped)
+            const first = await client.fetchQuery({
+                queryKey: inventoryKeys.list(firstPage),
+                queryFn: () => fetchInventoryList(firstPage),
+            })
+            return fetchInventoryList({
+                ...query,
+                scopeVersion: first.scopeVersion,
+            })
+        },
         enabled,
     })
 }

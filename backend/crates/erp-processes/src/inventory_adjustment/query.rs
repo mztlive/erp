@@ -60,9 +60,13 @@ impl InventoryAdjustmentService {
             },
             None => approval_query::load_document_approval(self, &adjustment, Some(binding), actor).await?,
         };
+        let mut adjustment_view = erp_inventory::StockAdjustmentView::from(adjustment);
+        if let Some(fact) = inventory.adjustment_people_by_ids(&[id.to_string()]).await?.remove(id) {
+            adjustment_view.apply_people(&fact);
+        }
         Ok(StockAdjustmentDetailView {
             approval,
-            adjustment: adjustment.into(),
+            adjustment: adjustment_view,
             lines: lines.into_iter().map(Into::into).collect(),
             posted_movements: movements.into_iter().map(Into::into).collect(),
         })

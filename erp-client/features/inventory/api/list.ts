@@ -34,6 +34,39 @@ import {
     pageFromCursor,
     sortTokenToBackend,
 } from "@/features/inventory/api/pagination"
+
+export function inventoryListRequestQuery(
+    query: InventoryQuery,
+    page: number,
+    pageSize: number,
+    sort_by: string | undefined,
+    sort_dir: string | undefined,
+): Record<string, unknown> {
+    const people =
+        query.view === "balance"
+            ? {}
+            : {
+                  operator_user_ids: query.operatorUserIds || undefined,
+                  ...(query.view === "adjustment"
+                      ? {
+                            applicant_user_ids:
+                                query.applicantUserIds || undefined,
+                            handler_user_ids: query.handlerUserIds || undefined,
+                        }
+                      : {}),
+              }
+    return {
+        page,
+        page_size: pageSize,
+        q: query.q?.trim() || undefined,
+        warehouse_id: query.warehouseId,
+        sku_id: query.skuId,
+        sort_by,
+        sort_dir,
+        scope_version: query.scopeVersion || undefined,
+        ...people,
+    }
+}
 import type {
     BackendPage,
     BackendStockAdjustment,
@@ -174,42 +207,51 @@ export async function fetchInventoryList(
     let adjustments: StockAdjustmentRow[] = []
     let total = 0
     let dataWatermark = ""
+    let scopeEmptyReason: string | null | undefined
+    let scopeVersion: string | undefined
+
+    const takeScope = (res: BackendPage<unknown>) => {
+        scopeEmptyReason = res.empty_reason
+        scopeVersion = res.scope_version
+    }
 
     if (query.view === "balance") {
         const res = await fetchTargetView<BackendPage<BackendStockBalance>>(
             "/admin/stock-balances",
             {
+                ...inventoryListRequestQuery(
+                    query,
+                    page,
+                    pageSize,
+                    sort_by,
+                    sort_dir,
+                ),
                 balance_id: query.balanceId,
                 availability: query.availability,
-                page,
-                page_size: pageSize,
-                q: query.q?.trim() || undefined,
-                warehouse_id: query.warehouseId,
-                sku_id: query.skuId,
-                sort_by,
-                sort_dir,
             },
         )
         if (!res) return permissionRevoked()
+        takeScope(res)
         balances = res.items.map(mapBalance)
         total = res.total
     } else if (query.view === "movement") {
         const res = await fetchTargetView<BackendPage<BackendStockMovement>>(
             "/admin/stock-movements",
             {
-                page,
-                page_size: pageSize,
-                q: query.q?.trim() || undefined,
-                warehouse_id: query.warehouseId,
-                sku_id: query.skuId,
+                ...inventoryListRequestQuery(
+                    query,
+                    page,
+                    pageSize,
+                    sort_by ?? "occurred_at",
+                    sort_dir ?? "desc",
+                ),
                 movement_type: backendMovementTypeFilter(query.movementType),
                 occurred_from: dateToUnixStart(query.occurredFrom),
                 occurred_to: dateToUnixEnd(query.occurredTo),
-                sort_by: sort_by ?? "occurred_at",
-                sort_dir: sort_dir ?? "desc",
             },
         )
         if (!res) return permissionRevoked()
+        takeScope(res)
         const warehouses = await loadWarehouseOptions()
         const whMap = new Map(warehouses.map((w) => [w.id, w.name]))
         movements = res.items.map((m) =>
@@ -236,6 +278,7 @@ export async function fetchInventoryList(
             },
         )
         if (!res) return permissionRevoked()
+        takeScope(res)
         reservations = res.items.map(mapReservation)
         total = res.total
     } else {
@@ -243,17 +286,18 @@ export async function fetchInventoryList(
         const res = await fetchTargetView<BackendPage<BackendStockAdjustment>>(
             "/admin/stock-adjustments",
             {
+                ...inventoryListRequestQuery(
+                    query,
+                    page,
+                    pageSize,
+                    sort_by ?? "created_at",
+                    sort_dir ?? "desc",
+                ),
                 adjustment_id: query.adjustmentId,
-                sku_id: query.skuId,
-                page,
-                page_size: pageSize,
-                q: query.q?.trim() || undefined,
-                warehouse_id: query.warehouseId,
-                sort_by: sort_by ?? "created_at",
-                sort_dir: sort_dir ?? "desc",
             },
         )
         if (!res) return permissionRevoked()
+        takeScope(res)
         // hydrate lines for quantity/sku when possible (N+1 limited to page)
         adjustments = await Promise.all(
             res.items.map(async (a) => {
@@ -293,7 +337,9 @@ export async function fetchInventoryList(
     )
 
     let emptyReason: InventoryListView["emptyReason"]
-    if (total === 0) {
+    if (scopeEmptyReason === "no_scope") {
+        emptyReason = "NO_DATA_SCOPE"
+    } else if (total === 0) {
         const hasActiveFilters = Boolean(
             query.q?.trim() ||
             query.warehouseId ||
@@ -304,6 +350,9 @@ export async function fetchInventoryList(
             query.movementType?.length ||
             query.occurredFrom ||
             query.occurredTo ||
+            query.operatorUserIds ||
+            query.applicantUserIds ||
+            query.handlerUserIds ||
             (query.availability && query.availability !== "all"),
         )
         emptyReason =
@@ -335,7 +384,8 @@ export async function fetchInventoryList(
         dataWatermark,
         lastMovementWatermark: dataWatermark,
         queriedAt: new Date().toISOString(),
-        hasWarehouseScope: true,
+        hasWarehouseScope: scopeEmptyReason !== "no_scope",
+        scopeVersion,
         moduleAllowed: true,
         canExport: true,
         emptyReason,

@@ -188,4 +188,82 @@ describe("inventory list optional enhancements", () => {
             expect(result.emptyReason).toBe("PERMISSION_REVOKED")
         },
     )
+
+    it("maps no_scope empty reason and does not send personnel on balance", async () => {
+        apiGetMock.mockImplementation(async (path, params) => {
+            if (path === "/admin/warehouses") return page([])
+            if (path === "/admin/stock-adjustments") return page([])
+            if (path === "/admin/stock-balances") {
+                return isMetricRequest(params)
+                    ? page([], 0)
+                    : {
+                          ...page([]),
+                          total: 0,
+                          empty_reason: "no_scope",
+                          scope_version: "v-scope",
+                      }
+            }
+            throw new Error(`unexpected path: ${path}`)
+        })
+        const result = await fetchInventoryList({
+            ...query,
+            operatorUserIds: "u-1",
+        })
+        expect(result.emptyReason).toBe("NO_DATA_SCOPE")
+        expect(result.hasWarehouseScope).toBe(false)
+        expect(result.scopeVersion).toBe("v-scope")
+        const balanceCall = apiGetMock.mock.calls.find(
+            (call) =>
+                call[0] === "/admin/stock-balances" &&
+                !isMetricRequest(call[1]),
+        )
+        expect(balanceCall?.[1]).not.toHaveProperty("operator_user_ids")
+    })
+
+    it("sends movement operator and adjustment people filters", async () => {
+        apiGetMock.mockImplementation(async (path) => {
+            if (path === "/admin/warehouses") return page([])
+            if (path === "/admin/stock-balances") return page([], 0)
+            if (path === "/admin/stock-movements") {
+                return { ...page([]), scope_version: "mv1" }
+            }
+            throw new Error(`unexpected path: ${path}`)
+        })
+        await fetchInventoryList({
+            view: "movement",
+            pageSize: 20,
+            sort: [],
+            operatorUserIds: "op-1",
+            scopeVersion: "mv1",
+        })
+        expect(apiGetMock).toHaveBeenCalledWith(
+            "/admin/stock-movements",
+            expect.objectContaining({
+                operator_user_ids: "op-1",
+                scope_version: "mv1",
+            }),
+        )
+        apiGetMock.mockImplementation(async (path) => {
+            if (path === "/admin/warehouses") return page([])
+            if (path === "/admin/stock-balances") return page([], 0)
+            if (path === "/admin/stock-adjustments") return page([])
+            throw new Error(`unexpected path: ${path}`)
+        })
+        await fetchInventoryList({
+            view: "adjustment",
+            pageSize: 20,
+            sort: [],
+            operatorUserIds: "op-1",
+            applicantUserIds: "app-1",
+            handlerUserIds: "h-1",
+        })
+        expect(apiGetMock).toHaveBeenCalledWith(
+            "/admin/stock-adjustments",
+            expect.objectContaining({
+                operator_user_ids: "op-1",
+                applicant_user_ids: "app-1",
+                handler_user_ids: "h-1",
+            }),
+        )
+    })
 })

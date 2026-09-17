@@ -100,6 +100,10 @@ fn stock_movement_indexes() -> Vec<IndexModel> {
             "idx_stock_movements_ledger",
             doc! { "warehouse_id": 1, "sku_id": 1, "occurred_at": 1, "id": 1 },
         ),
+        named_index(
+            "idx_stock_movements_operator",
+            doc! { "warehouse_id": 1, "recorded_by": 1, "occurred_at": 1, "id": 1 },
+        ),
     ]
 }
 
@@ -145,6 +149,10 @@ fn stock_adjustment_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_stock_adjustments_adjustment_no", doc! { "adjustment_no": 1 }),
         named_index("idx_stock_adjustments_warehouse_status", doc! { "warehouse_id": 1, "status": 1 }),
+        named_index(
+            "idx_stock_adjustments_operator",
+            doc! { "warehouse_id": 1, "prepared_by": 1, "created_at": 1, "id": 1 },
+        ),
     ]
 }
 
@@ -199,6 +207,9 @@ mod tests {
         assert_eq!(source.options.as_ref().unwrap().unique, Some(true));
         assert!(indexes.iter().any(|index| {
             index.keys == doc! { "warehouse_id": 1, "sku_id": 1, "occurred_at": 1, "id": 1 }
+        }));
+        assert!(indexes.iter().any(|index| {
+            index.keys == doc! { "warehouse_id": 1, "recorded_by": 1, "occurred_at": 1, "id": 1 }
         }));
     }
 
@@ -271,6 +282,9 @@ mod tests {
             .unwrap();
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
         assert!(adjustment.iter().any(|index| index.keys == doc! { "warehouse_id": 1, "status": 1 }));
+        assert!(adjustment.iter().any(|index| {
+            index.keys == doc! { "warehouse_id": 1, "prepared_by": 1, "created_at": 1, "id": 1 }
+        }));
 
         assert!(
             stock_adjustment_line_indexes()

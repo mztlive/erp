@@ -387,10 +387,12 @@ export function mapAdjustment(
         statusLabel: st.statusLabel,
         statusTone: st.statusTone,
         operatorLabel: a.prepared_by,
+        applicantLabel: a.submitted_by ?? undefined,
         currentNodeLabel:
             approval?.instance?.currentNodeName ??
             approval?.instance?.currentNode,
         currentAssigneeLabel:
+            a.current_assignee ??
             approval?.instance?.currentAssigneeName ??
             approval?.instance?.currentAssignee,
         createdAt: secsToIso(a.created_at),

@@ -10,11 +10,11 @@ use axum::{Extension, Json};
 use erp_core::ids::WarehouseId;
 use erp_inventory::{
     AdjustmentReasonType, CancelStockAdjustmentApprovalRequest, CreateStockAdjustmentRequest,
-    ExpectedStockBalanceVersion, PageView, StockAdjustmentDetailView, StockAdjustmentLineInput,
-    StockAdjustmentLineUpdateInput, StockAdjustmentListParams, StockAdjustmentSubmitResultQuery,
-    StockAdjustmentView, StockBalanceDetailView, StockBalanceListParams, StockBalanceView,
-    StockMovementListParams, StockMovementView, StockReservationListParams, StockReservationView,
-    SubmitStockAdjustmentRequest, UpdateStockAdjustmentRequest,
+    ExpectedStockBalanceVersion, InventoryListPage, PageView, StockAdjustmentDetailView,
+    StockAdjustmentLineInput, StockAdjustmentLineUpdateInput, StockAdjustmentListParams,
+    StockAdjustmentSubmitResultQuery, StockAdjustmentView, StockBalanceDetailView, StockBalanceListParams,
+    StockBalanceView, StockMovementListParams, StockMovementView, StockReservationListParams,
+    StockReservationView, SubmitStockAdjustmentRequest, UpdateStockAdjustmentRequest,
 };
 use serde::Deserialize;
 
@@ -194,7 +194,7 @@ pub async fn stock_balance_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<StockBalanceListParams>,
-) -> Result<PageView<StockBalanceView>> {
+) -> Result<InventoryListPage<StockBalanceView>> {
     let page = state.inventory_service().stock_balance_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
@@ -246,7 +246,7 @@ pub async fn stock_movement_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<StockMovementListParams>,
-) -> Result<PageView<StockMovementView>> {
+) -> Result<InventoryListPage<StockMovementView>> {
     let page = state.inventory_service().stock_movement_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
@@ -298,7 +298,7 @@ pub async fn stock_adjustment_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<StockAdjustmentListParams>,
-) -> Result<PageView<StockAdjustmentView>> {
+) -> Result<InventoryListPage<StockAdjustmentView>> {
     let page = state.inventory_service().stock_adjustment_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))

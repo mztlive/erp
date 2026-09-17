@@ -59,6 +59,7 @@ export function buildAdjustmentColumns(): ColumnDef<StockAdjustmentRow>[] {
             cell: ({ row }) => (
                 <div className="text-xs text-muted-foreground">
                     <div>经办 {row.original.operatorLabel}</div>
+                    <div>申请人 {row.original.applicantLabel ?? "—"}</div>
                     <div>当前节点 {row.original.currentNodeLabel ?? "—"}</div>
                     <div>
                         当前审批人 {row.original.currentAssigneeLabel ?? "—"}

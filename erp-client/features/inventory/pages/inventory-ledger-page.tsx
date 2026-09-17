@@ -66,6 +66,9 @@ export function InventoryLedgerPage() {
         pageSize,
         cursorParam,
         cursorOffset,
+        operatorUserIds,
+        applicantUserIds,
+        handlerUserIds,
         hasActiveFilters,
         patchUrl,
     } = useInventoryLedgerUrlState()
@@ -88,6 +91,9 @@ export function InventoryLedgerPage() {
         movementType,
         occurredFrom,
         occurredTo,
+        operatorUserIds,
+        applicantUserIds,
+        handlerUserIds,
         searchDraft,
         setSearchDraft,
         patchUrl,
@@ -125,6 +131,10 @@ export function InventoryLedgerPage() {
                 sortValue,
                 balanceIdParam,
                 adjustmentIdParam,
+                operatorUserIds,
+                applicantUserIds,
+                handlerUserIds,
+                scopeVersion: undefined,
             }),
         [
             view,
@@ -141,6 +151,9 @@ export function InventoryLedgerPage() {
             sortValue,
             balanceIdParam,
             adjustmentIdParam,
+            operatorUserIds,
+            applicantUserIds,
+            handlerUserIds,
         ],
     )
 
@@ -311,6 +324,30 @@ export function InventoryLedgerPage() {
                 label: `调整单：${chipAdjustmentNo ?? "已定位"}`,
             })
         }
+        if (view === "movement" && operatorUserIds) {
+            chips.push({
+                key: "operatorUserIds",
+                label: "经办人已筛选",
+            })
+        }
+        if (view === "adjustment" && operatorUserIds) {
+            chips.push({
+                key: "operatorUserIds",
+                label: "经办人已筛选",
+            })
+        }
+        if (view === "adjustment" && applicantUserIds) {
+            chips.push({
+                key: "applicantUserIds",
+                label: "申请人已筛选",
+            })
+        }
+        if (view === "adjustment" && handlerUserIds) {
+            chips.push({
+                key: "handlerUserIds",
+                label: "当前审批人已筛选",
+            })
+        }
         return chips
     }, [
         adjustmentIdParam,
@@ -327,6 +364,9 @@ export function InventoryLedgerPage() {
         skuId,
         view,
         warehouseId,
+        operatorUserIds,
+        applicantUserIds,
+        handlerUserIds,
     ])
 
     // 查询失败但无缓存数据时只替换表格内容为失败态，筛选区保持挂载（§11.2）
@@ -368,6 +408,7 @@ export function InventoryLedgerPage() {
                     startExport({
                         total: data?.total ?? 0,
                         filterSummary: data?.filterSummary ?? "",
+                        query: { ...query, scopeVersion: undefined },
                     })
                 }}
             />

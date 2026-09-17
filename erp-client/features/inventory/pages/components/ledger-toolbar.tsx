@@ -11,6 +11,8 @@ import {
 } from "@/components/business/list-workspace"
 import { Input } from "@/components/ui/input"
 import { WarehouseSearchCombobox } from "@/features/entity-selectors"
+import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import { useOwnerOptionsQuery } from "@/hooks/use-options"
 import { MOVEMENT_TYPE_OPTIONS } from "@/features/inventory/lib/presentation"
 import type {
     LedgerAppliedChip,
@@ -48,6 +50,12 @@ interface LedgerToolbarProps {
     setOccurredFromDraft: SetState<string>
     occurredToDraft: string
     setOccurredToDraft: SetState<string>
+    operatorUserIdsDraft: string
+    setOperatorUserIdsDraft: SetState<string>
+    applicantUserIdsDraft: string
+    setApplicantUserIdsDraft: SetState<string>
+    handlerUserIdsDraft: string
+    setHandlerUserIdsDraft: SetState<string>
     panelOpen: boolean
     setPanelOpen: SetState<boolean>
     hasStructuredFilters?: boolean
@@ -85,6 +93,12 @@ export function LedgerToolbar({
     setOccurredFromDraft,
     occurredToDraft,
     setOccurredToDraft,
+    operatorUserIdsDraft,
+    setOperatorUserIdsDraft,
+    applicantUserIdsDraft,
+    setApplicantUserIdsDraft,
+    handlerUserIdsDraft,
+    setHandlerUserIdsDraft,
     panelOpen,
     setPanelOpen,
     appliedChips,
@@ -102,11 +116,21 @@ export function LedgerToolbar({
     const dateErrorId = "inventory-ledger-occurred-error"
     const showAvailabilityCommon = view === "balance"
     const showMovementMore = view === "movement"
-    const showMore = showMovementMore
-    const moreCount = appliedChips.filter(
-        ({ key }) =>
-            showMovementMore &&
-            (key === "movementType" || key === "occurredRange"),
+    const showAdjustmentMore = view === "adjustment"
+    const showMore = showMovementMore || showAdjustmentMore
+    const ownerOptions = (useOwnerOptionsQuery().data ?? []).map((item) => ({
+        value: item.userId,
+        label: item.displayName,
+    }))
+    const moreCount = appliedChips.filter(({ key }) =>
+        showMovementMore
+            ? key === "movementType" ||
+              key === "occurredRange" ||
+              key === "operatorUserIds"
+            : showAdjustmentMore &&
+              (key === "operatorUserIds" ||
+                  key === "applicantUserIds" ||
+                  key === "handlerUserIds"),
     ).length
 
     const warehouseFilter = (
@@ -259,6 +283,38 @@ export function LedgerToolbar({
                                         </p>
                                     ) : null}
                                 </ListWorkspaceFilterField>
+                                <ResponsibleUserFilter
+                                    id="inventory-ledger-operator-filter"
+                                    label="经办人"
+                                    value={operatorUserIdsDraft}
+                                    onChange={setOperatorUserIdsDraft}
+                                    options={ownerOptions}
+                                />
+                            </div>
+                        ) : null}
+                        {showAdjustmentMore ? (
+                            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                                <ResponsibleUserFilter
+                                    id="inventory-ledger-adjustment-operator-filter"
+                                    label="经办人"
+                                    value={operatorUserIdsDraft}
+                                    onChange={setOperatorUserIdsDraft}
+                                    options={ownerOptions}
+                                />
+                                <ResponsibleUserFilter
+                                    id="inventory-ledger-applicant-filter"
+                                    label="申请人"
+                                    value={applicantUserIdsDraft}
+                                    onChange={setApplicantUserIdsDraft}
+                                    options={ownerOptions}
+                                />
+                                <ResponsibleUserFilter
+                                    id="inventory-ledger-handler-filter"
+                                    label="当前审批人"
+                                    value={handlerUserIdsDraft}
+                                    onChange={setHandlerUserIdsDraft}
+                                    options={ownerOptions}
+                                />
                             </div>
                         ) : null}
                     </div>

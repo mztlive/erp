@@ -14,11 +14,17 @@ use erp_identity::access_control::ScopedObject;
 use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
 use erp_identity::{Error as IdentityError, Permission, SharedRbacService};
 use erp_inventory::{
-    AuthorizationPort, CatalogFactsPort, FulfillmentFactsPort, InventoryAuditPort, InventoryAuthorization,
+    AdjustmentPeopleFact, AdjustmentPeopleFactsPort, AdjustmentSnapshotReadFilter, AuthorizationPort,
+    CatalogFactsPort, FulfillmentFactsPort, InventoryAuditPort, InventoryAuthorization, InventoryScopeMeta,
     InventoryService, PreparedInventoryAudit, ReceiptNoFact, SkuFact, SkuRevisionFact, WarehouseFact,
-    WarehouseFactsPort, WarehouseRevisionFact, WarehouseScope,
+    WarehouseFactsPort, WarehouseRevisionFact, WarehouseScope, applicant_object_ids,
+    latest_snapshot_submitters, merge_adjustment_people,
 };
 use erp_warehouse::WarehouseExt;
+use erp_workflow::{
+    ApprovalIntegrationExt, ApprovalSubjectSnapshot, DocumentType, WorkItem, WorkItemExt, WorkItemFilter,
+    WorkItemStatus, WorkItemType,
+};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -91,6 +97,7 @@ pub async fn authorize_inventory(
     }
     let service = DataScopeService::new(db.clone(), rbac.clone());
     let mut scopes = Vec::new();
+    let mut metas = Vec::new();
     for (code, requires_detail) in [
         (BALANCE_LIST_PERMISSION, false),
         (BALANCE_DETAIL_PERMISSION, false),
@@ -101,10 +108,19 @@ pub async fn authorize_inventory(
         (CREATE_PERMISSION, true),
         (UPDATE_PERMISSION, true),
     ] {
-        scopes.push(inventory_scope(&service, actor, code, requires_detail, executor).await?);
+        let (scope, meta) = inventory_scope(&service, actor, code, requires_detail, executor).await?;
+        scopes.push(scope);
+        metas.push(meta);
     }
     let mut scopes = scopes.into_iter();
+    let mut metas = metas.into_iter();
     let mut next = || scopes.next().expect("八项已解析范围");
+    let mut next_meta = || metas.next().expect("八项已解析范围");
+    let balance_meta = next_meta();
+    let _ = next_meta();
+    let movement_meta = next_meta();
+    let _ = next_meta();
+    let adjustment_meta = next_meta();
     Ok(InventoryAuthorization::from_scopes(
         true,
         next(),
@@ -115,7 +131,8 @@ pub async fn authorize_inventory(
         next(),
         next(),
         next(),
-    ))
+    )
+    .with_list_meta(balance_meta, movement_meta, adjustment_meta))
 }
 
 /// 每个库存资源动作独立解析；创建、更新及列表沿用同角色完整详情权限要求。
@@ -125,7 +142,7 @@ async fn inventory_scope(
     code: &str,
     requires_detail: bool,
     executor: &mut dyn Executor,
-) -> erp_inventory::Result<WarehouseScope> {
+) -> erp_inventory::Result<(WarehouseScope, InventoryScopeMeta)> {
     let (resource, action) = code.split_once(':').expect("固定库存权限合法");
     let extra = requires_detail
         .then(|| Permission::parse(DETAIL_PERMISSION).expect("固定权限合法"))
@@ -133,10 +150,21 @@ async fn inventory_scope(
         .collect::<Vec<_>>();
     let access = match service.resolve_permissions(actor, resource, action, &extra, executor).await {
         Ok(access) => access,
-        Err(IdentityError::Forbidden(_)) => return Ok(WarehouseScope::empty()),
+        Err(IdentityError::Forbidden(_)) => {
+            return Ok((WarehouseScope::empty(), InventoryScopeMeta::empty()));
+        },
         Err(error) => return Err(map_svc(error.into())),
     };
-    warehouse_scope(&access)
+    Ok((warehouse_scope(&access)?, scope_meta(&access)))
+}
+
+fn scope_meta(access: &AuthorizedDataScope) -> InventoryScopeMeta {
+    InventoryScopeMeta::new(
+        access.scope_version.clone(),
+        access.policy_version,
+        access.organizations.version,
+        access.as_of.as_utc().to_rfc3339(),
+    )
 }
 
 /// 仅把公共判定通过的仓库转换为库存 Port 条件；其他维度和其他资源不能补授权。
@@ -458,6 +486,195 @@ impl FulfillmentFactsPort for MongoInventoryFulfillmentFacts {
     }
 }
 
+const PEOPLE_LIMIT: usize = 20_000;
+
+/// 库存调整申请人与当前开放审批人 Mongo 适配器。
+#[derive(Clone)]
+pub struct MongoInventoryPeopleFacts {
+    db: Database,
+}
+
+impl MongoInventoryPeopleFacts {
+    /// Bind the adapter to `db`.
+    pub fn new(db: Database) -> Self {
+        Self { db }
+    }
+
+    /// Wrap the adapter as a shared port.
+    pub fn shared(db: Database) -> Arc<dyn AdjustmentPeopleFactsPort> {
+        Arc::new(Self::new(db))
+    }
+}
+
+#[async_trait]
+impl AdjustmentPeopleFactsPort for MongoInventoryPeopleFacts {
+    async fn people_by_adjustment_ids(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> erp_inventory::Result<HashMap<String, AdjustmentPeopleFact>> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        ensure_people_limit(ids.len())?;
+        let snapshots = self
+            .load_snapshots(
+                AdjustmentSnapshotReadFilter {
+                    business_object_ids: Some(ids.to_vec()),
+                    ..AdjustmentSnapshotReadFilter::default()
+                },
+                executor,
+            )
+            .await?;
+        let wanted = ids.iter().cloned().collect::<BTreeSet<_>>();
+        let tasks = self
+            .load_open_tasks(None, executor)
+            .await?
+            .into_iter()
+            .filter(|item| wanted.contains(&item.business_object_id))
+            .collect::<Vec<_>>();
+        Ok(merge_adjustment_people(
+            latest_snapshot_submitters(snapshot_rows(&snapshots)),
+            open_assignees(&tasks),
+        ))
+    }
+
+    async fn adjustment_ids_submitted_by(
+        &self,
+        applicant_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> erp_inventory::Result<Vec<String>> {
+        if applicant_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let matched = self
+            .load_snapshots(
+                AdjustmentSnapshotReadFilter {
+                    submitted_by_ids: Some(applicant_ids.to_vec()),
+                    ..AdjustmentSnapshotReadFilter::default()
+                },
+                executor,
+            )
+            .await?;
+        let object_ids = matched.iter().map(|row| row.business_object_id.clone()).collect::<Vec<_>>();
+        if object_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let snapshots = self
+            .load_snapshots(
+                AdjustmentSnapshotReadFilter {
+                    business_object_ids: Some(object_ids),
+                    ..AdjustmentSnapshotReadFilter::default()
+                },
+                executor,
+            )
+            .await?;
+        Ok(applicant_object_ids(&latest_snapshot_submitters(snapshot_rows(&snapshots)), applicant_ids))
+    }
+
+    async fn adjustment_ids_assigned_to(
+        &self,
+        handler_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> erp_inventory::Result<Vec<String>> {
+        if handler_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let tasks = self.load_open_tasks(Some(handler_ids.to_vec()), executor).await?;
+        let mut ids = open_assignees(&tasks).into_iter().map(|(id, _)| id).collect::<Vec<_>>();
+        ids.sort();
+        ids.dedup();
+        ensure_people_limit(ids.len())?;
+        Ok(ids)
+    }
+}
+
+impl MongoInventoryPeopleFacts {
+    async fn load_snapshots(
+        &self,
+        mut filter: AdjustmentSnapshotReadFilter,
+        executor: &mut dyn Executor,
+    ) -> erp_inventory::Result<Vec<ApprovalSubjectSnapshot>> {
+        let mut items = Vec::new();
+        filter.page = 1;
+        filter.page_size = 100;
+        loop {
+            let page = self
+                .db
+                .approval_subject_snapshots()
+                .search(&filter, executor)
+                .await
+                .map_err(erp_inventory::Error::from)?;
+            items.extend(page.items);
+            ensure_people_limit(items.len())?;
+            if items.len() as i64 >= page.total || page.total == 0 {
+                break;
+            }
+            filter.page += 1;
+        }
+        Ok(items)
+    }
+
+    async fn load_open_tasks(
+        &self,
+        handler_ids: Option<Vec<String>>,
+        executor: &mut dyn Executor,
+    ) -> erp_inventory::Result<Vec<WorkItem>> {
+        let mut filter = open_adjustment_task_filter(handler_ids);
+        let mut items = Vec::new();
+        loop {
+            let page =
+                self.db.work_items().search(&filter, executor).await.map_err(erp_inventory::Error::from)?;
+            items.extend(page.items);
+            ensure_people_limit(items.len())?;
+            if items.len() as i64 >= page.total || page.total == 0 {
+                break;
+            }
+            filter.page += 1;
+        }
+        Ok(items)
+    }
+}
+
+fn ensure_people_limit(len: usize) -> erp_inventory::Result<()> {
+    if len > PEOPLE_LIMIT {
+        return Err(erp_inventory::Error::ValidationError(
+            "库存范围超过 20000 个对象，请缩小人员筛选".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn open_adjustment_task_filter(handler_ids: Option<Vec<String>>) -> WorkItemFilter {
+    WorkItemFilter {
+        work_item_types: vec![WorkItemType::DocumentApproval],
+        statuses: vec![WorkItemStatus::Open],
+        object_access_shapes: Some(vec![(
+            WorkItemType::DocumentApproval,
+            DocumentType::StockAdjustment.as_str().to_string(),
+        )]),
+        managed_owner_ids: handler_ids,
+        page: 1,
+        page_size: 100,
+        ..WorkItemFilter::default()
+    }
+}
+
+fn snapshot_rows(snapshots: &[ApprovalSubjectSnapshot]) -> Vec<(String, u32, String)> {
+    snapshots
+        .iter()
+        .map(|row| (row.business_object_id.clone(), row.subject_version, row.payload.submitted_by.clone()))
+        .collect()
+}
+
+fn open_assignees(tasks: &[WorkItem]) -> Vec<(String, String)> {
+    tasks
+        .iter()
+        .filter(|item| item.status == WorkItemStatus::Open)
+        .filter_map(|item| Some((item.business_object_id.clone(), item.owner_user_id.clone()?)))
+        .collect()
+}
+
 /// Construct an inventory query service with composition adapters.
 pub fn inventory_service(db: Database, rbac: SharedRbacService) -> InventoryService {
     InventoryService::new(
@@ -466,7 +683,8 @@ pub fn inventory_service(db: Database, rbac: SharedRbacService) -> InventoryServ
         MongoInventoryWarehouseFacts::shared(db.clone()),
         MongoInventoryCatalogFacts::shared(db.clone()),
         MongoInventoryFulfillmentFacts::shared(db.clone()),
-        MongoInventoryAudit::shared(db),
+        MongoInventoryAudit::shared(db.clone()),
+        MongoInventoryPeopleFacts::shared(db),
     )
 }
 
@@ -536,5 +754,23 @@ mod tests {
         );
         access.scope.user_limit = Some(ScopeClause::default());
         assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::empty());
+    }
+
+    #[test]
+    fn applicant_filter_uses_latest_snapshot_not_created_by() {
+        let latest = latest_snapshot_submitters([
+            ("adj-1".into(), 1, "creator-1".into()),
+            ("adj-1".into(), 3, "applicant-1".into()),
+            ("adj-1".into(), 2, "creator-1".into()),
+        ]);
+        assert_eq!(latest.get("adj-1").map(String::as_str), Some("applicant-1"));
+        assert!(applicant_object_ids(&latest, &["creator-1".into()]).is_empty());
+        assert_eq!(
+            merge_adjustment_people(latest, Vec::<(String, String)>::new())
+                .get("adj-1")
+                .and_then(|fact| fact.submitted_by.clone())
+                .as_deref(),
+            Some("applicant-1")
+        );
     }
 }

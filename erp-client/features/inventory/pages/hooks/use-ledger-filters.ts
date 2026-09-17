@@ -19,6 +19,9 @@ export type LedgerFilterKey =
     | "skuId"
     | "salesOrderLineId"
     | "adjustmentId"
+    | "operatorUserIds"
+    | "applicantUserIds"
+    | "handlerUserIds"
 
 export type LedgerAppliedChip = Readonly<{
     key: LedgerFilterKey
@@ -34,6 +37,9 @@ export interface UseLedgerFiltersInput {
     movementType: string[]
     occurredFrom: string | undefined
     occurredTo: string | undefined
+    operatorUserIds: string | undefined
+    applicantUserIds: string | undefined
+    handlerUserIds: string | undefined
     /** 关键词草稿由 useLedgerSearch 持有（含 `/` 快捷键与回填保护）。 */
     searchDraft: string
     setSearchDraft: React.Dispatch<React.SetStateAction<string>>
@@ -53,6 +59,9 @@ export function useLedgerFilters({
     movementType,
     occurredFrom,
     occurredTo,
+    operatorUserIds,
+    applicantUserIds,
+    handlerUserIds,
     searchDraft,
     setSearchDraft,
     patchUrl,
@@ -72,17 +81,33 @@ export function useLedgerFilters({
     const [occurredToDraft, setOccurredToDraft] = React.useState(
         occurredTo ?? "",
     )
+    const [operatorUserIdsDraft, setOperatorUserIdsDraft] = React.useState(
+        operatorUserIds ?? "",
+    )
+    const [applicantUserIdsDraft, setApplicantUserIdsDraft] = React.useState(
+        applicantUserIds ?? "",
+    )
+    const [handlerUserIdsDraft, setHandlerUserIdsDraft] = React.useState(
+        handlerUserIds ?? "",
+    )
 
     // ---- UI 态 ----
     const hasStructuredFilters = Boolean(
         warehouseId ||
         (view === "balance" && availability !== "all") ||
         (view === "movement" && movementType.length > 0) ||
-        (view === "movement" && Boolean(occurredFrom || occurredTo)),
+        (view === "movement" && Boolean(occurredFrom || occurredTo)) ||
+        (view === "movement" && Boolean(operatorUserIds)) ||
+        (view === "adjustment" &&
+            Boolean(operatorUserIds || applicantUserIds || handlerUserIds)),
     )
     const hasMoreFilters = Boolean(
-        view === "movement" &&
-        (movementType.length > 0 || Boolean(occurredFrom || occurredTo)),
+        (view === "movement" &&
+            (movementType.length > 0 ||
+                Boolean(occurredFrom || occurredTo) ||
+                Boolean(operatorUserIds))) ||
+        (view === "adjustment" &&
+            Boolean(operatorUserIds || applicantUserIds || handlerUserIds)),
     )
     // 有更多条件的初始深链展开面板；URL 回填不得再次强制展开
     const [panelOpen, setPanelOpen] = React.useState(hasMoreFilters)
@@ -112,6 +137,9 @@ export function useLedgerFilters({
                         : null,
                 occurredFrom: from || null,
                 occurredTo: to || null,
+                operatorUserIds: operatorUserIdsDraft.trim() || null,
+                applicantUserIds: applicantUserIdsDraft.trim() || null,
+                handlerUserIds: handlerUserIdsDraft.trim() || null,
             },
             { replace: true, scroll: false },
         )
@@ -122,6 +150,9 @@ export function useLedgerFilters({
         movementTypeDraft,
         occurredFromDraft,
         occurredToDraft,
+        operatorUserIdsDraft,
+        applicantUserIdsDraft,
+        handlerUserIdsDraft,
         patchUrl,
         resetPagination,
         searchDraft,
@@ -140,6 +171,9 @@ export function useLedgerFilters({
                 setOccurredToDraft("")
                 setFilterError(null)
             }
+            if (key === "operatorUserIds") setOperatorUserIdsDraft("")
+            if (key === "applicantUserIds") setApplicantUserIdsDraft("")
+            if (key === "handlerUserIds") setHandlerUserIdsDraft("")
             patchUrl(
                 key === "occurredRange"
                     ? { occurredFrom: null, occurredTo: null }
@@ -157,6 +191,12 @@ export function useLedgerFilters({
             setMovementTypeDraft([])
             setOccurredFromDraft("")
             setOccurredToDraft("")
+            setOperatorUserIdsDraft("")
+        }
+        if (view === "adjustment") {
+            setOperatorUserIdsDraft("")
+            setApplicantUserIdsDraft("")
+            setHandlerUserIdsDraft("")
         }
         setFilterError(null)
     }, [view])
@@ -169,6 +209,9 @@ export function useLedgerFilters({
         setMovementTypeDraft([])
         setOccurredFromDraft("")
         setOccurredToDraft("")
+        setOperatorUserIdsDraft("")
+        setApplicantUserIdsDraft("")
+        setHandlerUserIdsDraft("")
         setFilterError(null)
         setPanelOpen(false)
         patchUrl(
@@ -179,6 +222,9 @@ export function useLedgerFilters({
                 movementType: null,
                 occurredFrom: null,
                 occurredTo: null,
+                operatorUserIds: null,
+                applicantUserIds: null,
+                handlerUserIds: null,
                 skuId: null,
                 salesOrderLineId: null,
                 adjustmentId: null,
@@ -197,8 +243,20 @@ export function useLedgerFilters({
                 movementType.join(","),
                 occurredFrom ?? "",
                 occurredTo ?? "",
+                operatorUserIds ?? "",
+                applicantUserIds ?? "",
+                handlerUserIds ?? "",
             ].join("\u0000"),
-        [availability, movementType, occurredFrom, occurredTo, warehouseId],
+        [
+            availability,
+            movementType,
+            occurredFrom,
+            occurredTo,
+            operatorUserIds,
+            applicantUserIds,
+            handlerUserIds,
+            warehouseId,
+        ],
     )
     React.useEffect(() => {
         setWarehouseIdDraft(warehouseId ?? null)
@@ -206,6 +264,9 @@ export function useLedgerFilters({
         setMovementTypeDraft(movementType)
         setOccurredFromDraft(occurredFrom ?? "")
         setOccurredToDraft(occurredTo ?? "")
+        setOperatorUserIdsDraft(operatorUserIds ?? "")
+        setApplicantUserIdsDraft(applicantUserIds ?? "")
+        setHandlerUserIdsDraft(handlerUserIds ?? "")
         setFilterError(null)
         // eslint-disable-next-line react-hooks/exhaustive-deps -- 以稳定签名驱动回填
     }, [appliedSignature])
@@ -217,7 +278,10 @@ export function useLedgerFilters({
         [...movementTypeDraft].sort().join(",") !==
             [...movementType].sort().join(",") ||
         occurredFromDraft !== (occurredFrom ?? "") ||
-        occurredToDraft !== (occurredTo ?? "")
+        occurredToDraft !== (occurredTo ?? "") ||
+        operatorUserIdsDraft !== (operatorUserIds ?? "") ||
+        applicantUserIdsDraft !== (applicantUserIds ?? "") ||
+        handlerUserIdsDraft !== (handlerUserIds ?? "")
 
     return {
         searchDraft,
@@ -232,6 +296,12 @@ export function useLedgerFilters({
         setOccurredFromDraft,
         occurredToDraft,
         setOccurredToDraft,
+        operatorUserIdsDraft,
+        setOperatorUserIdsDraft,
+        applicantUserIdsDraft,
+        setApplicantUserIdsDraft,
+        handlerUserIdsDraft,
+        setHandlerUserIdsDraft,
         panelOpen,
         setPanelOpen,
         hasStructuredFilters,

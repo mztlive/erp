@@ -19,6 +19,10 @@ export interface BuildListQueryInput {
     sortValue: string
     balanceIdParam: string | undefined
     adjustmentIdParam: string | undefined
+    operatorUserIds: string | undefined
+    applicantUserIds: string | undefined
+    handlerUserIds: string | undefined
+    scopeVersion: string | undefined
 }
 
 export function buildListQuery(input: BuildListQueryInput): InventoryQuery {
@@ -37,5 +41,9 @@ export function buildListQuery(input: BuildListQueryInput): InventoryQuery {
         sort: input.sortValue.split(",").filter(Boolean),
         balanceId: input.balanceIdParam,
         adjustmentId: input.adjustmentIdParam,
+        operatorUserIds: input.operatorUserIds,
+        applicantUserIds: input.applicantUserIds,
+        handlerUserIds: input.handlerUserIds,
+        scopeVersion: input.scopeVersion,
     }
 }

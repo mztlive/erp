@@ -56,6 +56,8 @@ pub struct StockMovementFilter {
     pub occurred_from: Option<Instant>,
     /// 发生时间上界（含）；`None` 表示不筛选。
     pub occurred_to: Option<Instant>,
+    /// 经办人（`recorded_by`）；`None` 表示不筛选，空集合表示无命中。
+    pub recorded_by_ids: Option<Vec<String>>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -86,6 +88,7 @@ impl Default for StockMovementFilter {
             direction: None,
             occurred_from: None,
             occurred_to: None,
+            recorded_by_ids: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -125,6 +128,9 @@ impl QueryFilter for StockMovementFilter {
         }
         if !range.is_empty() {
             filter.insert("occurred_at", range);
+        }
+        if let Some(recorded_by_ids) = &self.recorded_by_ids {
+            filter.insert("recorded_by", doc! { "$in": recorded_by_ids.clone() });
         }
         self.search.apply(&mut filter);
         filter
@@ -359,5 +365,23 @@ mod tests {
         assert_eq!(stock_movement_sort(&value), doc! { "occurred_at": 1, "id": 1 });
         value.sort_ascending = false;
         assert_eq!(stock_movement_sort(&value), doc! { "occurred_at": -1, "id": -1 });
+    }
+
+    #[test]
+    fn operator_filter_intersects_warehouse_scope_and_empty_warehouse_stays_empty() {
+        let mut value = filter(Some(vec![WarehouseId::new("warehouse-1")]));
+        value.recorded_by_ids = Some(vec!["op-1".to_string(), "op-2".to_string()]);
+        let document = value.to_doc();
+        assert_eq!(document.get_document("warehouse_id").unwrap(), &doc! { "$in": ["warehouse-1"] });
+        assert_eq!(document.get_document("recorded_by").unwrap(), &doc! { "$in": ["op-1", "op-2"] });
+
+        let mut empty = filter(Some(Vec::new()));
+        empty.recorded_by_ids = Some(vec!["op-1".to_string()]);
+        let document = empty.to_doc();
+        assert_eq!(
+            document.get_document("warehouse_id").unwrap().get_array("$in").unwrap(),
+            &Vec::<Bson>::new()
+        );
+        assert_eq!(document.get_document("recorded_by").unwrap(), &doc! { "$in": ["op-1"] });
     }
 }

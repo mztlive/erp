@@ -56,6 +56,10 @@ pub struct StockAdjustmentFilter {
     pub warehouse_ids: Option<Vec<WarehouseId>>,
     /// 单据状态；`None` 表示不筛选。
     pub status: Option<StockAdjustmentState>,
+    /// 经办人（`prepared_by`）；`None` 表示不筛选，空集合表示无命中。
+    pub prepared_by_ids: Option<Vec<String>>,
+    /// 申请人/当前审批人求交后的调整单主键；`None` 表示不按人员对象收窄。
+    pub id_in: Option<Vec<String>>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -82,6 +86,8 @@ impl Default for StockAdjustmentFilter {
             search: super::InventorySearch::default(),
             warehouse_ids: None,
             status: None,
+            prepared_by_ids: None,
+            id_in: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -105,6 +111,12 @@ impl QueryFilter for StockAdjustmentFilter {
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
+        }
+        if let Some(prepared_by_ids) = &self.prepared_by_ids {
+            filter.insert("prepared_by", doc! { "$in": prepared_by_ids.clone() });
+        }
+        if let Some(id_in) = &self.id_in {
+            filter.insert("id", doc! { "$in": id_in.clone() });
         }
         self.search.apply(&mut filter);
         filter
@@ -516,5 +528,23 @@ mod filter_tests {
         assert_eq!(stock_adjustment_sort(&value), doc! { "created_at": 1, "id": 1 });
         value.sort_ascending = false;
         assert_eq!(stock_adjustment_sort(&value), doc! { "created_at": -1, "id": -1 });
+    }
+
+    #[test]
+    fn operator_and_people_object_filters_intersect_warehouse_scope() {
+        let mut value = filter(Some(vec![WarehouseId::new("warehouse-1")]));
+        value.prepared_by_ids = Some(vec!["op-1".to_string()]);
+        value.id_in = Some(vec!["adj-1".to_string()]);
+        let document = value.to_doc();
+        assert_eq!(document.get_document("warehouse_id").unwrap(), &doc! { "$in": ["warehouse-1"] });
+        assert_eq!(document.get_document("prepared_by").unwrap(), &doc! { "$in": ["op-1"] });
+        assert_eq!(document.get_document("id").unwrap(), &doc! { "$in": ["adj-1"] });
+
+        let mut empty = filter(Some(Vec::new()));
+        empty.prepared_by_ids = Some(vec!["op-1".to_string()]);
+        assert_eq!(
+            empty.to_doc().get_document("warehouse_id").unwrap().get_array("$in").unwrap(),
+            &Vec::<Bson>::new()
+        );
     }
 }
