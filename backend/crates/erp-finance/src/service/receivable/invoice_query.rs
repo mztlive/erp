@@ -217,10 +217,7 @@ fn sales_allocation_view(
     let views = allocations
         .iter()
         .map(|allocation| {
-            match allocation.allocation_action {
-                AllocationAction::Apply => net = net.checked_add(allocation.allocated_gross_amount),
-                AllocationAction::Reverse => net = net.checked_sub(allocation.allocated_gross_amount),
-            }
+            net = allocation.allocation_action.apply_to_net(net, allocation.allocated_gross_amount);
             crate::dto::receivable::SalesInvoiceAllocationView {
                 id: allocation.base.id.clone(),
                 allocation_seq: allocation.allocation_seq,
@@ -254,10 +251,7 @@ fn purchase_allocation_view(
                 crate::entity::payable::AllocationAction::Apply => AllocationAction::Apply,
                 crate::entity::payable::AllocationAction::Reverse => AllocationAction::Reverse,
             };
-            match action {
-                AllocationAction::Apply => net = net.checked_add(allocation.allocated_gross_amount),
-                AllocationAction::Reverse => net = net.checked_sub(allocation.allocated_gross_amount),
-            }
+            net = action.apply_to_net(net, allocation.allocated_gross_amount);
             crate::dto::receivable::SalesInvoiceAllocationView {
                 id: allocation.base.id.clone(),
                 allocation_seq: allocation.allocation_seq,
