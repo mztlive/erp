@@ -8,8 +8,7 @@ use erp_supply::dto::supplier_settlement::{
     SupplierSettlementStatementListParams, SupplierSettlementStatementListView,
 };
 use erp_workflow::WorkItemExt;
-use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
-use mongodb::bson::doc;
+use erp_workflow::entity::work_item::WorkItemType;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::SupplierSettlementProcess;
@@ -95,14 +94,10 @@ async fn open_review_statement_ids(
     };
     let items = db
         .work_items()
-        .find_many_sorted(
-            doc! {
-                "work_item_type": WorkItemType::SupplierSettlementReview.as_str(),
-                "business_object_type": "supplier_settlement_statement",
-                "status": WorkItemStatus::Open.as_str(),
-                "owner_user_id": { "$in": ids.as_slice() },
-            },
-            doc! { "created_at": 1 },
+        .list_open_by_type_owners(
+            WorkItemType::SupplierSettlementReview,
+            "supplier_settlement_statement",
+            ids.as_slice(),
             &mut NoTransaction,
         )
         .await?;

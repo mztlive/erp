@@ -86,6 +86,45 @@ impl<'a> WorkItemRepository<'a> {
         .await
     }
 
+    /// 按任务类型、对象类型与当前处理人读取开放任务。
+    ///
+    /// # 参数
+    /// * `work_item_type` - 任务类型
+    /// * `business_object_type` - 业务对象类型
+    /// * `owner_user_ids` - 当前处理人稳定 ID；空集合不访问数据库
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回匹配的开放任务，按创建时间升序。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 只返回当前开放任务，历史处理人不得命中。
+    pub async fn list_open_by_type_owners(
+        &self,
+        work_item_type: WorkItemType,
+        business_object_type: &str,
+        owner_user_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        if owner_user_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many_sorted(
+            doc! {
+                "work_item_type": work_item_type.as_str(),
+                "business_object_type": business_object_type,
+                "status": WorkItemStatus::Open.as_str(),
+                "owner_user_id": { "$in": owner_user_ids },
+            },
+            doc! { "created_at": 1 },
+            executor,
+        )
+        .await
+    }
+
     /// 按稳定 ID 读取任意已注册工作项。
     ///
     /// # 参数

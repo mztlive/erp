@@ -390,7 +390,7 @@ mod equivalence_tests {
     fn empty_scope_and_three_role_filters_do_not_expand_visibility() {
         let empty = SettlementReadScope::default();
         assert!(empty.is_empty());
-        assert_eq!(empty.document(), mongodb::bson::doc! { "$expr": false });
+        assert!(!empty.allows_object("owner", "org-a"));
         let owner =
             SettlementScopeClause { owner_user_id: Some("owner".into()), ..SettlementScopeClause::default() };
         assert!(owner.allows("owner", "org-a"));

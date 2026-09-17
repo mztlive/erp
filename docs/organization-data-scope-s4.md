@@ -1,6 +1,6 @@
 # S4 扩展管理实施及验收合同
 
-状态：执行中；S4-01—S4-07 已合入 main（基线 `a16ce443`）；S4-08 已核对接线并登记九列／A33—A36 本地证据。退出条件未闭合：领域边界与 `check-org-data-scope.sh` 失败、部分详情未对象级重验、结算复核任务身份仍用 `company` 字符串。未登记已验收，非正式上线。
+状态：执行中；S4-01—S4-07 已合入 main；S4-08 已登记九列／A33—A36 本地证据。结算列表已改为工作项仓储类型化查询，领域边界与 `check-org-data-scope.sh` 通过。退出条件未闭合：部分详情未对象级重验、结算复核任务身份仍用 `company` 字符串。未登记已验收，非正式上线。
 
 实施日期：2026-09-17
 
@@ -223,7 +223,7 @@ env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
 
 | 验收项 | 调用链路径 | 等价／准入测试模块 | 当前登记 |
 | --- | --- | --- | --- |
-| A33 | 消费域 Port（上表）→ 组合层 adapter `DataScopeService::new(...).resolve(...)` 或库存 `resolve_permissions` 同语句调用 → 身份域 `consumers::registration`；业务域 Cargo 无 `erp-identity`。装配：`scoped_supplier_service_with_sensitive`、`scoped_catalog_service`／`catalog_center`、`offering_access`／`scoped_offering_process`、`scoped_fulfillment_service`＋`MongoFulfillmentExceptionHandlers`、`scoped_settlement_process`、`scoped_integration_ops_service`、`inventory_service` | 领域边界夹具拒绝业务域直连身份域（`check-domain-boundaries.sh --cutover` 自检 18 项通过）。**工作区当前失败**见 §6.3，不得把 A33 记为整阶段通过 | 调用链源码符合合同结构。工作区 ODS-DOMAIN 未通过，A33 阶段核销阻断 |
+| A33 | 消费域 Port（上表）→ 组合层 adapter `DataScopeService::new(...).resolve(...)` 或库存 `resolve_permissions` 同语句调用 → 身份域 `consumers::registration`；业务域 Cargo 无 `erp-identity`。装配：`scoped_supplier_service_with_sensitive`、`scoped_catalog_service`／`catalog_center`、`offering_access`／`scoped_offering_process`、`scoped_fulfillment_service`＋`MongoFulfillmentExceptionHandlers`、`scoped_settlement_process`、`scoped_integration_ops_service`、`inventory_service` | 领域边界夹具拒绝业务域直连身份域（`check-domain-boundaries.sh --cutover` 自检 18 项、工作区 0 错误） | 调用链源码符合合同结构；工作区 ODS-DOMAIN 已通过。A36 详情缺口不阻断 A33 |
 | A34 | 公共判定 `evaluate_object`／`ResolvedScope::allows` 为基准；仓储 `*ReadScope::document` 编译固定字段（维护人／跟进人／对账负责人／处理人＋业务组织）。库存仓库维沿 S2；人员条件不进入身份维度，与仓库过滤求交 | `erp-processes`：`supplier_data_scope::equivalence_tests::public_object_decision_matches_compiled_conditions`；`catalog_data_scope::tests::a34_public_allows_matches_catalog_read_scope_document`；`offering_data_scope::tests::a34_public_allows_matches_offering_read_scope_document`；`fulfillment_order_data_scope::equivalence_tests::public_object_decision_matches_compiled_conditions`；`settlement_data_scope::equivalence_tests::public_object_decision_matches_compiled_conditions`；`integration_data_scope::equivalence_tests::public_object_decision_matches_compiled_conditions`。库存人员：`erp_inventory::service::inventory::adjustment_query::people_projection_tests`、`dto::inventory::movement_and_adjustment_consume_registered_people_filters`、`adapters::inventory::tests::inventory_scope_keeps_dimension_and_user_limit_without_fallback`。不得登记为真实库执行等价 | 内存集合等价作为本地证据。真实库对拍转跟踪 |
 | A35 | 初始化 `predefined_data_scopes::RESOURCE_ACTIONS` 经 `validate_binding` → `WIRED_CONSUMERS`；未接线动作失败关闭。FailClosed Port 未装配即拒绝。库存维度仍走 Warehouse，S4 未把 InternalOrg 写入库存登记 | `erp-identity::service::access_control::consumers`：`wired_s3_actions_admit_reads_unwired_actions_fail_closed`（含 supplier）、`wired_integration_handlers_reject_history_writes`、`wired_supplier_offering_admits_list_and_writes_without_history`；`predefined_data_scopes::every_manifest_entry_uses_version_two_and_explicit_resource_actions` 对全部清单条目 `validate_binding`。FailClosed 单测在各 Port 模块 | 清单与消费者一致；未接线动作拒绝。详情已登记但未重验见 A36／§6.4，不得用初始化条目代替详情准入 |
 | A36 | 列表按自身动作 `resolve`；供应商／商品主详情／供给写／履约详情与命令／结算详情与命令 `require_*` 原执行器重验；跨页 `scope_version`；交接 mutation `affectsDataScope`。导出无独立后端入口的主数据走前端按当前授权拉全量（撤权后须丢弃，真实验收转跟踪） | 各域 `access`／handover 模块与 adapter 维度拒绝测试；库存 `ensure_scope_version`。**缺口**：集成错误任务／差异详情无 actor、不走 Port；商品 `product_detail_revisions/skus/sku_revisions` 不带范围 | 适用入口部分通过。详情未全部对象级重验，A36 不得整项记为本地检查通过 |
@@ -243,7 +243,7 @@ env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
 | 9.3 错误与空集 | 通过（本地） | adapter 拒不支持维度、FailClosed、空范围空集 |
 | 9.4 客户样例 | 不适用 | S2 客户域，本阶段不重做 |
 | 9.5、A35 登记与初始化一致 | 部分通过 | 清单一致；详情登记与实现偏离见 §6.4 |
-| ODS-* 静态门禁 | 失败 | §6.3 |
+| ODS-* 静态门禁 | 通过 | §6.3；行为条款仍按上表分列 |
 
 ### 6.3 本批命令与退出码
 
@@ -252,22 +252,21 @@ env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
 | 命令 | 退出码 | 结果 |
 | --- | --- | --- |
 | `cargo fmt --all -- --check` | 0 | 格式通过 |
-| `./scripts/check-domain-boundaries.sh --cutover` | 1 | 夹具 18 项通过；工作区 5 项：`settlement_data_scope.rs` 测试使用 `mongodb::bson::doc!`；`supply_settlement/list.rs` 生产路径对 WorkItem `find_many_sorted`＋`doc!` 查开放复核任务 |
-| `./scripts/check-org-data-scope.sh` | 1 | 自检通过；`[ODS-DOMAIN][整改项]` 因上项领域门禁失败阻断。其余 ODS-* 本扫描未另报 S4 生产路径解释 `scope_type`／`scope_targets` |
+| `./scripts/check-domain-boundaries.sh --cutover` | 0 | 夹具 18 项通过；工作区 0 错误。结算列表改为 `WorkItemRepository::list_open_by_type_owners`，adapter 测试不再使用 `doc!` |
+| `./scripts/check-org-data-scope.sh` | 0 | `STATIC_CHECKS_PASSED`，阻断 0。行为条款仍须按 §6.2 分列 |
 | `./scripts/check-permissions-drift.sh` | 0 | 重建 `web-api` 后 `erp-client/lib/permissions.generated.ts` 无漂移 |
 | `env -u ERP_TEST_MONGO_URI cargo test -p erp-supplier -p erp-catalog -p erp-supply -p erp-integration -p erp-inventory --lib --locked` | 0 | catalog 168、integration 129、inventory 103、supplier 161（4 ignored）、supply 306；合计 867 passed、0 failed、4 ignored（未跑 `--test`／真实 Mongo） |
 | `env -u ERP_TEST_MONGO_URI cargo test -p erp-processes --lib --locked data_scope` | 0 | 53 passed（含 S4 adapter 等价与维度拒绝，以及既有选品／资金／客户等 `*data_scope`） |
 | `env -u ERP_TEST_MONGO_URI cargo test -p erp-processes --lib --locked adapters::inventory` | 0 | 2 passed：`inventory_scope_keeps_dimension_and_user_limit_without_fallback`、`applicant_filter_uses_latest_snapshot_not_created_by` |
 
-S4-08 不修改上述失败源码（不重做 M16 列表查询）。缺口列入第 8 章。
+结算列表原始 Mongo 已在后续修补中移除。其余缺口见第 8 章。
 
 ### 6.4 已知偏差（不在本批修复）
 
 1. **WorkItem `owner_organization_id` 不改为部门 ID 模型。** 合同第 1.5 条与 S4 §1.1：禁止把部门 ID 写入 WorkItem 既有责任组织字段的新语义。W26 已用订单 `business_org_unit_id`（内部组织，拒绝 `"company"`）；W29 用实体 `owner_org_unit_id`。不得借 S4-08 把任务身份改成部门主键方案。
 2. **结算复核任务身份仍用 company 字符串。** `SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID = "company"`、`SETTLEMENT_REVIEW_OWNER_ROLE = "role-finance"` 仍写入复核 WorkItem。结算单 `business_org_unit_id` 已是内部组织且创建拒绝 `"company"`。不得把该任务字段继续解释为组织范围事实，也不得在本批改成部门 ID。
 3. **详情未全部对象级重验。** `integration_error_task:detail`、`reconciliation_difference:detail` 已进 `WIRED_CONSUMERS`，HTTP 详情不传 actor、读模型按 ID 直载。商品主详情已 `require_product(detail)`；`product_detail_revisions`／`skus`／`sku_revisions` 不带范围。供给无独立 detail 动作。
-4. **结算 handler 筛选走 Process 原始 Mongo。** `supply_settlement/list.rs` `open_review_statement_ids` 直接 `work_items().find_many_sorted(doc!{...})`，触发 ODS-DOMAIN。列表 DataScope 仍经领域 `statement_list_scoped`。
-5. 真实验收、浏览器真实账号、代表性索引计划、导出撤权下载：上线准入跟踪。
+4. 真实验收、浏览器真实账号、代表性索引计划、导出撤权下载：上线准入跟踪。
 
 ## 7. 验证分层
 
@@ -287,11 +286,10 @@ A33—A36 本地证据见第 6.1 节。真实验收转跟踪。
 - 第 6 章九列无「尚未接入」的本阶段资源动作（库存人员查询登记为已接入人员条件）。
 - `check-org-data-scope.sh` 与领域边界通过；本批活动路径不再自行解释原始范围。
 
-**S4-08 时点：退出条件未满足，阶段保持执行中。** 未闭合缺口：
+**当前时点：静态门禁已通过，阶段仍保持执行中。** 未闭合缺口：
 
-1. `check-domain-boundaries.sh --cutover` 与 `check-org-data-scope.sh` 退出码 1（ODS-DOMAIN：结算列表 Process 原始 Mongo、结算 adapter 测试 `doc!`）。
-2. A36：集成错误任务／差异详情、商品附属详情未对象级重验（九列已标「已接入但不符合合同」或写入 §6.4）。
-3. 结算复核 WorkItem 身份仍为 `"company"` 字符串（已知偏差，不改任务组织字段模型）。
-4. 真实验收转跟踪，不阻塞日后「本地检查通过」，但本时点因 1—2 仍不得改阶段状态。
+1. A36：集成错误任务／差异详情、商品附属详情未对象级重验（九列已标「已接入但不符合合同」或写入 §6.4）。
+2. 结算复核 WorkItem 身份仍为 `"company"` 字符串（已知偏差，不改任务组织字段模型）。
+3. 真实验收转跟踪。因第 1 条，不得把 S4 改为「本地检查通过」。
 
 第 6 章已无「尚未接入」的本阶段资源动作；库存人员查询已登记为已接入人员条件。不得登记已验收。不得以本阶段完成开放正式业务。
