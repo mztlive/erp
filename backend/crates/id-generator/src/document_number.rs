@@ -5,8 +5,11 @@
 //! `document_number_counters` 上的原子计数器（findAndModify 模式）取号，
 //! 保证并发环境下取号唯一、序号连续递增，且序号一经消费永不回收。
 
+use std::fmt::{Display, Formatter};
+use std::result::Result as StdResult;
+
 use chrono::NaiveDate;
-use mongodb::bson::{Bson, doc, serialize_to_bson};
+use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
 use mongodb::{Collection, Database};
 use persistence_core::{Error as DatabaseError, Executor};
@@ -23,22 +26,15 @@ pub const SEQ_WIDTH: usize = 6;
 pub enum Error {
     /// 计数器 upsert 后仍未返回文档，理论上不可达。
     #[error("document number counter missing after upsert for kind '{kind}'")]
-    CounterMissing { kind: String },
+    CounterMissing { kind: DocumentNumberKind },
 
     /// 底层 MongoDB 错误。
     #[error("database error: {0}")]
     Database(#[from] DatabaseError),
 }
 
-impl From<mongodb::error::Error> for Error {
-    /// 将 MongoDB 驱动错误转换为编号生成错误。
-    fn from(error: mongodb::error::Error) -> Self {
-        Self::Database(DatabaseError::from(error))
-    }
-}
-
-/// 编号生成结果类型。
-pub type Result<T> = std::result::Result<T, Error>;
+/// 编号生成结果类型.
+pub type Result<T> = StdResult<T, Error>;
 
 /// 可展示业务编号（`*_no`）的单据种类。
 ///
@@ -88,46 +84,76 @@ pub enum DocumentNumberKind {
     SupplierSettlement,
 }
 
-/// 单据种类的静态元数据。
-struct KindInfo {
-    prefix: &'static str,
+impl Display for DocumentNumberKind {
+    /// 格式化计数器标识。
+    ///
+    /// # 参数
+    /// * `formatter` - 格式化器
+    ///
+    /// # 返回
+    /// 写入静态计数器名。
+    ///
+    /// # 错误
+    /// 写入失败时返回格式化错误。
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.counter_id_str())
+    }
 }
 
 impl DocumentNumberKind {
     /// 返回单据种类的业务前缀。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回值
     /// 前缀为固定大写业务缩写（如 `SO`），编号格式串的一部分，一经启用不得变更。
-    pub fn prefix(self) -> &'static str {
-        self.info().prefix
-    }
-
-    /// 返回计数器文档 `_id`（即 serde snake_case 序列化名）。
-    pub(crate) fn counter_id(self) -> String {
-        let Ok(Bson::String(id)) = serialize_to_bson(&self) else {
-            unreachable!("unit variant must serialize to a bson string");
-        };
-        id
-    }
-
-    /// 单据种类与编号规则的静态映射表。
     ///
-    /// 前缀由数据模型 4.1 一期单据种类按业务缩写设计，完整清单见 crate README。
-    fn info(self) -> KindInfo {
+    /// # 错误
+    /// 无。
+    pub fn prefix(self) -> &'static str {
         match self {
-            Self::SalesOrder => KindInfo { prefix: "SO" },
-            Self::PurchaseOrder => KindInfo { prefix: "PO" },
-            Self::PurchaseReceipt => KindInfo { prefix: "GRN" },
-            Self::Delivery => KindInfo { prefix: "DN" },
-            Self::CustomerAcceptance => KindInfo { prefix: "CA" },
-            Self::StockAdjustment => KindInfo { prefix: "SA" },
-            Self::CustomerReceipt => KindInfo { prefix: "CR" },
-            Self::SupplierPayment => KindInfo { prefix: "PM" },
-            Self::Invoice => KindInfo { prefix: "INV" },
-            Self::SalesReturn => KindInfo { prefix: "SR" },
-            Self::PurchaseReturn => KindInfo { prefix: "PR" },
-            Self::SupplierFulfillment => KindInfo { prefix: "SF" },
-            Self::SupplierSettlement => KindInfo { prefix: "SS" },
+            Self::SalesOrder => "SO",
+            Self::PurchaseOrder => "PO",
+            Self::PurchaseReceipt => "GRN",
+            Self::Delivery => "DN",
+            Self::CustomerAcceptance => "CA",
+            Self::StockAdjustment => "SA",
+            Self::CustomerReceipt => "CR",
+            Self::SupplierPayment => "PM",
+            Self::Invoice => "INV",
+            Self::SalesReturn => "SR",
+            Self::PurchaseReturn => "PR",
+            Self::SupplierFulfillment => "SF",
+            Self::SupplierSettlement => "SS",
+        }
+    }
+
+    /// 返回计数器文档 `_id` 静态名。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回值
+    /// 返回与 serde snake_case 一致的静态计数器名。
+    ///
+    /// # 错误
+    /// 无。
+    pub(crate) fn counter_id_str(self) -> &'static str {
+        match self {
+            Self::SalesOrder => "sales_order",
+            Self::PurchaseOrder => "purchase_order",
+            Self::PurchaseReceipt => "purchase_receipt",
+            Self::Delivery => "delivery",
+            Self::CustomerAcceptance => "customer_acceptance",
+            Self::StockAdjustment => "stock_adjustment",
+            Self::CustomerReceipt => "customer_receipt",
+            Self::SupplierPayment => "supplier_payment",
+            Self::Invoice => "invoice",
+            Self::SalesReturn => "sales_return",
+            Self::PurchaseReturn => "purchase_return",
+            Self::SupplierFulfillment => "supplier_fulfillment",
+            Self::SupplierSettlement => "supplier_settlement",
         }
     }
 }
@@ -143,8 +169,21 @@ impl DocumentNumberKind {
 ///
 /// # 返回值
 /// 返回完整业务编号字符串。
+///
+/// # 错误
+/// 无。
 pub fn format_number(kind: DocumentNumberKind, date: NaiveDate, seq: i64) -> String {
-    format!("{}{}-{:0width$}", kind.prefix(), date.format("%Y%m%d"), seq, width = SEQ_WIDTH)
+    format!("{}{}-{:0width$}", kind.prefix(), display_date(date), seq, width = SEQ_WIDTH)
+}
+
+/// 格式化编号展示段日期（YYYYMMDD）。
+fn display_date(date: NaiveDate) -> String {
+    date.format("%Y%m%d").to_string()
+}
+
+/// 格式化计数器追溯段日期（YYYY-MM-DD）。
+fn trace_date(date: NaiveDate) -> String {
+    date.format("%Y-%m-%d").to_string()
 }
 
 /// 计数器集合中的文档形态。
@@ -174,6 +213,9 @@ impl DocumentNumberGenerator {
     ///
     /// # 返回值
     /// 返回取号器实例。
+    ///
+    /// # 错误
+    /// 无。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
@@ -197,7 +239,8 @@ impl DocumentNumberGenerator {
         executor: &mut dyn Executor,
     ) -> Result<String> {
         let in_transaction = executor.session().is_some();
-        let seq = self.next_seq(kind, date, in_transaction).await?;
+        tracing::debug!(kind = %kind.counter_id_str(), in_transaction, "taking next document number");
+        let seq = self.next_seq(kind, date).await?;
         Ok(format_number(kind, date, seq))
     }
 
@@ -209,35 +252,30 @@ impl DocumentNumberGenerator {
     /// # 参数
     /// * `kind` - 单据种类
     /// * `date` - 业务日期，写入计数器文档用于追溯
-    /// * `in_transaction` - 调用方是否位于事务中，仅用于日志观测
     ///
     /// # 返回值
     /// 返回本次消费的序号（首次取号为 1）。
     ///
     /// # 错误
     /// 底层 MongoDB 写入失败或计数器 upsert 后未返回文档时返回错误。
-    async fn next_seq(&self, kind: DocumentNumberKind, date: NaiveDate, in_transaction: bool) -> Result<i64> {
-        let counter_id = kind.counter_id();
-        tracing::debug!(
-            kind = %counter_id,
-            in_transaction,
-            "taking next document number"
-        );
+    async fn next_seq(&self, kind: DocumentNumberKind, date: NaiveDate) -> Result<i64> {
+        let counter_id = kind.counter_id_str();
         let counter = self
             .collection()
             .find_one_and_update(
-                doc! { "_id": &counter_id },
+                doc! { "_id": counter_id },
                 doc! {
                     "$inc": { "seq": 1_i64 },
-                    "$set": { "date": date.format("%Y-%m-%d").to_string() },
+                    "$set": { "date": trace_date(date) },
                     "$currentDate": { "updated_at": true },
                 },
             )
             .upsert(true)
             .return_document(ReturnDocument::After)
-            .await?;
+            .await
+            .map_err(DatabaseError::from)?;
         let Some(counter) = counter else {
-            return Err(Error::CounterMissing { kind: counter_id });
+            return Err(Error::CounterMissing { kind });
         };
         Ok(counter.seq)
     }
@@ -301,7 +339,8 @@ mod tests {
             let Bson::String(name) = serialize_to_bson(&kind).expect("kind should serialize") else {
                 panic!("kind must serialize to a string");
             };
-            assert_eq!(kind.counter_id(), name);
+            assert_eq!(kind.counter_id_str(), name.as_str());
+            assert_eq!(kind.to_string(), name.as_str());
         }
     }
 

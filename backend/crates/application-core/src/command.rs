@@ -16,17 +16,34 @@ impl CommandFingerprint {
     ///
     /// 本方法不使用 `Debug`、JSON Map 顺序或分隔符拼接；调用方必须显式固定
     /// 字段顺序，集合字段必须先按其业务语义规范排序。
+    ///
+    /// # 参数
+    /// * `parts` - 按固定顺序的指纹分量
+    ///
+    /// # 返回
+    /// 返回版本化持久指纹。
+    ///
+    /// # 错误
+    /// 无。
     pub fn from_parts(parts: impl IntoIterator<Item = String>) -> Self {
         let mut hasher = Sha256::new();
         hasher.update(b"command-fingerprint-v1");
-        for part in parts {
-            hasher.update((part.len() as u64).to_be_bytes());
-            hasher.update(part.as_bytes());
-        }
+        feed_length_prefixed(&mut hasher, parts);
         Self(format!("{V1_PREFIX}{}", hex::encode(hasher.finalize())))
     }
 
     /// 解析已持久化的 v1 指纹。
+    ///
+    /// 摘要统一转小写归一化，大小写输入视为同一指纹。
+    ///
+    /// # 参数
+    /// * `value` - 持久化指纹字符串
+    ///
+    /// # 返回
+    /// 返回归一化后的指纹。
+    ///
+    /// # 错误
+    /// 前缀缺失或摘要非 64 位十六进制时返回错误。
     pub fn parse(value: impl Into<String>) -> Result<Self> {
         let value = value.into();
         let digest = value
@@ -37,13 +54,43 @@ impl CommandFingerprint {
     }
 
     /// 返回稳定持久化字符串。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回含版本前缀的持久化字符串。
+    ///
+    /// # 错误
+    /// 无。
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
     /// 返回 64 位摘要部分。
+    ///
+    /// 构造器保证前缀存在并做小写归一化，正常路径恒成立。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 64 位小写十六进制摘要。
+    ///
+    /// # 错误
+    /// 无；非法形态在 debug 断言，release 兜底为空。
     pub fn digest_hex(&self) -> &str {
-        self.0.strip_prefix(V1_PREFIX).expect("已验证指纹必须有 v1 前缀")
+        debug_assert!(self.0.starts_with(V1_PREFIX), "已验证指纹必须有 v1 前缀");
+        self.0.strip_prefix(V1_PREFIX).unwrap_or("")
+    }
+}
+
+/// 以长度前缀 feeding 给定哈希器，版本化与历史路径共用内核。
+fn feed_length_prefixed(hasher: &mut Sha256, parts: impl IntoIterator<Item = impl AsRef<[u8]>>) {
+    for part in parts {
+        let bytes = part.as_ref();
+        hasher.update((bytes.len() as u64).to_be_bytes());
+        hasher.update(bytes);
     }
 }
 
@@ -63,6 +110,17 @@ pub struct CommandIdentity {
 
 impl CommandIdentity {
     /// 形成 v1 身份，并登记只读兼容查询使用的历史 ID。
+    ///
+    /// # 参数
+    /// * `prefix` - 收据 ID 前缀
+    /// * `parts` - 当前身份分量
+    /// * `legacy_ids` - 历史兼容候选 ID
+    ///
+    /// # 返回
+    /// 返回当前与历史候选身份。
+    ///
+    /// # 错误
+    /// 前缀为空时返回错误。
     pub fn new(
         prefix: &str,
         parts: impl IntoIterator<Item = String>,
@@ -80,13 +138,59 @@ impl CommandIdentity {
     }
 
     /// 返回新写入使用的 v1 ID。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回当前身份 ID。
+    ///
+    /// # 错误
+    /// 无。
     pub fn current_id(&self) -> &str {
         &self.current_id
     }
 
+    /// 判断给定 ID 是否为当前或历史候选，避免纯检查场景分配。
+    ///
+    /// # 参数
+    /// * `id` - 待检查的候选 ID
+    ///
+    /// # 返回
+    /// 命中时返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn contains_candidate(&self, id: &str) -> bool {
+        self.current_id == id || self.legacy_ids.iter().any(|legacy| legacy == id)
+    }
+
+    /// 返回按当前优先、历史其次排列的候选迭代器，避免纯检查场景分配。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回当前与历史候选的 borrowed 迭代器。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn candidates_iter(&self) -> impl Iterator<Item = &str> + '_ {
+        std::iter::once(self.current_id.as_str()).chain(self.legacy_ids.iter().map(String::as_str))
+    }
+
     /// 返回按当前优先、历史其次排列的查询候选 ID。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 owned 候选集合；纯检查改用 `contains_candidate`。
+    ///
+    /// # 错误
+    /// 无。
     pub fn candidates(&self) -> Vec<String> {
-        std::iter::once(self.current_id.clone()).chain(self.legacy_ids.iter().cloned()).collect()
+        self.candidates_iter().map(str::to_string).collect()
     }
 }
 
@@ -231,8 +335,31 @@ pub struct CommandReceipt {
     legacy_fingerprints: Vec<String>,
 }
 
+/// 规范化幂等键，两构造入口共用。
+fn normalize_idempotency_key(idempotency_key: &str) -> Result<&str> {
+    let key = idempotency_key.trim();
+    if key.is_empty() {
+        return Err(Error::from("操作号不能为空"));
+    }
+    Ok(key)
+}
+
 impl CommandReceipt {
     /// 从可序列化请求形成规范 JSON v1 收据，并保留旧 JSON/摘要兼容候选。
+    ///
+    /// # 参数
+    /// * `prefix` - 收据 ID 前缀
+    /// * `actor_id` - 操作人身份
+    /// * `action` - 动作名称
+    /// * `resource_type` - 资源类型
+    /// * `idempotency_key` - 调用方幂等键（首尾空白忽略，不持久化原文）
+    /// * `payload` - 待规范化的请求载荷
+    ///
+    /// # 返回
+    /// 返回版本化收据。
+    ///
+    /// # 错误
+    /// 幂等键为空或载荷序列化失败时返回错误。
     pub fn from_payload<T: Serialize>(
         prefix: &str,
         actor_id: &str,
@@ -241,10 +368,7 @@ impl CommandReceipt {
         idempotency_key: &str,
         payload: &T,
     ) -> Result<Self> {
-        let key = idempotency_key.trim();
-        if key.is_empty() {
-            return Err(Error::from("操作号不能为空"));
-        }
+        let key = normalize_idempotency_key(idempotency_key)?;
         let canonical_payload = canonical_json(payload)?;
         let legacy_payload = serde_json::to_string(payload)
             .map_err(|error| Error::from(format!("业务命令请求序列化失败: {error}")))?;
@@ -275,6 +399,21 @@ impl CommandReceipt {
     ///
     /// 兼容候选使用历史 `actor|action|resource_id|key` 身份和无版本
     /// 长度前缀指纹；新写入不保存原始幂等键。
+    ///
+    /// # 参数
+    /// * `prefix` - 收据 ID 前缀
+    /// * `actor_id` - 操作人身份
+    /// * `action` - 动作名称
+    /// * `resource_type` - 资源类型
+    /// * `resource_id` - 目标资源 ID
+    /// * `idempotency_key` - 调用方幂等键（首尾空白忽略，不持久化原文）
+    /// * `fingerprint_parts` - 指纹分量
+    ///
+    /// # 返回
+    /// 返回版本化收据。
+    ///
+    /// # 错误
+    /// 幂等键或资源 ID 为空时返回错误。
     pub fn from_resource_parts(
         prefix: &str,
         actor_id: &str,
@@ -284,18 +423,13 @@ impl CommandReceipt {
         idempotency_key: &str,
         fingerprint_parts: impl IntoIterator<Item = String>,
     ) -> Result<Self> {
-        let key = idempotency_key.trim();
-        if key.is_empty() {
-            return Err(Error::from("操作号不能为空"));
-        }
+        let key = normalize_idempotency_key(idempotency_key)?;
         if resource_id.trim().is_empty() {
             return Err(Error::from("命令资源 ID 不能为空"));
         }
         let fingerprint_parts = fingerprint_parts.into_iter().collect::<Vec<_>>();
-        let legacy_identity = format!(
-            "{prefix}{}",
-            hex::encode(Sha256::digest(format!("{actor_id}|{action}|{resource_id}|{key}").as_bytes()))
-        );
+        let legacy_identity =
+            format!("{prefix}{}", legacy_compat::pipe_identity(actor_id, action, resource_id, key));
         let legacy_fingerprint_parts = fingerprint_parts.iter().map(String::as_str).collect::<Vec<_>>();
         let legacy_fingerprint = legacy_digest_parts(&legacy_fingerprint_parts);
         let identity = CommandIdentity::new(
@@ -339,32 +473,58 @@ impl CommandReceipt {
     }
 
     /// 返回 v1 持久化消息；可追加权限安全的说明文本。
+    ///
+    /// # 参数
+    /// * `detail` - 追加的说明文本
+    ///
+    /// # 返回
+    /// 返回指纹承载段与说明的展示拼接。
+    ///
+    /// # 错误
+    /// 无。
     pub fn message(&self, detail: Option<&str>) -> String {
         let base = format!("command_fingerprint={}", self.fingerprint.as_str());
         detail.map_or(base.clone(), |detail| format!("{base}; {detail}"))
     }
 
+    /// 返回结构化指纹承载段，供展示拼接外的调用方直接使用。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `(当前指纹, 历史指纹)`。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn fingerprints(&self) -> (&CommandFingerprint, &[String]) {
+        (&self.fingerprint, &self.legacy_fingerprints)
+    }
+
     /// 校验最小持久化事实并分类回放结果。
+    ///
+    /// 身份不一致（含候选缺失与字段不一致）与未成功回放视为不可回放；
+    /// 形态损坏（缺消息、缺资源）视为损坏；指纹不一致视为载荷不同。
+    ///
+    /// # 参数
+    /// * `fact` - 最小持久化事实
+    ///
+    /// # 返回
+    /// 返回回放分类。
+    ///
+    /// # 错误
+    /// 无。
     pub fn match_fact(&self, fact: &CommandReceiptFact) -> CommandReceiptMatch {
-        if !self.identity.candidates().contains(&fact.id)
-            || !fact.success
-            || fact.actor_id != self.actor_id
-            || fact.action != self.action
-            || fact.resource_type != self.resource_type
-        {
-            return CommandReceiptMatch::Corrupted;
+        // 注意：当前仍返回 Corrupted 以保持调用方匹配语义；
+        // 未成功回放与身份不符的独立分类待调用方同步后收敛。
+        if let Err(matched) = self.check_identity(fact) {
+            return matched;
         }
-        let Some(message) = fact.message.as_deref() else {
-            return CommandReceiptMatch::Corrupted;
+        let fingerprint = match extract_persisted_fingerprint(fact.message.as_deref()) {
+            Ok(fingerprint) => fingerprint,
+            Err(matched) => return matched,
         };
-        let persisted = message.split(';').next().unwrap_or(message);
-        let matches = persisted
-            .strip_prefix("command_fingerprint=")
-            .is_some_and(|value| value == self.fingerprint.as_str())
-            || persisted
-                .strip_prefix("command_sha256=")
-                .is_some_and(|value| self.legacy_fingerprints.iter().any(|legacy| legacy == value));
-        if !matches {
+        if !self.matches_fingerprint(fingerprint) {
             return CommandReceiptMatch::DifferentPayload;
         }
         fact.resource_id
@@ -372,6 +532,55 @@ impl CommandReceipt {
             .map(CommandReceiptMatch::SamePayload)
             .unwrap_or(CommandReceiptMatch::Corrupted)
     }
+
+    /// 校验候选身份、成功标志与身份字段三元组。
+    fn check_identity(&self, fact: &CommandReceiptFact) -> std::result::Result<(), CommandReceiptMatch> {
+        if !self.identity.contains_candidate(&fact.id)
+            || fact.actor_id != self.actor_id
+            || fact.action != self.action
+            || fact.resource_type != self.resource_type
+        {
+            return Err(CommandReceiptMatch::Corrupted);
+        }
+        if !fact.success {
+            return Err(CommandReceiptMatch::Corrupted);
+        }
+        Ok(())
+    }
+
+    /// 比对当前与历史指纹。
+    fn matches_fingerprint(&self, persisted: PersistedFingerprint<'_>) -> bool {
+        match persisted {
+            PersistedFingerprint::Current(value) => value == self.fingerprint.as_str(),
+            PersistedFingerprint::Legacy(value) => {
+                self.legacy_fingerprints.iter().any(|legacy| legacy == value)
+            },
+        }
+    }
+}
+
+/// 持久化消息中的指纹承载段。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PersistedFingerprint<'a> {
+    Current(&'a str),
+    Legacy(&'a str),
+}
+
+/// 从自由文本消息提取结构化指纹段。
+fn extract_persisted_fingerprint(
+    message: Option<&str>,
+) -> std::result::Result<PersistedFingerprint<'_>, CommandReceiptMatch> {
+    let Some(message) = message else {
+        return Err(CommandReceiptMatch::Corrupted);
+    };
+    let persisted = message.split(';').next().unwrap_or(message);
+    if let Some(value) = persisted.strip_prefix("command_fingerprint=") {
+        return Ok(PersistedFingerprint::Current(value));
+    }
+    if let Some(value) = persisted.strip_prefix("command_sha256=") {
+        return Ok(PersistedFingerprint::Legacy(value));
+    }
+    Err(CommandReceiptMatch::Corrupted)
 }
 
 fn canonical_json<T: Serialize>(payload: &T) -> Result<String> {
@@ -415,13 +624,27 @@ fn write_canonical_json(value: &serde_json::Value, output: &mut String) -> Resul
     Ok(())
 }
 
-fn legacy_digest_parts(parts: &[&str]) -> String {
-    let mut hasher = Sha256::new();
-    for part in parts {
-        hasher.update((part.len() as u64).to_be_bytes());
-        hasher.update(part.as_bytes());
+/// 历史无版本指纹内核（独立版本适配，核心 v1 路径不依赖它）。
+mod legacy_compat {
+    use sha2::{Digest, Sha256};
+
+    use super::feed_length_prefixed;
+
+    /// 计算历史无版本长度前缀摘要。
+    pub(super) fn digest_parts(parts: &[&str]) -> String {
+        let mut hasher = Sha256::new();
+        feed_length_prefixed(&mut hasher, parts);
+        hex::encode(hasher.finalize())
     }
-    hex::encode(hasher.finalize())
+
+    /// 历史 `actor|action|resource_id|key` 管道身份摘要。
+    pub(super) fn pipe_identity(actor_id: &str, action: &str, resource_id: &str, key: &str) -> String {
+        hex::encode(Sha256::digest(format!("{actor_id}|{action}|{resource_id}|{key}").as_bytes()))
+    }
+}
+
+fn legacy_digest_parts(parts: &[&str]) -> String {
+    legacy_compat::digest_parts(parts)
 }
 
 #[cfg(test)]
