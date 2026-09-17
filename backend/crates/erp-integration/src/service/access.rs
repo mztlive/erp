@@ -183,10 +183,10 @@ impl IntegrationAccess {
     ) -> Result<()> {
         let (access, scope) = self.resolve(actor, resource, action, executor).await?;
         if !scope.allows_object(owner_user_id, owner_org_unit_id) {
-            return Err(Error::NotFound(hidden_object(resource)));
+            return Err(Error::NotFound(hidden_object(resource)?));
         }
         if !self.allows_handler(&access, owner_user_id, owner_org_unit_id, false)? {
-            return Err(Error::NotFound(hidden_object(resource)));
+            return Err(Error::NotFound(hidden_object(resource)?));
         }
         Ok(())
     }
@@ -228,10 +228,23 @@ pub fn integration_access(_db: Database, scope: Arc<dyn IntegrationDataScopePort
 }
 
 /// 越权详情与对象不存在同码，避免枚举他域任务或差异。
-fn hidden_object(resource: &str) -> String {
+///
+/// 已知资源显式枚举，未知资源走内部错误（禁止默认归入任务文案，
+/// 新增资源类型必须在此登记，否则测试失败关闭）。
+///
+/// # 参数
+/// * `resource` - 错误任务（`integration_error_task`）或对账差异（`reconciliation_difference`）
+///
+/// # 返回
+/// 返回与加载层一致的 NotFound 文案载荷。
+///
+/// # 错误
+/// 未知资源类型时返回内部错误。
+fn hidden_object(resource: &str) -> Result<String> {
     match resource {
-        "reconciliation_difference" => "差异不存在".into(),
-        _ => "任务不存在".into(),
+        "integration_error_task" => Ok("任务不存在".to_string()),
+        "reconciliation_difference" => Ok("差异不存在".to_string()),
+        _ => Err(Error::Internal(format!("未知集成资源类型: {resource}"))),
     }
 }
 

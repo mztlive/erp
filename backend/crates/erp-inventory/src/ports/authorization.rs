@@ -197,6 +197,29 @@ pub struct InventoryAuthorization {
     adjustment_list_meta: InventoryScopeMeta,
 }
 
+/// 库存各动作的仓库范围集合（具名字段，避免同类型位置参数传错顺序）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InventoryScopeSet {
+    /// 认证身份是否仍对应可登录账号。
+    pub actor_active: bool,
+    /// 余额列表范围。
+    pub balance_list_scope: WarehouseScope,
+    /// 余额详情范围。
+    pub balance_detail_scope: WarehouseScope,
+    /// 流水列表范围。
+    pub movement_list_scope: WarehouseScope,
+    /// 预占列表范围。
+    pub reservation_list_scope: WarehouseScope,
+    /// 调整列表范围。
+    pub adjustment_list_scope: WarehouseScope,
+    /// 对象读取范围。
+    pub read_scope: WarehouseScope,
+    /// 调整创建范围。
+    pub create_scope: WarehouseScope,
+    /// 调整更新范围。
+    pub update_scope: WarehouseScope,
+}
+
 impl InventoryAuthorization {
     /// Inactive actor with empty warehouse scopes.
     pub fn inactive() -> Self {
@@ -216,7 +239,33 @@ impl InventoryAuthorization {
         }
     }
 
+    /// 由范围集合构造授权快照（组合层装配入口）。
+    ///
+    /// # 参数
+    /// * `scopes` - 各动作的仓库范围集合
+    ///
+    /// # 返回
+    /// 返回带空列表元信息的授权快照。
+    pub fn from_scope_set(scopes: InventoryScopeSet) -> Self {
+        Self {
+            actor_active: scopes.actor_active,
+            balance_list_scope: scopes.balance_list_scope,
+            balance_detail_scope: scopes.balance_detail_scope,
+            movement_list_scope: scopes.movement_list_scope,
+            reservation_list_scope: scopes.reservation_list_scope,
+            adjustment_list_scope: scopes.adjustment_list_scope,
+            read_scope: scopes.read_scope,
+            create_scope: scopes.create_scope,
+            update_scope: scopes.update_scope,
+            balance_list_meta: InventoryScopeMeta::empty(),
+            movement_list_meta: InventoryScopeMeta::empty(),
+            adjustment_list_meta: InventoryScopeMeta::empty(),
+        }
+    }
+
     /// Construct scopes computed by the composition adapter.
+    ///
+    /// 历史位置参数入口，委托 [`Self::from_scope_set`]；外部组合层未迁移前保留。
     #[allow(clippy::too_many_arguments)]
     pub fn from_scopes(
         actor_active: bool,
@@ -229,7 +278,7 @@ impl InventoryAuthorization {
         create_scope: WarehouseScope,
         update_scope: WarehouseScope,
     ) -> Self {
-        Self {
+        Self::from_scope_set(InventoryScopeSet {
             actor_active,
             balance_list_scope,
             balance_detail_scope,
@@ -239,10 +288,7 @@ impl InventoryAuthorization {
             read_scope,
             create_scope,
             update_scope,
-            balance_list_meta: InventoryScopeMeta::empty(),
-            movement_list_meta: InventoryScopeMeta::empty(),
-            adjustment_list_meta: InventoryScopeMeta::empty(),
-        }
+        })
     }
 
     /// 绑定列表动作的授权指纹；人员筛选不改变仓库维。

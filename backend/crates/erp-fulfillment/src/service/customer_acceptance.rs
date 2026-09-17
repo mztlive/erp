@@ -6,7 +6,7 @@ use validator::Validate;
 use super::FulfillmentService;
 use crate::dto::{
     AcceptanceAllocationView, CustomerAcceptanceDetailView, CustomerAcceptanceLineView,
-    CustomerAcceptanceListParams, CustomerAcceptanceView, PageView, SortDir,
+    CustomerAcceptanceListParams, CustomerAcceptanceView, SortDir,
 };
 use crate::entity::fulfillment::{
     AcceptanceFulfillmentAllocation, CustomerAcceptance, CustomerAcceptanceLine,
@@ -39,7 +39,7 @@ impl FulfillmentService {
     pub async fn customer_acceptance_list(
         &self,
         params: &CustomerAcceptanceListParams,
-    ) -> Result<PageView<CustomerAcceptanceView>> {
+    ) -> Result<crate::dto::PageView<CustomerAcceptanceView>> {
         params.validate()?;
         let query = params.normalized()?;
         let filter = CustomerAcceptanceFilter {
@@ -52,10 +52,9 @@ impl FulfillmentService {
         };
         let page =
             self.db.customer_acceptances().search_customer_acceptances(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| CustomerAcceptanceView {
+        super::map_search_page(
+            async { Ok(page) },
+            |row| CustomerAcceptanceView {
                 id: row.id,
                 acceptance_no: row.acceptance_no,
                 sales_order_id: row.sales_order_id.to_string(),
@@ -65,9 +64,11 @@ impl FulfillmentService {
                 reversal_of_acceptance_id: row.reversal_of_acceptance_id.map(|id| id.to_string()),
                 version: row.version,
                 created_at: row.created_at,
-            })
-            .collect();
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+            },
+            filter.page,
+            filter.page_size,
+        )
+        .await
     }
 
     /// 查询客户验收单详情（表头 + 行 + 分配）。
@@ -87,12 +88,11 @@ impl FulfillmentService {
         fields(layer = "service", domain = "fulfillment", operation = "customer_acceptance_detail")
     )]
     pub async fn customer_acceptance_detail(&self, id: &str) -> Result<CustomerAcceptanceDetailView> {
-        let acceptance = self
-            .db
-            .customer_acceptances()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("客户验收单不存在".to_string()))?;
+        let acceptance = super::find_header_or_not_found(
+            self.db.customer_acceptances().find_by_id(id, &mut NoTransaction),
+            "客户验收单不存在",
+        )
+        .await?;
         let lines = self
             .db
             .fulfillment()

@@ -9,7 +9,7 @@ use erp_core::common::time::Instant;
 use crate::dto::{ControlledEvidenceRef, DirectReconciliationStatus, IntegrationActionOutcome};
 use crate::entity::integration_ops::{
     ReconciliationDifference, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
-    ReconciliationDifferenceResolutionId, ResolutionAction,
+    ReconciliationDifferenceResolutionId, ResolutionAction, is_resolution_no_overflow,
 };
 use crate::{Error, Result};
 
@@ -64,9 +64,8 @@ fn append_resolution(
         Instant::now(),
     )
     .map_err(|error| {
-        let message = error.to_string();
-        if message == "差异决定序号已达上限" {
-            Error::ConflictError(message)
+        if is_resolution_no_overflow(&error) {
+            Error::ConflictError(error.to_string())
         } else {
             Error::Logic(error)
         }

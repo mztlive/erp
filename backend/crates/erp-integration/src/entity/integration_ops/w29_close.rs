@@ -5,6 +5,7 @@ use std::fmt;
 use erp_core::{Error, Result};
 
 use super::ResolutionAction;
+use super::reconciliation_difference_resolution::RESOLUTION_NO_OVERFLOW_MESSAGE;
 
 /// W29 关闭证据的强类型引用。
 ///
@@ -148,8 +149,9 @@ impl W29CloseDecision {
 
     /// 计算下一条不可变差异决定序号。
     pub fn next_resolution_no(latest_resolution_no: Option<u32>) -> Result<u32> {
-        latest_resolution_no
-            .map_or(Ok(1), |value| value.checked_add(1).ok_or_else(|| Error::from("差异决定序号已达上限")))
+        latest_resolution_no.map_or(Ok(1), |value| {
+            value.checked_add(1).ok_or_else(|| Error::from(RESOLUTION_NO_OVERFLOW_MESSAGE))
+        })
     }
 }
 

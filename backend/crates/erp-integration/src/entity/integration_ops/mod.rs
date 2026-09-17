@@ -170,15 +170,15 @@ impl IntegrationCommandIdentity {
     }
 }
 
+/// 计算稳定 SHA-256 十六进制文本（与 `format!("{byte:02x}")` 同形态）。
+///
+/// # 参数
+/// * `value` - 待摘要字节
+///
+/// # 返回
+/// 返回 64 位小写十六进制摘要。
 fn sha256_hex(value: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let digest = Sha256::digest(value);
-    let mut encoded = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        encoded.push(HEX[(byte >> 4) as usize] as char);
-        encoded.push(HEX[(byte & 0x0f) as usize] as char);
-    }
-    encoded
+    Sha256::digest(value).iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 erp_core::ids）。

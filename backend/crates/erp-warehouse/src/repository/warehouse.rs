@@ -159,17 +159,16 @@ impl<'a> WarehouseRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<WarehouseRow>> {
         let query = self.keyword_filter(filter, executor).await?;
-        let options = FindOptions::builder()
-            .sort(warehouse_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(warehouse_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<WarehouseRow>();
-        let items = mongo_ops::find_many(&collection, query.clone(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), query, executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        search_projected_page(
+            &self.collection(),
+            query,
+            sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, WAREHOUSE_SORT_FIELDS),
+            filter.skip(),
+            filter.limit(),
+            warehouse_projection(),
+            executor,
+        )
+        .await
     }
 }
 
@@ -277,17 +276,16 @@ impl<'a> WarehouseRevisionRepository<'a> {
         filter: &WarehouseRevisionFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<WarehouseRevisionRow>> {
-        let options = FindOptions::builder()
-            .sort(warehouse_revision_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(warehouse_revision_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<WarehouseRevisionRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        search_projected_page(
+            &self.collection(),
+            filter.to_doc(),
+            sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, WAREHOUSE_REVISION_SORT_FIELDS),
+            filter.skip(),
+            filter.limit(),
+            warehouse_revision_projection(),
+            executor,
+        )
+        .await
     }
 }
 
@@ -363,6 +361,24 @@ impl Pagination for WarehouseSkuPolicyFilter {
     }
 }
 
+impl Default for WarehouseSkuPolicyFilter {
+    /// 返回首页空筛选（`page: 1`，`page_size: 20`，降序）。
+    ///
+    /// # 返回
+    /// 返回筛选为空、降序的首页过滤条件。
+    fn default() -> Self {
+        Self {
+            warehouse_id: None,
+            sku_id: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+}
+
 impl<'a> WarehouseSkuPolicyRepository<'a> {
     /// 分页检索仓库-SKU 预警策略列表（投影查询）。
     ///
@@ -383,17 +399,16 @@ impl<'a> WarehouseSkuPolicyRepository<'a> {
         filter: &WarehouseSkuPolicyFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<WarehouseSkuPolicyRow>> {
-        let options = FindOptions::builder()
-            .sort(warehouse_sku_policy_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(warehouse_sku_policy_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<WarehouseSkuPolicyRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        search_projected_page(
+            &self.collection(),
+            filter.to_doc(),
+            sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, WAREHOUSE_SKU_POLICY_SORT_FIELDS),
+            filter.skip(),
+            filter.limit(),
+            warehouse_sku_policy_projection(),
+            executor,
+        )
+        .await
     }
 
     /// 批量查询一组 SKU 的仓库预警策略（`$in`，一次取回）。
@@ -597,44 +612,64 @@ where
     .await
 }
 
-/// 构建排序文档。
+/// `warehouses` 排序白名单（`created_at`/`warehouse_code`）。
+const WAREHOUSE_SORT_FIELDS: &[&str] = &["created_at", "warehouse_code"];
+/// `warehouse_revisions` 排序白名单（`created_at`/`revision_no`）。
+const WAREHOUSE_REVISION_SORT_FIELDS: &[&str] = &["created_at", "revision_no"];
+/// `warehouse_sku_policies` 排序白名单（`created_at`/`effective_from`）。
+const WAREHOUSE_SKU_POLICY_SORT_FIELDS: &[&str] = &["created_at", "effective_from"];
+/// 关键词查询单次允许装入 `$in` 的修订 ID 上限（约束单次读取规模）。
+const KEYWORD_REVISION_ID_CAP: usize = 500;
+
+/// 执行通用筛选分页投影查询（三类列表共用；查询语义与返回形状不变）。
 ///
 /// # 参数
-/// * `field` - 已通过白名单校验的排序字段
+/// * `base` - 基集合句柄（用于计数）
+/// * `filter` - 查询条件文档
+/// * `sort` - 排序文档
+/// * `skip` - 跳过行数
+/// * `limit` - 单页条数
+/// * `projection` - 投影文档
+/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+///
+/// # 返回
+/// 返回当前页投影行与满足筛选条件的总数。
+///
+/// # 错误
+/// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+async fn search_projected_page<Entity, Row>(
+    base: &mongodb::Collection<Entity>,
+    filter: Document,
+    sort: Document,
+    skip: u64,
+    limit: i64,
+    projection: Document,
+    executor: &mut dyn Executor,
+) -> Result<PageResult<Row>>
+where
+    Entity: Send + Sync,
+    Row: for<'de> Deserialize<'de> + Serialize + Send + Sync,
+{
+    let options = FindOptions::builder().sort(sort).skip(skip).limit(limit).projection(projection).build();
+    let collection = base.clone_with_type::<Row>();
+    let items = mongo_ops::find_many(&collection, filter.clone(), options, executor).await?;
+    let total = mongo_ops::count_documents(base, filter, executor).await?;
+    Ok(PageResult { items, total: total as i64 })
+}
+
+/// 构建排序文档（字段名白名单映射，未命中回落 `created_at` 并追加 `id` 同向 tie-breaker）。
+///
+/// # 参数
+/// * `sort_by` - 排序字段；`None` 或不在白名单内时默认 `created_at`
 /// * `sort_ascending` - 升序为 `true`，降序为 `false`
+/// * `allowed` - 允许的排序字段白名单
 ///
 /// # 返回
 /// 返回排序条件文档。
-fn sort_doc(field: &str, sort_ascending: bool) -> Document {
+fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
+    let field = sort_by.filter(|field| allowed.contains(field)).unwrap_or("created_at");
     doc! { field: direction, "id": direction }
-}
-
-/// 构建仓库排序文档（白名单：`created_at`/`warehouse_code`）。
-fn warehouse_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
-    let field = match sort_by {
-        Some("warehouse_code") => "warehouse_code",
-        _ => "created_at",
-    };
-    sort_doc(field, sort_ascending)
-}
-
-/// 构建仓库修订排序文档（白名单：`created_at`/`revision_no`）。
-fn warehouse_revision_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
-    let field = match sort_by {
-        Some("revision_no") => "revision_no",
-        _ => "created_at",
-    };
-    sort_doc(field, sort_ascending)
-}
-
-/// 构建仓库-SKU 预警策略排序文档（白名单：`created_at`/`effective_from`）。
-fn warehouse_sku_policy_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
-    let field = match sort_by {
-        Some("effective_from") => "effective_from",
-        _ => "created_at",
-    };
-    sort_doc(field, sort_ascending)
 }
 
 /// 仓库列表投影字段。
@@ -701,6 +736,9 @@ impl WarehouseRepository<'_> {
             revisions = revisions.session(session);
         }
         let ids = revisions.await?;
+        if ids.len() > KEYWORD_REVISION_ID_CAP {
+            return Err(mongodb::error::Error::custom("关键词命中修订过多，请使用更精确的关键词").into());
+        }
         let mut code = Document::new();
         insert_literal_regex_filter(&mut code, "warehouse_code", Some(q));
         query.insert("$or", vec![code, doc! { "current_revision_id": { "$in": ids } }]);
@@ -713,7 +751,9 @@ mod tests {
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
 
-    use super::{WarehouseFilter, WarehouseRevisionFilter, sort_doc};
+    use super::{
+        WAREHOUSE_SORT_FIELDS, WarehouseFilter, WarehouseRevisionFilter, WarehouseSkuPolicyFilter, sort_doc,
+    };
     use crate::entity::warehouse::EnableStatus;
 
     #[test]
@@ -744,8 +784,26 @@ mod tests {
     }
 
     #[test]
+    fn sku_policy_filter_defaults_to_first_page_size_20() {
+        let filter = WarehouseSkuPolicyFilter::default();
+        assert_eq!((filter.page, filter.page_size), (1, 20));
+        assert!(!filter.sort_ascending);
+    }
+
+    #[test]
     fn sort_doc_applies_direction() {
-        assert_eq!(sort_doc("created_at", false), doc! { "created_at": -1, "id": -1 });
-        assert_eq!(sort_doc("warehouse_code", true), doc! { "warehouse_code": 1, "id": 1 });
+        assert_eq!(
+            sort_doc(Some("created_at"), false, WAREHOUSE_SORT_FIELDS),
+            doc! { "created_at": -1, "id": -1 }
+        );
+        assert_eq!(
+            sort_doc(Some("warehouse_code"), true, WAREHOUSE_SORT_FIELDS),
+            doc! { "warehouse_code": 1, "id": 1 }
+        );
+        assert_eq!(
+            sort_doc(Some("任意字段"), false, WAREHOUSE_SORT_FIELDS),
+            doc! { "created_at": -1, "id": -1 },
+            "白名单外的字段名回落默认排序"
+        );
     }
 }

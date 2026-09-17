@@ -89,7 +89,7 @@ impl QueryFilter for InboxMessageFilter {
     /// # 返回
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        let mut filter = undeleted_base();
         if let Some(source_system_id) = &self.source_system_id {
             filter.insert("source_system_id", source_system_id.to_string());
         }
@@ -213,7 +213,7 @@ impl QueryFilter for IntegrationErrorTaskFilter {
     /// # 返回
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        let mut filter = undeleted_base();
         if let Some(message_id) = &self.message_id {
             filter.insert("message_id", message_id.to_string());
         }
@@ -337,7 +337,7 @@ impl QueryFilter for ReconciliationDifferenceFilter {
     /// # 返回
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        let mut filter = undeleted_base();
         if let Some(business_object_type) = &self.business_object_type {
             filter.insert("business_object_type", business_object_type);
         }
@@ -401,6 +401,14 @@ pub struct ResolutionHistoryRow {
     pub handled_at: Instant,
 }
 
+/// 未删除基底文档（三类列表过滤与批量查询共用；修订表外全部列表查询自动追加）。
+///
+/// # 返回
+/// 返回仅含 `deleted_at` 未删除标记的查询文档。
+pub(crate) fn undeleted_base() -> Document {
+    doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON }
+}
+
 /// 向查询条件追加秒级时间戳闭区间范围（BSON Int64 形态，与 `Instant`/`created_at`
 /// 持久化形态一致；区间两端可选，任一端缺失表示不设界）。
 ///
@@ -409,7 +417,10 @@ pub struct ResolutionHistoryRow {
 /// * `field` - 时间字段名
 /// * `from` - 下界（含）；`None` 表示不设下界
 /// * `to` - 上界（含）；`None` 表示不设上界
-fn insert_time_range(filter: &mut Document, field: &str, from: Option<i64>, to: Option<i64>) {
+///
+/// # 返回
+/// 无返回值；直接修改传入的查询文档。
+pub(crate) fn insert_time_range(filter: &mut Document, field: &str, from: Option<i64>, to: Option<i64>) {
     let mut range = Document::new();
     if let Some(from) = from {
         range.insert("$gte", from);
@@ -421,23 +432,46 @@ fn insert_time_range(filter: &mut Document, field: &str, from: Option<i64>, to: 
         filter.insert(field, range);
     }
 }
-/// 精确 ID 列表；空集合不加条件，避免误伤。
-fn insert_id_in(filter: &mut Document, field: &str, ids: &[String]) {
+/// 向查询条件追加精确 ID 列表 `$in` 条件（空集合不加条件，避免误伤）。
+///
+/// # 参数
+/// * `filter` - 待追加的查询条件
+/// * `field` - ID 字段名
+/// * `ids` - 精确 ID 列表；空表示不收窄
+///
+/// # 返回
+/// 无返回值；直接修改传入的查询文档。
+pub(crate) fn insert_id_in(filter: &mut Document, field: &str, ids: &[String]) {
     if !ids.is_empty() {
         filter.insert(field, doc! { "$in": ids });
     }
 }
 
-/// 把已解析授权条件与业务筛选求交。
-fn and_scope(filter: Document, scope: Option<&Document>) -> Document {
+/// 把已解析授权条件与业务筛选求交（空授权文档不加条件，公司范围不收窄）。
+///
+/// # 参数
+/// * `filter` - 业务筛选文档
+/// * `scope` - 已解析授权条件；`None` 或空文档表示公司范围
+///
+/// # 返回
+/// 返回求交后的查询文档。
+pub(crate) fn and_scope(filter: Document, scope: Option<&Document>) -> Document {
     match scope {
         Some(scope) if !scope.is_empty() => doc! { "$and": [filter, scope.clone()] },
         _ => filter,
     }
 }
 
-/// 字面量多字段匹配，结构化范围保留为 AND 条件。
-fn keyword_filter(filter: &mut Document, q: Option<&str>, fields: &[&str]) {
+/// 向查询条件追加字面量多字段 OR 匹配（结构化范围保留为 AND 条件）。
+///
+/// # 参数
+/// * `filter` - 待追加的查询条件
+/// * `q` - 字面量关键词；`None` 表示不筛选
+/// * `fields` - 待匹配字段列表
+///
+/// # 返回
+/// 无返回值；直接修改传入的查询文档。
+pub(crate) fn keyword_filter(filter: &mut Document, q: Option<&str>, fields: &[&str]) {
     let Some(q) = q else {
         return;
     };

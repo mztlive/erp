@@ -50,6 +50,33 @@ pub struct EligibilitySources<'a> {
 /// # 关键业务约束
 /// 事实/分配入参由数据模型 §6.7 固定为三类来源，字段不可压缩。
 pub fn build_line_eligibilities(sources: &EligibilitySources<'_>) -> Result<Vec<AcceptanceLineEligibility>> {
+    let mut facts_by_line = group_facts_by_line(sources)?;
+    let mut line_inputs = group_revision_quantities(sources);
+    for (key, facts) in facts_by_line.drain() {
+        if let Some(entry) = line_inputs.iter_mut().find(|(line_key, _, _)| *line_key == key) {
+            entry.2 = facts;
+        }
+    }
+    let mut lines = Vec::with_capacity(line_inputs.len());
+    for (sales_order_line_id, required_quantity, facts) in line_inputs {
+        lines.push(AcceptanceLineEligibility::from_facts(sales_order_line_id, required_quantity, facts)?);
+    }
+    Ok(lines)
+}
+
+/// 按销售稳定明细组织三类履约事实（发货/电子/服务）。
+///
+/// # 参数
+/// * `sources` - 版本行、履约集合与分配
+///
+/// # 返回
+/// 返回按销售稳定明细索引的事实集合。
+///
+/// # 错误
+/// 分配汇总溢出/超出统一精度时返回错误（禁止静默回退为零）。
+fn group_facts_by_line(
+    sources: &EligibilitySources<'_>,
+) -> Result<HashMap<String, Vec<AcceptanceFactEligibility>>> {
     let mut facts_by_line: HashMap<String, Vec<AcceptanceFactEligibility>> = HashMap::new();
     for revision_line in sources.revision_lines {
         facts_by_line.insert(revision_line.sales_order_line_id.to_string(), Vec::new());
@@ -64,6 +91,7 @@ pub fn build_line_eligibilities(sources: &EligibilitySources<'_>) -> Result<Vec<
         }
     }
     for record in sources.electronic {
+        // 无效电子交付事实已被领域判定为不可验收：跳过该事实并保留其他有效事实。
         if record.acceptance_quantity(&record.sales_order_line_id).is_err() {
             continue;
         }
@@ -84,33 +112,40 @@ pub fn build_line_eligibilities(sources: &EligibilitySources<'_>) -> Result<Vec<
             )?);
         }
     }
+    Ok(facts_by_line)
+}
+
+/// 按版本行顺序组装稳定明细的应履约数量（同一稳定明细后行覆盖数量）。
+///
+/// 预建版本行主键索引，消除内层线性查找。
+///
+/// # 参数
+/// * `sources` - 版本行与数量快照
+///
+/// # 返回
+/// 返回按首次出现顺序的（稳定明细、应履约数量、空事实）三元组。
+fn group_revision_quantities(
+    sources: &EligibilitySources<'_>,
+) -> Vec<(String, Quantity, Vec<AcceptanceFactEligibility>)> {
+    let quantity_by_revision: HashMap<&str, Quantity> = sources
+        .goods_service_lines
+        .iter()
+        .map(|goods| (goods.revision_line_id.as_ref(), goods.quantity))
+        .collect();
+    let zero = Quantity::from_str("0").expect("字面量 0 必然合法");
     let mut line_index: HashMap<String, usize> = HashMap::new();
     let mut line_inputs: Vec<(String, Quantity, Vec<AcceptanceFactEligibility>)> = Vec::new();
     for revision_line in sources.revision_lines {
         let key = revision_line.sales_order_line_id.to_string();
-        let goods = sources
-            .goods_service_lines
-            .iter()
-            .find(|goods| goods.revision_line_id.to_string() == revision_line.id);
-        let required_quantity =
-            goods.map(|goods| goods.quantity).unwrap_or_else(|| Quantity::from_str("0").unwrap());
+        let required_quantity = quantity_by_revision.get(revision_line.id.as_str()).copied().unwrap_or(zero);
         if let Some(&index) = line_index.get(&key) {
             line_inputs[index].1 = required_quantity;
         } else {
-            line_index.insert(key, line_inputs.len());
-            line_inputs.push((revision_line.sales_order_line_id.to_string(), required_quantity, Vec::new()));
+            line_index.insert(key.clone(), line_inputs.len());
+            line_inputs.push((key, required_quantity, Vec::new()));
         }
     }
-    for (key, facts) in facts_by_line {
-        if let Some(&index) = line_index.get(&key) {
-            line_inputs[index].2 = facts;
-        }
-    }
-    let mut lines = Vec::with_capacity(line_inputs.len());
-    for (sales_order_line_id, required_quantity, facts) in line_inputs {
-        lines.push(AcceptanceLineEligibility::from_facts(sales_order_line_id, required_quantity, facts)?);
-    }
-    Ok(lines)
+    line_inputs
 }
 
 #[cfg(test)]

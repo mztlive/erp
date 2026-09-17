@@ -7,7 +7,10 @@ use mongodb::options::FindOptions;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
-use super::shared::{active_entity_by_id, both_dec, both_inc, cross_inc, ids_to_strings, sort_doc, to_bson};
+use super::shared::{
+    active_entity_by_id, apply_warehouse_scope_filter, both_dec, both_inc, cross_inc, ids_to_strings,
+    sort_doc, to_bson, with_id_tie_breaker,
+};
 use super::{InventoryRepository, STOCK_BALANCES};
 use crate::entity::inventory::StockBalance;
 use crate::repository::owned::StockBalanceRepository;
@@ -83,12 +86,7 @@ impl QueryFilter for StockBalanceFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        if let Some(warehouse_ids) = &self.warehouse_ids {
-            filter.insert(
-                "warehouse_id",
-                doc! { "$in": warehouse_ids.iter().map(ToString::to_string).collect::<Vec<_>>() },
-            );
-        }
+        apply_warehouse_scope_filter(&mut filter, self.warehouse_ids.as_deref());
         if let Some(sku_id) = &self.sku_id {
             filter.insert("sku_id", sku_id.to_string());
         }
@@ -250,11 +248,11 @@ impl<'a> StockBalanceRepository<'a> {
         quantity: Quantity,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let quantity = to_bson(quantity)?;
+        let quantity_bson = to_bson(quantity)?;
         let filter = doc! {
             "id": id,
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "available_quantity": { "$gte": &quantity },
+            "available_quantity": { "$gte": &quantity_bson },
         };
         let update = cross_inc(quantity, "reserved_quantity", "available_quantity")?;
         let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
@@ -294,11 +292,11 @@ impl<'a> StockBalanceRepository<'a> {
         quantity: Quantity,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let quantity = to_bson(quantity)?;
+        let quantity_bson = to_bson(quantity)?;
         let filter = doc! {
             "id": id,
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "available_quantity": { "$gte": &quantity },
+            "available_quantity": { "$gte": &quantity_bson },
         };
         let update = both_dec(quantity, "on_hand_quantity", "available_quantity")?;
         let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
@@ -338,11 +336,11 @@ impl<'a> StockBalanceRepository<'a> {
         quantity: Quantity,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let quantity = to_bson(quantity)?;
+        let quantity_bson = to_bson(quantity)?;
         let filter = doc! {
             "id": id,
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "reserved_quantity": { "$gte": &quantity },
+            "reserved_quantity": { "$gte": &quantity_bson },
         };
         let update = cross_inc(quantity, "available_quantity", "reserved_quantity")?;
         let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
@@ -400,9 +398,10 @@ impl<'a> StockBalanceRepository<'a> {
 
 /// 为余额分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
 fn stock_balance_sort(filter: &StockBalanceFilter) -> Document {
-    let mut sort = sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, &["sku_id", "created_at"]);
-    sort.insert("id", if filter.sort_ascending { 1 } else { -1 });
-    sort
+    with_id_tie_breaker(
+        sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, &["sku_id", "created_at"]),
+        filter.sort_ascending,
+    )
 }
 
 impl<'a> InventoryRepository<'a> {

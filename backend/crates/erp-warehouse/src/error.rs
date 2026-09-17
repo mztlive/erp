@@ -101,11 +101,15 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
 
 /// 将仓库域唯一索引名称映射为面向用户的冲突提示。
 ///
-/// `uk_warehouses_warehouse_code`、`uk_warehouse_revisions_revision`、
-/// `uk_warehouse_revisions_effective_from` 与 `uk_warehouse_sku_policies_start`
-/// 均保持原通用冲突文案。
-fn duplicate_index_conflict_message(_index_name: Option<&str>) -> String {
-    "数据已存在，请勿重复提交".to_string()
+/// 未知索引回落通用文案；错误分类保持 `Conflict` 不变。
+fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
+    match index_name {
+        Some("uk_warehouses_warehouse_code") => "仓库代码重复，请勿重复提交".to_string(),
+        Some("uk_warehouse_revisions_revision") => "仓库修订序号重复，请勿重复提交".to_string(),
+        Some("uk_warehouse_revisions_effective_from") => "仓库生效开始日重复，请勿重复提交".to_string(),
+        Some("uk_warehouse_sku_policies_start") => "仓库SKU预警策略已存在，请勿重复提交".to_string(),
+        _ => "数据已存在，请勿重复提交".to_string(),
+    }
 }
 
 impl From<validator::ValidationErrors> for Error {
@@ -129,16 +133,21 @@ mod tests {
         assert_eq!(generic.to_string(), "数据冲突: 数据已存在，请勿重复提交");
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_warehouses_warehouse_code")),
-            "数据已存在，请勿重复提交"
+            "仓库代码重复，请勿重复提交"
         );
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_warehouse_revisions_revision")),
-            "数据已存在，请勿重复提交"
+            "仓库修订序号重复，请勿重复提交"
         );
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_warehouse_sku_policies_start")),
+            "仓库SKU预警策略已存在，请勿重复提交"
+        );
+        assert_eq!(
+            super::duplicate_index_conflict_message(Some("uk_unknown_index")),
             "数据已存在，请勿重复提交"
         );
+        assert_eq!(super::duplicate_index_conflict_message(None), "数据已存在，请勿重复提交");
     }
 
     #[test]

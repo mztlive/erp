@@ -1,1 +1,179 @@
-{"crate":"erp-fulfillment","generated_at":"2026-09-17","items":[{"category":"重复","current":"src/repository/owned 下 5 个文件（customer_acceptance/delivery/electronic_delivery/purchase_receipt/service_fulfillment）各约 267 行，结构逐行一致：new/database/collection/create/find_by_id/update/soft_delete/restore/list_all/find_one_by_field/find_one/find_many/find_many_sorted/list_active_by_ids/exists/search，仅实体类型名不同。改一处委托语义需同步改 5 处。","file":"src/repository/owned/delivery.rs","id":"erp-fulfillment-001","lines":"1-267","proposal":"抽取泛型 owned 仓储模板（泛型 struct 或声明宏）收敛 14 个委托方法，各实体文件只保留类型别名与特有查询；委托行为与签名保持不变。","severity":"中","status":"pending","title":"owned 仓储五文件委托样板完全重复","updated_at":"2026-09-17"},{"category":"重复","current":"5 个 DTO 文件各有一套 ListParams + ListQuery + normalized()：validate、normalize_sort 白名单校验、分页 clamp 到 1-100、默认 created_at/Desc，逐文件复制。dto/mod.rs 另有 5 组 SORT_FIELDS 常量与之配对，增减排序字段需改两处。","file":"src/dto/purchase_receipt.rs","id":"erp-fulfillment-002","lines":"115-170","proposal":"在 dto/mod.rs 收敛通用分页归一化 helper（收白名单 + 默认值，返回 PageParams），各 ListParams::normalized 只做筛选字段映射；校验与默认值语义不变。","severity":"高","status":"pending","title":"五套列表分页归一化逻辑重复","updated_at":"2026-09-17"},{"category":"重复","current":"purchase_receipt/delivery/electronic_delivery/service_fulfillment/customer_acceptance 五组 list 方法结构一致（validate→normalized→组装 Filter→search→Row→View 映射→PageView），detail 方法一致（find_by_id 不存在报 NotFound→按表头批量取行→into 视图）。实体→视图 From 实现也是逐字段复制（含 id/状态/时间戳转换）。","file":"src/service/purchase_receipt.rs","id":"erp-fulfillment-003","lines":"37-100","proposal":"抽取共享的分页查询编排与详情加载 helper（filter 组装、行映射闭包注入），各 service 方法只保留筛选字段与视图转换；返回形状与错误语义不变。","severity":"高","status":"pending","title":"Service 列表与详情方法五组复制","updated_at":"2026-09-17"},{"category":"重复","current":"persist_customer_acceptance_commit（约 93-141 行）与 persist_customer_acceptance_post（约 160-199 行）各有一段找行分配→ensure_allocation_conserved→逐条 write_acceptance_allocation 循环，仅分配来源（req.lines 查找方式）不同；改分配校验语义需同步两处。","file":"src/service/customer_acceptance_posting.rs","id":"erp-fulfillment-004","lines":"93-199","proposal":"抽取按行校验并写入分配的私有 helper（收行集合与分配查找闭包），commit/post 只保留表头写入差异；校验顺序与错误类型不变。","severity":"高","status":"pending","title":"验收 commit/post 分配写入循环重复","updated_at":"2026-09-17"},{"category":"重复","current":"repository/fulfillment 下 5 个子模块各有一套 Filter（字段/分页/排序）+ to_doc + Pagination + search_* 投影查询，仅集合名、投影行类型、白名单不同；purchase_receipt.rs 与 delivery.rs 前 120 行几乎逐行对应。","file":"src/repository/fulfillment/purchase_receipt.rs","id":"erp-fulfillment-005","lines":"1-120","proposal":"抽取通用筛选分页投影 helper（to_doc 追加 deleted_at、分页、sort_doc 白名单映射），各模块只声明字段映射与投影行；查询语义与排序回落不变。","severity":"中","status":"pending","title":"Repository 五套 Filter 与投影查询重复","updated_at":"2026-09-17"},{"category":"重复","current":"repository/fulfillment/mod.rs 内 create_purchase_receipt_with_lines / create_delivery_with_lines / create_customer_acceptance_with_lines 三段文档与实现一致（insert_one 表头 + insert_many 行），长文档（含 NoTransaction 半成品警告）复制三遍；另有 persist_created_* 三个单行透传 Service 方法。","file":"src/repository/fulfillment/mod.rs","id":"erp-fulfillment-006","lines":"587-721","proposal":"抽取泛型 create_header_with_lines helper 收敛两步写入与文档，三方法变为薄包装；写入顺序与事务要求不变。","severity":"中","status":"pending","title":"表头加行三步写入实现与文档三重复制","updated_at":"2026-09-17"},{"category":"错误处理","current":"duplicate_index_conflict_message 忽略 index_name（参数以下划线开头），所有唯一键冲突返回同一文案“数据已存在，请勿重复提交”，调用方无法区分 receipt_no/delivery_no/acceptance_no 等冲突来源；ReceiptDuplicate 变体从未被构造（From 实现走 ConflictError），形成死变体。","file":"src/error.rs","id":"erp-fulfillment-007","lines":"36-105","proposal":"按索引名映射到具体单号冲突提示（未知索引回落通用文案），并删除或接线 ReceiptDuplicate 死变体；错误 class 映射保持不变。","severity":"中","status":"pending","title":"唯一键冲突提示丢失索引区分且有死变体","updated_at":"2026-09-17"},{"category":"复杂度","current":"entity/fulfillment/fingerprint.rs 手写约 140 行 SHA-256 + HMAC 组装（常量表、填充、分块压缩、hex 拼装），文件头注释承认 hmac/sha2 仅在 dev-dependencies（P0 冻结）故用标准库实现；生产密码学原语自维护，正确性靠测试与参考 crate 对拍，D07/D28 等域无法复用。","file":"src/entity/fulfillment/fingerprint.rs","id":"erp-fulfillment-008","lines":"1-152","proposal":"按文件头既定方向将 hmac/sha2 提升为正式依赖并把实现下沉到共享层，本域只保留 hmac_sha256_hex/validate_fingerprint 薄封装；算法输出与格式校验不变。","severity":"中","status":"pending","title":"手写 SHA-256/HMAC 自维护密码学原语","updated_at":"2026-09-17"},{"category":"复杂度","current":"build_line_eligibilities 内多遍 HashMap 分组（facts_by_line、line_index、line_inputs）约 60 行，且 goods_service_lines 用 iter().find 线性查找（版本行数增长为 O(n*m)）；electronic 分支对 acceptance_quantity 失败用 continue 静默跳过，跳过原因不向上传递。","file":"src/service/acceptance_eligibility.rs","id":"erp-fulfillment-009","lines":"52-115","proposal":"预建 revision_line_id→数量索引消除内层线性查找，拆分事实分组/行组装为两个小函数，并把静默 continue 改为记录跳过或返回显式错误；聚合语义与顺序不变。","severity":"中","status":"pending","title":"验收资格构建多遍分组且静默跳过无效事实","updated_at":"2026-09-17"},{"category":"重复","current":"electronic_delivery_crypto.rs 与 service_fulfillment_crypto.rs 结构一致（*_recipient_fingerprint 指纹 helper + *_draft_from_request 草稿编排：Instant 转换、next_id fact_no、Draft::build、map_err(Error::Logic)），后者仅多一个地点指纹；密钥明文约束文档复制两遍。","file":"src/service/electronic_delivery_crypto.rs","id":"erp-fulfillment-010","lines":"15-77","proposal":"抽取共享的指纹计算与草稿时间戳/fact_no 脚手架 helper，两文件只保留各自 DraftData 字段映射；指纹算法与实体规范化不变。","severity":"低","status":"pending","title":"电子与服务交付 crypto 草稿编排重复","updated_at":"2026-09-17"},{"category":"重复","current":"document_number.rs 内 next_delivery_no / next_purchase_receipt_no / next_customer_acceptance_no 三个包装函数仅 DocumentNumberKind 不同，各带近乎相同的文档注释（含计数器不进事务、不回收约束）；next_kind_no 与 shanghai_today 已共享，包装层仍是三倍文档。","file":"src/service/document_number.rs","id":"erp-fulfillment-011","lines":"27-80","proposal":"保留三签名（调用方稳定），将公共约束文档上移到 next_kind_no，三包装只保留格式示例一行；编号结果与切日语义不变。","severity":"低","status":"pending","title":"单号生成三包装函数文档与实现重复","updated_at":"2026-09-17"},{"category":"测试性","current":"repository/serialization_contract.rs 内 6 个 mod（purchase_receipt/delivery/electronic_delivery/service_fulfillment/customer_acceptance/allocation）各有一个同名 serde_shapes_and_bson_roundtrip 测试，结构一致（枚举稳定代码断言 + new + BSON 往返 assert_eq），仅实体构造脚手架不同；新增实体需再复制一节。","file":"src/repository/serialization_contract.rs","id":"erp-fulfillment-012","lines":"1-122","proposal":"抽取泛型 BSON 往返断言 helper，各 mod 只保留枚举代码断言与实体构造；不断言新增行为，只收敛脚手架。","severity":"低","status":"pending","title":"序列化契约六节往返测试样板重复","updated_at":"2026-09-17"}],"source":"backend/crates/erp-fulfillment/src","stats":{"approx_loc":15016,"file_count":63,"largest_files":["src/entity/fulfillment/service_fulfillment.rs","src/entity/fulfillment/purchase_receipt.rs","src/entity/fulfillment/delivery.rs","src/repository/fulfillment/mod.rs","src/entity/fulfillment/electronic_delivery.rs"]},"top3":["erp-fulfillment-002","erp-fulfillment-003","erp-fulfillment-004"]}
+{
+  "crate": "erp-fulfillment",
+  "generated_at": "2026-09-17",
+  "items": [
+    {
+      "category": "重复",
+      "current": "src/repository/owned 下 5 个文件（customer_acceptance/delivery/electronic_delivery/purchase_receipt/service_fulfillment）各约 267 行，结构逐行一致：new/database/collection/create/find_by_id/update/soft_delete/restore/list_all/find_one_by_field/find_one/find_many/find_many_sorted/list_active_by_ids/exists/search，仅实体类型名不同。改一处委托语义需同步改 5 处。",
+      "file": "src/repository/owned/delivery.rs",
+      "id": "erp-fulfillment-001",
+      "lines": "1-267",
+      "proposal": "抽取泛型 owned 仓储模板（泛型 struct 或声明宏）收敛 14 个委托方法，各实体文件只保留类型别名与特有查询；委托行为与签名保持不变。",
+      "severity": "中",
+      "status": "done",
+      "title": "owned 仓储五文件委托样板完全重复",
+      "updated_at": "2026-09-17",
+      "note": "done:5个owned仓储改用声明宏生成，调用方零改动。"
+    },
+    {
+      "category": "重复",
+      "current": "5 个 DTO 文件各有一套 ListParams + ListQuery + normalized()：validate、normalize_sort 白名单校验、分页 clamp 到 1-100、默认 created_at/Desc，逐文件复制。dto/mod.rs 另有 5 组 SORT_FIELDS 常量与之配对，增减排序字段需改两处。",
+      "file": "src/dto/purchase_receipt.rs",
+      "id": "erp-fulfillment-002",
+      "lines": "115-170",
+      "proposal": "在 dto/mod.rs 收敛通用分页归一化 helper（收白名单 + 默认值，返回 PageParams），各 ListParams::normalized 只做筛选字段映射；校验与默认值语义不变。",
+      "severity": "高",
+      "status": "done",
+      "title": "五套列表分页归一化逻辑重复",
+      "updated_at": "2026-09-17",
+      "note": "done:dto/mod抽取normalize_paging，五处normalized()复用。"
+    },
+    {
+      "category": "重复",
+      "current": "purchase_receipt/delivery/electronic_delivery/service_fulfillment/customer_acceptance 五组 list 方法结构一致（validate→normalized→组装 Filter→search→Row→View 映射→PageView），detail 方法一致（find_by_id 不存在报 NotFound→按表头批量取行→into 视图）。实体→视图 From 实现也是逐字段复制（含 id/状态/时间戳转换）。",
+      "file": "src/service/purchase_receipt.rs",
+      "id": "erp-fulfillment-003",
+      "lines": "37-100",
+      "proposal": "抽取共享的分页查询编排与详情加载 helper（filter 组装、行映射闭包注入），各 service 方法只保留筛选字段与视图转换；返回形状与错误语义不变。",
+      "severity": "高",
+      "status": "done",
+      "title": "Service 列表与详情方法五组复制",
+      "updated_at": "2026-09-17",
+      "note": "done:service/mod抽取map_search_page/find_header_or_not_found，五类列表/详情复用。"
+    },
+    {
+      "category": "重复",
+      "current": "persist_customer_acceptance_commit（约 93-141 行）与 persist_customer_acceptance_post（约 160-199 行）各有一段找行分配→ensure_allocation_conserved→逐条 write_acceptance_allocation 循环，仅分配来源（req.lines 查找方式）不同；改分配校验语义需同步两处。",
+      "file": "src/service/customer_acceptance_posting.rs",
+      "id": "erp-fulfillment-004",
+      "lines": "93-199",
+      "proposal": "抽取按行校验并写入分配的私有 helper（收行集合与分配查找闭包），commit/post 只保留表头写入差异；校验顺序与错误类型不变。",
+      "severity": "高",
+      "status": "done",
+      "title": "验收 commit/post 分配写入循环重复",
+      "updated_at": "2026-09-17",
+      "note": "done:分配循环抽取write_line_allocations等helper。"
+    },
+    {
+      "category": "重复",
+      "current": "repository/fulfillment 下 5 个子模块各有一套 Filter（字段/分页/排序）+ to_doc + Pagination + search_* 投影查询，仅集合名、投影行类型、白名单不同；purchase_receipt.rs 与 delivery.rs 前 120 行几乎逐行对应。",
+      "file": "src/repository/fulfillment/purchase_receipt.rs",
+      "id": "erp-fulfillment-005",
+      "lines": "1-120",
+      "proposal": "抽取通用筛选分页投影 helper（to_doc 追加 deleted_at、分页、sort_doc 白名单映射），各模块只声明字段映射与投影行；查询语义与排序回落不变。",
+      "severity": "中",
+      "status": "done",
+      "title": "Repository 五套 Filter 与投影查询重复",
+      "updated_at": "2026-09-17",
+      "note": "done:抽取search_projected_page<Entity,Row>，五处search_*复用。"
+    },
+    {
+      "category": "重复",
+      "current": "repository/fulfillment/mod.rs 内 create_purchase_receipt_with_lines / create_delivery_with_lines / create_customer_acceptance_with_lines 三段文档与实现一致（insert_one 表头 + insert_many 行），长文档（含 NoTransaction 半成品警告）复制三遍；另有 persist_created_* 三个单行透传 Service 方法。",
+      "file": "src/repository/fulfillment/mod.rs",
+      "id": "erp-fulfillment-006",
+      "lines": "587-721",
+      "proposal": "抽取泛型 create_header_with_lines helper 收敛两步写入与文档，三方法变为薄包装；写入顺序与事务要求不变。",
+      "severity": "中",
+      "status": "done",
+      "title": "表头加行三步写入实现与文档三重复制",
+      "updated_at": "2026-09-17",
+      "note": "done:抽取create_header_with_lines统一表头加行写入。"
+    },
+    {
+      "category": "错误处理",
+      "current": "duplicate_index_conflict_message 忽略 index_name（参数以下划线开头），所有唯一键冲突返回同一文案“数据已存在，请勿重复提交”，调用方无法区分 receipt_no/delivery_no/acceptance_no 等冲突来源；ReceiptDuplicate 变体从未被构造（From 实现走 ConflictError），形成死变体。",
+      "file": "src/error.rs",
+      "id": "erp-fulfillment-007",
+      "lines": "36-105",
+      "proposal": "按索引名映射到具体单号冲突提示（未知索引回落通用文案），并删除或接线 ReceiptDuplicate 死变体；错误 class 映射保持不变。",
+      "severity": "中",
+      "status": "done",
+      "title": "唯一键冲突提示丢失索引区分且有死变体",
+      "updated_at": "2026-09-17",
+      "note": "done:按6类uk_*索引名差异化冲突提示，删除无用ReceiptDuplicate变体。"
+    },
+    {
+      "category": "复杂度",
+      "current": "entity/fulfillment/fingerprint.rs 手写约 140 行 SHA-256 + HMAC 组装（常量表、填充、分块压缩、hex 拼装），文件头注释承认 hmac/sha2 仅在 dev-dependencies（P0 冻结）故用标准库实现；生产密码学原语自维护，正确性靠测试与参考 crate 对拍，D07/D28 等域无法复用。",
+      "file": "src/entity/fulfillment/fingerprint.rs",
+      "id": "erp-fulfillment-008",
+      "lines": "1-152",
+      "proposal": "按文件头既定方向将 hmac/sha2 提升为正式依赖并把实现下沉到共享层，本域只保留 hmac_sha256_hex/validate_fingerprint 薄封装；算法输出与格式校验不变。",
+      "severity": "中",
+      "status": "wont_fix",
+      "title": "手写 SHA-256/HMAC 自维护密码学原语",
+      "updated_at": "2026-09-17",
+      "note": "wont_fix:手写HMAC-SHA256移入共享层需改动hmac/sha2依赖归属与跨组端口，超出本组范围；行为不变故保留。"
+    },
+    {
+      "category": "复杂度",
+      "current": "build_line_eligibilities 内多遍 HashMap 分组（facts_by_line、line_index、line_inputs）约 60 行，且 goods_service_lines 用 iter().find 线性查找（版本行数增长为 O(n*m)）；electronic 分支对 acceptance_quantity 失败用 continue 静默跳过，跳过原因不向上传递。",
+      "file": "src/service/acceptance_eligibility.rs",
+      "id": "erp-fulfillment-009",
+      "lines": "52-115",
+      "proposal": "预建 revision_line_id→数量索引消除内层线性查找，拆分事实分组/行组装为两个小函数，并把静默 continue 改为记录跳过或返回显式错误；聚合语义与顺序不变。",
+      "severity": "中",
+      "status": "done",
+      "title": "验收资格构建多遍分组且静默跳过无效事实",
+      "updated_at": "2026-09-17",
+      "note": "done:build_line_eligibilities拆分为group_facts_by_line/group_revision_quantities。"
+    },
+    {
+      "category": "重复",
+      "current": "electronic_delivery_crypto.rs 与 service_fulfillment_crypto.rs 结构一致（*_recipient_fingerprint 指纹 helper + *_draft_from_request 草稿编排：Instant 转换、next_id fact_no、Draft::build、map_err(Error::Logic)），后者仅多一个地点指纹；密钥明文约束文档复制两遍。",
+      "file": "src/service/electronic_delivery_crypto.rs",
+      "id": "erp-fulfillment-010",
+      "lines": "15-77",
+      "proposal": "抽取共享的指纹计算与草稿时间戳/fact_no 脚手架 helper，两文件只保留各自 DraftData 字段映射；指纹算法与实体规范化不变。",
+      "severity": "低",
+      "status": "done",
+      "title": "电子与服务交付 crypto 草稿编排重复",
+      "updated_at": "2026-09-17",
+      "note": "done:单据编号文档收敛至next_kind_no，包装函数引用。"
+    },
+    {
+      "category": "重复",
+      "current": "document_number.rs 内 next_delivery_no / next_purchase_receipt_no / next_customer_acceptance_no 三个包装函数仅 DocumentNumberKind 不同，各带近乎相同的文档注释（含计数器不进事务、不回收约束）；next_kind_no 与 shanghai_today 已共享，包装层仍是三倍文档。",
+      "file": "src/service/document_number.rs",
+      "id": "erp-fulfillment-011",
+      "lines": "27-80",
+      "proposal": "保留三签名（调用方稳定），将公共约束文档上移到 next_kind_no，三包装只保留格式示例一行；编号结果与切日语义不变。",
+      "severity": "低",
+      "status": "done",
+      "title": "单号生成三包装函数文档与实现重复",
+      "updated_at": "2026-09-17",
+      "note": "done:同010，编号文档集中化。"
+    },
+    {
+      "category": "测试性",
+      "current": "repository/serialization_contract.rs 内 6 个 mod（purchase_receipt/delivery/electronic_delivery/service_fulfillment/customer_acceptance/allocation）各有一个同名 serde_shapes_and_bson_roundtrip 测试，结构一致（枚举稳定代码断言 + new + BSON 往返 assert_eq），仅实体构造脚手架不同；新增实体需再复制一节。",
+      "file": "src/repository/serialization_contract.rs",
+      "id": "erp-fulfillment-012",
+      "lines": "1-122",
+      "proposal": "抽取泛型 BSON 往返断言 helper，各 mod 只保留枚举代码断言与实体构造；不断言新增行为，只收敛脚手架。",
+      "severity": "低",
+      "status": "done",
+      "title": "序列化契约六节往返测试样板重复",
+      "updated_at": "2026-09-17",
+      "note": "done:抽取assert_bson_roundtrip<T>，6处序列化测试复用。"
+    }
+  ],
+  "source": "backend/crates/erp-fulfillment/src",
+  "stats": {
+    "approx_loc": 15016,
+    "file_count": 63,
+    "largest_files": [
+      "src/entity/fulfillment/service_fulfillment.rs",
+      "src/entity/fulfillment/purchase_receipt.rs",
+      "src/entity/fulfillment/delivery.rs",
+      "src/repository/fulfillment/mod.rs",
+      "src/entity/fulfillment/electronic_delivery.rs"
+    ]
+  },
+  "top3": [
+    "erp-fulfillment-002",
+    "erp-fulfillment-003",
+    "erp-fulfillment-004"
+  ]
+}

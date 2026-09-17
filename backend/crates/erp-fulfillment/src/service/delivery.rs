@@ -8,8 +8,8 @@ use validator::Validate;
 use super::FulfillmentService;
 use super::delivery_lines::delivery_line_specs;
 use crate::dto::{
-    CreateDeliveryRequest, DeliveryDetailView, DeliveryLineView, DeliveryListParams, DeliveryView, PageView,
-    SortDir, UpdateDeliveryRequest,
+    CreateDeliveryRequest, DeliveryDetailView, DeliveryLineView, DeliveryListParams, DeliveryView, SortDir,
+    UpdateDeliveryRequest,
 };
 use crate::entity::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineBatch};
 use crate::repository::FulfillmentExt;
@@ -35,7 +35,10 @@ impl FulfillmentService {
         skip_all,
         fields(layer = "service", domain = "fulfillment", operation = "delivery_list")
     )]
-    pub async fn delivery_list(&self, params: &DeliveryListParams) -> Result<PageView<DeliveryView>> {
+    pub async fn delivery_list(
+        &self,
+        params: &DeliveryListParams,
+    ) -> Result<crate::dto::PageView<DeliveryView>> {
         params.validate()?;
         let query = params.normalized()?;
         let filter = DeliveryFilter {
@@ -47,10 +50,9 @@ impl FulfillmentService {
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
         let page = self.db.deliveries().search_deliveries(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| DeliveryView {
+        super::map_search_page(
+            async { Ok(page) },
+            |row| DeliveryView {
                 id: row.id.clone(),
                 delivery_no: row.delivery_no,
                 delivery_type: row.delivery_type,
@@ -63,9 +65,11 @@ impl FulfillmentService {
                 shipped_at: row.shipped_at.map(|instant| instant.unix_secs()),
                 version: row.version,
                 created_at: row.created_at,
-            })
-            .collect();
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+            },
+            filter.page,
+            filter.page_size,
+        )
+        .await
     }
 
     /// 查询发货单详情（表头 + 行）。
@@ -85,12 +89,11 @@ impl FulfillmentService {
         fields(layer = "service", domain = "fulfillment", operation = "delivery_detail")
     )]
     pub async fn delivery_detail(&self, id: &str) -> Result<DeliveryDetailView> {
-        let delivery = self
-            .db
-            .deliveries()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("发货单不存在".to_string()))?;
+        let delivery = super::find_header_or_not_found(
+            self.db.deliveries().find_by_id(id, &mut NoTransaction),
+            "发货单不存在",
+        )
+        .await?;
         let lines = self
             .db
             .fulfillment()

@@ -127,6 +127,45 @@ pub enum ConfirmationScope {
     Finance,
 }
 
+/// 批次对象集分隔符（中英文半角口径，见 `required_for_object_set`）。
+const OBJECT_SET_SEPARATORS: [char; 5] = [',', ';', '|', '/', '、'];
+
+/// 来源对象类型（已大写去空白）→ 确认范围对照表（与 `required_for_object_set` 同语义）。
+const OBJECT_TYPE_SCOPE_TABLE: &[(&str, ConfirmationScope)] = &[
+    ("CUSTOMER", ConfirmationScope::Sales),
+    ("CONTRACT", ConfirmationScope::Sales),
+    ("CARD_SALES_ORDER", ConfirmationScope::Sales),
+    ("客户", ConfirmationScope::Sales),
+    ("合同", ConfirmationScope::Sales),
+    ("卡券销售", ConfirmationScope::Sales),
+    ("卡券销售单", ConfirmationScope::Sales),
+    ("SUPPLIER", ConfirmationScope::Procurement),
+    ("SKU", ConfirmationScope::Procurement),
+    ("供应商", ConfirmationScope::Procurement),
+    ("商品SKU", ConfirmationScope::Procurement),
+    ("商品 SKU", ConfirmationScope::Procurement),
+    ("CARD_CATEGORY", ConfirmationScope::Operations),
+    ("卡券类目", ConfirmationScope::Operations),
+    ("WAREHOUSE", ConfirmationScope::Warehouse),
+    ("OPENING_STOCK", ConfirmationScope::Warehouse),
+    ("仓库", ConfirmationScope::Warehouse),
+    ("期初库存", ConfirmationScope::Warehouse),
+    ("CARD_OPENING_AR", ConfirmationScope::Finance),
+    ("卡券期初应收", ConfirmationScope::Finance),
+    ("期初应收", ConfirmationScope::Finance),
+];
+
+/// 按对照表查找对象类型对应的确认范围（未注册时返回 `None`）。
+///
+/// # 参数
+/// * `object` - 已大写去空白的对象类型
+///
+/// # 返回
+/// 返回对应的确认范围；未注册时返回 `None`。
+fn lookup_confirmation_scope(object: &str) -> Option<ConfirmationScope> {
+    OBJECT_TYPE_SCOPE_TABLE.iter().find(|(name, _)| *name == object).map(|(_, scope)| *scope)
+}
+
 impl ConfirmationScope {
     /// 解析固定确认范围代码。
     ///
@@ -189,20 +228,13 @@ impl ConfirmationScope {
     /// 对象类型未注册或集合为空时返回错误。
     pub fn required_for_object_set(source_object_set: &str) -> Result<BTreeSet<Self>> {
         let mut scopes = BTreeSet::new();
-        for raw in source_object_set.split([',', ';', '|', '/', '、']) {
+        for raw in source_object_set.split(OBJECT_SET_SEPARATORS) {
             let object = raw.trim().to_ascii_uppercase();
             if object.is_empty() {
                 continue;
             }
-            let scope = match object.as_str() {
-                "CUSTOMER" | "CONTRACT" | "CARD_SALES_ORDER" | "客户" | "合同" | "卡券销售"
-                | "卡券销售单" => Self::Sales,
-                "SUPPLIER" | "SKU" | "供应商" | "商品SKU" | "商品 SKU" => Self::Procurement,
-                "CARD_CATEGORY" | "卡券类目" => Self::Operations,
-                "WAREHOUSE" | "OPENING_STOCK" | "仓库" | "期初库存" => Self::Warehouse,
-                "CARD_OPENING_AR" | "卡券期初应收" | "期初应收" => Self::Finance,
-                _ => return Err(Error::from(format!("批次对象类型 {raw} 未配置 W18 确认责任"))),
-            };
+            let scope = lookup_confirmation_scope(&object)
+                .ok_or_else(|| Error::from(format!("批次对象类型 {raw} 未配置 W18 确认责任")))?;
             scopes.insert(scope);
         }
         if scopes.is_empty() {

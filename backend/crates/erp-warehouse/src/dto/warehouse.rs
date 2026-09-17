@@ -62,6 +62,36 @@ use application_core::non_blank;
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
 
+/// 归一化分页与排序参数（白名单校验 + 默认值），三类列表查询共用。
+///
+/// # 参数
+/// * `sort_by` - 可选排序字段；空白视为未提供
+/// * `sort_dir` - 可选排序方向；空白视为未提供
+/// * `page` - 可选页码；缺省取首页
+/// * `page_size` - 可选单页条数；缺省取默认值
+/// * `allowed_fields` - 排序字段白名单
+///
+/// # 返回
+/// 返回归一化后的分页查询参数。
+///
+/// # 错误
+/// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+pub(crate) fn normalize_paging(
+    sort_by: &Option<String>,
+    sort_dir: &Option<String>,
+    page: Option<u64>,
+    page_size: Option<u32>,
+    allowed_fields: &'static [&'static str],
+) -> Result<PageParams> {
+    let (sort_by, sort_dir) = normalize_sort(sort_by, sort_dir, allowed_fields)?;
+    Ok(PageParams {
+        page: page_or_default(page),
+        page_size: page_size_or_default(page_size),
+        sort_by,
+        sort_dir,
+    })
+}
+
 /// 仓库创建请求（仓库稳定身份 + 首个仓库修订快照）。
 ///
 /// 地址与联系人为明文输入；Service 按数据模型 §4.5.5 生成带密钥 HMAC 指纹的
@@ -254,19 +284,19 @@ impl WarehouseListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<WarehouseListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, WAREHOUSE_SORT_FIELDS)?;
         Ok(WarehouseListQuery {
             warehouse_id: normalized_text(self.warehouse_id.as_deref()),
             require_inbound_handler: self.require_inbound_handler,
             q: normalized_text(self.q.as_deref()),
             warehouse_code: normalized_text(self.warehouse_code.as_deref()),
             status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: normalize_paging(
+                &self.sort_by,
+                &self.sort_dir,
+                self.page,
+                self.page_size,
+                WAREHOUSE_SORT_FIELDS,
+            )?,
         })
     }
 }
@@ -335,17 +365,16 @@ impl WarehouseRevisionListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<WarehouseRevisionListQuery> {
-        let (sort_by, sort_dir) =
-            normalize_sort(&self.sort_by, &self.sort_dir, WAREHOUSE_REVISION_SORT_FIELDS)?;
         Ok(WarehouseRevisionListQuery {
             warehouse_id: self.warehouse_id.as_ref().map(|id| id.to_string()),
             name: normalized_text(self.name.as_deref()),
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: normalize_paging(
+                &self.sort_by,
+                &self.sort_dir,
+                self.page,
+                self.page_size,
+                WAREHOUSE_REVISION_SORT_FIELDS,
+            )?,
         })
     }
 }
@@ -471,18 +500,17 @@ impl WarehouseSkuPolicyListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<WarehouseSkuPolicyListQuery> {
-        let (sort_by, sort_dir) =
-            normalize_sort(&self.sort_by, &self.sort_dir, WAREHOUSE_SKU_POLICY_SORT_FIELDS)?;
         Ok(WarehouseSkuPolicyListQuery {
             warehouse_id: self.warehouse_id.as_ref().map(|id| id.to_string()),
             sku_id: self.sku_id.as_ref().map(|id| id.to_string()),
             status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: normalize_paging(
+                &self.sort_by,
+                &self.sort_dir,
+                self.page,
+                self.page_size,
+                WAREHOUSE_SKU_POLICY_SORT_FIELDS,
+            )?,
         })
     }
 }

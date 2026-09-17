@@ -9,7 +9,8 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mo
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    active_entity_by_id, entities_by_ids, find_by_field_in, ids_to_strings, sort_doc, to_bson,
+    active_entity_by_id, apply_warehouse_scope_filter, entities_by_ids, find_by_field_in, ids_to_strings,
+    sort_doc, to_bson, with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_ADJUSTMENT_LINES, STOCK_ADJUSTMENTS};
 use crate::entity::inventory::{
@@ -103,12 +104,7 @@ impl QueryFilter for StockAdjustmentFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        if let Some(warehouse_ids) = &self.warehouse_ids {
-            filter.insert(
-                "warehouse_id",
-                doc! { "$in": warehouse_ids.iter().map(ToString::to_string).collect::<Vec<_>>() },
-            );
-        }
+        apply_warehouse_scope_filter(&mut filter, self.warehouse_ids.as_deref());
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
         }
@@ -232,10 +228,10 @@ impl<'a> StockAdjustmentLineRepository<'a> {
 
 /// 为调整单分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
 fn stock_adjustment_sort(filter: &StockAdjustmentFilter) -> Document {
-    let mut sort =
-        sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, &["created_at", "adjustment_no"]);
-    sort.insert("id", if filter.sort_ascending { 1 } else { -1 });
-    sort
+    with_id_tie_breaker(
+        sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, &["created_at", "adjustment_no"]),
+        filter.sort_ascending,
+    )
 }
 
 impl<'a> InventoryRepository<'a> {

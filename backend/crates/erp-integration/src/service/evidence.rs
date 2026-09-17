@@ -130,45 +130,51 @@ fn dto_conclusion(conclusion: DirectConclusion) -> DirectReconciliationConclusio
     }
 }
 
-/// 受控证据类型与领域证据类型的双向映射（1:1，wire 代码不变）。
-impl From<ControlledEvidenceKind> for RequiredEvidenceKind {
-    /// 将服务受控证据类型转换为领域证据类型。
-    ///
-    /// # 参数
-    /// * `kind` - 服务受控证据类型
-    ///
-    /// # 返回
-    /// 返回一一对应的领域证据类型。
-    fn from(kind: ControlledEvidenceKind) -> Self {
-        match kind {
-            ControlledEvidenceKind::ExternalCaseResult => Self::ExternalCaseResult,
-            ControlledEvidenceKind::BusinessObjectVerification => Self::BusinessObjectVerification,
-            ControlledEvidenceKind::FinancialReconciliation => Self::FinancialReconciliation,
-            ControlledEvidenceKind::CompensationResult => Self::CompensationResult,
-            ControlledEvidenceKind::DistinctReview => Self::DistinctReview,
+/// 受控证据类型双向映射对照表（1:1，wire 代码不变；新增类型只改此处）。
+///
+/// 三处转换（两个 `From` 与结论映射外的类型翻译）由同一表生成，
+/// 不再各自手写 5 臂 match。
+macro_rules! evidence_kind_table {
+    ($($variant:ident),*) => {
+        impl From<ControlledEvidenceKind> for RequiredEvidenceKind {
+            /// 将服务受控证据类型转换为领域证据类型。
+            ///
+            /// # 参数
+            /// * `kind` - 服务受控证据类型
+            ///
+            /// # 返回
+            /// 返回一一对应的领域证据类型。
+            fn from(kind: ControlledEvidenceKind) -> Self {
+                match kind {
+                    $(ControlledEvidenceKind::$variant => Self::$variant,)*
+                }
+            }
         }
-    }
+
+        impl From<RequiredEvidenceKind> for ControlledEvidenceKind {
+            /// 将领域证据类型转换为服务受控证据类型。
+            ///
+            /// # 参数
+            /// * `kind` - 领域证据类型
+            ///
+            /// # 返回
+            /// 返回一一对应的服务受控证据类型。
+            fn from(kind: RequiredEvidenceKind) -> Self {
+                match kind {
+                    $(RequiredEvidenceKind::$variant => Self::$variant,)*
+                }
+            }
+        }
+    };
 }
 
-/// 领域证据类型到服务受控证据类型的映射（1:1，wire 代码不变）。
-impl From<RequiredEvidenceKind> for ControlledEvidenceKind {
-    /// 将领域证据类型转换为服务受控证据类型。
-    ///
-    /// # 参数
-    /// * `kind` - 领域证据类型
-    ///
-    /// # 返回
-    /// 返回一一对应的服务受控证据类型。
-    fn from(kind: RequiredEvidenceKind) -> Self {
-        match kind {
-            RequiredEvidenceKind::ExternalCaseResult => Self::ExternalCaseResult,
-            RequiredEvidenceKind::BusinessObjectVerification => Self::BusinessObjectVerification,
-            RequiredEvidenceKind::FinancialReconciliation => Self::FinancialReconciliation,
-            RequiredEvidenceKind::CompensationResult => Self::CompensationResult,
-            RequiredEvidenceKind::DistinctReview => Self::DistinctReview,
-        }
-    }
-}
+evidence_kind_table!(
+    ExternalCaseResult,
+    BusinessObjectVerification,
+    FinancialReconciliation,
+    CompensationResult,
+    DistinctReview
+);
 
 /// 校验任务完成命令引用的策略身份、键与证据类型集合。
 pub fn ensure_completion_policy(

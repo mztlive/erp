@@ -8,6 +8,8 @@ use erp_core::ids::{ExternalIdentityMapId, LegacyImportRowId};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 
+use super::first_duplicate_key;
+
 /// 单次应用请求允许的最大行结果数（与 HTTP 契约 1–1000 对齐）。
 const APPLY_RESULT_MAX_LEN: usize = 1000;
 /// 目标对象 ID 与引用最大长度（与导入行实体一致）。
@@ -234,11 +236,8 @@ impl ApplyResultItem {
 /// # 错误
 /// 任一行 ID 出现两次及以上时返回错误。
 fn ensure_unique_row_ids(drafts: &[ApplyResultDraft]) -> Result<()> {
-    let mut seen = std::collections::HashSet::with_capacity(drafts.len());
-    for draft in drafts {
-        if !seen.insert(draft.row_id.as_ref()) {
-            return Err(Error::from(format!("行结果 ID 重复: {}", draft.row_id)));
-        }
+    if let Some(duplicate) = first_duplicate_key(drafts, |draft| draft.row_id.as_ref()) {
+        return Err(Error::from(format!("行结果 ID 重复: {duplicate}")));
     }
     Ok(())
 }

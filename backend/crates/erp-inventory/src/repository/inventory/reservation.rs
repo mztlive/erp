@@ -10,7 +10,9 @@ use mongodb::options::FindOptions;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
-use super::shared::{ids_to_strings, negate_bson, sort_doc, to_bson};
+use super::shared::{
+    apply_warehouse_scope_filter, ids_to_strings, negate_bson, sort_doc, to_bson, with_id_tie_breaker,
+};
 use super::{InventoryRepository, STOCK_RESERVATIONS};
 use crate::entity::inventory::{ReservationStatus, StockReservation, StockReservationSourceType};
 use crate::repository::owned::StockReservationRepository;
@@ -94,12 +96,7 @@ impl QueryFilter for StockReservationFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        if let Some(warehouse_ids) = &self.warehouse_ids {
-            filter.insert(
-                "warehouse_id",
-                doc! { "$in": warehouse_ids.iter().map(ToString::to_string).collect::<Vec<_>>() },
-            );
-        }
+        apply_warehouse_scope_filter(&mut filter, self.warehouse_ids.as_deref());
         if let Some(sku_id) = &self.sku_id {
             filter.insert("sku_id", sku_id.to_string());
         }
@@ -204,19 +201,19 @@ impl<'a> StockReservationRepository<'a> {
         quantity: Quantity,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let quantity = to_bson(quantity)?;
+        let quantity_bson = to_bson(quantity)?;
         let active_statuses =
             [ReservationStatus::Active.as_str(), ReservationStatus::PartiallyConsumed.as_str()];
         let filter = doc! {
             "id": id,
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "reserved_quantity": { "$gte": &quantity },
+            "reserved_quantity": { "$gte": &quantity_bson },
             "status": { "$in": active_statuses.as_slice() },
         };
         let update = doc! {
             "$inc": {
-                "reserved_quantity": negate_bson(&quantity),
-                "consumed_quantity": &quantity,
+                "reserved_quantity": negate_bson(&quantity_bson),
+                "consumed_quantity": &quantity_bson,
                 "version": 1,
             },
             "$set": { "updated_at": Local::now().timestamp() },
@@ -310,9 +307,10 @@ impl<'a> StockReservationRepository<'a> {
 
 /// 为库存预占分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
 fn stock_reservation_sort(filter: &StockReservationFilter) -> Document {
-    let mut sort = sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, &["created_at", "updated_at"]);
-    sort.insert("id", if filter.sort_ascending { 1 } else { -1 });
-    sort
+    with_id_tie_breaker(
+        sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, &["created_at", "updated_at"]),
+        filter.sort_ascending,
+    )
 }
 
 impl<'a> InventoryRepository<'a> {

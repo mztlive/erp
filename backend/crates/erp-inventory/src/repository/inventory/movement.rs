@@ -7,7 +7,7 @@ use mongodb::options::FindOptions;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
-use super::shared::{entities_by_ids, sort_doc};
+use super::shared::{apply_warehouse_scope_filter, entities_by_ids, sort_doc, with_id_tie_breaker};
 use super::{InventoryRepository, STOCK_MOVEMENTS};
 use crate::entity::inventory::{MovementDirection, MovementType, StockMovement};
 use crate::repository::owned::StockMovementRepository;
@@ -104,12 +104,7 @@ impl QueryFilter for StockMovementFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        if let Some(warehouse_ids) = &self.warehouse_ids {
-            filter.insert(
-                "warehouse_id",
-                doc! { "$in": warehouse_ids.iter().map(ToString::to_string).collect::<Vec<_>>() },
-            );
-        }
+        apply_warehouse_scope_filter(&mut filter, self.warehouse_ids.as_deref());
         if let Some(sku_id) = &self.sku_id {
             filter.insert("sku_id", sku_id.to_string());
         }
@@ -215,13 +210,14 @@ impl<'a> StockMovementRepository<'a> {
 
 /// 为库存流水分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
 fn stock_movement_sort(filter: &StockMovementFilter) -> Document {
-    let mut sort = sort_doc(
-        filter.sort_by.as_deref(),
+    with_id_tie_breaker(
+        sort_doc(
+            filter.sort_by.as_deref(),
+            filter.sort_ascending,
+            &["occurred_at", "recorded_at", "created_at"],
+        ),
         filter.sort_ascending,
-        &["occurred_at", "recorded_at", "created_at"],
-    );
-    sort.insert("id", if filter.sort_ascending { 1 } else { -1 });
-    sort
+    )
 }
 
 impl<'a> InventoryRepository<'a> {

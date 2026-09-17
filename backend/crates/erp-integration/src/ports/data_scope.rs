@@ -22,13 +22,13 @@ pub struct IntegrationResolvedClause {
 }
 
 impl IntegrationResolvedClause {
-    /// 判断条款是否构成有效集成范围规则。
+    /// 判断条款是否构成有效集成范围规则（与仓储侧 `IntegrationScopeClause::is_empty` 互为否定）。
     ///
     /// # 参数
     /// 无。
     ///
     /// # 返回
-    /// 含公司、本人处理或组织目标时为 true。
+    /// 含公司、本人处理或组织目标时为 true（即仓储侧 `is_empty() == false`）。
     ///
     /// # 错误
     /// 无。
@@ -37,6 +37,14 @@ impl IntegrationResolvedClause {
     /// 空条款保持空集且不得补公司。
     pub fn has_scope_rules(&self) -> bool {
         self.company || self.self_owned || !self.org_unit_ids.is_empty()
+    }
+
+    /// 判断条款是否为空（与 [`has_scope_rules`](Self::has_scope_rules) 互为否定）。
+    ///
+    /// # 返回
+    /// 无公司、无本人处理且无组织目标时为 true。
+    pub fn is_empty(&self) -> bool {
+        !self.has_scope_rules()
     }
 }
 

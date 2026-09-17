@@ -4,8 +4,7 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseOrderId, WarehouseId};
 use mongodb::bson::{Document, doc};
-use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
@@ -134,16 +133,16 @@ impl<'a> PurchaseReceiptRepository<'a> {
         filter: &PurchaseReceiptFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<PurchaseReceiptRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, PURCHASE_RECEIPT_SORT_FIELDS))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(purchase_receipt_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<PurchaseReceiptRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-        Ok(PageResult { items, total: total as i64 })
+        super::search_projected_page(
+            &self.collection(),
+            filter.to_doc(),
+            sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, PURCHASE_RECEIPT_SORT_FIELDS),
+            filter.skip(),
+            filter.limit(),
+            purchase_receipt_projection(),
+            executor,
+        )
+        .await
     }
 
     /// 按采购入库单号查找入库单（唯一单号，详情查询）。

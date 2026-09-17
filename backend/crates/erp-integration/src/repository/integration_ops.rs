@@ -46,6 +46,11 @@ const ERROR_TASK_SORT_FIELDS: &[&str] = &["created_at", "last_attempt_at", "stat
 const DIFFERENCE_SORT_FIELDS: &[&str] = &["created_at"];
 
 mod filters;
+/// 过滤构造器复用入口：`difference_resolution_batch` 经本模块路径复用
+/// [`undeleted_base`](filters::undeleted_base)，时间区间/ID 列表/授权求交/关键词
+/// 构造器（`insert_time_range`/`insert_id_in`/`and_scope`/`keyword_filter`）在
+/// `filters` 内 `pub(crate)` 集中维护，三类 `to_doc` 同文件直接复用。
+pub(crate) use filters::undeleted_base;
 pub use filters::{
     InboxMessageFilter, InboxMessageRow, IntegrationErrorTaskFilter, IntegrationErrorTaskRow,
     ReconciliationDifferenceFilter, ReconciliationDifferenceRow, ResolutionHistoryRow,

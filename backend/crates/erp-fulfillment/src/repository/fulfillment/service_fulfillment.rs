@@ -4,8 +4,7 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId};
 use mongodb::bson::{Document, doc};
-use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
@@ -118,16 +117,16 @@ impl<'a> ServiceFulfillmentRepository<'a> {
         filter: &ServiceFulfillmentFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<ServiceFulfillmentRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, SERVICE_FULFILLMENT_SORT_FIELDS))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(service_fulfillment_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<ServiceFulfillmentRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-        Ok(PageResult { items, total: total as i64 })
+        super::search_projected_page(
+            &self.collection(),
+            filter.to_doc(),
+            sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, SERVICE_FULFILLMENT_SORT_FIELDS),
+            filter.skip(),
+            filter.limit(),
+            service_fulfillment_projection(),
+            executor,
+        )
+        .await
     }
 }
 

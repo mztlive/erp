@@ -4,12 +4,10 @@
 //! 批内 `(object_type, row_key)` 唯一判定与行实体装配。无 I/O、时钟、
 //! ID 生成器或密钥。
 
-use std::collections::HashSet;
-
 use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId};
 use erp_core::{Error, Result};
 
-use super::{LegacyImportRow, LegacyImportRowData};
+use super::{LegacyImportRow, LegacyImportRowData, first_duplicate_key};
 
 /// 单行导入行装配规格（已由 DTO 校验形态，领域层再做规范化与唯一判定）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,13 +44,15 @@ pub fn build_import_rows(
     batch_id: &LegacyImportBatchId,
     specs: Vec<ImportRowSpec>,
 ) -> Result<Vec<LegacyImportRow>> {
-    let mut seen = HashSet::new();
+    if first_duplicate_key(&specs, |spec| {
+        (spec.source_object_type.trim().to_string(), spec.source_row_key.trim().to_string())
+    })
+    .is_some()
+    {
+        return Err(Error::from("同一批次内来源行身份重复"));
+    }
     let mut rows = Vec::with_capacity(specs.len());
     for spec in specs {
-        let key = (spec.source_object_type.trim().to_string(), spec.source_row_key.trim().to_string());
-        if !seen.insert(key) {
-            return Err(Error::from("同一批次内来源行身份重复"));
-        }
         rows.push(LegacyImportRow::new(
             spec.row_id,
             LegacyImportRowData {

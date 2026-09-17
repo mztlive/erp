@@ -1,1 +1,151 @@
-{"crate":"erp-import","generated_at":"2026-09-17","items":[{"category":"复杂度","current":"dto/legacy_import.rs 共 1082 行，含批次/行/确认/执行命令/分页归一化等多组 DTO 与 TryFrom 转换，扣除测试后生产代码仍超 800 行文件体积上限。","file":"src/dto/legacy_import.rs","id":"erp-import-001","lines":"1-1082","note":"","proposal":"按批次、行、确认、执行命令拆分为 dto/ 下多个子模块，公共 PageParams/SortDir 重导出保留在 dto/mod.rs，不改变任何公开类型路径与校验语义。","severity":"高","status":"pending","title":"DTO 单文件超 800 行体积上限","updated_at":"2026-09-17"},{"category":"重复","current":"search_legacy_import_batches、search_legacy_import_rows、search_legacy_import_confirmations 三段实现几乎逐行相同（组 FindOptions、clone_with_type 投影、find_many + count_documents），仅集合与投影函数不同；三个投影函数 likewise 仅字段列表不同。","file":"src/repository/legacy_import/mod.rs","id":"erp-import-002","lines":"180-491","note":"","proposal":"抽取通用的投影分页查询 helper（传 collection、filter doc、options、投影 doc），三个 search 方法只保留过滤与投影装配，不改变查询语义与返回形状。","severity":"中","status":"pending","title":"三个列表查询实现近乎逐行重复","updated_at":"2026-09-17"},{"category":"重复","current":"mark_conflict、mark_import_failed、mark_skipped 三段流程完全一致（ensure_parseable + ensure_mapped + ensure_transition + 写 error_code/error_detail），仅目标状态与必填错误码文案不同；mark_mapped/mark_imported 的成功分支同样各自清错误字段。","file":"src/entity/legacy_import/legacy_import_row.rs","id":"erp-import-003","lines":"351-459","note":"","proposal":"抽取私有的 record_diagnostic(status, error_code, error_detail) helper 统一做前置校验、迁移与错误字段写入，各 mark_* 只传参，不改变状态机与校验语义。","severity":"中","status":"pending","title":"行诊断类迁移方法三段重复","updated_at":"2026-09-17"},{"category":"重复","current":"行 ID 去重逻辑在三处各实现一遍：apply_scope::unique_row_ids（按首次出现保序）、import_row_factory::build_import_rows 内联 seen 集合（trim 后元组键）、apply_result_set::ensure_unique_row_ids（as_ref 键），语义相近但键归一化口径不一致。","file":"src/repository/legacy_import/apply_scope.rs","id":"erp-import-004","lines":"150-159","note":"","proposal":"在 entity 层抽取统一的保序去重 helper 并注明键归一化口径（是否 trim），三处复用，不改变各自的重复判定行为。","severity":"中","status":"pending","title":"行 ID 去重在三处重复实现","updated_at":"2026-09-17"},{"category":"复杂度","current":"required_for_object_set 用长 match 硬编码中英文对象类型到确认范围的映射，并内联多种分隔符、多语言别名（如 商品SKU/商品 SKU、卡券销售/卡券销售单），新增对象类型时易遗漏且难 review。","file":"src/entity/legacy_import/legacy_import_confirmation.rs","id":"erp-import-005","lines":"190-212","note":"","proposal":"抽取静态对象类型→范围对照表常量与分隔符常量，函数体只做切分、查表、聚合，不改变映射关系与错误语义。","severity":"中","status":"pending","title":"对象集到确认范围映射硬编码长 match","updated_at":"2026-09-17"},{"category":"测试性","current":"apply_row_scope_empty_ids_skip_database 为验证空集合跳过数据库，却先构造 mongodb::Client::with_uri_str(\"mongodb://127.0.0.1:1\")，依赖提前返回不触网；一旦实现改动顺序即误连，测试脆弱且含义不清。","file":"src/repository/legacy_import/apply_scope.rs","id":"erp-import-006","lines":"249-262","note":"","proposal":"空集合分支改为纯内存断言（直接测 unique_row_ids 为空时返回默认 scope），去掉 Client 构造；需连库的路径保留现有 ignore 测试，不改变覆盖意图。","severity":"中","status":"pending","title":"空集合测试构造真实 Mongo Client","updated_at":"2026-09-17"},{"category":"错误处理","current":"sort_doc 对非法排序字段静默回退到 created_at；DTO 层虽有白名单校验，但仓储层静默回退会掩盖直接调仓储的调用错误，排障困难。","file":"src/repository/legacy_import/mod.rs","id":"erp-import-007","lines":"643-657","note":"","proposal":"非法字段改为 debug_assert + 保留回退，或返回 Result 由调用方显式处理，不改变当前合法输入的排序行为。","severity":"低","status":"pending","title":"非法排序字段静默回退默认","updated_at":"2026-09-17"},{"category":"重复","current":"encode_digest 手写 nibble→hex 循环实现小写十六进制编码，与 sha256_hex 紧耦合，属于重复造轮子且多占约 20 行。","file":"src/entity/legacy_import/mod.rs","id":"erp-import-008","lines":"100-120","note":"","proposal":"复用 workspace 已有 hex 依赖或 format!(\"{digest:x}\") 实现同一小写 hex 输出，保持 64 字符摘要不变，不改变幂等身份语义。","severity":"低","status":"pending","title":"手写 SHA-256 hex 编码循环","updated_at":"2026-09-17"},{"category":"错误处理","current":"duplicate_index_conflict_message 参数为 _index_name，对批次号唯一、确认范围试算唯一、任务唯一三种冲突返回完全相同的通用文案，丢失定位信息。","file":"src/error.rs","id":"erp-import-009","lines":"96-106","note":"","proposal":"按索引名返回区分性冲突提示（如批次号重复/确认矩阵重复/任务重复），保持 Error::class 仍为 Conflict，不改变错误分类。","severity":"低","status":"pending","title":"唯一键冲突提示丢弃索引名上下文","updated_at":"2026-09-17"},{"category":"重复","current":"query.rs 中 batch_list/row_list 用约 20 行闭包逐字段拼 LegacyImportBatchListItem/LegacyImportRowView，而详情视图已有 From<LegacyImportBatch> 实现，行投影缺少对应的 From<LegacyImportRowRow>，两种装配风格并存。","file":"src/service/legacy_import/query.rs","id":"erp-import-010","lines":"36-133","note":"","proposal":"为行/确认投影行补齐 From 转换实现，service 只做 map(ProjectRow::into)，与批次详情风格统一，不改变视图字段。","severity":"低","status":"pending","title":"列表投影缺少 From 转换实现","updated_at":"2026-09-17"}],"source":"backend/crates/erp-import src read-only analysis, no behavior change","stats":{"approx_loc":7183,"file_count":31,"largest_files":["src/dto/legacy_import.rs","src/entity/legacy_import/legacy_import_confirmation.rs","src/entity/legacy_import/legacy_import_row.rs"]},"top3":["erp-import-001","erp-import-002","erp-import-003"]}
+{
+  "crate": "erp-import",
+  "generated_at": "2026-09-17",
+  "items": [
+    {
+      "category": "复杂度",
+      "current": "dto/legacy_import.rs 共 1082 行，含批次/行/确认/执行命令/分页归一化等多组 DTO 与 TryFrom 转换，扣除测试后生产代码仍超 800 行文件体积上限。",
+      "file": "src/dto/legacy_import.rs",
+      "id": "erp-import-001",
+      "lines": "1-1082",
+      "note": "done:dto/legacy_import.rs拆分为legacy_import/下batch/row/confirmation/execution/apply五个子模块，公开路径不变。",
+      "proposal": "按批次、行、确认、执行命令拆分为 dto/ 下多个子模块，公共 PageParams/SortDir 重导出保留在 dto/mod.rs，不改变任何公开类型路径与校验语义。",
+      "severity": "高",
+      "status": "done",
+      "title": "DTO 单文件超 800 行体积上限",
+      "updated_at": "2026-09-17"
+    },
+    {
+      "category": "重复",
+      "current": "search_legacy_import_batches、search_legacy_import_rows、search_legacy_import_confirmations 三段实现几乎逐行相同（组 FindOptions、clone_with_type 投影、find_many + count_documents），仅集合与投影函数不同；三个投影函数 likewise 仅字段列表不同。",
+      "file": "src/repository/legacy_import/mod.rs",
+      "id": "erp-import-002",
+      "lines": "180-491",
+      "note": "done:抽取search_projected_page<Entity,Row>，三处search_*复用。",
+      "proposal": "抽取通用的投影分页查询 helper（传 collection、filter doc、options、投影 doc），三个 search 方法只保留过滤与投影装配，不改变查询语义与返回形状。",
+      "severity": "中",
+      "status": "done",
+      "title": "三个列表查询实现近乎逐行重复",
+      "updated_at": "2026-09-17"
+    },
+    {
+      "category": "重复",
+      "current": "mark_conflict、mark_import_failed、mark_skipped 三段流程完全一致（ensure_parseable + ensure_mapped + ensure_transition + 写 error_code/error_detail），仅目标状态与必填错误码文案不同；mark_mapped/mark_imported 的成功分支同样各自清错误字段。",
+      "file": "src/entity/legacy_import/legacy_import_row.rs",
+      "id": "erp-import-003",
+      "lines": "351-459",
+      "note": "done:抽取record_diagnostic统一冲突/失败/跳过诊断登记。",
+      "proposal": "抽取私有的 record_diagnostic(status, error_code, error_detail) helper 统一做前置校验、迁移与错误字段写入，各 mark_* 只传参，不改变状态机与校验语义。",
+      "severity": "中",
+      "status": "done",
+      "title": "行诊断类迁移方法三段重复",
+      "updated_at": "2026-09-17"
+    },
+    {
+      "category": "重复",
+      "current": "行 ID 去重逻辑在三处各实现一遍：apply_scope::unique_row_ids（按首次出现保序）、import_row_factory::build_import_rows 内联 seen 集合（trim 后元组键）、apply_result_set::ensure_unique_row_ids（as_ref 键），语义相近但键归一化口径不一致。",
+      "file": "src/repository/legacy_import/apply_scope.rs",
+      "id": "erp-import-004",
+      "lines": "150-159",
+      "note": "done:entity层抽取dedupe_by_key/first_duplicate_key，三处去重复用（键口径保留在调用方）。",
+      "proposal": "在 entity 层抽取统一的保序去重 helper 并注明键归一化口径（是否 trim），三处复用，不改变各自的重复判定行为。",
+      "severity": "中",
+      "status": "done",
+      "title": "行 ID 去重在三处重复实现",
+      "updated_at": "2026-09-17"
+    },
+    {
+      "category": "复杂度",
+      "current": "required_for_object_set 用长 match 硬编码中英文对象类型到确认范围的映射，并内联多种分隔符、多语言别名（如 商品SKU/商品 SKU、卡券销售/卡券销售单），新增对象类型时易遗漏且难 review。",
+      "file": "src/entity/legacy_import/legacy_import_confirmation.rs",
+      "id": "erp-import-005",
+      "lines": "190-212",
+      "note": "done:抽取OBJECT_SET_SEPARATORS与OBJECT_TYPE_SCOPE_TABLE对照表，required_for_object_set查表。",
+      "proposal": "抽取静态对象类型→范围对照表常量与分隔符常量，函数体只做切分、查表、聚合，不改变映射关系与错误语义。",
+      "severity": "中",
+      "status": "done",
+      "title": "对象集到确认范围映射硬编码长 match",
+      "updated_at": "2026-09-17"
+    },
+    {
+      "category": "测试性",
+      "current": "apply_row_scope_empty_ids_skip_database 为验证空集合跳过数据库，却先构造 mongodb::Client::with_uri_str(\"mongodb://127.0.0.1:1\")，依赖提前返回不触网；一旦实现改动顺序即误连，测试脆弱且含义不清。",
+      "file": "src/repository/legacy_import/apply_scope.rs",
+      "id": "erp-import-006",
+      "lines": "249-262",
+      "note": "done:空集合测试改为纯内存断言，不再构造Mongo Client。",
+      "proposal": "空集合分支改为纯内存断言（直接测 unique_row_ids 为空时返回默认 scope），去掉 Client 构造；需连库的路径保留现有 ignore 测试，不改变覆盖意图。",
+      "severity": "中",
+      "status": "done",
+      "title": "空集合测试构造真实 Mongo Client",
+      "updated_at": "2026-09-17"
+    },
+    {
+      "category": "错误处理",
+      "current": "sort_doc 对非法排序字段静默回退到 created_at；DTO 层虽有白名单校验，但仓储层静默回退会掩盖直接调仓储的调用错误，排障困难。",
+      "file": "src/repository/legacy_import/mod.rs",
+      "id": "erp-import-007",
+      "lines": "643-657",
+      "note": "done:sort_doc保留回退并加debug_assert暴露非法字段，合法输入行为不变。",
+      "proposal": "非法字段改为 debug_assert + 保留回退，或返回 Result 由调用方显式处理，不改变当前合法输入的排序行为。",
+      "severity": "低",
+      "status": "done",
+      "title": "非法排序字段静默回退默认",
+      "updated_at": "2026-09-17"
+    },
+    {
+      "category": "重复",
+      "current": "encode_digest 手写 nibble→hex 循环实现小写十六进制编码，与 sha256_hex 紧耦合，属于重复造轮子且多占约 20 行。",
+      "file": "src/entity/legacy_import/mod.rs",
+      "id": "erp-import-008",
+      "lines": "100-120",
+      "note": "done:encode_digest改用format! hex迭代，输出同为64位小写。",
+      "proposal": "复用 workspace 已有 hex 依赖或 format!(\"{digest:x}\") 实现同一小写 hex 输出，保持 64 字符摘要不变，不改变幂等身份语义。",
+      "severity": "低",
+      "status": "done",
+      "title": "手写 SHA-256 hex 编码循环",
+      "updated_at": "2026-09-17"
+    },
+    {
+      "category": "错误处理",
+      "current": "duplicate_index_conflict_message 参数为 _index_name，对批次号唯一、确认范围试算唯一、任务唯一三种冲突返回完全相同的通用文案，丢失定位信息。",
+      "file": "src/error.rs",
+      "id": "erp-import-009",
+      "lines": "96-106",
+      "note": "done:按3类uk_legacy_import_*索引名差异化冲突提示。",
+      "proposal": "按索引名返回区分性冲突提示（如批次号重复/确认矩阵重复/任务重复），保持 Error::class 仍为 Conflict，不改变错误分类。",
+      "severity": "低",
+      "status": "done",
+      "title": "唯一键冲突提示丢弃索引名上下文",
+      "updated_at": "2026-09-17"
+    },
+    {
+      "category": "重复",
+      "current": "query.rs 中 batch_list/row_list 用约 20 行闭包逐字段拼 LegacyImportBatchListItem/LegacyImportRowView，而详情视图已有 From<LegacyImportBatch> 实现，行投影缺少对应的 From<LegacyImportRowRow>，两种装配风格并存。",
+      "file": "src/service/legacy_import/query.rs",
+      "id": "erp-import-010",
+      "lines": "36-133",
+      "note": "done:为LegacyImportBatchRow/LegacyImportRowRow补From转换，service只做map。",
+      "proposal": "为行/确认投影行补齐 From 转换实现，service 只做 map(ProjectRow::into)，与批次详情风格统一，不改变视图字段。",
+      "severity": "低",
+      "status": "done",
+      "title": "列表投影缺少 From 转换实现",
+      "updated_at": "2026-09-17"
+    }
+  ],
+  "source": "backend/crates/erp-import src read-only analysis, no behavior change",
+  "stats": {
+    "approx_loc": 7183,
+    "file_count": 31,
+    "largest_files": [
+      "src/dto/legacy_import.rs",
+      "src/entity/legacy_import/legacy_import_confirmation.rs",
+      "src/entity/legacy_import/legacy_import_row.rs"
+    ]
+  },
+  "top3": [
+    "erp-import-001",
+    "erp-import-002",
+    "erp-import-003"
+  ]
+}

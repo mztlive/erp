@@ -101,7 +101,45 @@ fn sha256_hex(value: &[u8]) -> String {
     encode_digest(Sha256::digest(value))
 }
 
-/// 将摘要字节编码为小写十六进制文本。
+/// 按首次出现顺序保序去重，返回去重后的元素引用（三处行 ID 去重共用原语）。
+///
+/// 键归一化口径由调用方 `key` 决定（是否 trim）：`apply_scope` 按行 ID 原值，
+/// 行工厂按去首尾空白后的 `(object_type, row_key)` 元组，`apply_result_set`
+/// 按行 ID 原值。语义差异保留在调用方，本函数只收敛保序去重样板。
+///
+/// # 参数
+/// * `items` - 待去重元素切片
+/// * `key` - 去重键提取（含调用方约定的归一化口径）
+///
+/// # 返回
+/// 返回首次出现顺序的元素引用。
+pub fn dedupe_by_key<T, K>(items: &[T], mut key: impl FnMut(&T) -> K) -> Vec<&T>
+where
+    K: Eq + std::hash::Hash,
+{
+    let mut seen = std::collections::HashSet::new();
+    items.iter().filter(|item| seen.insert(key(item))).collect()
+}
+
+/// 查找首个重复键（存在重复时返回该键；无重复返回 `None`）。
+///
+/// 键口径约定同 [`dedupe_by_key`]；调用方保留各自的重复错误文案。
+///
+/// # 参数
+/// * `items` - 待检查元素切片
+/// * `key` - 去重键提取（含调用方约定的归一化口径）
+///
+/// # 返回
+/// 返回首个重复键；无重复时返回 `None`。
+pub fn first_duplicate_key<'a, T: 'a, K>(items: &'a [T], mut key: impl FnMut(&'a T) -> K) -> Option<K>
+where
+    K: Eq + std::hash::Hash,
+{
+    let mut seen = std::collections::HashSet::new();
+    items.iter().find(|item| !seen.insert(key(item))).map(|item| key(item))
+}
+
+/// 将摘要字节编码为小写十六进制文本（与 `format!("{digest:x}")` 同形态）。
 ///
 /// # 参数
 /// * `digest` - SHA-256 摘要字节
@@ -109,14 +147,7 @@ fn sha256_hex(value: &[u8]) -> String {
 /// # 返回
 /// 返回 64 位小写十六进制摘要。
 fn encode_digest(digest: impl AsRef<[u8]>) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let bytes = digest.as_ref();
-    let mut encoded = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        encoded.push(HEX[(byte >> 4) as usize] as char);
-        encoded.push(HEX[(byte & 0x0f) as usize] as char);
-    }
-    encoded
+    digest.as_ref().iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。

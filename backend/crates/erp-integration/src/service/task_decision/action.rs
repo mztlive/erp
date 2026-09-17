@@ -17,7 +17,9 @@ use crate::entity::integration_ops::{
     CompactEvidenceSet, EvidenceRecordRef, IntegrationErrorTask, ProjectionOutcome, ProjectionSubject,
     ReconciliationDifference, ResolutionAction, next_actions_after_outcome,
 };
-use crate::ports::evidence::{EvidenceSubject, IntegrationEvidenceAuthority, OriginalResultFact};
+use crate::ports::evidence::{
+    EvidenceSubject, IntegrationEvidenceAuthority, OriginalResultFact, VerifiedEvidence,
+};
 use crate::repository::IntegrationOpsExt;
 use crate::service::evidence::{verified_reference, verify_evidence_refs};
 use crate::{Error, Result};
@@ -33,6 +35,67 @@ pub struct ActionFact {
     pub next_subject_version: Option<String>,
     /// 已按原顺序验证的证据。
     pub verified_evidence: Vec<ControlledEvidenceRef>,
+}
+
+impl ActionFact {
+    /// 仅结果代码的事实（无业务引用、无证据）。
+    ///
+    /// # 参数
+    /// * `outcome` - 本次动作的稳定结果代码
+    ///
+    /// # 返回
+    /// 返回无引用无证据的动作事实。
+    fn outcome_only(outcome: IntegrationActionOutcome) -> Self {
+        Self {
+            outcome,
+            business_result_reference: None,
+            next_subject_version: None,
+            verified_evidence: Vec::new(),
+        }
+    }
+
+    /// 携带业务结果引用的事实（无证据）。
+    ///
+    /// # 参数
+    /// * `outcome` - 本次动作的稳定结果代码
+    /// * `reference` - 权威业务结果引用
+    ///
+    /// # 返回
+    /// 返回带业务引用的动作事实。
+    fn with_reference(outcome: IntegrationActionOutcome, reference: String) -> Self {
+        Self { business_result_reference: Some(reference), ..Self::outcome_only(outcome) }
+    }
+
+    /// 携带已验证证据的事实（业务引用取证据集合引用）。
+    ///
+    /// # 参数
+    /// * `outcome` - 本次动作的稳定结果代码
+    /// * `verified` - 已验证证据（保持请求顺序）
+    ///
+    /// # 返回
+    /// 返回带证据引用列表的动作事实。
+    ///
+    /// # 错误
+    /// 证据集合引用语法非法时返回校验错误。
+    fn with_verified(outcome: IntegrationActionOutcome, verified: Vec<VerifiedEvidence>) -> Result<Self> {
+        let business_result_reference = Some(verified_reference(&verified)?);
+        Ok(Self {
+            business_result_reference,
+            verified_evidence: verified_refs(verified),
+            ..Self::outcome_only(outcome)
+        })
+    }
+}
+
+/// 把已验证证据投影为引用列表（保持请求顺序）。
+///
+/// # 参数
+/// * `verified` - 已验证证据
+///
+/// # 返回
+/// 返回引用列表。
+fn verified_refs(verified: Vec<VerifiedEvidence>) -> Vec<ControlledEvidenceRef> {
+    verified.into_iter().map(|evidence| evidence.reference).collect()
 }
 
 /// 执行已绑定正式任务的本域动作，所有读写和证据均使用传入执行器。
@@ -86,12 +149,7 @@ async fn error_action_fact(
         IntegrationTaskActionKind::AddEvidence => {
             let verified =
                 verify_evidence_refs(authority, &subject, &action.evidence_refs, actor_id, executor).await?;
-            Ok(ActionFact {
-                outcome: IntegrationActionOutcome::EvidenceAdded,
-                business_result_reference: Some(verified_reference(&verified)?),
-                next_subject_version: None,
-                verified_evidence: verified.into_iter().map(|evidence| evidence.reference).collect(),
-            })
+            Ok(ActionFact::with_verified(IntegrationActionOutcome::EvidenceAdded, verified)?)
         },
         IntegrationTaskActionKind::ReplayOriginal => {
             if !task.can_replay_original() {
@@ -100,12 +158,7 @@ async fn error_action_fact(
                 ));
             }
             let reference = authority.replay_original(&subject, executor).await?;
-            Ok(ActionFact {
-                outcome: IntegrationActionOutcome::ReplayAccepted,
-                business_result_reference: Some(reference),
-                next_subject_version: None,
-                verified_evidence: Vec::new(),
-            })
+            Ok(ActionFact::with_reference(IntegrationActionOutcome::ReplayAccepted, reference))
         },
         IntegrationTaskActionKind::Reattribute => {
             let reference = authority.verify_reattribution(&subject, executor).await?;
@@ -126,12 +179,7 @@ async fn error_action_fact(
             }
             let verified =
                 verify_evidence_refs(authority, &subject, &action.evidence_refs, actor_id, executor).await?;
-            Ok(ActionFact {
-                outcome: IntegrationActionOutcome::EvidenceLinked,
-                business_result_reference: Some(verified_reference(&verified)?),
-                next_subject_version: None,
-                verified_evidence: verified.into_iter().map(|evidence| evidence.reference).collect(),
-            })
+            Ok(ActionFact::with_verified(IntegrationActionOutcome::EvidenceLinked, verified)?)
         },
     }
 }
@@ -148,35 +196,30 @@ async fn query_action_fact(
             next_subject_version: None,
             verified_evidence: authority.discover_evidence(subject, executor).await?,
         }),
-        OriginalResultFact::NoResult => Ok(ActionFact {
-            outcome: IntegrationActionOutcome::NoResultConfirmed,
-            business_result_reference: None,
-            next_subject_version: None,
-            verified_evidence: Vec::new(),
-        }),
+        OriginalResultFact::NoResult => {
+            Ok(ActionFact::outcome_only(IntegrationActionOutcome::NoResultConfirmed))
+        },
         OriginalResultFact::Unknown => Ok(unknown_action_fact()),
     }
 }
 
 fn unknown_action_fact() -> ActionFact {
-    ActionFact {
-        outcome: IntegrationActionOutcome::ResultUnknown,
-        business_result_reference: None,
-        next_subject_version: None,
-        verified_evidence: Vec::new(),
-    }
+    ActionFact::outcome_only(IntegrationActionOutcome::ResultUnknown)
 }
+
+/// 动作证据摘要上限（字节口径；摘要为 ASCII 固定前缀 + 紧凑证据编码，字节 == 字符）。
+const ACTION_SUMMARY_MAX_BYTES: usize = 512;
 
 fn error_action_summary(action: &IntegrationNonTerminalTaskAction, fact: &ActionFact) -> Result<String> {
     let evidence = compact_evidence(&action.evidence_refs)?;
     let summary = format!(
-        "w29_action={};operation={};outcome={:?};evidence={}",
+        "w29_action={};operation={};outcome={};evidence={}",
         action.kind.as_str(),
         action.operation_id,
-        fact.outcome,
+        fact.outcome.as_str(),
         evidence.unwrap_or_else(|| "none".to_string())
     );
-    if summary.len() > 512 {
+    if summary.len() > ACTION_SUMMARY_MAX_BYTES {
         return Err(Error::ValidationError("动作证据摘要过长".to_string()));
     }
     Ok(summary)
@@ -208,6 +251,58 @@ async fn execute_difference_task_action(
     })
 }
 
+/// 开放态差异决定事实（结果状态 `Open`）。
+///
+/// # 参数
+/// * `action` - 不可变决定记录使用的领域动作
+/// * `fact` - 同动作的本域动作事实（结果与引用透传）
+/// * `evidence_reference` - 决定记录中的已验证证据引用
+///
+/// # 返回
+/// 返回结果状态为开放的差异决定事实。
+fn open_direct_fact(
+    action: ResolutionAction,
+    fact: ActionFact,
+    evidence_reference: Option<String>,
+) -> DirectFact {
+    DirectFact {
+        action,
+        evidence_reference,
+        resulting_status: DirectReconciliationStatus::Open,
+        outcome: fact.outcome,
+        business_result_reference: fact.business_result_reference,
+        verified_evidence: fact.verified_evidence,
+    }
+}
+
+/// 待证差异决定事实（结果状态 `EvidencePending`）。
+///
+/// # 参数
+/// * `action` - 不可变决定记录使用的领域动作
+/// * `evidence_reference` - 决定记录中的已验证证据引用
+/// * `outcome` - 本次动作的稳定结果代码
+/// * `business_result_reference` - 权威业务结果的稳定引用
+/// * `verified_evidence` - 已逐条验证的受控证据
+///
+/// # 返回
+/// 返回结果状态为待证的差异决定事实。
+fn pending_direct_fact(
+    action: ResolutionAction,
+    evidence_reference: Option<String>,
+    outcome: IntegrationActionOutcome,
+    business_result_reference: Option<String>,
+    verified_evidence: Vec<ControlledEvidenceRef>,
+) -> DirectFact {
+    DirectFact {
+        action,
+        evidence_reference,
+        resulting_status: DirectReconciliationStatus::EvidencePending,
+        outcome,
+        business_result_reference,
+        verified_evidence,
+    }
+}
+
 pub(super) async fn difference_action_fact(
     authority: &dyn IntegrationEvidenceAuthority,
     difference: &ReconciliationDifference,
@@ -220,49 +315,38 @@ pub(super) async fn difference_action_fact(
     match action.kind {
         IntegrationTaskActionKind::QueryOriginalResult => {
             let fact = query_action_fact(authority, &subject, executor).await?;
-            Ok(DirectFact {
-                action: ResolutionAction::QueryOriginalResult,
-                evidence_reference: Some(audit_log_reference(receipt_id)?),
-                resulting_status: DirectReconciliationStatus::Open,
-                outcome: fact.outcome,
-                business_result_reference: fact.business_result_reference,
-                verified_evidence: fact.verified_evidence,
-            })
+            let evidence_reference = Some(audit_log_reference(receipt_id)?);
+            Ok(open_direct_fact(ResolutionAction::QueryOriginalResult, fact, evidence_reference))
         },
         IntegrationTaskActionKind::AddEvidence => {
             let verified =
                 verify_evidence_refs(authority, &subject, &action.evidence_refs, actor_id, executor).await?;
             let evidence = verified_reference(&verified)?;
-            Ok(DirectFact {
-                action: ResolutionAction::AddEvidence,
-                evidence_reference: Some(evidence),
-                resulting_status: DirectReconciliationStatus::EvidencePending,
-                outcome: IntegrationActionOutcome::EvidenceAdded,
-                business_result_reference: None,
-                verified_evidence: verified.into_iter().map(|evidence| evidence.reference).collect(),
-            })
+            Ok(pending_direct_fact(
+                ResolutionAction::AddEvidence,
+                Some(evidence),
+                IntegrationActionOutcome::EvidenceAdded,
+                None,
+                verified_refs(verified),
+            ))
         },
         IntegrationTaskActionKind::ReplayOriginal => {
             let reference = authority.replay_original(&subject, executor).await?;
-            Ok(DirectFact {
-                action: ResolutionAction::ReplayOriginal,
-                evidence_reference: None,
-                resulting_status: DirectReconciliationStatus::Open,
-                outcome: IntegrationActionOutcome::ReplayAccepted,
-                business_result_reference: Some(reference),
-                verified_evidence: Vec::new(),
-            })
+            Ok(open_direct_fact(
+                ResolutionAction::ReplayOriginal,
+                ActionFact::with_reference(IntegrationActionOutcome::ReplayAccepted, reference),
+                None,
+            ))
         },
         IntegrationTaskActionKind::Reattribute => {
             let reference = authority.verify_reattribution(&subject, executor).await?;
-            Ok(DirectFact {
-                action: ResolutionAction::Reattribute,
-                evidence_reference: Some(reference.clone()),
-                resulting_status: DirectReconciliationStatus::EvidencePending,
-                outcome: IntegrationActionOutcome::Reattributed,
-                business_result_reference: Some(reference),
-                verified_evidence: authority.discover_evidence(&subject, executor).await?,
-            })
+            Ok(pending_direct_fact(
+                ResolutionAction::Reattribute,
+                Some(reference.clone()),
+                IntegrationActionOutcome::Reattributed,
+                Some(reference),
+                authority.discover_evidence(&subject, executor).await?,
+            ))
         },
         IntegrationTaskActionKind::LinkCompensation => {
             if !action
@@ -275,14 +359,13 @@ pub(super) async fn difference_action_fact(
             let verified =
                 verify_evidence_refs(authority, &subject, &action.evidence_refs, actor_id, executor).await?;
             let reference = verified_reference(&verified)?;
-            Ok(DirectFact {
-                action: ResolutionAction::LinkCompensation,
-                evidence_reference: Some(reference.clone()),
-                resulting_status: DirectReconciliationStatus::EvidencePending,
-                outcome: IntegrationActionOutcome::EvidenceLinked,
-                business_result_reference: Some(reference),
-                verified_evidence: verified.into_iter().map(|evidence| evidence.reference).collect(),
-            })
+            Ok(pending_direct_fact(
+                ResolutionAction::LinkCompensation,
+                Some(reference.clone()),
+                IntegrationActionOutcome::EvidenceLinked,
+                Some(reference),
+                verified_refs(verified),
+            ))
         },
     }
 }

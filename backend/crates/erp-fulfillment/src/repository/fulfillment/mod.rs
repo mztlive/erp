@@ -48,7 +48,7 @@ use erp_core::money::Quantity;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Result, mongo_ops};
 pub use purchase_receipt::PurchaseReceiptFilter;
 use serde::{Deserialize, Serialize};
 pub use service_fulfillment::ServiceFulfillmentFilter;
@@ -587,11 +587,7 @@ impl<'a> FulfillmentRepository<'a> {
 
     /// 创建采购入库单及全部行（跨集合多步骤写入）。
     ///
-    /// 依次写入 `purchase_receipts` 与 `purchase_receipt_lines`，保证表头与行
-    /// 原子可见（§6.7）。**必须收到事务执行器**：本方法不构成原子边界，传入
-    /// `NoTransaction` 时两笔写入各自自动提交，中途失败会留下只有表头没有行的
-    /// 半成品；Service 必须通过 `persistence_core::Transactional::with_transaction`
-    /// 传入事务会话。
+    /// 写入语义见 [`Self::create_header_with_lines`]。
     ///
     /// # 参数
     /// * `receipt` - 待写入的入库单表头
@@ -617,15 +613,11 @@ impl<'a> FulfillmentRepository<'a> {
         lines: &[PurchaseReceiptLine],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        mongo_ops::insert_one(
+        self.create_header_with_lines(
             &self.db.collection::<PurchaseReceipt>(<mongodb::Database as FulfillmentExt>::PURCHASE_RECEIPTS),
             receipt,
-            executor,
-        )
-        .await?;
-        mongo_ops::insert_many(
             &self.db.collection::<PurchaseReceiptLine>(PURCHASE_RECEIPT_LINES),
-            lines.to_vec(),
+            lines,
             executor,
         )
         .await
@@ -633,10 +625,7 @@ impl<'a> FulfillmentRepository<'a> {
 
     /// 创建发货单及全部行（跨集合多步骤写入）。
     ///
-    /// 依次写入 `deliveries` 与 `delivery_lines`，保证表头与行原子可见（§6.7）。
-    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
-    /// 两笔写入各自自动提交，中途失败会留下只有表头没有行的半成品；Service
-    /// 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
+    /// 写入语义见 [`Self::create_header_with_lines`]。
     ///
     /// # 参数
     /// * `delivery` - 待写入的发货单表头
@@ -662,23 +651,19 @@ impl<'a> FulfillmentRepository<'a> {
         lines: &[DeliveryLine],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        mongo_ops::insert_one(
+        self.create_header_with_lines(
             &self.db.collection::<Delivery>(<mongodb::Database as FulfillmentExt>::DELIVERIES),
             delivery,
+            &self.db.collection::<DeliveryLine>(DELIVERY_LINES),
+            lines,
             executor,
         )
-        .await?;
-        mongo_ops::insert_many(&self.db.collection::<DeliveryLine>(DELIVERY_LINES), lines.to_vec(), executor)
-            .await
+        .await
     }
 
     /// 创建客户验收单及全部行（跨集合多步骤写入）。
     ///
-    /// 依次写入 `customer_acceptances` 与 `customer_acceptance_lines`，保证
-    /// 表头与行原子可见（§6.7）。**必须收到事务执行器**：本方法不构成原子
-    /// 边界，传入 `NoTransaction` 时两笔写入各自自动提交，中途失败会留下只有
-    /// 表头没有行的半成品；Service 必须通过
-    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
+    /// 写入语义见 [`Self::create_header_with_lines`]。
     ///
     /// # 参数
     /// * `acceptance` - 待写入的验收单表头
@@ -704,20 +689,52 @@ impl<'a> FulfillmentRepository<'a> {
         lines: &[CustomerAcceptanceLine],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        mongo_ops::insert_one(
+        self.create_header_with_lines(
             &self.db.collection::<CustomerAcceptance>(
                 <mongodb::Database as FulfillmentExt>::CUSTOMER_ACCEPTANCES,
             ),
             acceptance,
-            executor,
-        )
-        .await?;
-        mongo_ops::insert_many(
             &self.db.collection::<CustomerAcceptanceLine>(CUSTOMER_ACCEPTANCE_LINES),
-            lines.to_vec(),
+            lines,
             executor,
         )
         .await
+    }
+
+    /// 依次写入表头与行，保证表头与行原子可见（§6.7）。
+    ///
+    /// **必须收到事务执行器**：本方法不构成原子边界，传入
+    /// `NoTransaction` 时两笔写入各自自动提交，中途失败会留下只有表头没有行
+    /// 的半成品；Service 必须通过 `persistence_core::Transactional::with_transaction`
+    /// 传入事务会话。
+    ///
+    /// # 参数
+    /// * `header_collection` - 表头集合
+    /// * `header` - 待写入的表头
+    /// * `lines_collection` - 行集合
+    /// * `lines` - 待写入的行集合
+    /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 两笔写入均成功后返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
+    /// 失败时返回错误。
+    async fn create_header_with_lines<Header, Line>(
+        &self,
+        header_collection: &mongodb::Collection<Header>,
+        header: &Header,
+        lines_collection: &mongodb::Collection<Line>,
+        lines: &[Line],
+        executor: &mut dyn Executor,
+    ) -> Result<()>
+    where
+        Header: serde::Serialize + Sync + Send,
+        Line: serde::Serialize + Clone + Sync + Send,
+    {
+        mongo_ops::insert_one(header_collection, header, executor).await?;
+        mongo_ops::insert_many(lines_collection, lines.to_vec(), executor).await
     }
 
     /// 原子替换草稿客户验收单的全部行。
@@ -842,6 +859,42 @@ where
         executor,
     )
     .await
+}
+
+/// 执行通用筛选分页投影查询（五类列表共用；查询语义与返回形状不变）。
+///
+/// # 参数
+/// * `base` - 基集合句柄（用于计数）
+/// * `filter` - 查询条件文档
+/// * `sort` - 排序文档
+/// * `skip` - 跳过行数
+/// * `limit` - 单页条数
+/// * `projection` - 投影文档
+/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+///
+/// # 返回
+/// 返回当前页投影行与满足筛选条件的总数.
+///
+/// # 错误
+/// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+pub(super) async fn search_projected_page<Entity, Row>(
+    base: &mongodb::Collection<Entity>,
+    filter: mongodb::bson::Document,
+    sort: mongodb::bson::Document,
+    skip: u64,
+    limit: i64,
+    projection: mongodb::bson::Document,
+    executor: &mut dyn Executor,
+) -> Result<PageResult<Row>>
+where
+    Entity: Send + Sync,
+    Row: for<'de> serde::Deserialize<'de> + serde::Serialize + Send + Sync,
+{
+    let options = FindOptions::builder().sort(sort).skip(skip).limit(limit).projection(projection).build();
+    let collection = base.clone_with_type::<Row>();
+    let items = mongo_ops::find_many(&collection, filter.clone(), options, executor).await?;
+    let total = mongo_ops::count_documents(base, filter, executor).await?;
+    Ok(PageResult { items, total: total as i64 })
 }
 
 /// 构建排序文档（字段名白名单映射）。

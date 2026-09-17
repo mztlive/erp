@@ -126,7 +126,8 @@ impl StockBalance {
         }
         self.on_hand_quantity = on_hand;
         self.reserved_quantity = reserved;
-        self.available_quantity = Quantity::try_from(available).expect("可用数量小数位受 Quantity 约束");
+        self.available_quantity = Quantity::try_from(available)
+            .map_err(|_| Error::from("可用数量小数位超出数量精度，无法更新余额"))?;
         if let Some(last_movement_id) = update.last_movement_id {
             self.last_movement_id = last_movement_id;
         }

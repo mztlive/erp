@@ -350,11 +350,12 @@ impl LegacyImportRow {
     /// 行未通过解析、映射维度已离开待映射状态或错误码为空时返回错误。
     pub fn mark_conflict(&mut self, error_code: String, error_detail: Option<String>) -> Result<()> {
         Self::ensure_parseable(self)?;
-        ensure_transition(self.mapping_status, MappingStatus::Conflict)?;
-        self.mapping_status = MappingStatus::Conflict;
-        self.error_code = Some(Self::required_error_code(Some(error_code))?);
-        self.error_detail = Self::normalized_error_detail(error_detail)?;
-        Ok(())
+        self.record_diagnostic(
+            |row| ensure_transition(row.mapping_status, MappingStatus::Conflict),
+            |row| row.mapping_status = MappingStatus::Conflict,
+            error_code,
+            error_detail,
+        )
     }
 
     /// 登记导入成功。
@@ -409,11 +410,12 @@ impl LegacyImportRow {
     pub fn mark_import_failed(&mut self, error_code: String, error_detail: Option<String>) -> Result<()> {
         Self::ensure_parseable(self)?;
         Self::ensure_mapped(self)?;
-        ensure_transition(self.import_status, ImportStatus::Failed)?;
-        self.import_status = ImportStatus::Failed;
-        self.error_code = Some(Self::required_error_code(Some(error_code))?);
-        self.error_detail = Self::normalized_error_detail(error_detail)?;
-        Ok(())
+        self.record_diagnostic(
+            |row| ensure_transition(row.import_status, ImportStatus::Failed),
+            |row| row.import_status = ImportStatus::Failed,
+            error_code,
+            error_detail,
+        )
     }
 
     /// 登记跳过。
@@ -432,11 +434,12 @@ impl LegacyImportRow {
     pub fn mark_skipped(&mut self, error_code: String, error_detail: Option<String>) -> Result<()> {
         Self::ensure_parseable(self)?;
         Self::ensure_mapped(self)?;
-        ensure_transition(self.import_status, ImportStatus::Skipped)?;
-        self.import_status = ImportStatus::Skipped;
-        self.error_code = Some(Self::required_error_code(Some(error_code))?);
-        self.error_detail = Self::normalized_error_detail(error_detail)?;
-        Ok(())
+        self.record_diagnostic(
+            |row| ensure_transition(row.import_status, ImportStatus::Skipped),
+            |row| row.import_status = ImportStatus::Skipped,
+            error_code,
+            error_detail,
+        )
     }
 
     /// 将失败行重新准备为待导入。
@@ -536,6 +539,38 @@ impl LegacyImportRow {
         if row.mapping_status != MappingStatus::Mapped {
             return Err(Error::from("未完成映射的行不能导入"));
         }
+        Ok(())
+    }
+
+    /// 统一登记行级诊断（冲突/导入失败/跳过三分支共用；状态机与校验语义不变）。
+    ///
+    /// 调用方先完成本分支特有的前置校验（`ensure_parseable`/`ensure_mapped`），
+    /// 本方法只做状态迁移校验、目标状态写入与错误字段写入。
+    ///
+    /// # 参数
+    /// * `check_transition` - 本分支的状态迁移校验
+    /// * `apply_status` - 本分支的目标状态写入
+    /// * `error_code` - 失败原因错误码
+    /// * `error_detail` - 失败原因明细（可为空）
+    ///
+    /// # 返回
+    /// 登记成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 状态迁移非法或错误码/明细非法时返回错误。
+    fn record_diagnostic(
+        &mut self,
+        check_transition: impl FnOnce(&Self) -> Result<()>,
+        apply_status: impl FnOnce(&mut Self),
+        error_code: String,
+        error_detail: Option<String>,
+    ) -> Result<()> {
+        check_transition(self)?;
+        let error_code = Self::required_error_code(Some(error_code))?;
+        let error_detail = Self::normalized_error_detail(error_detail)?;
+        apply_status(self);
+        self.error_code = Some(error_code);
+        self.error_detail = error_detail;
         Ok(())
     }
 

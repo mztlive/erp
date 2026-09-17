@@ -10,61 +10,62 @@ use persistence_core::NoTransaction;
 
 use crate::{Error, Result};
 
-/// 为履约发货单取下一个可展示单号。
+/// 为履约发货单取下一个可展示单号（`DNYYYYMMDD-000001` 形态）。
+///
+/// 公共约束见 [`next_kind_no`]。
 ///
 /// # 参数
 /// * `db` - 业务库；计数器集合与业务数据同库
 ///
 /// # 返回
-/// 返回 `DNYYYYMMDD-000001` 形态的发货单号。
+/// 返回发货单号。
 ///
 /// # 错误
 /// 时区无法形成或计数器写入失败时返回内部错误。
-///
-/// # 关键业务约束
-/// 计数器自增不加入调用方事务；序号一经消费不因履约草稿回滚而回收。
 pub async fn next_delivery_no(db: &Database) -> Result<String> {
     next_kind_no(db, DocumentNumberKind::Delivery).await
 }
 
-/// 为采购入库单取下一个可展示单号。
+/// 为采购入库单取下一个可展示单号（`GRNYYYYMMDD-000001` 形态）。
+///
+/// 公共约束见 [`next_kind_no`]。
 ///
 /// # 参数
 /// * `db` - 业务库；计数器集合与业务数据同库
 ///
 /// # 返回
-/// 返回 `GRNYYYYMMDD-000001` 形态的入库单号。
+/// 返回入库单号。
 ///
 /// # 错误
 /// 时区无法形成或计数器写入失败时返回内部错误。
-///
-/// # 关键业务约束
-/// 计数器自增不加入调用方事务；序号一经消费不因入库草稿回滚而回收。
 pub async fn next_purchase_receipt_no(db: &Database) -> Result<String> {
     next_kind_no(db, DocumentNumberKind::PurchaseReceipt).await
 }
 
-/// 为客户验收单取下一个可展示单号。
+/// 为客户验收单取下一个可展示单号（`CAYYYYMMDD-000001` 形态）。
+///
+/// 公共约束见 [`next_kind_no`]。
 ///
 /// # 参数
 /// * `db` - 业务库；计数器集合与业务数据同库
 ///
 /// # 返回
-/// 返回 `CAYYYYMMDD-000001` 形态的客户验收单号。
+/// 返回客户验收单号。
 ///
 /// # 错误
 /// 时区无法形成或计数器写入失败时返回内部错误。
-///
-/// # 关键业务约束
-/// 单号由服务端在登记时取得；浏览器提交的操作号不得充当业务单号。
 pub async fn next_customer_acceptance_no(db: &Database) -> Result<String> {
     next_kind_no(db, DocumentNumberKind::CustomerAcceptance).await
 }
 
 /// 按单据种类取当天下一个可展示编号。
 ///
+/// 三个单号包装共用本入口；公共约束如下：业务日按 Asia/Shanghai 切日，与
+/// 工作台统计日一致；计数器自增不加入调用方事务，序号一经消费不因履约草稿
+/// 回滚而回收；单号由服务端在登记时取得，浏览器提交的操作号不得充当业务单号。
+///
 /// # 参数
-/// * `db` - 业务库
+/// * `db` - 业务库；计数器集合与业务数据同库
 /// * `kind` - 履约单据种类
 ///
 /// # 返回

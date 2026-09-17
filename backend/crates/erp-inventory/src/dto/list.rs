@@ -12,6 +12,38 @@ use super::{
 use crate::entity::inventory::{MovementDirection, MovementType, ReservationStatus, StockAdjustmentState};
 use crate::error::{Error, Result};
 
+/// 归一化分页与排序参数（白名单校验 + 默认值）。
+///
+/// 四类列表查询共用：排序字段过白名单，页码与单页条数取默认值。
+///
+/// # 参数
+/// * `sort_by` - 可选排序字段；空白视为未提供
+/// * `sort_dir` - 可选排序方向；空白视为未提供
+/// * `page` - 可选页码；缺省取首页
+/// * `page_size` - 可选单页条数；缺省取默认值
+/// * `allowed_fields` - 排序字段白名单
+///
+/// # 返回
+/// 返回归一化后的分页查询参数。
+///
+/// # 错误
+/// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+fn normalize_paging(
+    sort_by: &Option<String>,
+    sort_dir: &Option<String>,
+    page: Option<u64>,
+    page_size: Option<u32>,
+    allowed_fields: &'static [&'static str],
+) -> Result<PageParams> {
+    let (sort_by, sort_dir) = normalize_sort(sort_by, sort_dir, allowed_fields)?;
+    Ok(PageParams {
+        page: page_or_default(page),
+        page_size: page_size_or_default(page_size),
+        sort_by,
+        sort_dir,
+    })
+}
+
 /// 余额可用量筛选；所有条件均在分页前应用。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -87,19 +119,19 @@ impl StockBalanceListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<StockBalanceListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, STOCK_BALANCE_SORT_FIELDS)?;
         Ok(StockBalanceListQuery {
             q: application_core::normalized_text(self.q.as_deref()),
             balance_id: application_core::normalized_text(self.balance_id.as_deref()),
             availability: self.availability,
             warehouse_id: self.warehouse_id.clone(),
             sku_id: self.sku_id.clone(),
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: normalize_paging(
+                &self.sort_by,
+                &self.sort_dir,
+                self.page,
+                self.page_size,
+                STOCK_BALANCE_SORT_FIELDS,
+            )?,
             scope_version: super::normalized_scope_version(self.scope_version.as_deref())?,
         })
     }
@@ -183,7 +215,6 @@ impl StockMovementListParams {
         {
             return Err(Error::ValidationError("发生时间区间下界不得晚于上界".to_string()));
         }
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, STOCK_MOVEMENT_SORT_FIELDS)?;
         Ok(StockMovementListQuery {
             q: application_core::normalized_text(self.q.as_deref()),
             warehouse_id: self.warehouse_id.clone(),
@@ -192,12 +223,13 @@ impl StockMovementListParams {
             direction: self.direction,
             occurred_from: self.occurred_from,
             occurred_to: self.occurred_to,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: normalize_paging(
+                &self.sort_by,
+                &self.sort_dir,
+                self.page,
+                self.page_size,
+                STOCK_MOVEMENT_SORT_FIELDS,
+            )?,
             operator_user_ids: super::normalized_user_ids(self.operator_user_ids.as_ref())?,
             scope_version: super::normalized_scope_version(self.scope_version.as_deref())?,
         })
@@ -261,20 +293,19 @@ impl StockReservationListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<StockReservationListQuery> {
-        let (sort_by, sort_dir) =
-            normalize_sort(&self.sort_by, &self.sort_dir, STOCK_RESERVATION_SORT_FIELDS)?;
         Ok(StockReservationListQuery {
             q: application_core::normalized_text(self.q.as_deref()),
             warehouse_id: self.warehouse_id.clone(),
             sku_id: self.sku_id.clone(),
             status: self.status,
             sales_order_line_id: self.sales_order_line_id.clone(),
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: normalize_paging(
+                &self.sort_by,
+                &self.sort_dir,
+                self.page,
+                self.page_size,
+                STOCK_RESERVATION_SORT_FIELDS,
+            )?,
         })
     }
 }
@@ -352,20 +383,19 @@ impl StockAdjustmentListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<StockAdjustmentListQuery> {
-        let (sort_by, sort_dir) =
-            normalize_sort(&self.sort_by, &self.sort_dir, STOCK_ADJUSTMENT_SORT_FIELDS)?;
         Ok(StockAdjustmentListQuery {
             q: application_core::normalized_text(self.q.as_deref()),
             adjustment_id: application_core::normalized_text(self.adjustment_id.as_deref()),
             sku_id: self.sku_id.clone(),
             warehouse_id: self.warehouse_id.clone(),
             status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: normalize_paging(
+                &self.sort_by,
+                &self.sort_dir,
+                self.page,
+                self.page_size,
+                STOCK_ADJUSTMENT_SORT_FIELDS,
+            )?,
             operator_user_ids: super::normalized_user_ids(self.operator_user_ids.as_ref())?,
             applicant_user_ids: super::normalized_user_ids(self.applicant_user_ids.as_ref())?,
             handler_user_ids: super::normalized_user_ids(self.handler_user_ids.as_ref())?,

@@ -14,6 +14,7 @@
 //! 跨域只调对方 Repository（D10 `skus` 校验策略引用的 SKU；D02 `audit_logs`
 //! 写审计），禁止 Service 依赖 Service。
 
+use std::future::Future;
 use std::sync::Arc;
 
 use application_core::AuditActor;
@@ -21,7 +22,7 @@ use erp_core::common::time::BusinessDate;
 use erp_core::ids::{WarehouseId, WarehouseRevisionId};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, PageResult, Transactional};
 use validator::Validate;
 
 use crate::dto::warehouse::SortDir;
@@ -61,6 +62,34 @@ pub struct WarehouseService {
     identity: Arc<dyn IdentityFactPort>,
     audit: Arc<dyn WarehouseAuditPort>,
     fingerprint: Arc<dyn AttachmentFingerprintPort>,
+    fingerprint_key: &'static [u8],
+}
+
+/// 在仓库事务内执行写入并持久化审计（五处用例共用；事务边界与写入顺序不变）。
+///
+/// 调用方只提供实体写入语句块（可用 `operation_db` 与 `session`，以 `Ok::<T, Error>(value)`
+/// 收尾），宏负责 `with_transaction` 包裹与审计持久化。
+/// 用宏而不用泛型函数：写操作闭包借用调用方局部（`&mut warehouse` 等）时，
+/// 泛型高阶界限无法满足 `with_transaction` 的 `for<'a>` 要求（`E0310`），
+/// 且闭包返回借用参数的 future 时推断失败；语句块在调用点直接展开则无此约束。
+macro_rules! transact_with_audit {
+    ($service:expr, $audit:expr, |$db:ident, $session:ident| $body:block) => {{
+        let $db = $service.db.clone();
+        let audit_port = $service.audit.clone();
+        let audit = $audit;
+        let client = $service.db.client().clone();
+        client
+            .with_transaction(move |$session| {
+                let $db = $db.clone();
+                Box::pin(async move {
+                    let result = $body;
+                    let result = result?;
+                    audit_port.persist(&audit, $session).await?;
+                    Ok(result)
+                })
+            })
+            .await
+    }};
 }
 
 impl WarehouseService {
@@ -80,7 +109,19 @@ impl WarehouseService {
         audit: Arc<dyn WarehouseAuditPort>,
         fingerprint: Arc<dyn AttachmentFingerprintPort>,
     ) -> Self {
-        Self { db, identity, audit, fingerprint }
+        Self { db, identity, audit, fingerprint, fingerprint_key: FINGERPRINT_KEY }
+    }
+
+    /// 覆盖敏感字段指纹密钥（默认 `FINGERPRINT_KEY`，换钥或测试时使用）。
+    ///
+    /// # 参数
+    /// * `key` - HMAC 密钥字节（`'static` 保证与服务同生命周期）
+    ///
+    /// # 返回
+    /// 返回携带新密钥的服务实例；指纹结果随密钥变化。
+    pub fn with_fingerprint_key(mut self, key: &'static [u8]) -> Self {
+        self.fingerprint_key = key;
+        self
     }
 
     /// 分页查询仓库列表。
@@ -108,12 +149,10 @@ impl WarehouseService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self.db.warehouses().search_warehouses(&filter, &mut NoTransaction).await?;
         // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结），按字段映射为响应视图。
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| WarehouseView {
+        map_search_page(
+            self.db.warehouses().search_warehouses(&filter, &mut NoTransaction),
+            |row| WarehouseView {
                 id: row.id,
                 warehouse_code: row.warehouse_code,
                 status: row.status,
@@ -121,9 +160,11 @@ impl WarehouseService {
                 outbound_handler_user_id: row.outbound_handler_user_id,
                 created_at: row.created_at,
                 version: row.version,
-            })
-            .collect();
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+            },
+            filter.page,
+            filter.page_size,
+        )
+        .await
     }
 
     /// 创建仓库（仓库稳定身份 + 首个修订，跨集合事务）。
@@ -172,22 +213,18 @@ impl WarehouseService {
                 change_reason: req.change_reason,
             },
             self.fingerprint.as_ref(),
+            self.fingerprint_key,
         )?;
         let audit =
             self.audit.resource_log(actor.clone(), "warehouse.create", "warehouse", id.to_string())?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.warehouse().create_warehouse_with_revision(&mut warehouse, &revision, session).await?;
-                    audit_port.persist(&audit, session).await?;
-                    Ok::<Warehouse, Error>(warehouse)
-                })
-            })
-            .await
-            .map(Into::into)
+        transact_with_audit!(self, audit, |operation_db, session| {
+            operation_db
+                .warehouse()
+                .create_warehouse_with_revision(&mut warehouse, &revision, session)
+                .await?;
+            Ok::<Warehouse, Error>(warehouse)
+        })
+        .map(Into::into)
     }
 
     /// 在调用方 Executor 上写入仓库稳定身份与首个修订。
@@ -241,9 +278,7 @@ impl WarehouseService {
             .warehouse(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
-        if !warehouse.matches_version(req.version) {
-            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
-        }
+        ensure_expected_version(warehouse.base.version, req.version)?;
         let revision_no = self.db.warehouse().next_revision_no(id, &mut NoTransaction).await?;
         let revision = build_warehouse_revision(
             WarehouseId::new(id.to_string()),
@@ -258,6 +293,7 @@ impl WarehouseService {
                 change_reason: req.change_reason,
             },
             self.fingerprint.as_ref(),
+            self.fingerprint_key,
         )?;
         warehouse.update(
             WarehouseUpdate {
@@ -274,20 +310,12 @@ impl WarehouseService {
             "warehouse",
             warehouse.base.id.clone(),
         )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.warehouse_revisions().create(&revision, session).await?;
-                    db.warehouses().update(&mut warehouse, session).await?;
-                    audit_port.persist(&audit, session).await?;
-                    Ok::<Warehouse, Error>(warehouse)
-                })
-            })
-            .await
-            .map(Into::into)
+        transact_with_audit!(self, audit, |operation_db, session| {
+            operation_db.warehouse_revisions().create(&revision, session).await?;
+            operation_db.warehouses().update(&mut warehouse, session).await?;
+            Ok::<Warehouse, Error>(warehouse)
+        })
+        .map(Into::into)
     }
 
     /// 更新仓库入库与仓发经办人。
@@ -321,9 +349,7 @@ impl WarehouseService {
             .warehouse(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
-        if !warehouse.matches_version(req.version) {
-            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
-        }
+        ensure_expected_version(warehouse.base.version, req.version)?;
         let audit_message = format!(
             "inbound:{}->{};outbound:{}->{}",
             warehouse.inbound_handler_user_id.as_deref().unwrap_or("未配置"),
@@ -346,19 +372,11 @@ impl WarehouseService {
             warehouse.base.id.clone(),
             Some(audit_message),
         )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.warehouses().update(&mut warehouse, session).await?;
-                    audit_port.persist(&audit, session).await?;
-                    Ok::<Warehouse, Error>(warehouse)
-                })
-            })
-            .await
-            .map(Into::into)
+        transact_with_audit!(self, audit, |operation_db, session| {
+            operation_db.warehouses().update(&mut warehouse, session).await?;
+            Ok::<Warehouse, Error>(warehouse)
+        })
+        .map(Into::into)
     }
 
     /// 列出仓库收发责任配置可选的具体账号。
@@ -399,12 +417,10 @@ impl WarehouseService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page =
-            self.db.warehouse_revisions().search_warehouse_revisions(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| WarehouseRevisionView {
+        let mut executor = NoTransaction;
+        map_search_page(
+            self.db.warehouse_revisions().search_warehouse_revisions(&filter, &mut executor),
+            |row| WarehouseRevisionView {
                 id: row.id,
                 warehouse_id: row.warehouse_id,
                 revision_no: row.revision_no,
@@ -414,9 +430,11 @@ impl WarehouseService {
                 change_reason: row.change_reason,
                 created_at: row.created_at,
                 version: row.version,
-            })
-            .collect();
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+            },
+            filter.page,
+            filter.page_size,
+        )
+        .await
     }
 
     /// 分页查询仓库-SKU 预警策略列表。
@@ -444,15 +462,10 @@ impl WarehouseService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .warehouse_sku_policies()
-            .search_warehouse_sku_policies(&filter, &mut NoTransaction)
-            .await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| WarehouseSkuPolicyView {
+        let mut executor = NoTransaction;
+        map_search_page(
+            self.db.warehouse_sku_policies().search_warehouse_sku_policies(&filter, &mut executor),
+            |row| WarehouseSkuPolicyView {
                 id: row.id,
                 warehouse_id: row.warehouse_id,
                 sku_id: row.sku_id,
@@ -462,9 +475,11 @@ impl WarehouseService {
                 effective_to: row.effective_to,
                 created_at: row.created_at,
                 version: row.version,
-            })
-            .collect();
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+            },
+            filter.page,
+            filter.page_size,
+        )
+        .await
     }
 
     /// 更新仓库-SKU 预警策略（乐观锁语义；`warehouse_id`/`sku_id` 是策略身份）。
@@ -493,9 +508,7 @@ impl WarehouseService {
             .sku_policy(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("预警策略不存在".to_string()))?;
-        if !policy.matches_version(req.version) {
-            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
-        }
+        ensure_expected_version(policy.base.version, req.version)?;
         policy.update(WarehouseSkuPolicyUpdate {
             minimum_available_quantity: req.minimum_available_quantity,
             status: req.status,
@@ -512,19 +525,11 @@ impl WarehouseService {
             "warehouse_sku_policy",
             policy.base.id.clone(),
         )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.warehouse_sku_policies().update(&mut policy, session).await?;
-                    audit_port.persist(&audit, session).await?;
-                    Ok::<WarehouseSkuPolicy, Error>(policy)
-                })
-            })
-            .await
-            .map(Into::into)
+        transact_with_audit!(self, audit, |operation_db, session| {
+            operation_db.warehouse_sku_policies().update(&mut policy, session).await?;
+            Ok::<WarehouseSkuPolicy, Error>(policy)
+        })
+        .map(Into::into)
     }
 
     /// 删除仓库-SKU 预警策略（软删除，乐观锁语义）。
@@ -552,18 +557,10 @@ impl WarehouseService {
             "warehouse_sku_policy",
             policy.base.id.clone(),
         )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.warehouse_sku_policies().soft_delete(&mut policy, session).await?;
-                    audit_port.persist(&audit, session).await?;
-                    Ok::<(), Error>(())
-                })
-            })
-            .await
+        transact_with_audit!(self, audit, |operation_db, session| {
+            operation_db.warehouse_sku_policies().soft_delete(&mut policy, session).await?;
+            Ok::<(), Error>(())
+        })
     }
 
     /// 校验仓储经办人是当前有效账号且具备对应正式操作权限。
@@ -572,6 +569,54 @@ impl WarehouseService {
         let fact = self.identity.handler_identity(account_id).await?;
         ensure_handler_fact_eligible(fact.as_ref(), duty)
     }
+}
+
+/// 校验乐观锁期望版本一致（三处更新守卫共用；冲突文案保持 HTTP 契约）。
+///
+/// # 参数
+/// * `current` - 当前版本
+/// * `expected` - 调用方期望版本
+///
+/// # 返回
+/// 版本一致时返回 `Ok(())`。
+///
+/// # 错误
+/// 版本不一致时返回 `ConflictError`。
+fn ensure_expected_version(current: u64, expected: u64) -> Result<()> {
+    if current != expected {
+        return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
+    }
+    Ok(())
+}
+
+/// 执行投影分页查询并映射视图行（三类列表共用编排）。
+///
+/// 各列表方法只保留筛选字段组装与行转视图闭包；查询语义与返回形状不变。
+///
+/// # 参数
+/// * `search` - 投影分页查询 future
+/// * `map_row` - 投影行转视图闭包
+/// * `page` - 页码（1 起）
+/// * `page_size` - 单页条数
+///
+/// # 返回
+/// 返回契约形状的分页视图。
+///
+/// # 错误
+/// 投影查询失败时返回仓储错误。
+async fn map_search_page<Row, View>(
+    search: impl Future<Output = persistence_core::Result<PageResult<Row>>>,
+    mut map_row: impl FnMut(Row) -> View,
+    page: u64,
+    page_size: u32,
+) -> Result<PageView<View>> {
+    let page_result = search.await.map_err(Error::from)?;
+    Ok(PageView {
+        items: page_result.items.into_iter().map(&mut map_row).collect(),
+        total: page_result.total,
+        page,
+        page_size,
+    })
 }
 
 /// 校验身份事实是否满足仓库经办人资格，并保留原错误文案。
@@ -640,6 +685,7 @@ struct WarehouseRevisionInput {
 /// * `revision_no` - 修订序号
 /// * `input` - 修订内容
 /// * `fingerprint` - 敏感字段指纹端口
+/// * `fingerprint_key` - 指纹密钥（默认 `FINGERPRINT_KEY`，经服务构造参数注入）
 ///
 /// # 返回
 /// 返回仓库修订实体。
@@ -652,6 +698,7 @@ fn build_warehouse_revision(
     revision_no: u32,
     input: WarehouseRevisionInput,
     fingerprint: &dyn AttachmentFingerprintPort,
+    fingerprint_key: &[u8],
 ) -> Result<WarehouseRevision> {
     Ok(WarehouseRevision::new(
         revision_id,
@@ -661,11 +708,11 @@ fn build_warehouse_revision(
             name: input.name,
             address: SensitiveText::new(
                 input.address.clone(),
-                fingerprint.content_fingerprint(&input.address, FINGERPRINT_KEY),
+                fingerprint.content_fingerprint(&input.address, fingerprint_key),
             )?,
             contact: SensitiveText::new(
                 input.contact.clone(),
-                fingerprint.content_fingerprint(&input.contact, FINGERPRINT_KEY),
+                fingerprint.content_fingerprint(&input.contact, fingerprint_key),
             )?,
             effective_from: input.effective_from,
             effective_to: input.effective_to,
@@ -816,6 +863,7 @@ mod tests {
                 change_reason: "期初建仓".to_string(),
             },
             &SupportFingerprint,
+            FINGERPRINT_KEY,
         )
         .unwrap();
         assert_eq!(

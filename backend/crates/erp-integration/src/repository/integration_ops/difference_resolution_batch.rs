@@ -8,11 +8,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, Result};
 
 use crate::entity::integration_ops::ReconciliationDifferenceResolution;
+use crate::repository::integration_ops::undeleted_base;
 use crate::repository::owned::ReconciliationDifferenceResolutionRepository;
 
 /// 对差异 ID 集合去重并保持首次出现顺序。
@@ -54,10 +54,9 @@ fn dedupe_difference_ids(ids: &[String]) -> Vec<String> {
 /// 纯过滤构造，不访问数据库；只限定所属差异与未删除标记，不截断行数，
 /// 最新选择由内存按决定序号完成，与单差异查询的序号语义同义。
 fn latest_batch_filter(ids: &[String]) -> Document {
-    doc! {
-        "reconciliation_difference_id": { "$in": ids },
-        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-    }
+    let mut filter = undeleted_base();
+    filter.insert("reconciliation_difference_id", doc! { "$in": ids });
+    filter
 }
 
 /// 在内存中按差异取决定序号最大的一条（与单差异查询同序）。

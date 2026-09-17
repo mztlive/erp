@@ -1,5 +1,6 @@
 use chrono::Local;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::WarehouseId;
 use erp_core::money::Quantity;
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
@@ -72,6 +73,38 @@ where
         executor,
     )
     .await
+}
+
+/// 把已证明可读的仓库范围写入查询过滤（`None` 为公司级不限，空集合保持空 `$in`）。
+///
+/// 空集合必须解释为空结果，禁止退化为全量查询。
+///
+/// # 参数
+/// * `filter` - 待追加条件的查询文档
+/// * `warehouse_ids` - Service 已证明的仓库集合
+///
+/// # 返回
+/// 无返回值；直接修改传入的查询文档。
+pub(super) fn apply_warehouse_scope_filter(filter: &mut Document, warehouse_ids: Option<&[WarehouseId]>) {
+    if let Some(warehouse_ids) = warehouse_ids {
+        filter.insert(
+            "warehouse_id",
+            doc! { "$in": warehouse_ids.iter().map(ToString::to_string).collect::<Vec<_>>() },
+        );
+    }
+}
+
+/// 为分页排序追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
+///
+/// # 参数
+/// * `sort` - 主排序文档
+/// * `sort_ascending` - 升序为 `true`，降序为 `false`
+///
+/// # 返回
+/// 返回带 `id` 同向 tie-breaker 的排序文档。
+pub(super) fn with_id_tie_breaker(mut sort: Document, sort_ascending: bool) -> Document {
+    sort.insert("id", if sort_ascending { 1 } else { -1 });
+    sort
 }
 
 /// 把 ID newtype 集合转为字符串集合（用于 `$in` 查询）。
@@ -147,6 +180,29 @@ pub(super) fn negate_bson(quantity: &Bson) -> Bson {
     Bson::Decimal128(mongodb::bson::Decimal128::from_bytes(bytes))
 }
 
+/// 构建原子 `$inc` 更新的公共原语（含 `version` 与 `updated_at` 元数据）。
+///
+/// 调用方以 `(字段, 系数)` 对声明每个字段的增减方向；符号翻转由本函数统一处理。
+///
+/// # 参数
+/// * `fields` - 字段与增减系数的对列表（系数 `1` 为增加，`-1` 为减少）
+///
+/// # 返回
+/// 返回更新条件文档。
+///
+/// # 错误
+/// 数量无法表示为 Decimal128 时返回错误。
+pub(super) fn inc_update(fields: &[(&str, Quantity)]) -> Result<Document> {
+    let mut inc = Document::new();
+    for (field, quantity) in fields {
+        inc.insert(*field, to_bson(*quantity)?);
+    }
+    Ok(doc! {
+        "$inc": inc,
+        "$set": { "updated_at": Local::now().timestamp() },
+    })
+}
+
 /// 构建两个字段同向增加的原子 `$inc` 更新（含 `version` 与 `updated_at` 元数据）。
 ///
 /// # 参数
@@ -156,44 +212,57 @@ pub(super) fn negate_bson(quantity: &Bson) -> Bson {
 ///
 /// # 返回
 /// 返回更新条件文档。
+///
+/// # 错误
+/// 数量无法表示为 Decimal128 时返回错误。
 pub(super) fn both_inc(quantity: Quantity, field_a: &str, field_b: &str) -> Result<Document> {
-    let quantity = to_bson(quantity)?;
-    Ok(doc! {
-        "$inc": { field_a: &quantity, field_b: &quantity, "version": 1 },
-        "$set": { "updated_at": Local::now().timestamp() },
-    })
+    let mut update = inc_update(&[(field_a, quantity), (field_b, quantity)])?;
+    update.get_document_mut("$inc").expect("inc_update 恒含 $inc").insert("version", 1);
+    Ok(update)
 }
 
 /// 构建两个字段同向减少的原子 `$inc` 更新（含 `version` 与 `updated_at` 元数据）。
 ///
 /// # 参数
-/// * `quantity` - 减少数量（Decimal128）
+/// * `quantity` - 减少数量（正数）
 /// * `field_a` - 减少字段一
 /// * `field_b` - 减少字段二
 ///
 /// # 返回
 /// 返回更新条件文档。
-pub(super) fn both_dec(quantity: Bson, field_a: &str, field_b: &str) -> Result<Document> {
-    Ok(doc! {
-        "$inc": { field_a: negate_bson(&quantity), field_b: negate_bson(&quantity), "version": 1 },
-        "$set": { "updated_at": Local::now().timestamp() },
-    })
+///
+/// # 错误
+/// 数量无法表示为 Decimal128 时返回错误。
+pub(super) fn both_dec(quantity: Quantity, field_a: &str, field_b: &str) -> Result<Document> {
+    let mut update = inc_update(&[(field_a, quantity), (field_b, quantity)])?;
+    let inc = update.get_document_mut("$inc").expect("inc_update 恒含 $inc");
+    for field in [field_a, field_b] {
+        let value = inc.remove(field).expect("inc_update 恒含声明字段");
+        inc.insert(field, negate_bson(&value));
+    }
+    inc.insert("version", 1);
+    Ok(update)
 }
 
 /// 构建一个字段增加、另一个字段减少的原子 `$inc` 更新（含 `version` 与 `updated_at` 元数据）。
 ///
 /// # 参数
-/// * `quantity` - 增加数量（Decimal128）
+/// * `quantity` - 增减数量（正数）
 /// * `increase_field` - 增加字段
 /// * `decrease_field` - 减少字段
 ///
 /// # 返回
 /// 返回更新条件文档。
-pub(super) fn cross_inc(quantity: Bson, increase_field: &str, decrease_field: &str) -> Result<Document> {
-    Ok(doc! {
-        "$inc": { increase_field: &quantity, decrease_field: negate_bson(&quantity), "version": 1 },
-        "$set": { "updated_at": Local::now().timestamp() },
-    })
+///
+/// # 错误
+/// 数量无法表示为 Decimal128 时返回错误。
+pub(super) fn cross_inc(quantity: Quantity, increase_field: &str, decrease_field: &str) -> Result<Document> {
+    let mut update = inc_update(&[(increase_field, quantity), (decrease_field, quantity)])?;
+    let inc = update.get_document_mut("$inc").expect("inc_update 恒含 $inc");
+    let value = inc.remove(decrease_field).expect("inc_update 恒含声明字段");
+    inc.insert(decrease_field, negate_bson(&value));
+    inc.insert("version", 1);
+    Ok(update)
 }
 
 /// 构建排序文档（字段名白名单映射）。

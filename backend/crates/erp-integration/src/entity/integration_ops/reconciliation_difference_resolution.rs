@@ -16,6 +16,23 @@ use super::{ReconciliationDifferenceId, ReconciliationDifferenceResolutionId};
 const EVIDENCE_REFERENCE_MAX_LEN: usize = 512;
 const HANDLED_BY_MAX_LEN: usize = 128;
 
+/// 差异决定序号已达 `u32` 上限的领域文案（唯一来源；服务层经哨兵判定映射，不复述字面量）。
+pub const RESOLUTION_NO_OVERFLOW_MESSAGE: &str = "差异决定序号已达上限";
+
+/// 判定领域错误是否为差异决定序号溢出（服务层冲突映射的唯一入口）。
+///
+/// `erp_core::Error` 无结构化变体（跨组共享类型，本组不改），此处集中字面量
+/// 比对；文案变更只需改 [`RESOLUTION_NO_OVERFLOW_MESSAGE`] 一处。
+///
+/// # 参数
+/// * `error` - 领域返回的错误
+///
+/// # 返回
+/// 序号溢出时返回 `true`。
+pub fn is_resolution_no_overflow(error: &Error) -> bool {
+    matches!(error, Error::LogicError(message) if message == RESOLUTION_NO_OVERFLOW_MESSAGE)
+}
+
 /// 对账差异的固定决定类型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -268,7 +285,7 @@ impl ReconciliationDifferenceResolution {
         handled_at: Instant,
     ) -> Result<Self> {
         let resolution_no =
-            Self::next_resolution_no(latest).ok_or_else(|| Error::from("差异决定序号已达上限"))?;
+            Self::next_resolution_no(latest).ok_or_else(|| Error::from(RESOLUTION_NO_OVERFLOW_MESSAGE))?;
         Self::new(
             id,
             ReconciliationDifferenceResolutionData {
