@@ -206,6 +206,8 @@ impl<'a> AccountCoreRepository<'a> {
 
     /// 根据账号类型查询账号集合。
     ///
+    /// 未删除过滤下推到仓储查询（`deleted_at = 0`），调用方不再内存过滤。
+    ///
     /// # 参数
     /// * `kind` - 账号类型
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
@@ -222,6 +224,7 @@ impl<'a> AccountCoreRepository<'a> {
     ) -> Result<Vec<AccountCore>> {
         let filter = doc! {
             "kind": kind.as_str(),
+            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
         };
         self.find_many(filter, executor).await
     }

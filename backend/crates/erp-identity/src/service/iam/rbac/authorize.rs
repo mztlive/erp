@@ -19,7 +19,38 @@ use crate::entity::rbac::{Permission, PermissionSet, RoleIdSet};
 use crate::entity::role::Role;
 use crate::error::{Error, Result};
 
+/// 同一 Enforcer 快照下的操作人权限集与 policy 版本。
+struct ActorPermissionSnapshot<'a> {
+    /// 持有读锁的 Enforcer 快照守卫；调用方用完后 `drop` 再做网络 I/O。
+    enforcer: tokio::sync::RwLockReadGuard<'a, Enforcer>,
+    /// 快照内解析出的操作人权限集。
+    actor_permissions: PermissionSet,
+    /// 快照时刻的 policy 版本。
+    policy_revision: u64,
+}
+
 impl RbacService {
+    /// 在同一 Enforcer 快照下取操作人权限集并捕获 policy 版本。
+    ///
+    /// 四个 `authorize_*` 入口共享该快照序列：快照内读操作人权限，调用方再按
+    /// 各自业务规则做子集校验；拒绝/子集语义不变。
+    ///
+    /// # 参数
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回操作人权限集、`policy_revision` 与持有读锁的 Enforcer 快照守卫；
+    /// 调用方用完后 `drop` 守卫再做网络 I/O。
+    ///
+    /// # 错误
+    /// Enforcer 快照加载或操作人权限解析失败时返回错误。
+    async fn actor_permission_snapshot(&self, actor: &AuditActor) -> Result<ActorPermissionSnapshot<'_>> {
+        let enforcer = self.fresh_enforcer().await?.read().await;
+        let actor_permissions = permissions_for_actor(&enforcer, actor)?;
+        let policy_revision = self.loaded_policy_revision.load(Ordering::Acquire);
+        Ok(ActorPermissionSnapshot { enforcer, actor_permissions, policy_revision })
+    }
+
     /// 校验操作人是否可以授予目标角色，并捕获当前 policy 版本。
     ///
     /// 系统角色不允许通过普通管理接口分配；目标角色权限必须是操作人当前隐式权限的子集。
@@ -36,12 +67,12 @@ impl RbacService {
         ensure_all_roles_assignable(role_ids.len(), roles.len())?;
         ensure_roles_delegable(&roles)?;
 
-        let enforcer = self.fresh_enforcer().await?.read().await;
-        let actor_permissions = permissions_for_actor(&enforcer, actor)?;
-        let required_permissions = permissions_for_roles(&enforcer, &role_ids)?;
-        ensure_permission_subset(&actor_permissions, &required_permissions)?;
-        let policy_revision = self.loaded_policy_revision.load(Ordering::Acquire);
-        Ok(AuthorizedRoleGrant { role_ids, policy_revision })
+        let snapshot = self.actor_permission_snapshot(actor).await?;
+        ensure_permission_subset(
+            &snapshot.actor_permissions,
+            &permissions_for_roles(&snapshot.enforcer, &role_ids)?,
+        )?;
+        Ok(AuthorizedRoleGrant { role_ids, policy_revision: snapshot.policy_revision })
     }
 
     /// 校验操作人可管理目标账号，并按需校验新的角色集合。
@@ -60,18 +91,17 @@ impl RbacService {
     ) -> Result<AuthorizedAccountManagement> {
         let requested_role_ids =
             requested_role_ids.map(RoleIdSet::parse).transpose()?.map(|role_ids| role_ids.to_strings());
-        let enforcer = self.fresh_enforcer().await?.read().await;
-        let actor_permissions = permissions_for_actor(&enforcer, actor)?;
-        let target_role_ids = role_ids_for_account(&enforcer, target_kind, target_id);
+        let snapshot = self.actor_permission_snapshot(actor).await?;
+        let target_role_ids = role_ids_for_account(&snapshot.enforcer, target_kind, target_id);
         authorize_account_permissions(
-            &enforcer,
-            &actor_permissions,
+            &snapshot.enforcer,
+            &snapshot.actor_permissions,
             target_kind,
             target_id,
             requested_role_ids.as_deref(),
         )?;
-        let policy_revision = self.loaded_policy_revision.load(Ordering::Acquire);
-        drop(enforcer);
+        let policy_revision = snapshot.policy_revision;
+        drop(snapshot.enforcer);
 
         let roles = self.load_management_roles(&target_role_ids, requested_role_ids.as_deref()).await?;
         ensure_target_roles_manageable(&target_role_ids, &roles)?;
@@ -88,13 +118,9 @@ impl RbacService {
         permissions: Vec<Permission>,
     ) -> Result<AuthorizedPermissions> {
         let permissions = PermissionSet::new(permissions);
-        let enforcer = self.fresh_enforcer().await?.read().await;
-        let actor_permissions = permissions_for_actor(&enforcer, actor)?;
-        ensure_permission_subset(&actor_permissions, &permissions)?;
-        Ok(AuthorizedPermissions {
-            permissions,
-            policy_revision: self.loaded_policy_revision.load(Ordering::Acquire),
-        })
+        let snapshot = self.actor_permission_snapshot(actor).await?;
+        ensure_permission_subset(&snapshot.actor_permissions, &permissions)?;
+        Ok(AuthorizedPermissions { permissions, policy_revision: snapshot.policy_revision })
     }
 
     /// 批量加载目标账号当前角色和可选待分配角色。
@@ -127,17 +153,13 @@ impl RbacService {
         updated_permissions: Option<Vec<Permission>>,
     ) -> Result<AuthorizedRoleUpdate> {
         let permissions = updated_permissions.map(PermissionSet::new);
-        let enforcer = self.fresh_enforcer().await?.read().await;
-        let actor_permissions = permissions_for_actor(&enforcer, actor)?;
-        let current_permissions = implicit_permissions_for_role(&enforcer, role_id)?;
-        ensure_management_subset(&actor_permissions, &current_permissions)?;
+        let snapshot = self.actor_permission_snapshot(actor).await?;
+        let current_permissions = implicit_permissions_for_role(&snapshot.enforcer, role_id)?;
+        ensure_management_subset(&snapshot.actor_permissions, &current_permissions)?;
         if let Some(permissions) = permissions.as_ref() {
-            ensure_permission_subset(&actor_permissions, permissions)?;
+            ensure_permission_subset(&snapshot.actor_permissions, permissions)?;
         }
-        Ok(AuthorizedRoleUpdate {
-            permissions,
-            policy_revision: self.loaded_policy_revision.load(Ordering::Acquire),
-        })
+        Ok(AuthorizedRoleUpdate { permissions, policy_revision: snapshot.policy_revision })
     }
 
     /// 覆盖账号角色绑定。

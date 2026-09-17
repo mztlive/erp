@@ -7,7 +7,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use mongodb::Database;
-use persistence_core::{Executor, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use self::access::{prepare_organization_change, visible_state};
 use crate::dto::{OrgPersonView, OrgRoleView, OrganizationStateView};
@@ -48,29 +48,20 @@ impl OrganizationService {
     /// # 关键业务约束
     /// 缺范围返回空集并标记 `no_scope`；部门负责人身份不代替 `org_unit:list`。
     pub async fn state(&self, actor: &AuditActor) -> Result<OrganizationStateView> {
-        let this = self.clone();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    let access = this.access(&actor, "list", session).await?;
-                    let visible = visible_state(access.organizations.clone(), &access);
-                    let people = this.people_for(&visible, access.as_of, session).await?;
-                    let roles = this.roles_for(&visible, session).await?;
-                    Ok::<_, Error>(OrganizationStateView::compose(
-                        visible,
-                        access.scope_version.clone(),
-                        access.policy_version,
-                        access.as_of.as_utc().to_rfc3339(),
-                        !access.scope.has_role_scope(),
-                        people,
-                        roles,
-                    ))
-                })
-            })
-            .await
+        let mut no_tx = NoTransaction;
+        let access = self.access(actor, "list", &mut no_tx).await?;
+        let visible = visible_state(access.organizations.clone(), &access);
+        let people = self.people_for_view(&visible, access.as_of, &mut no_tx).await?;
+        let roles = self.roles_for_view(&visible, &mut no_tx).await?;
+        Ok(OrganizationStateView::compose(
+            visible,
+            access.scope_version.clone(),
+            access.policy_version,
+            access.as_of.as_utc().to_rfc3339(),
+            !access.scope.has_role_scope(),
+            people,
+            roles,
+        ))
     }
 
     /// 读取组织页面人员展示与分派候选，不含联系方式。
@@ -88,28 +79,13 @@ impl OrganizationService {
     ///
     /// # 关键业务约束
     /// 不要求账号管理权限；分派仍只接受有效后台账号。不返回邮箱、电话或密钥。
-    async fn people_for(
+    async fn people_for_view(
         &self,
         visible: &OrganizationState,
         as_of: Instant,
         executor: &mut dyn Executor,
     ) -> Result<Vec<OrgPersonView>> {
-        let accounts = self.db.accounts().list_by_kind(erp_core::AccountKind::Admin, executor).await?;
-        let mut people = Vec::new();
-        for account in accounts {
-            if account.base.is_deleted() {
-                continue;
-            }
-            people.push(OrgPersonView {
-                id: account.base.id.clone(),
-                label: account.name.clone(),
-                account: account.secret.account().to_string(),
-                active: account.is_active_backoffice(),
-                own_org_unit_id: visible.own_org(&account.base.id, as_of)?.map(str::to_owned),
-            });
-        }
-        people.sort_by(|left, right| (&left.label, &left.id).cmp(&(&right.label, &right.id)));
-        Ok(people)
+        people_for(&self.db, visible, as_of, executor).await
     }
 
     /// 读取管理授权展示与可选角色，不含权限清单。
@@ -126,27 +102,12 @@ impl OrganizationService {
     ///
     /// # 关键业务约束
     /// 组织配置不把角色权限当作业务执行权授予。
-    async fn roles_for(
+    async fn roles_for_view(
         &self,
         visible: &OrganizationState,
         executor: &mut dyn Executor,
     ) -> Result<Vec<OrgRoleView>> {
-        let mut roles = self.db.roles().list_enabled(executor).await?;
-        let known = roles.iter().map(|role| role.base.id.clone()).collect::<std::collections::BTreeSet<_>>();
-        let extra = visible
-            .management
-            .iter()
-            .map(|item| item.role_id.clone())
-            .filter(|id| !known.contains(id))
-            .collect::<Vec<_>>();
-        roles.extend(self.db.roles().roles_by_ids(&extra, executor).await?);
-        let mut views = roles
-            .into_iter()
-            .map(|role| OrgRoleView { id: role.base.id, name: role.name, enabled: !role.disabled })
-            .collect::<Vec<_>>();
-        views.sort_by(|left, right| (&left.name, &left.id).cmp(&(&right.name, &right.id)));
-        views.dedup_by(|left, right| left.id == right.id);
-        Ok(views)
+        roles_for(&self.db, visible, executor).await
     }
 
     /// 预览通过同一校验准备的变更前后事实，不写入组织或业务任务。
@@ -293,4 +254,73 @@ impl OrganizationService {
         }
         Ok(())
     }
+}
+
+/// 读取组织页面人员展示与分派候选（借用可见状态，只克隆可见子集）。
+///
+/// # 参数
+/// * `db` - 数据库句柄（只借用，不克隆 client/actor）
+/// * `visible` - 当前可管理组织事实（借用）
+/// * `as_of` - 与范围解析相同的时点
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 后台账号 ID、显示名、登录账号、状态和当前主属组织；排序与空集语义不变。
+///
+/// # 错误
+/// 账号读取或主属关系冲突时失败。
+async fn people_for(
+    db: &Database,
+    visible: &OrganizationState,
+    as_of: Instant,
+    executor: &mut dyn Executor,
+) -> Result<Vec<OrgPersonView>> {
+    let accounts = db.accounts().list_by_kind(erp_core::AccountKind::Admin, executor).await?;
+    let mut people = Vec::with_capacity(accounts.len());
+    for account in &accounts {
+        people.push(OrgPersonView {
+            id: account.base.id.clone(),
+            label: account.name.clone(),
+            account: account.secret.account().to_string(),
+            active: account.is_active_backoffice(),
+            own_org_unit_id: visible.own_org(&account.base.id, as_of)?.map(str::to_owned),
+        });
+    }
+    people.sort_by(|left, right| (&left.label, &left.id).cmp(&(&right.label, &right.id)));
+    Ok(people)
+}
+
+/// 读取管理授权展示与可选角色（借用可见状态，只克隆可见子集）。
+///
+/// # 参数
+/// * `db` - 数据库句柄（只借用，不克隆 client/actor）
+/// * `visible` - 当前可管理组织事实（借用）
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 启用角色及现有管理关系引用的角色名称；排序与去重语义不变。
+///
+/// # 错误
+/// 角色读取失败时返回错误。
+async fn roles_for(
+    db: &Database,
+    visible: &OrganizationState,
+    executor: &mut dyn Executor,
+) -> Result<Vec<OrgRoleView>> {
+    let mut roles = db.roles().list_enabled(executor).await?;
+    let known = roles.iter().map(|role| role.base.id.clone()).collect::<std::collections::BTreeSet<_>>();
+    let extra = visible
+        .management
+        .iter()
+        .map(|item| item.role_id.clone())
+        .filter(|id| !known.contains(id))
+        .collect::<Vec<_>>();
+    roles.extend(db.roles().roles_by_ids(&extra, executor).await?);
+    let mut views = roles
+        .into_iter()
+        .map(|role| OrgRoleView { id: role.base.id, name: role.name, enabled: !role.disabled })
+        .collect::<Vec<_>>();
+    views.sort_by(|left, right| (&left.name, &left.id).cmp(&(&right.name, &right.id)));
+    views.dedup_by(|left, right| left.id == right.id);
+    Ok(views)
 }

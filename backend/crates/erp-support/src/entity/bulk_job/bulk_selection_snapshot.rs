@@ -31,35 +31,13 @@ pub enum SelectionType {
     RePull,
 }
 
-impl SelectionType {
-    /// 返回选择类型的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Export => "导出",
-            Self::OwnershipAssignment => "责任人分配",
-            Self::ImportApply => "导入应用",
-            Self::Mapping => "映射",
-            Self::RePull => "补拉",
-        }
-    }
-
-    /// 返回选择类型的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Export => "export",
-            Self::OwnershipAssignment => "ownership_assignment",
-            Self::ImportApply => "import_apply",
-            Self::Mapping => "mapping",
-            Self::RePull => "re_pull",
-        }
-    }
-}
+crate::entity::enum_str!(SelectionType {
+    Export => ("export", "导出"),
+    OwnershipAssignment => ("ownership_assignment", "责任人分配"),
+    ImportApply => ("import_apply", "导入应用"),
+    Mapping => ("mapping", "映射"),
+    RePull => ("re_pull", "补拉"),
+});
 
 /// 快照状态（数据模型 §6.1：待确认、已确认、执行中、完成、失效）。
 ///
@@ -82,35 +60,13 @@ pub enum SelectionStatus {
     Expired,
 }
 
-impl SelectionStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Pending => "待确认",
-            Self::Confirmed => "已确认",
-            Self::Executing => "执行中",
-            Self::Completed => "完成",
-            Self::Expired => "失效",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Confirmed => "confirmed",
-            Self::Executing => "executing",
-            Self::Completed => "completed",
-            Self::Expired => "expired",
-        }
-    }
-}
+crate::entity::enum_str!(SelectionStatus {
+    Pending => ("pending", "待确认"),
+    Confirmed => ("confirmed", "已确认"),
+    Executing => ("executing", "执行中"),
+    Completed => ("completed", "完成"),
+    Expired => ("expired", "失效"),
+});
 
 impl DocumentState for SelectionStatus {
     fn allowed_next(self) -> &'static [Self] {

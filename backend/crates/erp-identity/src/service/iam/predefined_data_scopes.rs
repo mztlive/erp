@@ -102,11 +102,38 @@ pub(crate) async fn seed_role(rbac: &SharedRbacService, role: &str) -> Result<()
 
 /// 明确岗位、资源与动作的默认规则，RBAC 仍独立决定实际动作权限。
 fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeData> {
-    if resource == "work_item" && !matches!(role, "role-root" | "role-sysadmin" | "role-management") {
+    if !definition_applies(role, resource) {
         return Vec::new();
     }
-    if resource == "org_unit" && !matches!(role, "role-root" | "role-sysadmin") {
+    if matches!(resource, "integration_error_task" | "reconciliation_difference") {
+        return integration_definitions(role, resource, actions);
+    }
+    let mut scope_types = vec![DataScopeType::Company];
+    let mut granted_actions = actions.to_vec();
+    apply_role_action_narrowing(role, resource, &mut scope_types, &mut granted_actions);
+    if scope_types.is_empty() {
         return Vec::new();
+    }
+    scope_types
+        .into_iter()
+        .map(|scope_type| definition(role, resource, &granted_actions, scope_type))
+        .collect()
+}
+
+/// 判断岗位与资源的默认规则是否适用（纯角色/资源包含判定）。
+///
+/// # 参数
+/// * `role` - 岗位角色 ID
+/// * `resource` - 资源代码
+///
+/// # 返回
+/// 适用时返回 `true`；不适用返回 `false`（调用方返回空集）。
+fn definition_applies(role: &str, resource: &str) -> bool {
+    if resource == "work_item" && !matches!(role, "role-root" | "role-sysadmin" | "role-management") {
+        return false;
+    }
+    if resource == "org_unit" && !matches!(role, "role-root" | "role-sysadmin") {
+        return false;
     }
     if matches!(
         resource,
@@ -118,19 +145,30 @@ fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeDat
             | "supplier_refund"
     ) && !matches!(role, "role-root" | "role-finance")
     {
-        return Vec::new();
+        return false;
     }
     if resource == "supplier_settlement_statement" && !matches!(role, "role-root" | "role-finance") {
-        return Vec::new();
+        return false;
     }
     if resource == "approval_instance" && !matches!(role, "role-root" | "role-finance" | "role-management") {
-        return Vec::new();
+        return false;
     }
-    if matches!(resource, "integration_error_task" | "reconciliation_difference") {
-        return integration_definitions(role, resource, actions);
-    }
-    let mut scope_types = vec![DataScopeType::Company];
-    let mut granted_actions = actions.to_vec();
+    true
+}
+
+/// 按岗位收敛默认范围类型与可授予动作（纯角色/资源包含判定）。
+///
+/// # 参数
+/// * `role` - 岗位角色 ID
+/// * `resource` - 资源代码
+/// * `scope_types` - 待收敛的范围类型（默认公司级）
+/// * `granted_actions` - 待收敛的可授予动作
+fn apply_role_action_narrowing(
+    role: &str,
+    resource: &str,
+    scope_types: &mut Vec<DataScopeType>,
+    granted_actions: &mut Vec<&str>,
+) {
     match role {
         "role-root" => {},
         "role-finance"
@@ -151,7 +189,7 @@ fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeDat
             granted_actions.retain(|action| matches!(*action, "list" | "detail"))
         },
         "role-sales-leader" => {
-            scope_types = vec![DataScopeType::Team];
+            *scope_types = vec![DataScopeType::Team];
             granted_actions.retain(|action| matches!(*action, "list" | "detail"));
         },
         "role-sales"
@@ -160,24 +198,22 @@ fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeDat
                 "purchase_order" | "payable_account" | "supplier_payment" | "purchase_invoice_allocation"
             ) =>
         {
-            scope_types = vec![DataScopeType::SelfOwned, DataScopeType::Collaborative]
+            *scope_types = vec![DataScopeType::SelfOwned, DataScopeType::Collaborative]
         },
-        "role-procurement" if resource == "supplier" => scope_types = vec![DataScopeType::SelfOwned],
+        "role-procurement" if resource == "supplier" => *scope_types = vec![DataScopeType::SelfOwned],
         "role-procurement" if resource == "supplier_fulfillment_order" => {
-            scope_types = vec![DataScopeType::SelfOwned]
+            *scope_types = vec![DataScopeType::SelfOwned]
         },
-        "role-procurement" if resource == "purchase_order" => scope_types = vec![DataScopeType::SelfOwned],
+        "role-procurement" if resource == "purchase_order" => *scope_types = vec![DataScopeType::SelfOwned],
         "role-procurement"
             if matches!(resource, "payable_account" | "supplier_payment" | "purchase_invoice_allocation") =>
         {
-            scope_types = vec![DataScopeType::SelfOwned]
+            *scope_types = vec![DataScopeType::SelfOwned]
         },
-        _ => return Vec::new(),
+        _ => {
+            scope_types.clear();
+        },
     }
-    scope_types
-        .into_iter()
-        .map(|scope_type| definition(role, resource, &granted_actions, scope_type))
-        .collect()
 }
 
 /// 集成异常与差异的岗位默认范围；处理人按本人，管理者按公司。

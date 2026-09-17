@@ -1,16 +1,17 @@
 //! 最小账号/角色/权限种子，供 P3 HTTP 测试鉴权使用。
 //!
-//! 集合名与 `database/src/indexes/access_control.rs` 保持一致：
-//! `accounts` / `roles` / `casbin_rules`。Casbin 规则文档形态与
-//! `database/src/casbin_adapter.rs` 中的 `CasbinRule` 完全一致
-//! （`_id` 为 `sec\u{1f}ptype\u{1f}values 拼接` 的字符串）。
+//! 行为契约（集合名与规则文档形态）：写入 `accounts` / `roles` /
+//! `casbin_rules` 三个集合，与身份领域的访问控制索引及 Casbin 适配器保持
+//! 一致（规则文档 `_id` 为 `sec\u{1f}ptype\u{1f}values 拼接` 的字符串）。
+//! 角色键前缀与主体前缀的取值同步身份领域 RBAC 实现（`role:` /
+//! `user:admin:`），改动任一侧须同步另一侧。
 
 use erp_identity::{Role, RoleData};
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 
 use crate::Result;
-use crate::db::uuid_hex;
+use crate::db::{UUID_ACCOUNT_SUFFIX_LEN, UUID_ROLE_SUFFIX_LEN, uuid_hex_n};
 
 /// 账号集合名。
 const ACCOUNTS: &str = "accounts";
@@ -22,9 +23,9 @@ const CASBIN_RULES: &str = "casbin_rules";
 /// 种子账号的持久化版本（`BaseModel::new` 固定为 1，与 `mint_jwt` 对应）。
 pub(crate) const ACCOUNT_VERSION: u64 = 1;
 
-/// Casbin 角色键前缀（与 services/iam/rbac.rs `ROLE_PREFIX` 一致）。
+/// Casbin 角色键前缀（与身份领域 RBAC 的角色键规则一致）。
 const ROLE_PREFIX: &str = "role:";
-/// 后台管理员主体前缀（与 services/iam/rbac.rs `subject()` 一致）。
+/// 后台管理员主体前缀（与身份领域 RBAC 的主体规则一致）。
 const SUBJECT_PREFIX: &str = "user:admin:";
 
 /// 种子管理员角色拥有的 `list` 类权限键 `(resource, action)`。
@@ -77,10 +78,11 @@ async fn insert_account(db: &Database, account_id: &str, login: &str) -> Result<
 
 /// 构造并插入种子角色与 Casbin 权限/绑定规则。
 ///
-/// 写入一条 `p` 权限规则 + 一条 `g` 角色绑定规则；不写入
-/// `casbin_policy_state` 版本文档，首次加载的 Enforcer 快照即包含这些规则。
+/// 按 `SEED_PERMISSIONS` 写入 N 条 `p` 权限规则 + 1 条 `g` 角色绑定规则
+///（当前共 4 条，见 smoke 测试断言）；不写入 `casbin_policy_state`
+/// 版本文档，首次加载的 Enforcer 快照即包含这些规则。
 async fn insert_role_and_policies(db: &Database, account_id: &str) -> Result<()> {
-    let role_id = format!("p0-test-{}", &uuid_hex()[..8]);
+    let role_id = format!("p0-test-{}", uuid_hex_n(UUID_ROLE_SUFFIX_LEN));
     let role = Role::new(role_id.clone(), RoleData::new("P0 测试管理员").with_system(false))?;
     db.collection::<Role>(ROLES).insert_one(role).await?;
 
@@ -116,7 +118,7 @@ fn casbin_rule(sec: &str, ptype: &str, values: &[&str]) -> Document {
 /// # 返回值
 /// 返回 `acc-<12 位十六进制>` 形式的账号 ID。
 fn new_account_id() -> String {
-    format!("acc-{}", &uuid_hex()[..12])
+    format!("acc-{}", uuid_hex_n(UUID_ACCOUNT_SUFFIX_LEN))
 }
 
 /// 按种子派生规则生成登录账号。

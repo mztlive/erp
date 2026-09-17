@@ -1,5 +1,7 @@
 //! 索引存在性断言辅助。
 
+use std::collections::HashSet;
+
 use mongodb::Database;
 use mongodb::bson::Document;
 
@@ -22,11 +24,9 @@ use crate::{Error, Result};
 /// 任一索引缺失或 MongoDB 查询失败时返回错误。
 pub async fn assert_indexes(db: &Database, collection: &str, names: &[&str]) -> Result<()> {
     let existing = db.collection::<Document>(collection).list_index_names().await?;
-    let missing: Vec<String> = names
-        .iter()
-        .map(|name| name.to_string())
-        .filter(|name| !existing.iter().any(|found| found == name))
-        .collect();
+    let existing: HashSet<&str> = existing.iter().map(String::as_str).collect();
+    let missing: Vec<String> =
+        names.iter().filter(|name| !existing.contains(**name)).map(|name| name.to_string()).collect();
     if missing.is_empty() {
         return Ok(());
     }

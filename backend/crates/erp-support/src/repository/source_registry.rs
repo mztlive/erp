@@ -3,7 +3,8 @@
 //! 单一集合 CRUD 与乐观锁直接复用 [`Repository`] 基类（base.rs：
 //! `update`/`soft_delete`/`restore` 比较 `id + version` 做 CAS，版本不匹配返回
 //! [`persistence_core::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
-//! 跨集合多步骤写入入口。集合名常量统一从 `indexes::source_registry` 导入。
+//! 跨集合多步骤写入入口。集合名直接引用 `extensions::SourceRegistryExt`
+//! 关联常量（唯一来源，conventions §4.3），不做本地转存。
 //!
 //! 筛选/行类型定义在本文件，经 `SourceRegistryExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
@@ -18,6 +19,7 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mo
 use serde::{Deserialize, Serialize};
 
 use super::extensions::SourceRegistryExt;
+use super::page::search_projected_page;
 use crate::entity::source_registry::{
     ExternalIdKey, ExternalIdentityMap, ExternalIdentityTarget, ExternalObjectType, MappingStatus,
     RelationRole, SourceSystem, SourceSystemId, SourceSystemStatus, SourceSystemType, TargetStatus,
@@ -36,11 +38,6 @@ pub fn external_id_key_bson(key: &ExternalIdKey) -> mongodb::bson::Binary {
         bytes: key.as_bytes().to_vec(),
     }
 }
-
-/// `external_identity_map` 集合名（单一来源：`SourceRegistryExt` 关联常量）。
-const EXTERNAL_IDENTITY_MAPS: &str = <mongodb::Database as SourceRegistryExt>::EXTERNAL_IDENTITY_MAPS;
-/// `external_identity_target` 集合名（单一来源：`SourceRegistryExt` 关联常量）。
-const EXTERNAL_IDENTITY_TARGETS: &str = <mongodb::Database as SourceRegistryExt>::EXTERNAL_IDENTITY_TARGETS;
 
 /// 来源系统列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -161,10 +158,7 @@ impl<'a> SourceSystemRepository<'a> {
             .projection(source_system_projection())
             .build();
         let collection = self.collection().clone_with_type::<SourceSystemRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        search_projected_page(&self.collection(), &collection, filter, options, executor).await
     }
 
     /// 按来源系统 ID 集合批量读取来源系统（INT-R17）。
@@ -288,10 +282,7 @@ impl<'a> ExternalIdentityMapRepository<'a> {
             .projection(external_identity_map_projection())
             .build();
         let collection = self.collection().clone_with_type::<ExternalIdentityMapRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        search_projected_page(&self.collection(), &collection, filter, options, executor).await
     }
 
     /// 按「来源系统 + 对象类型 + 规范化比较键」查找唯一映射。
@@ -573,7 +564,9 @@ impl<'a> SourceRegistryRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
         let targets = mongo_ops::find_many(
-            &self.db.collection::<ExternalIdentityTarget>(EXTERNAL_IDENTITY_TARGETS),
+            &self.db.collection::<ExternalIdentityTarget>(
+                <Database as SourceRegistryExt>::EXTERNAL_IDENTITY_TARGETS,
+            ),
             active_identity_target_filter(object_type, internal_object_id, as_of_unix_secs),
             FindOptions::builder().sort(doc! { "id": 1 }).build(),
             executor,
@@ -585,7 +578,9 @@ impl<'a> SourceRegistryRepository<'a> {
         let map_ids =
             targets.iter().map(|target| target.external_identity_map_id.to_string()).collect::<Vec<_>>();
         let maps = mongo_ops::find_many(
-            &self.db.collection::<ExternalIdentityMap>(EXTERNAL_IDENTITY_MAPS),
+            &self
+                .db
+                .collection::<ExternalIdentityMap>(<Database as SourceRegistryExt>::EXTERNAL_IDENTITY_MAPS),
             active_identity_map_filter(source_system_id, object_type, map_ids),
             FindOptions::builder().sort(doc! { "id": 1 }).build(),
             executor,
@@ -623,13 +618,17 @@ impl<'a> SourceRegistryRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
-            &self.db.collection::<ExternalIdentityMap>(EXTERNAL_IDENTITY_MAPS),
+            &self
+                .db
+                .collection::<ExternalIdentityMap>(<Database as SourceRegistryExt>::EXTERNAL_IDENTITY_MAPS),
             map,
             executor,
         )
         .await?;
         mongo_ops::insert_one(
-            &self.db.collection::<ExternalIdentityTarget>(EXTERNAL_IDENTITY_TARGETS),
+            &self.db.collection::<ExternalIdentityTarget>(
+                <Database as SourceRegistryExt>::EXTERNAL_IDENTITY_TARGETS,
+            ),
             target,
             executor,
         )

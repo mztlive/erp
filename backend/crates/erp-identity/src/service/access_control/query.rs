@@ -50,18 +50,8 @@ impl AccessControlService {
                     rbac.ensure_policy_snapshot_with_executor(policy_version, session).await?;
                     let organizations = OrganizationRepository::new(&db).state(session).await?;
                     let as_of = Instant::now();
-                    let scope_version = format!(
-                        "{:x}",
-                        md5::compute(
-                            format!(
-                                "{}:{}:{}:data_scope:list",
-                                actor.id(),
-                                policy_version,
-                                organizations.version
-                            )
-                            .as_bytes()
-                        )
-                    );
+                    let scope_version =
+                        data_scope_list_version(&actor, policy_version, organizations.version);
                     if let Some(expected) = query.scope_version.as_deref()
                         && expected != scope_version
                     {
@@ -81,20 +71,7 @@ impl AccessControlService {
                         sort_ascending: matches!(query.paging.sort_dir, crate::dto::SortDir::Asc),
                     };
                     let page = db.data_scopes().search_data_scopes(&filter, session).await?;
-                    let items = page
-                        .items
-                        .into_iter()
-                        .map(|row| DataScopeView {
-                            id: row.id,
-                            subject_type: row.subject_type,
-                            subject_id: row.subject_id,
-                            scope_type: row.scope_type,
-                            scope_targets: row.scope_targets,
-                            binding: row.binding,
-                            version: row.version,
-                            created_at: row.created_at,
-                        })
-                        .collect();
+                    let items = page.items.into_iter().map(DataScopeView::from).collect();
                     Ok::<_, Error>(DataScopeListView::compose(
                         PageView { items, total: page.total, page: filter.page, page_size: filter.page_size },
                         DataScopeListMeta::new(scope_version, as_of.as_utc().to_rfc3339())
@@ -105,4 +82,22 @@ impl AccessControlService {
             })
             .await
     }
+}
+
+/// 计算数据范围列表的跨页版本（操作人 + policy 版本 + 组织版本）。
+///
+/// # 参数
+/// * `actor` - 已认证操作人
+/// * `policy_version` - 当前 policy 版本
+/// * `organization_version` - 当前组织版本
+///
+/// # 返回
+/// 返回十六进制版本字符串；跨页不一致时调用方返回冲突。
+fn data_scope_list_version(actor: &AuditActor, policy_version: u64, organization_version: u64) -> String {
+    format!(
+        "{:x}",
+        md5::compute(
+            format!("{}:{policy_version}:{organization_version}:data_scope:list", actor.id()).as_bytes()
+        )
+    )
 }

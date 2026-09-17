@@ -156,8 +156,7 @@ impl MongoCasbinAdapter {
     }
 
     async fn replace_policy(&self, rules: Vec<CasbinRule>) -> casbin::Result<()> {
-        let adapter = self.clone();
-        self.run_policy_write(move |session| {
+        self.run_policy_write(true, move |adapter, session| {
             Box::pin(async move {
                 adapter.replace_all_rules(rules, session).await?;
                 Ok(((), true))
@@ -168,22 +167,37 @@ impl MongoCasbinAdapter {
     }
 
     /// 在 Adapter 自有事务中写 policy，并在确有变更时递增全局 revision。
-    async fn run_policy_write<T, F>(&self, operation: F) -> Result<T>
+    ///
+    /// 调用方只提供业务写入闭包并返回是否确有变更；事务装配与 revision
+    /// 递增由本方法统一承载，事务边界与 revision 语义不变。
+    ///
+    /// # 参数
+    /// * `known_changed` - 已知必然变更时传 `true`，跳过二次判断直接递增
+    /// * `operation` - 业务写入闭包，返回变更标记由本方法决定是否递增
+    ///
+    /// # 返回
+    /// 返回业务闭包的值。
+    ///
+    /// # 错误
+    /// 业务写入或 revision 递增失败时返回错误。
+    async fn run_policy_write<T, F>(&self, known_changed: bool, operation: F) -> Result<T>
     where
         T: Send + 'static,
         F: for<'a> FnOnce(
+                &'a MongoCasbinAdapter,
                 &'a mut ClientSession,
             ) -> Pin<Box<dyn Future<Output = Result<(T, bool)>> + Send + 'a>>
             + Send
             + 'static,
     {
         let adapter = self.clone();
+        let inner = adapter.clone();
         self.db
             .client()
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    let (value, changed) = operation(session).await?;
-                    if changed {
+                    let (value, changed) = operation(&inner, session).await?;
+                    if known_changed || changed {
                         adapter.bump_policy_revision(session).await?;
                     }
                     Ok(value)
@@ -469,8 +483,7 @@ impl Adapter for MongoCasbinAdapter {
     }
 
     async fn clear_policy(&mut self) -> casbin::Result<()> {
-        let adapter = self.clone();
-        self.run_policy_write(move |session| {
+        self.run_policy_write(false, move |adapter, session| {
             Box::pin(async move {
                 let result = mongo_ops::delete_many(&adapter.collection(), doc! {}, session).await?;
                 Ok(((), result.deleted_count > 0))
@@ -489,8 +502,7 @@ impl Adapter for MongoCasbinAdapter {
     async fn add_policy(&mut self, sec: &str, ptype: &str, rule: Vec<String>) -> casbin::Result<bool> {
         let rule = CasbinRule::new(sec, ptype, rule);
         let rule_doc = serialize_to_document(&rule).map_err(Self::adapter_error)?;
-        let adapter = self.clone();
-        self.run_policy_write(move |session| {
+        self.run_policy_write(false, move |adapter, session| {
             Box::pin(async move {
                 let result = mongo_ops::update_one(
                     &adapter.collection(),
@@ -520,8 +532,7 @@ impl Adapter for MongoCasbinAdapter {
         }
 
         let ids = rules.iter().map(|rule| rule.id.clone()).collect::<Vec<_>>();
-        let adapter = self.clone();
-        self.run_policy_write(move |session| {
+        self.run_policy_write(false, move |adapter, session| {
             Box::pin(async move {
                 let existing = mongo_ops::count_documents(
                     &adapter.collection(),
@@ -542,8 +553,7 @@ impl Adapter for MongoCasbinAdapter {
 
     async fn remove_policy(&mut self, sec: &str, ptype: &str, rule: Vec<String>) -> casbin::Result<bool> {
         let id = CasbinRule::id(sec, ptype, &rule);
-        let adapter = self.clone();
-        self.run_policy_write(move |session| {
+        self.run_policy_write(false, move |adapter, session| {
             Box::pin(async move {
                 let result =
                     mongo_ops::delete_one(&adapter.collection(), doc! { "_id": id }, session).await?;
@@ -566,8 +576,7 @@ impl Adapter for MongoCasbinAdapter {
         }
         let ids = rules.iter().map(|rule| CasbinRule::id(sec, ptype, rule)).collect::<Vec<_>>();
         let expected_count = rules.len() as u64;
-        let adapter = self.clone();
-        self.run_policy_write(move |session| {
+        self.run_policy_write(false, move |adapter, session| {
             Box::pin(async move {
                 let result =
                     mongo_ops::delete_many(&adapter.collection(), doc! { "_id": { "$in": ids } }, session)
@@ -590,8 +599,7 @@ impl Adapter for MongoCasbinAdapter {
             return Ok(false);
         }
         let filter = Self::filtered_query(sec, ptype, field_index, &field_values);
-        let adapter = self.clone();
-        self.run_policy_write(move |session| {
+        self.run_policy_write(false, move |adapter, session| {
             Box::pin(async move {
                 let result = mongo_ops::delete_many(&adapter.collection(), filter, session).await?;
                 let changed = result.deleted_count > 0;

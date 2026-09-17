@@ -1,8 +1,7 @@
 //! 域 D04 `bulk_job` 的索引声明：bulk_selection_snapshot、bulk_selection_item、background_job、background_job_item。
 //!
-//! 集合名常量取 `BulkJobExt` 关联常量（唯一权威来源，conventions §4.3）：
-//! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
-//! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
+//! 集合名直接引用 `BulkJobExt` 关联常量（唯一权威来源，conventions §4.3），
+//! 不做本地转存。
 
 use mongodb::bson::{Document, doc};
 use mongodb::options::IndexOptions;
@@ -10,15 +9,6 @@ use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
 use crate::repository::extensions::BulkJobExt;
-
-/// `bulk_selection_snapshot` 集合名。
-pub(crate) const BULK_SELECTION_SNAPSHOTS: &str = <mongodb::Database as BulkJobExt>::BULK_SELECTION_SNAPSHOTS;
-/// `bulk_selection_item` 集合名。
-pub(crate) const BULK_SELECTION_ITEMS: &str = <mongodb::Database as BulkJobExt>::BULK_SELECTION_ITEMS;
-/// `background_job` 集合名。
-pub(crate) const BACKGROUND_JOBS: &str = <mongodb::Database as BulkJobExt>::BACKGROUND_JOBS;
-/// `background_job_item` 集合名。
-pub(crate) const BACKGROUND_JOB_ITEMS: &str = <mongodb::Database as BulkJobExt>::BACKGROUND_JOB_ITEMS;
 
 /// 创建本域集合的幂等命名索引。
 ///
@@ -37,10 +27,11 @@ pub(crate) const BACKGROUND_JOB_ITEMS: &str = <mongodb::Database as BulkJobExt>:
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
-    create_indexes(db, BULK_SELECTION_SNAPSHOTS, bulk_selection_snapshot_indexes()).await?;
-    create_indexes(db, BULK_SELECTION_ITEMS, bulk_selection_item_indexes()).await?;
-    create_indexes(db, BACKGROUND_JOBS, background_job_indexes()).await?;
-    create_indexes(db, BACKGROUND_JOB_ITEMS, background_job_item_indexes()).await?;
+    create_indexes(db, <Database as BulkJobExt>::BULK_SELECTION_SNAPSHOTS, bulk_selection_snapshot_indexes())
+        .await?;
+    create_indexes(db, <Database as BulkJobExt>::BULK_SELECTION_ITEMS, bulk_selection_item_indexes()).await?;
+    create_indexes(db, <Database as BulkJobExt>::BACKGROUND_JOBS, background_job_indexes()).await?;
+    create_indexes(db, <Database as BulkJobExt>::BACKGROUND_JOB_ITEMS, background_job_item_indexes()).await?;
     Ok(())
 }
 

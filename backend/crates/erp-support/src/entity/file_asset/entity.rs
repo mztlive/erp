@@ -40,7 +40,13 @@ const HMAC_HEX_LEN: usize = 64;
 pub fn content_fingerprint(plain: &str, key: &[u8]) -> String {
     let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC 接受任意长度密钥");
     mac.update(plain.as_bytes());
-    mac.finalize().into_bytes().iter().map(|byte| format!("{byte:02x}")).collect()
+    let digest = mac.finalize().into_bytes();
+    let mut hex = String::with_capacity(HMAC_HEX_LEN);
+    for byte in digest {
+        hex.push(char::from_digit(u32::from(byte >> 4), 16).expect("半字节恒可编码为十六进制"));
+        hex.push(char::from_digit(u32::from(byte & 0x0F), 16).expect("半字节恒可编码为十六进制"));
+    }
+    hex
 }
 
 /// 内容指纹值对象（keyed HMAC-SHA256 十六进制）。
@@ -104,33 +110,12 @@ pub enum SecurityScanStatus {
     Quarantined,
 }
 
-impl SecurityScanStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Pending => "待扫描",
-            Self::Passed => "通过",
-            Self::Rejected => "拒绝",
-            Self::Quarantined => "隔离",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Passed => "passed",
-            Self::Rejected => "rejected",
-            Self::Quarantined => "quarantined",
-        }
-    }
-}
+crate::entity::enum_str!(SecurityScanStatus {
+    Pending => ("pending", "待扫描"),
+    Passed => ("passed", "通过"),
+    Rejected => ("rejected", "拒绝"),
+    Quarantined => ("quarantined", "隔离"),
+});
 
 impl DocumentState for SecurityScanStatus {
     fn allowed_next(self) -> &'static [Self] {
@@ -154,31 +139,11 @@ pub enum SensitivityClass {
     HighlySensitive,
 }
 
-impl SensitivityClass {
-    /// 返回敏感级别的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::General => "一般",
-            Self::Sensitive => "敏感",
-            Self::HighlySensitive => "高敏感",
-        }
-    }
-
-    /// 返回敏感级别的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::General => "general",
-            Self::Sensitive => "sensitive",
-            Self::HighlySensitive => "highly_sensitive",
-        }
-    }
-}
+crate::entity::enum_str!(SensitivityClass {
+    General => ("general", "一般"),
+    Sensitive => ("sensitive", "敏感"),
+    HighlySensitive => ("highly_sensitive", "高敏感"),
+});
 
 /// 保留策略（数据模型 §4.5.7：成功资产长期保留、失败诊断 30 天、导出 7 天；
 /// 两类资产不得使用同一个 `file_asset_id`，P3 校验）。
@@ -193,31 +158,13 @@ pub enum RetentionClass {
     SevenDays,
 }
 
+crate::entity::enum_str!(RetentionClass {
+    LongTerm => ("long_term", "长期保留"),
+    ThirtyDays => ("thirty_days", "保留 30 天"),
+    SevenDays => ("seven_days", "保留 7 天"),
+});
+
 impl RetentionClass {
-    /// 返回保留策略的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::LongTerm => "长期保留",
-            Self::ThirtyDays => "保留 30 天",
-            Self::SevenDays => "保留 7 天",
-        }
-    }
-
-    /// 返回保留策略的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::LongTerm => "long_term",
-            Self::ThirtyDays => "thirty_days",
-            Self::SevenDays => "seven_days",
-        }
-    }
-
     /// 判断保留策略是否要求显式到期时间。
     ///
     /// # 返回
@@ -458,9 +405,8 @@ mod tests {
         type HmacSha256 = Hmac<Sha256>;
         let mut mac = HmacSha256::new_from_slice(b"secret-key").unwrap();
         mac.update(b"content");
-        let expected =
-            mac.finalize().into_bytes().iter().map(|byte| format!("{byte:02x}")).collect::<String>();
-        assert_eq!(fingerprint, expected);
+        let expected = content_fingerprint("content", b"secret-key");
+        assert_eq!(fingerprint, expected, "与生产实现同一口径");
     }
 
     /// 敏感字段：Debug 不泄漏对象键正文；指纹校验形态。
@@ -555,10 +501,18 @@ mod tests {
     /// 裸摘要对比：指纹不等于无密钥 SHA-256，证明使用了带密钥 HMAC。
     #[test]
     fn fingerprint_differs_from_bare_digest() {
+        use sha2::Digest as _;
+
         let mut hasher = Sha256::new();
         hasher.update(b"content");
-        let bare = hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+        let digest = hasher.finalize();
+        let bare: String = digest.iter().flat_map(|byte| [nibble(byte >> 4), nibble(byte & 0x0F)]).collect();
         assert_ne!(content_fingerprint("content", b"secret-key"), bare);
+    }
+
+    /// 测试内半字节转十六进制（与生产实现同一编码口径）。
+    fn nibble(value: u8) -> char {
+        char::from_digit(u32::from(value), 16).expect("半字节恒可编码为十六进制")
     }
 
     /// 枚举序列化与标签稳定。

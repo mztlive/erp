@@ -11,8 +11,6 @@ use crate::entity::auth::{LoginAccount, Secret};
 
 /// 账号名称最大长度。
 const NAME_MAX_LEN: usize = 64;
-/// 账号最大长度。
-const ACCOUNT_MAX_LEN: usize = 32;
 /// 邮箱最大长度。
 const EMAIL_MAX_LEN: usize = 128;
 /// 电话最大长度。
@@ -321,9 +319,12 @@ impl AccountCore {
 }
 
 /// 构造符合后台账号长度约束的规范化登录账号。
+///
+/// 以 [`LoginAccount`] 为唯一账号形状来源；后台账号在通用 3..64 区间上
+/// 进一步收敛到 ≤32，不改匹配语义（仅 trim、不改大小写）与错误文案。
 fn backoffice_login_account(account: impl Into<String>) -> Result<LoginAccount> {
     let account = LoginAccount::new(account)?;
-    if account.as_str().chars().count() > ACCOUNT_MAX_LEN {
+    if account.as_str().chars().count() > LoginAccount::BACKOFFICE_MAX_LEN {
         return Err(Error::from("账号长度不符合要求"));
     }
 

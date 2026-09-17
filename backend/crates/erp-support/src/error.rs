@@ -80,7 +80,7 @@ impl From<persistence_core::Error> for Error {
     fn from(error: persistence_core::Error) -> Self {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
-                Self::ConflictError(duplicate_key_conflict_message(&error))
+                Self::ConflictError(duplicate_key_conflict_message(error.duplicate_index_name()))
             },
             persistence_core::Error::OptimisticLockingError => {
                 Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
@@ -96,9 +96,27 @@ impl From<persistence_core::Error> for Error {
 
 /// 将唯一键冲突映射为面向用户的冲突提示。
 ///
-/// Support 唯一索引原先走旧 `services::Error` 的未知索引分支，因此保持通用
-/// 「数据已存在」文案，避免改变 HTTP 冲突提示。
-fn duplicate_key_conflict_message(_error: &persistence_core::Error) -> String {
+/// 按索引名做最小映射：`request_id`/`job_no` 与外部身份键给出各自的冲突
+/// 文案，未知索引回退到通用「数据已存在」文案（原先走旧 `services::Error`
+/// 的未知索引分支，保持 HTTP 冲突提示不变）。`Error::class` 保持 `Conflict`。
+///
+/// # 参数
+/// * `index` - `persistence_core::Error::duplicate_index_name` 提取的索引名；
+///   `None` 表示无法识别，走通用文案。
+fn duplicate_key_conflict_message(index: Option<&str>) -> String {
+    let index = index.unwrap_or_default();
+    if index.contains("request_id") {
+        return "相同请求已提交，请勿重复提交".to_string();
+    }
+    if index.contains("jobs_no") {
+        return "任务编号已存在，请勿重复提交".to_string();
+    }
+    if index.contains("external_identity") {
+        return "外部身份映射已存在，请勿重复提交".to_string();
+    }
+    if index.contains("storage_key") {
+        return "同一文件已登记，请勿重复提交".to_string();
+    }
     "数据已存在，请勿重复提交".to_string()
 }
 
@@ -120,6 +138,27 @@ mod tests {
     fn external_identity_unique_conflicts_keep_conflict_class() {
         let error = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom(
             "E11000 duplicate key error collection: erp.external_identity_maps index: uk_external_identity_maps_identity",
+        )));
+        assert_eq!(error.class(), ErrorClass::Conflict);
+        assert_eq!(
+            super::duplicate_key_conflict_message(Some("uk_external_identity_maps_identity")),
+            "外部身份映射已存在，请勿重复提交"
+        );
+    }
+
+    #[test]
+    fn known_conflict_indexes_map_to_specific_messages() {
+        let conflict = |index: &str| super::duplicate_key_conflict_message(Some(index));
+        assert_eq!(conflict("uk_background_jobs_request_id"), "相同请求已提交，请勿重复提交");
+        assert_eq!(conflict("uk_background_jobs_no"), "任务编号已存在，请勿重复提交");
+        assert_eq!(conflict("uk_file_assets_storage_key"), "同一文件已登记，请勿重复提交");
+        assert_eq!(super::duplicate_key_conflict_message(None), "数据已存在，请勿重复提交");
+    }
+
+    #[test]
+    fn unknown_conflict_index_falls_back_to_generic_message() {
+        let error = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom(
+            "E11000 duplicate key error collection: erp.jobs index: uk_some_future_index",
         )));
         assert_eq!(error.class(), ErrorClass::Conflict);
         assert_eq!(error.to_string(), "数据冲突: 数据已存在，请勿重复提交");

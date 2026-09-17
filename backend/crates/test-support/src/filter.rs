@@ -18,17 +18,50 @@ pub fn matches_filter(filter: &Document, object: &Value) -> bool {
 
 fn matches(filter: &Document, object: &Document) -> bool {
     filter.iter().all(|(key, condition)| match (key.as_str(), condition) {
-        ("$and", Bson::Array(parts)) => parts.iter().all(|part| matches(part.as_document().unwrap(), object)),
-        ("$or", Bson::Array(parts)) => parts.iter().any(|part| matches(part.as_document().unwrap(), object)),
+        ("$and", Bson::Array(parts)) => {
+            parts.iter().all(|part| matches(unsupported_as_document(part, "$and"), object))
+        },
+        ("$or", Bson::Array(parts)) => {
+            parts.iter().any(|part| matches(unsupported_as_document(part, "$or"), object))
+        },
         ("$expr", Bson::Boolean(value)) => *value,
         (_, Bson::Document(operator)) => {
-            assert_eq!(operator.len(), 1, "未知组合操作必须使测试失败");
+            assert_eq!(operator.len(), 1, "未知查询操作必须使测试失败");
             let values = operator.get_array("$in").expect("未知查询操作必须使测试失败");
             object.get(key).is_some_and(|value| values.contains(value))
         },
-        (key, _) if key.starts_with('$') => panic!("未知查询操作: {key}"),
+        (key, _) if key.starts_with('$') => unsupported_operator(key),
         (_, value) => object.get(key) == Some(value),
     })
+}
+
+/// 将查询数组元素转为文档；非文档一律走统一的未知操作失败路径。
+///
+/// # 参数
+/// * `part` - `$and`/`$or` 数组中的单个元素
+/// * `operator` - 所属的组合操作名，仅用于失败信息
+///
+/// # 返回值
+/// 返回元素对应的文档引用。
+///
+/// # Panics
+/// 元素不是文档时 panic，信息与其他未知查询操作保持一致。
+fn unsupported_as_document<'a>(part: &'a Bson, operator: &str) -> &'a Document {
+    part.as_document().unwrap_or_else(|| unsupported_operator(operator))
+}
+
+/// 以统一信息使测试失败；所有不支持的查询操作都走本函数。
+///
+/// # 参数
+/// * `operation` - 不支持的操作名
+///
+/// # 返回值
+/// 永不返回。
+///
+/// # Panics
+/// 总是 panic，信息前缀固定为 `未知查询操作`。
+fn unsupported_operator(operation: &str) -> ! {
+    panic!("未知查询操作: {operation}")
 }
 
 #[cfg(test)]

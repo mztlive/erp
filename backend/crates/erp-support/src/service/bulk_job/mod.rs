@@ -24,16 +24,16 @@ use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::dto::bulk_job::{self as dto};
 pub use crate::dto::bulk_job::{
     BackgroundJobItemView, BackgroundJobListParams, BackgroundJobView, BulkSelectionItemView,
     BulkSelectionSnapshotListParams, BulkSelectionSnapshotView, CancelAllBackgroundJobsRequest,
-    CancelAllBackgroundJobsResponse, CancelBackgroundJobRequest, ConfirmBulkSelectionSnapshotRequest,
-    CreateBackgroundJobItemRequest, CreateBackgroundJobRequest, CreateBulkSelectionItemRequest,
-    CreateBulkSelectionSnapshotRequest, ExpireBulkSelectionSnapshotRequest, PageView,
+    CancelAllBackgroundJobsResponse, CancelBackgroundJobFailure, CancelBackgroundJobRequest,
+    ConfirmBulkSelectionSnapshotRequest, CreateBackgroundJobItemRequest, CreateBackgroundJobRequest,
+    CreateBulkSelectionItemRequest, CreateBulkSelectionSnapshotRequest, ExpireBulkSelectionSnapshotRequest,
+    PageView,
 };
 use crate::entity::bulk_job::{
-    BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId,
+    BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId, BackgroundJobItem,
     BackgroundJobItemDraft, BulkSelectionItemDraft, BulkSelectionSnapshot, BulkSelectionSnapshotAggregate,
     BulkSelectionSnapshotAggregateData, BulkSelectionSnapshotId,
 };
@@ -90,31 +90,18 @@ impl BulkJobService {
     ) -> Result<PageView<BulkSelectionSnapshotView>> {
         params.validate()?;
         let query = params.normalized()?;
+        let (page, page_size, sort_by, sort_ascending) = query.paging.into_filter_parts();
         let filter = BulkSelectionSnapshotFilter {
             selection_type: query.selection_type,
             status: query.status,
             created_by: query.created_by,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, dto::SortDir::Asc),
+            page,
+            page_size,
+            sort_by,
+            sort_ascending,
         };
         let page = self.db.bulk_selection_snapshots().search_snapshots(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| BulkSelectionSnapshotView {
-                id: row.id,
-                selection_type: row.selection_type,
-                data_cutoff_at: row.data_cutoff_at,
-                item_count: row.item_count,
-                created_by: row.created_by,
-                expires_at: row.expires_at,
-                status: row.status,
-                version: row.version,
-                created_at: row.created_at,
-            })
-            .collect();
+        let items = page.items.into_iter().map(BulkSelectionSnapshotView::from).collect();
 
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
@@ -273,20 +260,7 @@ impl BulkJobService {
             .bulk_selection_items()
             .search_items(&snapshot_id, result_status, page, page_size, &mut NoTransaction)
             .await?;
-        let items = result
-            .items
-            .into_iter()
-            .map(|row| BulkSelectionItemView {
-                id: row.id,
-                selection_snapshot_id: snapshot_id.to_string(),
-                object_type: row.object_type,
-                object_id: row.object_id,
-                expected_version: row.expected_version,
-                expected_hash: row.expected_hash,
-                result_status: row.result_status,
-                result_code: row.result_code,
-            })
-            .collect();
+        let items = result.items.into_iter().map(BulkSelectionItemView::from).collect();
 
         Ok(PageView { items, total: result.total, page, page_size })
     }
@@ -315,47 +289,20 @@ impl BulkJobService {
     ) -> Result<PageView<BackgroundJobView>> {
         params.validate()?;
         let query = params.normalized()?;
+        let (page, page_size, sort_by, sort_ascending) = query.paging.into_filter_parts();
         let filter = BackgroundJobFilter {
             job_no: query.job_no,
             job_type: query.job_type,
             domain_job_type: query.domain_job_type,
             status: query.status,
             requested_by: if is_admin { query.requested_by } else { Some(actor.id().to_string()) },
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, dto::SortDir::Asc),
+            page,
+            page_size,
+            sort_by,
+            sort_ascending,
         };
         let page = self.db.background_jobs().search_background_jobs(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| BackgroundJobView {
-                id: row.id,
-                job_no: row.job_no,
-                job_type: row.job_type,
-                domain_job_type: row.domain_job_type,
-                domain_job_id: row.domain_job_id,
-                selection_snapshot_id: row.selection_snapshot_id,
-                requested_by: row.requested_by,
-                request_id: row.request_id,
-                input_file_asset_id: row.input_file_asset_id,
-                result_file_asset_id: row.result_file_asset_id,
-                status: row.status,
-                total_count: row.total_count,
-                processed_count: row.processed_count,
-                success_count: row.success_count,
-                skipped_count: row.skipped_count,
-                failed_count: row.failed_count,
-                started_at: row.started_at,
-                finished_at: row.finished_at,
-                last_progress_at: row.last_progress_at,
-                result_expires_at: row.result_expires_at,
-                error_summary: row.error_summary,
-                version: row.version,
-                created_at: row.created_at,
-            })
-            .collect();
+        let items = page.items.into_iter().map(BackgroundJobView::from).collect();
 
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
@@ -412,38 +359,7 @@ impl BulkJobService {
         actor: &AuditActor,
     ) -> Result<BackgroundJobView> {
         req.validate()?;
-        let job_id = BackgroundJobId::new(next_id());
-        let drafts = req
-            .items
-            .into_iter()
-            .map(|item| BackgroundJobItemDraft {
-                id: erp_core::ids::BackgroundJobItemId::new(next_id()),
-                object_type: item.object_type,
-                object_id: item.object_id,
-                expected_version: item.expected_version,
-                expected_hash: item.expected_hash,
-                worksheet_name: item.worksheet_name,
-                source_row_no: item.source_row_no,
-                source_column_name: item.source_column_name,
-            })
-            .collect();
-        let aggregate = BackgroundJobAggregate::new(
-            job_id.clone(),
-            BackgroundJobAggregateData {
-                job_no: req.job_no,
-                job_type: req.job_type,
-                domain_job_type: req.domain_job_type,
-                domain_job_id: req.domain_job_id,
-                selection_snapshot_id: req.selection_snapshot_id.map(BulkSelectionSnapshotId::new),
-                requested_by: actor.id().to_string(),
-                request_id: req.request_id,
-                input_file_asset_id: req.input_file_asset_id.map(FileAssetId::new),
-                result_file_asset_id: None,
-                declared_total_count: req.total_count,
-            },
-            drafts,
-        )?;
-        let (job, items) = aggregate.into_parts();
+        let (job, items) = build_job_parts(req, actor)?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "background_job.create",
@@ -471,21 +387,31 @@ impl BulkJobService {
             Ok(BackgroundJobRegistration::ConflictDifferentPayload(_)) => {
                 Err(Error::ConflictError("同一请求身份已用于不同后台任务载荷".to_string()))
             },
-            Err(persistence_core::Error::DuplicateKey(_)) => {
-                match self.db.bulk_job().registration_by_request_id(&job, &mut NoTransaction).await? {
-                    Some(BackgroundJobRegistration::ReplaySame(existing)) => Ok(existing.into()),
-                    Some(BackgroundJobRegistration::ConflictDifferentPayload(_)) => {
-                        Err(Error::ConflictError(
-                            "同一请求身份已用于不同后台任务载荷；历史无指纹任务须使用新的请求身份"
-                                .to_string(),
-                        ))
-                    },
-                    Some(BackgroundJobRegistration::Created) | None => {
-                        Err(Error::ConflictError("后台任务唯一竞争结果已变化，请刷新后重试".to_string()))
-                    },
-                }
-            },
+            Err(persistence_core::Error::DuplicateKey(_)) => self.resolve_creation_race(&job).await,
             Err(error) => Err(error.into()),
+        }
+    }
+
+    /// 唯一键竞争后按 `request_id` 回查仲裁结果（幂等恢复路径）。
+    ///
+    /// # 参数
+    /// * `job` - 本次尝试创建的任务（含 `request_id` 幂等身份）
+    ///
+    /// # 返回
+    /// 幂等命中的既有任务视图。
+    ///
+    /// # 错误
+    /// * `ConflictError` - 请求身份已被不同载荷占用，或竞争结果已变化需刷新重试
+    /// * `RepositoryError` - 回查仲裁结果时数据库查询失败
+    async fn resolve_creation_race(&self, job: &BackgroundJob) -> Result<BackgroundJobView> {
+        match self.db.bulk_job().registration_by_request_id(job, &mut NoTransaction).await? {
+            Some(BackgroundJobRegistration::ReplaySame(existing)) => Ok(existing.into()),
+            Some(BackgroundJobRegistration::ConflictDifferentPayload(_)) => Err(Error::ConflictError(
+                "同一请求身份已用于不同后台任务载荷；历史无指纹任务须使用新的请求身份".to_string(),
+            )),
+            Some(BackgroundJobRegistration::Created) | None => {
+                Err(Error::ConflictError("后台任务唯一竞争结果已变化，请刷新后重试".to_string()))
+            },
         }
     }
 
@@ -582,24 +508,7 @@ impl BulkJobService {
             .background_job_items()
             .search_job_items(&job_id, status, page, page_size, &mut NoTransaction)
             .await?;
-        let items = result
-            .items
-            .into_iter()
-            .map(|row| BackgroundJobItemView {
-                id: row.id,
-                background_job_id: job_id.to_string(),
-                item_no: row.item_no,
-                object_type: row.object_type,
-                object_id: row.object_id,
-                worksheet_name: row.worksheet_name,
-                source_row_no: row.source_row_no,
-                status: row.status,
-                result_code: row.result_code,
-                result_summary: row.result_summary,
-                result_object_type: row.result_object_type,
-                result_object_id: row.result_object_id,
-            })
-            .collect();
+        let items = result.items.into_iter().map(BackgroundJobItemView::from).collect();
 
         Ok(PageView { items, total: result.total, page, page_size })
     }
@@ -620,9 +529,7 @@ impl BulkJobService {
             .filter(|item| is_business_document_type(&item.object_type))
             .map(|item| item.object_id.clone())
             .collect::<Vec<_>>();
-        let mut seen = HashSet::new();
-        let unique_ids =
-            document_ids.iter().filter(|id| seen.insert((*id).clone())).cloned().collect::<Vec<_>>();
+        let unique_ids = dedup_preserving_order(document_ids.iter().cloned());
         let registered_ids = self
             .documents
             .find_registered_ids(&unique_ids, &mut NoTransaction)
@@ -763,6 +670,67 @@ fn support_error_as_persistence(error: crate::error::Error) -> persistence_core:
     }
 }
 
+/// 由创建请求组装后台任务聚合并拆分为父实体与逐项行。
+///
+/// # 参数
+/// * `req` - 创建请求（含逐项结果与声明总数）
+/// * `actor` - 已通过鉴权的审计操作人（记为发起人）
+///
+/// # 返回
+/// 返回待写入事务的任务实体与逐项行。
+///
+/// # 错误
+/// 请求体校验失败或聚合不变量（空目标、总数不一致）失败时返回错误。
+fn build_job_parts(
+    req: CreateBackgroundJobRequest,
+    actor: &AuditActor,
+) -> Result<(BackgroundJob, Vec<BackgroundJobItem>)> {
+    let job_id = BackgroundJobId::new(next_id());
+    let drafts = req
+        .items
+        .into_iter()
+        .map(|item| BackgroundJobItemDraft {
+            id: erp_core::ids::BackgroundJobItemId::new(next_id()),
+            object_type: item.object_type,
+            object_id: item.object_id,
+            expected_version: item.expected_version,
+            expected_hash: item.expected_hash,
+            worksheet_name: item.worksheet_name,
+            source_row_no: item.source_row_no,
+            source_column_name: item.source_column_name,
+        })
+        .collect();
+    let aggregate = BackgroundJobAggregate::new(
+        job_id,
+        BackgroundJobAggregateData {
+            job_no: req.job_no,
+            job_type: req.job_type,
+            domain_job_type: req.domain_job_type,
+            domain_job_id: req.domain_job_id,
+            selection_snapshot_id: req.selection_snapshot_id.map(BulkSelectionSnapshotId::new),
+            requested_by: actor.id().to_string(),
+            request_id: req.request_id,
+            input_file_asset_id: req.input_file_asset_id.map(FileAssetId::new),
+            result_file_asset_id: None,
+            declared_total_count: req.total_count,
+        },
+        drafts,
+    )?;
+    Ok(aggregate.into_parts())
+}
+
+/// 单次遍历完成保序去重（替代“map→filter+clone→collect”三遍克隆遍历）。
+///
+/// # 参数
+/// * `ids` - 待去重的 ID 序列
+///
+/// # 返回
+/// 返回保序去重后的 ID 集合；去重语义与 `NotFound` 行为不变。
+fn dedup_preserving_order(ids: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    ids.into_iter().filter(|id| seen.insert(id.clone())).collect()
+}
+
 /// 按请求顺序定位首个尚未注册的业务单据 ID。
 ///
 /// # 参数
@@ -785,16 +753,7 @@ fn first_unregistered_document_id<'a>(
 mod tests {
     use std::collections::HashSet;
 
-    use super::{first_unregistered_document_id, is_business_document_type};
-
-    #[test]
-    fn business_document_type_matching_is_exact_and_fail_closed() {
-        assert!(is_business_document_type("sales_order"));
-        assert!(is_business_document_type("payment_reversal"));
-        assert!(!is_business_document_type(" Sales_order "));
-        assert!(!is_business_document_type("SALES_ORDER"));
-        assert!(!is_business_document_type("unknown"));
-    }
+    use super::first_unregistered_document_id;
 
     #[test]
     fn registration_membership_preserves_first_missing_request_order() {

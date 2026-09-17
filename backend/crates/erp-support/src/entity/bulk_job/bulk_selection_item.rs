@@ -30,31 +30,11 @@ pub enum SelectionItemStatus {
     Failed,
 }
 
-impl SelectionItemStatus {
-    /// 返回结果状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Success => "成功",
-            Self::Skipped => "跳过",
-            Self::Failed => "失败",
-        }
-    }
-
-    /// 返回结果状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Success => "success",
-            Self::Skipped => "skipped",
-            Self::Failed => "failed",
-        }
-    }
-}
+crate::entity::enum_str!(SelectionItemStatus {
+    Success => ("success", "成功"),
+    Skipped => ("skipped", "跳过"),
+    Failed => ("failed", "失败"),
+});
 
 /// 选择项创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

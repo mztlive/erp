@@ -1,8 +1,7 @@
 //! 域 D01 `source_registry` 的索引声明：source_system、external_identity_map、external_identity_target。
 //!
-//! 集合名常量取 `SourceRegistryExt` 关联常量（唯一权威来源，conventions §4.3）：
-//! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
-//! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
+//! 集合名直接引用 `SourceRegistryExt` 关联常量（唯一权威来源，conventions §4.3），
+//! 不做本地转存。
 
 use mongodb::bson::{Document, doc};
 use mongodb::options::IndexOptions;
@@ -10,15 +9,6 @@ use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
 use crate::repository::extensions::SourceRegistryExt;
-
-/// `source_system` 集合名。
-pub(crate) const SOURCE_SYSTEMS: &str = <mongodb::Database as SourceRegistryExt>::SOURCE_SYSTEMS;
-/// `external_identity_map` 集合名。
-pub(crate) const EXTERNAL_IDENTITY_MAPS: &str =
-    <mongodb::Database as SourceRegistryExt>::EXTERNAL_IDENTITY_MAPS;
-/// `external_identity_target` 集合名。
-pub(crate) const EXTERNAL_IDENTITY_TARGETS: &str =
-    <mongodb::Database as SourceRegistryExt>::EXTERNAL_IDENTITY_TARGETS;
 
 /// 创建本域集合的幂等命名索引。
 ///
@@ -33,9 +23,19 @@ pub(crate) const EXTERNAL_IDENTITY_TARGETS: &str =
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
-    create_indexes(db, SOURCE_SYSTEMS, source_system_indexes()).await?;
-    create_indexes(db, EXTERNAL_IDENTITY_MAPS, external_identity_map_indexes()).await?;
-    create_indexes(db, EXTERNAL_IDENTITY_TARGETS, external_identity_target_indexes()).await?;
+    create_indexes(db, <Database as SourceRegistryExt>::SOURCE_SYSTEMS, source_system_indexes()).await?;
+    create_indexes(
+        db,
+        <Database as SourceRegistryExt>::EXTERNAL_IDENTITY_MAPS,
+        external_identity_map_indexes(),
+    )
+    .await?;
+    create_indexes(
+        db,
+        <Database as SourceRegistryExt>::EXTERNAL_IDENTITY_TARGETS,
+        external_identity_target_indexes(),
+    )
+    .await?;
     Ok(())
 }
 

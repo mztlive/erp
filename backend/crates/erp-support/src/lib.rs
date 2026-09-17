@@ -12,9 +12,9 @@ pub use application_core::PageView;
 pub use dto::bulk_job::{
     BackgroundJobItemView, BackgroundJobListParams, BackgroundJobView, BulkSelectionItemView,
     BulkSelectionSnapshotListParams, BulkSelectionSnapshotView, CancelAllBackgroundJobsRequest,
-    CancelAllBackgroundJobsResponse, CancelBackgroundJobRequest, ConfirmBulkSelectionSnapshotRequest,
-    CreateBackgroundJobItemRequest, CreateBackgroundJobRequest, CreateBulkSelectionItemRequest,
-    CreateBulkSelectionSnapshotRequest, ExpireBulkSelectionSnapshotRequest,
+    CancelAllBackgroundJobsResponse, CancelBackgroundJobFailure, CancelBackgroundJobRequest,
+    ConfirmBulkSelectionSnapshotRequest, CreateBackgroundJobItemRequest, CreateBackgroundJobRequest,
+    CreateBulkSelectionItemRequest, CreateBulkSelectionSnapshotRequest, ExpireBulkSelectionSnapshotRequest,
 };
 pub use dto::file_asset::{
     AttachToDocumentRequest, DestroyFileAssetRequest, DocumentAttachmentView, FileAssetListItemView,

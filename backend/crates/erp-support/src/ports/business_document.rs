@@ -9,28 +9,29 @@ use crate::error::{Error, Result};
 ///
 /// Support does not depend on `erp-workflow`. Composition adapters map these
 /// codes to the workflow catalog; this list is the consumer snapshot of the
-/// twenty frozen snake_case variants.
+/// twenty frozen snake_case variants. Entries are sorted for binary search;
+/// keep them sorted when adding new codes.
 pub const BUSINESS_DOCUMENT_TYPE_CODES: &[&str] = &[
-    "sales_order",
-    "voucher_sales_order",
-    "sales_change_order",
-    "purchase_order",
-    "purchase_change_order",
-    "stock_adjustment",
+    "customer_acceptance",
     "customer_receipt",
-    "supplier_payment",
     "customer_refund",
-    "supplier_refund",
-    "receipt_reversal",
-    "payment_reversal",
-    "purchase_receipt",
     "delivery",
     "electronic_delivery",
-    "service_fulfillment",
-    "customer_acceptance",
     "invoice",
-    "sales_return_case",
+    "payment_reversal",
+    "purchase_change_order",
+    "purchase_order",
+    "purchase_receipt",
     "purchase_return_order",
+    "receipt_reversal",
+    "sales_change_order",
+    "sales_order",
+    "sales_return_case",
+    "service_fulfillment",
+    "stock_adjustment",
+    "supplier_payment",
+    "supplier_refund",
+    "voucher_sales_order",
 ];
 
 /// Return whether `object_type` is a frozen business-document type code.
@@ -38,7 +39,7 @@ pub const BUSINESS_DOCUMENT_TYPE_CODES: &[&str] = &[
 /// Matching is exact and fail-closed: whitespace, aliases and case folding are
 /// rejected so bulk-job target validation keeps the original DocumentType contract.
 pub fn is_business_document_type(object_type: &str) -> bool {
-    BUSINESS_DOCUMENT_TYPE_CODES.contains(&object_type)
+    BUSINESS_DOCUMENT_TYPE_CODES.binary_search(&object_type).is_ok()
 }
 
 /// Port support uses to read registered business-document ids without workflow types.
@@ -82,5 +83,8 @@ mod tests {
         assert!(!is_business_document_type("SALES_ORDER"));
         assert!(!is_business_document_type("unknown"));
         assert_eq!(BUSINESS_DOCUMENT_TYPE_CODES.len(), 20);
+        let mut sorted = BUSINESS_DOCUMENT_TYPE_CODES.to_vec();
+        sorted.sort_unstable();
+        assert_eq!(sorted, BUSINESS_DOCUMENT_TYPE_CODES, "类型码须保持有序以支持二分查找");
     }
 }

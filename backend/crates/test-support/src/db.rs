@@ -5,8 +5,16 @@ use uuid::Uuid;
 
 use crate::{Error, Result};
 
-/// 数据库名最大字节数（MongoDB 上限 64 字节，预留后缀空间）。
+/// 数据库名最大字符数（MongoDB 上限 64 字节；字符集已过滤为 ASCII，
+/// 此处按字符计数，预留后缀空间）。
 const MAX_DB_NAME_LEN: usize = 32;
+
+/// 随机十六进制串截取长度：数据库名后缀。
+pub(crate) const UUID_DB_SUFFIX_LEN: usize = 8;
+/// 随机十六进制串截取长度：种子角色 ID 后缀。
+pub(crate) const UUID_ROLE_SUFFIX_LEN: usize = 8;
+/// 随机十六进制串截取长度：种子账号 ID 后缀。
+pub(crate) const UUID_ACCOUNT_SUFFIX_LEN: usize = 12;
 
 /// 每个测试数据库内创建的标记集合，保证数据库真实存在、`drop` 可生效。
 const FIXTURE_COLLECTION: &str = "_fixture";
@@ -77,28 +85,42 @@ impl TestDb {
     /// 全部索引删除成功时返回 `()`。
     ///
     /// # 错误
-    /// 任一索引不存在或删除失败时返回 MongoDB 错误。
+    /// 任一索引不存在或删除失败时返回错误（已统一为 [`crate::Error`]，
+    /// 与 `TestDb::new` 等其他公开方法的错误风格一致）。
     ///
     /// # 关键业务约束
     /// 仅测试夹具可调用；不得替代生产唯一索引。生产路径必须继续依赖这些索引。
-    pub async fn drop_named_indexes(
-        &self,
-        collection: &str,
-        index_names: &[&str],
-    ) -> mongodb::error::Result<()> {
+    pub async fn drop_named_indexes(&self, collection: &str, index_names: &[&str]) -> Result<()> {
         let target = self.db.collection::<mongodb::bson::Document>(collection);
         for name in index_names {
             target.drop_index(*name).await?;
         }
         Ok(())
     }
+
+    /// 显式清理测试数据库并传播错误。
+    ///
+    /// `Drop` 的隐式清理不保证在进程退出前完成且丢弃错误；需要确定性
+    /// 清理的用例应在末尾调用本方法。`Drop` 仅保留尽力而为的兜底。
+    ///
+    /// # 返回值
+    /// 清理成功时返回 `()`。
+    ///
+    /// # 错误
+    /// 数据库删除失败时返回错误。
+    pub async fn cleanup(&self) -> Result<()> {
+        self.db.drop().await?;
+        Ok(())
+    }
 }
 
 impl Drop for TestDb {
-    /// 在独立线程中异步 drop 测试数据库。
+    /// 在独立线程中异步 drop 测试数据库（尽力而为的兜底）。
     ///
     /// 异步测试的 `Drop` 发生在运行时内部，直接 `block_on` 会恐慌；这里
-    /// 用独立当前线程运行时完成清理，避免影响测试进程。
+    /// 用独立当前线程运行时完成清理，避免影响测试进程。运行时构建失败与
+    /// `drop` 错误均被丢弃，且不保证在进程退出前完成——需要确定性清理
+    /// 的用例应显式调用 [`TestDb::cleanup`] 并传播错误。
     fn drop(&mut self) {
         let client = self.client.clone();
         let name = self.name.clone();
@@ -139,15 +161,19 @@ fn random_db_name(prefix: &str) -> String {
         .take(MAX_DB_NAME_LEN)
         .collect();
     let prefix = if sanitized.is_empty() { "test".to_string() } else { sanitized };
-    format!("{prefix}_{}", &Uuid::new_v4().simple().to_string()[..8])
+    format!("{prefix}_{}", uuid_hex_n(UUID_DB_SUFFIX_LEN))
 }
 
 /// 生成随机十六进制短串。
 ///
+/// # 参数
+/// * `len` - 截取长度（超过 32 时按 32 处理，保证不越界 panic）
+///
 /// # 返回值
-/// 返回 UUID v4 的前 12 位十六进制字符。
-pub(crate) fn uuid_hex() -> String {
-    Uuid::new_v4().simple().to_string()
+/// 返回 UUID v4 十六进制形式的前 `len` 个字符。
+pub(crate) fn uuid_hex_n(len: usize) -> String {
+    let hex = Uuid::new_v4().simple().to_string();
+    hex[..len.min(hex.len())].to_string()
 }
 
 #[cfg(test)]
