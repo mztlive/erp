@@ -6,11 +6,13 @@ mod cancel_blocked;
 mod decision_apply;
 mod notifications;
 mod query;
+mod query_contract;
 mod read_auth;
 mod resume_apply;
 mod tasks;
 mod upgrade;
 
+use std::future::Future;
 use std::sync::Arc;
 
 use application_core::AuditActor;
@@ -26,7 +28,7 @@ pub use query::{
 use serde::{Deserialize, Serialize};
 pub use upgrade::UpgradeBindingCommand;
 
-use super::idempotency::PreparedCommandIdentity;
+use super::idempotency::{PreparedCommandIdentity, command_may_have_committed, command_recovery_delay};
 use super::view::{ApprovalCommandView, OpenTaskSummary, map_command_view};
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::entity::document_registry::DocumentType;
@@ -225,7 +227,7 @@ fn ensure_expected_version(label: &str, expected: u64, actual: u64) -> Result<()
     if expected == actual {
         return Ok(());
     }
-    Err(Error::ConflictError(format!("{label}版本已变化，请刷新后重试")))
+    Err(Error::version_conflict(label))
 }
 
 /// CAS 未应用时失败关闭。
@@ -239,8 +241,79 @@ fn require_cas_applied<T>(outcome: crate::repository::bpm::CasWriteOutcome<T>, l
     }
 }
 
+/// 命令提交加恢复的通用编排模板。
+///
+/// 先执行调用方事务内提交；仅当错误表明命令可能已提交（收据唯一键竞争、
+/// 瞬态事务冲突或提交结果未知）时，才调用恢复函数回读胜者收据。
+///
+/// # 参数
+/// * `commit` - 事务内提交函数
+/// * `recover` - 提交疑似成功时的恢复函数
+///
+/// # 返回
+/// 返回提交或恢复得到的命令结果视图。
+///
+/// # 错误
+/// 提交失败且不属于可恢复形态，或恢复仍失败时返回原错误。
+pub(super) async fn commit_or_recover<T, Commit, Recover, CommitFut, RecoverFut>(
+    commit: Commit,
+    recover: Recover,
+) -> Result<T>
+where
+    Commit: FnOnce() -> CommitFut,
+    Recover: FnOnce(Error) -> RecoverFut,
+    CommitFut: Future<Output = Result<T>>,
+    RecoverFut: Future<Output = Result<T>>,
+{
+    match commit().await {
+        Ok(view) => Ok(view),
+        Err(error) if command_may_have_committed(&error) => recover(error).await,
+        Err(error) => Err(error),
+    }
+}
+
+/// 竞争提交后有限回读胜者收据的通用恢复模板。
+///
+/// 调用方每次以新会话执行只读回放；回放仍报可恢复错误则退避重试，遇到明确
+/// 失败立即返回，始终未见胜者则返回原始提交错误。
+///
+/// # 参数
+/// * `original_error` - 触发恢复的原始提交错误
+/// * `replay` - 每次以新会话回读胜者收据的回放函数
+///
+/// # 返回
+/// 回放命中胜者收据时返回其命令视图。
+///
+/// # 错误
+/// 回放明确失败时返回该错误；重试耗尽时返回原始提交错误。
+pub(super) async fn recover_by_replay<T, Replay, ReplayFut>(
+    original_error: Error,
+    mut replay: Replay,
+) -> Result<T>
+where
+    Replay: FnMut() -> ReplayFut,
+    ReplayFut: Future<Output = Result<Option<T>>>,
+{
+    for attempt in 0..COMMAND_RECOVERY_ATTEMPTS {
+        match replay().await {
+            Ok(Some(view)) => return Ok(view),
+            Ok(None) => {},
+            Err(error) if command_may_have_committed(&error) => {},
+            Err(error) => return Err(error),
+        }
+        if attempt + 1 < COMMAND_RECOVERY_ATTEMPTS {
+            tokio::time::sleep(command_recovery_delay(attempt)).await;
+        }
+    }
+    Err(original_error)
+}
+
+/// 竞争提交后允许的回放轮次上限；各命令共享同一退避序列。
+pub(super) const COMMAND_RECOVERY_ATTEMPTS: usize = 8;
+
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
     use std::str::FromStr;
 
     use application_core::AuditActor;
@@ -821,7 +894,7 @@ mod tests {
     #[test]
     fn resume_uncertain_result_recovery_always_opens_a_fresh_transaction() {
         let endpoint = runtime_source_fn("pub async fn resume_current_approver(", "async fn replay_resume(");
-        assert!(endpoint.contains("command_may_have_committed"));
+        assert!(endpoint.contains("commit_or_recover"));
         assert!(endpoint.contains("recover_resume_after_competing_commit"));
 
         let replay =
@@ -833,10 +906,89 @@ mod tests {
             "async fn recover_resume_after_competing_commit(",
             "async fn load_resume_task_guard(",
         );
-        assert!(recovery.contains("const RECOVERY_ATTEMPTS"));
+        assert!(recovery.contains("recover_by_replay"));
         assert!(recovery.contains("self.replay_resume"));
-        assert!(recovery.contains("command_recovery_delay"));
+        assert!(!recovery.contains("const RECOVERY_ATTEMPTS"));
         assert!(!recovery.contains("ClientSession"));
+
+        let template = include_str!("runtime_service.rs");
+        assert!(template.contains("COMMAND_RECOVERY_ATTEMPTS"));
+        assert!(template.contains("async fn commit_or_recover"));
+        assert!(template.contains("async fn recover_by_replay"));
+        assert!(template.contains("command_may_have_committed"));
+        assert!(template.contains("command_recovery_delay"));
+    }
+
+    #[test]
+    fn commit_recovery_template_converges_all_commands() {
+        let decision = include_str!("runtime_service/decision_apply.rs");
+        let cancel = include_str!("runtime_service/cancel_blocked.rs");
+        let resume = include_str!("runtime_service/resume_apply.rs");
+        let upgrade = include_str!("runtime_service/upgrade.rs");
+        for source in [decision, cancel, resume, upgrade] {
+            assert!(source.contains("recover_by_replay"));
+            assert!(!source.contains("const RECOVERY_ATTEMPTS"));
+            assert!(!source.contains("command_may_have_committed"));
+            assert!(!source.contains("command_recovery_delay("));
+        }
+        for source in [decision, cancel, resume, upgrade] {
+            assert!(source.contains("commit_or_recover"));
+        }
+    }
+
+    #[tokio::test]
+    async fn commit_or_recover_returns_commit_or_delegates_to_recovery() {
+        let ok: crate::error::Result<String> = super::commit_or_recover(
+            || async { Ok("committed".to_string()) },
+            |_| async { Ok("recovered".to_string()) },
+        )
+        .await;
+        assert_eq!(ok.unwrap(), "committed");
+
+        let recovered: crate::error::Result<String> = super::commit_or_recover(
+            || async { Err(Error::from_approval_code(ErrorCode::ApprovalTaskNotOpen)) },
+            |_| async { Err(Error::from_approval_code(ErrorCode::ApprovalTaskNotOpen)) },
+        )
+        .await;
+        assert!(recovered.is_err());
+
+        let delegated: crate::error::Result<String> = super::commit_or_recover(
+            || async {
+                Err(map_receipt_first_write_error(duplicate_key_error(Some(
+                    APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX,
+                ))))
+            },
+            |_| async { Ok("recovered".to_string()) },
+        )
+        .await;
+        assert_eq!(delegated.unwrap(), "recovered");
+    }
+
+    #[tokio::test]
+    async fn recover_by_replay_polls_until_winner_or_original_error() {
+        let winner: crate::error::Result<String> =
+            super::recover_by_replay(Error::ConflictError("原始提交错误".to_string()), || async {
+                Ok(Some("winner".to_string()))
+            })
+            .await;
+        assert_eq!(winner.unwrap(), "winner");
+
+        let attempts = Cell::new(0);
+        let retried: crate::error::Result<String> =
+            super::recover_by_replay(Error::ConflictError("原始提交错误".to_string()), || async {
+                let seen = attempts.get() + 1;
+                attempts.set(seen);
+                if seen < 3 { Ok(None) } else { Ok(Some("late-winner".to_string())) }
+            })
+            .await;
+        assert_eq!(retried.unwrap(), "late-winner");
+
+        let fatal: crate::error::Result<String> =
+            super::recover_by_replay(Error::ConflictError("原始提交错误".to_string()), || async {
+                Err::<Option<String>, Error>(Error::ValidationError("明确失败".to_string()))
+            })
+            .await;
+        assert!(matches!(fatal, Err(Error::ValidationError(_))));
     }
 
     fn decided_fixture(

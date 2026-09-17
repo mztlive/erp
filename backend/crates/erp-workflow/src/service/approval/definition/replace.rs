@@ -56,8 +56,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         let policy = policy_for_definition(&graph.definition)?;
         self.ensure_definition_admin(actor, &policy).await?;
         if let Some(view) = self
-            .replay_if_receipt(
-                &identity.current,
+            .replay_prepared_if_receipt(
+                &identity,
                 DefinitionResultExpectation::DefinitionId(request.definition_id.clone()),
             )
             .await?

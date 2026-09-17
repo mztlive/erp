@@ -1,4 +1,9 @@
 //! 中性 BPM 领域事件。不得包含 ERP URL、权限名、业务命令或通知模板。
+//!
+//! 序列化约定：引擎计划类型（`TransitionPlan`、`BpmEventKind`、`CommitRequired`、
+//! `TaskIntent`、`TaskCloseReason`、`Eligibility`）不做持久化，只透出模型快照
+//! （`ApprovalProcessInstance`/`ApprovalNodeExecution` 由 `model` 负责 serde）；
+//! 如确需透出计划，请按需派生并同步更新本约定。
 
 use crate::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use crate::model::ParticipantId;

@@ -235,20 +235,52 @@ pub(super) fn current_execution_matches_instance(
     }
 }
 
+impl RuntimeReadAuthorizationFacts {
+    /// 普通详情/历史读取：发起人、当前责任人，或对象读取与 DataScopeFact 同时成立。
+    ///
+    /// 纯判定（无 I/O），Service 只做仓储结果驱动的编排。
+    ///
+    /// # 返回
+    /// 允许读取时返回 `true`。
+    pub(super) fn ordinary_allowed(self) -> bool {
+        self.actor_active
+            && (self.initiator || self.current_responsibility || (self.object_readable && self.scope_covers))
+    }
+
+    /// 管理读取：同时具备类型级运行管理、对象读取与 DataScopeFact。
+    ///
+    /// 纯判定（无 I/O），Service 只做仓储结果驱动的编排。
+    ///
+    /// # 返回
+    /// 允许读取时返回 `true`。
+    pub(super) fn management_allowed(self) -> bool {
+        self.actor_active && self.runtime_admin && self.object_readable && self.scope_covers
+    }
+
+    /// Started 视图：由 BPM 启动人事实独立证明普通读取权。
+    ///
+    /// 纯判定（无 I/O），Service 只做仓储结果驱动的编排。
+    ///
+    /// # 返回
+    /// 允许读取时返回 `true`。
+    pub(super) fn started_allowed(self) -> bool {
+        self.actor_active && self.initiator
+    }
+}
+
 /// 普通详情/历史读取允许发起人、当前责任人，或对象读取与 DataScopeFact 同时成立。
 pub(super) fn ordinary_runtime_read_allowed(facts: RuntimeReadAuthorizationFacts) -> bool {
-    facts.actor_active
-        && (facts.initiator || facts.current_responsibility || (facts.object_readable && facts.scope_covers))
+    facts.ordinary_allowed()
 }
 
 /// 管理读取必须同时具备类型级运行管理、对象读取与 DataScopeFact。
 pub(super) fn management_runtime_read_allowed(facts: RuntimeReadAuthorizationFacts) -> bool {
-    facts.actor_active && facts.runtime_admin && facts.object_readable && facts.scope_covers
+    facts.management_allowed()
 }
 
 /// Started 视图由 BPM 启动人事实独立证明普通读取权。
 pub(super) fn started_runtime_read_allowed(facts: RuntimeReadAuthorizationFacts) -> bool {
-    facts.actor_active && facts.initiator
+    facts.started_allowed()
 }
 
 /// 当前开放审批任务是否精确证明 actor 对运行实例的当前责任。

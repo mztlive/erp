@@ -489,13 +489,20 @@ fn ordered_replacement_drafts(drafts: &[NodeReplacementDraft]) -> ModelResult<Ve
     }
     let mut ordered = drafts.iter().collect::<Vec<_>>();
     ordered.sort_by_key(|draft| draft.display_order);
-    for (index, draft) in ordered.iter().enumerate() {
+    let orders = ordered.iter().map(|draft| draft.display_order).collect::<Vec<_>>();
+    ensure_continuous_display_orders(&orders)?;
+    Ok(ordered)
+}
+
+/// 校验展示顺序从 1 连续无重复（节点与替换草稿共用同一顺序规则）。
+pub(crate) fn ensure_continuous_display_orders(orders: &[u32]) -> ModelResult<()> {
+    for (index, order) in orders.iter().enumerate() {
         let expected = u32::try_from(index + 1).map_err(|_| ModelError::InvalidField("节点顺序溢出"))?;
-        if draft.display_order != expected {
+        if *order != expected {
             return Err(ModelError::InvalidField("节点顺序必须从 1 连续且无重复"));
         }
     }
-    Ok(ordered)
+    Ok(())
 }
 
 /// 解析替换输入应使用的节点身份。

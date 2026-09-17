@@ -1,14 +1,14 @@
 //! 未提交单据绑定升级。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use bpm::ids::ApprovalCommandReceiptId;
 use id_generator::next_id;
 use persistence_core::Transactional;
 
-use super::super::idempotency::{
-    command_may_have_committed, command_recovery_delay, normalize_idempotency_key, upgrade_binding_identity,
-};
-use super::ApprovalRuntimeService;
+use super::super::idempotency::{normalize_idempotency_key, upgrade_binding_identity};
+use super::{ApprovalRuntimeService, commit_or_recover, recover_by_replay};
 use crate::entity::document_registry::{DocumentType, WorkflowActionId};
 use crate::error::{Error, Result};
 use crate::service::approval::binding::{
@@ -67,13 +67,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             action_id: WorkflowActionId::new(next_id()),
             receipt_id: ApprovalCommandReceiptId::new(next_id()),
         };
-        match self.commit_upgrade_binding(actor, prepared.clone()).await {
-            Ok(view) => Ok(view),
-            Err(error) if command_may_have_committed(&error) => {
-                self.recover_upgrade_binding(actor, prepared, error).await
-            },
-            Err(error) => Err(error),
-        }
+        commit_or_recover(
+            || self.commit_upgrade_binding(actor, prepared.clone()),
+            |error| self.recover_upgrade_binding(actor, prepared.clone(), error),
+        )
+        .await
     }
 
     /// 在唯一调用方事务内执行升级；绑定端口不得自行开启嵌套事务。
@@ -84,9 +82,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     ) -> Result<UpgradeBindingResultView> {
         let db = self.db.clone();
         let rbac = self.auth.clone();
-        let object_read = std::sync::Arc::clone(&self.object_read);
-        let upgrade = std::sync::Arc::clone(&self.upgrade);
-        let audit = std::sync::Arc::clone(&self.audit);
+        let object_read = Arc::clone(&self.object_read);
+        let upgrade = Arc::clone(&self.upgrade);
+        let audit = Arc::clone(&self.audit);
         let actor = actor.clone();
         self.db
             .client()
@@ -115,15 +113,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         command: UpgradeUnsubmittedDefinitionCommand,
         original_error: Error,
     ) -> Result<UpgradeBindingResultView> {
-        const RECOVERY_ATTEMPTS: usize = 8;
-        for attempt in 0..RECOVERY_ATTEMPTS {
+        recover_by_replay(original_error, || async {
             let db = self.db.clone();
             let rbac = self.auth.clone();
-            let upgrade = std::sync::Arc::clone(&self.upgrade);
+            let upgrade = Arc::clone(&self.upgrade);
             let actor = actor.clone();
             let command = command.clone();
-            let recovered = self
-                .db
+            self.db
                 .client()
                 .with_transaction(move |session| {
                     Box::pin(async move {
@@ -138,17 +134,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                         .await
                     })
                 })
-                .await;
-            match recovered {
-                Ok(Some(view)) => return Ok(view),
-                Ok(None) => {},
-                Err(error) if command_may_have_committed(&error) => {},
-                Err(error) => return Err(error),
-            }
-            if attempt + 1 < RECOVERY_ATTEMPTS {
-                tokio::time::sleep(command_recovery_delay(attempt)).await;
-            }
-        }
-        Err(original_error)
+                .await
+        })
+        .await
     }
 }

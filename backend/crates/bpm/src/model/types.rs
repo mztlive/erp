@@ -1,5 +1,10 @@
 //! 合同与计划第 3.1 节固定枚举，以及 BPM 模型领域错误。
 //!
+//! 错误分界：本模块 `ModelError` 用于状态机不变式失败
+//! （字段、状态、连线、计数溢出）；边界值对象构造失败
+//! （`SubjectRef`/`ParticipantId`/`Timestamp`/`ProcessKind` 编码）使用
+//! `crate::error::Error`。两套 `Invalid*` 不混用，见 `error.rs` 对照。
+//!
 //! 实例审批人绑定来源与节点执行分派来源必须是两个独立枚举。
 //! 目标公开 API 不得导出旧符号。
 

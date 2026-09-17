@@ -563,9 +563,7 @@ fn map_binding_upgrade_error(error: ApprovalBindingUpgradeError) -> Error {
         ApprovalBindingUpgradeError::ApprovalStarted => {
             Error::ConflictError("已启动单据不能升级审批绑定".to_string())
         },
-        ApprovalBindingUpgradeError::VersionConflict => {
-            Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-        },
+        ApprovalBindingUpgradeError::VersionConflict => Error::concurrent_modification(),
         ApprovalBindingUpgradeError::EmptyReason => Error::ValidationError("升级原因不能为空".to_string()),
         ApprovalBindingUpgradeError::BindingInvariant(error) => Error::Logic(error),
     }

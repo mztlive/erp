@@ -142,6 +142,14 @@ impl ApprovalProcessInstance {
         })
     }
 
+    /// 返回克隆后的强类型实例 ID，避免调用方手写字符串克隆与重包。
+    ///
+    /// # 返回
+    /// 返回与 `base.id` 同值的 [`ApprovalProcessInstanceId`]。
+    pub fn typed_id(&self) -> ApprovalProcessInstanceId {
+        ApprovalProcessInstanceId::new(self.base.id.clone())
+    }
+
     /// 返回实例乐观锁版本。
     ///
     /// # 参数

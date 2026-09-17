@@ -2,6 +2,8 @@
 //!
 //! 完整图可达性、发布完整性由后续阶段聚合校验；本模块只按顺序生成连线草稿。
 
+use std::collections::HashSet;
+
 use crate::ids::{ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
 use crate::model::types::{
     ApprovalTerminalResult, ApprovalTransitionEvent, ModelError, ModelResult, NODE_KEY_MAX_LEN,
@@ -124,7 +126,7 @@ fn normalize_keys(node_keys: &[String]) -> ModelResult<Vec<String>> {
     if node_keys.is_empty() {
         return Err(ModelError::InvalidField("线性流程至少需要一个节点"));
     }
-    let mut seen = Vec::with_capacity(node_keys.len());
+    let mut seen = HashSet::with_capacity(node_keys.len());
     let mut keys = Vec::with_capacity(node_keys.len());
     for key in node_keys {
         let trimmed = key.trim();
@@ -134,10 +136,9 @@ fn normalize_keys(node_keys: &[String]) -> ModelResult<Vec<String>> {
         if trimmed.len() > NODE_KEY_MAX_LEN {
             return Err(ModelError::InvalidField("节点键过长"));
         }
-        if seen.iter().any(|item: &String| item == trimmed) {
+        if !seen.insert(trimmed) {
             return Err(ModelError::InvalidField("节点键不能重复"));
         }
-        seen.push(trimmed.to_string());
         keys.push(trimmed.to_string());
     }
     Ok(keys)

@@ -103,30 +103,26 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
             .ok_or_else(definition_not_found)
     }
 
-    /// 同键同载荷回读详情。
+    /// 单一回放入口：按策略表先查当前 V3，再查已登记历史候选。
+    ///
+    /// 调用方只传期望结果约束；身份证明规则集中在
+    /// `replay_prepared_definition_receipt` 一处（当前 V3 与历史候选顺序固定）。
+    ///
+    /// # 参数
+    /// * `identity` - 当前 V3 身份与唯一历史候选
+    /// * `expectation` - 回放结果仍属原始资源的期望约束
+    ///
+    /// # 返回
+    /// 同载荷收据回读详情；无收据返回 `None`。
     ///
     /// # 错误
-    /// 异载荷、结果引用漂移或结果资源不匹配时返回稳定冲突。
-    pub(super) async fn replay_if_receipt(
-        &self,
-        identity: &ApprovalCommandIdentity,
-        expectation: DefinitionResultExpectation,
-    ) -> Result<Option<DefinitionDetailView>> {
-        replay_current_receipt(&self.db, identity, &expectation, &mut NoTransaction).await
-    }
-
-    /// 只查询命令声明的精确旧 scope/digest 候选。
-    ///
-    /// # 错误
-    /// 旧结果不能证明完整请求载荷时固定返回幂等载荷冲突。
-    pub(super) async fn replay_legacy_if_receipt(
+    /// 异载荷、结果引用漂移或旧结果无法证明完整载荷时返回稳定冲突。
+    pub(super) async fn replay_prepared_if_receipt(
         &self,
         identity: &PreparedDefinitionIdentity,
+        expectation: DefinitionResultExpectation,
     ) -> Result<Option<DefinitionDetailView>> {
-        let Some(legacy) = identity.legacy.as_ref() else {
-            return Ok(None);
-        };
-        replay_legacy_receipt(&self.db, identity.current.idempotency_key(), legacy, &mut NoTransaction).await
+        replay_prepared_definition_receipt(&self.db, identity, &expectation, &mut NoTransaction).await
     }
 
     /// 收据竞争、瞬态事务或提交结果未知后，在新会话有限回读胜者。
@@ -208,8 +204,9 @@ async fn replay_current_receipt(
     Ok(Some(detail_view(&graph)))
 }
 
-/// 事务内先读取 v3 收据；仅在 v3 不存在时读取命令声明的精确旧格式候选。
+/// 单一回放策略表（当前 V3 → 已登记历史候选），各命令入口共用。
 ///
+/// 事务内先读取 v3 收据；仅在 v3 不存在时读取命令声明的精确旧格式候选。
 /// 当前格式一旦存在即由 `reconcile_identity` 决定回放或冲突，不得降级至旧格式。
 pub(super) async fn replay_prepared_definition_receipt(
     db: &Database,

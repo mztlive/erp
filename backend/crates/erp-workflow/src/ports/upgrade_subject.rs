@@ -27,7 +27,7 @@ impl ApprovalUpgradeSubjectFacts {
     /// Reject a stale client-submitted business-object version.
     pub fn ensure_expected_business_object_version(&self, expected: u64) -> crate::error::Result<()> {
         if self.business_object_version != expected {
-            return Err(crate::error::Error::ConflictError("业务对象版本已变化，请刷新后重试".to_string()));
+            return Err(crate::error::Error::version_conflict("业务对象"));
         }
         Ok(())
     }

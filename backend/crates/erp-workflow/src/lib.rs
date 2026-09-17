@@ -1,7 +1,5 @@
 //! Workflow domain: approval integration, document registry and work-item commands.
 
-#![allow(clippy::too_many_arguments)]
-
 pub mod dto;
 pub mod entity;
 mod error;

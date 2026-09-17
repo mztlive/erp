@@ -68,6 +68,9 @@ impl PreparedCommandIdentity {
     }
 
     /// 返回 receipt 查询 scope，严格按 V3、已知历史格式顺序去重。
+    ///
+    /// 复杂度上限：候选数 = 1（V3）+ 已登记历史数（构造时去重冻结，通常 ≤ 3）；
+    /// 查询时线性扫描上界固定，不随单据量增长。
     pub fn scope_candidates(&self) -> Vec<&str> {
         let mut scopes = vec![self.current.scope().as_str()];
         for candidate in &self.legacy {

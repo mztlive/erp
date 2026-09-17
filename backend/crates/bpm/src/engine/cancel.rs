@@ -3,7 +3,7 @@
 use super::event::{BpmEvent, BpmEventKind};
 use super::transition_plan::{CommitRequired, TaskCloseReason, TaskIntent, TransitionPlan};
 use super::{EngineError, EngineResult};
-use crate::model::types::{ApprovalBlockerCode, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
+use crate::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use crate::model::{ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp};
 
 /// 取消命令。
@@ -39,16 +39,13 @@ pub fn cancel(
     let blocker = instance.blocker_code.or(current.blocker_code);
     current.cancel(command.now)?;
     instance.cancel(command.now)?;
-    let execution_id = crate::ids::ApprovalNodeExecutionId::new(current.base.id.clone());
+    let execution_id = current.typed_id();
     let mut plan = TransitionPlan::for_instance(instance, CommitRequired::Cancelled);
-    let mut event = BpmEvent::new(
-        BpmEventKind::InstanceCancelled,
-        crate::ids::ApprovalProcessInstanceId::new(plan.instance.base.id.clone()),
-        current.round_no,
-    )
-    .with_execution(execution_id.clone())
-    .with_actor(command.actor)
-    .with_reason(reason);
+    let mut event =
+        BpmEvent::new(BpmEventKind::InstanceCancelled, plan.instance.typed_id(), current.round_no)
+            .with_execution(execution_id.clone())
+            .with_actor(command.actor)
+            .with_reason(reason);
     if let Some(code) = blocker {
         event = event.with_blocker(code);
     }
@@ -74,12 +71,7 @@ fn ensure_cancellable(
     ) {
         return Err(EngineError::InvalidCommand("只有运行中或受阻实例可以取消"));
     }
-    if current.status.is_ended() {
-        return Err(EngineError::Uncommittable("当前执行已结束，无法形成合法取消计划"));
-    }
-    if current.status != ApprovalNodeExecutionStatus::Active
-        && current.status != ApprovalNodeExecutionStatus::Blocked
-    {
+    if !matches!(current.status, ApprovalNodeExecutionStatus::Active | ApprovalNodeExecutionStatus::Blocked) {
         return Err(EngineError::Uncommittable("当前执行状态无法形成合法取消计划"));
     }
     let Some(current_id) = instance.current_node_execution_id.as_ref() else {
@@ -88,6 +80,5 @@ fn ensure_cancellable(
     if current_id.as_ref() != current.base.id.as_str() {
         return Err(EngineError::InvalidCommand("执行不是实例当前令牌"));
     }
-    let _ = ApprovalBlockerCode::InternalInvariantBroken;
     Ok(())
 }

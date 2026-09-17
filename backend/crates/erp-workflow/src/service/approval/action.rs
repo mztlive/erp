@@ -83,6 +83,7 @@ impl DecisionActionParams {
     ///
     /// # 错误
     /// 无。
+    // 8 个 String 顺序敏感：调用方统一用结构体字面量组装，保留 `new` 仅作薄转发；告警逐项压制而非 crate 级。
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         approval_process_instance_id: String,
@@ -164,6 +165,7 @@ impl BlockedCancelActionParams {
     ///
     /// # 错误
     /// 无。
+    // 受阻取消 8 参数：与决定参数同形以便 Process 统一分派，顺序由字段名锚定；告警逐项压制。
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         approval_process_instance_id: String,

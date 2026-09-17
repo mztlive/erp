@@ -91,6 +91,25 @@ impl Error {
         Self::Coded(code)
     }
 
+    /// 版本冲突提示（“请刷新后重试”系的唯一真相源，按冲突对象参数化）。
+    ///
+    /// # 参数
+    /// * `target` - 冲突对象标签（如“任务”“实例”“执行”“快照”“单据”“数据”）
+    ///
+    /// # 返回
+    /// 返回携带统一措辞的 `ConflictError`。
+    pub fn version_conflict(target: impl Into<String>) -> Self {
+        Self::ConflictError(format!("{}版本已变化，请刷新后重试", target.into()))
+    }
+
+    /// 通用并发修改冲突提示（未命中具体对象时的兜底）。
+    ///
+    /// # 返回
+    /// 返回统一措辞的 `ConflictError`。
+    pub fn concurrent_modification() -> Self {
+        Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
+    }
+
     /// 返回结构化服务错误码。
     ///
     /// # 返回
@@ -110,9 +129,7 @@ impl From<persistence_core::Error> for Error {
             error @ persistence_core::Error::DuplicateKey(_) => {
                 Self::ConflictError(duplicate_key_conflict_message(&error))
             },
-            persistence_core::Error::OptimisticLockingError => {
-                Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            },
+            persistence_core::Error::OptimisticLockingError => Self::concurrent_modification(),
             error @ persistence_core::Error::TransientTransactionConflict(_) => {
                 Self::TransientTransaction(error)
             },

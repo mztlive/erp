@@ -1,5 +1,7 @@
 //! 原审批人恢复提交、回放与事务写入。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use bpm::engine::{CommitRequired, Eligibility};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
@@ -12,8 +14,8 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use super::super::apply_plan::PlannedWrites;
 use super::super::authorization::{AuthorizationFailure, converge_eligibility};
 use super::super::idempotency::{
-    PreparedCommandIdentity, ReceiptBranch, command_may_have_committed, command_recovery_delay,
-    map_receipt_first_write_error, normalize_idempotency_key, payload_conflict_error, resume_identity,
+    PreparedCommandIdentity, ReceiptBranch, map_receipt_first_write_error, normalize_idempotency_key,
+    payload_conflict_error, resume_identity,
 };
 use super::super::resume::prepare_resume;
 use super::super::runtime_query::{RuntimeRecoveryAction, recovery_options_for};
@@ -26,8 +28,9 @@ use super::read_auth::{
 };
 use super::tasks::{CreateOpenTasksInput, create_open_tasks};
 use super::{
-    ApprovalRuntimeService, ensure_command_actor, ensure_expected_version, find_receipt_for_identity,
-    hidden_not_found, load_exact_runtime_snapshot, persisted_command_view_with_executor, require_cas_applied,
+    ApprovalRuntimeService, commit_or_recover, ensure_command_actor, ensure_expected_version,
+    find_receipt_for_identity, hidden_not_found, load_exact_runtime_snapshot,
+    persisted_command_view_with_executor, recover_by_replay, require_cas_applied,
 };
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::entity::document_registry::DocumentType;
@@ -306,8 +309,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let submitted_by = snapshot.payload.submitted_by.clone();
         let ended_execution_id = current.base.id.clone();
         let rbac = self.auth.clone();
-        let object_read = std::sync::Arc::clone(&self.object_read);
-        let audit_port = std::sync::Arc::clone(&self.audit);
+        let object_read = Arc::clone(&self.object_read);
+        let audit_port = Arc::clone(&self.audit);
         let stock_resume_revalidation = (document_type == DocumentType::StockAdjustment).then(|| {
             (
                 assignee.current_assignee_participant_id.as_str().to_string(),
@@ -379,19 +382,18 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 })
             })
             .await;
-        match view {
-            Ok(view) => Ok(view),
-            Err(error) if command_may_have_committed(&error) => {
+        commit_or_recover(
+            move || async move { view },
+            |error| {
                 self.recover_resume_after_competing_commit(
                     actor,
-                    recovery_instance_id,
-                    recovery_identity,
+                    recovery_instance_id.clone(),
+                    recovery_identity.clone(),
                     error,
                 )
-                .await
             },
-            Err(error) => Err(error),
-        }
+        )
+        .await
     }
 
     /// 在独立事务快照内按当前权限回放原审批人恢复结果。
@@ -424,19 +426,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         identity: PreparedCommandIdentity,
         original_error: Error,
     ) -> Result<ApprovalCommandView> {
-        const RECOVERY_ATTEMPTS: usize = 8;
-        for attempt in 0..RECOVERY_ATTEMPTS {
-            match self.replay_resume(actor, &instance_id, &identity).await {
-                Ok(Some(view)) => return Ok(view),
-                Ok(None) => {},
-                Err(error) if command_may_have_committed(&error) => {},
-                Err(error) => return Err(error),
-            }
-            if attempt + 1 < RECOVERY_ATTEMPTS {
-                tokio::time::sleep(command_recovery_delay(attempt)).await;
-            }
-        }
-        Err(original_error)
+        recover_by_replay(original_error, || self.replay_resume(actor, &instance_id, &identity)).await
     }
 
     async fn load_resume_task_guard(
@@ -600,7 +590,7 @@ async fn persist_resume_writes(
             || task.base.version != guard.version
             || task.approval_node_execution_id.as_ref() != Some(&guard.execution_id)
         {
-            return Err(Error::ConflictError("原关闭审批任务已变化，请刷新后重试".to_string()));
+            return Err(Error::version_conflict("原关闭审批任务"));
         }
     }
     // 收据是完成全部只读验证后的第一笔物理写，用唯一身份仲裁同键并发。

@@ -1,3 +1,10 @@
+//! 可选联系方式与文本规范化原语。
+//!
+//! 错误分层：`validator::ValidationError` 仅用于 `validator` 派生所需的
+//! 纯格式校验（`validate_phone`/`validate_email`）；其余 `normalize_*`
+//! 入口统一返回 `crate::Error`，格式校验经由内部适配收敛为业务文案，
+//! 调用方只需处理 `crate::Error`。
+
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -54,7 +61,7 @@ pub fn validate_email(email: &str) -> ValidationResult {
 /// 去除首尾空白并校验非空，常用于领域对象的基础字符串验证。
 ///
 /// # 参数
-/// * `value` - 值
+/// * `value` - 值（`String` 或 `&str`，内部只借用）
 /// * `message` - 提示信息
 ///
 /// # 返回
@@ -62,8 +69,8 @@ pub fn validate_email(email: &str) -> ValidationResult {
 ///
 /// # 错误
 /// 当验证失败或底层操作失败时返回错误。
-pub fn non_empty_trimmed(value: String, message: &str) -> crate::errors::Result<String> {
-    let trimmed = value.trim();
+pub fn non_empty_trimmed(value: impl AsRef<str>, message: &str) -> Result<String> {
+    let trimmed = value.as_ref().trim();
     if trimmed.is_empty() {
         return Err(Error::from(message));
     }
@@ -106,17 +113,7 @@ pub fn normalize_required_text(
 /// # 错误
 /// 当邮箱超长或格式非法时返回错误
 pub fn normalize_optional_email(value: Option<String>, max_len: usize) -> Result<Option<String>> {
-    let value = normalize_optional_text(value, "邮箱", max_len).map_err(|_| Error::from("邮箱长度过长"))?;
-
-    let Some(value) = value else {
-        return Ok(None);
-    };
-
-    if validate_email(value.as_str()).is_err() {
-        return Err(Error::from("邮箱格式不正确"));
-    }
-
-    Ok(Some(value))
+    normalize_optional_contact(value, max_len, "邮箱", "邮箱长度过长", validate_email, "邮箱格式不正确")
 }
 
 /// 规范化可选手机号字段（去空白 + 长度 + 格式）。
@@ -131,15 +128,44 @@ pub fn normalize_optional_email(value: Option<String>, max_len: usize) -> Result
 /// # 错误
 /// 当手机号超长或格式非法时返回错误
 pub fn normalize_optional_phone(value: Option<String>, max_len: usize) -> Result<Option<String>> {
-    let value =
-        normalize_optional_text(value, "手机号", max_len).map_err(|_| Error::from("手机号长度过长"))?;
+    normalize_optional_contact(value, max_len, "手机号", "手机号长度过长", validate_phone, "手机号格式不正确")
+}
+
+/// 规范化可选联系方式（去空白 + 长度 + 格式）的通用入口。
+///
+/// 邮箱与手机号仅字段标签与格式校验不同，长度错误保留底层原因，
+/// 格式错误统一为业务文案，避免调用方同时处理两套错误。
+///
+/// # 参数
+/// * `value` - 可选联系方式原文
+/// * `max_len` - 最大长度
+/// * `label` - 字段标签（透传给长度校验）
+/// * `too_long_message` - 长度超限时的业务文案前缀
+/// * `validate_format` - `validator` 形态的格式校验（`validate_email`/`validate_phone`）
+/// * `invalid_format_message` - 格式非法时的业务文案
+///
+/// # 返回
+/// 返回规范化后的联系方式或 `None`。
+///
+/// # 错误
+/// 长度超限时返回携带底层原因的错误，格式非法时返回业务文案错误。
+fn normalize_optional_contact(
+    value: Option<String>,
+    max_len: usize,
+    label: &str,
+    too_long_message: &str,
+    validate_format: fn(&str) -> ValidationResult,
+    invalid_format_message: &str,
+) -> Result<Option<String>> {
+    let value = normalize_optional_text(value, label, max_len)
+        .map_err(|error| Error::from(format!("{too_long_message}：{error}")))?;
 
     let Some(value) = value else {
         return Ok(None);
     };
 
-    if validate_phone(value.as_str()).is_err() {
-        return Err(Error::from("手机号格式不正确"));
+    if validate_format(value.as_str()).is_err() {
+        return Err(Error::from(invalid_format_message));
     }
 
     Ok(Some(value))

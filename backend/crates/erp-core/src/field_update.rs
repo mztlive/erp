@@ -4,6 +4,12 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 ///
 /// 该类型区分请求未携带字段、显式传入 `null` 与传入具体值，避免使用
 /// `Option<T>` 时把“保持不变”和“清除字段”混为一谈。
+///
+/// # 容器侧契约（必读）
+///
+/// `Unchanged` 与 `Clear` 序列化均为 `null`，反序列化时 `null` 只还原为
+/// `Clear`；因此容器必须以 `#[serde(skip_serializing_if = "FieldUpdate::is_unchanged")]`
+/// 跳过 `Unchanged`，否则一次 serde 往返会把“保持不变”静默变为“清除字段”。
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum FieldUpdate<T> {
     /// 请求未携带字段，保留原值。
@@ -103,8 +109,10 @@ where
 {
     /// 序列化更新意图。
     ///
-    /// `Clear` 序列化为 `null`，`Set` 序列化为具体值。容器应通过
-    /// `skip_serializing_if` 跳过 `Unchanged`。
+    /// `Clear` 序列化为 `null`，`Set` 序列化为具体值。容器必须通过
+    /// `#[serde(skip_serializing_if = "FieldUpdate::is_unchanged")]` 跳过
+    /// `Unchanged`，否则往返后 `Unchanged` 会变为 `Clear`（保持不对称是已知
+    /// 取舍，见类型级文档）。
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,

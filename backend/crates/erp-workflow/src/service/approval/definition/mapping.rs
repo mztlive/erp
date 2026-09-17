@@ -59,7 +59,7 @@ pub(super) fn catalog_item(
         published_version,
         draft_version,
         configuration_status: configuration_status(policy.requirement(), published_version, draft_version),
-        allowed_actions: allowed_actions(
+        allowed_actions: definition_allowed_actions(
             policy.requirement(),
             visibility.can_define(document_type),
             published_version,
@@ -114,8 +114,8 @@ pub(super) fn catalog_facts_by_kind(
     facts.into_iter().map(|fact| (fact.process_kind, fact)).collect()
 }
 
-/// 类型级允许动作。
-pub(super) fn allowed_actions(
+/// 类型级定义允许动作（与工作项 `access::allowed_actions` 按语义区分命名）。
+pub(super) fn definition_allowed_actions(
     requirement: ApprovalRequirement,
     can_define: bool,
     published: Option<u32>,

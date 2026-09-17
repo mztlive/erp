@@ -84,6 +84,14 @@ pub struct NewNodeExecution {
 }
 
 impl ApprovalNodeExecution {
+    /// 返回克隆后的强类型执行 ID，避免调用方手写字符串克隆与重包。
+    ///
+    /// # 返回
+    /// 返回与 `base.id` 同值的 [`ApprovalNodeExecutionId`]。
+    pub fn typed_id(&self) -> ApprovalNodeExecutionId {
+        ApprovalNodeExecutionId::new(self.base.id.clone())
+    }
+
     /// 创建活动执行。
     ///
     /// # 错误

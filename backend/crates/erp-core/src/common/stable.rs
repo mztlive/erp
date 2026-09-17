@@ -27,6 +27,29 @@ where
 }
 
 impl<Status: Copy + PartialEq> StableBase<Status> {
+    /// 以类型化修订 ID 设置当前生效修订。
+    ///
+    /// 基元层仍以 `Option<String>` 存储以保持与现有 Mongo 文档兼容，
+    /// 调用方应传入各域 `id_type!` 修订 ID（如 `ProductRevisionId`），
+    /// 避免手写裸字符串。
+    ///
+    /// # 参数
+    /// * `revision_id` - 类型化修订 ID（`AsRef<str>`）
+    ///
+    /// # 返回
+    /// 无返回值；仅更新 `current_revision_id` 字段。
+    pub fn set_current_revision(&mut self, revision_id: impl AsRef<str>) {
+        self.current_revision_id = Some(revision_id.as_ref().to_string());
+    }
+
+    /// 清除当前生效修订。
+    ///
+    /// # 返回
+    /// 无返回值；`current_revision_id` 置为 `None`。
+    pub fn clear_current_revision(&mut self) {
+        self.current_revision_id = None;
+    }
+
     /// 创建稳定对象公共字段。
     ///
     /// # 参数

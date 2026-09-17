@@ -90,7 +90,6 @@
 //! - `sales_order_voucher_line_revision` → `SalesOrderVoucherLineRevisionId`
 //!
 //! D14 `sales_review`：
-//! - `sales_order_review` → `SalesOrderReviewId`
 //! - `procurement_confirmation` → `ProcurementConfirmationId`
 //! - `procurement_confirmation_line` → `ProcurementConfirmationLineId`
 //! - `sales_change_order` → `SalesChangeOrderId`
@@ -129,7 +128,8 @@
 //! - `receivable_funds_review` → `ReceivableFundsReviewId`
 //! - `receivable_entry_offset` → `ReceivableEntryOffsetId`
 //! - `customer_receipt` → `CustomerReceiptId`；`receipt_allocation` → `ReceiptAllocationId`
-//! - `invoice` → `InvoiceId`；`sales_invoice_allocation` → `SalesInvoiceAllocationId`
+//! - `invoice` → `InvoiceId`；`sales_invoice_request` → `SalesInvoiceRequestId`
+//! - `sales_invoice_allocation` → `SalesInvoiceAllocationId`
 //!
 //! D19 `payable`：
 //! - `payable_account` → `PayableAccountId`；`payable_entry` → `PayableEntryId`
@@ -220,7 +220,7 @@ id_type!(BackgroundJobItemId);
 id_type!(FileAssetId);
 id_type!(DocumentAttachmentId);
 
-// D06 access_control（`role` 沿用 rbac::RoleId，见文件头映射表）
+// D06 access_control（`role` 沿用 erp_identity::RoleId，见文件头映射表）
 id_type!(PermissionId);
 id_type!(UserRoleId);
 id_type!(DataScopeId);
@@ -291,6 +291,7 @@ id_type!(SalesChangeOrderId);
 id_type!(SalesChangeSubmissionId);
 id_type!(SalesChangeSubmissionLineId);
 
+// 采购职责规则：`procurement_responsibility_rule` → `ProcurementResponsibilityRuleId`（归属采购域，补齐映射表漂移）。
 // procurement responsibility
 id_type!(ProcurementResponsibilityRuleId);
 

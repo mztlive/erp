@@ -3,9 +3,9 @@
 //! 提供MongoDB数据库操作的通用接口，包括基础CRUD操作和各实体的特化方法
 
 use entity_core::{BaseModel, HasBaseModel, NOT_DELETED_TIMESTAMP, NOT_DELETED_TIMESTAMP_BSON};
-use mongodb::Database;
 use mongodb::bson::{Document, deserialize_from_slice, doc, serialize_to_vec};
 use mongodb::options::FindOptions;
+use mongodb::{Collection, Database};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -53,7 +53,7 @@ pub trait Pagination {
     /// The maximum number of documents to return
     fn limit(&self) -> i64 {
         let (_, page_size) = self.page_and_size();
-        page_size as i64
+        saturating_i64(page_size)
     }
 }
 
@@ -69,6 +69,11 @@ pub struct Repository<'a, T> {
     db: &'a Database,
     collection_name: &'a str,
     _phantom: std::marker::PhantomData<T>,
+}
+
+/// 将 `u64` 饱和转换为 `i64`，极端值钳制到 `i64::MAX` 而非静默截断。
+fn saturating_i64(value: u64) -> i64 {
+    i64::try_from(value).unwrap_or(i64::MAX)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +121,12 @@ fn deleted_cas_filter(base: &BaseModel, metadata: WriteMetadata) -> Document {
     }
 }
 
+/// 为查询附加软删除活跃约束，新增查询统一经此入口，避免遗漏 `deleted_at` 域。
+fn with_active_scope(mut filter: Document) -> Document {
+    filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
+    filter
+}
+
 /// 在 MongoDB 写入命中后同步内存中的持久化元数据。
 fn apply_write_result(
     base: &mut BaseModel,
@@ -133,6 +144,31 @@ fn apply_write_result(
         base.deleted_at = deleted_at;
     }
     Ok(())
+}
+
+/// 组装一次 CAS 写入所需的元数据与乐观锁过滤器。
+fn cas_metadata_and_filter(base: &BaseModel, active_scope: bool) -> Result<(WriteMetadata, Document)> {
+    let metadata = write_metadata(base)?;
+    let filter =
+        if active_scope { active_cas_filter(base, metadata) } else { deleted_cas_filter(base, metadata) };
+    Ok((metadata, filter))
+}
+
+/// 执行 CAS 更新并同步内存元数据。
+async fn exec_cas<T>(
+    collection: &Collection<T>,
+    base: &mut BaseModel,
+    metadata: WriteMetadata,
+    filter: Document,
+    update: Document,
+    deleted_at: Option<u64>,
+    executor: &mut dyn Executor,
+) -> Result<()>
+where
+    T: Send + Sync,
+{
+    let result = mongo_ops::update_one(collection, filter, update, false, executor).await?;
+    apply_write_result(base, metadata, deleted_at, result.matched_count)
 }
 
 impl<'a, T> Repository<'a, T>
@@ -186,12 +222,7 @@ where
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     pub async fn find_by_id(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<T>> {
-        mongo_ops::find_one(
-            &self.collection(),
-            doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
-            executor,
-        )
-        .await
+        mongo_ops::find_one(&self.collection(), with_active_scope(doc! { "id": id }), executor).await
     }
 
     /// 更新实体（带乐观锁）。
@@ -213,17 +244,21 @@ where
             return Err(Error::OptimisticLockingError);
         }
 
-        let metadata = write_metadata(entity.base())?;
-        let filter = active_cas_filter(entity.base(), metadata);
+        let (metadata, filter) = cas_metadata_and_filter(entity.base(), true)?;
         let mut document = persisted_document(&*entity)?;
         document.insert("version", metadata.next_version_bson);
         document.insert("updated_at", metadata.updated_at_bson);
 
-        let result =
-            mongo_ops::update_one(&self.collection(), filter, doc! { "$set": document }, false, executor)
-                .await?;
-
-        apply_write_result(entity.base_mut(), metadata, None, result.matched_count)
+        exec_cas(
+            &self.collection(),
+            entity.base_mut(),
+            metadata,
+            filter,
+            doc! { "$set": document },
+            None,
+            executor,
+        )
+        .await
     }
 
     /// 软删除活跃实体。
@@ -245,24 +280,18 @@ where
             return Err(Error::OptimisticLockingError);
         }
 
-        let metadata = write_metadata(entity.base())?;
-        let filter = active_cas_filter(entity.base(), metadata);
-        let result = mongo_ops::update_one(
-            &self.collection(),
-            filter,
-            doc! {
-                "$set": {
-                    "version": metadata.next_version_bson,
-                    "updated_at": metadata.updated_at_bson,
-                    "deleted_at": metadata.updated_at_bson,
-                }
-            },
-            false,
-            executor,
-        )
-        .await?;
+        let (metadata, filter) = cas_metadata_and_filter(entity.base(), true)?;
+        let deleted_at = metadata.updated_at;
+        let update = doc! {
+            "$set": {
+                "version": metadata.next_version_bson,
+                "updated_at": metadata.updated_at_bson,
+                "deleted_at": metadata.updated_at_bson,
+            }
+        };
 
-        apply_write_result(entity.base_mut(), metadata, Some(metadata.updated_at), result.matched_count)
+        exec_cas(&self.collection(), entity.base_mut(), metadata, filter, update, Some(deleted_at), executor)
+            .await
     }
 
     /// 恢复已软删除实体。
@@ -284,24 +313,25 @@ where
             return Err(Error::OptimisticLockingError);
         }
 
-        let metadata = write_metadata(entity.base())?;
-        let filter = deleted_cas_filter(entity.base(), metadata);
-        let result = mongo_ops::update_one(
+        let (metadata, filter) = cas_metadata_and_filter(entity.base(), false)?;
+        let update = doc! {
+            "$set": {
+                "version": metadata.next_version_bson,
+                "updated_at": metadata.updated_at_bson,
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            }
+        };
+
+        exec_cas(
             &self.collection(),
+            entity.base_mut(),
+            metadata,
             filter,
-            doc! {
-                "$set": {
-                    "version": metadata.next_version_bson,
-                    "updated_at": metadata.updated_at_bson,
-                    "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-                }
-            },
-            false,
+            update,
+            Some(NOT_DELETED_TIMESTAMP),
             executor,
         )
-        .await?;
-
-        apply_write_result(entity.base_mut(), metadata, Some(NOT_DELETED_TIMESTAMP), result.matched_count)
+        .await
     }
 
     /// 查找所有未删除的实体。
@@ -317,7 +347,7 @@ where
     pub async fn list_all(&self, executor: &mut dyn Executor) -> Result<Vec<T>> {
         mongo_ops::find_many(
             &self.collection(),
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            with_active_scope(Document::new()),
             FindOptions::default(),
             executor,
         )
@@ -345,7 +375,7 @@ where
     where
         V: Into<mongodb::bson::Bson> + Send,
     {
-        let filter = doc! { field: value.into(), "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        let filter = with_active_scope(doc! { field: value.into() });
         mongo_ops::find_one(&self.collection(), filter, executor).await
     }
 
@@ -361,10 +391,7 @@ where
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     pub async fn find_one(&self, filter: Document, executor: &mut dyn Executor) -> Result<Option<T>> {
-        let mut filter = filter;
-        filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
-
-        mongo_ops::find_one(&self.collection(), filter, executor).await
+        mongo_ops::find_one(&self.collection(), with_active_scope(filter), executor).await
     }
 
     /// 查找多个未删除实体。
@@ -379,10 +406,8 @@ where
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     pub async fn find_many(&self, filter: Document, executor: &mut dyn Executor) -> Result<Vec<T>> {
-        let mut filter = filter;
-        filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
-
-        mongo_ops::find_many(&self.collection(), filter, FindOptions::default(), executor).await
+        mongo_ops::find_many(&self.collection(), with_active_scope(filter), FindOptions::default(), executor)
+            .await
     }
 
     /// 查找多个未删除实体（带排序）。
@@ -403,11 +428,13 @@ where
         sort: Document,
         executor: &mut dyn Executor,
     ) -> Result<Vec<T>> {
-        let mut filter = filter;
-        filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
-
-        mongo_ops::find_many(&self.collection(), filter, FindOptions::builder().sort(sort).build(), executor)
-            .await
+        mongo_ops::find_many(
+            &self.collection(),
+            with_active_scope(filter),
+            FindOptions::builder().sort(sort).build(),
+            executor,
+        )
+        .await
     }
 
     /// 按稳定 ID 批量读取未删除实体。
@@ -445,10 +472,7 @@ where
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     pub async fn exists(&self, filter: Document, executor: &mut dyn Executor) -> Result<bool> {
-        let mut filter = filter;
-        filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
-
-        mongo_ops::exists(&self.db.collection::<Document>(self.collection_name), filter, executor).await
+        mongo_ops::exists(&self.collection(), with_active_scope(filter), executor).await
     }
 
     /// 分页检索实体。
@@ -466,9 +490,10 @@ where
     where
         F: QueryFilter + Pagination + Send + Sync,
     {
+        let filter_doc = filter.to_doc();
         let items = mongo_ops::find_many(
             &self.collection(),
-            filter.to_doc(),
+            filter_doc.clone(),
             FindOptions::builder()
                 .sort(doc! { "created_at": -1 })
                 .skip(filter.skip())
@@ -477,9 +502,9 @@ where
             &mut *executor,
         )
         .await?;
-        let total = self.search_count(filter, executor).await?;
+        let total = self.search_count_doc(filter_doc, executor).await?;
 
-        Ok(PageResult { items, total: total as i64 })
+        Ok(PageResult { items, total: saturating_i64(total) })
     }
 
     /// 统计符合条件的实体总数。
@@ -493,18 +518,15 @@ where
     ///
     /// # 错误
     /// 当 MongoDB 统计失败时返回错误。
-    async fn search_count<F>(&self, filter: &F, executor: &mut dyn Executor) -> Result<u64>
-    where
-        F: QueryFilter + Send + Sync,
-    {
-        mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await
+    async fn search_count_doc(&self, filter: Document, executor: &mut dyn Executor) -> Result<u64> {
+        mongo_ops::count_documents(&self.collection(), filter, executor).await
     }
 
     /// 获取当前实体对应的 MongoDB 集合（内部使用）。
     ///
     /// # 返回
     /// 返回按实体类型参数化的集合句柄。
-    pub fn collection(&self) -> mongodb::Collection<T> {
+    pub fn collection(&self) -> Collection<T> {
         self.db.collection::<T>(self.collection_name)
     }
 }

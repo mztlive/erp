@@ -39,19 +39,42 @@ pub async fn ensure_transaction_support(database: &Database) -> Result<()> {
     Err(Error::UnsupportedDeployment("a replica set or transaction-capable sharded cluster is required"))
 }
 
+/// 会话是否可用（`logicalSessionTimeoutMinutes` 为非负整数）。
+fn sessions_enabled(hello: &Document) -> bool {
+    hello.get("logicalSessionTimeoutMinutes").and_then(bson_integer).is_some_and(|minutes| minutes >= 0)
+}
+
+/// 当前拓扑是否为分片集群（`mongos` 以 `msg: isdbgrid` 标识）。
+fn is_sharded_cluster(hello: &Document) -> bool {
+    hello.get_str("msg").is_ok_and(|value| value == "isdbgrid")
+}
+
+/// 当前拓扑是否为副本集（`setName` 非空）。
+fn is_replica_set(hello: &Document) -> bool {
+    hello.get_str("setName").is_ok_and(|value| !value.trim().is_empty())
+}
+
+/// 副本集事务的最低 wire version（MongoDB 4.0 引入多文档事务）。
+fn replica_set_supports_transactions(max_wire_version: i64) -> bool {
+    max_wire_version >= MIN_REPLICA_SET_TRANSACTION_WIRE_VERSION
+}
+
+/// 分片事务的最低 wire version（MongoDB 4.2 起支持分片事务）。
+fn sharded_cluster_supports_transactions(max_wire_version: i64) -> bool {
+    max_wire_version >= MIN_SHARDED_TRANSACTION_WIRE_VERSION
+}
+
 /// 判断 `hello` 响应描述的拓扑是否具备事务所需的会话和 wire version。
 fn topology_supports_transactions(hello: &Document) -> bool {
-    if !hello.get("logicalSessionTimeoutMinutes").and_then(bson_integer).is_some_and(|minutes| minutes >= 0) {
+    if !sessions_enabled(hello) {
         return false;
     }
     let Some(max_wire_version) = hello.get("maxWireVersion").and_then(bson_integer) else {
         return false;
     };
-    let is_sharded = hello.get_str("msg").is_ok_and(|value| value == "isdbgrid");
-    let is_replica_set = hello.get_str("setName").is_ok_and(|value| !value.trim().is_empty());
 
-    (is_replica_set && max_wire_version >= MIN_REPLICA_SET_TRANSACTION_WIRE_VERSION)
-        || (is_sharded && max_wire_version >= MIN_SHARDED_TRANSACTION_WIRE_VERSION)
+    (is_replica_set(hello) && replica_set_supports_transactions(max_wire_version))
+        || (is_sharded_cluster(hello) && sharded_cluster_supports_transactions(max_wire_version))
 }
 
 /// 将 BSON 的两种有符号整数表示统一为 `i64`。

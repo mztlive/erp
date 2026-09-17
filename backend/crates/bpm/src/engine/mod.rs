@@ -11,6 +11,8 @@ mod event;
 mod resume;
 mod start;
 mod start_plan;
+#[cfg(test)]
+pub(crate) mod test_fixtures;
 mod transition_plan;
 
 pub use cancel::{CancelCommand, cancel};
@@ -128,6 +130,7 @@ impl DefinitionGraph {
 #[cfg(test)]
 mod tests {
     use super::enter_node::{EnterNodeInput, plan_enter_node};
+    use super::test_fixtures::{at, blocked, eligible, node, participant};
     use super::{
         CancelCommand, CommitRequired, DecideCommand, DefinitionGraph, Eligibility, EngineError,
         ResumeCommand, StartAssigneeBinding, StartCommand, TaskCloseReason, TaskIntent, block_current,
@@ -863,29 +866,6 @@ mod tests {
         }
     }
 
-    fn node(
-        id: &str,
-        key: &str,
-        name: &str,
-        order: u32,
-        user: &str,
-        label: &str,
-        at: Timestamp,
-    ) -> ApprovalNodeDefinition {
-        ApprovalNodeDefinition::new(crate::model::NewNodeDefinition {
-            id: ApprovalNodeDefinitionId::new(id),
-            process_definition_id: ApprovalProcessDefinitionId::new("def"),
-            node_key: key.into(),
-            node_name: name.into(),
-            node_purpose: None,
-            display_order: order,
-            assignee_participant_id: participant(user),
-            assignee_label_snapshot: label.into(),
-            at,
-        })
-        .unwrap()
-    }
-
     fn running_instance() -> ApprovalProcessInstance {
         ApprovalProcessInstance::start_running(crate::model::NewProcessInstance {
             id: ApprovalProcessInstanceId::new("inst"),
@@ -898,21 +878,5 @@ mod tests {
             at: at(10),
         })
         .unwrap()
-    }
-
-    fn eligible(user: &str, name: &str) -> Eligibility {
-        Eligibility::Eligible { participant: participant(user), assignee_name_snapshot: name.into() }
-    }
-
-    fn blocked(user: &str, name: &str, code: ApprovalBlockerCode) -> Eligibility {
-        Eligibility::Blocked { participant: participant(user), code, assignee_name_snapshot: name.into() }
-    }
-
-    fn participant(id: &str) -> ParticipantId {
-        ParticipantId::new(id).unwrap()
-    }
-
-    fn at(secs: i64) -> Timestamp {
-        Timestamp::from_unix_secs(secs).unwrap()
     }
 }

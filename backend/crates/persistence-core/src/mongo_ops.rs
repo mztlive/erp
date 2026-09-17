@@ -255,8 +255,8 @@ where
         },
         None => {
             let mut cursor = collection.find(filter).with_options(options).await?;
-            while let Some(document) = cursor.next().await {
-                documents.push(document?);
+            while let Some(document) = cursor.next().await.transpose()? {
+                documents.push(document);
             }
         },
     }
@@ -277,11 +277,14 @@ where
 ///
 /// # 错误
 /// 当 MongoDB 查询失败时返回错误。
-pub async fn exists(
-    collection: &Collection<Document>,
+pub async fn exists<T>(
+    collection: &Collection<T>,
     filter: Document,
     executor: &mut dyn Executor,
-) -> Result<bool> {
+) -> Result<bool>
+where
+    T: DeserializeOwned + Send + Sync,
+{
     let projection = doc! { "_id": 1 };
     let document = match executor.session() {
         Some(session) => collection.find_one(filter).projection(projection).session(session).await?,
