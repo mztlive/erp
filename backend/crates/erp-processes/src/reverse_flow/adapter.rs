@@ -4,6 +4,7 @@
 //! 领域动作只通过实体状态邻接与仓储更新，不得 `$set` 绕过不变式。
 //! 资金类 `PENDING_REVIEW` 已收敛为 `IN_APPROVAL`，不得再走通用状态更新。
 
+mod common;
 mod customer_refund;
 mod payment_reversal;
 mod receipt_reversal;

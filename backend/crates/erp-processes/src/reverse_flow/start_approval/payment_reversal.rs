@@ -1,9 +1,7 @@
 use application_core::AuditActor;
-use bpm::engine::{DefinitionGraph, StartAssigneeBinding, TaskIntent};
-use bpm::ids::{
-    ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
-};
-use bpm::model::{ParticipantId, SubjectRef, Timestamp};
+use bpm::engine::{DefinitionGraph, TaskIntent};
+use bpm::ids::ApprovalProcessInstanceId;
+use bpm::model::SubjectRef;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
@@ -12,18 +10,16 @@ use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, Approv
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
-use erp_workflow::service::approval::execution::authorization::{AuthorizationFailure, converge_eligibility};
-use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::{
-    ExecutionCommandInput, PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
+    PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
 };
-use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;
 
 use super::super::adapter::payment_reversal_object_readable;
+use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_start_input};
 use super::mapping::list_projection_from_execution;
 use super::prepare::load_start_receipt_for_document_type;
 use crate::{Error, Result};
@@ -125,75 +121,25 @@ pub fn build_payment_reversal_start_input(
         receipt,
         now,
     } = input;
-    if graph.definition.definition_version != binding.approval_definition_version {
-        return Err(Error::ConflictError("付款冲正单绑定定义版本与已加载定义不一致".to_string()));
-    }
-    let idempotency_key = normalize_idempotency_key(idempotency_key)?;
-    let actor =
-        ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
-    let timestamp = Timestamp::from_utc(now.as_utc());
-    let bindings = payment_reversal_start_bindings(&graph, organization_id)?;
-    let entry = graph.entry_node().map_err(|_| Error::ConflictError("审批定义缺少入口节点".to_string()))?;
-    let entry_eligibility = bindings
-        .iter()
-        .find(|item| item.node_key == entry.node_key)
-        .map(|item| item.eligibility.clone())
-        .ok_or_else(|| Error::ConflictError("入口节点缺少审批人绑定".to_string()))?;
-    Ok(StartExecutionInput {
-        command: ExecutionCommandInput {
+    build_reverse_start_input(
+        ReverseStartInput {
             graph,
-            current_eligibility: entry_eligibility.clone(),
-            next_eligibility: entry_eligibility,
-            receipt,
+            binding,
+            subject,
+            subject_version,
+            actor_id,
+            organization_id,
             idempotency_key,
-            now: timestamp,
+            receipt,
+            now,
         },
-        process_kind: process_kind_of(DocumentType::PaymentReversal),
-        subject,
-        subject_version,
-        binding_id: binding.approval_process_definition_id.as_ref().to_string(),
-        definition_version: binding.approval_definition_version,
-        actor,
-        instance_id: ApprovalProcessInstanceId::new(next_id()),
-        entry_execution_id: ApprovalNodeExecutionId::new(next_id()),
-        receipt_id: ApprovalCommandReceiptId::new(next_id()),
-        bindings,
-    })
-}
-
-/// 为定义全部节点冻结付款冲正启动绑定，并按单据组织重验对象读取权。
-///
-/// # 参数
-/// * `graph` - 定义图
-/// * `organization_id` - 单据责任组织
-///
-/// # 返回
-/// 返回与节点一一对应的绑定。
-///
-/// # 错误
-/// 节点审批人引用非法或显示名为空时返回校验错误。
-fn payment_reversal_start_bindings(
-    graph: &DefinitionGraph,
-    organization_id: &str,
-) -> Result<Vec<StartAssigneeBinding>> {
-    let mut bindings = Vec::with_capacity(graph.nodes.len());
-    for node in &graph.nodes {
-        let assignee = node.assignee_participant_id.as_str();
-        let failure = match payment_reversal_object_readable(organization_id, assignee) {
-            Ok(true) => None,
-            Ok(false) | Err(_) => Some(AuthorizationFailure::CannotReadSubject),
-        };
-        bindings.push(StartAssigneeBinding {
-            id: ApprovalInstanceAssigneeId::new(next_id()),
-            node_key: node.node_key.clone(),
-            participant: node.assignee_participant_id.clone(),
-            eligibility: converge_eligibility(assignee, &node.assignee_label_snapshot, failure)?,
-        });
-    }
-    if bindings.is_empty() {
-        return Err(Error::ConflictError("审批定义没有节点，无法启动付款冲正审批".to_string()));
-    }
-    Ok(bindings)
+        &ReverseStartContracts {
+            document_type: DocumentType::PaymentReversal,
+            readable: payment_reversal_object_readable,
+            version_mismatch: "付款冲正单绑定定义版本与已加载定义不一致",
+            empty_definition: "审批定义没有节点，无法启动付款冲正审批",
+        },
+    )
 }
 
 /// 付款冲正启动事务写入集合。

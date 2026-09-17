@@ -19,7 +19,7 @@ use erp_sales::entity::sales_selection::LinkTokenCrypto;
 use erp_sales::ports::sales_selection::SelectionImagePort;
 use erp_sales::service::sales_selection::SalesSelectionService;
 use mongodb::Database;
-use persistence_core::Transactional;
+use persistence_core::{NoTransaction, Transactional};
 use storage::S3Storage;
 
 use self::adapters::{CatalogAdapter, CustomerAdapter, ImageAdapter};
@@ -148,6 +148,8 @@ impl SalesSelectionProcess {
 
     /// 列表。
     ///
+    /// 纯读快照不开启事务会话，直接用无事务执行器读取，避免读流量占用事务资源。
+    ///
     /// # 参数
     /// * `params` - 筛选
     /// * `actor` - 已认证操作人
@@ -163,22 +165,13 @@ impl SalesSelectionProcess {
         actor: AuditActor,
     ) -> Result<SelectionBookletListView> {
         let access = self.selection_access()?;
-        let db = self.db.clone();
-        let params = params.clone();
-        let actor = actor.clone();
-        db.client()
-            .clone()
-            .with_transaction(move |executor| {
-                let access = access.clone();
-                let db = db.clone();
-                let params = params.clone();
-                let actor = actor.clone();
-                Box::pin(async move { booklet_list_snapshot(&access, &db, &params, &actor, executor).await })
-            })
-            .await
+        let mut executor = NoTransaction;
+        booklet_list_snapshot(&access, &self.db, &params, &actor, &mut executor).await
     }
 
     /// 详情。
+    ///
+    /// 纯读快照不开启事务会话；负责人显示名与详情读取共用同一无事务执行器。
     ///
     /// # 参数
     /// * `id` - 选品册
@@ -191,26 +184,12 @@ impl SalesSelectionProcess {
     /// 不存在或无权查看。
     pub async fn booklet_detail(&self, id: &str, actor: &AuditActor) -> Result<SalesSelectionBookletView> {
         let access = self.selection_access()?;
-        let db = self.db.clone();
-        let id = id.to_string();
-        let actor = actor.clone();
-        let mut view = db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                let access = access.clone();
-                let db = db.clone();
-                let id = id.clone();
-                let actor = actor.clone();
-                Box::pin(async move {
-                    let book = access.require_booklet(&actor, "get", &id, executor).await?;
-                    SalesSelectionService::new(db)
-                        .detail_view(&book, None, executor)
-                        .await
-                        .map_err(Error::from)
-                })
-            })
-            .await?;
+        let mut executor = NoTransaction;
+        let book = access.require_booklet(actor, "get", id, &mut executor).await?;
+        let mut view = SalesSelectionService::new(self.db.clone())
+            .detail_view(&book, None, &mut executor)
+            .await
+            .map_err(Error::from)?;
         view.sales_owner_name = owner_display_names(&self.db, &[view.sales_owner_user_id.clone()])
             .await?
             .remove(&view.sales_owner_user_id);
@@ -309,23 +288,9 @@ impl SalesSelectionProcess {
     /// 无链接或无权操作。
     pub async fn copy_link_url(&self, id: &str, actor: &AuditActor) -> Result<CopyLinkView> {
         let access = self.selection_access()?;
-        let db = self.db.clone();
-        let id = id.to_string();
-        let id_for_tx = id.clone();
-        let actor = actor.clone();
-        db.client()
-            .clone()
-            .with_transaction(move |executor| {
-                let access = access.clone();
-                let id_for_tx = id_for_tx.clone();
-                let actor = actor.clone();
-                Box::pin(async move {
-                    access.require_booklet(&actor, "copy_link", &id_for_tx, executor).await?;
-                    Ok::<(), erp_sales::Error>(())
-                })
-            })
-            .await?;
-        let token = SalesSelectionService::new(self.db.clone()).copy_link(&id, &self.crypto).await?;
+        let mut executor = NoTransaction;
+        access.require_booklet(actor, "copy_link", id, &mut executor).await?;
+        let token = SalesSelectionService::new(self.db.clone()).copy_link(id, &self.crypto).await?;
         let path = format!("/s/{token}");
         Ok(CopyLinkView { public_url: path.clone(), public_path: path })
     }
@@ -431,6 +396,8 @@ impl SalesSelectionProcess {
 
     /// 方案列表。
     ///
+    /// 纯读快照不开启事务会话，直接用无事务执行器读取。
+    ///
     /// # 参数
     /// * `params` - 筛选
     /// * `actor` - 已认证操作人
@@ -446,20 +413,13 @@ impl SalesSelectionProcess {
         actor: AuditActor,
     ) -> Result<SelectionProposalListView> {
         let access = self.selection_access()?;
-        let db = self.db.clone();
-        db.client()
-            .clone()
-            .with_transaction(move |executor| {
-                let access = access.clone();
-                let db = db.clone();
-                let params = params.clone();
-                let actor = actor.clone();
-                Box::pin(async move { proposal_list_snapshot(&access, &db, &params, &actor, executor).await })
-            })
-            .await
+        let mut executor = NoTransaction;
+        proposal_list_snapshot(&access, &self.db, &params, &actor, &mut executor).await
     }
 
     /// 方案详情。
+    ///
+    /// 纯读快照不开启事务会话，直接用无事务执行器读取。
     ///
     /// # 参数
     /// * `id` - 方案
@@ -472,25 +432,12 @@ impl SalesSelectionProcess {
     /// 不存在或无权查看。
     pub async fn proposal_detail(&self, id: &str, actor: &AuditActor) -> Result<SalesSelectionProposalView> {
         let access = self.selection_access()?;
-        let db = self.db.clone();
-        let id = id.to_string();
-        let actor = actor.clone();
-        db.client()
-            .clone()
-            .with_transaction(move |executor| {
-                let access = access.clone();
-                let db = db.clone();
-                let id = id.clone();
-                let actor = actor.clone();
-                Box::pin(async move {
-                    let proposal = access.require_proposal(&actor, "get", &id, executor).await?;
-                    SalesSelectionService::new(db)
-                        .proposal_view_of(&proposal, executor)
-                        .await
-                        .map_err(Error::from)
-                })
-            })
+        let mut executor = NoTransaction;
+        let proposal = access.require_proposal(actor, "get", id, &mut executor).await?;
+        SalesSelectionService::new(self.db.clone())
+            .proposal_view_of(&proposal, &mut executor)
             .await
+            .map_err(Error::from)
     }
 
     /// 运行到期准备任务。
@@ -722,22 +669,9 @@ impl SalesSelectionProcess {
         kind: CommandKind,
     ) -> Result<SalesSelectionBookletView> {
         let access = self.selection_access()?;
-        let db = self.db.clone();
-        let actor_for_check = actor.clone();
-        let checked_id = id.clone();
         let action = kind.action();
-        db.client()
-            .clone()
-            .with_transaction(move |executor| {
-                let access = access.clone();
-                let actor = actor_for_check.clone();
-                let checked_id = checked_id.clone();
-                Box::pin(async move {
-                    access.require_booklet(&actor, action, &checked_id, executor).await?;
-                    Ok::<(), erp_sales::Error>(())
-                })
-            })
-            .await?;
+        let mut executor = NoTransaction;
+        access.require_booklet(&actor, action, &id, &mut executor).await?;
         let service = SalesSelectionService::new(self.db.clone());
         let actor_id = actor.id().to_string();
         match kind {

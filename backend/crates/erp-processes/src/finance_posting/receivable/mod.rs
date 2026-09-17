@@ -23,6 +23,7 @@ mod account;
 mod adapter;
 mod cancel_approval;
 mod customer_receipt;
+mod customer_receipt_posting;
 
 mod dto;
 mod invoice;

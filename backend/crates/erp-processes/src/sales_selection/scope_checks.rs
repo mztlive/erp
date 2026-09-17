@@ -13,7 +13,7 @@ use erp_sales::dto::sales_selection::{
 use erp_sales::entity::sales_selection::{FirstNonEmptyMemberImage, LinkTokenCrypto};
 use erp_sales::service::sales_selection::{SalesSelectionService, SelectionAccess};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction};
 use storage::S3Storage;
 use validator::Validate;
 
@@ -283,6 +283,8 @@ pub(crate) async fn copy_link_checked(
 
 /// 授权后读取内部会话。
 ///
+/// 纯读快照不开启事务会话，直接用无事务执行器读取。
+///
 /// # 参数
 /// * `db` - 选品数据库
 /// * `access` - 选品范围访问器
@@ -300,22 +302,9 @@ pub(crate) async fn session_checked(
     id: &str,
     actor: &AuditActor,
 ) -> Result<SalesSelectionSessionView> {
-    let owned = db.clone();
-    let current = id.to_string();
-    let cloned = actor.clone();
-    db.client()
-        .clone()
-        .with_transaction(move |executor| {
-            let access = access.clone();
-            let owned = owned.clone();
-            let current = current.clone();
-            let cloned = cloned.clone();
-            Box::pin(async move {
-                access.require_booklet(&cloned, "get", &current, executor).await?;
-                SalesSelectionService::new(owned).session_of(&current, executor).await.map_err(Error::from)
-            })
-        })
-        .await
+    let mut executor = NoTransaction;
+    access.require_booklet(actor, "get", id, &mut executor).await?;
+    SalesSelectionService::new(db.clone()).session_of(id, &mut executor).await.map_err(Error::from)
 }
 
 /// 授权后更换链接。
@@ -346,7 +335,9 @@ pub(crate) async fn rotate_link_checked(
     Ok(SalesSelectionService::new(db.clone()).rotate_link(&id, req, &actor_id, crypto).await?)
 }
 
-/// 授权后读取册图片对象键；同一事务内重验。
+/// 授权后读取册图片对象键；同一执行器内重验。
+///
+/// 纯读快照不开启事务会话，直接用无事务执行器读取。
 ///
 /// # 参数
 /// * `db` - 选品数据库
@@ -367,30 +358,17 @@ pub(crate) async fn image_key_checked(
     asset_id: &str,
     actor: &AuditActor,
 ) -> Result<String> {
-    let owned = db.clone();
-    let current = id.to_string();
-    let asset = asset_id.to_string();
-    let cloned = actor.clone();
-    db.client()
-        .clone()
-        .with_transaction(move |executor| {
-            let access = access.clone();
-            let owned = owned.clone();
-            let current = current.clone();
-            let asset = asset.clone();
-            let cloned = cloned.clone();
-            Box::pin(async move {
-                access.require_booklet(&cloned, "get", &current, executor).await?;
-                SalesSelectionService::new(owned)
-                    .image_key_of(&current, &asset, executor)
-                    .await
-                    .map_err(Error::from)
-            })
-        })
+    let mut executor = NoTransaction;
+    access.require_booklet(actor, "get", id, &mut executor).await?;
+    SalesSelectionService::new(db.clone())
+        .image_key_of(id, asset_id, &mut executor)
         .await
+        .map_err(Error::from)
 }
 
 /// 在调用方事务外证明单对象动作；写命令前必须调用。
+///
+/// 纯读快照不开启事务会话，直接用无事务执行器读取。
 ///
 /// # 参数
 /// * `db` - 选品数据库
@@ -411,24 +389,9 @@ async fn require_action(
     action: &str,
     id: &str,
 ) -> Result<()> {
-    let owned = db.clone();
-    let current = id.to_string();
-    let cloned = actor.clone();
-    let requested = action.to_string();
-    owned
-        .client()
-        .clone()
-        .with_transaction(move |executor| {
-            let access = access.clone();
-            let cloned = cloned.clone();
-            let current = current.clone();
-            let requested = requested.clone();
-            Box::pin(async move {
-                access.require_booklet(&cloned, &requested, &current, executor).await?;
-                Ok::<(), erp_sales::Error>(())
-            })
-        })
-        .await?;
+    let _ = db;
+    let mut executor = NoTransaction;
+    access.require_booklet(actor, action, id, &mut executor).await?;
     Ok(())
 }
 

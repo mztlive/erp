@@ -18,10 +18,11 @@ use erp_workflow::service::approval::business_adapter::{
     AdapterReadScope, ApprovalAdapterSpec, adapter_spec_of, ensure_adapter_spec_complete,
 };
 use erp_workflow::service::approval::policy::{
-    ApprovalDomainAction, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource, OwnerOrganizationSource,
+    ApprovalDomainAction, ApprovalSubjectVersionSource, OwnerOrganizationSource,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
 
+use super::common::{ExpectedReverseAdapterContracts, ensure_reverse_adapter_spec};
 use crate::{Error, Result};
 
 /// 已注册的付款冲正单适配器规格。
@@ -69,19 +70,17 @@ pub fn payment_reversal_adapter() -> Result<PaymentReversalAdapter> {
 /// # 错误
 /// 字段与合同签署值不一致时返回错误。
 fn payment_reversal_adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<PaymentReversalAdapter> {
-    if spec.document_type != DocumentType::PaymentReversal
-        || spec.process_kind != process_kind_of(DocumentType::PaymentReversal)
-        || spec.subject_version_source != ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
-        || spec.on_approval_start != ApprovalDomainAction::PaymentReversalSubmit
-        || spec.on_final_approve != ApprovalDomainAction::PaymentReversalPost
-        || spec.cancel_action != ApprovalDomainAction::PaymentReversalCancelApproval
-        || spec.owner_role.as_str() != "payment_reversal_approver"
-        || spec.owner_organization_source != OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
-        || spec.read_scope != AdapterReadScope::DocumentOrganizationAndCreator
-        || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalAmount)
-    {
-        return Err(Error::Internal("付款冲正单审批适配器登记不完整".to_string()));
-    }
+    ensure_reverse_adapter_spec(
+        &spec,
+        &ExpectedReverseAdapterContracts {
+            document_type: DocumentType::PaymentReversal,
+            on_approval_start: ApprovalDomainAction::PaymentReversalSubmit,
+            on_final_approve: ApprovalDomainAction::PaymentReversalPost,
+            cancel_action: ApprovalDomainAction::PaymentReversalCancelApproval,
+            owner_role: "payment_reversal_approver",
+            mismatch_message: "付款冲正单审批适配器登记不完整",
+        },
+    )?;
     Ok(PaymentReversalAdapter {
         document_type: spec.document_type,
         process_kind: spec.process_kind,

@@ -6,23 +6,21 @@
 //! 同一外层事务中先加载事实并完成授权、查询收据；只有无收据的 Fresh 分支才
 //! 执行初始未提交门禁、强对象版本重验和绑定 CAS。
 
-use erp_core::ids::{SalesChangeOrderId, SalesOrderId};
-use erp_customer::CustomerExt;
-use erp_finance::repository::{PayableExt, ReceivableExt};
-use erp_inventory::InventoryExt;
-use erp_procurement::entity::purchase_order::{PurchaseChangeOrderStatus, PurchaseOrderStatus};
-use erp_procurement::repository::PurchaseOrderExt;
-use erp_returns::repository::ReturnsExt;
-use erp_sales::entity::sales_order::{BusinessType, CommercialStatus, ReviewStatus};
-use erp_sales::entity::sales_review::SalesChangeOrderStatus;
-use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
-use erp_supplier::SupplierExt;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::policy::require_process_required;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::upgrade_documents::{
+    ensure_fresh_customer_receipt, ensure_fresh_customer_refund, ensure_fresh_payment_reversal,
+    ensure_fresh_purchase_change, ensure_fresh_purchase_order, ensure_fresh_receipt_reversal,
+    ensure_fresh_sales_change, ensure_fresh_sales_order, ensure_fresh_stock_adjustment,
+    ensure_fresh_supplier_refund, load_customer_receipt, load_customer_refund, load_payment_reversal,
+    load_purchase_change, load_purchase_order, load_receipt_reversal, load_sales_change, load_sales_order,
+    load_stock_adjustment, load_supplier_refund,
+};
+use super::upgrade_shared::ensure_exact_document_id;
 use crate::{Error, Result};
 
 /// 审批绑定升级使用的强业务对象事实。
@@ -46,6 +44,91 @@ pub struct ApprovalUpgradeSubjectFacts {
     pub creator_id: String,
 }
 
+/// 审批升级单据的内部路由种类。
+///
+/// `load` 与 Fresh 门禁共用 [`classify_upgrade_subject`] 这一张分类表；
+/// `NO_APPROVAL` 拒绝收敛到该表一处。新增单据类型只需扩展本枚举并在两处
+/// 同形分派各加一臂，不得新增第二张分派表。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UpgradeSubjectKind {
+    /// 实物及服务销售单或卡券销售单。
+    SalesOrder,
+    /// 销售变更单。
+    SalesChangeOrder,
+    /// 采购单。
+    PurchaseOrder,
+    /// 采购变更单。
+    PurchaseChangeOrder,
+    /// 库存调整单。
+    StockAdjustment,
+    /// 开票申请：创建即提交，不支持升级绑定。
+    InvoiceRequestRejected,
+    /// 客户回款单。
+    CustomerReceipt,
+    /// 客户退款单。
+    CustomerRefund,
+    /// 供应商退款单。
+    SupplierRefund,
+    /// 回款冲正单。
+    ReceiptReversal,
+    /// 付款冲正单。
+    PaymentReversal,
+}
+
+/// load 与 Fresh 门禁共用的唯一单据分类表。
+///
+/// # 参数
+/// * `document_type` - 路由给出的精确单据类型
+///
+/// # 返回
+/// 返回后续 load 与 Fresh 门禁共用的内部路由种类。
+///
+/// # 错误
+/// `NO_APPROVAL` 类型或开票申请以外的政策门禁失败时返回错误；调用方不得
+/// 再各自重复 `NO_APPROVAL` 穷尽分派。
+fn classify_upgrade_subject(document_type: DocumentType) -> Result<UpgradeSubjectKind> {
+    require_process_required(document_type)?;
+    match document_type {
+        DocumentType::SalesOrder | DocumentType::VoucherSalesOrder => Ok(UpgradeSubjectKind::SalesOrder),
+        DocumentType::SalesChangeOrder => Ok(UpgradeSubjectKind::SalesChangeOrder),
+        DocumentType::PurchaseOrder => Ok(UpgradeSubjectKind::PurchaseOrder),
+        DocumentType::PurchaseChangeOrder => Ok(UpgradeSubjectKind::PurchaseChangeOrder),
+        DocumentType::StockAdjustment => Ok(UpgradeSubjectKind::StockAdjustment),
+        DocumentType::SalesInvoiceRequest => Ok(UpgradeSubjectKind::InvoiceRequestRejected),
+        DocumentType::CustomerReceipt => Ok(UpgradeSubjectKind::CustomerReceipt),
+        DocumentType::CustomerRefund => Ok(UpgradeSubjectKind::CustomerRefund),
+        DocumentType::SupplierRefund => Ok(UpgradeSubjectKind::SupplierRefund),
+        DocumentType::ReceiptReversal => Ok(UpgradeSubjectKind::ReceiptReversal),
+        DocumentType::PaymentReversal => Ok(UpgradeSubjectKind::PaymentReversal),
+        DocumentType::SupplierPayment
+        | DocumentType::PurchaseReceipt
+        | DocumentType::Delivery
+        | DocumentType::ElectronicDelivery
+        | DocumentType::ServiceFulfillment
+        | DocumentType::CustomerAcceptance
+        | DocumentType::Invoice
+        | DocumentType::SalesReturnCase
+        | DocumentType::PurchaseReturnOrder => {
+            Err(Error::Internal("NO_APPROVAL 类型通过了审批绑定升级政策门禁".to_string()))
+        },
+    }
+}
+
+/// 开票申请升级绑定的统一拒绝。
+///
+/// # 参数
+/// * `document_type` - 仅用于错误文案的单据类型
+///
+/// # 返回
+/// 恒返回冲突错误。
+///
+/// # 错误
+/// 恒返回冲突：开票申请创建即提交，不支持升级已提交申请的审批绑定。
+fn reject_invoice_request_upgrade(document_type: DocumentType) -> Error {
+    let _ = document_type;
+    Error::ConflictError("开票申请创建即提交，不支持升级已提交申请的审批绑定".into())
+}
+
 impl ApprovalUpgradeSubjectFacts {
     /// 读取并校验一张必须审批单据的强业务事实。
     ///
@@ -67,36 +150,23 @@ impl ApprovalUpgradeSubjectFacts {
         document_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Self> {
-        require_process_required(document_type)?;
+        let kind = classify_upgrade_subject(document_type)?;
         ensure_exact_document_id(document_type, document_id)?;
 
-        match document_type {
-            DocumentType::SalesOrder | DocumentType::VoucherSalesOrder => {
+        match kind {
+            UpgradeSubjectKind::SalesOrder => {
                 load_sales_order(db, document_type, document_id, executor).await
             },
-            DocumentType::SalesChangeOrder => load_sales_change(db, document_id, executor).await,
-            DocumentType::PurchaseOrder => load_purchase_order(db, document_id, executor).await,
-            DocumentType::PurchaseChangeOrder => load_purchase_change(db, document_id, executor).await,
-            DocumentType::StockAdjustment => load_stock_adjustment(db, document_id, executor).await,
-            DocumentType::SalesInvoiceRequest => {
-                Err(Error::ConflictError("开票申请创建即提交，不支持升级已提交申请的审批绑定".into()))
-            },
-            DocumentType::CustomerReceipt => load_customer_receipt(db, document_id, executor).await,
-            DocumentType::CustomerRefund => load_customer_refund(db, document_id, executor).await,
-            DocumentType::SupplierRefund => load_supplier_refund(db, document_id, executor).await,
-            DocumentType::ReceiptReversal => load_receipt_reversal(db, document_id, executor).await,
-            DocumentType::PaymentReversal => load_payment_reversal(db, document_id, executor).await,
-            DocumentType::SupplierPayment
-            | DocumentType::PurchaseReceipt
-            | DocumentType::Delivery
-            | DocumentType::ElectronicDelivery
-            | DocumentType::ServiceFulfillment
-            | DocumentType::CustomerAcceptance
-            | DocumentType::Invoice
-            | DocumentType::SalesReturnCase
-            | DocumentType::PurchaseReturnOrder => {
-                Err(Error::Internal("NO_APPROVAL 类型通过了审批绑定升级政策门禁".to_string()))
-            },
+            UpgradeSubjectKind::SalesChangeOrder => load_sales_change(db, document_id, executor).await,
+            UpgradeSubjectKind::PurchaseOrder => load_purchase_order(db, document_id, executor).await,
+            UpgradeSubjectKind::PurchaseChangeOrder => load_purchase_change(db, document_id, executor).await,
+            UpgradeSubjectKind::StockAdjustment => load_stock_adjustment(db, document_id, executor).await,
+            UpgradeSubjectKind::InvoiceRequestRejected => Err(reject_invoice_request_upgrade(document_type)),
+            UpgradeSubjectKind::CustomerReceipt => load_customer_receipt(db, document_id, executor).await,
+            UpgradeSubjectKind::CustomerRefund => load_customer_refund(db, document_id, executor).await,
+            UpgradeSubjectKind::SupplierRefund => load_supplier_refund(db, document_id, executor).await,
+            UpgradeSubjectKind::ReceiptReversal => load_receipt_reversal(db, document_id, executor).await,
+            UpgradeSubjectKind::PaymentReversal => load_payment_reversal(db, document_id, executor).await,
         }
     }
 
@@ -163,591 +233,21 @@ pub async fn ensure_initial_unsubmitted_approval_upgrade_subject(
 ) -> Result<()> {
     require_process_required(facts.document_type)?;
     ensure_exact_document_id(facts.document_type, &facts.document_id)?;
-    match facts.document_type {
-        DocumentType::SalesOrder | DocumentType::VoucherSalesOrder => {
-            ensure_fresh_sales_order(db, facts, executor).await
+    match classify_upgrade_subject(facts.document_type)? {
+        UpgradeSubjectKind::SalesOrder => ensure_fresh_sales_order(db, facts, executor).await,
+        UpgradeSubjectKind::SalesChangeOrder => ensure_fresh_sales_change(db, facts, executor).await,
+        UpgradeSubjectKind::PurchaseOrder => ensure_fresh_purchase_order(db, facts, executor).await,
+        UpgradeSubjectKind::PurchaseChangeOrder => ensure_fresh_purchase_change(db, facts, executor).await,
+        UpgradeSubjectKind::StockAdjustment => ensure_fresh_stock_adjustment(db, facts, executor).await,
+        UpgradeSubjectKind::InvoiceRequestRejected => {
+            Err(reject_invoice_request_upgrade(facts.document_type))
         },
-        DocumentType::SalesChangeOrder => ensure_fresh_sales_change(db, facts, executor).await,
-        DocumentType::PurchaseOrder => ensure_fresh_purchase_order(db, facts, executor).await,
-        DocumentType::PurchaseChangeOrder => ensure_fresh_purchase_change(db, facts, executor).await,
-        DocumentType::StockAdjustment => ensure_fresh_stock_adjustment(db, facts, executor).await,
-        DocumentType::SalesInvoiceRequest => {
-            Err(Error::ConflictError("开票申请创建即提交，不支持升级已提交申请的审批绑定".into()))
-        },
-        DocumentType::CustomerReceipt => ensure_fresh_customer_receipt(db, facts, executor).await,
-        DocumentType::CustomerRefund => ensure_fresh_customer_refund(db, facts, executor).await,
-        DocumentType::SupplierRefund => ensure_fresh_supplier_refund(db, facts, executor).await,
-        DocumentType::ReceiptReversal => ensure_fresh_receipt_reversal(db, facts, executor).await,
-        DocumentType::PaymentReversal => ensure_fresh_payment_reversal(db, facts, executor).await,
-        DocumentType::SupplierPayment
-        | DocumentType::PurchaseReceipt
-        | DocumentType::Delivery
-        | DocumentType::ElectronicDelivery
-        | DocumentType::ServiceFulfillment
-        | DocumentType::CustomerAcceptance
-        | DocumentType::Invoice
-        | DocumentType::SalesReturnCase
-        | DocumentType::PurchaseReturnOrder => {
-            Err(Error::Internal("NO_APPROVAL 类型进入了审批绑定升级 Fresh 门禁".to_string()))
-        },
+        UpgradeSubjectKind::CustomerReceipt => ensure_fresh_customer_receipt(db, facts, executor).await,
+        UpgradeSubjectKind::CustomerRefund => ensure_fresh_customer_refund(db, facts, executor).await,
+        UpgradeSubjectKind::SupplierRefund => ensure_fresh_supplier_refund(db, facts, executor).await,
+        UpgradeSubjectKind::ReceiptReversal => ensure_fresh_receipt_reversal(db, facts, executor).await,
+        UpgradeSubjectKind::PaymentReversal => ensure_fresh_payment_reversal(db, facts, executor).await,
     }
-}
-
-async fn load_sales_order(
-    db: &Database,
-    requested_type: DocumentType,
-    document_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalUpgradeSubjectFacts> {
-    let order = db
-        .sales_orders()
-        .find_by_id(document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound(format!("{}不存在", requested_type.label())))?;
-    ensure_sales_document_type(requested_type, order.business_type)?;
-    build_facts(
-        requested_type,
-        document_id,
-        &order.base.id,
-        order.base.version,
-        order.order_no,
-        order.settlement_party_id.as_ref(),
-        &order.stable.created_by,
-    )
-}
-
-async fn load_sales_change(
-    db: &Database,
-    document_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalUpgradeSubjectFacts> {
-    let change = db
-        .sales_change_orders()
-        .find_by_id(document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
-    let order = db
-        .sales_orders()
-        .find_by_id(change.sales_order_id.as_ref(), executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("销售变更单来源销售单不存在".to_string()))?;
-    ensure_known_sales_business_type(order.business_type)?;
-    build_facts(
-        DocumentType::SalesChangeOrder,
-        document_id,
-        &change.base.id,
-        change.base.version,
-        String::new(),
-        order.settlement_party_id.as_ref(),
-        &change.stable.created_by,
-    )
-}
-
-async fn load_purchase_order(
-    db: &Database,
-    document_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalUpgradeSubjectFacts> {
-    let purchase = db
-        .purchase_orders()
-        .find_by_id(document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
-    let sales = db
-        .sales_orders()
-        .find_by_id(purchase.sales_order_id.as_ref(), executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("采购单来源销售单不存在".to_string()))?;
-    ensure_goods_service_source(sales.business_type, DocumentType::PurchaseOrder)?;
-    build_facts(
-        DocumentType::PurchaseOrder,
-        document_id,
-        &purchase.base.id,
-        purchase.base.version,
-        purchase.purchase_no,
-        sales.settlement_party_id.as_ref(),
-        &purchase.stable.created_by,
-    )
-}
-
-async fn load_purchase_change(
-    db: &Database,
-    document_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalUpgradeSubjectFacts> {
-    let change = db
-        .purchase_change_orders()
-        .find_by_id(document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("采购变更单不存在".to_string()))?;
-    let purchase = db
-        .purchase_orders()
-        .find_by_id(change.purchase_order_id.as_ref(), executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("采购变更单来源采购单不存在".to_string()))?;
-    let sales = db
-        .sales_orders()
-        .find_by_id(purchase.sales_order_id.as_ref(), executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("采购变更单来源销售单不存在".to_string()))?;
-    ensure_goods_service_source(sales.business_type, DocumentType::PurchaseChangeOrder)?;
-    build_facts(
-        DocumentType::PurchaseChangeOrder,
-        document_id,
-        &change.base.id,
-        change.base.version,
-        String::new(),
-        sales.settlement_party_id.as_ref(),
-        &change.stable.created_by,
-    )
-}
-
-async fn load_stock_adjustment(
-    db: &Database,
-    document_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalUpgradeSubjectFacts> {
-    let adjustment = db
-        .stock_adjustments()
-        .find_by_id(document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-    build_facts(
-        DocumentType::StockAdjustment,
-        document_id,
-        &adjustment.base.id,
-        adjustment.base.version,
-        adjustment.adjustment_no,
-        adjustment.warehouse_id.as_ref(),
-        &adjustment.created_by,
-    )
-}
-
-async fn load_customer_receipt(
-    db: &Database,
-    document_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalUpgradeSubjectFacts> {
-    let receipt = db
-        .customer_receipts()
-        .find_by_id(document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
-    build_facts(
-        DocumentType::CustomerReceipt,
-        document_id,
-        &receipt.base.id,
-        receipt.base.version,
-        receipt.receipt_no,
-        receipt.counterparty_party_id.as_ref(),
-        &receipt.created_by,
-    )
-}
-
-async fn load_customer_refund(
-    db: &Database,
-    document_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalUpgradeSubjectFacts> {
-    let refund = db
-        .customer_refunds()
-        .find_by_id(document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("客户退款单不存在".to_string()))?;
-    let customer = db
-        .customer_accounts()
-        .find_by_id(refund.customer_id.as_ref(), executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("客户退款单所属客户不存在".to_string()))?;
-    build_facts(
-        DocumentType::CustomerRefund,
-        document_id,
-        &refund.base.id,
-        refund.base.version,
-        refund.refund_no,
-        customer.party_id.as_ref(),
-        &refund.created_by,
-    )
-}
-
-async fn load_supplier_refund(
-    db: &Database,
-    document_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalUpgradeSubjectFacts> {
-    let refund = db
-        .supplier_refunds()
-        .find_by_id(document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("供应商退款单不存在".to_string()))?;
-    let supplier = db
-        .supplier_accounts()
-        .find_by_id(refund.supplier_id.as_ref(), executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("供应商退款单所属供应商不存在".to_string()))?;
-    build_facts(
-        DocumentType::SupplierRefund,
-        document_id,
-        &refund.base.id,
-        refund.base.version,
-        refund.refund_no,
-        supplier.party_id.as_ref(),
-        &refund.created_by,
-    )
-}
-
-async fn load_receipt_reversal(
-    db: &Database,
-    document_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalUpgradeSubjectFacts> {
-    let reversal = db
-        .receipt_reversals()
-        .find_by_id(document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("回款冲正单不存在".to_string()))?;
-    let receipt = db
-        .customer_receipts()
-        .find_by_id(reversal.original_customer_receipt_id.as_ref(), executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("回款冲正单原回款不存在".to_string()))?;
-    build_facts(
-        DocumentType::ReceiptReversal,
-        document_id,
-        &reversal.base.id,
-        reversal.base.version,
-        reversal.reversal_no,
-        receipt.counterparty_party_id.as_ref(),
-        &reversal.created_by,
-    )
-}
-
-async fn load_payment_reversal(
-    db: &Database,
-    document_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalUpgradeSubjectFacts> {
-    let reversal = db
-        .payment_reversals()
-        .find_by_id(document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("付款冲正单不存在".to_string()))?;
-    let payment = db
-        .supplier_payments()
-        .find_by_id(reversal.original_supplier_payment_id.as_ref(), executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("付款冲正单原付款不存在".to_string()))?;
-    let supplier = db
-        .supplier_accounts()
-        .find_by_id(payment.supplier_id.as_ref(), executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("付款冲正单原付款供应商不存在".to_string()))?;
-    build_facts(
-        DocumentType::PaymentReversal,
-        document_id,
-        &reversal.base.id,
-        reversal.base.version,
-        reversal.reversal_no,
-        supplier.party_id.as_ref(),
-        &reversal.created_by,
-    )
-}
-
-async fn ensure_fresh_sales_order(
-    db: &Database,
-    facts: &ApprovalUpgradeSubjectFacts,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let order = db
-        .sales_orders()
-        .find_by_id(&facts.document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound(format!("{}不存在", facts.document_type.label())))?;
-    ensure_sales_document_type(facts.document_type, order.business_type)?;
-    ensure_fresh_subject_identity(facts, &order.base.id, order.base.version)?;
-    ensure_initial_sales_order_state(&order)?;
-    let latest_submission = db
-        .sales_order_submissions()
-        .find_latest_by_order(&SalesOrderId::new(order.base.id.clone()), executor)
-        .await?;
-    if latest_submission.is_some() {
-        return Err(already_submitted(facts.document_type));
-    }
-    Ok(())
-}
-
-async fn ensure_fresh_sales_change(
-    db: &Database,
-    facts: &ApprovalUpgradeSubjectFacts,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let change = db
-        .sales_change_orders()
-        .find_by_id(&facts.document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
-    ensure_fresh_subject_identity(facts, &change.base.id, change.base.version)?;
-    ensure_initial_sales_change_state(&change)?;
-    let latest_submission_no = db
-        .sales_change_submissions()
-        .latest_submission_no_by_change_order(&SalesChangeOrderId::new(change.base.id.clone()), executor)
-        .await?;
-    if latest_submission_no != 0 {
-        return Err(already_submitted(DocumentType::SalesChangeOrder));
-    }
-    Ok(())
-}
-
-async fn ensure_fresh_purchase_order(
-    db: &Database,
-    facts: &ApprovalUpgradeSubjectFacts,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let order = db
-        .purchase_orders()
-        .find_by_id(&facts.document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
-    ensure_fresh_subject_identity(facts, &order.base.id, order.base.version)?;
-    ensure_initial_purchase_state(&order)
-}
-
-async fn ensure_fresh_purchase_change(
-    db: &Database,
-    facts: &ApprovalUpgradeSubjectFacts,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let change = db
-        .purchase_change_orders()
-        .find_by_id(&facts.document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("采购变更单不存在".to_string()))?;
-    ensure_fresh_subject_identity(facts, &change.base.id, change.base.version)?;
-    ensure_initial_purchase_change_state(&change)
-}
-
-async fn ensure_fresh_stock_adjustment(
-    db: &Database,
-    facts: &ApprovalUpgradeSubjectFacts,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let adjustment = db
-        .stock_adjustments()
-        .find_by_id(&facts.document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-    ensure_fresh_subject_identity(facts, &adjustment.base.id, adjustment.base.version)?;
-    adjustment.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::StockAdjustment))
-}
-
-async fn ensure_fresh_customer_receipt(
-    db: &Database,
-    facts: &ApprovalUpgradeSubjectFacts,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let receipt = db
-        .customer_receipts()
-        .find_by_id(&facts.document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
-    ensure_fresh_subject_identity(facts, &receipt.base.id, receipt.base.version)?;
-    receipt.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::CustomerReceipt))
-}
-
-async fn ensure_fresh_customer_refund(
-    db: &Database,
-    facts: &ApprovalUpgradeSubjectFacts,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let refund = db
-        .customer_refunds()
-        .find_by_id(&facts.document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("客户退款单不存在".to_string()))?;
-    ensure_fresh_subject_identity(facts, &refund.base.id, refund.base.version)?;
-    refund.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::CustomerRefund))
-}
-
-async fn ensure_fresh_supplier_refund(
-    db: &Database,
-    facts: &ApprovalUpgradeSubjectFacts,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let refund = db
-        .supplier_refunds()
-        .find_by_id(&facts.document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("供应商退款单不存在".to_string()))?;
-    ensure_fresh_subject_identity(facts, &refund.base.id, refund.base.version)?;
-    refund.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::SupplierRefund))
-}
-
-async fn ensure_fresh_receipt_reversal(
-    db: &Database,
-    facts: &ApprovalUpgradeSubjectFacts,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let reversal = db
-        .receipt_reversals()
-        .find_by_id(&facts.document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("回款冲正单不存在".to_string()))?;
-    ensure_fresh_subject_identity(facts, &reversal.base.id, reversal.base.version)?;
-    reversal.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::ReceiptReversal))
-}
-
-async fn ensure_fresh_payment_reversal(
-    db: &Database,
-    facts: &ApprovalUpgradeSubjectFacts,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let reversal = db
-        .payment_reversals()
-        .find_by_id(&facts.document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("付款冲正单不存在".to_string()))?;
-    ensure_fresh_subject_identity(facts, &reversal.base.id, reversal.base.version)?;
-    reversal.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::PaymentReversal))
-}
-
-fn ensure_fresh_subject_identity(
-    facts: &ApprovalUpgradeSubjectFacts,
-    actual_id: &str,
-    actual_version: u64,
-) -> Result<()> {
-    if facts.document_id != actual_id {
-        return Err(Error::Internal("Fresh 强业务对象主键不一致".to_string()));
-    }
-    if facts.business_object_version != actual_version {
-        return Err(Error::ConflictError("强业务对象版本已变化，请刷新后重试".to_string()));
-    }
-    Ok(())
-}
-
-fn ensure_exact_document_id(document_type: DocumentType, document_id: &str) -> Result<()> {
-    if document_id.is_empty() || document_id.trim() != document_id {
-        return Err(Error::ValidationError("单据 ID 必须是非空精确主键".to_string()));
-    }
-    erp_workflow::entity::approval_integration::subject_ref_for(document_type, document_id)
-        .map_err(|error| Error::ValidationError(error.to_string()))?;
-    Ok(())
-}
-
-fn ensure_sales_document_type(requested: DocumentType, actual: BusinessType) -> Result<()> {
-    let actual = crate::approval_dispatch::sales_subject::document_type_of_sales_business(actual);
-    if actual != requested {
-        return Err(Error::ValidationError(format!(
-            "请求单据类型 {} 与销售单业务性质对应类型 {} 不一致",
-            requested.as_str(),
-            actual.as_str()
-        )));
-    }
-    Ok(())
-}
-
-fn ensure_known_sales_business_type(actual: BusinessType) -> Result<()> {
-    match crate::approval_dispatch::sales_subject::document_type_of_sales_business(actual) {
-        DocumentType::SalesOrder | DocumentType::VoucherSalesOrder => Ok(()),
-        _ => Err(Error::Internal("销售单业务性质映射不完整".to_string())),
-    }
-}
-
-fn ensure_goods_service_source(actual: BusinessType, target: DocumentType) -> Result<()> {
-    if actual != BusinessType::GoodsService {
-        return Err(Error::ValidationError(format!("{} 的来源销售单必须是实物及服务销售单", target.label())));
-    }
-    Ok(())
-}
-
-fn ensure_initial_sales_order_state(order: &erp_sales::entity::sales_order::SalesOrder) -> Result<()> {
-    if order.commercial_status != CommercialStatus::Draft
-        || order.review_status != ReviewStatus::NotSubmitted
-        || order.stable.status != CommercialStatus::Draft
-        || order.stable.current_revision_id.is_some()
-    {
-        return Err(already_submitted(
-            crate::approval_dispatch::sales_subject::document_type_of_sales_business(order.business_type),
-        ));
-    }
-    Ok(())
-}
-
-fn ensure_initial_sales_change_state(
-    change: &erp_sales::entity::sales_review::SalesChangeOrder,
-) -> Result<()> {
-    if change.stable.status != SalesChangeOrderStatus::Draft
-        || change.current_submission_id.is_some()
-        || change.target_content_hash.is_some()
-        || change.effective_revision_id.is_some()
-    {
-        return Err(already_submitted(DocumentType::SalesChangeOrder));
-    }
-    Ok(())
-}
-
-fn ensure_initial_purchase_state(
-    order: &erp_procurement::entity::purchase_order::PurchaseOrder,
-) -> Result<()> {
-    if order.stable.status != PurchaseOrderStatus::Draft
-        || order.approval_subject_version != 0
-        || order.current_submission_id.is_some()
-        || order.stable.current_revision_id.is_some()
-    {
-        return Err(already_submitted(DocumentType::PurchaseOrder));
-    }
-    Ok(())
-}
-
-fn ensure_initial_purchase_change_state(
-    change: &erp_procurement::entity::purchase_order::PurchaseChangeOrder,
-) -> Result<()> {
-    if change.stable.status != PurchaseChangeOrderStatus::Draft
-        || change.approval_subject_version != 0
-        || change.current_submission_id.is_some()
-        || change.target_content_hash.is_some()
-        || change.effective_revision_id.is_some()
-    {
-        return Err(already_submitted(DocumentType::PurchaseChangeOrder));
-    }
-    Ok(())
-}
-
-fn build_facts(
-    document_type: DocumentType,
-    requested_id: &str,
-    actual_id: &str,
-    business_object_version: u64,
-    document_no: String,
-    responsible_org_id: &str,
-    creator_id: &str,
-) -> Result<ApprovalUpgradeSubjectFacts> {
-    if requested_id != actual_id {
-        return Err(Error::Internal("强业务对象主键与查询主键不一致".to_string()));
-    }
-    if business_object_version == 0 {
-        return Err(Error::Internal("强业务对象版本非法".to_string()));
-    }
-    ensure_exact_nonempty_fact(responsible_org_id, "强业务对象责任组织缺失或非法")?;
-    ensure_exact_nonempty_fact(creator_id, "强业务对象不可变创建人缺失或非法")?;
-    Ok(ApprovalUpgradeSubjectFacts {
-        document_type,
-        document_id: actual_id.to_string(),
-        business_object_version,
-        document_no,
-        responsible_org_id: responsible_org_id.to_string(),
-        creator_id: creator_id.to_string(),
-    })
-}
-
-fn ensure_exact_nonempty_fact(value: &str, message: &str) -> Result<()> {
-    if value.is_empty() || value.trim() != value {
-        return Err(Error::Internal(message.to_string()));
-    }
-    Ok(())
-}
-
-fn already_submitted(document_type: DocumentType) -> Error {
-    Error::ConflictError(format!("{}不是从未提交审批的初始草稿，不能升级绑定", document_type.label()))
 }
 
 /// Process-owned upgrade-subject adapter over remaining domain aggregates.
@@ -836,6 +336,11 @@ impl erp_workflow::UpgradeSubjectPort for ProcessUpgradeSubject {
 
 #[cfg(test)]
 mod tests {
+    use erp_sales::entity::sales_order::BusinessType;
+
+    use super::super::upgrade_shared::{
+        build_facts, ensure_goods_service_source, ensure_sales_document_type,
+    };
     use super::*;
 
     #[test]
