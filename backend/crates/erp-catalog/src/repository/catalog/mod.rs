@@ -24,6 +24,8 @@ mod scope;
 mod sellable;
 mod shared;
 mod sku;
+mod sku_lookup;
+mod sku_revision;
 mod specification_audit;
 mod voucher;
 
@@ -33,11 +35,12 @@ pub use dictionary::{ProductBrandFilter, UnitOfMeasureFilter};
 pub use listing::{ProductListingSummary, sku_is_listed_expr};
 use mongodb::Database;
 pub use parent_chain::CategoryParentChainFact;
-pub use product::{ProductFilter, ProductRevisionFilter, ProductRow};
+pub use product::{ProductFilter, ProductRevisionFilter, ProductRevisionRow, ProductRow};
 pub use scope::{CatalogReadScope, CatalogScopeClause};
 pub use sellable::{SellableSkuFilter, SellableSkuRow};
-pub use sku::{SkuFilter, SkuRevisionFilter, SkuRow};
-pub use voucher::VoucherCategoryProfileRevisionFilter;
+pub use sku::{SkuFilter, SkuRow};
+pub use sku_revision::{SkuRevisionFilter, SkuRevisionRow};
+pub use voucher::{VoucherCategoryProfileRevisionFilter, VoucherCategoryProfileRevisionRow};
 
 /// D10 域专用仓储：跨集合聚合查询与必须位于事务内的多步骤写入。
 ///

@@ -299,7 +299,10 @@ fn windows_overlap(
     a_covers(b_from) && b_covers(a_from)
 }
 
-/// 校验生效区间：`valid_to` 必须晚于 `valid_from`。
+/// 校验生效区间：`valid_to` 必须晚于 `valid_from`（erp-customer-002）。
+///
+/// 窗口不变式的权威实现：实体构造、实体结束日期设置与命令层构造均复用本函数；
+/// DTO 只做字段组合分流，不再各自实现同语义校验。
 ///
 /// # 参数
 /// * `valid_from` - 生效开始日期
@@ -310,7 +313,7 @@ fn windows_overlap(
 ///
 /// # 错误
 /// 结束日期不晚于开始日期时返回错误。
-fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> Result<()> {
+pub(crate) fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> Result<()> {
     if let Some(valid_to) = valid_to
         && valid_to <= valid_from
     {

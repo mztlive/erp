@@ -8,7 +8,8 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mo
 use serde::{Deserialize, Serialize};
 
 use super::CatalogRepository;
-use super::shared::{in_filter, sort_doc};
+use super::shared::{in_filter, max_revision_no, sort_doc, whitelisted_sort};
+use crate::dto::catalog::VOUCHER_PROFILE_SORT_FIELDS;
 use crate::entity::catalog::{EnableStatus, Product, Sku, VoucherCategoryProfileRevision};
 use crate::repository::CatalogExt;
 use crate::repository::owned::VoucherCategoryProfileRevisionRepository;
@@ -253,12 +254,12 @@ impl<'a> CatalogRepository<'a> {
         sku_id: &SkuId,
         executor: &mut dyn Executor,
     ) -> Result<Option<u32>> {
-        let revisions = self
-            .db
-            .voucher_category_profile_revisions()
-            .find_many(doc! { "sku_id": sku_id.to_string() }, executor)
-            .await?;
-        Ok(revisions.iter().map(|revision| revision.revision.revision_no).max())
+        max_revision_no(
+            &self.db.voucher_category_profile_revisions().collection().clone_with_type(),
+            doc! { "sku_id": sku_id.to_string() },
+            executor,
+        )
+        .await
     }
 
     /// 解析指定卡券类目 SKU 的当前扩展修订。
@@ -406,11 +407,7 @@ fn attach_voucher_row(
 
 /// 构建卡券类目修订排序文档（白名单：`created_at`/`revision_no`）。
 fn voucher_revision_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
-    let field = match sort_by {
-        Some("revision_no") => "revision_no",
-        _ => "created_at",
-    };
-    sort_doc(field, sort_ascending)
+    sort_doc(whitelisted_sort(sort_by, VOUCHER_PROFILE_SORT_FIELDS), sort_ascending)
 }
 
 /// 卡券类目扩展修订列表投影字段。

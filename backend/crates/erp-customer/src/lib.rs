@@ -31,7 +31,7 @@ pub use error::{Error, Result, known_duplicate_index_message};
 pub use ports::{
     AccountFactPort, CustomerAuditPort, CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope,
     CustomerScopeObject, FailClosedAccountFactPort, FailClosedAuditPort, FailClosedCustomerDataScopePort,
-    FailClosedPartyFactPort, PartyFactPort, PartyIdentityFact, PreparedCustomerAudit,
+    FailClosedPartyFactPort, PartyFactPort, PartyIdentityFact, PreparedCustomerAudit, ValidatedAuditSnapshot,
 };
 pub use repository::{
     CustomerAccountFilter, CustomerAccountRepository, CustomerAccountRow, CustomerAssignmentFilter,

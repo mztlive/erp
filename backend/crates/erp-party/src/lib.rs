@@ -23,7 +23,8 @@ pub use entity::party::{
     PartyBankAccountId, PartyBankAccountUpdate, PartyContact, PartyContactContentMatch, PartyContactData,
     PartyContactId, PartyContactUpdate, PartyData, PartyId, PartyKind, PartyOwned, PartyRevision,
     PartyRevisionData, PartyRevisionId, PartyStatus, PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileId,
-    PartyTaxProfileUpdate, PartyUpdate, QueryFingerprint, SensitiveFactReuse, select_current_default,
+    PartyTaxProfileUpdate, PartyUpdate, QueryFingerprint, SensitiveFactReuse, SymmetricActiveStatus,
+    select_current_default,
 };
 pub use error::{Error, Result, known_duplicate_index_message};
 pub use ports::{

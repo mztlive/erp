@@ -57,6 +57,10 @@ pub enum Error {
 
 impl Error {
     /// Stable error class used by HTTP mapping; do not parse display text.
+    ///
+    /// 归类理由（erp-customer-009）：`Logic` 透出实体不变式失败，按内部错误
+    /// 由调用方转译；`OutcomeUnknown` 提交结果未知，禁止自动重放故不归为
+    /// 可重试的 `Conflict`；`TransientTransaction` 明确可重试，归为 `Conflict`。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
@@ -76,7 +80,9 @@ impl From<persistence_core::Error> for Error {
     /// 将仓储错误转换为客户领域错误。
     ///
     /// 唯一键、乐观锁和瞬态事务冲突保留为稳定的业务冲突语义，
-    /// 其余错误保持内部仓储错误。
+    /// 其余错误保持内部仓储错误。冲突文案映射内聚于此：
+    /// `duplicate_key_conflict_message` 经已知索引矩阵转译，
+    /// 未知索引回落通用提示（erp-customer-009）。
     fn from(error: persistence_core::Error) -> Self {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {

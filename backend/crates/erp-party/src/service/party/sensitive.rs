@@ -95,7 +95,7 @@ impl SensitiveDataCodec {
     /// # 关键业务约束
     /// 不得把密钥或明文交给比较 VO；仅传递本方法的 typed 结果。
     pub fn contact_mobile_fingerprint(&self, plain: &str) -> QueryFingerprint {
-        QueryFingerprint::from_precomputed(PartyContact::mobile_fingerprint(plain, self.fingerprint_key()))
+        self.entity_fingerprint(plain, PartyContact::mobile_fingerprint)
     }
 
     /// 计算地址内容的强类型查询指纹。
@@ -112,7 +112,7 @@ impl SensitiveDataCodec {
     /// # 关键业务约束
     /// 密钥不离开本编解码器。
     pub fn address_fingerprint(&self, plain: &str) -> QueryFingerprint {
-        QueryFingerprint::from_precomputed(PartyAddress::address_fingerprint(plain, self.fingerprint_key()))
+        self.entity_fingerprint(plain, PartyAddress::address_fingerprint)
     }
 
     /// 计算银行账号的强类型查询指纹。
@@ -129,10 +129,25 @@ impl SensitiveDataCodec {
     /// # 关键业务约束
     /// 密钥不离开本编解码器。
     pub fn bank_account_number_fingerprint(&self, plain: &str) -> QueryFingerprint {
-        QueryFingerprint::from_precomputed(PartyBankAccount::account_number_fingerprint(
-            plain,
-            self.fingerprint_key(),
-        ))
+        self.entity_fingerprint(plain, PartyBankAccount::account_number_fingerprint)
+    }
+
+    /// 用本编解码器密钥计算实体指纹并包装为强类型（erp-party-009）。
+    ///
+    /// 三个公开指纹方法仅实体指纹函数不同；密钥不出本编解码器的约束不变。
+    ///
+    /// # 参数
+    /// * `plain` - 待指纹的明文
+    /// * `fingerprint` - 实体指纹函数
+    ///
+    /// # 返回
+    /// 返回预计算的强类型查询指纹。
+    fn entity_fingerprint(
+        &self,
+        plain: &str,
+        fingerprint: impl Fn(&str, &[u8]) -> String,
+    ) -> QueryFingerprint {
+        QueryFingerprint::from_precomputed(fingerprint(plain, &self.fingerprint_key))
     }
 
     /// 使用 AES-256-GCM 加密明文并返回带版本的 URL-safe 编码。

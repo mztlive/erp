@@ -167,22 +167,64 @@ pub struct CustomerView {
 impl From<CustomerAccount> for CustomerView {
     /// 从实体构造响应视图。
     fn from(account: CustomerAccount) -> Self {
+        Self::from_account_parts(
+            account.base.id,
+            account.party_id.to_string(),
+            account.customer_no,
+            account.default_payment_term_id,
+            account.stable.status,
+            account.base.version,
+            account.base.created_at,
+            account.base.updated_at,
+        )
+    }
+}
+
+impl CustomerView {
+    /// 从投影行构造响应视图的内核（erp-customer-007）。
+    ///
+    /// 实体路径（字段留空待 hydrate）与行投影路径共用同一内核；
+    /// hydrate 补齐（主体身份、负责人、范围标签）由调用方后续步骤完成。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键
+    /// * `party_id` - 共用企业主体 ID
+    /// * `customer_no` - 客户编号
+    /// * `default_payment_term_id` - 默认付款条件引用
+    /// * `status` - 启停状态
+    /// * `version` - 乐观锁版本
+    /// * `created_at` - 创建时间
+    /// * `updated_at` - 最后更新时间
+    ///
+    /// # 返回
+    /// 返回待 hydrate 的客户视图。
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_account_parts(
+        id: String,
+        party_id: String,
+        customer_no: String,
+        default_payment_term_id: Option<String>,
+        status: CustomerAccountStatus,
+        version: u64,
+        created_at: u64,
+        updated_at: u64,
+    ) -> Self {
         Self {
-            id: account.base.id,
-            party_id: account.party_id.to_string(),
+            id,
+            party_id,
             party_no: None,
             legal_name: None,
             short_name: None,
-            customer_no: account.customer_no,
-            default_payment_term_id: account.default_payment_term_id,
-            status: account.stable.status,
+            customer_no,
+            default_payment_term_id,
+            status,
             owner_user_id: None,
             owner_user_name: None,
             collaborator_count: 0,
             scope_tags: Vec::new(),
-            version: account.base.version,
-            created_at: account.base.created_at,
-            updated_at: account.base.updated_at,
+            version,
+            created_at,
+            updated_at,
         }
     }
 }

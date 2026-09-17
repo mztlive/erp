@@ -76,9 +76,7 @@ impl From<persistence_core::Error> for Error {
     /// 将仓储错误转换为审计领域错误。
     fn from(error: persistence_core::Error) -> Self {
         match error {
-            _error @ persistence_core::Error::DuplicateKey(_) => {
-                Self::ConflictError("数据已存在，请勿重复提交".to_string())
-            },
+            error @ persistence_core::Error::DuplicateKey(_) => Self::ReceiptDuplicate(error),
             persistence_core::Error::OptimisticLockingError => {
                 Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
             },

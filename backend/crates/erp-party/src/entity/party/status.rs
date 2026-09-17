@@ -8,6 +8,68 @@ use erp_core::Result;
 use erp_core::common::state::{DocumentState, ensure_transition};
 use serde::{Deserialize, Serialize};
 
+/// 对称启停状态的共享语义（erp-party-006）。
+///
+/// 主体 [`PartyStatus`](super::entity::PartyStatus) 与从属事实
+/// [`EffectiveRecordStatus`] 是同形对称状态机（启用 ⇄ 停用）；
+/// 展示文案、稳定代码与迁移规则只在此 trait 的默认实现中出现一处，
+/// 两枚举仅保留类型名、文档与 `allowed_next` 差异，DB 存量值不受影响。
+pub trait SymmetricActiveStatus: DocumentState
+where
+    Self: 'static,
+{
+    /// 是否处于启用状态。
+    ///
+    /// # 返回
+    /// 处于启用变体时返回 `true`。
+    fn is_enabled(&self) -> bool;
+
+    /// 返回状态的中文展示名。
+    ///
+    /// # 返回
+    /// 返回面向用户的中文标签（启用/停用）。
+    fn status_label(&self) -> &'static str {
+        if self.is_enabled() { "启用" } else { "停用" }
+    }
+
+    /// 返回状态的稳定代码。
+    ///
+    /// # 返回
+    /// 返回用于持久化与查询的稳定字符串（active/disabled）。
+    fn status_code(&self) -> &'static str {
+        if self.is_enabled() { "active" } else { "disabled" }
+    }
+
+    /// 校验并迁移状态。
+    ///
+    /// 目标不在 `allowed_next()` 中且与当前状态不同时拒绝迁移（§13.3
+    /// 固定邻接矩阵，禁止运行时扩展）；幂等自迁移合法。
+    ///
+    /// # 参数
+    /// * `to` - 目标状态
+    ///
+    /// # 返回
+    /// 迁移成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 目标状态非法时返回 [`erp_core::Error::InvalidStateTransition`]。
+    fn transition_status(&mut self, to: Self) -> Result<()> {
+        ensure_transition(*self, to)?;
+        *self = to;
+        Ok(())
+    }
+}
+
+impl SymmetricActiveStatus for EffectiveRecordStatus {
+    /// 是否处于启用状态。
+    ///
+    /// # 返回
+    /// 处于 `Active` 时返回 `true`。
+    fn is_enabled(&self) -> bool {
+        matches!(self, Self::Active)
+    }
+}
+
 /// 从属事实行的启停状态（§6.2：启用/停用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -25,10 +87,7 @@ impl EffectiveRecordStatus {
     /// # 返回
     /// 返回面向用户的中文标签。
     pub fn label(&self) -> &'static str {
-        match self {
-            Self::Active => "启用",
-            Self::Disabled => "停用",
-        }
+        self.status_label()
     }
 
     /// 返回状态的稳定代码。
@@ -36,10 +95,7 @@ impl EffectiveRecordStatus {
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
     pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Active => "active",
-            Self::Disabled => "disabled",
-        }
+        self.status_code()
     }
 
     /// 判断是否处于启用状态。
@@ -47,7 +103,7 @@ impl EffectiveRecordStatus {
     /// # 返回
     /// 处于 `Active` 时返回 `true`。
     pub fn is_active(&self) -> bool {
-        matches!(self, Self::Active)
+        self.is_enabled()
     }
 
     /// 校验并迁移状态。
@@ -64,9 +120,7 @@ impl EffectiveRecordStatus {
     /// # 错误
     /// 目标状态非法时返回 [`erp_core::Error::InvalidStateTransition`]。
     pub fn transition_to(&mut self, to: Self) -> Result<()> {
-        ensure_transition(*self, to)?;
-        *self = to;
-        Ok(())
+        self.transition_status(to)
     }
 }
 

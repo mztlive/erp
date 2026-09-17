@@ -11,6 +11,9 @@ use crate::repository::SupplierListSearchInput;
 
 /// 供应商列表业务查询参数的仓储搜索输入组织（保留在 Service）。
 ///
+/// DTO→仓储的健康映射经 [`SupplierQualificationHealth::to_repository_filter`]
+/// 单一转换入口（erp-supplier-008），调用处只剩一句转换。
+///
 /// # 参数
 /// * `query` - 已校验的供应商列表业务筛选条件
 /// * `as_of` - 当前业务日字符串
@@ -23,15 +26,8 @@ pub(super) fn supplier_list_search_input(
     as_of: String,
     keyword_party_ids: Option<Vec<erp_core::ids::PartyId>>,
 ) -> SupplierListSearchInput {
-    type HealthFilter = crate::repository::SupplierQualificationHealthFilter;
-    let qualification_health = match query.qualification_health {
-        None => None,
-        Some(SupplierQualificationHealth::Unverified) => Some(HealthFilter::Unverified),
-        Some(SupplierQualificationHealth::Valid) => Some(HealthFilter::Valid),
-        Some(SupplierQualificationHealth::Expiring30) => Some(HealthFilter::Expiring30),
-        Some(SupplierQualificationHealth::Expired) => Some(HealthFilter::Expired),
-        Some(SupplierQualificationHealth::NotRegistered) => Some(HealthFilter::NotRegistered),
-    };
+    let qualification_health =
+        query.qualification_health.map(SupplierQualificationHealth::to_repository_filter);
     SupplierListSearchInput {
         keyword: query.keyword.clone(),
         party_id: query.party_id.clone(),

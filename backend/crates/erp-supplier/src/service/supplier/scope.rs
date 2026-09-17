@@ -1,7 +1,5 @@
 //! 供应商列表的一致授权快照；范围与业务版本跨页携带。
 
-use std::hash::{Hash, Hasher};
-
 use application_core::{AuditActor, FilterOption, FilteredPage};
 use persistence_core::Transactional;
 use serde::Serialize;
@@ -72,13 +70,38 @@ impl SupplierService {
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
         let snapshot = self.list_snapshot(&query, actor).await?;
         ensure_scope_version(params.scope_version.as_deref(), &snapshot.context.scope_version)?;
-        let current = self.list_snapshot(&query, actor).await?;
+        let current = self.list_version_snapshot(&query, actor).await?;
         ensure_stable_snapshot(&snapshot.context.scope_version, &current.context.scope_version)?;
         Ok(to_list_view(snapshot))
     }
 
     /// 授权、总数、候选与业务身份版本全部在同一个事务读取。
     async fn list_snapshot(&self, query: &SupplierListQuery, actor: &AuditActor) -> Result<SupplierSnapshot> {
+        self.run_list_snapshot(query, actor, true).await
+    }
+
+    /// 轻量版本复核快照（erp-supplier-004）。
+    ///
+    /// 与 [`Self::list_snapshot`] 共用授权、过滤与版本指纹逻辑，
+    /// 跳过列表束装配、候选与行水合；调用方仅用 `context.scope_version`
+    /// 做稳定性比对，快照语义保持不变。
+    async fn list_version_snapshot(
+        &self,
+        query: &SupplierListQuery,
+        actor: &AuditActor,
+    ) -> Result<SupplierSnapshot> {
+        self.run_list_snapshot(query, actor, false).await
+    }
+
+    /// 执行列表事务体（erp-supplier-004）。
+    ///
+    /// `hydrate` 为假时跳过列表束、水合与候选装配，仅重算版本指纹供复核使用。
+    async fn run_list_snapshot(
+        &self,
+        query: &SupplierListQuery,
+        actor: &AuditActor,
+        hydrate: bool,
+    ) -> Result<SupplierSnapshot> {
         let db = self.db.clone();
         let access = self.access();
         let data_scope = self.data_scope.clone();
@@ -96,8 +119,20 @@ impl SupplierService {
                     let input =
                         build_list_input(&query, &scope, data_scope.as_ref(), party.as_ref(), executor)
                             .await?;
-                    let bundle = db.supplier().load_supplier_list_bundle(&input, executor).await?;
                     fingerprint_scope(&db, &mut context, &input, executor).await?;
+                    if !hydrate {
+                        return Ok(SupplierSnapshot {
+                            items: Vec::new(),
+                            total: 0,
+                            page: input.page,
+                            page_size: input.page_size,
+                            owner_options: Vec::new(),
+                            capability_owner_options: Vec::new(),
+                            context,
+                            no_scope,
+                        });
+                    }
+                    let bundle = db.supplier().load_supplier_list_bundle(&input, executor).await?;
                     hydrate_snapshot(HydrateArgs {
                         bundle,
                         party: party.as_ref(),
@@ -204,10 +239,34 @@ async fn fingerprint_scope(
     if versions.len() > 10_000 {
         return Err(Error::ValidationError("供应商查询超过上限，请收窄组织或负责人条件".into()));
     }
-    let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-    versions.hash(&mut fingerprint);
-    context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
+    context.scope_version = fingerprint_versions(&context.scope_version, &versions);
     Ok(())
+}
+
+/// 用确定性哈希计算供应商身份版本指纹并拼接到基线版本。
+///
+/// `DefaultHasher` 跨进程不保证稳定（与 erp-customer-004 同类问题）；
+/// 本函数使用 FNV-1a 64 位并固化字段顺序，`query_versions` 已按 `id` 排序。
+///
+/// # 参数
+/// * `base` - 基线范围版本
+/// * `versions` - 供应商身份与版本集合
+///
+/// # 返回
+/// 返回 `{base}:{hex指纹}` 格式的范围版本。
+fn fingerprint_versions(base: &str, versions: &[crate::repository::SupplierVersion]) -> String {
+    const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
+    let mut hash = FNV_OFFSET;
+    for version in versions {
+        for byte in version.id.as_bytes().iter().chain(&version.version.to_le_bytes()) {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
+        hash ^= 0xff;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    format!("{base}:{hash:016x}")
 }
 
 fn account_filter(input: &SupplierListSearchInput) -> crate::repository::SupplierAccountFilter {

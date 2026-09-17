@@ -3,8 +3,8 @@ use validator::Validate;
 
 use super::CatalogService;
 use crate::dto::{
-    PageView, ProductListParams, ProductRevisionListParams, ProductRevisionMediaView, ProductRevisionView,
-    ProductView, SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView, SortDir,
+    PageView, ProductListParams, ProductRevisionListParams, ProductRevisionView, ProductView, SkuListParams,
+    SkuRevisionListParams, SkuRevisionView, SkuView, SortDir,
 };
 use crate::error::Result;
 use crate::repository::CatalogExt;
@@ -44,36 +44,7 @@ impl CatalogService {
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
         let page = self.db.catalog().product_revision_page(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| ProductRevisionView {
-                id: row.id,
-                product_id: row.product_id,
-                revision_no: row.revision_no,
-                name: row.name,
-                description: row.description,
-                specification: row.specification,
-                category_id: row.category_id,
-                brand_id: row.brand_id,
-                status: row.status,
-                effective_from: row.effective_from,
-                effective_to: row.effective_to,
-                media: row
-                    .media
-                    .into_iter()
-                    .map(|media| ProductRevisionMediaView {
-                        id: media.base.id,
-                        file_asset_id: media.file_asset_id.to_string(),
-                        media_role: media.media_role,
-                        sort_order: media.sort_order,
-                        alt_text: media.alt_text,
-                    })
-                    .collect(),
-                created_at: row.created_at,
-                version: row.version,
-            })
-            .collect();
+        let items = page.items.into_iter().map(ProductRevisionView::from).collect();
         Ok(PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size })
     }
 
@@ -103,23 +74,7 @@ impl CatalogService {
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
         let page = self.db.catalog().sku_page(keyword.as_deref(), &filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| SkuView {
-                id: row.id,
-                sku_no: row.sku_no,
-                product_id: row.product_id,
-                base_unit_id: row.base_unit_id,
-                specification_signature: row.specification_signature,
-                status: row.status,
-                listing_status: row.listing_status,
-                current_revision_id: row.current_revision_id,
-                name: row.name,
-                created_at: row.created_at,
-                version: row.version,
-            })
-            .collect();
+        let items = page.items.into_iter().map(SkuView::from).collect();
         Ok(PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size })
     }
 
@@ -150,29 +105,7 @@ impl CatalogService {
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
         let page = self.db.catalog().sku_revision_page(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| SkuRevisionView {
-                id: row.id,
-                sku_id: row.sku_id,
-                revision_no: row.revision_no,
-                name: row.name,
-                description: row.description,
-                specification: row.specification,
-                barcode: row.barcode,
-                source_main_image_asset_id: row.source_main_image_asset_id,
-                weight_kg: row.weight_kg,
-                volume_m3: row.volume_m3,
-                status: row.status,
-                sales_visible_price_gross: row.sales_visible_price_gross,
-                market_price: row.market_price,
-                effective_from: row.effective_from,
-                effective_to: row.effective_to,
-                created_at: row.created_at,
-                version: row.version,
-            })
-            .collect();
+        let items = page.items.into_iter().map(SkuRevisionView::from).collect();
         Ok(PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size })
     }
 }
@@ -209,28 +142,6 @@ pub fn product_page_view(
     page: persistence_core::PageResult<crate::repository::ProductRow>,
     filter: &ProductFilter,
 ) -> Result<PageView<ProductView>> {
-    let items = page
-        .items
-        .into_iter()
-        .map(|row| ProductView {
-            id: row.id,
-            product_no: row.product_no,
-            product_kind: row.product_kind,
-            name: row.name,
-            category_id: row.category_id,
-            brand_id: row.brand_id,
-            status: row.status,
-            listing_status: row.listing_status,
-            listed_sku_count: row.listed_sku_count,
-            sku_count: row.sku_count,
-            supplied_sku_count: row.supplied_sku_count,
-            priced_sku_count: row.priced_sku_count,
-            current_revision_id: row.current_revision_id,
-            created_at: row.created_at,
-            version: row.version,
-            maintainer_user_id: row.maintainer_user_id,
-            business_org_unit_id: row.business_org_unit_id,
-        })
-        .collect();
+    let items = page.items.into_iter().map(ProductView::from).collect();
     Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
 }

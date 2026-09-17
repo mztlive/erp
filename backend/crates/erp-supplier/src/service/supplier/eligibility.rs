@@ -50,8 +50,8 @@ pub async fn ensure_capability_qualified(
     capability_revision_id: &SupplierCapabilityRevisionId,
     on_date: BusinessDate,
 ) -> Result<()> {
-    ensure_capability_qualified_with_executor(
-        db,
+    ensure_qualified_with_port(
+        &MongoQualificationFacts { db },
         supplier_id,
         capability_revision_id,
         on_date,
@@ -60,7 +60,11 @@ pub async fn ensure_capability_qualified(
     .await
 }
 
-/// 校验指定能力修订；所有原读取使用调用方Executor，不另开事务。
+/// 校验指定供应商能力修订；所有原读取使用调用方Executor，不另开事务。
+///
+/// executor 版为唯一实现（erp-supplier-006）：便捷版直接构造
+/// `MongoQualificationFacts` 并以内联 `NoTransaction` 委托至此，
+/// 不再经第二层薄转发；签名与错误语义保持不变。
 pub async fn ensure_capability_qualified_with_executor(
     db: &Database,
     supplier_id: &SupplierAccountId,

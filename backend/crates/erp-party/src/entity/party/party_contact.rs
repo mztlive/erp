@@ -228,6 +228,23 @@ impl PartyContact {
         })
     }
 
+    /// 校验期望版本与当前版本一致（erp-party-008）。
+    ///
+    /// 冲突文案与主体 `ensure_version` 同源（见 [`super::ensure_base_version`]），
+    /// Service 层只做错误类映射。
+    ///
+    /// # 参数
+    /// * `expected` - 调用方持有的期望版本
+    ///
+    /// # 返回
+    /// 版本一致返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 版本不一致时返回版本冲突错误。
+    pub fn ensure_version(&self, expected: u64) -> Result<()> {
+        super::ensure_base_version(&self.base, expected)
+    }
+
     /// 更新联系人（仅限生命周期字段）。
     ///
     /// 内容变更必须通过新的有效期事实行追加（W03）；原地更新只允许

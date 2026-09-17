@@ -232,6 +232,26 @@ impl Product {
         !self.maintainer_user_id.trim().is_empty() && !self.business_org_unit_id.trim().is_empty()
     }
 
+    /// 维护人缺失时阻断写命令（erp-catalog-014）。
+    ///
+    /// 四处命令入口（`product_workflow`、`listing` ×2、`product_disable`）的
+    /// 同一守卫收敛至此；文案与判定保持不变。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 具备维护责任时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 缺少维护人或主属组织时返回业务逻辑错误。
+    pub fn ensure_has_responsibility(&self) -> crate::error::Result<()> {
+        if !self.has_responsibility() {
+            return Err(crate::error::Error::BusinessLogicError("商品缺少维护人或主属组织，请先交接".into()));
+        }
+        Ok(())
+    }
+
     /// 显式交接商品维护人与可选业务组织。
     ///
     /// 业务组织不随接收人部门隐式变化；`None` 表示保留原组织。

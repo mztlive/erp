@@ -80,6 +80,11 @@ struct SupplierRowContext<'a> {
 
 /// 收集商务版本引用的签约与付款主体 ID。
 ///
+/// 商务主体 ID 收集的唯一实现（erp-supplier-005）：仓储 `bundle/detail.rs`
+/// 的去重逻辑已转调此处，两处语义一致（排序去重后映射 `PartyId`）。
+/// 同 crate 仓储经 `crate::service::supplier::commercial_party_ids_for_repository`
+/// 转调，避免业务领域内两份去重逻辑。
+///
 /// # 参数
 /// * `profiles` - 当前页商务资料
 ///
@@ -88,7 +93,7 @@ struct SupplierRowContext<'a> {
 ///
 /// # 错误
 /// 无。
-pub(super) fn commercial_party_ids(profiles: &[SupplierCommercialProfileRevision]) -> Vec<PartyId> {
+pub(crate) fn commercial_party_ids(profiles: &[SupplierCommercialProfileRevision]) -> Vec<PartyId> {
     let mut ids: Vec<String> = profiles
         .iter()
         .flat_map(|profile| {

@@ -228,6 +228,42 @@ pub fn plan_supplier_creation(
     ids: SupplierCreationIds,
     inputs: SupplierCreationInputs,
 ) -> erp_core::Result<SupplierCreationPlan> {
+    validate_creation_cardinality(&ids, &inputs)?;
+    let (party_seed, supplier, commercial_profile) = build_creation_head(&ids, &inputs)?;
+    let (capabilities, capability_revisions, capability_ids) = build_creation_capabilities(&ids, &inputs)?;
+    let (qualifications, qualification_revisions, qualification_links) =
+        build_creation_qualifications(&ids, inputs.qualifications, &inputs.actor_id, &capability_ids)?;
+    let rating = build_creation_rating(&ids, inputs.rating, inputs.change_reason)?;
+
+    Ok(SupplierCreationPlan {
+        party_seed,
+        supplier,
+        commercial_profile,
+        capabilities,
+        capability_revisions,
+        capability_ids,
+        qualifications,
+        qualification_revisions,
+        qualification_links,
+        rating,
+    })
+}
+
+/// 校验创建输入的资质选择合法性与 ID 数量对应关系。
+///
+/// # 参数
+/// * `ids` - Service 已分配的全部主键
+/// * `inputs` - Service 已校验的根资料业务值
+///
+/// # 返回
+/// 校验通过返回 `Ok(())`。
+///
+/// # 错误
+/// 资质选择非法、能力与资质 ID 数量不匹配时返回错误。
+fn validate_creation_cardinality(
+    ids: &SupplierCreationIds,
+    inputs: &SupplierCreationInputs,
+) -> erp_core::Result<()> {
     let selections: Vec<SupplierQualificationSelection<'_>> = inputs
         .qualifications
         .iter()
@@ -244,53 +280,92 @@ pub fn plan_supplier_creation(
     if ids.qualification_ids.len() != inputs.qualifications.len() {
         return Err(erp_core::Error::from("供应商资质 ID 与资质输入数量不一致"));
     }
+    Ok(())
+}
 
+/// 构造主体快照、供应商角色与首版商务资料。
+///
+/// 首版修订号恒为 1；供应商当前指针在构造内推进。
+///
+/// # 参数
+/// * `ids` - Service 已分配的全部主键
+/// * `inputs` - Service 已校验的根资料业务值
+///
+/// # 返回
+/// 返回 `(主体快照, 供应商角色, 首版商务资料)`。
+///
+/// # 错误
+/// 任一实体字段校验失败时返回错误。
+fn build_creation_head(
+    ids: &SupplierCreationIds,
+    inputs: &SupplierCreationInputs,
+) -> erp_core::Result<(SupplierPartySeed, SupplierAccount, SupplierCommercialProfileRevision)> {
     let party_seed = SupplierPartySeed {
         party_id: ids.party_id.clone(),
         party_revision_id: ids.party_revision_id.clone(),
-        party_no: inputs.party_no,
-        legal_name: inputs.legal_name,
-        short_name: inputs.short_name,
-        unified_credit_code: inputs.unified_credit_code,
+        party_no: inputs.party_no.clone(),
+        legal_name: inputs.legal_name.clone(),
+        short_name: inputs.short_name.clone(),
+        unified_credit_code: inputs.unified_credit_code.clone(),
         change_reason: inputs.change_reason.clone(),
         actor_id: inputs.actor_id.clone(),
     };
-
     let supplier = SupplierAccount::new(
         ids.supplier_id.clone(),
         SupplierAccountData {
             party_id: ids.party_id.clone(),
-            supplier_no: inputs.supplier_no,
+            supplier_no: inputs.supplier_no.clone(),
             default_payment_term_id: None,
             current_commercial_profile_revision_id: Some(ids.commercial_profile_id.clone()),
-            maintainer_user_id: inputs.maintainer_user_id,
-            business_org_unit_id: inputs.business_org_unit_id,
+            maintainer_user_id: inputs.maintainer_user_id.clone(),
+            business_org_unit_id: inputs.business_org_unit_id.clone(),
             status: SupplierAccountStatus::Active,
         },
         inputs.actor_id.clone(),
     )?;
     let commercial_profile = SupplierCommercialProfileRevision::new(
-        ids.commercial_profile_id,
+        ids.commercial_profile_id.clone(),
         SupplierCommercialProfileRevisionData {
             supplier_id: ids.supplier_id.clone(),
             revision_no: 1,
             settlement_mode: inputs.settlement_mode,
             reconciliation_cycle: inputs.reconciliation_cycle,
-            payment_term_snapshot: inputs.payment_term_snapshot,
-            business_category: inputs.business_category,
+            payment_term_snapshot: inputs.payment_term_snapshot.clone(),
+            business_category: inputs.business_category.clone(),
             invoice_type: inputs.invoice_type,
             invoice_tax_rate: inputs.invoice_tax_rate,
             invoice_tax_rates: inputs.invoice_tax_rates.clone(),
-            signing_entity_party_id: inputs.signing_entity_party_id,
-            payment_entity_party_id: inputs.payment_entity_party_id,
+            signing_entity_party_id: inputs.signing_entity_party_id.clone(),
+            payment_entity_party_id: inputs.payment_entity_party_id.clone(),
             change_reason: inputs.change_reason.clone(),
         },
     )?;
+    Ok((party_seed, supplier, commercial_profile))
+}
 
+/// 逐能力构造新能力、首版修订与代码到稳定 ID 的映射。
+///
+/// # 参数
+/// * `ids` - Service 已分配的全部主键，能力 ID 与输入顺序对应
+/// * `inputs` - Service 已校验的根资料业务值
+///
+/// # 返回
+/// 返回 `(能力, 能力首版修订, 代码到稳定 ID 映射)`。
+///
+/// # 错误
+/// 能力负责人缺失或任一实体字段校验失败时返回错误。
+fn build_creation_capabilities(
+    ids: &SupplierCreationIds,
+    inputs: &SupplierCreationInputs,
+) -> erp_core::Result<(
+    Vec<SupplierCapability>,
+    Vec<SupplierCapabilityRevision>,
+    HashMap<String, SupplierCapabilityId>,
+)> {
     let mut capabilities = Vec::with_capacity(inputs.capability_codes.len());
     let mut capability_revisions = Vec::with_capacity(inputs.capability_codes.len());
     let mut capability_ids = HashMap::new();
-    for (code, allocated) in inputs.capability_codes.iter().copied().zip(ids.capability_ids) {
+    for (code, allocated) in inputs.capability_codes.iter().copied().zip(ids.capability_ids.clone()) {
         let (_, capability_id, revision_id) = allocated;
         let owner = capability_owner(&inputs.capability_owners, code)?;
         let (capability, revision) = profile_change::new_capability(
@@ -306,12 +381,37 @@ pub fn plan_supplier_creation(
         capabilities.push(capability);
         capability_revisions.push(revision);
     }
+    Ok((capabilities, capability_revisions, capability_ids))
+}
 
-    let mut qualifications = Vec::with_capacity(inputs.qualifications.len());
-    let mut qualification_revisions = Vec::with_capacity(inputs.qualifications.len());
-    let mut qualification_links = Vec::new();
-    for (input, allocated) in inputs.qualifications.into_iter().zip(ids.qualification_ids) {
-        let (qualification, revision, links) =
+/// 逐资质构造新资质、首版快照及适用能力关联。
+///
+/// # 参数
+/// * `ids` - Service 已分配的全部主键
+/// * `qualifications` - 待创建的资质输入（按输入顺序消费）
+/// * `actor_id` - 操作人 ID
+/// * `capability_ids` - 能力代码到稳定 ID 的映射
+///
+/// # 返回
+/// 返回 `(资质, 资质首版修订, 适用能力关联)`。
+///
+/// # 错误
+/// 资质身份重复、引用未勾选能力或任一实体字段校验失败时返回错误。
+fn build_creation_qualifications(
+    ids: &SupplierCreationIds,
+    qualifications: Vec<SupplierCreationQualificationInput>,
+    actor_id: &str,
+    capability_ids: &HashMap<String, SupplierCapabilityId>,
+) -> erp_core::Result<(
+    Vec<SupplierQualification>,
+    Vec<SupplierQualificationRevision>,
+    Vec<SupplierQualificationCapability>,
+)> {
+    let mut out = Vec::with_capacity(qualifications.len());
+    let mut revisions = Vec::with_capacity(qualifications.len());
+    let mut links = Vec::new();
+    for (input, allocated) in qualifications.into_iter().zip(ids.qualification_ids.clone()) {
+        let (qualification, revision, qualification_links) =
             profile_change::new_qualification(profile_change::NewQualificationParams {
                 supplier_id: &ids.supplier_id,
                 qualification_type: input.qualification_type,
@@ -321,19 +421,38 @@ pub fn plan_supplier_creation(
                 valid_to: input.valid_to,
                 attachment_id: input.attachment_id,
                 capability_codes: &input.capability_codes,
-                capability_ids: &capability_ids,
-                actor_id: &inputs.actor_id,
+                capability_ids,
+                actor_id,
                 qualification_id: allocated.qualification_id,
                 revision_id: allocated.revision_id,
                 link_ids: allocated.link_ids,
             })?;
-        qualifications.push(qualification);
-        qualification_revisions.push(revision);
-        qualification_links.extend(links);
+        out.push(qualification);
+        revisions.push(revision);
+        links.extend(qualification_links);
     }
+    Ok((out, revisions, links))
+}
 
-    let rating = match (inputs.rating, ids.rating_id) {
-        (Some(input), Some(rating_id)) => Some(SupplierRatingRevision::new(
+/// 构造首版评级；输入与 ID 必须同时存在或同时缺失。
+///
+/// # 参数
+/// * `ids` - Service 已分配的全部主键（含可选评级 ID）
+/// * `rating` - 首版评级输入；`None` 表示不写评级
+/// * `change_reason` - 变更原因
+///
+/// # 返回
+/// 返回首版评级；不写评级时返回 `None`。
+///
+/// # 错误
+/// 评级输入与 ID 一有一无，或评级校验失败时返回错误。
+fn build_creation_rating(
+    ids: &SupplierCreationIds,
+    rating: Option<SupplierCreationRatingInput>,
+    change_reason: String,
+) -> erp_core::Result<Option<SupplierRatingRevision>> {
+    match (rating, ids.rating_id.clone()) {
+        (Some(input), Some(rating_id)) => Ok(Some(SupplierRatingRevision::new(
             rating_id,
             SupplierRatingRevisionData {
                 supplier_id: ids.supplier_id.clone(),
@@ -343,30 +462,13 @@ pub fn plan_supplier_creation(
                 current_score: input.current_score,
                 valid_from: input.valid_from,
                 valid_to: None,
-                change_reason: inputs.change_reason,
+                change_reason,
             },
-        )?),
-        (None, None) => None,
-        (Some(_), None) => {
-            return Err(erp_core::Error::from("供应商评级 ID 缺失"));
-        },
-        (None, Some(_)) => {
-            return Err(erp_core::Error::from("供应商评级输入缺失"));
-        },
-    };
-
-    Ok(SupplierCreationPlan {
-        party_seed,
-        supplier,
-        commercial_profile,
-        capabilities,
-        capability_revisions,
-        capability_ids,
-        qualifications,
-        qualification_revisions,
-        qualification_links,
-        rating,
-    })
+        )?)),
+        (None, None) => Ok(None),
+        (Some(_), None) => Err(erp_core::Error::from("供应商评级 ID 缺失")),
+        (None, Some(_)) => Err(erp_core::Error::from("供应商评级输入缺失")),
+    }
 }
 
 /// 读取指定能力的显式负责人。

@@ -46,6 +46,28 @@ pub(crate) struct NormalizedAuditLogListParams {
     pub(crate) page_size: u32,
 }
 
+impl From<NormalizedAuditLogListParams> for crate::repository::AuditLogFilter {
+    /// 将规范化参数转换为仓储过滤器（erp-audit-003）。
+    ///
+    /// 字段映射只在此一处实现；新增筛选字段时同步两结构体与本函数。
+    ///
+    /// # 参数
+    /// * `params` - 规范化查询参数
+    ///
+    /// # 返回
+    /// 返回仓储层过滤条件。
+    fn from(params: NormalizedAuditLogListParams) -> Self {
+        Self {
+            actor_account: params.actor_account,
+            action: params.action,
+            resource_type: params.resource_type,
+            success: params.success,
+            page: params.page,
+            page_size: params.page_size,
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct AuditLogItem {
     pub id: String,

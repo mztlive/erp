@@ -175,18 +175,21 @@ pub(super) fn specification_signature_for(entries: &[SpecEntryInput]) -> Result<
     Ok(compute_specification_signature(&signature_entries)?)
 }
 
-/// 构造既有 SKU 编辑身份值对象。
+/// 由请求输入构造 SKU 编辑身份（erp-catalog-012）。
+///
+/// Create 路径传 `None`，编辑路径传请求级原因；两种构造仅差一个参数，
+/// 调用方不再需要记住用哪个函数。
 ///
 /// # 参数
 /// * `input` - 客户端提交的 SKU 行
-/// * `change_reason` - 请求级变更原因
+/// * `change_reason` - 请求级变更原因；新建时为 `None`
 ///
 /// # 返回
 /// 返回借用输入字段的 SKU 编辑身份快照。
 ///
 /// # 错误
 /// 无；具体身份规则由 [`Sku::classify_edit`] 校验。
-pub(super) fn existing_sku_edit_identity<'a>(
+pub(super) fn sku_edit_identity<'a>(
     input: &'a ProductSkuInput,
     change_reason: Option<&'a str>,
 ) -> SkuEditIdentity<'a> {
@@ -211,14 +214,7 @@ pub(super) fn existing_sku_edit_identity<'a>(
 /// # 错误
 /// 无；具体身份规则由 [`SkuEditIdentity::ensure_new`] 校验。
 fn new_sku_edit_identity(input: &ProductSkuInput) -> SkuEditIdentity<'_> {
-    SkuEditIdentity {
-        sku_id: input.sku_id.as_ref(),
-        expected_revision_id: input.expected_sku_revision_id.as_ref(),
-        sku_no: &input.sku_no,
-        base_unit_id: &input.base_unit_id,
-        reenable: input.reenable,
-        change_reason: None,
-    }
+    sku_edit_identity(input, None)
 }
 
 /// 把 SKU 身份领域错误映射为稳定的 Service 错误语义。

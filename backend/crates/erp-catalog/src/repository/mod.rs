@@ -7,9 +7,10 @@ pub mod owned;
 pub use catalog::{
     CatalogReadScope, CatalogRepository, CatalogScopeClause, CategoryParentChainFact, ProductBrandFilter,
     ProductCategoryAttributeFilter, ProductCategoryFilter, ProductFilter, ProductListingSummary,
-    ProductRevisionFilter, ProductRow, SellableSkuFilter, SellableSkuRow, SkuAttributeFilter,
-    SkuAttributeValueFilter, SkuFilter, SkuRevisionFilter, SkuRow, UnitOfMeasureFilter,
-    VoucherCategoryProfileRevisionFilter, sku_is_listed_expr,
+    ProductRevisionFilter, ProductRevisionRow, ProductRow, SellableSkuFilter, SellableSkuRow,
+    SkuAttributeFilter, SkuAttributeValueFilter, SkuFilter, SkuRevisionFilter, SkuRevisionRow, SkuRow,
+    UnitOfMeasureFilter, VoucherCategoryProfileRevisionFilter, VoucherCategoryProfileRevisionRow,
+    sku_is_listed_expr,
 };
 pub use extensions::CatalogExt;
 pub use owned::{

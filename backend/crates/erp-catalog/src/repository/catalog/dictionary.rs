@@ -2,13 +2,12 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
-};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter};
 use serde::{Deserialize, Serialize};
 
 use super::CatalogRepository;
-use super::shared::{in_filter, sort_doc};
+use super::shared::{default_paging, in_filter, sort_doc, whitelisted_sort};
+use crate::dto::catalog::{PRODUCT_BRAND_SORT_FIELDS, UNIT_OF_MEASURE_SORT_FIELDS};
 use crate::entity::catalog::voucher_defaults::{
     VOUCHER_DEFAULT_BRAND_CODE, VOUCHER_DEFAULT_BRAND_NAME, VOUCHER_DEFAULT_UNIT_CODE,
     VOUCHER_ROOT_CATEGORY_CODE,
@@ -69,16 +68,8 @@ impl Default for ProductBrandFilter {
     /// # 错误
     /// 无。
     fn default() -> Self {
-        Self {
-            q: None,
-            brand_code: None,
-            name: None,
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        }
+        let (page, page_size, sort_by, sort_ascending) = default_paging();
+        Self { q: None, brand_code: None, name: None, status: None, page, page_size, sort_by, sort_ascending }
     }
 }
 
@@ -148,10 +139,7 @@ impl<'a> ProductBrandRepository<'a> {
             .projection(product_brand_projection())
             .build();
         let collection = self.collection().clone_with_type::<ProductBrandRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        super::shared::search_projected(&collection, &self.collection(), filter, options, executor).await
     }
 }
 
@@ -250,10 +238,7 @@ impl<'a> UnitOfMeasureRepository<'a> {
             .projection(unit_of_measure_projection())
             .build();
         let collection = self.collection().clone_with_type::<UnitOfMeasureRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        super::shared::search_projected(&collection, &self.collection(), filter, options, executor).await
     }
 }
 
@@ -372,22 +357,12 @@ impl<'a> CatalogRepository<'a> {
 
 /// 构建商品品牌排序文档（白名单：`created_at`/`brand_code`/`name`）。
 fn product_brand_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
-    let field = match sort_by {
-        Some("brand_code") => "brand_code",
-        Some("name") => "name",
-        _ => "created_at",
-    };
-    sort_doc(field, sort_ascending)
+    sort_doc(whitelisted_sort(sort_by, PRODUCT_BRAND_SORT_FIELDS), sort_ascending)
 }
 
 /// 构建计量单位排序文档（白名单：`created_at`/`unit_code`/`name`）。
 fn unit_of_measure_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
-    let field = match sort_by {
-        Some("unit_code") => "unit_code",
-        Some("name") => "name",
-        _ => "created_at",
-    };
-    sort_doc(field, sort_ascending)
+    sort_doc(whitelisted_sort(sort_by, UNIT_OF_MEASURE_SORT_FIELDS), sort_ascending)
 }
 
 /// 商品品牌列表投影字段。

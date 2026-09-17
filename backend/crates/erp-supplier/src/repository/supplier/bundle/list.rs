@@ -245,56 +245,78 @@ impl<'a> SupplierRepository<'a> {
                 None,
                 Some(self.list_supplier_ids_by_qualification_types(qualification_types, executor).await?),
             )),
-            QualificationConstraintKind::Included => match health {
-                None => Ok((
-                    Some(self.list_supplier_ids_by_qualification_types(qualification_types, executor).await?),
-                    None,
-                )),
-                Some(SupplierQualificationHealthFilter::Unverified) => Ok((
+            QualificationConstraintKind::Included => {
+                self.list_included_qualification_constraints(qualification_types, health, as_of, executor)
+                    .await
+            },
+        }
+    }
+
+    /// 查询命中集合内的资质类型和健康状态对应的供应商角色 ID 约束。
+    ///
+    /// # 参数
+    /// * `qualification_types` - 资质类型；空集合表示不限制类型
+    /// * `health` - 资质健康状态；`None` 表示仅按类型命中
+    /// * `as_of` - 当前业务日字符串
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回应命中的供应商 ID 集合；`NotRegistered` 仅返回排除集合。
+    ///
+    /// # 错误
+    /// 到期窗口计算或任一仓储查询失败时返回错误。
+    async fn list_included_qualification_constraints(
+        &self,
+        qualification_types: &[QualificationType],
+        health: Option<SupplierQualificationHealthFilter>,
+        as_of: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<(Option<Vec<SupplierAccountId>>, Option<Vec<SupplierAccountId>>)> {
+        match health {
+            None => Ok((
+                Some(self.list_supplier_ids_by_qualification_types(qualification_types, executor).await?),
+                None,
+            )),
+            Some(SupplierQualificationHealthFilter::Unverified) => Ok((
+                Some(
+                    self.list_supplier_ids_by_unverified_qualifications(qualification_types, executor)
+                        .await?,
+                ),
+                None,
+            )),
+            Some(SupplierQualificationHealthFilter::Valid) => Ok((
+                Some(
+                    self.list_supplier_ids_by_valid_qualifications(qualification_types, as_of, executor)
+                        .await?,
+                ),
+                None,
+            )),
+            Some(SupplierQualificationHealthFilter::Expiring30) => {
+                let expires_by = qualification_expiry_cutoff(as_of)?;
+                Ok((
                     Some(
-                        self.list_supplier_ids_by_unverified_qualifications(qualification_types, executor)
-                            .await?,
-                    ),
-                    None,
-                )),
-                Some(SupplierQualificationHealthFilter::Valid) => Ok((
-                    Some(
-                        self.list_supplier_ids_by_valid_qualifications(qualification_types, as_of, executor)
-                            .await?,
-                    ),
-                    None,
-                )),
-                Some(SupplierQualificationHealthFilter::Expiring30) => {
-                    let expires_by = qualification_expiry_cutoff(as_of)?;
-                    Ok((
-                        Some(
-                            self.list_supplier_ids_by_expiring_qualifications(
-                                qualification_types,
-                                as_of,
-                                &expires_by,
-                                executor,
-                            )
-                            .await?,
-                        ),
-                        None,
-                    ))
-                },
-                Some(SupplierQualificationHealthFilter::Expired) => Ok((
-                    Some(
-                        self.list_supplier_ids_by_expired_qualifications(
+                        self.list_supplier_ids_by_expiring_qualifications(
                             qualification_types,
                             as_of,
+                            &expires_by,
                             executor,
                         )
                         .await?,
                     ),
                     None,
-                )),
-                Some(SupplierQualificationHealthFilter::NotRegistered) => Ok((
-                    None,
-                    Some(self.list_supplier_ids_by_qualification_types(qualification_types, executor).await?),
-                )),
+                ))
             },
+            Some(SupplierQualificationHealthFilter::Expired) => Ok((
+                Some(
+                    self.list_supplier_ids_by_expired_qualifications(qualification_types, as_of, executor)
+                        .await?,
+                ),
+                None,
+            )),
+            Some(SupplierQualificationHealthFilter::NotRegistered) => Ok((
+                None,
+                Some(self.list_supplier_ids_by_qualification_types(qualification_types, executor).await?),
+            )),
         }
     }
 }

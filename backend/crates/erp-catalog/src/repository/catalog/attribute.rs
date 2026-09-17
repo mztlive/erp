@@ -6,7 +6,8 @@ use persistence_core::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::shared::sort_doc;
+use super::shared::{default_paging, sort_doc, whitelisted_sort};
+use crate::dto::catalog::{SKU_ATTRIBUTE_SORT_FIELDS, SKU_ATTRIBUTE_VALUE_SORT_FIELDS};
 use crate::entity::catalog::EnableStatus;
 use crate::entity::catalog::sku_attribute::AttributeValueType;
 use crate::repository::owned::{SkuAttributeRepository, SkuAttributeValueRepository};
@@ -62,15 +63,16 @@ impl Default for SkuAttributeFilter {
     /// # 错误
     /// 无。
     fn default() -> Self {
+        let (page, page_size, sort_by, sort_ascending) = default_paging();
         Self {
             attribute_code: None,
             name: None,
             value_type: None,
             status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            page,
+            page_size,
+            sort_by,
+            sort_ascending,
         }
     }
 }
@@ -194,15 +196,16 @@ impl Default for SkuAttributeValueFilter {
     /// # 错误
     /// 无。
     fn default() -> Self {
+        let (page, page_size, sort_by, sort_ascending) = default_paging();
         Self {
             attribute_id: None,
             value_code: None,
             display_value: None,
             status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            page,
+            page_size,
+            sort_by,
+            sort_ascending,
         }
     }
 }
@@ -274,23 +277,12 @@ impl<'a> SkuAttributeValueRepository<'a> {
 
 /// 构建规格属性排序文档（白名单：`created_at`/`attribute_code`/`name`）。
 fn sku_attribute_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
-    let field = match sort_by {
-        Some("attribute_code") => "attribute_code",
-        Some("name") => "name",
-        _ => "created_at",
-    };
-    sort_doc(field, sort_ascending)
+    sort_doc(whitelisted_sort(sort_by, SKU_ATTRIBUTE_SORT_FIELDS), sort_ascending)
 }
 
 /// 构建规格属性值排序文档（白名单：`created_at`/`value_code`/`display_value`/`sort_order`）。
 fn sku_attribute_value_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
-    let field = match sort_by {
-        Some("value_code") => "value_code",
-        Some("display_value") => "display_value",
-        Some("sort_order") => "sort_order",
-        _ => "created_at",
-    };
-    sort_doc(field, sort_ascending)
+    sort_doc(whitelisted_sort(sort_by, SKU_ATTRIBUTE_VALUE_SORT_FIELDS), sort_ascending)
 }
 
 /// 规格属性列表投影字段。

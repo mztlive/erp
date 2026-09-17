@@ -152,7 +152,7 @@ impl SupplierReadScope {
 }
 
 /// 跨页校验使用的供应商身份和版本，不包含展示字段。
-#[derive(Debug, Deserialize, Hash)]
+#[derive(Debug, Deserialize)]
 pub struct SupplierVersion {
     /// 供应商稳定主键。
     pub id: String,

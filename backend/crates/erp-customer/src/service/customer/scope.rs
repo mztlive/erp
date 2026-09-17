@@ -1,17 +1,19 @@
 //! 客户列表与候选的一致授权快照；范围与业务版本跨页携带。
 
-use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use application_core::{AuditActor, FilterOption, FilteredPage};
-use persistence_core::Transactional;
+use erp_core::common::time::BusinessDate;
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 
 use super::CustomerService;
 use super::access::intersect_ids;
-use crate::dto::customer::{CustomerListParams, CustomerListQuery, CustomerScope, CustomerView};
+use crate::dto::customer::{CustomerListParams, CustomerListQuery, CustomerScope, CustomerView, SortDir};
 use crate::error::{Error, Result};
-use crate::ports::{CustomerDataScopePort, CustomerResolvedScope};
-use crate::repository::scope::CustomerReadScope;
+use crate::ports::{AccountFactPort, CustomerDataScopePort, CustomerResolvedScope, PartyFactPort};
+use crate::repository::scope::{CustomerReadScope, CustomerVersion};
 use crate::repository::{CustomerAccountFilter, CustomerExt};
 
 /// 列表响应保持现有字段并声明独立的授权时点及版本。
@@ -52,6 +54,20 @@ pub(super) struct CustomerSnapshot {
     pub no_scope: bool,
 }
 
+/// 列表事务共用的只读依赖（erp-customer-003）。
+///
+/// 复核路径与首快照共用同一过滤与指纹逻辑，仅 `hydrate` 决定是否执行
+/// 分页查询、候选装配与行水合；指纹与总数口径保持一致。
+struct ListTxDeps {
+    db: Database,
+    access: super::access::CustomerAccess,
+    data_scope: Arc<dyn CustomerDataScopePort>,
+    party: Arc<dyn PartyFactPort>,
+    accounts: Arc<dyn AccountFactPort>,
+    actor: AuditActor,
+    query: CustomerListQuery,
+}
+
 impl CustomerService {
     /// 授权、总数、候选与业务身份版本全部在同一个事务读取。
     ///
@@ -74,79 +90,308 @@ impl CustomerService {
         query: CustomerListQuery,
         actor: &AuditActor,
     ) -> Result<CustomerSnapshot> {
-        let db = self.db.clone();
-        let access = self.access();
-        let data_scope = self.data_scope.clone();
-        let party = self.party.clone();
-        let accounts = self.accounts.clone();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .clone()
+        let deps = self.list_deps(query, actor);
+        let client = deps.db.client().clone();
+        client
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
-                    let no_scope = !context.has_scope_rules();
-                    let authorized =
-                        apply_list_filters(&db, data_scope.as_ref(), &context, &scope, &query, executor)
-                            .await?;
-                    let as_of = super::access::business_date(context.as_of)?;
-                    let owners = db
-                        .customer_assignments()
-                        .current_owners(authorized.as_deref(), None, as_of, executor)
-                        .await?;
-                    let owner_ids =
-                        owners.iter().map(|assignment| assignment.user_id.clone()).collect::<Vec<_>>();
-                    let owner_options = accounts.filter_options(&owner_ids).await?;
-                    let keyword_party_ids = match query.keyword.as_deref() {
-                        Some(keyword) => Some(party.matching_ids_by_name(keyword).await?),
-                        None => None,
-                    };
-                    let filter = CustomerAccountFilter {
-                        keyword: query.keyword,
-                        keyword_party_ids,
-                        party_id: query.party_id,
-                        party_ids: None,
-                        customer_ids: authorized,
-                        status: query.status,
-                        page: query.paging.page,
-                        page_size: query.paging.page_size,
-                        sort_by: Some(query.paging.sort_by.to_string()),
-                        sort_ascending: matches!(query.paging.sort_dir, crate::dto::customer::SortDir::Asc),
-                    };
-                    let page = db.customer_accounts().search_customer_accounts(&filter, executor).await?;
-                    let versions = db.customer_accounts().query_versions(&filter, executor).await?;
-                    if versions.len() > 10_000 {
-                        return Err(Error::ValidationError(
-                            "客户查询超过上限，请收窄组织或负责人条件".into(),
-                        ));
-                    }
-                    let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-                    versions.hash(&mut fingerprint);
-                    context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
-                    let items = hydrate_rows(
-                        &db,
-                        (party.as_ref(), accounts.as_ref()),
-                        page.items,
-                        actor.id(),
-                        query.scope,
-                        as_of,
-                        executor,
-                    )
-                    .await?;
-                    Ok(CustomerSnapshot {
-                        no_scope,
-                        items,
-                        total: page.total,
-                        page: filter.page,
-                        page_size: filter.page_size,
-                        owner_options,
-                        context,
-                    })
-                })
+                Box::pin(async move { run_list_snapshot(deps, true, executor).await })
             })
             .await
     }
+
+    /// 轻量版本复核快照（erp-customer-003）。
+    ///
+    /// 与 [`Self::list_snapshot`] 共用授权、过滤与版本指纹逻辑，
+    /// 跳过分页查询、候选装配与行水合；调用方仅用 `context.scope_version`
+    /// 做稳定性比对，丢弃的 `items` 不再付出水合成本。
+    ///
+    /// # 参数
+    /// * `query` - 已归一化查询
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 返回
+    /// 返回仅带范围版本的轻量快照（`items` 为空、`total` 为零）。
+    ///
+    /// # 错误
+    /// 授权或版本读取失败时拒绝，语义与完整快照一致。
+    pub(super) async fn list_version_snapshot(
+        &self,
+        query: CustomerListQuery,
+        actor: &AuditActor,
+    ) -> Result<CustomerSnapshot> {
+        let deps = self.list_deps(query, actor);
+        let client = deps.db.client().clone();
+        client
+            .with_transaction(move |executor| {
+                Box::pin(async move { run_list_snapshot(deps, false, executor).await })
+            })
+            .await
+    }
+
+    /// 组装列表事务依赖。
+    ///
+    /// # 参数
+    /// * `query` - 已归一化查询
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 返回
+    /// 返回事务内复用的只读依赖。
+    fn list_deps(&self, query: CustomerListQuery, actor: &AuditActor) -> ListTxDeps {
+        ListTxDeps {
+            db: self.db.clone(),
+            access: self.access(),
+            data_scope: self.data_scope.clone(),
+            party: self.party.clone(),
+            accounts: self.accounts.clone(),
+            actor: actor.clone(),
+            query,
+        }
+    }
+}
+
+/// 执行列表事务体（erp-customer-003）。
+///
+/// `hydrate` 为假时跳过分页查询、候选与水合，仅重算版本指纹供复核使用。
+///
+/// # 参数
+/// * `deps` - 列表事务只读依赖
+/// * `hydrate` - 是否装配分页行与候选
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回完整或轻量列表快照。
+///
+/// # 错误
+/// 授权、筛选或版本读取失败时拒绝。
+async fn run_list_snapshot(
+    deps: ListTxDeps,
+    hydrate: bool,
+    executor: &mut dyn Executor,
+) -> Result<CustomerSnapshot> {
+    let (mut context, scope, authorized, as_of, no_scope) = resolve_list_authorized(&deps, executor).await?;
+    let filter = build_account_filter(&deps, authorized).await?;
+    let versions = deps.db.customer_accounts().query_versions(&filter, executor).await?;
+    ensure_versions_bounded(&versions)?;
+    apply_version_fingerprint(&mut context, &versions);
+    if !hydrate {
+        return Ok(CustomerSnapshot {
+            items: Vec::new(),
+            total: 0,
+            page: filter.page,
+            page_size: filter.page_size,
+            owner_options: Vec::new(),
+            context,
+            no_scope,
+        });
+    }
+    let owner_options =
+        load_owner_options(&deps, scope.authorized_customer_ids.as_deref(), as_of, executor).await?;
+    let page = deps.db.customer_accounts().search_customer_accounts(&filter, executor).await?;
+    let items = hydrate_rows(
+        &deps.db,
+        (&*deps.party, &*deps.accounts),
+        page.items,
+        deps.actor.id(),
+        deps.query.scope,
+        as_of,
+        executor,
+    )
+    .await?;
+    Ok(CustomerSnapshot {
+        no_scope,
+        items,
+        total: page.total,
+        page: filter.page,
+        page_size: filter.page_size,
+        owner_options,
+        context,
+    })
+}
+
+/// 解析授权并与业务筛选求交（erp-customer-003）。
+///
+/// # 参数
+/// * `deps` - 列表事务只读依赖
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回授权上下文、仓储条件、授权客户集合、归属时点与空范围标记。
+///
+/// # 错误
+/// 授权或组织筛选失败时拒绝。
+async fn resolve_list_authorized(
+    deps: &ListTxDeps,
+    executor: &mut dyn Executor,
+) -> Result<(CustomerResolvedScope, CustomerReadScope, Option<Vec<String>>, BusinessDate, bool)> {
+    let (context, scope) = deps.access.resolve(&deps.actor, "list", executor).await?;
+    let no_scope = !context.has_scope_rules();
+    let authorized =
+        apply_list_filters(&deps.db, deps.data_scope.as_ref(), &context, &scope, &deps.query, executor)
+            .await?;
+    let as_of = super::access::business_date(context.as_of)?;
+    Ok((context, scope, authorized, as_of, no_scope))
+}
+
+/// 装配关键词过滤后的仓储筛选（erp-customer-003）。
+///
+/// # 参数
+/// * `deps` - 列表事务只读依赖
+/// * `authorized` - 已授权客户集合
+///
+/// # 返回
+/// 返回仓储可消费的账户筛选。
+///
+/// # 错误
+/// 主体关键词匹配失败时拒绝。
+async fn build_account_filter(
+    deps: &ListTxDeps,
+    authorized: Option<Vec<String>>,
+) -> Result<CustomerAccountFilter> {
+    let keyword_party_ids = match deps.query.keyword.as_deref() {
+        Some(keyword) => Some(deps.party.matching_ids_by_name(keyword).await?),
+        None => None,
+    };
+    Ok(CustomerAccountFilter {
+        keyword: deps.query.keyword.clone(),
+        keyword_party_ids,
+        party_id: deps.query.party_id.clone(),
+        party_ids: None,
+        customer_ids: authorized,
+        status: deps.query.status,
+        page: deps.query.paging.page,
+        page_size: deps.query.paging.page_size,
+        sort_by: Some(deps.query.paging.sort_by.to_string()),
+        sort_ascending: matches!(deps.query.paging.sort_dir, SortDir::Asc),
+    })
+}
+
+/// 加载当前范围内的负责人候选（erp-customer-003）。
+///
+/// # 参数
+/// * `deps` - 列表事务只读依赖
+/// * `authorized` - 已授权客户集合
+/// * `as_of` - 归属自然日
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回负责人候选显示项。
+///
+/// # 错误
+/// 归属或账号候选读取失败时拒绝。
+async fn load_owner_options(
+    deps: &ListTxDeps,
+    authorized: Option<&[String]>,
+    as_of: BusinessDate,
+    executor: &mut dyn Executor,
+) -> Result<Vec<FilterOption>> {
+    let owners = deps.db.customer_assignments().current_owners(authorized, None, as_of, executor).await?;
+    let owner_ids = owners.iter().map(|assignment| assignment.user_id.clone()).collect::<Vec<_>>();
+    deps.accounts.filter_options(&owner_ids).await
+}
+
+/// 校验版本集合有界（erp-customer-003）。
+///
+/// # 参数
+/// * `versions` - 客户身份与版本集合
+///
+/// # 返回
+/// 未超限时成功。
+///
+/// # 错误
+/// 超过一万时返回校验错误。
+fn ensure_versions_bounded(versions: &[CustomerVersion]) -> Result<()> {
+    if versions.len() > 10_000 {
+        return Err(Error::ValidationError("客户查询超过上限，请收窄组织或负责人条件".into()));
+    }
+    Ok(())
+}
+
+/// 将版本指纹拼接到基线范围版本（erp-customer-003）。
+///
+/// # 参数
+/// * `context` - 待更新的授权上下文
+/// * `versions` - 已按 `id` 排序的客户版本
+fn apply_version_fingerprint(context: &mut CustomerResolvedScope, versions: &[CustomerVersion]) {
+    context.scope_version = fingerprint_versions(
+        &context.scope_version,
+        versions.iter().map(|version| (version.id.as_str(), version.version)),
+    );
+}
+
+/// 用确定性哈希计算范围版本指纹并拼接到基线版本（erp-customer-004）。
+///
+/// `DefaultHasher` 跨进程不保证稳定，重启后同授权可能算出不同版本并触发
+/// 无谓的 `DATA_SCOPE_CHANGED`。本函数使用 FNV-1a 64 位并固化字段顺序：
+/// 主责、协作、历史、组织映射依次写入；调用方不得自行拼接哈希。
+///
+/// # 参数
+/// * `base` - 基线范围版本
+/// * `owned` - 当前主责客户（调用方保证已排序）
+/// * `collaborating` - 当前协作客户（调用方保证已排序）
+/// * `history` - 历史参与客户（调用方保证已排序）
+/// * `org_owned` - 各组织集合对应的当前主责客户
+///
+/// # 返回
+/// 返回 `{base}:{hex指纹}` 格式的范围版本。
+pub(super) fn fingerprint_scope_version(
+    base: &str,
+    owned: &[String],
+    collaborating: &[String],
+    history: &[String],
+    org_owned: &[(Vec<String>, Vec<String>)],
+) -> String {
+    let mut hash = FNV_OFFSET_BASIS;
+    for part in owned.iter().chain(collaborating.iter()).chain(history.iter()) {
+        feed_str(&mut hash, part);
+    }
+    for (orgs, customers) in org_owned {
+        for part in orgs.iter().chain(customers.iter()) {
+            feed_str(&mut hash, part);
+        }
+        feed_byte(&mut hash, 0);
+    }
+    format!("{base}:{hash:016x}")
+}
+
+/// 用确定性哈希计算客户身份版本指纹并拼接到基线版本（erp-customer-004）。
+///
+/// 与 [`fingerprint_scope_version`] 共用同一 FNV-1a 算法；`query_versions`
+/// 已按 `id` 排序，调用方按迭代顺序传入 `(id, version)` 即可。
+///
+/// # 参数
+/// * `base` - 基线范围版本
+/// * `versions` - 客户身份与版本对
+///
+/// # 返回
+/// 返回 `{base}:{hex指纹}` 格式的范围版本。
+fn fingerprint_versions<'a>(base: &str, versions: impl IntoIterator<Item = (&'a str, u64)>) -> String {
+    let mut hash = FNV_OFFSET_BASIS;
+    for (id, version) in versions {
+        feed_str(&mut hash, id);
+        for byte in version.to_le_bytes() {
+            feed_byte(&mut hash, byte);
+        }
+    }
+    format!("{base}:{hash:016x}")
+}
+
+/// FNV-1a 64 位偏移基数。
+const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+/// FNV-1a 64 位素数。
+const FNV_PRIME: u64 = 0x100000001b3;
+
+/// 向 FNV-1a 状态写入字符串字节并以 `0xff` 分隔（erp-customer-004）。
+fn feed_str(hash: &mut u64, value: &str) {
+    for byte in value.as_bytes() {
+        feed_byte(hash, *byte);
+    }
+    feed_byte(hash, 0xff);
+}
+
+/// 向 FNV-1a 状态写入单个字节（erp-customer-004）。
+fn feed_byte(hash: &mut u64, byte: u8) {
+    *hash ^= u64::from(byte);
+    *hash = hash.wrapping_mul(FNV_PRIME);
 }
 
 /// 构造可被 HTTP 边界识别的范围变化冲突。

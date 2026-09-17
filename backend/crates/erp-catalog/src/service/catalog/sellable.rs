@@ -4,6 +4,7 @@
 //! 有效供给组合为销售只读投影。资格判定由 catalog Repository 的同一条聚合
 //! 管道执行，销售单提交也复用该仓储判定。
 
+use application_core::normalized_text;
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
@@ -134,20 +135,6 @@ fn specification_attribute_views(signature: &str) -> Vec<SellableSkuSpecificatio
             .collect(),
         crate::entity::catalog::SpecificationSignatureRead::LegacyNonCanonical => Vec::new(),
     }
-}
-
-/// 文本筛选去首尾空白；空串视为未筛选。
-///
-/// # 参数
-/// * `value` - 原始可选文本
-///
-/// # 返回
-/// 返回规范化后的非空字符串，或 `None`。
-///
-/// # 错误
-/// 无。
-fn normalized_text(value: Option<&str>) -> Option<String> {
-    value.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string)
 }
 
 /// 构造销售资格失效错误。

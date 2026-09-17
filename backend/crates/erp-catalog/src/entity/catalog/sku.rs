@@ -20,7 +20,9 @@ use crate::entity::catalog::status::{EnableStatus, ListingStatus};
 const SKU_NO_MAX_LEN: usize = 64;
 
 /// 上架概念引入前的 SKU 均视为延续原有可售行为，读取时兼容为已上架。
-fn legacy_listing_status() -> ListingStatus {
+///
+/// 仓储投影的 `serde default` 引用同一口径（erp-catalog-007）。
+pub(crate) fn legacy_listing_status() -> ListingStatus {
     ListingStatus::Listed
 }
 

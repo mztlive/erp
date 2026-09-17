@@ -66,7 +66,7 @@ impl Default for CustomerReadScope {
 }
 
 /// 跨页校验使用的客户身份和版本，不包含展示字段。
-#[derive(Debug, Deserialize, Hash)]
+#[derive(Debug, Deserialize)]
 pub struct CustomerVersion {
     /// 客户稳定主键。
     pub id: String,
@@ -76,6 +76,10 @@ pub struct CustomerVersion {
 
 impl CustomerScopeClause {
     /// 判断尚未持久化或已装载的客户责任是否被该条款覆盖。
+    ///
+    /// 生产授权语义（erp-customer-008）：生产路径经 Port `allows` 判定对象资格；
+    /// 本方法是同一谓词的轻量镜像，供 Service 组装授权集合前做条款级解释，
+    /// 并由单元测试锁定语义，改动时必须同步评估 Port 侧。
     ///
     /// # 参数
     /// * `owner` - 当前或拟写入的主负责人
@@ -90,7 +94,6 @@ impl CustomerScopeClause {
     ///
     /// # 关键业务约束
     /// 不得把创建人当作主责；组织条件只解释当前主负责人所属组织。
-    #[cfg(test)]
     pub fn allows(&self, owner: &str, owner_org: Option<&str>, collaborating: bool) -> bool {
         self.company
             || self.owner_user_id.as_deref() == Some(owner)
@@ -113,6 +116,23 @@ impl CustomerScopeClause {
     /// 空集合不得解释为全部协作客户。
     pub fn collaborative(&self) -> bool {
         !self.collaborative_customer_ids.is_empty()
+    }
+
+    /// 判断条款是否构成有效客户范围规则。
+    ///
+    /// 与 Port 侧 `CustomerResolvedClause::has_scope_rules` 同语义（erp-customer-005），
+    /// 为 `is_empty` 取反；映射只经 `access::customer_scope/map_clause` 单一入口。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 含公司、主责、协作或组织条件时为 true。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn has_scope_rules(&self) -> bool {
+        !self.is_empty()
     }
 
     /// 判断该条款是否确定不产生可见对象。
@@ -139,6 +159,9 @@ impl CustomerScopeClause {
 impl CustomerReadScope {
     /// 校验创建客户时的拟写入责任；历史参与不授予创建权。
     ///
+    /// 生产授权语义（erp-customer-008）：与 [`CustomerScopeClause::allows`] 同，
+    /// 为生产判定在仓储侧的组合入口；单元测试锁定角色并集与个人上限语义。
+    ///
     /// # 参数
     /// * `owner` - 拟写入的主负责人，必须是当前操作人
     /// * `owner_org` - 操作人当前主属组织
@@ -151,7 +174,6 @@ impl CustomerReadScope {
     ///
     /// # 关键业务约束
     /// 创建固定以操作人为主责，协作身份与历史参与不得单独放行建档。
-    #[cfg(test)]
     pub fn allows_creation(&self, owner: &str, owner_org: Option<&str>) -> bool {
         self.roles.iter().any(|clause| clause.allows(owner, owner_org, false))
             && self.user_limit.as_ref().is_none_or(|clause| clause.allows(owner, owner_org, false))

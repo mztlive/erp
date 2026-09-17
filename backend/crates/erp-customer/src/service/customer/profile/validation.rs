@@ -12,47 +12,31 @@ use crate::entity::customer::{
 };
 use crate::error::Result;
 
-impl CustomerProfileFactInput for CustomerProfileContactInput {
-    fn existing_id(&self) -> Option<&str> {
-        self.existing_id.as_deref()
-    }
+/// 三个资料输入共用的字段访问实现（erp-customer-011）。
+///
+/// `existing_id` 与 `is_default` 完全相同，各输入只声明敏感值字段映射；
+/// 以 `required_value` 区分联系人手机号、地址正文与银行账号。
+macro_rules! impl_fact_input {
+    ($input:ty, $sensitive:ident) => {
+        impl CustomerProfileFactInput for $input {
+            fn existing_id(&self) -> Option<&str> {
+                self.existing_id.as_deref()
+            }
 
-    fn is_default(&self) -> bool {
-        self.is_default
-    }
+            fn is_default(&self) -> bool {
+                self.is_default
+            }
 
-    fn required_value(&self) -> Option<&str> {
-        self.mobile.as_deref()
-    }
+            fn required_value(&self) -> Option<&str> {
+                self.$sensitive.as_deref()
+            }
+        }
+    };
 }
 
-impl CustomerProfileFactInput for CustomerProfileAddressInput {
-    fn existing_id(&self) -> Option<&str> {
-        self.existing_id.as_deref()
-    }
-
-    fn is_default(&self) -> bool {
-        self.is_default
-    }
-
-    fn required_value(&self) -> Option<&str> {
-        self.address.as_deref()
-    }
-}
-
-impl CustomerProfileFactInput for CustomerProfileBankAccountInput {
-    fn existing_id(&self) -> Option<&str> {
-        self.existing_id.as_deref()
-    }
-
-    fn is_default(&self) -> bool {
-        self.is_default
-    }
-
-    fn required_value(&self) -> Option<&str> {
-        self.account_number.as_deref()
-    }
-}
+impl_fact_input!(CustomerProfileContactInput, mobile);
+impl_fact_input!(CustomerProfileAddressInput, address);
+impl_fact_input!(CustomerProfileBankAccountInput, account_number);
 
 impl SaveCustomerProfileRequest {
     /// 形成客户资料命令的稳定幂等重放上下文。

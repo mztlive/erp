@@ -15,6 +15,7 @@ mod common;
 mod import;
 mod product;
 mod product_scope;
+mod sku_revision;
 mod voucher;
 
 pub use attribute::{
@@ -22,10 +23,13 @@ pub use attribute::{
     SkuAttributeValueListParams, SkuAttributeValueView, SkuAttributeView, UpdateSkuAttributeRequest,
     UpdateSkuAttributeValueRequest,
 };
+pub(crate) use attribute::{SKU_ATTRIBUTE_SORT_FIELDS, SKU_ATTRIBUTE_VALUE_SORT_FIELDS};
 pub use brand_unit::{
     CreateProductBrandRequest, CreateUnitOfMeasureRequest, ProductBrandListParams, ProductBrandView,
     UnitOfMeasureListParams, UnitOfMeasureView, UpdateProductBrandRequest, UpdateUnitOfMeasureRequest,
 };
+pub(crate) use brand_unit::{PRODUCT_BRAND_SORT_FIELDS, UNIT_OF_MEASURE_SORT_FIELDS};
+pub(crate) use category::PRODUCT_CATEGORY_SORT_FIELDS;
 pub use category::{
     CreateProductCategoryRequest, MoveProductCategoryRequest, ProductCategoryListParams,
     ProductCategoryParentChange, ProductCategoryView, UpdateProductCategoryRequest,
@@ -43,12 +47,16 @@ pub use import::{
 pub use product::{
     CreateProductRequest, DisableProductRequest, ProductListingView, ProductMediaInput,
     ProductRevisionListParams, ProductRevisionMediaView, ProductRevisionView, ProductSkuInput, ProductView,
-    SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView, SpecEntryInput,
-    UpdateProductListingRequest, UpdateProductRequest, UpdateSkuListingRequest,
+    SkuListParams, SkuView, SpecEntryInput, UpdateProductListingRequest, UpdateProductRequest,
+    UpdateSkuListingRequest,
 };
+pub(crate) use product::{PRODUCT_REVISION_SORT_FIELDS, SKU_SORT_FIELDS};
 pub use product_scope::{
     HandoverCandidateView, HandoverProductRequest, HandoverProductView, ProductListParams, ProductListView,
 };
+pub(crate) use sku_revision::SKU_REVISION_SORT_FIELDS;
+pub use sku_revision::{SkuRevisionListParams, SkuRevisionView};
+pub(crate) use voucher::VOUCHER_PROFILE_SORT_FIELDS;
 pub use voucher::{
     CreateVoucherCategoryRequest, NewVoucherCategoryInput, UpdateVoucherCategoryRequest,
     VoucherCategoryProfileListParams, VoucherCategoryProfileView, VoucherSkuInput,

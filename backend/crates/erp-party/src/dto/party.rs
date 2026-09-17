@@ -44,6 +44,40 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+/// 归一化原始分页排序四件套的唯一入口（erp-party-002）。
+///
+/// 各列表查询的 `page/page_size/sort_by/sort_dir` 归一化只走本函数；
+/// 契约结构体保留扁平字段（axum `Query` 经 `serde_urlencoded` 反序列化，
+/// 不支持 `flatten`，拆基段会改变线上传输形状，故只收敛归一化调用）。
+///
+/// # 参数
+/// * `page` - 可选页码；缺省为 1
+/// * `page_size` - 可选单页条数；缺省 20 并 clamp 到 1–100
+/// * `sort_by` - 可选排序字段；空白视为未提供
+/// * `sort_dir` - 可选排序方向；空白视为未提供
+/// * `allowed_fields` - 排序字段白名单
+///
+/// # 返回
+/// 返回可直接装配仓储筛选的分页排序参数。
+///
+/// # 错误
+/// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+pub(crate) fn normalize_paging(
+    page: Option<u64>,
+    page_size: Option<u32>,
+    sort_by: &Option<String>,
+    sort_dir: &Option<String>,
+    allowed_fields: &'static [&'static str],
+) -> Result<PageParams> {
+    let (sort_by, sort_dir) = normalize_sort(sort_by, sort_dir, allowed_fields)?;
+    Ok(PageParams {
+        page: page_or_default(page),
+        page_size: page_size_or_default(page_size),
+        sort_by,
+        sort_dir,
+    })
+}
+
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
 pub use application_core::PageView;
 /// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串不生效）。
@@ -133,15 +167,58 @@ pub struct PartyView {
 impl From<Party> for PartyView {
     /// 从实体构造响应视图。
     fn from(party: Party) -> Self {
+        Self::from_party_parts(
+            party.base.id,
+            party.party_no,
+            party.party_kind,
+            party.unified_credit_code,
+            party.stable.status,
+            party.stable.current_revision_id,
+            party.base.version,
+            party.base.created_at,
+        )
+    }
+}
+
+impl PartyView {
+    /// 从投影行构造响应视图，与 `From<Party>` 同语义（erp-party-007）。
+    ///
+    /// 字段映射只在此内核中出现一处；实体路径与投影行路径均转调它。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键
+    /// * `party_no` - 主体编号
+    /// * `party_kind` - 主体类型
+    /// * `unified_credit_code` - 统一社会信用代码
+    /// * `status` - 启停状态
+    /// * `current_revision_id` - 当前生效修订 ID
+    /// * `version` - 乐观锁版本
+    /// * `created_at` - 创建时间
+    ///
+    /// # 返回
+    /// 返回主体响应视图。
+    ///
+    /// 八个入参与投影行字段一一对应；clippy 参数计数在此放宽，行为与逐字段构造一致。
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_party_parts(
+        id: String,
+        party_no: String,
+        party_kind: PartyKind,
+        unified_credit_code: Option<String>,
+        status: PartyStatus,
+        current_revision_id: Option<String>,
+        version: u64,
+        created_at: u64,
+    ) -> Self {
         Self {
-            id: party.base.id,
-            party_no: party.party_no,
-            party_kind: party.party_kind,
-            unified_credit_code: party.unified_credit_code,
-            status: party.stable.status,
-            current_revision_id: party.stable.current_revision_id,
-            version: party.base.version,
-            created_at: party.base.created_at,
+            id,
+            party_no,
+            party_kind,
+            unified_credit_code,
+            status,
+            current_revision_id,
+            version,
+            created_at,
         }
     }
 }
@@ -168,15 +245,45 @@ pub struct PartyRevisionView {
 impl From<PartyRevision> for PartyRevisionView {
     /// 从实体构造响应视图。
     fn from(revision: PartyRevision) -> Self {
-        Self {
-            id: revision.base.id,
-            revision_no: revision.revision.revision_no,
-            legal_name: revision.legal_name,
-            short_name: revision.short_name,
-            change_reason: revision.change_reason,
-            version: revision.base.version,
-            created_at: revision.base.created_at,
-        }
+        Self::from_revision_parts(
+            revision.base.id,
+            revision.revision.revision_no,
+            revision.legal_name,
+            revision.short_name,
+            revision.change_reason,
+            revision.base.version,
+            revision.base.created_at,
+        )
+    }
+}
+
+impl PartyRevisionView {
+    /// 从投影行构造响应视图，与 `From<PartyRevision>` 同语义（erp-party-007）。
+    ///
+    /// 字段映射只在此内核中出现一处；实体路径与投影行路径均转调它，
+    /// 掩码语义不变。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键
+    /// * `revision_no` - 修订序号
+    /// * `legal_name` - 法定名称
+    /// * `short_name` - 简称
+    /// * `change_reason` - 变更原因
+    /// * `version` - 乐观锁版本
+    /// * `created_at` - 创建时间
+    ///
+    /// # 返回
+    /// 返回修订响应视图。
+    pub(crate) fn from_revision_parts(
+        id: String,
+        revision_no: u32,
+        legal_name: String,
+        short_name: Option<String>,
+        change_reason: String,
+        version: u64,
+        created_at: u64,
+    ) -> Self {
+        Self { id, revision_no, legal_name, short_name, change_reason, version, created_at }
     }
 }
 
@@ -225,17 +332,17 @@ impl PartyListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<PartyListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, PARTY_SORT_FIELDS)?;
         Ok(PartyListQuery {
             keyword: normalized_text(self.keyword.as_deref()),
             party_kind: self.party_kind,
             status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: normalize_paging(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                PARTY_SORT_FIELDS,
+            )?,
         })
     }
 }

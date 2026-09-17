@@ -39,7 +39,28 @@ pub use party_bank_account::{PartyBankAccount, PartyBankAccountData, PartyBankAc
 pub use party_contact::{PartyContact, PartyContactData, PartyContactUpdate};
 pub use party_revision::{PartyRevision, PartyRevisionData};
 pub use party_tax_profile::{PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileUpdate};
-pub use status::{EffectiveRecordStatus, select_current_default};
+pub use status::{EffectiveRecordStatus, SymmetricActiveStatus, select_current_default};
+
+/// 校验期望版本与实体当前版本一致（erp-party-008）。
+///
+/// 主体与四个从属事实的乐观锁冲突文案唯一来源；各实体 `ensure_version`
+/// 均转调本函数，Service 层只做错误类映射。
+///
+/// # 参数
+/// * `base` - 实体基础字段（含当前版本）
+/// * `expected` - 调用方持有的期望版本
+///
+/// # 返回
+/// 版本一致返回 `Ok(())`。
+///
+/// # 错误
+/// 版本不一致时返回版本冲突错误。
+pub(crate) fn ensure_base_version(base: &entity_core::BaseModel, expected: u64) -> Result<()> {
+    if base.version == expected {
+        return Ok(());
+    }
+    Err(Error::from("数据已被其他请求修改，请刷新后重试"))
+}
 
 /// 由单一 Party 拥有的从属实体。
 pub trait PartyOwned {

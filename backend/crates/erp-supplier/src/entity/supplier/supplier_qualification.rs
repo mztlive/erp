@@ -52,36 +52,57 @@ pub enum QualificationType {
     LegalPersonId,
 }
 
+/// 资质类型展示映射表（erp-supplier-002）：变体→中文名/稳定代码。
+const QUALIFICATION_TYPE_DISPLAY: [super::display::DisplayEntry<QualificationType>; 5] = [
+    super::display::DisplayEntry {
+        variant: QualificationType::Certificate,
+        label: "资质证照",
+        code: "certificate",
+    },
+    super::display::DisplayEntry { variant: QualificationType::Contract, label: "合同", code: "contract" },
+    super::display::DisplayEntry {
+        variant: QualificationType::Authorization,
+        label: "授权书",
+        code: "authorization",
+    },
+    super::display::DisplayEntry {
+        variant: QualificationType::FoodLicense,
+        label: "食品经营许可证",
+        code: "food_license",
+    },
+    super::display::DisplayEntry {
+        variant: QualificationType::LegalPersonId,
+        label: "法人身份证",
+        code: "legal_person_id",
+    },
+];
+
 impl QualificationType {
     /// 返回类型的中文展示名。
+    ///
+    /// 映射表见 [`QUALIFICATION_TYPE_DISPLAY`]（erp-supplier-002）。
     ///
     /// # 返回
     /// 返回面向用户的中文标签。
     pub fn label(&self) -> &'static str {
-        match self {
-            Self::Certificate => "资质证照",
-            Self::Contract => "合同",
-            Self::Authorization => "授权书",
-            Self::FoodLicense => "食品经营许可证",
-            Self::LegalPersonId => "法人身份证",
-        }
+        super::display::label_of(*self, &QUALIFICATION_TYPE_DISPLAY)
     }
 
     /// 返回类型的稳定代码。
     ///
+    /// 映射表见 [`QUALIFICATION_TYPE_DISPLAY`]（erp-supplier-002）。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
     pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Certificate => "certificate",
-            Self::Contract => "contract",
-            Self::Authorization => "authorization",
-            Self::FoodLicense => "food_license",
-            Self::LegalPersonId => "legal_person_id",
-        }
+        super::display::code_of(*self, &QUALIFICATION_TYPE_DISPLAY)
     }
 
     /// 校验日期窗口；只有合同允许缺少起始日期。
+    ///
+    /// 写入路径的权威校验（erp-supplier-011）：修订创建与更新经此拒绝非法窗口；
+    /// 展示判定 [`Self::validity_verified`] 只读已落库数据的资料完备性，
+    /// 两者适用场景不同，判定结果保持不变。
     ///
     /// # Errors
     /// 非合同缺少开始日期，或已知结束日期不晚于开始日期时拒绝。
@@ -104,6 +125,9 @@ impl QualificationType {
     /// 判断日期资料是否足以核实有效期。
     ///
     /// 合同须有完整起止日期；其他资质保留已登记起始日、截止日为空表示长期有效的规则。
+    /// 展示路径判定（erp-supplier-011）：只用于已通过
+    /// [`Self::ensure_validity_window`] 校验的落库数据，不做起止顺序复查；
+    /// 写入拒绝一律走校验入口，判定结果保持不变。
     pub fn validity_verified(self, start: Option<BusinessDate>, end: Option<BusinessDate>) -> bool {
         start.is_some() && (self != Self::Contract || end.is_some())
     }
@@ -145,29 +169,34 @@ pub enum QualificationStatus {
     Disabled,
 }
 
+/// 资质状态展示映射表（erp-supplier-002）：变体→中文名/稳定代码。
+const QUALIFICATION_STATUS_DISPLAY: [super::display::DisplayEntry<QualificationStatus>; 3] = [
+    super::display::DisplayEntry { variant: QualificationStatus::Active, label: "有效", code: "active" },
+    super::display::DisplayEntry { variant: QualificationStatus::Expired, label: "失效", code: "expired" },
+    super::display::DisplayEntry {
+        variant: QualificationStatus::Disabled, label: "停用", code: "disabled"
+    },
+];
+
 impl QualificationStatus {
     /// 返回状态的中文展示名。
+    ///
+    /// 映射表见 [`QUALIFICATION_STATUS_DISPLAY`]（erp-supplier-002）。
     ///
     /// # 返回
     /// 返回面向用户的中文标签。
     pub fn label(&self) -> &'static str {
-        match self {
-            Self::Active => "有效",
-            Self::Expired => "失效",
-            Self::Disabled => "停用",
-        }
+        super::display::label_of(*self, &QUALIFICATION_STATUS_DISPLAY)
     }
 
     /// 返回状态的稳定代码。
     ///
+    /// 映射表见 [`QUALIFICATION_STATUS_DISPLAY`]（erp-supplier-002）。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
     pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Active => "active",
-            Self::Expired => "expired",
-            Self::Disabled => "disabled",
-        }
+        super::display::code_of(*self, &QUALIFICATION_STATUS_DISPLAY)
     }
 
     /// 判断资质当前是否可用于业务（§6.2：启用可销售公司 SKU、采购单和

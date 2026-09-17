@@ -43,7 +43,10 @@ pub struct SupplierAccountRow {
 
 /// 供应商编号窄投影行。
 impl SupplierAccountRow {
-    /// 以必填身份构造供应商投影行；可选引用默认为空。
+    /// 以必填身份构造测试占位投影行（erp-supplier-012）。
+    ///
+    /// 生产装配一律从仓储行取值，不得把此处的 `version = 1` 与
+    /// `created_at = 0` 占位默认值当作真实版本使用。
     ///
     /// # 参数
     /// * `id` - 实体主键
@@ -51,11 +54,12 @@ impl SupplierAccountRow {
     /// * `supplier_no` - 供应商编号
     ///
     /// # 返回
-    /// 返回启用状态的投影行。
+    /// 返回启用状态的占位投影行，仅供测试装配。
     ///
     /// # 错误
     /// 无。
-    pub fn new(id: String, party_id: String, supplier_no: String) -> Self {
+    #[cfg(test)]
+    pub fn test_placeholder(id: String, party_id: String, supplier_no: String) -> Self {
         Self {
             id,
             party_id,

@@ -7,18 +7,18 @@
 
 use std::sync::Arc;
 
-use application_core::AuditActor;
+use application_core::{AuditActor, normalized_text};
 use erp_core::field_update::FieldUpdate;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
+use super::clear_default_marks;
 use super::sensitive::SensitiveDataCodec;
-use super::{clear_default_marks, normalized_text, page_or_default, page_size_or_default};
 use crate::dto::party::{
     CreatePartyContactRequest, PARTY_CONTACT_SORT_FIELDS, PageView, PartyContactListParams, PartyContactView,
-    SortDir, UpdatePartyContactRequest, normalize_sort,
+    SortDir, UpdatePartyContactRequest, normalize_paging,
 };
 use crate::entity::party::{
     EffectiveRecordStatus, PartyContact, PartyContactData, PartyContactId, PartyContactUpdate, PartyId,
@@ -76,18 +76,23 @@ impl PartyContactService {
     ) -> Result<PageView<PartyContactView>> {
         params.validate()?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(party_id)).await?;
-        let (sort_by, sort_dir) =
-            normalize_sort(&params.sort_by, &params.sort_dir, PARTY_CONTACT_SORT_FIELDS)?;
+        let paging = normalize_paging(
+            params.page,
+            params.page_size,
+            &params.sort_by,
+            &params.sort_dir,
+            PARTY_CONTACT_SORT_FIELDS,
+        )?;
         let filter = PartyContactFilter {
             party_id: Some(PartyId::new(party_id)),
             keyword: normalized_text(params.keyword.as_deref()),
             mobile_query_hmac: None,
             status: params.status,
             is_default: params.is_default,
-            page: page_or_default(params.page),
-            page_size: page_size_or_default(params.page_size),
-            sort_by: Some(sort_by.to_string()),
-            sort_ascending: matches!(sort_dir, SortDir::Asc),
+            page: paging.page,
+            page_size: paging.page_size,
+            sort_by: Some(paging.sort_by.to_string()),
+            sort_ascending: matches!(paging.sort_dir, SortDir::Asc),
         };
         let page = self.db.party_contacts().search_party_contacts(&filter, &mut NoTransaction).await?;
         let items = page
@@ -136,7 +141,7 @@ impl PartyContactService {
         actor: &AuditActor,
     ) -> Result<PartyContactView> {
         req.validate()?;
-        self.ensure_party_exists(party_id).await?;
+        super::ensure_party_exists(&self.db, party_id).await?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(party_id)).await?;
         let mobile = req.mobile.clone();
         let mut contact = PartyContact::new(
@@ -212,9 +217,7 @@ impl PartyContactService {
             .await?
             .ok_or_else(|| Error::NotFound("联系人不存在".to_string()))?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &contact.party_id).await?;
-        if contact.base.version != req.version {
-            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
-        }
+        contact.ensure_version(req.version).map_err(|error| Error::ConflictError(error.to_string()))?;
         contact.update(
             PartyContactUpdate {
                 status: req.status,
@@ -250,24 +253,5 @@ impl PartyContactService {
             .await?;
 
         Ok(updated.into())
-    }
-
-    /// 校验主体存在。
-    ///
-    /// # 参数
-    /// * `party_id` - 主体 ID
-    ///
-    /// # 返回
-    /// 主体存在返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// * `NotFound` - 主体不存在
-    async fn ensure_party_exists(&self, party_id: &str) -> Result<()> {
-        self.db
-            .parties()
-            .find_by_id(party_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("主体不存在".to_string()))?;
-        Ok(())
     }
 }

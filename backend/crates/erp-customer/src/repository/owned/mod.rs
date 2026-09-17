@@ -3,6 +3,7 @@
 mod customer_account;
 mod customer_assignment;
 mod customer_profile_command;
+mod owned_repository;
 
 pub use customer_account::CustomerAccountRepository;
 pub use customer_assignment::CustomerAssignmentRepository;

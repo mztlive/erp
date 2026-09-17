@@ -60,15 +60,9 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 
 /// 返回 `party` 的身份约束和列表查询索引。
 ///
-/// `uk_parties_id` 覆盖业务主键 `id` 的精确与 `$in` 批量读取（PROC-R10：
-/// `current_legal_names_by_party_ids` 经 `list_by_ids` 按 `id $in` 批量取主体，
-/// 默认 `_id` 索引不能覆盖业务字段 `id`，此前只能集合扫描）。
-/// 迁移：先按 `id` 分组审计重复值（`$group`/`$match: {count: {$gt: 1}}` 为空
-/// 才可继续），再执行幂等 `ensure` 创建索引，最后用 `explain` 验证 `$in`
-/// 命中 `uk_parties_id` 且无 `COLLSCAN`。
-/// 回滚：删除 `uk_parties_id`，批量查询退化为集合扫描，不改变数据。
-/// 失败关闭：存量存在重复 `id` 时 `ensure` 返回唯一冲突错误，部署必须中止，
-/// 先按审计诊断清理重复后再重跑，禁止跳过审计强行建索引。
+/// `uk_parties_id` 覆盖业务主键 `id` 的精确与 `$in` 批量读取（PROC-R10）；
+/// 部署前须按 `id` 分组审计重复值（为空才可继续），存量重复时 `ensure`
+/// 返回唯一冲突错误，部署必须中止并清理重复后再重跑。
 fn party_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_parties_id", doc! { "id": 1 }),

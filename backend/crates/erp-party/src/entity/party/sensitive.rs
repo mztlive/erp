@@ -93,6 +93,22 @@ const H_INIT: [u32; 8] =
 /// # 返回
 /// 返回 32 字节摘要。
 fn sha256(data: &[u8]) -> [u8; 32] {
+    let mut hash = H_INIT;
+    for chunk in sha256_blocks(data) {
+        let schedule = sha256_schedule(&chunk);
+        hash = sha256_compress(hash, schedule);
+    }
+    sha256_digest(hash)
+}
+
+/// 按 SHA-256 填充规则切分输入为 64 字节块。
+///
+/// # 参数
+/// * `data` - 输入字节
+///
+/// # 返回
+/// 返回填充后的 64 字节块集合。
+fn sha256_blocks(data: &[u8]) -> Vec<[u8; 64]> {
     let bit_len = (data.len() as u64).wrapping_mul(8);
     let mut padded = Vec::with_capacity(data.len() + 72);
     padded.extend_from_slice(data);
@@ -101,61 +117,84 @@ fn sha256(data: &[u8]) -> [u8; 32] {
         padded.push(0);
     }
     padded.extend_from_slice(&bit_len.to_be_bytes());
-
-    let mut hash = H_INIT;
     let (blocks, _) = padded.as_chunks::<64>();
-    for chunk in blocks {
-        let mut schedule = [0u32; 64];
-        let (words, _) = chunk.as_chunks::<4>();
-        for (word, bytes) in schedule.iter_mut().zip(words.iter()) {
-            *word = u32::from_be_bytes(*bytes);
-        }
-        for t in 16..64 {
-            let sigma0 = schedule[t - 15].rotate_right(7)
-                ^ schedule[t - 15].rotate_right(18)
-                ^ (schedule[t - 15] >> 3);
-            let sigma1 =
-                schedule[t - 2].rotate_right(17) ^ schedule[t - 2].rotate_right(19) ^ (schedule[t - 2] >> 10);
-            schedule[t] =
-                schedule[t - 16].wrapping_add(sigma0).wrapping_add(schedule[t - 7]).wrapping_add(sigma1);
-        }
+    blocks.to_vec()
+}
 
-        let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = hash;
-        for (round, &constant) in K.iter().enumerate() {
-            let sum1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
-            let choose = (e & f) ^ (!e & g);
-            let temp1 = h
-                .wrapping_add(sum1)
-                .wrapping_add(choose)
-                .wrapping_add(constant)
-                .wrapping_add(schedule[round]);
-            let sum0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
-            let majority = (a & b) ^ (a & c) ^ (b & c);
-            let temp2 = sum0.wrapping_add(majority);
+/// 由 64 字节块展开 64 字消息调度。
+///
+/// # 参数
+/// * `chunk` - 64 字节输入块
+///
+/// # 返回
+/// 返回 64 字调度表。
+fn sha256_schedule(chunk: &[u8; 64]) -> [u32; 64] {
+    let mut schedule = [0u32; 64];
+    let (words, _) = chunk.as_chunks::<4>();
+    for (word, bytes) in schedule.iter_mut().zip(words.iter()) {
+        *word = u32::from_be_bytes(*bytes);
+    }
+    for t in 16..64 {
+        let sigma0 =
+            schedule[t - 15].rotate_right(7) ^ schedule[t - 15].rotate_right(18) ^ (schedule[t - 15] >> 3);
+        let sigma1 =
+            schedule[t - 2].rotate_right(17) ^ schedule[t - 2].rotate_right(19) ^ (schedule[t - 2] >> 10);
+        schedule[t] =
+            schedule[t - 16].wrapping_add(sigma0).wrapping_add(schedule[t - 7]).wrapping_add(sigma1);
+    }
+    schedule
+}
 
-            h = g;
-            g = f;
-            f = e;
-            e = d.wrapping_add(temp1);
-            d = c;
-            c = b;
-            b = a;
-            a = temp1.wrapping_add(temp2);
-        }
+/// 单块压缩当前哈希状态。
+///
+/// # 参数
+/// * `hash` - 当前 8 字状态
+/// * `schedule` - 本块 64 字调度表
+///
+/// # 返回
+/// 返回更新后的 8 字状态。
+fn sha256_compress(hash: [u32; 8], schedule: [u32; 64]) -> [u32; 8] {
+    let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = hash;
+    for (round, &constant) in K.iter().enumerate() {
+        let sum1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
+        let choose = (e & f) ^ (!e & g);
+        let temp1 =
+            h.wrapping_add(sum1).wrapping_add(choose).wrapping_add(constant).wrapping_add(schedule[round]);
+        let sum0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
+        let majority = (a & b) ^ (a & c) ^ (b & c);
+        let temp2 = sum0.wrapping_add(majority);
 
-        let [da, db, dc, dd, de, df, dg, dh] = hash;
-        hash = [
-            da.wrapping_add(a),
-            db.wrapping_add(b),
-            dc.wrapping_add(c),
-            dd.wrapping_add(d),
-            de.wrapping_add(e),
-            df.wrapping_add(f),
-            dg.wrapping_add(g),
-            dh.wrapping_add(h),
-        ];
+        h = g;
+        g = f;
+        f = e;
+        e = d.wrapping_add(temp1);
+        d = c;
+        c = b;
+        b = a;
+        a = temp1.wrapping_add(temp2);
     }
 
+    let [da, db, dc, dd, de, df, dg, dh] = hash;
+    [
+        da.wrapping_add(a),
+        db.wrapping_add(b),
+        dc.wrapping_add(c),
+        dd.wrapping_add(d),
+        de.wrapping_add(e),
+        df.wrapping_add(f),
+        dg.wrapping_add(g),
+        dh.wrapping_add(h),
+    ]
+}
+
+/// 将 8 字状态编码为 32 字节摘要。
+///
+/// # 参数
+/// * `hash` - 最终 8 字状态
+///
+/// # 返回
+/// 返回大端编码的 32 字节摘要。
+fn sha256_digest(hash: [u32; 8]) -> [u8; 32] {
     let mut digest = [0u8; 32];
     let (digest_words, _) = digest.as_chunks_mut::<4>();
     for (bytes, word) in digest_words.iter_mut().zip(hash) {

@@ -6,7 +6,7 @@ mod data_scope;
 mod party;
 
 pub use account::{AccountFactPort, FailClosedAccountFactPort};
-pub use audit::{CustomerAuditPort, FailClosedAuditPort, PreparedCustomerAudit};
+pub use audit::{CustomerAuditPort, FailClosedAuditPort, PreparedCustomerAudit, ValidatedAuditSnapshot};
 pub use data_scope::{
     CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope, CustomerScopeObject,
     FailClosedCustomerDataScopePort,

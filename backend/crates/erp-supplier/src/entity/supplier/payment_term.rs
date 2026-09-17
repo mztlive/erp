@@ -25,38 +25,50 @@ pub enum SettlementMode {
 impl SettlementMode {
     /// 返回面向业务用户的中文标签。
     ///
+    /// 映射表见 [`SETTLEMENT_MODE_DISPLAY`]（erp-supplier-002）。
+    ///
     /// # 返回
     /// 返回结算方式中文名称。
     pub fn label(&self) -> &'static str {
-        match self {
-            Self::Prepayment => "预付款",
-            Self::PayAfterUse => "货到后付（历史）",
-            Self::Weekly => "周结",
-            Self::Monthly => "月结",
-            Self::Quarterly => "季结",
-            Self::HalfYearly => "半年结",
-            Self::Yearly => "年结",
-            Self::CashSettlement => "现结",
-        }
+        super::display::label_of(*self, &SETTLEMENT_MODE_DISPLAY)
     }
 
     /// 返回用于持久化和接口传输的稳定代码。
     ///
+    /// 映射表见 [`SETTLEMENT_MODE_DISPLAY`]（erp-supplier-002）。
+    ///
     /// # 返回
     /// 返回 snake_case 结算方式代码。
     pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Prepayment => "prepayment",
-            Self::PayAfterUse => "pay_after_use",
-            Self::Weekly => "weekly",
-            Self::Monthly => "monthly",
-            Self::Quarterly => "quarterly",
-            Self::HalfYearly => "half_yearly",
-            Self::Yearly => "yearly",
-            Self::CashSettlement => "cash_settlement",
-        }
+        super::display::code_of(*self, &SETTLEMENT_MODE_DISPLAY)
     }
 }
+
+/// 结算方式展示映射表（erp-supplier-002）：变体→中文名/稳定代码。
+const SETTLEMENT_MODE_DISPLAY: [super::display::DisplayEntry<SettlementMode>; 8] = [
+    super::display::DisplayEntry {
+        variant: SettlementMode::Prepayment, label: "预付款", code: "prepayment"
+    },
+    super::display::DisplayEntry {
+        variant: SettlementMode::PayAfterUse,
+        label: "货到后付（历史）",
+        code: "pay_after_use",
+    },
+    super::display::DisplayEntry { variant: SettlementMode::Weekly, label: "周结", code: "weekly" },
+    super::display::DisplayEntry { variant: SettlementMode::Monthly, label: "月结", code: "monthly" },
+    super::display::DisplayEntry { variant: SettlementMode::Quarterly, label: "季结", code: "quarterly" },
+    super::display::DisplayEntry {
+        variant: SettlementMode::HalfYearly,
+        label: "半年结",
+        code: "half_yearly",
+    },
+    super::display::DisplayEntry { variant: SettlementMode::Yearly, label: "年结", code: "yearly" },
+    super::display::DisplayEntry {
+        variant: SettlementMode::CashSettlement,
+        label: "现结",
+        code: "cash_settlement",
+    },
+];
 
 /// 可形成采购计划付款日的供应商付款条件。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
