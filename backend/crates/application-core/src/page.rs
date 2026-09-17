@@ -3,6 +3,7 @@ use serde::Serialize;
 /// 应用服务对外返回的分页结果。
 ///
 /// 该类型属于 Service/API 合同，不暴露仓储层的分页结果类型。
+/// 需要页码与页大小的完整信封改用 `query::PageView`；本类型仅承载 `items`/`total`。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Page<T> {
     pub items: Vec<T>,

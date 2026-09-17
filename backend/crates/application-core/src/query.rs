@@ -2,6 +2,17 @@ use serde::Serialize;
 
 use crate::{Error, Result};
 
+/// 缺省排序字段（创建时间倒序基线）。
+pub const DEFAULT_SORT_FIELD: &str = "created_at";
+/// 缺省排序方向（降序，新记录优先）。
+pub const DEFAULT_SORT_DIR: SortDir = SortDir::Desc;
+/// 缺省页码（第一页）。
+pub const DEFAULT_PAGE: u64 = 1;
+/// 缺省分页大小。
+pub const DEFAULT_PAGE_SIZE: u32 = 20;
+/// 分页大小上限。
+pub const MAX_PAGE_SIZE: u32 = 100;
+
 /// 列表排序方向。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SortDir {
@@ -23,11 +34,11 @@ pub fn normalize_sort(
             .find(|allowed| **allowed == field)
             .copied()
             .ok_or_else(|| Error::ValidationError(format!("不支持的排序字段: {field}")))?,
-        None => "created_at",
+        None => DEFAULT_SORT_FIELD,
     };
     let sort_dir = match sort_dir.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
         Some("asc") => SortDir::Asc,
-        Some("desc") | None => SortDir::Desc,
+        Some("desc") | None => DEFAULT_SORT_DIR,
         Some(other) => return Err(Error::ValidationError(format!("非法排序方向: {other}"))),
     };
     Ok((sort_by, sort_dir))
@@ -37,6 +48,8 @@ pub fn normalize_sort(
 ///
 /// 所有领域必须返回同一 `items`/`total`/`page`/`page_size` 合同；领域 DTO
 /// 只负责列表项与筛选参数，不得重复声明分页信封。
+/// 仅需 `items`/`total` 的轻信封改用 `crate::Page`；缺省排序见
+/// `DEFAULT_SORT_FIELD` 与 `DEFAULT_SORT_DIR`（创建时间倒序）。
 #[derive(Debug, Clone, Serialize)]
 pub struct PageView<T> {
     /// 当前页数据。
@@ -80,12 +93,12 @@ pub fn normalized_text(value: Option<&str>) -> Option<String> {
 
 /// 返回有效页码；未提供时使用第一页。
 pub fn page_or_default(page: Option<u64>) -> u64 {
-    page.unwrap_or(1)
+    page.unwrap_or(DEFAULT_PAGE)
 }
 
 /// 返回分页大小；未提供时使用默认大小。
 pub fn page_size_or_default(page_size: Option<u32>) -> u32 {
-    page_size.unwrap_or(20).clamp(1, 100)
+    page_size.unwrap_or(DEFAULT_PAGE_SIZE).clamp(1, MAX_PAGE_SIZE)
 }
 
 #[cfg(test)]

@@ -26,9 +26,9 @@
       "title": "长度前缀哈希逻辑重复",
       "current": "CommandFingerprint::from_parts与legacy_digest_parts各自实现长度前缀SHA-256循环，仅输出包装不同。",
       "proposal": "抽取共享长度前缀哈希内核，版本化与历史路径只做薄包装。",
-      "status": "pending",
+      "status": "done",
       "updated_at": "2026-09-17",
-      "note": ""
+      "note": "done:抽取feed_length_prefixed内核，v1与历史共用；cargo check -p application-core/env -u ERP_TEST_MONGO_URI cargo test -p application-core --lib --locked(13 passed)/cargo check --workspace"
     },
     {
       "id": "application-core-002",
@@ -39,9 +39,9 @@
       "title": "match_fact职责过多",
       "current": "match_fact单方法内做候选ID包含检查、成功标志、身份比对、消息前缀解析与新旧指纹分支判断。",
       "proposal": "拆分为身份校验、指纹提取、指纹比对三个私有步骤，主方法只做编排。",
-      "status": "pending",
+      "status": "done",
       "updated_at": "2026-09-17",
-      "note": ""
+      "note": "done:match_fact拆身份/指纹提取/比对三步+contains_candidate免分配；同上验证"
     },
     {
       "id": "application-core-003",
@@ -52,9 +52,9 @@
       "title": "指纹藏于自由文本消息",
       "current": "收据指纹以command_fingerprint=前缀拼入自由文本message，靠分号切分与strip_prefix解析回读。",
       "proposal": "用结构化字段承载指纹与说明文本，message只做展示拼接。",
-      "status": "pending",
+      "status": "done",
       "updated_at": "2026-09-17",
-      "note": ""
+      "note": "done:新增fingerprints结构化出口+PersistedFingerprint提取，message保持展示拼接兼容；同上验证"
     },
     {
       "id": "application-core-004",
@@ -65,9 +65,9 @@
       "title": "双构造入口键校验重复",
       "current": "from_payload与from_resource_parts重复实现幂等键trim与空值拒绝，以及CommandIdentity组装模式。",
       "proposal": "抽取键规范化与身份构造helper，两入口复用。",
-      "status": "pending",
+      "status": "done",
       "updated_at": "2026-09-17",
-      "note": ""
+      "note": "done:抽取normalize_idempotency_key，两入口复用；同上验证"
     },
     {
       "id": "application-core-005",
@@ -78,9 +78,9 @@
       "title": "Corrupted语义过载",
       "current": "身份不符、success为false、消息缺失统一返回Corrupted，调用方无法区分重试与数据损坏。",
       "proposal": "为未成功回放与身份不符定义独立分类，Corrupted只保留形态损坏。",
-      "status": "pending",
+      "status": "wont_fix",
       "updated_at": "2026-09-17",
-      "note": ""
+      "note": "wont_fix:独立分类需改CommandReceiptMatch公开枚举与erp-audit/erp-workflow调用方匹配分支，超本组范围（禁改其他crate）；note记冲突。cargo check -p application-core通过"
     },
     {
       "id": "application-core-006",
@@ -91,9 +91,9 @@
       "title": "双分页信封并存易混",
       "current": "Page与query.rs的PageView两套分页信封并存，FilteredPage又flatten其中之一，调用方易选错。",
       "proposal": "明确两信封适用边界，长期收敛为单一信封并标注弃用方向。",
-      "status": "pending",
+      "status": "done",
       "updated_at": "2026-09-17",
-      "note": ""
+      "note": "done:文档明确Page与PageView边界+缺省排序常量，长期收敛标注；同上验证"
     },
     {
       "id": "application-core-007",
@@ -104,9 +104,9 @@
       "title": "错误变体与分类未对齐",
       "current": "Error仅有Internal与ValidationError两变体，ErrorClass却定义四分类，冲突与权限映射散落上层。",
       "proposal": "补齐错误变体与ErrorClass的映射关系，统一上层转换入口。",
-      "status": "pending",
+      "status": "done",
       "updated_at": "2026-09-17",
-      "note": ""
+      "note": "done:补Error::class/映射文档+From<ValidationErrors>统一入口，不新增变体保公开签名稳定；cargo check --workspace通过"
     },
     {
       "id": "application-core-008",
@@ -117,9 +117,9 @@
       "title": "历史兼容常驻核心合同",
       "current": "历史身份与无版本指纹的兼容候选逻辑与核心v1路径交织在同一构造方法内。",
       "proposal": "将历史兼容下沉为独立版本适配模块，核心路径只保留v1语义。",
-      "status": "pending",
+      "status": "done",
       "updated_at": "2026-09-17",
-      "note": ""
+      "note": "done:历史兼容下沉legacy_compat模块，核心v1路径只调薄包装；同上验证"
     },
     {
       "id": "application-core-009",
@@ -130,9 +130,9 @@
       "title": "candidates高频克隆分配",
       "current": "candidates每次调用克隆全部ID生成Vec，match_fact仅为contains检查即分配一次。",
       "proposal": "提供contains式查询或迭代器视图，避免纯检查场景分配。",
-      "status": "pending",
+      "status": "done",
       "updated_at": "2026-09-17",
-      "note": ""
+      "note": "done:新增contains_candidate/candidates_iter免分配查询，candidates保留兼容；同上验证"
     },
     {
       "id": "application-core-010",
@@ -143,9 +143,9 @@
       "title": "digest_hex用expect断言",
       "current": "digest_hex用expect假设前缀必然存在，parse静默将摘要转小写归一化。",
       "proposal": "digest_hex改为返回Option或debug断言，大小写归一化策略写入文档显式声明。",
-      "status": "pending",
+      "status": "done",
       "updated_at": "2026-09-17",
-      "note": ""
+      "note": "done:digest_hex改debug断言+release兜底空串，大小写归一化写入文档；同上验证"
     },
     {
       "id": "application-core-011",
@@ -156,9 +156,9 @@
       "title": "await_owned错误界耦合",
       "current": "await_owned要求E同时满足From<Error>与Display，通用辅助与本crate错误类型耦合，单测需真实tokio运行时。",
       "proposal": "收窄泛型约束或分离映射层，使转换逻辑可独立单测。",
-      "status": "pending",
+      "status": "done",
       "updated_at": "2026-09-17",
-      "note": ""
+      "note": "done:分离owned_task_diagnostic_name可单测点，基线缺sync/time特性测试改纯函数断言；cargo test 13 passed"
     },
     {
       "id": "application-core-012",
@@ -169,9 +169,9 @@
       "title": "排序默认值隐式约定",
       "current": "默认排序字段created_at硬编码且不在白名单校验内，sort_dir缺省静默降序，调用方不易察觉。",
       "proposal": "将默认排序声明为具名常量并在文档显式说明缺省方向。",
-      "status": "pending",
+      "status": "done",
       "updated_at": "2026-09-17",
-      "note": ""
+      "note": "done:抽取DEFAULT_SORT_FIELD/DIR/PAGE/SIZE/MAX常量并导出，文档显式缺省方向；同上验证"
     }
   ]
 }
