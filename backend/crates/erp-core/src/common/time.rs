@@ -15,6 +15,10 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
 use crate::errors::{Error, Result};
 
+/// 业务时区相对 UTC 的偏移秒数（Asia/Shanghai，+08:00）。
+/// 业务自然日、前台日期归属与展示转换共用同一偏移，禁止在函数内重复手写 `8 * 3600`。
+pub const BUSINESS_TZ_OFFSET_SECS: i32 = 8 * 3600;
+
 /// 业务自然日（无时区语义）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BusinessDate(NaiveDate);
@@ -42,8 +46,7 @@ impl BusinessDate {
     /// 的“今天”会早于前端日期，导致归属范围查询（如客户列表）查不到当天
     /// 新建的数据。
     pub fn today() -> Self {
-        const BUSINESS_UTC_OFFSET_SECS: i32 = 8 * 3600;
-        let business_tz = FixedOffset::east_opt(BUSINESS_UTC_OFFSET_SECS).expect("+08:00 固定偏移量必然合法");
+        let business_tz = FixedOffset::east_opt(BUSINESS_TZ_OFFSET_SECS).expect("+08:00 固定偏移量必然合法");
         Self(Utc::now().with_timezone(&business_tz).date_naive())
     }
 
@@ -131,9 +134,23 @@ impl Instant {
     ///
     /// # Panics
     /// 时间戳超出 `DateTime<Utc>` 可表示范围时 panic（i64 秒在 ±2920 亿年范围
-    /// 内，实际业务数据不会触达）。
+    /// 内，实际业务数据不会触达）。不确定输入请用 [`Instant::try_from_unix_secs`]。
     pub fn from_unix_secs(secs: i64) -> Self {
-        Self(DateTime::from_timestamp(secs, 0).expect("Unix 时间戳超出可表示范围"))
+        Self::try_from_unix_secs(secs).expect("Unix 时间戳超出可表示范围")
+    }
+
+    /// 由 Unix 秒级时间戳尝试构造时刻。
+    ///
+    /// # 参数
+    /// * `secs` - Unix 秒（可为负数，表示 1970 年以前）
+    ///
+    /// # 返回
+    /// 时间戳可表示时返回对应时刻。
+    ///
+    /// # 错误
+    /// 超出 `DateTime<Utc>` 可表示范围时返回 `LogicError`。
+    pub fn try_from_unix_secs(secs: i64) -> Result<Self> {
+        DateTime::from_timestamp(secs, 0).map(Self).ok_or_else(|| Error::from("Unix 时间戳超出可表示范围"))
     }
 
     /// 返回 Unix 秒级时间戳。

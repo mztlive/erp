@@ -4,7 +4,7 @@ use super::enter_node::{EnterNodeInput, plan_enter_node};
 use super::event::{BpmEvent, BpmEventKind};
 use super::transition_plan::{CommitRequired, TransitionPlan};
 use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
-use crate::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
+use crate::ids::ApprovalNodeExecutionId;
 use crate::model::types::{
     ApprovalExecutionAssignmentSource, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus,
 };
@@ -48,13 +48,9 @@ pub fn resume(
     current.supersede_for_assignee_recovery(command.now)?;
     let mut plan = TransitionPlan::for_instance(instance, CommitRequired::Proceed);
     plan.events.push(
-        BpmEvent::new(
-            BpmEventKind::ExecutionSuperseded,
-            crate::ids::ApprovalProcessInstanceId::new(plan.instance.base.id.clone()),
-            current.round_no,
-        )
-        .with_execution(ApprovalNodeExecutionId::new(current.base.id.clone()))
-        .with_node_key(current.node_key.clone()),
+        BpmEvent::new(BpmEventKind::ExecutionSuperseded, plan.instance.typed_id(), current.round_no)
+            .with_execution(current.typed_id())
+            .with_node_key(current.node_key.clone()),
     );
     let enter = plan_enter_node(EnterNodeInput {
         instance: plan.instance.clone(),
@@ -66,15 +62,15 @@ pub fn resume(
         execution_id: command.next_execution_id,
         execution_no: command.next_execution_no,
         assignment_source: ApprovalExecutionAssignmentSource::AssigneeRecovery,
-        replaces_execution_id: Some(ApprovalNodeExecutionId::new(current.base.id.clone())),
+        replaces_execution_id: Some(current.typed_id()),
         now: command.now,
     })?;
     plan.updated_executions.push(current);
-    plan.merge_enter(enter, false);
+    plan.merge_enter_adopt_commit(enter);
     plan.events.push(
         BpmEvent::new(
             BpmEventKind::AssigneeRecovered,
-            crate::ids::ApprovalProcessInstanceId::new(plan.instance.base.id.clone()),
+            plan.instance.typed_id(),
             plan.instance.current_round_no,
         )
         .with_execution(recovered_execution_id),
@@ -89,6 +85,17 @@ fn ensure_assignee_recovery_state(
     assignee: &ApprovalInstanceAssignee,
     graph: &DefinitionGraph,
     eligibility: &Eligibility,
+) -> EngineResult<()> {
+    ensure_blocker_allows_recovery(instance, current)?;
+    ensure_instance_execution_affinity(instance, current, assignee, graph)?;
+    ensure_binding_eligibility_affinity(current, assignee, graph, eligibility)?;
+    Ok(())
+}
+
+/// 校验 blocker 一致性：受阻态、人员类别与实例-执行投影一致。
+fn ensure_blocker_allows_recovery(
+    instance: &ApprovalProcessInstance,
+    current: &ApprovalNodeExecution,
 ) -> EngineResult<()> {
     if instance.status != ApprovalProcessInstanceStatus::Blocked
         || current.status != ApprovalNodeExecutionStatus::Blocked
@@ -105,12 +112,21 @@ fn ensure_assignee_recovery_state(
     if instance.blocker_code != current.blocker_code {
         return Err(EngineError::InvalidCommand("实例与执行 blocker 不一致"));
     }
+    Ok(())
+}
 
-    let instance_id = ApprovalProcessInstanceId::new(instance.base.id.clone());
+/// 校验实例-执行归属：同一实例、当前令牌、当前轮次与冻结定义一致。
+fn ensure_instance_execution_affinity(
+    instance: &ApprovalProcessInstance,
+    current: &ApprovalNodeExecution,
+    assignee: &ApprovalInstanceAssignee,
+    graph: &DefinitionGraph,
+) -> EngineResult<()> {
+    let instance_id = instance.typed_id();
     if current.process_instance_id != instance_id || assignee.process_instance_id != instance_id {
         return Err(EngineError::InvalidCommand("恢复事实不属于同一审批实例"));
     }
-    let current_execution_id = ApprovalNodeExecutionId::new(current.base.id.clone());
+    let current_execution_id = current.typed_id();
     if instance.current_node_execution_id.as_ref() != Some(&current_execution_id) {
         return Err(EngineError::InvalidCommand("执行不是实例当前令牌"));
     }
@@ -122,7 +138,16 @@ fn ensure_assignee_recovery_state(
     {
         return Err(EngineError::InvalidCommand("恢复图与实例冻结定义不一致"));
     }
+    Ok(())
+}
 
+/// 校验绑定-资格归属：绑定未变、节点一致、资格属于原审批人且与定义快照一致。
+fn ensure_binding_eligibility_affinity(
+    current: &ApprovalNodeExecution,
+    assignee: &ApprovalInstanceAssignee,
+    graph: &DefinitionGraph,
+    eligibility: &Eligibility,
+) -> EngineResult<()> {
     assignee.ensure_unchanged_from_definition()?;
     if assignee.node_key != current.node_key {
         return Err(EngineError::InvalidCommand("实例审批人绑定与受阻节点不一致"));

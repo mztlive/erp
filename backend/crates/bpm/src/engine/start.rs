@@ -1,10 +1,15 @@
 //! 启动第 1 轮运行实例并进入入口节点。
 
+use std::collections::{HashMap, HashSet};
+
 use super::enter_node::{EnterNodeInput, plan_enter_node};
 use super::event::{BpmEvent, BpmEventKind};
 use super::transition_plan::TransitionPlan;
 use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
-use crate::ids::{ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
+use crate::ids::{
+    ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessDefinitionId,
+    ApprovalProcessInstanceId,
+};
 use crate::model::types::ApprovalExecutionAssignmentSource;
 use crate::model::{
     ApprovalInstanceAssignee, ApprovalProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp,
@@ -61,7 +66,7 @@ pub fn start(
     ensure_bindings_valid(graph, bindings)?;
     let instance = ApprovalProcessInstance::start_running(crate::model::NewProcessInstance {
         id: command.instance_id.clone(),
-        process_definition_id: graph.definition.base.id.clone().into_definition(),
+        process_definition_id: ApprovalProcessDefinitionId::new(graph.definition.base.id.clone()),
         definition_version: graph.definition.definition_version,
         process_kind: command.process_kind,
         subject: command.subject,
@@ -71,7 +76,11 @@ pub fn start(
     })?;
     let assignees = freeze_assignees(&instance, graph, bindings, command.now)?;
     let entry = graph.entry_node()?;
-    let entry_binding = binding_for(bindings, &entry.node_key)?;
+    let by_node = indexed_bindings(graph, bindings)?;
+    let entry_binding = by_node
+        .get(entry.node_key.as_str())
+        .copied()
+        .ok_or(EngineError::InvalidCommand("节点审批人绑定缺失或重复"))?;
     let mut plan = plan_enter_node(EnterNodeInput {
         instance,
         graph,
@@ -93,18 +102,35 @@ pub fn start(
     Ok(plan)
 }
 
-/// 启动绑定必须逐节点匹配定义责任人及其有效资格。
-fn ensure_bindings_valid(graph: &DefinitionGraph, bindings: &[StartAssigneeBinding]) -> EngineResult<()> {
+/// 按节点键建立绑定索引，一次完成数量、重复主键、重复节点与缺失校验。
+fn indexed_bindings<'a>(
+    graph: &DefinitionGraph,
+    bindings: &'a [StartAssigneeBinding],
+) -> EngineResult<HashMap<&'a str, &'a StartAssigneeBinding>> {
     if bindings.len() != graph.nodes.len() {
         return Err(EngineError::InvalidCommand("实例审批人绑定必须与定义节点一一对应"));
     }
-    for (index, binding) in bindings.iter().enumerate() {
-        if bindings[..index].iter().any(|prior| prior.id == binding.id) {
+    let mut by_node = HashMap::with_capacity(bindings.len());
+    let mut seen_ids = HashSet::with_capacity(bindings.len());
+    for binding in bindings {
+        if !seen_ids.insert(&binding.id) {
             return Err(EngineError::InvalidCommand("实例审批人绑定主键不得重复"));
         }
+        if by_node.insert(binding.node_key.as_str(), binding).is_some() {
+            return Err(EngineError::InvalidCommand("节点审批人绑定缺失或重复"));
+        }
     }
+    Ok(by_node)
+}
+
+/// 启动绑定必须逐节点匹配定义责任人及其有效资格。
+fn ensure_bindings_valid(graph: &DefinitionGraph, bindings: &[StartAssigneeBinding]) -> EngineResult<()> {
+    let by_node = indexed_bindings(graph, bindings)?;
     for node in &graph.nodes {
-        let binding = binding_for(bindings, &node.node_key)?;
+        let binding = by_node
+            .get(node.node_key.as_str())
+            .copied()
+            .ok_or(EngineError::InvalidCommand("节点审批人绑定缺失或重复"))?;
         if binding.participant != node.assignee_participant_id {
             return Err(EngineError::InvalidCommand("实例审批人绑定必须匹配定义审批人"));
         }
@@ -118,48 +144,28 @@ fn ensure_bindings_valid(graph: &DefinitionGraph, bindings: &[StartAssigneeBindi
     Ok(())
 }
 
-/// 为定义中每个节点冻结实例审批人，缺节点或重复时失败关闭。
+/// 为定义中每个节点冻结实例审批人，复用同一索引只做冻结。
 fn freeze_assignees(
     instance: &ApprovalProcessInstance,
     graph: &DefinitionGraph,
     bindings: &[StartAssigneeBinding],
     now: Timestamp,
 ) -> EngineResult<Vec<ApprovalInstanceAssignee>> {
-    if bindings.len() != graph.nodes.len() {
-        return Err(EngineError::InvalidCommand("实例审批人绑定必须与定义节点一一对应"));
-    }
+    let by_node = indexed_bindings(graph, bindings)?;
+    let instance_id = instance.typed_id();
     let mut assignees = Vec::with_capacity(graph.nodes.len());
     for node in &graph.nodes {
-        let binding = binding_for(bindings, &node.node_key)?;
+        let binding = by_node
+            .get(node.node_key.as_str())
+            .copied()
+            .ok_or(EngineError::InvalidCommand("节点审批人绑定缺失或重复"))?;
         assignees.push(ApprovalInstanceAssignee::from_definition(
             binding.id.clone(),
-            ApprovalProcessInstanceId::new(instance.base.id.clone()),
+            instance_id.clone(),
             node.node_key.clone(),
             binding.participant.clone(),
             now,
         )?);
     }
     Ok(assignees)
-}
-
-/// 按节点键查找启动绑定。
-fn binding_for<'a>(
-    bindings: &'a [StartAssigneeBinding],
-    node_key: &str,
-) -> EngineResult<&'a StartAssigneeBinding> {
-    let matches: Vec<_> = bindings.iter().filter(|item| item.node_key == node_key).collect();
-    match matches.as_slice() {
-        [only] => Ok(*only),
-        _ => Err(EngineError::InvalidCommand("节点审批人绑定缺失或重复")),
-    }
-}
-
-trait IntoDefinitionId {
-    fn into_definition(self) -> crate::ids::ApprovalProcessDefinitionId;
-}
-
-impl IntoDefinitionId for String {
-    fn into_definition(self) -> crate::ids::ApprovalProcessDefinitionId {
-        crate::ids::ApprovalProcessDefinitionId::new(self)
-    }
 }

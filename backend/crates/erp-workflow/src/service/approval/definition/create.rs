@@ -45,15 +45,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
             create_draft_identity(key, request.document_type, &name, request.draft_source, actor.id())?;
         self.ensure_definition_admin(actor, &policy).await?;
         if let Some(view) = self
-            .replay_if_receipt(
-                &identity.current,
+            .replay_prepared_if_receipt(
+                &identity,
                 DefinitionResultExpectation::ProcessKind(policy.process_kind),
             )
             .await?
         {
-            return Ok(view);
-        }
-        if let Some(view) = self.replay_legacy_if_receipt(&identity).await? {
             return Ok(view);
         }
         self.commit_create_draft(&policy, &name, request, actor, identity).await

@@ -80,6 +80,33 @@ pub struct FactSource {
     pub reason_text: Option<String>,
 }
 
+impl FactSource {
+    /// 构造事实来源与原因字段组。
+    ///
+    /// 必填仅 `source_type`；引用与原因均为可选，调用方按业务场景组合。
+    /// 本构造不做 trim/非空/长度校验，调用方须先完成规范化（见 [`FactBase::new`]）。
+    ///
+    /// # 参数
+    /// * `source_type` - 事实来源类型
+    /// * `source_reference` - 可追溯的来源单据或消息引用
+    /// * `reason_code` - 变更、纠错或人工处理原因代码
+    /// * `reason_text` - 原因说明文本
+    ///
+    /// # 返回
+    /// 返回来源与原因字段组。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn new(
+        source_type: SourceType,
+        source_reference: Option<String>,
+        reason_code: Option<String>,
+        reason_text: Option<String>,
+    ) -> Self {
+        Self { source_type, source_reference, reason_code, reason_text }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -91,12 +118,12 @@ mod tests {
             Instant::from_unix_secs(1_700_000_000),
             Instant::from_unix_secs(1_700_000_100),
             "system",
-            FactSource {
-                source_type: SourceType::ManualImport,
-                source_reference: Some("msg-1".to_string()),
-                reason_code: None,
-                reason_text: Some("人工补录".to_string()),
-            },
+            FactSource::new(
+                SourceType::ManualImport,
+                Some("msg-1".to_string()),
+                None,
+                Some("人工补录".to_string()),
+            ),
         );
         assert_eq!(base.fact_no, "F-100");
         assert_eq!(base.source_type, SourceType::ManualImport);

@@ -1,4 +1,4 @@
-//! 合同 §4.3 的 20 行穷尽审批政策。
+//! 合同 §4.3 基线 20 行 + 1 个新增项，共 21 行穷尽审批政策（见 `ALL_DOCUMENT_TYPES`）。
 //!
 //! 政策由代码注册，禁止默认政策、Noop 动作或复制 `process_kind.rs` 映射。
 
@@ -15,10 +15,19 @@ pub const SALES_ORDER_PROCUREMENT_CONFIRMATION: &str = "SALES_ORDER_PROCUREMENT_
 /// 定义期校验指定审批人的静态审批权限。
 pub const STATIC_APPROVE_PERMISSION: &str = "approval_instance:decide";
 
-/// 合同 §4.3 固定 20 个单据类型，复用实体层权威穷尽集合。
+/// 合同 §4.3 基线 20 个单据类型 + 1 个新增项（共 21），复用实体层权威穷尽集合。
 pub const ALL_DOCUMENT_TYPES: [DocumentType; 21] = DocumentType::ALL;
 
 const NO_PURPOSES: &[ApprovalNodePurpose] = &[];
+
+/// 全部快照表共享的公共前缀字段（顺序固定，变更时三表同步生效）。
+const SNAPSHOT_COMMON_PREFIX: &[ApprovalSubjectSnapshotField] = &[
+    ApprovalSubjectSnapshotField::DocumentNo,
+    ApprovalSubjectSnapshotField::ResponsibleOrgId,
+    ApprovalSubjectSnapshotField::SubmittedBy,
+    ApprovalSubjectSnapshotField::SubmittedAt,
+    ApprovalSubjectSnapshotField::CounterpartyOptional,
+];
 
 const SALES_PURCHASE_SNAPSHOT: &[ApprovalSubjectSnapshotField] = &[
     ApprovalSubjectSnapshotField::DocumentNo,
@@ -48,6 +57,13 @@ const STOCK_SNAPSHOT: &[ApprovalSubjectSnapshotField] = &[
     ApprovalSubjectSnapshotField::TotalQuantity,
     ApprovalSubjectSnapshotField::LineCount,
 ];
+
+/// 断言三快照表公共前缀与真相源一致（`debug` 构建防漂移，`release` 零开销）。
+fn debug_assert_snapshot_prefixes() {
+    debug_assert_eq!(&SALES_PURCHASE_SNAPSHOT[..SNAPSHOT_COMMON_PREFIX.len()], SNAPSHOT_COMMON_PREFIX);
+    debug_assert_eq!(&FINANCE_SNAPSHOT[..SNAPSHOT_COMMON_PREFIX.len()], SNAPSHOT_COMMON_PREFIX);
+    debug_assert_eq!(&STOCK_SNAPSHOT[..SNAPSHOT_COMMON_PREFIX.len()], SNAPSHOT_COMMON_PREFIX);
+}
 
 /// 单据类型审批要求。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -243,6 +259,7 @@ impl DocumentApprovalPolicy {
 /// # 错误
 /// 类型级权限字符串无法解析时返回部署不变量错误。
 pub fn policy_of(document_type: DocumentType) -> Result<DocumentApprovalPolicy> {
+    debug_assert_snapshot_prefixes();
     match document_type {
         DocumentType::SalesOrder => process_required(
             document_type,
@@ -631,6 +648,14 @@ mod tests {
         assert_eq!(policy.subject_snapshot_fields, STOCK_SNAPSHOT);
         assert!(policy.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalQuantity));
         assert!(!policy.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalAmount));
+    }
+
+    /// 三快照表公共前缀与 `SNAPSHOT_COMMON_PREFIX` 一致（顺序固定，防漂移）。
+    #[test]
+    fn snapshot_tables_share_common_prefix() {
+        for table in [SALES_PURCHASE_SNAPSHOT, FINANCE_SNAPSHOT, STOCK_SNAPSHOT] {
+            assert_eq!(&table[..SNAPSHOT_COMMON_PREFIX.len()], SNAPSHOT_COMMON_PREFIX);
+        }
     }
 
     /// 资金类快照必填金额、不要求数量。

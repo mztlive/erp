@@ -162,13 +162,31 @@ async fn aggregate_runtime_read(
     }
 }
 
+/// 从 facet `total` 段提取计数（`items`/`total` 两段式分页拼装的共用入口）。
+///
+/// 空页兜底为 0；负数或越界计数失败关闭。重复检查的 stage 定义仍保留在各自调用方。
+///
+/// # 参数
+/// * `count` - facet `total` 段首行计数（`None` 表示空页）
+/// * `scope` - 计数越界时的错误域标签
+///
+/// # 返回
+/// 返回非负总数。
+///
+/// # 错误
+/// 计数为负或超出 `u64` 时返回越界错误。
+pub(crate) fn facet_total_or_empty(count: Option<i64>, scope: &'static str) -> Result<u64> {
+    let Some(count) = count else {
+        return Ok(0);
+    };
+    u64::try_from(count).map_err(|_| Error::EntityMetadataOutOfRange(scope))
+}
+
 fn runtime_read_page(facet: Option<ApprovalRuntimeReadFacet>) -> Result<ApprovalRuntimeReadPage> {
     let Some(facet) = facet else {
         return Ok(ApprovalRuntimeReadPage { items: Vec::new(), total: 0 });
     };
-    let total = facet.total.first().map_or(Ok(0), |row| {
-        u64::try_from(row.count).map_err(|_| Error::EntityMetadataOutOfRange("approval_runtime_total"))
-    })?;
+    let total = facet_total_or_empty(facet.total.first().map(|row| row.count), "approval_runtime_total")?;
     Ok(ApprovalRuntimeReadPage { items: facet.items, total })
 }
 

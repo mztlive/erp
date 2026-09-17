@@ -38,13 +38,16 @@ pub enum AccountKind {
 }
 
 impl AccountKind {
+    /// 管理员账号的稳定代码（唯一真相源，`as_str`/`parse` 均由此驱动）。
+    pub const ADMIN_CODE: &'static str = "admin";
+
     /// 返回账号类型字符串表示。
     ///
     /// # 返回值
     /// 返回稳定的账号类型字符串。
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Admin => "admin",
+            Self::Admin => Self::ADMIN_CODE,
         }
     }
 
@@ -59,10 +62,10 @@ impl AccountKind {
     /// # 错误
     /// 未知取值返回 [`InvalidAccountKind`]。
     pub fn parse(value: &str) -> std::result::Result<Self, InvalidAccountKind> {
-        match value {
-            "admin" => Ok(Self::Admin),
-            _ => Err(InvalidAccountKind),
+        if value == Self::ADMIN_CODE {
+            return Ok(Self::Admin);
         }
+        Err(InvalidAccountKind)
     }
 }
 

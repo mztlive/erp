@@ -39,7 +39,6 @@ impl From<mongodb::error::Error> for Error {
     /// 其他写入或连接错误保持数据库错误。
     fn from(error: mongodb::error::Error) -> Self {
         if is_duplicate_key(&error) {
-            tracing::warn!(%error, "duplicate key write rejected");
             return Self::DuplicateKey(error);
         }
         if error.contains_label(TRANSIENT_TRANSACTION_ERROR) {
@@ -65,20 +64,34 @@ impl Error {
     }
 }
 
-/// 判断 MongoDB 错误是否包含服务端唯一键冲突码。
-fn is_duplicate_key(error: &mongodb::error::Error) -> bool {
+/// 以一次匹配提取唯一键冲突的错误文本；命中返回 `Some`，否则返回 `None`。
+///
+/// `is_duplicate_key` 与 `extract_duplicate_index_name` 共用同一视图，
+/// 判重码 `11000` 与标签逻辑只维护一处。
+fn duplicate_key_message(error: &mongodb::error::Error) -> Option<&str> {
     match error.kind.as_ref() {
-        ErrorKind::Command(error) => error.code == DUPLICATE_KEY_CODE,
-        ErrorKind::Write(WriteFailure::WriteError(error)) => error.code == DUPLICATE_KEY_CODE,
+        ErrorKind::Command(error) if error.code == DUPLICATE_KEY_CODE => Some(error.message.as_str()),
+        ErrorKind::Write(WriteFailure::WriteError(error)) if error.code == DUPLICATE_KEY_CODE => {
+            Some(error.message.as_str())
+        },
         ErrorKind::InsertMany(error) => error
             .write_errors
-            .as_ref()
-            .is_some_and(|errors| errors.iter().any(|error| error.code == DUPLICATE_KEY_CODE)),
-        ErrorKind::BulkWrite(error) => {
-            error.write_errors.values().any(|error| error.code == DUPLICATE_KEY_CODE)
-        },
-        _ => false,
+            .as_ref()?
+            .iter()
+            .find(|error| error.code == DUPLICATE_KEY_CODE)
+            .map(|error| error.message.as_str()),
+        ErrorKind::BulkWrite(error) => error
+            .write_errors
+            .values()
+            .find(|error| error.code == DUPLICATE_KEY_CODE)
+            .map(|error| error.message.as_str()),
+        _ => None,
     }
+}
+
+/// 判断 MongoDB 错误是否包含服务端唯一键冲突码。
+fn is_duplicate_key(error: &mongodb::error::Error) -> bool {
+    duplicate_key_message(error).is_some()
 }
 
 /// 从 MongoDB 唯一键冲突错误信息中提取索引名。
@@ -89,21 +102,7 @@ fn is_duplicate_key(error: &mongodb::error::Error) -> bool {
 /// # 返回
 /// 解析到的索引名；无法从错误文本中定位时返回 `None`。
 fn extract_duplicate_index_name(error: &mongodb::error::Error) -> Option<&str> {
-    let message = match error.kind.as_ref() {
-        ErrorKind::Command(error) => Some(error.message.as_str()),
-        ErrorKind::Write(WriteFailure::WriteError(error)) => Some(error.message.as_str()),
-        ErrorKind::InsertMany(error) => error
-            .write_errors
-            .as_ref()
-            .and_then(|errors| errors.iter().find(|error| error.code == DUPLICATE_KEY_CODE))
-            .map(|error| error.message.as_str()),
-        ErrorKind::BulkWrite(error) => error
-            .write_errors
-            .values()
-            .find(|error| error.code == DUPLICATE_KEY_CODE)
-            .map(|error| error.message.as_str()),
-        _ => None,
-    }?;
+    let message = duplicate_key_message(error)?;
     parse_index_name_from_message(message)
 }
 
@@ -116,7 +115,11 @@ fn extract_duplicate_index_name(error: &mongodb::error::Error) -> Option<&str> {
 /// 索引名切片；未匹配时返回 `None`。
 fn parse_index_name_from_message(message: &str) -> Option<&str> {
     let after_index = message.split("index: ").nth(1)?;
-    let name = after_index.split_whitespace().next().map(str::trim).filter(|name| !name.is_empty())?;
+    let name =
+        after_index.split_whitespace().next().map(|token| token.trim().trim_matches([',', '.', ';', ':']))?;
+    if name.is_empty() {
+        return None;
+    }
     Some(name)
 }
 
@@ -174,5 +177,23 @@ mod tests {
         let error = Error::from(write_error(11000));
 
         assert_eq!(error.duplicate_index_name(), None);
+    }
+
+    #[test]
+    fn index_name_parse_trims_punctuation_and_rejects_missing() {
+        let parsed = super::parse_index_name_from_message(
+            "E11000 duplicate key error collection: erp.parties index: uk_parties_party_no, dup key: {}",
+        );
+        assert_eq!(parsed, Some("uk_parties_party_no"));
+
+        let parsed = super::parse_index_name_from_message(
+            "E11000 duplicate key error collection: erp.parties index: uk_parties_party_no. dup key: {}",
+        );
+        assert_eq!(parsed, Some("uk_parties_party_no"));
+
+        assert_eq!(super::parse_index_name_from_message("E11000 duplicate key error"), None);
+        assert_eq!(super::parse_index_name_from_message("E11000 index: "), None);
+        // 大小写敏感： Mongo 文本固定为小写 `index: `，大写前缀不识别（保持既有语义）。
+        assert_eq!(super::parse_index_name_from_message("E11000 Index: foo"), None);
     }
 }

@@ -100,30 +100,33 @@ impl ProcessKind {
     ///
     /// # 返回
     /// 返回非空且不超过 [`Self::MAX_LEN`] 的稳定字符串。
+    /// 种类与稳定代码的唯一真相源；`as_str`/`try_from_code` 均由此查表。
+    const TABLE: [(Self, &'static str); 21] = [
+        (Self::SalesOrder, "sales_order"),
+        (Self::VoucherSalesOrder, "voucher_sales_order"),
+        (Self::SalesChangeOrder, "sales_change_order"),
+        (Self::PurchaseOrder, "purchase_order"),
+        (Self::PurchaseChangeOrder, "purchase_change_order"),
+        (Self::StockAdjustment, "stock_adjustment"),
+        (Self::CustomerReceipt, "customer_receipt"),
+        (Self::SalesInvoiceRequest, "sales_invoice_request"),
+        (Self::SupplierPayment, "supplier_payment"),
+        (Self::CustomerRefund, "customer_refund"),
+        (Self::SupplierRefund, "supplier_refund"),
+        (Self::ReceiptReversal, "receipt_reversal"),
+        (Self::PaymentReversal, "payment_reversal"),
+        (Self::PurchaseReceipt, "purchase_receipt"),
+        (Self::Delivery, "delivery"),
+        (Self::ElectronicDelivery, "electronic_delivery"),
+        (Self::ServiceFulfillment, "service_fulfillment"),
+        (Self::CustomerAcceptance, "customer_acceptance"),
+        (Self::Invoice, "invoice"),
+        (Self::SalesReturnCase, "sales_return_case"),
+        (Self::PurchaseReturnOrder, "purchase_return_order"),
+    ];
+
     pub fn as_str(self) -> &'static str {
-        match self {
-            Self::SalesOrder => "sales_order",
-            Self::VoucherSalesOrder => "voucher_sales_order",
-            Self::SalesChangeOrder => "sales_change_order",
-            Self::PurchaseOrder => "purchase_order",
-            Self::PurchaseChangeOrder => "purchase_change_order",
-            Self::StockAdjustment => "stock_adjustment",
-            Self::CustomerReceipt => "customer_receipt",
-            Self::SalesInvoiceRequest => "sales_invoice_request",
-            Self::SupplierPayment => "supplier_payment",
-            Self::CustomerRefund => "customer_refund",
-            Self::SupplierRefund => "supplier_refund",
-            Self::ReceiptReversal => "receipt_reversal",
-            Self::PaymentReversal => "payment_reversal",
-            Self::PurchaseReceipt => "purchase_receipt",
-            Self::Delivery => "delivery",
-            Self::ElectronicDelivery => "electronic_delivery",
-            Self::ServiceFulfillment => "service_fulfillment",
-            Self::CustomerAcceptance => "customer_acceptance",
-            Self::Invoice => "invoice",
-            Self::SalesReturnCase => "sales_return_case",
-            Self::PurchaseReturnOrder => "purchase_return_order",
-        }
+        Self::TABLE.iter().find(|(kind, _)| *kind == self).map(|(_, code)| *code).expect("种类表覆盖全部变体")
     }
 
     /// 仅接受已冻结的稳定代码。
@@ -140,30 +143,11 @@ impl ProcessKind {
         if code.is_empty() || code.len() > Self::MAX_LEN {
             return Err(Error::InvalidProcessKind);
         }
-        match code {
-            "sales_order" => Ok(Self::SalesOrder),
-            "voucher_sales_order" => Ok(Self::VoucherSalesOrder),
-            "sales_change_order" => Ok(Self::SalesChangeOrder),
-            "purchase_order" => Ok(Self::PurchaseOrder),
-            "purchase_change_order" => Ok(Self::PurchaseChangeOrder),
-            "stock_adjustment" => Ok(Self::StockAdjustment),
-            "customer_receipt" => Ok(Self::CustomerReceipt),
-            "sales_invoice_request" => Ok(Self::SalesInvoiceRequest),
-            "supplier_payment" => Ok(Self::SupplierPayment),
-            "customer_refund" => Ok(Self::CustomerRefund),
-            "supplier_refund" => Ok(Self::SupplierRefund),
-            "receipt_reversal" => Ok(Self::ReceiptReversal),
-            "payment_reversal" => Ok(Self::PaymentReversal),
-            "purchase_receipt" => Ok(Self::PurchaseReceipt),
-            "delivery" => Ok(Self::Delivery),
-            "electronic_delivery" => Ok(Self::ElectronicDelivery),
-            "service_fulfillment" => Ok(Self::ServiceFulfillment),
-            "customer_acceptance" => Ok(Self::CustomerAcceptance),
-            "invoice" => Ok(Self::Invoice),
-            "sales_return_case" => Ok(Self::SalesReturnCase),
-            "purchase_return_order" => Ok(Self::PurchaseReturnOrder),
-            _ => Err(Error::InvalidProcessKind),
-        }
+        Self::TABLE
+            .iter()
+            .find(|(_, known)| *known == code)
+            .map(|(kind, _)| *kind)
+            .ok_or(Error::InvalidProcessKind)
     }
 }
 

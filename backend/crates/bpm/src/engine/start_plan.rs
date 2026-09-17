@@ -104,6 +104,7 @@ fn binding_for<'a>(bindings: &'a [StartBindingInput], node_key: &str) -> EngineR
 
 #[cfg(test)]
 mod tests {
+    use super::super::test_fixtures::{at, blocked, eligible, node, participant};
     use super::{StartBindingInput, StartPlanInput, plan_start};
     use crate::engine::{Eligibility, EngineError};
     use crate::graph::DefinitionGraph;
@@ -158,51 +159,12 @@ mod tests {
         }
     }
 
-    fn node(
-        id: &str,
-        key: &str,
-        name: &str,
-        order: u32,
-        user: &str,
-        label: &str,
-        at: Timestamp,
-    ) -> ApprovalNodeDefinition {
-        ApprovalNodeDefinition::new(crate::model::NewNodeDefinition {
-            id: ApprovalNodeDefinitionId::new(id),
-            process_definition_id: ApprovalProcessDefinitionId::new("def"),
-            node_key: key.into(),
-            node_name: name.into(),
-            node_purpose: None,
-            display_order: order,
-            assignee_participant_id: participant(user),
-            assignee_label_snapshot: label.into(),
-            at,
-        })
-        .unwrap()
-    }
-
     fn binding(node_key: &str, id: &str, eligibility: Eligibility) -> StartBindingInput {
         StartBindingInput {
             node_key: node_key.into(),
             assignee_id: ApprovalInstanceAssigneeId::new(id),
             eligibility,
         }
-    }
-
-    fn eligible(user: &str, name: &str) -> Eligibility {
-        Eligibility::Eligible { participant: participant(user), assignee_name_snapshot: name.into() }
-    }
-
-    fn blocked(user: &str, name: &str, code: ApprovalBlockerCode) -> Eligibility {
-        Eligibility::Blocked { participant: participant(user), code, assignee_name_snapshot: name.into() }
-    }
-
-    fn participant(id: &str) -> ParticipantId {
-        ParticipantId::new(id).unwrap()
-    }
-
-    fn at(secs: i64) -> Timestamp {
-        Timestamp::from_unix_secs(secs).unwrap()
     }
 
     /// 通用计划逐节点冻结绑定，并解析入口资格。

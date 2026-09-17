@@ -23,9 +23,16 @@ enum CommitErrorAction {
     DefiniteFailure,
 }
 
+/// 提交错误的结果标签（具名枚举，避免调用点 `true`/`false` 难读）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CommitErrorLabel {
+    UnknownResult,
+    Definite,
+}
+
 /// 根据 MongoDB 错误标签与已用时间决定提交错误的处理方式。
-fn commit_error_action(has_unknown_result_label: bool, elapsed: Duration) -> CommitErrorAction {
-    if !has_unknown_result_label {
+fn commit_error_action(label: CommitErrorLabel, elapsed: Duration) -> CommitErrorAction {
+    if label != CommitErrorLabel::UnknownResult {
         return CommitErrorAction::DefiniteFailure;
     }
     if elapsed < COMMIT_RETRY_TIMEOUT {
@@ -49,22 +56,35 @@ fn transaction_options() -> TransactionOptions {
 async fn commit_with_retry(session: &mut ClientSession) -> Result<()> {
     let started_at = Instant::now();
     loop {
-        match session.commit_transaction().await {
-            Ok(()) => return Ok(()),
-            Err(error) => {
-                let action = commit_error_action(
-                    error.contains_label(UNKNOWN_TRANSACTION_COMMIT_RESULT),
-                    started_at.elapsed(),
-                );
-                match action {
-                    CommitErrorAction::Retry => continue,
-                    CommitErrorAction::OutcomeUnknown => {
-                        return Err(Error::CommitOutcomeUnknown(error));
-                    },
-                    CommitErrorAction::DefiniteFailure => return Err(Error::from(error)),
-                }
-            },
+        let Err(error) = session.commit_transaction().await else {
+            return Ok(());
+        };
+        let label = if error.contains_label(UNKNOWN_TRANSACTION_COMMIT_RESULT) {
+            CommitErrorLabel::UnknownResult
+        } else {
+            CommitErrorLabel::Definite
+        };
+        match commit_error_action(label, started_at.elapsed()) {
+            CommitErrorAction::Retry => continue,
+            CommitErrorAction::OutcomeUnknown => return Err(Error::CommitOutcomeUnknown(error)),
+            CommitErrorAction::DefiniteFailure => return Err(Error::from(error)),
         }
+    }
+}
+
+/// 启动带因果一致性的会话并开启统一业务事务选项。
+async fn start_transaction_session(client: &Client) -> Result<ClientSession> {
+    let session_options = SessionOptions::builder().causal_consistency(true).build();
+    let mut session = client.start_session().with_options(session_options).await.map_err(Error::from)?;
+    let txn_options = transaction_options();
+    session.start_transaction().with_options(txn_options).await.map_err(Error::from)?;
+    Ok(session)
+}
+
+/// 静默回滚事务；回滚失败仅记录日志，不覆盖用例原始错误。
+async fn abort_quietly(session: &mut ClientSession) {
+    if let Err(abort_error) = session.abort_transaction().await {
+        tracing::warn!(error = ?abort_error, "failed to abort MongoDB transaction after callback error");
     }
 }
 
@@ -114,11 +134,7 @@ impl Transactional for Client {
         R: Send,
         E: From<Error> + Send,
     {
-        let session_options = SessionOptions::builder().causal_consistency(true).build();
-        let mut session =
-            self.start_session().with_options(session_options).await.map_err(Error::from).map_err(E::from)?;
-        let txn_options = transaction_options();
-        session.start_transaction().with_options(txn_options).await.map_err(Error::from).map_err(E::from)?;
+        let mut session = start_transaction_session(self).await.map_err(E::from)?;
 
         match f(&mut session).await {
             Ok(result) => {
@@ -126,12 +142,7 @@ impl Transactional for Client {
                 Ok(result)
             },
             Err(error) => {
-                if let Err(abort_error) = session.abort_transaction().await {
-                    tracing::warn!(
-                        error = ?abort_error,
-                        "failed to abort MongoDB transaction after callback error"
-                    );
-                }
+                abort_quietly(&mut session).await;
                 Err(error)
             },
         }
@@ -144,27 +155,29 @@ mod tests {
 
     use mongodb::options::{ReadConcern, WriteConcern};
 
-    use super::{COMMIT_RETRY_TIMEOUT, CommitErrorAction, commit_error_action, transaction_options};
+    use super::{
+        COMMIT_RETRY_TIMEOUT, CommitErrorAction, CommitErrorLabel, commit_error_action, transaction_options,
+    };
 
     #[test]
     fn unknown_commit_result_retries_before_timeout() {
         let elapsed = COMMIT_RETRY_TIMEOUT - Duration::from_millis(1);
 
-        let action = commit_error_action(true, elapsed);
+        let action = commit_error_action(CommitErrorLabel::UnknownResult, elapsed);
 
         assert_eq!(action, CommitErrorAction::Retry);
     }
 
     #[test]
     fn unknown_commit_result_reports_unknown_at_timeout() {
-        let action = commit_error_action(true, COMMIT_RETRY_TIMEOUT);
+        let action = commit_error_action(CommitErrorLabel::UnknownResult, COMMIT_RETRY_TIMEOUT);
 
         assert_eq!(action, CommitErrorAction::OutcomeUnknown);
     }
 
     #[test]
     fn commit_error_without_unknown_label_is_definite_failure() {
-        let action = commit_error_action(false, Duration::ZERO);
+        let action = commit_error_action(CommitErrorLabel::Definite, Duration::ZERO);
 
         assert_eq!(action, CommitErrorAction::DefiniteFailure);
     }

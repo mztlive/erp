@@ -14,8 +14,8 @@ use persistence_core::{Executor, Transactional};
 
 use super::super::authorization::{converge_eligibility, hidden_forbidden, requires_blocked_cancel};
 use super::super::idempotency::{
-    CancelBlockedIdentityParams, ReceiptBranch, cancel_blocked_identity, command_may_have_committed,
-    command_recovery_delay, map_receipt_first_write_error, normalize_idempotency_key, payload_conflict_error,
+    CancelBlockedIdentityParams, ReceiptBranch, cancel_blocked_identity, map_receipt_first_write_error,
+    normalize_idempotency_key, payload_conflict_error,
 };
 use super::super::runtime_query::{RuntimeRecoveryAction, recovery_options_for};
 use super::super::view::{ApprovalCommandView, map_command_view};
@@ -23,8 +23,9 @@ use super::super::{CancelExecutionInput, ExecutionCommandInput, PreparedExecutio
 use super::notifications::{CancelNotificationFacts, persist_cancel_notifications};
 use super::read_auth::runtime_object_readable;
 use super::{
-    ApprovalRuntimeService, ensure_command_actor, ensure_expected_version, find_receipt_for_identity,
-    hidden_not_found, load_exact_runtime_snapshot, persisted_command_view_with_executor,
+    ApprovalRuntimeService, commit_or_recover, ensure_command_actor, ensure_expected_version,
+    find_receipt_for_identity, hidden_not_found, load_exact_runtime_snapshot,
+    persisted_command_view_with_executor, recover_by_replay,
 };
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::entity::document_registry::DocumentType;
@@ -74,15 +75,18 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         }
         let idempotency_key = normalize_idempotency_key(&command.idempotency_key)?;
         command.idempotency_key = idempotency_key.as_str().to_string();
-        let outcome = self.commit_cancel_blocked(actor, command.clone(), idempotency_key.clone()).await;
-        match outcome {
-            Ok(view) => Ok(view),
-            Err(error) if command_may_have_committed(&error) => {
-                self.recover_cancel_blocked_after_competing_commit(actor, command, idempotency_key, error)
-                    .await
+        commit_or_recover(
+            || self.commit_cancel_blocked(actor, command.clone(), idempotency_key.clone()),
+            |error| {
+                self.recover_cancel_blocked_after_competing_commit(
+                    actor,
+                    command.clone(),
+                    idempotency_key.clone(),
+                    error,
+                )
             },
-            Err(error) => Err(error),
-        }
+        )
+        .await
     }
 
     /// 在唯一事务内先查/写收据，再执行受阻取消的强类型动作与全部副作用。
@@ -127,8 +131,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         idempotency_key: IdempotencyKey,
         original_error: Error,
     ) -> Result<ApprovalCommandView> {
-        const RECOVERY_ATTEMPTS: usize = 8;
-        for attempt in 0..RECOVERY_ATTEMPTS {
+        recover_by_replay(original_error, || async {
             let db = self.db.clone();
             let rbac = self.auth.clone();
             let object_read = Arc::clone(&self.object_read);
@@ -136,8 +139,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             let actor = actor.clone();
             let command = command.clone();
             let idempotency_key = idempotency_key.clone();
-            let recovered = self
-                .db
+            self.db
                 .client()
                 .with_transaction(move |session| {
                     Box::pin(async move {
@@ -154,18 +156,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                         .await
                     })
                 })
-                .await;
-            match recovered {
-                Ok(Some(view)) => return Ok(view),
-                Ok(None) => {},
-                Err(error) if command_may_have_committed(&error) => {},
-                Err(error) => return Err(error),
-            }
-            if attempt + 1 < RECOVERY_ATTEMPTS {
-                tokio::time::sleep(command_recovery_delay(attempt)).await;
-            }
-        }
-        Err(original_error)
+                .await
+        })
+        .await
     }
 }
 

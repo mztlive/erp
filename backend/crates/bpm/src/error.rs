@@ -1,4 +1,9 @@
 //! BPM 纯领域错误。不含 HTTP、仓储或 ERP 业务语义。
+//!
+//! 错误分界：本模块 `Error` 用于边界值对象构造失败
+//! （`SubjectRef`/`ParticipantId`/`Timestamp`/`ProcessKind` 编码）；
+//! 状态机不变式失败（字段、状态、连线、计数溢出）使用
+//! `model::types::ModelError`。构造值对象失败时用前者，推进状态失败时用后者。
 
 /// BPM 领域操作结果。
 pub type Result<T> = std::result::Result<T, Error>;

@@ -147,19 +147,72 @@ impl Amount {
     ///
     /// # 关键约束
     /// 常量零值由确定性构造直接产生，不做字符串解析；求和仍使用
-    /// [`Amount::checked_add`] 保持精度。
+    /// [`Amount::add`] 保持精度。
     pub fn zero() -> Amount {
         Amount(Decimal::new(0, 2))
     }
 
     /// 两个金额相加（精确，不触发舍入）。
-    pub fn checked_add(self, other: Amount) -> Amount {
+    ///
+    /// 精确加法不做溢出检查：`rust_decimal` 溢出时按其自身语义处理，
+    /// 命名避免与标准库 `checked_*`（溢出返回 `Option`）混淆。
+    ///
+    /// # 参数
+    /// * `other` - 另一金额
+    ///
+    /// # 返回
+    /// 返回精确和（不舍入）。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn add(self, other: Amount) -> Amount {
         Amount(self.0 + other.0)
     }
 
     /// 两个金额相减（精确，不触发舍入）。
-    pub fn checked_sub(self, other: Amount) -> Amount {
+    ///
+    /// # 参数
+    /// * `other` - 另一金额
+    ///
+    /// # 返回
+    /// 返回精确差（不舍入）。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn sub(self, other: Amount) -> Amount {
         Amount(self.0 - other.0)
+    }
+
+    /// 两个金额相加（精确，不触发舍入）。
+    ///
+    /// 历史名称，与 [`Amount::add`] 等价；新代码请用 `add`。
+    ///
+    /// # 参数
+    /// * `other` - 另一金额
+    ///
+    /// # 返回
+    /// 返回精确和（不舍入）。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn checked_add(self, other: Amount) -> Amount {
+        self.add(other)
+    }
+
+    /// 两个金额相减（精确，不触发舍入）。
+    ///
+    /// 历史名称，与 [`Amount::sub`] 等价；新代码请用 `sub`。
+    ///
+    /// # 参数
+    /// * `other` - 另一金额
+    ///
+    /// # 返回
+    /// 返回精确差（不舍入）。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn checked_sub(self, other: Amount) -> Amount {
+        self.sub(other)
     }
 }
 
@@ -197,11 +250,14 @@ pub fn line_amounts(unit_price: UnitPrice, quantity: Quantity, tax_rate: Rate) -
     let tax = round_to_cent(gross * tax_rate.to_decimal());
     let net = gross - tax;
 
-    // round_to_cent 保证小数位 ≤ 2，以下构造不会失败。
-    let gross = Amount::try_from(gross).expect("gross 舍入后小数位不超过 2 位");
-    let tax = Amount::try_from(tax).expect("tax 舍入后小数位不超过 2 位");
-    let net = Amount::try_from(net).expect("net 舍入后小数位不超过 2 位");
-    (gross, net, tax)
+    // round_to_cent 保证小数位 ≤ 2，直接构造并以 debug 断言显式化不变式。
+    debug_assert!(
+        gross.normalize().scale() <= AMOUNT_SCALE
+            && tax.normalize().scale() <= AMOUNT_SCALE
+            && net.normalize().scale() <= AMOUNT_SCALE,
+        "round_to_cent 后小数位必须不超过 2 位"
+    );
+    (Amount(gross), Amount(net), Amount(tax))
 }
 
 /// 定点数值的反序列化访问器：接受字符串或扩展文档形态。
@@ -220,6 +276,18 @@ impl<'de> Visitor<'de> for MoneyVisitor {
 
     fn visit_string<E: de::Error>(self, value: String) -> std::result::Result<Decimal, E> {
         self.visit_str(&value)
+    }
+
+    fn visit_i64<E: de::Error>(self, value: i64) -> std::result::Result<Decimal, E> {
+        Err(E::custom(format!("金额必须用字符串传输（如 \"{value}\"），见 P0-4.1，不接受 JSON 数字")))
+    }
+
+    fn visit_u64<E: de::Error>(self, value: u64) -> std::result::Result<Decimal, E> {
+        Err(E::custom(format!("金额必须用字符串传输（如 \"{value}\"），见 P0-4.1，不接受 JSON 数字")))
+    }
+
+    fn visit_f64<E: de::Error>(self, value: f64) -> std::result::Result<Decimal, E> {
+        Err(E::custom(format!("金额必须用字符串传输，不接受 JSON 浮点数 {value}，见 P0-4.1")))
     }
 
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> std::result::Result<Decimal, A::Error> {
@@ -447,7 +515,9 @@ mod tests {
     fn amount_add_sub_is_exact() {
         let gross = Amount::from_str("29.97").unwrap();
         let tax = Amount::from_str("3.90").unwrap();
-        assert_eq!(gross.checked_sub(tax), Amount::from_str("26.07").unwrap());
-        assert_eq!(Amount::from_str("26.07").unwrap().checked_add(tax), gross);
+        assert_eq!(gross.sub(tax), Amount::from_str("26.07").unwrap());
+        assert_eq!(Amount::from_str("26.07").unwrap().add(tax), gross);
+        assert_eq!(gross.checked_sub(tax), gross.sub(tax));
+        assert_eq!(gross.checked_add(Amount::zero()), gross.add(Amount::zero()));
     }
 }

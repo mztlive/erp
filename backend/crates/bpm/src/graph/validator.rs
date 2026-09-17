@@ -70,12 +70,8 @@ pub fn ordered_nodes(nodes: &[ApprovalNodeDefinition]) -> ModelResult<Vec<&Appro
     }
     let mut ordered = nodes.iter().collect::<Vec<_>>();
     ordered.sort_by_key(|node| node.display_order);
-    for (index, node) in ordered.iter().enumerate() {
-        let expected = u32::try_from(index + 1).map_err(|_| ModelError::InvalidField("节点顺序溢出"))?;
-        if node.display_order != expected {
-            return Err(ModelError::InvalidField("节点顺序必须从 1 连续且无重复"));
-        }
-    }
+    let orders = ordered.iter().map(|node| node.display_order).collect::<Vec<_>>();
+    super::ensure_continuous_display_orders(&orders)?;
     Ok(ordered)
 }
 

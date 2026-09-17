@@ -96,7 +96,7 @@ fn build_enter_plan(
     }
     let execution_input = NewNodeExecution {
         id: input.execution_id.clone(),
-        process_instance_id: crate::ids::ApprovalProcessInstanceId::new(input.instance.base.id.clone()),
+        process_instance_id: input.instance.typed_id(),
         node_key: node.node_key.clone(),
         node_name: node.node_name.clone(),
         round_no: input.round_no,
@@ -116,14 +116,10 @@ fn build_enter_plan(
         input.instance.exit_blocked(input.now)?;
     }
     let mut plan = TransitionPlan::for_instance(input.instance, CommitRequired::Proceed);
-    let entered = BpmEvent::new(
-        BpmEventKind::NodeEntered,
-        crate::ids::ApprovalProcessInstanceId::new(plan.instance.base.id.clone()),
-        input.round_no,
-    )
-    .with_execution(input.execution_id.clone())
-    .with_node_key(node.node_key.clone())
-    .with_actor(input.participant.clone());
+    let entered = BpmEvent::new(BpmEventKind::NodeEntered, plan.instance.typed_id(), input.round_no)
+        .with_execution(input.execution_id.clone())
+        .with_node_key(node.node_key.clone())
+        .with_actor(input.participant.clone());
     plan.events.push(entered);
     plan.task_intents.push(TaskIntent::HumanTaskRequested {
         execution_id: input.execution_id,
@@ -150,14 +146,10 @@ fn blocked_enter(
     instance.enter_blocked(code, now)?;
     let mut plan = TransitionPlan::for_instance(instance, CommitRequired::Blocked);
     plan.events.push(
-        BpmEvent::new(
-            BpmEventKind::InstanceBlocked,
-            crate::ids::ApprovalProcessInstanceId::new(plan.instance.base.id.clone()),
-            node_round(&execution),
-        )
-        .with_execution(execution_id)
-        .with_node_key(node.node_key.clone())
-        .with_blocker(code),
+        BpmEvent::new(BpmEventKind::InstanceBlocked, plan.instance.typed_id(), node_round(&execution))
+            .with_execution(execution_id)
+            .with_node_key(node.node_key.clone())
+            .with_blocker(code),
     );
     plan.created_executions.push(execution);
     Ok(plan)

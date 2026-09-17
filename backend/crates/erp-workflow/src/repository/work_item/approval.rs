@@ -747,10 +747,10 @@ fn document_approval_page(
         duplicate_executions: Vec::new(),
         duplicate_instances: Vec::new(),
     });
-    let total = facet.total.first().map_or(Ok(0), |row| {
-        u64::try_from(row.count)
-            .map_err(|_| Error::EntityMetadataOutOfRange("document_approval_work_item_total"))
-    })?;
+    let total = super::super::approval_integration::facet_total_or_empty(
+        facet.total.first().map(|row| row.count),
+        "document_approval_work_item_total",
+    )?;
     let integrity_conflicts =
         document_approval_integrity_conflicts(facet.duplicate_executions, facet.duplicate_instances)?;
     document_approval_page_from_items(facet.items, total, limit, integrity_conflicts)

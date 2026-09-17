@@ -129,7 +129,7 @@ mod tests {
     use super::super::super::definition_dto::DefinitionAllowedAction;
     use super::super::super::policy::ApprovalRequirement;
     use super::super::command::ensure_definition_admin_allowed;
-    use super::super::mapping::allowed_actions;
+    use super::super::mapping::definition_allowed_actions;
     use super::*;
     use crate::error::Error;
 
@@ -152,17 +152,20 @@ mod tests {
         let intersected = visibility.intersect(&claimed);
         assert!(intersected.can_define(DocumentType::StockAdjustment));
         assert!(!intersected.can_define(DocumentType::SalesOrder));
-        assert_eq!(allowed_actions(ApprovalRequirement::ProcessRequired, false, None, None), Vec::new());
         assert_eq!(
-            allowed_actions(ApprovalRequirement::ProcessRequired, true, None, None),
+            definition_allowed_actions(ApprovalRequirement::ProcessRequired, false, None, None),
+            Vec::new()
+        );
+        assert_eq!(
+            definition_allowed_actions(ApprovalRequirement::ProcessRequired, true, None, None),
             vec![DefinitionAllowedAction::CreateDraft]
         );
         assert_eq!(
-            allowed_actions(ApprovalRequirement::ProcessRequired, true, None, Some(1)),
+            definition_allowed_actions(ApprovalRequirement::ProcessRequired, true, None, Some(1)),
             vec![DefinitionAllowedAction::ReplaceNodes, DefinitionAllowedAction::Publish]
         );
         assert_eq!(
-            allowed_actions(ApprovalRequirement::ProcessRequired, true, Some(2), Some(3)),
+            definition_allowed_actions(ApprovalRequirement::ProcessRequired, true, Some(2), Some(3)),
             vec![
                 DefinitionAllowedAction::ReplaceNodes,
                 DefinitionAllowedAction::Publish,
@@ -170,9 +173,9 @@ mod tests {
             ]
         );
         assert_eq!(
-            allowed_actions(ApprovalRequirement::ProcessRequired, true, Some(2), None),
+            definition_allowed_actions(ApprovalRequirement::ProcessRequired, true, Some(2), None),
             vec![DefinitionAllowedAction::CreateDraft, DefinitionAllowedAction::Retire]
         );
-        assert!(allowed_actions(ApprovalRequirement::NoApproval, true, None, None).is_empty());
+        assert!(definition_allowed_actions(ApprovalRequirement::NoApproval, true, None, None).is_empty());
     }
 }

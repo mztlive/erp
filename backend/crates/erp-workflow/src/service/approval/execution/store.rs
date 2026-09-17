@@ -1,4 +1,8 @@
 //! 单事务应用 PlannedWrites：领域动作、BPM CAS、审批任务与 outbox。
+//!
+//! 本模块仅 `#[cfg(test)]` 编译：`RecordingDomainActions` 与 `MemoryRuntimeStore`
+//! 均为测试替身/内存实现，生产持久化走 Mongo 仓储；跨模块测试经 `#[cfg(test)]`
+//! 公开入口复用，不得在生产路径引用。
 
 use std::collections::HashMap;
 
@@ -38,9 +42,7 @@ impl From<ApplyError> for Error {
     fn from(error: ApplyError) -> Self {
         match error {
             ApplyError::DuplicateReceipt => super::idempotency::payload_conflict_error(),
-            ApplyError::VersionConflict => {
-                Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            },
+            ApplyError::VersionConflict => Error::concurrent_modification(),
             ApplyError::DomainActionFailed(message) | ApplyError::Invariant(message) => {
                 Error::BusinessLogicError(message)
             },

@@ -4,7 +4,7 @@ use super::enter_node::{EnterNodeInput, plan_enter_node, require_decision_edges}
 use super::event::{BpmEvent, BpmEventKind};
 use super::transition_plan::{CommitRequired, TaskCloseReason, TaskIntent, TransitionPlan};
 use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
-use crate::ids::ApprovalNodeExecutionId;
+use crate::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use crate::model::types::{
     ApprovalBlockerCode, ApprovalDecision, ApprovalExecutionAssignmentSource, ApprovalNodeExecutionStatus,
     ApprovalProcessInstanceStatus, ApprovalTerminalResult, ApprovalTransitionEvent,
@@ -165,7 +165,11 @@ fn enter_after_decision(
         replaces_execution_id: None,
         now: command.now,
     })?;
-    plan.merge_enter(enter, keep_commit);
+    if keep_commit {
+        plan.merge_enter_keep_commit(enter);
+    } else {
+        plan.merge_enter_adopt_commit(enter);
+    }
     Ok(plan)
 }
 
@@ -245,10 +249,10 @@ fn ensure_reject_to_entry(
     Ok(())
 }
 
-fn process_id(instance: &ApprovalProcessInstance) -> crate::ids::ApprovalProcessInstanceId {
-    crate::ids::ApprovalProcessInstanceId::new(instance.base.id.clone())
+fn process_id(instance: &ApprovalProcessInstance) -> ApprovalProcessInstanceId {
+    instance.typed_id()
 }
 
 fn execution_id(execution: &ApprovalNodeExecution) -> ApprovalNodeExecutionId {
-    ApprovalNodeExecutionId::new(execution.base.id.clone())
+    execution.typed_id()
 }

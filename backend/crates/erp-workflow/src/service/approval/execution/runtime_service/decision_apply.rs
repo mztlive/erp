@@ -18,8 +18,8 @@ use super::super::apply_plan::PlannedWrites;
 use super::super::authorization::hidden_forbidden;
 use super::super::decision::prepare_decision;
 use super::super::idempotency::{
-    ReceiptBranch, command_may_have_committed, command_recovery_delay, decision_identity,
-    map_receipt_first_write_error, normalize_idempotency_key, payload_conflict_error,
+    ReceiptBranch, decision_identity, map_receipt_first_write_error, normalize_idempotency_key,
+    payload_conflict_error,
 };
 use super::super::view::{ApprovalCommandView, map_command_view};
 use super::super::{DecisionExecutionInput, ExecutionCommandInput, PreparedExecution};
@@ -35,8 +35,8 @@ use super::tasks::{
     CompleteOrCloseTasksInput, CreateOpenTasksInput, complete_or_close_tasks, create_open_tasks,
 };
 use super::{
-    ApprovalRuntimeService, find_receipt_for_identity, hidden_not_found,
-    persisted_command_view_with_executor, require_cas_applied,
+    ApprovalRuntimeService, commit_or_recover, find_receipt_for_identity, hidden_not_found,
+    persisted_command_view_with_executor, recover_by_replay, require_cas_applied,
 };
 use crate::entity::work_item::{ApprovalDecisionTaskError, WorkItem, WorkItemStatus};
 use crate::error::{Error, ErrorCode, Result};
@@ -116,14 +116,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             expected_task_version,
             idempotency_key: key,
         };
-        let outcome = self.commit_decision(actor, command.clone()).await;
-        let outcome = match outcome {
-            Ok(outcome) => outcome,
-            Err(error) if command_may_have_committed(&error) => {
-                self.recover_decision_after_competing_commit(actor, command, error).await?
-            },
-            Err(error) => return Err(error),
-        };
+        let outcome = commit_or_recover(
+            || self.commit_decision(actor, command.clone()),
+            |error| self.recover_decision_after_competing_commit(actor, command.clone(), error),
+        )
+        .await?;
         if outcome.blocked {
             return Err(Error::from_approval_code(ErrorCode::ApprovalInstanceBlocked));
         }
@@ -169,15 +166,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         command: RuntimeDecisionCommand,
         original_error: Error,
     ) -> Result<RuntimeDecisionOutcome> {
-        const RECOVERY_ATTEMPTS: usize = 8;
-        for attempt in 0..RECOVERY_ATTEMPTS {
+        recover_by_replay(original_error, || async {
             let db = self.db.clone();
             let rbac = self.auth.clone();
             let object_read = Arc::clone(&self.object_read);
             let actor = actor.clone();
             let command = command.clone();
-            let recovered = self
-                .db
+            self.db
                 .client()
                 .with_transaction(move |session| {
                     Box::pin(async move {
@@ -192,18 +187,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                         .await
                     })
                 })
-                .await;
-            match recovered {
-                Ok(Some(outcome)) => return Ok(outcome),
-                Ok(None) => {},
-                Err(error) if command_may_have_committed(&error) => {},
-                Err(error) => return Err(error),
-            }
-            if attempt + 1 < RECOVERY_ATTEMPTS {
-                tokio::time::sleep(command_recovery_delay(attempt)).await;
-            }
-        }
-        Err(original_error)
+                .await
+        })
+        .await
     }
 }
 
@@ -739,9 +725,7 @@ async fn authorize_decision_terminal_replay(
 pub(super) fn map_approval_task_error(error: ApprovalDecisionTaskError) -> Error {
     match error {
         ApprovalDecisionTaskError::NotCurrentOwner => Error::Forbidden("无权执行该审批动作".to_string()),
-        ApprovalDecisionTaskError::VersionConflict => {
-            Error::ConflictError("任务版本已变化，请刷新后重试".to_string())
-        },
+        ApprovalDecisionTaskError::VersionConflict => Error::version_conflict("任务"),
         ApprovalDecisionTaskError::NotDocumentApproval
         | ApprovalDecisionTaskError::NotOpen
         | ApprovalDecisionTaskError::MissingExecution => {

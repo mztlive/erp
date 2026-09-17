@@ -56,6 +56,7 @@ pub fn plan_cancel(input: CancelPlanInput<'_>) -> EngineResult<CancelPlan> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::test_fixtures::at;
     use super::{CancelPlan, CancelPlanInput, plan_cancel};
     use crate::engine::EngineError;
     use crate::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
@@ -107,10 +108,6 @@ mod tests {
             at: at(11),
         })
         .expect("当前执行夹具")
-    }
-
-    fn at(secs: i64) -> Timestamp {
-        Timestamp::from_unix_secs(secs).unwrap()
     }
 
     /// 运行中实例恰有一个开放任务：关闭任务并走业务取消端口。

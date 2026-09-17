@@ -4,7 +4,7 @@
 //! - 单据注册（幂等）、动作追加、关系/参与人写入：单集合 + 审计日志 → 跨审计
 //!   集合写入按 TRANSACTIONS.md「基本用法」编排在 `with_transaction` 内
 //!   （仓库尚无 `run_audited_transaction` 模板，与 source_registry 同款写法）；
-//! - 查询一律 `&mut NoTransaction`。
+//! - 查询入口统一接收 `&mut dyn Executor`（单文档读默认在组合点传 `NoTransaction`，事务复用时传入同一执行器）。
 //!
 //! 跨域：只经各领域 `*Ext` 扩展 trait 调对方域 Repository（P3-service-api §2）。本域依赖
 //! D01：登记外部来源单据时，经 `db.external_identity_maps()` 校验来源身份映射
@@ -212,6 +212,7 @@ impl DocumentRegistryService {
     ///
     /// # 参数
     /// * `params` - 查询参数
+    /// * `executor` - 数据访问执行器（单读传 `NoTransaction`，事务复用传同一执行器）
     ///
     /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
@@ -223,6 +224,26 @@ impl DocumentRegistryService {
         &self,
         params: &BusinessDocumentListParams,
     ) -> Result<PageView<BusinessDocumentView>> {
+        self.business_document_list_with(&params, &mut NoTransaction).await
+    }
+
+    /// 分页查询单据注册列表（执行器注入版，事务复用时传入同一执行器）。
+    ///
+    /// # 参数
+    /// * `params` - 查询参数
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+    ///
+    /// # 错误
+    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
+    /// * `RepositoryError` - 数据库查询失败
+    pub async fn business_document_list_with(
+        &self,
+        params: &BusinessDocumentListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<BusinessDocumentView>> {
         params.validate()?;
         let query = params.normalized()?;
         let filter = BusinessDocumentFilter {
@@ -233,8 +254,7 @@ impl DocumentRegistryService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, dto::SortDir::Asc),
         };
-        let page =
-            self.db.business_documents().search_business_documents(&filter, &mut NoTransaction).await?;
+        let page = self.db.business_documents().search_business_documents(&filter, executor).await?;
         // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结，无法命名），
         // 此处按字段映射为响应视图，避免把仓储类型泄漏到接口层。
         let items = page
@@ -257,6 +277,7 @@ impl DocumentRegistryService {
     ///
     /// # 参数
     /// * `id` - 单据注册 ID
+    /// * `executor` - 数据访问执行器
     ///
     /// # 返回
     /// 返回注册行视图。
@@ -264,10 +285,29 @@ impl DocumentRegistryService {
     /// # 错误
     /// * `NotFound` - 单据注册不存在
     pub async fn business_document_detail(&self, id: &str) -> Result<BusinessDocumentView> {
+        self.business_document_detail_with(id, &mut NoTransaction).await
+    }
+
+    /// 查询单据注册详情（执行器注入版）。
+    ///
+    /// # 参数
+    /// * `id` - 单据注册 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回注册行视图。
+    ///
+    /// # 错误
+    /// * `NotFound` - 单据注册不存在
+    pub async fn business_document_detail_with(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<BusinessDocumentView> {
         let doc = self
             .db
             .business_documents()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("单据注册不存在".to_string()))?;
         Ok(doc.into())
@@ -277,6 +317,7 @@ impl DocumentRegistryService {
     ///
     /// # 参数
     /// * `id` - 单据注册 ID
+    /// * `executor` - 数据访问执行器
     ///
     /// # 返回
     /// 无绑定返回 `None`。
@@ -284,7 +325,26 @@ impl DocumentRegistryService {
     /// # 错误
     /// 单据未注册时返回 `NotFound`。
     pub async fn approval_binding(&self, id: &str) -> Result<Option<ApprovalDefinitionBinding>> {
-        find_approval_binding(&self.db, id, &mut NoTransaction).await
+        self.approval_binding_with(id, &mut NoTransaction).await
+    }
+
+    /// 查询注册行上的审批绑定（执行器注入版）。
+    ///
+    /// # 参数
+    /// * `id` - 单据注册 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 无绑定返回 `None`。
+    ///
+    /// # 错误
+    /// 单据未注册时返回 `NotFound`。
+    pub async fn approval_binding_with(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ApprovalDefinitionBinding>> {
+        find_approval_binding(&self.db, id, executor).await
     }
 
     /// 追加工作流动作。
@@ -351,6 +411,26 @@ impl DocumentRegistryService {
         &self,
         params: &WorkflowActionListParams,
     ) -> Result<PageView<WorkflowActionView>> {
+        self.workflow_action_list_with(&params, &mut NoTransaction).await
+    }
+
+    /// 分页查询工作流动作列表（执行器注入版）。
+    ///
+    /// # 参数
+    /// * `params` - 查询参数（`document_id`/`actor_id`/`action_type` 扁平筛选）
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+    ///
+    /// # 错误
+    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
+    /// * `RepositoryError` - 数据库查询失败
+    pub async fn workflow_action_list_with(
+        &self,
+        params: &WorkflowActionListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<WorkflowActionView>> {
         params.validate()?;
         let query = params.normalized()?;
         let filter = WorkflowActionFilter {
@@ -362,7 +442,7 @@ impl DocumentRegistryService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, dto::SortDir::Asc),
         };
-        let page = self.db.workflow_actions().search_workflow_actions(&filter, &mut NoTransaction).await?;
+        let page = self.db.workflow_actions().search_workflow_actions(&filter, executor).await?;
         let items = page
             .items
             .into_iter()
@@ -386,6 +466,7 @@ impl DocumentRegistryService {
     ///
     /// # 参数
     /// * `document_id` - 业务单据 ID
+    /// * `executor` - 数据访问执行器
     ///
     /// # 返回
     /// 返回出向与入向关系的合并视图。
@@ -396,8 +477,26 @@ impl DocumentRegistryService {
         &self,
         document_id: &BusinessDocumentId,
     ) -> Result<Vec<DocumentRelationView>> {
-        let relations =
-            self.db.document_relations().list_for_document(document_id, &mut NoTransaction).await?;
+        self.document_relation_list_with(document_id, &mut NoTransaction).await
+    }
+
+    /// 查询单据的全部关系（执行器注入版）。
+    ///
+    /// # 参数
+    /// * `document_id` - 业务单据 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回出向与入向关系的合并视图。
+    ///
+    /// # 错误
+    /// * `RepositoryError` - 数据库查询失败
+    pub async fn document_relation_list_with(
+        &self,
+        document_id: &BusinessDocumentId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<DocumentRelationView>> {
+        let relations = self.db.document_relations().list_for_document(document_id, executor).await?;
         Ok(relations.into_iter().map(Into::into).collect())
     }
 
@@ -451,6 +550,7 @@ impl DocumentRegistryService {
     ///
     /// # 参数
     /// * `user_id` - 参与人用户 ID
+    /// * `executor` - 数据访问执行器
     ///
     /// # 返回
     /// 返回按参与时间倒序排列的参与记录视图。
@@ -459,10 +559,30 @@ impl DocumentRegistryService {
     /// * `ValidationError` - 用户 ID 为空白
     /// * `RepositoryError` - 数据库查询失败
     pub async fn document_participant_list(&self, user_id: &str) -> Result<Vec<DocumentParticipantView>> {
+        self.document_participant_list_with(user_id, &mut NoTransaction).await
+    }
+
+    /// 按参与人查询其参与过的全部单据（执行器注入版）。
+    ///
+    /// # 参数
+    /// * `user_id` - 参与人用户 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按参与时间倒序排列的参与记录视图。
+    ///
+    /// # 错误
+    /// * `ValidationError` - 用户 ID 为空白
+    /// * `RepositoryError` - 数据库查询失败
+    pub async fn document_participant_list_with(
+        &self,
+        user_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<DocumentParticipantView>> {
         if user_id.trim().is_empty() {
             return Err(Error::ValidationError("用户ID不能为空".to_string()));
         }
-        let items = self.db.document_participants().list_by_user(user_id, &mut NoTransaction).await?;
+        let items = self.db.document_participants().list_by_user(user_id, executor).await?;
         Ok(items.into_iter().map(Into::into).collect())
     }
 
