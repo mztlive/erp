@@ -18,10 +18,11 @@ use erp_workflow::service::approval::business_adapter::{
     AdapterReadScope, ApprovalAdapterSpec, adapter_spec_of, ensure_adapter_spec_complete,
 };
 use erp_workflow::service::approval::policy::{
-    ApprovalDomainAction, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource, OwnerOrganizationSource,
+    ApprovalDomainAction, ApprovalSubjectVersionSource, OwnerOrganizationSource,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
 
+use super::common::{ExpectedReverseAdapterContracts, ensure_reverse_adapter_spec};
 use crate::{Error, Result};
 
 /// 已注册的供应商退款单适配器规格。
@@ -69,19 +70,17 @@ pub fn supplier_refund_adapter() -> Result<SupplierRefundAdapter> {
 /// # 错误
 /// 字段与合同签署值不一致时返回错误。
 fn supplier_adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<SupplierRefundAdapter> {
-    if spec.document_type != DocumentType::SupplierRefund
-        || spec.process_kind != process_kind_of(DocumentType::SupplierRefund)
-        || spec.subject_version_source != ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
-        || spec.on_approval_start != ApprovalDomainAction::SupplierRefundSubmit
-        || spec.on_final_approve != ApprovalDomainAction::SupplierRefundPost
-        || spec.cancel_action != ApprovalDomainAction::SupplierRefundCancelApproval
-        || spec.owner_role.as_str() != "supplier_refund_approver"
-        || spec.owner_organization_source != OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
-        || spec.read_scope != AdapterReadScope::DocumentOrganizationAndCreator
-        || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalAmount)
-    {
-        return Err(Error::Internal("供应商退款单审批适配器登记不完整".to_string()));
-    }
+    ensure_reverse_adapter_spec(
+        &spec,
+        &ExpectedReverseAdapterContracts {
+            document_type: DocumentType::SupplierRefund,
+            on_approval_start: ApprovalDomainAction::SupplierRefundSubmit,
+            on_final_approve: ApprovalDomainAction::SupplierRefundPost,
+            cancel_action: ApprovalDomainAction::SupplierRefundCancelApproval,
+            owner_role: "supplier_refund_approver",
+            mismatch_message: "供应商退款单审批适配器登记不完整",
+        },
+    )?;
     Ok(SupplierRefundAdapter {
         document_type: spec.document_type,
         process_kind: spec.process_kind,

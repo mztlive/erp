@@ -3,6 +3,8 @@
 mod action_registry;
 mod object_read;
 mod sales_subject;
+mod upgrade_documents;
+mod upgrade_shared;
 mod upgrade_subject;
 
 pub use action_registry::ApprovalActionRegistry;

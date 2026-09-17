@@ -106,6 +106,11 @@ fn list_projection_copies_entry_assignee() {
     assert_eq!(projection.last_status_changed_at, Some(10));
 }
 
+/// 拆分子模块的生产代码拼接：逐文件截断 `#[cfg(test)]` 后的测试代码再连接。
+fn split_module_production(parts: &[&str]) -> String {
+    parts.iter().map(|source| source.split("#[cfg(test)]").next().expect("生产代码必须存在")).collect()
+}
+
 /// 十一种 PROCESS_REQUIRED 启动类型均固定 receipt -> guard -> BPM 顺序。
 #[test]
 fn all_process_required_start_paths_are_receipt_first_and_guarded() {
@@ -116,7 +121,12 @@ fn all_process_required_start_paths_are_receipt_first_and_guarded() {
     );
     assert_start_write_order(include_str!("../sales_change/start_approval.rs"), 1, ".mark_approval_started(");
     assert_start_write_order(
-        include_str!("../procure_to_pay/start_approval.rs"),
+        &split_module_production(&[
+            include_str!("../procure_to_pay/start_approval/mod.rs"),
+            include_str!("../procure_to_pay/start_approval/start_input.rs"),
+            include_str!("../procure_to_pay/start_approval/start_persist.rs"),
+            include_str!("../procure_to_pay/start_approval/start_receipt.rs"),
+        ]),
         1,
         ".mark_loaded_approval_started(",
     );
@@ -155,10 +165,15 @@ fn generic_start_replay_paths_return_before_transaction_writes() {
         let production = source.split("#[cfg(test)]").next().expect("生产代码必须存在");
         assert!(production.contains("let PreparedExecution::Apply(writes) = prepared else"));
     }
-    let procurement = include_str!("../procure_to_pay/start_approval.rs")
-        .split("pub(super) async fn persist_purchase_order_start_with_session(")
-        .nth(1)
-        .expect("采购事务内启动入口必须存在");
+    let procurement = concat!(
+        include_str!("../procure_to_pay/start_approval/mod.rs"),
+        include_str!("../procure_to_pay/start_approval/start_input.rs"),
+        include_str!("../procure_to_pay/start_approval/start_persist.rs"),
+        include_str!("../procure_to_pay/start_approval/start_receipt.rs"),
+    )
+    .split("pub(crate) async fn persist_purchase_order_start_with_session(")
+    .nth(1)
+    .expect("采购事务内启动入口必须存在");
     let replay_guard = procurement
         .find("if !matches!(&input.prepared, PreparedExecution::Apply(_)) {\n        return Ok(None);\n    }")
         .expect("采购Replay必须在调用写入Port前返回空任务");

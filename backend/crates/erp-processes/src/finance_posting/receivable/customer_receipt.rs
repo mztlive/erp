@@ -1,47 +1,44 @@
 //! 客户回款单查询、创建、提交审批、撤回与过账编排。
 
 use application_core::{AuditActor, CommandReceipt};
-use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
+use erp_audit::{AuditActorLogs, CommandReceiptServiceExt as _};
 use erp_core::common::time::Instant;
-use erp_core::ids::{CustomerReceiptId, SalesOrderId};
-use erp_finance::entity::receivable::{CustomerReceipt, CustomerReceiptData, CustomerReceiptStatus};
+use erp_core::ids::CustomerReceiptId;
+use erp_finance::entity::receivable::{CustomerReceipt, CustomerReceiptData};
 use erp_finance::repository::ReceivableExt;
-use erp_finance::service::receivable::customer_receipt_commit::PreparedCustomerReceiptCommit;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
-use erp_identity::SharedRbacService;
-use erp_workflow::DocumentRegistryExt;
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
-use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
-use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
-use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel, prepare_start};
-use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
+use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel};
+use erp_workflow::service::document_registry::find_approval_binding;
 use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::ReceivableProcess;
 use super::adapter::{
     self, RECENT_HISTORY_LIMIT, build_customer_receipt_snapshot, customer_receipt_adapter,
     customer_receipt_object_readable, customer_receipt_responsible_org_id, customer_receipt_start_command,
-    customer_receipt_subject_ref, ensure_final_approve_posting, execute_customer_receipt_domain_action,
-    require_frozen_binding, start_approval_command_kind, start_customer_receipt_approval,
+    customer_receipt_subject_ref, execute_customer_receipt_domain_action, require_frozen_binding,
+    start_approval_command_kind, start_customer_receipt_approval,
 };
 use super::cancel_approval::{
     CustomerReceiptCancelPersistInput, build_customer_receipt_cancel_input, load_cancel_runtime,
     persist_customer_receipt_cancel,
+};
+use super::customer_receipt_posting::{
+    CommitTransactionRequest, persist_created_customer_receipt, prepare_customer_receipt_commit_candidate,
+    prepare_dispatch_start, run_commit_transaction,
+};
+pub use super::customer_receipt_posting::{
+    cancel_customer_receipt_approval_in_transaction, post_customer_receipt_in_transaction,
 };
 use super::dto::{
     CancelCustomerReceiptApprovalRequest, CommitCustomerReceiptRequest, CreateCustomerReceiptRequest,
     CustomerReceiptView, SubmitCustomerReceiptRequest,
 };
 use super::start_approval::{
-    CustomerReceiptStartPersistInput, DocumentStartInput, build_document_start_input,
-    load_bound_definition_graph, load_bound_definition_graph_with_executor, load_start_receipt,
-    load_start_receipt_with_executor, persist_customer_receipt_start,
-    persist_customer_receipt_start_in_transaction, replay_customer_receipt_start_with_executor,
+    CustomerReceiptStartPersistInput, persist_customer_receipt_start,
+    replay_customer_receipt_start_with_executor,
 };
 use crate::{Error, Result};
 
@@ -124,172 +121,74 @@ impl ReceivableProcess {
             &req.idempotency_key,
             &req,
         )?;
-        if let Some(receipt_id) = command_receipt.committed_resource_id(&self.db).await? {
-            return self.read.customer_receipt_detail(&receipt_id).await.map_err(crate::Error::from);
+        if let Some(view) = self.replay_committed_receipt(&command_receipt).await? {
+            return Ok(view);
         }
         let prepared = req.prepare()?;
-        let (new_receipt, requested_id, expected_version, allocations) = match prepared {
-            PreparedCustomerReceiptCommit::New { receipt, allocations } => {
-                receipt.validate()?;
-                let candidate = CustomerReceipt::new(
-                    CustomerReceiptId::new(next_id()),
-                    CustomerReceiptData {
-                        receipt_no: receipt.receipt_no,
-                        counterparty_party_id: receipt.counterparty_party_id,
-                        customer_id: receipt.customer_id,
-                        received_at: receipt.received_at,
-                        amount: receipt.amount,
-                        bank_reference: receipt.bank_reference,
-                    },
-                    actor.id(),
-                )?;
-                (Some(candidate), None, None, allocations)
-            },
-            PreparedCustomerReceiptCommit::Existing { receipt_id, expected_version, allocations } => {
-                (None, Some(receipt_id), Some(expected_version), allocations)
-            },
-        };
-        let idempotency_key = req.idempotency_key;
+        let pending_commit = prepare_customer_receipt_commit_candidate(prepared, actor.id())?;
+        let allocations = pending_commit.allocations.clone();
         let adapter = customer_receipt_adapter()?;
-        let db = self.db.clone();
-        let rbac = self.rbac.clone();
-        let object_read = std::sync::Arc::clone(&self.object_read);
-        let client = db.client().clone();
-        let actor_owned = actor.clone();
-        let command_receipt_for_tx = command_receipt.clone();
-        let transaction_result = client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    let (mut receipt, binding) = match new_receipt {
-                        Some(candidate) => {
-                            if db
-                                .customer_receipts()
-                                .find_by_receipt_no(&candidate.receipt_no, session)
-                                .await?
-                                .is_some()
-                            {
-                                return Err(Error::ConflictError("回款单号已存在，请刷新后重试".to_string()));
-                            }
-                            let organization_id = customer_receipt_responsible_org_id(&candidate)?;
-                            let bind_command = BindPublishedDefinitionCommand {
-                                document_type: DocumentType::CustomerReceipt,
-                                business_object_id: candidate.base.id.clone(),
-                                business_object_version: candidate.base.version,
-                                context: BindingRevalidationContext::new(
-                                    organization_id,
-                                    actor_owned.id().to_string(),
-                                ),
-                            };
-                            let document = new_registered_document(
-                                &candidate.base.id,
-                                DocumentType::CustomerReceipt,
-                                candidate.receipt_no.clone(),
-                            )
-                            .map_err(crate::Error::from)?;
-                            let binding = persist_bound_customer_receipt_document(
-                                &db,
-                                &rbac,
-                                object_read.as_ref(),
-                                document,
-                                &bind_command,
-                                &actor_owned,
-                                session,
-                            )
-                            .await?;
-                            db.customer_receipts().create(&candidate, session).await?;
-                            let audit = actor_owned.clone().resource_log(
-                                "customer_receipt.create",
-                                "customer_receipt",
-                                candidate.base.id.clone(),
-                            )?;
-                            db.audit_logs().create(&audit, session).await?;
-                            (candidate, binding)
-                        },
-                        None => {
-                            let receipt_id = requested_id
-                                .as_deref()
-                                .ok_or_else(|| Error::ValidationError("已有回款缺少主键".to_string()))?;
-                            let receipt = db
-                                .customer_receipts()
-                                .find_by_id(receipt_id, session)
-                                .await?
-                                .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
-                            ensure_expected_version(
-                                receipt.base.version,
-                                expected_version.ok_or_else(|| {
-                                    Error::ValidationError("已有回款缺少期望版本".to_string())
-                                })?,
-                            )?;
-                            let binding = find_approval_binding(&db, receipt_id, session)
-                                .await?
-                                .ok_or_else(|| Error::ConflictError("客户回款单缺少审批绑定".to_string()))?;
-                            (receipt, binding)
-                        },
-                    };
-                    let binding = require_frozen_binding(Some(&binding))?.clone();
-                    start_customer_receipt_approval(&mut receipt, allocations)?;
-                    let id = receipt.base.id.clone();
-                    let subject = customer_receipt_subject_ref(&id)?;
-                    let now = Instant::now();
-                    let snapshot = build_customer_receipt_snapshot(&receipt, actor_owned.id(), now)?;
-                    let organization_id = customer_receipt_responsible_org_id(&receipt)?;
-                    let _ = customer_receipt_object_readable(&organization_id, actor_owned.id())?;
-                    let graph = load_bound_definition_graph_with_executor(&db, &binding, session).await?;
-                    let existing_start_receipt = load_start_receipt_with_executor(
-                        &db,
-                        &subject,
-                        receipt.approval_subject_version,
-                        &idempotency_key,
-                        session,
-                    )
-                    .await?;
-                    let start_input = build_document_start_input(DocumentStartInput {
-                        document_type: DocumentType::CustomerReceipt,
-                        graph,
-                        binding: &binding,
-                        subject,
-                        subject_version: receipt.approval_subject_version,
-                        actor_id: actor_owned.id(),
-                        organization_id: &organization_id,
-                        idempotency_key: &idempotency_key,
-                        receipt: existing_start_receipt,
-                        now,
-                    })?;
-                    let prepared = prepare_start(start_input)?;
-                    let committed = persist_customer_receipt_start_in_transaction(
-                        &db,
-                        CustomerReceiptStartPersistInput {
-                            receipt,
-                            actor: actor_owned.clone(),
-                            id,
-                            snapshot_payload: snapshot,
-                            prepared,
-                            owner_role: adapter.owner_role,
-                            organization_id,
-                            now,
-                        },
-                        session,
-                    )
-                    .await?;
-                    let command_audit =
-                        command_receipt_for_tx.audit(actor_owned.clone(), committed.base.id.clone())?;
-                    db.audit_logs().create(&command_audit, session).await?;
-                    Ok::<CustomerReceipt, crate::Error>(committed)
-                })
-            })
-            .await;
+        let transaction_result = run_commit_transaction(
+            &self.db,
+            &self.rbac,
+            std::sync::Arc::clone(&self.object_read),
+            CommitTransactionRequest {
+                pending: pending_commit,
+                allocations,
+                idempotency_key: req.idempotency_key,
+                owner_role: adapter.owner_role,
+                actor: actor.clone(),
+                command_receipt: command_receipt.clone(),
+            },
+        )
+        .await;
 
         let committed = match transaction_result {
             Ok(committed) => committed,
-            Err(error) => match command_receipt.committed_resource_id(&self.db).await? {
-                Some(receipt_id) => {
-                    return self.read.customer_receipt_detail(&receipt_id).await.map_err(crate::Error::from);
-                },
-                None => return Err(error),
-            },
+            Err(error) => return self.recover_committed_receipt(&command_receipt, error).await,
         };
 
         self.read.customer_receipt_detail(&committed.base.id).await.map_err(crate::Error::from)
+    }
+
+    /// 幂等重放已提交回款：收据已落盘时直接返回其视图，不再进入事务。
+    ///
+    /// # 参数
+    /// * `command_receipt` - 提交幂等收据
+    ///
+    /// # 返回
+    /// 已提交时返回其视图，否则返回 `None`。
+    async fn replay_committed_receipt(
+        &self,
+        command_receipt: &CommandReceipt,
+    ) -> Result<Option<CustomerReceiptView>> {
+        match command_receipt.committed_resource_id(&self.db).await? {
+            Some(receipt_id) => {
+                Ok(Some(self.read.customer_receipt_detail(&receipt_id).await.map_err(crate::Error::from)?))
+            },
+            None => Ok(None),
+        }
+    }
+
+    /// 事务失败后以幂等收据有界回读已提交回款，避免重复提交产生两条事实。
+    ///
+    /// # 参数
+    /// * `command_receipt` - 提交幂等收据
+    /// * `error` - 事务原始错误
+    ///
+    /// # 返回
+    /// 已提交时返回其视图，未提交时返回原始错误。
+    async fn recover_committed_receipt(
+        &self,
+        command_receipt: &CommandReceipt,
+        error: Error,
+    ) -> Result<CustomerReceiptView> {
+        match command_receipt.committed_resource_id(&self.db).await? {
+            Some(receipt_id) => {
+                self.read.customer_receipt_detail(&receipt_id).await.map_err(crate::Error::from)
+            },
+            None => Err(error),
+        }
     }
 
     /// 提交客户回款并调用统一 `start_approval`。
@@ -390,23 +289,17 @@ impl ReceivableProcess {
         let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
         let organization_id = customer_receipt_responsible_org_id(&receipt)?;
         let _ = customer_receipt_object_readable(&organization_id, actor.id())?;
-        let graph = load_bound_definition_graph(&self.db, &binding).await?;
-        let existing_receipt =
-            load_start_receipt(&self.db, &subject, receipt.approval_subject_version, &idempotency_key)
-                .await?;
-        let start_input = build_document_start_input(DocumentStartInput {
-            document_type: DocumentType::CustomerReceipt,
-            graph,
-            binding: &binding,
-            subject,
-            subject_version: receipt.approval_subject_version,
-            actor_id: actor.id(),
-            organization_id: &organization_id,
-            idempotency_key: &idempotency_key,
-            receipt: existing_receipt,
+        let prepared = prepare_dispatch_start(
+            &self.db,
+            &binding,
+            &subject,
+            receipt.approval_subject_version,
+            &organization_id,
+            actor.id(),
+            &idempotency_key,
             now,
-        })?;
-        let prepared = prepare_start(start_input)?;
+        )
+        .await?;
         let recovery_subject_version = receipt.approval_subject_version;
         let persisted = persist_customer_receipt_start(
             &self.db,
@@ -586,178 +479,6 @@ impl ReceivableProcess {
 
         self.read.customer_receipt_detail(&detail_id).await.map_err(crate::Error::from)
     }
-}
-
-/// 在审批运行时持有的事务内过账客户回款并写入核销事实。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `receipt_id` - 客户回款单 ID
-/// * `actor` - 已认证操作人
-/// * `session` - 审批运行时持有的唯一事务会话
-///
-/// # 返回
-/// 回款、核销、应收进度、销售回款进度和成功审计全部写入时返回 `Ok(())`。
-///
-/// # 错误
-/// 回款/分录不存在、主体或额度不变量失败、任一写入失败时返回错误。
-pub async fn post_customer_receipt_in_transaction(
-    db: &Database,
-    receipt_id: &str,
-    actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
-) -> Result<()> {
-    let actor_id = actor.id().to_string();
-    let mut receipt = db
-        .customer_receipts()
-        .find_by_id(receipt_id, session)
-        .await?
-        .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
-    if receipt.status == CustomerReceiptStatus::Reversed {
-        return Err(Error::BusinessLogicError("已冲正回款不能再核销".to_string()));
-    }
-    ensure_final_approve_posting(&receipt)?;
-    execute_customer_receipt_domain_action(
-        &mut receipt,
-        erp_workflow::service::approval::policy::ApprovalDomainAction::CustomerReceiptPost,
-    )?;
-
-    let mut sales_order_ids =
-        erp_finance::service::receivable::customer_receipt_posting::settle_customer_receipt(
-            db,
-            &mut receipt,
-            &actor_id,
-            session,
-        )
-        .await?;
-    let audit = actor.clone().resource_log(
-        &format!("customer_receipt.post:{receipt_id}"),
-        "customer_receipt",
-        receipt.base.id.clone(),
-    )?;
-    db.audit_logs().create(&audit, session).await?;
-    sales_order_ids.sort();
-    sales_order_ids.dedup();
-    for sales_order_id in sales_order_ids {
-        crate::order_to_cash::progress::update_sales_order_money_progress(
-            db,
-            session,
-            &SalesOrderId::new(sales_order_id),
-            actor_id.clone(),
-            None,
-        )
-        .await?;
-    }
-    Ok(())
-}
-
-/// 在审批运行时持有的事务内撤回客户回款审批。
-///
-/// # 错误
-/// 回款单不存在、动作不匹配、状态迁移或 CAS 写入失败时返回错误。
-pub async fn cancel_customer_receipt_approval_in_transaction(
-    db: &Database,
-    receipt_id: &str,
-    action: erp_workflow::service::approval::policy::ApprovalDomainAction,
-    actor: &AuditActor,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let mut receipt = db
-        .customer_receipts()
-        .find_by_id(receipt_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
-    execute_customer_receipt_domain_action(&mut receipt, action)?;
-    db.customer_receipts().update(&mut receipt, executor).await?;
-    let audit = actor.clone().resource_log(
-        "customer_receipt.cancel_approval",
-        "customer_receipt",
-        receipt_id.to_string(),
-    )?;
-    db.audit_logs().create(&audit, executor).await?;
-    Ok(())
-}
-
-/// 在创建事务内写入回款单、绑定发布定义并登记单据。
-///
-/// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
-///
-/// # 错误
-/// 无发布定义、人员重验失败或写入失败时返回错误。
-async fn persist_created_customer_receipt(
-    db: &Database,
-    rbac: &SharedRbacService,
-    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
-    receipt: CustomerReceipt,
-    actor: AuditActor,
-) -> Result<()> {
-    let organization_id = customer_receipt_responsible_org_id(&receipt)?;
-    let bind_command = BindPublishedDefinitionCommand {
-        document_type: DocumentType::CustomerReceipt,
-        business_object_id: receipt.base.id.clone(),
-        business_object_version: receipt.base.version,
-        context: BindingRevalidationContext::new(organization_id, actor.id().to_string()),
-    };
-    let document =
-        new_registered_document(&receipt.base.id, DocumentType::CustomerReceipt, receipt.receipt_no.clone())
-            .map_err(crate::Error::from)?;
-    let audit =
-        actor.clone().resource_log("customer_receipt.create", "customer_receipt", receipt.base.id.clone())?;
-    let db = db.clone();
-    let rbac = rbac.clone();
-    let object_read = object_read.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |session| {
-            Box::pin(async move {
-                persist_bound_customer_receipt_document(
-                    &db,
-                    &rbac,
-                    object_read.as_ref(),
-                    document,
-                    &bind_command,
-                    &actor,
-                    session,
-                )
-                .await?;
-                db.customer_receipts().create(&receipt, session).await?;
-                db.audit_logs().create(&audit, session).await?;
-                Ok::<(), crate::Error>(())
-            })
-        })
-        .await
-}
-
-/// 查询发布定义、写入绑定并持久化注册行。
-///
-/// # 错误
-/// 无发布定义或绑定失败时返回错误。
-pub(super) async fn persist_bound_customer_receipt_document(
-    db: &Database,
-    rbac: &SharedRbacService,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
-    mut document: BusinessDocument,
-    bind_command: &BindPublishedDefinitionCommand,
-    actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
-) -> Result<ApprovalDefinitionBinding> {
-    let _ = customer_receipt_object_readable(
-        &bind_command.context.organization_id,
-        &bind_command.context.creator_id,
-    )?;
-    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
-        db,
-        rbac,
-        object_read,
-        bind_command,
-        actor,
-        session,
-    )
-    .await?;
-    let binding = binding.ok_or_else(|| Error::Internal("客户回款单必须绑定已发布定义".to_string()))?;
-    attach_published_binding(&mut document, binding.clone())?;
-    db.business_documents().create(&document, session).await?;
-    Ok(binding)
 }
 
 #[cfg(test)]

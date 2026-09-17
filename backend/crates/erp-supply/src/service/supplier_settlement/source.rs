@@ -86,78 +86,8 @@ impl SupplierSettlementService {
             req.lines.iter().map(|line| line.supplier_fulfillment_item_id.clone()).collect::<Vec<_>>();
         SupplierSettlementSourceEvidence::ensure_unique_item_ids(&input_item_ids)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
-        if let Some(latest) = self
-            .db
-            .supplier_settlement_source_evidence()
-            .latest_for_period(
-                &req.supplier_id,
-                period.start(),
-                period.end(),
-                req.period_policy_id.trim(),
-                req.period_policy_version.trim(),
-                executor,
-            )
-            .await?
-        {
-            latest
-                .ensure_newer_source_version(req.source_version)
-                .map_err(|error| Error::ConflictError(error.to_string()))?;
-        }
-        let item_ids = req
-            .lines
-            .iter()
-            .map(|line| line.supplier_fulfillment_item_id.to_string())
-            .collect::<HashSet<_>>();
-        let scope = self
-            .db
-            .supplier_settlement()
-            .settlement_source_scope(
-                &req.supplier_id,
-                period.start(),
-                period.end(),
-                &req.lines.iter().map(|line| line.supplier_fulfillment_order_id.clone()).collect::<Vec<_>>(),
-                &input_item_ids,
-                executor,
-            )
-            .await?;
-        if scope.orders.is_empty() {
-            return Err(Error::NotFound("当前供应商没有可核验的供应商履约订单".to_string()));
-        }
-        let order_map =
-            scope.orders.into_iter().map(|value| (value.base.id.clone(), value)).collect::<HashMap<_, _>>();
-        let item_map =
-            scope.items.into_iter().map(|value| (value.base.id.clone(), value)).collect::<HashMap<_, _>>();
-        let refund_allocations = scope.refund_allocations;
-        let refund_fact_map =
-            scope.refund_facts.iter().map(|fact| (fact.base.id.as_str(), fact)).collect::<HashMap<_, _>>();
-        ensure_complete_source_scope(CompleteSourceScope {
-            inputs: &req.lines,
-            input_item_ids: &item_ids,
-            order_map: &order_map,
-            item_map: &item_map,
-            refund_allocations: &refund_allocations,
-            refund_fact_map: &refund_fact_map,
-            period,
-        })?;
-        let mut lines = Vec::with_capacity(req.lines.len());
-        for input in &req.lines {
-            let order = order_map
-                .get(input.supplier_fulfillment_order_id.as_ref())
-                .ok_or_else(|| Error::NotFound("供应商订单不存在".to_string()))?;
-            let item = item_map
-                .get(input.supplier_fulfillment_item_id.as_ref())
-                .ok_or_else(|| Error::NotFound("供应商履约明细不存在".to_string()))?;
-            if !item.belongs_to_order(&input.supplier_fulfillment_order_id) {
-                return Err(Error::BusinessLogicError(format!(
-                    "履约明细 {} 不属于订单 {}",
-                    input.supplier_fulfillment_item_id, input.supplier_fulfillment_order_id
-                )));
-            }
-            if !order.belongs_to_supplier(&req.supplier_id) {
-                return Err(Error::BusinessLogicError("来源证据包含其他供应商的订单".to_string()));
-            }
-            lines.push(build_source_line(input, order, item, &refund_allocations, &refund_fact_map, period)?);
-        }
+        let scope = load_source_scope(&self.db, req, period, &input_item_ids, executor).await?;
+        let lines = assemble_source_lines(&req.supplier_id, &req.lines, scope, period)?;
         let mut data = SupplierSettlementSourceEvidenceData {
             request_id: req.request_id.clone(),
             supplier_id: req.supplier_id.clone(),
@@ -179,6 +109,144 @@ impl SupplierSettlementService {
         data.source_hash = data.canonical_source_hash();
         SupplierSettlementSourceEvidence::new(next_id(), data).map_err(Into::into)
     }
+}
+
+/// 加载来源范围快照：新版本守卫与跨集合范围读取。
+///
+/// # 参数
+/// * `req` - 来源证据命令
+/// * `period` - 已校验的结算期间
+/// * `input_item_ids` - 去重后的命令明细身份
+/// * `executor` - 数据访问执行器
+///
+/// # 返回
+/// 返回订单、明细与退款事实的范围快照。
+///
+/// # 错误
+/// 版本回退、范围为空或仓储失败时返回错误。
+async fn load_source_scope(
+    db: &mongodb::Database,
+    req: &super::RecordSettlementSourceEvidenceRequest,
+    period: SettlementPeriod,
+    input_item_ids: &[erp_core::ids::SupplierFulfillmentItemId],
+    executor: &mut dyn Executor,
+) -> Result<crate::repository::supplier_settlement::SupplierSettlementSourceScope> {
+    if let Some(latest) = db
+        .supplier_settlement_source_evidence()
+        .latest_for_period(
+            &req.supplier_id,
+            period.start(),
+            period.end(),
+            req.period_policy_id.trim(),
+            req.period_policy_version.trim(),
+            executor,
+        )
+        .await?
+    {
+        latest
+            .ensure_newer_source_version(req.source_version)
+            .map_err(|error| Error::ConflictError(error.to_string()))?;
+    }
+    let scope = db
+        .supplier_settlement()
+        .settlement_source_scope(
+            &req.supplier_id,
+            period.start(),
+            period.end(),
+            &req.lines.iter().map(|line| line.supplier_fulfillment_order_id.clone()).collect::<Vec<_>>(),
+            input_item_ids,
+            executor,
+        )
+        .await?;
+    if scope.orders.is_empty() {
+        return Err(Error::NotFound("当前供应商没有可核验的供应商履约订单".to_string()));
+    }
+    Ok(scope)
+}
+
+/// 由范围快照组装全部冻结来源行：建索引、完整性校验与逐行派生。
+///
+/// # 参数
+/// * `supplier_id` - 结算供应商
+/// * `inputs` - 来源证据命令明细
+/// * `scope` - 已加载的范围快照
+/// * `period` - 已校验的结算期间
+///
+/// # 返回
+/// 返回与命令同序的冻结来源行。
+///
+/// # 错误
+/// 范围不完整、归属不一致或金额恒等失败时返回错误。
+fn assemble_source_lines(
+    supplier_id: &erp_core::ids::SupplierAccountId,
+    inputs: &[super::RecordSettlementSourceEvidenceLineRequest],
+    scope: crate::repository::supplier_settlement::SupplierSettlementSourceScope,
+    period: SettlementPeriod,
+) -> Result<Vec<SupplierSettlementSourceEvidenceLine>> {
+    let order_map =
+        scope.orders.into_iter().map(|value| (value.base.id.clone(), value)).collect::<HashMap<_, _>>();
+    let item_map =
+        scope.items.into_iter().map(|value| (value.base.id.clone(), value)).collect::<HashMap<_, _>>();
+    let refund_allocations = scope.refund_allocations;
+    let refund_fact_map =
+        scope.refund_facts.iter().map(|fact| (fact.base.id.as_str(), fact)).collect::<HashMap<_, _>>();
+    let item_ids =
+        inputs.iter().map(|line| line.supplier_fulfillment_item_id.to_string()).collect::<HashSet<_>>();
+    ensure_complete_source_scope(CompleteSourceScope {
+        inputs,
+        input_item_ids: &item_ids,
+        order_map: &order_map,
+        item_map: &item_map,
+        refund_allocations: &refund_allocations,
+        refund_fact_map: &refund_fact_map,
+        period,
+    })?;
+    let mut lines = Vec::with_capacity(inputs.len());
+    for input in inputs {
+        let (order, item) = check_source_line(input, &order_map, &item_map, supplier_id)?;
+        lines.push(build_source_line(input, order, item, &refund_allocations, &refund_fact_map, period)?);
+    }
+    Ok(lines)
+}
+
+/// 校验单行命令的订单与明细归属一致性。
+///
+/// # 参数
+/// * `input` - 当前来源命令行
+/// * `order_map` - 范围订单索引
+/// * `item_map` - 范围明细索引
+/// * `supplier_id` - 结算供应商
+///
+/// # 返回
+/// 返回已核验的订单与明细引用。
+///
+/// # 错误
+/// 订单或明细缺失、明细不属于订单或订单不属于供应商时返回错误。
+fn check_source_line<'a>(
+    input: &super::RecordSettlementSourceEvidenceLineRequest,
+    order_map: &'a HashMap<String, crate::entity::supplier_fulfillment::SupplierFulfillmentOrder>,
+    item_map: &'a HashMap<String, crate::entity::supplier_fulfillment::SupplierFulfillmentItem>,
+    supplier_id: &erp_core::ids::SupplierAccountId,
+) -> Result<(
+    &'a crate::entity::supplier_fulfillment::SupplierFulfillmentOrder,
+    &'a crate::entity::supplier_fulfillment::SupplierFulfillmentItem,
+)> {
+    let order = order_map
+        .get(input.supplier_fulfillment_order_id.as_ref())
+        .ok_or_else(|| Error::NotFound("供应商订单不存在".to_string()))?;
+    let item = item_map
+        .get(input.supplier_fulfillment_item_id.as_ref())
+        .ok_or_else(|| Error::NotFound("供应商履约明细不存在".to_string()))?;
+    if !item.belongs_to_order(&input.supplier_fulfillment_order_id) {
+        return Err(Error::BusinessLogicError(format!(
+            "履约明细 {} 不属于订单 {}",
+            input.supplier_fulfillment_item_id, input.supplier_fulfillment_order_id
+        )));
+    }
+    if !order.belongs_to_supplier(supplier_id) {
+        return Err(Error::BusinessLogicError("来源证据包含其他供应商的订单".to_string()));
+    }
+    Ok((order, item))
 }
 
 /// 由一条命令输入及已查询的正式事实构建冻结来源行。

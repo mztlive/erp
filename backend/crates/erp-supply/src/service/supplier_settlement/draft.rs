@@ -46,19 +46,14 @@ impl SupplierSettlementService {
         executor: &mut dyn Executor,
     ) -> Result<StatementPreparation> {
         req.validate()?;
-        if req.action != SettlementDraftAction::Create {
-            return Err(Error::ValidationError("创建结算草稿必须使用 CREATE 动作".to_string()));
-        }
-        let period_start = parse_business_date(&req.period_start, "结算期间开始")?;
-        let period_end = parse_business_date(&req.period_end, "结算期间结束")?;
-        if period_end < period_start {
-            return Err(Error::ValidationError("结算期间结束不得早于开始".to_string()));
-        }
-        let statement_no = deterministic_statement_no(req);
-        if let Some(existing) =
-            self.db.supplier_settlement_statements().find_by_statement_no(&statement_no, executor).await?
+        let inputs = collect_draft_inputs(req)?;
+        if let Some(existing) = self
+            .db
+            .supplier_settlement_statements()
+            .find_by_statement_no(&inputs.statement_no, executor)
+            .await?
         {
-            validate_create_replay(&existing, req, period_start, period_end)?;
+            validate_create_replay(&existing, req, inputs.period_start, inputs.period_end)?;
             return Ok(StatementPreparation::Replay(
                 self.draft_result(
                     existing,
@@ -73,65 +68,16 @@ impl SupplierSettlementService {
         let source = self
             .db
             .supplier_settlement_source_evidence()
-            .latest_for_scope(&req.supplier_id, period_start, period_end, executor)
+            .latest_for_scope(&req.supplier_id, inputs.period_start, inputs.period_end, executor)
             .await?
             .ok_or_else(|| {
                 Error::BusinessLogicError(
                     "SOURCE_EVIDENCE_MISSING: 当前供应商与期间缺少完整来源证据批次".to_string(),
                 )
             })?;
-        let statement_id = SupplierSettlementStatementId::new(next_id());
-        let snapshot = SupplierSettlementDraftSnapshot::from_source(
-            &statement_id,
-            &source,
-            || SupplierSettlementItemId::new(next_id()),
-            || SupplierSettlementDifferenceId::new(next_id()),
-        )?;
-        let now = Instant::now();
-        let mut statement = SupplierSettlementStatement::new(
-            statement_id,
-            SupplierSettlementStatementData {
-                statement_no: statement_no.clone(),
-                supplier_id: req.supplier_id.clone(),
-                period_start,
-                period_end,
-                period_policy_id: source.period_policy_id.clone(),
-                period_policy_version: source.period_policy_version.clone(),
-                period_timezone: source.timezone.clone(),
-                external_bill_no: Some(source.external_bill_no.clone()),
-                external_bill_version: Some(source.external_bill_version.clone()),
-                erp_amount: snapshot.erp_amount,
-                supplier_amount: snapshot.supplier_amount,
-                subject_hash: "0".repeat(64),
-                source_as_of: source.source_as_of,
-                source_snapshot_at: now,
-                source_snapshot_hash: source.source_hash.clone(),
-                refresh_cutoff_policy_id: REVIEW_CUTOFF_POLICY_ID.to_string(),
-                refresh_cutoff_policy_version: REVIEW_CUTOFF_POLICY_VERSION.to_string(),
-                prepared_by: actor_id.to_string(),
-                business_org_unit_id: business_org_unit_id.to_string(),
-                difference_handler_user_id: actor_id.to_string(),
-            },
-        )?;
-        statement.refresh_snapshot(SupplierSettlementSnapshotUpdate {
-            external_bill_no: source.external_bill_no.clone(),
-            external_bill_version: source.external_bill_version.clone(),
-            erp_amount: snapshot.erp_amount,
-            supplier_amount: snapshot.supplier_amount,
-            source_as_of: source.source_as_of,
-            source_snapshot_at: now,
-            source_snapshot_hash: source.source_hash.clone(),
-            has_difference: !snapshot.differences.is_empty(),
-        })?;
-        statement.update_subject_hash(statement.review_subject_hash(&snapshot.differences))?;
+        let prepared = assemble_statement(req, actor_id, business_org_unit_id, &source, inputs)?;
 
-        Ok(StatementPreparation::Ready(PreparedStatement {
-            statement,
-            snapshot,
-            statement_no,
-            period_start,
-            period_end,
-        }))
+        Ok(StatementPreparation::Ready(prepared))
     }
     async fn draft_result(
         &self,
@@ -297,6 +243,138 @@ impl SupplierSettlementService {
         Ok(())
     }
 }
+/// 已校验的创建草稿输入：期间与确定性结算单号。
+struct CollectedDraftInputs {
+    /// 结算期间开始。
+    period_start: BusinessDate,
+    /// 结算期间结束。
+    period_end: BusinessDate,
+    /// 确定性结算单号。
+    statement_no: String,
+}
+
+/// 校验创建动作与期间并派生确定性结算单号。
+///
+/// # 参数
+/// * `req` - 创建结算草稿请求
+///
+/// # 返回
+/// 返回已校验的期间与结算单号。
+///
+/// # 错误
+/// 动作非创建、日期非法或期间倒置时返回错误。
+fn collect_draft_inputs(req: &CreateSettlementStatementRequest) -> Result<CollectedDraftInputs> {
+    if req.action != SettlementDraftAction::Create {
+        return Err(Error::ValidationError("创建结算草稿必须使用 CREATE 动作".to_string()));
+    }
+    let period_start = parse_business_date(&req.period_start, "结算期间开始")?;
+    let period_end = parse_business_date(&req.period_end, "结算期间结束")?;
+    if period_end < period_start {
+        return Err(Error::ValidationError("结算期间结束不得早于开始".to_string()));
+    }
+    let statement_no = deterministic_statement_no(req);
+    Ok(CollectedDraftInputs { period_start, period_end, statement_no })
+}
+
+/// 由最新来源快照组装结算单、明细与差异的冻结草稿。
+///
+/// # 参数
+/// * `req` - 创建结算草稿请求
+/// * `actor_id` - 结算经办人
+/// * `business_org_unit_id` - 经办业务组织
+/// * `source` - 最新完整来源证据批次
+/// * `inputs` - 已校验的期间与结算单号
+///
+/// # 返回
+/// 返回待持久化的结算单与快照。
+///
+/// # 错误
+/// 快照派生或实体构造失败时返回错误。
+fn assemble_statement(
+    req: &CreateSettlementStatementRequest,
+    actor_id: &str,
+    business_org_unit_id: &str,
+    source: &SupplierSettlementSourceEvidence,
+    inputs: CollectedDraftInputs,
+) -> Result<PreparedStatement> {
+    let statement_id = SupplierSettlementStatementId::new(next_id());
+    let snapshot = SupplierSettlementDraftSnapshot::from_source(
+        &statement_id,
+        source,
+        || SupplierSettlementItemId::new(next_id()),
+        || SupplierSettlementDifferenceId::new(next_id()),
+    )?;
+    let now = Instant::now();
+    let mut statement = SupplierSettlementStatement::new(
+        statement_id,
+        draft_statement_data(req, actor_id, business_org_unit_id, source, &snapshot, &inputs, now),
+    )?;
+    statement.refresh_snapshot(SupplierSettlementSnapshotUpdate {
+        external_bill_no: source.external_bill_no.clone(),
+        external_bill_version: source.external_bill_version.clone(),
+        erp_amount: snapshot.erp_amount,
+        supplier_amount: snapshot.supplier_amount,
+        source_as_of: source.source_as_of,
+        source_snapshot_at: now,
+        source_snapshot_hash: source.source_hash.clone(),
+        has_difference: !snapshot.differences.is_empty(),
+    })?;
+    statement.update_subject_hash(statement.review_subject_hash(&snapshot.differences))?;
+    Ok(PreparedStatement {
+        statement,
+        snapshot,
+        statement_no: inputs.statement_no,
+        period_start: inputs.period_start,
+        period_end: inputs.period_end,
+    })
+}
+
+/// 由请求、来源与快照组装结算单初始数据。
+///
+/// # 参数
+/// * `req` - 创建结算草稿请求
+/// * `actor_id` - 结算经办人
+/// * `business_org_unit_id` - 经办业务组织
+/// * `source` - 最新完整来源证据批次
+/// * `snapshot` - 已派生的草稿快照
+/// * `inputs` - 已校验的期间与结算单号
+/// * `now` - 调用方时间
+///
+/// # 返回
+/// 返回可直接构造结算单实体的数据。
+fn draft_statement_data(
+    req: &CreateSettlementStatementRequest,
+    actor_id: &str,
+    business_org_unit_id: &str,
+    source: &SupplierSettlementSourceEvidence,
+    snapshot: &SupplierSettlementDraftSnapshot,
+    inputs: &CollectedDraftInputs,
+    now: Instant,
+) -> SupplierSettlementStatementData {
+    SupplierSettlementStatementData {
+        statement_no: inputs.statement_no.clone(),
+        supplier_id: req.supplier_id.clone(),
+        period_start: inputs.period_start,
+        period_end: inputs.period_end,
+        period_policy_id: source.period_policy_id.clone(),
+        period_policy_version: source.period_policy_version.clone(),
+        period_timezone: source.timezone.clone(),
+        external_bill_no: Some(source.external_bill_no.clone()),
+        external_bill_version: Some(source.external_bill_version.clone()),
+        erp_amount: snapshot.erp_amount,
+        supplier_amount: snapshot.supplier_amount,
+        subject_hash: "0".repeat(64),
+        source_as_of: source.source_as_of,
+        source_snapshot_at: now,
+        source_snapshot_hash: source.source_hash.clone(),
+        refresh_cutoff_policy_id: REVIEW_CUTOFF_POLICY_ID.to_string(),
+        refresh_cutoff_policy_version: REVIEW_CUTOFF_POLICY_VERSION.to_string(),
+        prepared_by: actor_id.to_string(),
+        business_org_unit_id: business_org_unit_id.to_string(),
+        difference_handler_user_id: actor_id.to_string(),
+    }
+}
+
 fn deterministic_statement_no(req: &CreateSettlementStatementRequest) -> String {
     let digest = digest_parts(&[
         "supplier-settlement-create-v1".to_string(),

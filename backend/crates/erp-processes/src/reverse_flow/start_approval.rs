@@ -1,6 +1,7 @@
 //! 客户退款提交启动：加载定义图、构造 `prepare_start` 输入并持久化运行事实。
 
 mod authorization;
+mod common;
 mod customer_refund;
 mod mapping;
 mod payment_reversal;

@@ -34,89 +34,15 @@ const POLICY_VALUE_MAX_LEN: usize = 128;
 /// 复核说明最大长度。
 const REVIEW_COMMENT_MAX_LEN: usize = 512;
 
-/// 结算复核的正式决定。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum SettlementReviewResult {
-    /// 复核确认并形成应付。
-    Confirmed,
-    /// 驳回给经办人继续处理。
-    Rejected,
-}
+mod hash;
+mod review;
+mod status;
 
-/// 结算复核正式决定数据。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SettlementReviewDecision {
-    /// 确认结算。
-    Confirm {
-        /// 同事务形成的应付账户。
-        payable_account_id: PayableAccountId,
-        /// 复核说明。
-        comment: Option<String>,
-    },
-    /// 驳回复核。
-    Reject {
-        /// 驳回后的可编辑状态，只允许草稿或有差异。
-        return_status: SettlementStatus,
-        /// 结构化驳回原因（固定三元值对象，绕过 Service 也不能写入未知原因）。
-        reason_code: SettlementReviewRejectReason,
-        /// 补充说明。
-        comment: Option<String>,
-    },
-}
+pub use review::{SettlementReviewDecision, SettlementReviewResult};
+pub use status::SettlementStatus;
 
-/// 结算单状态（数据模型 §6.20：草稿、待对账、有差异、待复核、已确认、已作废）。
-///
-/// 固定枚举（§4.6），不属于数据模型第 7 章的固定状态机；结算确认编排（§8.4 第 6 条）
-/// 由 P3 承担。实体层固化保守守卫：已作废为终态，已确认只能作废。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum SettlementStatus {
-    /// 草稿。
-    Draft,
-    /// 待对账。
-    PendingReconciliation,
-    /// 有差异。
-    HasDifference,
-    /// 待复核。
-    PendingReview,
-    /// 已确认：同事务形成应付（§8.4 第 6 条，P3）。
-    Confirmed,
-    /// 已作废：终态。
-    Voided,
-}
-
-impl SettlementStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Draft => "草稿",
-            Self::PendingReconciliation => "待对账",
-            Self::HasDifference => "有差异",
-            Self::PendingReview => "待复核",
-            Self::Confirmed => "已确认",
-            Self::Voided => "已作废",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Draft => "DRAFT",
-            Self::PendingReconciliation => "PENDING_RECONCILIATION",
-            Self::HasDifference => "HAS_DIFFERENCE",
-            Self::PendingReview => "PENDING_REVIEW",
-            Self::Confirmed => "CONFIRMED",
-            Self::Voided => "VOIDED",
-        }
-    }
-}
+use self::hash::normalize_sha256;
+use self::status::ensure_status_move;
 
 /// 结算单创建数据（不含系统字段；`difference_amount` 由双方金额派生）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -365,7 +291,6 @@ impl SupplierSettlementStatement {
             payable_account_id: None,
         })
     }
-
     /// 校验调用方持有的结算单版本仍是当前版本。
     ///
     /// # 参数
@@ -382,36 +307,6 @@ impl SupplierSettlementStatement {
         }
         Ok(())
     }
-
-    /// 判断结算单是否仍处于可编辑草稿阶段。
-    ///
-    /// # 返回
-    /// 草稿、待对账或有差异状态返回 `true`。
-    pub fn is_editable(&self) -> bool {
-        matches!(
-            self.status,
-            SettlementStatus::Draft
-                | SettlementStatus::PendingReconciliation
-                | SettlementStatus::HasDifference
-        )
-    }
-
-    /// 判断结算单是否已经作废。
-    ///
-    /// # 返回
-    /// 状态为 `VOIDED` 时返回 `true`。
-    pub fn is_voided(&self) -> bool {
-        self.status == SettlementStatus::Voided
-    }
-
-    /// 判断结算单是否正在等待财务复核。
-    ///
-    /// # 返回
-    /// 状态为 `PENDING_REVIEW` 时返回 `true`。
-    pub fn is_pending_review(&self) -> bool {
-        self.status == SettlementStatus::PendingReview
-    }
-
     /// 判断指定账号是否为当前对账负责人。
     ///
     /// # 参数
@@ -445,186 +340,6 @@ impl SupplierSettlementStatement {
     pub fn is_difference_handler(&self, actor_id: &str) -> bool {
         self.difference_handler() == actor_id
     }
-
-    /// 校验客户端提交的复核主题与刷新截止策略快照。
-    ///
-    /// # 参数
-    /// * `subject_hash` - 客户端持有的主题摘要
-    /// * `cutoff_policy_id` - 客户端持有的刷新截止策略
-    /// * `cutoff_policy_version` - 客户端持有的策略版本
-    ///
-    /// # 返回
-    /// 三项均与当前冻结值一致时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 任一值不一致时返回领域错误。
-    pub fn ensure_review_snapshot(
-        &self,
-        subject_hash: &str,
-        cutoff_policy_id: &str,
-        cutoff_policy_version: &str,
-    ) -> Result<()> {
-        if subject_hash != self.subject_hash
-            || cutoff_policy_id != self.refresh_cutoff_policy_id
-            || cutoff_policy_version != self.refresh_cutoff_policy_version
-        {
-            return Err(Error::from("结算主题或刷新截止策略不一致"));
-        }
-        Ok(())
-    }
-
-    /// 计算当前冻结结算事实和差异正式结论的复核主题摘要。
-    ///
-    /// 摘要不包含可变状态、实体版本或复核结果，因此提交复核和正式决定不会改变
-    /// 同一业务主题。
-    ///
-    /// # 参数
-    /// * `differences` - 当前结算单的全部差异
-    ///
-    /// # 返回
-    /// 返回 64 位小写 SHA-256 十六进制摘要。
-    pub fn review_subject_hash(&self, differences: &[SupplierSettlementDifference]) -> String {
-        let mut parts = vec![
-            "supplier-settlement-review-subject-v1".to_string(),
-            self.base.id.clone(),
-            self.statement_no.clone(),
-            self.supplier_id.to_string(),
-            self.period_start.to_string(),
-            self.period_end.to_string(),
-            self.period_policy_id.clone(),
-            self.period_policy_version.clone(),
-            self.period_timezone.clone(),
-            self.external_bill_no.clone().unwrap_or_default(),
-            self.external_bill_version.clone().unwrap_or_default(),
-            self.erp_amount.to_string(),
-            self.supplier_amount.to_string(),
-            self.difference_amount.to_string(),
-            self.source_as_of.unix_secs().to_string(),
-            self.source_snapshot_at.unix_secs().to_string(),
-            self.source_snapshot_hash.clone(),
-            self.refresh_cutoff_policy_id.clone(),
-            self.refresh_cutoff_policy_version.clone(),
-        ];
-        let mut differences = differences.iter().collect::<Vec<_>>();
-        differences.sort_by(|left, right| left.base.id.cmp(&right.base.id));
-        for difference in differences {
-            parts.extend([
-                difference.base.id.clone(),
-                difference.statement_item_id.to_string(),
-                difference.difference_type.as_str().to_string(),
-                difference.difference_amount.to_string(),
-                difference.status.as_str().to_string(),
-                difference.resolution.clone().unwrap_or_default(),
-                difference.resolved_by.clone().unwrap_or_default(),
-                difference.resolved_at.map(|value| value.unix_secs().to_string()).unwrap_or_default(),
-            ]);
-        }
-        digest_parts(&parts)
-    }
-
-    /// 校验当前主题摘要与全部差异正式结论一致且没有待处理差异。
-    ///
-    /// # 参数
-    /// * `differences` - 当前结算单的全部差异
-    ///
-    /// # 返回
-    /// 差异均已处理且主题摘要一致时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 存在待处理差异或主题摘要过期时返回领域错误。
-    pub fn ensure_resolved_subject(&self, differences: &[SupplierSettlementDifference]) -> Result<()> {
-        if differences.iter().any(|difference| difference.status == SettlementDifferenceStatus::Pending) {
-            return Err(Error::from("存在未解决差异，禁止提交或确认结算"));
-        }
-        if self.subject_hash != self.review_subject_hash(differences) {
-            return Err(Error::from("结算主题摘要与当前差异结论不一致"));
-        }
-        Ok(())
-    }
-
-    /// 计算 ERP 接受差异对应的冻结成本差额。
-    ///
-    /// 每个结算明细的 ERP 接受含税差异合计必须精确等于供应商账单与 ERP 冻结
-    /// 含税差额；不含税与税额只从冻结三元组派生，禁止按含税金额猜测。
-    ///
-    /// # 参数
-    /// * `items` - 当前结算单的冻结明细
-    /// * `differences` - 当前结算单的全部差异
-    ///
-    /// # 返回
-    /// 返回汇总后的含税、不含税和税额差额。
-    ///
-    /// # 错误
-    /// 明细重复、差异指向其他明细或金额恒等不成立时返回领域错误。
-    pub fn accepted_cost_delta(
-        &self,
-        items: &[SupplierSettlementItem],
-        differences: &[SupplierSettlementDifference],
-    ) -> Result<SettlementCostDelta> {
-        let statement_id = erp_core::ids::SupplierSettlementStatementId::new(self.base.id.as_str());
-        let mut item_by_id = HashMap::with_capacity(items.len());
-        for item in items {
-            if !item.belongs_to_statement(&statement_id) {
-                return Err(Error::from("结算快照包含其他结算单明细"));
-            }
-            if item_by_id.insert(item.base.id.as_str(), item).is_some() {
-                return Err(Error::from("结算快照包含重复明细"));
-            }
-        }
-
-        let mut accepted_gross_by_item: HashMap<&str, Amount> = HashMap::new();
-        for difference in differences
-            .iter()
-            .filter(|difference| difference.status == SettlementDifferenceStatus::ErpAcknowledged)
-        {
-            let item_id = difference.statement_item_id.as_ref();
-            if !item_by_id.contains_key(item_id) {
-                return Err(Error::from("ERP接受差异未指向当前结算快照明细"));
-            }
-            accepted_gross_by_item
-                .entry(item_id)
-                .and_modify(|amount| *amount = amount.checked_add(difference.difference_amount))
-                .or_insert(difference.difference_amount);
-        }
-
-        let mut total = SettlementCostDelta::zero();
-        for (item_id, accepted_gross) in accepted_gross_by_item {
-            let delta = item_by_id[item_id].supplier_minus_erp_delta()?;
-            if accepted_gross != delta.gross {
-                return Err(Error::from(format!("结算明细 {item_id} 的 ERP 接受差异与冻结双方金额不一致")));
-            }
-            total.add_assign(delta);
-        }
-        total.validate()?;
-        Ok(total)
-    }
-
-    /// 校验结算单具备正式确认条件并返回成本差额。
-    ///
-    /// # 参数
-    /// * `items` - 当前结算单的冻结明细
-    /// * `differences` - 当前结算单的全部差异
-    ///
-    /// # 返回
-    /// 账单身份完整、差异已解决且主题一致时返回冻结成本差额。
-    ///
-    /// # 错误
-    /// 外部账单身份不完整、差异未解决、主题过期或成本差额不一致时返回错误。
-    pub fn ensure_confirmable(
-        &self,
-        items: &[SupplierSettlementItem],
-        differences: &[SupplierSettlementDifference],
-    ) -> Result<SettlementCostDelta> {
-        if items.is_empty() {
-            return Err(Error::from("结算单没有冻结明细"));
-        }
-        if self.external_bill_no.is_none() || self.external_bill_version.is_none() {
-            return Err(Error::from("供应商账单身份未完整冻结"));
-        }
-        self.ensure_resolved_subject(differences)?;
-        self.accepted_cost_delta(items, differences)
-    }
-
     /// 使用新的服务端来源证据批次替换尚未提交复核的草稿快照。
     ///
     /// # 错误
@@ -667,7 +382,6 @@ impl SupplierSettlementStatement {
         };
         Ok(())
     }
-
     /// 更新结算单。
     ///
     /// 复用 `new` 的校验规则并强制状态守卫（已作废终态、已确认只能作废）；
@@ -707,169 +421,8 @@ impl SupplierSettlementStatement {
         }
         Ok(())
     }
-
-    /// 更新差异结论变化后的主题摘要。
-    ///
-    /// 来源快照保持冻结；只有覆盖当前结算明细与差异正式结论的主题摘要允许推进。
-    /// 待复核、已确认和已作废状态均拒绝修改。
-    ///
-    /// # 错误
-    /// 当前状态不可编辑或摘要不是规范 SHA-256 十六进制值时返回错误。
-    pub fn update_subject_hash(&mut self, subject_hash: impl Into<String>) -> Result<()> {
-        if matches!(
-            self.status,
-            SettlementStatus::PendingReview | SettlementStatus::Confirmed | SettlementStatus::Voided
-        ) {
-            return Err(Error::from("当前结算状态禁止改变复核主题"));
-        }
-        self.subject_hash = normalize_sha256(subject_hash.into(), "主题摘要")?;
-        Ok(())
-    }
-
-    /// 标记当前可编辑结算草稿仍存在正式差异。
-    ///
-    /// # 返回
-    /// 状态推进到 `HAS_DIFFERENCE` 时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当前结算单已提交复核或进入终态时返回领域错误。
-    pub fn mark_has_difference(&mut self) -> Result<()> {
-        if !self.is_editable() {
-            return Err(Error::from("当前结算状态禁止登记差异结论"));
-        }
-        self.status = SettlementStatus::HasDifference;
-        Ok(())
-    }
-
-    /// 作废尚未提交复核的可编辑结算草稿。
-    ///
-    /// # 返回
-    /// 状态推进到 `VOIDED` 时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当前结算单已提交复核或进入终态时返回领域错误。
-    pub fn void_draft(&mut self) -> Result<()> {
-        if !self.is_editable() {
-            return Err(Error::from("当前结算状态禁止作废草稿"));
-        }
-        self.status = SettlementStatus::Voided;
-        Ok(())
-    }
-
-    /// 将当前冻结主题提交财务复核。
-    ///
-    /// 本方法只形成结算单状态事实；应用服务必须把唯一复核任务与审计写入同一事务。
-    ///
-    /// # 错误
-    /// 非草稿、待对账或有差异状态时返回错误。
-    pub fn submit_review(&mut self) -> Result<()> {
-        if !matches!(
-            self.status,
-            SettlementStatus::Draft
-                | SettlementStatus::PendingReconciliation
-                | SettlementStatus::HasDifference
-        ) {
-            return Err(Error::from("当前结算状态不允许提交复核"));
-        }
-        self.status = SettlementStatus::PendingReview;
-        Ok(())
-    }
-
-    /// 记录强类型结算复核决定。
-    ///
-    /// 确认形成应付并进入终态；驳回必须携带结构化原因，且只能回到草稿或有差异。
-    /// 经办人与复核人岗位分离由本实体再次固化。
-    ///
-    /// # 错误
-    /// 非待复核状态、岗位冲突、驳回原因非法或目标状态非法时返回错误。
-    pub fn record_review(
-        &mut self,
-        decision: SettlementReviewDecision,
-        reviewed_by: impl Into<String>,
-        reviewed_at: Instant,
-    ) -> Result<()> {
-        if self.status != SettlementStatus::PendingReview {
-            return Err(Error::from("仅待复核结算单可以记录正式决定"));
-        }
-        let reviewed_by =
-            normalize_required_text(reviewed_by.into(), "复核人不能为空", ACTOR_MAX_LEN, "复核人过长")?;
-        if reviewed_by == self.prepared_by {
-            return Err(Error::from("经办人与复核人不得相同"));
-        }
-        let (result, target_status, reason_code, comment, payable_account_id) = match decision {
-            SettlementReviewDecision::Confirm { payable_account_id, comment } => (
-                SettlementReviewResult::Confirmed,
-                SettlementStatus::Confirmed,
-                None,
-                normalize_optional_text(comment, "复核说明", REVIEW_COMMENT_MAX_LEN)?,
-                Some(payable_account_id),
-            ),
-            SettlementReviewDecision::Reject { return_status, reason_code, comment } => {
-                if !matches!(return_status, SettlementStatus::Draft | SettlementStatus::HasDifference) {
-                    return Err(Error::from("驳回复核只能退回草稿或有差异状态"));
-                }
-                (
-                    SettlementReviewResult::Rejected,
-                    return_status,
-                    Some(reason_code.as_str().to_string()),
-                    normalize_optional_text(comment, "复核说明", REVIEW_COMMENT_MAX_LEN)?,
-                    None,
-                )
-            },
-        };
-        self.status = target_status;
-        self.reviewed_by = Some(reviewed_by);
-        self.review_result = Some(result);
-        self.review_reason_code = reason_code;
-        self.review_comment = comment;
-        self.reviewed_at = Some(reviewed_at);
-        self.payable_account_id = payable_account_id;
-        self.confirmed_at = (result == SettlementReviewResult::Confirmed).then_some(reviewed_at);
-        Ok(())
-    }
-
-    /// 应用复核人更新。
-    ///
-    /// # 参数
-    /// * `reviewed_by` - 新的复核人
-    ///
-    /// # 错误
-    /// 复核人为空/超长或与经办人相同时返回错误。
-    fn apply_reviewed_by(&mut self, reviewed_by: String) -> Result<()> {
-        let reviewed_by =
-            normalize_required_text(reviewed_by, "复核人不能为空", ACTOR_MAX_LEN, "复核人过长")?;
-        if reviewed_by == self.prepared_by {
-            return Err(Error::from("经办人与复核人不得相同"));
-        }
-        self.reviewed_by = Some(reviewed_by);
-        Ok(())
-    }
-
-    /// 应用状态更新并维护确认字段。
-    ///
-    /// # 参数
-    /// * `status` - 新的状态
-    /// * `payable_account_id` - 应付账户（推进到已确认时必填）
-    ///
-    /// # 错误
-    /// 推进到已确认但缺少应付账户时返回错误。
-    fn apply_status(
-        &mut self,
-        status: SettlementStatus,
-        payable_account_id: Option<PayableAccountId>,
-    ) -> Result<()> {
-        if status == SettlementStatus::Confirmed {
-            let payable_account_id =
-                payable_account_id.ok_or_else(|| Error::from("确认时必须提供应付账户"))?;
-            self.confirmed_at.get_or_insert_with(Instant::now);
-            self.payable_account_id = Some(payable_account_id);
-        }
-        self.status = status;
-        Ok(())
-    }
 }
 
-/// 规范化对账负责人、业务组织和差异处理人；禁止公司根。
 fn normalize_ownership(data: &SupplierSettlementStatementData) -> Result<(String, String, String)> {
     let prepared_by = normalize_required_text(
         data.prepared_by.clone(),
@@ -898,17 +451,6 @@ fn normalize_ownership(data: &SupplierSettlementStatementData) -> Result<(String
     };
     Ok((prepared_by, business_org_unit_id, difference_handler_user_id))
 }
-
-/// 对字段逐项加入长度前缀后计算稳定摘要，消除字符串拼接歧义。
-fn digest_parts(parts: &[String]) -> String {
-    let mut digest = Sha256::new();
-    for part in parts {
-        digest.update((part.len() as u64).to_be_bytes());
-        digest.update(part.as_bytes());
-    }
-    digest.finalize().iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
 /// 校验金额非负。
 ///
 /// # 参数
@@ -920,36 +462,6 @@ fn digest_parts(parts: &[String]) -> String {
 fn ensure_amount_non_negative(value: Amount, message: &str) -> Result<()> {
     if value.to_decimal() < Decimal::ZERO {
         return Err(Error::from(message));
-    }
-    Ok(())
-}
-
-/// 规范化服务端生成的 SHA-256 十六进制摘要。
-fn normalize_sha256(value: String, field: &str) -> Result<String> {
-    let value = value.trim().to_ascii_lowercase();
-    if value.len() != HASH_LEN || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(Error::from(format!("{field}必须是64位SHA-256十六进制摘要")));
-    }
-    Ok(value)
-}
-
-/// 校验结算状态迁移守卫（保守守卫：已作废终态，已确认只能作废；幂等恒合法）。
-///
-/// # 参数
-/// * `from` - 迁移前状态
-/// * `to` - 目标状态
-///
-/// # 错误
-/// 已作废再变更、或已确认迁移到已确认以外的状态时返回错误。
-fn ensure_status_move(from: SettlementStatus, to: SettlementStatus) -> Result<()> {
-    if from == to {
-        return Ok(());
-    }
-    if from == SettlementStatus::Voided {
-        return Err(Error::from("已作废结算单不可再变更状态"));
-    }
-    if from == SettlementStatus::Confirmed && to != SettlementStatus::Voided {
-        return Err(Error::from("已确认结算单只能作废"));
     }
     Ok(())
 }

@@ -31,9 +31,13 @@ use crate::{Error, Result};
 /// 详情最近审批历史条数上限。完整历史走分页端点。
 pub const RECENT_HISTORY_LIMIT: usize = 8;
 
-/// 已注册的实物及服务销售单适配器规格。
+/// 两类销售单共用的已登记审批适配器规格。
+///
+/// 实物及服务销售单与卡券销售单拥有完全相同的字段形状，仅单据类型、三类
+/// 动作与责任角色等登记值不同；新增单据类型只需新增一组期望声明并复用
+/// [`build_approval_adapter`]，不得复制本结构体。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SalesOrderAdapter {
+pub struct SalesOrderApprovalAdapter {
     /// 单据类型。
     pub document_type: DocumentType,
     /// 一对一流程种类。
@@ -58,82 +62,67 @@ pub struct SalesOrderAdapter {
     pub read_scope: AdapterReadScope,
 }
 
-/// 返回实物及服务销售单的完整适配器登记。
-///
-/// # 返回
-/// 返回已校验完整性的规格与显式字段声明。
-///
-/// # 错误
-/// 政策缺失或三类动作不互异时返回部署不变量错误。
-pub fn sales_order_adapter() -> Result<SalesOrderAdapter> {
-    let spec = adapter_spec_of(DocumentType::SalesOrder)?;
-    ensure_adapter_spec_complete(&spec)?;
-    adapter_from_spec(spec)
-}
+/// 已注册的实物及服务销售单适配器规格。
+pub type SalesOrderAdapter = SalesOrderApprovalAdapter;
 
 /// 已注册的卡券销售单适配器规格。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VoucherSalesOrderAdapter {
+pub type VoucherSalesOrderAdapter = SalesOrderApprovalAdapter;
+
+/// 单据种类相关的适配器期望登记值。
+///
+/// 两类销售单共用的规格校验（版本来源、组织来源、读取范围、快照字段）由
+/// [`build_approval_adapter`] 统一执行；本结构只声明随单据种类变化的差异。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ExpectedAdapterContracts {
     /// 单据类型。
-    pub document_type: DocumentType,
-    /// 一对一流程种类。
-    pub process_kind: bpm::ProcessKind,
-    /// 主体引用构造器标识。
-    pub subject_ref_builder: &'static str,
-    /// 提交版本权威来源。
-    pub subject_version_source: ApprovalSubjectVersionSource,
-    /// 快照构造器标识。
-    pub subject_snapshot_builder: &'static str,
+    document_type: DocumentType,
     /// 提交并启动动作。
-    pub on_approval_start: ApprovalDomainAction,
+    on_approval_start: ApprovalDomainAction,
     /// 最终通过动作。
-    pub on_final_approve: ApprovalDomainAction,
+    on_final_approve: ApprovalDomainAction,
     /// 撤回与受阻取消动作。
-    pub cancel_action: ApprovalDomainAction,
+    cancel_action: ApprovalDomainAction,
     /// WorkItem 责任角色。
-    pub owner_role: &'static str,
-    /// 责任组织快照来源。
-    pub owner_organization_snapshot: OwnerOrganizationSource,
-    /// 对象读取范围。
-    pub read_scope: AdapterReadScope,
+    owner_role: &'static str,
+    /// 登记不完整时的内部错误文案。
+    mismatch_message: &'static str,
 }
 
-/// 返回卡券销售单的完整适配器登记。
+/// 由政策规格填充共用 Adapter 字段，差异部分只取期望声明。
+///
+/// # 参数
+/// * `spec` - 政策登记的适配器规格
+/// * `subject_ref_builder` - 主体引用构造器标识
+/// * `expected` - 随单据种类变化的期望登记值
 ///
 /// # 返回
-/// 返回已校验完整性的规格与显式字段声明。
+/// 返回已校验完整性的共用适配器。
 ///
 /// # 错误
-/// 政策缺失或三类动作不互异时返回部署不变量错误。
-pub fn voucher_sales_order_adapter() -> Result<VoucherSalesOrderAdapter> {
-    let spec = adapter_spec_of(DocumentType::VoucherSalesOrder)?;
-    ensure_adapter_spec_complete(&spec)?;
-    voucher_adapter_from_spec(spec)
-}
-
-/// 由政策规格填充卡券 Adapter 字段。
-///
-/// # 错误
-/// 字段与合同签署值不一致时返回错误。
-fn voucher_adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<VoucherSalesOrderAdapter> {
-    if spec.document_type != DocumentType::VoucherSalesOrder
-        || spec.process_kind != process_kind_of(DocumentType::VoucherSalesOrder)
+/// 共用字段或期望字段与合同签署值不一致时返回部署不变量错误。
+fn build_approval_adapter(
+    spec: ApprovalAdapterSpec,
+    subject_ref_builder: &'static str,
+    expected: ExpectedAdapterContracts,
+) -> Result<SalesOrderApprovalAdapter> {
+    if spec.document_type != expected.document_type
+        || spec.process_kind != process_kind_of(expected.document_type)
         || spec.subject_version_source != ApprovalSubjectVersionSource::SalesOrderSubmissionNo
-        || spec.on_approval_start != ApprovalDomainAction::VoucherSalesOrderStartApprovalSubmission
-        || spec.on_final_approve != ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission
-        || spec.cancel_action != ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission
-        || spec.owner_role.as_str() != "voucher_sales_order_approver"
+        || spec.on_approval_start != expected.on_approval_start
+        || spec.on_final_approve != expected.on_final_approve
+        || spec.cancel_action != expected.cancel_action
+        || spec.owner_role.as_str() != expected.owner_role
         || spec.owner_organization_source != OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         || spec.read_scope != AdapterReadScope::DocumentOrganizationAndCreator
         || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalAmount)
         || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalQuantity)
     {
-        return Err(Error::Internal("卡券销售单审批适配器登记不完整".to_string()));
+        return Err(Error::Internal(expected.mismatch_message.to_string()));
     }
-    Ok(VoucherSalesOrderAdapter {
+    Ok(SalesOrderApprovalAdapter {
         document_type: spec.document_type,
         process_kind: spec.process_kind,
-        subject_ref_builder: "subject_ref_for(VoucherSalesOrder)",
+        subject_ref_builder,
         subject_version_source: spec.subject_version_source,
         subject_snapshot_builder: "build_sales_order_snapshot",
         on_approval_start: spec.on_approval_start,
@@ -143,6 +132,80 @@ fn voucher_adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<VoucherSalesOr
         owner_organization_snapshot: spec.owner_organization_source,
         read_scope: spec.read_scope,
     })
+}
+
+/// 由共用适配器提取两类销售单提交/撤回/正式化共用的已登记端口。
+///
+/// # 参数
+/// * `adapter` - 已校验的共用销售单适配器
+///
+/// # 返回
+/// 返回该类型已登记的单据类型、三类动作与责任角色。
+///
+/// # 错误
+/// 无。
+fn ports_of_adapter(adapter: &SalesOrderApprovalAdapter) -> SalesApprovalPorts {
+    SalesApprovalPorts {
+        document_type: adapter.document_type,
+        on_approval_start: adapter.on_approval_start,
+        on_final_approve: adapter.on_final_approve,
+        cancel_action: adapter.cancel_action,
+        owner_role: adapter.owner_role,
+    }
+}
+
+/// 返回实物及服务销售单的完整适配器登记。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回已校验完整性的规格与显式字段声明。
+///
+/// # 错误
+/// 政策缺失或三类动作不互异时返回部署不变量错误。
+pub fn sales_order_adapter() -> Result<SalesOrderAdapter> {
+    let spec = adapter_spec_of(DocumentType::SalesOrder)?;
+    ensure_adapter_spec_complete(&spec)?;
+    build_approval_adapter(
+        spec,
+        "subject_ref_for(SalesOrder)",
+        ExpectedAdapterContracts {
+            document_type: DocumentType::SalesOrder,
+            on_approval_start: ApprovalDomainAction::SalesOrderStartApprovalSubmission,
+            on_final_approve: ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission,
+            cancel_action: ApprovalDomainAction::SalesOrderCancelApprovalSubmission,
+            owner_role: "sales_order_approver",
+            mismatch_message: "销售单审批适配器登记不完整",
+        },
+    )
+}
+
+/// 返回卡券销售单的完整适配器登记。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回已校验完整性的规格与显式字段声明。
+///
+/// # 错误
+/// 政策缺失或三类动作不互异时返回部署不变量错误。
+pub fn voucher_sales_order_adapter() -> Result<VoucherSalesOrderAdapter> {
+    let spec = adapter_spec_of(DocumentType::VoucherSalesOrder)?;
+    ensure_adapter_spec_complete(&spec)?;
+    build_approval_adapter(
+        spec,
+        "subject_ref_for(VoucherSalesOrder)",
+        ExpectedAdapterContracts {
+            document_type: DocumentType::VoucherSalesOrder,
+            on_approval_start: ApprovalDomainAction::VoucherSalesOrderStartApprovalSubmission,
+            on_final_approve: ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission,
+            cancel_action: ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission,
+            owner_role: "voucher_sales_order_approver",
+            mismatch_message: "卡券销售单审批适配器登记不完整",
+        },
+    )
 }
 
 /// 两类销售单提交/撤回/正式化共用的已登记端口。
@@ -174,59 +237,13 @@ pub fn sales_approval_ports(business_type: BusinessType) -> Result<SalesApproval
     match business_type {
         BusinessType::GoodsService => {
             let adapter = sales_order_adapter()?;
-            Ok(SalesApprovalPorts {
-                document_type: adapter.document_type,
-                on_approval_start: adapter.on_approval_start,
-                on_final_approve: adapter.on_final_approve,
-                cancel_action: adapter.cancel_action,
-                owner_role: adapter.owner_role,
-            })
+            Ok(ports_of_adapter(&adapter))
         },
         BusinessType::Voucher => {
             let adapter = voucher_sales_order_adapter()?;
-            Ok(SalesApprovalPorts {
-                document_type: adapter.document_type,
-                on_approval_start: adapter.on_approval_start,
-                on_final_approve: adapter.on_final_approve,
-                cancel_action: adapter.cancel_action,
-                owner_role: adapter.owner_role,
-            })
+            Ok(ports_of_adapter(&adapter))
         },
     }
-}
-
-/// 由政策规格填充显式 Adapter 字段。
-///
-/// # 错误
-/// 字段与合同签署值不一致时返回错误。
-fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<SalesOrderAdapter> {
-    if spec.document_type != DocumentType::SalesOrder
-        || spec.process_kind != process_kind_of(DocumentType::SalesOrder)
-        || spec.subject_version_source != ApprovalSubjectVersionSource::SalesOrderSubmissionNo
-        || spec.on_approval_start != ApprovalDomainAction::SalesOrderStartApprovalSubmission
-        || spec.on_final_approve != ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission
-        || spec.cancel_action != ApprovalDomainAction::SalesOrderCancelApprovalSubmission
-        || spec.owner_role.as_str() != "sales_order_approver"
-        || spec.owner_organization_source != OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
-        || spec.read_scope != AdapterReadScope::DocumentOrganizationAndCreator
-        || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalAmount)
-        || !spec.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalQuantity)
-    {
-        return Err(Error::Internal("销售单审批适配器登记不完整".to_string()));
-    }
-    Ok(SalesOrderAdapter {
-        document_type: spec.document_type,
-        process_kind: spec.process_kind,
-        subject_ref_builder: "subject_ref_for(SalesOrder)",
-        subject_version_source: spec.subject_version_source,
-        subject_snapshot_builder: "build_sales_order_snapshot",
-        on_approval_start: spec.on_approval_start,
-        on_final_approve: spec.on_final_approve,
-        cancel_action: spec.cancel_action,
-        owner_role: spec.owner_role.as_str(),
-        owner_organization_snapshot: spec.owner_organization_source,
-        read_scope: spec.read_scope,
-    })
 }
 
 /// 无已绑定定义的必须审批单据不得提交。
