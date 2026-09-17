@@ -15,6 +15,10 @@ use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+pub use super::supplier_fulfillment_scope::{
+    FulfillmentHandoverCandidateView, HandoverFulfillmentOrderRequest, HandoverFulfillmentOrderView,
+    SupplierFulfillmentOrderListView,
+};
 use crate::Result;
 use crate::entity::supplier_fulfillment::{
     AllocationAction, CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentOrder,
@@ -30,7 +34,7 @@ pub(crate) use application_core::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct PageParams {
+pub struct PageParams {
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数（已 clamp 到 1–100）。
@@ -63,7 +67,23 @@ pub(crate) use application_core::normalize_sort;
 
 /// 供应商履约订单列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct SupplierFulfillmentOrderListParams {
+    /// 跨页与导出必须使用前一页的当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
+    /// 当前跟进人 ID，逗号分隔，最多 100 项；只收窄授权结果。
+    pub owner_user_ids: Option<application_core::QueryIds>,
+    /// 当前开放 W26 处理人，逗号分隔，最多 100 项；只收窄授权结果。
+    pub handler_user_ids: Option<application_core::QueryIds>,
+    /// 当前业务组织，逗号分隔，最多 100 项；只收窄授权结果。
+    pub org_unit_ids: Option<application_core::QueryIds>,
+    /// 组织筛选是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
+    /// 列表视图：`actionable` / `all` / `recent_completed`。
+    pub view: Option<String>,
+    /// 售后待处理快捷筛选（取消或退款异常态）。
+    pub aftersale_pending: Option<bool>,
     /// 多业务字段字面量关键词，空白不筛选。
     #[validate(length(max = 200))]
     pub q: Option<String>,
@@ -91,7 +111,19 @@ pub struct SupplierFulfillmentOrderListParams {
 
 /// 归一化后的供应商履约订单列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct FulfillmentOrderListQuery {
+pub struct FulfillmentOrderListQuery {
+    /// 当前跟进人精确身份条件。
+    pub owner_user_ids: Option<application_core::QueryIds>,
+    /// 当前开放 W26 处理人条件。
+    pub handler_user_ids: Option<application_core::QueryIds>,
+    /// 当前业务组织，只收窄授权结果。
+    pub org_unit_ids: Option<application_core::QueryIds>,
+    /// 组织筛选是否包含有效下级。
+    pub include_descendants: Option<bool>,
+    /// 规范化后的列表视图。
+    pub view: Option<String>,
+    /// 售后待处理快捷筛选。
+    pub aftersale_pending: bool,
     /// 多业务字段字面量关键词，空白不筛选。
     pub q: Option<String>,
     /// 固定供应商筛选。
@@ -118,10 +150,16 @@ impl SupplierFulfillmentOrderListParams {
     ///
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-    pub(crate) fn normalized(&self) -> Result<FulfillmentOrderListQuery> {
+    pub fn normalized(&self) -> Result<FulfillmentOrderListQuery> {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, FULFILLMENT_ORDER_SORT_FIELDS)?;
         Ok(FulfillmentOrderListQuery {
+            owner_user_ids: self.owner_user_ids.clone(),
+            handler_user_ids: self.handler_user_ids.clone(),
+            org_unit_ids: self.org_unit_ids.clone(),
+            include_descendants: self.include_descendants,
+            view: normalize_list_view(self.view.as_deref())?,
+            aftersale_pending: self.aftersale_pending.unwrap_or(false),
             q: normalized_text(self.q.as_deref()),
             supplier_id: self.supplier_id.clone(),
             fulfillment_status: self.fulfillment_status,
@@ -135,6 +173,17 @@ impl SupplierFulfillmentOrderListParams {
                 sort_dir,
             },
         })
+    }
+}
+
+/// 规范化列表视图参数；未提供视为全部。
+fn normalize_list_view(raw: Option<&str>) -> Result<Option<String>> {
+    let Some(value) = normalized_text(raw) else {
+        return Ok(None);
+    };
+    match value.as_str() {
+        "actionable" | "all" | "recent_completed" => Ok(Some(value)),
+        _ => Err(crate::Error::ValidationError("未知的供应商订单列表视图".into())),
     }
 }
 
@@ -167,6 +216,13 @@ pub struct SupplierFulfillmentOrderView {
     pub accepted_at: Option<i64>,
     /// 履约完成时间（秒级时间戳）。
     pub completed_at: Option<i64>,
+    /// 内部跟进人。
+    pub follow_up_user_id: String,
+    /// 当前业务组织。
+    pub business_org_unit_id: String,
+    /// 当前开放 W26 异常处理人；无开放任务时为空。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handler_user_id: Option<String>,
     /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -195,6 +251,9 @@ impl From<SupplierFulfillmentOrder> for SupplierFulfillmentOrderView {
             submitted_at: order.submitted_at.map(|t| t.unix_secs()),
             accepted_at: order.accepted_at.map(|t| t.unix_secs()),
             completed_at: order.completed_at.map(|t| t.unix_secs()),
+            follow_up_user_id: order.follow_up_user_id,
+            business_org_unit_id: order.business_org_unit_id,
+            handler_user_id: None,
             version: order.base.version,
             created_at: order.base.created_at,
         }
@@ -832,19 +891,20 @@ mod tests {
     #[test]
     fn list_params_normalize_paging_filters_and_sort_defaults() {
         let params = SupplierFulfillmentOrderListParams {
-            q: None,
-            supplier_id: None,
             fulfillment_status: Some(FulfillmentStatus::Accepted),
             cancel_status: Some(CancelStatus::None),
             refund_status: Some(RefundStatus::RefundPending),
             external_order_no: Some(" SUP-1 ".to_string()),
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            view: Some("actionable".into()),
+            aftersale_pending: Some(true),
+            ..SupplierFulfillmentOrderListParams::default()
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.fulfillment_status, Some(FulfillmentStatus::Accepted));
+        assert_eq!(query.cancel_status, Some(CancelStatus::None));
+        assert_eq!(query.refund_status, Some(RefundStatus::RefundPending));
+        assert_eq!(query.view.as_deref(), Some("actionable"));
+        assert!(query.aftersale_pending);
         assert_eq!(query.external_order_no.as_deref(), Some("SUP-1"));
         assert_eq!(query.paging.page, 1);
         assert_eq!(query.paging.page_size, 20);
@@ -855,18 +915,43 @@ mod tests {
     #[test]
     fn list_params_reject_unbounded_page_size() {
         let params = SupplierFulfillmentOrderListParams {
-            q: None,
-            supplier_id: None,
-            fulfillment_status: None,
-            cancel_status: None,
-            refund_status: None,
-            external_order_no: None,
             page: Some(0),
             page_size: Some(u32::MAX),
-            sort_by: None,
-            sort_dir: None,
+            ..SupplierFulfillmentOrderListParams::default()
         };
         assert!(params.validate().is_err());
+        assert!(
+            serde_json::from_value::<SupplierFulfillmentOrderListParams>(serde_json::json!({
+                "owner": "张三"
+            }))
+            .is_err()
+        );
+        let unknown_view = SupplierFulfillmentOrderListParams {
+            view: Some("mine".into()),
+            ..SupplierFulfillmentOrderListParams::default()
+        };
+        assert!(unknown_view.normalized().is_err());
+    }
+
+    #[test]
+    fn list_params_keep_owner_handler_org_and_cancel_refund_axes() {
+        let params: SupplierFulfillmentOrderListParams = serde_json::from_value(json!({
+            "owner_user_ids": "buyer-2,buyer-1",
+            "handler_user_ids": "handler-1",
+            "org_unit_ids": "org-a",
+            "include_descendants": true,
+            "scope_version": "v1",
+            "cancel_status": "FAILED",
+            "refund_status": "MANUAL"
+        }))
+        .unwrap();
+        let query = params.normalized().unwrap();
+        assert_eq!(query.owner_user_ids.as_ref().unwrap().as_slice(), ["buyer-1", "buyer-2"]);
+        assert_eq!(query.handler_user_ids.as_ref().unwrap().as_slice(), ["handler-1"]);
+        assert_eq!(query.org_unit_ids.as_ref().unwrap().as_slice(), ["org-a"]);
+        assert_eq!(query.include_descendants, Some(true));
+        assert_eq!(query.cancel_status, Some(CancelStatus::Failed));
+        assert_eq!(query.refund_status, Some(RefundStatus::Manual));
     }
 
     #[test]

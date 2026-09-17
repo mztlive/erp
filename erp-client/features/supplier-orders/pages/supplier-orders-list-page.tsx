@@ -62,6 +62,10 @@ export function SupplierOrdersListPage() {
             aftersalePending: url.aftersalePending,
             paidFrom: url.paidFrom,
             paidTo: url.paidTo,
+            ownerUserIds: url.ownerUserIds,
+            handlerUserIds: url.handlerUserIds,
+            orgUnitIds: url.orgUnitIds,
+            includeDescendants: url.includeDescendants,
             page: url.page,
             pageSize: url.pageSize,
             sortBy: url.sort ? SORT_COLUMN_TO_FIELD[url.sort] : undefined,
@@ -297,6 +301,8 @@ export function SupplierOrdersListPage() {
                         filters={filters}
                         resultCount={listQuery.data ? total : undefined}
                         loading={listQuery.isFetching}
+                        ownerOptions={listQuery.data?.ownerOptions}
+                        handlerOptions={listQuery.data?.handlerOptions}
                         failed={listQuery.isError}
                     />
                 }
@@ -309,6 +315,7 @@ export function SupplierOrdersListPage() {
                         error={listQuery.isError ? listQuery.error : null}
                         onRetry={() => void listQuery.refetch()}
                         hasActiveFilters={filters.hasActiveFilters}
+                        noScope={listQuery.data?.emptyReason === "no_scope"}
                         onClearFilters={filters.clearAllFilters}
                         sorting={sorting}
                         onSortingChange={handleSortingChange}

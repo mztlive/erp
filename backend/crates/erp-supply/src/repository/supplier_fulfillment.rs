@@ -99,6 +99,12 @@ pub struct SupplierFulfillmentOrderRow {
     pub accepted_at: Option<Instant>,
     /// 履约完成时间。
     pub completed_at: Option<Instant>,
+    /// 内部跟进人。
+    #[serde(default)]
+    pub follow_up_user_id: String,
+    /// 当前业务组织。
+    #[serde(default)]
+    pub business_org_unit_id: String,
     /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -114,6 +120,22 @@ pub struct SupplierFulfillmentOrderFilter {
     pub supplier_id: Option<SupplierAccountId>,
     /// 履约主线状态；`None` 表示不筛选。
     pub fulfillment_status: Option<FulfillmentStatus>,
+    /// 取消进度状态；`None` 表示不筛选。
+    pub cancel_status: Option<CancelStatus>,
+    /// 退款进度状态；`None` 表示不筛选。
+    pub refund_status: Option<RefundStatus>,
+    /// 列表视图；`None` 或 `all` 不追加视图条件。
+    pub view: Option<String>,
+    /// 售后待处理快捷筛选。
+    pub aftersale_pending: bool,
+    /// 已证明的跟进人授权条件；`None` 表示调用方尚未注入范围。
+    pub scope: Option<super::supplier_fulfillment_scope::FulfillmentOrderReadScope>,
+    /// 跟进人筛选，只收窄授权结果。
+    pub follow_up_user_ids: Option<Vec<String>>,
+    /// 业务组织筛选，只收窄授权结果。
+    pub business_org_unit_ids: Option<Vec<String>>,
+    /// 当前开放 W26 处理人命中的订单 ID；`None` 表示不按处理人收窄。
+    pub handler_order_ids: Option<Vec<String>>,
     /// 供应商订单号（按字面量部分匹配，忽略大小写）；`None` 表示不筛选。
     pub external_order_no: Option<String>,
     /// 页码（1 起）。
@@ -132,6 +154,14 @@ impl Default for SupplierFulfillmentOrderFilter {
             q: None,
             supplier_id: None,
             fulfillment_status: None,
+            cancel_status: None,
+            refund_status: None,
+            view: None,
+            aftersale_pending: false,
+            scope: None,
+            follow_up_user_ids: None,
+            business_org_unit_ids: None,
+            handler_order_ids: None,
             external_order_no: None,
             page: 1,
             page_size: 20,
@@ -154,7 +184,16 @@ impl QueryFilter for SupplierFulfillmentOrderFilter {
         if let Some(fulfillment_status) = self.fulfillment_status {
             filter.insert("fulfillment_status", fulfillment_status.as_str());
         }
+        if let Some(cancel_status) = self.cancel_status {
+            filter.insert("cancel_status", cancel_status.as_str());
+        }
+        if let Some(refund_status) = self.refund_status {
+            filter.insert("refund_status", refund_status.as_str());
+        }
         insert_literal_regex_filter(&mut filter, "external_order_no", self.external_order_no.as_deref());
+        insert_id_in(&mut filter, "follow_up_user_id", self.follow_up_user_ids.as_deref());
+        insert_id_in(&mut filter, "business_org_unit_id", self.business_org_unit_ids.as_deref());
+        insert_id_in(&mut filter, "id", self.handler_order_ids.as_deref());
         if let Some(q) = &self.q {
             let clauses = ["fulfillment_order_no", "external_order_no"]
                 .into_iter()
@@ -165,6 +204,13 @@ impl QueryFilter for SupplierFulfillmentOrderFilter {
                 })
                 .collect::<Vec<_>>();
             filter.insert("$or", clauses);
+        }
+        and_optional(&mut filter, view_clause(self.view.as_deref()));
+        if self.aftersale_pending {
+            and_optional(&mut filter, Some(aftersale_pending_clause()));
+        }
+        if let Some(scope) = &self.scope {
+            filter = doc! { "$and": [filter, scope.document()] };
         }
         filter
     }
@@ -1049,8 +1095,51 @@ fn supplier_fulfillment_order_projection() -> Document {
         "submitted_at": 1,
         "accepted_at": 1,
         "completed_at": 1,
+        "follow_up_user_id": 1,
+        "business_org_unit_id": 1,
         "version": 1,
         "created_at": 1,
+    }
+}
+
+fn insert_id_in(filter: &mut Document, field: &str, ids: Option<&[String]>) {
+    let Some(ids) = ids.filter(|values| !values.is_empty()) else {
+        if ids.is_some() {
+            filter.insert("$expr", false);
+        }
+        return;
+    };
+    filter.insert(field, doc! { "$in": ids });
+}
+
+fn and_optional(filter: &mut Document, extra: Option<Document>) {
+    let Some(extra) = extra else {
+        return;
+    };
+    let current = std::mem::take(filter);
+    *filter = doc! { "$and": [current, extra] };
+}
+
+fn view_clause(view: Option<&str>) -> Option<Document> {
+    match view {
+        Some("actionable") => Some(doc! {
+            "$or": [
+                { "fulfillment_status": { "$in": ["RESULT_UNKNOWN", "EXCEPTION", "REJECTED", "SUBMITTING", "RECEIVED"] } },
+                { "cancel_status": { "$in": ["FAILED", "MANUAL", "CANCEL_PENDING"] } },
+                { "refund_status": { "$in": ["REFUND_FAILED", "MANUAL", "REFUND_PENDING"] } },
+            ]
+        }),
+        Some("recent_completed") => Some(doc! { "fulfillment_status": "COMPLETED" }),
+        _ => None,
+    }
+}
+
+fn aftersale_pending_clause() -> Document {
+    doc! {
+        "$or": [
+            { "cancel_status": { "$in": ["FAILED", "MANUAL", "CANCEL_PENDING"] } },
+            { "refund_status": { "$in": ["REFUND_FAILED", "MANUAL", "REFUND_PENDING"] } },
+        ]
     }
 }
 
@@ -1066,21 +1155,57 @@ mod tests {
     #[test]
     fn order_filter_applies_optional_fields_and_deleted_filter() {
         let filter = SupplierFulfillmentOrderFilter {
-            q: None,
             supplier_id: Some(SupplierAccountId::new("supplier-1")),
             fulfillment_status: Some(FulfillmentStatus::Accepted),
+            cancel_status: Some(crate::entity::supplier_fulfillment::CancelStatus::Failed),
+            refund_status: Some(crate::entity::supplier_fulfillment::RefundStatus::Manual),
             external_order_no: Some("SUP-1".to_string()),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..SupplierFulfillmentOrderFilter::default()
         };
 
         let document = filter.to_doc();
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(document.get_str("supplier_id").unwrap(), "supplier-1");
         assert_eq!(document.get_str("fulfillment_status").unwrap(), "ACCEPTED");
+        assert_eq!(document.get_str("cancel_status").unwrap(), "FAILED");
+        assert_eq!(document.get_str("refund_status").unwrap(), "MANUAL");
         assert_eq!(document.get_document("external_order_no").unwrap().get_str("$regex").unwrap(), r"SUP\-1");
+    }
+
+    #[test]
+    fn order_filter_compiles_actionable_view_on_server() {
+        let filter = SupplierFulfillmentOrderFilter {
+            view: Some("actionable".into()),
+            ..SupplierFulfillmentOrderFilter::default()
+        };
+        let encoded = filter.to_doc().to_string();
+        assert!(encoded.contains("RESULT_UNKNOWN"));
+        assert!(encoded.contains("CANCEL_PENDING"));
+        assert!(encoded.contains("REFUND_PENDING"));
+    }
+
+    #[test]
+    fn order_filter_keeps_follow_up_and_handler_axes_separate() {
+        let filter = SupplierFulfillmentOrderFilter {
+            follow_up_user_ids: Some(vec!["buyer-1".into()]),
+            handler_order_ids: Some(vec!["order-w26".into()]),
+            ..SupplierFulfillmentOrderFilter::default()
+        };
+        let encoded = filter.to_doc().to_string();
+        assert!(encoded.contains("follow_up_user_id"));
+        assert!(encoded.contains("buyer-1"));
+        assert!(encoded.contains("order-w26"));
+        assert!(!encoded.contains("owner_user_id"));
+        assert!(!encoded.contains("handler_user_id"));
+    }
+
+    #[test]
+    fn empty_handler_order_ids_compile_to_no_results() {
+        let filter = SupplierFulfillmentOrderFilter {
+            handler_order_ids: Some(Vec::new()),
+            ..SupplierFulfillmentOrderFilter::default()
+        };
+        assert!(!filter.to_doc().get_bool("$expr").expect("empty handler ids compile to false"));
     }
 
     #[test]
@@ -1284,16 +1409,7 @@ mod keyword_regression_tests {
     use super::*;
     #[test]
     fn keyword_preserves_structural_scope() {
-        let mut filter = SupplierFulfillmentOrderFilter {
-            q: None,
-            supplier_id: None,
-            fulfillment_status: None,
-            external_order_no: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        };
+        let mut filter = SupplierFulfillmentOrderFilter::default();
 
         filter.q = Some("ERP.[1]".into());
         filter.external_order_no = Some("external".into());

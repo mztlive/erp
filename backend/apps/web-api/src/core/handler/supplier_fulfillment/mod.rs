@@ -12,12 +12,14 @@ use erp_processes::supply_execution::dto::{
 };
 use erp_read_models::supplier_center::fulfillment_dto::SupplierFulfillmentOrderDetailView;
 use erp_supply::dto::supplier_fulfillment::{
-    PageView, PlaceFulfillmentOrderRequest, RecordRefundResultRequest, RecordSupplierRejectRequest,
+    FulfillmentHandoverCandidateView, HandoverFulfillmentOrderRequest, HandoverFulfillmentOrderView,
+    PlaceFulfillmentOrderRequest, RecordRefundResultRequest, RecordSupplierRejectRequest,
     SubmitActionResultView, SubmitAfterSalesActionRequest, SupplierFulfillmentOrderDetailParams,
-    SupplierFulfillmentOrderListParams, SupplierFulfillmentOrderView,
+    SupplierFulfillmentOrderListParams, SupplierFulfillmentOrderListView, SupplierFulfillmentOrderView,
     SupplierOrderObjectInvestigationCommand, SupplierOrderStatusHistoryView,
     SupplierOrderTaskCompletionCommand, SupplierOrderTaskInvestigationCommand, SupplierRefundFactView,
 };
+use persistence_core::NoTransaction;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
@@ -40,9 +42,10 @@ use crate::core::response::ApiResponse;
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn supplier_fulfillment_order_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierFulfillmentOrderListParams>,
-) -> Result<PageView<SupplierFulfillmentOrderView>> {
-    let page = state.supplier_fulfillment_service().supplier_fulfillment_order_list(&params).await?;
+) -> Result<SupplierFulfillmentOrderListView> {
+    let page = state.supplier_fulfillment_process().supplier_fulfillment_order_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -70,6 +73,10 @@ pub async fn supplier_fulfillment_order_detail(
     Path(id): Path<String>,
     Query(params): Query<SupplierFulfillmentOrderDetailParams>,
 ) -> Result<SupplierFulfillmentOrderDetailView> {
+    state
+        .supplier_fulfillment_process()
+        .require_scoped_order(&id, &actor, "detail", &mut NoTransaction)
+        .await?;
     let view = erp_read_models::supplier_center::SupplierFulfillmentDetailReadService::new(
         state.db(),
         state.supplier_fulfillment_service(),
@@ -270,5 +277,40 @@ pub async fn supplier_refund_fact_post(
 ) -> Result<SupplierRefundFactView> {
     let view = state.supplier_fulfillment_process().record_refund_result(&id, req, &actor).await?;
 
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商订单",
+    group_desc = "供应商履约订单、动作与退款事实管理",
+    desc = "交接供应商履约订单跟进人",
+    resource = "supplier_fulfillment_order",
+    action = "handover"
+)]
+/// 显式交接内部跟进人；是否转交开放 W26 任务由命令声明。
+pub async fn supplier_fulfillment_order_handover(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<HandoverFulfillmentOrderRequest>,
+) -> Result<HandoverFulfillmentOrderView> {
+    let view = state.supplier_fulfillment_process().handover_fulfillment_order(&id, req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商订单",
+    group_desc = "供应商履约订单、动作与退款事实管理",
+    desc = "查询供应商履约订单交接待选目标",
+    resource = "supplier_fulfillment_order",
+    action = "handover"
+)]
+/// 查询当前订单可交接的合格内部人员。
+pub async fn supplier_fulfillment_order_handover_candidates(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<Vec<FulfillmentHandoverCandidateView>> {
+    let view = state.supplier_fulfillment_process().handover_candidates(&id, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }

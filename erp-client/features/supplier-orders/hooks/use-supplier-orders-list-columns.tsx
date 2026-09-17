@@ -115,6 +115,32 @@ export function useSupplierOrdersListColumns({
                 ),
             },
             {
+                id: "followUp",
+                header: "跟进人",
+                meta: { label: "跟进人", width: "default" },
+                enableSorting: false,
+                cell: ({ row }) => (
+                    <span className="truncate text-[13px]">
+                        {row.original.followUpUserName ||
+                            row.original.followUpUserId ||
+                            "—"}
+                    </span>
+                ),
+            },
+            {
+                id: "handler",
+                header: "异常处理人",
+                meta: { label: "异常处理人", width: "default" },
+                enableSorting: false,
+                cell: ({ row }) => (
+                    <span className="truncate text-[13px]">
+                        {row.original.handlerUserName ||
+                            row.original.handlerUserId ||
+                            "—"}
+                    </span>
+                ),
+            },
+            {
                 id: "external",
                 accessorKey: "externalOrderNo",
                 header: "外部单号",

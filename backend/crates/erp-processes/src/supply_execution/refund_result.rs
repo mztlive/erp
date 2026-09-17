@@ -43,7 +43,7 @@ impl SupplierFulfillmentProcess {
         actor: &AuditActor,
     ) -> Result<SupplierRefundFactView> {
         req.validate()?;
-        let mut order = self.load_order(id).await?;
+        let mut order = self.require_scoped_order(id, actor, "refund", &mut NoTransaction).await?;
         let connection_id = order.connection_id.clone();
         if let Some(existing) = self
             .db

@@ -29,7 +29,10 @@ mod complete;
 mod dispatch_writes;
 pub mod dto;
 mod execution;
+mod follow_up;
+mod handover;
 mod investigate;
+mod list;
 mod place;
 mod receipt;
 mod refund;
@@ -43,6 +46,7 @@ use std::sync::Arc;
 use erp_supply::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use erp_supply::ports::supplier_gateway::SupplierGateway;
 use erp_supply::service::supplier_fulfillment::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
+use erp_supply::{FulfillmentExceptionHandlerPort, FulfillmentOrderDataScopePort};
 use mongodb::Database;
 
 use crate::Result;
@@ -53,6 +57,8 @@ use crate::Result;
 pub struct SupplierFulfillmentProcess {
     db: Database,
     gateway: Arc<dyn SupplierGateway>,
+    data_scope: Arc<dyn FulfillmentOrderDataScopePort>,
+    handlers: Arc<dyn FulfillmentExceptionHandlerPort>,
 }
 impl SupplierFulfillmentProcess {
     /// 创建供应商履约服务实例。
@@ -60,17 +66,39 @@ impl SupplierFulfillmentProcess {
     /// # 参数
     /// * `db` - 数据库实例
     /// * `gateway` - 供应商动作派发网关（真实 Connector 接入点，只在事务外调用）
+    /// * `data_scope` - 履约订单范围 Port
+    /// * `handlers` - 当前开放 W26 处理人 Port
     ///
     /// # 返回
     /// 返回服务实例。
     /// 构造时不读取、授权或调用供应商。
-    pub fn new(db: Database, gateway: Arc<dyn SupplierGateway>) -> Self {
-        Self { db, gateway }
+    pub fn new(
+        db: Database,
+        gateway: Arc<dyn SupplierGateway>,
+        data_scope: Arc<dyn FulfillmentOrderDataScopePort>,
+        handlers: Arc<dyn FulfillmentExceptionHandlerPort>,
+    ) -> Self {
+        Self { db, gateway, data_scope, handlers }
     }
     fn domain(&self) -> SupplierFulfillmentService {
         SupplierFulfillmentService::new(self.db.clone())
+            .with_scope(self.data_scope.clone(), self.handlers.clone())
     }
     async fn load_order(&self, id: &str) -> Result<SupplierFulfillmentOrder> {
         Ok(self.domain().load_order(id).await?)
+    }
+
+    /// 按动作重验订单范围；当前开放 W26 处理人可处理非跟进人任务。
+    pub async fn require_scoped_order(
+        &self,
+        id: &str,
+        actor: &application_core::AuditActor,
+        action: &str,
+        executor: &mut dyn persistence_core::Executor,
+    ) -> Result<SupplierFulfillmentOrder> {
+        let handlers =
+            self.handlers.open_handler_user_ids(std::slice::from_ref(&id.to_string()), executor).await?;
+        let handler = handlers.get(id).map(String::as_str);
+        Ok(self.domain().access().require_order(actor, action, id, handler, executor).await?)
     }
 }

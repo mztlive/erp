@@ -71,6 +71,11 @@ const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     ("supplier", &["list", "detail", "create", "update", "delete"], &[ScopeDimension::InternalOrg]),
     ("product", &["list", "detail", "create", "update"], &[ScopeDimension::InternalOrg]),
     ("supplier_offering", &["list", "create", "update"], &[ScopeDimension::InternalOrg]),
+    (
+        "supplier_fulfillment_order",
+        &["list", "detail", "investigate", "complete", "submit", "cancel", "refund", "reject", "handover"],
+        &[ScopeDimension::InternalOrg],
+    ),
 ];
 
 /// 已接线消费者的资源动作登记。

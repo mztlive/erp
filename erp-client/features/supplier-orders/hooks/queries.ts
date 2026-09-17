@@ -7,7 +7,9 @@ import {
     completeSupplierOrderTask,
     createSupplierOrderExportJob,
     fetchSupplierOrderDetail,
+    fetchFulfillmentHandoverCandidates,
     fetchSupplierOrders,
+    handoverFulfillmentOrder,
     querySupplierResult,
     replaySupplierOrder,
     revealSupplierOrderAddress,
@@ -27,9 +29,29 @@ const supplierOrderKeys = {
 }
 
 export function useSupplierOrdersQuery(query: SupplierOrderListQuery) {
+    const client = useQueryClient()
+    const firstPage = { ...query, page: 1, scopeVersion: undefined }
+    const baseline = client.getQueryData<
+        Awaited<ReturnType<typeof fetchSupplierOrders>>
+    >(supplierOrderKeys.list(firstPage))
+    const scopeVersion =
+        query.scopeVersion ??
+        (query.page > 1 ? baseline?.scopeVersion : undefined)
+    const scoped = { ...query, scopeVersion }
     return useQuery({
-        queryKey: supplierOrderKeys.list(query),
-        queryFn: () => fetchSupplierOrders(query),
+        queryKey: supplierOrderKeys.list(scoped),
+        queryFn: async () => {
+            if (query.page === 1 || scopeVersion)
+                return fetchSupplierOrders(scoped)
+            const first = await client.fetchQuery({
+                queryKey: supplierOrderKeys.list(firstPage),
+                queryFn: () => fetchSupplierOrders(firstPage),
+            })
+            return fetchSupplierOrders({
+                ...query,
+                scopeVersion: first.scopeVersion,
+            })
+        },
     })
 }
 
@@ -119,6 +141,33 @@ export function useAddNoteMutation() {
         mutationFn: addCollaborationNote,
         onSuccess: async (result) => {
             if (result.status === "succeeded") await invalidate()
+        },
+    })
+}
+
+export function useFulfillmentHandoverCandidatesQuery(orderId: string) {
+    return useQuery({
+        queryKey: [...supplierOrderKeys.all, "handover-candidates", orderId],
+        queryFn: () => fetchFulfillmentHandoverCandidates(orderId),
+        enabled: Boolean(orderId),
+    })
+}
+
+export function useHandoverFulfillmentOrderMutation() {
+    const invalidate = useInvalidateOrders()
+    return useMutation({
+        mutationFn: (input: {
+            orderId: string
+            targetUserId: string
+            targetOrgUnitId?: string
+            reason: string
+            expectedVersion: number
+            idempotencyKey: string
+            transferOpenExceptionTasks?: boolean
+        }) => handoverFulfillmentOrder(input.orderId, input),
+        meta: { affectsDataScope: true },
+        onSuccess: async () => {
+            await invalidate()
         },
     })
 }

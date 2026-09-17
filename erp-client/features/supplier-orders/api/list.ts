@@ -1,6 +1,6 @@
 /**
  * W26 供应商订单 · 列表查询端点。
- * 后端未提供 view/actionable 筛选，客户端按视图投影。
+ * 视图、取消/退款与人员筛选全部由服务端求交，禁止客户端假分页。
  */
 
 import { apiGet, type Page } from "@/lib/api"
@@ -16,11 +16,28 @@ import {
 } from "./mapping"
 import type { BackendOrder } from "./wire-types"
 
+type ListEnvelope = Page<BackendOrder> & {
+    empty_reason?: string | null
+    scope_version?: string
+    ownership_basis?: string
+    owner_options?: { value: string; label: string }[]
+    handler_options?: { value: string; label: string }[]
+    as_of?: string
+}
+
+function optionLabel(
+    id: string | undefined,
+    options: ReadonlyArray<{ value: string; label: string }>,
+): string | undefined {
+    if (!id) return undefined
+    return options.find((option) => option.value === id)?.label
+}
+
 export async function fetchSupplierOrders(
     query: SupplierOrderListQuery,
 ): Promise<SupplierOrderListResult> {
     const now = new Date().toISOString()
-    const pageRes = await apiGet<Page<BackendOrder>>(
+    const pageRes = await apiGet<ListEnvelope>(
         "/admin/supplier-fulfillment-orders",
         {
             page: query.page,
@@ -30,45 +47,45 @@ export async function fetchSupplierOrders(
             cancel_status: query.cancelStatuses?.[0],
             refund_status: query.refundStatuses?.[0],
             q: query.q?.trim() || undefined,
+            view: query.view,
+            aftersale_pending: query.aftersalePending || undefined,
+            owner_user_ids: query.ownerUserIds || undefined,
+            handler_user_ids: query.handlerUserIds || undefined,
+            org_unit_ids: query.orgUnitIds || undefined,
+            include_descendants:
+                query.orgUnitIds && query.includeDescendants ? true : undefined,
+            scope_version: query.scopeVersion,
             sort_by:
                 query.sortBy === "lastBusinessAt" ? "created_at" : "created_at",
             sort_dir: query.sortDir ?? "desc",
         },
     )
 
-    let rows = (pageRes.items ?? []).map((o) => mapListRow(o))
-
-    // 客户端视图投影（后端未提供 view/actionable 筛选）
-    if (query.view === "actionable") {
-        rows = rows.filter(
-            (r) =>
-                r.fulfillmentStatus === "RESULT_UNKNOWN" ||
-                r.fulfillmentStatus === "EXCEPTION" ||
-                r.fulfillmentStatus === "REJECTED" ||
-                r.fulfillmentStatus === "SUBMITTING" ||
-                r.fulfillmentStatus === "RECEIVED" ||
-                r.cancelStatus === "FAILED" ||
-                r.cancelStatus === "MANUAL" ||
-                r.cancelStatus === "CANCEL_PENDING" ||
-                r.refundStatus === "REFUND_FAILED" ||
-                r.refundStatus === "MANUAL" ||
-                r.refundStatus === "REFUND_PENDING",
-        )
-    } else if (query.view === "recent_completed") {
-        rows = rows.filter((r) => r.fulfillmentStatus === "COMPLETED")
-    }
+    const ownerOptions = pageRes.owner_options ?? []
+    const handlerOptions = pageRes.handler_options ?? []
+    const rows = (pageRes.items ?? []).map((order) => {
+        const row = mapListRow(order)
+        row.followUpUserName = optionLabel(row.followUpUserId, ownerOptions)
+        row.handlerUserName = optionLabel(row.handlerUserId, handlerOptions)
+        return row
+    })
 
     return {
         rows,
         pageInfo: {
             page: pageRes.page ?? query.page,
             pageSize: pageRes.page_size ?? query.pageSize,
-            total: pageRes.total ?? rows.length,
+            total: pageRes.total ?? 0,
         },
         metrics: emptyMetrics(),
         permissionVersion: PERMISSION_VERSION,
-        sourceAsOf: now,
+        sourceAsOf: pageRes.as_of ?? now,
         queriedAt: now,
-        filterSummary: filterSummary(query, pageRes.total ?? rows.length),
+        filterSummary: filterSummary(query, pageRes.total ?? 0),
+        emptyReason: pageRes.empty_reason,
+        scopeVersion: pageRes.scope_version,
+        ownershipBasis: pageRes.ownership_basis,
+        ownerOptions,
+        handlerOptions,
     }
 }

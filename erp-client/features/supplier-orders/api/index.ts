@@ -7,6 +7,10 @@
  */
 
 export { fetchSupplierOrders } from "./list"
+export {
+    fetchFulfillmentHandoverCandidates,
+    handoverFulfillmentOrder,
+} from "./handover"
 export { fetchSupplierOrderDetail } from "./detail"
 export { querySupplierResult, replaySupplierOrder } from "./investigations"
 export { completeSupplierOrderTask } from "./task-completions"

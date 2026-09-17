@@ -11,6 +11,9 @@ import {
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { DatePicker } from "@/components/ui/date-picker"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import type {
     SupplierOrdersFilterKey,
@@ -38,6 +41,9 @@ const MORE_CHIP_KEYS: readonly SupplierOrdersFilterKey[] = [
     "refundStatuses",
     "paidRange",
     "aftersalePending",
+    "ownerUserIds",
+    "handlerUserIds",
+    "orgUnitIds",
 ]
 
 export function SupplierOrdersListToolbar({
@@ -46,12 +52,16 @@ export function SupplierOrdersListToolbar({
     resultCount,
     loading,
     failed,
+    ownerOptions = [],
+    handlerOptions = [],
 }: {
     searchInputRef: React.RefObject<HTMLInputElement | null>
     filters: ReturnType<typeof useSupplierOrdersFilters>
     resultCount?: number
     loading: boolean
     failed: boolean
+    ownerOptions?: ReadonlyArray<{ value: string; label: string }>
+    handlerOptions?: ReadonlyArray<{ value: string; label: string }>
 }) {
     const moreCount = f.appliedChips.filter(({ key }) =>
         MORE_CHIP_KEYS.includes(key),
@@ -204,6 +214,56 @@ export function SupplierOrdersListToolbar({
                                     aria-label="退款状态"
                                     placeholder="全部退款状态"
                                 />
+                            </ListWorkspaceFilterField>
+                        </div>
+                    </fieldset>
+                    <fieldset className="min-w-0">
+                        <legend className="mb-3 text-xs font-medium">
+                            跟进人与异常处理人
+                        </legend>
+                        <div className="grid min-w-0 gap-3">
+                            <ResponsibleUserFilter
+                                id={`${prefix}-owner`}
+                                label="跟进人"
+                                value={f.ownerUserIdsDraft}
+                                onChange={f.setOwnerUserIdsDraft}
+                                options={ownerOptions}
+                            />
+                            <ResponsibleUserFilter
+                                id={`${prefix}-handler`}
+                                label="异常处理人"
+                                value={f.handlerUserIdsDraft}
+                                onChange={f.setHandlerUserIdsDraft}
+                                options={handlerOptions}
+                            />
+                            <ListWorkspaceFilterField
+                                htmlFor={`${prefix}-org`}
+                                label="业务组织"
+                            >
+                                <Input
+                                    id={`${prefix}-org`}
+                                    value={f.orgUnitIdsDraft}
+                                    onChange={(event) =>
+                                        f.setOrgUnitIdsDraft(event.target.value)
+                                    }
+                                    placeholder="组织 ID，逗号分隔"
+                                    aria-label="按订单业务组织筛选"
+                                />
+                                <label
+                                    htmlFor={`${prefix}-org-descendants`}
+                                    className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                                >
+                                    <Checkbox
+                                        id={`${prefix}-org-descendants`}
+                                        checked={f.includeDescendantsDraft}
+                                        onCheckedChange={(checked) =>
+                                            f.setIncludeDescendantsDraft(
+                                                checked === true,
+                                            )
+                                        }
+                                    />
+                                    包含下级组织
+                                </label>
                             </ListWorkspaceFilterField>
                         </div>
                     </fieldset>

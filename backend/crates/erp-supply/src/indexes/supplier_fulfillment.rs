@@ -87,6 +87,14 @@ fn supplier_fulfillment_order_indexes() -> Vec<IndexModel> {
             "idx_supplier_fulfillment_orders_supplier_completed",
             doc! { "supplier_id": 1, "completed_at": 1 },
         ),
+        named_index(
+            "idx_supplier_fulfillment_orders_follow_up_created",
+            doc! { "follow_up_user_id": 1, "created_at": -1, "id": -1 },
+        ),
+        named_index(
+            "idx_supplier_fulfillment_orders_org_created",
+            doc! { "business_org_unit_id": 1, "created_at": -1, "id": -1 },
+        ),
     ]
 }
 
@@ -218,6 +226,16 @@ mod tests {
             index.keys == doc! { "supplier_id": 1, "fulfillment_status": 1, "created_at": -1 }
         }));
         assert!(indexes.iter().any(|index| index.keys == doc! { "external_order_no": 1 }));
+        assert!(
+            indexes
+                .iter()
+                .any(|index| { index.keys == doc! { "follow_up_user_id": 1, "created_at": -1, "id": -1 } })
+        );
+        assert!(
+            indexes.iter().any(|index| {
+                index.keys == doc! { "business_org_unit_id": 1, "created_at": -1, "id": -1 }
+            })
+        );
     }
 
     #[test]

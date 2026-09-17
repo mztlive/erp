@@ -117,6 +117,9 @@ export function mapListRow(o: BackendOrder): SupplierOrderListRow {
         paidAt: tsToIso(o.created_at),
         updatedAt: lastBusinessAt,
         lastBusinessAt,
+        followUpUserId: o.follow_up_user_id ?? undefined,
+        handlerUserId: o.handler_user_id ?? undefined,
+        businessOrgUnitId: o.business_org_unit_id ?? undefined,
         itemCount: 0,
         allowedActions: ["OPEN_CENTER", "NOTE"],
         actionBlockers: [

@@ -28,6 +28,8 @@ const EXTERNAL_ORDER_NO_MAX_LEN: usize = 64;
 const ADDRESS_ENCRYPTED_MAX_LEN: usize = 8192;
 /// 履约地址快照 HMAC 查询指纹最大长度。
 const ADDRESS_FINGERPRINT_MAX_LEN: usize = 128;
+/// 跟进人与业务组织标识最大长度。
+const RESPONSIBILITY_ID_MAX_LEN: usize = 128;
 
 /// 供应商子订单创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -58,6 +60,12 @@ pub struct SupplierFulfillmentOrderData {
     pub address_snapshot_encrypted: String,
     /// 履约地址快照带密钥 HMAC 查询指纹（§4.5.5，禁止裸摘要）。
     pub address_snapshot_fingerprint: String,
+    /// 内部跟进人；创建必须解析合格内部人员。
+    #[serde(default)]
+    pub follow_up_user_id: String,
+    /// 当前业务组织；禁止写入公司根。
+    #[serde(default)]
+    pub business_org_unit_id: String,
 }
 
 impl SupplierFulfillmentOrderData {
@@ -106,7 +114,30 @@ impl SupplierFulfillmentOrderData {
             completed_at: None,
             address_snapshot_encrypted: address_snapshot_encrypted.into(),
             address_snapshot_fingerprint: address_snapshot_fingerprint.into(),
+            follow_up_user_id: String::new(),
+            business_org_unit_id: String::new(),
         }
+    }
+
+    /// 写入创建时解析出的内部跟进人及其主属组织。
+    ///
+    /// # 参数
+    /// * `follow_up_user_id` - 合格内部人员
+    /// * `business_org_unit_id` - 该人员主属组织
+    ///
+    /// # 返回
+    /// 返回带责任事实的创建数据。
+    ///
+    /// # 错误
+    /// 无；空值由 `SupplierFulfillmentOrder::new` 与创建命令阻断。
+    pub fn with_follow_up(
+        mut self,
+        follow_up_user_id: impl Into<String>,
+        business_org_unit_id: impl Into<String>,
+    ) -> Self {
+        self.follow_up_user_id = follow_up_user_id.into();
+        self.business_org_unit_id = business_org_unit_id.into();
+        self
     }
 }
 
@@ -151,6 +182,12 @@ pub struct SupplierFulfillmentOrder {
     pub address_snapshot_encrypted: String,
     /// 履约地址快照 HMAC 查询指纹。
     pub address_snapshot_fingerprint: String,
+    /// 内部跟进人。
+    #[serde(default)]
+    pub follow_up_user_id: String,
+    /// 当前业务组织。
+    #[serde(default)]
+    pub business_org_unit_id: String,
 }
 
 impl SupplierFulfillmentOrder {
@@ -195,6 +232,13 @@ impl SupplierFulfillmentOrder {
             data.accepted_at,
             data.completed_at,
         )?;
+        let follow_up_user_id = normalize_optional_text(
+            Some(data.follow_up_user_id).filter(|value| !value.trim().is_empty()),
+            "内部跟进人",
+            RESPONSIBILITY_ID_MAX_LEN,
+        )?
+        .unwrap_or_default();
+        let business_org_unit_id = normalize_org_unit(data.business_org_unit_id)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -211,6 +255,8 @@ impl SupplierFulfillmentOrder {
             completed_at: data.completed_at,
             address_snapshot_encrypted,
             address_snapshot_fingerprint,
+            follow_up_user_id,
+            business_org_unit_id,
         })
     }
 
@@ -425,6 +471,74 @@ impl SupplierFulfillmentOrder {
             && action.status == SupplierOrderActionStatus::ResultUnknown
             && self.fulfillment_status == FulfillmentStatus::ResultUnknown
     }
+
+    /// 判断订单是否已具备内部跟进人与非公司业务组织。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 跟进人与业务组织均已写入且组织不是公司根时为 true。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn has_follow_up(&self) -> bool {
+        !self.follow_up_user_id.trim().is_empty()
+            && !self.business_org_unit_id.trim().is_empty()
+            && !is_company_org(&self.business_org_unit_id)
+    }
+
+    /// 创建或写命令前阻断缺少跟进人的订单。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 责任事实完整时成功。
+    ///
+    /// # 错误
+    /// 缺跟进人或业务组织为公司根时拒绝。
+    pub fn ensure_follow_up(&self) -> Result<()> {
+        if self.has_follow_up() {
+            return Ok(());
+        }
+        Err(Error::from("供应商订单缺少内部跟进人或有效主属组织，禁止用系统账号或派发人兜底"))
+    }
+
+    /// 显式交接内部跟进人与可选业务组织。
+    ///
+    /// 业务组织不随接收人部门隐式变化；`None` 表示保留原组织。
+    ///
+    /// # 参数
+    /// * `target_user_id` - 目标跟进人
+    /// * `target_org_unit_id` - 显式目标组织；`None` 保留原组织
+    ///
+    /// # 返回
+    /// 责任确有变化时返回 `true`。
+    ///
+    /// # 错误
+    /// 目标为空、组织为公司根或与当前完全一致时拒绝。
+    pub fn handover(&mut self, target_user_id: String, target_org_unit_id: Option<String>) -> Result<bool> {
+        let target = normalize_required_text(
+            target_user_id,
+            "目标跟进人不能为空",
+            RESPONSIBILITY_ID_MAX_LEN,
+            "目标跟进人过长",
+        )?;
+        let next_org = match target_org_unit_id {
+            Some(org) => normalize_org_unit(org)?,
+            None => self.business_org_unit_id.clone(),
+        };
+        if next_org.is_empty() || is_company_org(&next_org) {
+            return Err(Error::from("目标业务组织不能为空或公司根"));
+        }
+        if target == self.follow_up_user_id && next_org == self.business_org_unit_id {
+            return Err(Error::from("目标已是当前跟进人，无需交接"));
+        }
+        self.follow_up_user_id = target;
+        self.business_org_unit_id = next_org;
+        Ok(true)
+    }
 }
 
 impl fmt::Debug for SupplierFulfillmentOrder {
@@ -445,6 +559,8 @@ impl fmt::Debug for SupplierFulfillmentOrder {
             .field("submitted_at", &self.submitted_at)
             .field("accepted_at", &self.accepted_at)
             .field("completed_at", &self.completed_at)
+            .field("follow_up_user_id", &self.follow_up_user_id)
+            .field("business_org_unit_id", &self.business_org_unit_id)
             .field("address_snapshot_encrypted", &"<redacted>")
             .field("address_snapshot_fingerprint", &"<redacted>")
             .finish()
@@ -478,6 +594,25 @@ fn ensure_timestamp_consistency(
         return Err(Error::from("已完成状态 completed_at 必填"));
     }
     Ok(())
+}
+
+/// 规范化业务组织；公司根一律拒绝。
+fn normalize_org_unit(value: String) -> Result<String> {
+    let org = normalize_optional_text(
+        Some(value).filter(|item| !item.trim().is_empty()),
+        "业务组织",
+        RESPONSIBILITY_ID_MAX_LEN,
+    )?
+    .unwrap_or_default();
+    if is_company_org(&org) {
+        return Err(Error::from("业务组织不能为公司根"));
+    }
+    Ok(org)
+}
+
+/// 判断组织 ID 是否为禁止写入的公司根。
+fn is_company_org(org: &str) -> bool {
+    org.eq_ignore_ascii_case("company")
 }
 
 /// 计算敏感值的带密钥 HMAC 查询指纹（数据模型 §4.5.5，禁止裸摘要）。
@@ -522,6 +657,8 @@ mod tests {
             completed_at: None,
             address_snapshot_encrypted: "encrypted-address".to_string(),
             address_snapshot_fingerprint: "fingerprint-address".to_string(),
+            follow_up_user_id: String::new(),
+            business_org_unit_id: String::new(),
         }
     }
 
@@ -744,6 +881,27 @@ mod tests {
 
         let other_key = fingerprint("上海市浦东新区世纪大道 100 号", b"key-2");
         assert_ne!(first, other_key, "不同密钥必须产生不同指纹");
+    }
+
+    #[test]
+    fn missing_follow_up_blocks_commands_and_company_org_is_rejected() {
+        let order = sample_order();
+        assert!(!order.has_follow_up());
+        assert!(order.ensure_follow_up().is_err());
+        let company = SupplierFulfillmentOrderData {
+            follow_up_user_id: "buyer-1".into(),
+            business_org_unit_id: "company".into(),
+            ..sample_data()
+        };
+        assert!(
+            SupplierFulfillmentOrder::new(SupplierFulfillmentOrderId::new("order-company"), company).is_err()
+        );
+        let mut assigned = sample_order();
+        assigned.handover("buyer-1".into(), Some("org-procurement".into())).unwrap();
+        assigned.ensure_follow_up().unwrap();
+        assert_eq!(assigned.follow_up_user_id, "buyer-1");
+        assert_eq!(assigned.business_org_unit_id, "org-procurement");
+        assert!(assigned.handover("buyer-1".into(), None).is_err());
     }
 
     #[test]

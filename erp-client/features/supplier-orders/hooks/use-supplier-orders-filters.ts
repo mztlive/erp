@@ -24,6 +24,9 @@ export type SupplierOrdersFilterKey =
     | "refundStatuses"
     | "aftersalePending"
     | "paidRange"
+    | "ownerUserIds"
+    | "handlerUserIds"
+    | "orgUnitIds"
 
 export type SupplierOrdersAppliedChip = Readonly<{
     key: SupplierOrdersFilterKey
@@ -70,7 +73,10 @@ export function useSupplierOrdersFilters(
         url.refundStatuses?.length ||
         url.aftersalePending ||
         url.paidFrom ||
-        url.paidTo,
+        url.paidTo ||
+        url.ownerUserIds ||
+        url.handlerUserIds ||
+        url.orgUnitIds,
     )
     /** 结构化条件：不含 q。 */
     const hasStructuredFilters = Boolean(
@@ -80,7 +86,10 @@ export function useSupplierOrdersFilters(
         url.refundStatuses?.length ||
         url.aftersalePending ||
         url.paidFrom ||
-        url.paidTo,
+        url.paidTo ||
+        url.ownerUserIds ||
+        url.handlerUserIds ||
+        url.orgUnitIds,
     )
     /** 更多面板初始展开只认非常用条件。 */
     const hasMoreFilters = Boolean(
@@ -88,7 +97,10 @@ export function useSupplierOrdersFilters(
         url.refundStatuses?.length ||
         url.aftersalePending ||
         url.paidFrom ||
-        url.paidTo,
+        url.paidTo ||
+        url.ownerUserIds ||
+        url.handlerUserIds ||
+        url.orgUnitIds,
     )
 
     const { searchDraft, setSearchDraft } = useSupplierOrdersSearchDraft({
@@ -113,6 +125,17 @@ export function useSupplierOrdersFilters(
     )
     const [paidFromDraft, setPaidFromDraft] = React.useState(url.paidFrom ?? "")
     const [paidToDraft, setPaidToDraft] = React.useState(url.paidTo ?? "")
+    const [ownerUserIdsDraft, setOwnerUserIdsDraft] = React.useState(
+        url.ownerUserIds ?? "",
+    )
+    const [handlerUserIdsDraft, setHandlerUserIdsDraft] = React.useState(
+        url.handlerUserIds ?? "",
+    )
+    const [orgUnitIdsDraft, setOrgUnitIdsDraft] = React.useState(
+        url.orgUnitIds ?? "",
+    )
+    const [includeDescendantsDraft, setIncludeDescendantsDraft] =
+        React.useState(Boolean(url.includeDescendants))
 
     const [panelOpen, setPanelOpen] = React.useState(hasMoreFilters)
     const [filterError, setFilterError] = React.useState<string | null>(null)
@@ -153,6 +176,10 @@ export function useSupplierOrdersFilters(
             aftersalePending: aftersalePendingDraft || undefined,
             paidFrom: from || undefined,
             paidTo: to || undefined,
+            ownerUserIds: ownerUserIdsDraft.trim() || undefined,
+            handlerUserIds: handlerUserIdsDraft.trim() || undefined,
+            orgUnitIds: orgUnitIdsDraft.trim() || undefined,
+            includeDescendants: includeDescendantsDraft || undefined,
             page: 1,
         })
         setPanelOpen(false)
@@ -160,6 +187,10 @@ export function useSupplierOrdersFilters(
         aftersalePendingDraft,
         cancelStatusesDraft,
         fulfillmentStatusesDraft,
+        handlerUserIdsDraft,
+        includeDescendantsDraft,
+        orgUnitIdsDraft,
+        ownerUserIdsDraft,
         paidFromDraft,
         paidToDraft,
         refundStatusesDraft,
@@ -177,6 +208,12 @@ export function useSupplierOrdersFilters(
             if (key === "cancelStatuses") setCancelStatusesDraft([])
             if (key === "refundStatuses") setRefundStatusesDraft([])
             if (key === "aftersalePending") setAftersalePendingDraft(false)
+            if (key === "ownerUserIds") setOwnerUserIdsDraft("")
+            if (key === "handlerUserIds") setHandlerUserIdsDraft("")
+            if (key === "orgUnitIds") {
+                setOrgUnitIdsDraft("")
+                setIncludeDescendantsDraft(false)
+            }
             if (key === "paidRange") {
                 setPaidFromDraft("")
                 setPaidToDraft("")
@@ -191,7 +228,12 @@ export function useSupplierOrdersFilters(
             else if (key === "refundStatuses") patch.refundStatuses = undefined
             else if (key === "aftersalePending")
                 patch.aftersalePending = undefined
-            else if (key === "paidRange") {
+            else if (key === "ownerUserIds") patch.ownerUserIds = undefined
+            else if (key === "handlerUserIds") patch.handlerUserIds = undefined
+            else if (key === "orgUnitIds") {
+                patch.orgUnitIds = undefined
+                patch.includeDescendants = undefined
+            } else if (key === "paidRange") {
                 patch.paidFrom = undefined
                 patch.paidTo = undefined
             }
@@ -207,6 +249,10 @@ export function useSupplierOrdersFilters(
         setAftersalePendingDraft(false)
         setPaidFromDraft("")
         setPaidToDraft("")
+        setOwnerUserIdsDraft("")
+        setHandlerUserIdsDraft("")
+        setOrgUnitIdsDraft("")
+        setIncludeDescendantsDraft(false)
         setFilterError(null)
     }, [])
 
@@ -218,7 +264,11 @@ export function useSupplierOrdersFilters(
         !sameCodeList(refundStatusesDraft, url.refundStatuses) ||
         aftersalePendingDraft !== Boolean(url.aftersalePending) ||
         paidFromDraft.trim() !== (url.paidFrom ?? "") ||
-        paidToDraft.trim() !== (url.paidTo ?? "")
+        paidToDraft.trim() !== (url.paidTo ?? "") ||
+        ownerUserIdsDraft.trim() !== (url.ownerUserIds ?? "") ||
+        handlerUserIdsDraft.trim() !== (url.handlerUserIds ?? "") ||
+        orgUnitIdsDraft.trim() !== (url.orgUnitIds ?? "") ||
+        includeDescendantsDraft !== Boolean(url.includeDescendants)
 
     /** 清除全部：同时重置草稿、错误、面板与 URL 筛选参数；保留视图/排序/分页大小/导航上下文。 */
     const clearAllFilters = React.useCallback(() => {
@@ -230,6 +280,10 @@ export function useSupplierOrdersFilters(
         setAftersalePendingDraft(false)
         setPaidFromDraft("")
         setPaidToDraft("")
+        setOwnerUserIdsDraft("")
+        setHandlerUserIdsDraft("")
+        setOrgUnitIdsDraft("")
+        setIncludeDescendantsDraft(false)
         setFilterError(null)
         setPanelOpen(false)
         updateUrl({
@@ -241,6 +295,10 @@ export function useSupplierOrdersFilters(
             aftersalePending: undefined,
             paidFrom: undefined,
             paidTo: undefined,
+            ownerUserIds: undefined,
+            handlerUserIds: undefined,
+            orgUnitIds: undefined,
+            includeDescendants: undefined,
             page: 1,
         })
     }, [setSearchDraft, updateUrl])
@@ -292,12 +350,30 @@ export function useSupplierOrdersFilters(
                 label: `支付时间：${url.paidFrom ?? "不限"} 至 ${url.paidTo ?? "不限"}`,
             })
         }
+        if (url.ownerUserIds) {
+            chips.push({ key: "ownerUserIds", label: "跟进人已筛选" })
+        }
+        if (url.handlerUserIds) {
+            chips.push({ key: "handlerUserIds", label: "异常处理人已筛选" })
+        }
+        if (url.orgUnitIds) {
+            chips.push({
+                key: "orgUnitIds",
+                label: url.includeDescendants
+                    ? `业务组织（含下级）：${url.orgUnitIds}`
+                    : `业务组织：${url.orgUnitIds}`,
+            })
+        }
         return chips
     }, [
         selectedSupplierName,
         url.aftersalePending,
         url.cancelStatuses,
         url.fulfillmentStatuses,
+        url.handlerUserIds,
+        url.includeDescendants,
+        url.orgUnitIds,
+        url.ownerUserIds,
         url.paidFrom,
         url.paidTo,
         url.q,
@@ -315,11 +391,19 @@ export function useSupplierOrdersFilters(
         setAftersalePendingDraft(Boolean(url.aftersalePending))
         setPaidFromDraft(url.paidFrom ?? "")
         setPaidToDraft(url.paidTo ?? "")
+        setOwnerUserIdsDraft(url.ownerUserIds ?? "")
+        setHandlerUserIdsDraft(url.handlerUserIds ?? "")
+        setOrgUnitIdsDraft(url.orgUnitIds ?? "")
+        setIncludeDescendantsDraft(Boolean(url.includeDescendants))
         setFilterError(null)
     }, [
         url.aftersalePending,
         url.cancelStatuses,
         url.fulfillmentStatuses,
+        url.handlerUserIds,
+        url.includeDescendants,
+        url.orgUnitIds,
+        url.ownerUserIds,
         url.paidFrom,
         url.paidTo,
         url.refundStatuses,
@@ -349,6 +433,14 @@ export function useSupplierOrdersFilters(
         setPaidFromDraft,
         paidToDraft,
         setPaidToDraft,
+        ownerUserIdsDraft,
+        setOwnerUserIdsDraft,
+        handlerUserIdsDraft,
+        setHandlerUserIdsDraft,
+        orgUnitIdsDraft,
+        setOrgUnitIdsDraft,
+        includeDescendantsDraft,
+        setIncludeDescendantsDraft,
         panelOpen,
         setPanelOpen,
         filterError,

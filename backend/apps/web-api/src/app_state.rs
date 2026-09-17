@@ -418,7 +418,7 @@ impl AppState {
 
     /// 返回供应商履约的本域查询与持久化服务。
     pub fn supplier_fulfillment_service(&self) -> SupplierFulfillmentService {
-        SupplierFulfillmentService::new(self.db())
+        erp_processes::adapters::scoped_fulfillment_service(self.db(), self.rbac())
     }
 
     /// 返回已注入原网关的供应商履约跨域执行入口。
@@ -428,6 +428,8 @@ impl AppState {
         erp_processes::supply_execution::SupplierFulfillmentProcess::new(
             self.db(),
             Arc::clone(&self.external_connectors.supplier_fulfillment),
+            erp_processes::adapters::MongoFulfillmentOrderDataScope::shared(self.db(), self.rbac()),
+            erp_processes::adapters::MongoFulfillmentExceptionHandlers::shared(self.db()),
         )
     }
 

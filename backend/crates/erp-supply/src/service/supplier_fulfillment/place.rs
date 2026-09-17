@@ -94,6 +94,8 @@ impl SupplierFulfillmentService {
         &self,
         req: &PlaceFulfillmentOrderRequest,
         offerings: &HashMap<String, crate::entity::supplier_offering::SupplierOffering>,
+        follow_up_user_id: String,
+        business_org_unit_id: String,
     ) -> Result<(SupplierFulfillmentOrder, Vec<SupplierFulfillmentItem>, SupplierOrderAction)> {
         let order_id = SupplierFulfillmentOrderId::new(next_id());
         let order = SupplierFulfillmentOrder::new(
@@ -106,8 +108,10 @@ impl SupplierFulfillmentService {
                 Instant::now(),
                 req.address_snapshot_encrypted.clone(),
                 req.address_snapshot_fingerprint.clone(),
-            ),
+            )
+            .with_follow_up(follow_up_user_id, business_org_unit_id),
         )?;
+        order.ensure_follow_up().map_err(Error::from)?;
         let items = self.build_place_items(&order_id, req, offerings)?;
         let action = SupplierOrderAction::new(
             SupplierOrderActionId::new(next_id()),

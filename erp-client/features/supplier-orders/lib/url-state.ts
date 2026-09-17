@@ -32,6 +32,10 @@ export type SupplierOrdersUrlState = {
     sourceId?: string
     sort?: string
     dir?: "asc" | "desc"
+    ownerUserIds?: string
+    handlerUserIds?: string
+    orgUnitIds?: string
+    includeDescendants?: boolean
 }
 
 /** 列表页 URL 状态的部分更新（含 `page: 1` 等重置项） */
@@ -86,6 +90,10 @@ const codec = createUrlStateCodec<SupplierOrdersUrlState>([
     { key: "sourceId", type: "string" },
     { key: "sort", type: "string" },
     { key: "dir", type: "enum", values: ["asc", "desc"] },
+    { key: "ownerUserIds", type: "string" },
+    { key: "handlerUserIds", type: "string" },
+    { key: "orgUnitIds", type: "string" },
+    { key: "includeDescendants", type: "boolean", defaultValue: false },
 ])
 
 export const parseSupplierOrdersSearchParams = codec.parse

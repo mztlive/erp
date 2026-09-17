@@ -94,6 +94,22 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/supplier-fulfillment-orders/{id}/handover",
+            with_permission(
+                post(supplier_fulfillment::supplier_fulfillment_order_handover),
+                rbac,
+                supplier_fulfillment::supplier_fulfillment_order_handover_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-fulfillment-orders/{id}/handover-candidates",
+            with_permission(
+                get(supplier_fulfillment::supplier_fulfillment_order_handover_candidates),
+                rbac,
+                supplier_fulfillment::supplier_fulfillment_order_handover_candidates_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-refund-facts",
             with_permission(
                 post(supplier_fulfillment::supplier_refund_fact_post),

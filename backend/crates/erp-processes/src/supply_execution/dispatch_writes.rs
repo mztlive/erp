@@ -82,12 +82,8 @@ impl DispatchWrites for MongoWrites<'_> {
                     self.db.audit_logs().create(&audit, executor).await?;
                 }
             } else {
-                let work_item = super::work_item::create(
-                    self.work_item_id.clone(),
-                    self.order,
-                    work_item_type,
-                    self.actor.id(),
-                )?;
+                let work_item =
+                    super::work_item::create(self.work_item_id.clone(), self.order, work_item_type)?;
                 self.db.work_items().create(&work_item, executor).await?;
                 let audit = self.actor.clone().resource_log(
                     "supplier_fulfillment.work_item.create",

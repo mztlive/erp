@@ -8,14 +8,14 @@ use erp_workflow::entity::work_item::{
 
 use crate::Result;
 const W26_OWNER_ROLE: &str = "role-procurement";
-const W26_OWNER_ORGANIZATION: &str = "company";
 /// 在原创建分支与时点执行 WorkItem 构造校验；调用方预先生成身份。
 pub(super) fn create(
     work_item_id: WorkItemId,
     order: &SupplierFulfillmentOrder,
     work_item_type: WorkItemType,
-    actor_id: &str,
 ) -> Result<WorkItem> {
+    order.ensure_follow_up().map_err(crate::Error::from)?;
+    super::follow_up::reject_company_org(&order.business_org_unit_id)?;
     Ok(WorkItem::new(
         work_item_id,
         WorkItemData {
@@ -24,8 +24,8 @@ pub(super) fn create(
             business_object_id: order.base.id.clone(),
             subject_version: order.base.version.to_string(),
             owner_role: W26_OWNER_ROLE.to_string(),
-            owner_organization_id: W26_OWNER_ORGANIZATION.to_string(),
-            owner_user_id: actor_id.to_string(),
+            owner_organization_id: order.business_org_unit_id.clone(),
+            owner_user_id: order.follow_up_user_id.clone(),
             assignment_source: AssignmentSource::SystemRule,
             priority: WorkItemPriority::High,
             due_at: None,
@@ -63,6 +63,8 @@ mod tests {
                 completed_at: None,
                 address_snapshot_encrypted: "encrypted".to_string(),
                 address_snapshot_fingerprint: "fingerprint".to_string(),
+                follow_up_user_id: "buyer-1".to_string(),
+                business_org_unit_id: "org-procurement".to_string(),
             },
         )
         .unwrap()
@@ -75,15 +77,15 @@ mod tests {
             (WorkItemType::IntegrationResultUnknown, "SUPPLIER_RESULT_UNKNOWN"),
             (WorkItemType::BusinessException, "SUPPLIER_BUSINESS_EXCEPTION"),
         ] {
-            let task = create(WorkItemId::new("formal-1"), &order, kind, "actor-1").unwrap();
+            let task = create(WorkItemId::new("formal-1"), &order, kind).unwrap();
             assert_eq!(task.base.id, "formal-1");
             assert_eq!(task.business_object_type, "SUPPLIER_FULFILLMENT_ORDER");
             assert_eq!(task.business_object_id, "order-1");
             assert_eq!(task.subject_version, "7");
             assert_eq!(task.work_item_type, kind);
             assert_eq!(task.owner_role, "role-procurement");
-            assert_eq!(task.owner_organization_id, "company");
-            assert_eq!(task.owner_user_id.as_deref(), Some("actor-1"));
+            assert_eq!(task.owner_organization_id, "org-procurement");
+            assert_eq!(task.owner_user_id.as_deref(), Some("buyer-1"));
             assert_eq!(task.assignment_source, AssignmentSource::SystemRule);
             assert_eq!(task.priority, WorkItemPriority::High);
             assert_eq!(task.due_at, None);
@@ -92,10 +94,12 @@ mod tests {
         }
     }
     #[test]
-    fn w26_factory_keeps_work_item_validation_for_empty_personal_owner() {
-        assert!(
-            create(WorkItemId::new("formal-1"), &sample_order(), WorkItemType::BusinessException, "")
-                .is_err()
-        );
+    fn w26_factory_rejects_missing_follow_up_and_company_org() {
+        let mut missing = sample_order();
+        missing.follow_up_user_id.clear();
+        assert!(create(WorkItemId::new("formal-1"), &missing, WorkItemType::BusinessException).is_err());
+        let mut company = sample_order();
+        company.business_org_unit_id = "company".into();
+        assert!(create(WorkItemId::new("formal-2"), &company, WorkItemType::BusinessException).is_err());
     }
 }

@@ -213,6 +213,11 @@ export type SupplierOrderListQuery = {
     pageSize: number
     /** 售后待处理快捷筛选（与指标口径一致：取消/退款异常态任一命中） */
     aftersalePending?: boolean
+    ownerUserIds?: string
+    handlerUserIds?: string
+    orgUnitIds?: string
+    includeDescendants?: boolean
+    scopeVersion?: string
     sortBy?: "orderNo" | "externalOrderNo" | "lastBusinessAt"
     sortDir?: "asc" | "desc"
 }
@@ -236,6 +241,11 @@ export type SupplierOrderListRow = {
     updatedAt: string
     lastBusinessAt: string
     errorSummary?: string
+    followUpUserId?: string
+    followUpUserName?: string
+    handlerUserId?: string
+    handlerUserName?: string
+    businessOrgUnitId?: string
     /** 商品明细行数 */
     itemCount: number
     allowedActions: string[]
@@ -262,6 +272,11 @@ export type SupplierOrderListResult = {
     sourceAsOf: string
     queriedAt: string
     filterSummary: string
+    emptyReason?: string | null
+    scopeVersion?: string
+    ownershipBasis?: string
+    ownerOptions: ReadonlyArray<{ value: string; label: string }>
+    handlerOptions: ReadonlyArray<{ value: string; label: string }>
 }
 
 export type ExportCommand = {

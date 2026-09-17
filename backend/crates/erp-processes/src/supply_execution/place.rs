@@ -56,7 +56,14 @@ impl SupplierFulfillmentProcess {
             return Ok(existing.into());
         }
         let (connection, offerings) = self.domain().ensure_placeable(&req).await?;
-        let (mut order, items, mut action) = self.domain().build_place_facts(&req, &offerings)?;
+        let follow_up =
+            super::follow_up::resolve_follow_up(&self.db, &req.supplier_id, &mut NoTransaction).await?;
+        self.domain()
+            .access()
+            .ensure_writable(actor, "submit", &follow_up.user_id, &follow_up.org_unit_id, &mut NoTransaction)
+            .await?;
+        let (mut order, items, mut action) =
+            self.domain().build_place_facts(&req, &offerings, follow_up.user_id, follow_up.org_unit_id)?;
         let mut message = build_action_message(&action, &connection, InboxMessageStatus::Received)?;
         let audit = actor.clone().resource_log(
             "supplier_fulfillment.submit",

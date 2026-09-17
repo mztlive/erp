@@ -6,6 +6,7 @@ mod contract;
 mod contract_data_scope;
 mod customer;
 mod customer_data_scope;
+mod fulfillment_order_data_scope;
 mod funds_data_scope;
 mod import;
 mod integration_data_scope;
@@ -219,6 +220,10 @@ pub mod support_audit;
 pub mod support_documents;
 
 pub use catalog_data_scope::{MongoCatalogDataScope, catalog_access, scoped_catalog_service};
+pub use fulfillment_order_data_scope::{
+    MongoFulfillmentExceptionHandlers, MongoFulfillmentOrderDataScope, fulfillment_order_access,
+    scoped_fulfillment_service,
+};
 pub use offering_data_scope::{
     MongoOfferingDataScope, offering_access, scoped_offering_process, scoped_offering_service,
 };

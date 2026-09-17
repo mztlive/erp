@@ -4444,6 +4444,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
+                path: "/admin/supplier-fulfillment-orders/{id}/handover",
+                description: "交接供应商履约订单跟进人",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "handover",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-fulfillment-orders/{id}/handover-candidates",
+                description: "查询供应商履约订单交接待选目标",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "handover",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
                 path: "/admin/supplier-refund-facts",
                 description: "登记供应商退款成功结果",
                 permission: {

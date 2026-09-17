@@ -23,6 +23,7 @@ export type SupplierOrdersListTableProps = {
     error: Error | null
     onRetry: () => void
     hasActiveFilters: boolean
+    noScope?: boolean
     onClearFilters: () => void
     sorting: SortingState
     onSortingChange: (next: SortingState) => void
@@ -39,6 +40,7 @@ export function SupplierOrdersListTable({
     error,
     onRetry,
     hasActiveFilters,
+    noScope = false,
     onClearFilters,
     sorting,
     onSortingChange,
@@ -75,17 +77,27 @@ export function SupplierOrdersListTable({
             emptyState={
                 !loading && rows.length === 0 ? (
                     <BusinessEmptyState
-                        kind={hasActiveFilters ? "filter" : "no-data"}
+                        kind={
+                            noScope
+                                ? "no-data"
+                                : hasActiveFilters
+                                  ? "filter"
+                                  : "no-data"
+                        }
                         className={listWorkspaceEmptyStateClassName}
                         title={
-                            hasActiveFilters
-                                ? "当前筛选无结果"
-                                : "当前范围没有供应商订单"
+                            noScope
+                                ? "当前没有可查看的供应商订单范围"
+                                : hasActiveFilters
+                                  ? "当前筛选无结果"
+                                  : "当前范围没有供应商订单"
                         }
                         description={
-                            hasActiveFilters
-                                ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                : "调整视图、供应商或支付时间后重试。"
+                            noScope
+                                ? "已授权动作但没有可见订单。请联系管理员配置数据范围，或清除筛选后重试。"
+                                : hasActiveFilters
+                                  ? "没有记录符合当前筛选条件，可清除筛选后重试。"
+                                  : "调整视图、供应商或支付时间后重试。"
                         }
                         action={
                             hasActiveFilters ? (

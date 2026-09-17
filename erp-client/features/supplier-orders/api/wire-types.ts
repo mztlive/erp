@@ -19,6 +19,9 @@ export type BackendOrder = {
     submitted_at?: number | null
     accepted_at?: number | null
     completed_at?: number | null
+    follow_up_user_id?: string | null
+    business_org_unit_id?: string | null
+    handler_user_id?: string | null
     version: number
     created_at: number
 }

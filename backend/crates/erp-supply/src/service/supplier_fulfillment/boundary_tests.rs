@@ -24,6 +24,8 @@ fn sample_order() -> SupplierFulfillmentOrder {
             completed_at: None,
             address_snapshot_encrypted: "encrypted".to_string(),
             address_snapshot_fingerprint: "fingerprint".to_string(),
+            follow_up_user_id: "buyer-1".to_string(),
+            business_org_unit_id: "org-procurement".to_string(),
         },
     )
     .unwrap()

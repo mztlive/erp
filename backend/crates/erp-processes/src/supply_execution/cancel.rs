@@ -67,7 +67,12 @@ impl SupplierFulfillmentProcess {
         actor: &AuditActor,
     ) -> Result<SubmitActionResultView> {
         req.validate()?;
-        let mut order = self.load_order(id).await?;
+        let action_name = match action_type {
+            SupplierOrderActionType::Cancel => "cancel",
+            SupplierOrderActionType::Refund => "refund",
+            _ => "cancel",
+        };
+        let mut order = self.require_scoped_order(id, actor, action_name, &mut NoTransaction).await?;
         let idempotency_key = format!("{}+{}", order.fulfillment_order_no, action_type.as_str(),);
         if let Some(existing) = self
             .db
