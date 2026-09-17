@@ -124,7 +124,26 @@ impl From<erp_sales::Error> for Error {
 from_domain!(erp_integration);
 from_domain!(erp_supply);
 from_domain!(erp_returns);
-from_domain!(erp_fulfillment);
+impl From<erp_fulfillment::Error> for Error {
+    /// 将履约领域错误映射为应用错误。
+    /// 履约域已删除 `ReceiptDuplicate` 变体（唯一冲突按 `uk_*` 索引名细化为 `ConflictError`），故不用 `from_domain!`
+    /// 统一宏而手写映射；分类语义不变（冲突仍归冲突）。
+    fn from(error: erp_fulfillment::Error) -> Self {
+        match error {
+            erp_fulfillment::Error::Internal(payload) => Self::Internal(payload),
+            erp_fulfillment::Error::NotFound(payload) => Self::NotFound(payload),
+            erp_fulfillment::Error::ValidationError(payload) => Self::ValidationError(payload),
+            erp_fulfillment::Error::BusinessLogicError(payload) => Self::BusinessLogicError(payload),
+            erp_fulfillment::Error::ConflictError(payload) => Self::ConflictError(payload),
+            erp_fulfillment::Error::TransientTransaction(payload) => Self::TransientTransaction(payload),
+            erp_fulfillment::Error::Forbidden(payload) => Self::Forbidden(payload),
+            erp_fulfillment::Error::Unauthenticated(payload) => Self::Unauthenticated(payload),
+            erp_fulfillment::Error::Logic(payload) => Self::Logic(payload),
+            erp_fulfillment::Error::OutcomeUnknown(payload) => Self::OutcomeUnknown(payload),
+            erp_fulfillment::Error::RepositoryError(payload) => Self::RepositoryError(payload),
+        }
+    }
+}
 from_domain!(erp_procurement);
 from_domain!(erp_import);
 

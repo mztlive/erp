@@ -180,7 +180,7 @@ fn advance_search_result(
     deserialize: impl FnOnce() -> mongodb::error::Result<ContractSearchResult>,
 ) -> Result<ContractSearchResult> {
     if advanced {
-        return Ok(deserialize().map_err(persistence_core::Error::from)?);
+        return deserialize().map_err(persistence_core::Error::from);
     }
     Ok(ContractSearchResult::default())
 }

@@ -275,7 +275,7 @@ mod tests {
     /// 不返回数据，仅表示执行结果。
     #[test]
     fn non_empty_trimmed_returns_trimmed_value() {
-        let result = non_empty_trimmed("  hello ".to_string(), "should not be empty").unwrap();
+        let result = non_empty_trimmed("  hello ", "should not be empty").unwrap();
         assert_eq!(result, "hello");
     }
 

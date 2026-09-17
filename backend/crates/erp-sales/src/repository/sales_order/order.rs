@@ -682,8 +682,7 @@ mod tests {
         assert_eq!(SalesOrderListView::from_flags(false, true).unwrap(), SalesOrderListView::ExceptionOnly);
         assert!(SalesOrderListView::from_flags(true, true).is_err());
 
-        let mut filter = SalesOrderFilter::default();
-        filter.view = SalesOrderListView::MyTodo;
+        let mut filter = SalesOrderFilter { view: SalesOrderListView::MyTodo, ..Default::default() };
         assert!(filter.to_doc().contains_key("$or"), "待我处理 OR 必须保留");
         filter.view = SalesOrderListView::ExceptionOnly;
         assert_eq!(filter.to_doc().get_str("review_status").unwrap(), "REJECTED");

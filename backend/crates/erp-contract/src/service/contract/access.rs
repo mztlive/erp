@@ -92,7 +92,7 @@ impl ContractAccess {
         ensure_limit(collaborating.len(), "协作范围超过查询上限")?;
         let org_owned = self.org_owned_customers(&access, as_of, executor).await?;
         let limit_customers = access.user_limit.as_ref().and_then(|clause| {
-            clause_ids(&map_clause(clause, actor.id(), &collaborating, &org_owned), &owned, &org_owned)
+            clause_ids(&map_clause(clause, actor.id(), &collaborating), &owned, &org_owned)
         });
         let history = if allows_history(action) {
             self.historical_contracts(actor.id(), limit_customers.as_deref(), executor).await?
@@ -396,13 +396,9 @@ pub fn contract_scope(
     history: Vec<String>,
     org_owned: &[(Vec<String>, Vec<String>)],
 ) -> ContractReadScope {
-    let roles = access
-        .role_clauses
-        .iter()
-        .map(|clause| map_clause(clause, user, collaborating, org_owned))
-        .collect::<Vec<_>>();
-    let user_limit =
-        access.user_limit.as_ref().map(|clause| map_clause(clause, user, collaborating, org_owned));
+    let roles =
+        access.role_clauses.iter().map(|clause| map_clause(clause, user, collaborating)).collect::<Vec<_>>();
+    let user_limit = access.user_limit.as_ref().map(|clause| map_clause(clause, user, collaborating));
     let mut authorized = union_clauses(&roles, owned, org_owned);
     if let Some(limit) = &user_limit {
         authorized = intersect_ids(authorized, clause_ids(limit, owned, org_owned));
@@ -423,7 +419,6 @@ pub fn contract_scope(
 /// * `clause` - Port 返回的正向范围
 /// * `user` - 当前账号
 /// * `collaborating` - 当前协作客户
-/// * `org_owned` - 组织到客户的预计算结果（本函数只透传，展开在 `clause_ids` 内回查）
 ///
 /// # 返回
 /// 返回主责、协作与组织分别保留的合同条款。
@@ -432,13 +427,9 @@ pub fn contract_scope(
 /// 无。
 ///
 /// # 关键业务约束
-/// 协作客户集合只在条款声明 Collaborative 时填入。
-fn map_clause(
-    clause: &ContractResolvedClause,
-    user: &str,
-    collaborating: &[String],
-    org_owned: &[(Vec<String>, Vec<String>)],
-) -> ContractScopeClause {
+/// 协作客户集合只在条款声明 Collaborative 时填入；组织展开不在本函数做，仍在 `clause_ids` 内按
+/// `owner_org_unit_ids` 回查。
+fn map_clause(clause: &ContractResolvedClause, user: &str, collaborating: &[String]) -> ContractScopeClause {
     ContractScopeClause {
         company: clause.company,
         owner_user_id: clause.self_owned.then(|| user.into()),

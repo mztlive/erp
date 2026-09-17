@@ -21,8 +21,8 @@ pub(crate) use permission_tables::{
 };
 #[cfg(test)]
 pub(crate) use upgrades::{
-    APPROVAL_HTTP_ACTION_PERMISSIONS, FINANCE_PARTY_READ_GAP_PERMISSIONS, PROCUREMENT_DUTY_GAP_PERMISSIONS,
-    approval_http_legacy_snapshot, finance_legacy_permission_snapshots, integration_task_legacy_snapshot,
+    APPROVAL_HTTP_ACTION_PERMISSIONS, PROCUREMENT_DUTY_GAP_PERMISSIONS, approval_http_legacy_snapshot,
+    finance_legacy_permission_snapshots, integration_task_legacy_snapshot,
     legacy_workflow_permission_snapshot, low_margin_confirmation_legacy_snapshot,
     procurement_legacy_permission_snapshots, sales_legacy_permission_snapshots,
 };

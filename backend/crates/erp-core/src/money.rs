@@ -147,45 +147,18 @@ impl Amount {
     ///
     /// # 关键约束
     /// 常量零值由确定性构造直接产生，不做字符串解析；求和仍使用
-    /// [`Amount::add`] 保持精度。
+    /// [`Amount::checked_add`] 保持精度。
     pub fn zero() -> Amount {
         Amount(Decimal::new(0, 2))
     }
 
     /// 两个金额相加（精确，不触发舍入）。
     ///
-    /// 精确加法不做溢出检查：`rust_decimal` 溢出时按其自身语义处理，
-    /// 命名避免与标准库 `checked_*`（溢出返回 `Option`）混淆。
-    ///
-    /// # 参数
-    /// * `other` - 另一金额
-    ///
-    /// # 返回
-    /// 返回精确和（不舍入）。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn add(self, other: Amount) -> Amount {
-        Amount(self.0 + other.0)
-    }
-
-    /// 两个金额相减（精确，不触发舍入）。
-    ///
-    /// # 参数
-    /// * `other` - 另一金额
-    ///
-    /// # 返回
-    /// 返回精确差（不舍入）。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn sub(self, other: Amount) -> Amount {
-        Amount(self.0 - other.0)
-    }
-
-    /// 两个金额相加（精确，不触发舍入）。
-    ///
-    /// 历史名称，与 [`Amount::add`] 等价；新代码请用 `add`。
+    /// 命名说明：本方法实为 infallible 精确加法（直接返回 `Amount`），与标准库
+    /// `checked_*`（溢出返回 `Option`）的惯例不同。曾提议改名为 `add`/`sub`，但全仓提交门禁
+    /// `clippy -- -D warnings` 的 `should_implement_trait` 会拒绝与 `std::ops::Add`/`Sub`
+    /// 同名的 inherent 方法（含 deprecated 别名），故保留历史名称并在此注明语义。
+    /// 溢出行为：`rust_decimal` 按其自身语义处理（不静默回绕）。
     ///
     /// # 参数
     /// * `other` - 另一金额
@@ -196,12 +169,12 @@ impl Amount {
     /// # 错误
     /// 不返回错误。
     pub fn checked_add(self, other: Amount) -> Amount {
-        self.add(other)
+        Amount(self.0 + other.0)
     }
 
     /// 两个金额相减（精确，不触发舍入）。
     ///
-    /// 历史名称，与 [`Amount::sub`] 等价；新代码请用 `sub`。
+    /// 命名说明：同 [`Amount::checked_add`]，infallible 精确减法，保留历史名称。
     ///
     /// # 参数
     /// * `other` - 另一金额
@@ -212,7 +185,7 @@ impl Amount {
     /// # 错误
     /// 不返回错误。
     pub fn checked_sub(self, other: Amount) -> Amount {
-        self.sub(other)
+        Amount(self.0 - other.0)
     }
 }
 
@@ -515,9 +488,8 @@ mod tests {
     fn amount_add_sub_is_exact() {
         let gross = Amount::from_str("29.97").unwrap();
         let tax = Amount::from_str("3.90").unwrap();
-        assert_eq!(gross.sub(tax), Amount::from_str("26.07").unwrap());
-        assert_eq!(Amount::from_str("26.07").unwrap().add(tax), gross);
-        assert_eq!(gross.checked_sub(tax), gross.sub(tax));
-        assert_eq!(gross.checked_add(Amount::zero()), gross.add(Amount::zero()));
+        assert_eq!(gross.checked_sub(tax), Amount::from_str("26.07").unwrap());
+        assert_eq!(Amount::from_str("26.07").unwrap().checked_add(tax), gross);
+        assert_eq!(gross.checked_add(Amount::zero()), gross);
     }
 }

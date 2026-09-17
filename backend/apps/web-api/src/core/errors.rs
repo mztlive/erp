@@ -302,9 +302,24 @@ impl From<erp_returns::Error> for Error {
 
 impl From<erp_fulfillment::Error> for Error {
     /// 将履约领域错误映射为 HTTP 边界错误。
+    /// 履约域已删除 `ReceiptDuplicate` 变体（唯一冲突按 `uk_*` 索引名细化为 `ConflictError` 并携带具体文案，
+    /// 由 `ConflictError` 分支透出），故手写映射；分类语义不变。
     fn from(err: erp_fulfillment::Error) -> Self {
-        boundary_error!(err, erp_fulfillment;
-        )
+        match err {
+            erp_fulfillment::Error::ValidationError(msg) => Error::BadRequest(msg),
+            erp_fulfillment::Error::NotFound(msg) => Error::NotFound(msg),
+            erp_fulfillment::Error::ConflictError(msg) => Error::Conflict(msg),
+            erp_fulfillment::Error::TransientTransaction(_) => {
+                Error::Conflict("并发事务冲突，请重试".to_string())
+            },
+            erp_fulfillment::Error::BusinessLogicError(msg) => Error::Unprocessable(msg),
+            erp_fulfillment::Error::Forbidden(msg) => Error::Forbidden(msg),
+            erp_fulfillment::Error::Unauthenticated(msg) => Error::Unauthorized(msg),
+            erp_fulfillment::Error::Logic(err) => Error::Logic(err),
+            erp_fulfillment::Error::Internal(msg) => Error::Internal(msg),
+            erp_fulfillment::Error::OutcomeUnknown(error) => Error::OutcomeUnknown(error),
+            error @ erp_fulfillment::Error::RepositoryError(_) => Error::Internal(error.to_string()),
+        }
     }
 }
 

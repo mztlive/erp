@@ -478,11 +478,6 @@ fn group_refund_allocations(
         .collect()
 }
 
-/// 供应商履约订单列表投影字段（不含敏感地址快照）。
-///
-/// # 返回
-/// 返回投影条件文档。
-
 #[cfg(test)]
 mod tests {
     use erp_core::ids::SupplierAccountId;

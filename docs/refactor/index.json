@@ -10,8 +10,8 @@
   "by_status": {
     "pending": 0,
     "in_progress": 0,
-    "done": 314,
-    "wont_fix": 54
+    "done": 313,
+    "wont_fix": 55
   },
   "crates": [
     {
@@ -142,8 +142,8 @@
       "low": 8,
       "pending": 0,
       "in_progress": 0,
-      "done": 18,
-      "wont_fix": 0,
+      "done": 17,
+      "wont_fix": 1,
       "top3": [
         "erp-core-001",
         "erp-core-013",

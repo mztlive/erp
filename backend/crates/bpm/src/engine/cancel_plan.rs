@@ -65,7 +65,7 @@ mod tests {
     };
     use crate::model::{
         ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, ParticipantId, ProcessKind,
-        SubjectRef, Timestamp,
+        SubjectRef,
     };
 
     /// 构造运行中且已进入当前执行的实例夹具。

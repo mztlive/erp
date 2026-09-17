@@ -90,17 +90,6 @@ impl<'a> AccessControlRepository<'a> {
 ///
 /// # 返回
 /// 返回排序条件文档。
-
-/// 构建排序文档（排序字段白名单化，禁止透传任意字段名）。
-///
-/// 仅允许 `created_at` / `updated_at`；未知字段回落默认 `created_at`。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或白名单外字段时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = match sort_by {

@@ -169,6 +169,23 @@ impl RuntimeInstanceListCursor {
     }
 }
 
+/// 解析实例列表筛选中的单据类型稳定码。
+///
+/// # 参数
+/// * `code` - 调用方提供的单据类型稳定代码
+///
+/// # 返回
+/// 精确命中登记代码时返回对应单据类型。
+///
+/// # 错误
+/// 未登记代码返回原有校验错误文本。
+///
+/// # 关键业务约束
+/// Service 不裁剪、不接受别名，也不维护第二份代码注册表。
+pub(crate) fn parse_document_type(code: &str) -> Result<DocumentType> {
+    DocumentType::try_from_code(code).map_err(|_| Error::ValidationError(format!("未登记单据类型: {code}")))
+}
+
 #[cfg(test)]
 mod runtime_instance_list_query_tests {
 
@@ -378,9 +395,4 @@ mod runtime_instance_list_query_tests {
             .is_err()
         );
     }
-}
-
-/// 解析单据类型稳定码。
-pub(crate) fn parse_document_type(code: &str) -> Result<DocumentType> {
-    DocumentType::try_from_code(code).map_err(|_| Error::ValidationError(format!("未登记单据类型: {code}")))
 }

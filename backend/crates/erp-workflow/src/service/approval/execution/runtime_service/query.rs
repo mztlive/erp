@@ -131,45 +131,6 @@ struct ResumeVersionHints {
     closed_task_version: Option<String>,
 }
 
-#[cfg(test)]
-mod runtime_recovery_options_view_tests {
-    use serde_json::json;
-
-    use super::{RuntimeRecoveryAction, RuntimeRecoveryOptionsView};
-
-    /// 旧恢复选项载荷缺版本提示时须兼容反序列化为空提示。
-    #[test]
-    fn legacy_payload_without_version_hints_deserializes_with_defaults() {
-        let view: RuntimeRecoveryOptionsView = serde_json::from_value(json!({
-            "instance_id": "inst-1",
-            "actions": ["RESUME_CURRENT_APPROVER"],
-        }))
-        .expect("旧载荷");
-        assert_eq!(view.instance_id, "inst-1");
-        assert_eq!(view.actions, vec![RuntimeRecoveryAction::ResumeCurrentApprover]);
-        assert_eq!(view.expected_instance_version, String::new());
-        assert_eq!(view.expected_execution_version, None);
-        assert_eq!(view.expected_assignment_version, None);
-        assert_eq!(view.expected_closed_task_version, None);
-    }
-
-    /// 版本提示序列化往返须保留十进制字符串。
-    #[test]
-    fn version_hints_round_trip_preserves_strings() {
-        let view = RuntimeRecoveryOptionsView {
-            instance_id: "inst-1".to_string(),
-            actions: vec![RuntimeRecoveryAction::ResumeCurrentApprover],
-            expected_instance_version: "3".to_string(),
-            expected_execution_version: Some("2".to_string()),
-            expected_assignment_version: Some("1".to_string()),
-            expected_closed_task_version: None,
-        };
-        let value = serde_json::to_value(&view).expect("序列化");
-        let round_trip: RuntimeRecoveryOptionsView = serde_json::from_value(value).expect("反序列化");
-        assert_eq!(round_trip, view);
-    }
-}
-
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 按固定 view 查询实例摘要。
     ///
@@ -841,20 +802,6 @@ fn process_required_document_types() -> Result<Vec<DocumentType>> {
     Ok(document_types)
 }
 
-/// 解析实例列表筛选中的单据类型稳定码。
-///
-/// # 参数
-/// * `code` - 调用方提供的单据类型稳定代码
-///
-/// # 返回
-/// 精确命中登记代码时返回对应单据类型。
-///
-/// # 错误
-/// 未登记代码返回原有校验错误文本。
-///
-/// # 关键业务约束
-/// Service 不裁剪、不接受别名，也不维护第二份代码注册表。
-
 /// 构造实例列表的授权过滤与稳定游标。
 ///
 /// # 参数
@@ -1057,4 +1004,43 @@ pub(super) fn first_open_task(writes: &PlannedWrites, new_task_ids: &[String]) -
         task_version: "1".to_string(),
         owner_user_id: assignee.as_str().to_string(),
     })
+}
+
+#[cfg(test)]
+mod runtime_recovery_options_view_tests {
+    use serde_json::json;
+
+    use super::{RuntimeRecoveryAction, RuntimeRecoveryOptionsView};
+
+    /// 旧恢复选项载荷缺版本提示时须兼容反序列化为空提示。
+    #[test]
+    fn legacy_payload_without_version_hints_deserializes_with_defaults() {
+        let view: RuntimeRecoveryOptionsView = serde_json::from_value(json!({
+            "instance_id": "inst-1",
+            "actions": ["RESUME_CURRENT_APPROVER"],
+        }))
+        .expect("旧载荷");
+        assert_eq!(view.instance_id, "inst-1");
+        assert_eq!(view.actions, vec![RuntimeRecoveryAction::ResumeCurrentApprover]);
+        assert_eq!(view.expected_instance_version, String::new());
+        assert_eq!(view.expected_execution_version, None);
+        assert_eq!(view.expected_assignment_version, None);
+        assert_eq!(view.expected_closed_task_version, None);
+    }
+
+    /// 版本提示序列化往返须保留十进制字符串。
+    #[test]
+    fn version_hints_round_trip_preserves_strings() {
+        let view = RuntimeRecoveryOptionsView {
+            instance_id: "inst-1".to_string(),
+            actions: vec![RuntimeRecoveryAction::ResumeCurrentApprover],
+            expected_instance_version: "3".to_string(),
+            expected_execution_version: Some("2".to_string()),
+            expected_assignment_version: Some("1".to_string()),
+            expected_closed_task_version: None,
+        };
+        let value = serde_json::to_value(&view).expect("序列化");
+        let round_trip: RuntimeRecoveryOptionsView = serde_json::from_value(value).expect("反序列化");
+        assert_eq!(round_trip, view);
+    }
 }

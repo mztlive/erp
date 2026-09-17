@@ -224,7 +224,7 @@ impl DocumentRegistryService {
         &self,
         params: &BusinessDocumentListParams,
     ) -> Result<PageView<BusinessDocumentView>> {
-        self.business_document_list_with(&params, &mut NoTransaction).await
+        self.business_document_list_with(params, &mut NoTransaction).await
     }
 
     /// 分页查询单据注册列表（执行器注入版，事务复用时传入同一执行器）。
@@ -411,7 +411,7 @@ impl DocumentRegistryService {
         &self,
         params: &WorkflowActionListParams,
     ) -> Result<PageView<WorkflowActionView>> {
-        self.workflow_action_list_with(&params, &mut NoTransaction).await
+        self.workflow_action_list_with(params, &mut NoTransaction).await
     }
 
     /// 分页查询工作流动作列表（执行器注入版）。

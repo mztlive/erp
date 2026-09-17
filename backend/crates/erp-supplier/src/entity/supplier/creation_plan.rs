@@ -354,14 +354,14 @@ fn build_creation_head(
 ///
 /// # 错误
 /// 能力负责人缺失或任一实体字段校验失败时返回错误。
+/// 新能力三元组：能力、首版修订、代码到稳定 ID 映射。
+type NewCapabilities =
+    (Vec<SupplierCapability>, Vec<SupplierCapabilityRevision>, HashMap<String, SupplierCapabilityId>);
+
 fn build_creation_capabilities(
     ids: &SupplierCreationIds,
     inputs: &SupplierCreationInputs,
-) -> erp_core::Result<(
-    Vec<SupplierCapability>,
-    Vec<SupplierCapabilityRevision>,
-    HashMap<String, SupplierCapabilityId>,
-)> {
+) -> erp_core::Result<NewCapabilities> {
     let mut capabilities = Vec::with_capacity(inputs.capability_codes.len());
     let mut capability_revisions = Vec::with_capacity(inputs.capability_codes.len());
     let mut capability_ids = HashMap::new();

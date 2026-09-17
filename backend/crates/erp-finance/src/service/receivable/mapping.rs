@@ -1,8 +1,18 @@
 //! Finance fact projections and stable money, version, and ledger error contracts.
 
+use erp_core::money::Amount;
+
 use crate::dto::receivable::{ReceivableInvoiceFactView, ReceivableReceiptFactView};
 /// 固定零金额与账本共用同一实体层实现（`0.00` 确定性拼写）。
-pub(crate) use crate::entity::receivable::allocation_amount::zero_amount;
+///
+/// # 返回
+/// 返回 `0.00`。
+///
+/// 公开包装：`erp-read-models` 的资金作用域投影（`funds_scope` 等）跨 crate 复用本入口，保持与基线一致的
+/// 公开路径 `service::receivable::mapping::zero_amount`；实体层实现保持 crate 内可见。
+pub fn zero_amount() -> Amount {
+    crate::entity::receivable::allocation_amount::zero_amount()
+}
 use crate::entity::receivable::{CustomerReceiptStatus, InvoiceKind, InvoiceStatus};
 use crate::ports::receivable::ReceivableSnapshot;
 use crate::{Error, Result};

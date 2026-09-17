@@ -136,7 +136,7 @@ where
     K: Eq + std::hash::Hash,
 {
     let mut seen = std::collections::HashSet::new();
-    items.iter().find(|item| !seen.insert(key(item))).map(|item| key(item))
+    items.iter().find(|item| !seen.insert(key(item))).map(key)
 }
 
 /// 将摘要字节编码为小写十六进制文本（与 `format!("{digest:x}")` 同形态）。

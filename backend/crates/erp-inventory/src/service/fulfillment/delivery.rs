@@ -56,7 +56,7 @@ pub async fn post_warehouse_ship_line(
     occurred_at: Instant,
     actor_id: &str,
 ) -> Result<()> {
-    post_with_store(&mut MongoInventoryStore(&db), executor, input, occurred_at, actor_id).await
+    post_with_store(&mut MongoInventoryStore(db), executor, input, occurred_at, actor_id).await
 }
 
 /// 实际逐行过账算法；库存仓储和失败注入替身均从此入口执行。
