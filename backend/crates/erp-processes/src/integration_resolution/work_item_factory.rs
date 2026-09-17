@@ -29,10 +29,9 @@ use erp_workflow::entity::work_item::{
 pub(super) fn new_error_work_item(
     id: WorkItemId,
     task: &IntegrationErrorTask,
-    owner_user_id: &str,
     now: Instant,
 ) -> Result<WorkItem> {
-    new_work_item(id, error_responsibility(task, owner_user_id), now)
+    new_work_item(id, error_responsibility(task), now)
 }
 /// 为对账差异构造指定到人的正式任务。
 ///
@@ -53,10 +52,9 @@ pub(super) fn new_error_work_item(
 pub(super) fn new_difference_work_item(
     id: WorkItemId,
     difference: &ReconciliationDifference,
-    owner_user_id: &str,
     now: Instant,
 ) -> Result<WorkItem> {
-    new_work_item(id, difference_responsibility(difference, owner_user_id)?, now)
+    new_work_item(id, difference_responsibility(difference)?, now)
 }
 fn new_work_item(id: WorkItemId, spec: IntegrationResponsibilitySpec, now: Instant) -> Result<WorkItem> {
     WorkItem::new_at(
@@ -93,7 +91,7 @@ mod tests {
     use erp_core::ids::{IntegrationErrorTaskId, ReconciliationDifferenceId};
     use erp_integration::entity::integration_ops::{
         DIFFERENCE_WORK_ITEM_OBJECT_TYPE, ERROR_WORK_ITEM_OBJECT_TYPE, ErrorClass, IntegrationErrorTaskData,
-        ReconciliationDifferenceData, W29_OWNER_ORGANIZATION,
+        ReconciliationDifferenceData,
     };
 
     use super::*;
@@ -106,7 +104,8 @@ mod tests {
                 business_object_id: Some("so-1".to_string()),
                 error_class,
                 owner_role: None,
-                owner_user_id: None,
+                owner_user_id: Some("user-1".to_string()),
+                owner_org_unit_id: "org-sysadmin".to_string(),
             },
         )
         .unwrap()
@@ -121,6 +120,8 @@ mod tests {
                 difference_type: difference_type.to_string(),
                 left_fact_reference: Some("mall_order_fact://f-1".to_string()),
                 right_fact_reference: None,
+                owner_user_id: "user-2".to_string(),
+                owner_org_unit_id: "org-finance".to_string(),
             },
         )
         .unwrap()
@@ -131,7 +132,6 @@ mod tests {
         let item = new_error_work_item(
             WorkItemId::new("wi-1"),
             &error_task(ErrorClass::ResultUnknown),
-            "user-1",
             Instant::from_unix_secs(NOW),
         )
         .unwrap();
@@ -141,7 +141,7 @@ mod tests {
         assert_eq!(item.business_object_id.as_str(), "task-1");
         assert_eq!(item.subject_version.as_str(), "1");
         assert_eq!(item.owner_role.as_str(), "role-sysadmin");
-        assert_eq!(item.owner_organization_id.as_str(), W29_OWNER_ORGANIZATION);
+        assert_eq!(item.owner_organization_id.as_str(), "org-sysadmin");
         assert_eq!(item.owner_user_id.as_deref(), Some("user-1"));
         assert_eq!(item.assignment_source, AssignmentSource::SystemRule);
         assert_eq!(item.priority, WorkItemPriority::Urgent);
@@ -154,7 +154,6 @@ mod tests {
         let item = new_difference_work_item(
             WorkItemId::new("wi-2"),
             &difference("amount_mismatch"),
-            "user-2",
             Instant::from_unix_secs(NOW),
         )
         .unwrap();
@@ -171,17 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn factories_reject_unknown_difference_and_blank_owner() {
-        assert!(
-            new_difference_work_item(
-                WorkItemId::new("wi-3"),
-                &difference("status_difference"),
-                "   ",
-                Instant::from_unix_secs(NOW),
-            )
-            .is_err()
-        );
-
+    fn factories_reject_unknown_difference() {
         let unknown = ReconciliationDifference::new(
             ReconciliationDifferenceId::new("diff-9"),
             ReconciliationDifferenceData {
@@ -190,17 +179,14 @@ mod tests {
                 difference_type: "free_form_type".to_string(),
                 left_fact_reference: Some("mall_order_fact://f-9".to_string()),
                 right_fact_reference: None,
+                owner_user_id: "user-9".to_string(),
+                owner_org_unit_id: "org-ops".to_string(),
             },
         )
         .unwrap();
         assert!(
-            new_difference_work_item(
-                WorkItemId::new("wi-4"),
-                &unknown,
-                "user-9",
-                Instant::from_unix_secs(NOW),
-            )
-            .is_err()
+            new_difference_work_item(WorkItemId::new("wi-4"), &unknown, Instant::from_unix_secs(NOW),)
+                .is_err()
         );
     }
 }

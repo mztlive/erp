@@ -30,8 +30,8 @@ use crate::{Error, Result};
 ///
 /// # 约束
 /// 责任政策归领域，本函数只做 ID/时间注入与错误透传。
-pub(crate) fn error_work_item(task: &IntegrationErrorTask, owner_user_id: &str) -> Result<WorkItem> {
-    new_error_work_item(WorkItemId::new(next_id()), task, owner_user_id, Instant::now()).map_err(Into::into)
+pub(crate) fn error_work_item(task: &IntegrationErrorTask) -> Result<WorkItem> {
+    new_error_work_item(WorkItemId::new(next_id()), task, Instant::now()).map_err(Into::into)
 }
 
 /// 构造指定到人的对账差异任务（主键与时间由服务注入）。
@@ -50,14 +50,10 @@ pub(crate) fn error_work_item(task: &IntegrationErrorTask, owner_user_id: &str) 
 ///
 /// # 约束
 /// 责任政策归领域，本函数只做 ID/时间注入与错误映射。
-pub(super) fn difference_work_item(
-    difference: &ReconciliationDifference,
-    owner_user_id: &str,
-) -> Result<WorkItem> {
+pub(super) fn difference_work_item(difference: &ReconciliationDifference) -> Result<WorkItem> {
     difference_owner_role(&difference.difference_type)
         .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-    new_difference_work_item(WorkItemId::new(next_id()), difference, owner_user_id, Instant::now())
-        .map_err(Into::into)
+    new_difference_work_item(WorkItemId::new(next_id()), difference, Instant::now()).map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -103,12 +99,13 @@ mod tests {
                 business_object_id: Some("so-1".to_string()),
                 error_class: ErrorClass::ResultUnknown,
                 owner_role: None,
-                owner_user_id: None,
+                owner_user_id: Some("user-1".to_string()),
+                owner_org_unit_id: "org-sysadmin".to_string(),
             },
         )
         .unwrap();
 
-        let item = super::error_work_item(&task, "user-1").unwrap();
+        let item = super::error_work_item(&task).unwrap();
         assert_eq!(item.owner_role.as_str(), "role-sysadmin");
         assert_eq!(item.owner_user_id.as_deref(), Some("user-1"));
         assert_eq!(item.business_object_id.as_str(), "task-1");
@@ -124,11 +121,13 @@ mod tests {
                 difference_type: "free_form_type".to_string(),
                 left_fact_reference: Some("mall_order_fact://f-1".to_string()),
                 right_fact_reference: None,
+                owner_user_id: "user-1".to_string(),
+                owner_org_unit_id: "org-ops".to_string(),
             },
         )
         .unwrap();
 
-        let error = super::difference_work_item(&difference, "user-1").unwrap_err();
+        let error = super::difference_work_item(&difference).unwrap_err();
         assert!(matches!(error, crate::Error::BusinessLogicError(_)));
 
         let known = ReconciliationDifference::new(
@@ -139,10 +138,12 @@ mod tests {
                 difference_type: "amount_mismatch".to_string(),
                 left_fact_reference: Some("mall_order_fact://f-2".to_string()),
                 right_fact_reference: None,
+                owner_user_id: "user-2".to_string(),
+                owner_org_unit_id: "org-finance".to_string(),
             },
         )
         .unwrap();
-        let item = super::difference_work_item(&known, "user-2").unwrap();
+        let item = super::difference_work_item(&known).unwrap();
         assert_eq!(item.owner_role.as_str(), "role-finance");
     }
 }

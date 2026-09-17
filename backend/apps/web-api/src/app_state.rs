@@ -351,7 +351,11 @@ impl AppState {
 
     /// 返回使用统一权威证据提供方的集成治理命令入口。
     pub fn integration_resolution(&self) -> IntegrationResolutionProcess {
-        IntegrationResolutionProcess::new(self.db(), Arc::clone(&self.integration_evidence))
+        IntegrationResolutionProcess::new(
+            self.db(),
+            Arc::clone(&self.integration_evidence),
+            erp_processes::adapters::MongoIntegrationDataScope::shared(self.db(), self.rbac()),
+        )
     }
 
     /// 返回使用同一权威证据提供方的集成详情读取入口。

@@ -301,7 +301,8 @@ mod tests {
                 business_object_id: None,
                 error_class: ErrorClass::ResultUnknown,
                 owner_role: Some("role-operations".to_string()),
-                owner_user_id: None,
+                owner_user_id: Some("user-1".to_string()),
+                owner_org_unit_id: "org-ops".to_string(),
             },
         )
         .unwrap()

@@ -1,11 +1,13 @@
 //! 集成本域查询、实体准备与调用方事务内写入。
+use application_core::AuditActor;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::IntegrationOpsService;
-use crate::dto::*;
+use super::scope::{ScopedIntegrationList, ensure_page, ensure_scope_version};
+use crate::dto::{self, *};
 use crate::entity::integration_ops::*;
 use crate::repository::IntegrationOpsExt;
 use crate::{Error, Result};
@@ -15,45 +17,49 @@ impl IntegrationOpsService {
     /// 分页查询集成错误任务列表。
     ///
     /// # 错误
-    /// 查询参数非法或仓储查询失败时返回错误。
-    pub async fn error_task_list(&self, params: &ErrorTaskListParams) -> Result<PageView<ErrorTaskView>> {
+    /// 查询参数非法、范围变化或仓储查询失败时返回错误。
+    pub async fn error_task_list(
+        &self,
+        params: &ErrorTaskListParams,
+        actor: &AuditActor,
+    ) -> Result<ErrorTaskListView> {
         params.validate()?;
         let query = params.normalized()?;
-        let filter = ErrorTaskFilter {
-            q: query.q,
-            message_id: query.message_id,
-            business_object_id: query.business_object_id,
-            error_class: query.error_class,
-            status: query.status,
-            owner_role: query.owner_role,
-            owner_user_id: query.owner_user_id,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-        };
-        let page = self.db.integration_error_tasks().search_error_tasks(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| ErrorTaskView {
-                id: row.id,
-                message_id: row.message_id.map(|id| id.to_string()),
-                business_object_id: row.business_object_id,
-                error_class: row.error_class,
-                status: row.status,
-                owner_role: row.owner_role,
-                owner_user_id: row.owner_user_id,
-                attempt_count: row.attempt_count,
-                last_attempt_at: row.last_attempt_at.map(|at| at.unix_secs()),
-                last_attempt_summary: row.last_attempt_summary,
-                resolution_type: row.resolution_type,
-                resolved_at: row.resolved_at.map(|at| at.unix_secs()),
-                version: row.version,
-                created_at: row.created_at,
+        ensure_page(query.paging.page, query.scope_version.as_deref())?;
+        let this = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.error_task_page(query, &actor, executor).await })
             })
-            .collect();
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+            .await
+    }
+
+    async fn error_task_page(
+        &self,
+        query: dto::ErrorTaskListQuery,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<ErrorTaskListView> {
+        let access = self.access();
+        let (context, read_scope) = access.resolve(actor, "integration_error_task", "list", executor).await?;
+        let owner_org_unit_ids = super::scope::expand_org_filter(
+            &access,
+            &query.org_unit_ids,
+            query.include_descendants,
+            executor,
+        )
+        .await?;
+        let filter = error_task_filter(&query, &read_scope, owner_org_unit_ids);
+        let meta = ScopedIntegrationList::from_access(&context, &read_scope);
+        ensure_scope_version(query.scope_version.as_deref(), &meta.scope_version)?;
+        if meta.empty_reason == Some("no_scope") {
+            return Ok(empty_error_task_page(&filter, meta));
+        }
+        let page = self.db.integration_error_tasks().search_error_tasks(&filter, executor).await?;
+        Ok(error_task_list_view(page, &filter, meta))
     }
 
     pub async fn ensure_message_exists(&self, id: &str) -> Result<()> {
@@ -68,7 +74,10 @@ impl IntegrationOpsService {
 /// 由已校验请求构造原责任政策下的错误任务。
 /// # Errors
 /// 保留原实体字段和责任不变量错误。
-pub fn prepare_error_task(req: &CreateErrorTaskRequest) -> Result<IntegrationErrorTask> {
+pub fn prepare_error_task(
+    req: &CreateErrorTaskRequest,
+    owner_org_unit_id: String,
+) -> Result<IntegrationErrorTask> {
     let task = IntegrationErrorTask::new(
         IntegrationErrorTaskId::new(next_id()),
         IntegrationErrorTaskData {
@@ -77,10 +86,90 @@ pub fn prepare_error_task(req: &CreateErrorTaskRequest) -> Result<IntegrationErr
             error_class: req.error_class,
             owner_role: Some(error_owner_role(req.error_class).to_string()),
             owner_user_id: Some(req.owner_user_id.clone()),
+            owner_org_unit_id,
         },
     )?;
 
     Ok(task)
+}
+
+/// 把已规范化查询与授权条件装配为仓储筛选。
+fn error_task_filter(
+    query: &dto::ErrorTaskListQuery,
+    read_scope: &crate::repository::IntegrationReadScope,
+    owner_org_unit_ids: Vec<String>,
+) -> ErrorTaskFilter {
+    ErrorTaskFilter {
+        q: query.q.clone(),
+        message_id: query.message_id.clone(),
+        business_object_id: query.business_object_id.clone(),
+        error_class: query.error_class,
+        status: query.status,
+        owner_role: query.owner_role.clone(),
+        handler_user_ids: query.handler_user_ids.clone(),
+        operator_user_ids: query.operator_user_ids.clone(),
+        owner_org_unit_ids,
+        scope_document: Some(read_scope.document()),
+        page: query.paging.page,
+        page_size: query.paging.page_size,
+        sort_by: Some(query.paging.sort_by.to_string()),
+        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+    }
+}
+
+/// 装配带范围元数据的错误任务列表响应。
+fn error_task_list_view(
+    page: persistence_core::PageResult<crate::repository::integration_ops::IntegrationErrorTaskRow>,
+    filter: &ErrorTaskFilter,
+    meta: ScopedIntegrationList,
+) -> ErrorTaskListView {
+    ErrorTaskListView {
+        data: PageView {
+            items: page.items.into_iter().map(map_error_task_row).collect(),
+            total: page.total,
+            page: filter.page,
+            page_size: filter.page_size,
+        },
+        scope_version: meta.scope_version,
+        policy_version: meta.policy_version,
+        organization_version: meta.organization_version,
+        as_of: meta.as_of,
+        empty_reason: None,
+        scope_summary: meta.scope_summary,
+        ownership_basis: meta.ownership_basis,
+    }
+}
+
+fn map_error_task_row(row: crate::repository::integration_ops::IntegrationErrorTaskRow) -> ErrorTaskView {
+    ErrorTaskView {
+        id: row.id,
+        message_id: row.message_id.map(|id| id.to_string()),
+        business_object_id: row.business_object_id,
+        error_class: row.error_class,
+        status: row.status,
+        owner_role: row.owner_role,
+        owner_user_id: row.owner_user_id,
+        attempt_count: row.attempt_count,
+        last_attempt_at: row.last_attempt_at.map(|at| at.unix_secs()),
+        last_attempt_summary: row.last_attempt_summary,
+        resolution_type: row.resolution_type,
+        resolved_at: row.resolved_at.map(|at| at.unix_secs()),
+        version: row.version,
+        created_at: row.created_at,
+    }
+}
+
+fn empty_error_task_page(filter: &ErrorTaskFilter, meta: ScopedIntegrationList) -> ErrorTaskListView {
+    ErrorTaskListView {
+        data: PageView { items: Vec::new(), total: 0, page: filter.page, page_size: filter.page_size },
+        scope_version: meta.scope_version,
+        policy_version: meta.policy_version,
+        organization_version: meta.organization_version,
+        as_of: meta.as_of,
+        empty_reason: meta.empty_reason,
+        scope_summary: meta.scope_summary,
+        ownership_basis: meta.ownership_basis,
+    }
 }
 
 /// 在调用方事务内保存错误任务。

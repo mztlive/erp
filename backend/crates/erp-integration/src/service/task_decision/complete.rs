@@ -79,6 +79,7 @@ async fn complete_error_task(
             .any(|evidence| evidence.reference.kind == ControlledEvidenceKind::BusinessObjectVerification),
     );
     task.transition(ErrorTaskStatus::Resolved, Some(resolution_type), Some(resolution), Instant::now())?;
+    task.record_completed_by(actor_id.to_string())?;
     db.integration_error_tasks().update(&mut task, executor).await?;
     Ok(TerminalFact { reference, next_subject_version: task.base.version.to_string() })
 }

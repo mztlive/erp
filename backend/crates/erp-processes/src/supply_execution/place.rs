@@ -138,11 +138,22 @@ impl SupplierFulfillmentProcess {
                 })?;
                 None
             },
-            DispatchMessageResult::Failed(class) => self.build_error_task(
-                message,
-                order,
-                crate::adapters::supplier_failure::integration_class(class),
-            )?,
+            DispatchMessageResult::Failed(class) => {
+                let org = erp_identity::repository::OrganizationRepository::new(&self.db)
+                    .state(&mut NoTransaction)
+                    .await?
+                    .own_org(actor.id(), Instant::now())?
+                    .filter(|org| !org.eq_ignore_ascii_case("company"))
+                    .map(str::to_string)
+                    .ok_or_else(|| crate::Error::ValidationError("处理人缺少有效内部组织".into()))?;
+                self.build_error_task(
+                    message,
+                    order,
+                    crate::adapters::supplier_failure::integration_class(class),
+                    actor,
+                    org,
+                )?
+            },
         };
         self.write_dispatch_result(order, action, message, task.as_ref(), actor).await
     }
@@ -164,6 +175,8 @@ impl SupplierFulfillmentProcess {
         message: &mut InboxMessage,
         order: &SupplierFulfillmentOrder,
         error_class: ErrorClass,
+        actor: &AuditActor,
+        owner_org_unit_id: String,
     ) -> Result<Option<IntegrationErrorTask>> {
         message
             .update(InboxMessageUpdate { status: Some(InboxMessageStatus::Failed), ..Default::default() })?;
@@ -174,7 +187,8 @@ impl SupplierFulfillmentProcess {
                 business_object_id: Some(order.base.id.clone()),
                 error_class,
                 owner_role: None,
-                owner_user_id: None,
+                owner_user_id: Some(actor.id().to_string()),
+                owner_org_unit_id,
             },
         )?;
         Ok(Some(task))

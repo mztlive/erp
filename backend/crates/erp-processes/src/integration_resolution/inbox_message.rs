@@ -120,14 +120,20 @@ impl IntegrationResolutionProcess {
             },
             PreparedWriteBackOutcome::Failed { error_class, attempt_summary, attempt_at } => {
                 apply_failed_outcome(&mut message)?;
+                let org = self
+                    .domain()
+                    .access()
+                    .require_handler_org(actor.id(), attempt_at, &mut NoTransaction)
+                    .await?;
                 let task = prepare_failed_message_task(
                     InboxMessageId::new(message.base.id.clone()),
                     error_class,
                     actor.id(),
+                    org,
                     attempt_summary,
                     attempt_at,
                 )?;
-                let work_item = error_work_item(&task, actor.id())?;
+                let work_item = error_work_item(&task)?;
                 let audit = actor.clone().resource_log(
                     "inbox_message.failed",
                     "inbox_message",

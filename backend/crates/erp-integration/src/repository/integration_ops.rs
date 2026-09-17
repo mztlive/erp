@@ -13,24 +13,18 @@
 //! `integration_error_task` 由 `status` 状态机承载投递状态。**本域不提供任何软删除
 //! 方法**（base 的泛型 `soft_delete`/`restore` 不在本域调用面暴露）。
 //!
-//! 筛选/行类型定义在本文件，经 `IntegrationOpsExt` 的关联类型对外暴露
-//! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
+//! 筛选/行类型定义在 `filters` 子模块，经本模块再导出给 `IntegrationOpsExt`。
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::common::time::Instant;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
-};
-use serde::{Deserialize, Serialize};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 
 use super::IntegrationOpsExt;
 use crate::entity::integration_ops::{
-    ErrorClass, ErrorTaskStatus, InboxMessage, InboxMessageId, InboxMessageStatus, IntegrationErrorTask,
-    MessageType, ReconciliationDifference, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
-    ResolutionAction, ResolutionType, ResultingStatus, SourceSystemId,
+    InboxMessage, IntegrationErrorTask, MessageType, ReconciliationDifference, ReconciliationDifferenceId,
+    ReconciliationDifferenceResolution, SourceSystemId,
 };
 use crate::repository::owned::{
     InboxMessageRepository, IntegrationErrorTaskRepository, ReconciliationDifferenceRepository,
@@ -51,359 +45,11 @@ const ERROR_TASK_SORT_FIELDS: &[&str] = &["created_at", "last_attempt_at", "stat
 /// `reconciliation_difference` 列表排序白名单。
 const DIFFERENCE_SORT_FIELDS: &[&str] = &["created_at"];
 
-/// 入站消息列表投影行（列表接口只取必要字段，禁止返回整文档；
-/// 内容引用 `payload_reference` 不进入列表投影）。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct InboxMessageRow {
-    /// 实体主键。
-    pub id: String,
-    /// 来源系统 ID。
-    pub source_system_id: SourceSystemId,
-    /// 来源事件 ID。
-    pub source_event_id: String,
-    /// 消息类型。
-    pub message_type: MessageType,
-    /// 业务事实键（幂等键）。
-    pub business_fact_key: String,
-    /// 来源契约版本。
-    pub payload_schema_version: String,
-    /// 消息处理状态。
-    pub status: InboxMessageStatus,
-    /// 来源系统发送时间。
-    pub source_sent_at: Option<Instant>,
-    /// ERP 接收时间。
-    pub received_at: Instant,
-    /// 处理完成时间。
-    pub processed_at: Option<Instant>,
-    /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
-    pub version: u64,
-    /// 创建时间（秒级时间戳）。
-    pub created_at: u64,
-}
-
-/// 入站消息列表筛选条件。
-#[derive(Debug, Clone)]
-pub struct InboxMessageFilter {
-    /// 来源系统 ID；`None` 表示不筛选。
-    pub source_system_id: Option<SourceSystemId>,
-    /// 消息类型；`None` 表示不筛选。
-    pub message_type: Option<MessageType>,
-    /// 消息处理状态；`None` 表示不筛选。
-    pub status: Option<InboxMessageStatus>,
-    /// 来源事件 ID 模糊匹配（字面量、忽略大小写）；`None` 表示不筛选。
-    pub source_event_id: Option<String>,
-    /// 接收时间下界（Unix 秒，含）；`None` 表示不筛选。
-    pub received_at_from: Option<i64>,
-    /// 接收时间上界（Unix 秒，含）；`None` 表示不筛选。
-    pub received_at_to: Option<i64>,
-    /// 页码（1 起）。
-    pub page: u64,
-    /// 单页条数。
-    pub page_size: u32,
-    /// 排序字段（白名单内，默认 `created_at`）。
-    pub sort_by: Option<String>,
-    /// 是否升序；`false` 表示降序（默认）。
-    pub sort_ascending: bool,
-}
-
-impl Default for InboxMessageFilter {
-    fn default() -> Self {
-        Self {
-            source_system_id: None,
-            message_type: None,
-            status: None,
-            source_event_id: None,
-            received_at_from: None,
-            received_at_to: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        }
-    }
-}
-
-impl QueryFilter for InboxMessageFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    fn to_doc(&self) -> Document {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        if let Some(source_system_id) = &self.source_system_id {
-            filter.insert("source_system_id", source_system_id.to_string());
-        }
-        if let Some(message_type) = self.message_type {
-            filter.insert("message_type", message_type.as_str());
-        }
-        if let Some(status) = self.status {
-            filter.insert("status", status.as_str());
-        }
-        insert_literal_regex_filter(&mut filter, "source_event_id", self.source_event_id.as_deref());
-        insert_time_range(&mut filter, "received_at", self.received_at_from, self.received_at_to);
-        filter
-    }
-}
-
-impl Pagination for InboxMessageFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    fn page_and_size(&self) -> (u64, u64) {
-        (self.page, u64::from(self.page_size))
-    }
-}
-
-/// 集成错误任务列表投影行（列表接口只取必要字段；解决证据文本
-/// `resolution` 不进入列表投影）。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct IntegrationErrorTaskRow {
-    /// 实体主键。
-    pub id: String,
-    /// 关联的消息。
-    pub message_id: Option<InboxMessageId>,
-    /// 关联的业务对象。
-    pub business_object_id: Option<String>,
-    /// 错误分类。
-    pub error_class: ErrorClass,
-    /// 任务状态。
-    pub status: ErrorTaskStatus,
-    /// 责任角色。
-    pub owner_role: Option<String>,
-    /// 责任人。
-    pub owner_user_id: Option<String>,
-    /// 重试次数。
-    pub attempt_count: u32,
-    /// 最近尝试时间。
-    pub last_attempt_at: Option<Instant>,
-    /// 最近尝试结果（脱敏）。
-    pub last_attempt_summary: Option<String>,
-    /// 解决方式。
-    pub resolution_type: Option<ResolutionType>,
-    /// 完成时间。
-    pub resolved_at: Option<Instant>,
-    /// 乐观锁版本。
-    pub version: u64,
-    /// 创建时间（秒级时间戳）。
-    pub created_at: u64,
-}
-
-/// 集成错误任务列表筛选条件。
-#[derive(Debug, Clone)]
-pub struct IntegrationErrorTaskFilter {
-    /// 字面量关键词；分页和计数共同使用。
-    pub q: Option<String>,
-    /// 关联的消息；`None` 表示不筛选。
-    pub message_id: Option<InboxMessageId>,
-    /// 关联的业务对象；`None` 表示不筛选。
-    pub business_object_id: Option<String>,
-    /// 错误分类；`None` 表示不筛选。
-    pub error_class: Option<ErrorClass>,
-    /// 任务状态；`None` 表示不筛选。
-    pub status: Option<ErrorTaskStatus>,
-    /// 责任角色；`None` 表示不筛选。
-    pub owner_role: Option<String>,
-    /// 责任人模糊匹配（字面量、忽略大小写）；`None` 表示不筛选。
-    pub owner_user_id: Option<String>,
-    /// 页码（1 起）。
-    pub page: u64,
-    /// 单页条数。
-    pub page_size: u32,
-    /// 排序字段（白名单内，默认 `created_at`）。
-    pub sort_by: Option<String>,
-    /// 是否升序；`false` 表示降序（默认）。
-    pub sort_ascending: bool,
-}
-
-impl Default for IntegrationErrorTaskFilter {
-    fn default() -> Self {
-        Self {
-            q: None,
-            message_id: None,
-            business_object_id: None,
-            error_class: None,
-            status: None,
-            owner_role: None,
-            owner_user_id: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        }
-    }
-}
-
-impl QueryFilter for IntegrationErrorTaskFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    fn to_doc(&self) -> Document {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        if let Some(message_id) = &self.message_id {
-            filter.insert("message_id", message_id.to_string());
-        }
-        if let Some(business_object_id) = &self.business_object_id {
-            filter.insert("business_object_id", business_object_id);
-        }
-        if let Some(error_class) = self.error_class {
-            filter.insert("error_class", error_class.as_str());
-        }
-        if let Some(status) = self.status {
-            filter.insert("status", status.as_str());
-        }
-        if let Some(owner_role) = &self.owner_role {
-            filter.insert("owner_role", owner_role);
-        }
-        insert_literal_regex_filter(&mut filter, "owner_user_id", self.owner_user_id.as_deref());
-        keyword_filter(
-            &mut filter,
-            self.q.as_deref(),
-            &["id", "business_object_id", "message_id", "last_attempt_summary", "error_class"],
-        );
-        error_label_filter(&mut filter, self.q.as_deref());
-        filter
-    }
-}
-
-impl Pagination for IntegrationErrorTaskFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    fn page_and_size(&self) -> (u64, u64) {
-        (self.page, u64::from(self.page_size))
-    }
-}
-
-/// 对账差异列表投影行（正式差异事实，只读）。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ReconciliationDifferenceRow {
-    /// 实体主键。
-    pub id: String,
-    /// 差异对象类型。
-    pub business_object_type: String,
-    /// 差异对象 ID。
-    pub business_object_id: String,
-    /// 差异分类。
-    pub difference_type: String,
-    /// 左侧不可变证据引用。
-    pub left_fact_reference: Option<String>,
-    /// 右侧不可变证据引用。
-    pub right_fact_reference: Option<String>,
-    /// 乐观锁版本。
-    pub version: u64,
-    /// 差异发现时间（秒级时间戳）。
-    pub created_at: u64,
-}
-
-/// 对账差异列表筛选条件。
-#[derive(Debug, Clone)]
-pub struct ReconciliationDifferenceFilter {
-    /// 字面量关键词；分页和计数共同使用。
-    pub q: Option<String>,
-    /// 差异对象类型；`None` 表示不筛选。
-    pub business_object_type: Option<String>,
-    /// 差异对象 ID；`None` 表示不筛选。
-    pub business_object_id: Option<String>,
-    /// 差异分类；`None` 表示不筛选。
-    pub difference_type: Option<String>,
-    /// 发现时间下界（Unix 秒，含）；`None` 表示不筛选。
-    pub created_at_from: Option<i64>,
-    /// 发现时间上界（Unix 秒，含）；`None` 表示不筛选。
-    pub created_at_to: Option<i64>,
-    /// 页码（1 起）。
-    pub page: u64,
-    /// 单页条数。
-    pub page_size: u32,
-    /// 排序字段（白名单内，默认 `created_at`）。
-    pub sort_by: Option<String>,
-    /// 是否升序；`false` 表示降序（默认）。
-    pub sort_ascending: bool,
-}
-
-impl Default for ReconciliationDifferenceFilter {
-    fn default() -> Self {
-        Self {
-            q: None,
-            business_object_type: None,
-            business_object_id: None,
-            difference_type: None,
-            created_at_from: None,
-            created_at_to: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        }
-    }
-}
-
-impl QueryFilter for ReconciliationDifferenceFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    fn to_doc(&self) -> Document {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        if let Some(business_object_type) = &self.business_object_type {
-            filter.insert("business_object_type", business_object_type);
-        }
-        if let Some(business_object_id) = &self.business_object_id {
-            filter.insert("business_object_id", business_object_id);
-        }
-        if let Some(difference_type) = &self.difference_type {
-            filter.insert("difference_type", difference_type);
-        }
-        insert_time_range(&mut filter, "created_at", self.created_at_from, self.created_at_to);
-        keyword_filter(
-            &mut filter,
-            self.q.as_deref(),
-            &[
-                "id",
-                "business_object_id",
-                "business_object_type",
-                "difference_type",
-                "left_fact_reference",
-                "right_fact_reference",
-            ],
-        );
-        if self.q.as_deref().is_some_and(|q| "对账差异".contains(q)) {
-            filter.remove("$or");
-        }
-        filter
-    }
-}
-
-impl Pagination for ReconciliationDifferenceFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    fn page_and_size(&self) -> (u64, u64) {
-        (self.page, u64::from(self.page_size))
-    }
-}
-
-/// 差异解决记录历史投影行（不可变追加记录，只读）。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ResolutionHistoryRow {
-    /// 实体主键。
-    pub id: String,
-    /// 递增处理序号。
-    pub resolution_no: u32,
-    /// 解决动作。
-    pub resolution_action: ResolutionAction,
-    /// 动作后的派生状态。
-    pub resulting_status: ResultingStatus,
-    /// 终态证据引用。
-    pub evidence_reference: Option<String>,
-    /// 处理人。
-    pub handled_by: String,
-    /// 处理时间。
-    pub handled_at: Instant,
-}
+mod filters;
+pub use filters::{
+    InboxMessageFilter, InboxMessageRow, IntegrationErrorTaskFilter, IntegrationErrorTaskRow,
+    ReconciliationDifferenceFilter, ReconciliationDifferenceRow, ResolutionHistoryRow,
+};
 
 impl<'a> InboxMessageRepository<'a> {
     /// 按「来源系统 + 来源事件 ID」查找已接收消息（消息层去重判定）。
@@ -651,6 +297,42 @@ impl<'a> ReconciliationDifferenceResolutionRepository<'a> {
         mongo_ops::find_many(&collection, filter, options, executor).await
     }
 
+    /// 按历史处理人读取其参与过的差异 ID；不删除处理留痕。
+    ///
+    /// # 参数
+    /// * `handled_by` - 历史处理人稳定 ID
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回去重后的差异 ID。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn find_difference_ids_handled_by(
+        &self,
+        handled_by: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        if handled_by.is_empty() {
+            return Ok(Vec::new());
+        }
+        let filter = doc! {
+            "handled_by": { "$in": handled_by },
+            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        };
+        let options =
+            FindOptions::builder().projection(doc! { "reconciliation_difference_id": 1, "id": 1 }).build();
+        let collection = self.collection().clone_with_type::<Document>();
+        let rows = mongo_ops::find_many(&collection, filter, options, executor).await?;
+        let mut ids = rows
+            .into_iter()
+            .filter_map(|row| row.get_str("reconciliation_difference_id").ok().map(str::to_string))
+            .collect::<Vec<_>>();
+        ids.sort();
+        ids.dedup();
+        Ok(ids)
+    }
+
     /// 读取差异的最新一条解决记录（派生当前处理状态）。
     ///
     /// 按处理序号降序取首条，当前处理状态由最后一条处理动作派生（§6.21）。
@@ -749,27 +431,6 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Do
     doc! { field: direction, "id": direction }
 }
 
-/// 向查询条件追加秒级时间戳闭区间范围（BSON Int64 形态，与 `Instant`/`created_at`
-/// 持久化形态一致；区间两端可选，任一端缺失表示不设界）。
-///
-/// # 参数
-/// * `filter` - 待追加的查询条件
-/// * `field` - 时间字段名
-/// * `from` - 下界（含）；`None` 表示不设下界
-/// * `to` - 上界（含）；`None` 表示不设上界
-fn insert_time_range(filter: &mut Document, field: &str, from: Option<i64>, to: Option<i64>) {
-    let mut range = Document::new();
-    if let Some(from) = from {
-        range.insert("$gte", from);
-    }
-    if let Some(to) = to {
-        range.insert("$lte", to);
-    }
-    if !range.is_empty() {
-        filter.insert(field, range);
-    }
-}
-
 /// 入站消息列表投影字段。
 ///
 /// # 返回
@@ -804,6 +465,8 @@ fn integration_error_task_projection() -> Document {
         "status": 1,
         "owner_role": 1,
         "owner_user_id": 1,
+        "owner_org_unit_id": 1,
+        "completed_by": 1,
         "attempt_count": 1,
         "last_attempt_at": 1,
         "last_attempt_summary": 1,
@@ -826,6 +489,8 @@ fn reconciliation_difference_projection() -> Document {
         "difference_type": 1,
         "left_fact_reference": 1,
         "right_fact_reference": 1,
+        "owner_user_id": 1,
+        "owner_org_unit_id": 1,
         "version": 1,
         "created_at": 1,
     }
@@ -850,88 +515,8 @@ fn resolution_history_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use mongodb::bson::doc;
-    use persistence_core::QueryFilter;
 
-    use super::{
-        DIFFERENCE_SORT_FIELDS, ERROR_TASK_SORT_FIELDS, INBOX_SORT_FIELDS, InboxMessageFilter,
-        IntegrationErrorTaskFilter, ReconciliationDifferenceFilter, sort_doc,
-    };
-    use crate::entity::integration_ops::{
-        ErrorClass, ErrorTaskStatus, InboxMessageStatus, MessageType, SourceSystemId,
-    };
-
-    #[test]
-    fn inbox_filter_applies_optional_fields_and_time_range() {
-        let filter = InboxMessageFilter {
-            source_system_id: Some(SourceSystemId::new("sys-mall-1")),
-            message_type: Some(MessageType::PaymentSucceeded),
-            status: Some(InboxMessageStatus::Received),
-            source_event_id: Some("SO-1.".to_string()),
-            received_at_from: Some(1_700_000_000),
-            received_at_to: Some(1_700_000_100),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        };
-
-        let document = filter.to_doc();
-        assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
-        assert_eq!(document.get_str("source_system_id").unwrap(), "sys-mall-1");
-        assert_eq!(document.get_str("message_type").unwrap(), "PAYMENT_SUCCEEDED");
-        assert_eq!(document.get_str("status").unwrap(), "received");
-        assert_eq!(document.get_document("source_event_id").unwrap().get_str("$regex").unwrap(), r"SO\-1\.");
-        let range = document.get_document("received_at").unwrap();
-        assert_eq!(range.get_i64("$gte").unwrap(), 1_700_000_000);
-        assert_eq!(range.get_i64("$lte").unwrap(), 1_700_000_100);
-    }
-
-    #[test]
-    fn error_task_filter_maps_enums_to_stable_codes() {
-        let filter = IntegrationErrorTaskFilter {
-            q: None,
-            message_id: None,
-            business_object_id: Some("so-1".to_string()),
-            error_class: Some(ErrorClass::TransientFailure),
-            status: Some(ErrorTaskStatus::AutoRetrying),
-            owner_role: Some("ops".to_string()),
-            owner_user_id: Some("u-1".to_string()),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        };
-
-        let document = filter.to_doc();
-        assert_eq!(document.get_str("error_class").unwrap(), "transient_failure");
-        assert_eq!(document.get_str("status").unwrap(), "auto_retrying");
-        assert_eq!(document.get_str("owner_role").unwrap(), "ops");
-        assert_eq!(document.get_document("owner_user_id").unwrap().get_str("$regex").unwrap(), r"u\-1");
-    }
-
-    #[test]
-    fn difference_filter_applies_object_key_and_time_range() {
-        let filter = ReconciliationDifferenceFilter {
-            q: None,
-            business_object_type: Some("mall_order".to_string()),
-            business_object_id: Some("MO-1".to_string()),
-            difference_type: Some("amount_mismatch".to_string()),
-            created_at_from: Some(1_700_000_000),
-            created_at_to: Some(1_700_000_100),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        };
-
-        let document = filter.to_doc();
-        assert_eq!(document.get_str("business_object_type").unwrap(), "mall_order");
-        assert_eq!(document.get_str("business_object_id").unwrap(), "MO-1");
-        assert_eq!(document.get_str("difference_type").unwrap(), "amount_mismatch");
-        let range = document.get_document("created_at").unwrap();
-        assert_eq!(range.get_i64("$gte").unwrap(), 1_700_000_000);
-        assert_eq!(range.get_i64("$lte").unwrap(), 1_700_000_100);
-    }
+    use super::{DIFFERENCE_SORT_FIELDS, ERROR_TASK_SORT_FIELDS, INBOX_SORT_FIELDS, sort_doc};
 
     #[test]
     fn sort_doc_defaults_to_created_at_and_rejects_non_whitelisted_fields() {
@@ -953,85 +538,5 @@ mod tests {
             sort_doc(Some("business_object_id"), false, DIFFERENCE_SORT_FIELDS),
             doc! { "created_at": -1, "id": -1 }
         );
-    }
-}
-
-/// 字面量多字段匹配，结构化范围保留为 AND 条件。
-fn keyword_filter(filter: &mut Document, q: Option<&str>, fields: &[&str]) {
-    let Some(q) = q else {
-        return;
-    };
-    let clauses = fields
-        .iter()
-        .map(|field| {
-            let mut clause = Document::new();
-            insert_literal_regex_filter(&mut clause, field, Some(q));
-            clause
-        })
-        .collect::<Vec<_>>();
-    filter.insert("$or", clauses);
-}
-
-#[cfg(test)]
-mod keyword_tests {
-    use super::*;
-
-    /// 关键词按字面量 OR 匹配且不覆盖状态、归属与软删除条件。
-    #[test]
-    fn literal_keyword_keeps_structured_constraints() {
-        let filter = IntegrationErrorTaskFilter {
-            q: Some("event.[x]".into()),
-            message_id: None,
-            business_object_id: None,
-            error_class: None,
-            status: Some(ErrorTaskStatus::Pending),
-            owner_role: None,
-            owner_user_id: Some("alice".into()),
-            page: 3,
-            page_size: 50,
-            sort_by: None,
-            sort_ascending: false,
-        };
-        let document = filter.to_doc();
-        assert_eq!(document.get_str("status").unwrap(), "pending");
-        assert!(document.contains_key("deleted_at"));
-        assert!(document.contains_key("owner_user_id"));
-        let clauses = document.get_array("$or").unwrap();
-        assert!(
-            clauses.iter().any(|clause| clause.as_document().unwrap().contains_key("last_attempt_summary"))
-        );
-        assert_eq!(
-            clauses[0].as_document().unwrap().get_document("id").unwrap().get_str("$regex").unwrap(),
-            r"event\.\[x\]"
-        );
-        assert_eq!(
-            sort_doc(Some("created_at"), false, ERROR_TASK_SORT_FIELDS),
-            doc! { "created_at": -1, "id": -1 }
-        );
-    }
-}
-
-/// 保留队列现有中文错误类别搜索，别名仅扩展类别 OR 分支。
-fn error_label_filter(filter: &mut Document, q: Option<&str>) {
-    let Some(q) = q else {
-        return;
-    };
-    let aliases = [
-        (ErrorClass::CapabilityGap, "能力不足"),
-        (ErrorClass::MappingError, "参数/映射错误"),
-        (ErrorClass::BusinessRejected, "供应商业务拒绝"),
-        (ErrorClass::TransientFailure, "临时故障"),
-        (ErrorClass::ResultUnknown, "结果未知"),
-        (ErrorClass::AuthSignature, "鉴权/签名失败"),
-        (ErrorClass::RateLimited, "调用次数受限"),
-        (ErrorClass::OutOfOrder, "通知顺序异常"),
-    ];
-    let codes = aliases
-        .iter()
-        .filter(|(class, label)| label.contains(q) || class.label().contains(q))
-        .map(|(class, _)| class.as_str())
-        .collect::<Vec<_>>();
-    if let Ok(clauses) = filter.get_array_mut("$or") {
-        clauses.push(doc! { "error_class": { "$in": codes } }.into());
     }
 }

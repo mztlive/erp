@@ -549,6 +549,7 @@ mod integration_brief_tests {
                 error_class: ErrorClass::ResultUnknown,
                 owner_role: Some("integration-operator".to_string()),
                 owner_user_id: Some("operator-1".to_string()),
+                owner_org_unit_id: "org-ops".to_string(),
             },
         )
         .unwrap();
@@ -579,6 +580,8 @@ mod integration_brief_tests {
                 difference_type: "金额不一致".to_string(),
                 left_fact_reference: Some("mall-snapshot:7".to_string()),
                 right_fact_reference: Some("erp-revision:9".to_string()),
+                owner_user_id: "operator-1".to_string(),
+                owner_org_unit_id: "org-finance".to_string(),
             },
         )
         .unwrap();

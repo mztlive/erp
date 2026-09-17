@@ -1,4 +1,3 @@
-import { collectQueuePages } from "./queue-pagination"
 /**
  * W29 正式处理责任的批量查询：按业务对象键归集 work item 投影。
  * 从 requests.ts 拆出，供队列与详情请求函数共用。
@@ -9,33 +8,26 @@ import {
     mapWorkItemDto,
     type WorkItemProjection,
 } from "@/features/work-items"
-import type { IntegrationResolutionQuery } from "../types"
 
 export function workItemObjectKey(type: string, id: string): string {
     return `${type.trim().toUpperCase()}:${id}`
 }
 
-export async function fetchW29WorkItems(
-    owner: IntegrationResolutionQuery["owner"],
-    history = false,
-): Promise<Map<string, WorkItemProjection>> {
-    const scope = history
-        ? "history"
-        : owner === "assigned"
-          ? "managed"
-          : "mine"
-    const items = await collectQueuePages((page) =>
-        listWorkItems({
-            scope,
-            timezone:
-                Intl.DateTimeFormat().resolvedOptions().timeZone ||
-                "Asia/Shanghai",
-            page,
-            pageSize: 100,
-        }),
-    )
+export async function fetchW29WorkItems(input?: {
+    handlerUserIds?: string
+    history?: boolean
+}): Promise<Map<string, WorkItemProjection>> {
+    const result = await listWorkItems({
+        scope: input?.history ? "history" : "managed",
+        timezone:
+            Intl.DateTimeFormat().resolvedOptions().timeZone ||
+            "Asia/Shanghai",
+        page: 1,
+        pageSize: 100,
+        handlerUserIds: input?.handlerUserIds,
+    })
     const byObject = new Map<string, WorkItemProjection>()
-    for (const dto of items) {
+    for (const dto of result.items) {
         const item = mapWorkItemDto(dto)
         const objectType = item.businessObjectType.trim().toUpperCase()
         if (

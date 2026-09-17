@@ -62,6 +62,8 @@ const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     ("payable_account", &["list", "detail"], &[ScopeDimension::InternalOrg]),
     ("supplier_payment", &["list", "detail"], &[ScopeDimension::InternalOrg]),
     ("purchase_invoice_allocation", &["list"], &[ScopeDimension::InternalOrg]),
+    ("integration_error_task", &["list", "detail", "create"], &[ScopeDimension::InternalOrg]),
+    ("reconciliation_difference", &["list", "detail", "create", "decide"], &[ScopeDimension::InternalOrg]),
 ];
 
 /// 已接线消费者的资源动作登记。
@@ -230,5 +232,20 @@ mod tests {
         assert!(registration("fulfillment_queue", "list").is_err());
         assert!(registration("customer_quality", "list").is_err());
         assert!(registration("handover", "update").is_err());
+    }
+
+    #[test]
+    fn wired_integration_handlers_reject_history_writes() {
+        for action in ["list", "detail", "create"] {
+            let consumer = registration("integration_error_task", action).unwrap();
+            assert!(!consumer.allows_history);
+            assert_eq!(consumer.required_dimensions, &[ScopeDimension::InternalOrg]);
+        }
+        for action in ["list", "detail", "create", "decide"] {
+            let consumer = registration("reconciliation_difference", action).unwrap();
+            assert!(!consumer.allows_history);
+        }
+        assert!(registration("integration_error_task", "decide").is_err());
+        assert!(registration("reconciliation_difference", "update").is_err());
     }
 }

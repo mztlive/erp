@@ -76,9 +76,18 @@ export function useIntegrationPageUrl({
                     patch.errorClass === null
                         ? undefined
                         : (patch.errorClass ?? base.errorClass),
-                owner:
-                    (patch.owner as typeof base.owner | undefined) ??
-                    base.owner,
+                handlerUserIds:
+                    patch.handlerUserIds === null
+                        ? undefined
+                        : (patch.handlerUserIds ?? base.handlerUserIds),
+                operatorUserIds:
+                    patch.operatorUserIds === null
+                        ? undefined
+                        : (patch.operatorUserIds ?? base.operatorUserIds),
+                scopeVersion:
+                    patch.scopeVersion === null
+                        ? undefined
+                        : (patch.scopeVersion ?? base.scopeVersion),
                 q: patch.q === null ? undefined : (patch.q ?? base.q),
                 queueContextId: patch.queueContextId ?? base.queueContextId,
                 resolveWorkItemId:
@@ -129,7 +138,8 @@ export function useIntegrationPageUrl({
         urlState.mode !== "all" ||
         urlState.environment !== "production" ||
         urlState.errorClass ||
-        urlState.owner !== "me" ||
+        urlState.handlerUserIds ||
+        urlState.operatorUserIds ||
         urlState.q,
     )
 

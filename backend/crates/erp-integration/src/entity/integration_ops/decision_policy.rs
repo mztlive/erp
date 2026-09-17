@@ -437,7 +437,8 @@ mod tests {
                 business_object_id: (!with_message).then(|| "so-1".to_string()),
                 error_class: ErrorClass::TransientFailure,
                 owner_role: None,
-                owner_user_id: None,
+                owner_user_id: Some("user-1".to_string()),
+                owner_org_unit_id: "org-ops".to_string(),
             },
         )
         .unwrap()
@@ -452,6 +453,8 @@ mod tests {
                 difference_type: difference_type.to_string(),
                 left_fact_reference: Some("mall_order_fact://f-1".to_string()),
                 right_fact_reference: None,
+                owner_user_id: "user-1".to_string(),
+                owner_org_unit_id: "org-finance".to_string(),
             },
         )
         .unwrap()

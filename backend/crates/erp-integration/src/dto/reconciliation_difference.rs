@@ -1,8 +1,8 @@
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{QueryIds, normalized_text, page_or_default, page_size_or_default};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::common::{PageParams, non_blank, normalize_sort};
+use super::common::{PageParams, non_blank, normalize_sort, reject_me_ids};
 use super::error_task::ActionBlockerView;
 use super::task_decision::{
     ControlledEvidenceRef, ReconciliationReasonRegistryView, ResolutionEvidencePolicyView,
@@ -50,6 +50,7 @@ pub struct CreateDifferenceRequest {
 
 /// 对账差异列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct DifferenceListParams {
     /// 编号、业务对象、事件或差异摘要的字面量关键词。
     #[validate(length(max = 200))]
@@ -65,6 +66,16 @@ pub struct DifferenceListParams {
     pub created_at_from: Option<i64>,
     /// 发现时间上界（秒级时间戳，含）。
     pub created_at_to: Option<i64>,
+    /// 当前处理人稳定 ID 列表。
+    pub handler_user_ids: Option<QueryIds>,
+    /// 历史处理人稳定 ID 列表（处理记录 `handled_by`）。
+    pub operator_user_ids: Option<QueryIds>,
+    /// 当前处理人所属内部组织。
+    pub org_unit_ids: Option<QueryIds>,
+    /// 组织筛选是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
+    /// 跨页必须携带的范围版本。
+    pub scope_version: Option<String>,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
@@ -93,6 +104,16 @@ pub(crate) struct DifferenceListQuery {
     pub created_at_from: Option<i64>,
     /// 发现时间上界。
     pub created_at_to: Option<i64>,
+    /// 当前处理人稳定 ID。
+    pub handler_user_ids: Vec<String>,
+    /// 历史处理人稳定 ID。
+    pub operator_user_ids: Vec<String>,
+    /// 当前处理人所属内部组织。
+    pub org_unit_ids: Vec<String>,
+    /// 组织筛选是否包含有效下级。
+    pub include_descendants: bool,
+    /// 跨页范围版本。
+    pub scope_version: Option<String>,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -109,6 +130,17 @@ impl DifferenceListParams {
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<DifferenceListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, DIFFERENCE_SORT_FIELDS)?;
+        if self.scope_version.as_ref().is_some_and(|version| version.is_empty() || version.len() > 256) {
+            return Err(crate::Error::ValidationError("范围版本非法".into()));
+        }
+        if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
+            return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
+        }
+        let handler_user_ids = self.handler_user_ids.as_ref().map(QueryIds::as_slice).unwrap_or(&[]).to_vec();
+        let operator_user_ids =
+            self.operator_user_ids.as_ref().map(QueryIds::as_slice).unwrap_or(&[]).to_vec();
+        reject_me_ids(&handler_user_ids, "当前处理人")?;
+        reject_me_ids(&operator_user_ids, "历史处理人")?;
         Ok(DifferenceListQuery {
             q: normalized_text(self.q.as_deref()),
             business_object_type: normalized_text(self.business_object_type.as_deref()),
@@ -116,6 +148,11 @@ impl DifferenceListParams {
             difference_type: normalized_text(self.difference_type.as_deref()),
             created_at_from: self.created_at_from,
             created_at_to: self.created_at_to,
+            handler_user_ids,
+            operator_user_ids,
+            org_unit_ids: self.org_unit_ids.as_ref().map(QueryIds::as_slice).unwrap_or(&[]).to_vec(),
+            include_descendants: self.include_descendants.unwrap_or(false),
+            scope_version: self.scope_version.clone(),
             paging: PageParams {
                 page: page_or_default(self.page),
                 page_size: page_size_or_default(self.page_size),
@@ -147,6 +184,30 @@ pub struct DifferenceView {
     pub version: u64,
     /// 差异发现时间（秒级时间戳）。
     pub created_at: u64,
+    /// 当前处理人。
+    pub owner_user_id: String,
+}
+
+/// 带范围版本的对账差异列表响应。
+#[derive(Debug, Clone, Serialize)]
+pub struct DifferenceListView {
+    /// 分页结果。
+    #[serde(flatten)]
+    pub data: super::PageView<DifferenceView>,
+    /// 跨页必须原样回传的范围版本。
+    pub scope_version: String,
+    /// RBAC 策略版本。
+    pub policy_version: u64,
+    /// 组织配置版本。
+    pub organization_version: u64,
+    /// 授权解析时点。
+    pub as_of: String,
+    /// 角色无有效范围时为 `no_scope`。
+    pub empty_reason: Option<&'static str>,
+    /// 当前范围口径摘要。
+    pub scope_summary: &'static str,
+    /// 当前处理人权威来源。
+    pub ownership_basis: &'static str,
 }
 
 /// 差异处理记录视图（不可变追加历史）。
@@ -228,6 +289,7 @@ impl From<ReconciliationDifference> for DifferenceView {
             status: None,
             version: 0,
             created_at: difference.base.created_at,
+            owner_user_id: difference.owner_user_id,
         }
     }
 }
@@ -247,6 +309,11 @@ mod tests {
             difference_type: None,
             created_at_from: None,
             created_at_to: None,
+            handler_user_ids: None,
+            operator_user_ids: None,
+            org_unit_ids: None,
+            include_descendants: None,
+            scope_version: None,
             page: Some(0),
             page_size: Some(u32::MAX),
             sort_by: None,
@@ -261,6 +328,11 @@ mod tests {
             difference_type: Some("amount_mismatch".to_string()),
             created_at_from: Some(1_700_000_000),
             created_at_to: Some(1_700_000_100),
+            handler_user_ids: None,
+            operator_user_ids: None,
+            org_unit_ids: None,
+            include_descendants: None,
+            scope_version: None,
             page: Some(3),
             page_size: Some(10),
             sort_by: Some("created_at".to_string()),
@@ -273,5 +345,32 @@ mod tests {
         assert_eq!(query.created_at_to, Some(1_700_000_100));
         assert_eq!(query.paging.page, 3);
         assert_eq!(query.paging.page_size, 10);
+    }
+
+    #[test]
+    fn difference_list_params_reject_me_as_person_id() {
+        let handlers = DifferenceListParams {
+            handler_user_ids: Some(serde_json::from_value(serde_json::json!("me")).unwrap()),
+            ..DifferenceListParams::default()
+        };
+        assert!(handlers.normalized().is_err());
+        let operators = DifferenceListParams {
+            operator_user_ids: Some(serde_json::from_value(serde_json::json!("ME")).unwrap()),
+            ..DifferenceListParams::default()
+        };
+        assert!(operators.normalized().is_err());
+    }
+
+    #[test]
+    fn difference_view_projects_current_handler() {
+        use crate::entity::integration_ops::{ReconciliationDifference, ReconciliationDifferenceId};
+        let difference = ReconciliationDifference::new(
+            ReconciliationDifferenceId::new("diff-view"),
+            crate::entity::integration_ops::reconciliation_difference::tests::difference_data(),
+        )
+        .unwrap();
+        let view = super::DifferenceView::from(difference);
+        assert_eq!(view.owner_user_id, "user-1");
+        assert_eq!(view.id, "diff-view");
     }
 }

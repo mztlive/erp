@@ -49,6 +49,8 @@ pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[
         ],
     ),
     ("sales_selection_proposal", &["list", "get"]),
+    ("integration_error_task", &["list", "detail", "create"]),
+    ("reconciliation_difference", &["list", "detail", "create", "decide"]),
 ];
 
 /// 首次初始化显式岗位清单；没有条目的岗位不获得兜底范围。
@@ -117,6 +119,9 @@ fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeDat
     if resource == "approval_instance" && !matches!(role, "role-root" | "role-finance" | "role-management") {
         return Vec::new();
     }
+    if matches!(resource, "integration_error_task" | "reconciliation_difference") {
+        return integration_definitions(role, resource, actions);
+    }
     let mut scope_types = vec![DataScopeType::Company];
     let mut granted_actions = actions.to_vec();
     match role {
@@ -161,6 +166,23 @@ fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeDat
     scope_types
         .into_iter()
         .map(|scope_type| definition(role, resource, &granted_actions, scope_type))
+        .collect()
+}
+
+/// 集成异常与差异的岗位默认范围；处理人按本人，管理者按公司。
+fn integration_definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeData> {
+    let (scope_types, granted) = match role {
+        "role-root" | "role-sysadmin" => (vec![DataScopeType::Company], actions.to_vec()),
+        "role-management" => (
+            vec![DataScopeType::Company],
+            actions.iter().copied().filter(|a| matches!(*a, "list" | "detail")).collect(),
+        ),
+        "role-finance" | "role-procurement" => (vec![DataScopeType::SelfOwned], actions.to_vec()),
+        _ => return Vec::new(),
+    };
+    scope_types
+        .into_iter()
+        .map(|scope_type| definition(role, resource, granted.as_slice(), scope_type))
         .collect()
 }
 

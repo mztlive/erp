@@ -25,9 +25,17 @@ impl IntegrationResolutionProcess {
         actor: &AuditActor,
     ) -> Result<DifferenceView> {
         req.validate()?;
-        let owner_user_id = req.owner_user_id.clone();
-        let difference = prepare_difference(&req)?;
-        let work_item = difference_work_item(&difference, &owner_user_id)?;
+        let org = self
+            .domain()
+            .access()
+            .require_handler_org(
+                &req.owner_user_id,
+                erp_core::common::time::Instant::now(),
+                &mut persistence_core::NoTransaction,
+            )
+            .await?;
+        let difference = prepare_difference(&req, org)?;
+        let work_item = difference_work_item(&difference)?;
         self.store_difference(difference.clone(), work_item, actor).await?;
         Ok(difference.into())
     }

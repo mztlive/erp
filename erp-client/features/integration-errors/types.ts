@@ -23,8 +23,6 @@ export type IntegrationMode = "all" | "errors"
 
 export type IntegrationEnvironment = "production" | "verification"
 
-export type IntegrationOwnerFilter = "me" | "assigned"
-
 export type FundsImpact = "NONE" | "POTENTIAL" | "POSTED"
 
 type QueryOutcome =
@@ -231,7 +229,11 @@ export type IntegrationResolutionQuery = {
     mode: IntegrationMode
     environment: IntegrationEnvironment | "all"
     errorClass?: string
-    owner: IntegrationOwnerFilter
+    handlerUserIds?: string
+    operatorUserIds?: string
+    currentUserId?: string
+    scopeVersion?: string
+    page?: number
     q?: string
     queueContextId?: string
     resolveWorkItemId?: string
@@ -243,6 +245,10 @@ export type IntegrationResolutionQuery = {
 export type IntegrationQueueView = {
     items: IntegrationResolutionItemView[]
     metrics: IntegrationMetrics
+    emptyReason?: "no_scope" | null
+    scopeVersion?: string
+    scopeSummary?: string
+    ownershipBasis?: string
     context: {
         queueContextId: string
         filterSummary: string
@@ -350,7 +356,6 @@ export {
     EVIDENCE_KIND_LABEL,
     FUNDS_LABEL,
     MODE_LABEL,
-    OWNER_LABEL,
     REVIEWER_SEPARATION_LABEL,
     VIEW_LABEL,
 } from "./lib/labels"

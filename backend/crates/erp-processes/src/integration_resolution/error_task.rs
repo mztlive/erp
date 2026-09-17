@@ -28,8 +28,17 @@ impl IntegrationResolutionProcess {
         if let Some(message_id) = &req.message_id {
             self.domain().ensure_message_exists(message_id.as_ref()).await?;
         }
-        let task = prepare_error_task(&req)?;
-        let work_item = error_work_item(&task, &req.owner_user_id)?;
+        let org = self
+            .domain()
+            .access()
+            .require_handler_org(
+                &req.owner_user_id,
+                erp_core::common::time::Instant::now(),
+                &mut persistence_core::NoTransaction,
+            )
+            .await?;
+        let task = prepare_error_task(&req, org)?;
+        let work_item = error_work_item(&task)?;
         self.store_error_task(task.clone(), work_item, actor).await?;
         Ok(task.into())
     }

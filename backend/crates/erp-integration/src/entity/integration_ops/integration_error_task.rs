@@ -21,6 +21,8 @@ const BUSINESS_OBJECT_ID_MAX_LEN: usize = 128;
 const OWNER_ROLE_MAX_LEN: usize = 64;
 /// 责任人标识最大长度。
 const OWNER_USER_ID_MAX_LEN: usize = 128;
+/// 处理人内部组织标识最大长度。
+const OWNER_ORG_UNIT_ID_MAX_LEN: usize = 128;
 /// 最近尝试结果（脱敏）最大长度。
 const ATTEMPT_SUMMARY_MAX_LEN: usize = 512;
 /// 解决/关闭证据文本最大长度。
@@ -251,6 +253,8 @@ pub struct IntegrationErrorTaskData {
     pub owner_role: Option<String>,
     /// 责任人。
     pub owner_user_id: Option<String>,
+    /// 当前处理人有效内部组织。
+    pub owner_org_unit_id: String,
 }
 
 /// 错误任务更新数据（只允许修改责任信息；消息/业务对象与错误分类是关键字段）。
@@ -277,8 +281,13 @@ pub struct IntegrationErrorTask {
     pub status: ErrorTaskStatus,
     /// 责任角色。
     pub owner_role: Option<String>,
-    /// 责任人。
+    /// 当前处理人。
     pub owner_user_id: Option<String>,
+    /// 当前处理人有效内部组织。
+    pub owner_org_unit_id: String,
+    /// 已办处理人；历史筛选使用，不删除留痕。
+    #[serde(default)]
+    pub completed_by: Option<String>,
     /// 重试次数。
     pub attempt_count: u32,
     /// 最近尝试时间。
@@ -315,7 +324,8 @@ impl IntegrationErrorTask {
             return Err(Error::from("错误任务必须关联消息或业务对象"));
         }
         let owner_role = normalize_optional_text(data.owner_role, "责任角色", OWNER_ROLE_MAX_LEN)?;
-        let owner_user_id = normalize_optional_text(data.owner_user_id, "责任人", OWNER_USER_ID_MAX_LEN)?;
+        let owner_user_id = require_handler_user_id(data.owner_user_id)?;
+        let owner_org_unit_id = require_handler_org_unit_id(data.owner_org_unit_id)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -324,7 +334,9 @@ impl IntegrationErrorTask {
             error_class: data.error_class,
             status: ErrorTaskStatus::Pending,
             owner_role,
-            owner_user_id,
+            owner_user_id: Some(owner_user_id),
+            owner_org_unit_id,
+            completed_by: None,
             attempt_count: 0,
             last_attempt_at: None,
             last_attempt_summary: None,
@@ -348,7 +360,41 @@ impl IntegrationErrorTask {
     /// 当责任字段超长时返回错误。
     pub fn update(&mut self, update: IntegrationErrorTaskUpdate) -> Result<()> {
         self.owner_role = normalize_optional_text(update.owner_role, "责任角色", OWNER_ROLE_MAX_LEN)?;
-        self.owner_user_id = normalize_optional_text(update.owner_user_id, "责任人", OWNER_USER_ID_MAX_LEN)?;
+        if update.owner_user_id.is_some() {
+            self.owner_user_id = Some(require_handler_user_id(update.owner_user_id)?);
+        }
+        Ok(())
+    }
+
+    /// 改派当前处理人，并同步其有效内部组织。
+    ///
+    /// # 参数
+    /// * `owner_user_id` - 合格内部处理人
+    /// * `owner_org_unit_id` - 处理人当前有效内部组织
+    ///
+    /// # 返回
+    /// 更新成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 处理人或组织为空、为 `me`/`company` 占位或超长时返回错误。
+    pub fn reassign_handler(&mut self, owner_user_id: String, owner_org_unit_id: String) -> Result<()> {
+        self.owner_user_id = Some(require_handler_user_id(Some(owner_user_id))?);
+        self.owner_org_unit_id = require_handler_org_unit_id(owner_org_unit_id)?;
+        Ok(())
+    }
+
+    /// 记录已办处理人；不删除既有参与留痕。
+    ///
+    /// # 参数
+    /// * `user_id` - 完成或关闭该任务的处理人
+    ///
+    /// # 返回
+    /// 记录成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 处理人为空、为 `me` 或超长时返回错误。
+    pub fn record_completed_by(&mut self, user_id: String) -> Result<()> {
+        self.completed_by = Some(require_handler_user_id(Some(user_id))?);
         Ok(())
     }
 
@@ -544,6 +590,26 @@ impl IntegrationErrorTask {
     }
 }
 
+/// 规范化并拒绝 `"me"` 占位的处理人 ID。
+fn require_handler_user_id(raw: Option<String>) -> Result<String> {
+    let owner = normalize_optional_text(raw, "责任人", OWNER_USER_ID_MAX_LEN)?
+        .ok_or_else(|| Error::from("错误任务必须指定合格内部处理人"))?;
+    if owner.eq_ignore_ascii_case("me") {
+        return Err(Error::from("处理人不得使用 me 作为人员 ID"));
+    }
+    Ok(owner)
+}
+
+/// 规范化并拒绝公司占位的处理人内部组织。
+fn require_handler_org_unit_id(raw: String) -> Result<String> {
+    let org =
+        normalize_required_text(raw, "处理人组织不能为空", OWNER_ORG_UNIT_ID_MAX_LEN, "处理人组织过长")?;
+    if org.eq_ignore_ascii_case("company") {
+        return Err(Error::from("处理人组织不得使用公司占位"));
+    }
+    Ok(org)
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use erp_core::common::time::Instant;
@@ -562,7 +628,8 @@ pub(crate) mod tests {
             business_object_id: None,
             error_class: ErrorClass::TransientFailure,
             owner_role: Some(" ops ".to_string()),
-            owner_user_id: None,
+            owner_user_id: Some("user-1".to_string()),
+            owner_org_unit_id: "org-ops".to_string(),
         }
     }
 
@@ -600,6 +667,16 @@ pub(crate) mod tests {
     fn new_rejects_missing_message_and_object() {
         let data = IntegrationErrorTaskData { message_id: None, business_object_id: None, ..task_data() };
         assert!(IntegrationErrorTask::new(IntegrationErrorTaskId::new("task-4"), data).is_err());
+    }
+
+    #[test]
+    fn new_rejects_missing_handler_and_me_placeholder() {
+        let missing = IntegrationErrorTaskData { owner_user_id: None, ..task_data() };
+        assert!(IntegrationErrorTask::new(IntegrationErrorTaskId::new("task-owner"), missing).is_err());
+        let me = IntegrationErrorTaskData { owner_user_id: Some("me".into()), ..task_data() };
+        assert!(IntegrationErrorTask::new(IntegrationErrorTaskId::new("task-me"), me).is_err());
+        let company = IntegrationErrorTaskData { owner_org_unit_id: "company".into(), ..task_data() };
+        assert!(IntegrationErrorTask::new(IntegrationErrorTaskId::new("task-org"), company).is_err());
     }
 
     #[test]

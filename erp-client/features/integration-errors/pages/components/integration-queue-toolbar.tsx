@@ -11,15 +11,20 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 
 import type { IntegrationUrlState } from "../../lib/url-state"
+import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
 import {
     ENV_LABEL,
     MODE_LABEL,
-    OWNER_LABEL,
     VIEW_LABEL,
     type IntegrationView,
 } from "../../types"
 
-type IntegrationFilterKey = "q" | "mode" | "environment"
+type IntegrationFilterKey =
+    | "q"
+    | "mode"
+    | "environment"
+    | "handlerUserIds"
+    | "operatorUserIds"
 
 type IntegrationAppliedChip = Readonly<{
     key: IntegrationFilterKey
@@ -75,13 +80,14 @@ export function IntegrationQueueToolbar({
             if (key === "q") onSearchDraftChange("")
             if (key === "mode") setModeDraft("all")
             if (key === "environment") setEnvironmentDraft("production")
+            const cleared =
+                key === "mode"
+                    ? "all"
+                    : key === "environment"
+                      ? "production"
+                      : null
             patchUrl({
-                [key === "environment" ? "environment" : key]:
-                    key === "mode"
-                        ? "all"
-                        : key === "environment"
-                          ? "production"
-                          : null,
+                [key]: cleared,
                 taskId: null,
                 differenceId: null,
             })
@@ -94,6 +100,18 @@ export function IntegrationQueueToolbar({
     >(() => {
         const chips: IntegrationAppliedChip[] = []
         if (urlState.q) chips.push({ key: "q", label: `搜索：${urlState.q}` })
+        if (urlState.handlerUserIds) {
+            chips.push({
+                key: "handlerUserIds",
+                label: `当前处理人：${urlState.handlerUserIds}`,
+            })
+        }
+        if (urlState.operatorUserIds) {
+            chips.push({
+                key: "operatorUserIds",
+                label: `历史处理人：${urlState.operatorUserIds}`,
+            })
+        }
         if (urlState.mode !== "all") {
             chips.push({
                 key: "mode",
@@ -107,7 +125,13 @@ export function IntegrationQueueToolbar({
             })
         }
         return chips
-    }, [urlState.environment, urlState.mode, urlState.q])
+    }, [
+        urlState.environment,
+        urlState.handlerUserIds,
+        urlState.mode,
+        urlState.operatorUserIds,
+        urlState.q,
+    ])
 
     const hasPendingChanges =
         searchDraft.trim() !== (urlState.q ?? "") ||
@@ -141,32 +165,31 @@ export function IntegrationQueueToolbar({
                     aria-label="队列视图"
                     inputClassName="w-[9.5rem]"
                 />
-                <Label
-                    htmlFor="integration-queue-toolbar-owner"
-                    className="ml-3 text-xs text-muted-foreground"
-                >
-                    责任人
-                </Label>
-                <OptionCombobox
-                    id="integration-queue-toolbar-owner"
-                    value={urlState.owner}
-                    onValueChange={(v) =>
+                <ResponsibleUserFilter
+                    id="integration-queue-toolbar-handler"
+                    label="当前处理人"
+                    value={urlState.handlerUserIds ?? ""}
+                    options={[]}
+                    onChange={(value) =>
                         patchUrl({
-                            owner: v ?? "me",
+                            handlerUserIds: value || null,
                             taskId: null,
                             differenceId: null,
                         })
                     }
-                    options={(
-                        Object.keys(OWNER_LABEL) as (keyof typeof OWNER_LABEL)[]
-                    ).map((o) => ({
-                        value: o,
-                        label: OWNER_LABEL[o],
-                    }))}
-                    inputClassName="w-[8rem]"
-                    size="sm"
-                    aria-label="责任人"
-                    allowClear={false}
+                />
+                <ResponsibleUserFilter
+                    id="integration-queue-toolbar-operator"
+                    label="历史处理人"
+                    value={urlState.operatorUserIds ?? ""}
+                    options={[]}
+                    onChange={(value) =>
+                        patchUrl({
+                            operatorUserIds: value || null,
+                            taskId: null,
+                            differenceId: null,
+                        })
+                    }
                 />
             </div>
             <ListWorkspaceFilterBar

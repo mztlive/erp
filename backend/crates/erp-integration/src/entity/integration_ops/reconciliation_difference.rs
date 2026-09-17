@@ -13,8 +13,8 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use erp_core::Result;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::ReconciliationDifferenceId;
@@ -27,6 +27,10 @@ const BUSINESS_OBJECT_ID_MAX_LEN: usize = 128;
 const DIFFERENCE_TYPE_MAX_LEN: usize = 64;
 /// 不可变证据引用最大长度。
 const FACT_REFERENCE_MAX_LEN: usize = 512;
+/// 处理人标识最大长度。
+const OWNER_USER_ID_MAX_LEN: usize = 128;
+/// 处理人内部组织标识最大长度。
+const OWNER_ORG_UNIT_ID_MAX_LEN: usize = 128;
 
 /// 对账差异创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -41,6 +45,10 @@ pub struct ReconciliationDifferenceData {
     pub left_fact_reference: Option<String>,
     /// 右侧不可变证据引用。
     pub right_fact_reference: Option<String>,
+    /// 当前处理人。
+    pub owner_user_id: String,
+    /// 当前处理人有效内部组织。
+    pub owner_org_unit_id: String,
 }
 impl ReconciliationDifferenceData {
     /// 以必填三元组构造差异创建数据；证据引用默认为空。
@@ -62,6 +70,8 @@ impl ReconciliationDifferenceData {
             difference_type,
             left_fact_reference: None,
             right_fact_reference: None,
+            owner_user_id: String::new(),
+            owner_org_unit_id: String::new(),
         }
     }
 
@@ -100,6 +110,10 @@ pub struct ReconciliationDifference {
     pub left_fact_reference: Option<String>,
     /// 右侧不可变证据引用。
     pub right_fact_reference: Option<String>,
+    /// 当前处理人。
+    pub owner_user_id: String,
+    /// 当前处理人有效内部组织。
+    pub owner_org_unit_id: String,
 }
 
 impl ReconciliationDifference {
@@ -142,8 +156,10 @@ impl ReconciliationDifference {
         let right_fact_reference =
             normalize_optional_text(data.right_fact_reference, "右侧证据引用", FACT_REFERENCE_MAX_LEN)?;
         if left_fact_reference.is_none() && right_fact_reference.is_none() {
-            return Err(erp_core::Error::from("差异必须至少提供一侧不可变证据引用"));
+            return Err(Error::from("差异必须至少提供一侧不可变证据引用"));
         }
+        let owner_user_id = require_handler_user_id(data.owner_user_id)?;
+        let owner_org_unit_id = require_handler_org_unit_id(data.owner_org_unit_id)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -152,7 +168,26 @@ impl ReconciliationDifference {
             difference_type,
             left_fact_reference,
             right_fact_reference,
+            owner_user_id,
+            owner_org_unit_id,
         })
+    }
+
+    /// 改派当前处理人，并同步其有效内部组织。
+    ///
+    /// # 参数
+    /// * `owner_user_id` - 合格内部处理人
+    /// * `owner_org_unit_id` - 处理人当前有效内部组织
+    ///
+    /// # 返回
+    /// 更新成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 处理人或组织为空、为 `me`/`company` 占位或超长时返回错误。
+    pub fn reassign_handler(&mut self, owner_user_id: String, owner_org_unit_id: String) -> Result<()> {
+        self.owner_user_id = require_handler_user_id(owner_user_id)?;
+        self.owner_org_unit_id = require_handler_org_unit_id(owner_org_unit_id)?;
+        Ok(())
     }
 
     /// 判断差异分类是否表示潜在资金影响。
@@ -170,6 +205,25 @@ impl ReconciliationDifference {
     }
 }
 
+/// 规范化并拒绝 `"me"` 占位的处理人 ID。
+fn require_handler_user_id(raw: String) -> Result<String> {
+    let owner = normalize_required_text(raw, "处理人不能为空", OWNER_USER_ID_MAX_LEN, "处理人过长")?;
+    if owner.eq_ignore_ascii_case("me") {
+        return Err(Error::from("处理人不得使用 me 作为人员 ID"));
+    }
+    Ok(owner)
+}
+
+/// 规范化并拒绝公司占位的处理人内部组织。
+fn require_handler_org_unit_id(raw: String) -> Result<String> {
+    let org =
+        normalize_required_text(raw, "处理人组织不能为空", OWNER_ORG_UNIT_ID_MAX_LEN, "处理人组织过长")?;
+    if org.eq_ignore_ascii_case("company") {
+        return Err(Error::from("处理人组织不得使用公司占位"));
+    }
+    Ok(org)
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use erp_core::ids::ReconciliationDifferenceId;
@@ -183,6 +237,8 @@ pub(crate) mod tests {
             difference_type: " amount_mismatch ".to_string(),
             left_fact_reference: Some(" mall_order_fact://f-1001 ".to_string()),
             right_fact_reference: Some(" invoice://inv-88 ".to_string()),
+            owner_user_id: " user-1 ".to_string(),
+            owner_org_unit_id: " org-finance ".to_string(),
         }
     }
 
@@ -197,7 +253,22 @@ pub(crate) mod tests {
         assert_eq!(difference.difference_type, "amount_mismatch");
         assert_eq!(difference.left_fact_reference.as_deref(), Some("mall_order_fact://f-1001"));
         assert_eq!(difference.right_fact_reference.as_deref(), Some("invoice://inv-88"));
+        assert_eq!(difference.owner_user_id, "user-1");
+        assert_eq!(difference.owner_org_unit_id, "org-finance");
         assert!(!difference.base.is_deleted(), "正式差异事实不设业务软删除（§4.5.1）");
+    }
+
+    #[test]
+    fn new_rejects_missing_handler_and_me_placeholder() {
+        let missing = ReconciliationDifferenceData { owner_user_id: "  ".into(), ..difference_data() };
+        assert!(
+            ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-owner"), missing).is_err()
+        );
+        let me = ReconciliationDifferenceData { owner_user_id: "me".into(), ..difference_data() };
+        assert!(ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-me"), me).is_err());
+        let company =
+            ReconciliationDifferenceData { owner_org_unit_id: "company".into(), ..difference_data() };
+        assert!(ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-org"), company).is_err());
     }
 
     #[test]

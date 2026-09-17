@@ -57,8 +57,11 @@ export function IntegrationErrorsPage({
         autoNext,
     } = useIntegrationPageUrl({ forcedTaskId, forcedDifferenceId })
 
-    const queueQuery = useIntegrationQueueQuery(query)
     const profileQuery = useAccountProfileQuery()
+    const queueQuery = useIntegrationQueueQuery({
+        ...query,
+        currentUserId: profileQuery.data?.userid,
+    })
 
     const view = queueQuery.data
     const queueItems = React.useMemo(() => view?.items ?? [], [view?.items])
@@ -155,6 +158,8 @@ export function IntegrationErrorsPage({
             mode: "all",
             environment: "production",
             errorClass: null,
+            handlerUserIds: null,
+            operatorUserIds: null,
             q: null,
             taskId: null,
             differenceId: null,
@@ -271,6 +276,9 @@ export function IntegrationErrorsPage({
 
             {!focusMode ? (
                 <p className="text-xs text-muted-foreground">
+                    {view?.scopeSummary
+                        ? `${view.scopeSummary} · `
+                        : null}
                     筛选：{view?.context.filterSummary}
                 </p>
             ) : null}
@@ -299,6 +307,7 @@ export function IntegrationErrorsPage({
                 neighbor={neighbor}
                 replaceUrl={replaceUrl}
                 onClearFilters={clearQueueFilters}
+                emptyReason={view?.emptyReason}
             />
         </PageScaffold>
     )

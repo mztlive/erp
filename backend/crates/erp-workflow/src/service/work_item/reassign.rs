@@ -557,6 +557,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                         .await?
                     } else {
                         current.reassign(target_user_id.clone(), Instant::now())?;
+                        validation
+                            .facts
+                            .reassign_integration_handler(&mut current, &target_user_id, session)
+                            .await?;
                         db.work_items().update(&mut current, session).await.map_err(|error| match error {
                             persistence_core::Error::OptimisticLockingError => {
                                 Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())

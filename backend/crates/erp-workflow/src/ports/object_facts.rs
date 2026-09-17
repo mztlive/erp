@@ -257,6 +257,25 @@ pub trait ObjectFactPort: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<()>;
 
+    /// 改派 W29 对象当前处理人，同步实体与任务组织。
+    ///
+    /// # 参数
+    /// * `item` - 已改派用户的正式任务
+    /// * `target_user_id` - 接收人
+    /// * `executor` - 与任务写入相同的执行器
+    ///
+    /// # 返回
+    /// 非 W29 对象时成功且不写入。
+    ///
+    /// # 错误
+    /// 处理人缺少有效内部组织、对象不存在或适配未接线时拒绝。
+    async fn reassign_integration_handler(
+        &self,
+        item: &mut WorkItem,
+        target_user_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
+
     /// Validate a W29 close reason without I/O.
     fn prepare_w29_close(
         &self,
@@ -339,6 +358,21 @@ impl ObjectFactPort for FailClosedObjectFactPort {
         _executor: &mut dyn Executor,
     ) -> Result<()> {
         Err(crate::error::Error::Internal("履约责任适配未接线".to_string()))
+    }
+
+    async fn reassign_integration_handler(
+        &self,
+        item: &mut WorkItem,
+        _target_user_id: &str,
+        _executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if matches!(
+            item.business_object_type.as_str(),
+            "integration_error_task" | "reconciliation_difference"
+        ) {
+            return Err(crate::error::Error::Internal("集成改派适配未接线".to_string()));
+        }
+        Ok(())
     }
 
     fn prepare_w29_close(

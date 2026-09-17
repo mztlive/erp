@@ -82,7 +82,10 @@ export function mapDifference(
         compensationOpen: false,
         ageLabel: ageLabel(diff.created_at),
         ownerRole: formalWorkItem?.ownerRoleLabel ?? "财务",
-        ownerUser: formalWorkItem?.ownerUser?.displayName,
+        ownerUser:
+            formalWorkItem?.ownerUser?.displayName ??
+            diff.owner_user_id ??
+            undefined,
         createdAt: tsToIso(diff.created_at),
         difference: {
             leftLabel: "左侧证据",

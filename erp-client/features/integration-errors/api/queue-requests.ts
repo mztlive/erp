@@ -1,4 +1,3 @@
-import { collectQueuePages } from "./queue-pagination"
 /**
  * W29 队列请求函数。
  * 从 requests.ts 拆出；requests.ts 统一再导出 fetchIntegrationQueue。
@@ -19,130 +18,101 @@ import {
     type BackendDifference,
     type BackendErrorTask,
 } from "./mappers"
-import { fetchW29WorkItems, workItemObjectKey } from "./work-item-lookup"
+
+type ScopedPage<T> = Page<T> & {
+    empty_reason?: string | null
+    scope_version?: string
+    scope_summary?: string
+    ownership_basis?: string
+}
+
+function handlerIds(query: IntegrationResolutionQuery): string | undefined {
+    if (query.handlerUserIds?.trim()) return query.handlerUserIds.trim()
+    if (query.view === "mine" && query.currentUserId?.trim()) {
+        return query.currentUserId.trim()
+    }
+    return undefined
+}
+
+function errorStatus(query: IntegrationResolutionQuery): string | undefined {
+    if (query.view === "resolved") return "resolved"
+    if (query.view === "auto_retry") return "auto_retrying"
+    if (query.view === "mine") return undefined
+    return "manual_required"
+}
 
 export async function fetchIntegrationQueue(
     query: IntegrationResolutionQuery,
 ): Promise<IntegrationQueueView> {
     const pageSize = 50
     const items: IntegrationResolutionItemView[] = []
+    const handlers = handlerIds(query)
+    const operators = query.operatorUserIds?.trim() || undefined
+    let emptyReason: "no_scope" | null = null
+    let scopeVersion = query.scopeVersion
+    let scopeSummary: string | undefined
+    let ownershipBasis: string | undefined
 
-    const workItems = await fetchW29WorkItems(
-        query.owner,
-        query.view === "resolved",
-    )
+    async function takeScope<T>(page: ScopedPage<T>): Promise<void> {
+        if (page.empty_reason === "no_scope") emptyReason = "no_scope"
+        if (page.scope_version) scopeVersion = page.scope_version
+        scopeSummary ??= page.scope_summary
+        ownershipBasis ??= page.ownership_basis
+    }
 
     if (query.view !== "reconciliation") {
-        const status =
-            query.view === "resolved"
-                ? "resolved"
-                : query.view === "auto_retry"
-                  ? "auto_retrying"
-                  : query.view === "mine"
-                    ? undefined
-                    : "manual_required"
-
-        const tasks = await collectQueuePages((page) =>
-            apiGet<Page<BackendErrorTask>>("/admin/integration/error-tasks", {
-                page,
+        const tasks = await apiGet<ScopedPage<BackendErrorTask>>(
+            "/admin/integration/error-tasks",
+            {
+                page: 1,
                 q: query.q?.trim() || undefined,
                 page_size: pageSize,
-                error_class: errorClassToBackend(query.errorClass),
-                status: query.view === "resolved" ? "resolved" : status,
-                owner_user_id: query.owner === "me" ? "me" : undefined,
+                error_class:
+                    query.view === "result_unknown"
+                        ? "result_unknown"
+                        : errorClassToBackend(query.errorClass),
+                status: query.view === "resolved" ? "resolved" : errorStatus(query),
+                handler_user_ids: handlers,
+                operator_user_ids: operators,
+                scope_version: query.scopeVersion,
                 sort_by: "created_at",
                 sort_dir: "desc",
-            }),
+            },
         )
-        for (const t of tasks) {
-            items.push(
-                mapErrorTask(
-                    t,
-                    workItems.get(
-                        workItemObjectKey("INTEGRATION_ERROR_TASK", t.id),
-                    ),
-                ),
-            )
-        }
-
-        // Also fetch pending if view is mine/all
-        if (query.view === "mine" || query.view === "result_unknown") {
-            const more = await collectQueuePages((page) =>
-                apiGet<Page<BackendErrorTask>>(
-                    "/admin/integration/error-tasks",
-                    {
-                        page,
-                        q: query.q?.trim() || undefined,
-                        page_size: pageSize,
-                        error_class:
-                            query.view === "result_unknown"
-                                ? "result_unknown"
-                                : errorClassToBackend(query.errorClass),
-                        status: "pending",
-                        sort_by: "created_at",
-                        sort_dir: "desc",
-                    },
-                ),
-            )
-            const seen = new Set(items.map((i) => i.identity.id))
-            for (const t of more) {
-                if (!seen.has(t.id)) {
-                    items.push(
-                        mapErrorTask(
-                            t,
-                            workItems.get(
-                                workItemObjectKey(
-                                    "INTEGRATION_ERROR_TASK",
-                                    t.id,
-                                ),
-                            ),
-                        ),
-                    )
-                }
-            }
-        }
+        await takeScope(tasks)
+        for (const t of tasks.items) items.push(mapErrorTask(t))
     }
 
     if (
-        query.view === "reconciliation" ||
-        query.view === "mine" ||
-        query.mode === "all"
+        query.mode !== "errors" &&
+        (query.view === "reconciliation" ||
+            query.view === "mine" ||
+            query.mode === "all")
     ) {
         if (
             query.view !== "result_unknown" &&
             query.view !== "security" &&
             query.view !== "auto_retry"
         ) {
-            const diffs = await collectQueuePages((page) =>
-                apiGet<Page<BackendDifference>>(
-                    "/admin/integration/differences",
-                    {
-                        page,
-                        q: query.q?.trim() || undefined,
-                        page_size: pageSize,
-                        sort_by: "created_at",
-                        sort_dir: "desc",
-                    },
-                ),
+            const diffs = await apiGet<ScopedPage<BackendDifference>>(
+                "/admin/integration/differences",
+                {
+                    page: 1,
+                    q: query.q?.trim() || undefined,
+                    page_size: pageSize,
+                    handler_user_ids: handlers,
+                    operator_user_ids: operators,
+                    scope_version: query.scopeVersion,
+                    sort_by: "created_at",
+                    sort_dir: "desc",
+                },
             )
-            for (const d of diffs) {
-                items.push(
-                    mapDifference(
-                        d,
-                        workItems.get(
-                            workItemObjectKey(
-                                "RECONCILIATION_DIFFERENCE",
-                                d.id,
-                            ),
-                        ),
-                    ),
-                )
-            }
+            await takeScope(diffs)
+            for (const d of diffs.items) items.push(mapDifference(d))
         }
     }
 
     const filtered = items.filter((i) => matchesQuery(i, query))
-
     filtered.sort((a, b) => {
         const rank = (i: IntegrationResolutionItemView) => {
             if (i.classification.errorClass === "authentication-or-signature")
@@ -170,6 +140,8 @@ export async function fetchIntegrationQueue(
             `类别=${ERROR_CLASS_LABEL[query.errorClass] ?? query.errorClass}`,
         )
     if (query.q) filterParts.push(`搜索=${query.q}`)
+    if (handlers) filterParts.push(`当前处理人=${handlers}`)
+    if (operators) filterParts.push(`历史处理人=${operators}`)
 
     let resolvedEntry: IntegrationQueueView["resolvedEntry"]
     if (query.resolveWorkItemId) {
@@ -187,6 +159,10 @@ export async function fetchIntegrationQueue(
 
     return {
         items: filtered,
+        emptyReason,
+        scopeVersion,
+        scopeSummary,
+        ownershipBasis,
         metrics: {
             resultUnknown: filtered.filter(
                 (i) => i.classification.errorClass === "result-unknown",

@@ -21,6 +21,7 @@ mod transaction;
 mod work_item_factory;
 use std::sync::Arc;
 
+use erp_integration::ports::IntegrationDataScopePort;
 use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
 use erp_integration::service::IntegrationOpsService;
 use mongodb::Database;
@@ -28,13 +29,18 @@ use mongodb::Database;
 pub struct IntegrationResolutionProcess {
     pub(super) db: Database,
     pub(super) evidence: Arc<dyn IntegrationEvidenceAuthority>,
+    pub(super) data_scope: Arc<dyn IntegrationDataScopePort>,
 }
 impl IntegrationResolutionProcess {
-    /// 绑定同一权威证据实例；不在构造时执行授权或读取。
-    pub fn new(db: Database, evidence: Arc<dyn IntegrationEvidenceAuthority>) -> Self {
-        Self { db, evidence }
+    /// 绑定同一权威证据实例与范围 Port；不在构造时执行授权或读取。
+    pub fn new(
+        db: Database,
+        evidence: Arc<dyn IntegrationEvidenceAuthority>,
+        data_scope: Arc<dyn IntegrationDataScopePort>,
+    ) -> Self {
+        Self { db, evidence, data_scope }
     }
     fn domain(&self) -> IntegrationOpsService {
-        IntegrationOpsService::new(self.db.clone())
+        IntegrationOpsService::with_scope(self.db.clone(), self.data_scope.clone())
     }
 }

@@ -51,9 +51,8 @@ pub use w29_close::*;
 pub use w29_work_items::{
     DIFFERENCE_INITIAL_SUBJECT_VERSION, DIFFERENCE_WORK_ITEM_OBJECT_TYPE, ERROR_WORK_ITEM_OBJECT_TYPE,
     IntegrationResponsibilityKind, IntegrationResponsibilityPriority, IntegrationResponsibilitySpec,
-    W29_FINANCE_ROLE, W29_OPERATIONS_ROLE, W29_OWNER_ORGANIZATION, W29_PROCUREMENT_ROLE, W29_SYSADMIN_ROLE,
-    difference_owner_role, difference_responsibility, error_owner_role, error_priority, error_responsibility,
-    error_work_item_type,
+    W29_FINANCE_ROLE, W29_OPERATIONS_ROLE, W29_PROCUREMENT_ROLE, W29_SYSADMIN_ROLE, difference_owner_role,
+    difference_responsibility, error_owner_role, error_priority, error_responsibility, error_work_item_type,
 };
 
 /// W29 命令的稳定幂等身份与载荷指纹。

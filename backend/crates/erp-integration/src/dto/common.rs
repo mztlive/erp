@@ -18,6 +18,24 @@ pub struct PageParams {
 pub use application_core::PageView;
 /// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串不生效）。
 pub(super) use application_core::non_blank;
+/// 拒绝把 `"me"` 当作人员 ID。
+///
+/// # 参数
+/// * `ids` - 已解析的稳定人员 ID
+/// * `field` - 面向用户的字段名
+///
+/// # 返回
+/// 不含 `me` 时成功。
+///
+/// # 错误
+/// 任一 ID 为 `me` 时返回校验错误。
+pub(crate) fn reject_me_ids(ids: &[String], field: &str) -> crate::Result<()> {
+    if ids.iter().any(|id| id.eq_ignore_ascii_case("me")) {
+        return Err(crate::Error::ValidationError(format!("{field}不得使用 me 作为人员 ID")));
+    }
+    Ok(())
+}
+
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。///
 /// # 参数
 /// * `sort_by` - 可选排序字段；空白视为未提供

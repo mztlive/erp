@@ -15,8 +15,10 @@ mod reconciliation_difference;
 mod task_decision;
 
 pub use common::{PageView, SortDir};
+pub(crate) use error_task::ErrorTaskListQuery;
 pub use error_task::{
-    ActionBlockerView, CreateErrorTaskRequest, ErrorTaskDetailView, ErrorTaskListParams, ErrorTaskView,
+    ActionBlockerView, CreateErrorTaskRequest, ErrorTaskDetailView, ErrorTaskListParams, ErrorTaskListView,
+    ErrorTaskView,
 };
 pub use inbox_message::{
     InboxMessageListParams, InboxMessageListView, InboxMessageView, RegisterInboxMessageRequest,
@@ -24,8 +26,10 @@ pub use inbox_message::{
 };
 pub use prepared_decision::{PreparedDirectDecisionTarget, PreparedWorkItemTarget};
 pub use prepared_inbox::PreparedWriteBackOutcome;
+pub(crate) use reconciliation_difference::DifferenceListQuery;
 pub use reconciliation_difference::{
-    CreateDifferenceRequest, DifferenceDetailView, DifferenceListParams, DifferenceView, ResolutionView,
+    CreateDifferenceRequest, DifferenceDetailView, DifferenceListParams, DifferenceListView, DifferenceView,
+    ResolutionView,
 };
 pub use task_decision::{
     ControlledEvidenceKind, ControlledEvidenceRef, DifferenceReasonCode, DirectReconciliationCommand,

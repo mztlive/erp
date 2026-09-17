@@ -3,6 +3,7 @@ use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::IntegrationErrorTaskId;
+use erp_identity::repository::OrganizationRepository;
 use erp_integration::entity::integration_ops::{
     IntegrationErrorTask, IntegrationErrorTaskData, error_owner_role,
 };
@@ -35,6 +36,20 @@ pub(super) fn settle_health_failure(
     Ok(())
 }
 
+async fn handler_org(
+    db: &mongodb::Database,
+    user_id: &str,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<String> {
+    OrganizationRepository::new(db)
+        .state(executor)
+        .await?
+        .own_org(user_id, Instant::now())?
+        .filter(|org| !org.eq_ignore_ascii_case("company"))
+        .map(str::to_string)
+        .ok_or_else(|| crate::Error::ValidationError("处理人缺少有效内部组织".into()))
+}
+
 pub(super) async fn persist_health_failure_task(
     db: &mongodb::Database,
     connection: &SupplierApiConnection,
@@ -51,9 +66,10 @@ pub(super) async fn persist_health_failure_task(
             error_class: integration_class(error.class),
             owner_role: Some(error_owner_role(integration_class(error.class)).to_string()),
             owner_user_id: Some(actor.id().to_string()),
+            owner_org_unit_id: handler_org(db, actor.id(), executor).await?,
         },
     )?;
-    let work_item = error_work_item(&task, actor.id())?;
+    let work_item = error_work_item(&task)?;
     let work_item_audit = actor.clone().resource_log_with_id(
         format!("w20-work-audit-{}", digest(&[&job.base.id])),
         "integration_error_task.work_item.create",

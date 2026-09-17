@@ -1,8 +1,8 @@
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use application_core::{QueryIds, normalized_text, page_or_default, page_size_or_default};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::common::{PageParams, normalize_sort};
+use super::common::{PageParams, normalize_sort, reject_me_ids};
 use super::task_decision::{ControlledEvidenceRef, ResolutionEvidencePolicyView};
 use crate::Result;
 use crate::entity::integration_ops::{ErrorClass, ErrorTaskStatus, IntegrationErrorTask, ResolutionType};
@@ -28,6 +28,7 @@ pub struct CreateErrorTaskRequest {
 
 /// 错误任务列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct ErrorTaskListParams {
     /// 编号、业务对象、事件或差异摘要的字面量关键词。
     #[validate(length(max = 200))]
@@ -43,8 +44,16 @@ pub struct ErrorTaskListParams {
     pub status: Option<ErrorTaskStatus>,
     /// 责任角色筛选。
     pub owner_role: Option<String>,
-    /// 责任人模糊匹配（忽略大小写）。
-    pub owner_user_id: Option<String>,
+    /// 当前处理人稳定 ID 列表。
+    pub handler_user_ids: Option<QueryIds>,
+    /// 历史处理人稳定 ID 列表（已办 `completed_by`）。
+    pub operator_user_ids: Option<QueryIds>,
+    /// 当前处理人所属内部组织。
+    pub org_unit_ids: Option<QueryIds>,
+    /// 组织筛选是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
+    /// 跨页必须携带的范围版本。
+    pub scope_version: Option<String>,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
@@ -73,8 +82,16 @@ pub(crate) struct ErrorTaskListQuery {
     pub status: Option<ErrorTaskStatus>,
     /// 责任角色筛选。
     pub owner_role: Option<String>,
-    /// 责任人模糊匹配。
-    pub owner_user_id: Option<String>,
+    /// 当前处理人稳定 ID。
+    pub handler_user_ids: Vec<String>,
+    /// 历史处理人稳定 ID。
+    pub operator_user_ids: Vec<String>,
+    /// 当前处理人所属内部组织。
+    pub org_unit_ids: Vec<String>,
+    /// 组织筛选是否包含有效下级。
+    pub include_descendants: bool,
+    /// 跨页范围版本。
+    pub scope_version: Option<String>,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -91,6 +108,17 @@ impl ErrorTaskListParams {
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ErrorTaskListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, ERROR_TASK_SORT_FIELDS)?;
+        if self.scope_version.as_ref().is_some_and(|version| version.is_empty() || version.len() > 256) {
+            return Err(crate::Error::ValidationError("范围版本非法".into()));
+        }
+        if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
+            return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
+        }
+        let handler_user_ids = self.handler_user_ids.as_ref().map(QueryIds::as_slice).unwrap_or(&[]).to_vec();
+        let operator_user_ids =
+            self.operator_user_ids.as_ref().map(QueryIds::as_slice).unwrap_or(&[]).to_vec();
+        reject_me_ids(&handler_user_ids, "当前处理人")?;
+        reject_me_ids(&operator_user_ids, "历史处理人")?;
         Ok(ErrorTaskListQuery {
             q: normalized_text(self.q.as_deref()),
             message_id: self.message_id.clone(),
@@ -98,7 +126,11 @@ impl ErrorTaskListParams {
             error_class: self.error_class,
             status: self.status,
             owner_role: normalized_text(self.owner_role.as_deref()),
-            owner_user_id: normalized_text(self.owner_user_id.as_deref()),
+            handler_user_ids,
+            operator_user_ids,
+            org_unit_ids: self.org_unit_ids.as_ref().map(QueryIds::as_slice).unwrap_or(&[]).to_vec(),
+            include_descendants: self.include_descendants.unwrap_or(false),
+            scope_version: self.scope_version.clone(),
             paging: PageParams {
                 page: page_or_default(self.page),
                 page_size: page_size_or_default(self.page_size),
@@ -140,6 +172,28 @@ pub struct ErrorTaskView {
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+}
+
+/// 带范围版本的错误任务列表响应。
+#[derive(Debug, Clone, Serialize)]
+pub struct ErrorTaskListView {
+    /// 分页结果。
+    #[serde(flatten)]
+    pub data: super::PageView<ErrorTaskView>,
+    /// 跨页必须原样回传的范围版本。
+    pub scope_version: String,
+    /// RBAC 策略版本。
+    pub policy_version: u64,
+    /// 组织配置版本。
+    pub organization_version: u64,
+    /// 授权解析时点。
+    pub as_of: String,
+    /// 角色无有效范围时为 `no_scope`。
+    pub empty_reason: Option<&'static str>,
+    /// 当前范围口径摘要。
+    pub scope_summary: &'static str,
+    /// 当前处理人权威来源。
+    pub ownership_basis: &'static str,
 }
 
 impl From<IntegrationErrorTask> for ErrorTaskView {
@@ -220,7 +274,11 @@ mod tests {
             error_class: Some(ErrorClass::TransientFailure),
             status: Some(ErrorTaskStatus::AutoRetrying),
             owner_role: Some(" ops ".to_string()),
-            owner_user_id: Some("u-1".to_string()),
+            handler_user_ids: Some(serde_json::from_value(serde_json::json!("user-2,user-1")).unwrap()),
+            operator_user_ids: None,
+            org_unit_ids: None,
+            include_descendants: None,
+            scope_version: Some("v1".into()),
             page: Some(2),
             page_size: Some(50),
             sort_by: Some("last_attempt_at".to_string()),
@@ -232,9 +290,24 @@ mod tests {
         assert_eq!(query.error_class, Some(ErrorClass::TransientFailure));
         assert_eq!(query.status, Some(ErrorTaskStatus::AutoRetrying));
         assert_eq!(query.owner_role.as_deref(), Some("ops"));
+        assert_eq!(query.handler_user_ids, vec!["user-1".to_string(), "user-2".to_string()]);
         assert_eq!(query.paging.page, 2);
         assert_eq!(query.paging.page_size, 50);
         assert_eq!(query.paging.sort_by, "last_attempt_at");
         assert_eq!(query.paging.sort_dir, SortDir::Asc);
+    }
+
+    #[test]
+    fn error_task_list_params_reject_me_as_person_id() {
+        let params = ErrorTaskListParams {
+            handler_user_ids: Some(serde_json::from_value(serde_json::json!("me")).unwrap()),
+            ..ErrorTaskListParams::default()
+        };
+        assert!(params.normalized().is_err());
+        let operators = ErrorTaskListParams {
+            operator_user_ids: Some(serde_json::from_value(serde_json::json!("ME")).unwrap()),
+            ..ErrorTaskListParams::default()
+        };
+        assert!(operators.normalized().is_err());
     }
 }

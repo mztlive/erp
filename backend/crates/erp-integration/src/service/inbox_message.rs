@@ -136,6 +136,7 @@ pub fn prepare_failed_message_task(
     message_id: InboxMessageId,
     error_class: ErrorClass,
     actor_id: &str,
+    owner_org_unit_id: String,
     attempt_summary: Option<String>,
     attempt_at: Instant,
 ) -> Result<IntegrationErrorTask> {
@@ -147,6 +148,7 @@ pub fn prepare_failed_message_task(
             error_class,
             owner_role: Some(error_owner_role(error_class).to_string()),
             owner_user_id: Some(actor_id.to_string()),
+            owner_org_unit_id,
         },
     )?;
     if attempt_summary.is_some() {

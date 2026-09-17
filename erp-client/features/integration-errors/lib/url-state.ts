@@ -6,7 +6,6 @@
 import type {
     IntegrationEnvironment,
     IntegrationMode,
-    IntegrationOwnerFilter,
     IntegrationResolutionQuery,
     IntegrationView,
 } from "../types"
@@ -17,7 +16,9 @@ export type IntegrationUrlState = {
     mode: IntegrationMode
     environment: IntegrationEnvironment | "all"
     errorClass?: string
-    owner: IntegrationOwnerFilter
+    handlerUserIds?: string
+    operatorUserIds?: string
+    scopeVersion?: string
     q?: string
     queueContextId: string
     resolveWorkItemId?: string
@@ -37,7 +38,6 @@ const VIEW_VALUES = [
 
 const MODE_VALUES = ["all", "errors"] as const
 const ENV_VALUES = ["all", "production", "verification"] as const
-const OWNER_VALUES = ["me", "assigned"] as const
 
 const codec = createUrlStateCodec<IntegrationUrlState>([
     {
@@ -54,8 +54,9 @@ const codec = createUrlStateCodec<IntegrationUrlState>([
         values: ENV_VALUES,
         defaultValue: "production",
     },
-    // 错误类别统一使用 q 搜索，旧链接不再叠加独立类别条件。
-    { key: "owner", type: "enum", values: OWNER_VALUES, defaultValue: "me" },
+    { key: "handlerUserIds", type: "string" },
+    { key: "operatorUserIds", type: "string" },
+    { key: "scopeVersion", type: "string" },
     { key: "q", type: "string" },
     {
         key: "queueContextId",
@@ -96,7 +97,9 @@ export function toResolutionQuery(
         view: state.view,
         mode: state.mode,
         environment: state.environment,
-        owner: state.owner,
+        handlerUserIds: state.handlerUserIds,
+        operatorUserIds: state.operatorUserIds,
+        scopeVersion: state.scopeVersion,
         q: state.q,
         queueContextId: state.queueContextId,
         resolveWorkItemId: state.resolveWorkItemId,

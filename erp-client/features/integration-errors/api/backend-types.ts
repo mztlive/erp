@@ -43,6 +43,7 @@ export type BackendDifference = {
     status?: string | null
     version: number
     created_at: number
+    owner_user_id?: string | null
     resolutions?: Array<{
         id: string
         resolution_no: number

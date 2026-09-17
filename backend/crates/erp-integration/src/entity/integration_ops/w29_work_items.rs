@@ -8,8 +8,6 @@ use erp_core::Result;
 
 use super::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
 
-/// W29 任务正式责任的归属组织。
-pub const W29_OWNER_ORGANIZATION: &str = "company";
 /// 运营责任角色。
 pub const W29_OPERATIONS_ROLE: &str = "role-operations";
 /// 采购责任角色。
@@ -157,18 +155,17 @@ pub struct IntegrationResponsibilitySpec {
 }
 
 /// 从错误事实提取固定责任，不生成 ID、不取时、不提前验证任务字段。
-pub fn error_responsibility(
-    task: &IntegrationErrorTask,
-    owner_user_id: &str,
-) -> IntegrationResponsibilitySpec {
+///
+/// 处理人及其内部组织必须已写入错误任务；本层不再写入公司占位。
+pub fn error_responsibility(task: &IntegrationErrorTask) -> IntegrationResponsibilitySpec {
     IntegrationResponsibilitySpec {
         task_kind: error_work_item_type(task.error_class),
         business_object_type: ERROR_WORK_ITEM_OBJECT_TYPE.to_string(),
         business_object_id: task.base.id.clone(),
         subject_version: task.base.version.to_string(),
         owner_role: error_owner_role(task.error_class).to_string(),
-        owner_organization_id: W29_OWNER_ORGANIZATION.to_string(),
-        owner_user_id: owner_user_id.to_string(),
+        owner_organization_id: task.owner_org_unit_id.clone(),
+        owner_user_id: task.owner_user_id.clone().unwrap_or_default(),
         priority: error_priority(task.error_class),
         reason_code: Some(task.error_class.as_str().to_string()),
         impact_summary: Some(format!("集成异常待处理：{}", task.error_class.label())),
@@ -181,7 +178,6 @@ pub fn error_responsibility(
 /// 差异类型未注册固定责任规则时返回原错误。
 pub fn difference_responsibility(
     difference: &ReconciliationDifference,
-    owner_user_id: &str,
 ) -> Result<IntegrationResponsibilitySpec> {
     let owner_role = difference_owner_role(&difference.difference_type)?;
     Ok(IntegrationResponsibilitySpec {
@@ -190,8 +186,8 @@ pub fn difference_responsibility(
         business_object_id: difference.base.id.clone(),
         subject_version: DIFFERENCE_INITIAL_SUBJECT_VERSION.to_string(),
         owner_role: owner_role.to_string(),
-        owner_organization_id: W29_OWNER_ORGANIZATION.to_string(),
-        owner_user_id: owner_user_id.to_string(),
+        owner_organization_id: difference.owner_org_unit_id.clone(),
+        owner_user_id: difference.owner_user_id.clone(),
         priority: IntegrationResponsibilityPriority::High,
         reason_code: Some(difference.difference_type.clone()),
         impact_summary: Some(format!("对账差异待核验：{}", difference.difference_type)),
@@ -293,13 +289,14 @@ mod tests {
     }
 
     #[test]
-    fn error_spec_keeps_frozen_identity_and_unvalidated_owner() {
+    fn error_spec_uses_task_handler_and_internal_org() {
         let mut task = crate::entity::integration_ops::integration_error_task::tests::task();
         task.base.version = 7;
         task.error_class = ErrorClass::ResultUnknown;
         task.owner_role = Some("old-role".to_string());
         task.owner_user_id = Some("old-owner".to_string());
-        let spec = super::error_responsibility(&task, "  ");
+        task.owner_org_unit_id = "org-sysadmin".to_string();
+        let spec = super::error_responsibility(&task);
         assert_eq!(
             spec,
             super::IntegrationResponsibilitySpec {
@@ -309,8 +306,8 @@ mod tests {
                 business_object_id: task.base.id.clone(),
                 subject_version: "7".to_string(),
                 owner_role: "role-sysadmin".to_string(),
-                owner_organization_id: "company".to_string(),
-                owner_user_id: "  ".to_string(),
+                owner_organization_id: "org-sysadmin".to_string(),
+                owner_user_id: "old-owner".to_string(),
                 reason_code: Some("result_unknown".to_string()),
                 impact_summary: Some("集成异常待处理：结果未知".to_string()),
             }
@@ -328,7 +325,7 @@ mod tests {
         difference.base.version = 9;
         // 既有事实允许带历史大小写和空白；注册查询归一化，冻结原因仍用原值。
         difference.difference_type = " Amount_Mismatch ".to_string();
-        let spec = super::difference_responsibility(&difference, "  user-1  ").unwrap();
+        let spec = super::difference_responsibility(&difference).unwrap();
         assert_eq!(
             spec,
             super::IntegrationResponsibilitySpec {
@@ -338,8 +335,8 @@ mod tests {
                 business_object_id: "diff-spec".to_string(),
                 subject_version: "0".to_string(),
                 owner_role: "role-finance".to_string(),
-                owner_organization_id: "company".to_string(),
-                owner_user_id: "  user-1  ".to_string(),
+                owner_organization_id: "org-finance".to_string(),
+                owner_user_id: "user-1".to_string(),
                 reason_code: Some(" Amount_Mismatch ".to_string()),
                 impact_summary: Some("对账差异待核验： Amount_Mismatch ".to_string()),
             }
@@ -354,10 +351,10 @@ mod tests {
             crate::entity::integration_ops::reconciliation_difference::tests::difference_data(),
         )
         .unwrap();
-        assert_eq!(super::difference_responsibility(&difference, "   ").unwrap().owner_user_id, "   ");
+        assert_eq!(super::difference_responsibility(&difference).unwrap().owner_user_id, "user-1");
         difference.difference_type = "free_form_type".to_string();
         assert_eq!(
-            super::difference_responsibility(&difference, "   ").unwrap_err().to_string(),
+            super::difference_responsibility(&difference).unwrap_err().to_string(),
             erp_core::Error::from("差异类型未注册固定责任规则，禁止创建任务").to_string(),
         );
     }

@@ -9,3 +9,8 @@ pub mod repository;
 pub mod service;
 
 pub use error::{Error, Result};
+pub use ports::{
+    FailClosedIntegrationDataScopePort, IntegrationDataScopePort, IntegrationResolvedClause,
+    IntegrationResolvedScope, IntegrationScopeObject,
+};
+pub use service::{IntegrationAccess, IntegrationOpsService, ScopedIntegrationList};

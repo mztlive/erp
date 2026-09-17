@@ -100,6 +100,14 @@ fn integration_error_task_indexes() -> Vec<IndexModel> {
             "idx_integration_error_tasks_work_queue",
             doc! { "status": 1, "owner_role": 1, "created_at": 1 },
         ),
+        named_index(
+            "idx_integration_error_tasks_handler",
+            doc! { "owner_user_id": 1, "created_at": -1, "id": -1 },
+        ),
+        named_index(
+            "idx_integration_error_tasks_org",
+            doc! { "owner_org_unit_id": 1, "created_at": -1, "id": -1 },
+        ),
     ]
 }
 
@@ -118,6 +126,10 @@ fn reconciliation_difference_indexes() -> Vec<IndexModel> {
             "idx_reconciliation_differences_object_time",
             doc! { "business_object_type": 1, "created_at": 1 },
         ),
+        named_index(
+            "idx_reconciliation_differences_handler",
+            doc! { "owner_user_id": 1, "created_at": -1, "id": -1 },
+        ),
     ]
 }
 
@@ -134,6 +146,10 @@ fn reconciliation_difference_resolution_indexes() -> Vec<IndexModel> {
         named_index(
             "idx_reconciliation_difference_resolutions_difference",
             doc! { "reconciliation_difference_id": 1 },
+        ),
+        named_index(
+            "idx_reconciliation_difference_resolutions_handled_by",
+            doc! { "handled_by": 1, "reconciliation_difference_id": 1 },
         ),
     ]
 }

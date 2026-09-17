@@ -10,10 +10,11 @@ use axum::extract::{Path, Query, State};
 use axum::{Extension, Json};
 use erp_integration::dto::{
     CreateDifferenceRequest, CreateErrorTaskRequest, DifferenceDetailView, DifferenceListParams,
-    DifferenceView, DirectReconciliationCommand, DirectReconciliationResult, ErrorTaskDetailView,
-    ErrorTaskListParams, ErrorTaskView, InboxMessageListParams, InboxMessageListView, InboxMessageView,
-    IntegrationTaskActionCommand, IntegrationTaskActionResult, IntegrationTaskCompletionCommand,
-    IntegrationTaskCompletionResult, PageView, RegisterInboxMessageRequest, WriteBackInboxResultRequest,
+    DifferenceListView, DifferenceView, DirectReconciliationCommand, DirectReconciliationResult,
+    ErrorTaskDetailView, ErrorTaskListParams, ErrorTaskListView, ErrorTaskView, InboxMessageListParams,
+    InboxMessageListView, InboxMessageView, IntegrationTaskActionCommand, IntegrationTaskActionResult,
+    IntegrationTaskCompletionCommand, IntegrationTaskCompletionResult, PageView, RegisterInboxMessageRequest,
+    WriteBackInboxResultRequest,
 };
 use erp_integration::service::IntegrationOpsService;
 
@@ -140,9 +141,12 @@ pub async fn inbox_message_write_back(
 /// 返回契约形状的分页视图。
 pub async fn error_task_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<ErrorTaskListParams>,
-) -> Result<PageView<ErrorTaskView>> {
-    let page = IntegrationOpsService::new(state.db()).error_task_list(&params).await?;
+) -> Result<ErrorTaskListView> {
+    let page = erp_processes::adapters::scoped_integration_ops_service(state.db(), state.rbac())
+        .error_task_list(&params, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -248,9 +252,12 @@ pub async fn integration_task_completion(
 /// 返回契约形状的分页视图。
 pub async fn difference_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<DifferenceListParams>,
-) -> Result<PageView<DifferenceView>> {
-    let page = IntegrationOpsService::new(state.db()).difference_list(&params).await?;
+) -> Result<DifferenceListView> {
+    let page = erp_processes::adapters::scoped_integration_ops_service(state.db(), state.rbac())
+        .difference_list(&params, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }

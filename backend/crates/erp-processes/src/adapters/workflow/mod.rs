@@ -18,6 +18,7 @@ mod order_access;
 mod purchase_responsibility;
 mod task_scope;
 mod w29_close;
+mod w29_reassign;
 pub mod work_item_authorization;
 
 pub use audit::WorkflowAudit;

@@ -12,6 +12,7 @@ import { IntegrationActionZone } from "./integration-action-zone"
 import { IntegrationDetailWorkflow } from "./integration-detail-workflow"
 import {
     IntegrationEmptyQueue,
+    IntegrationEmptyScope,
     IntegrationEmptySelection,
 } from "./integration-empty-states"
 import { IntegrationTerminalConfirmation } from "./integration-terminal-confirmation"
@@ -29,6 +30,7 @@ export function IntegrationErrorWorkspace({
     neighbor,
     replaceUrl,
     onClearFilters,
+    emptyReason,
 }: {
     items: IntegrationResolutionItemView[]
     item: IntegrationResolutionItemView | undefined
@@ -42,6 +44,7 @@ export function IntegrationErrorWorkspace({
     neighbor: (delta: number) => IntegrationResolutionItemView | null
     replaceUrl: (patch: Record<string, string | null | undefined>) => void
     onClearFilters: () => void
+    emptyReason?: "no_scope" | null
 }) {
     const router = useRouter()
 
@@ -50,6 +53,9 @@ export function IntegrationErrorWorkspace({
         if (next) goToItem(next)
     }
 
+    if (emptyReason === "no_scope") {
+        return <IntegrationEmptyScope />
+    }
     if (items.length === 0) {
         return <IntegrationEmptyQueue onClearFilters={onClearFilters} />
     }

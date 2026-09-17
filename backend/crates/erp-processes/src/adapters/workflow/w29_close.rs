@@ -169,6 +169,8 @@ async fn persist(
                 closed_at,
             )
             .map_err(|error| map_service(Error::from(error)))?;
+            task.record_completed_by(actor_id.to_string())
+                .map_err(|error| map_service(Error::from(error)))?;
             port.persist_task(&mut task, executor).await?;
             Ok(())
         },
@@ -347,7 +349,8 @@ mod tests {
                 business_object_id: Some("source-1".into()),
                 error_class: class,
                 owner_role: None,
-                owner_user_id: None,
+                owner_user_id: Some("operator".into()),
+                owner_org_unit_id: "org-ops".into(),
             },
         )
         .unwrap()

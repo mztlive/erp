@@ -105,6 +105,14 @@ impl ObjectFactPort for WorkflowObjectFacts {
         )
         .await
     }
+    async fn reassign_integration_handler(
+        &self,
+        item: &mut WorkItem,
+        target_user_id: &str,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<()> {
+        super::w29_reassign::reassign_handler(self.db(), item, target_user_id, executor).await
+    }
     fn prepare_w29_close(
         &self,
         reason_code: &str,

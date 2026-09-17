@@ -8,7 +8,6 @@ import type {
     FundsImpact,
     IntegrationEnvironment,
     IntegrationMode,
-    IntegrationOwnerFilter,
     IntegrationView,
 } from "../types"
 
@@ -43,11 +42,6 @@ export const ENV_LABEL: Record<IntegrationEnvironment | "all", string> = {
     all: "全部环境",
     production: "生产",
     verification: "验证",
-}
-
-export const OWNER_LABEL: Record<IntegrationOwnerFilter, string> = {
-    me: "我的任务",
-    assigned: "已分派",
 }
 
 export const FUNDS_LABEL: Record<FundsImpact, string> = {
