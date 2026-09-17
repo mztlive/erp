@@ -41,6 +41,19 @@ export function useSupplierListColumns() {
             },
             lifecycleColumn(),
             {
+                id: "maintainer",
+                header: "维护人",
+                meta: { label: "维护人" },
+                cell: ({ row }) => (
+                    <span className="truncate text-sm">
+                        {row.original.supplierList?.maintainerUserName ||
+                            row.original.supplierList?.maintainerUserId || (
+                                <span className="text-muted-foreground">—</span>
+                            )}
+                    </span>
+                ),
+            },
+            {
                 id: "capability",
                 header: masterDataCopy.colCapability,
                 meta: { label: masterDataCopy.colCapability },

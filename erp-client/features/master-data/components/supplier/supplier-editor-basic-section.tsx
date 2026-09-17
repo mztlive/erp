@@ -41,6 +41,37 @@ export function SupplierEditorBasicSection({
         >
             <div className="grid gap-4 sm:grid-cols-2">
                 <FieldShell>
+                    <Label htmlFor="master-data-supplier-basic-maintainer">
+                        维护人<span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                        id="master-data-supplier-basic-maintainer"
+                        value={values.maintainerUserId}
+                        onChange={(e) =>
+                            setFieldValue("maintainerUserId", e.target.value)
+                        }
+                        placeholder="内部人员 ID"
+                        disabled={!canEdit}
+                    />
+                </FieldShell>
+                <FieldShell>
+                    <Label htmlFor="master-data-supplier-basic-capability-owner">
+                        能力负责人
+                    </Label>
+                    <Input
+                        id="master-data-supplier-basic-capability-owner"
+                        value={values.capabilityOwnerUserId}
+                        onChange={(e) =>
+                            setFieldValue(
+                                "capabilityOwnerUserId",
+                                e.target.value,
+                            )
+                        }
+                        placeholder="新建能力时必填"
+                        disabled={!canEdit}
+                    />
+                </FieldShell>
+                <FieldShell>
                     <Label htmlFor="master-data-supplier-basic-name">
                         名称<span className="text-destructive">*</span>
                     </Label>

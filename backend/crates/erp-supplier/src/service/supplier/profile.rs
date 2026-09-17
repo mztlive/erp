@@ -104,6 +104,8 @@ mod tests {
             invoice_tax_rates: None,
             signing_entity_party_id: erp_core::ids::PartyId::new("party-1"),
             payment_entity_party_id: erp_core::ids::PartyId::new("party-2"),
+            maintainer_user_id: Some("buyer-1".to_string()),
+            capability_owners: vec![],
             capability_codes: Vec::new(),
             qualifications: Vec::new(),
             rating: None,

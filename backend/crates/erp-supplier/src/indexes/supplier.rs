@@ -92,6 +92,14 @@ fn supplier_account_indexes() -> Vec<IndexModel> {
         unique_index("uk_supplier_accounts_party", doc! { "party_id": 1 }),
         unique_index("uk_supplier_accounts_supplier_no", doc! { "supplier_no": 1 }),
         named_index("idx_supplier_accounts_status", doc! { "status": 1 }),
+        named_index(
+            "idx_supplier_accounts_maintainer",
+            doc! { "maintainer_user_id": 1, "deleted_at": 1, "created_at": -1, "id": -1 },
+        ),
+        named_index(
+            "idx_supplier_accounts_org",
+            doc! { "business_org_unit_id": 1, "deleted_at": 1, "created_at": -1, "id": -1 },
+        ),
     ]
 }
 
@@ -115,6 +123,7 @@ fn capability_indexes() -> Vec<IndexModel> {
             doc! { "capability_code": 1, "status": 1, "valid_to": 1 },
         ),
         named_index("idx_supplier_capabilities_supplier_status", doc! { "supplier_id": 1, "status": 1 }),
+        named_index("idx_supplier_capabilities_owner", doc! { "owner_user_id": 1, "supplier_id": 1 }),
     ]
 }
 

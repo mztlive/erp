@@ -419,6 +419,9 @@ function mapSupplierListFacts(
                   .join("、")
             : undefined,
         businessCategory: profile?.business_category?.trim() || undefined,
+        maintainerUserId: supplier.maintainer_user_id || undefined,
+        maintainerUserName: supplier.maintainer_user_name?.trim() || undefined,
+        businessOrgUnitId: supplier.business_org_unit_id || undefined,
     }
 }
 

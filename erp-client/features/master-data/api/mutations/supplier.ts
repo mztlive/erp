@@ -203,6 +203,11 @@ export async function createSupplier(
             ),
             signing_entity_party_id: fields.signingEntity.trim(),
             payment_entity_party_id: fields.paymentEntity.trim(),
+            maintainer_user_id: fields.maintainerUserId?.trim() || null,
+            capability_owners: capabilityCodes.map((code) => ({
+                capability_code: code,
+                owner_user_id: fields.capabilityOwnerUserId?.trim() || "",
+            })),
             capability_codes: capabilityCodes,
             qualifications: buildSupplierProfileQualifications(
                 fields,
@@ -319,6 +324,11 @@ export async function updateSupplierRevision(
             ),
             signing_entity_party_id: fields.signingEntity.trim(),
             payment_entity_party_id: fields.paymentEntity.trim(),
+            maintainer_user_id: fields.maintainerUserId?.trim() || null,
+            capability_owners: capabilityCodes.map((code) => ({
+                capability_code: code,
+                owner_user_id: fields.capabilityOwnerUserId?.trim() || "",
+            })),
             capability_codes: capabilityCodes,
             qualifications: buildSupplierProfileQualifications(
                 fields,
@@ -405,4 +415,42 @@ export async function disableSupplier(
             revisionNo: 0,
         })
     }
+}
+
+/** 显式交接供应商整体维护人。 */
+export async function handoverSupplier(input: {
+    supplierId: string
+    targetUserId: string
+    targetOrgUnitId?: string
+    reason: string
+    expectedVersion: number
+    idempotencyKey: string
+}) {
+    return apiPost(`/admin/suppliers/${input.supplierId}/handover`, {
+        target_user_id: input.targetUserId,
+        target_org_unit_id: input.targetOrgUnitId ?? null,
+        reason: input.reason,
+        expected_version: input.expectedVersion,
+        idempotency_key: input.idempotencyKey,
+    })
+}
+
+/** 显式交接供给能力负责人。 */
+export async function handoverSupplierCapability(input: {
+    supplierId: string
+    capabilityId: string
+    targetUserId: string
+    reason: string
+    expectedVersion: number
+    idempotencyKey: string
+}) {
+    return apiPost(
+        `/admin/suppliers/${input.supplierId}/capabilities/${input.capabilityId}/handover`,
+        {
+            target_user_id: input.targetUserId,
+            reason: input.reason,
+            expected_version: input.expectedVersion,
+            idempotency_key: input.idempotencyKey,
+        },
+    )
 }

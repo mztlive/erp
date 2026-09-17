@@ -81,6 +81,14 @@ pub struct SupplierListSearchInput {
     pub sort_by: Option<String>,
     /// 是否升序。
     pub sort_ascending: bool,
+    /// 已证明的供应商责任范围。
+    pub authorized_scope: crate::repository::scope::SupplierReadScope,
+    /// 维护人筛选；`None` 表示不筛选。
+    pub maintainer_user_ids: Option<Vec<String>>,
+    /// 业务组织筛选；`None` 表示不筛选。
+    pub business_org_unit_ids: Option<Vec<String>>,
+    /// 能力负责人筛选得到的供应商 ID；`None` 表示不筛选。
+    pub capability_owner_user_ids: Vec<String>,
 }
 
 /// 供应商列表事实束。

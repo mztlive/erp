@@ -81,8 +81,18 @@ impl SupplierProfileService {
         let result = prepared.result.clone();
         let db = self.db.clone();
         let client = db.client().clone();
+        let rbac = self.require_rbac()?.clone();
+        let actor = actor.clone();
+        let scoped_id = supplier_id.to_string();
         let transaction_result = client
-            .with_transaction(move |session| Box::pin(async move { prepared.persist(&db, session).await }))
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    crate::adapters::supplier_access(db.clone(), rbac)
+                        .require_with(&actor, "update", &scoped_id, session)
+                        .await?;
+                    prepared.persist(&db, session).await
+                })
+            })
             .await;
         self.resolve_transaction_result_with_assets(
             transaction_result,
@@ -192,7 +202,12 @@ impl SupplierProfileService {
         let expected =
             SaveSupplierProfileRequest::required_update_version(req.expected_supplier_version, "供应商")?;
         match supplier.profile_update_violation(expected) {
-            None => Ok(supplier),
+            None => {
+                supplier
+                    .ensure_responsibility()
+                    .map_err(|error| Error::ValidationError(error.to_string()))?;
+                Ok(supplier)
+            },
             Some(SupplierProfileUpdateViolation::VersionMismatch) => {
                 Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))
             },
@@ -381,10 +396,17 @@ impl SupplierProfileService {
         for code in plan.capability_creates {
             let capability_id = SupplierCapabilityId::new(next_id());
             let revision_id = SupplierCapabilityRevisionId::new(next_id());
+            let owner = req
+                .capability_owners
+                .iter()
+                .find(|item| item.capability_code == code && !item.owner_user_id.trim().is_empty())
+                .map(|item| item.owner_user_id.trim().to_string())
+                .ok_or_else(|| Error::ValidationError("供给能力负责人必须显式指定".to_string()))?;
             let (capability, revision) = profile_change::new_capability(
                 supplier_id,
                 code,
                 req.effective_from,
+                &owner,
                 actor_id,
                 capability_id.clone(),
                 revision_id,

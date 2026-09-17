@@ -110,4 +110,35 @@ impl<'a> SupplierRepository<'a> {
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
+
+    /// 按能力负责人收窄供应商集合；空条件表示不筛选。
+    ///
+    /// # 参数
+    /// * `owner_user_ids` - 能力负责人 ID
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// `None` 表示不筛选；`Some` 为命中的供应商 ID，空集合保持空结果。
+    ///
+    /// # 错误
+    /// 数据库读取失败时拒绝。
+    ///
+    /// # 关键业务约束
+    /// 能力负责人只收窄，不单独扩大可见供应商。
+    pub async fn supplier_ids_by_capability_owners(
+        &self,
+        owner_user_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Vec<SupplierAccountId>>> {
+        if owner_user_ids.is_empty() {
+            return Ok(None);
+        }
+        let ids = find_supplier_ids(
+            self.db.collection::<SupplierIdRow>(SUPPLIER_CAPABILITIES),
+            doc! { "owner_user_id": { "$in": owner_user_ids } },
+            executor,
+        )
+        .await?;
+        Ok(Some(ids))
+    }
 }

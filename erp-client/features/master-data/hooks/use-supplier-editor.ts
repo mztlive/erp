@@ -77,13 +77,16 @@ export function useSupplierEditor(stableId: string) {
     /** 弹窗确认的变更原因；保证 setFieldValue 与 handleSubmit 之间不丢值。 */
     const pendingChangeReasonRef = React.useRef<string | null>(null)
 
-    const initialFormValues = React.useMemo(
-        () =>
-            !isCreate && data
-                ? hydrateSupplierEditor(data)
-                : createSupplierEditorDefaults(isCreate),
-        [data, isCreate],
-    )
+    const initialFormValues = React.useMemo(() => {
+        if (!isCreate && data) return hydrateSupplierEditor(data)
+        const defaults = createSupplierEditorDefaults(isCreate)
+        const userId = accountQuery.data?.userid ?? ""
+        return {
+            ...defaults,
+            maintainerUserId: userId,
+            capabilityOwnerUserId: userId,
+        }
+    }, [accountQuery.data?.userid, data, isCreate])
 
     const form = useAppForm({
         defaultValues: initialFormValues,

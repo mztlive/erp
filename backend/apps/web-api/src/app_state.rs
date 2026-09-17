@@ -527,12 +527,16 @@ impl AppState {
 
     /// Supplier list/detail service with party facts and reveal tokens.
     pub fn supplier_service(&self) -> erp_supplier::SupplierService {
-        erp_processes::adapters::supplier_service_with_sensitive(self.db(), self.sensitive_data())
+        erp_processes::adapters::scoped_supplier_service_with_sensitive(
+            self.db(),
+            self.rbac(),
+            self.sensitive_data(),
+        )
     }
 
     /// Supplier profile root process.
     pub fn supplier_profile_service(&self) -> erp_processes::SupplierProfileService {
-        erp_processes::SupplierProfileService::new(self.db(), self.sensitive_data())
+        erp_processes::SupplierProfileService::new(self.db(), self.sensitive_data()).with_rbac(self.rbac())
     }
 
     /// 绑定供应商后台导入所需数据库、对象存储和密文编解码器。

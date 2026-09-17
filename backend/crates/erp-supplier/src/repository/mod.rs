@@ -2,6 +2,7 @@
 
 pub mod extensions;
 pub mod owned;
+pub mod scope;
 pub mod supplier;
 
 pub use extensions::SupplierExt;
@@ -10,6 +11,7 @@ pub use owned::{
     SupplierProfileCommandRepository, SupplierQualificationCapabilityRepository,
     SupplierQualificationRepository,
 };
+pub use scope::{SupplierReadScope, SupplierScopeClause};
 pub use supplier::{
     SupplierAccountFilter, SupplierAccountRow, SupplierCapabilityFilter, SupplierCommercialProfileFilter,
     SupplierDetailBundle, SupplierListBundle, SupplierListSearchInput, SupplierQualificationFilter,

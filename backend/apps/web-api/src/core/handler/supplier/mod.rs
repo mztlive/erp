@@ -9,8 +9,10 @@ use application_core::AuditActor;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::{Extension, Json};
 use erp_supplier::{
-    PageView, RevealSupplierSensitiveRequest, SaveSupplierProfileRequest, SupplierDetailView,
-    SupplierListParams, SupplierProfileMutationView, SupplierSensitiveRevealView, SupplierView,
+    HandoverCandidateView, HandoverSupplierCapabilityRequest, HandoverSupplierCapabilityView,
+    HandoverSupplierRequest, HandoverSupplierView, RevealSupplierSensitiveRequest,
+    SaveSupplierProfileRequest, SupplierDetailView, SupplierListParams, SupplierListView,
+    SupplierProfileMutationView, SupplierSensitiveRevealView,
 };
 use erp_support::SensitivityClass;
 
@@ -190,15 +192,17 @@ pub async fn supplier_sensitive_reveal(
 ///
 /// # 参数
 /// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`keyword`/`party_id`/`status` 扁平传递）
+/// * `actor` - 已认证操作人
+/// * `query` - 分页与筛选参数
 ///
 /// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 返回分页视图及范围元信息。
 pub async fn supplier_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierListParams>,
-) -> Result<PageView<SupplierView>> {
-    let page = state.supplier_service().supplier_list(&params).await?;
+) -> Result<SupplierListView> {
+    let page = state.supplier_service().supplier_list(&params, &actor).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -219,9 +223,10 @@ pub async fn supplier_list(
 /// 返回供应商详情视图。
 pub async fn supplier_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SupplierDetailView> {
-    let view = state.supplier_service().supplier_detail(&id).await?;
+    let view = state.supplier_service().supplier_detail(&id, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -248,4 +253,93 @@ pub async fn supplier_delete(
 ) -> Result<()> {
     erp_processes::delete_supplier(state.db(), id, actor).await?;
     Ok(ApiResponse::ok())
+}
+
+#[permission_macros::permission(
+    group = "供应商",
+    group_desc = "供应商角色、商务结算版本、能力与资质管理",
+    desc = "交接供应商整体维护人",
+    resource = "supplier",
+    action = "update"
+)]
+/// 显式交接供应商整体维护人。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已认证操作人
+/// * `id` - 供应商 ID
+/// * `req` - 交接请求
+///
+/// # 返回
+/// 返回交接后的维护人与业务组织。
+///
+/// # 错误
+/// 版本冲突、目标不合格或范围不足时拒绝。
+pub async fn supplier_handover(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<HandoverSupplierRequest>,
+) -> Result<HandoverSupplierView> {
+    let view = state.supplier_profile_service().handover_supplier(&id, req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商",
+    group_desc = "供应商角色、商务结算版本、能力与资质管理",
+    desc = "查询供应商交接待选人",
+    resource = "supplier",
+    action = "update"
+)]
+/// 查询合格有效的维护人交接待选。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已认证操作人
+/// * `id` - 供应商 ID
+///
+/// # 返回
+/// 返回合格有效人员。
+///
+/// # 错误
+/// 供应商不存在或范围不足时拒绝。
+pub async fn supplier_handover_candidates(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<Vec<HandoverCandidateView>> {
+    let view = state.supplier_profile_service().handover_candidates(&id, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商",
+    group_desc = "供应商角色、商务结算版本、能力与资质管理",
+    desc = "交接供给能力负责人",
+    resource = "supplier",
+    action = "update"
+)]
+/// 显式交接供给能力负责人。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已认证操作人
+/// * `id` - 供应商 ID
+/// * `capability_id` - 供给能力 ID
+/// * `req` - 交接请求
+///
+/// # 返回
+/// 返回交接后的能力负责人。
+///
+/// # 错误
+/// 版本冲突、目标不合格或范围不足时拒绝。
+pub async fn supplier_capability_handover(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path((id, capability_id)): Path<(String, String)>,
+    Json(req): Json<HandoverSupplierCapabilityRequest>,
+) -> Result<HandoverSupplierCapabilityView> {
+    let view = state.supplier_profile_service().handover_capability(&id, &capability_id, req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
 }

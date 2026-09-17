@@ -223,6 +223,9 @@ export type SupplierDto = {
     capability_codes?: string[]
     qualification_health?: SupplierQualificationHealth | null
     qualification_types?: string[]
+    maintainer_user_id?: string
+    maintainer_user_name?: string | null
+    business_org_unit_id?: string
 }
 
 export type CommercialProfileDto = {

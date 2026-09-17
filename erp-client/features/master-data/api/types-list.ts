@@ -70,6 +70,9 @@ export type MasterDataListItem = Readonly<{
         invoiceTypeLabel: string
         invoiceTaxRatesLabel?: string
         businessCategory?: string
+        maintainerUserId?: string
+        maintainerUserName?: string
+        businessOrgUnitId?: string
     }>
     /**
      * 字典稳定代码（分类代码 / 品牌代码等）。
@@ -128,6 +131,10 @@ export type MasterDataListQuery = Readonly<{
     supplierCapabilityCodes?: readonly string[]
     supplierQualificationTypes?: readonly string[]
     supplierQualificationHealth?: SupplierQualificationHealth
+    owner_user_ids?: string
+    capability_owner_user_ids?: string
+    org_unit_ids?: string
+    include_descendants?: boolean
 }>
 
 export type SellableSupplyPreset = "single-supplier" | "nationwide"
@@ -146,6 +153,9 @@ export type MasterDataListResult = Readonly<{
         value: number
         detail?: string
     }[]
+    emptyReason?: "no_scope" | null
+    ownerOptions?: readonly { value: string; label: string }[]
+    capabilityOwnerOptions?: readonly { value: string; label: string }[]
 }>
 
 /** 商品列表的当前启用 SKU 摘要；销售价来自 SKU 当前修订。 */

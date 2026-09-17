@@ -22,6 +22,9 @@ export type SupplierFilterKey =
     | "supplierQualificationHealth"
     | "supplierCapabilityCodes"
     | "supplierQualificationTypes"
+    | "owner_user_ids"
+    | "capability_owner_user_ids"
+    | "org_unit_ids"
 
 /** 供应商列表：搜索 + 启停 + 资质状态 / 类型 + 供应能力。 */
 export function useSupplierListFilters(
@@ -71,11 +74,19 @@ export function useSupplierListFilters(
                     searchParams.get("supplierQualificationHealth"),
         )?.value as SupplierQualificationHealth | undefined
     const metricKey = lifecycleStatus
+    const ownerUserIds = searchParams.get("owner_user_ids") ?? ""
+    const capabilityOwnerUserIds =
+        searchParams.get("capability_owner_user_ids") ?? ""
+    const orgUnitIds = searchParams.get("org_unit_ids") ?? ""
+    const includeDescendants = searchParams.get("include_descendants") === "true"
     const hasStructuredSupplierFilters = Boolean(
         lifecycleStatus !== "all" ||
         supplierQualificationHealth ||
         supplierCapabilityCodes.length ||
-        supplierQualificationTypes.length,
+        supplierQualificationTypes.length ||
+        ownerUserIds ||
+        capabilityOwnerUserIds ||
+        orgUnitIds,
     )
 
     const [supplierFilterPanelOpen, setSupplierFilterPanelOpen] =
@@ -92,6 +103,12 @@ export function useSupplierListFilters(
     ] = React.useState<SupplierQualificationHealth | "all">(
         supplierQualificationHealth ?? "all",
     )
+    const [ownerUserIdsDraft, setOwnerUserIdsDraft] = React.useState(ownerUserIds)
+    const [capabilityOwnerUserIdsDraft, setCapabilityOwnerUserIdsDraft] =
+        React.useState(capabilityOwnerUserIds)
+    const [orgUnitIdsDraft, setOrgUnitIdsDraft] = React.useState(orgUnitIds)
+    const [includeDescendantsDraft, setIncludeDescendantsDraft] =
+        React.useState(includeDescendants)
 
     const changeLifecycle = React.useCallback(
         (next: "enabled" | "disabled" | "all") => {
@@ -126,6 +143,10 @@ export function useSupplierListFilters(
                 supplierQualificationHealthDraft === "all"
                     ? null
                     : supplierQualificationHealthDraft,
+            owner_user_ids: ownerUserIdsDraft || null,
+            capability_owner_user_ids: capabilityOwnerUserIdsDraft || null,
+            org_unit_ids: orgUnitIdsDraft.trim() || null,
+            include_descendants: includeDescendantsDraft ? "true" : null,
             page: null,
         })
         resetPagination()
@@ -137,6 +158,10 @@ export function useSupplierListFilters(
         supplierCapabilityCodesDraft,
         supplierQualificationHealthDraft,
         supplierQualificationTypesDraft,
+        ownerUserIdsDraft,
+        capabilityOwnerUserIdsDraft,
+        orgUnitIdsDraft,
+        includeDescendantsDraft,
     ])
 
     /** 移除单个普通筛选条件，保留当前启停 Tab。 */
@@ -152,6 +177,20 @@ export function useSupplierListFilters(
             if (key === "supplierQualificationTypes") {
                 setSupplierQualificationTypesDraft([])
             }
+            if (key === "owner_user_ids") setOwnerUserIdsDraft("")
+            if (key === "capability_owner_user_ids")
+                setCapabilityOwnerUserIdsDraft("")
+            if (key === "org_unit_ids") {
+                setOrgUnitIdsDraft("")
+                setIncludeDescendantsDraft(false)
+                patchUrl({
+                    org_unit_ids: null,
+                    include_descendants: null,
+                    page: null,
+                })
+                resetPagination()
+                return
+            }
             patchUrl({ [key]: null, page: null })
             resetPagination()
         },
@@ -162,6 +201,10 @@ export function useSupplierListFilters(
     const resetMoreFilters = React.useCallback(() => {
         setSupplierCapabilityCodesDraft([])
         setSupplierQualificationTypesDraft([])
+        setOwnerUserIdsDraft("")
+        setCapabilityOwnerUserIdsDraft("")
+        setOrgUnitIdsDraft("")
+        setIncludeDescendantsDraft(false)
     }, [])
 
     const hasPendingChanges =
@@ -171,7 +214,11 @@ export function useSupplierListFilters(
         [...supplierCapabilityCodesDraft].sort().join(",") !==
             [...supplierCapabilityCodes].sort().join(",") ||
         [...supplierQualificationTypesDraft].sort().join(",") !==
-            [...supplierQualificationTypes].sort().join(",")
+            [...supplierQualificationTypes].sort().join(",") ||
+        ownerUserIdsDraft !== ownerUserIds ||
+        capabilityOwnerUserIdsDraft !== capabilityOwnerUserIds ||
+        orgUnitIdsDraft.trim() !== orgUnitIds.trim() ||
+        includeDescendantsDraft !== includeDescendants
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -186,6 +233,10 @@ export function useSupplierListFilters(
             supplierCapabilityCodes: null,
             supplierQualificationTypes: null,
             supplierQualificationHealth: null,
+            owner_user_ids: null,
+            capability_owner_user_ids: null,
+            org_unit_ids: null,
+            include_descendants: null,
             page: null,
         })
         resetPagination()
@@ -197,11 +248,19 @@ export function useSupplierListFilters(
         setSupplierQualificationHealthDraft(
             supplierQualificationHealth ?? "all",
         )
+        setOwnerUserIdsDraft(ownerUserIds)
+        setCapabilityOwnerUserIdsDraft(capabilityOwnerUserIds)
+        setOrgUnitIdsDraft(orgUnitIds)
+        setIncludeDescendantsDraft(includeDescendants)
     }, [
         lifecycleStatus,
         supplierCapabilityCodes,
         supplierQualificationHealth,
         supplierQualificationTypes,
+        ownerUserIds,
+        capabilityOwnerUserIds,
+        orgUnitIds,
+        includeDescendants,
     ])
 
     return {
@@ -210,6 +269,10 @@ export function useSupplierListFilters(
         supplierCapabilityCodes,
         supplierQualificationTypes,
         supplierQualificationHealth,
+        ownerUserIds,
+        capabilityOwnerUserIds,
+        orgUnitIds,
+        includeDescendants,
         metricKey,
         hasStructuredSupplierFilters,
         searchDraft,
@@ -222,6 +285,14 @@ export function useSupplierListFilters(
         setSupplierQualificationTypesDraft,
         supplierQualificationHealthDraft,
         setSupplierQualificationHealthDraft,
+        ownerUserIdsDraft,
+        setOwnerUserIdsDraft,
+        capabilityOwnerUserIdsDraft,
+        setCapabilityOwnerUserIdsDraft,
+        orgUnitIdsDraft,
+        setOrgUnitIdsDraft,
+        includeDescendantsDraft,
+        setIncludeDescendantsDraft,
         hasPendingChanges,
         pagination,
         setPagination,

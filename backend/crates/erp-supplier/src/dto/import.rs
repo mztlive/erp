@@ -172,6 +172,8 @@ impl SupplierImportRow {
             invoice_tax_rates: Some(import_tax_rates(self.cell(19))?),
             signing_entity_party_id: signing,
             payment_entity_party_id: payment,
+            maintainer_user_id: None,
+            capability_owners: vec![],
             capability_codes: vec![],
             qualifications: self.qualifications(),
             rating: self.rating()?,

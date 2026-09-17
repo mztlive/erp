@@ -9,13 +9,17 @@ pub mod repository;
 pub mod service;
 
 pub use application_core::PageView;
+pub use dto::handover::{
+    HandoverCandidateView, HandoverSupplierCapabilityRequest, HandoverSupplierCapabilityView,
+    HandoverSupplierRequest, HandoverSupplierView,
+};
 pub use dto::supplier::{
     CommercialProfileView, RevealSupplierSensitiveRequest, SaveSupplierProfileRequest,
     SupplierCapabilityView, SupplierDetailView, SupplierListParams, SupplierProfileAddressInput,
-    SupplierProfileBankAccountInput, SupplierProfileContactInput, SupplierProfileMutationView,
-    SupplierProfileQualificationInput, SupplierProfileRatingInput, SupplierQualificationHealth,
-    SupplierQualificationView, SupplierRatingView, SupplierSensitiveFieldView, SupplierSensitiveRevealView,
-    SupplierView,
+    SupplierProfileBankAccountInput, SupplierProfileCapabilityOwnerInput, SupplierProfileContactInput,
+    SupplierProfileMutationView, SupplierProfileQualificationInput, SupplierProfileRatingInput,
+    SupplierQualificationHealth, SupplierQualificationView, SupplierRatingView, SupplierSensitiveFieldView,
+    SupplierSensitiveRevealView, SupplierView,
 };
 pub use entity::supplier::{
     CapabilityCode, CapabilityStatus, InvoiceType, NewQualificationParams, PlannedQualificationInput,
@@ -38,10 +42,12 @@ pub use entity::supplier::{
 };
 pub use error::{Error, Result, known_duplicate_index_message};
 pub use ports::{
-    AddressTypeFact, EffectiveRecordStatusFact, EmptyFileAssetFacts, EmptyPartyFacts, EmptySensitiveTokens,
-    FileAssetFact, FileAssetFactsPort, PartyAddressFact, PartyBankAccountFact, PartyContactFact,
-    PartyFactsPort, PartyListFact, PartyRevisionFact, PartyStatusFact, PartyTaxProfileFact,
-    SensitiveFieldKindFact, SensitiveTokenPort, select_current_default,
+    AccountFactPort, AddressTypeFact, EffectiveRecordStatusFact, EmptyFileAssetFacts, EmptyPartyFacts,
+    EmptySensitiveTokens, FailClosedAccountFactPort, FailClosedSupplierDataScopePort, FileAssetFact,
+    FileAssetFactsPort, PartyAddressFact, PartyBankAccountFact, PartyContactFact, PartyFactsPort,
+    PartyListFact, PartyRevisionFact, PartyStatusFact, PartyTaxProfileFact, SensitiveFieldKindFact,
+    SensitiveTokenPort, SupplierDataScopePort, SupplierResolvedClause, SupplierResolvedScope,
+    SupplierScopeObject, select_current_default,
 };
 pub use repository::{
     SupplierAccountFilter, SupplierAccountRepository, SupplierAccountRow, SupplierCapabilityFilter,
@@ -49,7 +55,12 @@ pub use repository::{
     SupplierCommercialProfileRevisionRepository, SupplierDetailBundle, SupplierExt, SupplierListBundle,
     SupplierListSearchInput, SupplierProfileCommandRepository, SupplierQualificationCapabilityRepository,
     SupplierQualificationFilter, SupplierQualificationHealthFilter, SupplierQualificationRepository,
-    SupplierRepository,
+    SupplierReadScope, SupplierRepository, SupplierScopeClause,
 };
 pub use service::supplier::eligibility::ensure_capability_qualified;
-pub use service::supplier::{SupplierService, command_view};
+pub use service::supplier::{
+    SupplierAccess, SupplierListView, SupplierService, capability_handover_audit_id,
+    capability_handover_fingerprint, command_view, supplier_handover_audit_id,
+    supplier_handover_audit_message, supplier_handover_fingerprint, supplier_handover_fingerprint_matches,
+    supplier_scope,
+};

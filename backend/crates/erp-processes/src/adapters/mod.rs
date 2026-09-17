@@ -14,6 +14,7 @@ mod party;
 mod purchase_data_scope;
 mod selection_data_scope;
 mod supplier;
+mod supplier_data_scope;
 mod warehouse;
 use std::sync::Arc;
 
@@ -39,6 +40,9 @@ pub use party::{MongoPartyAudit, MongoSupplierRole};
 pub use purchase_data_scope::{MongoPurchaseDataScope, purchase_access};
 pub use selection_data_scope::{MongoSelectionDataScope, selection_access};
 pub use supplier::{MongoSupplierFileAssets, MongoSupplierPartyFacts, MongoSupplierSensitiveTokens};
+pub use supplier_data_scope::{
+    MongoSupplierDataScope, scoped_supplier_service, scoped_supplier_service_with_sensitive, supplier_access,
+};
 pub use warehouse::warehouse_service;
 
 /// Construct a party service with audit and supplier-role adapters.

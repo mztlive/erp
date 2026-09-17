@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 const SUPPLIER_NO_MAX_LEN: usize = 64;
 /// 结算条件引用最大长度。
 const PAYMENT_TERM_ID_MAX_LEN: usize = 64;
+/// 维护人与组织标识最大长度。
+const RESPONSIBILITY_ID_MAX_LEN: usize = 128;
 
 /// 供应商角色启停状态（§6.2：启用/停用；对称状态机）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -88,6 +90,10 @@ pub struct SupplierAccountData {
     pub default_payment_term_id: Option<String>,
     /// 供应商当前商务结算版本 ID；客户角色不适用。
     pub current_commercial_profile_revision_id: Option<SupplierCommercialProfileRevisionId>,
+    /// 整体维护人；创建必填，禁止用创建人兜底。
+    pub maintainer_user_id: String,
+    /// 当前业务组织；创建取维护人有效主属组织。
+    pub business_org_unit_id: String,
     /// 启停状态。
     pub status: SupplierAccountStatus,
 }
@@ -126,6 +132,12 @@ pub struct SupplierAccount {
     pub default_payment_term_id: Option<String>,
     /// 供应商当前商务结算版本 ID（§6.2：供应商角色专用）。
     pub current_commercial_profile_revision_id: Option<SupplierCommercialProfileRevisionId>,
+    /// 整体维护人；存量缺值时正式变更新增交接前阻断。
+    #[serde(default)]
+    pub maintainer_user_id: String,
+    /// 当前业务组织；存量缺值时正式变更新增交接前阻断。
+    #[serde(default)]
+    pub business_org_unit_id: String,
 }
 
 impl PartialEq for SupplierAccount {
@@ -140,6 +152,8 @@ impl PartialEq for SupplierAccount {
             && self.supplier_no == other.supplier_no
             && self.default_payment_term_id == other.default_payment_term_id
             && self.current_commercial_profile_revision_id == other.current_commercial_profile_revision_id
+            && self.maintainer_user_id == other.maintainer_user_id
+            && self.business_org_unit_id == other.business_org_unit_id
     }
 }
 
@@ -172,6 +186,18 @@ impl SupplierAccount {
             SUPPLIER_NO_MAX_LEN,
             "供应商编号过长",
         )?;
+        let maintainer_user_id = normalize_required_text(
+            data.maintainer_user_id,
+            "供应商维护人不能为空",
+            RESPONSIBILITY_ID_MAX_LEN,
+            "供应商维护人标识过长",
+        )?;
+        let business_org_unit_id = normalize_required_text(
+            data.business_org_unit_id,
+            "供应商业务组织不能为空",
+            RESPONSIBILITY_ID_MAX_LEN,
+            "供应商业务组织标识过长",
+        )?;
         let default_payment_term_id = normalize_payment_term_id(data.default_payment_term_id)?;
 
         Ok(Self {
@@ -181,6 +207,8 @@ impl SupplierAccount {
             supplier_no,
             default_payment_term_id,
             current_commercial_profile_revision_id: data.current_commercial_profile_revision_id,
+            maintainer_user_id,
+            business_org_unit_id,
         })
     }
 
@@ -212,6 +240,91 @@ impl SupplierAccount {
     /// 状态为 `Active` 时返回 `true`。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
+    }
+
+    /// 判断是否已采集整体维护人与业务组织。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 两字段均非空时为 true。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 缺责任不得用创建人回填后开放筛选。
+    pub fn has_responsibility(&self) -> bool {
+        !self.maintainer_user_id.trim().is_empty() && !self.business_org_unit_id.trim().is_empty()
+    }
+
+    /// 正式资料变更前要求已有维护人与业务组织。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 责任齐全时成功。
+    ///
+    /// # 错误
+    /// 缺维护人或业务组织时拒绝。
+    ///
+    /// # 关键业务约束
+    /// 存量缺责任只能走显式交接／补录，不得静默写成操作人。
+    pub fn ensure_responsibility(&self) -> Result<()> {
+        if self.has_responsibility() {
+            return Ok(());
+        }
+        Err(erp_core::Error::from("供应商缺少维护人或业务组织，请先交接或补录"))
+    }
+
+    /// 显式交接整体维护人与可选业务组织。
+    ///
+    /// # 参数
+    /// * `target_user_id` - 目标维护人
+    /// * `target_org_unit_id` - 显式目标组织；`None` 保留原组织
+    /// * `updated_by` - 本次交接执行人
+    ///
+    /// # 返回
+    /// 责任确有变化时返回 `true`。
+    ///
+    /// # 错误
+    /// 目标为空、组织空白或与当前完全一致时拒绝。
+    ///
+    /// # 关键业务约束
+    /// 组织不随接收人部门隐式变化；不改审批任务。
+    pub fn handover(
+        &mut self,
+        target_user_id: String,
+        target_org_unit_id: Option<String>,
+        updated_by: impl Into<String>,
+    ) -> Result<bool> {
+        let target = normalize_required_text(
+            target_user_id,
+            "目标维护人不能为空",
+            RESPONSIBILITY_ID_MAX_LEN,
+            "目标维护人标识过长",
+        )?;
+        let next_org = match target_org_unit_id {
+            Some(org) => normalize_required_text(
+                org,
+                "目标业务组织不能为空",
+                RESPONSIBILITY_ID_MAX_LEN,
+                "目标业务组织标识过长",
+            )?,
+            None if self.business_org_unit_id.trim().is_empty() => {
+                return Err(erp_core::Error::from("目标业务组织不能为空"));
+            },
+            None => self.business_org_unit_id.clone(),
+        };
+        if target == self.maintainer_user_id && next_org == self.business_org_unit_id {
+            return Err(erp_core::Error::from("目标已是当前维护人，无需交接"));
+        }
+        self.maintainer_user_id = target;
+        self.business_org_unit_id = next_org;
+        self.stable.touch(updated_by);
+        Ok(true)
     }
 
     /// 判断当前供应商是否允许从指定乐观锁版本修订资料。
@@ -317,6 +430,8 @@ mod tests {
             supplier_no: " S-2026-001 ".to_string(),
             default_payment_term_id: Some(" PREPAY_30 ".to_string()),
             current_commercial_profile_revision_id: None,
+            maintainer_user_id: " buyer-1 ".to_string(),
+            business_org_unit_id: " org-a ".to_string(),
             status: SupplierAccountStatus::Active,
         }
     }
@@ -330,6 +445,9 @@ mod tests {
         assert_eq!(account.default_payment_term_id.as_deref(), Some("PREPAY_30"));
         assert!(account.current_commercial_profile_revision_id.is_none());
         assert!(account.is_active());
+        assert_eq!(account.maintainer_user_id, "buyer-1");
+        assert_eq!(account.business_org_unit_id, "org-a");
+        assert!(account.has_responsibility());
         assert_eq!(account.stable.created_by, "admin-1");
     }
 
@@ -345,6 +463,27 @@ mod tests {
         let overlong_term =
             SupplierAccountData { default_payment_term_id: Some("t".repeat(65)), ..account_data() };
         assert!(SupplierAccount::new(SupplierAccountId::new("s"), overlong_term, "admin-1").is_err());
+
+        let blank_owner = SupplierAccountData { maintainer_user_id: "  ".into(), ..account_data() };
+        assert!(SupplierAccount::new(SupplierAccountId::new("s"), blank_owner, "admin-1").is_err());
+
+        let blank_org = SupplierAccountData { business_org_unit_id: "  ".into(), ..account_data() };
+        assert!(SupplierAccount::new(SupplierAccountId::new("s"), blank_org, "admin-1").is_err());
+    }
+
+    /// 缺责任阻断正式变更；交接推进维护人与可选组织，冲突保持原值。
+    #[test]
+    fn missing_responsibility_blocks_and_handover_is_explicit() {
+        let mut account =
+            SupplierAccount::new(SupplierAccountId::new("supplier-5"), account_data(), "admin-1").unwrap();
+        account.maintainer_user_id.clear();
+        assert!(account.ensure_responsibility().is_err());
+        account.maintainer_user_id = "buyer-1".into();
+        account.handover("buyer-2".into(), Some("org-b".into()), "manager").unwrap();
+        assert_eq!(account.maintainer_user_id, "buyer-2");
+        assert_eq!(account.business_org_unit_id, "org-b");
+        assert!(account.handover("buyer-2".into(), None, "manager").is_err());
+        assert_eq!(account.business_org_unit_id, "org-b");
     }
 
     /// 状态机：邻接矩阵闭包完整，合法迁移通过。

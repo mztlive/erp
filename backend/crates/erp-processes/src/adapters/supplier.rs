@@ -5,15 +5,16 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use erp_core::ids::{FileAssetId, PartyId};
+use erp_identity::AccessControlExt;
 use erp_party::{PartyExt, SensitiveDataCodec, SensitiveFieldKind};
 use erp_supplier::{
-    AddressTypeFact, EffectiveRecordStatusFact, FileAssetFact, FileAssetFactsPort, PartyAddressFact,
-    PartyBankAccountFact, PartyContactFact, PartyFactsPort, PartyListFact, PartyRevisionFact,
-    PartyStatusFact, PartyTaxProfileFact, SensitiveFieldKindFact, SensitiveTokenPort,
+    AccountFactPort, AddressTypeFact, EffectiveRecordStatusFact, FileAssetFact, FileAssetFactsPort,
+    PartyAddressFact, PartyBankAccountFact, PartyContactFact, PartyFactsPort, PartyListFact,
+    PartyRevisionFact, PartyStatusFact, PartyTaxProfileFact, SensitiveFieldKindFact, SensitiveTokenPort,
 };
 use erp_support::FileAssetExt;
 use mongodb::Database;
-use persistence_core::Executor;
+use persistence_core::{Executor, NoTransaction};
 
 /// MongoDB adapter that reads party facts for supplier queries.
 #[derive(Clone)]
@@ -361,5 +362,70 @@ fn map_party_to_supplier(error: erp_party::Error) -> erp_supplier::Error {
         erp_party::Error::Logic(error) => erp_supplier::Error::Logic(error),
         erp_party::Error::OutcomeUnknown(error) => erp_supplier::Error::OutcomeUnknown(error),
         erp_party::Error::RepositoryError(error) => erp_supplier::Error::RepositoryError(error),
+    }
+}
+
+/// 供应商查询读取账号显示名与登录资格。
+#[derive(Clone)]
+pub struct MongoSupplierAccountFacts {
+    db: Database,
+}
+
+impl MongoSupplierAccountFacts {
+    /// 绑定身份账号集合。
+    ///
+    /// # 参数
+    /// * `db` - 身份集合所在数据库
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(db: Database) -> Self {
+        Self { db }
+    }
+
+    /// 包装为供应商域可注入的账号 Port。
+    ///
+    /// # 参数
+    /// * `db` - 身份集合所在数据库
+    ///
+    /// # 返回
+    /// 返回账号事实 Port。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn shared(db: Database) -> Arc<dyn AccountFactPort> {
+        Arc::new(Self::new(db))
+    }
+}
+
+#[async_trait]
+impl AccountFactPort for MongoSupplierAccountFacts {
+    async fn filter_options(
+        &self,
+        ids: &[String],
+    ) -> erp_supplier::Result<Vec<application_core::FilterOption>> {
+        Ok(self.db.accounts().filter_options(ids, &mut NoTransaction).await?)
+    }
+
+    async fn ensure_can_login(&self, user_id: &str) -> erp_supplier::Result<()> {
+        let account = self
+            .db
+            .accounts()
+            .find_account(user_id, &mut NoTransaction)
+            .await
+            .map_err(erp_supplier::Error::from)?
+            .ok_or_else(|| erp_supplier::Error::NotFound("维护人账号不存在".to_string()))?;
+        account.ensure_can_login().map_err(|error| erp_supplier::Error::BusinessLogicError(error.to_string()))
+    }
+
+    async fn names_by_ids(&self, account_ids: &[String]) -> erp_supplier::Result<HashMap<String, String>> {
+        self.db
+            .accounts()
+            .names_by_ids(account_ids, &mut NoTransaction)
+            .await
+            .map_err(erp_supplier::Error::from)
     }
 }

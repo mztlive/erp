@@ -51,6 +51,7 @@ pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[
     ("sales_selection_proposal", &["list", "get"]),
     ("integration_error_task", &["list", "detail", "create"]),
     ("reconciliation_difference", &["list", "detail", "create", "decide"]),
+    ("supplier", &["list", "detail", "create", "update", "delete"]),
 ];
 
 /// 首次初始化显式岗位清单；没有条目的岗位不获得兜底范围。
@@ -155,6 +156,7 @@ fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeDat
         {
             scope_types = vec![DataScopeType::SelfOwned, DataScopeType::Collaborative]
         },
+        "role-procurement" if resource == "supplier" => scope_types = vec![DataScopeType::SelfOwned],
         "role-procurement" if resource == "purchase_order" => scope_types = vec![DataScopeType::SelfOwned],
         "role-procurement"
             if matches!(resource, "payable_account" | "supplier_payment" | "purchase_invoice_allocation") =>

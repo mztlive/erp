@@ -64,6 +64,7 @@ const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     ("purchase_invoice_allocation", &["list"], &[ScopeDimension::InternalOrg]),
     ("integration_error_task", &["list", "detail", "create"], &[ScopeDimension::InternalOrg]),
     ("reconciliation_difference", &["list", "detail", "create", "decide"], &[ScopeDimension::InternalOrg]),
+    ("supplier", &["list", "detail", "create", "update", "delete"], &[ScopeDimension::InternalOrg]),
 ];
 
 /// 已接线消费者的资源动作登记。
@@ -232,6 +233,11 @@ mod tests {
         assert!(registration("fulfillment_queue", "list").is_err());
         assert!(registration("customer_quality", "list").is_err());
         assert!(registration("handover", "update").is_err());
+        for action in ["list", "detail", "create", "update", "delete"] {
+            let consumer = registration("supplier", action).unwrap();
+            assert!(!consumer.allows_history);
+        }
+        assert!(registration("supplier", "submit").is_err());
     }
 
     #[test]

@@ -18,6 +18,10 @@ import {
     fetchSkuSupplierCounts,
     updateProductListingStatus,
 } from "@/features/master-data/api"
+import {
+    handoverSupplier,
+    handoverSupplierCapability,
+} from "@/features/master-data/api/mutations/supplier"
 import { fetchFileAsset } from "@/features/master-data/api/media-assets"
 import {
     fetchWarehouseFulfillmentHandlerOptions,
@@ -109,6 +113,20 @@ export function useProductFilterOptionsQuery(enabled: boolean) {
 export function useMasterDataExportMutation() {
     return useMutation({
         mutationFn: (query: MasterDataListQuery) => fetchMasterDataList(query),
+    })
+}
+
+export function useHandoverSupplierMutation() {
+    return useMutation({
+        mutationFn: handoverSupplier,
+        meta: { affectsDataScope: true },
+    })
+}
+
+export function useHandoverSupplierCapabilityMutation() {
+    return useMutation({
+        mutationFn: handoverSupplierCapability,
+        meta: { affectsDataScope: true },
     })
 }
 

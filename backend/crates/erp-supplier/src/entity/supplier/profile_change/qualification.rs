@@ -18,7 +18,8 @@ use crate::entity::supplier::{
 /// * `supplier_id` - 供应商角色 ID
 /// * `code` - 能力代码
 /// * `valid_from` - 生效起始日
-/// * `actor_id` - 操作人 ID
+/// * `owner_user_id` - 显式能力负责人，禁止传入操作人兜底
+/// * `actor_id` - 创建人，只写入审计
 /// * `capability_id` - 新能力主键，Service 分配
 /// * `revision_id` - 首版修订主键，Service 分配
 ///
@@ -35,6 +36,7 @@ pub fn new_capability(
     supplier_id: &SupplierAccountId,
     code: CapabilityCode,
     valid_from: BusinessDate,
+    owner_user_id: &str,
     actor_id: &str,
     capability_id: SupplierCapabilityId,
     revision_id: SupplierCapabilityRevisionId,
@@ -45,7 +47,7 @@ pub fn new_capability(
             supplier_id: supplier_id.clone(),
             capability_code: code,
             service_region: None,
-            owner_user_id: actor_id.to_string(),
+            owner_user_id: owner_user_id.to_string(),
             fulfillment_note: None,
             valid_from,
             valid_to: None,

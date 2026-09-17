@@ -9,8 +9,12 @@ import {
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
 import { masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
 import {
     SUPPLIER_CAPABILITY_OPTIONS,
@@ -26,6 +30,9 @@ import type {
 const MORE_CHIP_KEYS = [
     "supplierCapabilityCodes",
     "supplierQualificationTypes",
+    "owner_user_ids",
+    "capability_owner_user_ids",
+    "org_unit_ids",
 ] as const
 
 export function SupplierListToolbar({
@@ -36,6 +43,8 @@ export function SupplierListToolbar({
     resultCount,
     loading,
     failed,
+    ownerOptions = [],
+    capabilityOwnerOptions = [],
 }: {
     idPrefix?: string
     searchInputRef: React.RefObject<HTMLInputElement | null>
@@ -44,6 +53,8 @@ export function SupplierListToolbar({
     resultCount?: number
     loading: boolean
     failed: boolean
+    ownerOptions?: readonly { value: string; label: string }[]
+    capabilityOwnerOptions?: readonly { value: string; label: string }[]
 }) {
     const prefix = idPrefix ?? "master-data-list-supplier-list-toolbar"
     const panelId = `${prefix}-more-panel`
@@ -116,6 +127,47 @@ export function SupplierListToolbar({
                             aria-label="资质类型，可多选"
                         />
                     </fieldset>
+                    <ResponsibleUserFilter
+                        id={`${prefix}-filter-maintainer`}
+                        label="维护人"
+                        value={f.ownerUserIdsDraft}
+                        onChange={f.setOwnerUserIdsDraft}
+                        options={ownerOptions}
+                    />
+                    <ResponsibleUserFilter
+                        id={`${prefix}-filter-capability-owner`}
+                        label="能力负责人"
+                        value={f.capabilityOwnerUserIdsDraft}
+                        onChange={f.setCapabilityOwnerUserIdsDraft}
+                        options={capabilityOwnerOptions}
+                    />
+                    <ListWorkspaceFilterField
+                        htmlFor={`${prefix}-filter-org`}
+                        label="业务组织"
+                    >
+                        <Input
+                            id={`${prefix}-filter-org`}
+                            value={f.orgUnitIdsDraft}
+                            onChange={(event) =>
+                                f.setOrgUnitIdsDraft(event.target.value)
+                            }
+                            placeholder="组织 ID，逗号分隔"
+                            aria-label="按供应商业务组织筛选"
+                        />
+                        <label
+                            htmlFor={`${prefix}-filter-org-descendants`}
+                            className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                        >
+                            <Checkbox
+                                id={`${prefix}-filter-org-descendants`}
+                                checked={f.includeDescendantsDraft}
+                                onCheckedChange={(checked) =>
+                                    f.setIncludeDescendantsDraft(checked === true)
+                                }
+                            />
+                            包含下级
+                        </label>
+                    </ListWorkspaceFilterField>
                 </div>
             }
             resultStatus={listWorkspaceFilterStatusText({

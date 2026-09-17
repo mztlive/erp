@@ -127,6 +127,9 @@ impl<'a> SupplierRepository<'a> {
                 executor,
             )
             .await?;
+        let capability_owner_ids =
+            self.supplier_ids_by_capability_owners(&input.capability_owner_user_ids, executor).await?;
+        let supplier_ids = intersect_supplier_ids(supplier_ids, capability_owner_ids);
         let filter = SupplierAccountFilter {
             keyword: input.keyword.clone(),
             party_id: input.party_id.clone(),
@@ -134,6 +137,9 @@ impl<'a> SupplierRepository<'a> {
             status: input.status,
             supplier_ids,
             excluded_supplier_ids,
+            authorized_scope: input.authorized_scope.clone(),
+            maintainer_user_ids: input.maintainer_user_ids.clone(),
+            business_org_unit_ids: input.business_org_unit_ids.clone(),
             page: input.page,
             page_size: input.page_size,
             sort_by: input.sort_by.clone(),

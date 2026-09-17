@@ -108,6 +108,9 @@ describe("mapSupplierRow", () => {
             invoiceTypeLabel: "增值税专用发票",
             invoiceTaxRatesLabel: "13%、9%",
             businessCategory: "礼盒",
+            maintainerUserId: undefined,
+            maintainerUserName: undefined,
+            businessOrgUnitId: undefined,
         })
         expect(row.keyFacts.map((fact) => fact.label)).toEqual(
             expect.arrayContaining(["供应能力", "资质状态", "签约主体"]),

@@ -20,6 +20,8 @@ type ListEnvelope = {
     as_of?: string
     scope_summary?: string
     ownership_basis?: string
+    owner_options?: { value: string; label: string }[]
+    capability_owner_options?: { value: string; label: string }[]
 }
 
 type CompletePage<T> = Page<T> & ListEnvelope
@@ -46,7 +48,25 @@ function takeEnvelope(
             throw scopeChangedError()
         Object.assign(next, { [key]: value })
     }
+    next.owner_options = mergeOptions(seen.owner_options, page.owner_options)
+    next.capability_owner_options = mergeOptions(
+        seen.capability_owner_options,
+        page.capability_owner_options,
+    )
     return next
+}
+
+function mergeOptions(
+    seen: readonly { value: string; label: string }[] | undefined,
+    next: readonly { value: string; label: string }[] | undefined,
+): { value: string; label: string }[] | undefined {
+    if (!seen && !next) return undefined
+    const labels = new Map<string, string>()
+    for (const option of [...(seen ?? []), ...(next ?? [])]) {
+        if (!option.value) continue
+        labels.set(option.value, option.label)
+    }
+    return [...labels.entries()].map(([value, label]) => ({ value, label }))
 }
 
 /** 读取完整匹配集合；重复页、总数变化、空的中间页或范围版本变化使整次查询失败。 */

@@ -14,6 +14,8 @@ const validValues = (): SupplierEditorFormValues => ({
     paymentEntity: "party-payment",
     settlement: "pay_after_use",
     paymentTerm: "POSTPAY_NET30",
+    maintainerUserId: "buyer-1",
+    capabilityOwnerUserId: "buyer-1",
 })
 
 describe("validateSupplierEditorFields", () => {

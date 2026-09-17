@@ -152,6 +152,8 @@ export async function centerSupplier(
         ),
         fact("发票类型", invoiceLabel(profile?.invoice_type)),
         fact("常用进项税率", invoiceTaxRatePercent),
+        fact("维护人", detail.maintainer_user_id),
+        fact("能力负责人", capabilities[0]?.owner_user_id),
         fact("能力", capabilityLabels),
         fact("经营类目", businessCategory || null),
         fact("公司签约主体", profile?.signing_entity_party_id),

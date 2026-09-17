@@ -123,6 +123,8 @@ fn supplier_account(
             supplier_no: supplier_no.to_string(),
             default_payment_term_id: None,
             current_commercial_profile_revision_id: profile_id.map(SupplierCommercialProfileRevisionId::new),
+            maintainer_user_id: "buyer-1".to_string(),
+            business_org_unit_id: "org-a".to_string(),
             status: SupplierAccountStatus::Active,
         },
         "test",
@@ -335,6 +337,16 @@ fn list_input(build: impl FnOnce(&mut SupplierListSearchInput)) -> SupplierListS
         page_size: 20,
         sort_by: Some("created_at".to_string()),
         sort_ascending: false,
+        authorized_scope: crate::repository::scope::SupplierReadScope {
+            roles: vec![crate::repository::scope::SupplierScopeClause {
+                company: true,
+                ..Default::default()
+            }],
+            user_limit: None,
+        },
+        maintainer_user_ids: None,
+        business_org_unit_ids: None,
+        capability_owner_user_ids: Vec::new(),
     };
     build(&mut input);
     input
@@ -695,6 +707,16 @@ async fn supplier_bundles_see_same_session_writes() {
                                 page_size: 20,
                                 sort_by: Some("created_at".to_string()),
                                 sort_ascending: false,
+                                authorized_scope: crate::repository::scope::SupplierReadScope {
+                                    roles: vec![crate::repository::scope::SupplierScopeClause {
+                                        company: true,
+                                        ..Default::default()
+                                    }],
+                                    user_limit: None,
+                                },
+                                maintainer_user_ids: None,
+                                business_org_unit_ids: None,
+                                capability_owner_user_ids: Vec::new(),
                             },
                             session,
                         )

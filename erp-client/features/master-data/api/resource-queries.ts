@@ -43,6 +43,10 @@ import { isoNow } from "@/features/master-data/api/presentation"
 function wrapListResult(
     resource: MasterDataResource,
     rows: MasterDataListItem[],
+    extra: Pick<
+        MasterDataListResult,
+        "emptyReason" | "ownerOptions" | "capabilityOwnerOptions"
+    > = {},
 ): MasterDataListResult {
     const now = isoNow()
     return {
@@ -54,6 +58,7 @@ function wrapListResult(
         eligibilityAsOf: now,
         queriedAt: now,
         metrics: [...computeMetrics(rows)],
+        ...extra,
     }
 }
 
@@ -64,6 +69,10 @@ export async function fetchMasterDataList(
     query: MasterDataListQuery,
 ): Promise<MasterDataListResult> {
     let rows: MasterDataListItem[]
+    let extra: Pick<
+        MasterDataListResult,
+        "emptyReason" | "ownerOptions" | "capabilityOwnerOptions"
+    > = {}
     switch (query.resource) {
         case "categories":
             rows = await listCategories(query)
@@ -86,9 +95,16 @@ export async function fetchMasterDataList(
         case "warehouses":
             rows = await listWarehouses(query)
             break
-        case "suppliers":
-            rows = await listSuppliers(query)
+        case "suppliers": {
+            const listed = await listSuppliers(query)
+            rows = listed.rows
+            extra = {
+                emptyReason: listed.emptyReason,
+                ownerOptions: listed.ownerOptions,
+                capabilityOwnerOptions: listed.capabilityOwnerOptions,
+            }
             break
+        }
         default:
             rows = []
     }
@@ -115,7 +131,7 @@ export async function fetchMasterDataList(
         rows = filterBySellableSupplyPreset(rows, query.sellableSupplyPreset)
     }
 
-    return wrapListResult(query.resource, rows)
+    return wrapListResult(query.resource, rows, extra)
 }
 
 /** 按稳定 SKU 查询正式供给，返回当前启用供给的去重供应商数量。 */

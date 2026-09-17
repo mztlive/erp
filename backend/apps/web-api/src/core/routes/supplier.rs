@@ -117,4 +117,28 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 supplier::supplier_delete_permission_key(),
             ),
         )
+        .route(
+            "/suppliers/{id}/handover",
+            with_permission(
+                post(supplier::supplier_handover),
+                rbac,
+                supplier::supplier_handover_permission_key(),
+            ),
+        )
+        .route(
+            "/suppliers/{id}/handover-candidates",
+            with_permission(
+                get(supplier::supplier_handover_candidates),
+                rbac,
+                supplier::supplier_handover_candidates_permission_key(),
+            ),
+        )
+        .route(
+            "/suppliers/{id}/capabilities/{capability_id}/handover",
+            with_permission(
+                post(supplier::supplier_capability_handover),
+                rbac,
+                supplier::supplier_capability_handover_permission_key(),
+            ),
+        )
 }

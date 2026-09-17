@@ -250,6 +250,8 @@ mod isolation_tests {
                 supplier_no: format!("SN-{id}"),
                 default_payment_term_id: None,
                 current_commercial_profile_revision_id: None,
+                maintainer_user_id: "buyer-1".to_string(),
+                business_org_unit_id: "org-a".to_string(),
                 status: SupplierAccountStatus::Active,
             },
             "test",

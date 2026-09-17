@@ -59,6 +59,7 @@ export function SuppliersListPage() {
     const columns = useSupplierListColumns()
     const hasActiveFilters =
         filters.q.trim() !== "" || filters.hasStructuredSupplierFilters
+    const noScope = state.listQuery.data?.emptyReason === "no_scope"
     const listLoadFailed = state.listQuery.isError || !state.listQuery.data
     // 导入只做任务投递：本页不留进度，用曲线把任务飞到侧栏「后台任务」，结果由 toast 交代。
     const onImportSubmitted = (job: BackgroundJobView, fileName: string) => {
@@ -149,6 +150,10 @@ export function SuppliersListPage() {
                         }
                         loading={state.listQuery.isFetching}
                         failed={state.listQuery.isError}
+                        ownerOptions={state.listQuery.data?.ownerOptions ?? []}
+                        capabilityOwnerOptions={
+                            state.listQuery.data?.capabilityOwnerOptions ?? []
+                        }
                     />
                 }
                 tableClassName={suppliersListStyles.table}
@@ -195,18 +200,26 @@ export function SuppliersListPage() {
                             !listLoadFailed && state.rows.length === 0 ? (
                                 <BusinessEmptyState
                                     kind={
-                                        hasActiveFilters ? "filter" : "no-data"
+                                        noScope
+                                            ? "no-scope"
+                                            : hasActiveFilters
+                                              ? "filter"
+                                              : "no-data"
                                     }
                                     className={listWorkspaceEmptyStateClassName}
                                     title={
-                                        hasActiveFilters
-                                            ? "当前筛选无结果"
-                                            : "还没有供应商与资质资料"
+                                        noScope
+                                            ? "当前角色无供应商范围"
+                                            : hasActiveFilters
+                                              ? "当前筛选无结果"
+                                              : "还没有供应商与资质资料"
                                     }
                                     description={
-                                        hasActiveFilters
-                                            ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                            : "点击「新建」创建第一份资料；历史记录会随资料保留。"
+                                        noScope
+                                            ? "当前权限与数据范围内没有供应商；不代表系统尚无供应商。"
+                                            : hasActiveFilters
+                                              ? "没有记录符合当前筛选条件，可清除筛选后重试。"
+                                              : "点击「新建」创建第一份资料；历史记录会随资料保留。"
                                     }
                                     action={
                                         hasActiveFilters ? (

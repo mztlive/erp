@@ -147,6 +147,12 @@ pub struct SupplierCreationInputs {
     pub change_reason: String,
     /// 操作人 ID。
     pub actor_id: String,
+    /// 整体维护人；必须显式指定。
+    pub maintainer_user_id: String,
+    /// 维护人当前主属组织。
+    pub business_org_unit_id: String,
+    /// 能力代码到显式负责人；新建能力必须命中。
+    pub capability_owners: Vec<(CapabilityCode, String)>,
 }
 
 /// 组合层构造主体所需的稳定快照；不含 Party 实体。
@@ -257,6 +263,8 @@ pub fn plan_supplier_creation(
             supplier_no: inputs.supplier_no,
             default_payment_term_id: None,
             current_commercial_profile_revision_id: Some(ids.commercial_profile_id.clone()),
+            maintainer_user_id: inputs.maintainer_user_id,
+            business_org_unit_id: inputs.business_org_unit_id,
             status: SupplierAccountStatus::Active,
         },
         inputs.actor_id.clone(),
@@ -284,10 +292,12 @@ pub fn plan_supplier_creation(
     let mut capability_ids = HashMap::new();
     for (code, allocated) in inputs.capability_codes.iter().copied().zip(ids.capability_ids) {
         let (_, capability_id, revision_id) = allocated;
+        let owner = capability_owner(&inputs.capability_owners, code)?;
         let (capability, revision) = profile_change::new_capability(
             &ids.supplier_id,
             code,
             inputs.effective_from,
+            owner,
             &inputs.actor_id,
             capability_id.clone(),
             revision_id,
@@ -359,6 +369,25 @@ pub fn plan_supplier_creation(
     })
 }
 
+/// 读取指定能力的显式负责人。
+///
+/// # 参数
+/// * `owners` - 能力代码到负责人
+/// * `code` - 待创建能力
+///
+/// # 返回
+/// 返回该能力的负责人。
+///
+/// # 错误
+/// 未显式指定时拒绝，不得回退操作人。
+fn capability_owner(owners: &[(CapabilityCode, String)], code: CapabilityCode) -> erp_core::Result<&str> {
+    owners
+        .iter()
+        .find(|(item, owner)| *item == code && !owner.trim().is_empty())
+        .map(|(_, owner)| owner.as_str())
+        .ok_or_else(|| erp_core::Error::from("供给能力负责人必须显式指定"))
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -403,6 +432,9 @@ mod tests {
             effective_from: BusinessDate::from_ymd(2026, 8, 31).unwrap(),
             change_reason: "首次".to_string(),
             actor_id: "actor-1".to_string(),
+            maintainer_user_id: "buyer-1".to_string(),
+            business_org_unit_id: "org-a".to_string(),
+            capability_owners: vec![(CapabilityCode::Physical, "buyer-1".to_string())],
         }
     }
 
@@ -447,6 +479,9 @@ mod tests {
         assert_eq!(plan.qualification_links.len(), 1);
         assert!(plan.rating.is_some());
         assert_eq!(plan.rating.as_ref().unwrap().revision.revision_no, 1);
+        assert_eq!(plan.supplier.maintainer_user_id, "buyer-1");
+        assert_eq!(plan.capabilities[0].owner_user_id, "buyer-1");
+        assert_ne!(plan.capabilities[0].owner_user_id, plan.supplier.stable.created_by);
     }
 
     /// 无评级输入时不生成评级实体。
@@ -457,6 +492,14 @@ mod tests {
         let plan = plan_supplier_creation(test_ids(false), inputs).unwrap();
         assert!(plan.rating.is_none());
         assert_eq!(plan.qualifications.len(), 1);
+    }
+
+    /// 新建能力未显式指定负责人时失败关闭。
+    #[test]
+    fn creation_plan_rejects_missing_capability_owner() {
+        let mut inputs = test_inputs();
+        inputs.capability_owners.clear();
+        assert!(plan_supplier_creation(test_ids(true), inputs).is_err());
     }
 
     /// 重复能力输入整体拒绝，不返回部分计划。

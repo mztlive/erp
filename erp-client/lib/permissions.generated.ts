@@ -1569,6 +1569,36 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                     action: "delete",
                 },
             },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/suppliers/{id}/handover",
+                description: "交接供应商整体维护人",
+                permission: {
+                    resource: "supplier",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/suppliers/{id}/handover-candidates",
+                description: "查询供应商交接待选人",
+                permission: {
+                    resource: "supplier",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/suppliers/{id}/capabilities/{capability_id}/handover",
+                description: "交接供给能力负责人",
+                permission: {
+                    resource: "supplier",
+                    action: "update",
+                },
+            },
         ],
     },
     {

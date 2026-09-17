@@ -17,15 +17,27 @@ use crate::dto::supplier::{
 };
 use crate::entity::supplier::{SupplierAccount, SupplierAccountId};
 use crate::error::{Error, Result};
-use crate::ports::{PartyFactsPort, SensitiveFieldKindFact, SensitiveTokenPort, select_current_default};
+use crate::ports::{
+    AccountFactPort, FailClosedAccountFactPort, FailClosedSupplierDataScopePort, PartyFactsPort,
+    SensitiveFieldKindFact, SensitiveTokenPort, SupplierDataScopePort, select_current_default,
+};
 use crate::repository::{SupplierAccountRow, SupplierExt};
 
+pub mod access;
 pub mod eligibility;
+mod handover_identity;
 mod list;
 mod list_view;
 mod profile;
+mod scope;
 
+pub use access::{SupplierAccess, supplier_scope};
+pub use handover_identity::{
+    capability_handover_audit_id, capability_handover_fingerprint, supplier_handover_audit_id,
+    supplier_handover_audit_message, supplier_handover_fingerprint, supplier_handover_fingerprint_matches,
+};
 pub use profile::command_view;
+pub use scope::SupplierListView;
 
 /// 供应商服务。
 ///
@@ -34,6 +46,8 @@ pub struct SupplierService {
     db: Database,
     party: Arc<dyn PartyFactsPort>,
     sensitive_data: Option<Arc<dyn SensitiveTokenPort>>,
+    data_scope: Arc<dyn SupplierDataScopePort>,
+    accounts: Arc<dyn AccountFactPort>,
 }
 
 impl SupplierService {
@@ -46,7 +60,13 @@ impl SupplierService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database, party: Arc<dyn PartyFactsPort>) -> Self {
-        Self { db, party, sensitive_data: None }
+        Self {
+            db,
+            party,
+            sensitive_data: None,
+            data_scope: FailClosedSupplierDataScopePort::shared(),
+            accounts: Arc::new(FailClosedAccountFactPort),
+        }
     }
 
     /// 创建可签发敏感字段短时揭示令牌的详情查询服务。
@@ -55,7 +75,39 @@ impl SupplierService {
         party: Arc<dyn PartyFactsPort>,
         sensitive_data: Arc<dyn SensitiveTokenPort>,
     ) -> Self {
-        Self { db, party, sensitive_data: Some(sensitive_data) }
+        Self {
+            db,
+            party,
+            sensitive_data: Some(sensitive_data),
+            data_scope: FailClosedSupplierDataScopePort::shared(),
+            accounts: Arc::new(FailClosedAccountFactPort),
+        }
+    }
+
+    /// 注入范围 Port 与账号事实。
+    ///
+    /// # 参数
+    /// * `data_scope` - 已接线供应商范围 Port
+    /// * `accounts` - 账号显示名与登录资格
+    ///
+    /// # 返回
+    /// 返回可解析范围的服务。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_scope(
+        mut self,
+        data_scope: Arc<dyn SupplierDataScopePort>,
+        accounts: Arc<dyn AccountFactPort>,
+    ) -> Self {
+        self.data_scope = data_scope;
+        self.accounts = accounts;
+        self
+    }
+
+    /// 构造供应商对象访问器。
+    pub fn access(&self) -> SupplierAccess {
+        SupplierAccess::new(self.db.clone(), self.data_scope.clone())
     }
 
     /// 查询供应商角色详情（供应商 + 当前商务结算版本 + 主体编号）。
@@ -68,7 +120,20 @@ impl SupplierService {
     ///
     /// # 错误
     /// * `NotFound` - 供应商角色不存在
-    pub async fn supplier_detail(&self, id: &str) -> Result<SupplierDetailView> {
+    pub async fn supplier_detail(
+        &self,
+        id: &str,
+        actor: &application_core::AuditActor,
+    ) -> Result<SupplierDetailView> {
+        let expected = self.access().require(actor, "detail", id).await?;
+        let view = self.load_supplier_detail(id).await?;
+        let current = self.access().require(actor, "detail", id).await?;
+        scope::ensure_stable_snapshot(&expected.scope_version, &current.scope_version)?;
+        Ok(view)
+    }
+
+    /// 装载详情展示字段，不解释数据范围。
+    pub async fn load_supplier_detail(&self, id: &str) -> Result<SupplierDetailView> {
         let supplier_id = SupplierAccountId::new(id);
         let bundle = self
             .db
@@ -93,6 +158,8 @@ impl SupplierService {
             id: bundle.supplier.base.id.clone(),
             party_id: bundle.supplier.party_id.to_string(),
             supplier_no: bundle.supplier.supplier_no.clone(),
+            maintainer_user_id: bundle.supplier.maintainer_user_id.clone(),
+            business_org_unit_id: bundle.supplier.business_org_unit_id.clone(),
             default_payment_term_id: bundle.supplier.default_payment_term_id.clone(),
             current_commercial_profile_revision_id: bundle
                 .supplier
@@ -127,6 +194,10 @@ impl SupplierService {
             capabilities: bundle.capabilities.clone(),
             qualifications: bundle.qualifications.clone(),
             entity_names: commercial_party_names.clone(),
+            maintainer_names: self
+                .accounts
+                .names_by_ids(std::slice::from_ref(&bundle.supplier.maintainer_user_id))
+                .await?,
             as_of: BusinessDate::today(),
         })
         .into_iter()

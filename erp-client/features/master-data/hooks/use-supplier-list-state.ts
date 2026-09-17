@@ -39,6 +39,10 @@ export function useSupplierListState(
         supplierCapabilityCodes: filters.supplierCapabilityCodes,
         supplierQualificationTypes: filters.supplierQualificationTypes,
         supplierQualificationHealth: filters.supplierQualificationHealth,
+        owner_user_ids: filters.ownerUserIds || undefined,
+        capability_owner_user_ids: filters.capabilityOwnerUserIds || undefined,
+        org_unit_ids: filters.orgUnitIds || undefined,
+        include_descendants: filters.includeDescendants || undefined,
     })
     const { exportMeta, handleExport } = useMasterDataListExport()
 
@@ -85,12 +89,34 @@ export function useSupplierListState(
                 ).join("、")}`,
             })
         }
+        if (filters.ownerUserIds) {
+            chips.push({
+                key: "owner_user_ids",
+                label: `维护人 ${filters.ownerUserIds}`,
+            })
+        }
+        if (filters.capabilityOwnerUserIds) {
+            chips.push({
+                key: "capability_owner_user_ids",
+                label: `能力负责人 ${filters.capabilityOwnerUserIds}`,
+            })
+        }
+        if (filters.orgUnitIds) {
+            chips.push({
+                key: "org_unit_ids",
+                label: `组织 ${filters.orgUnitIds}${filters.includeDescendants ? "（含下级）" : ""}`,
+            })
+        }
         return chips
     }, [
         filters.q,
         filters.supplierCapabilityCodes,
         filters.supplierQualificationHealth,
         filters.supplierQualificationTypes,
+        filters.ownerUserIds,
+        filters.capabilityOwnerUserIds,
+        filters.orgUnitIds,
+        filters.includeDescendants,
     ])
     const listTableDescription = React.useMemo(
         () =>
@@ -140,6 +166,11 @@ export function useSupplierListState(
                 supplierQualificationTypes: filters.supplierQualificationTypes,
                 supplierQualificationHealth:
                     filters.supplierQualificationHealth,
+                owner_user_ids: filters.ownerUserIds || undefined,
+                capability_owner_user_ids:
+                    filters.capabilityOwnerUserIds || undefined,
+                org_unit_ids: filters.orgUnitIds || undefined,
+                include_descendants: filters.includeDescendants || undefined,
             },
             filterSnapshotLabel,
             resourceLabel("suppliers"),

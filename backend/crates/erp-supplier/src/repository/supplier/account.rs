@@ -23,6 +23,12 @@ pub struct SupplierAccountRow {
     pub party_id: String,
     /// 供应商编号。
     pub supplier_no: String,
+    /// 整体维护人。
+    #[serde(default)]
+    pub maintainer_user_id: String,
+    /// 当前业务组织。
+    #[serde(default)]
+    pub business_org_unit_id: String,
     /// 默认结算条件引用。
     pub default_payment_term_id: Option<String>,
     /// 当前商务结算版本 ID。
@@ -54,6 +60,8 @@ impl SupplierAccountRow {
             id,
             party_id,
             supplier_no,
+            maintainer_user_id: String::new(),
+            business_org_unit_id: String::new(),
             default_payment_term_id: None,
             current_commercial_profile_revision_id: None,
             status: SupplierAccountStatus::Active,
@@ -106,6 +114,12 @@ pub struct SupplierAccountFilter {
     pub supplier_ids: Option<Vec<SupplierAccountId>>,
     /// 必须排除的供应商角色 ID 集合。
     pub excluded_supplier_ids: Option<Vec<SupplierAccountId>>,
+    /// 已证明的供应商责任范围。
+    pub authorized_scope: crate::repository::scope::SupplierReadScope,
+    /// 维护人筛选；`None` 表示不筛选。
+    pub maintainer_user_ids: Option<Vec<String>>,
+    /// 业务组织筛选；`None` 表示不筛选。
+    pub business_org_unit_ids: Option<Vec<String>>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -125,6 +139,9 @@ impl Default for SupplierAccountFilter {
             status: None,
             supplier_ids: None,
             excluded_supplier_ids: None,
+            authorized_scope: crate::repository::scope::SupplierReadScope::default(),
+            maintainer_user_ids: None,
+            business_org_unit_ids: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -167,7 +184,22 @@ impl QueryFilter for SupplierAccountFilter {
             self.supplier_ids.as_deref(),
             self.excluded_supplier_ids.as_deref(),
         );
-        filter
+        if let Some(owners) = &self.maintainer_user_ids {
+            filter.insert("maintainer_user_id", doc! { "$in": owners });
+        }
+        if let Some(orgs) = &self.business_org_unit_ids {
+            filter.insert("business_org_unit_id", doc! { "$in": orgs });
+        }
+        if self.authorized_scope.is_empty() {
+            filter.insert("$expr", false);
+            return filter;
+        }
+        let scope = self.authorized_scope.document();
+        if scope.is_empty() {
+            filter
+        } else {
+            doc! { "$and": [filter, scope] }
+        }
     }
 }
 
@@ -466,6 +498,8 @@ fn supplier_account_projection() -> Document {
         "id": 1,
         "party_id": 1,
         "supplier_no": 1,
+        "maintainer_user_id": 1,
+        "business_org_unit_id": 1,
         "default_payment_term_id": 1,
         "current_commercial_profile_revision_id": 1,
         "status": 1,
@@ -617,16 +651,10 @@ mod tests {
     #[test]
     fn account_filter_applies_candidate_and_excluded_supplier_ids() {
         let filter = SupplierAccountFilter {
-            keyword: None,
-            party_id: None,
-            party_ids: None,
             status: Some(SupplierAccountStatus::Active),
             supplier_ids: Some(vec![erp_core::ids::SupplierAccountId::new("supplier-1")]),
             excluded_supplier_ids: Some(vec![erp_core::ids::SupplierAccountId::new("supplier-2")]),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            ..SupplierAccountFilter::default()
         };
 
         let document = filter.to_doc();

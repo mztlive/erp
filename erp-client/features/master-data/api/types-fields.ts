@@ -113,6 +113,8 @@ export type SupplierFields = Readonly<{
     clearBankAccount?: boolean
     invoiceType?: string
     invoiceTaxRate?: string
+    maintainerUserId?: string
+    capabilityOwnerUserId?: string
     initialScore?: string
     supplierRating?: string
     currentScore?: string

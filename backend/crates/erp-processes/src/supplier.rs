@@ -16,6 +16,9 @@ pub fn process_name() -> &'static str {
 
 /// Soft-delete a supplier role and persist the success audit in one transaction.
 pub async fn delete_supplier(db: Database, id: String, actor: AuditActor) -> Result<()> {
+    crate::adapters::supplier_access(db.clone(), crate::adapters::identity::shared_rbac_service(db.clone()))
+        .require(&actor, "delete", &id)
+        .await?;
     let mut supplier = supplier_service(db.clone()).load_supplier(&id).await?;
     let audit = actor.clone().resource_log("supplier.delete", "supplier", supplier.base.id.clone())?;
     run_audited(&db, audit, move |db, session| {

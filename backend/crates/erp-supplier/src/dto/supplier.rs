@@ -84,6 +84,15 @@ pub struct SupplierView {
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+    /// 整体维护人。
+    #[serde(default)]
+    pub maintainer_user_id: String,
+    /// 整体维护人显示名。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maintainer_user_name: Option<String>,
+    /// 当前业务组织。
+    #[serde(default)]
+    pub business_org_unit_id: String,
     /// 当前商务资料；列表由服务端批量投影填充。
     pub current_profile: Option<CommercialProfileView>,
     /// 当前有效供应能力代码；未水合时为空。
@@ -115,6 +124,9 @@ impl From<SupplierAccount> for SupplierView {
             status: account.stable.status,
             version: account.base.version,
             created_at: account.base.created_at,
+            maintainer_user_id: account.maintainer_user_id,
+            maintainer_user_name: None,
+            business_org_unit_id: account.business_org_unit_id,
             current_profile: None,
             capability_codes: Vec::new(),
             qualification_health: None,
@@ -183,7 +195,19 @@ pub struct SupplierSensitiveRevealView {
 
 /// 供应商角色列表查询参数。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct SupplierListParams {
+    /// 跨页与导出必须使用前一页的当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
+    /// 当前整体维护人 ID，逗号分隔，最多 100 项。
+    pub owner_user_ids: Option<application_core::QueryIds>,
+    /// 供给能力负责人 ID，逗号分隔，最多 100 项。
+    pub capability_owner_user_ids: Option<application_core::QueryIds>,
+    /// 当前业务组织，逗号分隔，最多 100 项。
+    pub org_unit_ids: Option<application_core::QueryIds>,
+    /// 组织筛选是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
     /// 供应商编号模糊搜索。
     pub keyword: Option<String>,
     /// 共用企业主体 ID（精确匹配）。
@@ -211,6 +235,14 @@ pub struct SupplierListParams {
 /// 归一化后的供应商角色列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SupplierListQuery {
+    /// 当前整体维护人。
+    pub owner_user_ids: Option<application_core::QueryIds>,
+    /// 供给能力负责人。
+    pub capability_owner_user_ids: Option<application_core::QueryIds>,
+    /// 当前业务组织。
+    pub org_unit_ids: Option<application_core::QueryIds>,
+    /// 是否包含下级组织。
+    pub include_descendants: Option<bool>,
     /// 供应商编号模糊搜索。
     pub keyword: Option<String>,
     /// 共用企业主体 ID。
@@ -238,6 +270,10 @@ impl SupplierListParams {
     pub(crate) fn normalized(&self) -> Result<SupplierListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, SUPPLIER_SORT_FIELDS)?;
         Ok(SupplierListQuery {
+            owner_user_ids: self.owner_user_ids.clone(),
+            capability_owner_user_ids: self.capability_owner_user_ids.clone(),
+            org_unit_ids: self.org_unit_ids.clone(),
+            include_descendants: self.include_descendants,
             keyword: normalized_text(self.keyword.as_deref()),
             party_id: self.party_id.clone(),
             status: self.status,
@@ -627,6 +663,16 @@ pub struct SupplierProfileQualificationInput {
     pub capability_codes: Vec<CapabilityCode>,
 }
 
+/// 根级供应商资料中单条能力的显式负责人。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq, Eq)]
+pub struct SupplierProfileCapabilityOwnerInput {
+    /// 能力代码。
+    pub capability_code: CapabilityCode,
+    /// 供给能力负责人。
+    #[validate(custom(function = "non_blank", message = "供给能力负责人不能为空"))]
+    pub owner_user_id: String,
+}
+
 /// 根级供应商资料中的当前评级输入。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SupplierProfileRatingInput {
@@ -702,6 +748,11 @@ pub struct SaveSupplierProfileRequest {
     pub signing_entity_party_id: erp_core::ids::PartyId,
     /// 付款主体。
     pub payment_entity_party_id: erp_core::ids::PartyId,
+    /// 整体维护人；创建必填。
+    pub maintainer_user_id: Option<String>,
+    /// 新建能力的显式负责人；禁止省略后写成操作人。
+    #[serde(default)]
+    pub capability_owners: Vec<SupplierProfileCapabilityOwnerInput>,
     /// 当前启用能力代码集合。
     pub capability_codes: Vec<CapabilityCode>,
     /// 当前资质集合。
@@ -1040,6 +1091,8 @@ mod tests {
             invoice_tax_rates: None,
             signing_entity_party_id: PartyId::new("party-signing"),
             payment_entity_party_id: PartyId::new("party-payment"),
+            maintainer_user_id: Some("buyer-1".to_string()),
+            capability_owners: vec![],
             capability_codes: vec![CapabilityCode::Physical],
             qualifications: vec![SupplierProfileQualificationInput {
                 qualification_type: QualificationType::Contract,
@@ -1156,16 +1209,10 @@ mod tests {
     #[test]
     fn supplier_list_normalizes_repeated_filter_codes() {
         let params = SupplierListParams {
-            keyword: None,
-            party_id: None,
-            status: None,
             capability_codes: Some(" physical, api,physical ".to_string()),
             qualification_types: Some("contract, food_license,contract".to_string()),
             qualification_health: Some(SupplierQualificationHealth::Expiring30),
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..SupplierListParams::default()
         };
 
         let query = params.normalized().unwrap();
@@ -1177,16 +1224,8 @@ mod tests {
     #[test]
     fn supplier_list_rejects_unknown_filter_code() {
         let params = SupplierListParams {
-            keyword: None,
-            party_id: None,
-            status: None,
             capability_codes: Some("unknown".to_string()),
-            qualification_types: None,
-            qualification_health: None,
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
+            ..SupplierListParams::default()
         };
 
         assert!(params.normalized().is_err());

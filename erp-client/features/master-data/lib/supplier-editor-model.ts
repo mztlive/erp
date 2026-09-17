@@ -40,6 +40,8 @@ export type SupplierEditorFormValues = Readonly<{
     supplierRating: string
     currentScore: string
     changeReason: string
+    maintainerUserId: string
+    capabilityOwnerUserId: string
 }>
 
 export type SupplierFieldKey = keyof SupplierEditorFormValues
@@ -56,6 +58,10 @@ export function validateSupplierEditorFields(
     values: SupplierEditorFormValues,
     context: SupplierValidationContext = {},
 ): string | null {
+    if (!values.maintainerUserId.trim()) return "请指定供应商维护人"
+    if (values.capability.trim() && !values.capabilityOwnerUserId.trim()) {
+        return "请指定供给能力负责人"
+    }
     if (values.name.trim().length < 2) return "请填写供应商名称"
     if (values.company.trim().length < 1) return "请填写企业主体"
     if (
@@ -164,6 +170,14 @@ export function hydrateSupplierEditor(
         supplierRating: fields.supplierRating ?? "",
         currentScore: fields.currentScore ?? "",
         changeReason: "",
+        maintainerUserId:
+            data.supplierList?.maintainerUserId ??
+            fields.maintainerUserId ??
+            "",
+        capabilityOwnerUserId:
+            data.keyFacts.find((item) => item.label === "能力负责人")?.value ??
+            fields.capabilityOwnerUserId ??
+            "",
     }
 }
 
@@ -202,5 +216,7 @@ export function createSupplierEditorDefaults(
         supplierRating: "",
         currentScore: "",
         changeReason: isCreate ? "新建供应商" : "",
+        maintainerUserId: "",
+        capabilityOwnerUserId: "",
     }
 }

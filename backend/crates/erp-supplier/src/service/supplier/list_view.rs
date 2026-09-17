@@ -28,6 +28,8 @@ pub(super) struct SupplierViewAssembleInput {
     pub qualifications: Vec<SupplierQualification>,
     /// 签约/付款主体法定名称，键为主体 ID 字符串。
     pub entity_names: HashMap<String, String>,
+    /// 整体维护人显示名。
+    pub maintainer_names: HashMap<String, String>,
     /// 能力与资质判定业务日。
     pub as_of: BusinessDate,
 }
@@ -50,6 +52,7 @@ pub(super) fn assemble_supplier_views(input: SupplierViewAssembleInput) -> Vec<S
         capabilities: capability_codes_by_supplier(&input.capabilities, input.as_of),
         qualifications: qualifications_by_supplier(&input.qualifications),
         entity_names: input.entity_names,
+        maintainer_names: input.maintainer_names,
         as_of: input.as_of,
     };
     input.rows.into_iter().map(|row| assemble_one_supplier_view(row, &context)).collect()
@@ -69,6 +72,8 @@ struct SupplierRowContext<'a> {
     qualifications: HashMap<String, Vec<&'a SupplierQualification>>,
     /// 签约/付款主体名称。
     entity_names: HashMap<String, String>,
+    /// 整体维护人显示名。
+    maintainer_names: HashMap<String, String>,
     /// 判定业务日。
     as_of: BusinessDate,
 }
@@ -130,6 +135,9 @@ fn assemble_one_supplier_view(row: SupplierAccountRow, context: &SupplierRowCont
         status: row.status,
         version: row.version,
         created_at: row.created_at,
+        maintainer_user_id: row.maintainer_user_id.clone(),
+        maintainer_user_name: context.maintainer_names.get(&row.maintainer_user_id).cloned(),
+        business_org_unit_id: row.business_org_unit_id,
         current_profile,
         capability_codes: context.capabilities.get(&row.id).cloned().unwrap_or_default(),
         qualification_health: Some(SupplierQualificationHealth::from(SupplierQualification::rollup_health(
@@ -323,6 +331,8 @@ mod tests {
                 id: "sup-1".to_string(),
                 party_id: "party-1".to_string(),
                 supplier_no: "SUP-1".to_string(),
+                maintainer_user_id: "buyer".to_string(),
+                business_org_unit_id: "org-a".to_string(),
                 default_payment_term_id: None,
                 current_commercial_profile_revision_id: Some("rev-1".to_string()),
                 status: SupplierAccountStatus::Active,
@@ -347,6 +357,7 @@ mod tests {
             capabilities: vec![capability],
             qualifications: vec![qualification],
             entity_names: names,
+            maintainer_names: HashMap::from([("buyer".to_string(), "采购员".to_string())]),
             as_of: as_of(),
         });
         let view = &views[0];

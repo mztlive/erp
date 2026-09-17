@@ -289,6 +289,35 @@ impl SupplierCapability {
         self.stable.status().is_active()
     }
 
+    /// 显式交接供给能力负责人。
+    ///
+    /// # 参数
+    /// * `target_user_id` - 目标能力负责人
+    /// * `updated_by` - 本次交接执行人
+    ///
+    /// # 返回
+    /// 负责人确有变化时返回 `true`。
+    ///
+    /// # 错误
+    /// 目标为空或与当前一致时拒绝。
+    ///
+    /// # 关键业务约束
+    /// 独立于整体维护人；不得把操作人写成能力负责人。
+    pub fn handover(&mut self, target_user_id: String, updated_by: impl Into<String>) -> Result<()> {
+        let target = normalize_required_text(
+            target_user_id,
+            "目标能力负责人不能为空",
+            OWNER_USER_ID_MAX_LEN,
+            "目标能力负责人标识过长",
+        )?;
+        if target == self.owner_user_id {
+            return Err(Error::from("目标已是当前能力负责人，无需交接"));
+        }
+        self.owner_user_id = target;
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
     /// 判断能力在指定业务日是否可用于列表展示。
     ///
     /// 须同时满足启用、已到生效日、且尚未到期；与列表按能力筛选的日期口径一致。
@@ -583,6 +612,18 @@ mod tests {
             .unwrap();
         assert_eq!(capability.capability_code, CapabilityCode::Physical);
         assert_eq!(capability.supplier_id, SupplierAccountId::new("supplier-1"));
+    }
+
+    /// 能力交接与维护人分列；相同目标冲突保持原值。
+    #[test]
+    fn capability_handover_rejects_same_owner() {
+        let mut capability =
+            SupplierCapability::new(SupplierCapabilityId::new("cap-h"), capability_data(), "admin-1")
+                .unwrap();
+        capability.handover("buyer-2".into(), "manager").unwrap();
+        assert_eq!(capability.owner_user_id, "buyer-2");
+        assert!(capability.handover("buyer-2".into(), "manager").is_err());
+        assert_eq!(capability.owner_user_id, "buyer-2");
     }
 
     /// 快照字段必须与实体当前状态完全一致；修订号溢出仍由 `RevisionBase::next_revision_no` 负责，本方法仅校验字段一致性。

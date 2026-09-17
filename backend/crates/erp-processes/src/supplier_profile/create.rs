@@ -81,6 +81,9 @@ impl SupplierProfileService {
         self.ensure_unique_inputs(&req)?;
 
         let idempotency_key = req.idempotency_key.clone();
+        let maintainer = required_maintainer(&req)?;
+        let rbac = self.require_rbac()?.clone();
+        let org = resolve_create_org(&self.db, rbac.clone(), actor, &maintainer).await?;
         let prepared = self.prepare_create(
             req,
             party_no,
@@ -88,12 +91,22 @@ impl SupplierProfileService {
             request_fingerprint.clone(),
             actor,
             pending_assets,
+            maintainer.clone(),
+            org,
         )?;
         let result = prepared.result.clone();
         let db = self.db.clone();
         let client = db.client().clone();
+        let actor = actor.clone();
         let transaction_result = client
-            .with_transaction(move |session| Box::pin(async move { prepared.persist(&db, session).await }))
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    crate::adapters::supplier_access(db.clone(), rbac)
+                        .require_create(&actor, &maintainer, session)
+                        .await?;
+                    prepared.persist(&db, session).await
+                })
+            })
             .await;
         self.resolve_transaction_result_with_assets(
             transaction_result,
@@ -115,6 +128,8 @@ impl SupplierProfileService {
         request_fingerprint: String,
         actor: &AuditActor,
         pending_assets: Arc<dyn PendingAttachmentBatch>,
+        maintainer_user_id: String,
+        business_org_unit_id: String,
     ) -> Result<PreparedCreate> {
         let party_id = PartyId::new(next_id());
         let supplier_id = SupplierAccountId::new(next_id());
@@ -127,6 +142,8 @@ impl SupplierProfileService {
             &supplier_id,
             &profile_id,
             actor.id(),
+            maintainer_user_id,
+            business_org_unit_id,
         )?;
         let plan = erp_supplier::plan_supplier_creation(ids, inputs)
             .map_err(|e| Error::ValidationError(e.to_string()))?;
@@ -394,6 +411,8 @@ fn allocate_creation_plan(
     supplier_id: &SupplierAccountId,
     profile_id: &SupplierCommercialProfileRevisionId,
     actor_id: &str,
+    maintainer_user_id: String,
+    business_org_unit_id: String,
 ) -> Result<(SupplierCreationIds, SupplierCreationInputs)> {
     let capability_ids = req
         .capability_codes
@@ -466,8 +485,61 @@ fn allocate_creation_plan(
         effective_from: req.effective_from,
         change_reason: req.change_reason.clone(),
         actor_id: actor_id.to_string(),
+        maintainer_user_id,
+        business_org_unit_id,
+        capability_owners: capability_owners_of(req)?,
     };
     Ok((ids, inputs))
+}
+
+/// 创建必须显式指定整体维护人。
+pub(super) fn required_maintainer(req: &SaveSupplierProfileRequest) -> Result<String> {
+    req.maintainer_user_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .ok_or_else(|| Error::ValidationError("供应商维护人不能为空".into()))
+}
+
+/// 读取新建能力的显式负责人。
+pub(super) fn capability_owners_of(
+    req: &SaveSupplierProfileRequest,
+) -> Result<Vec<(erp_supplier::CapabilityCode, String)>> {
+    let mut owners = Vec::new();
+    for code in &req.capability_codes {
+        let owner = req
+            .capability_owners
+            .iter()
+            .find(|item| item.capability_code == *code && !item.owner_user_id.trim().is_empty())
+            .ok_or_else(|| Error::ValidationError("供给能力负责人必须显式指定".into()))?;
+        owners.push((*code, owner.owner_user_id.trim().to_string()));
+    }
+    Ok(owners)
+}
+
+/// 在独立事务中证明创建资格并读取维护人主属组织。
+async fn resolve_create_org(
+    db: &Database,
+    rbac: erp_identity::SharedRbacService,
+    actor: &AuditActor,
+    maintainer: &str,
+) -> Result<String> {
+    let actor = actor.clone();
+    let maintainer = maintainer.to_string();
+    let db = db.clone();
+    db.client()
+        .clone()
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                crate::adapters::supplier_access(db, rbac)
+                    .require_create(&actor, &maintainer, executor)
+                    .await
+                    .map(|(_, org)| org)
+                    .map_err(Error::from)
+            })
+        })
+        .await
 }
 
 /// 创建可选税务事实。
