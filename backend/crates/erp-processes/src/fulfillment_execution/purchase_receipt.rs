@@ -88,19 +88,19 @@ impl FulfillmentProcess {
         let actor_id = actor.id().to_string();
         let client = db.client().clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     erp_fulfillment::service::FulfillmentService::new(db.clone())
-                        .persist_purchase_receipt(&mut receipt, session)
+                        .persist_purchase_receipt(&mut receipt, executor)
                         .await?;
                     super::task::record_fulfillment_activity(
                         &db,
                         super::task::FulfillmentTaskObject::PurchaseReceipt(&receipt),
                         &actor_id,
-                        session,
+                        executor,
                     )
                     .await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<PurchaseReceipt, crate::Error>(receipt)
                 })
             })
@@ -290,7 +290,7 @@ async fn persist_created_purchase_receipt(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 register_created_purchase_receipt_document(
                     &db,
@@ -298,19 +298,19 @@ async fn persist_created_purchase_receipt(
                     object_read.as_ref(),
                     &receipt,
                     &actor,
-                    session,
+                    executor,
                 )
                 .await?;
                 erp_fulfillment::service::FulfillmentService::new(db.clone())
-                    .persist_created_purchase_receipt(&receipt, &lines, session)
+                    .persist_created_purchase_receipt(&receipt, &lines, executor)
                     .await?;
                 super::task::ensure_fulfillment_task(
                     &db,
                     super::task::FulfillmentTaskObject::PurchaseReceipt(&receipt),
-                    session,
+                    executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

@@ -21,9 +21,9 @@ pub async fn delete_supplier(db: Database, id: String, actor: AuditActor) -> Res
         .await?;
     let mut supplier = supplier_service(db.clone()).load_supplier(&id).await?;
     let audit = actor.clone().resource_log("supplier.delete", "supplier", supplier.base.id.clone())?;
-    run_audited(&db, audit, move |db, session| {
+    run_audited(&db, audit, move |db, executor| {
         Box::pin(async move {
-            db.supplier_accounts().soft_delete(&mut supplier, session).await?;
+            db.supplier_accounts().soft_delete(&mut supplier, executor).await?;
             Ok(())
         })
     })

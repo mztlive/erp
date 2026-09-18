@@ -36,19 +36,19 @@ fn create_save_submit_require_related_contract_and_customer_in_write_tx() {
     );
 
     let create_submit_tx = create
-        .split("access_for_tx.related_order(&submitted_order, session)")
+        .split("access_for_tx.related_order(&submitted_order, executor)")
         .nth(1)
         .expect("创建并提交事务必须重验合同／客户");
-    assert!(create_submit_tx.contains("access_for_tx.creation(&submitted_order, session)"));
-    assert!(create.contains("access_for_tx.related_order(&order_for_tx, session)"));
+    assert!(create_submit_tx.contains("access_for_tx.creation(&submitted_order, executor)"));
+    assert!(create.contains("access_for_tx.related_order(&order_for_tx, executor)"));
 
     let save_tx = save.split("with_transaction").nth(1).expect("保存写入事务");
-    assert!(save_tx.contains("related_order(&order, session)"));
+    assert!(save_tx.contains("related_order(&order, executor)"));
     assert!(save.contains("resolve_sales_command_draft(&access, &req.contract_id"));
 
     let persist_tx = persist.split("client").last().expect("提交写入事务");
-    assert!(persist_tx.contains("related_order(&order, session)"));
-    assert!(reopen.contains("related_order(&related_order, session)"));
+    assert!(persist_tx.contains("related_order(&order, executor)"));
+    assert!(reopen.contains("related_order(&related_order, executor)"));
 
     assert!(handler.contains("ensure_contract_access"));
     assert!(handler.contains("ensure_customer_access"));

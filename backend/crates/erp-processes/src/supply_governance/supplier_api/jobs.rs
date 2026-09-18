@@ -27,7 +27,7 @@ impl SupplierApiGovernanceProcess {
         let actor = actor.clone();
         let connection_id_value = id.to_string();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let domain = SupplierApiService::new(db.clone());
                     let (connection, capabilities) = domain
@@ -35,7 +35,7 @@ impl SupplierApiGovernanceProcess {
                             &connection_id_value,
                             expected_version,
                             SupplierConnectionAction::RunHealthCheck,
-                            session,
+                            executor,
                         )
                         .await?;
                     let job = BackgroundJob::for_supplier_governance(SupplierGovernanceJobSpec {
@@ -53,8 +53,8 @@ impl SupplierApiGovernanceProcess {
                         actor.id(),
                         &identity,
                     )?;
-                    db.background_jobs().create(&job, session).await?;
-                    domain.create_health_run(&run, session).await?;
+                    db.background_jobs().create(&job, executor).await?;
+                    domain.create_health_run(&run, executor).await?;
                     persist_command_receipt(
                         &db,
                         CommandReceiptWrite {
@@ -65,7 +65,7 @@ impl SupplierApiGovernanceProcess {
                             job_id: Some(job.base.id.clone()),
                             actor: &actor,
                         },
-                        session,
+                        executor,
                     )
                     .await
                 })
@@ -84,7 +84,7 @@ impl SupplierApiGovernanceProcess {
         let actor = actor.clone();
         let connection_id_value = id.to_string();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let domain = SupplierApiService::new(db.clone());
                     let (connection, _capabilities) = domain
@@ -92,7 +92,7 @@ impl SupplierApiGovernanceProcess {
                             &connection_id_value,
                             expected_version,
                             SupplierConnectionAction::StartCatalogSync,
-                            session,
+                            executor,
                         )
                         .await?;
                     let job = BackgroundJob::for_supplier_governance(SupplierGovernanceJobSpec {
@@ -102,7 +102,7 @@ impl SupplierApiGovernanceProcess {
                         requested_by: actor.id().to_string(),
                         idempotency_hash: identity.idempotency_hash.clone(),
                     })?;
-                    db.background_jobs().create(&job, session).await?;
+                    db.background_jobs().create(&job, executor).await?;
                     persist_command_receipt(
                         &db,
                         CommandReceiptWrite {
@@ -113,7 +113,7 @@ impl SupplierApiGovernanceProcess {
                             job_id: Some(job.base.id.clone()),
                             actor: &actor,
                         },
-                        session,
+                        executor,
                     )
                     .await
                 })

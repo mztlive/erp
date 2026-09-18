@@ -146,25 +146,25 @@ impl RbacService {
         use persistence_core::Transactional;
         db.client()
             .clone()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let Some(first) = scopes.first() else {
                         return Ok::<(), Error>(());
                     };
-                    if !db.roles().exists_active_by_id(&first.subject_id, session).await? {
+                    if !db.roles().exists_active_by_id(&first.subject_id, executor).await? {
                         return Ok(());
                     }
                     if db
                         .data_scopes()
-                        .has_subject_resource_history(&first.subject_id, &first.binding.resource, session)
+                        .has_subject_resource_history(&first.subject_id, &first.binding.resource, executor)
                         .await?
                     {
                         return Ok(());
                     }
                     for scope in &scopes {
-                        db.data_scopes().create(scope, session).await?;
+                        db.data_scopes().create(scope, executor).await?;
                     }
-                    MongoCasbinAdapter::new(db.clone()).bump_policy_revision(session).await?;
+                    MongoCasbinAdapter::new(db.clone()).bump_policy_revision(executor).await?;
                     Ok::<(), Error>(())
                 })
             })

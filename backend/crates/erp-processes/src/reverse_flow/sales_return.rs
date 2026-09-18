@@ -250,7 +250,7 @@ async fn persist_created_sales_return_case(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 let mut creation = MongoCreation {
                     db: &db,
@@ -261,7 +261,7 @@ async fn persist_created_sales_return_case(
                     actor: &actor,
                     audit: &audit,
                 };
-                persist_creation(&mut creation, session).await?;
+                persist_creation(&mut creation, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

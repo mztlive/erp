@@ -190,11 +190,11 @@ impl DocumentRegistryService {
         let client = db.client().clone();
         let doc_for_tx = doc.clone();
         let existing = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let existing = db.business_documents().register(&doc_for_tx, session).await?;
+                    let existing = db.business_documents().register(&doc_for_tx, executor).await?;
                     if existing.is_none() {
-                        audit_port.persist(&audit, session).await?;
+                        audit_port.persist(&audit, executor).await?;
                     }
                     Ok::<Option<BusinessDocument>, crate::error::Error>(existing)
                 })
@@ -382,13 +382,13 @@ impl DocumentRegistryService {
         )?;
         let action_for_tx = action.clone();
         let audit_port = Arc::clone(&self.audit);
-        self.write_with_audit(move |tx_db, session| {
+        self.write_with_audit(move |tx_db, executor| {
             Box::pin(async move {
-                if !tx_db.business_documents().exists_by_id(&action_for_tx.document_id, session).await? {
+                if !tx_db.business_documents().exists_by_id(&action_for_tx.document_id, executor).await? {
                     return Err(Error::NotFound("业务单据未注册".to_string()));
                 }
-                tx_db.workflow_actions().create(&action_for_tx, session).await?;
-                audit_port.persist(&audit, session).await?;
+                tx_db.workflow_actions().create(&action_for_tx, executor).await?;
+                audit_port.persist(&audit, executor).await?;
                 Ok::<(), crate::error::Error>(())
             })
         })
@@ -530,15 +530,15 @@ impl DocumentRegistryService {
         )?;
         let relation_for_tx = relation.clone();
         let audit_port = Arc::clone(&self.audit);
-        self.write_with_audit(move |tx_db, session| {
+        self.write_with_audit(move |tx_db, executor| {
             Box::pin(async move {
                 let document_ids =
                     [relation_for_tx.from_document_id.clone(), relation_for_tx.to_document_id.clone()];
-                if tx_db.business_documents().existing_ids(&document_ids, session).await?.len() != 2 {
+                if tx_db.business_documents().existing_ids(&document_ids, executor).await?.len() != 2 {
                     return Err(Error::NotFound("业务单据未注册".to_string()));
                 }
-                tx_db.document_relations().create(&relation_for_tx, session).await?;
-                audit_port.persist(&audit, session).await?;
+                tx_db.document_relations().create(&relation_for_tx, executor).await?;
+                audit_port.persist(&audit, executor).await?;
                 Ok::<(), crate::error::Error>(())
             })
         })
@@ -620,13 +620,14 @@ impl DocumentRegistryService {
         )?;
         let participant_for_tx = participant.clone();
         let audit_port = Arc::clone(&self.audit);
-        self.write_with_audit(move |tx_db, session| {
+        self.write_with_audit(move |tx_db, executor| {
             Box::pin(async move {
-                if !tx_db.business_documents().exists_by_id(&participant_for_tx.document_id, session).await? {
+                if !tx_db.business_documents().exists_by_id(&participant_for_tx.document_id, executor).await?
+                {
                     return Err(Error::NotFound("业务单据未注册".to_string()));
                 }
-                tx_db.document_participants().create(&participant_for_tx, session).await?;
-                audit_port.persist(&audit, session).await?;
+                tx_db.document_participants().create(&participant_for_tx, executor).await?;
+                audit_port.persist(&audit, executor).await?;
                 Ok::<(), crate::error::Error>(())
             })
         })
@@ -641,7 +642,7 @@ impl DocumentRegistryService {
     /// `persistence_core::Error::CommitOutcomeUnknown` → `services::Error::OutcomeUnknown` 映射。
     ///
     /// # 参数
-    /// * `transaction` - 业务写入闭包（收到事务会话执行器）
+    /// * `transaction` - 业务写入闭包（收到执行器）
     ///
     /// # 返回
     /// 返回事务闭包的结果。
@@ -650,7 +651,7 @@ impl DocumentRegistryService {
         T: Send + 'static,
         F: for<'a> FnOnce(
                 &'a mongodb::Database,
-                &'a mut mongodb::ClientSession,
+                &'a mut dyn Executor,
             ) -> std::pin::Pin<
                 Box<dyn std::future::Future<Output = crate::error::Result<T>> + Send + 'a>,
             > + Send
@@ -658,6 +659,8 @@ impl DocumentRegistryService {
     {
         let db = self.db.clone();
         let client = db.client().clone();
-        client.with_transaction(move |session| Box::pin(async move { transaction(&db, session).await })).await
+        client
+            .with_transaction(move |executor| Box::pin(async move { transaction(&db, executor).await }))
+            .await
     }
 }

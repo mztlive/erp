@@ -63,14 +63,14 @@ impl CustomerAcceptanceProcess {
         let client = db.client().clone();
         let command_receipt_for_tx = command_receipt.clone();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (original, reverse_acceptance) =
                         FulfillmentService::persist_customer_acceptance_reverse(
                             &db,
                             &original_id,
                             &req,
-                            session,
+                            executor,
                         )
                         .await?;
                     complete_acceptance(
@@ -81,7 +81,7 @@ impl CustomerAcceptanceProcess {
                             original_id: original.base.id,
                             receipt: command_receipt_for_tx,
                         },
-                        session,
+                        executor,
                     )
                     .await?;
                     Ok::<CustomerAcceptance, crate::Error>(reverse_acceptance)

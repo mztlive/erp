@@ -143,9 +143,9 @@ impl ReturnsProcess {
         let actor_owned = actor.clone();
         let idempotency_key = req.idempotency_key;
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    validate_customer_refund_source(&db, &source_fact_id, source_version, session).await?;
+                    validate_customer_refund_source(&db, &source_fact_id, source_version, executor).await?;
                     let binding = persist_bound_customer_refund_document(
                         &db,
                         &rbac,
@@ -153,10 +153,10 @@ impl ReturnsProcess {
                         document,
                         &bind_command,
                         &actor_owned,
-                        session,
+                        executor,
                     )
                     .await?;
-                    let graph = load_bound_definition_graph_with_executor(&db, &binding, session).await?;
+                    let graph = load_bound_definition_graph_with_executor(&db, &binding, executor).await?;
                     let start_input = build_customer_refund_start_input(CustomerRefundStartInput {
                         graph,
                         binding: &binding,
@@ -170,7 +170,7 @@ impl ReturnsProcess {
                     })?;
                     let prepared = prepare_start(start_input)?;
                     erp_returns::service::ReturnsService::new(db.clone())
-                        .create_customer_refund_in_transaction(&refund, session)
+                        .create_customer_refund(&refund, executor)
                         .await?;
                     if let erp_workflow::service::approval::execution::PreparedExecution::Apply(writes) =
                         prepared
@@ -182,13 +182,13 @@ impl ReturnsProcess {
                             adapter.owner_role,
                             &organization_id,
                             now,
-                            session,
+                            executor,
                         )
                         .await?;
                     }
-                    db.audit_logs().create(&create_audit, session).await?;
-                    db.audit_logs().create(&submit_audit, session).await?;
-                    db.audit_logs().create(&command_audit, session).await?;
+                    db.audit_logs().create(&create_audit, executor).await?;
+                    db.audit_logs().create(&submit_audit, executor).await?;
+                    db.audit_logs().create(&command_audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })
@@ -292,9 +292,9 @@ impl ReturnsProcess {
         let refund_id = id.to_string();
         let detail_id = refund_id.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    apply_customer_refund_final_post(&db, &refund_id, &actor_id, &actor_owned, session).await
+                    apply_customer_refund_final_post(&db, &refund_id, &actor_id, &actor_owned, executor).await
                 })
             })
             .await?;
@@ -312,15 +312,15 @@ pub(super) async fn apply_customer_refund_final_post(
     refund_id: &str,
     actor_id: &str,
     actor: &AuditActor,
-    session: &mut dyn Executor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let domain = erp_returns::service::ReturnsService::new(db.clone());
-    let mut refund = domain.prepare_customer_refund_final_post(refund_id, session).await?;
+    let mut refund = domain.prepare_customer_refund_final_post(refund_id, executor).await?;
     execute_customer_refund_domain_action(
         &mut refund,
         erp_workflow::service::approval::policy::ApprovalDomainAction::CustomerRefundPost,
     )?;
-    execute_refund_posting(&mut MongoRefundPosting { db, refund: &mut refund, actor_id, actor }, session)
+    execute_refund_posting(&mut MongoRefundPosting { db, refund: &mut refund, actor_id, actor }, executor)
         .await?;
     Ok(())
 }
@@ -359,18 +359,18 @@ struct MongoRefundPosting<'a> {
 }
 #[async_trait::async_trait]
 impl RefundPostingSteps for MongoRefundPosting<'_> {
-    async fn apply(&mut self, step: RefundPostingStep, session: &mut dyn Executor) -> Result<()> {
+    async fn apply(&mut self, step: RefundPostingStep, executor: &mut dyn Executor) -> Result<()> {
         let db = self.db;
         let refund = &mut *self.refund;
         let actor_id = self.actor_id;
         let actor = self.actor;
         match step {
             RefundPostingStep::Finance => {
-                apply_customer_refund_posting(db, refund, actor_id, session).await?;
+                apply_customer_refund_posting(db, refund, actor_id, executor).await?;
             },
             RefundPostingStep::Refund => {
                 erp_returns::service::ReturnsService::new(db.clone())
-                    .persist_posted_customer_refund(refund, session)
+                    .persist_posted_customer_refund(refund, executor)
                     .await?;
             },
             RefundPostingStep::SalesProgress => {
@@ -379,13 +379,13 @@ impl RefundPostingSteps for MongoRefundPosting<'_> {
                     erp_finance::service::receivable::receipt_reversal::receipt_allocation_sales_order_ids(
                         db,
                         &receipt_id,
-                        session,
+                        executor,
                     )
                     .await?;
                 for sales_id in sales {
                     crate::order_to_cash::progress::update_sales_order_money_progress(
                         db,
-                        session,
+                        executor,
                         &sales_id,
                         actor_id.to_string(),
                         None,
@@ -399,7 +399,7 @@ impl RefundPostingSteps for MongoRefundPosting<'_> {
                     "customer_refund",
                     refund.base.id.clone(),
                 )?;
-                db.audit_logs().create(&audit, session).await?;
+                db.audit_logs().create(&audit, executor).await?;
             },
         }
         Ok(())
@@ -435,7 +435,7 @@ async fn persist_created_customer_refund(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 persist_bound_customer_refund_document(
                     &db,
@@ -444,13 +444,13 @@ async fn persist_created_customer_refund(
                     document,
                     &bind_command,
                     &actor,
-                    session,
+                    executor,
                 )
                 .await?;
                 erp_returns::service::ReturnsService::new(db.clone())
-                    .create_customer_refund_in_transaction(&refund, session)
+                    .create_customer_refund(&refund, executor)
                     .await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })
@@ -504,7 +504,7 @@ async fn persist_bound_customer_refund_document(
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
-    session: &mut dyn Executor,
+    executor: &mut dyn Executor,
 ) -> Result<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding> {
     let _ = customer_refund_object_readable(
         &bind_command.context.organization_id,
@@ -516,12 +516,12 @@ async fn persist_bound_customer_refund_document(
         object_read,
         bind_command,
         actor,
-        session,
+        executor,
     )
     .await?;
     let binding = binding.ok_or_else(|| Error::Internal("客户退款单必须绑定已发布定义".to_string()))?;
     attach_published_binding(&mut document, binding.clone())?;
-    db.business_documents().create(&document, session).await?;
+    db.business_documents().create(&document, executor).await?;
     Ok(binding)
 }
 
@@ -533,17 +533,17 @@ async fn apply_customer_refund_posting(
     db: &Database,
     refund: &CustomerRefund,
     actor_id: &str,
-    session: &mut dyn Executor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let original_receipt_id = erp_returns::service::ReturnsService::customer_refund_receipt_id(refund)?;
     let receipt = erp_finance::service::receivable::customer_refund::load_posted_refund_receipt(
         db,
         &original_receipt_id,
-        session,
+        executor,
     )
     .await?;
     erp_returns::service::ReturnsService::new(db.clone())
-        .validate_customer_refund_amount(refund, &original_receipt_id, receipt.amount, session)
+        .validate_customer_refund_amount(refund, &original_receipt_id, receipt.amount, executor)
         .await?;
     erp_finance::service::receivable::customer_refund::persist_refund_offsets_and_reversals(
         db,
@@ -554,7 +554,7 @@ async fn apply_customer_refund_posting(
         },
         &receipt,
         actor_id,
-        session,
+        executor,
     )
     .await?;
     Ok(())

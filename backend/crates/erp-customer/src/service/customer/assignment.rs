@@ -237,11 +237,11 @@ impl CustomerAssignmentService {
         let access = self.access();
         let actor_for_tx = actor.clone();
         let changed = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.require_with(actor_for_tx, "update", &customer_id_for_tx, session).await?;
-                    let changed = persist_assign(&db, &customer_id_for_tx, &new_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    access.require_with(actor_for_tx, "update", &customer_id_for_tx, executor).await?;
+                    let changed = persist_assign(&db, &customer_id_for_tx, &new_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<Vec<CustomerAssignment>, crate::error::Error>(changed)
                 })
             })
@@ -287,11 +287,11 @@ impl CustomerAssignmentService {
         let actor_for_tx = actor.clone();
         let customer_id_for_tx = customer_id.to_string();
         let ended = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.require_with(actor_for_tx, "update", &customer_id_for_tx, session).await?;
-                    db.customer_assignments().update(&mut assignment_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    access.require_with(actor_for_tx, "update", &customer_id_for_tx, executor).await?;
+                    db.customer_assignments().update(&mut assignment_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<CustomerAssignment, crate::error::Error>(assignment_for_tx)
                 })
             })

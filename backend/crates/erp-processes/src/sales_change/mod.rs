@@ -5,8 +5,8 @@ use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
 use erp_read_models::sales_center::review::{SalesChangeOrderDetailView, SalesChangeReadService};
 use erp_sales::service::sales_review::SalesReviewService;
-use mongodb::{ClientSession, Database};
-use persistence_core::{NoTransaction, Transactional};
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use crate::Result;
 
@@ -99,8 +99,8 @@ impl SalesChangeProcess {
         let db = self.db.clone();
         self.db
             .client()
-            .with_transaction(move |session| {
-                Box::pin(async move { persist_effective_writes(&db, write, delta, &audit, session).await })
+            .with_transaction(move |executor| {
+                Box::pin(async move { persist_effective_writes(&db, write, delta, &audit, executor).await })
             })
             .await?;
         SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
@@ -113,21 +113,21 @@ impl SalesChangeProcess {
     ///
     /// # 错误
     /// 状态、基准版本、应收差额或持久化不变量失败时返回错误。
-    pub async fn apply_effective_change_in_transaction(
+    pub async fn apply_effective_change_apply(
         &self,
         id: &str,
         actor: &AuditActor,
-        session: &mut ClientSession,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let write =
-            SalesReviewService::new(self.db.clone()).prepare_effective_change(id, actor, session).await?;
+            SalesReviewService::new(self.db.clone()).prepare_effective_change(id, actor, executor).await?;
         let delta = posting::prepare_receivable_delta(&self.db, &write, actor).await?;
         let audit = actor.clone().resource_log(
             "sales_change_order.effective",
             "sales_change_order",
             write.change_id().to_string(),
         )?;
-        persist_effective_writes(&self.db, write, delta, &audit, session).await
+        persist_effective_writes(&self.db, write, delta, &audit, executor).await
     }
 }
 
@@ -135,7 +135,7 @@ impl SalesChangeProcess {
 ///
 /// # 错误
 /// 变更单不存在、动作不属于本域、状态迁移或 CAS 失败时返回原错误。
-pub async fn cancel_approval_in_transaction(
+pub async fn cancel_approval(
     db: &Database,
     id: &str,
     action: erp_workflow::service::approval::policy::ApprovalDomainAction,

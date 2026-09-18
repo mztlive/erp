@@ -684,13 +684,13 @@ async fn supplier_bundles_see_same_session_writes() {
         let db = fixture.db().clone();
         let client = db.client().clone();
         client
-            .with_transaction::<_, (), persistence_core::Error>(move |session| {
+            .with_transaction::<_, (), persistence_core::Error>(move |executor| {
                 let db = db.clone();
                 let supplier = supplier.clone();
                 let trans_capability = trans_capability.clone();
                 Box::pin(async move {
-                    db.supplier_accounts().create(&supplier, session).await?;
-                    db.supplier_capabilities().create(&trans_capability, session).await?;
+                    db.supplier_accounts().create(&supplier, executor).await?;
+                    db.supplier_capabilities().create(&trans_capability, executor).await?;
                     let bundle = db
                         .supplier()
                         .load_supplier_list_bundle(
@@ -718,14 +718,14 @@ async fn supplier_bundles_see_same_session_writes() {
                                 business_org_unit_ids: None,
                                 capability_owner_user_ids: Vec::new(),
                             },
-                            session,
+                            executor,
                         )
                         .await?;
                     assert_eq!(bundle.page.total, 1, "事务内应能 read-your-writes");
                     assert_eq!(bundle.capabilities.len(), 1, "列表事实束应带回当前页能力");
                     let detail = db
                         .supplier()
-                        .load_supplier_detail_bundle(&SupplierAccountId::new("sup-txn"), session)
+                        .load_supplier_detail_bundle(&SupplierAccountId::new("sup-txn"), executor)
                         .await?;
                     let detail = detail.expect("事务内详情事实束缺失");
                     assert_eq!(detail.capabilities.len(), 1);

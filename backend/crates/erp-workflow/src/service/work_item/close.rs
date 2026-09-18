@@ -164,7 +164,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         let audit_port = Arc::clone(&self.audit);
         let client = db.client().clone();
         let result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     facts
                         .persist_w29_close(
@@ -174,11 +174,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                             &actor_id,
                             &receipt_id,
                             closed_at,
-                            session,
+                            executor,
                         )
                         .await?;
-                    db.work_items().update(&mut item, session).await.map_err(work_item_update_error)?;
-                    audit_port.persist(&audit, session).await?;
+                    db.work_items().update(&mut item, executor).await.map_err(work_item_update_error)?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<WorkItem, WorkItemWriteError>(item)
                 })
             })

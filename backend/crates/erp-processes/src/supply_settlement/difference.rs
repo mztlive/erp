@@ -64,13 +64,13 @@ impl SupplierSettlementProcess {
         let fingerprint_for_tx = fingerprint.clone();
         let audit_id_for_tx = audit_id.clone();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     erp_supply::SettlementAccess::new(db.clone(), data_scope)
-                        .require_statement(&audit_actor, "update", &statement_id, session)
+                        .require_statement(&audit_actor, "update", &statement_id, executor)
                         .await?;
                     SupplierSettlementService::new(db.clone())
-                        .persist_difference_decision(&mut statement, &mut difference, session)
+                        .persist_difference_decision(&mut statement, &mut difference, executor)
                         .await?;
                     let receipt = DifferenceDecisionReceipt {
                         operation_id: operation_id_for_tx,
@@ -85,7 +85,7 @@ impl SupplierSettlementProcess {
                         difference.base.id.clone(),
                         Some(difference_decision_receipt_message(&fingerprint_for_tx, &receipt)),
                     )?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<(SupplierSettlementStatement, SupplierSettlementDifference), crate::Error>((
                         statement, difference,
                     ))

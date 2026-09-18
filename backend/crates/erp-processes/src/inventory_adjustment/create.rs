@@ -16,7 +16,7 @@ use erp_workflow::service::approval::business_adapter::BindingRevalidationContex
 use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::Transactional;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::adapter::document_approval_view_with_history;
@@ -177,21 +177,21 @@ async fn persist_created_adjustment(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
-                let authorization = authorize_inventory(&db, &rbac, &actor, session).await?;
+                let authorization = authorize_inventory(&db, &rbac, &actor, executor).await?;
                 if !authorization.actor_is_active()
                     || !authorization.can_create(adjustment.warehouse_id.as_ref())
                 {
                     return Err(Error::Forbidden("无权在该仓库创建库存调整单".to_string()));
                 }
                 db.warehouse()
-                    .warehouse(adjustment.warehouse_id.as_ref(), session)
+                    .warehouse(adjustment.warehouse_id.as_ref(), executor)
                     .await?
                     .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
                 let balance = db
                     .inventory()
-                    .stock_balance(&balance_id, session)
+                    .stock_balance(&balance_id, executor)
                     .await?
                     .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
                 if balance.warehouse_id != adjustment.warehouse_id {
@@ -209,7 +209,7 @@ async fn persist_created_adjustment(
                         &rbac,
                         &adjustment,
                         &actor,
-                        session,
+                        executor,
                     )
                     .await
                     {
@@ -217,7 +217,7 @@ async fn persist_created_adjustment(
                         Err(Error::Forbidden(_)) => false,
                         Err(error) => return Err(error),
                     };
-                db.inventory().create_stock_adjustment_with_lines(&adjustment, &lines, session).await?;
+                db.inventory().create_stock_adjustment_with_lines(&adjustment, &lines, executor).await?;
                 let binding = persist_bound_document(
                     &db,
                     &rbac,
@@ -225,10 +225,10 @@ async fn persist_created_adjustment(
                     &mut document,
                     &bind_command,
                     &actor,
-                    session,
+                    executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 created_adjustment_detail(adjustment, lines, binding, can_submit)
             })
         })
@@ -282,7 +282,7 @@ async fn persist_bound_document(
     document: &mut BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<ApprovalDefinitionBinding> {
     let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
@@ -290,12 +290,12 @@ async fn persist_bound_document(
         object_read,
         bind_command,
         actor,
-        session,
+        executor,
     )
     .await?;
     let binding = binding.ok_or_else(|| Error::Internal("库存调整单必须绑定已发布定义".to_string()))?;
     attach_published_binding(document, binding.clone())?;
-    persist_registered_document(db, document, session).await.map_err(crate::Error::from)?;
+    persist_registered_document(db, document, executor).await.map_err(crate::Error::from)?;
     Ok(binding)
 }
 

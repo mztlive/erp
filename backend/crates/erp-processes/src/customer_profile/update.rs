@@ -13,7 +13,7 @@ use erp_party::repository::prelude::*;
 use erp_party::{Party, PartyExt, PartyRevision, PartyRevisionData, PartyUpdate};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::CustomerProfileService;
 use super::facts::PartyFactChanges;
@@ -82,12 +82,12 @@ impl CustomerProfileService {
         let db = self.db.clone();
         db.client()
             .clone()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     customer_access(db.clone(), rbac)
-                        .require_with(actor, "update", &customer_id, session)
+                        .require_with(actor, "update", &customer_id, executor)
                         .await?;
-                    prepared.persist(&db, session).await
+                    prepared.persist(&db, executor).await
                 })
             })
             .await
@@ -179,13 +179,13 @@ impl PreparedUpdate {
     }
 
     /// 将根修订、事实差异、幂等结果与审计写入同一事务。
-    async fn persist(mut self, db: &Database, session: &mut mongodb::ClientSession) -> Result<()> {
-        db.party_revisions().create(&self.revision, session).await?;
-        db.parties().update(&mut self.party, session).await?;
-        db.customer_accounts().update(&mut self.account, session).await?;
-        self.facts.persist(db, session).await?;
-        db.customer_profile_commands().create(&self.command, session).await?;
-        db.audit_logs().create(&self.audit, session).await?;
+    async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
+        db.party_revisions().create(&self.revision, executor).await?;
+        db.parties().update(&mut self.party, executor).await?;
+        db.customer_accounts().update(&mut self.account, executor).await?;
+        self.facts.persist(db, executor).await?;
+        db.customer_profile_commands().create(&self.command, executor).await?;
+        db.audit_logs().create(&self.audit, executor).await?;
         Ok(())
     }
 }

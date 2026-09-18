@@ -65,7 +65,7 @@ pub(super) struct CancelNotificationFacts<'a> {
 /// * `writes` - 受阻取消计划
 /// * `facts` - 模板与收件人事实
 /// * `now` - 入队时间
-/// * `session` - 事务会话
+/// * `executor` - 执行器
 ///
 /// # 返回
 /// 写入成功时返回 `Ok(())`。
@@ -80,7 +80,7 @@ pub(super) async fn persist_cancel_notifications(
     writes: &PlannedWrites,
     facts: CancelNotificationFacts<'_>,
     now: Instant,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     if !writes.create_tasks.is_empty() || !writes.complete_tasks.is_empty() || !writes.close_tasks.is_empty()
     {
@@ -112,7 +112,7 @@ pub(super) async fn persist_cancel_notifications(
         now,
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
-    db.approval_notification_outbox().create(&record, session).await?;
+    db.approval_notification_outbox().create(&record, executor).await?;
     Ok(())
 }
 
@@ -168,7 +168,7 @@ pub(super) async fn persist_decision_notifications(
     writes: &PlannedWrites,
     facts: DecisionNotificationFacts<'_>,
     now: Instant,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     use crate::entity::approval_integration::ApprovalNotificationEventKind as EventKind;
 
@@ -241,7 +241,7 @@ pub(super) async fn persist_decision_notifications(
             now,
         )
         .map_err(|error| Error::ValidationError(error.to_string()))?;
-        db.approval_notification_outbox().create(&record, session).await?;
+        db.approval_notification_outbox().create(&record, executor).await?;
     }
     Ok(())
 }
@@ -293,7 +293,7 @@ pub(super) struct ResumeNotificationFacts<'a> {
 /// * `writes` - 恢复计划
 /// * `facts` - 新执行与模板事实
 /// * `now` - 入队时间
-/// * `session` - 事务会话
+/// * `executor` - 执行器
 ///
 /// # 返回
 /// 写入成功时返回 `Ok(())`。
@@ -308,7 +308,7 @@ pub(super) async fn persist_resume_notifications(
     writes: &PlannedWrites,
     facts: ResumeNotificationFacts<'_>,
     now: Instant,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     use crate::entity::approval_integration::ApprovalNotificationEventKind as EventKind;
 
@@ -352,7 +352,7 @@ pub(super) async fn persist_resume_notifications(
             now,
         )
         .map_err(|error| Error::ValidationError(error.to_string()))?;
-        db.approval_notification_outbox().create(&record, session).await?;
+        db.approval_notification_outbox().create(&record, executor).await?;
     }
     if !seen.contains(&EventKind::Entered) || !seen.contains(&EventKind::Resumed) {
         return Err(Error::Internal("原审批人恢复缺少进入节点或恢复通知意图".to_string()));

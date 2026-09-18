@@ -118,12 +118,12 @@ impl ProcurementResponsibilityProcess {
         let db = self.db.clone();
         let validation = Self::new(db.clone(), self.rbac.clone());
         let rbac = self.rbac.clone();
-        rbac.run_authorized_policy_transaction(policy_revision, move |session| {
+        rbac.run_authorized_policy_transaction(policy_revision, move |executor| {
             Box::pin(async move {
-                validation.validate_selector_reference(&data, session).await?;
-                load_owner_account(&db, data.owner_user_id.as_str(), session).await?;
-                ProcurementResponsibilityService::new(db.clone()).create_rule(&rule, session).await?;
-                db.audit_logs().create(&audit, session).await?;
+                validation.validate_selector_reference(&data, executor).await?;
+                load_owner_account(&db, data.owner_user_id.as_str(), executor).await?;
+                ProcurementResponsibilityService::new(db.clone()).create_rule(&rule, executor).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok(rule)
             })
         })
@@ -159,14 +159,14 @@ impl ProcurementResponsibilityProcess {
         let rbac = self.rbac.clone();
         let id = id.to_string();
         let updated_by = updated_by.to_string();
-        rbac.run_authorized_policy_transaction(policy_revision, move |session| {
+        rbac.run_authorized_policy_transaction(policy_revision, move |executor| {
             Box::pin(async move {
-                validation.validate_selector_reference(&data, session).await?;
-                load_owner_account(&db, data.owner_user_id.as_str(), session).await?;
+                validation.validate_selector_reference(&data, executor).await?;
+                load_owner_account(&db, data.owner_user_id.as_str(), executor).await?;
                 let rule = ProcurementResponsibilityService::new(db.clone())
-                    .update_rule(&id, version, data, &updated_by, session)
+                    .update_rule(&id, version, data, &updated_by, executor)
                     .await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok(rule)
             })
         })
@@ -261,7 +261,7 @@ mod tests {
         let production = include_str!("service.rs").split("#[cfg(test)]").next().expect("生产代码必须存在");
 
         assert_eq!(production.matches("run_authorized_policy_transaction(policy_revision").count(), 2);
-        assert!(production.contains("validation.validate_selector_reference(&data, session)"));
-        assert!(production.contains("load_owner_account(&db, data.owner_user_id.as_str(), session)"));
+        assert!(production.contains("validation.validate_selector_reference(&data, executor)"));
+        assert!(production.contains("load_owner_account(&db, data.owner_user_id.as_str(), executor)"));
     }
 }

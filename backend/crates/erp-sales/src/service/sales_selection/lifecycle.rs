@@ -27,8 +27,10 @@ impl SalesSelectionService {
         let (id, actor) = (id.to_string(), actor.to_string());
         self.db
             .client()
-            .with_transaction(move |tx| {
-                Box::pin(async move { service.lifecycle_in(&id, req, &actor, operation, crypto, tx).await })
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.lifecycle_in(&id, req, &actor, operation, crypto, executor).await },
+                )
             })
             .await
     }

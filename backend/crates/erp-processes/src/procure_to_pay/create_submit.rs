@@ -15,7 +15,8 @@ use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::service::approval::execution::prepare_start;
 use erp_workflow::service::approval::policy::ApprovalDomainAction;
 use erp_workflow::service::document_registry::{find_approval_binding, find_registered_document};
-use mongodb::{ClientSession, Database};
+use mongodb::Database;
+use persistence_core::Executor;
 
 use super::adapter::{
     RECENT_HISTORY_LIMIT, build_purchase_order_snapshot, execute_purchase_order_domain_action,
@@ -25,7 +26,7 @@ use super::adapter::{
 };
 use super::start_approval::{
     PurchaseOrderStartInput, PurchaseOrderStartPersistInput, build_purchase_order_start_input,
-    load_bound_definition_graph_with_executor, persist_purchase_order_start_with_session,
+    load_bound_definition_graph_with_executor, persist_purchase_order_start,
 };
 use crate::{Error, Result};
 
@@ -71,7 +72,7 @@ struct FrozenCreatedDraft {
 /// * `order_id` - 刚写入的采购单主键
 /// * `actor` - 审计操作人
 /// * `idempotency_key` - 建单命令幂等键，复用于启动审批
-/// * `session` - 与建单相同的事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回正式号与提交后乐观锁版本。
@@ -81,19 +82,19 @@ struct FrozenCreatedDraft {
 ///
 /// # 关键业务约束
 /// 必须与建单同事务；失败时整批采购单一起回滚，不得留下未提交草稿。
-pub(super) async fn submit_created_draft_in_session(
+pub(super) async fn submit_created_draft(
     db: &Database,
     sales_order: &SalesOrder,
     order_id: &str,
     actor: &AuditActor,
     idempotency_key: &str,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<SubmittedCreatedOrder> {
     let now = Instant::now();
-    let mut bundle = load_created_draft_bundle(db, order_id, session).await?;
+    let mut bundle = load_created_draft_bundle(db, order_id, executor).await?;
     assign_formal_identifiers(&mut bundle.order, &mut bundle.document, now)?;
-    let frozen = freeze_created_order(db, bundle, actor, session).await?;
-    persist_created_order_start(db, sales_order, frozen, actor, idempotency_key, now, session).await
+    let frozen = freeze_created_order(db, bundle, actor, executor).await?;
+    persist_created_order_start(db, sales_order, frozen, actor, idempotency_key, now, executor).await
 }
 
 /// 读取刚写入的草稿采购单、提交、明细和注册行。
@@ -101,7 +102,7 @@ pub(super) async fn submit_created_draft_in_session(
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `order_id` - 采购单主键
-/// * `session` - 建单事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回尚未提交的草稿聚合。
@@ -114,18 +115,18 @@ pub(super) async fn submit_created_draft_in_session(
 async fn load_created_draft_bundle(
     db: &Database,
     order_id: &str,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<CreatedDraftBundle> {
-    let order = load_created_order(db, order_id, session).await?;
+    let order = load_created_order(db, order_id, executor).await?;
     let draft_id =
         order.draft_submission_id().map_err(|error| Error::BusinessLogicError(error.to_string()))?;
     let draft = db
         .purchase_order_submissions()
-        .find_by_id(&draft_id, session)
+        .find_by_id(&draft_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("草稿提交不存在".to_string()))?;
-    let draft_lines = db.purchase_order().list_submission_lines(&draft_id, session).await?;
-    let document = find_registered_document(db, order_id, session)
+    let draft_lines = db.purchase_order().list_submission_lines(&draft_id, executor).await?;
+    let document = find_registered_document(db, order_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))?;
     Ok(CreatedDraftBundle { order, draft, draft_lines, document })
@@ -166,7 +167,7 @@ fn assign_formal_identifiers(
 /// * `db` - MongoDB 数据库
 /// * `bundle` - 刚写入的草稿聚合
 /// * `actor` - 提交人
-/// * `session` - 建单事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回冻结提交与已进入审批中的采购单。
@@ -180,13 +181,13 @@ async fn freeze_created_order(
     db: &Database,
     bundle: CreatedDraftBundle,
     actor: &AuditActor,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<FrozenCreatedDraft> {
     let CreatedDraftBundle { mut order, draft, draft_lines, document } = bundle;
     let mut superseded_draft = draft.clone();
     superseded_draft.mark_superseded()?;
     let (submission, submission_lines) =
-        freeze_submission_from_created_draft(db, &order, &draft, &draft_lines, actor, session).await?;
+        freeze_submission_from_created_draft(db, &order, &draft, &draft_lines, actor, executor).await?;
     execute_purchase_order_domain_action(
         &mut order,
         ApprovalDomainAction::PurchaseOrderSubmit,
@@ -205,7 +206,7 @@ async fn freeze_created_order(
 /// * `actor` - 提交人
 /// * `idempotency_key` - 建单幂等键
 /// * `now` - 调用方时间
-/// * `session` - 建单事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回提交后的正式号与乐观锁版本。
@@ -222,7 +223,7 @@ async fn persist_created_order_start(
     actor: &AuditActor,
     idempotency_key: &str,
     now: Instant,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<SubmittedCreatedOrder> {
     let organization_id = purchase_order_responsible_org_id(sales_order)?;
     let _ = purchase_order_object_readable(&organization_id, actor.id())?;
@@ -241,13 +242,13 @@ async fn persist_created_order_start(
         actor,
         idempotency_key,
         now,
-        session,
+        executor,
     )
     .await?;
     persist_frozen_created_order_start(
         db,
         PersistFrozenCreatedOrderStartInput { frozen, prepared, snapshot, organization_id, actor, now },
-        session,
+        executor,
     )
     .await
 }
@@ -261,7 +262,7 @@ async fn persist_created_order_start(
 /// * `actor` - 提交人
 /// * `idempotency_key` - 建单幂等键
 /// * `now` - 调用方时间
-/// * `session` - 建单事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回可写入的启动计划。
@@ -278,11 +279,11 @@ async fn prepare_created_order_start(
     actor: &AuditActor,
     idempotency_key: &str,
     now: Instant,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<erp_workflow::service::approval::execution::PreparedExecution> {
-    let binding = find_approval_binding(db, &order.base.id, session).await.map_err(crate::Error::from)?;
+    let binding = find_approval_binding(db, &order.base.id, executor).await.map_err(crate::Error::from)?;
     let binding = require_frozen_binding(binding.as_ref())?.clone();
-    let graph = load_bound_definition_graph_with_executor(db, &binding, session).await?;
+    let graph = load_bound_definition_graph_with_executor(db, &binding, executor).await?;
     let start = purchase_order_start_command(
         &order.base.id,
         order.approval_subject_version,
@@ -325,7 +326,7 @@ struct PersistFrozenCreatedOrderStartInput<'a> {
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `input` - 冻结提交、启动计划与责任组织上下文
-/// * `session` - 建单事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回正式号与提交后乐观锁版本。
@@ -338,11 +339,11 @@ struct PersistFrozenCreatedOrderStartInput<'a> {
 async fn persist_frozen_created_order_start(
     db: &Database,
     input: PersistFrozenCreatedOrderStartInput<'_>,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<SubmittedCreatedOrder> {
     let order_id = input.frozen.order.base.id.clone();
     let audit = create_submit_audit(input.actor, &input.frozen.order)?;
-    persist_purchase_order_start_with_session(
+    persist_purchase_order_start(
         db,
         PurchaseOrderStartPersistInput {
             order: input.frozen.order,
@@ -360,10 +361,10 @@ async fn persist_frozen_created_order_start(
             receipt: None,
             object_scope: None,
         },
-        session,
+        executor,
     )
     .await?;
-    load_submitted_created_order(db, &order_id, session).await
+    load_submitted_created_order(db, &order_id, executor).await
 }
 
 /// 构造创建并提交的审计记录。
@@ -398,7 +399,7 @@ fn create_submit_audit(actor: &AuditActor, order: &PurchaseOrder) -> Result<erp_
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `order_id` - 采购单主键
-/// * `session` - 建单事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回正式号与乐观锁版本。
@@ -411,11 +412,11 @@ fn create_submit_audit(actor: &AuditActor, order: &PurchaseOrder) -> Result<erp_
 async fn load_submitted_created_order(
     db: &Database,
     order_id: &str,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<SubmittedCreatedOrder> {
     let order = db
         .purchase_orders()
-        .find_by_id(order_id, session)
+        .find_by_id(order_id, executor)
         .await?
         .ok_or_else(|| Error::Internal("采购单提交后丢失".to_string()))?;
     Ok(SubmittedCreatedOrder { purchase_no: order.purchase_no, lock_version: order.base.version })
@@ -430,7 +431,7 @@ mod tests {
             include_str!("create_submit.rs").split("#[cfg(test)]").next().expect("生产代码必须存在");
         assert!(production.contains("execute_purchase_order_domain_action"));
         assert!(production.contains("ApprovalDomainAction::PurchaseOrderSubmit"));
-        assert!(production.contains("persist_purchase_order_start_with_session"));
+        assert!(production.contains("persist_purchase_order_start"));
         assert!(production.contains("prepare_start"));
         assert!(production.contains("procurement_guard: None"));
     }

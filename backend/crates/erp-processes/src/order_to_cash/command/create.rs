@@ -277,17 +277,17 @@ impl SalesOrderCommandProcess {
             let mut document = document;
             let access_for_tx = access.clone();
             let transaction_result = client
-                .with_transaction(move |session| {
+                .with_transaction(move |executor| {
                     Box::pin(async move {
-                        access_for_tx.related_order(&submitted_order, session).await?;
-                        access_for_tx.creation(&submitted_order, session).await?;
+                        access_for_tx.related_order(&submitted_order, executor).await?;
+                        access_for_tx.creation(&submitted_order, executor).await?;
                         erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                             .ensure_sellable_refs(
                                 &sellable_refs,
                                 &crate::order_to_cash::adapters::catalog::CatalogQualificationAdapter::new(
                                     db.clone(),
                                 ),
-                                session,
+                                executor,
                             )
                             .await?;
                         let binding = persist_bound_sales_document(
@@ -297,10 +297,11 @@ impl SalesOrderCommandProcess {
                             &mut document,
                             &bind_command,
                             &actor_owned,
-                            session,
+                            executor,
                         )
                         .await?;
-                        let graph = load_bound_definition_graph_with_executor(&db, &binding, session).await?;
+                        let graph =
+                            load_bound_definition_graph_with_executor(&db, &binding, executor).await?;
                         let start_input = build_sales_order_start_input(SalesOrderStartInput {
                             graph,
                             binding: &binding,
@@ -318,11 +319,11 @@ impl SalesOrderCommandProcess {
                             &db,
                             &submitted_order.sales_owner_user_id,
                             &submitted_order.business_org_unit_id,
-                            session,
+                            executor,
                         )
                         .await?;
                         erp_sales::service::sales_order::SalesOrderService::new(db.clone())
-                            .create_order(&submitted_order, session)
+                            .create_order(&submitted_order, executor)
                             .await?;
                         let sales = erp_sales::service::sales_order::SalesOrderService::new(db.clone());
                         sales
@@ -330,11 +331,11 @@ impl SalesOrderCommandProcess {
                                 &stable_lines,
                                 &submitted_working_copy,
                                 &working_copy_lines,
-                                session,
+                                executor,
                             )
                             .await?;
-                        sales.create_submission(&submission, &submission_lines, session).await?;
-                        db.workflow_actions().create(&workflow_action, session).await?;
+                        sales.create_submission(&submission, &submission_lines, executor).await?;
+                        db.workflow_actions().create(&workflow_action, executor).await?;
                         if let erp_workflow::service::approval::execution::PreparedExecution::Apply(writes) =
                             prepared
                         {
@@ -348,12 +349,12 @@ impl SalesOrderCommandProcess {
                                     organization_id: &organization_id,
                                     now,
                                 },
-                                session,
+                                executor,
                             )
                             .await?;
                         }
-                        db.audit_logs().create(&create_audit, session).await?;
-                        db.audit_logs().create(&submit_audit, session).await?;
+                        db.audit_logs().create(&create_audit, executor).await?;
+                        db.audit_logs().create(&submit_audit, executor).await?;
                         Ok::<(), crate::Error>(())
                     })
                 })
@@ -397,28 +398,28 @@ impl SalesOrderCommandProcess {
             )?;
         let access_for_tx = access.clone();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access_for_tx.related_order(&order_for_tx, session).await?;
-                    access_for_tx.creation(&order_for_tx, session).await?;
+                    access_for_tx.related_order(&order_for_tx, executor).await?;
+                    access_for_tx.creation(&order_for_tx, executor).await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                         .ensure_sellable_refs(
                             &sellable_refs_for_tx,
                             &crate::order_to_cash::adapters::catalog::CatalogQualificationAdapter::new(
                                 db.clone(),
                             ),
-                            session,
+                            executor,
                         )
                         .await?;
                     crate::business_ownership::ensure_creation_org(
                         &db,
                         &order_for_tx.sales_owner_user_id,
                         &order_for_tx.business_org_unit_id,
-                        session,
+                        executor,
                     )
                     .await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
-                        .create_order(&order_for_tx, session)
+                        .create_order(&order_for_tx, executor)
                         .await?;
                     persist_bound_sales_document(
                         &db,
@@ -427,7 +428,7 @@ impl SalesOrderCommandProcess {
                         &mut document_for_tx,
                         &bind_command,
                         &actor_for_tx,
-                        session,
+                        executor,
                     )
                     .await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
@@ -435,10 +436,10 @@ impl SalesOrderCommandProcess {
                             &lines_for_tx,
                             &working_copy_for_tx,
                             &working_copy_lines_for_tx,
-                            session,
+                            executor,
                         )
                         .await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

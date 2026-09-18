@@ -150,9 +150,9 @@ impl ReturnsProcess {
         let actor_owned = actor.clone();
         let idempotency_key = req.idempotency_key;
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    validate_payment_reversal_source(&db, &source_fact_id, source_version, session).await?;
+                    validate_payment_reversal_source(&db, &source_fact_id, source_version, executor).await?;
                     let binding = persist_bound_payment_reversal_document(
                         &db,
                         &rbac,
@@ -160,10 +160,10 @@ impl ReturnsProcess {
                         document,
                         &bind_command,
                         &actor_owned,
-                        session,
+                        executor,
                     )
                     .await?;
-                    let graph = load_bound_definition_graph_with_executor(&db, &binding, session).await?;
+                    let graph = load_bound_definition_graph_with_executor(&db, &binding, executor).await?;
                     let start_input = build_payment_reversal_start_input(PaymentReversalStartInput {
                         graph,
                         binding: &binding,
@@ -176,7 +176,7 @@ impl ReturnsProcess {
                         now,
                     })?;
                     let prepared = prepare_start(start_input)?;
-                    ReturnsService::new(db.clone()).create_payment_reversal(&reversal, session).await?;
+                    ReturnsService::new(db.clone()).create_payment_reversal(&reversal, executor).await?;
                     if let erp_workflow::service::approval::execution::PreparedExecution::Apply(writes) =
                         prepared
                     {
@@ -187,13 +187,13 @@ impl ReturnsProcess {
                             adapter.owner_role,
                             &organization_id,
                             now,
-                            session,
+                            executor,
                         )
                         .await?;
                     }
-                    db.audit_logs().create(&create_audit, session).await?;
-                    db.audit_logs().create(&submit_audit, session).await?;
-                    db.audit_logs().create(&command_audit, session).await?;
+                    db.audit_logs().create(&create_audit, executor).await?;
+                    db.audit_logs().create(&submit_audit, executor).await?;
+                    db.audit_logs().create(&command_audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })
@@ -435,7 +435,7 @@ async fn persist_created_payment_reversal(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 persist_bound_payment_reversal_document(
                     &db,
@@ -444,11 +444,11 @@ async fn persist_created_payment_reversal(
                     document,
                     &bind_command,
                     &actor,
-                    session,
+                    executor,
                 )
                 .await?;
-                ReturnsService::new(db.clone()).create_payment_reversal(&reversal, session).await?;
-                db.audit_logs().create(&audit, session).await?;
+                ReturnsService::new(db.clone()).create_payment_reversal(&reversal, executor).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })
@@ -510,7 +510,7 @@ async fn persist_bound_payment_reversal_document(
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding> {
     let _ = payment_reversal_object_readable(
         &bind_command.context.organization_id,
@@ -522,12 +522,12 @@ async fn persist_bound_payment_reversal_document(
         object_read,
         bind_command,
         actor,
-        session,
+        executor,
     )
     .await?;
     let binding = binding.ok_or_else(|| Error::Internal("付款冲正单必须绑定已发布定义".to_string()))?;
     attach_published_binding(&mut document, binding.clone())?;
-    db.business_documents().create(&document, session).await?;
+    db.business_documents().create(&document, executor).await?;
     Ok(binding)
 }
 

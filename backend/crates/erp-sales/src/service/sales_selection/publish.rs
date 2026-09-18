@@ -108,9 +108,9 @@ impl SalesSelectionService {
         let mut booklet_tx = booklet;
         let session_tx = session;
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let executor: &mut dyn Executor = session;
+                    let executor: &mut dyn Executor = executor;
                     db.sales_selection_booklets().update(&mut booklet_tx, executor).await?;
                     db.sales_selection_sessions().create(&session_tx, executor).await?;
                     let view = Self::booklet_view(&booklet_tx, &items, None, None);
@@ -235,10 +235,16 @@ impl SalesSelectionService {
             (booklet_id.to_string(), display_id.to_string(), actor_id.to_string());
         self.db
             .client()
-            .with_transaction(move |tx| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     service
-                        .delete_display_item_in(&booklet_id, &display_id, expected_version, &actor_id, tx)
+                        .delete_display_item_in(
+                            &booklet_id,
+                            &display_id,
+                            expected_version,
+                            &actor_id,
+                            executor,
+                        )
                         .await
                 })
             })

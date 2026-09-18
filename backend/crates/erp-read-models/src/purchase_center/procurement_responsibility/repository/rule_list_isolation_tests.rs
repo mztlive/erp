@@ -539,7 +539,7 @@ async fn transaction_reuses_caller_executor_read_your_writes() {
             test_rule("r-txn", ProcurementResponsibilityRuleType::DefaultDispatcher, None, None, "owner-1");
         let filter = page_filter(None, 1, 10);
         client
-            .with_transaction::<_, (), persistence_core::Error>(move |session| {
+            .with_transaction::<_, (), persistence_core::Error>(move |executor| {
                 let db = db.clone();
                 let rule = rule.clone();
                 let filter = ProcurementResponsibilityRuleFilter {
@@ -550,8 +550,8 @@ async fn transaction_reuses_caller_executor_read_your_writes() {
                     page_size: filter.page_size,
                 };
                 Box::pin(async move {
-                    db.procurement_responsibility_rules().create(&rule, session).await?;
-                    let page = load_procurement_rule_list_page(&db, &filter, session).await?;
+                    db.procurement_responsibility_rules().create(&rule, executor).await?;
+                    let page = load_procurement_rule_list_page(&db, &filter, executor).await?;
                     assert_eq!(page.total, 1, "事务内应能 read-your-writes");
                     assert_eq!(page.items[0].base.id, "r-txn");
                     Ok(())

@@ -137,7 +137,7 @@ impl CatalogService {
         let access = self.access();
         let actor = actor.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     access
                         .ensure_writable(
@@ -145,13 +145,13 @@ impl CatalogService {
                             "update",
                             &maintainer_user_id,
                             &business_org_unit_id,
-                            session,
+                            executor,
                         )
                         .await?;
                     for sku in &mut changed {
-                        db.skus().update(sku, session).await?;
+                        db.skus().update(sku, executor).await?;
                     }
-                    audit_port.persist(&audit, session).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -206,11 +206,11 @@ impl CatalogService {
         let owner = product.maintainer_user_id.clone();
         let org = product.business_org_unit_id.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.ensure_writable(&actor, "update", &owner, &org, session).await?;
-                    db.skus().update(&mut sku, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    access.ensure_writable(&actor, "update", &owner, &org, executor).await?;
+                    db.skus().update(&mut sku, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<Sku, crate::error::Error>(sku)
                 })
             })

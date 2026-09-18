@@ -56,9 +56,9 @@ impl InventoryService {
         let actor = actor.clone();
         let client = db.client().clone();
         let (page, authorization) = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let authorization = authorization_port.authorize(&actor, session).await?;
+                    let authorization = authorization_port.authorize(&actor, executor).await?;
                     if !authorization.actor_is_active() {
                         return Err(Error::Forbidden("当前账号无库存读取权限".to_string()));
                     }
@@ -66,7 +66,7 @@ impl InventoryService {
                         catalog.as_ref(),
                         query.q.as_deref(),
                         query.sku_id.as_ref(),
-                        session,
+                        executor,
                     )
                     .await?;
                     let search = super::search::balance_filter(
@@ -74,7 +74,7 @@ impl InventoryService {
                         search,
                         query.balance_id.as_deref(),
                         query.availability,
-                        session,
+                        executor,
                     )
                     .await?;
                     let (sort_by, sort_ascending) = query.paging.sort_selection();
@@ -89,7 +89,7 @@ impl InventoryService {
                         sort_by,
                         sort_ascending,
                     };
-                    let page = db.stock_balances().search_stock_balances(&filter, session).await?;
+                    let page = db.stock_balances().search_stock_balances(&filter, executor).await?;
                     Ok::<_, Error>((page, authorization))
                 })
             })
@@ -153,12 +153,12 @@ impl InventoryService {
         let id = id.to_string();
         let client = db.client().clone();
         let (balance, authorization) = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let authorization = authorization_port.authorize(&actor, session).await?;
+                    let authorization = authorization_port.authorize(&actor, executor).await?;
                     let balance = db
                         .inventory()
-                        .stock_balance(&id, session)
+                        .stock_balance(&id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
                     if !authorization.actor_is_active()

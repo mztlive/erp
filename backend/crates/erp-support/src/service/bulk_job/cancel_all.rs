@@ -76,10 +76,10 @@ impl BulkJobService {
         let audit_port = self.audit.clone();
         db.client()
             .clone()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.background_jobs().update(&mut job, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.background_jobs().update(&mut job, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), Error>(())
                 })
             })

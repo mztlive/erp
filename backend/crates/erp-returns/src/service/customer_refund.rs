@@ -99,7 +99,7 @@ impl ReturnsService {
         or_not_found(self.db.customer_refunds().find_by_id(id, executor).await?, "客户退款单不存在")
     }
     /// 在调用方事务创建退款单；绑定和运行事实由流程保持原先后顺序。
-    pub async fn create_customer_refund_in_transaction(
+    pub async fn create_customer_refund(
         &self,
         refund: &CustomerRefund,
         executor: &mut dyn Executor,

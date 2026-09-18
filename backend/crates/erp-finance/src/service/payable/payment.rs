@@ -23,7 +23,7 @@ pub struct PaymentSettlement {
 }
 /// 校验分配与应付余额并条件更新财务账户；禁止自行开启事务。
 /// 失败立即向调用者传播，后续任务与付款事实不得执行。
-pub async fn settle_supplier_payment_in_transaction(
+pub async fn settle_supplier_payment(
     db: &Database,
     payment: &SupplierPayment,
     pending: &[PendingPaymentAllocation],
@@ -82,7 +82,7 @@ pub async fn settle_supplier_payment_in_transaction(
     Ok(PaymentSettlement { ledger, applied_account_ids: settlement.applied })
 }
 /// 在任务同步成功后落付款状态与分配事实；必须复用余额更新时的 Executor。
-pub async fn finish_supplier_payment_in_transaction(
+pub async fn finish_supplier_payment(
     db: &Database,
     payment: &mut SupplierPayment,
     pending: &[PendingPaymentAllocation],

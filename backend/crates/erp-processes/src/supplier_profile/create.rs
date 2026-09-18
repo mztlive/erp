@@ -26,7 +26,7 @@ use erp_supplier::{
 use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::Transactional;
+use persistence_core::{Executor, Transactional};
 
 use super::validation::resolve_supplier_file_references;
 use super::{SupplierProfileService, SupplierProfileWithAssetsResult};
@@ -99,12 +99,12 @@ impl SupplierProfileService {
         let client = db.client().clone();
         let actor = actor.clone();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     crate::adapters::supplier_access(db.clone(), rbac)
-                        .require_create(&actor, &maintainer, session)
+                        .require_create(&actor, &maintainer, executor)
                         .await?;
-                    prepared.persist(&db, session).await
+                    prepared.persist(&db, executor).await
                 })
             })
             .await;
@@ -313,45 +313,45 @@ struct PreparedCreate {
 
 impl PreparedCreate {
     /// 将完整供应商资料与幂等结果写入同一事务。
-    async fn persist(self, db: &Database, session: &mut mongodb::ClientSession) -> Result<()> {
-        self.pending_assets.persist(db, session).await?;
-        db.party_revisions().create(&self.party_revision, session).await?;
-        db.parties().create(&self.party, session).await?;
+    async fn persist(self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
+        self.pending_assets.persist(db, executor).await?;
+        db.party_revisions().create(&self.party_revision, executor).await?;
+        db.parties().create(&self.party, executor).await?;
         db.supplier()
-            .create_supplier_with_initial_profile(&self.supplier, &self.commercial_profile, session)
+            .create_supplier_with_initial_profile(&self.supplier, &self.commercial_profile, executor)
             .await?;
         if let Some(contact) = &self.contact {
-            db.party_contacts().create(contact, session).await?;
+            db.party_contacts().create(contact, executor).await?;
         }
         if let Some(address) = &self.address {
-            db.party_addresses().create(address, session).await?;
+            db.party_addresses().create(address, executor).await?;
         }
         if let Some(tax_profile) = &self.tax_profile {
-            db.party_tax_profiles().create(tax_profile, session).await?;
+            db.party_tax_profiles().create(tax_profile, executor).await?;
         }
         if let Some(bank_account) = &self.bank_account {
-            db.party_bank_accounts().create(bank_account, session).await?;
+            db.party_bank_accounts().create(bank_account, executor).await?;
         }
         for revision in &self.capability_revisions {
-            db.supplier_capability_revisions().create(revision, session).await?;
+            db.supplier_capability_revisions().create(revision, executor).await?;
         }
         for capability in &self.capabilities {
-            db.supplier_capabilities().create(capability, session).await?;
+            db.supplier_capabilities().create(capability, executor).await?;
         }
         for revision in &self.qualification_revisions {
-            db.supplier_qualification_revisions().create(revision, session).await?;
+            db.supplier_qualification_revisions().create(revision, executor).await?;
         }
         for qualification in &self.qualifications {
-            db.supplier_qualifications().create(qualification, session).await?;
+            db.supplier_qualifications().create(qualification, executor).await?;
         }
         for link in &self.qualification_links {
-            db.supplier_qualification_capabilities().create(link, session).await?;
+            db.supplier_qualification_capabilities().create(link, executor).await?;
         }
         if let Some(rating) = &self.rating {
-            db.supplier_rating_revisions().create(rating, session).await?;
+            db.supplier_rating_revisions().create(rating, executor).await?;
         }
-        db.supplier_profile_commands().create(&self.command, session).await?;
-        db.audit_logs().create(&self.audit, session).await?;
+        db.supplier_profile_commands().create(&self.command, executor).await?;
+        db.audit_logs().create(&self.audit, executor).await?;
         Ok(())
     }
 }

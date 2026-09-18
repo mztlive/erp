@@ -220,7 +220,7 @@ async fn persist_created_electronic_delivery(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 register_created_electronic_delivery_document(
                     &db,
@@ -228,19 +228,19 @@ async fn persist_created_electronic_delivery(
                     object_read.as_ref(),
                     &record,
                     &actor,
-                    session,
+                    executor,
                 )
                 .await?;
                 FulfillmentService::new(db.clone())
-                    .persist_created_electronic_delivery(&record, session)
+                    .persist_created_electronic_delivery(&record, executor)
                     .await?;
                 super::task::ensure_fulfillment_task(
                     &db,
                     super::task::FulfillmentTaskObject::ElectronicDelivery(&record),
-                    session,
+                    executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

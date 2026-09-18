@@ -49,9 +49,9 @@ pub async fn create_unit_of_measure(
     )?;
     let audit = actor.clone().resource_log("unit_of_measure.create", "unit_of_measure", id.to_string())?;
     let unit_for_tx = unit.clone();
-    run_audited(&db, audit, move |db, session| {
+    run_audited(&db, audit, move |db, executor| {
         Box::pin(async move {
-            db.unit_of_measures().create(&unit_for_tx, session).await?;
+            db.unit_of_measures().create(&unit_for_tx, executor).await?;
             Ok(())
         })
     })
@@ -82,9 +82,9 @@ pub async fn create_product_category(
     )?;
     let audit = actor.clone().resource_log("product_category.create", "product_category", id.to_string())?;
     let category_for_tx = category.clone();
-    run_audited(&db, audit, move |db, session| {
+    run_audited(&db, audit, move |db, executor| {
         Box::pin(async move {
-            db.product_categories().create(&category_for_tx, session).await?;
+            db.product_categories().create(&category_for_tx, executor).await?;
             Ok(())
         })
     })
@@ -112,9 +112,9 @@ pub async fn create_sku_attribute(
     )?;
     let audit = actor.clone().resource_log("sku_attribute.create", "sku_attribute", id.to_string())?;
     let attribute_for_tx = attribute.clone();
-    run_audited(&db, audit, move |db, session| {
+    run_audited(&db, audit, move |db, executor| {
         Box::pin(async move {
-            db.sku_attributes().create(&attribute_for_tx, session).await?;
+            db.sku_attributes().create(&attribute_for_tx, executor).await?;
             Ok(())
         })
     })
@@ -145,9 +145,9 @@ pub async fn create_sku_attribute_value(
     let audit =
         actor.clone().resource_log("sku_attribute_value.create", "sku_attribute_value", id.to_string())?;
     let value_for_tx = value.clone();
-    run_audited(&db, audit, move |db, session| {
+    run_audited(&db, audit, move |db, executor| {
         Box::pin(async move {
-            db.sku_attribute_values().create(&value_for_tx, session).await?;
+            db.sku_attribute_values().create(&value_for_tx, executor).await?;
             Ok(())
         })
     })

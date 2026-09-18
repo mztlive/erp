@@ -488,19 +488,19 @@ mod isolation_tests {
             let db = fixture.db().clone();
             let client = db.client().clone();
             client
-                .with_transaction::<_, (), persistence_core::Error>(move |session| {
+                .with_transaction::<_, (), persistence_core::Error>(move |executor| {
                     let db = db.clone();
                     Box::pin(async move {
                         let mut fresh = offering("offering-txn", "sku-1", "sup-a");
                         fresh.stable.current_revision_id = Some("offrev-txn".to_string());
-                        db.supplier_offerings().create(&fresh, session).await?;
+                        db.supplier_offerings().create(&fresh, executor).await?;
                         db.supplier_offering_revisions()
-                            .create(&offering_revision("offrev-txn", "offering-txn"), session)
+                            .create(&offering_revision("offrev-txn", "offering-txn"), executor)
                             .await?;
                         db.supplier_offering_availabilities()
-                            .create(&availability("avail-txn", "offering-txn"), session)
+                            .create(&availability("avail-txn", "offering-txn"), executor)
                             .await?;
-                        let facts = load_creation_basis_facts(&db, &[SkuId::new("sku-1")], session).await?;
+                        let facts = load_creation_basis_facts(&db, &[SkuId::new("sku-1")], executor).await?;
                         assert!(
                             facts.offerings.iter().any(|offering| offering.base.id == "offering-txn"),
                             "事务内应能 read-your-writes"

@@ -167,22 +167,23 @@ pub(crate) async fn committed_cancel_replay(
     let actor = actor.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 // 请求已携带稳定 instance scope，因此收据必须是快照内第一读。
-                let receipt = find_cancel_receipt(&db, &identity, session).await?;
+                let receipt = find_cancel_receipt(&db, &identity, executor).await?;
                 let instance = db
                     .bpm_workflow()
                     .find_instance_by_id(
                         &ApprovalProcessInstanceId::new(&req.approval_process_instance_id),
-                        session,
+                        executor,
                     )
                     .await?
                     .ok_or_else(|| Error::NotFound("审批实例不存在".to_string()))?;
                 ensure_cancel_instance_subject(&instance, &id, req.expected_subject_version)?;
-                ensure_cancel_authorized_with_executor(&db, &rbac, &instance, &actor, session).await?;
+                ensure_cancel_authorized_with_executor(&db, &rbac, &instance, &actor, executor).await?;
                 if instance.status == ApprovalProcessInstanceStatus::Cancelled {
-                    let original_actor = committed_cancel_actor(&db, &id, &instance.base.id, session).await?;
+                    let original_actor =
+                        committed_cancel_actor(&db, &id, &instance.base.id, executor).await?;
                     if original_actor != actor.id() {
                         return Err(cancel_replay_actor_mismatch(&instance));
                     }
@@ -201,7 +202,7 @@ pub(crate) async fn committed_cancel_replay(
                 }
                 let adjustment = db
                     .inventory()
-                    .stock_adjustment(&id, session)
+                    .stock_adjustment(&id, executor)
                     .await?
                     .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
                 Ok(Some(adjustment.into()))

@@ -2,8 +2,6 @@
 
 pub mod inventory;
 
-pub use inventory::{
-    InventoryService, apply_posted_adjustment_in_transaction, build_adjustment_line_updates,
-};
+pub use inventory::{InventoryService, apply_posted_adjustment, build_adjustment_line_updates};
 
 pub mod fulfillment;

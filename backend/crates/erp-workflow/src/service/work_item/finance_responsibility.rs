@@ -203,16 +203,16 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let audit_port = Arc::clone(&self.audit);
         let rule = rbac
             .clone()
-            .run_authorized_policy_transaction(policy_revision, move |session| {
+            .run_authorized_policy_transaction(policy_revision, move |executor| {
                 let service = WorkItemService::new(db.clone(), rbac.clone());
                 let data = data.clone();
                 let rule = rule.clone();
                 let audit = audit.clone();
                 let audit_port = Arc::clone(&audit_port);
                 Box::pin(async move {
-                    service.validate_finance_rule_data(&data, true, true, session).await?;
-                    db.finance_responsibility_rules().create(&rule, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    service.validate_finance_rule_data(&data, true, true, executor).await?;
+                    db.finance_responsibility_rules().create(&rule, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<FinanceResponsibilityRule, crate::error::Error>(rule)
                 })
             })
@@ -273,7 +273,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let updated_by = actor.id().to_string();
         let rule = rbac
             .clone()
-            .run_authorized_policy_transaction(policy_revision, move |session| {
+            .run_authorized_policy_transaction(policy_revision, move |executor| {
                 let service = WorkItemService::new(db.clone(), rbac.clone());
                 let data = data.clone();
                 let id = id.clone();
@@ -283,13 +283,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                 Box::pin(async move {
                     let mut rule = db
                         .finance_responsibility_rules()
-                        .find_by_id(&id, session)
+                        .find_by_id(&id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("财务责任规则不存在".to_string()))?;
                     if rule.base.version != version {
                         return Err(Error::ConflictError("财务责任规则版本已变化".to_string()));
                     }
-                    let probe = service.validate_finance_rule_data(&data, false, false, session).await?;
+                    let probe = service.validate_finance_rule_data(&data, false, false, executor).await?;
                     let counterparty_must_be_eligible = probe.status.is_active()
                         || probe.operation != rule.operation
                         || probe.scope != rule.scope
@@ -302,12 +302,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                             &data,
                             counterparty_must_be_eligible,
                             owner_must_be_eligible,
-                            session,
+                            executor,
                         )
                         .await?;
                     rule.update(data, updated_by).map_err(Error::Logic)?;
-                    db.finance_responsibility_rules().update(&mut rule, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.finance_responsibility_rules().update(&mut rule, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<FinanceResponsibilityRule, crate::error::Error>(rule)
                 })
             })

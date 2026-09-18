@@ -20,13 +20,13 @@ use erp_workflow::service::approval::binding::BindPublishedDefinitionCommand;
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 use id_generator::next_id;
-use mongodb::{ClientSession, Database};
+use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::dto::{CommitSupplierPaymentRequest, SupplierPaymentView};
 use super::mapping::resolve_current_payment_recipient;
-use super::posting::{PaymentPostSource, post_supplier_payment_in_transaction};
+use super::posting::{PaymentPostSource, post_supplier_payment};
 use super::{PayableService, SupplierPaymentWithAssetsResult, payment_task};
 use crate::{Error, Result};
 
@@ -142,12 +142,12 @@ impl PayableService {
         let command_receipt_for_tx = command_receipt.clone();
         let transaction_result = rbac
             .clone()
-            .run_authorized_policy_transaction(policy_revision, move |session| {
+            .run_authorized_policy_transaction(policy_revision, move |executor| {
                 Box::pin(async move {
                     let mut payment = payment;
                     if db
                         .supplier_payments()
-                        .find_by_payment_no(&payment.payment_no, session)
+                        .find_by_payment_no(&payment.payment_no, executor)
                         .await?
                         .is_some()
                     {
@@ -155,7 +155,7 @@ impl PayableService {
                     }
                     let supplier = db
                         .supplier_accounts()
-                        .find_by_id(payment.supplier_id.as_ref(), session)
+                        .find_by_id(payment.supplier_id.as_ref(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
                     let bind_command = BindPublishedDefinitionCommand {
@@ -180,30 +180,30 @@ impl PayableService {
                         document,
                         &bind_command,
                         &actor_owned,
-                        session,
+                        executor,
                     )
                     .await?;
-                    ensure_bank_receipt_asset_in_transaction(
+                    ensure_bank_receipt_asset(
                         &db,
                         payment.require_bank_receipt()?,
                         &pending_assets,
-                        session,
+                        executor,
                     )
                     .await?;
-                    pending_assets.persist(&db, session).await?;
-                    db.supplier_payments().create(&payment, session).await?;
+                    pending_assets.persist(&db, executor).await?;
+                    db.supplier_payments().create(&payment, executor).await?;
                     let audit = actor_owned.clone().resource_log(
                         "supplier_payment.create",
                         "supplier_payment",
                         payment.base.id.clone(),
                     )?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     lock_expected_payment_recipient(
                         &db,
                         &payment.supplier_id,
                         &expected_payee_bank_account_id,
                         expected_payee_bank_account_version,
-                        session,
+                        executor,
                     )
                     .await?;
                     payment_task::record_payment_execution(
@@ -216,21 +216,21 @@ impl PayableService {
                             allocations: &allocations,
                         },
                         &actor_owned,
-                        session,
+                        executor,
                     )
                     .await?;
                     let id = payment.base.id.clone();
-                    post_supplier_payment_in_transaction(
+                    post_supplier_payment(
                         &db,
                         &mut payment,
                         &allocations,
                         PaymentPostSource::ExecutionTask,
                         &actor_owned,
-                        session,
+                        executor,
                     )
                     .await?;
                     let command_audit = command_receipt_for_tx.audit(actor_owned.clone(), id)?;
-                    db.audit_logs().create(&command_audit, session).await?;
+                    db.audit_logs().create(&command_audit, executor).await?;
                     Ok::<SupplierPayment, crate::Error>(payment)
                 })
             })
@@ -340,18 +340,18 @@ fn resolve_payment_receipt_references(
 /// 待登记资产已在事务前经 [`BankReceiptEvidencePolicy::validate`] 同一入口
 /// 完成全量规则校验（与 stored 元数据共用规则），事务内只确认临时引用属于
 /// 本批次；正式资产按已落库元数据再次执行同一策略。
-async fn ensure_bank_receipt_asset_in_transaction(
+async fn ensure_bank_receipt_asset(
     db: &Database,
     asset_id: &FileAssetId,
     pending_assets: &dyn PendingAttachmentBatch,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     if pending_assets.contains_id(asset_id) {
         return Ok(());
     }
     let asset = db
         .file_assets()
-        .find_by_id(asset_id.as_ref(), session)
+        .find_by_id(asset_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("银行回单不存在".to_string()))?;
     BankReceiptEvidencePolicy::validate(
@@ -374,7 +374,7 @@ async fn persist_unbound_supplier_payment_document(
     document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
         db,
@@ -382,11 +382,11 @@ async fn persist_unbound_supplier_payment_document(
         object_read,
         bind_command,
         actor,
-        session,
+        executor,
     )
     .await?;
     if binding.is_some() || document.approval_binding.is_some() {
         return Err(Error::Internal("供应商付款为 NO_APPROVAL，不得写入审批绑定".to_string()));
     }
-    persist_registered_document(db, &document, session).await.map_err(crate::Error::from)
+    persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
 }

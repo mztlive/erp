@@ -83,7 +83,7 @@ SS=Supplier Settlement）。**前缀一经启用不得变更**（历史编号依
 ## 4. 事务与回滚要求
 
 - `next_number(kind, date, executor)` 接收执行器，以便在 `with_transaction` 事务代码内
-  以相同签名调用（传入 `&mut ClientSession`），单集合独立取号时传 `&mut NoTransaction`；
+  以相同签名调用（传入 `&mut dyn Executor`），单集合独立取号时传 `&mut NoTransaction`；
 - **计数器自增始终以自动提交方式独立执行，不挂到调用方事务会话上**：即使传入
   事务执行器，事务回滚也不会撤销已消费的序号；
 - 因此"事务内取号 → 回滚 → 再取号"得到 `SO20260701-000001` 与 `SO20260701-000002`，

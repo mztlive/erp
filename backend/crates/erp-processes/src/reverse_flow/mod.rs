@@ -68,19 +68,19 @@ impl ReturnsProcess {
 /// * `document_type` - 退款或冲正单据类型
 /// * `business_object_id` - 业务对象 ID
 /// * `actor` - 已认证操作人
-/// * `session` - 审批运行时持有的唯一事务会话
+/// * `executor` - 审批运行时持有的执行器
 ///
 /// # 返回
 /// 领域过账、业务审计与全部关联事实写入成功时返回 `Ok(())`。
 ///
 /// # 错误
 /// 单据类型不属于退货退款域，或领域状态/额度/持久化不变量失败时返回错误。
-pub async fn finalize_approved_return_in_transaction(
+pub async fn finalize_approved_return(
     db: &Database,
     document_type: DocumentType,
     business_object_id: &str,
     actor: &application_core::AuditActor,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let actor_id = actor.id();
     match document_type {
@@ -90,7 +90,7 @@ pub async fn finalize_approved_return_in_transaction(
                 business_object_id,
                 actor_id,
                 actor,
-                session,
+                executor,
             )
             .await
         },
@@ -100,7 +100,7 @@ pub async fn finalize_approved_return_in_transaction(
                 business_object_id,
                 actor_id,
                 actor,
-                session,
+                executor,
             )
             .await
         },
@@ -112,7 +112,7 @@ pub async fn finalize_approved_return_in_transaction(
 ///
 /// # 错误
 /// 单据不存在、类型与动作不匹配、状态迁移或 CAS 写入失败时返回错误。
-pub async fn cancel_approval_in_transaction(
+pub async fn cancel_approval(
     db: &Database,
     document_type: DocumentType,
     id: &str,

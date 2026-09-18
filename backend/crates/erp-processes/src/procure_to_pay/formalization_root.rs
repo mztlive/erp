@@ -4,8 +4,8 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
 use erp_procurement::dto::purchase_order::PurchaseReviewResult;
-use mongodb::{ClientSession, Database};
-use persistence_core::Transactional;
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 
 use super::PurchaseOrderProcess;
 use super::review::FormalizedOrderPersist;
@@ -46,8 +46,8 @@ impl PurchaseOrderFormalizationProcess {
         let actor = actor.clone();
         self.db
             .client()
-            .with_transaction(move |session| {
-                Box::pin(async move { persist_formalized_order_write(&db, persist, &actor, session).await })
+            .with_transaction(move |executor| {
+                Box::pin(async move { persist_formalized_order_write(&db, persist, &actor, executor).await })
             })
             .await?;
         Ok(result)
@@ -57,15 +57,15 @@ impl PurchaseOrderFormalizationProcess {
     ///
     /// # 错误
     /// 提交、来源复验、应付/成本或履约草稿写入失败时返回错误。
-    pub async fn formalize_approved_order_in_transaction(
+    pub async fn formalize_approved_order_apply(
         &self,
         id: &str,
         actor: &AuditActor,
-        session: &mut ClientSession,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let service = PurchaseOrderProcess::with_rbac(self.db.clone(), self.rbac.clone());
         let (persist, _) = service.prepare_formalized_order(id, actor).await?.into_parts();
-        persist_formalized_order_write(&self.db, persist, actor, session).await
+        persist_formalized_order_write(&self.db, persist, actor, executor).await
     }
 }
 
@@ -74,12 +74,12 @@ async fn persist_formalized_order_write(
     db: &Database,
     persist: FormalizedOrderPersist,
     actor: &AuditActor,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let audit = actor.clone().resource_log(
         "purchase_order.formalize",
         "purchase_order",
         persist.order_id().to_string(),
     )?;
-    super::formalization_posting::post(db, persist, actor, &audit, session).await
+    super::formalization_posting::post(db, persist, actor, &audit, executor).await
 }

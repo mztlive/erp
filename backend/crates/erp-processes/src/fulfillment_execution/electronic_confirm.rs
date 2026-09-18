@@ -75,15 +75,13 @@ async fn persist(
     let client = db.client().clone();
     let record = client
         .with_transaction(move |executor| {
-            Box::pin(async move {
-                confirm_in_transaction(&db, &id, confirmation, pending.as_ref(), &actor, executor).await
-            })
+            Box::pin(async move { confirm(&db, &id, confirmation, pending.as_ref(), &actor, executor).await })
         })
         .await?;
     Ok(record.into())
 }
 
-async fn confirm_in_transaction(
+async fn confirm(
     db: &Database,
     id: &ElectronicDeliveryId,
     confirmation: Confirmation,
@@ -97,7 +95,7 @@ async fn confirm_in_transaction(
         return Err(Error::ConflictError("电子交付草稿版本已变化，请刷新后重试".into()));
     }
     let order = purchase_context(db, &record, executor).await?;
-    super::service_confirm::ensure_service_evidence_asset_in_transaction(
+    super::service_confirm::ensure_service_evidence_asset(
         db,
         &confirmation.request.evidence_attachment_id,
         pending,

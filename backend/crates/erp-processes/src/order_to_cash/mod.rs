@@ -84,7 +84,7 @@ fn subject_ref_for_sales_business(business_type: BusinessType, id: &str) -> Resu
 /// Cancel the sales approval state within the workflow runtime's existing transaction.
 ///
 /// The workflow action is checked against the sales type before sales writes and audit.
-pub async fn cancel_approval_in_transaction(
+pub async fn cancel_approval(
     db: &Database,
     id: &str,
     action: erp_workflow::service::approval::policy::ApprovalDomainAction,

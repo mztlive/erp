@@ -132,18 +132,18 @@ impl SupplierFulfillmentProcess {
         let message_for_tx = message.clone();
         let audit_for_tx = audit.clone();
         super::execution::after_intent(client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     erp_supply::service::supplier_fulfillment::cancel::persist_after_sales(
                         &db,
                         &action_for_tx,
                         &lines_for_tx,
                         &mut order_for_tx,
-                        session,
+                        executor,
                     )
                     .await?;
-                    db.inbox_messages().create(&message_for_tx, session).await?;
-                    db.audit_logs().create(&audit_for_tx, session).await?;
+                    db.inbox_messages().create(&message_for_tx, executor).await?;
+                    db.audit_logs().create(&audit_for_tx, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             }), || async {

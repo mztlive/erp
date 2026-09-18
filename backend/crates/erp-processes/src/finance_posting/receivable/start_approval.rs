@@ -417,8 +417,8 @@ pub(super) async fn persist_customer_receipt_start(
     let db = db.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
-            Box::pin(async move { persist_customer_receipt_start_in_transaction(&db, input, session).await })
+        .with_transaction(move |executor| {
+            Box::pin(async move { persist_customer_receipt_start_apply(&db, input, executor).await })
         })
         .await
 }
@@ -428,7 +428,7 @@ pub(super) async fn persist_customer_receipt_start(
 /// # 参数
 /// * `db` - 数据库
 /// * `input` - 已进入审批的回款、快照与启动计划
-/// * `session` - 调用方事务会话
+/// * `executor` - 调用方执行器
 ///
 /// # 返回
 /// 返回更新后的回款实体。
@@ -440,10 +440,10 @@ pub(super) async fn persist_customer_receipt_start(
 /// 独立提交通过上层新建事务，本方法的启动收据必须是整笔事务第一写。创建并
 /// 提交由外层创建命令先完成自身幂等仲裁；本方法作为不可独立调用的审批子步骤，
 /// 其写段仍固定为“启动收据 -> 注册行启动守卫 -> BPM -> 回款单与审计”。
-pub(super) async fn persist_customer_receipt_start_in_transaction(
+pub(super) async fn persist_customer_receipt_start_apply(
     db: &Database,
     input: CustomerReceiptStartPersistInput,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<CustomerReceipt> {
     let CustomerReceiptStartPersistInput {
         receipt,
@@ -460,7 +460,7 @@ pub(super) async fn persist_customer_receipt_start_in_transaction(
     };
     let audit = actor.resource_log("customer_receipt.submit", "customer_receipt", id)?;
     db.bpm_workflow()
-        .insert_command_receipt(&writes.receipt, session)
+        .insert_command_receipt(&writes.receipt, executor)
         .await
         .map_err(map_receipt_first_write_error)?;
     let guarded = db
@@ -471,7 +471,7 @@ pub(super) async fn persist_customer_receipt_start_in_transaction(
             &writes.instance.process_definition_id,
             writes.instance.definition_version,
             now,
-            session,
+            executor,
         )
         .await?;
     if guarded.is_none() {
@@ -479,7 +479,7 @@ pub(super) async fn persist_customer_receipt_start_in_transaction(
     }
     // 先在同一事务写入提交字段，快照读取才能包含本次核销安排。
     let mut receipt = receipt;
-    db.customer_receipts().update(&mut receipt, session).await?;
+    db.customer_receipts().update(&mut receipt, executor).await?;
     persist_runtime_writes(
         db,
         &writes,
@@ -487,10 +487,10 @@ pub(super) async fn persist_customer_receipt_start_in_transaction(
         owner_role,
         &organization_id,
         now,
-        session,
+        executor,
     )
     .await?;
-    db.audit_logs().create(&audit, session).await?;
+    db.audit_logs().create(&audit, executor).await?;
     Ok(receipt)
 }
 
@@ -511,7 +511,7 @@ pub(super) async fn persist_runtime_writes(
     owner_role: &str,
     organization_id: &str,
     now: Instant,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let RuntimeSubject { document_type, snapshot_payload } = subject;
     let first = writes
@@ -524,7 +524,7 @@ pub(super) async fn persist_runtime_writes(
             &writes.created_assignees,
             first,
             &list_projection_from_execution(first, now),
-            session,
+            executor,
         )
         .await?;
     let mut snapshot = ApprovalSubjectSnapshot::new(
@@ -541,12 +541,12 @@ pub(super) async fn persist_runtime_writes(
             db,
             snapshot.document_type,
             &snapshot.business_object_id,
-            session,
+            executor,
         )
         .await?,
     );
-    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, session).await?;
-    persist_open_tasks(db, document_type, writes, owner_role, organization_id, now, session).await
+    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
+    persist_open_tasks(db, document_type, writes, owner_role, organization_id, now, executor).await
 }
 
 /// 由入口执行构造有界列表投影。
@@ -583,7 +583,7 @@ async fn persist_open_tasks(
     owner_role: &str,
     organization_id: &str,
     now: Instant,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     for intent in &writes.create_tasks {
         let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
@@ -604,7 +604,7 @@ async fn persist_open_tasks(
             },
             now,
         )?;
-        db.work_items().create(&item, session).await?;
+        db.work_items().create(&item, executor).await?;
     }
     Ok(())
 }

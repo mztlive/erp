@@ -74,31 +74,31 @@ impl InventoryService {
         self.db
             .client()
             .clone()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let authorization = authorization_port.authorize(&actor, session).await?;
+                    let authorization = authorization_port.authorize(&actor, executor).await?;
                     if !authorization.actor_is_active() {
                         return Err(Error::Forbidden("当前账号无库存调整读取权限".to_string()));
                     }
-                    let id_in = people_object_ids(people_facts.as_ref(), &query, session).await?;
+                    let id_in = people_object_ids(people_facts.as_ref(), &query, executor).await?;
                     let search = super::search::sku_filter(
                         catalog.as_ref(),
                         query.q.as_deref(),
                         query.sku_id.as_ref(),
-                        session,
+                        executor,
                     )
                     .await?;
                     let search = super::search::adjustment_filter(
                         &db,
                         search,
                         query.adjustment_id.as_deref(),
-                        session,
+                        executor,
                     )
                     .await?;
                     let filter = adjustment_filter(&query, &authorization, search, id_in);
-                    let page = db.stock_adjustments().search_stock_adjustments(&filter, session).await?;
+                    let page = db.stock_adjustments().search_stock_adjustments(&filter, executor).await?;
                     let ids = page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
-                    let people = people_facts.people_by_adjustment_ids(&ids, session).await?;
+                    let people = people_facts.people_by_adjustment_ids(&ids, executor).await?;
                     Ok::<_, Error>((page, authorization, people))
                 })
             })
@@ -130,12 +130,12 @@ impl InventoryService {
         let actor = actor.clone();
         let client = db.client().clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let authorization = authorization_port.authorize(&actor, session).await?;
+                    let authorization = authorization_port.authorize(&actor, executor).await?;
                     let adjustment = db
                         .inventory()
-                        .stock_adjustment(&id, session)
+                        .stock_adjustment(&id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
                     if !authorization.actor_is_active()

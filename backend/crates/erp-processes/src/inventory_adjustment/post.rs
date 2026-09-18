@@ -38,10 +38,10 @@ impl InventoryAdjustmentService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<StockAdjustmentView> {
-        let session = executor
+        let _ = executor
             .session()
             .ok_or_else(|| Error::Internal("库存调整审批过账缺少运行时事务会话".to_string()))?;
-        post_stock_adjustment_write(&self.db, context, actor, session).await.map(Into::into)
+        post_stock_adjustment_write(&self.db, context, actor, executor).await.map(Into::into)
     }
 }
 
@@ -51,7 +51,7 @@ impl InventoryAdjustmentService {
 /// * `db` - 数据库实例
 /// * `adjustment_id` - 库存调整单 ID
 /// * `actor` - 已认证操作人
-/// * `session` - 审批运行时持有的唯一事务会话
+/// * `executor` - 审批运行时持有的事务执行器
 ///
 /// # 返回
 /// 返回事务内已推进到过账状态的调整单。
@@ -62,25 +62,24 @@ async fn post_stock_adjustment_write(
     db: &Database,
     context: &ApprovalActionContext,
     actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<StockAdjustment> {
     let adjustment_id = StockAdjustmentId::new(context.business_object_id());
     let mut adjustment = db
         .inventory()
-        .stock_adjustment(adjustment_id.as_ref(), session)
+        .stock_adjustment(adjustment_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-    validate_post_runtime_context(db, context, actor, &adjustment, session).await?;
+    validate_post_runtime_context(db, context, actor, &adjustment, executor).await?;
     adjustment.ensure_approval_postable().map_err(|error| Error::ConflictError(error.to_string()))?;
     let lines = db
         .inventory()
-        .adjustment_lines_by_adjustment_ids(std::slice::from_ref(&adjustment_id), session)
+        .adjustment_lines_by_adjustment_ids(std::slice::from_ref(&adjustment_id), executor)
         .await?;
-    erp_inventory::apply_posted_adjustment_in_transaction(db, &mut adjustment, &lines, actor, session)
-        .await?;
+    erp_inventory::apply_posted_adjustment(db, &mut adjustment, &lines, actor, executor).await?;
     let audit =
         actor.clone().resource_log("stock_adjustment.post", "stock_adjustment", adjustment_id.to_string())?;
-    db.audit_logs().create(&audit, session).await?;
+    db.audit_logs().create(&audit, executor).await?;
     Ok(adjustment)
 }
 
@@ -94,7 +93,7 @@ async fn validate_post_runtime_context(
     context: &ApprovalActionContext,
     actor: &AuditActor,
     adjustment: &StockAdjustment,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     if context.business_object_type() != DocumentType::StockAdjustment.as_str()
         || context.actor_id() != actor.id()
@@ -119,14 +118,14 @@ async fn validate_post_runtime_context(
     let instance_id = bpm::ids::ApprovalProcessInstanceId::new(context.approval_process_instance_id());
     let instance = db
         .bpm_workflow()
-        .find_instance_by_id(&instance_id, session)
+        .find_instance_by_id(&instance_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("库存调整审批实例不存在".to_string()))?;
-    let binding = load_approval_binding(db, &adjustment.base.id, session).await?;
+    let binding = load_approval_binding(db, &adjustment.base.id, executor).await?;
     let binding = require_frozen_binding(binding.as_ref())?;
     let snapshot = db
         .approval_subject_snapshots()
-        .find_by_process_instance_id(&instance.base.id, session)
+        .find_by_process_instance_id(&instance.base.id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("库存调整审批实例缺少冻结快照".to_string()))?;
     snapshot
@@ -151,7 +150,7 @@ async fn validate_post_runtime_context(
     }
     let execution = db
         .bpm_workflow()
-        .find_execution_by_id(&bpm::ids::ApprovalNodeExecutionId::new(execution_id), session)
+        .find_execution_by_id(&bpm::ids::ApprovalNodeExecutionId::new(execution_id), executor)
         .await?
         .ok_or_else(|| Error::ConflictError("库存调整审批执行不存在".to_string()))?;
     if execution.process_instance_id != instance_id
@@ -164,7 +163,7 @@ async fn validate_post_runtime_context(
     }
     let task = db
         .work_items()
-        .find_document_approval_by_id(work_item_id, session)
+        .find_document_approval_by_id(work_item_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("库存调整审批任务不存在".to_string()))?;
     let adapter = stock_adjustment_adapter()?;

@@ -94,11 +94,11 @@ impl ImportApplyService {
         let rows_for_tx = rows.clone();
         let job_for_tx = background_job.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.legacy_import().create_batch_with_rows(&batch_for_tx, &rows_for_tx, session).await?;
-                    db.background_jobs().create(&job_for_tx, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.legacy_import().create_batch_with_rows(&batch_for_tx, &rows_for_tx, executor).await?;
+                    db.background_jobs().create(&job_for_tx, executor).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

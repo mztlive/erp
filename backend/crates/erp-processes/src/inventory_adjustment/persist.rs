@@ -127,11 +127,11 @@ pub async fn persist_stock_adjustment_start(
     let db = db.clone();
     let client = db.client().clone();
     let updated = client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 let current = db
                     .inventory()
-                    .stock_adjustment(&id, session)
+                    .stock_adjustment(&id, executor)
                     .await?
                     .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
                 ensure_fresh_start_document(
@@ -141,32 +141,32 @@ pub async fn persist_stock_adjustment_start(
                     expected_subject_version,
                 )?;
                 ensure_stock_adjustment_submit_authorized_with_executor(
-                    &db, &rbac, &current, &actor, session,
+                    &db, &rbac, &current, &actor, executor,
                 )
                 .await?;
-                let persisted_binding = load_approval_binding(&db, &id, session).await?;
+                let persisted_binding = load_approval_binding(&db, &id, executor).await?;
                 let persisted_binding = require_frozen_binding(persisted_binding.as_ref())?;
                 if persisted_binding != &binding {
                     return Err(Error::ConflictError("库存调整审批定义绑定已变化，请刷新后重试".to_string()));
                 }
                 let graph =
-                    load_bound_definition_graph_with_executor(&db, persisted_binding, session).await?;
+                    load_bound_definition_graph_with_executor(&db, persisted_binding, executor).await?;
                 revalidate_stock_adjustment_start_candidates(
                     &db,
                     &rbac,
                     &graph,
                     actor.id(),
                     &organization_id,
-                    session,
+                    executor,
                 )
                 .await?;
-                revalidate_start_lines(&db, &current, &lines, session).await?;
-                validate_balance_versions(&db, &adjustment, &lines, &balances, session).await?;
+                revalidate_start_lines(&db, &current, &lines, executor).await?;
+                validate_balance_versions(&db, &adjustment, &lines, &balances, executor).await?;
                 validate_start_writes(&writes, &graph, &binding, &id, actor.id(), expected_subject_version)?;
                 // 命令收据是事务内第一笔写入。并发 loser 退出失败事务后只允许
                 // 使用新会话回读 winner，不得先留下任何业务或 BPM 写入。
                 db.bpm_workflow()
-                    .insert_command_receipt(&writes.receipt, session)
+                    .insert_command_receipt(&writes.receipt, executor)
                     .await
                     .map_err(map_receipt_first_write_error)?;
                 let guarded = db
@@ -177,7 +177,7 @@ pub async fn persist_stock_adjustment_start(
                         &writes.instance.process_definition_id,
                         writes.instance.definition_version,
                         now,
-                        session,
+                        executor,
                     )
                     .await?;
                 if guarded.is_none() {
@@ -187,14 +187,14 @@ pub async fn persist_stock_adjustment_start(
                 for line in &lines {
                     if !db
                         .inventory()
-                        .update_adjustment_line(&line.base.id, line.quantity, Some(line.direction), session)
+                        .update_adjustment_line(&line.base.id, line.quantity, Some(line.direction), executor)
                         .await?
                     {
                         return Err(Error::NotFound("调整明细不存在".to_string()));
                     }
                 }
                 let mut adjustment = adjustment;
-                db.stock_adjustments().update(&mut adjustment, session).await?;
+                db.stock_adjustments().update(&mut adjustment, executor).await?;
                 persist_runtime_writes(
                     &db,
                     &writes,
@@ -206,10 +206,10 @@ pub async fn persist_stock_adjustment_start(
                         submitted_by: actor.id(),
                         now,
                     },
-                    session,
+                    executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<StockAdjustment, crate::Error>(adjustment)
             })
         })
@@ -366,7 +366,7 @@ fn validate_start_writes(
 /// * `adjustment` - 待提交调整单
 /// * `lines` - 最终调整明细
 /// * `expected` - 客户端编辑时冻结的余额版本
-/// * `session` - 当前事务
+/// * `executor` - 数据访问执行器
 ///
 /// # 错误
 /// 余额缺失、版本冲突、重复或不能完整覆盖明细维度时返回错误。
@@ -375,7 +375,7 @@ async fn validate_balance_versions(
     adjustment: &StockAdjustment,
     lines: &[StockAdjustmentLine],
     expected: &[ExpectedStockBalanceVersion],
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let mut balance_ids = std::collections::HashSet::with_capacity(expected.len());
     let mut covered_dimensions = std::collections::HashSet::with_capacity(expected.len());
@@ -385,7 +385,7 @@ async fn validate_balance_versions(
         }
         let balance = db
             .stock_balances()
-            .find_by_id(&item.balance_id, session)
+            .find_by_id(&item.balance_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
         if balance.base.version != item.expected_version {
@@ -415,7 +415,7 @@ async fn validate_balance_versions(
 /// * `owner_role` - 责任角色
 /// * `organization_id` - 责任组织
 /// * `now` - 调用方时间
-/// * `session` - 当前事务
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 成功时无返回值。
@@ -435,7 +435,7 @@ async fn persist_runtime_writes(
     writes: &PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     context: StartRuntimeContext<'_>,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let first = writes
         .created_executions
@@ -447,7 +447,7 @@ async fn persist_runtime_writes(
             &writes.created_assignees,
             first,
             &list_projection_from_execution(first, context.now),
-            session,
+            executor,
         )
         .await?;
     let mut snapshot = ApprovalSubjectSnapshot::new(
@@ -464,12 +464,13 @@ async fn persist_runtime_writes(
             db,
             snapshot.document_type,
             &snapshot.business_object_id,
-            session,
+            executor,
         )
         .await?,
     );
-    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, session).await?;
-    persist_open_tasks(db, writes, context.owner_role, context.organization_id, context.now, session).await?;
+    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
+    persist_open_tasks(db, writes, context.owner_role, context.organization_id, context.now, executor)
+        .await?;
     persist_start_notifications(
         db,
         writes,
@@ -477,7 +478,7 @@ async fn persist_runtime_writes(
         context.document_no,
         context.submitted_by,
         context.now,
-        session,
+        executor,
     )
     .await
 }
@@ -565,7 +566,7 @@ pub(super) fn validate_start_notification_identities(
 /// * `owner_role` - 责任角色
 /// * `organization_id` - 责任组织
 /// * `now` - 创建时间
-/// * `session` - 当前事务
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 成功时无返回值。
@@ -578,7 +579,7 @@ async fn persist_open_tasks(
     owner_role: &str,
     organization_id: &str,
     now: Instant,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     for intent in &writes.create_tasks {
         let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
@@ -599,7 +600,7 @@ async fn persist_open_tasks(
             },
             now,
         )?;
-        db.work_items().create(&item, session).await?;
+        db.work_items().create(&item, executor).await?;
     }
     Ok(())
 }

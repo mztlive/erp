@@ -24,8 +24,7 @@ use erp_workflow::service::approval::execution::idempotency::normalize_idempoten
 use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 use id_generator::next_id;
-use mongodb::ClientSession;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::SalesChangeProcess;
@@ -192,14 +191,14 @@ impl SalesChangeProcess {
         let rbac = self.require_rbac()?;
         let actor_for_tx = actor.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac)
-                        .require_object(&actor_for_tx, "update", sales_write.sales_order_id(), &[], session)
+                        .require_object(&actor_for_tx, "update", sales_write.sales_order_id(), &[], executor)
                         .await
                         .map_err(crate::Error::from)?;
-                    sales_write.persist(&db, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    sales_write.persist(&db, executor).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })
@@ -394,22 +393,22 @@ impl SalesChangeProcess {
             let recovered = self
                 .db
                 .client()
-                .with_transaction(move |session| {
+                .with_transaction(move |executor| {
                     Box::pin(async move {
                         let change = db
                             .sales_change_orders()
-                            .find_by_id(&change_order_id, session)
+                            .find_by_id(&change_order_id, executor)
                             .await?
                             .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
                         let sales_order = db
                             .sales_orders()
-                            .find_by_id(&change.sales_order_id, session)
+                            .find_by_id(&change.sales_order_id, executor)
                             .await?
                             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
                         let organization_id =
                             sales_change_responsible_org_id(&sales_order.settlement_party_id)?;
                         let _ = sales_change_order_object_readable(&organization_id, &actor_id)?;
-                        let binding = find_approval_binding(&db, &change_order_id, session)
+                        let binding = find_approval_binding(&db, &change_order_id, executor)
                             .await
                             .map_err(crate::Error::from)?;
                         let binding = require_frozen_binding(binding.as_ref())?;
@@ -421,7 +420,7 @@ impl SalesChangeProcess {
                             &idempotency_key,
                             binding,
                             &actor_id,
-                            session,
+                            executor,
                         )
                         .await
                     })
@@ -499,10 +498,10 @@ async fn persist_created_change_order(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac.clone())
-                    .require_object(&actor, "update", sales_write.sales_order_id(), &[], session)
+                    .require_object(&actor, "update", sales_write.sales_order_id(), &[], executor)
                     .await
                     .map_err(crate::Error::from)?;
                 persist_bound_change_document(
@@ -512,11 +511,11 @@ async fn persist_created_change_order(
                     &mut document,
                     &bind_command,
                     &actor,
-                    session,
+                    executor,
                 )
                 .await?;
-                sales_write.persist(&db, session).await?;
-                db.audit_logs().create(&audit, session).await?;
+                sales_write.persist(&db, executor).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })
@@ -533,7 +532,7 @@ async fn persist_bound_change_document(
     document: &mut BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let _ = sales_change_order_object_readable(
         &bind_command.context.organization_id,
@@ -548,12 +547,12 @@ async fn persist_bound_change_document(
         audit.as_ref(),
         bind_command,
         actor,
-        session,
+        executor,
     )
     .await?;
     let binding = binding.ok_or_else(|| Error::Internal("销售变更单必须绑定已发布定义".to_string()))?;
     attach_published_binding(document, binding)?;
-    db.business_documents().create(document, session).await?;
+    db.business_documents().create(document, executor).await?;
     Ok(())
 }
 

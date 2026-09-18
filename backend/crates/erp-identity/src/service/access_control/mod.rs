@@ -158,10 +158,10 @@ impl AccessControlService {
         let client = db.client().clone();
         let permission_for_tx = permission.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.permissions().create(&permission_for_tx, session).await?;
-                    db.audit_events().create(&event, session).await?;
+                    db.permissions().create(&permission_for_tx, executor).await?;
+                    db.audit_events().create(&event, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -208,10 +208,10 @@ impl AccessControlService {
         let db = self.db.clone();
         let client = db.client().clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.permissions().update(&mut permission, session).await?;
-                    db.audit_events().create(&event, session).await?;
+                    db.permissions().update(&mut permission, executor).await?;
+                    db.audit_events().create(&event, executor).await?;
                     Ok::<Permission, crate::error::Error>(permission)
                 })
             })
@@ -249,10 +249,10 @@ impl AccessControlService {
         let db = self.db.clone();
         let client = db.client().clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.permissions().soft_delete(&mut permission, session).await?;
-                    db.audit_events().create(&event, session).await?;
+                    db.permissions().soft_delete(&mut permission, executor).await?;
+                    db.audit_events().create(&event, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -298,9 +298,9 @@ impl AccessControlService {
         let rbac = self.rbac.clone().ok_or_else(|| Error::Forbidden("未装配范围配置授权".into()))?;
         let actor_for_tx = actor.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope_for_tx, "create", session)
+                    ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope_for_tx, "create", executor)
                         .await?;
                     if scope_for_tx.binding.target_mode == Some(ScopeTargetMode::Explicit)
                         && scope_for_tx.binding.target_dimension != ScopeDimension::InternalOrg
@@ -311,13 +311,13 @@ impl AccessControlService {
                             .validate_targets(
                                 scope_for_tx.binding.target_dimension,
                                 &scope_for_tx.scope_targets,
-                                session,
+                                executor,
                             )
                             .await?;
                     }
-                    db.data_scopes().create(&scope_for_tx, session).await?;
-                    crate::MongoCasbinAdapter::new(db.clone()).bump_policy_revision(session).await?;
-                    db.audit_events().create(&event, session).await?;
+                    db.data_scopes().create(&scope_for_tx, executor).await?;
+                    crate::MongoCasbinAdapter::new(db.clone()).bump_policy_revision(executor).await?;
+                    db.audit_events().create(&event, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -352,12 +352,12 @@ impl AccessControlService {
         let db = self.db.clone();
         let client = db.client().clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope, "delete", session).await?;
-                    db.data_scopes().soft_delete(&mut scope, session).await?;
-                    crate::MongoCasbinAdapter::new(db.clone()).bump_policy_revision(session).await?;
-                    db.audit_events().create(&event, session).await?;
+                    ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope, "delete", executor).await?;
+                    db.data_scopes().soft_delete(&mut scope, executor).await?;
+                    crate::MongoCasbinAdapter::new(db.clone()).bump_policy_revision(executor).await?;
+                    db.audit_events().create(&event, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -423,9 +423,11 @@ impl AccessControlService {
         let client = db.client().clone();
         let binding_for_tx = binding.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.access_control().assign_user_role_with_audit(&binding_for_tx, &event, session).await?;
+                    db.access_control()
+                        .assign_user_role_with_audit(&binding_for_tx, &event, executor)
+                        .await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -472,16 +474,16 @@ impl AccessControlService {
         let revoked_by = actor.id().to_string();
         let revoke_data = req.into_revoke_data();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let mut binding = db
                         .user_roles()
-                        .find_by_id(&id, session)
+                        .find_by_id(&id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("用户角色绑定不存在".to_string()))?;
                     binding.revoke(revoke_data, &revoked_by, Instant::now())?;
-                    db.user_roles().update(&mut binding, session).await?;
-                    db.audit_events().create(&event, session).await?;
+                    db.user_roles().update(&mut binding, executor).await?;
+                    db.audit_events().create(&event, executor).await?;
                     Ok::<UserRole, crate::error::Error>(binding)
                 })
             })

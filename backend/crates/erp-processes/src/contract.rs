@@ -61,13 +61,13 @@ pub async fn upload_contract(
     let actor_for_tx = actor.clone();
     let customer_id = planned.contract.customer_id.to_string();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
-                service.require_create(&actor_for_tx, &customer_id, session).await?;
-                db_for_tx.file_assets().create(&asset_for_tx, session).await?;
-                service.apply_create_in_transaction(&mut contract_for_tx, &revision, session).await?;
-                db_for_tx.audit_logs().create(&asset_audit, session).await?;
-                db_for_tx.audit_logs().create(&contract_audit, session).await?;
+                service.require_create(&actor_for_tx, &customer_id, executor).await?;
+                db_for_tx.file_assets().create(&asset_for_tx, executor).await?;
+                service.apply_create(&mut contract_for_tx, &revision, executor).await?;
+                db_for_tx.audit_logs().create(&asset_audit, executor).await?;
+                db_for_tx.audit_logs().create(&contract_audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

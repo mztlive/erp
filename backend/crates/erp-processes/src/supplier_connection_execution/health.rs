@@ -30,11 +30,11 @@ impl SupplierConnectionExecutionProcess {
         let db = self.db.clone();
         let client = db.client().clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let mut job = db
                         .background_jobs()
-                        .find_by_id(&job.base.id, session)
+                        .find_by_id(&job.base.id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("健康检查任务不存在".to_string()))?;
                     if job.status != JobStatus::Pending {
@@ -42,19 +42,19 @@ impl SupplierConnectionExecutionProcess {
                     }
                     let mut run = db
                         .supplier_api()
-                        .health_run_for_job(&job.base.id, session)
+                        .health_run_for_job(&job.base.id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("健康检查运行记录不存在".to_string()))?;
                     let connection = db
                         .supplier_api()
-                        .connection(&run.connection_id, session)
+                        .connection(&run.connection_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
                     let at = Instant::now();
                     job.start(at)?;
                     run.start(at)?;
-                    db.background_jobs().update(&mut job, session).await?;
-                    SupplierApiService::new(db.clone()).persist_health_run(&mut run, session).await?;
+                    db.background_jobs().update(&mut job, executor).await?;
+                    SupplierApiService::new(db.clone()).persist_health_run(&mut run, executor).await?;
                     Ok((connection, job, run))
                 })
             })
@@ -73,21 +73,21 @@ impl SupplierConnectionExecutionProcess {
         let client = db.client().clone();
         let actor = actor.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let mut job = db
                         .background_jobs()
-                        .find_by_id(&job.base.id, session)
+                        .find_by_id(&job.base.id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("健康检查任务不存在".to_string()))?;
                     let mut run = db
                         .supplier_api()
-                        .health_run_for_job(&job.base.id, session)
+                        .health_run_for_job(&job.base.id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("健康检查运行记录不存在".to_string()))?;
                     let mut connection = db
                         .supplier_api()
-                        .connection(&run.connection_id, session)
+                        .connection(&run.connection_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
                     let at = Instant::now();
@@ -99,15 +99,15 @@ impl SupplierConnectionExecutionProcess {
                             summary: "检查期间技术配置已变化，本次结果不能作为启用依据".to_string(),
                         };
                         settle_health_failure(&mut job, &mut run, at, latency_ms, &error)?;
-                        persist_health_failure_task(&db, &connection, &job, &error, &actor, session).await?;
+                        persist_health_failure_task(&db, &connection, &job, &error, &actor, executor).await?;
                     } else if let Err(error) = &outcome {
                         settle_health_failure(&mut job, &mut run, at, latency_ms, error)?;
                         connection.record_health(HealthCheckResult::Failed, at);
                         connection.stable.touch(actor.id());
                         SupplierApiService::new(db.clone())
-                            .persist_connection(&mut connection, session)
+                            .persist_connection(&mut connection, executor)
                             .await?;
-                        persist_health_failure_task(&db, &connection, &job, error, &actor, session).await?;
+                        persist_health_failure_task(&db, &connection, &job, error, &actor, executor).await?;
                     } else {
                         job.record_progress(1, 0, 0, at)?;
                         job.mark_succeeded(at)?;
@@ -115,11 +115,11 @@ impl SupplierConnectionExecutionProcess {
                         connection.record_health(HealthCheckResult::Healthy, at);
                         connection.stable.touch(actor.id());
                         SupplierApiService::new(db.clone())
-                            .persist_connection(&mut connection, session)
+                            .persist_connection(&mut connection, executor)
                             .await?;
                     }
-                    db.background_jobs().update(&mut job, session).await?;
-                    SupplierApiService::new(db.clone()).persist_health_run(&mut run, session).await?;
+                    db.background_jobs().update(&mut job, executor).await?;
+                    SupplierApiService::new(db.clone()).persist_health_run(&mut run, executor).await?;
                     let audit = actor.clone().resource_log_with_id(
                         format!("w20-health-audit-{}", digest(&[&job.base.id])),
                         "supplier_api_connection.health_check.settle",
@@ -127,7 +127,7 @@ impl SupplierConnectionExecutionProcess {
                         connection.base.id,
                         Some(format!("job_id={};status={}", job.base.id, job.status.as_str())),
                     )?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok(())
                 })
             })

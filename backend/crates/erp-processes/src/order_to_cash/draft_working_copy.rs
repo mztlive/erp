@@ -114,17 +114,17 @@ impl SalesOrderCommandProcess {
         let access = self.command_access(actor, "update")?;
         let related_order = order.clone();
         let persisted = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.related_order(&related_order, session).await?;
-                    access.revalidate(&order_id, expected_order_version, session).await?;
+                    access.related_order(&related_order, executor).await?;
+                    access.revalidate(&order_id, expected_order_version, executor).await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                         .ensure_sellable_refs(
                             &sellable_refs,
                             &crate::order_to_cash::adapters::catalog::CatalogQualificationAdapter::new(
                                 db.clone(),
                             ),
-                            session,
+                            executor,
                         )
                         .await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
@@ -132,10 +132,10 @@ impl SalesOrderCommandProcess {
                             &created_stable_lines,
                             &working_copy,
                             &working_copy_lines,
-                            session,
+                            executor,
                         )
                         .await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<SalesOrderWorkingCopy, crate::Error>(working_copy)
                 })
             })

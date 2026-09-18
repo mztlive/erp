@@ -163,11 +163,11 @@ impl SupplierFulfillmentProcess {
         let db = self.db.clone();
         let client = db.client().clone();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let mut order = db
                         .supplier_fulfillment_orders()
-                        .find_by_id(&context_for_tx.order_id, session)
+                        .find_by_id(&context_for_tx.order_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商履约订单不存在".to_string()))?;
                     order.ensure_version(context_for_tx.expected_order_version).map_err(|_| {
@@ -175,7 +175,7 @@ impl SupplierFulfillmentProcess {
                     })?;
                     let mut target_action = db
                         .supplier_order_actions()
-                        .find_by_id(&context_for_tx.target_action_id, session)
+                        .find_by_id(&context_for_tx.target_action_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("被调查的供应商原动作不存在".to_string()))?;
                     target_action
@@ -183,10 +183,10 @@ impl SupplierFulfillmentProcess {
                         .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
                     let investigated_order_version = order.base.version;
                     if context_for_tx.task.is_none() {
-                        ensure_no_active_w26_task(&db, &order.base.id, session).await?;
+                        ensure_no_active_w26_task(&db, &order.base.id, executor).await?;
                     }
                     if context_for_tx.action == SupplierOrderInvestigationAction::Replay {
-                        ensure_replay_safe(&db, &order, &target_action, session).await?;
+                        ensure_replay_safe(&db, &order, &target_action, executor).await?;
                     }
 
                     let original_order = order.clone();
@@ -198,10 +198,10 @@ impl SupplierFulfillmentProcess {
                         &mut target_action,
                     )?;
                     if order != original_order {
-                        persist_order(&db, &mut order, session).await?;
+                        persist_order(&db, &mut order, executor).await?;
                     }
                     if target_action != original_target {
-                        persist_action(&db, &mut target_action, session).await?;
+                        persist_action(&db, &mut target_action, executor).await?;
                     }
 
                     let evidence_record = investigation_evidence_record(
@@ -213,7 +213,7 @@ impl SupplierFulfillmentProcess {
                         .map_err(|error| Error::Internal(format!("调查证据序列化失败: {error}")))?;
                     let mut evidence = db
                         .supplier_order_actions()
-                        .find_by_id(&evidence_id_for_tx, session)
+                        .find_by_id(&evidence_id_for_tx, executor)
                         .await?
                         .ok_or_else(|| Error::Internal("供应商调查意图记录不存在".to_string()))?;
                     validate_investigation_intent(
@@ -228,12 +228,12 @@ impl SupplierFulfillmentProcess {
                         ));
                     }
                     finish_evidence(&mut evidence, finding.outcome, response_summary)?;
-                    persist_action(&db, &mut evidence, session).await?;
+                    persist_action(&db, &mut evidence, executor).await?;
 
                     let task_version = if let Some(task_context) = &context_for_tx.task {
                         let mut work_item = db
                             .work_items()
-                            .find_by_id(&task_context.work_item_id, session)
+                            .find_by_id(&task_context.work_item_id, executor)
                             .await?
                             .ok_or_else(|| Error::NotFound("供应商履约正式任务不存在".to_string()))?;
                         validate_w26_task(
@@ -248,13 +248,13 @@ impl SupplierFulfillmentProcess {
                             &task_context.expected_subject_version,
                             investigated_order_version,
                         )?;
-                        ensure_task_actor_eligible(&db, &work_item, &actor_id, session).await?;
+                        ensure_task_actor_eligible(&db, &work_item, &actor_id, executor).await?;
                         work_item_service(db.clone(), rbac_for_tx.clone())
-                            .ensure_domain_decision_access(&actor_for_tx, &work_item, session)
+                            .ensure_domain_decision_access(&actor_for_tx, &work_item, executor)
                             .await?;
                         work_item.subject_version = order.base.version.to_string();
                         work_item.record_activity(&actor_id, Instant::now())?;
-                        db.work_items().update(&mut work_item, session).await?;
+                        db.work_items().update(&mut work_item, executor).await?;
                         Some(work_item.base.version)
                     } else {
                         None
@@ -274,7 +274,7 @@ impl SupplierFulfillmentProcess {
                         order.base.id.clone(),
                         Some(investigation_receipt_message(&fingerprint_for_tx, &receipt)),
                     )?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<
                         (
                             SupplierFulfillmentOrder,
@@ -327,11 +327,11 @@ impl SupplierFulfillmentProcess {
         let db = self.db.clone();
         let client = db.client().clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let order = db
                         .supplier_fulfillment_orders()
-                        .find_by_id(&context.order_id, session)
+                        .find_by_id(&context.order_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商履约订单不存在".to_string()))?;
                     order.ensure_version(context.expected_order_version).map_err(|_| {
@@ -339,7 +339,7 @@ impl SupplierFulfillmentProcess {
                     })?;
                     let target_action = db
                         .supplier_order_actions()
-                        .find_by_id(&context.target_action_id, session)
+                        .find_by_id(&context.target_action_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("被调查的供应商原动作不存在".to_string()))?;
                     target_action
@@ -348,7 +348,7 @@ impl SupplierFulfillmentProcess {
                     if let Some(task_context) = &context.task {
                         let work_item = db
                             .work_items()
-                            .find_by_id(&task_context.work_item_id, session)
+                            .find_by_id(&task_context.work_item_id, executor)
                             .await?
                             .ok_or_else(|| Error::NotFound("供应商履约正式任务不存在".to_string()))?;
                         validate_w26_task(
@@ -363,19 +363,19 @@ impl SupplierFulfillmentProcess {
                             &task_context.expected_subject_version,
                             order.base.version,
                         )?;
-                        ensure_task_actor_eligible(&db, &work_item, &actor_id, session).await?;
+                        ensure_task_actor_eligible(&db, &work_item, &actor_id, executor).await?;
                         work_item_service(db.clone(), rbac.clone())
-                            .ensure_domain_decision_access(&actor, &work_item, session)
+                            .ensure_domain_decision_access(&actor, &work_item, executor)
                             .await?;
                     } else {
-                        ensure_no_active_w26_task(&db, &order.base.id, session).await?;
+                        ensure_no_active_w26_task(&db, &order.base.id, executor).await?;
                     }
                     if context.action == SupplierOrderInvestigationAction::Replay {
-                        ensure_replay_safe(&db, &order, &target_action, session).await?;
+                        ensure_replay_safe(&db, &order, &target_action, executor).await?;
                     }
 
                     if let Some(existing) =
-                        db.supplier_order_actions().find_by_id(&evidence_id, session).await?
+                        db.supplier_order_actions().find_by_id(&evidence_id, executor).await?
                     {
                         validate_investigation_intent(
                             &existing,
@@ -395,7 +395,7 @@ impl SupplierFulfillmentProcess {
                         evidence_idempotency_key,
                         order.base.id.as_str(),
                     )?;
-                    create_action(&db, &intent, session).await?;
+                    create_action(&db, &intent, executor).await?;
                     Ok::<Option<PreparedInvestigation>, Error>(None)
                 })
             })
@@ -417,19 +417,19 @@ impl SupplierFulfillmentProcess {
         let db = self.db.clone();
         let client = db.client().clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let mut evidence =
-                        db.supplier_order_actions()
-                            .find_by_id(&evidence_id, session)
-                            .await?
-                            .ok_or_else(|| Error::Internal("供应商调查意图记录不存在".to_string()))?;
+                    let mut evidence = db
+                        .supplier_order_actions()
+                        .find_by_id(&evidence_id, executor)
+                        .await?
+                        .ok_or_else(|| Error::Internal("供应商调查意图记录不存在".to_string()))?;
                     validate_investigation_intent(&evidence, &context.subject(), &evidence_idempotency_key)?;
                     if evidence.response_summary.is_some() {
                         return Ok(parse_prepared_investigation(&evidence, &context.subject())?);
                     }
                     prepare_durable_evidence(&mut evidence, &context.subject(), &prepared_for_tx)?;
-                    persist_action(&db, &mut evidence, session).await?;
+                    persist_action(&db, &mut evidence, executor).await?;
                     Ok::<PreparedInvestigation, Error>(prepared_for_tx)
                 })
             })

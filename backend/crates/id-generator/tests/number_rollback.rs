@@ -58,9 +58,9 @@ async fn number_taken_in_aborted_transaction_is_not_recycled() {
     let outcome = client
         .with_transaction::<_, String, TestTxnError>({
             let generator = generator.clone();
-            move |session| {
+            move |executor| {
                 Box::pin(async move {
-                    let number = generator.next_number(kind, date, session).await?;
+                    let number = generator.next_number(kind, date, executor).await?;
                     Err(TestTxnError::Abort(number))
                 })
             }

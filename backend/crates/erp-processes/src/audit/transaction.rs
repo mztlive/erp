@@ -7,8 +7,8 @@ use std::future::Future;
 use std::pin::Pin;
 
 use erp_audit::{AuditExt, AuditLog};
-use mongodb::{ClientSession, Database};
-use persistence_core::Transactional;
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 
 use crate::Result;
 
@@ -30,7 +30,7 @@ where
     R: Send + 'static,
     F: for<'a> FnOnce(
             &'a Database,
-            &'a mut ClientSession,
+            &'a mut dyn Executor,
         ) -> Pin<Box<dyn Future<Output = Result<R>> + Send + 'a>>
         + Send
         + 'static,
@@ -38,10 +38,10 @@ where
     let db = db.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
-                let result = write(&db, session).await?;
-                db.audit_logs().create(&audit, session).await?;
+                let result = write(&db, executor).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok(result)
             })
         })

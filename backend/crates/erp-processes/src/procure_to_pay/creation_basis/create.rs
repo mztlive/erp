@@ -28,7 +28,6 @@ use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, a
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::document_registry::new_registered_document;
 use id_generator::next_id;
-use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -36,7 +35,7 @@ use validator::Validate;
 use super::super::PurchaseOrderProcess;
 use super::super::adapter::{purchase_order_object_readable, purchase_order_responsible_org_id};
 use super::super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
-use super::super::create_submit::submit_created_draft_in_session;
+use super::super::create_submit::submit_created_draft;
 use super::super::procurement_task_sync::{
     load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
 };
@@ -137,9 +136,9 @@ impl PurchaseOrderProcess {
         let transaction_fingerprint = request_fingerprint.clone();
         let transaction_audit_id = audit_id.clone();
         let transaction_result = rbac
-            .run_authorized_policy_transaction(policy_revision, move |session| {
+            .run_authorized_policy_transaction(policy_revision, move |executor| {
                 Box::pin(async move {
-                    ensure_purchase_order_actor_account(&db, &transaction_actor, session).await?;
+                    ensure_purchase_order_actor_account(&db, &transaction_actor, executor).await?;
                     let command = CreateBasisCommand {
                         sales_order_id: &sales_order_id,
                         req: &transaction_req,
@@ -148,14 +147,8 @@ impl PurchaseOrderProcess {
                         request_fingerprint: &transaction_fingerprint,
                         actor: &transaction_actor,
                     };
-                    create_from_basis_in_transaction(
-                        &db,
-                        &binding_rbac,
-                        object_read.as_ref(),
-                        &command,
-                        session,
-                    )
-                    .await
+                    create_from_basis_apply(&db, &binding_rbac, object_read.as_ref(), &command, executor)
+                        .await
                 })
             })
             .await;
@@ -176,7 +169,7 @@ impl PurchaseOrderProcess {
 /// * `db` - MongoDB 数据库
 /// * `rbac` - 审批绑定授权源
 /// * `command` - 来源销售单、请求、幂等收据与审计操作人
-/// * `session` - MongoDB 事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回本次创建或事务内命中的幂等结果。
@@ -186,15 +179,15 @@ impl PurchaseOrderProcess {
 ///
 /// # 关键业务约束
 /// guard CAS 成功后必须再次按采购当前指针计算剩余量，并复用同一事务事实。
-async fn create_from_basis_in_transaction(
+async fn create_from_basis_apply(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
     object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     command: &CreateBasisCommand<'_>,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<CreatePurchaseOrderResult> {
     if let Some(result) =
-        replay_creation(db, command.audit_id, command.request_fingerprint, command.actor, session).await?
+        replay_creation(db, command.audit_id, command.request_fingerprint, command.actor, executor).await?
     {
         return Ok(result);
     }
@@ -203,11 +196,11 @@ async fn create_from_basis_in_transaction(
         &command.req.work_item_id,
         command.sales_order_id,
         command.actor.id(),
-        session,
+        executor,
     )
     .await?;
-    let mut order = load_effective_sales_order(db, command.sales_order_id, session).await?;
-    let groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
+    let mut order = load_effective_sales_order(db, command.sales_order_id, executor).await?;
+    let groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), executor).await?;
     let selected = find_requested_group(
         &sales_order_basis_fact(&order),
         &groups,
@@ -217,9 +210,9 @@ async fn create_from_basis_in_transaction(
     .clone();
     ensure_request_scope(command.req, &selected.scope)?;
     order.advance_procurement_guard(command.actor.id())?;
-    db.sales_orders().update(&mut order, session).await?;
+    db.sales_orders().update(&mut order, executor).await?;
     let (latest_groups, latest_facts) =
-        basis_groups_and_facts(db, &order, task.responsibility_scope_ids(), session).await?;
+        basis_groups_and_facts(db, &order, task.responsibility_scope_ids(), executor).await?;
     let latest = latest_groups
         .into_iter()
         .find(|group| group.scope == selected.scope)
@@ -231,7 +224,7 @@ async fn create_from_basis_in_transaction(
         selected_lines: &selected_lines,
         facts: &latest_facts,
     };
-    persist_basis_draft(db, rbac, object_read, &input, command, session).await
+    persist_basis_draft(db, rbac, object_read, &input, command, executor).await
 }
 
 /// guard 重算后的事务内创建输入：已完成 CAS 的销售单、最新依据范围、
@@ -260,7 +253,7 @@ pub struct VerifiedBasisInput<'a> {
 /// * `rbac` - 审批绑定授权源
 /// * `input` - guard 重算后的事务内创建输入（销售单、依据范围、本次行与事实）
 /// * `command` - 原始请求、命令收据与审计操作人
-/// * `session` - MongoDB 事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回已提交审批的创建结果。
@@ -278,7 +271,7 @@ pub async fn persist_basis_draft(
     object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     input: &VerifiedBasisInput<'_>,
     command: &CreateBasisCommand<'_>,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<CreatePurchaseOrderResult> {
     let sales_order = input.sales_order;
     let group = input.group;
@@ -289,7 +282,7 @@ pub async fn persist_basis_draft(
         rbac,
         group.scope.fulfillment_responsibility,
         command.req.target_warehouse_id.as_deref(),
-        session,
+        executor,
     )
     .await?;
     ensure_initial_purchase_order_owner(
@@ -297,7 +290,7 @@ pub async fn persist_basis_draft(
         rbac,
         group.scope.fulfillment_responsibility,
         command.actor.id(),
-        session,
+        executor,
     )
     .await?;
     let creation_basis_id = basis_id_for(
@@ -307,7 +300,7 @@ pub async fn persist_basis_draft(
         target_warehouse_id.as_ref(),
     );
     let business_org_unit_id =
-        crate::business_ownership::required_business_org(db, command.actor.id(), session).await?;
+        crate::business_ownership::required_business_org(db, command.actor.id(), executor).await?;
     let order_id = PurchaseOrderId::new(next_id());
     let mut order = PurchaseOrder::new(
         order_id.clone(),
@@ -339,7 +332,7 @@ pub async fn persist_basis_draft(
         &group.scope,
         &supplier_name,
         computed.totals,
-        session,
+        executor,
     )
     .await?;
     let submission_id = PurchaseOrderSubmissionId::new(submission.base.id.clone());
@@ -349,7 +342,7 @@ pub async fn persist_basis_draft(
     }
     order.attach_draft_submission(submission.base.id.clone().into())?;
     crate::adapters::purchase_access(db.clone(), rbac.clone())
-        .ensure_create_and_submit(command.actor, &order, session)
+        .ensure_create_and_submit(command.actor, &order, executor)
         .await?;
     let write = PreparedDraftWrite {
         sales_order,
@@ -358,14 +351,14 @@ pub async fn persist_basis_draft(
         lines: &submission_lines,
         actor: command.actor,
     };
-    write_prepared_draft(db, rbac, object_read, &write, session).await?;
-    let submitted = submit_created_draft_in_session(
+    write_prepared_draft(db, rbac, object_read, &write, executor).await?;
+    let submitted = submit_created_draft(
         db,
         sales_order,
         &order.base.id,
         command.actor,
         command.req.idempotency_key.as_str(),
-        session,
+        executor,
     )
     .await?;
     write_creation_receipt(
@@ -374,7 +367,7 @@ pub async fn persist_basis_draft(
         &order.base.id,
         submitted.purchase_no,
         submitted.lock_version,
-        session,
+        executor,
     )
     .await
 }
@@ -385,7 +378,7 @@ pub async fn persist_basis_draft(
 /// * `db` - MongoDB 数据库
 /// * `rbac` - 审批绑定授权源
 /// * `write` - 来源销售单、采购聚合与审计操作人
-/// * `session` - MongoDB 事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 写入成功返回 `Ok(())`。
@@ -400,7 +393,7 @@ async fn write_prepared_draft(
     rbac: &SharedRbacService,
     object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     write: &PreparedDraftWrite<'_>,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let organization_id = purchase_order_responsible_org_id(write.sales_order)?;
     let _ = purchase_order_object_readable(&organization_id, write.actor.id())?;
@@ -419,20 +412,20 @@ async fn write_prepared_draft(
         object_read,
         &bind_command,
         write.actor,
-        session,
+        executor,
     )
     .await?
     .ok_or_else(|| Error::Internal("采购单必须绑定已发布定义".to_string()))?;
     let mut document = new_registered_document(&write.order.base.id, DocumentType::PurchaseOrder, "")
         .map_err(crate::Error::from)?;
     attach_published_binding(&mut document, binding)?;
-    db.purchase_orders().create(write.order, session).await?;
-    db.business_documents().create(&document, session).await?;
-    db.purchase_order_submissions().create(write.submission, session).await?;
+    db.purchase_orders().create(write.order, executor).await?;
+    db.business_documents().create(&document, executor).await?;
+    db.purchase_order_submissions().create(write.submission, executor).await?;
     for line in write.lines {
-        db.purchase_order_submission_lines().create(line, session).await?;
+        db.purchase_order_submission_lines().create(line, executor).await?;
     }
-    sync_procurement_tasks_for_sales_order(db, &write.order.sales_order_id, session).await?;
+    sync_procurement_tasks_for_sales_order(db, &write.order.sales_order_id, executor).await?;
     Ok(())
 }
 
@@ -444,7 +437,7 @@ async fn write_prepared_draft(
 /// * `purchase_order_id` - 采购单主键
 /// * `purchase_no` - 提交后正式号
 /// * `lock_version` - 提交后乐观锁版本
-/// * `session` - MongoDB 事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回可回放的创建结果。
@@ -460,7 +453,7 @@ async fn write_creation_receipt(
     purchase_order_id: &str,
     purchase_no: String,
     lock_version: u64,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<CreatePurchaseOrderResult> {
     let receipt =
         CreationReceipt { purchase_order_id: purchase_order_id.to_string(), purchase_no, lock_version };
@@ -474,7 +467,7 @@ async fn write_creation_receipt(
                 .encode_message()?,
         ),
     )?;
-    db.audit_logs().create(&audit, session).await?;
+    db.audit_logs().create(&audit, executor).await?;
     Ok(receipt.into_result(false))
 }
 

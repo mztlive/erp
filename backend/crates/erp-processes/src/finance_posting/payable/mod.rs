@@ -139,7 +139,7 @@ mod supplier_payment_execution_tests {
         .next()
         .expect("生产代码");
         assert!(production.contains("record_payment_execution"));
-        assert!(production.contains("post_supplier_payment_in_transaction"));
+        assert!(production.contains("post_supplier_payment"));
         assert!(production.contains("PaymentPostSource::ExecutionTask"));
         assert!(!production.contains("pub async fn submit_supplier_payment"));
         assert!(!production.contains("prepare_start"));

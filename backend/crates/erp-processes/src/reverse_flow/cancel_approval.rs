@@ -207,7 +207,7 @@ pub(super) async fn persist_customer_refund_cancel(
     let db = db.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 super::cancel_write::persist(
                     super::cancel_write::MongoCancelWrite {
@@ -221,7 +221,7 @@ pub(super) async fn persist_customer_refund_cancel(
                         audit,
                         closed_tasks: Vec::new(),
                     },
-                    session,
+                    executor,
                 )
                 .await
             })
@@ -317,7 +317,7 @@ pub(super) async fn persist_supplier_refund_cancel(
     let db = db.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 super::cancel_write::persist(
                     super::cancel_write::MongoCancelWrite {
@@ -331,7 +331,7 @@ pub(super) async fn persist_supplier_refund_cancel(
                         audit,
                         closed_tasks: Vec::new(),
                     },
-                    session,
+                    executor,
                 )
                 .await
             })
@@ -434,7 +434,7 @@ pub(super) async fn persist_receipt_reversal_cancel(
     let db = db.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 super::cancel_write::persist(
                     super::cancel_write::MongoCancelWrite {
@@ -448,7 +448,7 @@ pub(super) async fn persist_receipt_reversal_cancel(
                         audit,
                         closed_tasks: Vec::new(),
                     },
-                    session,
+                    executor,
                 )
                 .await
             })
@@ -551,7 +551,7 @@ pub(super) async fn persist_payment_reversal_cancel(
     let db = db.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 super::cancel_write::persist(
                     super::cancel_write::MongoCancelWrite {
@@ -565,7 +565,7 @@ pub(super) async fn persist_payment_reversal_cancel(
                         audit,
                         closed_tasks: Vec::new(),
                     },
-                    session,
+                    executor,
                 )
                 .await
             })

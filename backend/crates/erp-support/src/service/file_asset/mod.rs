@@ -226,14 +226,14 @@ impl FileAssetService {
         let asset_for_tx = asset.clone();
         let audit_port = self.audit.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.file_assets().create(&asset_for_tx, session).await?;
-                    audit_port.persist(&asset_audit, session).await?;
+                    db.file_assets().create(&asset_for_tx, executor).await?;
+                    audit_port.persist(&asset_audit, executor).await?;
                     if let (Some(attachment), Some(audit)) = (attachment.as_ref(), attachment_audit.as_ref())
                     {
-                        db.document_attachments().create(attachment, session).await?;
-                        audit_port.persist(audit, session).await?;
+                        db.document_attachments().create(attachment, executor).await?;
+                        audit_port.persist(audit, executor).await?;
                     }
                     Ok::<(), crate::error::Error>(())
                 })
@@ -282,10 +282,10 @@ impl FileAssetService {
         let attachment_for_tx = attachment.clone();
         let audit_port = self.audit.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.document_attachments().create(&attachment_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.document_attachments().create(&attachment_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -415,10 +415,10 @@ impl FileAssetService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.file_assets().update(&mut asset, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.file_assets().update(&mut asset, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<FileAsset, crate::error::Error>(asset)
                 })
             })

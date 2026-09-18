@@ -92,7 +92,7 @@ async fn persist_created_receipt_reversal(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 persist_bound_receipt_reversal_document(
                     &db,
@@ -101,11 +101,11 @@ async fn persist_created_receipt_reversal(
                     document,
                     &bind_command,
                     &actor,
-                    session,
+                    executor,
                 )
                 .await?;
-                ReturnsService::persist_created_receipt_reversal(&db, &reversal, session).await?;
-                db.audit_logs().create(&audit, session).await?;
+                ReturnsService::persist_created_receipt_reversal(&db, &reversal, executor).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

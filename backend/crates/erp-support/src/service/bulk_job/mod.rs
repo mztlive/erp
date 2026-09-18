@@ -166,10 +166,10 @@ impl BulkJobService {
         let snapshot_for_tx = snapshot.clone();
         let audit_port = self.audit.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.bulk_job().create_snapshot_with_items(&snapshot_for_tx, items, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.bulk_job().create_snapshot_with_items(&snapshot_for_tx, items, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -373,11 +373,11 @@ impl BulkJobService {
         let job_for_tx = job.clone();
         let audit_port = self.audit.clone();
         let registration = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let registration =
-                        db.bulk_job().create_job_with_items(&job_for_tx, items, session).await?;
-                    audit_port.persist(&audit, session).await.map_err(support_error_as_persistence)?;
+                        db.bulk_job().create_job_with_items(&job_for_tx, items, executor).await?;
+                    audit_port.persist(&audit, executor).await.map_err(support_error_as_persistence)?;
                     Ok::<BackgroundJobRegistration, persistence_core::Error>(registration)
                 })
             })
@@ -456,10 +456,10 @@ impl BulkJobService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.background_jobs().update(&mut job, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.background_jobs().update(&mut job, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<BackgroundJob, crate::error::Error>(job)
                 })
             })
@@ -598,10 +598,10 @@ impl BulkJobService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.bulk_selection_snapshots().update(&mut snapshot, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.bulk_selection_snapshots().update(&mut snapshot, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<BulkSelectionSnapshot, crate::error::Error>(snapshot)
                 })
             })

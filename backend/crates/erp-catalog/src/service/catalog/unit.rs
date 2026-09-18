@@ -87,10 +87,10 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.unit_of_measures().update(&mut unit, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.unit_of_measures().update(&mut unit, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<UnitOfMeasure, crate::error::Error>(unit)
                 })
             })
@@ -122,10 +122,10 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.unit_of_measures().soft_delete(&mut unit, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.unit_of_measures().soft_delete(&mut unit, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })

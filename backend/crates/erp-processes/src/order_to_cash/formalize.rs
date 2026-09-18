@@ -215,7 +215,7 @@ fn build_procurement_work_items(
 /// # 参数
 /// * `db` - 数据库
 /// * `items` - 按负责人分组后的完整任务集合
-/// * `session` - 销售形式化事务会话
+/// * `executor` - 销售形式化事务执行器
 ///
 /// # 返回
 /// 全部任务已存在或全部创建成功时返回 `Ok(())`。
@@ -225,7 +225,7 @@ fn build_procurement_work_items(
 pub(super) async fn persist_procurement_work_items(
     db: &Database,
     items: &[WorkItem],
-    session: &mut dyn Executor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     for item in items {
         let responsibility_key =
@@ -235,7 +235,7 @@ pub(super) async fn persist_procurement_work_items(
             .list_open_procurement_by_responsibility(
                 &SalesOrderId::new(item.business_object_id.clone()),
                 responsibility_key,
-                session,
+                executor,
             )
             .await?;
         if existing.len() > 1 {
@@ -247,7 +247,7 @@ pub(super) async fn persist_procurement_work_items(
             return Err(Error::ConflictError("开放供给分配任务的冻结责任范围与当前解析不一致".to_string()));
         }
         if existing.is_empty() {
-            db.work_items().create(item, session).await?;
+            db.work_items().create(item, executor).await?;
         }
     }
     Ok(())

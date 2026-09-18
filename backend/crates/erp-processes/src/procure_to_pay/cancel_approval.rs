@@ -136,9 +136,9 @@ async fn replay_purchase_order_cancel(
     let command = command.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
-                replay_committed_document_cancel(&db, &command, session).await.map_err(Error::from)
+                replay_committed_document_cancel(&db, &command, executor).await.map_err(Error::from)
             })
         })
         .await
@@ -383,10 +383,10 @@ pub(super) async fn persist_purchase_order_cancel(
     let db = db.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 if let Some(scope) = &object_scope {
-                    scope.current(&order.base.id, session).await?;
+                    scope.current(&order.base.id, executor).await?;
                 }
                 execute_cancel_steps(
                     &mut CancelPosting {
@@ -396,7 +396,7 @@ pub(super) async fn persist_purchase_order_cancel(
                         order: &mut order,
                         audit: &audit,
                     },
-                    session,
+                    executor,
                 )
                 .await
             })

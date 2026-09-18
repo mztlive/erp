@@ -108,7 +108,7 @@ impl IntegrationResolutionProcess {
         receipt: IntegrationCommandIdentity,
     ) -> Result<DirectReconciliationResult> {
         let evidence = std::sync::Arc::clone(&self.evidence);
-        self.run_audited(move |db, session| {
+        self.run_audited(move |db, executor| {
             Box::pin(async move {
                 let prepared = PreparedDirectDecisionTarget::try_from(&command)?;
                 super::execution::run_direct(
@@ -120,7 +120,7 @@ impl IntegrationResolutionProcess {
                         actor: &actor,
                         receipt: &receipt,
                     },
-                    session,
+                    executor,
                 )
                 .await
             })

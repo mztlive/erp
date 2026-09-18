@@ -463,12 +463,12 @@ pub(super) async fn persist_sales_order_start(
         return Ok(submission_view);
     };
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
-                access.related_order(&order, session).await?;
-                access.revalidate(&order.base.id, expected_order_version, session).await?;
+                access.related_order(&order, executor).await?;
+                access.revalidate(&order.base.id, expected_order_version, executor).await?;
                 db.bpm_workflow()
-                    .insert_command_receipt(&writes.receipt, session)
+                    .insert_command_receipt(&writes.receipt, executor)
                     .await
                     .map_err(map_receipt_first_write_error)?;
                 let guarded = db
@@ -479,7 +479,7 @@ pub(super) async fn persist_sales_order_start(
                         &writes.instance.process_definition_id,
                         writes.instance.definition_version,
                         now,
-                        session,
+                        executor,
                     )
                     .await?;
                 if guarded.is_none() {
@@ -491,7 +491,7 @@ pub(super) async fn persist_sales_order_start(
                         &crate::order_to_cash::adapters::catalog::CatalogQualificationAdapter::new(
                             db.clone(),
                         ),
-                        session,
+                        executor,
                     )
                     .await?;
                 erp_sales::service::sales_order::SalesOrderService::new(db.clone())
@@ -501,10 +501,10 @@ pub(super) async fn persist_sales_order_start(
                         &submission,
                         &submission_lines,
                         working_copy_plan,
-                        session,
+                        executor,
                     )
                     .await?;
-                db.workflow_actions().create(&workflow_action, session).await?;
+                db.workflow_actions().create(&workflow_action, executor).await?;
                 persist_runtime_writes(
                     &db,
                     &writes,
@@ -515,10 +515,10 @@ pub(super) async fn persist_sales_order_start(
                         organization_id: &organization_id,
                         now,
                     },
-                    session,
+                    executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })
@@ -564,7 +564,7 @@ pub(super) struct SalesOrderRuntimeWriteInput<'a> {
 /// * `db` - 数据库
 /// * `writes` - 启动写入集合
 /// * `input` - 快照、单据类型与责任组织
-/// * `session` - 当前事务
+/// * `executor` - 当前执行器
 ///
 /// # 返回
 /// 成功时无返回值。
@@ -578,7 +578,7 @@ pub(super) async fn persist_runtime_writes(
     db: &Database,
     writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
     input: SalesOrderRuntimeWriteInput<'_>,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let SalesOrderRuntimeWriteInput { document_type, snapshot_payload, owner_role, organization_id, now } =
         input;
@@ -592,7 +592,7 @@ pub(super) async fn persist_runtime_writes(
             &writes.created_assignees,
             first,
             &list_projection_from_execution(first, now),
-            session,
+            executor,
         )
         .await?;
     let snapshot = ApprovalSubjectSnapshot::new(
@@ -604,8 +604,8 @@ pub(super) async fn persist_runtime_writes(
         snapshot_payload.clone(),
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
-    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, session).await?;
-    persist_open_tasks(db, writes, document_type, owner_role, organization_id, now, session).await
+    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
+    persist_open_tasks(db, writes, document_type, owner_role, organization_id, now, executor).await
 }
 
 /// 由入口执行构造有界列表投影。
@@ -640,7 +640,7 @@ fn list_projection_from_execution(
 /// * `owner_role` - 责任角色
 /// * `organization_id` - 责任组织
 /// * `now` - 创建时间
-/// * `session` - 当前事务
+/// * `executor` - 当前执行器
 ///
 /// # 错误
 /// 责任人为空或仓储失败时返回错误。
@@ -651,7 +651,7 @@ async fn persist_open_tasks(
     owner_role: &str,
     organization_id: &str,
     now: Instant,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     for intent in &writes.create_tasks {
         let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
@@ -672,7 +672,7 @@ async fn persist_open_tasks(
             },
             now,
         )?;
-        db.work_items().create(&item, session).await?;
+        db.work_items().create(&item, executor).await?;
     }
     Ok(())
 }

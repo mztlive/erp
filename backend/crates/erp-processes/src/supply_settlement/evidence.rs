@@ -50,7 +50,7 @@ impl SupplierSettlementProcess {
         let difference_id_for_tx = difference_id.to_string();
         let statement_id_for_tx = req.statement_id.clone();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     SupplierSettlementService::new(db.clone())
                         .persist_difference_evidence(
@@ -58,10 +58,10 @@ impl SupplierSettlementProcess {
                             &statement_id_for_tx,
                             expected_difference_version,
                             &evidence_for_tx,
-                            session,
+                            executor,
                         )
                         .await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

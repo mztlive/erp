@@ -59,11 +59,11 @@ impl SupplierFulfillmentProcess {
         let fingerprint_for_tx = fingerprint.clone();
         let terminal_action_id_for_tx = terminal_action_id.clone();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let mut work_item = db
                         .work_items()
-                        .find_by_id(command_for_tx.work_item_id.as_ref(), session)
+                        .find_by_id(command_for_tx.work_item_id.as_ref(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商履约正式任务不存在".to_string()))?;
                     validate_w26_task(
@@ -73,14 +73,14 @@ impl SupplierFulfillmentProcess {
                         &command_for_tx.expected_subject_version,
                         &actor_id,
                     )?;
-                    ensure_task_actor_eligible(&db, &work_item, &actor_id, session).await?;
+                    ensure_task_actor_eligible(&db, &work_item, &actor_id, executor).await?;
                     work_item_service(db.clone(), rbac_for_tx.clone())
-                        .ensure_domain_decision_access(&actor_for_tx, &work_item, session)
+                        .ensure_domain_decision_access(&actor_for_tx, &work_item, executor)
                         .await?;
 
                     let order = db
                         .supplier_fulfillment_orders()
-                        .find_by_id(command_for_tx.decision.order_id.as_ref(), session)
+                        .find_by_id(command_for_tx.decision.order_id.as_ref(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商履约订单不存在".to_string()))?;
                     order.ensure_version(command_for_tx.decision.expected_order_lock_version).map_err(
@@ -95,7 +95,7 @@ impl SupplierFulfillmentProcess {
                         .supplier_order_actions()
                         .find_by_id(
                             command_for_tx.decision.verified_supplier_action_result_id.as_ref(),
-                            session,
+                            executor,
                         )
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商结果证据不存在".to_string()))?;
@@ -103,7 +103,7 @@ impl SupplierFulfillmentProcess {
                         verified_terminal_evidence(&evidence, &order, command_for_tx.decision.resolution)?;
                     let target_action = db
                         .supplier_order_actions()
-                        .find_by_id(evidence_record.target_supplier_action_id(), session)
+                        .find_by_id(evidence_record.target_supplier_action_id(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("结果证据引用的原供应商动作不存在".to_string()))?;
                     ensure_current_resolution(&order, &target_action, command_for_tx.decision.resolution)?;
@@ -122,10 +122,10 @@ impl SupplierFulfillmentProcess {
                     erp_supply::service::supplier_fulfillment::investigate::create_action(
                         &db,
                         &terminal_action,
-                        session,
+                        executor,
                     )
                     .await?;
-                    db.work_items().update(&mut work_item, session).await?;
+                    db.work_items().update(&mut work_item, executor).await?;
                     let receipt = CompletionReceipt {
                         terminal_action_id: terminal_action.base.id.clone(),
                         order_version: order.base.version,
@@ -139,7 +139,7 @@ impl SupplierFulfillmentProcess {
                         order.base.id.clone(),
                         Some(completion_receipt_message(&fingerprint_for_tx, &receipt)),
                     )?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<CompletionReceipt, crate::Error>(receipt)
                 })
             })

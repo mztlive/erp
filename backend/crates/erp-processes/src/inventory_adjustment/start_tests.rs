@@ -171,14 +171,14 @@ fn generic_start_replay_paths_return_before_transaction_writes() {
         include_str!("../procure_to_pay/start_approval/start_persist.rs"),
         include_str!("../procure_to_pay/start_approval/start_receipt.rs"),
     )
-    .split("pub(crate) async fn persist_purchase_order_start_with_session(")
+    .split("pub(crate) async fn persist_purchase_order_start(")
     .nth(1)
     .expect("采购事务内启动入口必须存在");
     let replay_guard = procurement
         .find("if !matches!(&input.prepared, PreparedExecution::Apply(_)) {\n        return Ok(None);\n    }")
         .expect("采购Replay必须在调用写入Port前返回空任务");
     let first_write = procurement
-        .find("execute_start_steps(&mut posting, session).await?")
+        .find("execute_start_steps(&mut posting, executor).await?")
         .expect("采购必须调用真实生产写入Port");
     assert!(replay_guard < first_write, "采购Replay不得进入写入步骤");
 }

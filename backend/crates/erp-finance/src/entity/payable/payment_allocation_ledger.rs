@@ -22,7 +22,7 @@ use crate::entity::receivable::{checked_add_amount, zero_amount};
 
 /// 付款核销账本：以已装载分录事实逐行完成净额、余额、序号与实体构造。
 ///
-/// 构造规则（与 `PayableService::post_supplier_payment_in_transaction`
+/// 构造规则（与 `post_supplier_payment`
 /// 原实现一致，责任归位后 Service 不再手工求和）：
 /// - `new` 先按既有分配计算净已核销合计（`APPLY` 加、`REVERSE` 减）并与
 ///   待过账合计比对付款金额上限，同时冻结待过账行顺序；

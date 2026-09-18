@@ -72,11 +72,11 @@ pub(crate) async fn persist_stock_adjustment_cancel(
     let db = db.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 let persisted_adjustment = db
                     .inventory()
-                    .stock_adjustment(&adjustment.base.id, session)
+                    .stock_adjustment(&adjustment.base.id, executor)
                     .await?
                     .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
                 if persisted_adjustment.base.version != adjustment.base.version
@@ -89,7 +89,7 @@ pub(crate) async fn persist_stock_adjustment_cancel(
                     .bpm_workflow()
                     .find_instance_by_id(
                         &ApprovalProcessInstanceId::new(authorization_instance.base.id.clone()),
-                        session,
+                        executor,
                     )
                     .await?
                     .ok_or_else(|| Error::ConflictError("库存调整审批实例不存在".to_string()))?;
@@ -98,14 +98,14 @@ pub(crate) async fn persist_stock_adjustment_cancel(
                     &adjustment.base.id,
                     authorization_instance.subject_version,
                 )?;
-                let persisted_binding = load_approval_binding(&db, &adjustment.base.id, session).await?;
+                let persisted_binding = load_approval_binding(&db, &adjustment.base.id, executor).await?;
                 let persisted_binding = require_frozen_binding(persisted_binding.as_ref())?;
                 ensure_cancel_instance_binding(&persisted_instance, persisted_binding)?;
                 if persisted_binding != &binding || persisted_instance != authorization_instance {
                     return Err(Error::ConflictError("库存调整撤回事务内运行事实已变化".to_string()));
                 }
                 let authorization =
-                    ensure_cancel_authorized_with_executor(&db, &rbac, &persisted_instance, &actor, session)
+                    ensure_cancel_authorized_with_executor(&db, &rbac, &persisted_instance, &actor, executor)
                         .await?;
                 let current_open_tasks = revalidate_cancel_open_tasks(
                     &db,
@@ -113,7 +113,7 @@ pub(crate) async fn persist_stock_adjustment_cancel(
                     &authorization_execution,
                     &open_tasks,
                     &authorization,
-                    session,
+                    executor,
                 )
                 .await?;
                 let closed_tasks = WorkItem::close_all_for_approval_cancellation(
@@ -125,18 +125,18 @@ pub(crate) async fn persist_stock_adjustment_cancel(
                 // 唯一收据必须是事务内第一笔写入：并发同键只有一个事务获得
                 // 命令所有权；失败事务退出后由外层使用新会话回读并分类回放。
                 db.bpm_workflow()
-                    .insert_command_receipt(&writes.receipt, session)
+                    .insert_command_receipt(&writes.receipt, executor)
                     .await
                     .map_err(map_receipt_first_write_error)?;
-                db.stock_adjustments().update(&mut adjustment, session).await?;
+                db.stock_adjustments().update(&mut adjustment, executor).await?;
                 db.bpm_workflow()
                     .persist_cancelled_runtime_after_receipt(
                         &writes.instance,
                         &writes.updated_executions,
-                        session,
+                        executor,
                     )
                     .await?;
-                db.work_items().persist_cancelled_approval_tasks(&closed_tasks, session).await?;
+                db.work_items().persist_cancelled_approval_tasks(&closed_tasks, executor).await?;
                 persist_stock_adjustment_cancel_notifications(
                     &db,
                     StockAdjustmentCancelNotificationInput {
@@ -148,7 +148,7 @@ pub(crate) async fn persist_stock_adjustment_cancel(
                         document_no: &document_no,
                         now,
                     },
-                    session,
+                    executor,
                 )
                 .await?;
                 let audit = actor.clone().resource_log_with_message(
@@ -161,7 +161,7 @@ pub(crate) async fn persist_stock_adjustment_cancel(
                         authorization.authority.as_str()
                     )),
                 )?;
-                db.audit_logs().create(&audit, session).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<StockAdjustment, crate::Error>(adjustment)
             })
         })
@@ -235,7 +235,7 @@ pub(crate) struct StockAdjustmentCancelNotificationInput<'a> {
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `input` - 取消通知意图、授权与收件人上下文
-/// * `session` - 调用方事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 唯一取消通知写入 outbox 时返回 `Ok(())`。
@@ -248,7 +248,7 @@ pub(crate) struct StockAdjustmentCancelNotificationInput<'a> {
 pub(crate) async fn persist_stock_adjustment_cancel_notifications(
     db: &Database,
     input: StockAdjustmentCancelNotificationInput<'_>,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let [intent] = input.writes.notifications.as_slice() else {
         return Err(Error::Internal("库存调整普通撤回必须产生唯一取消通知意图".to_string()));
@@ -287,7 +287,7 @@ pub(crate) async fn persist_stock_adjustment_cancel_notifications(
         input.now,
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
-    db.approval_notification_outbox().create(&record, session).await?;
+    db.approval_notification_outbox().create(&record, executor).await?;
     Ok(())
 }
 
@@ -295,7 +295,7 @@ pub(crate) async fn persist_stock_adjustment_cancel_notifications(
 ///
 /// # 错误
 /// 调整单不存在、动作不匹配、状态迁移或 CAS 写入失败时返回错误。
-pub async fn cancel_stock_adjustment_approval_in_transaction(
+pub async fn cancel_stock_adjustment_approval_apply(
     db: &Database,
     context: &ApprovalActionContext,
     action: erp_workflow::service::approval::policy::ApprovalDomainAction,

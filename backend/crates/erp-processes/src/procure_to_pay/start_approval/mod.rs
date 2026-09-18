@@ -14,7 +14,6 @@ pub(crate) use start_input::tests;
 pub(super) use start_input::{PurchaseOrderStartInput, build_purchase_order_start_input};
 pub(super) use start_persist::{
     PurchaseOrderStartPersistInput, PurchaseSubmitProcurementGuard, persist_purchase_order_start,
-    persist_purchase_order_start_with_session,
 };
 pub(super) use start_receipt::{
     load_bound_definition_graph, load_bound_definition_graph_with_executor, load_start_receipt,

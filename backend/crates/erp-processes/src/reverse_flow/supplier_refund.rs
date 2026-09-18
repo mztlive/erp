@@ -153,9 +153,9 @@ impl ReturnsProcess {
         let actor_owned = actor.clone();
         let idempotency_key = req.idempotency_key;
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    validate_supplier_refund_source(&db, &source_fact_id, source_version, session).await?;
+                    validate_supplier_refund_source(&db, &source_fact_id, source_version, executor).await?;
                     let binding = persist_bound_supplier_refund_document(
                         &db,
                         &rbac,
@@ -163,10 +163,10 @@ impl ReturnsProcess {
                         document,
                         &bind_command,
                         &actor_owned,
-                        session,
+                        executor,
                     )
                     .await?;
-                    let graph = load_bound_definition_graph_with_executor(&db, &binding, session).await?;
+                    let graph = load_bound_definition_graph_with_executor(&db, &binding, executor).await?;
                     let start_input = build_supplier_refund_start_input(SupplierRefundStartInput {
                         graph,
                         binding: &binding,
@@ -179,7 +179,7 @@ impl ReturnsProcess {
                         now,
                     })?;
                     let prepared = prepare_start(start_input)?;
-                    ReturnsService::new(db.clone()).create_supplier_refund(&refund, session).await?;
+                    ReturnsService::new(db.clone()).create_supplier_refund(&refund, executor).await?;
                     if let erp_workflow::service::approval::execution::PreparedExecution::Apply(writes) =
                         prepared
                     {
@@ -190,13 +190,13 @@ impl ReturnsProcess {
                             adapter.owner_role,
                             &organization_id,
                             now,
-                            session,
+                            executor,
                         )
                         .await?;
                     }
-                    db.audit_logs().create(&create_audit, session).await?;
-                    db.audit_logs().create(&submit_audit, session).await?;
-                    db.audit_logs().create(&command_audit, session).await?;
+                    db.audit_logs().create(&create_audit, executor).await?;
+                    db.audit_logs().create(&submit_audit, executor).await?;
+                    db.audit_logs().create(&command_audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })
@@ -382,14 +382,14 @@ impl ReturnsProcess {
         let actor = actor.clone();
         self.db
             .client()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    ensure_return_start_actor_active(&db, &rbac, &actor, session).await?;
+                    ensure_return_start_actor_active(&db, &rbac, &actor, executor).await?;
                     let refund =
-                        ReturnsService::new(db.clone()).load_supplier_refund(&refund_id, session).await?;
+                        ReturnsService::new(db.clone()).load_supplier_refund(&refund_id, executor).await?;
                     let supplier = db
                         .supplier_accounts()
-                        .find_by_id(&refund.supplier_id, session)
+                        .find_by_id(&refund.supplier_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
                     let organization_id = supplier_refund_responsible_org_id(supplier.party_id.as_ref())?;
@@ -400,11 +400,11 @@ impl ReturnsProcess {
                         DocumentType::SupplierRefund,
                         "supplier_refund:submit",
                         &organization_id,
-                        session,
+                        executor,
                     )
                     .await?;
                     let binding =
-                        find_approval_binding(&db, &refund_id, session).await.map_err(crate::Error::from)?;
+                        find_approval_binding(&db, &refund_id, executor).await.map_err(crate::Error::from)?;
                     let binding = require_supplier_refund_binding(binding.as_ref())?;
                     let subject = supplier_refund_subject_ref(&refund_id)?;
                     for subject_version in replay_subject_versions(refund.approval_subject_version)? {
@@ -418,7 +418,7 @@ impl ReturnsProcess {
                                 binding,
                                 actor_id: actor.id(),
                             },
-                            session,
+                            executor,
                         )
                         .await?
                         {
@@ -446,14 +446,14 @@ impl ReturnsProcess {
         let actor = actor.clone();
         self.db
             .client()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    ensure_return_start_actor_active(&db, &rbac, &actor, session).await?;
+                    ensure_return_start_actor_active(&db, &rbac, &actor, executor).await?;
                     let refund =
-                        ReturnsService::new(db.clone()).load_supplier_refund(&refund_id, session).await?;
+                        ReturnsService::new(db.clone()).load_supplier_refund(&refund_id, executor).await?;
                     let supplier = db
                         .supplier_accounts()
-                        .find_by_id(&refund.supplier_id, session)
+                        .find_by_id(&refund.supplier_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
                     let organization_id = supplier_refund_responsible_org_id(supplier.party_id.as_ref())?;
@@ -464,11 +464,11 @@ impl ReturnsProcess {
                         DocumentType::SupplierRefund,
                         "supplier_refund:submit",
                         &organization_id,
-                        session,
+                        executor,
                     )
                     .await?;
                     let binding =
-                        find_approval_binding(&db, &refund_id, session).await.map_err(crate::Error::from)?;
+                        find_approval_binding(&db, &refund_id, executor).await.map_err(crate::Error::from)?;
                     let binding = require_supplier_refund_binding(binding.as_ref())?;
                     let subject = supplier_refund_subject_ref(&refund_id)?;
                     replay_return_start_with_executor(
@@ -481,7 +481,7 @@ impl ReturnsProcess {
                             binding,
                             actor_id: actor.id(),
                         },
-                        session,
+                        executor,
                     )
                     .await
                 })
@@ -574,9 +574,9 @@ impl ReturnsProcess {
         let refund_id = id.to_string();
         let detail_id = refund_id.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    apply_supplier_refund_final_post(&db, &refund_id, &actor_id, &actor_owned, session).await
+                    apply_supplier_refund_final_post(&db, &refund_id, &actor_id, &actor_owned, executor).await
                 })
             })
             .await?;
@@ -619,7 +619,7 @@ async fn persist_created_supplier_refund(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 persist_bound_supplier_refund_document(
                     &db,
@@ -628,11 +628,11 @@ async fn persist_created_supplier_refund(
                     document,
                     &bind_command,
                     &actor,
-                    session,
+                    executor,
                 )
                 .await?;
-                ReturnsService::new(db.clone()).create_supplier_refund(&refund, session).await?;
-                db.audit_logs().create(&audit, session).await?;
+                ReturnsService::new(db.clone()).create_supplier_refund(&refund, executor).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })
@@ -686,7 +686,7 @@ async fn persist_bound_supplier_refund_document(
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding> {
     let _ = supplier_refund_object_readable(
         &bind_command.context.organization_id,
@@ -698,12 +698,12 @@ async fn persist_bound_supplier_refund_document(
         object_read,
         bind_command,
         actor,
-        session,
+        executor,
     )
     .await?;
     let binding = binding.ok_or_else(|| Error::Internal("供应商退款单必须绑定已发布定义".to_string()))?;
     attach_published_binding(&mut document, binding.clone())?;
-    db.business_documents().create(&document, session).await?;
+    db.business_documents().create(&document, executor).await?;
     Ok(binding)
 }
 
@@ -716,18 +716,19 @@ pub(super) async fn apply_supplier_refund_final_post(
     refund_id: &str,
     actor_id: &str,
     actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
-    let mut refund = ReturnsService::new(db.clone()).prepare_supplier_refund_post(refund_id, session).await?;
+    let mut refund =
+        ReturnsService::new(db.clone()).prepare_supplier_refund_post(refund_id, executor).await?;
     execute_supplier_refund_domain_action(
         &mut refund,
         erp_workflow::service::approval::policy::ApprovalDomainAction::SupplierRefundPost,
     )?;
-    apply_supplier_refund_posting(db, &refund, actor_id, session).await?;
-    ReturnsService::new(db.clone()).persist_supplier_refund_post(&mut refund, session).await?;
+    apply_supplier_refund_posting(db, &refund, actor_id, executor).await?;
+    ReturnsService::new(db.clone()).persist_supplier_refund_post(&mut refund, executor).await?;
     let audit =
         actor.clone().resource_log("supplier_refund.post", "supplier_refund", refund.base.id.clone())?;
-    db.audit_logs().create(&audit, session).await?;
+    db.audit_logs().create(&audit, executor).await?;
     Ok(())
 }
 
@@ -739,16 +740,16 @@ async fn apply_supplier_refund_posting(
     db: &Database,
     refund: &SupplierRefund,
     actor_id: &str,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let original_payment_id = erp_returns::service::supplier_refund::original_payment_id(refund)?;
     let payment = erp_finance::service::payable::supplier_refund::load_posted_payment_for_refund(
         db,
         &original_payment_id,
-        session,
+        executor,
     )
     .await?;
-    ReturnsService::new(db.clone()).validate_supplier_refund_amount(refund, payment.amount, session).await?;
+    ReturnsService::new(db.clone()).validate_supplier_refund_amount(refund, payment.amount, executor).await?;
     erp_finance::service::payable::supplier_refund::persist_refund_offsets_and_reversals(
         db,
         &erp_finance::service::payable::supplier_refund::SupplierRefundPostingFact {
@@ -758,7 +759,7 @@ async fn apply_supplier_refund_posting(
         },
         &payment,
         actor_id,
-        session,
+        executor,
     )
     .await?;
     Ok(())

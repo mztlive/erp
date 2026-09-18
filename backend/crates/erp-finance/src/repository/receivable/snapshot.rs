@@ -856,12 +856,14 @@ mod tests {
 
             // 唯一键冲突整事务回滚：进度与分配零残留。
             let db_tx = db.clone();
-            let outcome = fixture.client().with_transaction(move |session| {
+            let outcome = fixture.client().with_transaction(move |executor| {
                 let db_tx = db_tx.clone();
                 Box::pin(async move {
                     let delta = [(ReceivableAccountId::new("acct-1"), Amount::from_str("10.00").unwrap())];
-                    let applied =
-                        db_tx.receivable_accounts().apply_settlements_many(&delta, "tester", session).await?;
+                    let applied = db_tx
+                        .receivable_accounts()
+                        .apply_settlements_many(&delta, "tester", executor)
+                        .await?;
                     if !applied.rejected.is_empty() {
                         return Err(persistence_core::Error::OptimisticLockingError);
                     }
@@ -872,7 +874,7 @@ mod tests {
                                 receipt_allocation("dup-1", "cr-h", "e-1", 1, "10.00"),
                                 receipt_allocation("dup-2", "cr-h", "e-1", 1, "10.00"),
                             ],
-                            session,
+                            executor,
                         )
                         .await?;
                     Ok(())

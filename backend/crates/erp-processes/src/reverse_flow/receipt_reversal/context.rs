@@ -8,7 +8,7 @@ use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 
 use super::super::adapter::{receipt_reversal_object_readable, receipt_reversal_responsible_org_id};
 use crate::{Error, Result};
@@ -41,7 +41,7 @@ pub(super) async fn persist_bound_receipt_reversal_document(
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding> {
     let _ = receipt_reversal_object_readable(
         &bind_command.context.organization_id,
@@ -53,11 +53,11 @@ pub(super) async fn persist_bound_receipt_reversal_document(
         object_read,
         bind_command,
         actor,
-        session,
+        executor,
     )
     .await?;
     let binding = binding.ok_or_else(|| Error::Internal("回款冲正单必须绑定已发布定义".to_string()))?;
     attach_published_binding(&mut document, binding.clone())?;
-    db.business_documents().create(&document, session).await?;
+    db.business_documents().create(&document, executor).await?;
     Ok(binding)
 }

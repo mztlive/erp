@@ -5,7 +5,8 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use persistence_core::Transactional;
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 
 use super::IntegrationResolutionProcess;
 use crate::Result;
@@ -25,14 +26,14 @@ impl IntegrationResolutionProcess {
     where
         R: Send,
         F: for<'a> FnOnce(
-                &'a mongodb::Database,
-                &'a mut mongodb::ClientSession,
+                &'a Database,
+                &'a mut dyn Executor,
             ) -> Pin<Box<dyn Future<Output = Result<R>> + Send + 'a>>
             + Send
             + 'static,
     {
         let db = self.db.clone();
         let client = db.client().clone();
-        client.with_transaction(move |session| Box::pin(async move { f(&db, session).await })).await
+        client.with_transaction(move |executor| Box::pin(async move { f(&db, executor).await })).await
     }
 }

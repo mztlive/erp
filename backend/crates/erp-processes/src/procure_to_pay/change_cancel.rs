@@ -20,7 +20,7 @@ use erp_workflow::service::approval::execution::{
 use erp_workflow::{BpmExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::change_start::load_bound_definition_graph;
 use crate::{Error, Result};
@@ -243,7 +243,7 @@ pub(super) async fn persist_purchase_change_cancel(
     let db = db.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 crate::adapters::purchase_access(db.clone(), rbac.clone())
                     .require_object(
@@ -251,15 +251,15 @@ pub(super) async fn persist_purchase_change_cancel(
                         "cancel_approval",
                         change_order.purchase_order_id.as_ref(),
                         &[],
-                        session,
+                        executor,
                     )
                     .await?;
                 if let PreparedExecution::Apply(writes) = prepared {
-                    persist_cancel_runtime(&db, &writes, &open_tasks, &actor_id, &reason, now, session)
+                    persist_cancel_runtime(&db, &writes, &open_tasks, &actor_id, &reason, now, executor)
                         .await?;
                 }
-                db.purchase_change_orders().update(&mut change_order, session).await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.purchase_change_orders().update(&mut change_order, executor).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })
@@ -277,7 +277,7 @@ async fn persist_cancel_runtime(
     actor_id: &str,
     reason: &str,
     now: Instant,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let expected_instance_version = writes
         .instance
@@ -297,7 +297,7 @@ async fn persist_cancel_runtime(
                 expected_instance_version,
                 &expected_execution_id,
                 &cancel_list_projection(now),
-                session,
+                executor,
             )
             .await?,
         "审批实例",
@@ -309,12 +309,12 @@ async fn persist_cancel_runtime(
             .checked_sub(1)
             .ok_or_else(|| Error::Internal("取消后执行版本非法".to_string()))?;
         require_cas_applied(
-            db.bpm_workflow().end_active_execution(execution, expected, session).await?,
+            db.bpm_workflow().end_active_execution(execution, expected, executor).await?,
             "审批执行",
         )?;
     }
-    db.approval_command_receipts().create(&writes.receipt, session).await?;
-    close_open_tasks(db, open_tasks, actor_id, reason, now, session).await
+    db.approval_command_receipts().create(&writes.receipt, executor).await?;
+    close_open_tasks(db, open_tasks, actor_id, reason, now, executor).await
 }
 
 /// 关闭当前开放审批任务。
@@ -327,7 +327,7 @@ async fn close_open_tasks(
     actor_id: &str,
     reason: &str,
     now: Instant,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     for item in open_tasks {
         let mut item = item.clone();
@@ -342,7 +342,7 @@ async fn close_open_tasks(
             now,
         )?;
         require_cas_applied(
-            db.work_items().close_approval_task(&item, expected, &execution_id, session).await?,
+            db.work_items().close_approval_task(&item, expected, &execution_id, executor).await?,
             "审批任务",
         )?;
     }

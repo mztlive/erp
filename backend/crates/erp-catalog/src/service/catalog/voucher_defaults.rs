@@ -71,10 +71,10 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let created = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.product_categories().create(&category_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.product_categories().create(&category_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -136,10 +136,10 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let created = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.product_brands().create(&brand_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.product_brands().create(&brand_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -201,10 +201,10 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let created = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.unit_of_measures().create(&unit_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.unit_of_measures().create(&unit_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })

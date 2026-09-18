@@ -12,8 +12,7 @@ use erp_audit::AuditActorLogs;
 use erp_procurement::dto::purchase_order::{EffectPurchaseChangeRequest, PurchaseChangeEffectResult};
 use erp_procurement::entity::purchase_order::PurchaseChangeOrder;
 use erp_workflow::service::approval::policy::ApprovalDomainAction;
-use mongodb::ClientSession;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::super::PurchaseOrderProcess;
@@ -63,13 +62,13 @@ impl PurchaseOrderProcess {
     ///
     /// # 错误
     /// 状态、基准版本、应付/成本差额或持久化不变量失败时返回错误。
-    pub async fn apply_effective_change_in_transaction(
+    pub async fn apply_effective_change_apply(
         &self,
         change_id: &str,
         actor: &AuditActor,
-        session: &mut ClientSession,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
-        let change = self.domain().load_change(change_id, session).await?;
+        let change = self.domain().load_change(change_id, executor).await?;
         execute_purchase_change_domain_action(
             &mut change.clone(),
             ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange,
@@ -78,7 +77,7 @@ impl PurchaseOrderProcess {
         let submission_id =
             change.submission_id_for_effect(None).map_err(|error| Error::ConflictError(error.to_string()))?;
         let prepared = self.prepare_effective_change_write(&change, submission_id.as_ref()).await?;
-        write_effective_change_in_transaction(&self.db, prepared.write, actor, session).await.map(|_| ())
+        write_effective_change_apply(&self.db, prepared.write, actor, executor).await.map(|_| ())
     }
 
     /// 准备生效修订与应付差额，并在同一事务内推进采购当前版本。
@@ -201,8 +200,8 @@ async fn write_effective_change(
     let client = db.client().clone();
     let actor = actor.clone();
     client
-        .with_transaction(move |session| {
-            Box::pin(async move { write_effective_change_in_transaction(&db, write, &actor, session).await })
+        .with_transaction(move |executor| {
+            Box::pin(async move { write_effective_change_apply(&db, write, &actor, executor).await })
         })
         .await
 }
@@ -211,11 +210,11 @@ async fn write_effective_change(
 ///
 /// # 错误
 /// 状态迁移或任一仓储写入失败时返回错误。
-async fn write_effective_change_in_transaction(
+async fn write_effective_change_apply(
     db: &mongodb::Database,
     mut write: EffectiveChangePosting,
     actor: &AuditActor,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<u64> {
     let audit = actor.clone().resource_log(
         "purchase_change_order.effect",
@@ -224,5 +223,5 @@ async fn write_effective_change_in_transaction(
     )?;
     let actor_id = actor.id().to_string();
     write.purchase.mark_effective(&actor_id)?;
-    super::posting::persist_effective_writes(db, write, audit, &actor_id, session).await
+    super::posting::persist_effective_writes(db, write, audit, &actor_id, executor).await
 }

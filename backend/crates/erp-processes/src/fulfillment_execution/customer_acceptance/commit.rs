@@ -90,13 +90,14 @@ impl CustomerAcceptanceProcess {
         let client = db.client().clone();
         let command_receipt_for_tx = command_receipt.clone();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let existing =
-                        FulfillmentService::load_customer_acceptance_commit_draft(&db, &req, session).await?;
+                        FulfillmentService::load_customer_acceptance_commit_draft(&db, &req, executor)
+                            .await?;
                     let order = db
                         .sales_orders()
-                        .find_by_id(req.sales_order_id.as_ref(), session)
+                        .find_by_id(req.sales_order_id.as_ref(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
                     if order.base.version != req.expected_sales_order_version {
@@ -108,7 +109,7 @@ impl CustomerAcceptanceProcess {
                         actor.id(),
                         req.work_item_id.as_deref(),
                         req.expected_task_version,
-                        session,
+                        executor,
                     )
                     .await?;
                     let (mut acceptance, is_new) = FulfillmentService::prepare_customer_acceptance_commit(
@@ -124,7 +125,7 @@ impl CustomerAcceptanceProcess {
                             object_read.as_ref(),
                             &acceptance,
                             &actor,
-                            session,
+                            executor,
                         )
                         .await?;
                     }
@@ -134,7 +135,7 @@ impl CustomerAcceptanceProcess {
                         is_new,
                         &final_lines,
                         &req,
-                        session,
+                        executor,
                     )
                     .await?;
                     complete_acceptance(
@@ -142,7 +143,7 @@ impl CustomerAcceptanceProcess {
                         &acceptance,
                         &actor,
                         CompletionKind::Commit { task, receipt: command_receipt_for_tx },
-                        session,
+                        executor,
                     )
                     .await?;
                     Ok::<CustomerAcceptance, crate::Error>(acceptance)

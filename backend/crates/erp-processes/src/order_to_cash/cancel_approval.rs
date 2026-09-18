@@ -223,14 +223,14 @@ pub(super) async fn persist_sales_order_cancel(
     let db = db.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
-                access.revalidate(&order.base.id, expected_order_version, session).await?;
-                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, session).await?;
+                access.revalidate(&order.base.id, expected_order_version, executor).await?;
+                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, executor).await?;
                 erp_sales::service::sales_order::SalesOrderService::new(db.clone())
-                    .persist_order(&mut order, session)
+                    .persist_order(&mut order, executor)
                     .await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

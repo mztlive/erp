@@ -76,7 +76,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         let name = name.to_string();
         let transaction_identity = identity.clone();
         let client = db.client().clone();
-        let outcome = client.with_transaction(move |session| {
+        let outcome = client.with_transaction(move |executor| {
             Box::pin(async move {
                 create_draft_tx(
                     &db,
@@ -89,7 +89,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
                         identity: &transaction_identity,
                         audit: audit.as_ref(),
                     },
-                    session,
+                    executor,
                 )
                 .await
             })
@@ -145,7 +145,7 @@ struct CreateDraftTxInput<'a> {
 /// * `db` - 数据库
 /// * `rbac` - 共享 RBAC 服务
 /// * `input` - 政策、请求、摘要与操作人
-/// * `session` - 事务会话
+/// * `executor` - 执行器
 ///
 /// # 返回
 /// 返回草稿详情。
@@ -159,27 +159,27 @@ async fn create_draft_tx(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     input: CreateDraftTxInput<'_>,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
     let CreateDraftTxInput { policy, name, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(rbac, actor, policy, session).await?;
+    ensure_definition_admin_permission(rbac, actor, policy, executor).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,
         &DefinitionResultExpectation::ProcessKind(policy.process_kind),
-        session,
+        executor,
     )
     .await?
     {
         return Ok(view);
     }
     let CreateDraftWriteStep::PersistNewDraftAndReceipt =
-        decide_create_draft_write(db.bpm_workflow().find_active_draft(policy.process_kind, session).await?)?;
-    let graph = build_new_draft(db, rbac, policy, name, request.draft_source, actor, session).await?;
+        decide_create_draft_write(db.bpm_workflow().find_active_draft(policy.process_kind, executor).await?)?;
+    let graph = build_new_draft(db, rbac, policy, name, request.draft_source, actor, executor).await?;
     let result_ref = DefinitionCommandResultRef::from_graph(&graph).encode();
-    write_receipt(db, &identity.current, &result_ref, session).await?;
-    persist_new_draft(db, &graph, session).await?;
-    write_definition_audit(audit, actor, "approval_definition.create_draft", &graph, None, None, session)
+    write_receipt(db, &identity.current, &result_ref, executor).await?;
+    persist_new_draft(db, &graph, executor).await?;
+    write_definition_audit(audit, actor, "approval_definition.create_draft", &graph, None, None, executor)
         .await?;
     Ok(detail_view(&graph))
 }

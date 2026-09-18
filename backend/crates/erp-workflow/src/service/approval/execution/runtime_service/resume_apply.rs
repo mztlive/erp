@@ -323,7 +323,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let recovery_identity = identity.clone();
         let recovery_instance_id = instance_id.clone();
         let view = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     if let Some((assignee_id, assignee_name, snapshot, spec)) =
                         stock_resume_revalidation.as_ref()
@@ -342,7 +342,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                                     snapshot.document_type,
                                 )?,
                             },
-                            session,
+                            executor,
                         )
                         .await?;
                         ensure_resume_approver_recovered(&eligibility)?;
@@ -368,7 +368,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                             document_no: &document_no,
                             submitted_by: &submitted_by,
                         },
-                        session,
+                        executor,
                     )
                     .await?;
                     Ok::<ApprovalCommandView, crate::error::Error>(map_command_view(
@@ -411,9 +411,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let identity = identity.clone();
         self.db
             .client()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    replay_resume_in_transaction(&db, &rbac, &actor, &instance_id, &identity, session).await
+                    replay_resume_apply(&db, &rbac, &actor, &instance_id, &identity, executor).await
                 })
             })
             .await
@@ -516,33 +516,33 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
 }
 
 /// 原审批人恢复回放先按当前账号与责任组织授权，再允许读取和比较收据。
-async fn replay_resume_in_transaction(
+async fn replay_resume_apply(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     actor: &AuditActor,
     instance_id: &str,
     identity: &PreparedCommandIdentity,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<Option<ApprovalCommandView>> {
     let instance = db
         .bpm_workflow()
-        .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), session)
+        .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), executor)
         .await?
         .ok_or_else(hidden_not_found)?;
-    let (_, snapshot) = load_exact_runtime_snapshot(db, &instance, session, true).await?;
+    let (_, snapshot) = load_exact_runtime_snapshot(db, &instance, executor, true).await?;
     let (recovery_scope, _) = crate::service::approval::scope::permission_scope_and_roles_with_executor(
         rbac,
         actor,
         "approval_instance:resume",
-        session,
+        executor,
     )
     .await?;
     if !recovery_scope.covers_object(
-        &rbac.approval_scope_object(snapshot.document_type, &snapshot.business_object_id, session).await?,
+        &rbac.approval_scope_object(snapshot.document_type, &snapshot.business_object_id, executor).await?,
     ) {
         return Err(Error::Forbidden("无权恢复该责任组织的审批实例".to_string()));
     }
-    let Some(receipt) = find_receipt_for_identity(db, identity, session).await? else {
+    let Some(receipt) = find_receipt_for_identity(db, identity, executor).await? else {
         return Ok(None);
     };
     if receipt.result_ref != instance_id {
@@ -553,7 +553,7 @@ async fn replay_resume_in_transaction(
         ReceiptBranch::Fresh => unreachable!("receipt was loaded"),
         ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
     }
-    persisted_command_view_with_executor(db, instance_id, CommitRequired::Proceed, true, session)
+    persisted_command_view_with_executor(db, instance_id, CommitRequired::Proceed, true, executor)
         .await
         .map(Some)
 }
@@ -563,7 +563,7 @@ async fn replay_resume_in_transaction(
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `input` - 恢复计划、CAS 版本、任务元数据与审计
-/// * `session` - 唯一事务会话
+/// * `executor` - 执行器
 ///
 /// # 返回
 /// 实例、执行、收据、新任务、通知与审计全部写入时返回 `Ok(())`。
@@ -576,7 +576,7 @@ async fn replay_resume_in_transaction(
 async fn persist_resume_writes(
     db: &Database,
     input: ResumePersistInput<'_>,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let [new_execution] = input.writes.created_executions.as_slice() else {
         return Err(Error::Internal("原审批人恢复必须且只能创建一个新执行".to_string()));
@@ -584,7 +584,7 @@ async fn persist_resume_writes(
     if let Some(guard) = input.closed_task_guard {
         let task = db
             .work_items()
-            .find_document_approval_by_id(&guard.task_id, session)
+            .find_document_approval_by_id(&guard.task_id, executor)
             .await?
             .ok_or_else(|| Error::ConflictError("原关闭审批任务不存在".to_string()))?;
         if task.status != WorkItemStatus::Closed
@@ -596,7 +596,7 @@ async fn persist_resume_writes(
     }
     // 收据是完成全部只读验证后的第一笔物理写，用唯一身份仲裁同键并发。
     db.bpm_workflow()
-        .insert_command_receipt(&input.writes.receipt, session)
+        .insert_command_receipt(&input.writes.receipt, executor)
         .await
         .map_err(map_receipt_first_write_error)?;
     let expected_execution_id = ApprovalNodeExecutionId::new(input.ended_execution_id);
@@ -607,7 +607,7 @@ async fn persist_resume_writes(
                 input.expected_instance_version,
                 &expected_execution_id,
                 input.list_projection,
-                session,
+                executor,
             )
             .await?,
         "审批实例",
@@ -618,7 +618,7 @@ async fn persist_resume_writes(
         }
         require_cas_applied(
             db.bpm_workflow()
-                .end_blocked_execution(execution, input.expected_execution_version, session)
+                .end_blocked_execution(execution, input.expected_execution_version, executor)
                 .await?,
             "受阻审批执行",
         )?;
@@ -626,7 +626,7 @@ async fn persist_resume_writes(
     if !input.writes.created_assignees.is_empty() {
         return Err(Error::Internal("原审批人恢复不得修改实例审批人绑定".to_string()));
     }
-    db.bpm_workflow().insert_execution(new_execution, session).await?;
+    db.bpm_workflow().insert_execution(new_execution, executor).await?;
     create_open_tasks(
         db,
         CreateOpenTasksInput {
@@ -638,7 +638,7 @@ async fn persist_resume_writes(
             business_object_id: input.business_object_id,
             now: input.now,
         },
-        session,
+        executor,
     )
     .await?;
     persist_resume_notifications(
@@ -651,10 +651,10 @@ async fn persist_resume_writes(
             document_no: input.document_no,
         },
         input.now,
-        session,
+        executor,
     )
     .await?;
-    input.audit_port.persist(input.audit, session).await?;
+    input.audit_port.persist(input.audit, executor).await?;
     Ok(())
 }
 

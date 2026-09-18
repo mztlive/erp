@@ -625,8 +625,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         self.db
             .client()
             .clone()
-            .with_transaction(move |session| {
-                Box::pin(async move { this.list_scoped_instances(&actor, &query, session).await })
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.list_scoped_instances(&actor, &query, executor).await })
             })
             .await
     }

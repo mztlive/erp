@@ -226,7 +226,7 @@ pub(super) async fn persist_sales_change_cancel(
     let db = db.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac)
                     .require_object(
@@ -234,14 +234,14 @@ pub(super) async fn persist_sales_change_cancel(
                         "cancel_approval",
                         change_order.sales_order_id.as_ref(),
                         &[],
-                        session,
+                        executor,
                     )
                     .await
                     .map_err(crate::Error::from)?;
-                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, session).await?;
-                erp_sales::service::sales_review::persist_cancelled_change(&db, &mut change_order, session)
+                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, executor).await?;
+                erp_sales::service::sales_review::persist_cancelled_change(&db, &mut change_order, executor)
                     .await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

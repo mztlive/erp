@@ -98,10 +98,10 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.product_categories().update(&mut category, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.product_categories().update(&mut category, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<ProductCategory, crate::error::Error>(category)
                 })
             })
@@ -146,10 +146,10 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.product_categories().update(&mut category, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.product_categories().update(&mut category, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<ProductCategory, crate::error::Error>(category)
                 })
             })
@@ -188,10 +188,10 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.product_categories().soft_delete(&mut category, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.product_categories().soft_delete(&mut category, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })

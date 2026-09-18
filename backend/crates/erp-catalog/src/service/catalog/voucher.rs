@@ -434,18 +434,18 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     if let Some(category) = &new_category {
-                        db.product_categories().create(category, session).await?;
+                        db.product_categories().create(category, executor).await?;
                     }
-                    db.products().create(&product, session).await?;
-                    db.catalog().create_product_revision_with_media(&revision, &[], session).await?;
+                    db.products().create(&product, executor).await?;
+                    db.catalog().create_product_revision_with_media(&revision, &[], executor).await?;
                     db.catalog()
-                        .create_sku_with_revision(&sku_item.sku, &sku_item.revision, &[], session)
+                        .create_sku_with_revision(&sku_item.sku, &sku_item.revision, &[], executor)
                         .await?;
-                    db.voucher_category_profile_revisions().create(&voucher_revision, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.voucher_category_profile_revisions().create(&voucher_revision, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<VoucherCategoryProfileRevision, crate::error::Error>(voucher_revision)
                 })
             })
@@ -678,14 +678,14 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.products().update(&mut product, session).await?;
-                    db.catalog().create_product_revision_with_media(&product_revision, &[], session).await?;
-                    db.skus().update(&mut sku, session).await?;
-                    db.sku_revisions().create(&sku_revision, session).await?;
-                    db.voucher_category_profile_revisions().create(&voucher_revision, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.products().update(&mut product, executor).await?;
+                    db.catalog().create_product_revision_with_media(&product_revision, &[], executor).await?;
+                    db.skus().update(&mut sku, executor).await?;
+                    db.sku_revisions().create(&sku_revision, executor).await?;
+                    db.voucher_category_profile_revisions().create(&voucher_revision, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<VoucherCategoryProfileRevision, crate::error::Error>(voucher_revision)
                 })
             })

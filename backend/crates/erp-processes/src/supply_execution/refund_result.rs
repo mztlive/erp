@@ -87,7 +87,7 @@ impl SupplierFulfillmentProcess {
         let message_for_tx = message.clone();
         let audit_for_tx = audit.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     super::refund_writes::persist(
                         &db,
@@ -96,7 +96,7 @@ impl SupplierFulfillmentProcess {
                         &fact_for_tx,
                         &allocations_for_tx,
                         &audit_for_tx,
-                        session,
+                        executor,
                     )
                     .await?;
                     Ok::<(), crate::Error>(())

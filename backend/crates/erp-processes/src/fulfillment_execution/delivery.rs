@@ -91,19 +91,19 @@ impl FulfillmentProcess {
         let actor_id = actor.id().to_string();
         let client = db.client().clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     erp_fulfillment::service::FulfillmentService::new(db.clone())
-                        .persist_delivery(&mut delivery, session)
+                        .persist_delivery(&mut delivery, executor)
                         .await?;
                     super::task::record_fulfillment_activity(
                         &db,
                         super::task::FulfillmentTaskObject::Delivery(&delivery),
                         &actor_id,
-                        session,
+                        executor,
                     )
                     .await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<Delivery, crate::Error>(delivery)
                 })
             })
@@ -250,7 +250,7 @@ async fn persist_created_delivery(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 register_created_delivery_document(
                     &db,
@@ -258,19 +258,19 @@ async fn persist_created_delivery(
                     object_read.as_ref(),
                     &delivery,
                     &actor,
-                    session,
+                    executor,
                 )
                 .await?;
                 erp_fulfillment::service::FulfillmentService::new(db.clone())
-                    .persist_created_delivery(&delivery, &lines, session)
+                    .persist_created_delivery(&delivery, &lines, executor)
                     .await?;
                 super::task::ensure_fulfillment_task(
                     &db,
                     super::task::FulfillmentTaskObject::Delivery(&delivery),
-                    session,
+                    executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

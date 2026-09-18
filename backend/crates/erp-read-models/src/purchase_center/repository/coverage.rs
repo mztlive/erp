@@ -689,25 +689,25 @@ mod isolation_tests {
             let db = fixture.db().clone();
             let client = db.client().clone();
             client
-                .with_transaction::<_, (), persistence_core::Error>(move |session| {
+                .with_transaction::<_, (), persistence_core::Error>(move |executor| {
                     let db = db.clone();
                     Box::pin(async move {
-                        // 同一 session 内写入新的草稿提交行并推进当前提交指针，
+                        // 同一 executor 内写入新的草稿提交行并推进当前提交指针，
                         // 事实加载必须立即可见。
                         db.purchase_order_submissions()
-                            .create(&submission("sub-txn", "po-draft"), session)
+                            .create(&submission("sub-txn", "po-draft"), executor)
                             .await?;
                         db.purchase_order_submission_lines()
-                            .create(&submission_line("subl-txn", "sub-txn", "sol-1"), session)
+                            .create(&submission_line("subl-txn", "sub-txn", "sol-1"), executor)
                             .await?;
                         let mut txn_order =
                             purchase_order("po-draft", PurchaseOrderStatus::Draft, Some("sub-txn"), None);
-                        db.purchase_orders().update(&mut txn_order, session).await?;
+                        db.purchase_orders().update(&mut txn_order, executor).await?;
                         let facts = load_procurement_coverage_facts(
                             &db,
                             &SalesOrderRevisionId::new("rev-1"),
                             &SalesOrderId::new("so-1"),
-                            session,
+                            executor,
                         )
                         .await?;
                         assert!(

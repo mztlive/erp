@@ -16,7 +16,6 @@ use erp_procurement::service::purchase_order::draft_edit::{
 };
 use erp_read_models::purchase_center::repository::load_sales_procurement_coverage;
 use erp_sales::repository::SalesOrderExt;
-use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -143,11 +142,11 @@ async fn execute_save_draft_transaction(
     let transaction_receipt_id = receipt_id.clone();
     let transaction_fingerprint = fingerprint.clone();
     let transaction_result = rbac
-        .run_authorized_policy_transaction(policy_revision, move |session| {
+        .run_authorized_policy_transaction(policy_revision, move |executor| {
             Box::pin(async move {
-                ensure_purchase_order_actor_account(&db, &transaction_actor, session).await?;
+                ensure_purchase_order_actor_account(&db, &transaction_actor, executor).await?;
                 object_scope
-                    .revalidate(&transaction_order_id, request.expected_lock_version, session)
+                    .revalidate(&transaction_order_id, request.expected_lock_version, executor)
                     .await?;
                 let command = SaveDraftCommand {
                     purchase_order_id: &transaction_order_id,
@@ -156,7 +155,7 @@ async fn execute_save_draft_transaction(
                     request_fingerprint: &transaction_fingerprint,
                     actor: &transaction_actor,
                 };
-                save_draft_in_transaction(&db, &command, session).await
+                save_draft_apply(&db, &command, executor).await
             })
         })
         .await;
@@ -169,7 +168,7 @@ async fn execute_save_draft_transaction(
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `command` - 保存请求、收据身份和操作人上下文
-/// * `session` - MongoDB 事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回首次保存结果或事务内命中的原收据结果。
@@ -179,10 +178,10 @@ async fn execute_save_draft_transaction(
 ///
 /// # 关键业务约束
 /// 事务内先查收据；未命中时先校验创建人，再校验版本和状态。
-async fn save_draft_in_transaction(
+async fn save_draft_apply(
     db: &mongodb::Database,
     command: &SaveDraftCommand<'_>,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<SavePurchaseOrderDraftResult> {
     if let Some(result) = replay_saved_draft(
         db,
@@ -190,13 +189,13 @@ async fn save_draft_in_transaction(
         command.request_fingerprint,
         command.purchase_order_id,
         command.actor,
-        session,
+        executor,
     )
     .await?
     {
         return Ok(result);
     }
-    let mut order = load_purchase_order(db, command.purchase_order_id, session).await?;
+    let mut order = load_purchase_order(db, command.purchase_order_id, executor).await?;
     ensure_save_target(
         &order.stable.created_by,
         order.base.version,
@@ -207,7 +206,7 @@ async fn save_draft_in_transaction(
     order
         .ensure_payment_term_unchanged(command.request.payment_term_code.as_deref())
         .map_err(map_draft_edit_violation)?;
-    replace_current_draft(db, &mut order, command, session).await
+    replace_current_draft(db, &mut order, command, executor).await
 }
 
 /// 加载并替换当前采购草稿提交。
@@ -216,7 +215,7 @@ async fn save_draft_in_transaction(
 /// * `db` - MongoDB 数据库
 /// * `order` - 已完成创建人、版本和状态校验的采购单
 /// * `command` - 保存请求、收据身份和操作人上下文
-/// * `session` - MongoDB 事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回事务内持久化后的保存结果。
@@ -230,10 +229,10 @@ async fn replace_current_draft(
     db: &mongodb::Database,
     order: &mut PurchaseOrder,
     command: &SaveDraftCommand<'_>,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<SavePurchaseOrderDraftResult> {
-    let (mut old_draft, old_lines) = load_current_draft(db, order, session).await?;
-    let coverage = advance_guard_and_load_coverage(db, order, command.actor.id(), session).await?;
+    let (mut old_draft, old_lines) = load_current_draft(db, order, executor).await?;
+    let coverage = advance_guard_and_load_coverage(db, order, command.actor.id(), executor).await?;
     let requested_lines = command.request.resolve_lines(&old_lines)?;
     let requested_edits =
         requested_lines.iter().map(SavePurchaseOrderLine::to_draft_edit).collect::<Vec<_>>();
@@ -243,7 +242,7 @@ async fn replace_current_draft(
     order.update(Default::default(), command.actor.id(), super::adapters::payment_term::parse)?;
     old_draft.mark_superseded()?;
     order.current_submission_id = Some(replacement.submission.base.id.clone());
-    persist_draft_replacement(db, order, &mut old_draft, &replacement, command, session).await
+    persist_draft_replacement(db, order, &mut old_draft, &replacement, command, executor).await
 }
 
 /// 推进销售采购 guard 并加载最新采购覆盖。
@@ -252,7 +251,7 @@ async fn replace_current_draft(
 /// * `db` - MongoDB 数据库
 /// * `order` - 当前采购单
 /// * `actor_id` - 当前操作人 ID
-/// * `session` - MongoDB 事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回 guard CAS 成功后的最新采购覆盖。
@@ -266,16 +265,16 @@ pub(super) async fn advance_guard_and_load_coverage(
     db: &mongodb::Database,
     order: &PurchaseOrder,
     actor_id: &str,
-    session: &mut dyn Executor,
+    executor: &mut dyn Executor,
 ) -> Result<SalesProcurementCoverage> {
     let mut sales_order = db
         .sales_orders()
-        .find_by_id(&order.sales_order_id, session)
+        .find_by_id(&order.sales_order_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
     sales_order.advance_procurement_guard(actor_id)?;
-    db.sales_orders().update(&mut sales_order, session).await?;
-    load_sales_procurement_coverage(db, &sales_order, session).await.map_err(crate::Error::from)
+    db.sales_orders().update(&mut sales_order, executor).await?;
+    load_sales_procurement_coverage(db, &sales_order, executor).await.map_err(crate::Error::from)
 }
 
 /// 持久化草稿替换、同步任务并写入稳定命令收据。
@@ -286,7 +285,7 @@ pub(super) async fn advance_guard_and_load_coverage(
 /// * `old_draft` - 已标记为被替代的旧草稿
 /// * `replacement` - 新草稿提交、完整行和金额
 /// * `command` - 保存请求、收据身份和操作人上下文
-/// * `session` - MongoDB 事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回首次成功响应中需要稳定回放的结果。
@@ -302,10 +301,10 @@ async fn persist_draft_replacement(
     old_draft: &mut PurchaseOrderSubmission,
     replacement: &DraftReplacement,
     command: &SaveDraftCommand<'_>,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<SavePurchaseOrderDraftResult> {
-    persist_replacement(db, order, old_draft, replacement, session).await?;
-    sync_procurement_tasks_for_sales_order(db, &order.sales_order_id, session).await?;
+    persist_replacement(db, order, old_draft, replacement, executor).await?;
+    sync_procurement_tasks_for_sales_order(db, &order.sales_order_id, executor).await?;
     let receipt = SaveDraftReceipt::from_saved(order, replacement);
     let audit = command.actor.clone().resource_log_with_id(
         command.receipt_id.to_string(),
@@ -317,7 +316,7 @@ async fn persist_draft_replacement(
                 .encode_message()?,
         ),
     )?;
-    db.audit_logs().create(&audit, session).await?;
+    db.audit_logs().create(&audit, executor).await?;
     Ok(receipt.into_result())
 }
 

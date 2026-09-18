@@ -82,15 +82,15 @@ impl ReturnsProcess {
             let recovered = self
                 .db
                 .client()
-                .with_transaction(move |session| {
+                .with_transaction(move |executor| {
                     Box::pin(async move {
-                        ensure_return_start_actor_active(&db, &rbac, &actor, session).await?;
+                        ensure_return_start_actor_active(&db, &rbac, &actor, executor).await?;
                         let refund = erp_returns::service::ReturnsService::new(db.clone())
-                            .load_customer_refund(&refund_id, session)
+                            .load_customer_refund(&refund_id, executor)
                             .await?;
                         let customer = db
                             .customer_accounts()
-                            .find_by_id(&refund.customer_id, session)
+                            .find_by_id(&refund.customer_id, executor)
                             .await?
                             .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
                         let organization_id = customer_refund_responsible_org_id(customer.party_id.as_ref())?;
@@ -101,10 +101,10 @@ impl ReturnsProcess {
                             DocumentType::CustomerRefund,
                             "customer_refund:submit",
                             &organization_id,
-                            session,
+                            executor,
                         )
                         .await?;
-                        let binding = find_approval_binding(&db, &refund_id, session)
+                        let binding = find_approval_binding(&db, &refund_id, executor)
                             .await
                             .map_err(crate::Error::from)?;
                         let binding = require_frozen_binding(binding.as_ref())?;
@@ -119,7 +119,7 @@ impl ReturnsProcess {
                                 binding,
                                 actor_id: actor.id(),
                             },
-                            session,
+                            executor,
                         )
                         .await
                     })
@@ -151,15 +151,15 @@ impl ReturnsProcess {
         let actor = actor.clone();
         self.db
             .client()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    ensure_return_start_actor_active(&db, &rbac, &actor, session).await?;
+                    ensure_return_start_actor_active(&db, &rbac, &actor, executor).await?;
                     let refund = erp_returns::service::ReturnsService::new(db.clone())
-                        .load_customer_refund(&refund_id, session)
+                        .load_customer_refund(&refund_id, executor)
                         .await?;
                     let customer = db
                         .customer_accounts()
-                        .find_by_id(&refund.customer_id, session)
+                        .find_by_id(&refund.customer_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
                     let organization_id = customer_refund_responsible_org_id(customer.party_id.as_ref())?;
@@ -170,11 +170,11 @@ impl ReturnsProcess {
                         DocumentType::CustomerRefund,
                         "customer_refund:submit",
                         &organization_id,
-                        session,
+                        executor,
                     )
                     .await?;
                     let binding =
-                        find_approval_binding(&db, &refund_id, session).await.map_err(crate::Error::from)?;
+                        find_approval_binding(&db, &refund_id, executor).await.map_err(crate::Error::from)?;
                     let binding = require_frozen_binding(binding.as_ref())?;
                     let subject = customer_refund_subject_ref(&refund_id)?;
                     for subject_version in replay_subject_versions(refund.approval_subject_version)? {
@@ -188,7 +188,7 @@ impl ReturnsProcess {
                                 binding,
                                 actor_id: actor.id(),
                             },
-                            session,
+                            executor,
                         )
                         .await?
                         {

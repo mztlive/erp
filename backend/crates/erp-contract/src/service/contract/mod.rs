@@ -174,10 +174,10 @@ impl ContractService {
             TxAuthorization::Create(customer_id),
             access,
             actor_for_tx,
-            Box::new(move |db, session| {
+            Box::new(move |db, executor| {
                 Box::pin(async move {
                     db.contract()
-                        .create_contract_with_revision(&mut contract_for_tx, &revision, session)
+                        .create_contract_with_revision(&mut contract_for_tx, &revision, executor)
                         .await?;
                     Ok::<(), crate::error::Error>(())
                 })
@@ -226,7 +226,7 @@ impl ContractService {
     ///
     /// # 错误
     /// 唯一索引冲突、乐观锁冲突或底层写入失败。
-    pub async fn apply_create_in_transaction(
+    pub async fn apply_create(
         &self,
         contract: &mut Contract,
         revision: &ContractRevision,
@@ -361,9 +361,11 @@ impl ContractService {
             TxAuthorization::Use(contract_id),
             access,
             actor_for_tx,
-            Box::new(move |db, session| {
+            Box::new(move |db, executor| {
                 Box::pin(async move {
-                    db.contract().archive_contract_revision(&mut contract_for_tx, &revision, session).await?;
+                    db.contract()
+                        .archive_contract_revision(&mut contract_for_tx, &revision, executor)
+                        .await?;
                     Ok::<(), crate::error::Error>(())
                 })
             }),
@@ -382,7 +384,7 @@ impl ContractService {
     ///
     /// # 错误
     /// 唯一索引冲突、乐观锁冲突或底层写入失败。
-    pub async fn apply_archive_in_transaction(
+    pub async fn apply_archive(
         &self,
         contract: &mut Contract,
         revision: &ContractRevision,
@@ -442,9 +444,9 @@ impl ContractService {
             TxAuthorization::Use(contract_id),
             access,
             actor_for_tx,
-            Box::new(move |db, session| {
+            Box::new(move |db, executor| {
                 Box::pin(async move {
-                    db.contracts().update(&mut contract, session).await?;
+                    db.contracts().update(&mut contract, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             }),
@@ -462,11 +464,7 @@ impl ContractService {
     ///
     /// # 错误
     /// 乐观锁冲突或底层写入失败。
-    pub async fn apply_terminate_in_transaction(
-        &self,
-        contract: &mut Contract,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
+    pub async fn apply_terminate(&self, contract: &mut Contract, executor: &mut dyn Executor) -> Result<()> {
         self.db.contracts().update(contract, executor).await?;
         Ok(())
     }
@@ -577,7 +575,7 @@ enum TxAuthorization {
 type TxAction = Box<
     dyn for<'a> FnOnce(
             &'a Database,
-            &'a mut mongodb::ClientSession,
+            &'a mut dyn Executor,
         ) -> std::pin::Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>
         + Send,
 >;
@@ -614,7 +612,7 @@ async fn execute_authorized_transaction(
     let client = db.client().clone();
     let db = db.clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             let db = db.clone();
             let audit_port = audit_port.clone();
             let audit = audit.clone();
@@ -624,14 +622,14 @@ async fn execute_authorized_transaction(
             Box::pin(async move {
                 match authorization {
                     TxAuthorization::Create(customer_id) => {
-                        access.require_create(&actor, &customer_id, session).await?;
+                        access.require_create(&actor, &customer_id, executor).await?;
                     },
                     TxAuthorization::Use(contract_id) => {
-                        access.require_with(actor, "update", &contract_id, session).await?;
+                        access.require_with(actor, "update", &contract_id, executor).await?;
                     },
                 }
-                action(&db, session).await?;
-                audit_port.persist(&audit, session).await?;
+                action(&db, executor).await?;
+                audit_port.persist(&audit, executor).await?;
                 Ok::<(), crate::error::Error>(())
             })
         })

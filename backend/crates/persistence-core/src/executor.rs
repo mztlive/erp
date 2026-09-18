@@ -42,8 +42,8 @@ impl Executor for NoTransaction {
 impl Executor for ClientSession {
     /// 返回自身作为本次操作的事务会话。
     ///
-    /// 该实现使 `Transactional::with_transaction` 回调拿到的 `&mut ClientSession`
-    /// 可以直接作为执行器传入 Repository。
+    /// 该实现使事务会话可作为执行器传入 Repository；`with_transaction`
+    /// 回调只暴露 `&mut dyn Executor`，不把会话类型传到业务层。
     ///
     /// # 返回值
     /// 恒为 `Some(self)`。

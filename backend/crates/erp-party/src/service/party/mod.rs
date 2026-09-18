@@ -159,11 +159,11 @@ impl PartyService {
         let party_for_tx = party.clone();
         let revision_for_tx = revision.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.party_revisions().create(&revision_for_tx, session).await?;
-                    db.parties().create(&party_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.party_revisions().create(&revision_for_tx, executor).await?;
+                    db.parties().create(&party_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -297,17 +297,17 @@ impl PartyService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let next_no = db
                         .party_revisions()
-                        .next_revision_no(&PartyId::new(prepared.party_id().to_string()), session)
+                        .next_revision_no(&PartyId::new(prepared.party_id().to_string()), executor)
                         .await?;
                     let (mut party, revision_for_tx, party_update) = prepared.into_parts();
                     let revision = PartyRevision { revision: RevisionBase::new(next_no), ..revision_for_tx };
                     party.update(party_update, &updated_by)?;
-                    db.party().append_party_revision(&mut party, &revision, &updated_by, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.party().append_party_revision(&mut party, &revision, &updated_by, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<Party, crate::error::Error>(party)
                 })
             })

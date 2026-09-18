@@ -53,10 +53,10 @@ impl IntegrationResolutionProcess {
         let audit =
             actor.clone().resource_log("inbox_message.register", "inbox_message", message.base.id.clone())?;
         let stored = message.clone();
-        self.run_audited(move |db, session| {
+        self.run_audited(move |db, executor| {
             Box::pin(async move {
-                persist_inbox_message(db, &stored, session).await?;
-                db.audit_logs().create(&audit, session).await?;
+                persist_inbox_message(db, &stored, executor).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok(())
             })
         })
@@ -107,11 +107,11 @@ impl IntegrationResolutionProcess {
                     message.base.id.clone(),
                 )?;
                 let stored = self
-                    .run_audited(move |db, session| {
+                    .run_audited(move |db, executor| {
                         let mut stored = message;
                         Box::pin(async move {
-                            update_inbox_message(db, &mut stored, session).await?;
-                            db.audit_logs().create(&audit, session).await?;
+                            update_inbox_message(db, &mut stored, executor).await?;
+                            db.audit_logs().create(&audit, executor).await?;
                             Ok(stored)
                         })
                     })
@@ -140,7 +140,7 @@ impl IntegrationResolutionProcess {
                     message.base.id.clone(),
                 )?;
                 let stored = self
-                    .run_audited(move |db, session| {
+                    .run_audited(move |db, executor| {
                         let mut stored = message;
                         Box::pin(async move {
                             persist_created(
@@ -148,7 +148,7 @@ impl IntegrationResolutionProcess {
                                 CreatedFact::FailedMessage { task: &task, message: &mut stored },
                                 &work_item,
                                 &audit,
-                                session,
+                                executor,
                             )
                             .await?;
                             Ok(stored)

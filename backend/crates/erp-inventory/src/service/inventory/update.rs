@@ -53,12 +53,12 @@ impl InventoryService {
         let adjustment_id = StockAdjustmentId::new(id.to_string());
         let actor = actor.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let authorization = authorization_port.authorize(&actor, session).await?;
+                    let authorization = authorization_port.authorize(&actor, executor).await?;
                     let mut adjustment = db
                         .inventory()
-                        .stock_adjustment(adjustment_id.as_ref(), session)
+                        .stock_adjustment(adjustment_id.as_ref(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
                     if !authorization.actor_is_active()
@@ -79,17 +79,20 @@ impl InventoryService {
                     if requires_line_validation {
                         let mut existing = db
                             .inventory()
-                            .adjustment_lines_by_adjustment_ids(std::slice::from_ref(&adjustment_id), session)
+                            .adjustment_lines_by_adjustment_ids(
+                                std::slice::from_ref(&adjustment_id),
+                                executor,
+                            )
                             .await?;
                         let changed = adjustment.apply_line_updates(&mut existing, &line_updates, false)?;
                         for line in &changed {
-                            if !db.inventory().persist_adjustment_line(line, session).await? {
+                            if !db.inventory().persist_adjustment_line(line, executor).await? {
                                 return Err(Error::NotFound("调整明细不存在".to_string()));
                             }
                         }
                     }
-                    db.stock_adjustments().update(&mut adjustment, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.stock_adjustments().update(&mut adjustment, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<StockAdjustment, crate::error::Error>(adjustment)
                 })
             })

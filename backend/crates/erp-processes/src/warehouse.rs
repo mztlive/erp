@@ -55,9 +55,9 @@ pub async fn create_warehouse_sku_policy(
     let audit =
         actor.clone().resource_log("warehouse_sku_policy.create", "warehouse_sku_policy", id.to_string())?;
     let policy_for_tx = policy.clone();
-    run_audited(&db, audit, move |db, session| {
+    run_audited(&db, audit, move |db, executor| {
         Box::pin(async move {
-            db.warehouse_sku_policies().create(&policy_for_tx, session).await?;
+            db.warehouse_sku_policies().create(&policy_for_tx, executor).await?;
             Ok(())
         })
     })

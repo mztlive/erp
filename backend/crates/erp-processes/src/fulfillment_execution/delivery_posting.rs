@@ -58,14 +58,14 @@ impl FulfillmentProcess {
         let db = self.db.clone();
         let client = db.client().clone();
         let posted = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (delivery, lines) = erp_fulfillment::service::FulfillmentService::new(db.clone())
                         .prepare_delivery_posting(
                             &delivery_id,
                             expected_version,
                             DeliveryUpdate { carrier, tracking_no },
-                            session,
+                            executor,
                         )
                         .await?;
                     let occurred_at = Instant::now();
@@ -73,7 +73,7 @@ impl FulfillmentProcess {
                     let line_count = lines.len();
                     let mut posting =
                         DeliveryPosting { db: &db, delivery_id, delivery, lines, occurred_at, actor };
-                    execute_posting(&mut posting, delivery_type, line_count, session).await?;
+                    execute_posting(&mut posting, delivery_type, line_count, executor).await?;
                     Ok::<Delivery, crate::Error>(posting.delivery)
                 })
             })

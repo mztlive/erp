@@ -28,7 +28,7 @@ use erp_supplier::{
 use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::create::create_tax_profile;
 use super::validation::resolve_supplier_file_references;
@@ -87,12 +87,12 @@ impl SupplierProfileService {
         let actor = actor.clone();
         let scoped_id = supplier_id.to_string();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     crate::adapters::supplier_access(db.clone(), rbac)
-                        .require_with(&actor, "update", &scoped_id, session)
+                        .require_with(&actor, "update", &scoped_id, executor)
                         .await?;
-                    prepared.persist(&db, session).await
+                    prepared.persist(&db, executor).await
                 })
             })
             .await;
@@ -812,54 +812,54 @@ impl PreparedUpdate {
     }
 
     /// 将完整资料修订与幂等结果写入同一事务。
-    async fn persist(mut self, db: &Database, session: &mut mongodb::ClientSession) -> Result<()> {
-        self.pending_assets.persist(db, session).await?;
-        self.persist_roots(db, session).await?;
-        self.facts.persist(db, session).await?;
-        self.capabilities.persist(db, session).await?;
-        self.qualifications.persist(db, session).await?;
-        self.ratings.persist(db, session).await?;
-        db.supplier_profile_commands().create(&self.command, session).await?;
-        db.audit_logs().create(&self.audit, session).await?;
+    async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
+        self.pending_assets.persist(db, executor).await?;
+        self.persist_roots(db, executor).await?;
+        self.facts.persist(db, executor).await?;
+        self.capabilities.persist(db, executor).await?;
+        self.qualifications.persist(db, executor).await?;
+        self.ratings.persist(db, executor).await?;
+        db.supplier_profile_commands().create(&self.command, executor).await?;
+        db.audit_logs().create(&self.audit, executor).await?;
         Ok(())
     }
 
     /// 写入 Party/Supplier 根及新修订。
-    async fn persist_roots(&mut self, db: &Database, session: &mut mongodb::ClientSession) -> Result<()> {
-        db.party_revisions().create(&self.party_revision, session).await?;
-        db.parties().update(&mut self.party, session).await?;
-        db.supplier_commercial_profile_revisions().create(&self.commercial_profile, session).await?;
-        db.supplier_accounts().update(&mut self.supplier, session).await?;
+    async fn persist_roots(&mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
+        db.party_revisions().create(&self.party_revision, executor).await?;
+        db.parties().update(&mut self.party, executor).await?;
+        db.supplier_commercial_profile_revisions().create(&self.commercial_profile, executor).await?;
+        db.supplier_accounts().update(&mut self.supplier, executor).await?;
         Ok(())
     }
 }
 
 impl PartyFactChanges {
     /// 写入从属事实的停用与新事实行。
-    async fn persist(mut self, db: &Database, session: &mut mongodb::ClientSession) -> Result<()> {
+    async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         for item in &mut self.contacts {
-            db.party_contacts().update(item, session).await?;
+            db.party_contacts().update(item, executor).await?;
         }
         if let Some(item) = &self.new_contact {
-            db.party_contacts().create(item, session).await?;
+            db.party_contacts().create(item, executor).await?;
         }
         for item in &mut self.addresses {
-            db.party_addresses().update(item, session).await?;
+            db.party_addresses().update(item, executor).await?;
         }
         if let Some(item) = &self.new_address {
-            db.party_addresses().create(item, session).await?;
+            db.party_addresses().create(item, executor).await?;
         }
         for item in &mut self.tax_profiles {
-            db.party_tax_profiles().update(item, session).await?;
+            db.party_tax_profiles().update(item, executor).await?;
         }
         if let Some(item) = &self.new_tax_profile {
-            db.party_tax_profiles().create(item, session).await?;
+            db.party_tax_profiles().create(item, executor).await?;
         }
         for item in &mut self.bank_accounts {
-            db.party_bank_accounts().update(item, session).await?;
+            db.party_bank_accounts().update(item, executor).await?;
         }
         if let Some(item) = &self.new_bank_account {
-            db.party_bank_accounts().create(item, session).await?;
+            db.party_bank_accounts().create(item, executor).await?;
         }
         Ok(())
     }
@@ -867,15 +867,15 @@ impl PartyFactChanges {
 
 impl CapabilityChanges {
     /// 写入能力快照及当前实体变更。
-    async fn persist(mut self, db: &Database, session: &mut mongodb::ClientSession) -> Result<()> {
+    async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         for revision in &self.revisions {
-            db.supplier_capability_revisions().create(revision, session).await?;
+            db.supplier_capability_revisions().create(revision, executor).await?;
         }
         for capability in &self.created {
-            db.supplier_capabilities().create(capability, session).await?;
+            db.supplier_capabilities().create(capability, executor).await?;
         }
         for capability in &mut self.updated {
-            db.supplier_capabilities().update(capability, session).await?;
+            db.supplier_capabilities().update(capability, executor).await?;
         }
         Ok(())
     }
@@ -883,18 +883,18 @@ impl CapabilityChanges {
 
 impl QualificationChanges {
     /// 写入资质快照、当前实体和整体替换后的能力关联。
-    async fn persist(mut self, db: &Database, session: &mut mongodb::ClientSession) -> Result<()> {
+    async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         for revision in &self.revisions {
-            db.supplier_qualification_revisions().create(revision, session).await?;
+            db.supplier_qualification_revisions().create(revision, executor).await?;
         }
         for qualification in &self.created {
-            db.supplier_qualifications().create(qualification, session).await?;
+            db.supplier_qualifications().create(qualification, executor).await?;
         }
         for qualification in &mut self.updated {
-            db.supplier_qualifications().update(qualification, session).await?;
+            db.supplier_qualifications().update(qualification, executor).await?;
         }
         for (qualification_id, links) in self.replacements {
-            db.supplier().replace_qualification_capabilities(&qualification_id, links, session).await?;
+            db.supplier().replace_qualification_capabilities(&qualification_id, links, executor).await?;
         }
         Ok(())
     }
@@ -902,12 +902,12 @@ impl QualificationChanges {
 
 impl RatingChanges {
     /// 关闭上一开放区间并写入下一评级版本。
-    async fn persist(mut self, db: &Database, session: &mut mongodb::ClientSession) -> Result<()> {
+    async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         if let Some(current) = self.current.as_mut() {
-            db.supplier_rating_revisions().update(current, session).await?;
+            db.supplier_rating_revisions().update(current, executor).await?;
         }
         if let Some(created) = &self.created {
-            db.supplier_rating_revisions().create(created, session).await?;
+            db.supplier_rating_revisions().create(created, executor).await?;
         }
         Ok(())
     }

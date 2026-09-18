@@ -166,13 +166,13 @@ impl PartyAddressService {
         let address_for_tx = address.clone();
         let party_id_for_tx = address.party_id.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     if address_for_tx.is_default {
-                        clear_default_marks!(db, party_addresses, party_id_for_tx, None, session);
+                        clear_default_marks!(db, party_addresses, party_id_for_tx, None, executor);
                     }
-                    db.party_addresses().create(&address_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.party_addresses().create(&address_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -231,7 +231,7 @@ impl PartyAddressService {
         let party_id_for_tx = address.party_id.clone();
         let exclude_id = address.base.id.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     if address_for_tx.is_default {
                         clear_default_marks!(
@@ -239,11 +239,11 @@ impl PartyAddressService {
                             party_addresses,
                             party_id_for_tx,
                             Some(&exclude_id),
-                            session
+                            executor
                         );
                     }
-                    db.party_addresses().update(&mut address_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.party_addresses().update(&mut address_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<PartyAddress, crate::error::Error>(address_for_tx)
                 })
             })

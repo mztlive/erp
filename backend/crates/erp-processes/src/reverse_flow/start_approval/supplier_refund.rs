@@ -17,7 +17,7 @@ use erp_workflow::service::approval::execution::{
 use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::Transactional;
+use persistence_core::{Executor, Transactional};
 
 use super::super::adapter::supplier_refund_object_readable;
 use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_start_input};
@@ -215,10 +215,10 @@ pub async fn persist_supplier_refund_start(
     let db = db.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 db.bpm_workflow()
-                    .insert_command_receipt(&writes.receipt, session)
+                    .insert_command_receipt(&writes.receipt, executor)
                     .await
                     .map_err(map_receipt_first_write_error)?;
                 let guarded = db
@@ -229,7 +229,7 @@ pub async fn persist_supplier_refund_start(
                         &writes.instance.process_definition_id,
                         writes.instance.definition_version,
                         now,
-                        session,
+                        executor,
                     )
                     .await?;
                 if guarded.is_none() {
@@ -238,7 +238,7 @@ pub async fn persist_supplier_refund_start(
                     ));
                 }
                 let mut refund = refund;
-                erp_returns::service::ReturnsService::persist_supplier_refund(&db, &mut refund, session)
+                erp_returns::service::ReturnsService::persist_supplier_refund(&db, &mut refund, executor)
                     .await?;
                 persist_supplier_refund_runtime(
                     &db,
@@ -247,10 +247,10 @@ pub async fn persist_supplier_refund_start(
                     owner_role,
                     &organization_id,
                     now,
-                    session,
+                    executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<SupplierRefund, crate::Error>(refund)
             })
         })
@@ -268,7 +268,7 @@ pub async fn persist_supplier_refund_runtime(
     owner_role: &str,
     organization_id: &str,
     now: Instant,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let first = writes
         .created_executions
@@ -280,7 +280,7 @@ pub async fn persist_supplier_refund_runtime(
             &writes.created_assignees,
             first,
             &list_projection_from_execution(first, now),
-            session,
+            executor,
         )
         .await?;
     let mut snapshot = ApprovalSubjectSnapshot::new(
@@ -297,12 +297,12 @@ pub async fn persist_supplier_refund_runtime(
             db,
             snapshot.document_type,
             &snapshot.business_object_id,
-            session,
+            executor,
         )
         .await?,
     );
-    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, session).await?;
-    persist_supplier_refund_open_tasks(db, writes, owner_role, organization_id, now, session).await
+    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
+    persist_supplier_refund_open_tasks(db, writes, owner_role, organization_id, now, executor).await
 }
 
 /// 将供应商退款 `HumanTaskRequested` 映射为 `DOCUMENT_APPROVAL` 任务并写入。
@@ -315,7 +315,7 @@ async fn persist_supplier_refund_open_tasks(
     owner_role: &str,
     organization_id: &str,
     now: Instant,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     for intent in &writes.create_tasks {
         let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
@@ -336,7 +336,7 @@ async fn persist_supplier_refund_open_tasks(
             },
             now,
         )?;
-        db.work_items().create(&item, session).await?;
+        db.work_items().create(&item, executor).await?;
     }
     Ok(())
 }

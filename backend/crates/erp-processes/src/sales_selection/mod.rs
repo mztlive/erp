@@ -123,7 +123,7 @@ impl SalesSelectionProcess {
         let rbac = self.require_rbac()?;
         let client = db.client().clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 let req = req.clone();
                 let actor = actor.clone();
                 let db = db.clone();
@@ -135,11 +135,11 @@ impl SalesSelectionProcess {
                         &actor,
                         &req.sales_owner_user_id,
                         &req.business_org_unit_id,
-                        session,
+                        executor,
                     )
                     .await?;
                     SalesSelectionService::new(db)
-                        .create(req, actor.id(), &customer, session)
+                        .create(req, actor.id(), &customer, executor)
                         .await
                         .map_err(Error::from)
                 })
@@ -498,11 +498,11 @@ impl SalesSelectionProcess {
         let db = self.db.clone();
         let client = db.client().clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 let db = db.clone();
                 Box::pin(async move {
                     SalesSelectionService::new(db)
-                        .public_save(&token, req, Instant::now(), session)
+                        .public_save(&token, req, Instant::now(), executor)
                         .await
                         .map_err(Error::from)
                 })
@@ -532,11 +532,11 @@ impl SalesSelectionProcess {
         let db = self.db.clone();
         let client = db.client().clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 let db = db.clone();
                 Box::pin(async move {
                     SalesSelectionService::new(db)
-                        .public_submit(&token, req, Instant::now(), session)
+                        .public_submit(&token, req, Instant::now(), executor)
                         .await
                         .map_err(Error::from)
                 })

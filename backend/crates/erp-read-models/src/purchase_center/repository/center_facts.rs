@@ -355,11 +355,11 @@ mod isolation_tests {
             let db = fixture.db().clone();
             let client = db.client().clone();
             client
-                .with_transaction::<_, (), persistence_core::Error>(move |session| {
+                .with_transaction::<_, (), persistence_core::Error>(move |executor| {
                     let db = db.clone();
                     Box::pin(async move {
-                        db.purchase_orders().create(&order("po-txn", None, None), session).await?;
-                        let facts = load_purchase_order_center_facts(&db, "po-txn", session).await?;
+                        db.purchase_orders().create(&order("po-txn", None, None), executor).await?;
+                        let facts = load_purchase_order_center_facts(&db, "po-txn", executor).await?;
                         assert!(facts.order.is_some(), "事务内应能 read-your-writes");
                         Ok(())
                     })

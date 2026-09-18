@@ -177,13 +177,13 @@ impl PartyBankAccountService {
         let account_for_tx = account.clone();
         let party_id_for_tx = account.party_id.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     if account_for_tx.is_default {
-                        clear_default_marks!(db, party_bank_accounts, party_id_for_tx, None, session);
+                        clear_default_marks!(db, party_bank_accounts, party_id_for_tx, None, executor);
                     }
-                    db.party_bank_accounts().create(&account_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.party_bank_accounts().create(&account_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -242,7 +242,7 @@ impl PartyBankAccountService {
         let party_id_for_tx = account.party_id.clone();
         let exclude_id = account.base.id.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     if account_for_tx.is_default {
                         clear_default_marks!(
@@ -250,11 +250,11 @@ impl PartyBankAccountService {
                             party_bank_accounts,
                             party_id_for_tx,
                             Some(&exclude_id),
-                            session
+                            executor
                         );
                     }
-                    db.party_bank_accounts().update(&mut account_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.party_bank_accounts().update(&mut account_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<PartyBankAccount, crate::error::Error>(account_for_tx)
                 })
             })

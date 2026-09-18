@@ -21,8 +21,7 @@ use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, a
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
-use mongodb::ClientSession;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::super::PurchaseOrderProcess;
@@ -453,26 +452,26 @@ impl PurchaseOrderProcess {
             let recovered = self
                 .db
                 .client()
-                .with_transaction(move |session| {
+                .with_transaction(move |executor| {
                     Box::pin(async move {
                         let change = db
                             .purchase_change_orders()
-                            .find_by_id(&change_order_id, session)
+                            .find_by_id(&change_order_id, executor)
                             .await?
                             .ok_or_else(|| Error::NotFound("采购变更单不存在".to_string()))?;
                         let order = db
                             .purchase_orders()
-                            .find_by_id(&change.purchase_order_id, session)
+                            .find_by_id(&change.purchase_order_id, executor)
                             .await?
                             .ok_or_else(|| Error::NotFound("原采购单不存在".to_string()))?;
                         let sales_order = db
                             .sales_orders()
-                            .find_by_id(&order.sales_order_id, session)
+                            .find_by_id(&order.sales_order_id, executor)
                             .await?
                             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
                         let organization_id = purchase_change_responsible_org_id(&sales_order)?;
                         let _ = purchase_change_order_object_readable(&organization_id, &actor_id)?;
-                        let binding = find_approval_binding(&db, &change_order_id, session)
+                        let binding = find_approval_binding(&db, &change_order_id, executor)
                             .await
                             .map_err(crate::Error::from)?;
                         let binding = require_frozen_binding(binding.as_ref())?;
@@ -484,7 +483,7 @@ impl PurchaseOrderProcess {
                             &idempotency_key,
                             binding,
                             &actor_id,
-                            session,
+                            executor,
                         )
                         .await?
                         else {
@@ -500,7 +499,7 @@ impl PurchaseOrderProcess {
                         })?;
                         let submission = db
                             .purchase_change_submissions()
-                            .find_by_id(submission_id, session)
+                            .find_by_id(submission_id, executor)
                             .await?
                             .ok_or_else(|| Error::ConflictError("采购变更冻结提交不存在".to_string()))?;
                         if submission.purchase_change_order_id.as_ref() != change_order_id {
@@ -643,10 +642,10 @@ async fn persist_created_change_order(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 crate::adapters::purchase_access(db.clone(), rbac.clone())
-                    .require_object(&actor, "update", change_order.purchase_order_id.as_ref(), &[], session)
+                    .require_object(&actor, "update", change_order.purchase_order_id.as_ref(), &[], executor)
                     .await?;
                 persist_bound_change_document(
                     &db,
@@ -655,11 +654,11 @@ async fn persist_created_change_order(
                     &mut document,
                     &bind_command,
                     &actor,
-                    session,
+                    executor,
                 )
                 .await?;
-                db.purchase_change_orders().create(&change_order, session).await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.purchase_change_orders().create(&change_order, executor).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })
@@ -677,7 +676,7 @@ async fn persist_bound_change_document(
     document: &mut BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let _ = purchase_change_order_object_readable(
         &bind_command.context.organization_id,
@@ -689,11 +688,11 @@ async fn persist_bound_change_document(
         object_read,
         bind_command,
         actor,
-        session,
+        executor,
     )
     .await?;
     let binding = binding.ok_or_else(|| Error::Internal("采购变更单必须绑定已发布定义".to_string()))?;
     attach_published_binding(document, binding)?;
-    db.business_documents().create(document, session).await?;
+    db.business_documents().create(document, executor).await?;
     Ok(())
 }

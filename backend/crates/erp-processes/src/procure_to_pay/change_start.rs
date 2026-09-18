@@ -390,13 +390,13 @@ pub(super) async fn persist_purchase_change_start(
         return Ok(());
     };
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 crate::adapters::purchase_access(db.clone(), rbac.clone())
-                    .require_object(&actor, "submit", change_order.purchase_order_id.as_ref(), &[], session)
+                    .require_object(&actor, "submit", change_order.purchase_order_id.as_ref(), &[], executor)
                     .await?;
                 db.bpm_workflow()
-                    .insert_command_receipt(&writes.receipt, session)
+                    .insert_command_receipt(&writes.receipt, executor)
                     .await
                     .map_err(map_receipt_first_write_error)?;
                 let guarded = db
@@ -407,14 +407,14 @@ pub(super) async fn persist_purchase_change_start(
                         &writes.instance.process_definition_id,
                         writes.instance.definition_version,
                         now,
-                        session,
+                        executor,
                     )
                     .await?;
                 if guarded.is_none() {
                     return Err(Error::ConflictError("采购变更单审批启动守卫冲突，请刷新后重试".to_string()));
                 }
                 db.purchase_order()
-                    .create_change_submission(&mut change_order, &submission, &submission_lines, session)
+                    .create_change_submission(&mut change_order, &submission, &submission_lines, executor)
                     .await?;
                 persist_runtime_writes(
                     &db,
@@ -423,10 +423,10 @@ pub(super) async fn persist_purchase_change_start(
                     owner_role,
                     &organization_id,
                     now,
-                    session,
+                    executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })
@@ -444,7 +444,7 @@ async fn persist_runtime_writes(
     owner_role: &str,
     organization_id: &str,
     now: Instant,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let first = writes
         .created_executions
@@ -456,7 +456,7 @@ async fn persist_runtime_writes(
             &writes.created_assignees,
             first,
             &list_projection_from_execution(first, now),
-            session,
+            executor,
         )
         .await?;
     let snapshot = ApprovalSubjectSnapshot::new(
@@ -468,8 +468,8 @@ async fn persist_runtime_writes(
         snapshot_payload.clone(),
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
-    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, session).await?;
-    persist_open_tasks(db, writes, owner_role, organization_id, now, session).await
+    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
+    persist_open_tasks(db, writes, owner_role, organization_id, now, executor).await
 }
 
 /// 由入口执行构造有界列表投影。
@@ -505,7 +505,7 @@ async fn persist_open_tasks(
     owner_role: &str,
     organization_id: &str,
     now: Instant,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     for intent in &writes.create_tasks {
         let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
@@ -526,7 +526,7 @@ async fn persist_open_tasks(
             },
             now,
         )?;
-        db.work_items().create(&item, session).await?;
+        db.work_items().create(&item, executor).await?;
     }
     Ok(())
 }

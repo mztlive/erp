@@ -80,16 +80,16 @@ impl ReceivableProcess {
         let result = db
             .client()
             .clone()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    claim_and_persist_document_cancel_runtime(&db, &writes, &closed, session).await?;
-                    let current = load(&db, &id, session).await?;
+                    claim_and_persist_document_cancel_runtime(&db, &writes, &closed, executor).await?;
+                    let current = load(&db, &id, executor).await?;
                     erp_finance::service::receivable::mapping::ensure_expected_version(
                         current.base.version,
                         req.expected_version,
                     )?;
-                    cancel_in_transaction(&db, &id, &actor, session).await?;
-                    db.audit_logs().create(&command.audit(actor, id.clone())?, session).await?;
+                    cancel(&db, &id, &actor, executor).await?;
+                    db.audit_logs().create(&command.audit(actor, id.clone())?, executor).await?;
                     Ok::<String, Error>(id)
                 })
             })
@@ -104,7 +104,7 @@ impl ReceivableProcess {
     }
 }
 /// 撤回及管理员受阻取消的唯一业务动作；必须在审批运行时事务内调用。
-pub(crate) async fn cancel_in_transaction(
+pub(crate) async fn cancel(
     db: &Database,
     id: &str,
     actor: &AuditActor,

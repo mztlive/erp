@@ -12,6 +12,7 @@ use mongodb::error::UNKNOWN_TRANSACTION_COMMIT_RESULT;
 use mongodb::options::{ReadConcern, SessionOptions, TransactionOptions, WriteConcern};
 use mongodb::{Client, ClientSession};
 
+use crate::Executor;
 use crate::errors::{Error, Result};
 
 const COMMIT_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
@@ -103,7 +104,7 @@ pub trait Transactional {
     async fn with_transaction<F, R, E>(&self, f: F) -> std::result::Result<R, E>
     where
         F: for<'a> FnOnce(
-                &'a mut ClientSession,
+                &'a mut dyn Executor,
             )
                 -> Pin<Box<dyn Future<Output = std::result::Result<R, E>> + Send + 'a>>
             + Send,
@@ -116,6 +117,9 @@ pub trait Transactional {
 impl Transactional for Client {
     /// 在事务中执行函数，并允许调用方指定错误类型。
     ///
+    /// 回调收到 `&mut dyn Executor`，不得再向下传递 `&mut ClientSession`。
+    /// 提交与回滚由本方法完成。
+    ///
     /// # 参数
     /// * `f` - 处理函数
     ///
@@ -127,7 +131,7 @@ impl Transactional for Client {
     async fn with_transaction<F, R, E>(&self, f: F) -> std::result::Result<R, E>
     where
         F: for<'a> FnOnce(
-                &'a mut ClientSession,
+                &'a mut dyn Executor,
             )
                 -> Pin<Box<dyn Future<Output = std::result::Result<R, E>> + Send + 'a>>
             + Send,

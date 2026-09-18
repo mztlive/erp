@@ -21,7 +21,7 @@ use super::adapter::{
 use super::approval_query::load_approval_binding;
 #[allow(unused_imports)]
 pub(crate) use super::cancel_persist::{
-    StockAdjustmentCancelPersistInput, cancel_stock_adjustment_approval_in_transaction,
+    StockAdjustmentCancelPersistInput, cancel_stock_adjustment_approval_apply,
     persist_stock_adjustment_cancel,
 };
 pub(crate) use super::cancel_runtime::{

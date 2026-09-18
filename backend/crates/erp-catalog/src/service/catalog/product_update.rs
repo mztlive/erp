@@ -380,7 +380,7 @@ impl CatalogService {
         let access = self.access();
         let actor = actor.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     access
                         .ensure_writable(
@@ -388,30 +388,30 @@ impl CatalogService {
                             "update",
                             &product.maintainer_user_id,
                             &product.business_org_unit_id,
-                            session,
+                            executor,
                         )
                         .await?;
-                    pending_assets.persist(&db, session).await?;
-                    db.products().update(&mut product, session).await?;
-                    db.catalog().create_product_revision_with_media(&revision, &media, session).await?;
+                    pending_assets.persist(&db, executor).await?;
+                    db.products().update(&mut product, executor).await?;
+                    db.catalog().create_product_revision_with_media(&revision, &media, executor).await?;
                     for item in &sku_items {
                         match item.action {
                             SkuEditAction::Create => {
                                 db.catalog()
-                                    .create_sku_with_revision(&item.sku, &item.revision, &[], session)
+                                    .create_sku_with_revision(&item.sku, &item.revision, &[], executor)
                                     .await?;
                             },
                             SkuEditAction::Keep | SkuEditAction::Reactivate => {
-                                db.sku_revisions().create(&item.revision, session).await?;
+                                db.sku_revisions().create(&item.revision, executor).await?;
                                 let mut sku = item.sku.clone();
-                                db.skus().update(&mut sku, session).await?;
+                                db.skus().update(&mut sku, executor).await?;
                             },
                         }
                     }
                     for sku in &mut disable {
-                        db.skus().update(sku, session).await?;
+                        db.skus().update(sku, executor).await?;
                     }
-                    audit_port.persist(&audit, session).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<Product, crate::error::Error>(product)
                 })
             })

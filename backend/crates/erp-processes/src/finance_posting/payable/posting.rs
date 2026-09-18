@@ -3,9 +3,7 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_finance::entity::payable::{PendingPaymentAllocation, SupplierPayment};
-use erp_finance::service::payable::{
-    PaymentSettlement, finish_supplier_payment_in_transaction, settle_supplier_payment_in_transaction,
-};
+use erp_finance::service::payable::{PaymentSettlement, finish_supplier_payment, settle_supplier_payment};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -27,7 +25,7 @@ pub(super) enum PaymentPostSource {
 ///
 /// # 错误
 /// 付款状态、供应商、应付开放余额、分配金额或仓储写入不合法时返回错误。
-pub(super) async fn post_supplier_payment_in_transaction(
+pub(super) async fn post_supplier_payment(
     db: &Database,
     payment: &mut SupplierPayment,
     pending: &[PendingPaymentAllocation],
@@ -75,14 +73,7 @@ impl MongoPaymentPosting<'_> {
 impl PaymentPostingSteps for MongoPaymentPosting<'_> {
     async fn settle_accounts(&mut self, executor: &mut dyn Executor) -> Result<()> {
         self.settlement = Some(
-            settle_supplier_payment_in_transaction(
-                self.db,
-                self.payment,
-                self.pending,
-                self.actor.id(),
-                executor,
-            )
-            .await?,
+            settle_supplier_payment(self.db, self.payment, self.pending, self.actor.id(), executor).await?,
         );
         Ok(())
     }
@@ -101,14 +92,7 @@ impl PaymentPostingSteps for MongoPaymentPosting<'_> {
             .ok_or_else(|| Error::Internal("付款过账缺少应付核销结果".to_string()))?;
         match self.source {
             PaymentPostSource::ExecutionTask => {
-                finish_supplier_payment_in_transaction(
-                    self.db,
-                    self.payment,
-                    self.pending,
-                    settlement,
-                    executor,
-                )
-                .await?
+                finish_supplier_payment(self.db, self.payment, self.pending, settlement, executor).await?
             },
         }
         Ok(())

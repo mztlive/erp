@@ -29,7 +29,6 @@ use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use id_generator::next_id;
-use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -137,12 +136,12 @@ impl PurchaseOrderProcess {
         let transaction_audit_id = audit_id.clone();
         let transaction_sales_order_id = sales_order_id.clone();
         let transaction_result = rbac
-            .run_authorized_policy_transaction(policy_revision, move |session| {
+            .run_authorized_policy_transaction(policy_revision, move |executor| {
                 Box::pin(async move {
-                    ensure_purchase_order_actor_account(&db, &transaction_actor, session).await?;
-                    create_from_sourcing_in_transaction(
+                    ensure_purchase_order_actor_account(&db, &transaction_actor, executor).await?;
+                    create_from_sourcing_apply(
                         &db,
-                        CreateFromSourcingInTransactionInput {
+                        CreateFromSourcingApplyInput {
                             rbac: &binding_rbac,
                             object_read: object_read.as_ref(),
                             req: &transaction_req,
@@ -152,7 +151,7 @@ impl PurchaseOrderProcess {
                             request_fingerprint: &transaction_fingerprint,
                             actor: &transaction_actor,
                         },
-                        session,
+                        executor,
                     )
                     .await
                 })
@@ -176,7 +175,7 @@ impl PurchaseOrderProcess {
 }
 
 /// 选源建单事务内写入所需上下文。
-struct CreateFromSourcingInTransactionInput<'a> {
+struct CreateFromSourcingApplyInput<'a> {
     /// 审批绑定授权源。
     rbac: &'a SharedRbacService,
     /// Composition-root object-read port.
@@ -200,7 +199,7 @@ struct CreateFromSourcingInTransactionInput<'a> {
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `input` - 选源请求、分配集合与命令收据上下文
-/// * `session` - MongoDB 事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回本次创建或事务内命中的幂等结果。
@@ -210,10 +209,10 @@ struct CreateFromSourcingInTransactionInput<'a> {
 ///
 /// # 关键业务约束
 /// guard CAS 成功后必须再次按统一供给覆盖计算剩余量，且本函数只推进一次 guard。
-async fn create_from_sourcing_in_transaction(
+async fn create_from_sourcing_apply(
     db: &mongodb::Database,
-    input: CreateFromSourcingInTransactionInput<'_>,
-    session: &mut ClientSession,
+    input: CreateFromSourcingApplyInput<'_>,
+    executor: &mut dyn Executor,
 ) -> Result<CreatePurchaseOrdersFromSourcingResult> {
     if let Some(result) = replay_sourcing(
         db,
@@ -222,7 +221,7 @@ async fn create_from_sourcing_in_transaction(
         input.actor,
         input.sales_order_id.as_ref(),
         &input.req.work_item_id,
-        session,
+        executor,
     )
     .await?
     {
@@ -233,13 +232,13 @@ async fn create_from_sourcing_in_transaction(
         &input.req.work_item_id,
         input.sales_order_id,
         input.actor.id(),
-        session,
+        executor,
     )
     .await?;
-    let mut order = load_effective_sales_order(db, input.sales_order_id, session).await?;
-    let groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
+    let mut order = load_effective_sales_order(db, input.sales_order_id, executor).await?;
+    let groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), executor).await?;
     let stock_groups =
-        stock_basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
+        stock_basis_groups_for_order(db, &order, task.responsibility_scope_ids(), executor).await?;
     let plan = SourcingPlan::plan(
         &sales_order_basis_fact(&order),
         &groups,
@@ -249,9 +248,9 @@ async fn create_from_sourcing_in_transaction(
     )
     .map_err(map_sourcing_plan_error)?;
     order.advance_procurement_guard(input.actor.id())?;
-    db.sales_orders().update(&mut order, session).await?;
+    db.sales_orders().update(&mut order, executor).await?;
     let latest_stock_groups =
-        stock_basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
+        stock_basis_groups_for_order(db, &order, task.responsibility_scope_ids(), executor).await?;
     plan.validate_against_latest_stock(&latest_stock_groups).map_err(map_sourcing_plan_error)?;
     let persisted_stock = persist_stock_allocations(
         db,
@@ -260,14 +259,14 @@ async fn create_from_sourcing_in_transaction(
         input.sales_order_id,
         input.audit_id,
         input.request_fingerprint,
-        session,
+        executor,
     )
     .await?;
-    create_stock_delivery_drafts(db, input.sales_order_id, &persisted_stock, session).await?;
+    create_stock_delivery_drafts(db, input.sales_order_id, &persisted_stock, executor).await?;
     let stock_reservations =
         persisted_stock.into_iter().map(|allocation| allocation.result).collect::<Vec<_>>();
     let (latest_groups, latest_facts) =
-        basis_groups_and_facts(db, &order, task.responsibility_scope_ids(), session).await?;
+        basis_groups_and_facts(db, &order, task.responsibility_scope_ids(), executor).await?;
     plan.validate_against_latest_sourcing(&latest_groups).map_err(map_sourcing_plan_error)?;
     let mut orders = Vec::with_capacity(plan.purchase_plans().len());
     for plan in plan.purchase_plans() {
@@ -328,15 +327,15 @@ async fn create_from_sourcing_in_transaction(
                     facts: &latest_facts,
                 },
                 &command,
-                session,
+                executor,
             )
             .await?,
         );
     }
-    sync_procurement_tasks_for_sales_order(db, input.sales_order_id, session).await?;
+    sync_procurement_tasks_for_sales_order(db, input.sales_order_id, executor).await?;
     let work_item_status = db
         .work_items()
-        .find_by_id(&input.req.work_item_id, session)
+        .find_by_id(&input.req.work_item_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("供给分配任务在同步后不存在".to_string()))?
         .status;
@@ -360,7 +359,7 @@ async fn create_from_sourcing_in_transaction(
         input.sales_order_id.as_ref(),
         &receipt,
         input.actor,
-        session,
+        executor,
     )
     .await?;
     Ok(CreatePurchaseOrdersFromSourcingResult {
@@ -415,7 +414,7 @@ async fn create_stock_delivery_drafts(
     db: &mongodb::Database,
     sales_order_id: &SalesOrderId,
     allocations: &[PersistedStockAllocation],
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let mut by_warehouse = BTreeMap::<String, Vec<&StockReservation>>::new();
     for allocation in allocations {
@@ -430,7 +429,7 @@ async fn create_stock_delivery_drafts(
             sales_order_id,
             &WarehouseId::new(warehouse_id),
             &reservations,
-            session,
+            executor,
         )
         .await?;
     }
@@ -443,15 +442,15 @@ async fn ensure_stock_delivery_for_warehouse(
     sales_order_id: &SalesOrderId,
     warehouse_id: &WarehouseId,
     reservations: &[&StockReservation],
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
-    let existing = db.fulfillment().draft_warehouse_delivery(sales_order_id, warehouse_id, session).await?;
+    let existing = db.fulfillment().draft_warehouse_delivery(sales_order_id, warehouse_id, executor).await?;
     if let Some(delivery) = existing {
-        append_stock_delivery_lines(db, &delivery, reservations, session).await?;
+        append_stock_delivery_lines(db, &delivery, reservations, executor).await?;
         crate::fulfillment_execution::task::ensure_fulfillment_task(
             db,
             crate::fulfillment_execution::task::FulfillmentTaskObject::Delivery(&delivery),
-            session,
+            executor,
         )
         .await?;
         return Ok(());
@@ -472,11 +471,11 @@ async fn ensure_stock_delivery_for_warehouse(
         },
     )?;
     let lines = build_stock_delivery_lines(&delivery_id, reservations, 1)?;
-    db.fulfillment().create_delivery_with_lines(&delivery, &lines, session).await?;
+    db.fulfillment().create_delivery_with_lines(&delivery, &lines, executor).await?;
     crate::fulfillment_execution::task::ensure_fulfillment_task(
         db,
         crate::fulfillment_execution::task::FulfillmentTaskObject::Delivery(&delivery),
-        session,
+        executor,
     )
     .await
 }
@@ -486,11 +485,11 @@ async fn append_stock_delivery_lines(
     db: &mongodb::Database,
     delivery: &Delivery,
     reservations: &[&StockReservation],
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let delivery_id = DeliveryId::new(delivery.base.id.clone());
     let existing =
-        db.fulfillment().delivery_lines_by_delivery_ids(std::slice::from_ref(&delivery_id), session).await?;
+        db.fulfillment().delivery_lines_by_delivery_ids(std::slice::from_ref(&delivery_id), executor).await?;
     let existing_reservations = existing
         .iter()
         .filter_map(|line| line.stock_reservation_id.as_ref().map(ToString::to_string))
@@ -502,7 +501,7 @@ async fn append_stock_delivery_lines(
         .collect::<Vec<_>>();
     let next_line_no = existing.iter().map(|line| line.line_no).max().unwrap_or(0) + 1;
     for line in build_stock_delivery_lines(&delivery_id, &pending, next_line_no)? {
-        db.delivery_lines().create(&line, session).await?;
+        db.delivery_lines().create(&line, executor).await?;
     }
     Ok(())
 }
@@ -543,7 +542,7 @@ fn build_stock_delivery_lines(
 /// * `sales_order_id` - 来源销售单，作为收据资源身份
 /// * `receipt` - 采购单与库存预留的完整命令结果
 /// * `actor` - 审计操作人
-/// * `session` - MongoDB 事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 写入成功返回 `Ok(())`。
@@ -560,7 +559,7 @@ async fn write_sourcing_receipt(
     sales_order_id: &str,
     receipt: &SourcingReceipt,
     actor: &AuditActor,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let audit = actor.clone().resource_log_with_id(
         audit_id.to_string(),
@@ -569,7 +568,7 @@ async fn write_sourcing_receipt(
         sales_order_id.to_string(),
         Some(PurchaseCommandReceipt::new(request_fingerprint.to_string(), receipt.clone()).encode_message()?),
     )?;
-    db.audit_logs().create(&audit, session).await?;
+    db.audit_logs().create(&audit, executor).await?;
     Ok(())
 }
 

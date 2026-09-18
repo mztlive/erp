@@ -6,7 +6,7 @@ use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
-use mongodb::ClientSession;
+use persistence_core::Executor;
 
 use super::super::adapter::{sales_order_object_readable, sales_order_responsible_org_id};
 use crate::{Error, Result};
@@ -47,7 +47,7 @@ pub(super) async fn persist_bound_sales_document(
     document: &mut BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding> {
     let _ =
         sales_order_object_readable(&bind_command.context.organization_id, &bind_command.context.creator_id)?;
@@ -57,11 +57,11 @@ pub(super) async fn persist_bound_sales_document(
         object_read,
         bind_command,
         actor,
-        session,
+        executor,
     )
     .await?;
     let binding = binding.ok_or_else(|| Error::Internal("销售单必须绑定已发布定义".to_string()))?;
     attach_published_binding(document, binding.clone())?;
-    db.business_documents().create(document, session).await?;
+    db.business_documents().create(document, executor).await?;
     Ok(binding)
 }

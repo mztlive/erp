@@ -18,7 +18,7 @@ use erp_workflow::ports::{
     WorkflowDataScope, WorkflowScopeObject, WorkflowScopeObjects,
 };
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult};
-use mongodb::{ClientSession, Database};
+use mongodb::Database;
 use persistence_core::Executor;
 
 use super::order_access::{approval_readable, readable_sources};
@@ -448,7 +448,7 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
             + Send
             + 'static,
         F: for<'a> FnOnce(
-                &'a mut ClientSession,
+                &'a mut dyn Executor,
             )
                 -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'a>>
             + Send
@@ -456,9 +456,9 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
     {
         let rbac = self.rbac.clone();
         async move {
-            rbac.run_authorized_policy_transaction(policy_revision, move |session| {
+            rbac.run_authorized_policy_transaction(policy_revision, move |executor| {
                 Box::pin(async move {
-                    transaction(session).await.map_err(|error| PolicyTxnError::<E>::Caller(error))
+                    transaction(executor).await.map_err(|error| PolicyTxnError::<E>::Caller(error))
                 })
             })
             .await

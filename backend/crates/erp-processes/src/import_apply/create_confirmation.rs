@@ -91,7 +91,7 @@ impl ImportApplyService {
         let subject_for_tx = subject_version.clone();
         let actor_id = actor.id().to_string();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     if let Some(existing) = db
                         .legacy_import_confirmations()
@@ -99,13 +99,13 @@ impl ImportApplyService {
                             &req_for_tx.batch_id,
                             &scope_for_tx,
                             req_for_tx.trial_version,
-                            session,
+                            executor,
                         )
                         .await?
                     {
                         let existing_item = db
                             .work_items()
-                            .find_by_id(existing.work_item_id.as_ref(), session)
+                            .find_by_id(existing.work_item_id.as_ref(), executor)
                             .await?
                             .ok_or_else(|| Error::Internal("导入确认任务关联缺失".to_string()))?;
                         validate_confirmation_creation_replay(
@@ -125,25 +125,27 @@ impl ImportApplyService {
 
                     let mut batch = db
                         .legacy_import_batches()
-                        .find_by_id(req_for_tx.batch_id.as_ref(), session)
+                        .find_by_id(req_for_tx.batch_id.as_ref(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("导入批次不存在".to_string()))?;
                     validate_confirmation_creation_batch(&batch, &scope_for_tx, &import_rule_for_tx)?;
                     batch.prepare_confirmation()?;
                     let enabled_roles =
-                        db.roles().enabled_roles(std::slice::from_ref(&owner_role_for_tx), session).await?;
+                        db.roles().enabled_roles(std::slice::from_ref(&owner_role_for_tx), executor).await?;
                     if enabled_roles.len() != 1 {
                         return Err(Error::BusinessLogicError("导入确认责任角色未注册或已停用".to_string()));
                     }
-                    let mut confirmations =
-                        db.legacy_import_confirmations().list_by_batch(&req_for_tx.batch_id, session).await?;
+                    let mut confirmations = db
+                        .legacy_import_confirmations()
+                        .list_by_batch(&req_for_tx.batch_id, executor)
+                        .await?;
                     validate_trial_snapshot(&batch, &confirmations, &req_for_tx, &import_rule_for_tx)?;
                     super::supersede::invalidate_replaced_confirmation(
                         &db,
                         &mut confirmations,
                         &confirmation_for_tx,
                         &actor_id,
-                        session,
+                        executor,
                     )
                     .await?;
                     let mut current_matrix = LegacyImportConfirmation::current_matrix(
@@ -160,10 +162,10 @@ impl ImportApplyService {
                             &current_matrix,
                         )),
                     )?;
-                    db.legacy_import_confirmations().create(&confirmation_for_tx, session).await?;
-                    db.work_items().create(&work_item_for_tx, session).await?;
-                    db.legacy_import_batches().update(&mut batch, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.legacy_import_confirmations().create(&confirmation_for_tx, executor).await?;
+                    db.work_items().create(&work_item_for_tx, executor).await?;
+                    db.legacy_import_batches().update(&mut batch, executor).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<(LegacyImportConfirmation, WorkItem), crate::Error>((
                         confirmation_for_tx,
                         work_item_for_tx,

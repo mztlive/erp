@@ -93,20 +93,20 @@ impl SupplierSettlementProcess {
         let items_for_tx = snapshot.items.clone();
         let differences_for_tx = snapshot.differences.clone();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     erp_supply::SettlementAccess::new(db.clone(), data_scope)
-                        .require_create(&actor_for_tx, &owner_id, session)
+                        .require_create(&actor_for_tx, &owner_id, executor)
                         .await?;
                     SupplierSettlementService::new(db.clone())
                         .persist_statement_with_items(
                             &statement_for_tx,
                             &items_for_tx,
                             &differences_for_tx,
-                            session,
+                            executor,
                         )
                         .await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })
@@ -193,10 +193,10 @@ impl SupplierSettlementProcess {
         let mut statement_for_tx = statement.clone();
         let snapshot_for_tx = snapshot;
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     erp_supply::SettlementAccess::new(db.clone(), data_scope)
-                        .require_statement(&actor_for_tx, "update", &id_for_tx, session)
+                        .require_statement(&actor_for_tx, "update", &id_for_tx, executor)
                         .await?;
                     SupplierSettlementService::new(db.clone())
                         .persist_refreshed_statement(
@@ -204,10 +204,10 @@ impl SupplierSettlementProcess {
                             &snapshot_for_tx,
                             (&old_item_ids, &old_difference_ids),
                             &req,
-                            session,
+                            executor,
                         )
                         .await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<SupplierSettlementStatement, crate::Error>(statement_for_tx)
                 })
             })

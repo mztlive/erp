@@ -517,11 +517,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         let audit_port = Arc::clone(&self.audit);
         let db = self.db.clone();
         let result = policy_rbac
-            .run_authorized_policy_transaction(policy_revision, move |session| {
+            .run_authorized_policy_transaction(policy_revision, move |executor| {
                 Box::pin(async move {
                     let mut current = db
                         .work_items()
-                        .find_work_item(&item_id, session)
+                        .find_work_item(&item_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("任务不存在".to_string()))?;
                     if current.base.version != expected_task_version {
@@ -529,7 +529,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                     }
                     let allow_current_owner =
                         current.owner_user_id.as_deref() == Some(target_user_id.as_str());
-                    ensure_assignment_policy_in_transaction(
+                    ensure_assignment_policy(
                         &validation,
                         AssignmentPolicyCheck {
                             actor_kind,
@@ -540,7 +540,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                             authorization: &authorization,
                             allow_current_owner,
                         },
-                        session,
+                        executor,
                     )
                     .await?;
                     current = if let Some(purchase_order_id) = purchase_order_id.as_deref() {
@@ -553,24 +553,26 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                                 actor_id: &actor_id,
                                 authorization: &authorization,
                             },
-                            session,
+                            executor,
                         )
                         .await?
                     } else {
                         current.reassign(target_user_id.clone(), Instant::now())?;
                         validation
                             .facts
-                            .reassign_integration_handler(&mut current, &target_user_id, session)
+                            .reassign_integration_handler(&mut current, &target_user_id, executor)
                             .await?;
-                        db.work_items().update(&mut current, session).await.map_err(|error| match error {
-                            persistence_core::Error::OptimisticLockingError => {
-                                Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
+                        db.work_items().update(&mut current, executor).await.map_err(
+                            |error| match error {
+                                persistence_core::Error::OptimisticLockingError => {
+                                    Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
+                                },
+                                error => Error::from(error),
                             },
-                            error => Error::from(error),
-                        })?;
+                        )?;
                         current
                     };
-                    ensure_assignment_policy_in_transaction(
+                    ensure_assignment_policy(
                         &validation,
                         AssignmentPolicyCheck {
                             actor_kind,
@@ -581,13 +583,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                             authorization: &authorization,
                             allow_current_owner: true,
                         },
-                        session,
+                        executor,
                     )
                     .await?;
                     if let Some(purchase_order_audit) = &purchase_order_audit {
-                        audit_port.persist(purchase_order_audit, session).await?;
+                        audit_port.persist(purchase_order_audit, executor).await?;
                     }
-                    audit_port.persist(&audit, session).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok(current)
                 })
             })
@@ -608,7 +610,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
 /// 事务内分派策略重验输入。
 ///
 /// # 用途
-/// 将操作人、候选人与授权快照打包，供 [`ensure_assignment_policy_in_transaction`] 使用。
+/// 将操作人、候选人与授权快照打包，供 [`ensure_assignment_policy`] 使用。
 ///
 /// # 参数
 /// 无
@@ -656,7 +658,7 @@ struct AssignmentPolicyCheck<'a> {
 ///
 /// # 关键业务约束
 /// 必须在同一任务责任事务内调用。
-async fn ensure_assignment_policy_in_transaction<A: crate::ports::WorkflowAuthorizationPort>(
+async fn ensure_assignment_policy<A: crate::ports::WorkflowAuthorizationPort>(
     service: &WorkItemService<A>,
     check: AssignmentPolicyCheck<'_>,
     executor: &mut dyn Executor,

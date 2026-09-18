@@ -30,7 +30,7 @@ use super::customer_receipt_posting::{
     prepare_dispatch_start, run_commit_transaction,
 };
 pub use super::customer_receipt_posting::{
-    cancel_customer_receipt_approval_in_transaction, post_customer_receipt_in_transaction,
+    cancel_customer_receipt_approval_apply, post_customer_receipt_apply,
 };
 use super::dto::{
     CancelCustomerReceiptApprovalRequest, CommitCustomerReceiptRequest, CreateCustomerReceiptRequest,
@@ -343,16 +343,16 @@ impl ReceivableProcess {
             let recovered = self
                 .db
                 .client()
-                .with_transaction(move |session| {
+                .with_transaction(move |executor| {
                     Box::pin(async move {
                         let receipt = db
                             .customer_receipts()
-                            .find_by_id(&receipt_id, session)
+                            .find_by_id(&receipt_id, executor)
                             .await?
                             .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
                         let organization_id = customer_receipt_responsible_org_id(&receipt)?;
                         let _ = customer_receipt_object_readable(&organization_id, &actor_id)?;
-                        let binding = find_approval_binding(&db, &receipt_id, session)
+                        let binding = find_approval_binding(&db, &receipt_id, executor)
                             .await
                             .map_err(crate::Error::from)?;
                         let binding = require_frozen_binding(binding.as_ref())?;
@@ -364,7 +364,7 @@ impl ReceivableProcess {
                             &idempotency_key,
                             binding,
                             &actor_id,
-                            session,
+                            executor,
                         )
                         .await
                     })
@@ -470,9 +470,9 @@ impl ReceivableProcess {
         let receipt_id = id.to_string();
         let detail_id = receipt_id.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    post_customer_receipt_in_transaction(&db, &receipt_id, &actor_owned, session).await
+                    post_customer_receipt_apply(&db, &receipt_id, &actor_owned, executor).await
                 })
             })
             .await?;

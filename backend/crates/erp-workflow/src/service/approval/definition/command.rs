@@ -153,10 +153,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
             let recovered = self
                 .db
                 .client()
-                .with_transaction(move |session| {
+                .with_transaction(move |executor| {
                     Box::pin(async move {
-                        ensure_definition_admin_permission(&rbac, &actor, &policy, session).await?;
-                        replay_prepared_definition_receipt(&db, &identity, &expectation, session).await
+                        ensure_definition_admin_permission(&rbac, &actor, &policy, executor).await?;
+                        replay_prepared_definition_receipt(&db, &identity, &expectation, executor).await
                     })
                 })
                 .await;

@@ -68,8 +68,8 @@ impl SupplierImportProcess {
         let result = db
             .client()
             .clone()
-            .with_transaction(move |session| {
-                Box::pin(async move { db.bulk_job().create_job_with_items(&copy, items, session).await })
+            .with_transaction(move |executor| {
+                Box::pin(async move { db.bulk_job().create_job_with_items(&copy, items, executor).await })
             })
             .await;
         match result {

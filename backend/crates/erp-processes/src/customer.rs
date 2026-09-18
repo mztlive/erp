@@ -41,12 +41,12 @@ pub async fn delete_customer(
     let audit = actor.clone().resource_log("customer.delete", "customer", account.base.id.clone())?;
     let actor_for_tx = actor.clone();
     let customer_id = id.clone();
-    run_audited(&db, audit, move |db, session| {
+    run_audited(&db, audit, move |db, executor| {
         Box::pin(async move {
             customer_access(db.clone(), rbac)
-                .require_with(actor_for_tx, "delete", &customer_id, session)
+                .require_with(actor_for_tx, "delete", &customer_id, executor)
                 .await?;
-            db.customer_accounts().soft_delete(&mut account, session).await?;
+            db.customer_accounts().soft_delete(&mut account, executor).await?;
             Ok(())
         })
     })

@@ -100,9 +100,9 @@ impl ReturnsProcess {
         let actor_owned = actor.clone();
         let idempotency_key = req.idempotency_key;
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    validate_receipt_reversal_source(&db, &source_fact_id, source_version, session).await?;
+                    validate_receipt_reversal_source(&db, &source_fact_id, source_version, executor).await?;
                     let binding = persist_bound_receipt_reversal_document(
                         &db,
                         &rbac,
@@ -110,10 +110,10 @@ impl ReturnsProcess {
                         document,
                         &bind_command,
                         &actor_owned,
-                        session,
+                        executor,
                     )
                     .await?;
-                    let graph = load_bound_definition_graph_with_executor(&db, &binding, session).await?;
+                    let graph = load_bound_definition_graph_with_executor(&db, &binding, executor).await?;
                     let start_input = build_receipt_reversal_start_input(ReceiptReversalStartInput {
                         graph,
                         binding: &binding,
@@ -126,7 +126,7 @@ impl ReturnsProcess {
                         now,
                     })?;
                     let prepared = prepare_start(start_input)?;
-                    ReturnsService::persist_created_receipt_reversal(&db, &reversal, session).await?;
+                    ReturnsService::persist_created_receipt_reversal(&db, &reversal, executor).await?;
                     if let erp_workflow::service::approval::execution::PreparedExecution::Apply(writes) =
                         prepared
                     {
@@ -137,13 +137,13 @@ impl ReturnsProcess {
                             adapter.owner_role,
                             &organization_id,
                             now,
-                            session,
+                            executor,
                         )
                         .await?;
                     }
-                    db.audit_logs().create(&create_audit, session).await?;
-                    db.audit_logs().create(&submit_audit, session).await?;
-                    db.audit_logs().create(&command_audit, session).await?;
+                    db.audit_logs().create(&create_audit, executor).await?;
+                    db.audit_logs().create(&submit_audit, executor).await?;
+                    db.audit_logs().create(&command_audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

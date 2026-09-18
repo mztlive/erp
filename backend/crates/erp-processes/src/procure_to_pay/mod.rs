@@ -115,7 +115,7 @@ use persistence_core::Executor;
 ///
 /// # 错误
 /// 采购单不存在、提交快照缺失、状态迁移或 CAS 写入失败时返回错误。
-pub async fn cancel_order_approval_in_transaction(
+pub async fn cancel_order_approval(
     db: &Database,
     id: &str,
     action: ApprovalDomainAction,
@@ -146,7 +146,7 @@ pub async fn cancel_order_approval_in_transaction(
 ///
 /// # 错误
 /// 采购变更单不存在、状态迁移或 CAS 写入失败时返回错误。
-pub async fn cancel_change_approval_in_transaction(
+pub async fn cancel_change_approval_apply(
     db: &Database,
     id: &str,
     action: ApprovalDomainAction,

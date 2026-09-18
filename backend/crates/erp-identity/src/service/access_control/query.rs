@@ -45,11 +45,11 @@ impl AccessControlService {
         let actor = actor.clone();
         db.client()
             .clone()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let policy_version = rbac.current_policy_revision().await?;
-                    rbac.ensure_policy_snapshot_with_executor(policy_version, session).await?;
-                    let organizations = OrganizationRepository::new(&db).state(session).await?;
+                    rbac.ensure_policy_snapshot_with_executor(policy_version, executor).await?;
+                    let organizations = OrganizationRepository::new(&db).state(executor).await?;
                     let as_of = Instant::now();
                     let scope_version =
                         data_scope_list_version(&actor, policy_version, organizations.version);
@@ -71,7 +71,7 @@ impl AccessControlService {
                         sort_by: Some(query.paging.sort_by.to_string()),
                         sort_ascending: matches!(query.paging.sort_dir, crate::dto::SortDir::Asc),
                     };
-                    let page = db.data_scopes().search_data_scopes(&filter, session).await?;
+                    let page = db.data_scopes().search_data_scopes(&filter, executor).await?;
                     let items = page.items.into_iter().map(DataScopeView::from).collect();
                     Ok::<_, Error>(DataScopeListView::compose(
                         PageView { items, total: page.total, page: filter.page, page_size: filter.page_size },

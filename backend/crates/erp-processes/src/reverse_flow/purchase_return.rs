@@ -256,7 +256,7 @@ async fn persist_created_purchase_return_order(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 let mut creation = MongoCreation {
                     db: &db,
@@ -268,9 +268,9 @@ async fn persist_created_purchase_return_order(
                     audit: &audit,
                 };
                 crate::adapters::purchase_access(db.clone(), rbac.clone())
-                    .require_object(&actor, "update", order.purchase_order_id.as_ref(), &[], session)
+                    .require_object(&actor, "update", order.purchase_order_id.as_ref(), &[], executor)
                     .await?;
-                persist_creation(&mut creation, session).await?;
+                persist_creation(&mut creation, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

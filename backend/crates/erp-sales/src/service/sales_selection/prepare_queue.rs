@@ -47,8 +47,8 @@ impl SalesSelectionService {
         let actor = actor_id.to_string();
         self.db
             .client()
-            .with_transaction(move |tx| {
-                Box::pin(async move { service.enqueue_prepare(req, &actor, tx).await })
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.enqueue_prepare(req, &actor, executor).await })
             })
             .await
     }
@@ -237,8 +237,8 @@ impl SalesSelectionService {
         let run = run.clone();
         self.db
             .client()
-            .with_transaction(move |tx| {
-                Box::pin(async move { service.commit_task_in(&run, prepared, tx).await })
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.commit_task_in(&run, prepared, executor).await })
             })
             .await
     }
@@ -272,7 +272,9 @@ impl SalesSelectionService {
         let (run, reason) = (run.clone(), reason.to_string());
         self.db
             .client()
-            .with_transaction(move |tx| Box::pin(async move { service.fail_task_in(&run, reason, tx).await }))
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.fail_task_in(&run, reason, executor).await })
+            })
             .await
     }
 

@@ -31,7 +31,7 @@ use crate::repository::prelude::*;
 ///
 /// # 错误
 /// 明细为空、方向不匹配、余额不足或任一库存写入失败。
-pub async fn apply_posted_adjustment_in_transaction(
+pub async fn apply_posted_adjustment(
     db: &Database,
     adjustment: &mut StockAdjustment,
     lines: &[StockAdjustmentLine],

@@ -343,8 +343,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         self.db
             .client()
             .clone()
-            .with_transaction(move |session| {
-                Box::pin(async move { this.fulfillment_queue_page(query, actor, session).await })
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.fulfillment_queue_page(query, actor, executor).await })
             })
             .await
     }

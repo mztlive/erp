@@ -79,14 +79,14 @@ impl PayableService {
         let invoice_for_tx = invoice.clone();
         let command_receipt_for_tx = command_receipt.clone();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (plan, accounts) =
-                        erp_finance::service::payable::prepare_purchase_invoice_allocations_in_transaction(
+                        erp_finance::service::payable::prepare_purchase_invoice_allocations(
                             &db,
                             &req,
                             &invoice_for_tx,
-                            session,
+                            executor,
                         )
                         .await?;
                     let account_ids: Vec<PayableAccountId> =
@@ -104,7 +104,7 @@ impl PayableService {
                         }
                     }
                     let suppliers =
-                        db.supplier_accounts().find_accounts_by_ids(&supplier_ids, session).await?;
+                        db.supplier_accounts().find_accounts_by_ids(&supplier_ids, executor).await?;
                     let suppliers_by_id: HashMap<&str, &SupplierAccount> =
                         suppliers.iter().map(|supplier| (supplier.base.id.as_str(), supplier)).collect();
                     for account_id in &account_ids {
@@ -118,12 +118,12 @@ impl PayableService {
                             return Err(Error::BusinessLogicError("禁止跨供应商收票".to_string()));
                         }
                     }
-                    let invoice_mut = erp_finance::service::payable::persist_purchase_invoice_in_transaction(
+                    let invoice_mut = erp_finance::service::payable::persist_purchase_invoice(
                         &db,
                         invoice_for_tx,
                         &plan,
                         &actor_id,
-                        session,
+                        executor,
                     )
                     .await?;
                     let audit = actor_owned.clone().resource_log(
@@ -131,10 +131,10 @@ impl PayableService {
                         "purchase_invoice_allocation",
                         invoice_mut.base.id.clone(),
                     )?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     let receipt_audit =
                         command_receipt_for_tx.audit(actor_owned.clone(), invoice_mut.base.id.clone())?;
-                    db.audit_logs().create(&receipt_audit, session).await?;
+                    db.audit_logs().create(&receipt_audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

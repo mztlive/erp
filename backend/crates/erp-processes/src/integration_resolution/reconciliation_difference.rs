@@ -51,9 +51,9 @@ impl IntegrationResolutionProcess {
             "reconciliation_difference",
             difference.base.id.clone(),
         )?;
-        self.run_audited(move |db, session| {
+        self.run_audited(move |db, executor| {
             Box::pin(async move {
-                persist_created(db, CreatedFact::Difference(&difference), &work_item, &audit, session)
+                persist_created(db, CreatedFact::Difference(&difference), &work_item, &audit, executor)
                     .await?;
                 Ok(())
             })

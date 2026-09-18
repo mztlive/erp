@@ -79,11 +79,11 @@ impl SupplierFulfillmentProcess {
         let message_for_tx = message.clone();
         let audit_for_tx = audit.clone();
         super::execution::after_intent(client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    persist_place_facts(&db, &order_for_tx, &items_for_tx, &action_for_tx, session).await?;
-                    db.inbox_messages().create(&message_for_tx, session).await?;
-                    db.audit_logs().create(&audit_for_tx, session).await?;
+                    persist_place_facts(&db, &order_for_tx, &items_for_tx, &action_for_tx, executor).await?;
+                    db.inbox_messages().create(&message_for_tx, executor).await?;
+                    db.audit_logs().create(&audit_for_tx, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             }), || async {
@@ -230,7 +230,7 @@ impl SupplierFulfillmentProcess {
         let work_item_id = WorkItemId::new(next_id());
         let task_audit_actor = actor.clone();
         let (order_out, action_out, message_out) = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     super::dispatch_writes::MongoWrites {
                         db: &db,
@@ -241,7 +241,7 @@ impl SupplierFulfillmentProcess {
                         work_item_id,
                         actor: &task_audit_actor,
                     }
-                    .persist(session)
+                    .persist(executor)
                     .await?;
                     Ok::<(SupplierFulfillmentOrder, SupplierOrderAction, InboxMessage), crate::Error>((
                         order_for_tx,

@@ -21,9 +21,9 @@ pub async fn delete_party(db: Database, id: String, actor: AuditActor) -> Result
     erp_party::ensure_outside_supplier_profile(&*MongoSupplierRole::shared(db.clone()), &PartyId::new(&id))
         .await?;
     let audit = actor.clone().resource_log("party.delete", "party", party.base.id.clone())?;
-    run_audited(&db, audit, move |db, session| {
+    run_audited(&db, audit, move |db, executor| {
         Box::pin(async move {
-            db.parties().soft_delete(&mut party, session).await?;
+            db.parties().soft_delete(&mut party, executor).await?;
             Ok(())
         })
     })

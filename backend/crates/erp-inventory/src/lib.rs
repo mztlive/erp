@@ -36,4 +36,4 @@ pub use repository::{
     StockMovementRepositoryExt, StockMovementRow, StockReservationFilter, StockReservationRepository,
     StockReservationRepositoryExt, StockReservationRepositoryFulfillmentExt, StockReservationRow,
 };
-pub use service::{InventoryService, apply_posted_adjustment_in_transaction, build_adjustment_line_updates};
+pub use service::{InventoryService, apply_posted_adjustment, build_adjustment_line_updates};

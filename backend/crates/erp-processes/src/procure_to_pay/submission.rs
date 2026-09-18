@@ -204,36 +204,40 @@ impl PurchaseOrderProcess {
             order.base.id.clone(),
             None,
         )?;
-        let first_task = persist_purchase_order_start(
-            &self.db,
-            PurchaseOrderStartPersistInput {
-                order: order.clone(),
-                document,
-                superseded_draft,
-                submission: submission.clone(),
-                submission_lines: draft_lines,
-                procurement_guard,
-                snapshot_payload: snapshot,
-                prepared,
-                owner_role,
-                organization_id,
-                now,
-                audit,
-                object_scope: Some(self.command_access(actor, "submit")?),
-                receipt: Some((
-                    fingerprint.clone(),
-                    PurchaseSubmitReceipt::new(
-                        order.purchase_no.clone(),
-                        submission.base.id.clone(),
-                        submission.submission_no.clone(),
-                        String::new(),
-                        order.approval_subject_version.to_string(),
-                    )
-                    .with_versions(0, order.base.version),
-                )),
-            },
-        )
-        .await;
+        let db = self.db.clone();
+        let input = PurchaseOrderStartPersistInput {
+            order: order.clone(),
+            document,
+            superseded_draft,
+            submission: submission.clone(),
+            submission_lines: draft_lines,
+            procurement_guard,
+            snapshot_payload: snapshot,
+            prepared,
+            owner_role,
+            organization_id,
+            now,
+            audit,
+            object_scope: Some(self.command_access(actor, "submit")?),
+            receipt: Some((
+                fingerprint.clone(),
+                PurchaseSubmitReceipt::new(
+                    order.purchase_no.clone(),
+                    submission.base.id.clone(),
+                    submission.submission_no.clone(),
+                    String::new(),
+                    order.approval_subject_version.to_string(),
+                )
+                .with_versions(0, order.base.version),
+            )),
+        };
+        let first_task = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { persist_purchase_order_start(&db, input, executor).await })
+            })
+            .await;
         let first_task = match first_task {
             Ok(task) => task,
             Err(error) if error.command_may_have_committed() => {
@@ -348,21 +352,21 @@ impl PurchaseOrderProcess {
             let recovered = self
                 .db
                 .client()
-                .with_transaction(move |session| {
+                .with_transaction(move |executor| {
                     Box::pin(async move {
                         let order = db
                             .purchase_orders()
-                            .find_by_id(&purchase_order_id_owned, session)
+                            .find_by_id(&purchase_order_id_owned, executor)
                             .await?
                             .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
                         let sales_order = db
                             .sales_orders()
-                            .find_by_id(&order.sales_order_id, session)
+                            .find_by_id(&order.sales_order_id, executor)
                             .await?
                             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
                         let organization_id = purchase_order_responsible_org_id(&sales_order)?;
                         let _ = purchase_order_object_readable(&organization_id, &actor_id)?;
-                        let binding = find_approval_binding(&db, &purchase_order_id_owned, session)
+                        let binding = find_approval_binding(&db, &purchase_order_id_owned, executor)
                             .await
                             .map_err(crate::Error::from)?;
                         let binding = require_frozen_binding(binding.as_ref())?;
@@ -374,7 +378,7 @@ impl PurchaseOrderProcess {
                             &idempotency_key_owned,
                             binding,
                             &actor_id,
-                            session,
+                            executor,
                         )
                         .await
                     })

@@ -150,7 +150,7 @@ impl SupplierApiGovernanceProcess {
         let operation_id = command.operation_id.trim().to_string();
         let connection_id_value = id.to_string();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let prepared = SupplierApiService::new(db.clone())
                         .prepare_business_confirmation(
@@ -162,7 +162,7 @@ impl SupplierApiGovernanceProcess {
                                 fingerprint: fingerprint.clone(),
                                 actor_id: actor.id(),
                             },
-                            session,
+                            executor,
                         )
                         .await?;
                     let erp_supply::service::supplier_api::confirmation::PreparedBusinessConfirmation {
@@ -179,9 +179,9 @@ impl SupplierApiGovernanceProcess {
                         Some(format!("request_sha256={fingerprint}")),
                     )?;
                     SupplierApiService::new(db.clone())
-                        .persist_business_confirmation(&confirmation, session)
+                        .persist_business_confirmation(&confirmation, executor)
                         .await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok(ConfirmBusinessCapabilityRequirementResult {
                         outcome: SupplierCommandOutcome::Succeeded,
                         operation_id,
@@ -243,7 +243,7 @@ impl SupplierApiGovernanceProcess {
         let connection_id_value = id.to_string();
         let audit_id_tx = audit_id.clone();
         let result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let connection = SupplierApiService::new(db.clone())
                         .apply_capability_changes(
@@ -251,7 +251,7 @@ impl SupplierApiGovernanceProcess {
                             command.expected_connection_version,
                             change_set,
                             actor_tx.id(),
-                            session,
+                            executor,
                         )
                         .await?;
                     let audit = actor_tx.clone().resource_log_with_id(
@@ -261,7 +261,7 @@ impl SupplierApiGovernanceProcess {
                         connection_id_value.clone(),
                         Some(format!("request_sha256={fingerprint}")),
                     )?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<u64, Error>(connection.base.version)
                 })
             })
@@ -289,14 +289,15 @@ impl SupplierApiGovernanceProcess {
         let actor = actor.clone();
         let connection_id_value = id.to_string();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let domain = SupplierApiService::new(db.clone());
-                    let (mut connection, context) =
-                        domain.prepare_status_target(&connection_id_value, expected_version, session).await?;
+                    let (mut connection, context) = domain
+                        .prepare_status_target(&connection_id_value, expected_version, executor)
+                        .await?;
                     let active_sync_jobs = db
                         .background_jobs()
-                        .count_active_supplier_catalog_jobs(&connection_id_value, session)
+                        .count_active_supplier_catalog_jobs(&connection_id_value, executor)
                         .await?;
                     domain
                         .apply_status_change(
@@ -305,7 +306,7 @@ impl SupplierApiGovernanceProcess {
                             active_sync_jobs,
                             action,
                             actor.id(),
-                            session,
+                            executor,
                         )
                         .await?;
                     persist_command_receipt(
@@ -318,7 +319,7 @@ impl SupplierApiGovernanceProcess {
                             job_id: None,
                             actor: &actor,
                         },
-                        session,
+                        executor,
                     )
                     .await
                 })

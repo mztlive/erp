@@ -555,7 +555,7 @@ mod isolation_tests {
             let db = fixture.db().clone();
             let client = db.client().clone();
             client
-                .with_transaction::<_, (), persistence_core::Error>(move |session| {
+                .with_transaction::<_, (), persistence_core::Error>(move |executor| {
                     let db = db.clone();
                     Box::pin(async move {
                         let mut order = PurchaseOrder::new(
@@ -578,9 +578,9 @@ mod isolation_tests {
                         )
                         .expect("采购单构造失败");
                         order.current_submission_id = Some("sub-txn".to_string());
-                        db.purchase_orders().create(&order, session).await?;
+                        db.purchase_orders().create(&order, executor).await?;
                         let (page, facts) =
-                            load_purchase_order_list_page(&db, &list_filter(), &company_scope(), session)
+                            load_purchase_order_list_page(&db, &list_filter(), &company_scope(), executor)
                                 .await?;
                         assert_eq!(page.total, 1, "事务内应能 read-your-writes");
                         assert!(facts.submissions.is_empty() || page.items.len() == 1);

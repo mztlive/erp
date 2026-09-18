@@ -175,7 +175,7 @@ impl InventoryAdjustmentService {
         let query_for_read = query.clone();
         let client = db.client().clone();
         let result_ref = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     start_approval::find_stock_adjustment_start_result(
                         &db,
@@ -184,7 +184,7 @@ impl InventoryAdjustmentService {
                         query_for_read.expected_subject_version,
                         &query_for_read.idempotency_key,
                         &actor,
-                        session,
+                        executor,
                     )
                     .await
                 })
@@ -216,7 +216,7 @@ async fn committed_stock_adjustment_start_replay(
     let actor_owned = actor.clone();
     let client = db.client().clone();
     let result_ref = client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 start_approval::reconcile_stock_adjustment_start_receipt(
                     &db,
@@ -224,7 +224,7 @@ async fn committed_stock_adjustment_start_replay(
                     &id_owned,
                     &req_owned,
                     &actor_owned,
-                    session,
+                    executor,
                 )
                 .await
             })

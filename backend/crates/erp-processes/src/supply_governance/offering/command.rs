@@ -43,8 +43,8 @@ impl SupplierOfferingProcess {
         let db = self.db.clone();
         let client = db.client().clone();
         let transaction_result = client
-            .with_transaction(move |session| {
-                Box::pin(async move { super::commit::created(&db, &prepared, &audit, session).await })
+            .with_transaction(move |executor| {
+                Box::pin(async move { super::commit::created(&db, &prepared, &audit, executor).await })
             })
             .await;
         self.domain()
@@ -94,8 +94,8 @@ impl SupplierOfferingProcess {
         let db = self.db.clone();
         let client = db.client().clone();
         let transaction_result = client
-            .with_transaction(move |session| {
-                Box::pin(async move { super::commit::revised(&db, &mut prepared, &audit, session).await })
+            .with_transaction(move |executor| {
+                Box::pin(async move { super::commit::revised(&db, &mut prepared, &audit, executor).await })
             })
             .await;
         self.domain()
@@ -141,9 +141,9 @@ impl SupplierOfferingProcess {
         let db = self.db.clone();
         let client = db.client().clone();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(
-                    async move { super::commit::availability(&db, &mut prepared, &audit, session).await },
+                    async move { super::commit::availability(&db, &mut prepared, &audit, executor).await },
                 )
             })
             .await;

@@ -123,11 +123,11 @@ impl CatalogService {
         let audit_port = self.audit.clone();
         let brand_for_tx = brand.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    pending_assets.persist(&db, session).await?;
-                    db.product_brands().create(&brand_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    pending_assets.persist(&db, executor).await?;
+                    db.product_brands().create(&brand_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -208,11 +208,11 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    pending_assets.persist(&db, session).await?;
-                    db.product_brands().update(&mut brand, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    pending_assets.persist(&db, executor).await?;
+                    db.product_brands().update(&mut brand, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<ProductBrand, crate::error::Error>(brand)
                 })
             })
@@ -263,10 +263,10 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.product_brands().soft_delete(&mut brand, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.product_brands().soft_delete(&mut brand, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })

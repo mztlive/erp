@@ -175,13 +175,13 @@ impl PartyContactService {
         let contact_for_tx = contact.clone();
         let party_id_for_tx = contact.party_id.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     if contact_for_tx.is_default {
-                        clear_default_marks!(db, party_contacts, party_id_for_tx, None, session);
+                        clear_default_marks!(db, party_contacts, party_id_for_tx, None, executor);
                     }
-                    db.party_contacts().create(&contact_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.party_contacts().create(&contact_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -240,13 +240,19 @@ impl PartyContactService {
         let party_id_for_tx = contact.party_id.clone();
         let exclude_id = contact.base.id.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     if contact_for_tx.is_default {
-                        clear_default_marks!(db, party_contacts, party_id_for_tx, Some(&exclude_id), session);
+                        clear_default_marks!(
+                            db,
+                            party_contacts,
+                            party_id_for_tx,
+                            Some(&exclude_id),
+                            executor
+                        );
                     }
-                    db.party_contacts().update(&mut contact_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.party_contacts().update(&mut contact_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<PartyContact, crate::error::Error>(contact_for_tx)
                 })
             })

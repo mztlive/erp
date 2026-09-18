@@ -402,7 +402,7 @@ pub fn prepare_cost_entry(req: CreateCostEntryRequest) -> Result<PreparedCostEnt
     Ok(PreparedCostEntry { entry, allocations })
 }
 /// 用调用方的 Executor 原子写入成本与分配；审计由组合层随后执行。
-pub async fn persist_cost_entry_in_transaction(
+pub async fn persist_cost_entry(
     db: &Database,
     prepared: PreparedCostEntry,
     executor: &mut dyn Executor,

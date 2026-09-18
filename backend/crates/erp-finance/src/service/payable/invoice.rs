@@ -151,7 +151,7 @@ pub fn prepare_purchase_invoice(
 }
 /// 在调用方 Executor 内按原顺序校验号码、构建分配计划并批量读取应付账户。
 /// 供应商主体一致性由流程使用这些财务账户事实完成，之后才可调用持久化接口。
-pub async fn prepare_purchase_invoice_allocations_in_transaction(
+pub async fn prepare_purchase_invoice_allocations(
     db: &Database,
     req: &RegisterPurchaseInvoiceRequest,
     invoice_for_tx: &Invoice,
@@ -199,7 +199,7 @@ pub async fn prepare_purchase_invoice_allocations_in_transaction(
     Ok((plan, accounts))
 }
 /// 使用原 Executor 更新收票额度、发票状态与分配事实，禁止在此写工作项或审计。
-pub async fn persist_purchase_invoice_in_transaction(
+pub async fn persist_purchase_invoice(
     db: &Database,
     invoice_for_tx: Invoice,
     plan: &PurchaseInvoiceAllocationPlan,

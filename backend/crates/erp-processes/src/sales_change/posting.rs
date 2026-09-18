@@ -79,16 +79,16 @@ pub(super) async fn persist_effective_writes(
 async fn write_receivable_delta(
     db: &mongodb::Database,
     mut delta: SalesChangeReceivableWrite,
-    session: &mut dyn Executor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
-    delta.persist(db, session).await?;
+    delta.persist(db, executor).await?;
     let account = delta.account();
     let account_id = ReceivableAccountId::new(account.base.id.clone());
     crate::finance_posting::receivable::invoice_task::sync_sales_invoice_task(
         db,
         &account_id,
         crate::finance_posting::receivable::invoice_task::SalesInvoiceTaskChange::ReceivableChanged,
-        session,
+        executor,
     )
     .await
 }

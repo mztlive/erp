@@ -894,7 +894,7 @@ mod tests {
         let replay =
             runtime_source_fn("async fn replay_resume(", "async fn recover_resume_after_competing_commit(");
         assert!(replay.contains("with_transaction"));
-        assert!(replay.contains("replay_resume_in_transaction"));
+        assert!(replay.contains("replay_resume_apply"));
 
         let recovery = runtime_source_fn(
             "async fn recover_resume_after_competing_commit(",

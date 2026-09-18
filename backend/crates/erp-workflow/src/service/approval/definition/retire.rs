@@ -3,7 +3,7 @@ use bpm::graph::DefinitionGraph;
 use bpm::model::ApprovalProcessDefinition;
 use bpm::model::types::ApprovalCommandKind;
 use mongodb::Database;
-use persistence_core::Transactional;
+use persistence_core::{Executor, Transactional};
 
 use super::super::definition_dto::{DefinitionDetailView, RetireDefinitionRequest};
 use super::super::policy::ProcessRequiredApprovalPolicy;
@@ -77,7 +77,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         let transaction_identity = identity.clone();
         let expectation = DefinitionResultExpectation::DefinitionId(request.definition_id.clone());
         let client = db.client().clone();
-        let outcome = client.with_transaction(move |session| {
+        let outcome = client.with_transaction(move |executor| {
             Box::pin(async move {
                 retire_tx(
                     &db,
@@ -90,7 +90,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
                         identity: &transaction_identity,
                         audit: audit.as_ref(),
                     },
-                    session,
+                    executor,
                 )
                 .await
             })
@@ -138,7 +138,7 @@ struct RetireTxInput<'a> {
 /// * `rbac` - 共享 RBAC 服务
 /// * `graph` - 当前定义图
 /// * `input` - 政策、请求、摘要与操作人
-/// * `session` - 事务会话
+/// * `executor` - 执行器
 ///
 /// # 返回
 /// 返回退役后的定义详情。
@@ -153,21 +153,21 @@ async fn retire_tx(
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     graph: DefinitionGraph,
     input: RetireTxInput<'_>,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
     let RetireTxInput { policy, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(rbac, actor, &policy, session).await?;
+    ensure_definition_admin_permission(rbac, actor, &policy, executor).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,
         &DefinitionResultExpectation::DefinitionId(request.definition_id.clone()),
-        session,
+        executor,
     )
     .await?
     {
         return Ok(view);
     }
-    let published = db.bpm_workflow().find_published_by_process_kind(policy.process_kind, session).await?;
+    let published = db.bpm_workflow().find_published_by_process_kind(policy.process_kind, executor).await?;
     let RetireWriteStep::RetireCurrentPublished = decide_retire_write(
         published.as_ref(),
         &graph.definition.base.id,
@@ -181,9 +181,9 @@ async fn retire_tx(
     let graph =
         DefinitionGraph { definition: retired.clone(), nodes: graph.nodes, transitions: graph.transitions };
     let result_ref = DefinitionCommandResultRef::from_graph(&graph).encode();
-    write_receipt(db, &identity.current, &result_ref, session).await?;
+    write_receipt(db, &identity.current, &result_ref, executor).await?;
     retired.base.version = expected;
-    db.approval_process_definitions().update(&mut retired, session).await?;
+    db.approval_process_definitions().update(&mut retired, executor).await?;
     let graph = DefinitionGraph { definition: retired, nodes: graph.nodes, transitions: graph.transitions };
     write_definition_audit(
         audit,
@@ -192,7 +192,7 @@ async fn retire_tx(
         &graph,
         Some(request.expected_definition_lock_version),
         None,
-        session,
+        executor,
     )
     .await?;
     Ok(detail_view(&graph))

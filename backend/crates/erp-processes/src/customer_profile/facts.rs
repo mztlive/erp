@@ -17,7 +17,7 @@ use erp_party::{
 };
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 
 use super::CustomerProfileService;
 use super::numbering::business_no;
@@ -417,15 +417,15 @@ pub(super) struct PartyFacts {
 
 impl PartyFacts {
     /// 写入全部新事实。
-    pub(super) async fn persist(self, db: &Database, session: &mut mongodb::ClientSession) -> Result<()> {
+    pub(super) async fn persist(self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         for item in &self.contacts {
-            db.party_contacts().create(item, session).await?;
+            db.party_contacts().create(item, executor).await?;
         }
         for item in &self.addresses {
-            db.party_addresses().create(item, session).await?;
+            db.party_addresses().create(item, executor).await?;
         }
         for item in &self.bank_accounts {
-            db.party_bank_accounts().create(item, session).await?;
+            db.party_bank_accounts().create(item, executor).await?;
         }
         Ok(())
     }
@@ -453,24 +453,24 @@ pub(super) struct PartyFactChanges {
 
 impl PartyFactChanges {
     /// 按先结束旧事实、后写新事实的顺序持久化差异。
-    pub(super) async fn persist(mut self, db: &Database, session: &mut mongodb::ClientSession) -> Result<()> {
+    pub(super) async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         for item in &mut self.contacts.updated {
-            db.party_contacts().update(item, session).await?;
+            db.party_contacts().update(item, executor).await?;
         }
         for item in &self.contacts.created {
-            db.party_contacts().create(item, session).await?;
+            db.party_contacts().create(item, executor).await?;
         }
         for item in &mut self.addresses.updated {
-            db.party_addresses().update(item, session).await?;
+            db.party_addresses().update(item, executor).await?;
         }
         for item in &self.addresses.created {
-            db.party_addresses().create(item, session).await?;
+            db.party_addresses().create(item, executor).await?;
         }
         for item in &mut self.bank_accounts.updated {
-            db.party_bank_accounts().update(item, session).await?;
+            db.party_bank_accounts().update(item, executor).await?;
         }
         for item in &self.bank_accounts.created {
-            db.party_bank_accounts().create(item, session).await?;
+            db.party_bank_accounts().create(item, executor).await?;
         }
         Ok(())
     }

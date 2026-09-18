@@ -21,7 +21,7 @@ mod stock_write;
 mod update;
 
 pub use mapping::build_adjustment_line_updates;
-pub use stock_write::apply_posted_adjustment_in_transaction;
+pub use stock_write::apply_posted_adjustment;
 
 /// 库存查询与本域事务内命令。
 pub struct InventoryService {

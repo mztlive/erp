@@ -87,7 +87,7 @@ async fn persist_created_customer_acceptance(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 register_created_customer_acceptance_document(
                     &db,
@@ -95,11 +95,11 @@ async fn persist_created_customer_acceptance(
                     object_read.as_ref(),
                     &acceptance,
                     &actor,
-                    session,
+                    executor,
                 )
                 .await?;
-                db.fulfillment().create_customer_acceptance_with_lines(&acceptance, &lines, session).await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.fulfillment().create_customer_acceptance_with_lines(&acceptance, &lines, executor).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

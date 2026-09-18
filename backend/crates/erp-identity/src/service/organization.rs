@@ -163,14 +163,14 @@ impl OrganizationService {
         self.db
             .client()
             .clone()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let access = this.access(&actor, "manage", session).await?;
+                    let access = this.access(&actor, "manage", executor).await?;
                     let repository = OrganizationRepository::new(&this.db);
                     let receipt_id = format!("{}:{}", actor.id(), request.idempotency_key);
-                    let existing = repository.receipt(&receipt_id, session).await?;
+                    let existing = repository.receipt(&receipt_id, executor).await?;
                     if existing.is_none() {
-                        this.ensure_change(&request.change, &access, session).await?;
+                        this.ensure_change(&request.change, &access, executor).await?;
                         if this.rbac.current_policy_revision().await? != access.policy_version {
                             return Err(Error::ConflictError("授权版本已变化，请刷新后重试".into()));
                         }
@@ -186,7 +186,7 @@ impl OrganizationService {
                         Instant::from_unix_secs(Instant::now().unix_secs()),
                     )?;
                     if persist {
-                        repository.save(&mut receipt, session).await?;
+                        repository.save(&mut receipt, executor).await?;
                     }
                     Ok::<_, Error>(receipt)
                 })

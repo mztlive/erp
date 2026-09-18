@@ -88,7 +88,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let actor = actor.clone();
         self.db
             .client()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     upgrade_unsubmitted_document_definition(
                         &db,
@@ -98,7 +98,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                         audit.as_ref(),
                         &command,
                         &actor,
-                        session,
+                        executor,
                     )
                     .await
                 })
@@ -121,7 +121,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             let command = command.clone();
             self.db
                 .client()
-                .with_transaction(move |session| {
+                .with_transaction(move |executor| {
                     Box::pin(async move {
                         replay_unsubmitted_document_definition_upgrade(
                             &db,
@@ -129,7 +129,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                             upgrade.as_ref(),
                             &command,
                             &actor,
-                            session,
+                            executor,
                         )
                         .await
                     })

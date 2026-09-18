@@ -120,7 +120,7 @@ impl IntegrationResolutionProcess {
         let rbac = crate::adapters::identity::shared_rbac_service(self.db.clone());
         let prepared = PreparedWorkItemTarget::try_from(&command)?;
         let evidence = std::sync::Arc::clone(&self.evidence);
-        self.run_audited(move |db, session| {
+        self.run_audited(move |db, executor| {
             Box::pin(async move {
                 super::execution::run_completion(
                     &mut CompletionCommand {
@@ -132,7 +132,7 @@ impl IntegrationResolutionProcess {
                         actor: &actor,
                         receipt: &receipt,
                     },
-                    session,
+                    executor,
                 )
                 .await
             })

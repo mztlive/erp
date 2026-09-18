@@ -67,21 +67,21 @@ impl ImportApplyService {
         let audit_id_for_tx = audit_id.clone();
         let fingerprint_for_tx = fingerprint.clone();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let mut work_item = db
                         .work_items()
-                        .find_by_id(prepared_for_tx.work_item_id.as_ref(), session)
+                        .find_by_id(prepared_for_tx.work_item_id.as_ref(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("导入确认任务不存在".to_string()))?;
                     let mut confirmation = db
                         .legacy_import_confirmations()
-                        .find_by_work_item(&prepared_for_tx.work_item_id, session)
+                        .find_by_work_item(&prepared_for_tx.work_item_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("导入确认事实不存在".to_string()))?;
                     let mut batch = db
                         .legacy_import_batches()
-                        .find_by_id(confirmation.batch_id.as_ref(), session)
+                        .find_by_id(confirmation.batch_id.as_ref(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("导入批次不存在".to_string()))?;
                     validate_confirmation_completion(
@@ -92,12 +92,12 @@ impl ImportApplyService {
                         &actor_id,
                     )?;
                     work_item_service(db.clone(), rbac_for_tx.clone())
-                        .ensure_domain_decision_access(&audit_actor, &work_item, session)
+                        .ensure_domain_decision_access(&audit_actor, &work_item, executor)
                         .await?;
                     let _ = &work_item;
                     let mut matrix = db
                         .legacy_import_confirmations()
-                        .list_by_batch(&confirmation.batch_id, session)
+                        .list_by_batch(&confirmation.batch_id, executor)
                         .await?;
                     confirmation.decide(
                         prepared_for_tx.decision,
@@ -136,10 +136,10 @@ impl ImportApplyService {
                         &confirmation,
                         &actor_id,
                     )?;
-                    db.legacy_import_confirmations().update(&mut confirmation, session).await?;
-                    db.legacy_import_batches().update(&mut batch, session).await?;
-                    db.work_items().update(&mut work_item, session).await?;
-                    db.workflow_actions().create(&workflow_action, session).await?;
+                    db.legacy_import_confirmations().update(&mut confirmation, executor).await?;
+                    db.legacy_import_batches().update(&mut batch, executor).await?;
+                    db.work_items().update(&mut work_item, executor).await?;
+                    db.workflow_actions().create(&workflow_action, executor).await?;
                     let receipt = ConfirmationCompletionReceipt {
                         result_status: confirmation_result_status(prepared_for_tx.decision),
                         task_version: work_item.base.version,
@@ -153,7 +153,7 @@ impl ImportApplyService {
                         confirmation.base.id.clone(),
                         Some(confirmation_completion_receipt_message(&fingerprint_for_tx, receipt)),
                     )?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<ConfirmationCompletionTransactionResult, crate::Error>(
                         ConfirmationCompletionTransactionResult { confirmation, work_item, receipt },
                     )

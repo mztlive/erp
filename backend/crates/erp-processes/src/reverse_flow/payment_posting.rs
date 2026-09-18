@@ -55,9 +55,9 @@ impl PaymentReversalProcess {
         let reversal_id = id.to_string();
         let detail_id = reversal_id.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    apply_payment_reversal_final_post(&db, &reversal_id, &actor_id, &actor_owned, session)
+                    apply_payment_reversal_final_post(&db, &reversal_id, &actor_id, &actor_owned, executor)
                         .await
                 })
             })
@@ -70,13 +70,13 @@ impl PaymentReversalProcess {
     }
 
     /// 在审批最终通过持有的唯一事务内执行付款冲正。
-    pub async fn post_payment_reversal_in_transaction(
+    pub async fn post_payment_reversal_apply(
         &self,
         id: &str,
         actor: &AuditActor,
-        session: &mut mongodb::ClientSession,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
-        apply_payment_reversal_final_post(&self.db, id, actor.id(), actor, session).await
+        apply_payment_reversal_final_post(&self.db, id, actor.id(), actor, executor).await
     }
 }
 

@@ -52,7 +52,7 @@ mod tests {
         assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
         assert!(production.contains("ensure_initial_purchase_order_owner"));
         assert!(production.contains("ensure_fulfillment_owner_eligible"));
-        assert!(production.contains("submit_created_draft_in_session"));
+        assert!(production.contains("submit_created_draft("));
     }
     /// 创建依据路径必须使用批量事实加载，旧逐行供给与名称查询已删除。
     #[test]

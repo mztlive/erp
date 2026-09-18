@@ -89,10 +89,10 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.sku_attributes().update(&mut attribute, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.sku_attributes().update(&mut attribute, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<SkuAttribute, crate::error::Error>(attribute)
                 })
             })
@@ -124,10 +124,10 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.sku_attributes().soft_delete(&mut attribute, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.sku_attributes().soft_delete(&mut attribute, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -208,10 +208,10 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.sku_attribute_values().update(&mut value, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.sku_attribute_values().update(&mut value, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<SkuAttributeValue, crate::error::Error>(value)
                 })
             })
@@ -243,10 +243,10 @@ impl CatalogService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.sku_attribute_values().soft_delete(&mut value, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.sku_attribute_values().soft_delete(&mut value, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })

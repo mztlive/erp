@@ -27,7 +27,7 @@ pub(super) struct InvoicePostingInput<'a> {
 ///
 /// The root owns authorization, duplicate checks and commit recovery. This operation
 /// preserves the prior step order and returns the first error without further writes.
-pub(super) async fn post_invoice_in_transaction(
+pub(super) async fn post_invoice_apply(
     db: &Database,
     invoice: &mut Invoice,
     input: InvoicePostingInput<'_>,

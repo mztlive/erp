@@ -121,7 +121,7 @@ impl ReceivableProcess {
         let command_receipt_for_tx = command_receipt.clone();
         let transaction_result = rbac
             .clone()
-            .run_authorized_policy_transaction(policy_revision, move |session| {
+            .run_authorized_policy_transaction(policy_revision, move |executor| {
                 Box::pin(async move {
                     let (mut invoice, plan_lines) = match prepared {
                         PreparedInvoiceCommit::New { invoice, allocations } => {
@@ -152,16 +152,16 @@ impl ReceivableProcess {
                                 object_read.as_ref(),
                                 &new_invoice,
                                 &actor_owned,
-                                session,
+                                executor,
                             )
                             .await?;
-                            db.invoices().create(&new_invoice, session).await?;
+                            db.invoices().create(&new_invoice, executor).await?;
                             (new_invoice, allocations)
                         },
                         PreparedInvoiceCommit::Existing { invoice_id, expected_version, allocations } => {
                             let invoice = db
                                 .invoices()
-                                .find_by_id(&invoice_id, session)
+                                .find_by_id(&invoice_id, executor)
                                 .await?
                                 .ok_or_else(|| Error::NotFound("发票不存在".to_string()))?;
                             ensure_expected_version(invoice.base.version, expected_version)?;
@@ -177,13 +177,13 @@ impl ReceivableProcess {
                         .find_by_direction_and_normalized_no(
                             invoice.invoice_direction,
                             &invoice.normalized_no,
-                            session,
+                            executor,
                         )
                         .await?;
                     if duplicate.as_ref().is_some_and(|other| other.base.id != invoice.base.id) {
                         return Err(Error::ConflictError("发票号码已登记，请勿重复提交".to_string()));
                     }
-                    super::invoice_posting::post_invoice_in_transaction(
+                    super::invoice_posting::post_invoice_apply(
                         &db,
                         &mut invoice,
                         super::invoice_posting::InvoicePostingInput {
@@ -194,7 +194,7 @@ impl ReceivableProcess {
                             action: "invoice.commit",
                             command_receipt: Some(&command_receipt_for_tx),
                         },
-                        session,
+                        executor,
                     )
                     .await?;
                     let committed_id = invoice.base.id.clone();
@@ -251,11 +251,11 @@ impl ReceivableProcess {
         let detail_id = invoice_id.clone();
         let work_item_id = req.work_item_id.clone();
         let plan_lines = convert_post_allocations(&req.allocations);
-        rbac.run_authorized_policy_transaction(policy_revision, move |session| {
+        rbac.run_authorized_policy_transaction(policy_revision, move |executor| {
             Box::pin(async move {
                 let mut invoice = db
                     .invoices()
-                    .find_by_id(&invoice_id, session)
+                    .find_by_id(&invoice_id, executor)
                     .await?
                     .ok_or_else(|| Error::NotFound("发票不存在".to_string()))?;
                 ensure_sales_invoice(&invoice)?;
@@ -267,7 +267,7 @@ impl ReceivableProcess {
                     .find_by_direction_and_normalized_no(
                         invoice.invoice_direction,
                         &invoice.normalized_no,
-                        session,
+                        executor,
                     )
                     .await?;
                 if let Some(other) = duplicate
@@ -276,7 +276,7 @@ impl ReceivableProcess {
                     return Err(Error::ConflictError("发票号码已登记，请勿重复提交".to_string()));
                 }
 
-                super::invoice_posting::post_invoice_in_transaction(
+                super::invoice_posting::post_invoice_apply(
                     &db,
                     &mut invoice,
                     super::invoice_posting::InvoicePostingInput {
@@ -287,7 +287,7 @@ impl ReceivableProcess {
                         action: "invoice.post",
                         command_receipt: None,
                     },
-                    session,
+                    executor,
                 )
                 .await?;
                 Ok::<(), crate::Error>(())
@@ -475,7 +475,7 @@ async fn persist_created_invoice(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 register_created_invoice_document(
                     &db,
@@ -483,11 +483,11 @@ async fn persist_created_invoice(
                     object_read.as_ref(),
                     &invoice,
                     &actor,
-                    session,
+                    executor,
                 )
                 .await?;
-                db.invoices().create(&invoice, session).await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.invoices().create(&invoice, executor).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

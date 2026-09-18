@@ -62,12 +62,12 @@ impl SupplierSettlementProcess {
         let mut statement_for_tx = statement.clone();
         let audit_for_tx = audit.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     erp_supply::service::supplier_settlement::SupplierSettlementService::new(db.clone())
-                        .persist_statement(&mut statement_for_tx, session)
+                        .persist_statement(&mut statement_for_tx, executor)
                         .await?;
-                    db.audit_logs().create(&audit_for_tx, session).await?;
+                    db.audit_logs().create(&audit_for_tx, executor).await?;
                     Ok::<SupplierSettlementStatement, crate::Error>(statement_for_tx)
                 })
             })

@@ -90,7 +90,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         let outcome = db
             .client()
             .clone()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     replace_nodes_tx(
                         &db,
@@ -103,7 +103,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
                             identity: &transaction_identity,
                             audit: audit.as_ref(),
                         },
-                        session,
+                        executor,
                     )
                     .await
                 })
@@ -152,7 +152,7 @@ struct ReplaceNodesTxInput<'a> {
 /// * `rbac` - 共享 RBAC 服务
 /// * `graph` - 当前草稿图
 /// * `input` - 政策、请求、摘要与操作人
-/// * `session` - 事务会话
+/// * `executor` - 执行器
 ///
 /// # 返回
 /// 返回替换后的定义详情。
@@ -167,26 +167,26 @@ async fn replace_nodes_tx(
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     graph: DefinitionGraph,
     input: ReplaceNodesTxInput<'_>,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
     let ReplaceNodesTxInput { policy, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(rbac, actor, &policy, session).await?;
+    ensure_definition_admin_permission(rbac, actor, &policy, executor).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,
         &DefinitionResultExpectation::DefinitionId(request.definition_id.clone()),
-        session,
+        executor,
     )
     .await?
     {
         return Ok(view);
     }
     let reloaded =
-        reload_draft_for_cas(db, &graph.definition, request.expected_definition_lock_version, session)
+        reload_draft_for_cas(db, &graph.definition, request.expected_definition_lock_version, executor)
             .await?;
-    let prepared = prepare_replacement(db, rbac, &reloaded, &policy, &request.nodes, actor, session).await?;
+    let prepared = prepare_replacement(db, rbac, &reloaded, &policy, &request.nodes, actor, executor).await?;
     let result_ref = DefinitionCommandResultRef::from_graph(&prepared).encode();
-    write_receipt(db, &identity.current, &result_ref, session).await?;
+    write_receipt(db, &identity.current, &result_ref, executor).await?;
     apply_draft_graph(
         db,
         audit,
@@ -195,7 +195,7 @@ async fn replace_nodes_tx(
         actor,
         "approval_definition.replace_nodes",
         Some(node_summary(&reloaded.nodes)),
-        session,
+        executor,
     )
     .await
 }

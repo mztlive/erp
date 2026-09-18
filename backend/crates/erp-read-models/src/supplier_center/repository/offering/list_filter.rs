@@ -593,7 +593,7 @@ mod isolation_tests {
             let db = fixture.db().clone();
             let client = db.client().clone();
             client
-                .with_transaction::<_, (), persistence_core::Error>(move |session| {
+                .with_transaction::<_, (), persistence_core::Error>(move |executor| {
                     let db = db.clone();
                     Box::pin(async move {
                         let (offering, revision, availability) =
@@ -603,12 +603,12 @@ mod isolation_tests {
                                 &offering,
                                 &revision,
                                 &availability,
-                                session,
+                                executor,
                             )
                             .await?;
                         let query = super::SupplierOfferingListQuery::default();
                         let bundle = super::SupplierOfferingReadRepository::new(&db)
-                            .load_offering_list_page(&query, session)
+                            .load_offering_list_page(&query, executor)
                             .await?;
                         assert_eq!(bundle.page.total, 1, "事务内应能 read-your-writes");
                         Ok(())

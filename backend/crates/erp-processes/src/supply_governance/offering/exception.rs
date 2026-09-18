@@ -61,16 +61,16 @@ impl SupplierOfferingProcess {
         let receipt_for_tx = receipt.clone();
         let offering_id_for_tx = offering_id.to_string();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let typed_offering_id = SupplierOfferingId::new(&offering_id_for_tx);
                     db.supplier_offerings()
-                        .find_by_id(&typed_offering_id, session)
+                        .find_by_id(&typed_offering_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商供给不存在".to_string()))?;
                     let mut work_item = db
                         .work_items()
-                        .find_by_id(&req_for_tx.work_item_id, session)
+                        .find_by_id(&req_for_tx.work_item_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应停止任务不存在".to_string()))?;
                     ensure_supply_exception_work_item(
@@ -80,7 +80,7 @@ impl SupplierOfferingProcess {
                         &req_for_tx.expected_subject_version,
                     )?;
                     work_item_service(db.clone(), rbac.clone())
-                        .ensure_domain_decision_access(&actor_for_tx, &work_item, session)
+                        .ensure_domain_decision_access(&actor_for_tx, &work_item, executor)
                         .await?;
 
                     let completed_at = Instant::now();
@@ -104,7 +104,7 @@ impl SupplierOfferingProcess {
                             decision: &decision_audit,
                             receipt: &receipt_audit,
                         },
-                        session,
+                        executor,
                     )
                     .await?;
 

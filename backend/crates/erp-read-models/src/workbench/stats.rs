@@ -38,8 +38,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         self.db
             .client()
             .clone()
-            .with_transaction(move |session| {
-                Box::pin(async move { this.stats_at(query, actor, all_families, session).await })
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.stats_at(query, actor, all_families, executor).await })
             })
             .await
     }

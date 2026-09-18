@@ -139,11 +139,11 @@ impl CustomerService {
         let access = self.access();
         let actor_for_tx = actor.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.require_create(&actor_for_tx, session).await?;
-                    persist_new_account(&db, &account_for_tx, &assignment_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    access.require_create(&actor_for_tx, executor).await?;
+                    persist_new_account(&db, &account_for_tx, &assignment_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -269,11 +269,11 @@ impl CustomerService {
         let actor_for_tx = actor.clone();
         let customer_id = id.to_string();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.require_with(actor_for_tx, "update", &customer_id, session).await?;
-                    persist_account_update(&db, &mut account_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    access.require_with(actor_for_tx, "update", &customer_id, executor).await?;
+                    persist_account_update(&db, &mut account_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<CustomerAccount, crate::error::Error>(account_for_tx)
                 })
             })

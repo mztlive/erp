@@ -58,17 +58,17 @@ impl SupplierFulfillmentProcess {
         let mut action_for_tx = action.clone();
         let audit_for_tx = audit.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     erp_supply::service::supplier_fulfillment::reject::persist_reject(
                         &db,
                         &mut order_for_tx,
                         &history_for_tx,
                         &mut action_for_tx,
-                        session,
+                        executor,
                     )
                     .await?;
-                    db.audit_logs().create(&audit_for_tx, session).await?;
+                    db.audit_logs().create(&audit_for_tx, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

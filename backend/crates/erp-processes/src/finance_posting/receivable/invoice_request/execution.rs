@@ -17,7 +17,7 @@ use super::*;
 /// 最终审批通过时原子授予额度并生成申请专属财务执行任务。
 /// # 错误
 /// 应收额度不足、财务负责人缺失、状态或并发冲突时审批事务回滚。
-pub(crate) async fn approve_in_transaction(
+pub(crate) async fn approve(
     db: &Database,
     id: &str,
     actor: &AuditActor,

@@ -115,10 +115,10 @@ impl ReceivableProcess {
         let db = self.db.clone();
         let client = db.client().clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.receivable().create_receivable_with_entry(&account, &entry, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.receivable().create_receivable_with_entry(&account, &entry, executor).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

@@ -213,7 +213,7 @@ impl ImportApplyService {
         let skipped = deltas.skipped;
         let failed = deltas.failed;
         let updated_batch = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     persist_apply_transaction(
                         PersistApplyWrite {
@@ -228,7 +228,7 @@ impl ImportApplyService {
                             all_terminal,
                             now,
                         },
-                        session,
+                        executor,
                     )
                     .await
                 })
@@ -844,7 +844,7 @@ mod tests {
             let client = db.client().clone();
             let persist_db = db.clone();
             let persist: crate::Result<LegacyImportBatch> = client
-                .with_transaction(move |session| {
+                .with_transaction(move |executor| {
                     Box::pin(async move {
                         persist_apply_transaction(
                             PersistApplyWrite {
@@ -859,7 +859,7 @@ mod tests {
                                 all_terminal: true,
                                 now: Instant::from_unix_secs(1_700_000_100),
                             },
-                            session,
+                            executor,
                         )
                         .await
                     })

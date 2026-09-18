@@ -5,9 +5,9 @@ use async_trait::async_trait;
 use casbin::error::AdapterError;
 use casbin::{Adapter, Filter, Model};
 use futures_util::StreamExt;
+use mongodb::Database;
 use mongodb::bson::{Document, doc, serialize_to_document};
 use mongodb::options::FindOptions;
-use mongodb::{ClientSession, Database};
 use persistence_core::{Executor, Result, Transactional, mongo_ops};
 use serde::{Deserialize, Serialize};
 
@@ -185,7 +185,7 @@ impl MongoCasbinAdapter {
         T: Send + 'static,
         F: for<'a> FnOnce(
                 &'a MongoCasbinAdapter,
-                &'a mut ClientSession,
+                &'a mut dyn Executor,
             ) -> Pin<Box<dyn Future<Output = Result<(T, bool)>> + Send + 'a>>
             + Send
             + 'static,
@@ -194,11 +194,11 @@ impl MongoCasbinAdapter {
         let inner = adapter.clone();
         self.db
             .client()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (value, changed) = operation(&inner, session).await?;
+                    let (value, changed) = operation(&inner, executor).await?;
                     if known_changed || changed {
-                        adapter.bump_policy_revision(session).await?;
+                        adapter.bump_policy_revision(executor).await?;
                     }
                     Ok(value)
                 })

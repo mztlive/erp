@@ -14,7 +14,7 @@ use erp_identity::repository::prelude::*;
 use erp_party::{Party, PartyData, PartyExt, PartyKind, PartyRevision, PartyRevisionData, PartyStatus};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::CustomerProfileService;
 use super::facts::PartyFacts;
@@ -79,10 +79,10 @@ impl CustomerProfileService {
         let db = self.db.clone();
         db.client()
             .clone()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    customer_access(db.clone(), rbac).require_create(&actor, session).await?;
-                    prepared.persist(&db, session).await
+                    customer_access(db.clone(), rbac).require_create(&actor, executor).await?;
+                    prepared.persist(&db, executor).await
                 })
             })
             .await
@@ -193,14 +193,14 @@ impl PreparedCreate {
     }
 
     /// 将完整客户资料与幂等结果写入同一事务。
-    async fn persist(self, db: &Database, session: &mut mongodb::ClientSession) -> Result<()> {
-        db.party_revisions().create(&self.revision, session).await?;
-        db.parties().create(&self.party, session).await?;
-        db.customer_accounts().create(&self.account, session).await?;
-        db.customer_assignments().create(&self.assignment, session).await?;
-        self.facts.persist(db, session).await?;
-        db.customer_profile_commands().create(&self.command, session).await?;
-        db.audit_logs().create(&self.audit, session).await?;
+    async fn persist(self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
+        db.party_revisions().create(&self.revision, executor).await?;
+        db.parties().create(&self.party, executor).await?;
+        db.customer_accounts().create(&self.account, executor).await?;
+        db.customer_assignments().create(&self.assignment, executor).await?;
+        self.facts.persist(db, executor).await?;
+        db.customer_profile_commands().create(&self.command, executor).await?;
+        db.audit_logs().create(&self.audit, executor).await?;
         Ok(())
     }
 }

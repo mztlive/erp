@@ -82,7 +82,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         let transaction_identity = identity.clone();
         let expectation = DefinitionResultExpectation::DefinitionId(request.definition_id.clone());
         let client = db.client().clone();
-        let outcome = client.with_transaction(move |session| {
+        let outcome = client.with_transaction(move |executor| {
             Box::pin(async move {
                 publish_tx(
                     &db,
@@ -95,7 +95,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
                         identity: &transaction_identity,
                         audit: audit.as_ref(),
                     },
-                    session,
+                    executor,
                 )
                 .await
             })
@@ -143,7 +143,7 @@ struct PublishTxInput<'a> {
 /// * `rbac` - 共享 RBAC 服务
 /// * `graph` - 当前草稿图
 /// * `input` - 政策、请求、摘要与操作人
-/// * `session` - 事务会话
+/// * `executor` - 执行器
 ///
 /// # 返回
 /// 返回发布后的定义详情。
@@ -158,31 +158,31 @@ async fn publish_tx(
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     graph: DefinitionGraph,
     input: PublishTxInput<'_>,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
     let PublishTxInput { policy, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(rbac, actor, &policy, session).await?;
+    ensure_definition_admin_permission(rbac, actor, &policy, executor).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,
         &DefinitionResultExpectation::DefinitionId(request.definition_id.clone()),
-        session,
+        executor,
     )
     .await?
     {
         return Ok(view);
     }
     let mut current =
-        reload_draft_for_cas(db, &graph.definition, request.expected_definition_lock_version, session)
+        reload_draft_for_cas(db, &graph.definition, request.expected_definition_lock_version, executor)
             .await?;
     let PublishWriteStep::RefreshSnapshotsAndRetirePrevious = decide_publish_write(
         current.validate_linear().map_err(map_model_error),
         validate_required_purposes(&policy, &current.purpose_refs()),
-        validate_assignees(db, rbac, &policy, &current.assignee_ids(), session).await,
+        validate_assignees(db, rbac, &policy, &current.assignee_ids(), executor).await,
         ensure_actions_registered(&policy),
     )?;
-    current = prepare_publish_graph(db, rbac, current, session).await?;
-    let previous = db.bpm_workflow().find_published_by_process_kind(policy.process_kind, session).await?;
+    current = prepare_publish_graph(db, rbac, current, executor).await?;
+    let previous = db.bpm_workflow().find_published_by_process_kind(policy.process_kind, executor).await?;
     let previous_lock = previous.as_ref().map(|item| item.definition_lock_version());
     let (published, previous) = current
         .definition
@@ -195,8 +195,8 @@ async fn publish_tx(
         transitions: current.transitions.clone(),
     };
     let result_ref = DefinitionCommandResultRef::from_graph(&result).encode();
-    write_receipt(db, &identity.current, &result_ref, session).await?;
-    let refreshed = replace_graph(db, current, request.expected_definition_lock_version, session).await?;
+    write_receipt(db, &identity.current, &result_ref, executor).await?;
+    let refreshed = replace_graph(db, current, request.expected_definition_lock_version, executor).await?;
     let outcome = db
         .bpm_workflow()
         .publish_and_retire_previous(
@@ -204,7 +204,7 @@ async fn publish_tx(
             previous.as_ref(),
             refreshed.definition.definition_lock_version(),
             previous_lock,
-            session,
+            executor,
         )
         .await?;
     result.definition = applied_definition(outcome)?;
@@ -215,7 +215,7 @@ async fn publish_tx(
         &result,
         Some(request.expected_definition_lock_version),
         None,
-        session,
+        executor,
     )
     .await?;
     Ok(detail_view(&result))

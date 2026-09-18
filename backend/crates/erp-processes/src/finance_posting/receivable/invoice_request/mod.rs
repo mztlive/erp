@@ -2,7 +2,7 @@
 mod cancel;
 mod execution;
 mod submit;
-pub(crate) use cancel::cancel_in_transaction;
+pub(crate) use cancel::cancel;
 use erp_core::money::Amount;
 use erp_finance::entity::receivable::{ReceivableAccount, SalesInvoiceRequest};
 use erp_finance::repository::ReceivableExt;

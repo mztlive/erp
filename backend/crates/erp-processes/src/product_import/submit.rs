@@ -147,10 +147,10 @@ impl ProductImportProcess {
         let file_for_tx = file_asset.clone();
         let job_for_tx = job.clone();
         let registration = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.file_assets().create(&file_for_tx, session).await?;
-                    db.bulk_job().create_job_with_items(&job_for_tx, items, session).await
+                    db.file_assets().create(&file_for_tx, executor).await?;
+                    db.bulk_job().create_job_with_items(&job_for_tx, items, executor).await
                 })
             })
             .await;

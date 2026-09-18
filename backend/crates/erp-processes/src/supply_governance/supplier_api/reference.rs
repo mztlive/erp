@@ -48,7 +48,7 @@ impl SupplierApiGovernanceProcess {
         let actor = actor.clone();
         let connection_id_value = id.to_string();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let connection = SupplierApiService::new(db.clone())
                         .apply_reference(
@@ -57,7 +57,7 @@ impl SupplierApiGovernanceProcess {
                             expected_version,
                             resolved,
                             actor.id(),
-                            session,
+                            executor,
                         )
                         .await?;
                     persist_command_receipt(
@@ -70,7 +70,7 @@ impl SupplierApiGovernanceProcess {
                             job_id: None,
                             actor: &actor,
                         },
-                        session,
+                        executor,
                     )
                     .await
                 })

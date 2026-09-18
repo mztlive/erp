@@ -5,7 +5,7 @@ use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
 use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::{FormalizedSubmissionWrite, SalesOrderCommandProcess};
 use crate::Result;
@@ -57,18 +57,18 @@ impl SalesOrderFormalizationProcess {
             let db = self.db.clone();
             if let Some(policy_revision) = policy_revision {
                 self.rbac
-                    .run_authorized_policy_transaction(policy_revision, move |session| {
+                    .run_authorized_policy_transaction(policy_revision, move |executor| {
                         Box::pin(
-                            async move { persist_formalized_submission(&db, write, &audit, session).await },
+                            async move { persist_formalized_submission(&db, write, &audit, executor).await },
                         )
                     })
                     .await?;
             } else {
                 self.db
                     .client()
-                    .with_transaction(move |session| {
+                    .with_transaction(move |executor| {
                         Box::pin(
-                            async move { persist_formalized_submission(&db, write, &audit, session).await },
+                            async move { persist_formalized_submission(&db, write, &audit, executor).await },
                         )
                     })
                     .await?;
@@ -82,27 +82,27 @@ impl SalesOrderFormalizationProcess {
     /// # 参数
     /// * `id` - 销售单主键
     /// * `actor` - 已认证操作人
-    /// * `session` - 审批运行时持有的唯一事务会话
+    /// * `executor` - 审批运行时持有的执行器
     ///
     /// # 返回
     /// 正式版本、应收、供给任务和成功审计全部写入时返回 `Ok(())`。
     ///
     /// # 错误
     /// 单据状态、提交、采购责任或持久化不变量失败时返回错误。
-    pub async fn formalize_approved_submission_in_transaction(
+    pub async fn formalize_approved_submission_apply(
         &self,
         id: &str,
         actor: &AuditActor,
-        session: &mut mongodb::ClientSession,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let service = SalesOrderCommandProcess::with_rbac(self.db.clone(), self.rbac.clone());
-        if let Some(write) = service.prepare_approved_submission(id, actor, session).await? {
+        if let Some(write) = service.prepare_approved_submission(id, actor, executor).await? {
             let audit = actor.clone().resource_log(
                 "sales_order.formalize",
                 "sales_order",
                 write.order_id().to_string(),
             )?;
-            persist_formalized_submission(&self.db, write, &audit, session).await?;
+            persist_formalized_submission(&self.db, write, &audit, executor).await?;
         }
         Ok(())
     }
@@ -113,7 +113,7 @@ async fn persist_formalized_submission(
     _db: &Database,
     write: FormalizedSubmissionWrite,
     audit: &erp_audit::AuditLog,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
-    super::formalization_posting::post(write, audit, session).await
+    super::formalization_posting::post(write, audit, executor).await
 }

@@ -12,7 +12,6 @@ use erp_procurement::service::purchase_order::void_order::{
     ensure_current_submission_is_draft, ensure_void_target, load_purchase_order, persist_voided_order,
 };
 use erp_sales::repository::SalesOrderExt;
-use mongodb::ClientSession;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -137,11 +136,11 @@ async fn execute_void_draft_transaction(
     let transaction_receipt_id = receipt_id.clone();
     let transaction_fingerprint = fingerprint.clone();
     let transaction_result = rbac
-        .run_authorized_policy_transaction(policy_revision, move |session| {
+        .run_authorized_policy_transaction(policy_revision, move |executor| {
             Box::pin(async move {
-                ensure_purchase_order_actor_account(&db, &transaction_actor, session).await?;
+                ensure_purchase_order_actor_account(&db, &transaction_actor, executor).await?;
                 object_scope
-                    .revalidate(&transaction_order_id, request.expected_lock_version, session)
+                    .revalidate(&transaction_order_id, request.expected_lock_version, executor)
                     .await?;
                 let command = VoidDraftCommand {
                     purchase_order_id: &transaction_order_id,
@@ -150,7 +149,7 @@ async fn execute_void_draft_transaction(
                     request_fingerprint: &transaction_fingerprint,
                     actor: &transaction_actor,
                 };
-                void_draft_in_transaction(&db, &command, session).await
+                void_draft_apply(&db, &command, executor).await
             })
         })
         .await;
@@ -163,7 +162,7 @@ async fn execute_void_draft_transaction(
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `command` - 作废请求、收据身份和操作人上下文
-/// * `session` - MongoDB 事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回首次作废结果或事务内命中的原收据结果。
@@ -173,10 +172,10 @@ async fn execute_void_draft_transaction(
 ///
 /// # 关键业务约束
 /// 事务内先查收据；收据未命中时，`Voided` 状态只能返回冲突，不能返回回放。
-async fn void_draft_in_transaction(
+async fn void_draft_apply(
     db: &mongodb::Database,
     command: &VoidDraftCommand<'_>,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<VoidPurchaseOrderResult> {
     if let Some(result) = replay_void_draft(
         db,
@@ -184,13 +183,13 @@ async fn void_draft_in_transaction(
         command.request_fingerprint,
         command.purchase_order_id,
         command.actor,
-        session,
+        executor,
     )
     .await?
     {
         return Ok(result);
     }
-    let mut order = load_purchase_order(db, command.purchase_order_id, session).await?;
+    let mut order = load_purchase_order(db, command.purchase_order_id, executor).await?;
     ensure_void_target(
         &order.stable.created_by,
         order.base.version,
@@ -198,8 +197,8 @@ async fn void_draft_in_transaction(
         command.request.expected_lock_version,
         command.actor.id(),
     )?;
-    ensure_current_submission_is_draft(db, &order, session).await?;
-    void_order_and_persist(db, &mut order, command, session).await
+    ensure_current_submission_is_draft(db, &order, executor).await?;
+    void_order_and_persist(db, &mut order, command, executor).await
 }
 
 /// 推进来源销售 guard、作废采购单并持久化命令收据。
@@ -208,7 +207,7 @@ async fn void_draft_in_transaction(
 /// * `db` - MongoDB 数据库
 /// * `order` - 已完成目标和草稿提交校验的采购单
 /// * `command` - 作废请求、收据身份和操作人上下文
-/// * `session` - MongoDB 事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回首次成功响应中需要稳定回放的作废结果。
@@ -222,9 +221,9 @@ async fn void_order_and_persist(
     db: &mongodb::Database,
     order: &mut PurchaseOrder,
     command: &VoidDraftCommand<'_>,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<VoidPurchaseOrderResult> {
-    execute_void_steps(&mut VoidPosting { db, order, command }, session).await
+    execute_void_steps(&mut VoidPosting { db, order, command }, executor).await
 }
 
 /// 原作废写段在命令收据写入前的三个副作用边界。

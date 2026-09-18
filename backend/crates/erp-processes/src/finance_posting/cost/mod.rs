@@ -15,8 +15,7 @@ use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::CostEntryId;
 use erp_finance::dto::cost::{CostEntryView, CreateCostEntryRequest};
 use erp_finance::service::cost::{
-    dedupe_order_ids, missing_order_id, persist_cost_entry_in_transaction, prepare_cost_entry,
-    validate_create_cost_entry,
+    dedupe_order_ids, missing_order_id, persist_cost_entry, prepare_cost_entry, validate_create_cost_entry,
 };
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
@@ -74,10 +73,10 @@ impl CostService {
         let db = self.db.clone();
         let client = db.client().clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    persist_cost_entry_in_transaction(&db, prepared, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    persist_cost_entry(&db, prepared, executor).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

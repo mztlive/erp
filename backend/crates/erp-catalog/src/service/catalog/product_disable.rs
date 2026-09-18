@@ -55,7 +55,7 @@ impl CatalogService {
         let actor = actor.clone();
         let id = id.to_string();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     write_disabled_product(
                         DisableWrite {
@@ -67,7 +67,7 @@ impl CatalogService {
                             actor: &actor,
                             audit: &audit,
                         },
-                        session,
+                        executor,
                     )
                     .await
                 })

@@ -30,7 +30,7 @@ use super::adapter::{
 use super::start_approval::{
     CustomerReceiptStartPersistInput, DocumentStartInput, build_document_start_input,
     load_bound_definition_graph, load_bound_definition_graph_with_executor, load_start_receipt,
-    load_start_receipt_with_executor, persist_customer_receipt_start_in_transaction,
+    load_start_receipt_with_executor, persist_customer_receipt_start_apply,
 };
 use crate::{Error, Result};
 
@@ -81,10 +81,10 @@ pub(super) async fn run_commit_transaction(
     let rbac = rbac.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 let (receipt, binding) =
-                    load_commit_receipt(&db, &rbac, object_read.as_ref(), pending, &actor, session).await?;
+                    load_commit_receipt(&db, &rbac, object_read.as_ref(), pending, &actor, executor).await?;
                 persist_loaded_commit_start(
                     &db,
                     LoadedCommitStart {
@@ -96,7 +96,7 @@ pub(super) async fn run_commit_transaction(
                         actor: actor.clone(),
                     },
                     &command_receipt,
-                    session,
+                    executor,
                 )
                 .await
             })
@@ -110,23 +110,23 @@ pub(super) async fn run_commit_transaction(
 /// * `db` - 数据库实例
 /// * `receipt_id` - 客户回款单 ID
 /// * `actor` - 已认证操作人
-/// * `session` - 审批运行时持有的唯一事务会话
+/// * `executor` - 调用方执行器
 ///
 /// # 返回
 /// 回款、核销、应收进度、销售回款进度和成功审计全部写入时返回 `Ok(())`。
 ///
 /// # 错误
 /// 回款/分录不存在、主体或额度不变量失败、任一写入失败时返回错误。
-pub async fn post_customer_receipt_in_transaction(
+pub async fn post_customer_receipt_apply(
     db: &Database,
     receipt_id: &str,
     actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let actor_id = actor.id().to_string();
     let mut receipt = db
         .customer_receipts()
-        .find_by_id(receipt_id, session)
+        .find_by_id(receipt_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
     if receipt.status == CustomerReceiptStatus::Reversed {
@@ -142,7 +142,7 @@ pub async fn post_customer_receipt_in_transaction(
             db,
             &mut receipt,
             &actor_id,
-            session,
+            executor,
         )
         .await?;
     let audit = actor.clone().resource_log(
@@ -150,13 +150,13 @@ pub async fn post_customer_receipt_in_transaction(
         "customer_receipt",
         receipt.base.id.clone(),
     )?;
-    db.audit_logs().create(&audit, session).await?;
+    db.audit_logs().create(&audit, executor).await?;
     sales_order_ids.sort();
     sales_order_ids.dedup();
     for sales_order_id in sales_order_ids {
         crate::order_to_cash::progress::update_sales_order_money_progress(
             db,
-            session,
+            executor,
             &SalesOrderId::new(sales_order_id),
             actor_id.clone(),
             None,
@@ -177,7 +177,7 @@ pub async fn post_customer_receipt_in_transaction(
 ///
 /// # 错误
 /// 回款单不存在、动作不匹配、状态迁移或 CAS 写入失败时返回错误。
-pub async fn cancel_customer_receipt_approval_in_transaction(
+pub async fn cancel_customer_receipt_approval_apply(
     db: &Database,
     receipt_id: &str,
     action: erp_workflow::service::approval::policy::ApprovalDomainAction,
@@ -237,7 +237,7 @@ pub(super) async fn persist_created_customer_receipt(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 persist_bound_customer_receipt_document(
                     &db,
@@ -246,11 +246,11 @@ pub(super) async fn persist_created_customer_receipt(
                     document,
                     &bind_command,
                     &actor,
-                    session,
+                    executor,
                 )
                 .await?;
-                db.customer_receipts().create(&receipt, session).await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.customer_receipts().create(&receipt, executor).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })
@@ -266,7 +266,7 @@ pub(super) async fn persist_created_customer_receipt(
 /// * `document` - 待登记单据
 /// * `bind_command` - 绑定命令
 /// * `actor` - 提交人
-/// * `session` - 调用方事务会话
+/// * `executor` - 调用方执行器
 ///
 /// # 返回
 /// 返回已冻结的审批定义绑定。
@@ -280,7 +280,7 @@ pub(super) async fn persist_bound_customer_receipt_document(
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<ApprovalDefinitionBinding> {
     let _ = customer_receipt_object_readable(
         &bind_command.context.organization_id,
@@ -292,12 +292,12 @@ pub(super) async fn persist_bound_customer_receipt_document(
         object_read,
         bind_command,
         actor,
-        session,
+        executor,
     )
     .await?;
     let binding = binding.ok_or_else(|| Error::Internal("客户回款单必须绑定已发布定义".to_string()))?;
     attach_published_binding(&mut document, binding.clone())?;
-    db.business_documents().create(&document, session).await?;
+    db.business_documents().create(&document, executor).await?;
     Ok(binding)
 }
 
@@ -371,7 +371,7 @@ pub(super) fn prepare_customer_receipt_commit_candidate(
 /// * `object_read` - 对象读取端口
 /// * `candidate` - 新建回款候选
 /// * `actor` - 提交人
-/// * `session` - 调用方事务会话
+/// * `executor` - 调用方执行器
 ///
 /// # 返回
 /// 返回已落盘回款与冻结绑定。
@@ -384,9 +384,9 @@ async fn create_new_commit_records(
     object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     candidate: CustomerReceipt,
     actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<(CustomerReceipt, ApprovalDefinitionBinding)> {
-    if db.customer_receipts().find_by_receipt_no(&candidate.receipt_no, session).await?.is_some() {
+    if db.customer_receipts().find_by_receipt_no(&candidate.receipt_no, executor).await?.is_some() {
         return Err(Error::ConflictError("回款单号已存在，请刷新后重试".to_string()));
     }
     let organization_id = customer_receipt_responsible_org_id(&candidate)?;
@@ -409,16 +409,16 @@ async fn create_new_commit_records(
         document,
         &bind_command,
         actor,
-        session,
+        executor,
     )
     .await?;
-    db.customer_receipts().create(&candidate, session).await?;
+    db.customer_receipts().create(&candidate, executor).await?;
     let audit = actor.clone().resource_log(
         "customer_receipt.create",
         "customer_receipt",
         candidate.base.id.clone(),
     )?;
-    db.audit_logs().create(&audit, session).await?;
+    db.audit_logs().create(&audit, executor).await?;
     Ok((candidate, binding))
 }
 
@@ -428,7 +428,7 @@ async fn create_new_commit_records(
 /// * `db` - 数据库
 /// * `receipt_id` - 已有草稿主键
 /// * `expected_version` - 调用方期望版本
-/// * `session` - 调用方事务会话
+/// * `executor` - 调用方执行器
 ///
 /// # 返回
 /// 返回已有回款与冻结绑定。
@@ -439,15 +439,15 @@ async fn load_existing_commit_records(
     db: &Database,
     receipt_id: &str,
     expected_version: u64,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<(CustomerReceipt, ApprovalDefinitionBinding)> {
     let receipt = db
         .customer_receipts()
-        .find_by_id(receipt_id, session)
+        .find_by_id(receipt_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
     ensure_expected_version(receipt.base.version, expected_version)?;
-    let binding = find_approval_binding(db, receipt_id, session)
+    let binding = find_approval_binding(db, receipt_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("客户回款单缺少审批绑定".to_string()))?;
     Ok((receipt, binding))
@@ -477,7 +477,7 @@ pub(super) struct LoadedCommitStart {
 /// * `object_read` - 对象读取端口
 /// * `pending` - 待提交的新建候选或已有草稿身份
 /// * `actor` - 提交人
-/// * `session` - 调用方事务会话
+/// * `executor` - 调用方执行器
 ///
 /// # 返回
 /// 返回回款实体与冻结绑定。
@@ -490,18 +490,18 @@ pub(super) async fn load_commit_receipt(
     object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     pending: PendingCustomerReceiptCommit,
     actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<(CustomerReceipt, ApprovalDefinitionBinding)> {
     let PendingCustomerReceiptCommit { new_receipt, requested_id, expected_version, .. } = pending;
     match new_receipt {
-        Some(candidate) => create_new_commit_records(db, rbac, object_read, candidate, actor, session).await,
+        Some(candidate) => create_new_commit_records(db, rbac, object_read, candidate, actor, executor).await,
         None => {
             let receipt_id = requested_id
                 .as_deref()
                 .ok_or_else(|| Error::ValidationError("已有回款缺少主键".to_string()))?;
             let version =
                 expected_version.ok_or_else(|| Error::ValidationError("已有回款缺少期望版本".to_string()))?;
-            load_existing_commit_records(db, receipt_id, version, session).await
+            load_existing_commit_records(db, receipt_id, version, executor).await
         },
     }
 }
@@ -512,7 +512,7 @@ pub(super) async fn load_commit_receipt(
 /// * `db` - 数据库
 /// * `request` - 已加载的回款、绑定、分配与身份
 /// * `command_receipt` - 提交幂等收据
-/// * `session` - 调用方事务会话
+/// * `executor` - 调用方执行器
 ///
 /// # 返回
 /// 返回进入审批后的回款实体。
@@ -523,7 +523,7 @@ pub(super) async fn persist_loaded_commit_start(
     db: &Database,
     mut request: LoadedCommitStart,
     command_receipt: &CommandReceipt,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<CustomerReceipt> {
     let binding = require_frozen_binding(Some(&request.binding))?.clone();
     start_customer_receipt_approval(&mut request.receipt, request.allocations)?;
@@ -533,13 +533,13 @@ pub(super) async fn persist_loaded_commit_start(
     let snapshot = build_customer_receipt_snapshot(&request.receipt, request.actor.id(), now)?;
     let organization_id = customer_receipt_responsible_org_id(&request.receipt)?;
     let _ = customer_receipt_object_readable(&organization_id, request.actor.id())?;
-    let graph = load_bound_definition_graph_with_executor(db, &binding, session).await?;
+    let graph = load_bound_definition_graph_with_executor(db, &binding, executor).await?;
     let existing_receipt = load_start_receipt_with_executor(
         db,
         &subject,
         request.receipt.approval_subject_version,
         &request.idempotency_key,
-        session,
+        executor,
     )
     .await?;
     let start_input = build_document_start_input(DocumentStartInput {
@@ -555,7 +555,7 @@ pub(super) async fn persist_loaded_commit_start(
         now,
     })?;
     let prepared = prepare_start(start_input)?;
-    let committed = persist_customer_receipt_start_in_transaction(
+    let committed = persist_customer_receipt_start_apply(
         db,
         CustomerReceiptStartPersistInput {
             receipt: request.receipt,
@@ -567,11 +567,11 @@ pub(super) async fn persist_loaded_commit_start(
             organization_id,
             now,
         },
-        session,
+        executor,
     )
     .await?;
     let command_audit = command_receipt.audit(request.actor.clone(), committed.base.id.clone())?;
-    db.audit_logs().create(&command_audit, session).await?;
+    db.audit_logs().create(&command_audit, executor).await?;
     Ok(committed)
 }
 

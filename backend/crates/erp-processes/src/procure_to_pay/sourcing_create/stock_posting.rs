@@ -12,7 +12,7 @@ use erp_inventory::{
 use erp_procurement::dto::purchase_order::ExistingStockReservationResult;
 use erp_procurement::entity::purchase_order::{StockAllocationPlan, StockBasisGroup, payload_fingerprint};
 use id_generator::next_id;
-use mongodb::{ClientSession, Database};
+use mongodb::Database;
 use persistence_core::Executor;
 
 use super::{latest_stock_group, procurement_quantity_changed};
@@ -76,7 +76,7 @@ pub(super) async fn persist_stock_allocations(
     sales_order_id: &SalesOrderId,
     audit_id: &str,
     request_fingerprint: &str,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<Vec<PersistedStockAllocation>> {
     persist_with_port(
         &StockAllocationAdapter { db },
@@ -85,7 +85,7 @@ pub(super) async fn persist_stock_allocations(
         sales_order_id,
         audit_id,
         request_fingerprint,
-        session,
+        executor,
     )
     .await
 }
@@ -174,6 +174,7 @@ mod tests {
     use erp_procurement::entity::purchase_order::{
         ProcurementCoverageSummary, RequestedStockLine, SalesProcurementCoverageLine, StockBasisLine,
     };
+    use mongodb::ClientSession;
 
     use super::*;
 

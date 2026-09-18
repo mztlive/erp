@@ -71,11 +71,11 @@ impl ReceivableProcess {
         let reason = req.reason.trim().to_string();
         let original_id = id.to_string();
         let red_invoice_id = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let original = db
                         .invoices()
-                        .find_by_id(&original_id, session)
+                        .find_by_id(&original_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("原蓝票不存在".to_string()))?;
                     if !original.is_registered() || original.invoice_kind != InvoiceKind::Blue {
@@ -87,7 +87,7 @@ impl ReceivableProcess {
                                 .sales_invoice_allocations()
                                 .find_allocations_by_invoices(
                                     &[InvoiceId::new(original.base.id.clone())],
-                                    session,
+                                    executor,
                                 )
                                 .await?;
                             let account_ids = blue
@@ -97,7 +97,7 @@ impl ReceivableProcess {
                                 .collect::<Vec<_>>();
                             let related = db
                                 .sales_invoice_allocations()
-                                .find_allocations_by_accounts(&account_ids, session)
+                                .find_allocations_by_accounts(&account_ids, executor)
                                 .await?;
                             sales_red_invoice_allocation_plan(&blue, &related, requested_amount)?
                         },
@@ -106,7 +106,7 @@ impl ReceivableProcess {
                                 .purchase_invoice_allocations()
                                 .find_allocations_by_invoices(
                                     &[InvoiceId::new(original.base.id.clone())],
-                                    session,
+                                    executor,
                                 )
                                 .await?;
                             let account_ids = blue
@@ -119,7 +119,7 @@ impl ReceivableProcess {
                                 .collect::<Vec<_>>();
                             let related = db
                                 .purchase_invoice_allocations()
-                                .find_allocations_by_accounts(&account_ids, session)
+                                .find_allocations_by_accounts(&account_ids, executor)
                                 .await?;
                             purchase_red_invoice_allocation_plan(&blue, &related, requested_amount)?
                         },
@@ -131,7 +131,7 @@ impl ReceivableProcess {
                         .find_by_direction_and_normalized_no(
                             original.invoice_direction,
                             &red_no.to_uppercase(),
-                            session,
+                            executor,
                         )
                         .await?
                     {
@@ -174,7 +174,7 @@ impl ReceivableProcess {
                         object_read.as_ref(),
                         &red_mut,
                         &actor_owned,
-                        session,
+                        executor,
                     )
                     .await?;
                     let mut sales_order_account_ids =
@@ -184,7 +184,7 @@ impl ReceivableProcess {
                             &mut original_mut,
                             &allocation_plan,
                             &actor_id,
-                            session,
+                            executor,
                         )
                         .await?;
                     let audit = actor_owned.clone().resource_log_with_message(
@@ -193,7 +193,7 @@ impl ReceivableProcess {
                         red_mut.base.id.clone(),
                         Some(reason.clone()),
                     )?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     if original_mut.invoice_direction == InvoiceDirection::Sales {
                         sales_order_account_ids.sort();
                         sales_order_account_ids.dedup();
@@ -202,14 +202,14 @@ impl ReceivableProcess {
                                 &db,
                                 &ReceivableAccountId::new(account_id.clone()),
                                 invoice_task::SalesInvoiceTaskChange::RedInvoiceIssued,
-                                session,
+                                executor,
                             )
                             .await?;
                         }
                         let mut sales_order_ids = Vec::new();
                         for account in db
                             .receivable_accounts()
-                            .find_accounts_by_ids(&sales_order_account_ids, session)
+                            .find_accounts_by_ids(&sales_order_account_ids, executor)
                             .await?
                         {
                             sales_order_ids.push(account.sales_order_id.to_string());
@@ -219,7 +219,7 @@ impl ReceivableProcess {
                         for sales_order_id in sales_order_ids {
                             crate::order_to_cash::progress::update_sales_order_money_progress(
                                 &db,
-                                session,
+                                executor,
                                 &erp_core::ids::SalesOrderId::new(sales_order_id),
                                 actor_id.clone(),
                                 None,

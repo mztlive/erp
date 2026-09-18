@@ -444,9 +444,9 @@ impl SalesOrderCommandProcess {
             let recovered = self
                 .db
                 .client()
-                .with_transaction(move |session| {
+                .with_transaction(move |executor| {
                     Box::pin(async move {
-                        let order = access.current(&sales_order_id_owned, session).await?;
+                        let order = access.current(&sales_order_id_owned, executor).await?;
                         let current_ports = sales_approval_ports(order.business_type)?;
                         if current_ports.document_type != document_type {
                             return Err(Error::ConflictError(
@@ -455,7 +455,7 @@ impl SalesOrderCommandProcess {
                         }
                         let organization_id = sales_order_responsible_org_id(&order)?;
                         let _ = sales_order_object_readable(&organization_id, &actor_id)?;
-                        let binding = find_approval_binding(&db, &sales_order_id_owned, session)
+                        let binding = find_approval_binding(&db, &sales_order_id_owned, executor)
                             .await
                             .map_err(crate::Error::from)?;
                         let binding = require_frozen_binding(binding.as_ref())?;
@@ -474,7 +474,7 @@ impl SalesOrderCommandProcess {
                                 binding,
                                 actor_id: &actor_id,
                             },
-                            session,
+                            executor,
                         )
                         .await
                     })

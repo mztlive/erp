@@ -425,15 +425,15 @@ async fn transaction_reuses_caller_executor_read_your_writes() {
         let sku = test_sku("sku-txn", "prod-1");
         let sku_id = SkuId::new("sku-txn");
         client
-            .with_transaction::<_, (), persistence_core::Error>(move |session| {
+            .with_transaction::<_, (), persistence_core::Error>(move |executor| {
                 let db = db.clone();
                 let sku = sku.clone();
                 let sku_id = sku_id.clone();
                 Box::pin(async move {
-                    db.skus().create(&sku, session).await?;
-                    // Same executor (session) should see uncommitted write
+                    db.skus().create(&sku, executor).await?;
+                    // Same executor should see uncommitted write
                     let bundle =
-                        load_procurement_catalog_bundle(&db, std::slice::from_ref(&sku_id), session).await?;
+                        load_procurement_catalog_bundle(&db, std::slice::from_ref(&sku_id), executor).await?;
                     assert!(bundle.skus.contains_key("sku-txn"), "事务内应能 read-your-writes");
                     // Also verify Entity can build facts inside txn
                     let inputs = vec![

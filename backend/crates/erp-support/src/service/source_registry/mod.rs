@@ -136,10 +136,10 @@ impl SourceRegistryService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.source_systems().update(&mut system, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.source_systems().update(&mut system, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<SourceSystem, crate::error::Error>(system)
                 })
             })
@@ -195,12 +195,12 @@ impl SourceRegistryService {
         let target_for_tx = target.clone();
         let audit_port = self.audit.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     db.source_registry()
-                        .create_external_identity_link(&map_for_tx, &target_for_tx, session)
+                        .create_external_identity_link(&map_for_tx, &target_for_tx, executor)
                         .await?;
-                    audit_port.persist(&audit, session).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })

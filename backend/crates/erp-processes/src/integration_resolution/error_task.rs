@@ -54,9 +54,9 @@ impl IntegrationResolutionProcess {
             "integration_error_task",
             task.base.id.clone(),
         )?;
-        self.run_audited(move |db, session| {
+        self.run_audited(move |db, executor| {
             Box::pin(async move {
-                persist_created(db, CreatedFact::ErrorTask(&task), &work_item, &audit, session).await?;
+                persist_created(db, CreatedFact::ErrorTask(&task), &work_item, &audit, executor).await?;
                 Ok(())
             })
         })

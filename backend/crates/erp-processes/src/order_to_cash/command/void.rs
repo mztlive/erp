@@ -60,13 +60,13 @@ impl SalesOrderCommandProcess {
         let db = self.db.clone();
         let client = db.client().clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.revalidate(&order.base.id, expected_order_version, session).await?;
+                    access.revalidate(&order.base.id, expected_order_version, executor).await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
-                        .persist_void(&mut order, working_copy.as_mut(), session)
+                        .persist_void(&mut order, working_copy.as_mut(), executor)
                         .await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

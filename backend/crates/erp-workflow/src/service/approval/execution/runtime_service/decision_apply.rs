@@ -12,7 +12,7 @@ use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, IdempotencyKey, 
 use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::Transactional;
+use persistence_core::{Executor, Transactional};
 
 use super::super::apply_plan::PlannedWrites;
 use super::super::authorization::hidden_forbidden;
@@ -142,9 +142,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let actor = actor.clone();
         self.db
             .client()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    submit_decision_in_transaction(
+                    submit_decision_apply(
                         &db,
                         &rbac,
                         action_port.as_ref(),
@@ -152,7 +152,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                         audit_port.as_ref(),
                         &actor,
                         &command,
-                        session,
+                        executor,
                     )
                     .await
                 })
@@ -175,17 +175,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             let command = command.clone();
             self.db
                 .client()
-                .with_transaction(move |session| {
+                .with_transaction(move |executor| {
                     Box::pin(async move {
-                        replay_decision_in_transaction(
-                            &db,
-                            &rbac,
-                            object_read.as_ref(),
-                            &actor,
-                            &command,
-                            session,
-                        )
-                        .await
+                        replay_decision(&db, &rbac, object_read.as_ref(), &actor, &command, executor).await
                     })
                 })
                 .await
@@ -217,17 +209,17 @@ pub(super) fn decision_terminal_fresh_error() -> Error {
 }
 
 /// 决定回放先执行与 Fresh 相同的任务前置和当前授权，再允许查询和比较收据。
-async fn replay_decision_in_transaction(
+async fn replay_decision(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     object_read: &dyn crate::ports::ApprovalObjectReadPort,
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<Option<RuntimeDecisionOutcome>> {
     let item = db
         .work_items()
-        .find_document_approval_by_id(&command.work_item_id, session)
+        .find_document_approval_by_id(&command.work_item_id, executor)
         .await?
         .ok_or_else(hidden_not_found)?;
     let execution_id = match decision_receipt_lookup_gate(&item, actor.id(), command.expected_task_version)? {
@@ -236,7 +228,7 @@ async fn replay_decision_in_transaction(
     };
     let execution = db
         .bpm_workflow()
-        .find_execution_by_id(&execution_id, session)
+        .find_execution_by_id(&execution_id, executor)
         .await?
         .ok_or_else(decision_terminal_fresh_error)?;
     let Some(original_actor_id) = decision_terminal_actor(&item, &execution) else {
@@ -245,7 +237,7 @@ async fn replay_decision_in_transaction(
     if original_actor_id != actor.id() {
         return Err(decision_terminal_fresh_error());
     }
-    match authorize_decision_terminal_replay(db, rbac, object_read, actor, &execution, session).await {
+    match authorize_decision_terminal_replay(db, rbac, object_read, actor, &execution, executor).await {
         Ok(()) => {},
         Err(Error::Forbidden(_)) => {
             return Err(decision_terminal_fresh_error());
@@ -261,12 +253,12 @@ async fn replay_decision_in_transaction(
         command.expected_task_version,
         actor.id(),
     )?;
-    let Some(receipt) = find_receipt_for_identity(db, &identity, session).await? else {
+    let Some(receipt) = find_receipt_for_identity(db, &identity, executor).await? else {
         return Err(decision_terminal_fresh_error());
     };
     // 历史无版本摘要可能存在分隔符碰撞，必须先证明收据仍指向该任务的冻结运行身份。
     let ended_execution =
-        verify_decision_receipt_runtime_identity(db, &receipt, &execution_id, session).await?;
+        verify_decision_receipt_runtime_identity(db, &receipt, &execution_id, executor).await?;
     let is_current_v3 = receipt.scope_id == identity.current().scope().as_str();
     if !is_current_v3 && !legacy_decision_terminal_facts_match(&item, &ended_execution, command, actor.id()) {
         return Err(payload_conflict_error());
@@ -276,9 +268,14 @@ async fn replay_decision_in_transaction(
         ReceiptBranch::Fresh => unreachable!("receipt was loaded"),
         ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
     }
-    let view =
-        persisted_command_view_with_executor(db, &receipt.result_ref, CommitRequired::Proceed, true, session)
-            .await?;
+    let view = persisted_command_view_with_executor(
+        db,
+        &receipt.result_ref,
+        CommitRequired::Proceed,
+        true,
+        executor,
+    )
+    .await?;
     Ok(Some(RuntimeDecisionOutcome {
         blocked: view.instance_status == ApprovalProcessInstanceStatus::Blocked.as_str(),
         view,
@@ -288,7 +285,7 @@ async fn replay_decision_in_transaction(
 /// 在同一事务内执行决定的完整前置、授权、领域动作与运行时写入。
 // 决定事务 8 参数：与受阻取消/恢复入口同形以便统一分派，顺序由调用点锚定；告警逐项压制。
 #[allow(clippy::too_many_arguments)]
-async fn submit_decision_in_transaction(
+async fn submit_decision_apply(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     action_port: &dyn ApprovalDomainActionPort,
@@ -296,29 +293,30 @@ async fn submit_decision_in_transaction(
     audit_port: &dyn crate::ports::WorkflowAuditPort,
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<RuntimeDecisionOutcome> {
-    if let Some(replay) =
-        replay_decision_in_transaction(db, rbac, object_read, actor, command, session).await?
-    {
+    if let Some(replay) = replay_decision(db, rbac, object_read, actor, command, executor).await? {
         return Ok(replay);
     }
 
     let item = db
         .work_items()
-        .find_document_approval_by_id(&command.work_item_id, session)
+        .find_document_approval_by_id(&command.work_item_id, executor)
         .await?
         .ok_or_else(hidden_not_found)?;
     let execution_id = item
         .approval_execution_for_decision(actor.id(), command.expected_task_version)
         .map_err(map_approval_task_error)?
         .clone();
-    let execution =
-        db.bpm_workflow().find_execution_by_id(&execution_id, session).await?.ok_or_else(hidden_not_found)?;
+    let execution = db
+        .bpm_workflow()
+        .find_execution_by_id(&execution_id, executor)
+        .await?
+        .ok_or_else(hidden_not_found)?;
     let expected_execution_version = execution.base.version;
     let instance_id = execution.process_instance_id.clone();
     let instance =
-        db.bpm_workflow().find_instance_by_id(&instance_id, session).await?.ok_or_else(hidden_not_found)?;
+        db.bpm_workflow().find_instance_by_id(&instance_id, executor).await?.ok_or_else(hidden_not_found)?;
     let expected_instance_version = instance.base.version;
     let document_type =
         crate::entity::approval_integration::document_type_from_subject_kind(instance.subject.subject_kind())
@@ -328,7 +326,7 @@ async fn submit_decision_in_transaction(
     }
     let snapshot = db
         .approval_subject_snapshots()
-        .find_by_process_instance_id(instance_id.as_ref(), session)
+        .find_by_process_instance_id(instance_id.as_ref(), executor)
         .await?
         .ok_or_else(hidden_not_found)?;
     snapshot
@@ -350,18 +348,18 @@ async fn submit_decision_in_transaction(
     {
         return Err(Error::ConflictError("APPROVAL_RESPONSIBILITY_CONFLICT".to_string()));
     }
-    let open_tasks = db.work_items().open_approval_tasks_for_execution(&execution_id, session).await?;
+    let open_tasks = db.work_items().open_approval_tasks_for_execution(&execution_id, executor).await?;
     if open_tasks.is_empty() || !open_tasks.iter().any(|task| task.base.id == command.work_item_id) {
         return Err(Error::from_approval_code(ErrorCode::ApprovalTaskNotOpen));
     }
     let instance_assignee = db
         .bpm_workflow()
-        .find_assignee_for_node(&instance_id, &execution.node_key, session)
+        .find_assignee_for_node(&instance_id, &execution.node_key, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("实例缺少节点审批人绑定".to_string()))?;
     let graph = db
         .bpm_workflow()
-        .load_definition_graph(&instance.process_definition_id, session)
+        .load_definition_graph(&instance.process_definition_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))?;
     let current_eligibility = revalidate_decision_approver(
@@ -376,7 +374,7 @@ async fn submit_decision_in_transaction(
             spec: &spec,
             separation_policy,
         },
-        session,
+        executor,
     )
     .await?;
     let decision_target = graph
@@ -397,7 +395,7 @@ async fn submit_decision_in_transaction(
                         spec: &spec,
                         separation_policy,
                     },
-                    session,
+                    executor,
                 )
                 .await?
             },
@@ -446,7 +444,7 @@ async fn submit_decision_in_transaction(
     let runtime_admin_ids = if writes.notifications.iter().any(|intent| {
         intent.event_kind == crate::entity::approval_integration::ApprovalNotificationEventKind::Blocked
     }) {
-        runtime_admin_notification_recipients(db, rbac, object_read, document_type, &snapshot, session)
+        runtime_admin_notification_recipients(db, rbac, object_read, document_type, &snapshot, executor)
             .await?
     } else {
         Vec::new()
@@ -481,11 +479,11 @@ async fn submit_decision_in_transaction(
 
     // 收据唯一键先于任何领域写入仲裁同键并发；后续失败会随事务整体回滚。
     db.bpm_workflow()
-        .insert_command_receipt(&writes.receipt, session)
+        .insert_command_receipt(&writes.receipt, executor)
         .await
         .map_err(map_receipt_first_write_error)?;
     if should_finalize {
-        action_port.execute(spec.on_final_approve, &action_context, actor, session).await?;
+        action_port.execute(spec.on_final_approve, &action_context, actor, executor).await?;
     }
     persist_decision_writes(
         db,
@@ -513,7 +511,7 @@ async fn submit_decision_in_transaction(
             reject_reason: command.reason.as_deref(),
             runtime_admin_ids: &runtime_admin_ids,
         },
-        session,
+        executor,
     )
     .await?;
     let blocked = writes.commit == CommitRequired::Blocked;
@@ -534,19 +532,19 @@ async fn verify_decision_receipt_runtime_identity(
     db: &Database,
     receipt: &ApprovalCommandReceipt,
     expected_execution_id: &ApprovalNodeExecutionId,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<ApprovalNodeExecution> {
     if receipt.scope_id != expected_execution_id.as_ref() {
         return Err(hidden_not_found());
     }
     let execution = db
         .bpm_workflow()
-        .find_execution_by_id(expected_execution_id, session)
+        .find_execution_by_id(expected_execution_id, executor)
         .await?
         .ok_or_else(hidden_not_found)?;
     let instance = db
         .bpm_workflow()
-        .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), session)
+        .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), executor)
         .await?
         .ok_or_else(hidden_not_found)?;
     if execution.process_instance_id.as_ref() != receipt.result_ref || instance.base.id != receipt.result_ref
@@ -560,7 +558,7 @@ async fn verify_decision_receipt_runtime_identity(
     .map_err(|_| hidden_not_found())?;
     let snapshot = db
         .approval_subject_snapshots()
-        .find_by_process_instance_id(&instance.base.id, session)
+        .find_by_process_instance_id(&instance.base.id, executor)
         .await?
         .ok_or_else(hidden_not_found)?;
     snapshot
@@ -647,11 +645,11 @@ async fn authorize_decision_terminal_replay(
     object_read: &dyn crate::ports::ApprovalObjectReadPort,
     actor: &AuditActor,
     execution: &ApprovalNodeExecution,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let instance = db
         .bpm_workflow()
-        .find_instance_by_id(&execution.process_instance_id, session)
+        .find_instance_by_id(&execution.process_instance_id, executor)
         .await?
         .ok_or_else(hidden_not_found)?;
     if execution.process_instance_id.as_ref() != instance.base.id {
@@ -664,7 +662,7 @@ async fn authorize_decision_terminal_replay(
     .map_err(|_| hidden_not_found())?;
     let snapshot = db
         .approval_subject_snapshots()
-        .find_by_process_instance_id(&instance.base.id, session)
+        .find_by_process_instance_id(&instance.base.id, executor)
         .await?
         .ok_or_else(hidden_not_found)?;
     snapshot
@@ -679,7 +677,7 @@ async fn authorize_decision_terminal_replay(
         .find_assignee_for_node(
             &ApprovalProcessInstanceId::new(&instance.base.id),
             &execution.node_key,
-            session,
+            executor,
         )
         .await?
         .ok_or_else(hidden_not_found)?;
@@ -701,7 +699,7 @@ async fn authorize_decision_terminal_replay(
             spec: &spec,
             separation_policy: process_required_separation_policy(document_type)?,
         },
-        session,
+        executor,
     )
     .await?;
     if eligibility.blocked_code().is_some() {
@@ -802,7 +800,7 @@ struct PersistDecisionWrites<'a> {
 /// # 参数
 /// * `db` - 数据库
 /// * `input` - 计划、版本守卫、任务与通知事实
-/// * `session` - 事务会话
+/// * `executor` - 执行器
 ///
 /// # 返回
 /// 全部写入成功时返回 `Ok(())`。
@@ -815,7 +813,7 @@ struct PersistDecisionWrites<'a> {
 async fn persist_decision_writes(
     db: &Database,
     input: PersistDecisionWrites<'_>,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let PersistDecisionWrites {
         writes,
@@ -851,7 +849,7 @@ async fn persist_decision_writes(
                 expected_instance_version,
                 &expected_current_execution_id,
                 list_projection,
-                session,
+                executor,
             )
             .await?,
         "审批实例",
@@ -868,16 +866,16 @@ async fn persist_decision_writes(
                 .ok_or_else(|| Error::Internal("决定后执行版本非法".to_string()))?
         };
         require_cas_applied(
-            db.bpm_workflow().end_active_execution(execution, expected, session).await?,
+            db.bpm_workflow().end_active_execution(execution, expected, executor).await?,
             "审批执行",
         )?;
     }
     // 新执行与审批人绑定。
     for execution in &writes.created_executions {
-        db.bpm_workflow().insert_execution(execution, session).await?;
+        db.bpm_workflow().insert_execution(execution, executor).await?;
     }
     if !writes.created_assignees.is_empty() {
-        db.bpm_workflow().insert_assignees(&writes.created_assignees, session).await?;
+        db.bpm_workflow().insert_assignees(&writes.created_assignees, executor).await?;
     }
     // 任务：完成当前、按原因关闭、为下一节点新建。
     complete_or_close_tasks(
@@ -891,7 +889,7 @@ async fn persist_decision_writes(
             actor_id,
             now,
         },
-        session,
+        executor,
     )
     .await?;
     create_open_tasks(
@@ -905,7 +903,7 @@ async fn persist_decision_writes(
             business_object_id,
             now,
         },
-        session,
+        executor,
     )
     .await?;
     persist_decision_notifications(
@@ -920,9 +918,9 @@ async fn persist_decision_writes(
             runtime_admin_ids,
         },
         now,
-        session,
+        executor,
     )
     .await?;
-    audit_port.persist(audit, session).await?;
+    audit_port.persist(audit, executor).await?;
     Ok(())
 }

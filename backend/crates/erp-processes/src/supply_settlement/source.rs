@@ -50,12 +50,12 @@ impl SupplierSettlementProcess {
         let client = db.client().clone();
         let evidence_for_tx = evidence.clone();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     SupplierSettlementService::new(db.clone())
-                        .persist_source_evidence(&evidence_for_tx, session)
+                        .persist_source_evidence(&evidence_for_tx, executor)
                         .await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

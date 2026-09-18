@@ -125,16 +125,16 @@ async fn persist_confirmed_service_fulfillment(
     let db = db.clone();
     let client = db.client().clone();
     let confirmed = client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
-                confirm_service_fulfillment_in_transaction(
+                confirm_service_fulfillment_apply(
                     &db,
                     &record_id,
                     expected_version,
                     confirmation,
                     &pending_assets,
                     &actor,
-                    session,
+                    executor,
                 )
                 .await
             })
@@ -159,7 +159,7 @@ async fn persist_confirmed_service_fulfillment(
 ///
 /// # 错误
 /// 记录不存在、版本冲突、门槛失败或凭证不合法时返回错误。
-async fn confirm_service_fulfillment_in_transaction(
+async fn confirm_service_fulfillment_apply(
     db: &Database,
     record_id: &ServiceFulfillmentId,
     expected_version: u64,
@@ -212,7 +212,7 @@ fn resolve_service_evidence_id(
 ///
 /// # 错误
 /// 凭证不存在、已销毁或元数据不合法时返回错误。
-pub(super) async fn ensure_service_evidence_asset_in_transaction(
+pub(super) async fn ensure_service_evidence_asset(
     db: &Database,
     asset_id: &FileAssetId,
     pending_assets: &dyn PendingAttachmentBatch,
@@ -321,7 +321,7 @@ impl ServiceConfirmationPort for MongoServiceConfirmation<'_> {
     }
 
     async fn evidence(&self, executor: &mut dyn Executor) -> Result<()> {
-        ensure_service_evidence_asset_in_transaction(
+        ensure_service_evidence_asset(
             self.db,
             &self.confirmation.evidence_attachment_id,
             self.pending_assets,

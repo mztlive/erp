@@ -42,9 +42,9 @@ impl InventoryService {
         let actor = actor.clone();
         let client = db.client().clone();
         let page = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let authorization = authorization_port.authorize(&actor, session).await?;
+                    let authorization = authorization_port.authorize(&actor, executor).await?;
                     if !authorization.actor_is_active() {
                         return Err(Error::Forbidden("当前账号无库存预占读取权限".to_string()));
                     }
@@ -52,7 +52,7 @@ impl InventoryService {
                         catalog.as_ref(),
                         query.q.as_deref(),
                         query.sku_id.as_ref(),
-                        session,
+                        executor,
                     )
                     .await?;
                     let (sort_by, sort_ascending) = query.paging.sort_selection();
@@ -69,7 +69,9 @@ impl InventoryService {
                         sort_by,
                         sort_ascending,
                     };
-                    Ok::<_, Error>(db.stock_reservations().search_stock_reservations(&filter, session).await?)
+                    Ok::<_, Error>(
+                        db.stock_reservations().search_stock_reservations(&filter, executor).await?,
+                    )
                 })
             })
             .await?;

@@ -21,7 +21,7 @@ use erp_read_models::returns_center::ReturnsReadService;
 use erp_read_models::returns_center::dto::ReceiptReversalView;
 use erp_returns::entity::returns::ReceiptReversal;
 use erp_returns::service::ReturnsService;
-use mongodb::{ClientSession, Database};
+use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use sales_refresh::{AffectedSales, refresh_affected_sales};
 
@@ -62,9 +62,9 @@ impl ReceiptReversalProcess {
         let reversal_id = id.to_string();
         let detail_id = reversal_id.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    apply_receipt_reversal_final_post(&db, &reversal_id, &actor_owned, session).await
+                    apply_receipt_reversal_final_post(&db, &reversal_id, &actor_owned, executor).await
                 })
             })
             .await?;
@@ -75,13 +75,13 @@ impl ReceiptReversalProcess {
     }
 
     /// 复用审批最终通过的会话，禁止创建内层事务或延后销售刷新。
-    pub async fn post_receipt_reversal_in_transaction(
+    pub async fn post_receipt_reversal_apply(
         &self,
         id: &str,
         actor: &AuditActor,
-        session: &mut ClientSession,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
-        apply_receipt_reversal_final_post(&self.db, id, actor, session).await
+        apply_receipt_reversal_final_post(&self.db, id, actor, executor).await
     }
 }
 

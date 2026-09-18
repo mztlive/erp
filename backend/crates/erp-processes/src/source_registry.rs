@@ -29,9 +29,9 @@ pub async fn create_source_system(
     let audit =
         actor.clone().resource_log("source_system.create", "source_system", system.base.id.clone())?;
     let system_for_tx = system.clone();
-    run_audited(&db, audit, move |db, session| {
+    run_audited(&db, audit, move |db, executor| {
         Box::pin(async move {
-            db.source_systems().create(&system_for_tx, session).await?;
+            db.source_systems().create(&system_for_tx, executor).await?;
             Ok(())
         })
     })

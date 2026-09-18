@@ -66,7 +66,7 @@ impl FulfillmentProcess {
         let db = self.db.clone();
         let client = db.client().clone();
         let posted = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let domain = erp_fulfillment::service::FulfillmentService::new(db.clone());
                     let (mut receipt, lines) = domain
@@ -74,26 +74,26 @@ impl FulfillmentProcess {
                             &receipt_id,
                             expected_version,
                             warehouse_id,
-                            session,
+                            executor,
                         )
                         .await?;
                     let mut po = db
                         .purchase_orders()
-                        .find_by_id(receipt.purchase_order_id.as_ref(), session)
+                        .find_by_id(receipt.purchase_order_id.as_ref(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("来源采购单不存在".to_string()))?;
                     ensure_po_fulfillable(&po)?;
-                    ensure_prepay_gate(&db, session, &po).await?;
-                    let revision = load_po_current_revision(&db, session, &po).await?;
+                    ensure_prepay_gate(&db, executor, &po).await?;
+                    let revision = load_po_current_revision(&db, executor, &po).await?;
                     let revision_lines = db
                         .purchase_order_revision_lines()
-                        .find_lines_by_revision_ids(&[revision.base.id.clone().into()], session)
+                        .find_lines_by_revision_ids(&[revision.base.id.clone().into()], executor)
                         .await?;
                     let mut received = db
                         .fulfillment()
                         .qualified_received_totals_by_purchase_revision_line(
                             &receipt.purchase_order_id,
-                            session,
+                            executor,
                         )
                         .await?;
                     let occurred_at = Instant::now();
@@ -110,7 +110,7 @@ impl FulfillmentProcess {
                             receipt_id: &receipt_id,
                         },
                         lines.len(),
-                        session,
+                        executor,
                     )
                     .await?;
                     Ok::<PurchaseReceipt, crate::Error>(receipt)

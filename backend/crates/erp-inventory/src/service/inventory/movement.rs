@@ -75,9 +75,9 @@ impl InventoryService {
         self.db
             .client()
             .clone()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let authorization = authorization_port.authorize(&actor, session).await?;
+                    let authorization = authorization_port.authorize(&actor, executor).await?;
                     if !authorization.actor_is_active() {
                         return Err(Error::Forbidden("当前账号无库存流水读取权限".to_string()));
                     }
@@ -85,11 +85,11 @@ impl InventoryService {
                         catalog.as_ref(),
                         query.q.as_deref(),
                         query.sku_id.as_ref(),
-                        session,
+                        executor,
                     )
                     .await?;
                     let filter = movement_filter(&query, &authorization, search);
-                    let page = db.stock_movements().search_stock_movements(&filter, session).await?;
+                    let page = db.stock_movements().search_stock_movements(&filter, executor).await?;
                     Ok::<_, Error>((page, authorization))
                 })
             })

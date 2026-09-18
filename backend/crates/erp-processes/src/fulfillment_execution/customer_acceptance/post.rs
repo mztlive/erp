@@ -56,10 +56,10 @@ impl CustomerAcceptanceProcess {
         let db = self.db.clone();
         let client = db.client().clone();
         let posted = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let mut acceptance =
-                        FulfillmentService::load_customer_acceptance_for_post(&db, &acceptance_id, session)
+                        FulfillmentService::load_customer_acceptance_for_post(&db, &acceptance_id, executor)
                             .await?;
                     let task = prepare_customer_acceptance_task_command(
                         &db,
@@ -67,12 +67,17 @@ impl CustomerAcceptanceProcess {
                         actor.id(),
                         req.work_item_id.as_deref(),
                         req.expected_task_version,
-                        session,
+                        executor,
                     )
                     .await?;
-                    FulfillmentService::persist_customer_acceptance_post(&db, &mut acceptance, &req, session)
-                        .await?;
-                    complete_acceptance(&db, &acceptance, &actor, CompletionKind::Post { task }, session)
+                    FulfillmentService::persist_customer_acceptance_post(
+                        &db,
+                        &mut acceptance,
+                        &req,
+                        executor,
+                    )
+                    .await?;
+                    complete_acceptance(&db, &acceptance, &actor, CompletionKind::Post { task }, executor)
                         .await?;
                     Ok::<CustomerAcceptance, crate::Error>(acceptance)
                 })

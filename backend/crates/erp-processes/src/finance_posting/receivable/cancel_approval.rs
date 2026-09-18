@@ -214,11 +214,11 @@ pub(super) async fn persist_customer_receipt_cancel(
     let db = db.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
-                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, session).await?;
-                db.customer_receipts().update(&mut receipt, session).await?;
-                db.audit_logs().create(&audit, session).await?;
+                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, executor).await?;
+                db.customer_receipts().update(&mut receipt, executor).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

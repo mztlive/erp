@@ -227,9 +227,9 @@ impl AdminService {
     ) -> Result<()> {
         let db = self.db.clone();
         self.rbac
-            .run_authorized_audited_policy_transaction(policy_revision, audit, move |session| {
+            .run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
                 Box::pin(async move {
-                    db.accounts().update(&mut account, session).await?;
+                    db.accounts().update(&mut account, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -267,9 +267,9 @@ impl AdminService {
             self.rbac.prepare_resource_log(actor, "admin.role.update", "admin", account_id.clone())?;
         let rbac = self.rbac.clone();
         self.rbac
-            .run_authorized_audited_policy_transaction(policy_revision, audit, move |session| {
+            .run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
                 Box::pin(async move {
-                    rbac.assign_roles(AccountKind::Admin, &account_id, grant, session).await?;
+                    rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -322,10 +322,10 @@ impl AdminService {
         let account_id = account.base.id.clone();
         let policy_revision = grant.policy_revision();
         self.rbac
-            .run_authorized_audited_policy_transaction(policy_revision, audit, move |session| {
+            .run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
                 Box::pin(async move {
-                    db.accounts().create(&account, session).await?;
-                    rbac.assign_roles(AccountKind::Admin, &account_id, grant, session).await?;
+                    db.accounts().create(&account, executor).await?;
+                    rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
                     Ok::<AccountCore, crate::error::Error>(account)
                 })
             })
@@ -355,10 +355,10 @@ impl AdminService {
         let account_id = account.base.id.clone();
         let policy_revision = grant.policy_revision();
         self.rbac
-            .run_authorized_audited_policy_transaction(policy_revision, audit, move |session| {
+            .run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
                 Box::pin(async move {
-                    db.accounts().update(&mut account, session).await?;
-                    rbac.assign_roles(AccountKind::Admin, &account_id, grant, session).await?;
+                    db.accounts().update(&mut account, executor).await?;
+                    rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
                     Ok::<AccountCore, crate::error::Error>(account)
                 })
             })
@@ -375,10 +375,10 @@ impl AdminService {
         let rbac = self.rbac.clone();
         let account_id = account.base.id.clone();
         self.rbac
-            .run_system_policy_transaction(move |session| {
+            .run_system_policy_transaction(move |executor| {
                 Box::pin(async move {
-                    db.accounts().create(&account, session).await?;
-                    rbac.assign_system_roles(AccountKind::Admin, &account_id, role_ids, session).await?;
+                    db.accounts().create(&account, executor).await?;
+                    rbac.assign_system_roles(AccountKind::Admin, &account_id, role_ids, executor).await?;
                     Ok::<AccountCore, crate::error::Error>(account)
                 })
             })
@@ -395,17 +395,17 @@ impl AdminService {
         let rbac = self.rbac.clone();
         let account_id = account.base.id.clone();
         self.rbac
-            .run_system_policy_transaction(move |session| {
+            .run_system_policy_transaction(move |executor| {
                 Box::pin(async move {
                     if matches!(state, ExistingSuperAdminState::Deleted) {
-                        db.accounts().restore(&mut account, session).await?;
+                        db.accounts().restore(&mut account, executor).await?;
                     }
-                    db.accounts().update(&mut account, session).await?;
+                    db.accounts().update(&mut account, executor).await?;
                     rbac.assign_system_roles(
                         AccountKind::Admin,
                         &account_id,
                         vec![crate::ROOT_ROLE_ID.to_string()],
-                        session,
+                        executor,
                     )
                     .await?;
                     Ok::<AccountCore, crate::error::Error>(account)
@@ -435,10 +435,10 @@ impl AdminService {
         let rbac = self.rbac.clone();
         let account_id = account.base.id.clone();
         self.rbac
-            .run_authorized_audited_policy_transaction(policy_revision, audit, move |session| {
+            .run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
                 Box::pin(async move {
-                    db.accounts().soft_delete(&mut account, session).await?;
-                    rbac.clear_roles(AccountKind::Admin, &account_id, session).await?;
+                    db.accounts().soft_delete(&mut account, executor).await?;
+                    rbac.clear_roles(AccountKind::Admin, &account_id, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })

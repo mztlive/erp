@@ -105,9 +105,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let actor = actor.clone();
         self.db
             .client()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    cancel_blocked_in_transaction(
+                    cancel_blocked_apply(
                         &db,
                         &rbac,
                         action_port.as_ref(),
@@ -116,7 +116,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                         &actor,
                         &command,
                         &idempotency_key,
-                        session,
+                        executor,
                     )
                     .await
                 })
@@ -142,9 +142,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             let idempotency_key = idempotency_key.clone();
             self.db
                 .client()
-                .with_transaction(move |session| {
+                .with_transaction(move |executor| {
                     Box::pin(async move {
-                        replay_cancel_blocked_in_transaction(
+                        replay_cancel_blocked(
                             &db,
                             &rbac,
                             object_read.as_ref(),
@@ -152,7 +152,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                             &actor,
                             &command,
                             &idempotency_key,
-                            session,
+                            executor,
                         )
                         .await
                     })
@@ -164,9 +164,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
 }
 
 /// 受阻取消先按实例终态证明原操作人并重验当前授权，再允许查询和比较收据。
-// 受阻取消事务 8/9 参数：db/各 Port/命令/幂等键/会话随同一事务传递，拆包破坏回放与提交对称；告警逐项压制。
+// 受阻取消事务 8/9 参数：db/各 Port/命令/幂等键/执行器随同一事务传递，拆包破坏回放与提交对称；告警逐项压制。
 #[allow(clippy::too_many_arguments)]
-async fn replay_cancel_blocked_in_transaction(
+async fn replay_cancel_blocked(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     object_read: &dyn ApprovalObjectReadPort,
@@ -174,23 +174,23 @@ async fn replay_cancel_blocked_in_transaction(
     actor: &AuditActor,
     command: &ApprovalCancelBlockedCommand,
     idempotency_key: &IdempotencyKey,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<Option<ApprovalCommandView>> {
     let instance = db
         .bpm_workflow()
-        .find_instance_by_id(&ApprovalProcessInstanceId::new(&command.approval_process_instance_id), session)
+        .find_instance_by_id(&ApprovalProcessInstanceId::new(&command.approval_process_instance_id), executor)
         .await?
         .ok_or_else(hidden_not_found)?;
     if instance.base.id != command.approval_process_instance_id {
         return Err(hidden_not_found());
     }
-    let (document_type, snapshot) = load_exact_runtime_snapshot(db, &instance, session, true).await?;
+    let (document_type, snapshot) = load_exact_runtime_snapshot(db, &instance, executor, true).await?;
 
     let terminal_facts = if instance.status == ApprovalProcessInstanceStatus::Cancelled {
         // 与 Fresh 路径保持相同顺序：失权调用方在任何收据读取或摘要比较前即失败关闭。
-        ensure_cancel_blocked_authorized(db, rbac, object_read, actor, document_type, &snapshot, session)
+        ensure_cancel_blocked_authorized(db, rbac, object_read, actor, document_type, &snapshot, executor)
             .await?;
-        let facts = load_cancel_blocked_terminal_facts(db, audit_port, &instance, session)
+        let facts = load_cancel_blocked_terminal_facts(db, audit_port, &instance, executor)
             .await?
             .ok_or_else(hidden_not_found)?;
         if facts.actor_id != actor.id() {
@@ -217,7 +217,7 @@ async fn replay_cancel_blocked_in_transaction(
         reason: &command.reason,
         actor_id: actor.id(),
     })?;
-    let Some(receipt) = find_receipt_for_identity(db, &identity, session).await? else {
+    let Some(receipt) = find_receipt_for_identity(db, &identity, executor).await? else {
         return Ok(None);
     };
     if receipt.result_ref != command.approval_process_instance_id {
@@ -232,7 +232,7 @@ async fn replay_cancel_blocked_in_transaction(
         ReceiptBranch::Fresh => unreachable!("receipt was loaded"),
         ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
     }
-    persisted_command_view_with_executor(db, &receipt.result_ref, CommitRequired::Cancelled, true, session)
+    persisted_command_view_with_executor(db, &receipt.result_ref, CommitRequired::Cancelled, true, executor)
         .await
         .map(Some)
 }
@@ -339,7 +339,7 @@ pub(super) fn ensure_cancel_blocked_instance_preconditions(
 /// 在同一事务内完成受阻取消的收据仲裁、授权、动作、运行时、通知与审计。
 // 与回放函数同形以便命令入口统一分派，参数顺序由字段名锚定；告警逐项压制。
 #[allow(clippy::too_many_arguments)]
-async fn cancel_blocked_in_transaction(
+async fn cancel_blocked_apply(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     action_port: &dyn ApprovalDomainActionPort,
@@ -348,27 +348,20 @@ async fn cancel_blocked_in_transaction(
     actor: &AuditActor,
     command: &ApprovalCancelBlockedCommand,
     idempotency_key: &IdempotencyKey,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<ApprovalCommandView> {
-    if let Some(replay) = replay_cancel_blocked_in_transaction(
-        db,
-        rbac,
-        object_read,
-        audit_port,
-        actor,
-        command,
-        idempotency_key,
-        session,
-    )
-    .await?
+    if let Some(replay) =
+        replay_cancel_blocked(db, rbac, object_read, audit_port, actor, command, idempotency_key, executor)
+            .await?
     {
         return Ok(replay);
     }
     let instance_id = ApprovalProcessInstanceId::new(&command.approval_process_instance_id);
     let instance =
-        db.bpm_workflow().find_instance_by_id(&instance_id, session).await?.ok_or_else(hidden_not_found)?;
-    let (document_type, snapshot) = load_exact_runtime_snapshot(db, &instance, session, false).await?;
-    ensure_cancel_blocked_authorized(db, rbac, object_read, actor, document_type, &snapshot, session).await?;
+        db.bpm_workflow().find_instance_by_id(&instance_id, executor).await?.ok_or_else(hidden_not_found)?;
+    let (document_type, snapshot) = load_exact_runtime_snapshot(db, &instance, executor, false).await?;
+    ensure_cancel_blocked_authorized(db, rbac, object_read, actor, document_type, &snapshot, executor)
+        .await?;
     ensure_cancel_blocked_instance_preconditions(&instance, command)?;
     let task_policy =
         instance.cancellation_task_policy().map_err(|error| Error::ConflictError(error.to_string()))?;
@@ -377,7 +370,7 @@ async fn cancel_blocked_in_transaction(
     }
     let current = db
         .bpm_workflow()
-        .find_current_execution(&instance_id, session)
+        .find_current_execution(&instance_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例缺少当前受阻执行".to_string()))?;
     if current.process_instance_id != instance_id
@@ -389,16 +382,16 @@ async fn cancel_blocked_in_transaction(
     }
     ensure_expected_version("审批执行", command.expected_execution_version, current.base.version)?;
     let execution_id = ApprovalNodeExecutionId::new(&current.base.id);
-    let open_tasks = db.work_items().open_approval_tasks_for_execution(&execution_id, session).await?;
+    let open_tasks = db.work_items().open_approval_tasks_for_execution(&execution_id, executor).await?;
     task_policy
         .ensure_open_task_count(open_tasks.len())
         .map_err(|error| Error::ConflictError(error.to_string()))?;
-    validate_cancel_task_version_with_executor(db, &execution_id, command.expected_task_version, session)
+    validate_cancel_task_version_with_executor(db, &execution_id, command.expected_task_version, executor)
         .await?;
     let spec = adapter_spec_of(document_type)?;
     let graph = db
         .bpm_workflow()
-        .load_definition_graph(&instance.process_definition_id, session)
+        .load_definition_graph(&instance.process_definition_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))?;
     match (instance.blocker_code, current.blocker_code) {
@@ -457,12 +450,12 @@ async fn cancel_blocked_in_transaction(
     )?;
 
     db.bpm_workflow()
-        .insert_command_receipt(&writes.receipt, session)
+        .insert_command_receipt(&writes.receipt, executor)
         .await
         .map_err(map_receipt_first_write_error)?;
-    action_port.execute(spec.cancel_action, &action_context, actor, session).await?;
+    action_port.execute(spec.cancel_action, &action_context, actor, executor).await?;
     db.bpm_workflow()
-        .persist_cancelled_runtime_after_receipt(&writes.instance, &writes.updated_executions, session)
+        .persist_cancelled_runtime_after_receipt(&writes.instance, &writes.updated_executions, executor)
         .await?;
     persist_cancel_notifications(
         db,
@@ -476,10 +469,10 @@ async fn cancel_blocked_in_transaction(
             current_approver_display_name: &current.assignee_name_snapshot,
         },
         now,
-        session,
+        executor,
     )
     .await?;
-    audit_port.persist(&audit, session).await?;
+    audit_port.persist(&audit, executor).await?;
     Ok(map_command_view(&writes.instance, None, None, Some("DRAFT".to_string()), None, writes.commit, false))
 }
 

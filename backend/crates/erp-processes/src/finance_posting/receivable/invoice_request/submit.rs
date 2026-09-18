@@ -50,19 +50,19 @@ impl ReceivableProcess {
         let revision = rbac.current_policy_revision().await?;
         let result = rbac
             .clone()
-            .run_authorized_policy_transaction(revision, move |session| {
+            .run_authorized_policy_transaction(revision, move |executor| {
                 Box::pin(async move {
-                    let account = lock_account(&db, &req.receivable_account_id, session).await?;
-                    ensure_effective_source(&db, &account, session).await?;
-                    let mut request = candidate(&db, &account, &req, &actor, session).await?;
+                    let account = lock_account(&db, &req.receivable_account_id, executor).await?;
+                    ensure_effective_source(&db, &account, executor).await?;
+                    let mut request = candidate(&db, &account, &req, &actor, executor).await?;
                     let available = account
                         .open_invoiceable_total
-                        .checked_sub(reserved(&db, &account.base.id, session).await?);
+                        .checked_sub(reserved(&db, &account.base.id, executor).await?);
                     request.submit(available)?;
-                    let binding = bind(&db, &rbac, object_read.as_ref(), &request, &actor, session).await?;
+                    let binding = bind(&db, &rbac, object_read.as_ref(), &request, &actor, executor).await?;
                     let id = request.base.id.clone();
-                    start(&db, &mut request, &binding, &req.idempotency_key, &actor, session).await?;
-                    db.audit_logs().create(&command.audit(actor, id.clone())?, session).await?;
+                    start(&db, &mut request, &binding, &req.idempotency_key, &actor, executor).await?;
+                    db.audit_logs().create(&command.audit(actor, id.clone())?, executor).await?;
                     Ok::<String, Error>(id)
                 })
             })
@@ -119,7 +119,7 @@ async fn candidate(
 /// * `object_read` - 审批对象读取端口。
 /// * `request` - 已写入的开票申请。
 /// * `actor` - 提交人。
-/// * `session` - 当前业务事务。
+/// * `executor` - 调用方执行器。
 ///
 /// # 返回
 /// 已绑定的发布定义。
@@ -136,9 +136,9 @@ async fn bind(
     object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     request: &SalesInvoiceRequest,
     actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding> {
-    if let Some(document) = find_registered_document(db, &request.base.id, session).await? {
+    if let Some(document) = find_registered_document(db, &request.base.id, executor).await? {
         return document
             .approval_binding
             .ok_or_else(|| Error::ConflictError("请先发布开票申请审批流程".into()));
@@ -158,7 +158,7 @@ async fn bind(
         object_read,
         &command,
         actor,
-        session,
+        executor,
     )
     .await?
     .ok_or_else(|| Error::ConflictError("请先发布开票申请审批流程".into()))?;
@@ -168,7 +168,7 @@ async fn bind(
         request.request_no.clone(),
     )?;
     attach_published_binding(&mut document, binding.clone())?;
-    db.business_documents().create(&document, session).await?;
+    db.business_documents().create(&document, executor).await?;
     Ok(binding)
 }
 /// 同一事务写入启动收据、单据守卫、申请快照和审批任务。
@@ -178,10 +178,10 @@ async fn start(
     binding: &erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding,
     key: &str,
     actor: &AuditActor,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let now = Instant::now();
-    let graph = start_approval::load_bound_definition_graph_with_executor(db, binding, session).await?;
+    let graph = start_approval::load_bound_definition_graph_with_executor(db, binding, executor).await?;
     let subject = erp_workflow::entity::approval_integration::subject_ref_for(
         DocumentType::SalesInvoiceRequest,
         &request.base.id,
@@ -201,7 +201,7 @@ async fn start(
     let PreparedExecution::Apply(writes) = prepare_start(input)? else {
         return Err(Error::ConflictError("申请已提交，请刷新查看结果".into()));
     };
-    db.bpm_workflow().insert_command_receipt(&writes.receipt, session).await?;
+    db.bpm_workflow().insert_command_receipt(&writes.receipt, executor).await?;
     let guarded = db
         .business_documents()
         .mark_approval_started(
@@ -210,13 +210,13 @@ async fn start(
             &binding.approval_process_definition_id,
             binding.approval_definition_version,
             now,
-            session,
+            executor,
         )
         .await?;
     if guarded.is_none() {
         return Err(Error::ConflictError("申请审批状态已变化，请刷新后重试".into()));
     }
-    db.sales_invoice_requests().update(request, session).await?;
+    db.sales_invoice_requests().update(request, executor).await?;
     let snapshot = ApprovalSubjectSnapshotPayload {
         document_no: request.request_no.clone(),
         responsible_org_id: request.counterparty_party_id.to_string(),
@@ -240,7 +240,7 @@ async fn start(
         spec.owner_role.as_str(),
         request.counterparty_party_id.as_ref(),
         now,
-        session,
+        executor,
     )
     .await
 }

@@ -6,6 +6,7 @@ use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use id_generator::next_id;
 use mongodb::Database;
+use persistence_core::Executor;
 
 use super::super::apply_plan::PlannedWrites;
 use super::{ensure_expected_version, hidden_not_found};
@@ -32,7 +33,7 @@ pub(super) struct CompleteOrCloseTasksInput<'a> {
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `input` - 当前决定涉及的任务结束事实与并发版本
-/// * `session` - 调用方事务会话
+/// * `executor` - 执行器
 ///
 /// # 返回
 /// 当前执行对应任务完成或关闭并通过 CAS 写回时返回 `Ok(())`。
@@ -45,20 +46,20 @@ pub(super) struct CompleteOrCloseTasksInput<'a> {
 pub(super) async fn complete_or_close_tasks(
     db: &Database,
     input: CompleteOrCloseTasksInput<'_>,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let execution_id = ApprovalNodeExecutionId::new(input.ended_execution_id);
     let Some(ending) = approval_task_ending(&input, &execution_id)? else {
         return Ok(());
     };
-    let tasks = db.work_items().open_approval_tasks_for_execution(&execution_id, session).await?;
+    let tasks = db.work_items().open_approval_tasks_for_execution(&execution_id, executor).await?;
     let requested =
         tasks.iter().find(|item| item.base.id == input.work_item_id).ok_or_else(hidden_not_found)?;
     ensure_expected_version("审批任务", input.expected_task_version, requested.base.version)?;
     let tasks =
         WorkItem::end_all_for_approval_execution(tasks, &execution_id, input.actor_id, &ending, input.now)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
-    db.work_items().persist_ended_approval_tasks(&tasks, session).await?;
+    db.work_items().persist_ended_approval_tasks(&tasks, executor).await?;
     Ok(())
 }
 
@@ -107,7 +108,7 @@ pub(super) struct CreateOpenTasksInput<'a> {
 pub(super) async fn create_open_tasks(
     db: &Database,
     input: CreateOpenTasksInput<'_>,
-    session: &mut mongodb::ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     for (index, intent) in input.writes.create_tasks.iter().enumerate() {
         let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
@@ -129,7 +130,7 @@ pub(super) async fn create_open_tasks(
             input.now,
         )
         .map_err(|error| Error::ValidationError(error.to_string()))?;
-        db.work_items().create(&item, session).await?;
+        db.work_items().create(&item, executor).await?;
     }
     Ok(())
 }

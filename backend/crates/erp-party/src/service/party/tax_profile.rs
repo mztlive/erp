@@ -156,13 +156,13 @@ impl PartyTaxProfileService {
         let profile_for_tx = profile.clone();
         let party_id_for_tx = profile.party_id.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     if profile_for_tx.is_default {
-                        clear_default_marks!(db, party_tax_profiles, party_id_for_tx, None, session);
+                        clear_default_marks!(db, party_tax_profiles, party_id_for_tx, None, executor);
                     }
-                    db.party_tax_profiles().create(&profile_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.party_tax_profiles().create(&profile_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
             })
@@ -221,7 +221,7 @@ impl PartyTaxProfileService {
         let party_id_for_tx = profile.party_id.clone();
         let exclude_id = profile.base.id.clone();
         let updated = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     if profile_for_tx.is_default {
                         clear_default_marks!(
@@ -229,11 +229,11 @@ impl PartyTaxProfileService {
                             party_tax_profiles,
                             party_id_for_tx,
                             Some(&exclude_id),
-                            session
+                            executor
                         );
                     }
-                    db.party_tax_profiles().update(&mut profile_for_tx, session).await?;
-                    audit_port.persist(&audit, session).await?;
+                    db.party_tax_profiles().update(&mut profile_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<PartyTaxProfile, crate::error::Error>(profile_for_tx)
                 })
             })

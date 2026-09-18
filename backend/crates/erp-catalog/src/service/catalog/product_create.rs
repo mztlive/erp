@@ -248,7 +248,7 @@ impl CatalogService {
         let access = self.access();
         let actor = actor.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     access
                         .ensure_writable(
@@ -256,18 +256,18 @@ impl CatalogService {
                             "create",
                             &product.maintainer_user_id,
                             &product.business_org_unit_id,
-                            session,
+                            executor,
                         )
                         .await?;
-                    pending_assets.persist(&db, session).await?;
-                    db.products().create(&product, session).await?;
-                    db.catalog().create_product_revision_with_media(&revision, &media, session).await?;
+                    pending_assets.persist(&db, executor).await?;
+                    db.products().create(&product, executor).await?;
+                    db.catalog().create_product_revision_with_media(&revision, &media, executor).await?;
                     for item in &sku_items {
                         db.catalog()
-                            .create_sku_with_revision(&item.sku, &item.revision, &[], session)
+                            .create_sku_with_revision(&item.sku, &item.revision, &[], executor)
                             .await?;
                     }
-                    audit_port.persist(&audit, session).await?;
+                    audit_port.persist(&audit, executor).await?;
                     Ok::<Product, crate::error::Error>(product)
                 })
             })

@@ -65,7 +65,7 @@ impl ImportApplyService {
         let audit_id_for_tx = audit_id.clone();
         let fingerprint_for_tx = fingerprint.clone();
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     execute_import_command_transaction(
                         &db,
@@ -74,7 +74,7 @@ impl ImportApplyService {
                         &audit_id_for_tx,
                         &fingerprint_for_tx,
                         action_name,
-                        session,
+                        executor,
                     )
                     .await
                 })

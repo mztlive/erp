@@ -58,12 +58,12 @@ impl SupplierApiGovernanceProcess {
         let client = db.client().clone();
         let connection_tx = connection.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     SupplierApiService::new(db.clone())
-                        .persist_created_connection(&connection_tx, session)
+                        .persist_created_connection(&connection_tx, executor)
                         .await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<(), Error>(())
                 })
             })

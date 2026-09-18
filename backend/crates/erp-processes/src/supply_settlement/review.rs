@@ -78,22 +78,22 @@ impl SupplierSettlementProcess {
         let fingerprint_for_tx = fingerprint.clone();
         let audit_id_for_tx = audit_id.clone();
         let transaction_result = auth
-            .run_authorized_policy_transaction(policy_revision, move |session| {
+            .run_authorized_policy_transaction(policy_revision, move |executor| {
                 Box::pin(async move {
                     let mut current = erp_supply::SettlementAccess::new(db.clone(), data_scope)
-                        .require_statement(&audit_actor, "submit", &statement.base.id, session)
+                        .require_statement(&audit_actor, "submit", &statement.base.id, executor)
                         .await?;
                     if current.base.version != statement.base.version
                         || current.subject_hash != expected_subject_hash
                     {
                         return Err(Error::ConflictError("结算单版本或主题已变化，请刷新后重试".to_string()));
                     }
-                    ensure_review_submission_ready(&db, &current, &actor_id, session).await?;
+                    ensure_review_submission_ready(&db, &current, &actor_id, executor).await?;
                     current.submit_review()?;
                     SupplierSettlementService::new(db.clone())
-                        .persist_statement(&mut current, session)
+                        .persist_statement(&mut current, executor)
                         .await?;
-                    db.work_items().create(&work_item, session).await?;
+                    db.work_items().create(&work_item, executor).await?;
                     let receipt = ReviewSubmissionReceipt {
                         operation_id: operation_id_for_tx,
                         statement_version: current.base.version,
@@ -107,7 +107,7 @@ impl SupplierSettlementProcess {
                         current.base.id.clone(),
                         Some(review_submission_receipt_message(&fingerprint_for_tx, &receipt)),
                     )?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<(SupplierSettlementStatement, WorkItem), crate::Error>((current, work_item))
                 })
             })
@@ -211,7 +211,7 @@ impl SupplierSettlementProcess {
         let action_for_tx = action.to_string();
         let result_status_for_tx = result_status;
         let transaction_result = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let receipt = super::review_posting::post(
                         super::review_posting::Posting {
@@ -231,7 +231,7 @@ impl SupplierSettlementProcess {
                             audit_id: audit_id_for_tx,
                             action: action_for_tx,
                         },
-                        session,
+                        executor,
                     )
                     .await?;
                     Ok::<(SupplierSettlementStatement, WorkItem, ReviewDecisionReceipt), crate::Error>((

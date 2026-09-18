@@ -280,10 +280,10 @@ impl ProductImportProcess {
         let client = db.client().clone();
         let mut job_for_tx = job.clone();
         client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.background_job_items().update(&mut item, session).await?;
-                    db.background_jobs().update(&mut job_for_tx, session).await?;
+                    db.background_job_items().update(&mut item, executor).await?;
+                    db.background_jobs().update(&mut job_for_tx, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

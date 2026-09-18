@@ -23,8 +23,8 @@ use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::{PreparedExecution, map_receipt_first_write_error};
 use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
-use mongodb::{ClientSession, Database};
-use persistence_core::{Executor, Transactional};
+use mongodb::Database;
+use persistence_core::Executor;
 
 use crate::{Error, Result};
 
@@ -85,42 +85,12 @@ pub(crate) struct PurchaseSubmitProcurementGuard {
     pub actor_id: String,
 }
 
-/// 在同一事务中写入正式号、提交快照、单据迁移、快照、BPM 运行事实与入口任务。
-///
-/// # 用途
-/// 提交启动后原子写入采购单、提交快照与运行事实。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `input` - 提交写入集合
-///
-/// # 返回
-/// 返回首个入口任务身份，无任务时为空。
-///
-/// # 错误
-/// 仓储写入失败或计划不完整时返回错误，事务回滚。
-///
-/// # 关键业务约束
-/// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
-pub(crate) async fn persist_purchase_order_start(
-    db: &Database,
-    input: PurchaseOrderStartPersistInput,
-) -> Result<Option<(String, u64)>> {
-    let db = db.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |session| {
-            Box::pin(async move { persist_purchase_order_start_with_session(&db, input, session).await })
-        })
-        .await
-}
-
 /// 在调用方事务会话中写入正式号、提交快照、运行事实与入口任务。
 ///
 /// # 参数
 /// * `db` - 数据库
 /// * `input` - 提交写入集合
-/// * `session` - 已开启的 MongoDB 事务会话
+/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回首个入口任务身份，无任务时为空。
@@ -133,19 +103,19 @@ pub(crate) async fn persist_purchase_order_start(
 /// 外层创建命令已经完成自身幂等仲裁并持有同一事务；本方法不得再开事务，且其
 /// 审批写段仍必须按“启动收据 -> 带正式编号的注册行启动守卫 -> 业务提交 ->
 /// BPM 运行事实”顺序执行。写事务必须重验采购对象范围，历史参与不授予提交。
-pub(crate) async fn persist_purchase_order_start_with_session(
+pub(crate) async fn persist_purchase_order_start(
     db: &Database,
     input: PurchaseOrderStartPersistInput,
-    session: &mut ClientSession,
+    executor: &mut dyn Executor,
 ) -> Result<Option<(String, u64)>> {
     if !matches!(&input.prepared, PreparedExecution::Apply(_)) {
         return Ok(None);
     }
     if let Some(scope) = &input.object_scope {
-        scope.current(&input.order.base.id, session).await?;
+        scope.current(&input.order.base.id, executor).await?;
     }
     let mut posting = StartPosting { db, input, first_task: None };
-    execute_start_steps(&mut posting, session).await?;
+    execute_start_steps(&mut posting, executor).await?;
     Ok(posting.first_task)
 }
 
@@ -312,7 +282,7 @@ async fn persist_runtime_writes(
     owner_role: &str,
     organization_id: &str,
     now: Instant,
-    session: &mut dyn Executor,
+    executor: &mut dyn Executor,
 ) -> Result<Option<(String, u64)>> {
     let first = writes
         .created_executions
@@ -324,7 +294,7 @@ async fn persist_runtime_writes(
             &writes.created_assignees,
             first,
             &list_projection_from_execution(first, now),
-            session,
+            executor,
         )
         .await?;
     let snapshot = ApprovalSubjectSnapshot::new(
@@ -336,8 +306,8 @@ async fn persist_runtime_writes(
         snapshot_payload.clone(),
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
-    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, session).await?;
-    persist_open_tasks(db, writes, owner_role, organization_id, now, session).await
+    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
+    persist_open_tasks(db, writes, owner_role, organization_id, now, executor).await
 }
 
 /// 由入口执行构造有界列表投影。
@@ -373,7 +343,7 @@ async fn persist_open_tasks(
     owner_role: &str,
     organization_id: &str,
     now: Instant,
-    session: &mut dyn Executor,
+    executor: &mut dyn Executor,
 ) -> Result<Option<(String, u64)>> {
     let mut first_task = None;
     for intent in &writes.create_tasks {
@@ -398,7 +368,7 @@ async fn persist_open_tasks(
         if first_task.is_none() {
             first_task = Some((item.base.id.clone(), item.base.version));
         }
-        db.work_items().create(&item, session).await?;
+        db.work_items().create(&item, executor).await?;
     }
     Ok(first_task)
 }

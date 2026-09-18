@@ -220,7 +220,7 @@ async fn persist_created_service_fulfillment(
     let object_read = object_read.clone();
     let client = db.client().clone();
     client
-        .with_transaction(move |session| {
+        .with_transaction(move |executor| {
             Box::pin(async move {
                 register_created_service_fulfillment_document(
                     &db,
@@ -228,19 +228,19 @@ async fn persist_created_service_fulfillment(
                     object_read.as_ref(),
                     &record,
                     &actor,
-                    session,
+                    executor,
                 )
                 .await?;
                 FulfillmentService::new(db.clone())
-                    .persist_created_service_fulfillment(&record, session)
+                    .persist_created_service_fulfillment(&record, executor)
                     .await?;
                 super::task::ensure_fulfillment_task(
                     &db,
                     super::task::FulfillmentTaskObject::ServiceFulfillment(&record),
-                    session,
+                    executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, session).await?;
+                db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

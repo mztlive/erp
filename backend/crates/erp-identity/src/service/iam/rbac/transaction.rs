@@ -4,8 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use application_core::owned_task::await_owned;
-use mongodb::ClientSession;
-use persistence_core::Transactional;
+use persistence_core::{Executor, Transactional};
 
 use super::RbacService;
 use super::policy::commit_outcome_unknown;
@@ -17,7 +16,7 @@ impl RbacService {
     /// 该入口没有操作人授权快照，只允许内建角色和超级管理员初始化使用。
     ///
     /// # 参数
-    /// * `transaction` - 在 MongoDB 会话中执行的事务函数
+    /// * `transaction` - 在事务执行器中执行的写入函数
     ///
     /// # 返回值
     /// 返回事务函数的结果。
@@ -38,7 +37,7 @@ impl RbacService {
             + Send
             + 'static,
         F: for<'a> FnOnce(
-                &'a mut ClientSession,
+                &'a mut dyn Executor,
             )
                 -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'a>>
             + Send
@@ -66,7 +65,7 @@ impl RbacService {
             + Send
             + 'static,
         F: for<'a> FnOnce(
-                &'a mut ClientSession,
+                &'a mut dyn Executor,
             )
                 -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'a>>
             + Send
@@ -91,7 +90,7 @@ impl RbacService {
             + Send
             + 'static,
         F: for<'a> FnOnce(
-                &'a mut ClientSession,
+                &'a mut dyn Executor,
             )
                 -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'a>>
             + Send
@@ -106,14 +105,14 @@ impl RbacService {
             rbac.ensure_policy_consistency_known()?;
             let policy_store = rbac.policy_store.clone();
             let result = client
-                .with_transaction(move |session| {
+                .with_transaction(move |executor| {
                     Box::pin(async move {
-                        let value = transaction(session).await?;
+                        let value = transaction(executor).await?;
                         match expected_revision {
                             Some(revision) => {
-                                policy_store.bump_policy_revision_if_matches(revision, session).await?;
+                                policy_store.bump_policy_revision_if_matches(revision, executor).await?;
                             },
-                            None => policy_store.bump_policy_revision(session).await?,
+                            None => policy_store.bump_policy_revision(executor).await?,
                         }
                         Ok::<_, E>(value)
                     })
@@ -144,17 +143,17 @@ impl RbacService {
             + Send
             + 'static,
         F: for<'a> FnOnce(
-                &'a mut ClientSession,
+                &'a mut dyn Executor,
             )
                 -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'a>>
             + Send
             + 'static,
     {
         let audit_port = self.audit.clone();
-        self.run_authorized_policy_transaction(policy_revision, move |session| {
+        self.run_authorized_policy_transaction(policy_revision, move |executor| {
             Box::pin(async move {
-                let value = transaction(session).await?;
-                audit_port.persist(&audit, session).await?;
+                let value = transaction(executor).await?;
+                audit_port.persist(&audit, executor).await?;
                 Ok::<_, E>(value)
             })
         })

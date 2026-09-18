@@ -81,17 +81,17 @@ impl SalesOrderCommandProcess {
         let sellable_refs_for_tx =
             erp_sales::service::sales_order::SalesOrderService::sellable_working_copy_refs(&lines)?;
         let working_copy = client
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.related_order(&order, session).await?;
-                    access.revalidate(&order.base.id, expected_order_version, session).await?;
+                    access.related_order(&order, executor).await?;
+                    access.revalidate(&order.base.id, expected_order_version, executor).await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                         .ensure_sellable_refs(
                             &sellable_refs_for_tx,
                             &crate::order_to_cash::adapters::catalog::CatalogQualificationAdapter::new(
                                 db.clone(),
                             ),
-                            session,
+                            executor,
                         )
                         .await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
@@ -100,10 +100,10 @@ impl SalesOrderCommandProcess {
                             old_lines,
                             &lines_for_tx,
                             &mut working_copy,
-                            session,
+                            executor,
                         )
                         .await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&audit, executor).await?;
                     Ok::<SalesOrderWorkingCopy, crate::Error>(working_copy)
                 })
             })

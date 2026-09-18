@@ -126,10 +126,10 @@ impl SupplierImportProcess {
         let updated = db
             .client()
             .clone()
-            .with_transaction(move |session| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.background_job_items().update(&mut item, session).await?;
-                    db.background_jobs().update(&mut copy, session).await?;
+                    db.background_job_items().update(&mut item, executor).await?;
+                    db.background_jobs().update(&mut copy, executor).await?;
                     Ok::<_, Error>(copy)
                 })
             })

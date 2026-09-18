@@ -6,7 +6,6 @@ use std::pin::Pin;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use mongodb::ClientSession;
 use persistence_core::Executor;
 
 use super::object_facts::OrderTaskSource;
@@ -103,7 +102,7 @@ fn split_permission(code: &str) -> Option<(&str, &str)> {
 /// Closure type for a policy-bound MongoDB write.
 pub type WorkflowPolicyWrite<T, E> = Box<
     dyn for<'a> FnOnce(
-            &'a mut ClientSession,
+            &'a mut dyn Executor,
         ) -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'a>>
         + Send,
 >;
@@ -350,7 +349,7 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
             + Send
             + 'static,
         F: for<'a> FnOnce(
-                &'a mut ClientSession,
+                &'a mut dyn Executor,
             )
                 -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'a>>
             + Send
@@ -492,7 +491,7 @@ impl WorkflowAuthorizationPort for FailClosedWorkflowAuthorizationPort {
             + Send
             + 'static,
         F: for<'a> FnOnce(
-                &'a mut ClientSession,
+                &'a mut dyn Executor,
             )
                 -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'a>>
             + Send
