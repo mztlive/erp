@@ -1,17 +1,12 @@
 //! 逆向资金单据的只读审批摘要。
-mod customer_refund;
 mod runtime;
-pub(super) use runtime::load_runtime;
-mod payment_reversal;
-mod receipt_reversal;
-mod supplier_refund;
-pub(super) use customer_refund::document_approval_view;
+use erp_returns::entity::returns::{
+    CustomerRefundStatus, PaymentReversalStatus, ReceiptReversalStatus, SupplierRefundStatus,
+};
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::document_registry::find_approval_binding;
-pub(super) use payment_reversal::payment_reversal_approval_view;
 use persistence_core::NoTransaction;
-pub(super) use receipt_reversal::receipt_reversal_approval_view;
-pub(super) use supplier_refund::supplier_refund_approval_view;
+pub(super) use runtime::load_runtime;
 
 use super::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
@@ -56,6 +51,114 @@ fn process_required_allowed_actions(is_draft: bool, is_in_approval: bool) -> Vec
     }
 }
 
+/// 由绑定与可选实例事实构造只读审批结构。
+///
+/// 创建后未提交只返回绑定定义；客户端不得据此选择定义或审批人。
+///
+/// # 参数
+/// * `binding` - 创建时冻结的定义绑定
+/// * `instance` - 已启动时的实例摘要
+/// * `status` - 当前业务状态
+///
+/// # 返回
+/// 返回有界只读审批结构。
+///
+/// # 错误
+/// 无。
+pub fn document_approval_view(
+    binding: Option<&ApprovalDefinitionBinding>,
+    instance: Option<DocumentApprovalInstanceView>,
+    status: CustomerRefundStatus,
+) -> DocumentApprovalView {
+    process_required_view(
+        binding,
+        instance,
+        matches!(status, CustomerRefundStatus::Draft),
+        matches!(status, CustomerRefundStatus::InApproval),
+    )
+}
+
+/// 由绑定与可选实例事实构造供应商退款只读审批结构。
+///
+/// 创建后未提交只返回绑定定义；客户端不得据此选择定义或审批人。
+///
+/// # 参数
+/// * `binding` - 创建时冻结的定义绑定
+/// * `instance` - 已启动时的实例摘要
+/// * `status` - 当前业务状态
+///
+/// # 返回
+/// 返回有界只读审批结构。
+///
+/// # 错误
+/// 无。
+pub fn supplier_refund_approval_view(
+    binding: Option<&ApprovalDefinitionBinding>,
+    instance: Option<DocumentApprovalInstanceView>,
+    status: SupplierRefundStatus,
+) -> DocumentApprovalView {
+    process_required_view(
+        binding,
+        instance,
+        matches!(status, SupplierRefundStatus::Draft),
+        matches!(status, SupplierRefundStatus::InApproval),
+    )
+}
+
+/// 由绑定与可选实例事实构造回款冲正只读审批结构。
+///
+/// 创建后未提交只返回绑定定义；客户端不得据此选择定义或审批人。
+///
+/// # 参数
+/// * `binding` - 创建时冻结的定义绑定
+/// * `instance` - 已启动时的实例摘要
+/// * `status` - 当前业务状态
+///
+/// # 返回
+/// 返回有界只读审批结构。
+///
+/// # 错误
+/// 无。
+pub fn receipt_reversal_approval_view(
+    binding: Option<&ApprovalDefinitionBinding>,
+    instance: Option<DocumentApprovalInstanceView>,
+    status: ReceiptReversalStatus,
+) -> DocumentApprovalView {
+    process_required_view(
+        binding,
+        instance,
+        matches!(status, ReceiptReversalStatus::Draft),
+        matches!(status, ReceiptReversalStatus::InApproval),
+    )
+}
+
+/// 由绑定与可选实例事实构造付款冲正只读审批结构。
+///
+/// 创建后未提交只返回绑定定义；客户端不得据此选择定义或审批人。
+///
+/// # 参数
+/// * `binding` - 创建时冻结的定义绑定
+/// * `instance` - 已启动时的实例摘要
+/// * `status` - 当前业务状态
+///
+/// # 返回
+/// 返回有界只读审批结构。
+///
+/// # 错误
+/// 无。
+pub fn payment_reversal_approval_view(
+    binding: Option<&ApprovalDefinitionBinding>,
+    instance: Option<DocumentApprovalInstanceView>,
+    status: PaymentReversalStatus,
+) -> DocumentApprovalView {
+    process_required_view(
+        binding,
+        instance,
+        matches!(status, PaymentReversalStatus::Draft),
+        matches!(status, PaymentReversalStatus::InApproval),
+    )
+}
+
 /// 缺注册行时把 NotFound 吞成未绑定，其它错误原样上抛。
 ///
 /// # 参数
@@ -88,6 +191,10 @@ fn binding_or_none(
 
 #[cfg(test)]
 mod tests {
+    use bpm::ids::ApprovalProcessDefinitionId;
+    use erp_core::common::time::Instant;
+    use erp_workflow::service::approval::binding::binding_from_published;
+
     use super::*;
 
     #[test]
@@ -101,6 +208,46 @@ mod tests {
         let other = process_required_view(None, None, false, false);
         assert!(other.allowed_actions.is_empty());
         assert!(other.recent_history.len() <= RECENT_HISTORY_LIMIT);
+    }
+
+    #[test]
+    fn process_required_wrappers_keep_status_actions_and_history_cap() {
+        let binding =
+            binding_from_published(ApprovalProcessDefinitionId::new("def-1"), 2, Instant::from_unix_secs(1))
+                .unwrap();
+        let views = [
+            document_approval_view(Some(&binding), None, CustomerRefundStatus::Draft),
+            supplier_refund_approval_view(Some(&binding), None, SupplierRefundStatus::Draft),
+            receipt_reversal_approval_view(Some(&binding), None, ReceiptReversalStatus::Draft),
+            payment_reversal_approval_view(Some(&binding), None, PaymentReversalStatus::Draft),
+        ];
+        for view in views {
+            assert_eq!(view.requirement, "PROCESS_REQUIRED");
+            assert_eq!(view.definition.as_ref().unwrap().id, "def-1");
+            assert!(view.instance.is_none());
+            assert!(view.recent_history.len() <= RECENT_HISTORY_LIMIT);
+            assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
+            assert!(!view.allowed_actions.iter().any(|item| item.contains("DEFINITION")));
+        }
+        assert_eq!(
+            document_approval_view(Some(&binding), None, CustomerRefundStatus::InApproval).allowed_actions,
+            vec!["CANCEL".to_string()]
+        );
+        assert_eq!(
+            supplier_refund_approval_view(Some(&binding), None, SupplierRefundStatus::InApproval)
+                .allowed_actions,
+            vec!["CANCEL".to_string()]
+        );
+        assert_eq!(
+            receipt_reversal_approval_view(Some(&binding), None, ReceiptReversalStatus::InApproval)
+                .allowed_actions,
+            vec!["CANCEL".to_string()]
+        );
+        assert_eq!(
+            payment_reversal_approval_view(Some(&binding), None, PaymentReversalStatus::InApproval)
+                .allowed_actions,
+            vec!["CANCEL".to_string()]
+        );
     }
 
     #[test]

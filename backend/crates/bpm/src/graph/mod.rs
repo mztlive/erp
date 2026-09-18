@@ -502,12 +502,20 @@ pub fn copy_nodes_for_definition(
 /// # 错误
 /// 节点数量不在 `1..=20` 或顺序不连续时返回模型错误。
 fn ordered_replacement_drafts(drafts: &[NodeReplacementDraft]) -> ModelResult<Vec<&NodeReplacementDraft>> {
-    if !(1..=MAX_DEFINITION_NODES).contains(&drafts.len()) {
+    ordered_by_display_order(drafts, |draft| draft.display_order)
+}
+
+/// 按展示顺序排列并校验数量与连续性（节点与替换草稿共用）。
+pub(crate) fn ordered_by_display_order<T>(
+    items: &[T],
+    display_order: impl Fn(&T) -> u32,
+) -> ModelResult<Vec<&T>> {
+    if !(1..=MAX_DEFINITION_NODES).contains(&items.len()) {
         return Err(ModelError::InvalidField("审批节点数量必须在 1 到 20 之间"));
     }
-    let mut ordered = drafts.iter().collect::<Vec<_>>();
-    ordered.sort_by_key(|draft| draft.display_order);
-    let orders = ordered.iter().map(|draft| draft.display_order).collect::<Vec<_>>();
+    let mut ordered = items.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|item| display_order(item));
+    let orders = ordered.iter().map(|item| display_order(item)).collect::<Vec<_>>();
     ensure_continuous_display_orders(&orders)?;
     Ok(ordered)
 }

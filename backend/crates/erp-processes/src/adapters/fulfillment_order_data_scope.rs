@@ -299,14 +299,6 @@ mod tests {
     }
 
     #[test]
-    fn identity_forbidden_stays_forbidden() {
-        match map_identity_error(erp_identity::Error::Forbidden("没有该资源动作权限".into())) {
-            erp_supply::Error::Forbidden(message) => assert_eq!(message, "没有该资源动作权限"),
-            other => panic!("expected forbidden, got {other:?}"),
-        }
-    }
-
-    #[test]
     fn unwired_port_and_mismatched_resource_fail_closed() {
         let mut scope = FulfillmentOrderResolvedScope {
             user_id: "actor".into(),

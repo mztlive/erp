@@ -13,24 +13,8 @@ use erp_sales::repository::sales_order::scope::SalesReadScope;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::dto::{CurrentQualityQuery, HistoryQualityQuery};
-use super::query::PeriodBounds as QualityPeriodBounds;
+use crate::Result;
 use crate::sales_center::access::SalesAccess;
-use crate::{Error, Result};
-
-/// 报表期间与版本指纹输入；调用方负责把指纹并入范围版本。
-#[allow(dead_code)]
-pub(super) struct ScopeInput<'a> {
-    pub query: &'a CurrentQualityQuery,
-    pub history: &'a HistoryQualityQuery,
-    pub bounds: QualityPeriodBounds,
-}
-
-/// 未装配 Port 或错误分类保留领域语义，由上层统一映射。
-#[allow(dead_code)]
-pub(super) fn map_customer_error(error: erp_customer::Error) -> Error {
-    Error::from(error)
-}
 
 /// 双口径授权解析器；不缓存任何授权结论。
 #[derive(Clone)]

@@ -14,6 +14,7 @@ use crate::ports::{
     CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope, CustomerScopeObject,
 };
 use crate::repository::CustomerExt;
+use crate::repository::customer_shared::distinct_sorted_customer_ids;
 use crate::repository::prelude::*;
 use crate::repository::scope::{CustomerReadScope, CustomerScopeClause};
 
@@ -79,8 +80,8 @@ impl CustomerAccess {
                 AssignmentRole::Collaborator => collaborating.push(assignment.customer_id.to_string()),
             }
         }
-        let owned = sorted_unique_ids(owned);
-        let collaborating = sorted_unique_ids(collaborating);
+        let owned = distinct_sorted_customer_ids(owned);
+        let collaborating = distinct_sorted_customer_ids(collaborating);
         let history = if allows_history(action) {
             self.historical_customers(actor.id(), executor).await?
         } else {
@@ -274,7 +275,7 @@ impl CustomerAccess {
             .into_iter()
             .map(|assignment| assignment.customer_id.to_string())
             .collect::<Vec<_>>();
-        let ids = sorted_unique_ids(ids);
+        let ids = distinct_sorted_customer_ids(ids);
         ensure_limit(ids.len(), "历史参与范围超过查询上限")?;
         Ok(ids)
     }
@@ -350,7 +351,7 @@ impl CustomerAccess {
             .into_iter()
             .map(|assignment| assignment.customer_id.to_string())
             .collect::<Vec<_>>();
-        let customers = sorted_unique_ids(customers);
+        let customers = distinct_sorted_customer_ids(customers);
         ensure_limit(customers.len(), "组织主责客户超过查询上限")?;
         Ok(customers)
     }
@@ -510,7 +511,7 @@ fn clause_ids(
     {
         ids.extend(customers.iter().cloned());
     }
-    Some(sorted_unique_ids(ids))
+    Some(distinct_sorted_customer_ids(ids))
 }
 
 /// 将角色条款求并为授权集合。
@@ -563,7 +564,7 @@ fn union_ids(left: Option<Vec<String>>, right: Option<Vec<String>>) -> Option<Ve
         (None, _) | (_, None) => None,
         (Some(mut left), Some(right)) => {
             left.extend(right);
-            Some(sorted_unique_ids(left))
+            Some(distinct_sorted_customer_ids(left))
         },
     }
 }
@@ -639,20 +640,6 @@ pub(super) fn ensure_limit(count: usize, message: &str) -> Result<()> {
 /// 授权与筛选集合的查询上限。
 pub(super) const QUERY_LIMIT: usize = 10_000;
 
-/// 将客户 ID 按升序去重（授权并集与组织展开的唯一入口）。
-///
-/// # 参数
-/// * `ids` - 原始客户 ID（可含重复、无序）
-///
-/// # 返回
-/// 返回升序去重后的客户 ID。
-pub(super) fn sorted_unique_ids(ids: Vec<String>) -> Vec<String> {
-    let mut ids = ids;
-    ids.sort();
-    ids.dedup();
-    ids
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -716,12 +703,7 @@ mod tests {
     }
 
     #[test]
-    fn sorted_ids_dedup_and_limit_rejects_overflow() {
-        assert!(sorted_unique_ids(Vec::new()).is_empty());
-        assert_eq!(
-            sorted_unique_ids(vec!["c-2".to_string(), "c-1".to_string(), "c-2".to_string()]),
-            vec!["c-1".to_string(), "c-2".to_string()]
-        );
+    fn query_limit_rejects_overflow() {
         assert!(ensure_limit(QUERY_LIMIT, "主责范围超过查询上限").is_ok());
         assert!(ensure_limit(QUERY_LIMIT + 1, "主责范围超过查询上限").is_err());
     }

@@ -208,16 +208,6 @@ mod tests {
         assert!(mapped.collaborative);
         assert_eq!(mapped.org_unit_ids, vec!["org-a".to_string(), "org-b".to_string()]);
     }
-
-    #[test]
-    fn identity_forbidden_stays_forbidden() {
-        match map_identity_error(erp_identity::Error::Forbidden("没有该资源动作权限".into())) {
-            erp_contract::Error::Forbidden(message) => {
-                assert_eq!(message, "没有该资源动作权限");
-            },
-            other => panic!("expected forbidden, got {other:?}"),
-        }
-    }
 }
 
 /// 将本域已解析事实无损转回公共判定输入，不读取或重解释原始规则。

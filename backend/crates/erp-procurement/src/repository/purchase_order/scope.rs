@@ -313,7 +313,7 @@ impl PurchaseOrderRepositoryScopeExt
 /// * `conditions` - 角色或条款并集
 ///
 /// # 返回
-/// 空集合返回恒假条件，否则返回 `$or`。
+/// 空集合返回恒假条件；恰好一条时直接返回该条件；不少于两条时返回 `$or`。
 ///
 /// # 错误
 /// 无。
@@ -321,8 +321,12 @@ impl PurchaseOrderRepositoryScopeExt
 /// # 关键业务约束
 /// 缺范围不得解释为匹配全部单据。
 fn union(conditions: Vec<Document>) -> Document {
+    let mut conditions = conditions;
     if conditions.is_empty() {
         return doc! { "$expr": false };
+    }
+    if conditions.len() == 1 {
+        return conditions.pop().unwrap_or_else(|| doc! { "$expr": false });
     }
     doc! { "$or": conditions }
 }
@@ -374,7 +378,7 @@ mod tests {
             user_limit: Some(PurchaseScopeClause::default()),
             historical_order_ids: vec![],
         };
-        assert_eq!(scope.document(), doc! { "$and": [{ "$or": [{}] }, { "$expr": false }] });
+        assert_eq!(scope.document(), doc! { "$and": [{}, { "$expr": false }] });
         assert!(scope.is_empty());
     }
 
@@ -383,13 +387,13 @@ mod tests {
         let mut scope =
             PurchaseReadScope { historical_order_ids: vec!["old-order".into()], ..Default::default() };
         assert!(!scope.is_empty());
-        assert_eq!(scope.document(), doc! { "$or": [{ "id": { "$in": ["old-order"] } }] });
+        assert_eq!(scope.document(), doc! { "id": { "$in": ["old-order"] } });
         scope.user_limit = Some(PurchaseScopeClause::default());
         assert!(scope.is_empty());
         assert_eq!(
             scope.document(),
             doc! { "$and": [
-                { "$or": [{ "id": { "$in": ["old-order"] } }] }, { "$expr": false }
+                { "id": { "$in": ["old-order"] } }, { "$expr": false }
             ] }
         );
     }
@@ -409,10 +413,10 @@ mod tests {
         assert!(!scope.is_empty());
         assert_eq!(
             scope.document(),
-            doc! { "$or": [{ "$or": [
+            doc! { "$or": [
                 { "owner_user_id": "buyer-a" },
                 { "business_org_unit_id": { "$in": ["org-a"] } }
-            ] }] }
+            ] }
         );
     }
 

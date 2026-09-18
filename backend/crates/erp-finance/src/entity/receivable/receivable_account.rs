@@ -432,13 +432,13 @@ impl ReceivableAccount {
             return Err(Error::from("复核人、复核时间与复核证据必须同时提供或同时省略"));
         }
         match review_status {
-            AccountReviewStatus::Reviewed if !trio_complete || reviewed_at.is_none() => {
+            AccountReviewStatus::Reviewed if reviewed_at.is_none() => {
                 Err(Error::from("已复核状态必须携带复核人、复核时间与复核证据"))
             },
             AccountReviewStatus::NotApplicable
             | AccountReviewStatus::OpeningPending
             | AccountReviewStatus::SyncDeltaPending
-                if trio_complete && reviewed_at.is_some() =>
+                if reviewed_at.is_some() =>
             {
                 Err(Error::from("未复核状态不得携带复核人、复核时间与复核证据"))
             },

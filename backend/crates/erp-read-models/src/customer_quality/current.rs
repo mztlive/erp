@@ -16,7 +16,7 @@ use super::dto::{
     QualityTotals,
 };
 use super::query::{BASIS_LABEL, PERIOD_BASIS};
-use super::source::{CustomerFact, QUALITY_ORDER_LIMIT, QualityOrder, effective_label, version};
+use super::source::{CustomerFact, QUALITY_ORDER_LIMIT, QualityOrder, effective_label};
 use crate::Result;
 
 /// 同一快照产生的当前视图与请求问询；版本校验需要原查询。
@@ -577,10 +577,4 @@ fn combined_version(customer_version: &str, sales_version: &str, view: &CurrentQ
     view.rows.items.iter().map(|r| &r.row_id).collect::<Vec<_>>().hash(&mut fingerprint);
     view.totals.order_count.hash(&mut fingerprint);
     format!("{customer_version}:{sales_version}:{:x}", fingerprint.finish())
-}
-
-/// 避免未使用导入告警；版本指纹统一经组合版本计算。
-#[allow(dead_code)]
-fn _use_version_scope(orders: &[QualityOrder]) -> String {
-    version("v", orders)
 }

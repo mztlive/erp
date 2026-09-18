@@ -582,7 +582,6 @@ impl PurchaseOrder {
         updated_by: impl Into<String>,
     ) -> Result<u32> {
         self.ensure_draft()?;
-        ensure_transition(self.stable.status, PurchaseOrderStatus::InApproval)?;
         let next =
             self.approval_subject_version.checked_add(1).ok_or_else(|| Error::from("审批提交版本溢出"))?;
         self.approval_subject_version = next;
@@ -603,7 +602,6 @@ impl PurchaseOrder {
         if self.stable.status != PurchaseOrderStatus::InApproval {
             return Err(Error::from("只有审批中的采购单可以撤回审批"));
         }
-        ensure_transition(self.stable.status, PurchaseOrderStatus::Draft)?;
         self.stable.status = PurchaseOrderStatus::Draft;
         self.stable.touch(updated_by);
         Ok(())
@@ -620,13 +618,12 @@ impl PurchaseOrder {
     /// 主状态迁移到 `EFFECTIVE` 并更新审计人后返回 `Ok(())`。
     ///
     /// # 错误
-    /// 状态不是审批中或状态机拒绝迁移时返回领域错误。
+    /// 状态不是审批中时返回领域错误。
     ///
     /// # 关键约束
     /// 复用非变更状态守卫；不检查提交指针，也不改写财务审核状态。
     pub fn formalize_approved(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.ensure_can_formalize()?;
-        ensure_transition(self.stable.status, PurchaseOrderStatus::Effective)?;
         self.stable.status = PurchaseOrderStatus::Effective;
         self.stable.touch(updated_by);
         Ok(())

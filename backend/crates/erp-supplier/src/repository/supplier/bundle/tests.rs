@@ -1,4 +1,7 @@
-use super::list::{qualification_constraint_kind, qualification_expiry_cutoff};
+use super::list::{
+    IncludedQualificationHealth, included_qualification_health, qualification_constraint_kind,
+    qualification_expiry_cutoff,
+};
 use super::{QualificationConstraintKind, SupplierQualificationHealthFilter};
 
 /// 资质约束分支覆盖类型、健康状态与未登记排除路径。
@@ -41,6 +44,29 @@ fn qualification_constraint_kind_covers_all_branches() {
         qualification_constraint_kind(&[], Some(SupplierQualificationHealthFilter::NotRegistered)),
         Excluded
     );
+}
+
+/// 命中集合健康状态不含 `NotRegistered`，未登记仍由排除集路径处理。
+#[test]
+fn included_qualification_health_omits_not_registered() {
+    assert_eq!(included_qualification_health(None), Some(IncludedQualificationHealth::ByType));
+    assert_eq!(
+        included_qualification_health(Some(SupplierQualificationHealthFilter::Unverified)),
+        Some(IncludedQualificationHealth::Unverified)
+    );
+    assert_eq!(
+        included_qualification_health(Some(SupplierQualificationHealthFilter::Valid)),
+        Some(IncludedQualificationHealth::Valid)
+    );
+    assert_eq!(
+        included_qualification_health(Some(SupplierQualificationHealthFilter::Expiring30)),
+        Some(IncludedQualificationHealth::Expiring30)
+    );
+    assert_eq!(
+        included_qualification_health(Some(SupplierQualificationHealthFilter::Expired)),
+        Some(IncludedQualificationHealth::Expired)
+    );
+    assert_eq!(included_qualification_health(Some(SupplierQualificationHealthFilter::NotRegistered)), None);
 }
 
 /// 到期窗口固定为起始日后第三十个自然日。

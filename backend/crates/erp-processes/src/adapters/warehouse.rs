@@ -19,6 +19,10 @@ use erp_workflow::{AvailableWorkItemAccount, WorkItemType};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
+use super::identity_error::map_identity_error;
+
+map_identity_error!(erp_warehouse);
+
 /// MongoDB adapter that converts warehouse audit facts into `erp-audit` writes.
 #[derive(Clone)]
 pub struct MongoWarehouseAudit {
@@ -108,7 +112,7 @@ impl MongoWarehouseIdentity {
             .rbac
             .permissions(account.kind, account.base.id.as_str())
             .await
-            .map_err(map_identity_to_warehouse)?;
+            .map_err(map_identity_error)?;
         let inbound_eligible =
             inbound.iter().all(|required| permissions.iter().any(|granted| granted.covers(required)));
         let outbound_eligible =
@@ -242,23 +246,5 @@ fn map_audit_to_warehouse(error: erp_audit::Error) -> erp_warehouse::Error {
         erp_audit::Error::Logic(error) => erp_warehouse::Error::Logic(error),
         erp_audit::Error::OutcomeUnknown(error) => erp_warehouse::Error::OutcomeUnknown(error),
         erp_audit::Error::RepositoryError(error) => erp_warehouse::Error::RepositoryError(error),
-    }
-}
-
-fn map_identity_to_warehouse(error: erp_identity::Error) -> erp_warehouse::Error {
-    match error {
-        erp_identity::Error::Internal(message) => erp_warehouse::Error::Internal(message),
-        erp_identity::Error::NotFound(message) => erp_warehouse::Error::NotFound(message),
-        erp_identity::Error::ValidationError(message) => erp_warehouse::Error::ValidationError(message),
-        erp_identity::Error::BusinessLogicError(message) => erp_warehouse::Error::BusinessLogicError(message),
-        erp_identity::Error::ConflictError(message) => erp_warehouse::Error::ConflictError(message),
-        erp_identity::Error::ReceiptDuplicate(error) => erp_warehouse::Error::ReceiptDuplicate(error),
-        erp_identity::Error::TransientTransaction(error) => erp_warehouse::Error::TransientTransaction(error),
-        erp_identity::Error::Forbidden(message) => erp_warehouse::Error::Forbidden(message),
-        erp_identity::Error::Unauthenticated(message) => erp_warehouse::Error::Unauthenticated(message),
-        erp_identity::Error::Logic(error) => erp_warehouse::Error::Logic(error),
-        erp_identity::Error::Rbac(message) => erp_warehouse::Error::Internal(message),
-        erp_identity::Error::OutcomeUnknown(error) => erp_warehouse::Error::OutcomeUnknown(error),
-        erp_identity::Error::RepositoryError(error) => erp_warehouse::Error::RepositoryError(error),
     }
 }

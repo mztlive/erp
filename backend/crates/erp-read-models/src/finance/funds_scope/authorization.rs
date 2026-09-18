@@ -1,6 +1,7 @@
 //! 资金授权解析与范围版本守卫。
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::future::Future;
 use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
@@ -584,6 +585,38 @@ pub(super) fn empty_page<T>(
     }
 }
 
+/// 连拍两次范围快照：先对照调用方 `expected`，再对照二次快照的 `scope_version`。
+///
+/// 必须保持该两段比较顺序，禁止合成一次读取。版本一致时交付第一次快照。
+///
+/// # 参数
+/// * `expected` - 调用方回传的范围版本；首页可为 `None`
+/// * `snapshot` - 产生范围页的闭包，按顺序调用两次
+///
+/// # 返回
+/// 两次版本一致时返回第一次快照。
+///
+/// # 错误
+/// * `ConflictError` - `expected` 与第一次快照不一致，或两次快照的 `scope_version` 不一致
+pub(super) async fn checked_twice<T, F, Fut>(
+    expected: Option<&str>,
+    snapshot: F,
+) -> Result<FundsScopedPage<T>>
+where
+    F: Fn() -> Fut,
+    Fut: Future<Output = Result<FundsScopedPage<T>>>,
+{
+    let first = snapshot().await?;
+    if expected.is_some_and(|value| value != first.scope_version) {
+        return Err(changed());
+    }
+    let current = snapshot().await?;
+    if current.scope_version != first.scope_version {
+        return Err(changed());
+    }
+    Ok(first)
+}
+
 /// 版本不一致时返回可识别的范围变化错误并要求从第一页刷新。
 pub(super) fn changed() -> Error {
     crate::support::data_scope_changed("数据范围已变化，请从第一页刷新")
@@ -643,6 +676,74 @@ mod tests {
         assert!(ensure_page(2, Some("v1")).is_ok());
         assert!(ensure_version(Some("v1"), "v1").is_ok());
         assert!(ensure_version(Some("v1"), "v2").is_err());
+    }
+
+    fn test_page(scope_version: &str, page: u64) -> FundsScopedPage<()> {
+        FundsScopedPage {
+            items: Vec::new(),
+            total: 0,
+            summary: FundsSummaryView {
+                grouped: Vec::new(),
+                unassigned: erp_finance::service::receivable::mapping::zero_amount(),
+                whole_total: None,
+                permission_limited: true,
+                scope_version: scope_version.to_string(),
+            },
+            owner_options: Vec::new(),
+            page,
+            page_size: 20,
+            scope_version: scope_version.to_string(),
+            policy_version: 0,
+            organization_version: 0,
+            as_of: String::new(),
+            empty_reason: None,
+            scope_summary: "",
+            ownership_basis: "",
+        }
+    }
+
+    #[tokio::test]
+    async fn checked_twice_compares_expected_before_second_snapshot() {
+        use std::cell::Cell;
+        let calls = Cell::new(0);
+        let err = checked_twice(Some("old"), || {
+            calls.set(calls.get() + 1);
+            async { Ok(test_page("new", 1)) }
+        })
+        .await
+        .unwrap_err();
+        assert_eq!(calls.get(), 1);
+        assert!(
+            matches!(err, Error::ConflictError(message) if message == "DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新")
+        );
+    }
+
+    #[tokio::test]
+    async fn checked_twice_rejects_second_snapshot_change_and_returns_first_page() {
+        use std::cell::Cell;
+        let calls = Cell::new(0);
+        let err = checked_twice(Some("v1"), || {
+            let n = calls.get();
+            calls.set(n + 1);
+            let version = if n == 0 { "v1" } else { "v2" };
+            async move { Ok(test_page(version, 1)) }
+        })
+        .await
+        .unwrap_err();
+        assert_eq!(calls.get(), 2);
+        assert!(matches!(err, Error::ConflictError(_)));
+
+        let calls = Cell::new(0);
+        let page = checked_twice(Some("v1"), || {
+            let n = calls.get();
+            calls.set(n + 1);
+            async move { Ok(test_page("v1", n as u64 + 1)) }
+        })
+        .await
+        .unwrap();
+        assert_eq!(calls.get(), 2);
+        assert_eq!(page.page, 1);
+        assert_eq!(page.scope_version, "v1");
     }
 
     #[test]

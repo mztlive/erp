@@ -16,9 +16,9 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 /// 证书编号最大长度。
-const CERTIFICATE_NO_MAX_LEN: usize = 128;
+pub(super) const CERTIFICATE_NO_MAX_LEN: usize = 128;
 /// 发证机构最大长度。
-const ISSUER_MAX_LEN: usize = 128;
+pub(super) const ISSUER_MAX_LEN: usize = 128;
 
 /// 资质附件的领域敏感级别。
 ///
@@ -128,10 +128,8 @@ impl QualificationType {
         if self != Self::Contract && start.is_none() {
             return Err(Error::from("资质生效开始日期不能为空"));
         }
-        if let (Some(start), Some(end)) = (start, end)
-            && end <= start
-        {
-            return Err(Error::from("生效结束日期必须晚于生效开始日期"));
+        if let Some(start) = start {
+            super::ensure_window_valid(start, end)?;
         }
         Ok(())
     }

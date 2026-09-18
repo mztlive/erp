@@ -268,9 +268,26 @@ pub fn replay_after_duplicate(
     let receipt = store
         .find_receipt(kind, scope_id, idempotency_key)
         .ok_or_else(|| Error::ConflictError("命令收据不存在".to_string()))?;
-    match super::idempotency::classify_receipt(Some(receipt), digest) {
+    match classify_receipt(Some(receipt), digest) {
         super::idempotency::ReceiptBranch::SamePayload(item) => Ok(item.clone()),
         _ => Err(super::idempotency::payload_conflict_error()),
+    }
+}
+
+/// 按收据与本次摘要选择旧内存测试分支。
+///
+/// 新生产调用必须使用 [`super::idempotency::PreparedCommandIdentity::classify`]；此函数只保留给
+/// 不含 scope 查询的内存存储测试。
+fn classify_receipt<'a>(
+    receipt: Option<&'a ApprovalCommandReceipt>,
+    payload_digest: &str,
+) -> super::idempotency::ReceiptBranch<'a> {
+    let Some(receipt) = receipt else {
+        return super::idempotency::ReceiptBranch::Fresh;
+    };
+    match receipt.reconcile(payload_digest) {
+        Ok(_) => super::idempotency::ReceiptBranch::SamePayload(receipt),
+        Err(_) => super::idempotency::ReceiptBranch::PayloadConflict,
     }
 }
 

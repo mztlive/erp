@@ -9,10 +9,11 @@ use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 
 use super::CustomerService;
-use super::access::{ensure_limit, intersect_ids, sorted_unique_ids};
-use crate::dto::customer::{CustomerListParams, CustomerListQuery, CustomerScope, CustomerView, SortDir};
+use super::access::{ensure_limit, intersect_ids};
+use crate::dto::customer::{CustomerListQuery, CustomerScope, CustomerView, SortDir};
 use crate::error::{Error, Result};
 use crate::ports::{AccountFactPort, CustomerDataScopePort, CustomerResolvedScope, PartyFactPort};
+use crate::repository::customer_shared::distinct_sorted_customer_ids;
 use crate::repository::prelude::*;
 use crate::repository::scope::{CustomerReadScope, CustomerVersion};
 use crate::repository::{CustomerAccountFilter, CustomerExt};
@@ -73,7 +74,6 @@ impl CustomerService {
     /// 授权、总数、候选与业务身份版本全部在同一个事务读取。
     ///
     /// # 参数
-    /// * `params` - 原始查询
     /// * `query` - 已归一化查询
     /// * `actor` - 已认证操作人
     ///
@@ -87,7 +87,6 @@ impl CustomerService {
     /// 组织筛选按当前主负责人所属组织收窄，不得扩大授权结果。
     pub(super) async fn list_snapshot(
         &self,
-        _params: &CustomerListParams,
         query: CustomerListQuery,
         actor: &AuditActor,
     ) -> Result<CustomerSnapshot> {
@@ -617,7 +616,7 @@ fn assignment_filter(scope: &CustomerReadScope, requested: CustomerScope) -> Opt
         CustomerScope::Assigned => {
             let mut ids = scope.owned_customer_ids.clone();
             ids.extend(scope.collaborative_customer_ids.iter().cloned());
-            Some(sorted_unique_ids(ids))
+            Some(distinct_sorted_customer_ids(ids))
         },
     }
 }
@@ -675,6 +674,7 @@ async fn hydrate_rows(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dto::customer::CustomerListParams;
 
     #[test]
     fn scope_version_is_consumed_and_org_filter_is_accepted() {

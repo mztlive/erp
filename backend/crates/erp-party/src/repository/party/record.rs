@@ -214,7 +214,7 @@ pub trait PartyRepositoryExt {
 
     /// 按主体 ID 集合批量读取未删除主体（erp-party-012）。
     ///
-    /// 本域批量读取的唯一入口；早期的 `find_parties_by_ids` 别名已删除，调用方统一使用本方法。
+    /// 本域批量读取入口；`find_parties_by_ids` 保留以兼容公开签名，实现委托本方法。
     ///
     /// # 参数
     /// * `party_ids` - 主体 ID 集合；为空时直接返回空集合

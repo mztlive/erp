@@ -203,13 +203,12 @@ impl<'a> PartyDomainRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyId>> {
         let escaped = regex::escape(keyword);
-        let pattern = contains_pattern(&escaped);
         let revisions = PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
             .find_many(
                 doc! {
                     "$or": [
-                        { "legal_name": { "$regex": &pattern, "$options": "i" } },
-                        { "short_name": { "$regex": &pattern, "$options": "i" } },
+                        { "legal_name": { "$regex": &escaped, "$options": "i" } },
+                        { "short_name": { "$regex": &escaped, "$options": "i" } },
                     ]
                 },
                 executor,
@@ -360,13 +359,6 @@ impl PartyDomainRepository<'_> {
         ids.dedup();
         Ok(ids)
     }
-}
-
-/// 构造模糊名称匹配的字面量正则（erp-party-005）。
-///
-/// 调用方已做字面量转义；本函数只表达“包含”语义。
-fn contains_pattern(escaped: &str) -> String {
-    escaped.to_string()
 }
 
 /// 构造精确名称匹配的正则并兼容空白及全半角括号（erp-party-005）。

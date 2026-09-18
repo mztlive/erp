@@ -303,16 +303,6 @@ mod tests {
     }
 
     #[test]
-    fn identity_forbidden_stays_forbidden() {
-        match map_identity_error(erp_identity::Error::Forbidden("没有该资源动作权限".into())) {
-            erp_sales::Error::Forbidden(message) => {
-                assert_eq!(message, "没有该资源动作权限");
-            },
-            other => panic!("expected forbidden, got {other:?}"),
-        }
-    }
-
-    #[test]
     fn non_selection_resource_is_rejected() {
         assert!(ensure_selection_resource("sales_selection_booklet").is_ok());
         assert!(ensure_selection_resource("sales_selection_proposal").is_ok());

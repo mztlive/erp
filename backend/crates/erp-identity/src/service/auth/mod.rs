@@ -103,7 +103,7 @@ impl BackofficeAuthService {
     /// 当凭证无效、账号不可登录、数据库访问或旧哈希升级失败时返回错误。
     pub async fn authenticate(&self, request: &crate::dto::AuthRequest) -> Result<BackofficeAuthResult> {
         request.validate()?;
-        let mut stored_account = self.find_account(&request.account).await?;
+        let stored_account = self.find_account(&request.account).await?;
         let secret = stored_account
             .as_ref()
             .and_then(|account| account.authentication_secret_for(request.account_kind))
@@ -121,9 +121,7 @@ impl BackofficeAuthService {
             return Err(invalid_credentials());
         }
 
-        let Some(mut stored_account) = stored_account.take() else {
-            return Err(invalid_credentials());
-        };
+        let mut stored_account = stored_account.ok_or_else(invalid_credentials)?;
         if let Some(secret) = password_check.into_upgraded_secret() {
             stored_account.secret = secret;
             self.db.accounts().update(&mut stored_account, &mut NoTransaction).await?;

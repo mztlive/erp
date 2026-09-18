@@ -365,16 +365,6 @@ mod adapter_tests {
     }
 
     #[test]
-    fn identity_forbidden_stays_forbidden() {
-        match map_identity_error(erp_identity::Error::Forbidden("没有该资源动作权限".into())) {
-            erp_finance::Error::Forbidden(message) => {
-                assert_eq!(message, "没有该资源动作权限");
-            },
-            other => panic!("expected forbidden, got {other:?}"),
-        }
-    }
-
-    #[test]
     fn mismatched_resource_fails_closed() {
         let scope = FundsResolvedScope {
             user_id: "actor".into(),

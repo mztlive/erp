@@ -29,16 +29,13 @@ pub(super) const QUALITY_ORDER_LIMIT: usize =
 
 /// 快照装载的销售行：正式版本金额与冻结归属的最小集合。
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub struct QualityOrder {
+pub(super) struct QualityOrder {
     pub id: String,
     pub order_no: String,
     pub version: u64,
     pub customer_id: String,
     pub current_revision_id: Option<String>,
     pub effective_at: Option<i64>,
-    pub sales_owner_user_id: String,
-    pub business_org_unit_id: String,
     pub attribution: Option<SalesAttribution>,
 }
 
@@ -297,8 +294,6 @@ async fn load_orders(
             order_no: order.order_no.clone(),
             customer_id: order.customer_id.to_string(),
             current_revision_id: order.stable.current_revision_id.clone(),
-            sales_owner_user_id: order.sales_owner_user_id.clone(),
-            business_org_unit_id: order.business_org_unit_id.clone(),
             attribution: order.attribution.clone(),
         })
         .collect())
@@ -343,15 +338,6 @@ pub(super) fn version(scope_version: &str, orders: &[QualityOrder]) -> String {
     let versions = orders.iter().map(|o| (&o.id, o.version)).collect::<BTreeMap<_, _>>();
     versions.hash(&mut fingerprint);
     format!("{scope_version}:{:x}", fingerprint.finish())
-}
-
-/// 客户归属自然日使用授权上下文的同一时点，避免跨上海零点混用两天资格。
-#[allow(dead_code)]
-pub(super) fn business_date(
-    at: erp_core::common::time::Instant,
-) -> Result<erp_core::common::time::BusinessDate> {
-    let date = at.as_utc() + chrono::Duration::hours(8);
-    Ok(date.format("%Y-%m-%d").to_string().parse()?)
 }
 
 /// 组织快照的当日自然日；现任归属展示使用当日有效窗口。

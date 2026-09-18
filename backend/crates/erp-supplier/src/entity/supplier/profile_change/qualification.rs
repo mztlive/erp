@@ -8,8 +8,7 @@ use super::types::option_as_authoritative_update;
 use crate::entity::supplier::{
     CapabilityCode, CapabilityStatus, QualificationStatus, SupplierCapability, SupplierCapabilityData,
     SupplierCapabilityRevision, SupplierQualification, SupplierQualificationCapability,
-    SupplierQualificationCapabilityData, SupplierQualificationData, SupplierQualificationRevision,
-    SupplierQualificationUpdate,
+    SupplierQualificationData, SupplierQualificationRevision, SupplierQualificationUpdate,
 };
 
 /// 创建一项新能力及首版快照。
@@ -166,9 +165,6 @@ pub fn new_qualification(
         revision_id,
         link_ids,
     } = params;
-    if capability_codes.len() != link_ids.len() {
-        return Err(erp_core::Error::from("资质适用能力与关联 ID 数量不一致"));
-    }
     let mut qualification = SupplierQualification::new(
         qualification_id.clone(),
         SupplierQualificationData {
@@ -185,17 +181,11 @@ pub fn new_qualification(
     )?;
     qualification.stable.current_revision_id = Some(revision_id.to_string());
     let revision = SupplierQualification::snapshot_revision(&qualification, revision_id, 1)?;
-    let mut links = Vec::with_capacity(capability_codes.len());
-    for (code, link_id) in capability_codes.iter().zip(link_ids) {
-        let capability_id =
-            capability_ids.get(code.as_str()).ok_or_else(|| erp_core::Error::from("资质适用能力不存在"))?;
-        links.push(SupplierQualificationCapability::new(
-            link_id,
-            SupplierQualificationCapabilityData {
-                qualification_id: qualification_id.clone(),
-                capability_id: capability_id.clone(),
-            },
-        )?);
-    }
+    let links = SupplierQualificationCapability::links_for_qualification(
+        qualification_id,
+        capability_codes,
+        capability_ids,
+        link_ids,
+    )?;
     Ok((qualification, revision, links))
 }

@@ -14,8 +14,8 @@ use super::dto::{
     QualityTotals,
 };
 use super::query::{BASIS_LABEL, PERIOD_BASIS};
-use super::source::{HistorySnapshot, QualityOrder, effective_label, version};
-use crate::{Error, Result};
+use super::source::{HistorySnapshot, QualityOrder, version};
+use crate::Result;
 
 /// 同一快照产生的历史视图与请求问询；版本校验需要原查询。
 pub(super) struct HistorySnapshotOutput {
@@ -403,16 +403,4 @@ fn apply_context(
     view.as_of = sales.as_of.as_utc().to_rfc3339();
     view.policy_version = sales.policy_version;
     view.organization_version = sales.organizations.version;
-}
-
-/// 未使用导入占位，避免重构期告警干扰门禁。
-#[allow(dead_code)]
-fn _use_effective(order: &QualityOrder) -> Option<String> {
-    effective_label(order.effective_at)
-}
-
-/// 未使用错误占位。
-#[allow(dead_code)]
-fn _use_error() -> Result<()> {
-    Err(Error::ValidationError("占位".into()))
 }

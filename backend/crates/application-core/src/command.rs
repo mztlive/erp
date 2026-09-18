@@ -344,11 +344,6 @@ fn require_non_blank<'a>(value: &'a str, message: &str) -> Result<&'a str> {
     Ok(trimmed)
 }
 
-/// 规范化幂等键，两构造入口共用。
-fn normalize_idempotency_key(idempotency_key: &str) -> Result<&str> {
-    require_non_blank(idempotency_key, "操作号不能为空")
-}
-
 /// 载荷序列化失败统一映射，两条序列化路径共用。
 fn payload_serialize_error(error: impl Display) -> Error {
     Error::from(format!("业务命令请求序列化失败: {error}"))
@@ -406,7 +401,7 @@ impl CommandReceipt {
         idempotency_key: &str,
         payload: &T,
     ) -> Result<Self> {
-        let key = normalize_idempotency_key(idempotency_key)?;
+        let key = require_non_blank(idempotency_key, "操作号不能为空")?;
         let canonical_payload = canonical_json(payload)?;
         let legacy_payload = serde_json::to_string(payload).map_err(payload_serialize_error)?;
         let fingerprint = CommandFingerprint::from_parts([
@@ -452,7 +447,7 @@ impl CommandReceipt {
         idempotency_key: &str,
         fingerprint_parts: impl IntoIterator<Item = String>,
     ) -> Result<Self> {
-        let key = normalize_idempotency_key(idempotency_key)?;
+        let key = require_non_blank(idempotency_key, "操作号不能为空")?;
         require_non_blank(resource_id, "命令资源 ID 不能为空")?;
         let fingerprint_parts = fingerprint_parts.into_iter().collect::<Vec<_>>();
         let legacy_fingerprint_parts = fingerprint_parts.iter().map(String::as_str).collect::<Vec<_>>();

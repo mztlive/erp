@@ -257,8 +257,8 @@ pub(super) fn build_purchase_change_start_input(
         .map(|node| {
             let assignee = node.assignee_participant_id.as_str();
             let failure = match purchase_change_order_object_readable(organization_id, assignee) {
-                Ok(true) => None,
-                Ok(false) | Err(_) => Some(AuthorizationFailure::CannotReadSubject),
+                Ok(_) => None,
+                Err(_) => Some(AuthorizationFailure::CannotReadSubject),
             };
             Ok(StartBindingInput {
                 node_key: node.node_key.clone(),

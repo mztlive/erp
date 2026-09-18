@@ -342,8 +342,8 @@ fn start_bindings_from_graph(
     for node in &graph.nodes {
         let assignee = node.assignee_participant_id.as_str();
         let failure = match customer_receipt_object_readable(organization_id, assignee) {
-            Ok(true) => None,
-            Ok(false) | Err(_) => Some(AuthorizationFailure::CannotReadSubject),
+            Ok(_) => None,
+            Err(_) => Some(AuthorizationFailure::CannotReadSubject),
         };
         bindings.push(StartAssigneeBinding {
             id: ApprovalInstanceAssigneeId::new(next_id()),

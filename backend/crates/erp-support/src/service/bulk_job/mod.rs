@@ -372,23 +372,18 @@ impl BulkJobService {
         let client = db.client().clone();
         let job_for_tx = job.clone();
         let audit_port = self.audit.clone();
-        let registration = client
+        let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let registration =
-                        db.bulk_job().create_job_with_items(&job_for_tx, items, executor).await?;
+                    db.bulk_job().create_job_with_items(&job_for_tx, items, executor).await?;
                     audit_port.persist(&audit, executor).await.map_err(support_error_as_persistence)?;
-                    Ok::<BackgroundJobRegistration, persistence_core::Error>(registration)
+                    Ok(())
                 })
             })
             .await;
 
-        match registration {
-            Ok(BackgroundJobRegistration::Created) => Ok(job.into()),
-            Ok(BackgroundJobRegistration::ReplaySame(existing)) => Ok(existing.into()),
-            Ok(BackgroundJobRegistration::ConflictDifferentPayload(_)) => {
-                Err(Error::ConflictError("同一请求身份已用于不同后台任务载荷".to_string()))
-            },
+        match created {
+            Ok(()) => Ok(job.into()),
             Err(persistence_core::Error::DuplicateKey(_)) => self.resolve_creation_race(&job).await,
             Err(error) => Err(error.into()),
         }
@@ -656,14 +651,14 @@ fn ensure_job_visible(job: &BackgroundJob, actor: &AuditActor, is_admin: bool) -
 
 /// Map a support-domain error back to a persistence error for idempotent job create.
 ///
-/// `create_job_with_items` still inspects `DuplicateKey` after the transaction;
+/// `create_background_job` still inspects `DuplicateKey` after the transaction;
 /// audit persist failures are not request-id conflicts and must not look like them.
-fn support_error_as_persistence(error: crate::error::Error) -> persistence_core::Error {
+fn support_error_as_persistence(error: Error) -> persistence_core::Error {
     match error {
-        crate::error::Error::RepositoryError(inner)
-        | crate::error::Error::ReceiptDuplicate(inner)
-        | crate::error::Error::TransientTransaction(inner)
-        | crate::error::Error::OutcomeUnknown(inner) => inner,
+        Error::RepositoryError(inner)
+        | Error::ReceiptDuplicate(inner)
+        | Error::TransientTransaction(inner)
+        | Error::OutcomeUnknown(inner) => inner,
         other => persistence_core::Error::DatabaseError(mongodb::error::Error::custom(other.to_string())),
     }
 }
@@ -771,5 +766,18 @@ mod tests {
         ]);
         assert_eq!(first_unregistered_document_id(&ids, &all_registered), None);
         assert_eq!(first_unregistered_document_id(&[], &HashSet::new()), None);
+    }
+
+    #[test]
+    fn create_background_job_keeps_duplicate_key_race_and_conflict_copy() {
+        const SHORT: &str = "同一请求身份已用于不同后台任务载荷";
+        const LONG: &str = "同一请求身份已用于不同后台任务载荷；历史无指纹任务须使用新的请求身份";
+        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
+        assert!(production.contains("Err(persistence_core::Error::DuplicateKey(_))"));
+        assert!(production.contains("Ok(()) => Ok(job.into())"));
+        assert!(!production.contains("Ok(BackgroundJobRegistration::"));
+        assert!(production.contains(LONG));
+        assert_eq!(LONG.get(..SHORT.len()), Some(SHORT));
+        assert_ne!(SHORT, LONG);
     }
 }

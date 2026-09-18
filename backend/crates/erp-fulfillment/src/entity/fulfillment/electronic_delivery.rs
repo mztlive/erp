@@ -86,7 +86,7 @@ impl ElectronicDeliveryState {
     /// # 返回
     /// 仅草稿状态返回 `true`。
     pub fn is_confirmable(self) -> bool {
-        matches!(self, Self::Draft)
+        self.is_editable()
     }
 
     /// 判断当前状态能否作为客户验收履约事实。

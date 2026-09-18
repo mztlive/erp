@@ -15,12 +15,9 @@ pub use erp_core::ids::{
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use serde::{Deserialize, Serialize};
 
-use super::supplier_qualification::{QualificationStatus, QualificationType};
-
-/// 证书编号最大长度。
-const CERTIFICATE_NO_MAX_LEN: usize = 128;
-/// 发证机构最大长度。
-const ISSUER_MAX_LEN: usize = 128;
+use super::supplier_qualification::{
+    CERTIFICATE_NO_MAX_LEN, ISSUER_MAX_LEN, QualificationStatus, QualificationType,
+};
 
 /// 资质修订创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

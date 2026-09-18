@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::entity::customer::{AssignmentRole, CustomerAccountStatus};
 use crate::repository::CustomerExt;
 
-/// 对客户 ID 迭代器排序去重（INT-R22 投影归一化）。
+/// 对客户 ID 迭代器排序去重（授权并集、组织展开与投影归一化的唯一入口）。
 ///
 /// # 参数
 /// * `ids` - 原始客户 ID 迭代器（可含重复、无序）
@@ -51,7 +51,6 @@ pub(crate) fn active_customer_user_assignment_filter(
                 ],
             },
         }),
-        None,
     )
 }
 
@@ -60,25 +59,17 @@ pub(crate) fn active_customer_user_assignment_filter(
 /// `list_active_for_customers`、`find_current_owner`、
 /// `find_active_assignments_for_user`、`active_customer_user_assignment_filter`
 /// 与 `current_owner_pipeline` 的 `valid_from $lte` 加 `$or(valid_to null/$gt)`
-/// 语义相同；各查询只传自有约束与角色约束，窗口部分只在此一处实现。
+/// 语义相同；各查询只传自有约束，窗口部分只在此一处实现。
 ///
 /// # 参数
 /// * `as_of` - 业务日期边界
 /// * `owned` - 自有约束（客户、用户、角色等）；`None` 表示仅窗口
-/// * `roles` - 角色约束；`Some` 时写入 `assignment_role` 字段
 ///
 /// # 返回
 /// 返回含半开窗口的 MongoDB 过滤文档。
-pub(crate) fn active_window_filter(
-    as_of: &BusinessDate,
-    owned: Option<Document>,
-    roles: Option<Document>,
-) -> Document {
+pub(crate) fn active_window_filter(as_of: &BusinessDate, owned: Option<Document>) -> Document {
     let as_of = as_of.to_string();
     let mut filter = owned.unwrap_or_default();
-    if let Some(roles) = roles {
-        filter.extend(roles);
-    }
     filter.insert("valid_from", doc! { "$lte": &as_of });
     filter.insert("$or", vec![doc! { "valid_to": null }, doc! { "valid_to": { "$gt": &as_of } }]);
     filter
@@ -111,7 +102,6 @@ pub(crate) fn current_owner_pipeline(
     let mut filter = active_window_filter(
         &as_of,
         Some(doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "assignment_role": "OWNER" }),
-        None,
     );
     if let Some(ids) = customer_ids {
         filter.insert("customer_id", doc! { "$in": ids });

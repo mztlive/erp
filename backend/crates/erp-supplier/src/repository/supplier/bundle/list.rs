@@ -11,6 +11,37 @@ use crate::entity::supplier::supplier_account::intersect_supplier_ids;
 use crate::entity::supplier::{CapabilityCode, QualificationType, SupplierQualification};
 use crate::repository::owned::SupplierAccountRepository;
 
+/// 命中集合查询允许的资质健康状态（不含 `NotRegistered`）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum IncludedQualificationHealth {
+    /// 仅按资质类型命中，不限制健康状态。
+    ByType,
+    /// 合同有效期缺少起始日或截止日。
+    Unverified,
+    /// 当前有效。
+    Valid,
+    /// 当前有效且 30 天内到期。
+    Expiring30,
+    /// 已失效。
+    Expired,
+}
+
+/// 将列表筛选转为命中集合健康状态。
+///
+/// `NotRegistered` 由排除集路径处理，不属于命中集合，返回 `None`。
+pub(super) fn included_qualification_health(
+    health: Option<SupplierQualificationHealthFilter>,
+) -> Option<IncludedQualificationHealth> {
+    match health {
+        None => Some(IncludedQualificationHealth::ByType),
+        Some(SupplierQualificationHealthFilter::Unverified) => Some(IncludedQualificationHealth::Unverified),
+        Some(SupplierQualificationHealthFilter::Valid) => Some(IncludedQualificationHealth::Valid),
+        Some(SupplierQualificationHealthFilter::Expiring30) => Some(IncludedQualificationHealth::Expiring30),
+        Some(SupplierQualificationHealthFilter::Expired) => Some(IncludedQualificationHealth::Expired),
+        Some(SupplierQualificationHealthFilter::NotRegistered) => None,
+    }
+}
+
 /// 判定资质筛选约束的纯分支种类。
 ///
 /// 未传健康状态且资质类型为空时无约束；`NotRegistered` 无论类型是否为空均走
@@ -217,8 +248,28 @@ impl<'a> SupplierRepository<'a> {
                 Some(self.list_supplier_ids_by_qualification_types(qualification_types, executor).await?),
             )),
             QualificationConstraintKind::Included => {
-                self.list_included_qualification_constraints(qualification_types, health, as_of, executor)
-                    .await
+                debug_assert!(
+                    !matches!(health, Some(SupplierQualificationHealthFilter::NotRegistered)),
+                    "NotRegistered 应走 Excluded"
+                );
+                match included_qualification_health(health) {
+                    Some(health) => {
+                        self.list_included_qualification_constraints(
+                            qualification_types,
+                            health,
+                            as_of,
+                            executor,
+                        )
+                        .await
+                    },
+                    None => Ok((
+                        None,
+                        Some(
+                            self.list_supplier_ids_by_qualification_types(qualification_types, executor)
+                                .await?,
+                        ),
+                    )),
+                }
             },
         }
     }
@@ -227,42 +278,42 @@ impl<'a> SupplierRepository<'a> {
     ///
     /// # 参数
     /// * `qualification_types` - 资质类型；空集合表示不限制类型
-    /// * `health` - 资质健康状态；`None` 表示仅按类型命中
+    /// * `health` - 命中集合健康状态；`ByType` 表示仅按类型命中
     /// * `as_of` - 当前业务日字符串
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回应命中的供应商 ID 集合；`NotRegistered` 仅返回排除集合。
+    /// 返回应命中的供应商 ID 集合。
     ///
     /// # 错误
     /// 到期窗口计算或任一仓储查询失败时返回错误。
     async fn list_included_qualification_constraints(
         &self,
         qualification_types: &[QualificationType],
-        health: Option<SupplierQualificationHealthFilter>,
+        health: IncludedQualificationHealth,
         as_of: &str,
         executor: &mut dyn Executor,
     ) -> Result<(Option<Vec<SupplierAccountId>>, Option<Vec<SupplierAccountId>>)> {
         match health {
-            None => Ok((
+            IncludedQualificationHealth::ByType => Ok((
                 Some(self.list_supplier_ids_by_qualification_types(qualification_types, executor).await?),
                 None,
             )),
-            Some(SupplierQualificationHealthFilter::Unverified) => Ok((
+            IncludedQualificationHealth::Unverified => Ok((
                 Some(
                     self.list_supplier_ids_by_unverified_qualifications(qualification_types, executor)
                         .await?,
                 ),
                 None,
             )),
-            Some(SupplierQualificationHealthFilter::Valid) => Ok((
+            IncludedQualificationHealth::Valid => Ok((
                 Some(
                     self.list_supplier_ids_by_valid_qualifications(qualification_types, as_of, executor)
                         .await?,
                 ),
                 None,
             )),
-            Some(SupplierQualificationHealthFilter::Expiring30) => {
+            IncludedQualificationHealth::Expiring30 => {
                 let expires_by = qualification_expiry_cutoff(as_of)?;
                 Ok((
                     Some(
@@ -277,16 +328,12 @@ impl<'a> SupplierRepository<'a> {
                     None,
                 ))
             },
-            Some(SupplierQualificationHealthFilter::Expired) => Ok((
+            IncludedQualificationHealth::Expired => Ok((
                 Some(
                     self.list_supplier_ids_by_expired_qualifications(qualification_types, as_of, executor)
                         .await?,
                 ),
                 None,
-            )),
-            Some(SupplierQualificationHealthFilter::NotRegistered) => Ok((
-                None,
-                Some(self.list_supplier_ids_by_qualification_types(qualification_types, executor).await?),
             )),
         }
     }

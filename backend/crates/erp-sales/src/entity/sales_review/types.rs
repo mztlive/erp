@@ -65,6 +65,28 @@ impl From<VoucherLineDraft> for crate::entity::sales_order::types::VoucherLineDr
     }
 }
 
+impl From<crate::entity::sales_order::types::VoucherLineDraft> for VoucherLineDraft {
+    /// 将销售单域卡券字段组转为审核域同形字段组。
+    ///
+    /// # 参数
+    /// * `value` - 销售单域卡券草稿字段组
+    ///
+    /// # 返回
+    /// 返回审核域卡券草稿字段组。
+    fn from(value: crate::entity::sales_order::types::VoucherLineDraft) -> Self {
+        Self {
+            face_value: value.face_value,
+            card_count: value.card_count,
+            unit_price_gross: value.unit_price_gross,
+            face_value_total: value.face_value_total,
+            transaction_amount: value.transaction_amount,
+            gift_amount: value.gift_amount,
+            gift_rate: value.gift_rate,
+            card_form: value.card_form,
+        }
+    }
+}
+
 /// 构建行字段组并计算行金额三元组。
 ///
 /// 行类型与字段组必须一一对应：实物及服务行只允许 `goods`，卡券行只允许 `voucher`。

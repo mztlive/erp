@@ -746,5 +746,5 @@ pub(super) fn keep_row(visible: bool, whole: bool, matched_any: bool, all_unlink
 /// 单据行关联责任元组：关联单据、负责人、组织、事实主键与版本。
 pub(super) type OrderTuple = (LinkedOrderId, Option<String>, Option<String>, String, u64);
 
-/// 关联责任行：关联单据、负责人、组织、事实主键与版本。
-pub(super) type LinkedOrderRow = (LinkedOrderId, Option<String>, Option<String>, String, u64);
+/// 关联责任行：字段顺序与 [`OrderTuple`] 相同。
+pub(super) type LinkedOrderRow = OrderTuple;

@@ -206,14 +206,11 @@ impl CustomerService {
         scope: CustomerScope,
         actor_user_id: &str,
     ) -> Result<Option<Vec<String>>> {
-        if scope == CustomerScope::AllAuthorized {
-            return Ok(None);
-        }
         let expected_role = match scope {
+            CustomerScope::AllAuthorized => return Ok(None),
             CustomerScope::Mine => Some(AssignmentRole::Owner),
             CustomerScope::Collaborating => Some(AssignmentRole::Collaborator),
             CustomerScope::Assigned => None,
-            CustomerScope::AllAuthorized => unreachable!(),
         };
         let assignments = self
             .db
@@ -272,7 +269,7 @@ impl CustomerService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     access.require_with(actor_for_tx, "update", &customer_id, executor).await?;
-                    persist_account_update(&db, &mut account_for_tx, executor).await?;
+                    db.customer_accounts().update(&mut account_for_tx, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<CustomerAccount, crate::error::Error>(account_for_tx)
                 })
@@ -295,7 +292,8 @@ impl CustomerService {
         account: &mut CustomerAccount,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        persist_account_update(&self.db, account, executor).await
+        self.db.customer_accounts().update(account, executor).await?;
+        Ok(())
     }
 
     /// 按 ID 加载未删除客户角色。
@@ -375,16 +373,6 @@ async fn persist_new_account(
 ) -> Result<()> {
     db.customer_accounts().create(account, executor).await?;
     db.customer_assignments().create(assignment, executor).await?;
-    Ok(())
-}
-
-/// 在同一 Executor 上更新客户角色。
-async fn persist_account_update(
-    db: &Database,
-    account: &mut CustomerAccount,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    db.customer_accounts().update(account, executor).await?;
     Ok(())
 }
 

@@ -95,7 +95,6 @@ impl BackgroundJob {
         let hash_prefix = spec
             .idempotency_hash
             .get(..JOB_NO_HASH_LEN)
-            .filter(|prefix| prefix.len() == JOB_NO_HASH_LEN)
             .ok_or_else(|| erp_core::Error::from("幂等摘要长度不足以派生任务编号"))?;
         Self::new(
             spec.job_id,

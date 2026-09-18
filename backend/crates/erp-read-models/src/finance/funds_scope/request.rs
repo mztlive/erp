@@ -55,15 +55,7 @@ impl FundsAccess {
         actor: &AuditActor,
         expected: Option<&str>,
     ) -> Result<FundsScopedPage<ScopedInvoiceRequestRow>> {
-        let snapshot = self.snapshot_requests(query, actor).await?;
-        if expected.is_some_and(|value| value != snapshot.scope_version) {
-            return Err(changed());
-        }
-        let current = self.snapshot_requests(query, actor).await?;
-        if current.scope_version != snapshot.scope_version {
-            return Err(changed());
-        }
-        Ok(snapshot)
+        checked_twice(expected, || self.snapshot_requests(query, actor)).await
     }
 
     /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。

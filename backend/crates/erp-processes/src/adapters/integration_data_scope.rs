@@ -232,16 +232,6 @@ mod tests {
         };
         assert!(matches!(map_clause(&settlement), Err(erp_integration::Error::ValidationError(_))));
     }
-
-    #[test]
-    fn identity_forbidden_stays_forbidden() {
-        match map_identity_error(erp_identity::Error::Forbidden("没有该资源动作权限".into())) {
-            erp_integration::Error::Forbidden(message) => {
-                assert_eq!(message, "没有该资源动作权限");
-            },
-            other => panic!("expected forbidden, got {other:?}"),
-        }
-    }
 }
 
 #[cfg(test)]

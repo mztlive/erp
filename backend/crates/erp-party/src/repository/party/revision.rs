@@ -151,7 +151,7 @@ pub trait PartyRevisionRepositoryExt {
 
     /// 按修订 ID 集合批量读取主体修订（erp-party-012）。
     ///
-    /// 本域修订批量读取的唯一入口；早期的 `find_revisions_by_ids` 别名已删除。
+    /// 本域修订批量读取入口；`find_revisions_by_ids` 保留以兼容公开签名，实现委托本方法。
     ///
     /// # 参数
     /// * `revision_ids` - 修订 ID 集合；为空时直接返回空集合

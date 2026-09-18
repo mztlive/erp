@@ -165,17 +165,10 @@ impl FundsAccess {
         purchase_access: &PurchaseAccess,
         expected: Option<&str>,
     ) -> Result<FundsScopedPage<ScopedPurchaseInvoiceAllocationRow>> {
-        let snapshot =
-            self.snapshot_purchase_invoice_allocations(params, query, actor, purchase_access).await?;
-        if expected.is_some_and(|value| value != snapshot.scope_version) {
-            return Err(changed());
-        }
-        let current =
-            self.snapshot_purchase_invoice_allocations(params, query, actor, purchase_access).await?;
-        if current.scope_version != snapshot.scope_version {
-            return Err(changed());
-        }
-        Ok(snapshot)
+        checked_twice(expected, || {
+            self.snapshot_purchase_invoice_allocations(params, query, actor, purchase_access)
+        })
+        .await
     }
 
     /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。

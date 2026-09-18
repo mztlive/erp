@@ -43,6 +43,8 @@ pub use sales_order_amount_summary::SalesOrderReceivableAmountSummary;
 
 pub mod money_progress_facts;
 
+mod red_invoice_plan;
+
 pub(crate) mod allocation_amount;
 
 pub(crate) use allocation_amount::{

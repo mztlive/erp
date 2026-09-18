@@ -25,6 +25,7 @@ use super::types::{
     BusinessType, GoodsLineFields, LineSummary, LineType, VoucherLineDraft, WelfareScenario,
     build_line_groups, validate_line_list,
 };
+use crate::entity::sales_order::SalesOrderWorkingCopyLine;
 use crate::entity::sales_order::amount_validation::validate_amount_triple;
 
 /// 提交人标识最大长度。
@@ -158,7 +159,7 @@ impl SalesChangeSubmissionData {
     pub fn from_sales_working_copy(
         change_order: &super::SalesChangeOrder,
         working_copy: &crate::entity::sales_order::SalesOrderWorkingCopy,
-        lines: &[crate::entity::sales_order::SalesOrderWorkingCopyLine],
+        lines: &[SalesOrderWorkingCopyLine],
         submission_no: u32,
         submitted_at: Instant,
         submitted_by: impl Into<String>,
@@ -179,8 +180,7 @@ impl SalesChangeSubmissionData {
             .iter()
             .map(SalesChangeSubmissionLineData::from_sales_working_copy)
             .collect::<Result<Vec<_>>>()?;
-        let (gross_amount, net_amount, tax_amount) =
-            crate::entity::sales_order::SalesOrderWorkingCopyLine::amount_totals(lines);
+        let (gross_amount, net_amount, tax_amount) = SalesOrderWorkingCopyLine::amount_totals(lines);
         Ok(Self {
             sales_change_order_id: change_order_id,
             submission_no,
@@ -544,66 +544,7 @@ impl SalesChangeSubmissionLineData {
     ///
     /// # 错误
     /// 行类型与字段组不一致，或任一必填字段缺失时返回错误。
-    pub fn from_sales_working_copy(
-        line: &crate::entity::sales_order::SalesOrderWorkingCopyLine,
-    ) -> Result<Self> {
-        let goods = if line.line_type == crate::entity::sales_order::LineType::GoodsService {
-            Some(GoodsLineFields {
-                sku_id: line
-                    .sku_id
-                    .clone()
-                    .ok_or_else(|| Error::from(format!("第 {} 行缺少商品字段组", line.line_no)))?,
-                sku_revision_id: line
-                    .sku_revision_id
-                    .clone()
-                    .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", line.line_no)))?,
-                welfare_scenario: line.welfare_scenario,
-                service_region: line.service_region.clone(),
-                fulfillment_due_at: line
-                    .fulfillment_due_at
-                    .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", line.line_no)))?,
-                quantity: line
-                    .quantity
-                    .ok_or_else(|| Error::from(format!("第 {} 行缺少数量", line.line_no)))?,
-                base_unit_code: line
-                    .base_unit_code
-                    .clone()
-                    .ok_or_else(|| Error::from(format!("第 {} 行缺少单位", line.line_no)))?,
-                unit_price_gross: line
-                    .unit_price_gross
-                    .ok_or_else(|| Error::from(format!("第 {} 行缺少含税单价", line.line_no)))?,
-            })
-        } else {
-            None
-        };
-        let voucher = if line.line_type == crate::entity::sales_order::LineType::Voucher {
-            Some(VoucherLineDraft {
-                face_value: line
-                    .face_value
-                    .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券字段组", line.line_no)))?,
-                card_count: line
-                    .card_count
-                    .ok_or_else(|| Error::from(format!("第 {} 行缺少卡张数", line.line_no)))?,
-                unit_price_gross: line
-                    .unit_price_gross
-                    .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券成交单价", line.line_no)))?,
-                face_value_total: line
-                    .face_value_total
-                    .ok_or_else(|| Error::from(format!("第 {} 行缺少面额小计", line.line_no)))?,
-                transaction_amount: line
-                    .transaction_amount
-                    .ok_or_else(|| Error::from(format!("第 {} 行缺少成交金额", line.line_no)))?,
-                gift_amount: line
-                    .gift_amount
-                    .ok_or_else(|| Error::from(format!("第 {} 行缺少配赠金额", line.line_no)))?,
-                gift_rate: line.gift_rate,
-                card_form: line
-                    .card_form
-                    .ok_or_else(|| Error::from(format!("第 {} 行缺少卡形态", line.line_no)))?,
-            })
-        } else {
-            None
-        };
+    pub fn from_sales_working_copy(line: &SalesOrderWorkingCopyLine) -> Result<Self> {
         Ok(Self {
             sales_order_line_id: line.sales_order_line_id.clone(),
             line_no: line.line_no,
@@ -612,8 +553,8 @@ impl SalesChangeSubmissionLineData {
             item_name_snapshot: line.item_name_snapshot.clone(),
             spec_snapshot: line.spec_snapshot.clone(),
             unit_snapshot: line.unit_snapshot.clone(),
-            goods,
-            voucher,
+            goods: line.goods_fields()?,
+            voucher: line.voucher_fields()?.map(VoucherLineDraft::from),
         })
     }
 }

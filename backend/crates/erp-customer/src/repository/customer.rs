@@ -661,7 +661,7 @@ impl CustomerAssignmentRepositoryExt for Repository<'_, CustomerAssignment> {
             return Ok(Vec::new());
         }
         self.find_many(
-            active_window_filter(&as_of, Some(doc! { "customer_id": { "$in": customer_ids } }), None),
+            active_window_filter(&as_of, Some(doc! { "customer_id": { "$in": customer_ids } })),
             executor,
         )
         .await
@@ -681,7 +681,6 @@ impl CustomerAssignmentRepositoryExt for Repository<'_, CustomerAssignment> {
                         "customer_id": customer_id.to_string(),
                         "assignment_role": AssignmentRole::Owner.as_str(),
                     }),
-                    None,
                 ),
                 doc! { "valid_from": -1, "created_at": -1 },
                 executor,
@@ -719,7 +718,7 @@ impl CustomerAssignmentRepositoryExt for Repository<'_, CustomerAssignment> {
         as_of: BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<CustomerAssignment>> {
-        self.find_many(active_window_filter(&as_of, Some(doc! { "user_id": user_id }), None), executor).await
+        self.find_many(active_window_filter(&as_of, Some(doc! { "user_id": user_id })), executor).await
     }
 
     async fn distinct_active_customer_ids_for_user(

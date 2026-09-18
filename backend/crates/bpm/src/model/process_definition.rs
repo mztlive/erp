@@ -186,7 +186,7 @@ impl ApprovalProcessDefinition {
     /// 非草稿或名称为空/超长时返回错误。
     pub fn rename_draft(&mut self, name: impl Into<String>, at: Timestamp) -> ModelResult<()> {
         self.ensure_mutable()?;
-        self.name = normalize_required(name, "定义名称不能为空", NAME_MAX_LEN, "定义名称过长")?;
+        self.name = Self::normalize_name(name)?;
         touch_base(&mut self.base, at)
     }
 

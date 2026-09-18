@@ -303,13 +303,7 @@ impl PaymentAllocation {
                 continue;
             }
             let effective = allocation.allocated_amount.checked_sub(reversed);
-            if effective.to_decimal().is_zero() {
-                continue;
-            }
             let chunk = if effective >= remaining { remaining } else { effective };
-            if chunk.to_decimal().is_zero() {
-                continue;
-            }
             rows.push(PaymentReversePlanRow {
                 original_id: allocation.base.id.clone().into(),
                 amount: chunk,

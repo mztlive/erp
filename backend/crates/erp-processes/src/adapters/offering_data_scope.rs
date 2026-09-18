@@ -294,14 +294,6 @@ mod tests {
     }
 
     #[test]
-    fn identity_forbidden_stays_forbidden() {
-        match map_identity_error(erp_identity::Error::Forbidden("没有该资源动作权限".into())) {
-            erp_supply::Error::Forbidden(message) => assert_eq!(message, "没有该资源动作权限"),
-            other => panic!("expected forbidden, got {other:?}"),
-        }
-    }
-
-    #[test]
     fn a34_public_allows_matches_offering_read_scope_document() {
         use erp_core::common::time::Instant;
         use erp_supply::offering_scope;

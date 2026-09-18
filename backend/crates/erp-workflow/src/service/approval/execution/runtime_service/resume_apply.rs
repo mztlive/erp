@@ -19,7 +19,7 @@ use super::super::idempotency::{
 };
 use super::super::resume::prepare_resume;
 use super::super::runtime_query::{RuntimeRecoveryAction, recovery_options_for};
-use super::super::view::{ApprovalCommandView, OpenTaskSummary, map_command_view};
+use super::super::view::{ApprovalCommandView, map_command_view};
 use super::super::{ExecutionCommandInput, PreparedExecution, ResumeExecutionInput};
 use super::notifications::{ResumeNotificationFacts, persist_resume_notifications};
 use super::query::{first_open_task, list_projection_from_writes};
@@ -465,39 +465,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         commit: CommitRequired,
         replay: bool,
     ) -> Result<ApprovalCommandView> {
-        let instance = self
-            .db
-            .bpm_workflow()
-            .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), &mut NoTransaction)
-            .await?
-            .ok_or_else(hidden_not_found)?;
-        let current = self
-            .db
-            .bpm_workflow()
-            .find_current_execution(&ApprovalProcessInstanceId::new(instance_id), &mut NoTransaction)
-            .await?;
-        let next_open_task = match current.as_ref() {
-            Some(execution) => {
-                let tasks = self
-                    .db
-                    .work_items()
-                    .open_approval_tasks_for_execution(
-                        &ApprovalNodeExecutionId::new(execution.base.id.clone()),
-                        &mut NoTransaction,
-                    )
-                    .await?;
-                if tasks.len() > 1 {
-                    return Err(Error::ConflictError("当前执行关联多个开放审批任务".to_string()));
-                }
-                tasks.into_iter().next().map(|task| OpenTaskSummary {
-                    work_item_id: task.base.id,
-                    task_version: task.base.version.to_string(),
-                    owner_user_id: task.owner_user_id.unwrap_or_default(),
-                })
-            },
-            None => None,
-        };
-        Ok(map_command_view(&instance, current.as_ref(), None, None, next_open_task, commit, replay))
+        persisted_command_view_with_executor(&self.db, instance_id, commit, replay, &mut NoTransaction).await
     }
 
     async fn require_recovery_action(&self, instance_id: &str, wanted: RuntimeRecoveryAction) -> Result<()> {

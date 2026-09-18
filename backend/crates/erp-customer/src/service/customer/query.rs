@@ -37,7 +37,7 @@ impl CustomerService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
-        let snapshot = self.list_snapshot(params, query.clone(), actor).await?;
+        let snapshot = self.list_snapshot(query.clone(), actor).await?;
         ensure_scope_version(params.scope_version.as_deref(), &snapshot.context.scope_version)?;
         let current = self.list_version_snapshot(query, actor).await?;
         ensure_stable_snapshot(&snapshot.context.scope_version, &current.context.scope_version)?;

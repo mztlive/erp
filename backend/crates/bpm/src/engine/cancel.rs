@@ -62,14 +62,11 @@ fn ensure_cancellable(
     instance: &ApprovalProcessInstance,
     current: &ApprovalNodeExecution,
 ) -> EngineResult<()> {
-    if instance.status.is_terminal() {
-        return Err(EngineError::InvalidCommand("终态实例不得取消"));
-    }
-    if !matches!(
-        instance.status,
-        ApprovalProcessInstanceStatus::Running | ApprovalProcessInstanceStatus::Blocked
-    ) {
-        return Err(EngineError::InvalidCommand("只有运行中或受阻实例可以取消"));
+    match instance.status {
+        ApprovalProcessInstanceStatus::Running | ApprovalProcessInstanceStatus::Blocked => {},
+        ApprovalProcessInstanceStatus::Approved | ApprovalProcessInstanceStatus::Cancelled => {
+            return Err(EngineError::InvalidCommand("终态实例不得取消"));
+        },
     }
     if !matches!(current.status, ApprovalNodeExecutionStatus::Active | ApprovalNodeExecutionStatus::Blocked) {
         return Err(EngineError::Uncommittable("当前执行状态无法形成合法取消计划"));

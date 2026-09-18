@@ -24,24 +24,10 @@ use crate::entity::sales_order::{
 /// 销售单列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const SALES_ORDER_SORT_FIELDS: &[&str] = &["created_at", "order_no"];
 
-/// 排序方向。
-pub use application_core::SortDir;
-
-/// 归一化后的分页查询 DTO（Service → Repository 共用）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PageParams {
-    /// 页码（1 起）。
-    pub page: u64,
-    /// 单页条数（已 clamp 到 1–100）。
-    pub page_size: u32,
-    /// 排序字段（已过白名单校验，`&'static str` 保证来源只可能是白名单）。
-    pub sort_by: &'static str,
-    /// 排序方向。
-    pub sort_dir: SortDir,
-}
-
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
 pub use application_core::PageView;
+/// 排序方向。
+pub use application_core::SortDir;
 /// 校验文本去除首尾空白后非空。
 use application_core::non_blank;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
@@ -57,6 +43,9 @@ use application_core::non_blank;
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
+
+/// 归一化后的分页查询 DTO（Service → Repository 共用）。
+pub use crate::dto::PageParams;
 
 /// 建单意图（W05 M5：保存草稿或直接提交）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

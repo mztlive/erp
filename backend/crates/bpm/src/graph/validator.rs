@@ -1,6 +1,6 @@
 //! 审批定义图的节点顺序、入口、连线形状与完整线性模型校验。
 
-use super::{LinearTransitionDraft, MAX_DEFINITION_NODES, generate_linear_transitions};
+use super::{LinearTransitionDraft, generate_linear_transitions};
 use crate::model::types::{ModelError, ModelResult, NODE_KEY_MAX_LEN};
 use crate::model::{ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition};
 
@@ -65,14 +65,7 @@ pub fn validate_entry_node(entry_node_key: &str, node_keys: &[String]) -> ModelR
 /// # 关键业务约束
 /// 存储返回顺序不参与流程语义，展示顺序是唯一权威顺序。
 pub fn ordered_nodes(nodes: &[ApprovalNodeDefinition]) -> ModelResult<Vec<&ApprovalNodeDefinition>> {
-    if !(1..=MAX_DEFINITION_NODES).contains(&nodes.len()) {
-        return Err(ModelError::InvalidField("审批节点数量必须在 1 到 20 之间"));
-    }
-    let mut ordered = nodes.iter().collect::<Vec<_>>();
-    ordered.sort_by_key(|node| node.display_order);
-    let orders = ordered.iter().map(|node| node.display_order).collect::<Vec<_>>();
-    super::ensure_continuous_display_orders(&orders)?;
-    Ok(ordered)
+    super::ordered_by_display_order(nodes, |node| node.display_order)
 }
 
 /// 校验完整定义图与线性生成器完全一致。

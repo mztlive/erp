@@ -16,11 +16,11 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 /// 服务区域引用最大长度。
-const SERVICE_REGION_MAX_LEN: usize = 128;
+pub(super) const SERVICE_REGION_MAX_LEN: usize = 128;
 /// 负责人标识最大长度。
-const OWNER_USER_ID_MAX_LEN: usize = 128;
+pub(super) const OWNER_USER_ID_MAX_LEN: usize = 128;
 /// 履约说明最大长度。
-const FULFILLMENT_NOTE_MAX_LEN: usize = 500;
+pub(super) const FULFILLMENT_NOTE_MAX_LEN: usize = 500;
 
 /// 能力代码（§6.2：实物、虚拟、线下服务、API、印刷；固定枚举）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -267,7 +267,7 @@ impl SupplierCapability {
         )?;
         let fulfillment_note =
             normalize_optional_text(data.fulfillment_note, "履约说明", FULFILLMENT_NOTE_MAX_LEN)?;
-        ensure_window_valid(data.valid_from, data.valid_to)?;
+        super::ensure_window_valid(data.valid_from, data.valid_to)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -446,7 +446,7 @@ impl SupplierCapability {
     /// 当结束日期不晚于开始日期时返回错误。
     fn apply_valid_to(&mut self, update: FieldUpdate<BusinessDate>) -> Result<()> {
         if let Some(valid_to) = update.into_option() {
-            ensure_window_valid(self.valid_from, Some(valid_to))?;
+            super::ensure_window_valid(self.valid_from, Some(valid_to))?;
             self.valid_to = Some(valid_to);
         }
         Ok(())
@@ -501,26 +501,6 @@ impl SupplierCapability {
             },
         )
     }
-}
-
-/// 校验生效区间：`valid_to` 必须晚于 `valid_from`。
-///
-/// # 参数
-/// * `valid_from` - 生效开始日期
-/// * `valid_to` - 生效结束日期（可空）
-///
-/// # 返回
-/// 区间合法返回 `Ok(())`。
-///
-/// # 错误
-/// 结束日期不晚于开始日期时返回错误。
-fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> Result<()> {
-    if let Some(valid_to) = valid_to
-        && valid_to <= valid_from
-    {
-        return Err(Error::from("生效结束日期必须晚于生效开始日期"));
-    }
-    Ok(())
 }
 
 #[cfg(test)]

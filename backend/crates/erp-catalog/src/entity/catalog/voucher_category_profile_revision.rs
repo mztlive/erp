@@ -7,12 +7,13 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_core::Result;
 use erp_core::common::revision::RevisionBase;
 use erp_core::ids::{SkuId, VoucherCategoryProfileRevisionId};
 use erp_core::validation::normalize_required_text;
-use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::revision::ensure_revision_no;
 use crate::entity::catalog::status::EnableStatus;
 
 /// 卡券类目描述最大长度。
@@ -71,9 +72,7 @@ impl VoucherCategoryProfileRevision {
             DESCRIPTION_MAX_LEN,
             "卡券类目描述过长",
         )?;
-        if data.revision_no == 0 {
-            return Err(Error::from("修订序号必须从 1 开始"));
-        }
+        ensure_revision_no(data.revision_no)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -163,12 +162,14 @@ mod tests {
         );
 
         let zero_revision = VoucherCategoryProfileRevisionData { revision_no: 0, ..data() };
-        assert!(
+        assert_eq!(
             VoucherCategoryProfileRevision::new(
                 VoucherCategoryProfileRevisionId::new("vcp-1"),
                 zero_revision
             )
-            .is_err()
+            .unwrap_err()
+            .to_string(),
+            "修订序号必须从 1 开始"
         );
     }
 

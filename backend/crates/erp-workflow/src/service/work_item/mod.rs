@@ -9,6 +9,7 @@ mod finance_responsibility;
 pub mod order_access;
 mod query_support;
 mod reassign;
+mod reassign_apply;
 mod write;
 
 use std::sync::Arc;

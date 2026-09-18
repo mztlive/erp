@@ -73,6 +73,33 @@ pub use supplier_qualification_capability::{
 pub use supplier_qualification_revision::{SupplierQualificationRevision, SupplierQualificationRevisionData};
 pub use supplier_rating_revision::{SupplierRating, SupplierRatingRevision, SupplierRatingRevisionData};
 
+/// 校验生效区间：`valid_to` 必须晚于 `valid_from`。
+///
+/// 能力现档/修订与评级修订的窗口规则唯一来源；空结束日期表示长期有效。
+/// 资质窗口另经 [`QualificationType::ensure_validity_window`] 处理可空起始日，
+/// 倒挂判定转调本函数。
+///
+/// # 参数
+/// * `valid_from` - 生效开始日期
+/// * `valid_to` - 生效结束日期；`None` 表示长期有效
+///
+/// # 返回
+/// 区间合法返回 `Ok(())`。
+///
+/// # 错误
+/// 结束日期不晚于开始日期时返回错误。
+pub(crate) fn ensure_window_valid(
+    valid_from: erp_core::common::time::BusinessDate,
+    valid_to: Option<erp_core::common::time::BusinessDate>,
+) -> erp_core::Result<()> {
+    if let Some(valid_to) = valid_to
+        && valid_to <= valid_from
+    {
+        return Err(erp_core::Error::from("生效结束日期必须晚于生效开始日期"));
+    }
+    Ok(())
+}
+
 /// 返回供应商追加式修订序列的下一号。
 ///
 /// # 参数

@@ -16,6 +16,7 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::revision::{ensure_effective_window, ensure_revision_no};
 use crate::entity::catalog::status::EnableStatus;
 
 /// SKU 名称最大长度。
@@ -198,43 +199,6 @@ impl SkuRevision {
     }
 }
 
-/// 校验修订序号从 1 开始。
-///
-/// # 参数
-/// * `revision_no` - 修订序号
-///
-/// # 返回
-/// 大于等于 1 时返回 `Ok(())`。
-///
-/// # 错误
-/// 为 0 时返回错误。
-fn ensure_revision_no(revision_no: u32) -> Result<()> {
-    if revision_no == 0 {
-        return Err(Error::from("修订序号必须从 1 开始"));
-    }
-    Ok(())
-}
-
-/// 校验生效区间不倒挂。
-///
-/// # 参数
-/// * `effective_from` - 生效开始日
-/// * `effective_to` - 生效结束日
-///
-/// # 返回
-/// 结束日晚于开始日（或无限期）时返回 `Ok(())`。
-///
-/// # 错误
-/// 结束日早于或等于开始日时返回错误。
-fn ensure_effective_window(effective_from: BusinessDate, effective_to: Option<BusinessDate>) -> Result<()> {
-    if let Some(effective_to) = effective_to
-        && effective_to <= effective_from
-    {
-        return Err(Error::from("生效结束日必须晚于生效开始日"));
-    }
-    Ok(())
-}
-
 /// 校验物流属性为非负定点数量。
 ///
 /// # 参数
@@ -328,14 +292,20 @@ mod tests {
     #[test]
     fn new_rejects_zero_revision_no_and_reversed_window() {
         let zero_revision = SkuRevisionData { revision_no: 0, ..data() };
-        assert!(SkuRevision::new(SkuRevisionId::new("rev-1"), zero_revision).is_err());
+        assert_eq!(
+            SkuRevision::new(SkuRevisionId::new("rev-1"), zero_revision).unwrap_err().to_string(),
+            "修订序号必须从 1 开始"
+        );
 
         let reversed = SkuRevisionData {
             effective_from: BusinessDate::from_ymd(2026, 3, 1).unwrap(),
             effective_to: Some(BusinessDate::from_ymd(2026, 2, 1).unwrap()),
             ..data()
         };
-        assert!(SkuRevision::new(SkuRevisionId::new("rev-1"), reversed).is_err());
+        assert_eq!(
+            SkuRevision::new(SkuRevisionId::new("rev-1"), reversed).unwrap_err().to_string(),
+            "生效结束日必须晚于生效开始日"
+        );
     }
 
     /// 金额：价格与物流属性为负数时被拒绝（定点类型仍可带负号，需实体校验）。

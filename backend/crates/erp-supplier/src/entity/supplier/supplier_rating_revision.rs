@@ -128,7 +128,7 @@ impl SupplierRatingRevision {
             "变更原因过长",
         )?;
         ensure_scores_valid(data.revision_no, data.initial_score, data.current_score)?;
-        ensure_window_valid(data.valid_from, data.valid_to)?;
+        super::ensure_window_valid(data.valid_from, data.valid_to)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -190,26 +190,6 @@ fn ensure_scores_valid(revision_no: u32, initial_score: Option<u8>, current_scor
         if initial_score > SCORE_MAX {
             return Err(Error::from("期初评分必须在 0–100 百分制区间内"));
         }
-    }
-    Ok(())
-}
-
-/// 校验生效区间：`valid_to` 必须晚于 `valid_from`。
-///
-/// # 参数
-/// * `valid_from` - 生效开始日期
-/// * `valid_to` - 生效结束日期（可空）
-///
-/// # 返回
-/// 区间合法返回 `Ok(())`。
-///
-/// # 错误
-/// 结束日期不晚于开始日期时返回错误。
-fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> Result<()> {
-    if let Some(valid_to) = valid_to
-        && valid_to <= valid_from
-    {
-        return Err(Error::from("生效结束日期必须晚于生效开始日期"));
     }
     Ok(())
 }

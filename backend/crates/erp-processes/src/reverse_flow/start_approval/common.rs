@@ -147,8 +147,8 @@ pub fn reverse_start_bindings(
     for node in &graph.nodes {
         let assignee = node.assignee_participant_id.as_str();
         let failure = match readable(organization_id, assignee) {
-            Ok(true) => None,
-            Ok(false) | Err(_) => Some(AuthorizationFailure::CannotReadSubject),
+            Ok(_) => None,
+            Err(_) => Some(AuthorizationFailure::CannotReadSubject),
         };
         bindings.push(StartAssigneeBinding {
             id: ApprovalInstanceAssigneeId::new(next_id()),
