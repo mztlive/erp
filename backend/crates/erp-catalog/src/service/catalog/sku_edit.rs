@@ -116,6 +116,51 @@ impl CatalogService {
     }
 }
 
+/// 构造 SKU 修订（`Create` 首个修订与 `Keep`/`Reactivate` 追加修订共用）。
+///
+/// 修订内容字段（名称/条码/主图/重量/体积/价格）全部取自 SKU 输入行；
+/// 首个修订传新稳定 ID 与序号 1，追加修订传既有 ID 与下个序号。
+/// 启停一律落 `Active`，停用只走稳定主表状态机。
+///
+/// # 参数
+/// * `sku_id` - 修订归属的稳定 SKU
+/// * `revision_no` - 修订序号（首个为 1）
+/// * `effective_from` / `effective_to` - 修订生效区间
+/// * `input` - SKU 输入行（含独立 SKU 名称）
+///
+/// # 返回
+/// 返回不可变 SKU 修订实体。
+///
+/// # 错误
+/// SKU 修订字段违反实体不变式时返回错误。
+pub(super) fn sku_revision_for_input(
+    sku_id: SkuId,
+    revision_no: u32,
+    effective_from: BusinessDate,
+    effective_to: Option<BusinessDate>,
+    input: &ProductSkuInput,
+) -> Result<SkuRevision> {
+    Ok(SkuRevision::new(
+        SkuRevisionId::new(next_id()),
+        SkuRevisionData {
+            sku_id,
+            revision_no,
+            name: input.name.clone(),
+            description: None,
+            specification: None,
+            barcode: input.barcode.clone(),
+            source_main_image_asset_id: input.main_image_asset_id.clone(),
+            weight_kg: input.weight_kg,
+            volume_m3: input.volume_m3,
+            sales_visible_price_gross: input.sales_visible_price_gross,
+            market_price: input.market_price,
+            status: EnableStatus::Active,
+            effective_from,
+            effective_to,
+        },
+    )?)
+}
+
 /// 构造新 SKU 的首个修订。
 ///
 /// # 参数
@@ -132,26 +177,7 @@ fn build_initial_sku_revision(
     effective_from: BusinessDate,
     effective_to: Option<BusinessDate>,
 ) -> Result<SkuRevision> {
-    let sku_id = SkuId::new(next_id());
-    Ok(SkuRevision::new(
-        SkuRevisionId::new(next_id()),
-        SkuRevisionData {
-            sku_id,
-            revision_no: 1,
-            name: input.name.clone(),
-            description: None,
-            specification: None,
-            barcode: input.barcode.clone(),
-            source_main_image_asset_id: input.main_image_asset_id.clone(),
-            weight_kg: input.weight_kg,
-            volume_m3: input.volume_m3,
-            sales_visible_price_gross: input.sales_visible_price_gross,
-            market_price: input.market_price,
-            status: EnableStatus::Active,
-            effective_from,
-            effective_to,
-        },
-    )?)
+    sku_revision_for_input(SkuId::new(next_id()), 1, effective_from, effective_to, input)
 }
 
 /// 根据请求中的 SPU 局部规格名和值计算 SKU 身份签名。

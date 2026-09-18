@@ -40,3 +40,49 @@ where
     let total = mongo_ops::count_documents(collection, document, executor).await?;
     Ok(PageResult { items, total: total as i64 })
 }
+
+/// 返回 MongoDB 排序方向（升序 `1`，降序 `-1`）。
+///
+/// 三个列表 `sort_doc` 共用同一方向口径；字段白名单仍由各自保留
+/// （来源注册透传 Service 已校验字段，快照/任务/资产限制
+/// `created_at`/`updated_at`）。
+///
+/// # 参数
+/// * `ascending` - 是否升序；`false` 表示降序（默认）
+///
+/// # 返回
+/// 返回 MongoDB 排序方向数值。
+pub(crate) fn sort_direction(ascending: bool) -> i32 {
+    if ascending { 1 } else { -1 }
+}
+
+/// 返回 `created_at`/`updated_at` 白名单内的排序字段。
+///
+/// 未知字段回落默认 `created_at`，与既有快照/任务/资产行为一致；
+/// 来源注册列表透传 Service 已校验字段，不使用本函数。
+///
+/// # 参数
+/// * `sort_by` - 排序字段；`None` 或白名单外字段时默认 `created_at`
+///
+/// # 返回
+/// 返回白名单内的排序字段名。
+pub(crate) fn created_updated_field(sort_by: Option<&str>) -> &'static str {
+    match sort_by {
+        Some("updated_at") => "updated_at",
+        _ => "created_at",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{created_updated_field, sort_direction};
+
+    #[test]
+    fn sort_helpers_keep_direction_and_whitelist() {
+        assert_eq!(sort_direction(true), 1);
+        assert_eq!(sort_direction(false), -1);
+        assert_eq!(created_updated_field(None), "created_at");
+        assert_eq!(created_updated_field(Some("updated_at")), "updated_at");
+        assert_eq!(created_updated_field(Some("job_no")), "created_at");
+    }
+}

@@ -118,10 +118,7 @@ pub(super) async fn persist_cancel_notifications(
 
 /// 受阻取消固定通知提交人和实际执行取消的运行管理员；同人时只保留一次。
 pub(super) fn blocked_cancel_notification_recipients(submitted_by: &str, actor_id: &str) -> Vec<String> {
-    if submitted_by == actor_id {
-        return vec![submitted_by.to_string()];
-    }
-    vec![submitted_by.to_string(), actor_id.to_string()]
+    notification_recipients(submitted_by, [actor_id])
 }
 
 /// 读取当前有效且真正具备该单据类型运行管理权限的通知收件人。

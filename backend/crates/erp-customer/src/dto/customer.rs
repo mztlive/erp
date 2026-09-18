@@ -36,6 +36,39 @@ pub enum CustomerScope {
     AllAuthorized,
 }
 
+impl CustomerScope {
+    /// 装配目录范围标签（纯展示规则下沉自 Service）。
+    ///
+    /// # 参数
+    /// * `assignments` - 同一客户的归属行
+    /// * `owner_user_id` - 已解析的主负责人
+    /// * `actor_user_id` - 当前账号
+    /// * `requested` - 页面请求的目录范围
+    ///
+    /// # 返回
+    /// 返回命中原因标签，保证包含请求范围。
+    pub(crate) fn tags_for(
+        assignments: &[CustomerAssignment],
+        owner_user_id: Option<&str>,
+        actor_user_id: &str,
+        requested: Self,
+    ) -> Vec<Self> {
+        let mut scope_tags = Vec::new();
+        if owner_user_id == Some(actor_user_id) {
+            scope_tags.push(Self::Mine);
+        }
+        if assignments.iter().any(|assignment| {
+            assignment.assignment_role == AssignmentRole::Collaborator && assignment.user_id == actor_user_id
+        }) {
+            scope_tags.push(Self::Collaborating);
+        }
+        if !scope_tags.contains(&requested) {
+            scope_tags.push(requested);
+        }
+        scope_tags
+    }
+}
+
 /// 排序方向。
 pub use application_core::SortDir;
 
@@ -528,19 +561,20 @@ pub struct CustomerActionBlockerView {
 
 /// 返回客户状态产生的业务动作阻断原因。
 ///
+/// 阻断动作集合以 [`CustomerAccountStatus::blocked_actions`] 为准，本函数只
+/// 负责组装面向操作者的稳定代码与文案。
+///
 /// # 参数
 /// * `status` - 客户角色启停状态
 ///
 /// # 返回
 /// 启用客户返回空集合；停用客户返回禁止新合同和新销售单的稳定阻断原因。
 pub fn customer_status_blockers(status: CustomerAccountStatus) -> Vec<CustomerActionBlockerView> {
-    if status.is_active() {
-        return Vec::new();
-    }
-    ["UPLOAD_CONTRACT_PDF", "CREATE_SALES_ORDER"]
-        .into_iter()
+    status
+        .blocked_actions()
+        .iter()
         .map(|action| CustomerActionBlockerView {
-            action: action.to_string(),
+            action: (*action).to_string(),
             code: "CUSTOMER_DISABLED".to_string(),
             message: "客户已停用，请先恢复客户后再发起新业务".to_string(),
         })
@@ -792,7 +826,10 @@ mod tests {
     use serde_json::json;
     use validator::Validate;
 
-    use super::{AssignmentAction, CustomerListParams, CustomerProfileContactInput, SortDir, normalize_sort};
+    use super::{
+        AssignmentAction, CustomerListParams, CustomerProfileContactInput, CustomerScope, SortDir,
+        normalize_sort,
+    };
     use crate::entity::customer::{AssignmentRole, CustomerAssignmentCommand};
 
     #[test]
@@ -1006,6 +1043,31 @@ mod tests {
         let mut zero_version = complete;
         zero_version.as_object_mut().unwrap().insert("version".to_string(), json!(0));
         assert!(parse_assignment(&zero_version).into_command().is_err());
+    }
+
+    #[test]
+    fn scope_tags_cover_mine_collaborating_and_requested() {
+        use erp_core::common::time::BusinessDate;
+        use erp_core::ids::CustomerAccountId;
+
+        use crate::entity::customer::{CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId};
+
+        let owner = CustomerAssignment::new(
+            CustomerAssignmentId::new("o"),
+            CustomerAssignmentData {
+                customer_id: CustomerAccountId::new("c-1"),
+                user_id: "actor-1".to_string(),
+                assignment_role: AssignmentRole::Owner,
+                valid_from: BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+                valid_to: None,
+                change_reason: "首次指派".to_string(),
+            },
+        )
+        .unwrap();
+        let tags = CustomerScope::tags_for(&[owner], Some("actor-1"), "actor-1", CustomerScope::Mine);
+        assert_eq!(tags, vec![CustomerScope::Mine]);
+        let tags = CustomerScope::tags_for(&[], None, "actor-1", CustomerScope::AllAuthorized);
+        assert_eq!(tags, vec![CustomerScope::AllAuthorized]);
     }
 
     fn parse_assignment(value: &serde_json::Value) -> super::CustomerAssignmentRequest {

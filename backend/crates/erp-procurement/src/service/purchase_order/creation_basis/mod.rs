@@ -12,7 +12,7 @@ pub use mapping::{basis_groups_from_facts, business_date_of, zero_quantity};
 pub use stock::{physical_stock_lines, stock_groups_from_facts};
 pub use submission::build_draft_submission;
 
-use super::shared::zero_amount;
+pub(crate) use crate::entity::purchase_order::zero_amount;
 
 #[cfg(test)]
 mod tests {

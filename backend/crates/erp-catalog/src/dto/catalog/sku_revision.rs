@@ -1,11 +1,11 @@
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use application_core::normalized_text;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::SkuId;
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::common::{PageParams, normalize_sort};
+use super::common::{PageParams, paging_params};
 use crate::entity::catalog::{EnableStatus, SkuRevision};
 use crate::error::Result;
 use crate::repository::SkuRevisionRow;
@@ -163,18 +163,18 @@ impl SkuRevisionListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<SkuRevisionListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, SKU_REVISION_SORT_FIELDS)?;
         Ok(SkuRevisionListQuery {
             sku_id: self.sku_id.as_ref().map(|id| id.to_string()),
             name: normalized_text(self.name.as_deref()),
             barcode: normalized_text(self.barcode.as_deref()),
             status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: paging_params(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                SKU_REVISION_SORT_FIELDS,
+            )?,
         })
     }
 }

@@ -13,6 +13,7 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::handler::{reject_me_handler, require_handler_org_unit_id};
 use super::{InboxMessageId, IntegrationErrorTaskId};
 
 /// 业务对象 ID 最大长度。
@@ -21,8 +22,6 @@ const BUSINESS_OBJECT_ID_MAX_LEN: usize = 128;
 const OWNER_ROLE_MAX_LEN: usize = 64;
 /// 责任人标识最大长度。
 const OWNER_USER_ID_MAX_LEN: usize = 128;
-/// 处理人内部组织标识最大长度。
-const OWNER_ORG_UNIT_ID_MAX_LEN: usize = 128;
 /// 最近尝试结果（脱敏）最大长度。
 const ATTEMPT_SUMMARY_MAX_LEN: usize = 512;
 /// 解决/关闭证据文本最大长度。
@@ -346,6 +345,41 @@ impl IntegrationErrorTask {
         })
     }
 
+    /// 以派生责任角色构造集成错误任务（两处登记入口共用）。
+    ///
+    /// 责任角色恒为错误分类的固定责任角色；处理人与组织仍由调用方提供。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键
+    /// * `message_id` - 关联消息（消息类失败必填其一）
+    /// * `business_object_id` - 关联业务对象（非消息类失败必填其一）
+    /// * `error_class` - 错误分类
+    /// * `owner_user_id` - 当前处理人
+    /// * `owner_org_unit_id` - 处理人内部组织
+    ///
+    /// # 错误
+    /// 关联缺失、处理人/组织非法时返回领域校验错误。
+    pub fn with_derived_owner_role(
+        id: IntegrationErrorTaskId,
+        message_id: Option<InboxMessageId>,
+        business_object_id: Option<String>,
+        error_class: ErrorClass,
+        owner_user_id: String,
+        owner_org_unit_id: String,
+    ) -> Result<Self> {
+        Self::new(
+            id,
+            IntegrationErrorTaskData {
+                message_id,
+                business_object_id,
+                error_class,
+                owner_role: Some(super::w29_work_items::error_owner_role(error_class).to_string()),
+                owner_user_id: Some(owner_user_id),
+                owner_org_unit_id,
+            },
+        )
+    }
+
     /// 更新错误任务的责任信息。
     ///
     /// 消息、业务对象与错误分类是关键字段，不在通用更新中修改。
@@ -594,20 +628,8 @@ impl IntegrationErrorTask {
 fn require_handler_user_id(raw: Option<String>) -> Result<String> {
     let owner = normalize_optional_text(raw, "责任人", OWNER_USER_ID_MAX_LEN)?
         .ok_or_else(|| Error::from("错误任务必须指定合格内部处理人"))?;
-    if owner.eq_ignore_ascii_case("me") {
-        return Err(Error::from("处理人不得使用 me 作为人员 ID"));
-    }
+    reject_me_handler(&owner)?;
     Ok(owner)
-}
-
-/// 规范化并拒绝公司占位的处理人内部组织。
-fn require_handler_org_unit_id(raw: String) -> Result<String> {
-    let org =
-        normalize_required_text(raw, "处理人组织不能为空", OWNER_ORG_UNIT_ID_MAX_LEN, "处理人组织过长")?;
-    if org.eq_ignore_ascii_case("company") {
-        return Err(Error::from("处理人组织不得使用公司占位"));
-    }
-    Ok(org)
 }
 
 #[cfg(test)]

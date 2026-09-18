@@ -252,11 +252,11 @@ impl<'de> Visitor<'de> for MoneyVisitor {
     }
 
     fn visit_i64<E: de::Error>(self, value: i64) -> std::result::Result<Decimal, E> {
-        Err(E::custom(format!("金额必须用字符串传输（如 \"{value}\"），见 P0-4.1，不接受 JSON 数字")))
+        Err(json_integer_rejected(value))
     }
 
     fn visit_u64<E: de::Error>(self, value: u64) -> std::result::Result<Decimal, E> {
-        Err(E::custom(format!("金额必须用字符串传输（如 \"{value}\"），见 P0-4.1，不接受 JSON 数字")))
+        Err(json_integer_rejected(value))
     }
 
     fn visit_f64<E: de::Error>(self, value: f64) -> std::result::Result<Decimal, E> {
@@ -283,6 +283,11 @@ impl<'de> Visitor<'de> for MoneyVisitor {
         }
         Err(de::Error::custom("缺少金额值"))
     }
+}
+
+/// JSON 整数形态的统一拒绝文案（P0-4.1：金额与数量以字符串传输）。
+fn json_integer_rejected<E: de::Error>(value: impl fmt::Display) -> E {
+    E::custom(format!("金额必须用字符串传输（如 \"{value}\"），见 P0-4.1，不接受 JSON 数字"))
 }
 
 /// 读取 Decimal128 原始 16 字节的 DeserializeSeed。
@@ -450,6 +455,17 @@ mod tests {
 
         let back: MoneyDoc = serde_json::from_str(&json).unwrap();
         assert_eq!(back, doc);
+    }
+
+    /// JSON 数字形态拒绝：整数（含负数）与浮点均不得解析为定点数值。
+    #[test]
+    fn json_numbers_are_rejected() {
+        let err = serde_json::from_str::<Amount>("123").unwrap_err().to_string();
+        assert!(err.contains("字符串传输"), "u64 路径文案漂移：{err}");
+        let err = serde_json::from_str::<Amount>("-5").unwrap_err().to_string();
+        assert!(err.contains("字符串传输"), "i64 路径文案漂移：{err}");
+        assert!(serde_json::from_str::<Amount>("123.45").is_err());
+        assert!(serde_json::from_str::<Amount>("\"1.234\"").is_err());
     }
 
     /// Decimal128 往返（非 human-readable，mongodb 驱动 wire 路径）：

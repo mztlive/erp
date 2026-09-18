@@ -146,10 +146,7 @@ impl<'a> VoucherCategoryProfileRevisionRepository<'a> {
             .projection(voucher_revision_projection())
             .build();
         let collection = self.collection().clone_with_type::<VoucherCategoryProfileRevisionRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        super::shared::search_projected(&collection, &self.collection(), filter, options, executor).await
     }
 
     /// 查找 SKU 当前启用的卡券类目扩展修订。

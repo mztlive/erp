@@ -1,9 +1,9 @@
-use erp_core::ids::{PartyId, SupplierAccountId};
+use erp_core::ids::SupplierAccountId;
 use persistence_core::{Executor, Result};
 
 use super::super::{SUPPLIER_QUALIFICATION_CAPABILITIES, SupplierRepository};
 use super::SupplierDetailBundle;
-use crate::entity::supplier::SupplierCommercialProfileRevision;
+use crate::entity::supplier::supplier_commercial_profile_revision::commercial_party_ids;
 use crate::repository::owned::SupplierQualificationCapabilityRepository;
 
 impl<'a> SupplierRepository<'a> {
@@ -59,12 +59,4 @@ impl<'a> SupplierRepository<'a> {
             commercial_party_ids,
         }))
     }
-}
-
-/// 收集商务版本引用的签约与付款主体 ID。
-///
-/// 转调 Service 侧 `list_view::commercial_party_ids` 唯一实现
-/// （erp-supplier-005），语义一致；仓储内不再保留第二份去重逻辑。
-fn commercial_party_ids(profiles: &[SupplierCommercialProfileRevision]) -> Vec<PartyId> {
-    crate::service::supplier::commercial_party_ids_for_repository(profiles)
 }

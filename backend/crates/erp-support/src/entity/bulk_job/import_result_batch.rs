@@ -6,7 +6,7 @@
 use erp_core::common::time::Instant;
 use erp_core::{Error, Result};
 
-use super::background_job::{BackgroundJob, JobStatus};
+use super::background_job::{BackgroundJob, JobStatus, add_progress_counts};
 
 impl BackgroundJob {
     /// 记录一批导入行结果并在全部终态时选择唯一终态。
@@ -42,12 +42,11 @@ impl BackgroundJob {
         all_terminal: bool,
         at: Instant,
     ) -> Result<()> {
-        if self.finished_at.is_some()
-            || !matches!(self.status, JobStatus::Running | JobStatus::PartiallySucceeded)
-        {
+        if !self.can_record_progress() {
             return Err(Error::from(format!("状态 {:?} 不允许记录导入结果", self.status)));
         }
-        let next_processed = next_processed_count(self.processed_count, success, skipped, failed)?;
+        let next_processed =
+            add_progress_counts(self.processed_count, success, skipped, failed)?;
         if next_processed > self.total_count {
             return Err(Error::from("已处理数不能超过目标总数"));
         }
@@ -99,25 +98,6 @@ impl BackgroundJob {
         self.last_progress_at = Some(at);
         Ok(())
     }
-}
-
-/// 计算本批之后的已处理数。
-///
-/// # 参数
-/// * `processed` - 当前已处理数
-/// * `success` / `skipped` / `failed` - 本批增量
-///
-/// # 返回
-/// 返回累加后的已处理数。
-///
-/// # 错误
-/// 加法溢出时返回错误，不修改调用方状态。
-fn next_processed_count(processed: u64, success: u64, skipped: u64, failed: u64) -> Result<u64> {
-    processed
-        .checked_add(success)
-        .and_then(|value| value.checked_add(skipped))
-        .and_then(|value| value.checked_add(failed))
-        .ok_or_else(|| Error::from("处理计数溢出"))
 }
 
 #[cfg(test)]

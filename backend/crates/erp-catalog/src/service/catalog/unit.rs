@@ -41,20 +41,7 @@ impl CatalogService {
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
         let page = self.db.unit_of_measures().search_unit_of_measures(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| UnitOfMeasureView {
-                id: row.id,
-                unit_code: row.unit_code,
-                name: row.name,
-                symbol: row.symbol,
-                quantity_scale: row.quantity_scale,
-                status: row.status,
-                created_at: row.created_at,
-                version: row.version,
-            })
-            .collect();
+        let items = page.items.into_iter().map(UnitOfMeasureView::from).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 

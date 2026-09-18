@@ -103,22 +103,37 @@ fn write_metadata_at(base: &BaseModel, updated_at_bson: i64) -> Result<WriteMeta
     Ok(WriteMetadata { expected_version, next_version, next_version_bson, updated_at, updated_at_bson })
 }
 
-/// 构建活跃实体的乐观锁过滤条件。
-fn active_cas_filter(base: &BaseModel, metadata: WriteMetadata) -> Document {
-    doc! {
+/// 构建 CAS 写入的乐观锁过滤条件。
+///
+/// `active_scope` 为 `true` 时限定活跃实体，为 `false` 时限定已删除实体；
+/// 两分支仅 `deleted_at` 子句不同，组装收敛一处避免过滤条件漂移。
+fn cas_filter(base: &BaseModel, metadata: WriteMetadata, active_scope: bool) -> Document {
+    let mut filter = doc! {
         "id": &base.id,
         "version": metadata.expected_version,
-        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    };
+    if active_scope {
+        filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
+    } else {
+        filter.insert("deleted_at", doc! { "$ne": NOT_DELETED_TIMESTAMP_BSON });
     }
+    filter
 }
 
-/// 构建已删除实体的乐观锁过滤条件。
-fn deleted_cas_filter(base: &BaseModel, metadata: WriteMetadata) -> Document {
-    doc! {
-        "id": &base.id,
-        "version": metadata.expected_version,
-        "deleted_at": { "$ne": NOT_DELETED_TIMESTAMP_BSON },
+/// 拒绝已删除实体的 CAS 写入（更新与软删除仅接受活跃实体）。
+fn ensure_active_for_cas(base: &BaseModel) -> Result<()> {
+    if base.is_deleted() {
+        return Err(Error::OptimisticLockingError);
     }
+    Ok(())
+}
+
+/// 拒绝活跃实体的恢复（恢复仅接受已删除实体）。
+fn ensure_deleted_for_restore(base: &BaseModel) -> Result<()> {
+    if !base.is_deleted() {
+        return Err(Error::OptimisticLockingError);
+    }
+    Ok(())
 }
 
 /// 为查询附加软删除活跃约束，新增查询统一经此入口，避免遗漏 `deleted_at` 域。
@@ -149,9 +164,7 @@ fn apply_write_result(
 /// 组装一次 CAS 写入所需的元数据与乐观锁过滤器。
 fn cas_metadata_and_filter(base: &BaseModel, active_scope: bool) -> Result<(WriteMetadata, Document)> {
     let metadata = write_metadata(base)?;
-    let filter =
-        if active_scope { active_cas_filter(base, metadata) } else { deleted_cas_filter(base, metadata) };
-    Ok((metadata, filter))
+    Ok((metadata, cas_filter(base, metadata, active_scope)))
 }
 
 /// 执行 CAS 更新并同步内存元数据。
@@ -222,7 +235,7 @@ where
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     pub async fn find_by_id(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<T>> {
-        mongo_ops::find_one(&self.collection(), with_active_scope(doc! { "id": id }), executor).await
+        self.find_one_scoped(doc! { "id": id }, executor).await
     }
 
     /// 更新实体（带乐观锁）。
@@ -240,9 +253,7 @@ where
     where
         T: HasBaseModel,
     {
-        if entity.base().is_deleted() {
-            return Err(Error::OptimisticLockingError);
-        }
+        ensure_active_for_cas(entity.base())?;
 
         let (metadata, filter) = cas_metadata_and_filter(entity.base(), true)?;
         let mut document = persisted_document(&*entity)?;
@@ -276,9 +287,7 @@ where
     where
         T: HasBaseModel,
     {
-        if entity.base().is_deleted() {
-            return Err(Error::OptimisticLockingError);
-        }
+        ensure_active_for_cas(entity.base())?;
 
         let (metadata, filter) = cas_metadata_and_filter(entity.base(), true)?;
         let deleted_at = metadata.updated_at;
@@ -309,9 +318,7 @@ where
     where
         T: HasBaseModel,
     {
-        if !entity.base().is_deleted() {
-            return Err(Error::OptimisticLockingError);
-        }
+        ensure_deleted_for_restore(entity.base())?;
 
         let (metadata, filter) = cas_metadata_and_filter(entity.base(), false)?;
         let update = doc! {
@@ -345,13 +352,7 @@ where
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     pub async fn list_all(&self, executor: &mut dyn Executor) -> Result<Vec<T>> {
-        mongo_ops::find_many(
-            &self.collection(),
-            with_active_scope(Document::new()),
-            FindOptions::default(),
-            executor,
-        )
-        .await
+        self.find_many_scoped(Document::new(), FindOptions::default(), executor).await
     }
 
     /// 根据单个字段查找一个未删除实体。
@@ -375,8 +376,8 @@ where
     where
         V: Into<mongodb::bson::Bson> + Send,
     {
-        let filter = with_active_scope(doc! { field: value.into() });
-        mongo_ops::find_one(&self.collection(), filter, executor).await
+        let filter = doc! { field: value.into() };
+        self.find_one_scoped(filter, executor).await
     }
 
     /// 查找单个未删除实体。
@@ -391,7 +392,7 @@ where
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     pub async fn find_one(&self, filter: Document, executor: &mut dyn Executor) -> Result<Option<T>> {
-        mongo_ops::find_one(&self.collection(), with_active_scope(filter), executor).await
+        self.find_one_scoped(filter, executor).await
     }
 
     /// 查找多个未删除实体。
@@ -406,8 +407,7 @@ where
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     pub async fn find_many(&self, filter: Document, executor: &mut dyn Executor) -> Result<Vec<T>> {
-        mongo_ops::find_many(&self.collection(), with_active_scope(filter), FindOptions::default(), executor)
-            .await
+        self.find_many_scoped(filter, FindOptions::default(), executor).await
     }
 
     /// 查找多个未删除实体（带排序）。
@@ -428,13 +428,7 @@ where
         sort: Document,
         executor: &mut dyn Executor,
     ) -> Result<Vec<T>> {
-        mongo_ops::find_many(
-            &self.collection(),
-            with_active_scope(filter),
-            FindOptions::builder().sort(sort).build(),
-            executor,
-        )
-        .await
+        self.find_many_scoped(filter, FindOptions::builder().sort(sort).build(), executor).await
     }
 
     /// 按稳定 ID 批量读取未删除实体。
@@ -502,24 +496,9 @@ where
             &mut *executor,
         )
         .await?;
-        let total = self.search_count_doc(filter_doc, executor).await?;
+        let total = mongo_ops::count_documents(&self.collection(), filter_doc, executor).await?;
 
         Ok(PageResult { items, total: saturating_i64(total) })
-    }
-
-    /// 统计符合条件的实体总数。
-    ///
-    /// # 参数
-    /// * `filter` - 过滤条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回值
-    /// 返回匹配实体总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 统计失败时返回错误。
-    async fn search_count_doc(&self, filter: Document, executor: &mut dyn Executor) -> Result<u64> {
-        mongo_ops::count_documents(&self.collection(), filter, executor).await
     }
 
     /// 获取当前实体对应的 MongoDB 集合（内部使用）。
@@ -528,6 +507,42 @@ where
     /// 返回按实体类型参数化的集合句柄。
     pub fn collection(&self) -> Collection<T> {
         self.db.collection::<T>(self.collection_name)
+    }
+
+    /// 以活跃域约束查询单个文档（各单条读取的共用入口）。
+    ///
+    /// # 参数
+    /// * `filter` - 未加域的过滤条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除实体；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_one_scoped(&self, filter: Document, executor: &mut dyn Executor) -> Result<Option<T>> {
+        mongo_ops::find_one(&self.collection(), with_active_scope(filter), executor).await
+    }
+
+    /// 以活跃域约束查询多个文档（各列表读取的共用入口）。
+    ///
+    /// # 参数
+    /// * `filter` - 未加域的过滤条件
+    /// * `options` - 排序与分页等查询选项
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回符合条件且未删除的实体集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_many_scoped(
+        &self,
+        filter: Document,
+        options: FindOptions,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<T>> {
+        mongo_ops::find_many(&self.collection(), with_active_scope(filter), options, executor).await
     }
 }
 
@@ -545,9 +560,13 @@ fn persisted_document<T: Serialize>(value: &T) -> Result<Document> {
 
 #[cfg(test)]
 mod tests {
-    use entity_core::BaseModel;
+    use entity_core::{BaseModel, NOT_DELETED_TIMESTAMP_BSON};
+    use mongodb::bson::doc;
 
-    use super::{Pagination, apply_write_result, persisted_document, write_metadata_at};
+    use super::{
+        Pagination, apply_write_result, cas_filter, ensure_active_for_cas, ensure_deleted_for_restore,
+        persisted_document, write_metadata_at,
+    };
     use crate::errors::Error;
 
     struct TestPagination {
@@ -659,5 +678,38 @@ mod tests {
         assert_eq!(base.version, metadata.next_version);
         assert_eq!(base.updated_at, metadata.updated_at);
         assert_eq!(base.deleted_at, 123);
+    }
+
+    #[test]
+    fn cas_filter_branches_share_identity_and_differ_only_in_deleted_scope() {
+        let base = BaseModel::fake();
+        let metadata = write_metadata_at(&base, 1_700_000_000).expect("metadata should be valid");
+
+        let active = cas_filter(&base, metadata, true);
+        assert_eq!(active.get_str("id").expect("id should be present"), "fake");
+        assert_eq!(active.get_i64("version").expect("version should be present"), 1);
+        assert_eq!(
+            active.get_i64("deleted_at").expect("deleted_at should be present"),
+            NOT_DELETED_TIMESTAMP_BSON
+        );
+
+        let deleted = cas_filter(&base, metadata, false);
+        assert_eq!(
+            deleted.get_document("deleted_at").expect("deleted scope should be present"),
+            &doc! { "$ne": NOT_DELETED_TIMESTAMP_BSON }
+        );
+    }
+
+    #[test]
+    fn cas_guards_accept_only_matching_lifecycle_state() {
+        let active = BaseModel::fake();
+
+        ensure_active_for_cas(&active).expect("active entity should be writable");
+        assert!(matches!(ensure_deleted_for_restore(&active), Err(Error::OptimisticLockingError)));
+
+        let deleted = BaseModel { deleted_at: 1_700_000_001, ..BaseModel::fake() };
+
+        ensure_deleted_for_restore(&deleted).expect("deleted entity should be restorable");
+        assert!(matches!(ensure_active_for_cas(&deleted), Err(Error::OptimisticLockingError)));
     }
 }

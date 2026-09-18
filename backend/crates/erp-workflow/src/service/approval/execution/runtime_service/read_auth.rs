@@ -268,21 +268,6 @@ impl RuntimeReadAuthorizationFacts {
     }
 }
 
-/// 普通详情/历史读取允许发起人、当前责任人，或对象读取与 DataScopeFact 同时成立。
-pub(super) fn ordinary_runtime_read_allowed(facts: RuntimeReadAuthorizationFacts) -> bool {
-    facts.ordinary_allowed()
-}
-
-/// 管理读取必须同时具备类型级运行管理、对象读取与 DataScopeFact。
-pub(super) fn management_runtime_read_allowed(facts: RuntimeReadAuthorizationFacts) -> bool {
-    facts.management_allowed()
-}
-
-/// Started 视图由 BPM 启动人事实独立证明普通读取权。
-pub(super) fn started_runtime_read_allowed(facts: RuntimeReadAuthorizationFacts) -> bool {
-    facts.started_allowed()
-}
-
 /// 当前开放审批任务是否精确证明 actor 对运行实例的当前责任。
 pub(super) fn task_proves_current_responsibility(
     task: &WorkItem,
@@ -436,8 +421,8 @@ mod tests {
     fn read_authorization_facts_default_denies_by_default() {
         let facts = RuntimeReadAuthorizationFacts::default();
         assert!(!facts.actor_active && !facts.initiator);
-        assert!(!ordinary_runtime_read_allowed(facts));
-        assert!(!management_runtime_read_allowed(facts));
-        assert!(!started_runtime_read_allowed(facts));
+        assert!(!facts.ordinary_allowed());
+        assert!(!facts.management_allowed());
+        assert!(!facts.started_allowed());
     }
 }

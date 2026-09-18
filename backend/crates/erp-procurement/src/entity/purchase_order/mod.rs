@@ -57,6 +57,7 @@ pub use creation_basis::{
 };
 pub use draft_edit::{DraftLineEdit, DraftLineEditViolation, validate_draft_line_edits};
 pub use line_amounts::{LineAmountViolation, PurchaseLineInput, compute_header_totals};
+pub(crate) use line_amounts::{zero_amount, zero_rate};
 pub use order::{
     ProgressStatus, PurchaseOrder, PurchaseOrderData, PurchaseOrderStatus, PurchaseOrderUpdate,
     PurchaseReviewStatus,

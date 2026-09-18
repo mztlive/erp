@@ -1,11 +1,12 @@
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use application_core::normalized_text;
 use erp_core::ids::ProductCategoryId;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::common::{PageParams, non_blank, normalize_sort};
+use super::common::{PageParams, non_blank, paging_params};
 use crate::entity::catalog::{EnableStatus, ProductCategory, ProductKind};
 use crate::error::Result;
+use crate::repository::ProductCategoryRow;
 
 /// 商品分类列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const PRODUCT_CATEGORY_SORT_FIELDS: &[&str] = &["created_at", "category_code", "name"];
@@ -106,6 +107,28 @@ impl From<ProductCategory> for ProductCategoryView {
     }
 }
 
+impl From<ProductCategoryRow> for ProductCategoryView {
+    /// 从投影行构造响应视图，与 `From<ProductCategory>` 同语义。
+    ///
+    /// # 参数
+    /// * `row` - 商品分类列表投影行
+    ///
+    /// # 返回
+    /// 返回响应视图。
+    fn from(row: ProductCategoryRow) -> Self {
+        Self {
+            id: row.id,
+            category_code: row.category_code,
+            parent_category_id: row.parent_category_id,
+            name: row.name,
+            product_kind: row.product_kind,
+            status: row.status,
+            created_at: row.created_at,
+            version: row.version,
+        }
+    }
+}
+
 /// 商品分类列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ProductCategoryListParams {
@@ -160,8 +183,6 @@ impl ProductCategoryListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ProductCategoryListQuery> {
-        let (sort_by, sort_dir) =
-            normalize_sort(&self.sort_by, &self.sort_dir, PRODUCT_CATEGORY_SORT_FIELDS)?;
         let parent_category_id =
             match self.parent_category_id.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
                 Some("root") => Some(None),
@@ -174,12 +195,13 @@ impl ProductCategoryListParams {
             name: normalized_text(self.name.as_deref()),
             parent_category_id,
             status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: paging_params(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                PRODUCT_CATEGORY_SORT_FIELDS,
+            )?,
         })
     }
 }

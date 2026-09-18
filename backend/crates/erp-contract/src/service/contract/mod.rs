@@ -13,9 +13,7 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_core::common::time::BusinessDate;
-use erp_core::ids::{ContractId, ContractRevisionId, CustomerAccountId, FileAssetId, PartyId};
-use id_generator::next_id;
+use erp_core::ids::{CustomerAccountId, FileAssetId, PartyId};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
@@ -24,9 +22,7 @@ use crate::dto::contract::{
     ArchiveContractRevisionRequest, ContractDetailView, ContractRevisionView, ContractView,
     CreateContractRequest, TerminateContractRequest, UploadContractRequest,
 };
-use crate::entity::contract::{
-    ArchiveSource, Contract, ContractData, ContractRevision, ContractRevisionData,
-};
+use crate::entity::contract::{Contract, ContractRevision};
 use crate::error::{Error, Result};
 use crate::ports::{
     AccountNamePort, ContractAuditPort, ContractDataScopePort, ContractParticipantPort, CustomerAccountFact,
@@ -35,19 +31,13 @@ use crate::ports::{
 use crate::repository::ContractExt;
 
 pub mod access;
+mod archive;
 mod query;
 mod scope;
 
 pub use access::ContractAccess;
-
-/// 已规划、尚未持久化的合同身份与首个/下一个不可变修订。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PlannedContractArchive {
-    /// 合同稳定身份。
-    pub contract: Contract,
-    /// 不可变合同修订。
-    pub revision: ContractRevision,
-}
+pub use archive::{PlannedContractArchive, plan_first_archive, plan_upload_archive};
+pub(crate) use archive::{conflict_if_stale_version, customer_eligibility, plan_next_revision};
 
 /// 合同范围解析及合法参与事实必须成组装配；缺少任一项均不能形成完整授权。
 pub struct ContractScopePorts {
@@ -574,230 +564,6 @@ impl ContractService {
     }
 }
 
-/// 将客户事实映射为归档资格；缺失或停用保持原错误文案。
-fn customer_eligibility(customer: Option<CustomerAccountFact>) -> Result<CustomerAccountFact> {
-    let customer = customer.ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
-    if !customer.is_active {
-        return Err(Error::BusinessLogicError("客户已停用，禁止归档新合同".to_string()));
-    }
-    Ok(customer)
-}
-
-/// 三类归档规划请求共用的版本内联快照字段组。
-struct ArchiveSnapshotFields {
-    /// 客户名称快照。
-    customer_name: String,
-    /// 结算主体名称快照。
-    settlement_party_name: String,
-    /// 付款条件代码。
-    payment_term_code: String,
-    /// 付款条件名称。
-    payment_term_name: String,
-    /// 开票类型。
-    invoice_type: String,
-    /// 税点。
-    tax_point: String,
-    /// 合同有效期起。
-    valid_from: BusinessDate,
-    /// 合同有效期止；`None` 表示长期。
-    valid_to: Option<BusinessDate>,
-    /// 签订日期。
-    signed_at: BusinessDate,
-}
-
-/// 由合同身份与快照组装不可变修订数据（三处规划函数共用）。
-///
-/// 版本号规则与默认来源回退由调用方完成，本函数只做字段搬运。
-///
-/// # 参数
-/// * `contract` - 合同实体（提供编号与结算主体）
-/// * `contract_pdf_file_id` - 本版本已签署合同 PDF 的文件资产
-/// * `archive_source` - 归档来源（调用方已完成默认回退）
-/// * `settlement_party_id` - 结算主体（调用方已按客户缺省补齐）
-/// * `snapshot` - 归档快照字段组
-///
-/// # 返回
-/// 返回尚未持久化的修订创建数据。
-fn revision_data(
-    contract: &Contract,
-    contract_pdf_file_id: FileAssetId,
-    archive_source: ArchiveSource,
-    settlement_party_id: PartyId,
-    snapshot: ArchiveSnapshotFields,
-) -> ContractRevisionData {
-    ContractRevisionData {
-        contract_no: contract.contract_no.clone(),
-        customer_name: snapshot.customer_name,
-        contract_pdf_file_id,
-        archive_source,
-        settlement_party_id,
-        settlement_party_name: snapshot.settlement_party_name,
-        payment_term_code: snapshot.payment_term_code,
-        payment_term_name: snapshot.payment_term_name,
-        invoice_type: snapshot.invoice_type,
-        tax_point: snapshot.tax_point,
-        valid_from: snapshot.valid_from,
-        valid_to: snapshot.valid_to,
-        signed_at: snapshot.signed_at,
-    }
-}
-
-/// 由首次归档请求构造合同身份与首个不可变修订。
-///
-/// # 参数
-/// * `req` - 已通过 `Validate` 的创建请求
-/// * `actor_id` - 创建人
-///
-/// # 返回
-/// 返回尚未持久化的合同与修订。
-///
-/// # 错误
-/// 编号/快照为空、超长或有效期倒挂。
-pub fn plan_first_archive(
-    req: CreateContractRequest,
-    actor_id: impl Into<String>,
-) -> Result<PlannedContractArchive> {
-    let actor_id = actor_id.into();
-    let contract = Contract::new(
-        ContractId::new(next_id()),
-        ContractData {
-            contract_no: req.contract_no,
-            customer_id: req.customer_id,
-            settlement_party_id: req.settlement_party_id,
-        },
-        actor_id,
-    )?;
-    let revision = ContractRevision::new(
-        ContractRevisionId::new(next_id()),
-        contract.base.id.clone().into(),
-        1,
-        revision_data(
-            &contract,
-            req.contract_pdf_file_id,
-            req.archive_source.unwrap_or(ArchiveSource::ContractCenter),
-            contract.settlement_party_id.clone(),
-            ArchiveSnapshotFields {
-                customer_name: req.customer_name,
-                settlement_party_name: req.settlement_party_name,
-                payment_term_code: req.payment_term_code,
-                payment_term_name: req.payment_term_name,
-                invoice_type: req.invoice_type,
-                tax_point: req.tax_point,
-                valid_from: req.valid_from,
-                valid_to: req.valid_to,
-                signed_at: req.signed_at,
-            },
-        ),
-    )?;
-    Ok(PlannedContractArchive { contract, revision })
-}
-
-/// 由一次上传命令构造合同身份与首个不可变修订。
-///
-/// # 参数
-/// * `req` - 已通过 `Validate` 的上传命令
-/// * `file_asset_id` - 已分配的文件资产 ID
-/// * `settlement_party_id` - 结算主体；调用方已按客户缺省补齐
-/// * `actor_id` - 创建人
-///
-/// # 返回
-/// 返回尚未持久化的合同与修订。
-///
-/// # 错误
-/// 编号/快照为空、超长或有效期倒挂。
-pub fn plan_upload_archive(
-    req: UploadContractRequest,
-    file_asset_id: FileAssetId,
-    settlement_party_id: PartyId,
-    actor_id: impl Into<String>,
-) -> Result<PlannedContractArchive> {
-    let actor_id = actor_id.into();
-    let contract = Contract::new(
-        ContractId::new(next_id()),
-        ContractData {
-            contract_no: req.contract_no,
-            customer_id: req.customer_id,
-            settlement_party_id: settlement_party_id.clone(),
-        },
-        actor_id,
-    )?;
-    let revision = ContractRevision::new(
-        ContractRevisionId::new(next_id()),
-        contract.base.id.clone().into(),
-        1,
-        revision_data(
-            &contract,
-            file_asset_id,
-            ArchiveSource::ContractCenter,
-            settlement_party_id,
-            ArchiveSnapshotFields {
-                customer_name: req.customer_name,
-                settlement_party_name: req.settlement_party_name,
-                payment_term_code: req.payment_term_code,
-                payment_term_name: req.payment_term_name,
-                invoice_type: req.invoice_type,
-                tax_point: req.tax_point,
-                valid_from: req.valid_from,
-                valid_to: req.valid_to,
-                signed_at: req.signed_at,
-            },
-        ),
-    )?;
-    Ok(PlannedContractArchive { contract, revision })
-}
-
-/// 由追加版本请求构造下一不可变修订。
-fn plan_next_revision(
-    contract: &Contract,
-    req: ArchiveContractRevisionRequest,
-    current_revision_no: u32,
-) -> Result<PlannedContractArchive> {
-    let next_no = ContractRevision::next_revision_no(current_revision_no)?;
-    let revision = ContractRevision::new(
-        ContractRevisionId::new(next_id()),
-        contract.base.id.clone().into(),
-        next_no,
-        revision_data(
-            contract,
-            req.contract_pdf_file_id,
-            req.archive_source.unwrap_or(ArchiveSource::ContractCenter),
-            contract.settlement_party_id.clone(),
-            ArchiveSnapshotFields {
-                customer_name: req.customer_name,
-                settlement_party_name: req.settlement_party_name,
-                payment_term_code: req.payment_term_code,
-                payment_term_name: req.payment_term_name,
-                invoice_type: req.invoice_type,
-                tax_point: req.tax_point,
-                valid_from: req.valid_from,
-                valid_to: req.valid_to,
-                signed_at: req.signed_at,
-            },
-        ),
-    )?;
-    Ok(PlannedContractArchive { contract: contract.clone(), revision })
-}
-
-/// 将实体版本匹配结果映射为稳定 409 语义。
-///
-/// # 参数
-/// * `matched` - `Contract::matches_version(expected)` 的结果
-///
-/// # 返回
-/// 匹配时返回 `Ok(())`。
-///
-/// # 错误
-/// 不匹配时返回 `ConflictError`（HTTP 409）。
-///
-/// # 约束
-/// 不比较版本号；调用方必须先调用实体 `matches_version`。
-fn conflict_if_stale_version(matched: bool) -> Result<()> {
-    if matched {
-        return Ok(());
-    }
-    Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))
-}
-
 /// 写命令事务内的授权目标：新建客户或既有合同。
 enum TxAuthorization {
     /// 新建归档：证明按指定客户创建的资格。
@@ -873,13 +639,10 @@ async fn execute_authorized_transaction(
 
 #[cfg(test)]
 mod version_lock_tests {
-    use erp_core::common::time::BusinessDate;
-    use erp_core::ids::{CustomerAccountId, FileAssetId, PartyId};
-    use serde_json::json;
+    use erp_core::ids::{CustomerAccountId, PartyId};
 
-    use super::{conflict_if_stale_version, plan_first_archive, plan_upload_archive};
-    use crate::dto::contract::{CreateContractRequest, UploadContractRequest};
-    use crate::entity::contract::{ArchiveSource, Contract, ContractData, ContractId};
+    use super::conflict_if_stale_version;
+    use crate::entity::contract::{Contract, ContractData, ContractId};
     use crate::error::Error;
 
     /// 归档与终止必须使用实体 matches_version，禁止字段级直接比较。
@@ -912,37 +675,6 @@ mod version_lock_tests {
         }
     }
 
-    fn archive_json() -> serde_json::Value {
-        json!({
-            "contract_no": "HT-2026-0088",
-            "customer_id": "cust-1",
-            "settlement_party_id": "party-1",
-            "contract_pdf_file_id": "file-1",
-            "customer_name": "东方企业",
-            "settlement_party_name": "集团结算中心",
-            "payment_term_code": "NET30",
-            "payment_term_name": "月结 30 天",
-            "invoice_type": "增值税专用发票",
-            "tax_point": "6",
-            "valid_from": "2026-01-01",
-            "valid_to": "2026-12-31",
-            "signed_at": "2025-12-20",
-        })
-    }
-
-    #[test]
-    fn plan_first_archive_keeps_request_snapshots_and_pdf_id() {
-        let req: CreateContractRequest = serde_json::from_value(archive_json()).unwrap();
-        let planned = plan_first_archive(req, "admin-1").unwrap();
-        assert_eq!(planned.contract.contract_no, "HT-2026-0088");
-        assert_eq!(planned.revision.revision.revision_no, 1);
-        assert_eq!(planned.revision.customer_snapshot.customer_name, "东方企业");
-        assert_eq!(planned.revision.settlement_party_snapshot.settlement_party_name, "集团结算中心");
-        assert_eq!(planned.revision.contract_pdf_file_id, FileAssetId::new("file-1"));
-        assert_eq!(planned.revision.archive_source, ArchiveSource::ContractCenter);
-        assert_eq!(planned.revision.valid_from, BusinessDate::from_ymd(2026, 1, 1).unwrap());
-    }
-
     #[test]
     fn inactive_or_missing_customer_keeps_original_archive_errors() {
         use super::customer_eligibility;
@@ -964,33 +696,5 @@ mod version_lock_tests {
             },
             other => panic!("期望 BusinessLogicError，得到 {other:?}"),
         }
-    }
-
-    #[test]
-    fn plan_upload_archive_binds_assigned_file_id_and_default_source() {
-        let req: UploadContractRequest = serde_json::from_value(json!({
-            "contract_no": "HT-2026-0099",
-            "customer_id": "cust-1",
-            "customer_name": "东方企业",
-            "settlement_party_name": "集团结算中心",
-            "payment_term_code": "NET30",
-            "payment_term_name": "月结 30 天",
-            "invoice_type": "增值税专用发票",
-            "tax_point": "6",
-            "valid_from": "2026-01-01",
-            "signed_at": "2025-12-20",
-        }))
-        .unwrap();
-        let planned = plan_upload_archive(
-            req,
-            FileAssetId::new("asset-9"),
-            PartyId::new("party-from-customer"),
-            "admin-1",
-        )
-        .unwrap();
-        assert_eq!(planned.contract.settlement_party_id, PartyId::new("party-from-customer"));
-        assert_eq!(planned.revision.contract_pdf_file_id, FileAssetId::new("asset-9"));
-        assert_eq!(planned.revision.archive_source, ArchiveSource::ContractCenter);
-        assert_eq!(planned.revision.revision.revision_no, 1);
     }
 }

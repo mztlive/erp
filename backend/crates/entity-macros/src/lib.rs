@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use quote::__private::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{Data, DeriveInput, Error, Fields, Ident, Result, parse_macro_input};
+use syn::{Data, DeriveInput, Error, Fields, FieldsNamed, Ident, Result, parse_macro_input};
 
 /// 派生 Entity 宏实现。
 ///
@@ -34,13 +34,13 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
 /// 输入非具名结构体或缺 `base` 字段时返回错误。
 fn expand_derive_entity(input: &DeriveInput) -> Result<TokenStream2> {
     let Data::Struct(data) = &input.data else {
-        return Err(Error::new_spanned(&input.ident, "Entity 派生仅支持结构体"));
+        return Err(entity_error(&input.ident, "Entity 派生仅支持结构体"));
     };
     let Fields::Named(fields) = &data.fields else {
-        return Err(Error::new_spanned(&input.ident, "Entity 派生要求具名结构体并含有 base 字段"));
+        return Err(entity_error(&input.ident, "Entity 派生要求具名结构体并含有 base 字段"));
     };
-    if !fields.named.iter().any(|field| field.ident.as_ref().is_some_and(|id| id == "base")) {
-        return Err(Error::new_spanned(&input.ident, "Entity 派生要求含有 base 字段"));
+    if !has_base_field(fields) {
+        return Err(entity_error(&input.ident, "Entity 派生要求含有 base 字段"));
     }
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
@@ -63,6 +63,16 @@ fn expand_derive_entity(input: &DeriveInput) -> Result<TokenStream2> {
             }
         }
     })
+}
+
+/// Entity 派生错误的统一构造入口。
+fn entity_error(target: &Ident, message: &str) -> Error {
+    Error::new_spanned(target, message)
+}
+
+/// 判定具名字段是否含有 `base` 字段。
+fn has_base_field(fields: &FieldsNamed) -> bool {
+    fields.named.iter().any(|field| field.ident.as_ref().is_some_and(|id| id == "base"))
 }
 
 /// 生成透明主键 ID newtype。
@@ -169,10 +179,13 @@ mod tests {
         syn::parse_str(input).expect("测试输入必须可解析")
     }
 
+    fn expand_to_string(input: &str) -> String {
+        expand_derive_entity(&parse_derive(input)).expect("合法输入必须展开").to_string()
+    }
+
     #[test]
     fn derive_expands_for_named_struct_with_base() {
-        let input = parse_derive("struct Foo { base: ::entity_core::BaseModel }");
-        let expanded = expand_derive_entity(&input).expect("合法输入必须展开").to_string();
+        let expanded = expand_to_string("struct Foo { base: ::entity_core::BaseModel }");
 
         assert!(expanded.contains("HasBaseModel"));
         assert!(expanded.contains("entity_core"));
@@ -189,8 +202,7 @@ mod tests {
 
     #[test]
     fn derive_keeps_generics_in_impl() {
-        let input = parse_derive("struct Foo<T> { base: ::entity_core::BaseModel, value: T }");
-        let expanded = expand_derive_entity(&input).expect("泛型输入必须展开").to_string();
+        let expanded = expand_to_string("struct Foo<T> { base: ::entity_core::BaseModel, value: T }");
 
         assert!(expanded.contains("Foo"));
     }

@@ -1,18 +1,33 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
+/// 未软删除标记：`deleted_at` 为该值表示实体处于活动状态。
 pub const NOT_DELETED_TIMESTAMP: u64 = 0;
+/// [`NOT_DELETED_TIMESTAMP`] 的 BSON 形态（MongoDB 时间戳字段为有符号整数）。
+///
+/// `as` 仅用于该零值常量的编译期镜像，相等性由单测锁定。
 pub const NOT_DELETED_TIMESTAMP_BSON: i64 = NOT_DELETED_TIMESTAMP as i64;
 
 /// 测试伪造实例使用的固定非零时间戳。
 const FAKE_TIMESTAMP: u64 = 1_700_000_000;
 
+/// 新建实体的起始版本号。
+const INITIAL_VERSION: u64 = 1;
+
+/// 持久化实体共用的基础元数据：主键、版本号与时间戳。
+///
+/// 调用方通过 `#[serde(flatten)]` 将其嵌入业务实体。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct BaseModel {
+    /// 实体主键，由调用方生成。
     pub id: String,
+    /// 乐观锁版本号，新建实例从 1 开始。
     pub version: u64,
+    /// 创建时间的 Unix 秒。
     pub created_at: u64,
+    /// 更新时间的 Unix 秒。
     pub updated_at: u64,
+    /// 软删除时间的 Unix 秒，为 [`NOT_DELETED_TIMESTAMP`] 时表示未删除。
     pub deleted_at: u64,
 }
 
@@ -28,9 +43,7 @@ impl BaseModel {
     /// # 错误
     /// 无；时间戳钳制到零值后仍能构造。
     pub fn new(id: String) -> Self {
-        let now = Utc::now().timestamp();
-        let now_u64 = u64::try_from(now).unwrap_or(NOT_DELETED_TIMESTAMP);
-        Self { id, version: 1, created_at: now_u64, updated_at: now_u64, deleted_at: NOT_DELETED_TIMESTAMP }
+        Self::active(id, clamp_unix_timestamp(Utc::now().timestamp()))
     }
 
     /// 判断对象是否已被软删除。
@@ -58,14 +71,24 @@ impl BaseModel {
     /// # 错误
     /// 无。
     pub fn fake() -> Self {
+        Self::active("fake".to_string(), FAKE_TIMESTAMP)
+    }
+
+    /// 以共享不变式组装活动实例：起始版本、创建与更新时间相同、未删除。
+    fn active(id: String, timestamp: u64) -> Self {
         Self {
-            id: "fake".to_string(),
-            version: 1,
-            created_at: FAKE_TIMESTAMP,
-            updated_at: FAKE_TIMESTAMP,
+            id,
+            version: INITIAL_VERSION,
+            created_at: timestamp,
+            updated_at: timestamp,
             deleted_at: NOT_DELETED_TIMESTAMP,
         }
     }
+}
+
+/// Unix 秒转存储时间戳，负值钳制为零值。
+fn clamp_unix_timestamp(value: i64) -> u64 {
+    u64::try_from(value).unwrap_or(NOT_DELETED_TIMESTAMP)
 }
 
 /// 提供实体持久化元数据的读写访问。
@@ -139,21 +162,20 @@ pub trait HasBaseModel {
 
 #[cfg(test)]
 mod tests {
-    use super::{BaseModel, FAKE_TIMESTAMP, NOT_DELETED_TIMESTAMP, NOT_DELETED_TIMESTAMP_BSON};
+    use super::{
+        BaseModel, FAKE_TIMESTAMP, HasBaseModel, NOT_DELETED_TIMESTAMP, NOT_DELETED_TIMESTAMP_BSON,
+        clamp_unix_timestamp,
+    };
 
     #[test]
-    fn new_model_is_active() {
-        let model = BaseModel::new("id_1".to_string());
-
-        assert!(!model.is_deleted());
-    }
-
-    #[test]
-    fn new_accepts_string_without_explicit_conversion() {
+    fn new_builds_active_model_with_shared_invariants() {
         let model = BaseModel::new("id_1".to_string());
 
         assert_eq!(model.id, "id_1");
         assert_eq!(model.version, 1);
+        assert_eq!(model.created_at, model.updated_at);
+        assert_eq!(model.deleted_at, NOT_DELETED_TIMESTAMP);
+        assert!(!model.is_deleted());
     }
 
     #[test]
@@ -169,8 +191,54 @@ mod tests {
     }
 
     #[test]
+    fn clamp_unix_timestamp_passes_through_non_negative() {
+        assert_eq!(clamp_unix_timestamp(0), 0);
+        assert_eq!(clamp_unix_timestamp(1_700_000_000), 1_700_000_000);
+    }
+
+    #[test]
+    fn clamp_unix_timestamp_clamps_negative_to_not_deleted() {
+        assert_eq!(clamp_unix_timestamp(-1), NOT_DELETED_TIMESTAMP);
+        assert_eq!(clamp_unix_timestamp(i64::MIN), NOT_DELETED_TIMESTAMP);
+    }
+
+    #[test]
+    fn non_zero_deleted_at_marks_model_deleted() {
+        let model = BaseModel { deleted_at: 1_700_000_001, ..BaseModel::fake() };
+
+        assert!(model.is_deleted());
+    }
+
+    struct TestEntity {
+        base: BaseModel,
+    }
+
+    impl HasBaseModel for TestEntity {
+        fn base(&self) -> &BaseModel {
+            &self.base
+        }
+
+        fn base_mut(&mut self) -> &mut BaseModel {
+            &mut self.base
+        }
+    }
+
+    #[test]
+    fn has_base_model_defaults_delegate_to_base() {
+        let mut entity = TestEntity { base: BaseModel::fake() };
+
+        assert_eq!(entity.id(), "fake");
+        assert_eq!(entity.version(), 1);
+        assert!(!entity.is_deleted());
+
+        entity.base_mut().deleted_at = 1_700_000_001;
+
+        assert!(entity.is_deleted());
+    }
+
+    #[test]
     fn soft_delete_zero_constants_stay_equal() {
-        assert_eq!(u64::from(NOT_DELETED_TIMESTAMP_BSON as u8), NOT_DELETED_TIMESTAMP);
-        assert_eq!(NOT_DELETED_TIMESTAMP_BSON, NOT_DELETED_TIMESTAMP as i64);
+        assert_eq!(u64::try_from(NOT_DELETED_TIMESTAMP_BSON).expect("零值必须可转换"), NOT_DELETED_TIMESTAMP);
+        assert_eq!(i64::try_from(NOT_DELETED_TIMESTAMP).expect("零值必须可转换"), NOT_DELETED_TIMESTAMP_BSON);
     }
 }

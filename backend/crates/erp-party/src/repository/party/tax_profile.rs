@@ -5,7 +5,10 @@ use mongodb::options::FindOptions;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
-use super::shared::{active_fact_filter, active_fact_window_filter, sort_doc};
+use super::shared::{
+    active_fact_filter, active_fact_window_filter, default_first_sort, party_default_marks_filter,
+    sort_doc,
+};
 use crate::entity::party::{EffectiveRecordStatus, PartyTaxProfile};
 use crate::repository::owned::PartyTaxProfileRepository;
 
@@ -157,12 +160,7 @@ impl<'a> PartyTaxProfileRepository<'a> {
         as_of: erp_core::common::time::BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyTaxProfile>> {
-        self.find_many_sorted(
-            active_fact_filter(party_id, as_of),
-            doc! { "is_default": -1, "created_at": -1 },
-            executor,
-        )
-        .await
+        self.find_many_sorted(active_fact_filter(party_id, as_of), default_first_sort(), executor).await
     }
 
     /// 批量读取多个主体在指定日期生效的税务资料。
@@ -219,8 +217,7 @@ impl<'a> PartyTaxProfileRepository<'a> {
         exclude_id: Option<&str>,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let rows =
-            self.find_many(doc! { "party_id": party_id.to_string(), "is_default": true }, executor).await?;
+        let rows = self.find_many(party_default_marks_filter(party_id), executor).await?;
         for mut row in rows {
             if exclude_id.is_some_and(|id| id == row.base.id) {
                 continue;
@@ -247,12 +244,7 @@ impl<'a> PartyTaxProfileRepository<'a> {
         party_id: &PartyId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyTaxProfile>> {
-        self.find_many_sorted(
-            doc! { "party_id": party_id.to_string() },
-            doc! { "is_default": -1, "created_at": -1 },
-            executor,
-        )
-        .await
+        self.find_many_sorted(doc! { "party_id": party_id.to_string() }, default_first_sort(), executor).await
     }
 }
 /// 税务资料列表投影字段。

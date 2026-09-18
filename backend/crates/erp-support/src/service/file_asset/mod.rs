@@ -29,6 +29,8 @@ use crate::error::{Error, Result};
 use crate::ports::{BusinessDocumentPort, SupportAuditPort};
 use crate::repository::FileAssetExt;
 
+use super::check_expected_version;
+
 /// 文件资产列表筛选条件类型（经 `FileAssetExt` 关联类型跨 crate 可达）。
 type FileAssetFilter = <mongodb::Database as FileAssetExt>::FileAssetFilter;
 
@@ -383,9 +385,7 @@ impl FileAssetService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("文件资产不存在".to_string()))?;
-        if asset.base.version != expected_version {
-            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
-        }
+        check_expected_version(asset.base.version, expected_version)?;
         Ok(asset)
     }
 

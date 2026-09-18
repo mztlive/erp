@@ -145,10 +145,7 @@ impl<'a> SupplierQualificationRepository<'a> {
         as_of: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierAccountId>> {
-        let mut filter = qualification_type_filter(qualification_types);
-        filter.insert("status", QualificationStatus::Active.as_str());
-        filter.insert("$and", vec![verified_window_filter()]);
-        filter.insert("valid_from", doc! { "$lte": as_of });
+        let mut filter = active_window_filter(qualification_types, as_of);
         filter.insert("$or", vec![doc! { "valid_to": null }, doc! { "valid_to": { "$gte": as_of } }]);
         super::find_supplier_ids(self.collection().clone_with_type(), filter, executor).await
     }
@@ -173,10 +170,7 @@ impl<'a> SupplierQualificationRepository<'a> {
         expires_by: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierAccountId>> {
-        let mut filter = qualification_type_filter(qualification_types);
-        filter.insert("status", QualificationStatus::Active.as_str());
-        filter.insert("$and", vec![verified_window_filter()]);
-        filter.insert("valid_from", doc! { "$lte": as_of });
+        let mut filter = active_window_filter(qualification_types, as_of);
         filter.insert("valid_to", doc! { "$gte": as_of, "$lte": expires_by });
         super::find_supplier_ids(self.collection().clone_with_type(), filter, executor).await
     }
@@ -256,6 +250,25 @@ impl<'a> SupplierQualificationCapabilityRepository<'a> {
         let ids: Vec<String> = qualification_ids.iter().map(ToString::to_string).collect();
         self.find_many(doc! { "qualification_id": { "$in": ids } }, executor).await
     }
+}
+
+/// 构建有效资质窗口的公共前缀条件。
+///
+/// 资质类型范围、启用状态、日期核实与生效日上限在有效/窗口内到期两条
+/// 查询中共用；调用方只追加各自的失效日窗口。
+///
+/// # 参数
+/// * `qualification_types` - 允许命中的资质类型集合
+/// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
+///
+/// # 返回
+/// 返回已含类型、状态、核实与生效日条件的查询文档。
+fn active_window_filter(qualification_types: &[QualificationType], as_of: &str) -> Document {
+    let mut filter = qualification_type_filter(qualification_types);
+    filter.insert("status", QualificationStatus::Active.as_str());
+    filter.insert("$and", vec![verified_window_filter()]);
+    filter.insert("valid_from", doc! { "$lte": as_of });
+    filter
 }
 
 /// 构建资质类型范围条件；空集合表示不限制类型。

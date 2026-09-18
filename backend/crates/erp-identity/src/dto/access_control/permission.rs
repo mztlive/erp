@@ -1,10 +1,10 @@
 //! 域 D06 `access_control` 的 权限定义 DTO。
 
-use application_core::{non_blank, normalized_text, page_or_default, page_size_or_default};
+use application_core::{non_blank, normalized_text};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::{PageParams, TIMESTAMP_SORT_FIELDS, normalize_sort};
+use super::PageParams;
 use crate::entity::access_control::{Permission, PermissionData, PermissionUpdate};
 use crate::error::Result;
 
@@ -190,17 +190,11 @@ impl PermissionListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<PermissionListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, TIMESTAMP_SORT_FIELDS)?;
         Ok(PermissionListQuery {
             resource: normalized_text(self.resource.as_deref()),
             disabled: self.disabled,
             system: self.system,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: super::page_params(&self.sort_by, &self.sort_dir, self.page, self.page_size)?,
         })
     }
 }

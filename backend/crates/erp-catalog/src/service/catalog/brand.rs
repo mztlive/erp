@@ -49,19 +49,7 @@ impl CatalogService {
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
         let page = self.db.product_brands().search_product_brands(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| ProductBrandView {
-                id: row.id,
-                brand_code: row.brand_code,
-                name: row.name,
-                logo_asset_id: row.logo_asset_id,
-                status: row.status,
-                created_at: row.created_at,
-                version: row.version,
-            })
-            .collect();
+        let items = page.items.into_iter().map(ProductBrandView::from).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 

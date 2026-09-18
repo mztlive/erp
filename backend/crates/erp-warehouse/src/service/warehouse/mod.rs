@@ -25,7 +25,6 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, PageResult, Transactional};
 use validator::Validate;
 
-use crate::dto::warehouse::SortDir;
 pub use crate::dto::warehouse::{
     CreateWarehouseRequest, CreateWarehouseSkuPolicyRequest, PageView,
     UpdateWarehouseFulfillmentHandlersRequest, UpdateWarehouseRequest, UpdateWarehouseSkuPolicyRequest,
@@ -146,8 +145,8 @@ impl WarehouseService {
             status: query.status,
             page: query.paging.page,
             page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+            sort_by: Some(query.paging.sort_name()),
+            sort_ascending: query.paging.ascending(),
         };
         // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结），按字段映射为响应视图。
         map_search_page(
@@ -414,8 +413,8 @@ impl WarehouseService {
             name: query.name,
             page: query.paging.page,
             page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+            sort_by: Some(query.paging.sort_name()),
+            sort_ascending: query.paging.ascending(),
         };
         let mut executor = NoTransaction;
         map_search_page(
@@ -459,8 +458,8 @@ impl WarehouseService {
             status: query.status,
             page: query.paging.page,
             page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+            sort_by: Some(query.paging.sort_name()),
+            sort_ascending: query.paging.ascending(),
         };
         let mut executor = NoTransaction;
         map_search_page(

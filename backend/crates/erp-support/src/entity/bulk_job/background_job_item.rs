@@ -7,6 +7,8 @@ use erp_core::validation::normalize_optional_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::entity::ensure_paired;
+
 /// 对象类型代码最大长度。
 const OBJECT_TYPE_MAX_LEN: usize = 64;
 /// 对象 ID 最大长度。
@@ -126,14 +128,18 @@ impl BackgroundJobItem {
         }
         let object_type = normalize_optional_text(data.object_type, "对象类型", OBJECT_TYPE_MAX_LEN)?;
         let object_id = normalize_optional_text(data.object_id, "对象ID", OBJECT_ID_MAX_LEN)?;
-        if object_type.is_some() != object_id.is_some() {
-            return Err(Error::from("对象类型与对象ID必须同时提供或同时省略"));
-        }
+        ensure_paired(
+            object_type.is_some(),
+            object_id.is_some(),
+            "对象类型与对象ID必须同时提供或同时省略",
+        )?;
         let expected_version = normalize_optional_text(data.expected_version, "预期版本", VERSION_MAX_LEN)?;
         let expected_hash = normalize_optional_text(data.expected_hash, "内容摘要", HASH_MAX_LEN)?;
-        if expected_version.is_some() != expected_hash.is_some() {
-            return Err(Error::from("预期版本与内容摘要必须同时提供或同时省略"));
-        }
+        ensure_paired(
+            expected_version.is_some(),
+            expected_hash.is_some(),
+            "预期版本与内容摘要必须同时提供或同时省略",
+        )?;
         let worksheet_name =
             normalize_optional_text(data.worksheet_name, "工作表名", WORKSHEET_NAME_MAX_LEN)?;
         let source_column_name =
@@ -193,9 +199,11 @@ impl BackgroundJobItem {
         let result_object_type =
             normalize_optional_text(result_object_type, "结果对象类型", OBJECT_TYPE_MAX_LEN)?;
         let result_object_id = normalize_optional_text(result_object_id, "结果对象ID", OBJECT_ID_MAX_LEN)?;
-        if result_object_type.is_some() != result_object_id.is_some() {
-            return Err(Error::from("结果对象类型与结果对象ID必须同时提供或同时省略"));
-        }
+        ensure_paired(
+            result_object_type.is_some(),
+            result_object_id.is_some(),
+            "结果对象类型与结果对象ID必须同时提供或同时省略",
+        )?;
         self.status = Some(status);
         self.result_code = result_code;
         self.result_summary = result_summary;

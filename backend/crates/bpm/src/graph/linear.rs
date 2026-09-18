@@ -7,6 +7,7 @@ use std::collections::HashSet;
 use crate::ids::{ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
 use crate::model::types::{
     ApprovalTerminalResult, ApprovalTransitionEvent, ModelError, ModelResult, NODE_KEY_MAX_LEN,
+    normalize_required,
 };
 use crate::model::{ApprovalNodeDefinition, ApprovalTransitionDefinition, Timestamp};
 
@@ -129,17 +130,11 @@ fn normalize_keys(node_keys: &[String]) -> ModelResult<Vec<String>> {
     let mut seen = HashSet::with_capacity(node_keys.len());
     let mut keys = Vec::with_capacity(node_keys.len());
     for key in node_keys {
-        let trimmed = key.trim();
-        if trimmed.is_empty() {
-            return Err(ModelError::InvalidField("节点键不能为空"));
-        }
-        if trimmed.len() > NODE_KEY_MAX_LEN {
-            return Err(ModelError::InvalidField("节点键过长"));
-        }
-        if !seen.insert(trimmed) {
+        let normalized = normalize_required(key.clone(), "节点键不能为空", NODE_KEY_MAX_LEN, "节点键过长")?;
+        if !seen.insert(normalized.clone()) {
             return Err(ModelError::InvalidField("节点键不能重复"));
         }
-        keys.push(trimmed.to_string());
+        keys.push(normalized);
     }
     Ok(keys)
 }

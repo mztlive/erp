@@ -42,6 +42,36 @@ pub(crate) use application_core::normalize_sort;
 /// 列表时间排序白名单（`created_at`/`updated_at`），三类列表复用同一语义。
 pub(crate) const TIMESTAMP_SORT_FIELDS: &[&str] = &["created_at", "updated_at"];
 
+/// 由原始分页与排序参数构造归一化分页查询（三类列表 `normalized()` 共用）。
+///
+/// 排序字段过白名单校验，页码与单页条数取默认值并 clamp 到合法区间。
+///
+/// # 参数
+/// * `sort_by` - 可选排序字段；空白视为未提供
+/// * `sort_dir` - 可选排序方向；空白视为未提供
+/// * `page` - 可选页码；缺省为第一页
+/// * `page_size` - 可选单页条数；缺省为默认大小
+///
+/// # 返回
+/// 返回归一化后的分页与排序参数。
+///
+/// # 错误
+/// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
+pub(crate) fn page_params(
+    sort_by: &Option<String>,
+    sort_dir: &Option<String>,
+    page: Option<u64>,
+    page_size: Option<u32>,
+) -> crate::error::Result<PageParams> {
+    let (sort_by, sort_dir) = normalize_sort(sort_by, sort_dir, TIMESTAMP_SORT_FIELDS)?;
+    Ok(PageParams {
+        page: application_core::page_or_default(page),
+        page_size: application_core::page_size_or_default(page_size),
+        sort_by,
+        sort_dir,
+    })
+}
+
 pub mod audit_event;
 pub mod data_scope;
 pub mod permission;

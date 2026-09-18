@@ -33,6 +33,7 @@ pub use entity::{Party, PartyData, PartyKind, PartyStatus, PartyUpdate};
 pub use erp_core::ids::{
     PartyAddressId, PartyBankAccountId, PartyContactId, PartyId, PartyRevisionId, PartyTaxProfileId,
 };
+use erp_core::common::time::BusinessDate;
 use erp_core::{Error, Result};
 pub use party_address::{AddressType, PartyAddress, PartyAddressData, PartyAddressUpdate};
 pub use party_bank_account::{PartyBankAccount, PartyBankAccountData, PartyBankAccountUpdate};
@@ -60,6 +61,29 @@ pub(crate) fn ensure_base_version(base: &entity_core::BaseModel, expected: u64) 
         return Ok(());
     }
     Err(Error::from("数据已被其他请求修改，请刷新后重试"))
+}
+
+/// 校验从属事实生效区间（erp-party-010）。
+///
+/// 四个从属事实（联系人/地址/税务资料/银行账户）的生效区间规则唯一来源；
+/// 各实体 `new`/`update` 均转调本函数。空结束日期表示长期有效。
+///
+/// # 参数
+/// * `valid_from` - 生效开始日期
+/// * `valid_to` - 生效结束日期；`None` 表示长期有效
+///
+/// # 返回
+/// 区间合法返回 `Ok(())`。
+///
+/// # 错误
+/// 结束日期不晚于开始日期时返回错误。
+pub(crate) fn ensure_valid_window(valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> Result<()> {
+    if let Some(valid_to) = valid_to
+        && valid_to <= valid_from
+    {
+        return Err(Error::from("生效结束日期必须晚于生效开始日期"));
+    }
+    Ok(())
 }
 
 /// 由单一 Party 拥有的从属实体。
@@ -122,7 +146,24 @@ impl PartyOwned for PartyBankAccount {
 mod tests {
     use erp_core::common::time::BusinessDate;
 
-    use super::{EffectiveRecordStatus, PartyContact, PartyContactData, PartyContactId, PartyId, PartyOwned};
+    use super::{
+        EffectiveRecordStatus, PartyContact, PartyContactData, PartyContactId, PartyId, PartyOwned,
+        ensure_valid_window,
+    };
+
+    #[test]
+    fn valid_window_accepts_open_and_ordered_range() {
+        let from = BusinessDate::from_ymd(2026, 1, 1).unwrap();
+        assert!(ensure_valid_window(from, None).is_ok());
+        assert!(ensure_valid_window(from, Some(BusinessDate::from_ymd(2026, 1, 2).unwrap())).is_ok());
+    }
+
+    #[test]
+    fn valid_window_rejects_same_day_and_reversed_range() {
+        let from = BusinessDate::from_ymd(2026, 1, 1).unwrap();
+        assert!(ensure_valid_window(from, Some(from)).is_err());
+        assert!(ensure_valid_window(from, Some(BusinessDate::from_ymd(2025, 12, 31).unwrap())).is_err());
+    }
 
     #[test]
     fn party_owned_accepts_matching_party_and_rejects_other_party() {

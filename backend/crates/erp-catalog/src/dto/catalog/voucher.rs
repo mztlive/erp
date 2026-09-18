@@ -1,11 +1,10 @@
-use application_core::{page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ProductBrandId, ProductCategoryId, SkuId, UnitOfMeasureId};
 use erp_core::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::common::{PageParams, non_blank, normalize_sort};
+use super::common::{PageParams, non_blank, paging_params};
 use super::product::ProductSkuInput;
 use crate::entity::catalog::{EnableStatus, VoucherCategoryProfileRevision};
 use crate::error::Result;
@@ -300,16 +299,16 @@ impl VoucherCategoryProfileListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<VoucherCategoryProfileListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, VOUCHER_PROFILE_SORT_FIELDS)?;
         Ok(VoucherCategoryProfileListQuery {
             sku_id: self.sku_id.as_ref().map(|id| id.to_string()),
             status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: paging_params(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                VOUCHER_PROFILE_SORT_FIELDS,
+            )?,
         })
     }
 }

@@ -54,160 +54,93 @@ trait PurchaseLineViewSource {
     }
 }
 
+/// 为同形行实体生成视图字段读取。
+macro_rules! common_view_methods {
+    () => {
+        fn view_line_id(&self) -> String {
+            self.base.id.clone()
+        }
+
+        fn view_line_no(&self) -> u32 {
+            self.line_no
+        }
+
+        fn view_line_type(&self) -> PurchaseLineType {
+            self.line_type
+        }
+
+        fn view_procurement_confirmation_line_id(&self) -> Option<String> {
+            self.procurement_confirmation_line_id.as_ref().map(ToString::to_string)
+        }
+
+        fn view_sku_id(&self) -> Option<String> {
+            self.sku_id.as_ref().map(ToString::to_string)
+        }
+
+        fn view_sku_revision_id(&self) -> Option<String> {
+            self.sku_revision_id.as_ref().map(ToString::to_string)
+        }
+
+        fn view_product_name(&self) -> Option<String> {
+            self.product_name_snapshot.clone()
+        }
+
+        fn view_specification(&self) -> Option<String> {
+            self.specification_snapshot.clone()
+        }
+
+        fn view_quantity(&self) -> Option<String> {
+            self.quantity.map(|q| q.to_string())
+        }
+
+        fn view_base_unit_code(&self) -> Option<String> {
+            self.base_unit_code.clone()
+        }
+
+        fn view_unit_cost_gross(&self) -> Option<String> {
+            self.unit_cost_gross.map(|v| v.to_string())
+        }
+
+        fn view_input_tax_rate(&self) -> Option<String> {
+            self.input_tax_rate.map(|v| v.to_string())
+        }
+
+        fn view_gross_amount(&self) -> String {
+            self.gross_amount.to_string()
+        }
+
+        fn view_net_amount(&self) -> String {
+            self.net_amount.to_string()
+        }
+
+        fn view_tax_amount(&self) -> String {
+            self.tax_amount.to_string()
+        }
+
+        fn view_expected_delivery_date(&self) -> Option<String> {
+            self.expected_delivery_date.map(|d| d.to_string())
+        }
+
+        fn view_sales_order_line_id(&self) -> Option<String> {
+            self.sales_order_line_id.as_ref().map(ToString::to_string)
+        }
+
+        fn view_sales_order_revision_line_id(&self) -> Option<String> {
+            self.sales_order_revision_line_id.as_ref().map(ToString::to_string)
+        }
+
+        fn view_allocated_quantity(&self) -> Option<String> {
+            self.allocated_quantity.map(|q| q.to_string())
+        }
+    };
+}
+
 impl PurchaseLineViewSource for PurchaseOrderRevisionLine {
-    fn view_line_id(&self) -> String {
-        self.base.id.clone()
-    }
-
-    fn view_line_no(&self) -> u32 {
-        self.line_no
-    }
-
-    fn view_line_type(&self) -> PurchaseLineType {
-        self.line_type
-    }
-
-    fn view_procurement_confirmation_line_id(&self) -> Option<String> {
-        self.procurement_confirmation_line_id.as_ref().map(ToString::to_string)
-    }
-
-    fn view_sku_id(&self) -> Option<String> {
-        self.sku_id.as_ref().map(ToString::to_string)
-    }
-
-    fn view_sku_revision_id(&self) -> Option<String> {
-        self.sku_revision_id.as_ref().map(ToString::to_string)
-    }
-
-    fn view_product_name(&self) -> Option<String> {
-        self.product_name_snapshot.clone()
-    }
-
-    fn view_specification(&self) -> Option<String> {
-        self.specification_snapshot.clone()
-    }
-
-    fn view_quantity(&self) -> Option<String> {
-        self.quantity.map(|q| q.to_string())
-    }
-
-    fn view_base_unit_code(&self) -> Option<String> {
-        self.base_unit_code.clone()
-    }
-
-    fn view_unit_cost_gross(&self) -> Option<String> {
-        self.unit_cost_gross.map(|v| v.to_string())
-    }
-
-    fn view_input_tax_rate(&self) -> Option<String> {
-        self.input_tax_rate.map(|v| v.to_string())
-    }
-
-    fn view_gross_amount(&self) -> String {
-        self.gross_amount.to_string()
-    }
-
-    fn view_net_amount(&self) -> String {
-        self.net_amount.to_string()
-    }
-
-    fn view_tax_amount(&self) -> String {
-        self.tax_amount.to_string()
-    }
-
-    fn view_expected_delivery_date(&self) -> Option<String> {
-        self.expected_delivery_date.map(|d| d.to_string())
-    }
-
-    fn view_sales_order_line_id(&self) -> Option<String> {
-        self.sales_order_line_id.as_ref().map(ToString::to_string)
-    }
-
-    fn view_sales_order_revision_line_id(&self) -> Option<String> {
-        self.sales_order_revision_line_id.as_ref().map(ToString::to_string)
-    }
-
-    fn view_allocated_quantity(&self) -> Option<String> {
-        self.allocated_quantity.map(|q| q.to_string())
-    }
+    common_view_methods!();
 }
 
 impl PurchaseLineViewSource for PurchaseOrderSubmissionLine {
-    fn view_line_id(&self) -> String {
-        self.base.id.clone()
-    }
-
-    fn view_line_no(&self) -> u32 {
-        self.line_no
-    }
-
-    fn view_line_type(&self) -> PurchaseLineType {
-        self.line_type
-    }
-
-    fn view_procurement_confirmation_line_id(&self) -> Option<String> {
-        self.procurement_confirmation_line_id.as_ref().map(ToString::to_string)
-    }
-
-    fn view_sku_id(&self) -> Option<String> {
-        self.sku_id.as_ref().map(ToString::to_string)
-    }
-
-    fn view_sku_revision_id(&self) -> Option<String> {
-        self.sku_revision_id.as_ref().map(ToString::to_string)
-    }
-
-    fn view_product_name(&self) -> Option<String> {
-        self.product_name_snapshot.clone()
-    }
-
-    fn view_specification(&self) -> Option<String> {
-        self.specification_snapshot.clone()
-    }
-
-    fn view_quantity(&self) -> Option<String> {
-        self.quantity.map(|q| q.to_string())
-    }
-
-    fn view_base_unit_code(&self) -> Option<String> {
-        self.base_unit_code.clone()
-    }
-
-    fn view_unit_cost_gross(&self) -> Option<String> {
-        self.unit_cost_gross.map(|v| v.to_string())
-    }
-
-    fn view_input_tax_rate(&self) -> Option<String> {
-        self.input_tax_rate.map(|v| v.to_string())
-    }
-
-    fn view_gross_amount(&self) -> String {
-        self.gross_amount.to_string()
-    }
-
-    fn view_net_amount(&self) -> String {
-        self.net_amount.to_string()
-    }
-
-    fn view_tax_amount(&self) -> String {
-        self.tax_amount.to_string()
-    }
-
-    fn view_expected_delivery_date(&self) -> Option<String> {
-        self.expected_delivery_date.map(|d| d.to_string())
-    }
-
-    fn view_sales_order_line_id(&self) -> Option<String> {
-        self.sales_order_line_id.as_ref().map(ToString::to_string)
-    }
-
-    fn view_sales_order_revision_line_id(&self) -> Option<String> {
-        self.sales_order_revision_line_id.as_ref().map(ToString::to_string)
-    }
-
-    fn view_allocated_quantity(&self) -> Option<String> {
-        self.allocated_quantity.map(|q| q.to_string())
-    }
+    common_view_methods!();
 
     fn view_sales_order_submission_line_id(&self) -> Option<String> {
         self.sales_order_submission_line_id.as_ref().map(ToString::to_string)

@@ -20,6 +20,8 @@ use erp_core::{Error, Result};
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::entity::ensure_paired;
+
 /// 来源系统代码最大长度。
 const CODE_MAX_LEN: usize = 64;
 /// 名称最大长度。
@@ -465,9 +467,11 @@ impl ExternalIdentityMap {
         let external_id =
             normalize_required_text(data.external_id, "外部ID不能为空", EXTERNAL_ID_MAX_LEN, "外部ID过长")?;
         let mapped_by = normalize_optional_text(data.mapped_by, "映射责任人", ACTOR_MAX_LEN)?;
-        if data.mapped_at.is_some() != mapped_by.is_some() {
-            return Err(Error::from("映射时间与映射责任人必须同时提供或同时省略"));
-        }
+        ensure_paired(
+            data.mapped_at.is_some(),
+            mapped_by.is_some(),
+            "映射时间与映射责任人必须同时提供或同时省略",
+        )?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -588,9 +592,11 @@ impl ExternalIdentityTarget {
         {
             return Err(Error::from("映射失效时间必须晚于生效时间"));
         }
-        if data.approved_at.is_some() != approved_by.is_some() {
-            return Err(Error::from("确认时间与确认人必须同时提供或同时省略"));
-        }
+        ensure_paired(
+            data.approved_at.is_some(),
+            approved_by.is_some(),
+            "确认时间与确认人必须同时提供或同时省略",
+        )?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),

@@ -12,14 +12,11 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use super::common::{ACTOR_MAX_LEN, validate_actor_pair, validate_original_target};
-
-/// 退款单号最大长度。
-const REFUND_NO_MAX_LEN: usize = 64;
-/// 原因代码最大长度。
-const REASON_CODE_MAX_LEN: usize = 32;
-/// 原因文本最大长度。
-const REASON_TEXT_MAX_LEN: usize = 512;
+use super::common::{
+    DOCUMENT_NO_MAX_LEN, REASON_CODE_MAX_LEN, REASON_TEXT_MAX_LEN, ensure_initial_approval,
+    ensure_positive_amount, next_approval_version, normalize_created_by, validate_actor_pair,
+    validate_original_target,
+};
 
 /// 退款状态（合同 §4.4.1 / §4.4.2：复核态收敛为唯一 `IN_APPROVAL`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -187,8 +184,12 @@ impl CustomerRefund {
         data: CustomerRefundData,
         created_by: impl Into<String>,
     ) -> Result<Self> {
-        let refund_no =
-            normalize_required_text(data.refund_no, "退款单号不能为空", REFUND_NO_MAX_LEN, "退款单号过长")?;
+        let refund_no = normalize_required_text(
+            data.refund_no,
+            "退款单号不能为空",
+            DOCUMENT_NO_MAX_LEN,
+            "退款单号过长",
+        )?;
         let reason_text = normalize_required_text(
             data.reason_text,
             "退款原因不能为空",
@@ -196,12 +197,9 @@ impl CustomerRefund {
             "退款原因过长",
         )?;
         let reason_code = normalize_optional_text(data.reason_code, "原因代码", REASON_CODE_MAX_LEN)?;
-        if data.amount.to_decimal().is_sign_negative() || data.amount.to_decimal().is_zero() {
-            return Err(Error::from("退款金额必须为正数"));
-        }
+        ensure_positive_amount(data.amount, "退款金额必须为正数")?;
         let (handled_by, reviewed_by) = validate_actor_pair(data.handled_by, data.reviewed_by)?;
-        let created_by =
-            normalize_required_text(created_by.into(), "创建人不能为空", ACTOR_MAX_LEN, "创建人标识过长")?;
+        let created_by = normalize_created_by(created_by)?;
         validate_original_target(&data.original_receipt_id, &data.original_receivable_entry_id)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -228,10 +226,11 @@ impl CustomerRefund {
     /// # 错误
     /// 非草稿或审批主题版本已经递增时返回错误。
     pub fn ensure_initial_approval_state(&self) -> Result<()> {
-        if self.status != CustomerRefundStatus::Draft || self.approval_subject_version != 0 {
-            return Err(Error::from("客户退款单已经提交或启动过审批"));
-        }
-        Ok(())
+        ensure_initial_approval(
+            self.status == CustomerRefundStatus::Draft,
+            self.approval_subject_version,
+            "客户退款单已经提交或启动过审批",
+        )
     }
 
     /// 更新客户退款草稿。
@@ -252,9 +251,7 @@ impl CustomerRefund {
             return Err(Error::from("非草稿状态的退款不可编辑"));
         }
         if let Some(amount) = update.amount {
-            if amount.to_decimal().is_sign_negative() || amount.to_decimal().is_zero() {
-                return Err(Error::from("退款金额必须为正数"));
-            }
+            ensure_positive_amount(amount, "退款金额必须为正数")?;
             self.amount = amount;
         }
         if let Some(reason_text) = update.reason_text {
@@ -305,8 +302,7 @@ impl CustomerRefund {
         if self.status != CustomerRefundStatus::Draft {
             return Err(Error::from("只有草稿状态的客户退款单可以提交审批"));
         }
-        let next =
-            self.approval_subject_version.checked_add(1).ok_or_else(|| Error::from("审批提交版本溢出"))?;
+        let next = next_approval_version(self.approval_subject_version)?;
         self.approval_subject_version = next;
         self.transition(CustomerRefundStatus::InApproval)?;
         Ok(next)

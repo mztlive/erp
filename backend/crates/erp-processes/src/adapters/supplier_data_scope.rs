@@ -8,9 +8,6 @@ use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
 use erp_identity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
-use erp_identity::entity::organization::OrgTree;
-use erp_identity::entity::organization_change::OrganizationState;
-use erp_identity::repository::OrganizationRepository;
 use erp_identity::service::access_control::consumers::registration;
 use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_supplier::ports::SupplierScopeObject;
@@ -19,6 +16,8 @@ use erp_supplier::{
 };
 use mongodb::Database;
 use persistence_core::Executor;
+
+use super::scope_support::{expand_org_ids, load_organization_state, member_ids};
 
 /// 组合层供应商范围 adapter，持有身份域解析所需依赖。
 #[derive(Clone)]
@@ -98,8 +97,8 @@ impl SupplierDataScopePort for MongoSupplierDataScope {
         include_descendants: bool,
         executor: &mut dyn Executor,
     ) -> erp_supplier::Result<BTreeSet<String>> {
-        let state = organization_state(&self.db, executor).await?;
-        expand_org_units(&state, org_unit_ids, include_descendants)
+        let state = load_organization_state(&self.db, executor).await?;
+        expand_org_ids(&state, org_unit_ids, include_descendants).map_err(map_identity_error)
     }
 
     async fn org_member_ids(
@@ -108,7 +107,7 @@ impl SupplierDataScopePort for MongoSupplierDataScope {
         at: Instant,
         executor: &mut dyn Executor,
     ) -> erp_supplier::Result<Vec<String>> {
-        let state = organization_state(&self.db, executor).await?;
+        let state = load_organization_state(&self.db, executor).await?;
         Ok(member_ids(&state, org_unit_ids, at))
     }
 
@@ -118,45 +117,9 @@ impl SupplierDataScopePort for MongoSupplierDataScope {
         at: Instant,
         executor: &mut dyn Executor,
     ) -> erp_supplier::Result<Option<String>> {
-        let state = organization_state(&self.db, executor).await?;
+        let state = load_organization_state(&self.db, executor).await?;
         Ok(state.own_org(user_id, at).map_err(map_identity_error)?.map(str::to_string))
     }
-}
-
-async fn organization_state(
-    db: &Database,
-    executor: &mut dyn Executor,
-) -> erp_supplier::Result<OrganizationState> {
-    Ok(OrganizationRepository::new(db).state(executor).await?)
-}
-
-fn expand_org_units(
-    state: &OrganizationState,
-    org_ids: &[String],
-    include_descendants: bool,
-) -> erp_supplier::Result<BTreeSet<String>> {
-    let tree = OrgTree::new(&state.units).map_err(map_identity_error)?;
-    let mut expanded = BTreeSet::new();
-    for id in org_ids {
-        expanded.extend(tree.expand(id, include_descendants).map_err(map_identity_error)?);
-    }
-    Ok(expanded)
-}
-
-fn member_ids(state: &OrganizationState, org_ids: &BTreeSet<String>, at: Instant) -> Vec<String> {
-    let mut ids = state
-        .memberships
-        .iter()
-        .filter(|membership| {
-            !membership.base.is_deleted()
-                && org_ids.contains(&membership.org_unit_id)
-                && membership.validity.contains(at)
-        })
-        .map(|membership| membership.user_id.clone())
-        .collect::<Vec<_>>();
-    ids.sort();
-    ids.dedup();
-    ids
 }
 
 fn map_clauses(clauses: &[ScopeClause]) -> erp_supplier::Result<Vec<SupplierResolvedClause>> {

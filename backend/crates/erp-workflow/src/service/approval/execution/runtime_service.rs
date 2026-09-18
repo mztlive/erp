@@ -37,7 +37,6 @@ use crate::ports::{
     ApprovalObjectReadPort, FailClosedObjectReadPort, ObjectFactPort, UpgradeSubjectPort, WorkflowAuditPort,
 };
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
-use crate::service::approval::process_kind::process_kind_of;
 use crate::service::approval::{ApprovalDomainActionPort, FailClosedApprovalActionPort};
 
 /// HTTP 面审批运行服务。
@@ -127,12 +126,11 @@ async fn load_exact_runtime_snapshot(
             Error::ConflictError("审批实例与冻结业务快照不一致".to_string())
         }
     };
-    let document_type =
-        crate::entity::approval_integration::document_type_from_subject_kind(instance.subject.subject_kind())
-            .map_err(|_| mismatch())?;
-    if instance.process_kind != process_kind_of(document_type) {
-        return Err(mismatch());
-    }
+    let document_type = crate::entity::approval_integration::resolve_runtime_document_type(
+        instance.subject.subject_kind(),
+        instance.process_kind,
+    )
+    .map_err(|_| mismatch())?;
     let snapshot = db
         .approval_subject_snapshots()
         .find_by_process_instance_id(&instance.base.id, executor)
@@ -347,9 +345,8 @@ mod tests {
     use super::notifications::{blocked_cancel_notification_recipients, notification_recipients};
     use super::query::{cursor_from_summary, item_from_runtime_read_row, item_from_summary};
     use super::read_auth::{
-        RuntimeReadAuthorizationFacts, RuntimeReadSubject, ensure_mine_page_integrity,
-        management_runtime_read_allowed, mine_execution_ids, mine_instance_ids, mine_runtime_chain_matches,
-        ordinary_runtime_read_allowed, runtime_object_readable, started_runtime_read_allowed,
+        RuntimeReadAuthorizationFacts, RuntimeReadSubject, ensure_mine_page_integrity, mine_execution_ids,
+        mine_instance_ids, mine_runtime_chain_matches, runtime_object_readable,
         task_proves_current_responsibility, unique_by_id,
     };
     use super::tasks::{CompleteOrCloseTasksInput, approval_task_ending};
@@ -546,25 +543,24 @@ mod tests {
             scope_covers: false,
             runtime_admin: false,
         };
-        assert!(!ordinary_runtime_read_allowed(denied));
-        assert!(ordinary_runtime_read_allowed(RuntimeReadAuthorizationFacts { initiator: true, ..denied }));
-        assert!(ordinary_runtime_read_allowed(RuntimeReadAuthorizationFacts {
-            current_responsibility: true,
-            ..denied
-        }));
-        assert!(ordinary_runtime_read_allowed(RuntimeReadAuthorizationFacts {
-            object_readable: true,
-            scope_covers: true,
-            ..denied
-        }));
-        assert!(!ordinary_runtime_read_allowed(RuntimeReadAuthorizationFacts {
-            actor_active: false,
-            initiator: true,
-            current_responsibility: true,
-            object_readable: true,
-            scope_covers: true,
-            ..denied
-        }));
+        assert!(!denied.ordinary_allowed());
+        assert!(RuntimeReadAuthorizationFacts { initiator: true, ..denied }.ordinary_allowed());
+        assert!(RuntimeReadAuthorizationFacts { current_responsibility: true, ..denied }.ordinary_allowed());
+        assert!(
+            RuntimeReadAuthorizationFacts { object_readable: true, scope_covers: true, ..denied }
+                .ordinary_allowed()
+        );
+        assert!(
+            !RuntimeReadAuthorizationFacts {
+                actor_active: false,
+                initiator: true,
+                current_responsibility: true,
+                object_readable: true,
+                scope_covers: true,
+                ..denied
+            }
+            .ordinary_allowed()
+        );
     }
 
     #[test]
@@ -692,30 +688,27 @@ mod tests {
             scope_covers: true,
             runtime_admin: true,
         };
-        assert!(management_runtime_read_allowed(allowed));
-        assert!(started_runtime_read_allowed(allowed));
+        assert!(allowed.management_allowed());
+        assert!(allowed.started_allowed());
         for denied in [
             RuntimeReadAuthorizationFacts { actor_active: false, ..allowed },
             RuntimeReadAuthorizationFacts { object_readable: false, ..allowed },
             RuntimeReadAuthorizationFacts { scope_covers: false, ..allowed },
         ] {
-            assert!(!management_runtime_read_allowed(denied));
+            assert!(!denied.management_allowed());
         }
-        assert!(!started_runtime_read_allowed(RuntimeReadAuthorizationFacts {
-            actor_active: false,
-            ..allowed
-        }));
-        assert!(started_runtime_read_allowed(RuntimeReadAuthorizationFacts {
-            object_readable: false,
-            scope_covers: false,
-            runtime_admin: false,
-            ..allowed
-        }));
-        assert!(!management_runtime_read_allowed(RuntimeReadAuthorizationFacts {
-            runtime_admin: false,
-            ..allowed
-        }));
-        assert!(!started_runtime_read_allowed(RuntimeReadAuthorizationFacts { initiator: false, ..allowed }));
+        assert!(!RuntimeReadAuthorizationFacts { actor_active: false, ..allowed }.started_allowed());
+        assert!(
+            RuntimeReadAuthorizationFacts {
+                object_readable: false,
+                scope_covers: false,
+                runtime_admin: false,
+                ..allowed
+            }
+            .started_allowed()
+        );
+        assert!(!RuntimeReadAuthorizationFacts { runtime_admin: false, ..allowed }.management_allowed());
+        assert!(!RuntimeReadAuthorizationFacts { initiator: false, ..allowed }.started_allowed());
     }
 
     #[test]

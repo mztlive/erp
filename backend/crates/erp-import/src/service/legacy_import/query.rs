@@ -4,7 +4,7 @@ use validator::Validate;
 use super::LegacyImportService;
 use crate::dto::legacy_import::{
     LegacyImportBatchListItem, LegacyImportBatchListParams, LegacyImportBatchListQuery,
-    LegacyImportBatchView, LegacyImportRowListParams, LegacyImportRowView, PageView, SortDir,
+    LegacyImportBatchView, LegacyImportRowListParams, LegacyImportRowView, PageView,
 };
 use crate::entity::legacy_import::{LegacyImportBatch, LegacyImportBatchId};
 use crate::error::{Error, Result};
@@ -37,7 +37,7 @@ impl LegacyImportService {
             self.db.legacy_import_batches().search_legacy_import_batches(&filter, &mut NoTransaction).await?;
         let items = page.items.into_iter().map(LegacyImportBatchListItem::from).collect();
 
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+        Ok(page_view(items, page.total, filter.page, filter.page_size))
     }
 
     /// 查询导入批次详情（含后台任务关联）。
@@ -90,14 +90,14 @@ impl LegacyImportService {
             source_row_key: query.source_row_key,
             page: query.paging.page,
             page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+            sort_by: Some(query.paging.sort_field()),
+            sort_ascending: query.paging.sort_ascending(),
         };
         let page =
             self.db.legacy_import_rows().search_legacy_import_rows(&filter, &mut NoTransaction).await?;
         let items = page.items.into_iter().map(LegacyImportRowView::from).collect();
 
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+        Ok(page_view(items, page.total, filter.page, filter.page_size))
     }
 
     /// 构造导入批次列表筛选条件。
@@ -116,8 +116,8 @@ impl LegacyImportService {
             baseline_date_to: query.baseline_date_to,
             page: query.paging.page,
             page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+            sort_by: Some(query.paging.sort_field()),
+            sort_ascending: query.paging.sort_ascending(),
         }
     }
 
@@ -154,6 +154,20 @@ impl LegacyImportService {
             .ok_or_else(|| Error::NotFound("导入批次不存在".to_string()))?;
         Ok(())
     }
+}
+
+/// 组装契约形状的分页视图（批次/行列表共用；分页口径不变）。
+///
+/// # 参数
+/// * `items` - 当前页数据
+/// * `total` - 满足筛选条件的总数
+/// * `page` - 当前页码
+/// * `page_size` - 单页条数
+///
+/// # 返回
+/// 返回 `items`/`total`/`page`/`page_size` 视图。
+fn page_view<Item>(items: Vec<Item>, total: i64, page: u64, page_size: u32) -> PageView<Item> {
+    PageView { items, total, page, page_size }
 }
 
 impl From<LegacyImportBatchRow> for LegacyImportBatchListItem {
@@ -207,5 +221,19 @@ impl From<LegacyImportRowRow> for LegacyImportRowView {
             version: row.version,
             created_at: row.created_at,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::page_view;
+
+    #[test]
+    fn page_view_carries_items_total_and_paging() {
+        let view = page_view(vec!["row-1"], 7, 2, 20);
+        assert_eq!(view.items, vec!["row-1"]);
+        assert_eq!(view.total, 7);
+        assert_eq!(view.page, 2);
+        assert_eq!(view.page_size, 20);
     }
 }

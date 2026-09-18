@@ -186,13 +186,7 @@ impl RbacService {
         grant: AuthorizedRoleGrant,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let role_ids = grant.role_ids;
-        self.ensure_roles_assignable(&role_ids, executor).await?;
-        let role_keys = role_ids.iter().map(|role_id| role_key(role_id)).collect::<Vec<_>>();
-        self.policy_store
-            .replace_subject_roles(&subject(account_kind, account_id), &role_keys, executor)
-            .await?;
-        Ok(())
+        self.write_subject_roles(account_kind, account_id, grant.role_ids, executor).await
     }
 
     /// 执行系统初始化角色绑定。
@@ -219,6 +213,32 @@ impl RbacService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let role_ids = RoleIdSet::parse(role_ids)?.to_strings();
+        self.write_subject_roles(account_kind, account_id, role_ids, executor).await
+    }
+
+    /// 校验角色有效并覆盖账号角色绑定（授权与系统初始化入口共用该写入）。
+    ///
+    /// 该方法只写数据，不更新本地 Enforcer；调用方必须传入事务执行器，并通过
+    /// [`Self::run_authorized_policy_transaction`] 建立取消安全的事务与刷新边界。
+    ///
+    /// # 参数
+    /// * `account_kind` - 账号类型
+    /// * `account_id` - 账号 ID
+    /// * `role_ids` - 已规范化的完整角色 ID 集合
+    /// * `executor` - 数据访问执行器，必须为事务执行器
+    ///
+    /// # 返回值
+    /// 事务内角色校验和绑定替换成功时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当角色无效或 MongoDB policy 写入失败时返回错误。
+    async fn write_subject_roles(
+        &self,
+        account_kind: AccountKind,
+        account_id: &str,
+        role_ids: Vec<String>,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         self.ensure_roles_assignable(&role_ids, executor).await?;
         let role_keys = role_ids.iter().map(|role_id| role_key(role_id)).collect::<Vec<_>>();
         self.policy_store
@@ -353,15 +373,17 @@ fn authorized_role_grant(
 }
 
 pub(super) fn ensure_permission_subset(actor: &PermissionSet, required: &PermissionSet) -> Result<()> {
-    if !actor.covers(required) {
-        return Err(Error::Forbidden("不能授予超出自身权限范围的角色或权限".to_string()));
-    }
-    Ok(())
+    ensure_covers(actor, required, "不能授予超出自身权限范围的角色或权限")
 }
 
 pub(super) fn ensure_management_subset(actor: &PermissionSet, target: &PermissionSet) -> Result<()> {
-    if !actor.covers(target) {
-        return Err(Error::Forbidden("不能管理权限范围高于自身的账号或角色".to_string()));
+    ensure_covers(actor, target, "不能管理权限范围高于自身的账号或角色")
+}
+
+/// 校验操作人权限覆盖目标集合；两个授权子集检查共用该覆盖语义。
+fn ensure_covers(actor: &PermissionSet, required: &PermissionSet, message: &str) -> Result<()> {
+    if !actor.covers(required) {
+        return Err(Error::Forbidden(message.to_string()));
     }
     Ok(())
 }

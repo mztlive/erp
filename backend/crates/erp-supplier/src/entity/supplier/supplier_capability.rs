@@ -58,6 +58,20 @@ impl CapabilityCode {
     pub fn as_str(&self) -> &'static str {
         super::display::code_of(*self, &CAPABILITY_CODE_DISPLAY)
     }
+
+    /// 由稳定代码反查能力代码。
+    ///
+    /// 映射表见 [`CAPABILITY_CODE_DISPLAY`]（erp-supplier-002）；列表查询的
+    /// 逗号分隔代码经此归一化，不再于 DTO 侧重复分支。
+    ///
+    /// # 参数
+    /// * `code` - 稳定代码（如 `physical`）
+    ///
+    /// # 返回
+    /// 命中时返回对应能力代码，未知代码返回 `None`。
+    pub fn from_code(code: &str) -> Option<Self> {
+        super::display::from_code(code, &CAPABILITY_CODE_DISPLAY)
+    }
 }
 
 /// 能力代码展示映射表（erp-supplier-002）：变体→中文名/稳定代码。

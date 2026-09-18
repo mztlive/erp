@@ -36,15 +36,13 @@ pub(crate) const WAREHOUSE_SKU_POLICIES: &str = <mongodb::Database as WarehouseE
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
-    create_indexes(db, WAREHOUSES, warehouse_indexes()).await?;
-    create_indexes(db, WAREHOUSE_REVISIONS, warehouse_revision_indexes()).await?;
-    create_indexes(db, WAREHOUSE_SKU_POLICIES, warehouse_sku_policy_indexes()).await?;
-    Ok(())
-}
-
-/// 为单个集合创建一组幂等命名索引。
-async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection).create_indexes(indexes).await?;
+    for (collection, indexes) in [
+        (WAREHOUSES, warehouse_indexes()),
+        (WAREHOUSE_REVISIONS, warehouse_revision_indexes()),
+        (WAREHOUSE_SKU_POLICIES, warehouse_sku_policy_indexes()),
+    ] {
+        db.collection::<Document>(collection).create_indexes(indexes).await?;
+    }
     Ok(())
 }
 

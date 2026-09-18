@@ -12,7 +12,7 @@ use super::write::{
     IDEMPOTENCY_AUDIT_PREFIX, WorkItemWriteError, WorkItemWriteOutcome, expected_task_version, required_text,
     work_item_update_error,
 };
-use super::{CloseWorkItemRequest, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemService, dto};
+use super::{CloseWorkItemRequest, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemService};
 use crate::entity::work_item::{WorkItem, WorkItemCloseData};
 use crate::error::{Error, Result};
 use crate::ports::{PreparedWorkflowAudit, W29CloseFact};
@@ -194,18 +194,4 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             },
         }
     }
-}
-
-/// 判断工作项投影是否属于 W29 可受控关闭关系。
-///
-/// # 参数
-/// * `item` - 已授权的工作项投影字段
-///
-/// # 返回
-/// 非审批的集成异常或对账差异任务返回 `true`。
-///
-/// # 错误
-/// 无。
-pub(super) fn is_w29_fields_closable(item: &dto::WorkItemFields) -> bool {
-    item.work_item_type.is_w29_closable(&item.business_object_type, item.approval_node_execution_id.is_some())
 }

@@ -9,7 +9,7 @@ use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 
 use super::CustomerService;
-use super::access::intersect_ids;
+use super::access::{ensure_limit, intersect_ids, sorted_unique_ids};
 use crate::dto::customer::{CustomerListParams, CustomerListQuery, CustomerScope, CustomerView, SortDir};
 use crate::error::{Error, Result};
 use crate::ports::{AccountFactPort, CustomerDataScopePort, CustomerResolvedScope, PartyFactPort};
@@ -171,7 +171,7 @@ async fn run_list_snapshot(
     let (mut context, scope, authorized, as_of, no_scope) = resolve_list_authorized(&deps, executor).await?;
     let filter = build_account_filter(&deps, authorized).await?;
     let versions = deps.db.customer_accounts().query_versions(&filter, executor).await?;
-    ensure_versions_bounded(&versions)?;
+    ensure_limit(versions.len(), "客户查询超过上限，请收窄组织或负责人条件")?;
     apply_version_fingerprint(&mut context, &versions);
     if !hydrate {
         return Ok(CustomerSnapshot {
@@ -289,23 +289,6 @@ async fn load_owner_options(
     deps.accounts.filter_options(&owner_ids).await
 }
 
-/// 校验版本集合有界（erp-customer-003）。
-///
-/// # 参数
-/// * `versions` - 客户身份与版本集合
-///
-/// # 返回
-/// 未超限时成功。
-///
-/// # 错误
-/// 超过一万时返回校验错误。
-fn ensure_versions_bounded(versions: &[CustomerVersion]) -> Result<()> {
-    if versions.len() > 10_000 {
-        return Err(Error::ValidationError("客户查询超过上限，请收窄组织或负责人条件".into()));
-    }
-    Ok(())
-}
-
 /// 将版本指纹拼接到基线范围版本（erp-customer-003）。
 ///
 /// # 参数
@@ -316,6 +299,46 @@ fn apply_version_fingerprint(context: &mut CustomerResolvedScope, versions: &[Cu
         &context.scope_version,
         versions.iter().map(|version| (version.id.as_str(), version.version)),
     );
+}
+
+/// 范围版本指纹的 FNV-1a 64 位封装（erp-customer-004）。
+///
+/// `DefaultHasher` 跨进程不保证稳定，重启后同授权可能算出不同版本并触发
+/// 无谓的 `DATA_SCOPE_CHANGED`。本结构固化字段写入顺序，调用方不得自行
+/// 拼接哈希状态。
+struct ScopeFingerprint(u64);
+
+impl ScopeFingerprint {
+    /// 以 FNV-1a 偏移基数创建空指纹。
+    fn new() -> Self {
+        Self(FNV_OFFSET_BASIS)
+    }
+
+    /// 写入字符串字节并以 `0xff` 分隔。
+    fn feed_str(&mut self, value: &str) {
+        for byte in value.as_bytes() {
+            self.feed_byte(*byte);
+        }
+        self.feed_byte(0xff);
+    }
+
+    /// 写入单个字节。
+    fn feed_byte(&mut self, byte: u8) {
+        self.0 ^= u64::from(byte);
+        self.0 = self.0.wrapping_mul(FNV_PRIME);
+    }
+
+    /// 写入小端版本字节。
+    fn feed_version(&mut self, version: u64) {
+        for byte in version.to_le_bytes() {
+            self.feed_byte(byte);
+        }
+    }
+
+    /// 拼接到基线版本，返回 `{base}:{hex指纹}`。
+    fn finish(self, base: &str) -> String {
+        format!("{base}:{:016x}", self.0)
+    }
 }
 
 /// 用确定性哈希计算范围版本指纹并拼接到基线版本（erp-customer-004）。
@@ -340,17 +363,17 @@ pub(super) fn fingerprint_scope_version(
     history: &[String],
     org_owned: &[(Vec<String>, Vec<String>)],
 ) -> String {
-    let mut hash = FNV_OFFSET_BASIS;
+    let mut fingerprint = ScopeFingerprint::new();
     for part in owned.iter().chain(collaborating.iter()).chain(history.iter()) {
-        feed_str(&mut hash, part);
+        fingerprint.feed_str(part);
     }
     for (orgs, customers) in org_owned {
         for part in orgs.iter().chain(customers.iter()) {
-            feed_str(&mut hash, part);
+            fingerprint.feed_str(part);
         }
-        feed_byte(&mut hash, 0);
+        fingerprint.feed_byte(0);
     }
-    format!("{base}:{hash:016x}")
+    fingerprint.finish(base)
 }
 
 /// 用确定性哈希计算客户身份版本指纹并拼接到基线版本（erp-customer-004）。
@@ -365,34 +388,18 @@ pub(super) fn fingerprint_scope_version(
 /// # 返回
 /// 返回 `{base}:{hex指纹}` 格式的范围版本。
 fn fingerprint_versions<'a>(base: &str, versions: impl IntoIterator<Item = (&'a str, u64)>) -> String {
-    let mut hash = FNV_OFFSET_BASIS;
+    let mut fingerprint = ScopeFingerprint::new();
     for (id, version) in versions {
-        feed_str(&mut hash, id);
-        for byte in version.to_le_bytes() {
-            feed_byte(&mut hash, byte);
-        }
+        fingerprint.feed_str(id);
+        fingerprint.feed_version(version);
     }
-    format!("{base}:{hash:016x}")
+    fingerprint.finish(base)
 }
 
 /// FNV-1a 64 位偏移基数。
 const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
 /// FNV-1a 64 位素数。
 const FNV_PRIME: u64 = 0x100000001b3;
-
-/// 向 FNV-1a 状态写入字符串字节并以 `0xff` 分隔（erp-customer-004）。
-fn feed_str(hash: &mut u64, value: &str) {
-    for byte in value.as_bytes() {
-        feed_byte(hash, *byte);
-    }
-    feed_byte(hash, 0xff);
-}
-
-/// 向 FNV-1a 状态写入单个字节（erp-customer-004）。
-fn feed_byte(hash: &mut u64, byte: u8) {
-    *hash ^= u64::from(byte);
-    *hash = hash.wrapping_mul(FNV_PRIME);
-}
 
 /// 构造可被 HTTP 边界识别的范围变化冲突。
 ///
@@ -550,9 +557,7 @@ async fn apply_org_unit_filter(
         .expand_org_units(org_ids.as_slice(), query.include_descendants.unwrap_or(false), executor)
         .await?;
     let members = data_scope.org_member_ids(&expanded, context.as_of, executor).await?;
-    if members.len() > 10_000 {
-        return Err(Error::ValidationError("组织成员超过查询上限，请收窄组织筛选".into()));
-    }
+    ensure_limit(members.len(), "组织成员超过查询上限，请收窄组织筛选")?;
     Ok(Some(current_owner_customer_ids(db, ids.as_deref(), &members, as_of, executor).await?))
 }
 
@@ -611,9 +616,7 @@ fn assignment_filter(scope: &CustomerReadScope, requested: CustomerScope) -> Opt
         CustomerScope::Assigned => {
             let mut ids = scope.owned_customer_ids.clone();
             ids.extend(scope.collaborative_customer_ids.iter().cloned());
-            ids.sort();
-            ids.dedup();
-            Some(ids)
+            Some(sorted_unique_ids(ids))
         },
     }
 }
@@ -734,5 +737,18 @@ mod tests {
         assert!(assignment_filter(&scope, CustomerScope::AllAuthorized).is_none());
         assert_eq!(assignment_filter(&scope, CustomerScope::Mine), Some(vec!["c-own".into()]));
         assert_eq!(assignment_filter(&scope, CustomerScope::Collaborating), Some(vec!["c-collab".into()]));
+    }
+
+    #[test]
+    fn fingerprint_is_deterministic_and_sensitive_to_inputs() {
+        let first = fingerprint_scope_version("v1", &["c-1".to_string()], &[], &[], &[]);
+        let second = fingerprint_scope_version("v1", &["c-1".to_string()], &[], &[], &[]);
+        assert_eq!(first, second);
+        assert!(first.starts_with("v1:"));
+        assert_ne!(first, fingerprint_scope_version("v1", &["c-2".to_string()], &[], &[], &[]));
+        let versions = [("c-1", 1_u64), ("c-2", 2_u64)];
+        let fingerprinted = fingerprint_versions("v1", versions);
+        assert!(fingerprinted.starts_with("v1:"));
+        assert_ne!(fingerprinted, fingerprint_versions("v1", [("c-1", 1_u64)]));
     }
 }

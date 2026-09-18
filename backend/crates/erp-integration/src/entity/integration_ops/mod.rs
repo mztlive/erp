@@ -23,6 +23,7 @@ mod decision_policy;
 mod direct_conclusion;
 mod error_classification;
 mod evidence_reference;
+pub(crate) mod handler;
 pub(crate) mod inbox_message;
 pub(crate) mod integration_error_task;
 pub(crate) mod reconciliation_difference;

@@ -12,10 +12,10 @@ use erp_core::Result;
 use erp_core::validation::normalize_required_text;
 use serde::{Deserialize, Serialize};
 
+use super::CONTRACT_NO_MAX_LEN;
+
 /// 客户名称最大长度。
 const CUSTOMER_NAME_MAX_LEN: usize = 128;
-/// 合同编号最大长度。
-const CONTRACT_NO_MAX_LEN: usize = 64;
 /// 主体名称最大长度。
 const PARTY_NAME_MAX_LEN: usize = 128;
 /// 付款条件代码最大长度。

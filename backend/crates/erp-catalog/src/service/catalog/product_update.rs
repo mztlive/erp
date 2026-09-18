@@ -2,8 +2,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_core::common::time::BusinessDate;
-use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
@@ -18,10 +16,8 @@ use crate::entity::catalog::product::Product;
 use crate::entity::catalog::product_revision::{ProductRevision, ProductRevisionData};
 use crate::entity::catalog::product_revision_media::{MediaRole, ProductRevisionMedia};
 use crate::entity::catalog::sku::{Sku, SkuEditAction};
-use crate::entity::catalog::sku_revision::{SkuRevision, SkuRevisionData};
 use crate::entity::catalog::{
-    EnableStatus, ProductId, ProductRevisionId, SkuId, SkuRevisionId, SpecificationSignatureSet,
-    next_revision_no,
+    EnableStatus, ProductId, ProductRevisionId, SkuId, SpecificationSignatureSet, next_revision_no,
 };
 use crate::error::Result;
 use crate::ports::{EmptyPendingAttachments, PendingAttachmentBatch};
@@ -325,8 +321,8 @@ impl CatalogService {
             self.ensure_barcode_available(&sku_input.barcode, Some(existing_sku.base.id.as_str())).await?;
             let sku_id = SkuId::new(existing_sku.base.id.clone());
             let revision_no = self.next_sku_revision_no(&sku_id).await?;
-            let revision = self.build_sku_revision(
-                &sku_id,
+            let revision = super::sku_edit::sku_revision_for_input(
+                sku_id,
                 revision_no,
                 line_ctx.effective_from,
                 line_ctx.effective_to,
@@ -418,48 +414,6 @@ impl CatalogService {
                 })
             })
             .await
-    }
-
-    /// 构造既有 SKU 的追加修订（Keep/Reactivate 动作）。
-    ///
-    /// # 参数
-    /// * `sku_id` - 既有 SKU
-    /// * `revision_no` - 下一个修订序号
-    /// * `effective_from` / `effective_to` - 生效区间
-    /// * `input` - SKU 输入行（含独立 SKU 名称）
-    ///
-    /// # 返回
-    /// 返回 SKU 修订实体。
-    ///
-    /// # 错误
-    /// 实体校验失败时返回错误。
-    fn build_sku_revision(
-        &self,
-        sku_id: &SkuId,
-        revision_no: u32,
-        effective_from: BusinessDate,
-        effective_to: Option<BusinessDate>,
-        input: &ProductSkuInput,
-    ) -> Result<SkuRevision> {
-        Ok(SkuRevision::new(
-            SkuRevisionId::new(next_id()),
-            SkuRevisionData {
-                sku_id: sku_id.clone(),
-                revision_no,
-                name: input.name.clone(),
-                description: None,
-                specification: None,
-                barcode: input.barcode.clone(),
-                source_main_image_asset_id: input.main_image_asset_id.clone(),
-                weight_kg: input.weight_kg,
-                volume_m3: input.volume_m3,
-                sales_visible_price_gross: input.sales_visible_price_gross,
-                market_price: input.market_price,
-                status: EnableStatus::Active,
-                effective_from,
-                effective_to,
-            },
-        )?)
     }
 
     /// 计算某商品已有修订的最大序号 + 1。

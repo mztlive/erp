@@ -153,8 +153,7 @@ impl CommandScope {
         domain: &str,
         payload: &CanonicalCommandPayload,
     ) -> ModelResult<Self> {
-        validate_domain(domain)?;
-        Ok(Self(versioned_hash(COMMAND_SCOPE_NAMESPACE, command_kind, domain, payload)))
+        Ok(Self(hashed_identity_value(COMMAND_SCOPE_NAMESPACE, command_kind, domain, payload)?))
     }
 
     /// 返回稳定持久化字符串。
@@ -193,8 +192,7 @@ impl CommandDigest {
         domain: &str,
         payload: &CanonicalCommandPayload,
     ) -> ModelResult<Self> {
-        validate_domain(domain)?;
-        Ok(Self(versioned_hash(COMMAND_DIGEST_NAMESPACE, command_kind, domain, payload)))
+        Ok(Self(hashed_identity_value(COMMAND_DIGEST_NAMESPACE, command_kind, domain, payload)?))
     }
 
     /// 返回稳定持久化字符串。
@@ -276,6 +274,17 @@ fn validate_domain(domain: &str) -> ModelResult<()> {
         return Err(ModelError::InvalidField("命令摘要域过长"));
     }
     Ok(())
+}
+
+/// 校验命令域并按命名空间计算版本化哈希。作用域与摘要共用本规则，仅命名空间不同。
+fn hashed_identity_value(
+    namespace: &[u8],
+    command_kind: ApprovalCommandKind,
+    domain: &str,
+    payload: &CanonicalCommandPayload,
+) -> ModelResult<String> {
+    validate_domain(domain)?;
+    Ok(versioned_hash(namespace, command_kind, domain, payload))
 }
 
 fn versioned_hash(

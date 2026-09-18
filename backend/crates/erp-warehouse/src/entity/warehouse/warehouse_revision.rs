@@ -182,14 +182,17 @@ impl WarehouseRevision {
 
     /// 判断修订当前是否处于生效区间（不含结束日）。
     ///
+    /// 半开区间语义收敛到 [`WarehouseSkuPolicyPeriod::contains`]；非法区间恒返回 `false`
+    ///（退化区间在任何业务日都不生效，与原逐字段比较一致）。
+    ///
     /// # 参数
     /// * `business_day` - 当前业务日
     ///
     /// # 返回
     /// 业务日落在 `[effective_from, effective_to)` 时返回 `true`。
     pub fn is_effective_on(&self, business_day: BusinessDate) -> bool {
-        business_day >= self.effective_from
-            && self.effective_to.is_none_or(|effective_to| business_day < effective_to)
+        WarehouseSkuPolicyPeriod::new(self.effective_from, self.effective_to)
+            .is_ok_and(|period| period.contains(business_day))
     }
 }
 

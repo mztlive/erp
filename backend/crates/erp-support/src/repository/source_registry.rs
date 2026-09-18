@@ -19,7 +19,7 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mo
 use serde::{Deserialize, Serialize};
 
 use super::extensions::SourceRegistryExt;
-use super::page::search_projected_page;
+use super::page::{search_projected_page, sort_direction};
 use crate::entity::source_registry::{
     ExternalIdKey, ExternalIdentityMap, ExternalIdentityTarget, ExternalObjectType, MappingStatus,
     RelationRole, SourceSystem, SourceSystemId, SourceSystemStatus, SourceSystemType, TargetStatus,
@@ -682,8 +682,7 @@ fn active_identity_map_filter(
 /// # 返回
 /// 返回排序条件文档。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
-    let direction = if sort_ascending { 1 } else { -1 };
-    doc! { sort_by.unwrap_or("created_at"): direction }
+    doc! { sort_by.unwrap_or("created_at"): sort_direction(sort_ascending) }
 }
 
 /// 来源系统列表投影字段。

@@ -80,7 +80,7 @@ impl From<persistence_core::Error> for Error {
     fn from(error: persistence_core::Error) -> Self {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
-                Self::ConflictError(duplicate_key_conflict_message(&error))
+                Self::ConflictError(duplicate_index_conflict_message(error.duplicate_index_name()))
             },
             persistence_core::Error::OptimisticLockingError => {
                 Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
@@ -92,11 +92,6 @@ impl From<persistence_core::Error> for Error {
             other => Self::RepositoryError(other),
         }
     }
-}
-
-/// 将唯一键冲突映射为面向用户的冲突提示。
-fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
-    duplicate_index_conflict_message(error.duplicate_index_name())
 }
 
 /// 将导入域唯一索引名称映射为面向用户的冲突提示。

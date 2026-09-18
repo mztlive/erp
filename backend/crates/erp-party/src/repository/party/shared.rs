@@ -57,12 +57,37 @@ pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&
     doc! { field: direction }
 }
 
+/// 构造从属事实默认优先的稳定排序（erp-party-012）。
+///
+/// 四个从属事实的 `list_current_on`/`list_by_party` 共用同一排序语义；
+/// 排序文档唯一来源，避免默认优先与创建时间顺序漂移。
+///
+/// # 返回
+/// 返回默认标记优先、同组内最新创建优先的排序文档。
+pub(super) fn default_first_sort() -> Document {
+    doc! { "is_default": -1, "created_at": -1 }
+}
+
+/// 构造同一主体默认标记行的查询条件（erp-party-012）。
+///
+/// 四个从属事实的 `clear_other_default_marks` 共用同一过滤语义；调用方
+/// 在同一事务执行器内逐行清除，与主写入组成原子边界。
+///
+/// # 参数
+/// * `party_id` - 所属 Party ID
+///
+/// # 返回
+/// 返回限定同一主体默认行的查询文档。
+pub(super) fn party_default_marks_filter(party_id: &PartyId) -> Document {
+    doc! { "party_id": party_id.to_string(), "is_default": true }
+}
+
 #[cfg(test)]
 mod tests {
     use erp_core::common::time::BusinessDate;
     use mongodb::bson::doc;
 
-    use super::{active_fact_window_filter, sort_doc};
+    use super::{active_fact_window_filter, default_first_sort, party_default_marks_filter, sort_doc};
 
     #[test]
     fn active_fact_window_is_left_closed_and_right_open() {
@@ -94,5 +119,15 @@ mod tests {
         );
         assert_eq!(sort_doc(Some("party_no"), true, &["created_at", "party_no"]), doc! { "party_no": 1 });
         assert_eq!(sort_doc(None, false, &["created_at"]), doc! { "created_at": -1 });
+    }
+
+    #[test]
+    fn subordinate_fact_sort_and_default_filter_share_single_source() {
+        assert_eq!(default_first_sort(), doc! { "is_default": -1, "created_at": -1 });
+        let party_id = erp_core::ids::PartyId::new("party-1");
+        assert_eq!(
+            party_default_marks_filter(&party_id),
+            doc! { "party_id": "party-1", "is_default": true }
+        );
     }
 }

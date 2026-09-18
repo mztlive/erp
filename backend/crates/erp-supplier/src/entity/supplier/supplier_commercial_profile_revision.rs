@@ -44,36 +44,43 @@ pub enum ReconciliationCycle {
 impl ReconciliationCycle {
     /// 返回周期的中文展示名。
     ///
+    /// 映射表见 [`RECONCILIATION_CYCLE_DISPLAY`]（erp-supplier-002）。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
     pub fn label(&self) -> &'static str {
-        match self {
-            Self::Daily => "日",
-            Self::Weekly => "周",
-            Self::Monthly => "月",
-            Self::Quarterly => "季",
-            Self::Yearly => "年",
-            Self::HalfYearly => "半年",
-            Self::None => "无需周期对账",
-        }
+        super::display::label_of(*self, &RECONCILIATION_CYCLE_DISPLAY)
     }
 
     /// 返回周期的稳定代码。
     ///
+    /// 映射表见 [`RECONCILIATION_CYCLE_DISPLAY`]（erp-supplier-002）。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
     pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Daily => "daily",
-            Self::Weekly => "weekly",
-            Self::Monthly => "monthly",
-            Self::Quarterly => "quarterly",
-            Self::Yearly => "yearly",
-            Self::HalfYearly => "half_yearly",
-            Self::None => "none",
-        }
+        super::display::code_of(*self, &RECONCILIATION_CYCLE_DISPLAY)
     }
 }
+
+/// 对账周期展示映射表（erp-supplier-002）：变体→中文名/稳定代码。
+const RECONCILIATION_CYCLE_DISPLAY: [super::display::DisplayEntry<ReconciliationCycle>; 7] = [
+    super::display::DisplayEntry { variant: ReconciliationCycle::Daily, label: "日", code: "daily" },
+    super::display::DisplayEntry { variant: ReconciliationCycle::Weekly, label: "周", code: "weekly" },
+    super::display::DisplayEntry { variant: ReconciliationCycle::Monthly, label: "月", code: "monthly" },
+    super::display::DisplayEntry {
+        variant: ReconciliationCycle::Quarterly,
+        label: "季",
+        code: "quarterly",
+    },
+    super::display::DisplayEntry { variant: ReconciliationCycle::Yearly, label: "年", code: "yearly" },
+    super::display::DisplayEntry {
+        variant: ReconciliationCycle::HalfYearly,
+        label: "半年",
+        code: "half_yearly",
+    },
+    super::display::DisplayEntry { variant: ReconciliationCycle::None, label: "无需周期对账", code: "none" },
+];
 
 /// 发票类型（§6.2：增值税专用发票、增值税普通发票、电子发票等受控代码）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -90,28 +97,43 @@ pub enum InvoiceType {
 impl InvoiceType {
     /// 返回类型的中文展示名。
     ///
+    /// 映射表见 [`INVOICE_TYPE_DISPLAY`]（erp-supplier-002）。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
     pub fn label(&self) -> &'static str {
-        match self {
-            Self::VatSpecial => "增值税专用发票",
-            Self::VatNormal => "增值税普通发票",
-            Self::Electronic => "电子发票",
-        }
+        super::display::label_of(*self, &INVOICE_TYPE_DISPLAY)
     }
 
     /// 返回类型的稳定代码。
     ///
+    /// 映射表见 [`INVOICE_TYPE_DISPLAY`]（erp-supplier-002）。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
     pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::VatSpecial => "vat_special",
-            Self::VatNormal => "vat_normal",
-            Self::Electronic => "electronic",
-        }
+        super::display::code_of(*self, &INVOICE_TYPE_DISPLAY)
     }
 }
+
+/// 发票类型展示映射表（erp-supplier-002）：变体→中文名/稳定代码。
+const INVOICE_TYPE_DISPLAY: [super::display::DisplayEntry<InvoiceType>; 3] = [
+    super::display::DisplayEntry {
+        variant: InvoiceType::VatSpecial,
+        label: "增值税专用发票",
+        code: "vat_special",
+    },
+    super::display::DisplayEntry {
+        variant: InvoiceType::VatNormal,
+        label: "增值税普通发票",
+        code: "vat_normal",
+    },
+    super::display::DisplayEntry {
+        variant: InvoiceType::Electronic,
+        label: "电子发票",
+        code: "electronic",
+    },
+];
 
 /// 商务结算版本创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -267,6 +289,31 @@ impl SupplierCommercialProfileRevision {
             .map(ToOwned::to_owned)
             .or_else(|| split_encoded_payment_term_snapshot(&self.payment_term_snapshot).business_category)
     }
+}
+
+/// 收集商务版本引用的签约与付款主体 ID。
+///
+/// 排序去重后映射为 [`PartyId`]，供列表/详情批量读取法定名称；
+/// Service 与仓储共用本实现，不再各自保留去重逻辑。
+///
+/// # 参数
+/// * `profiles` - 商务资料版本
+///
+/// # 返回
+/// 返回去重后的主体 ID，供批量读取法定名称。
+///
+/// # 错误
+/// 无。
+pub(crate) fn commercial_party_ids(profiles: &[SupplierCommercialProfileRevision]) -> Vec<PartyId> {
+    let mut ids: Vec<String> = profiles
+        .iter()
+        .flat_map(|profile| {
+            [profile.signing_entity_party_id.to_string(), profile.payment_entity_party_id.to_string()]
+        })
+        .collect();
+    ids.sort();
+    ids.dedup();
+    ids.into_iter().map(|id| PartyId::new(&id)).collect()
 }
 
 /// 把付款条件快照与经营类目规范成两个独立字段。

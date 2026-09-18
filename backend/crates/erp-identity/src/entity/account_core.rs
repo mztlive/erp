@@ -32,6 +32,39 @@ pub enum AccountStatus {
     Archived,
 }
 
+/// 已存在超级管理员的账号状态（初始化路径的纯状态分类）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ExistingSuperAdminState {
+    Active,
+    Inactive,
+    Deleted,
+}
+
+impl ExistingSuperAdminState {
+    /// 根据软删除与登录状态确定恢复语义。
+    ///
+    /// # 参数
+    /// * `is_deleted` - 账号是否已软删除
+    /// * `is_active` - 账号状态是否允许登录
+    ///
+    /// # 返回值
+    /// 返回对应的已存在账号状态。
+    pub(crate) fn from_state(is_deleted: bool, is_active: bool) -> Self {
+        if is_deleted {
+            return Self::Deleted;
+        }
+        if is_active { Self::Active } else { Self::Inactive }
+    }
+
+    /// 返回初始化是否恢复了不可登录或已删除账号。
+    ///
+    /// # 返回值
+    /// 非启用状态恢复为启用时返回 `true`。
+    pub(crate) fn reactivates(self) -> bool {
+        !matches!(self, Self::Active)
+    }
+}
+
 impl AccountStatus {
     /// 判断状态是否可登录。
     ///

@@ -26,13 +26,37 @@ pub use filter::matches_filter;
 pub use indexes::assert_indexes;
 pub use jwt::mint_jwt;
 pub use seed::seed_admin_account;
+use uuid::Uuid;
+
+/// 测试 MongoDB 连接串的环境变量名。
+pub(crate) const TEST_MONGO_URI_ENV: &str = "ERP_TEST_MONGO_URI";
+
+/// 读取测试 MongoDB 连接串。
+///
+/// 未设置或仅空白时返回 `None`，供存在性判断与连接复用同一口径。
+pub(crate) fn test_mongo_uri() -> Option<String> {
+    let uri = std::env::var(TEST_MONGO_URI_ENV).ok()?;
+    (!uri.trim().is_empty()).then_some(uri)
+}
+
+/// 生成随机十六进制短串。
+///
+/// # 参数
+/// * `len` - 截取长度（超过 32 时按 32 处理，保证不越界 panic）
+///
+/// # 返回值
+/// 返回 UUID v4 十六进制形式的前 `len` 个字符。
+pub(crate) fn uuid_hex_n(len: usize) -> String {
+    let hex = Uuid::new_v4().simple().to_string();
+    hex[..len.min(hex.len())].to_string()
+}
 
 /// 判断是否具备真实 MongoDB（单节点副本集）环境。
 ///
 /// # 返回值
 /// `ERP_TEST_MONGO_URI` 已设置且非空时返回 `true`。
 pub fn mongo_env_present() -> bool {
-    std::env::var("ERP_TEST_MONGO_URI").map(|uri| !uri.trim().is_empty()).unwrap_or(false)
+    test_mongo_uri().is_some()
 }
 
 /// 需要真实 MongoDB 的集成测试门控宏使用的统一跳过提示前缀。
@@ -66,14 +90,9 @@ macro_rules! require_mongo {
     (async move $body:block) => {
         $crate::require_mongo!(async { $body })
     };
-    (async $body:block) => {{
-        if $crate::mongo_env_present() {
-            (async $body).await
-        } else {
-            ::std::eprintln!("{}: {}", $crate::MONGO_SKIP_HINT, ::std::module_path!());
-            return;
-        }
-    }};
+    (async $body:block) => {
+        $crate::require_mongo!((async $body).await)
+    };
     ($body:expr) => {{
         if $crate::mongo_env_present() {
             $body

@@ -1,11 +1,11 @@
 //! 商品范围列表与交接 DTO。
 
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use application_core::normalized_text;
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::common::{PageParams, non_blank, normalize_sort, validate_sales_price_range};
+use super::common::{PageParams, non_blank, paging_params, validate_sales_price_range};
 use super::product::{PRODUCT_SORT_FIELDS, ProductView};
 use crate::entity::catalog::{EnableStatus, ProductKind, ProductListingStatus, SkuCoverageStatus};
 use crate::error::Result;
@@ -174,7 +174,6 @@ impl ProductListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ProductListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, PRODUCT_SORT_FIELDS)?;
         validate_sales_price_range(self.sales_price_min, self.sales_price_max)?;
         Ok(ProductListQuery {
             owner_user_ids: self.owner_user_ids.clone(),
@@ -192,12 +191,13 @@ impl ProductListParams {
             supply_coverage: self.supply_coverage,
             sales_price_min: self.sales_price_min,
             sales_price_max: self.sales_price_max,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: paging_params(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                PRODUCT_SORT_FIELDS,
+            )?,
         })
     }
 }

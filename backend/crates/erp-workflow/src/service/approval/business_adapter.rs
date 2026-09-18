@@ -208,9 +208,11 @@ pub fn spec_from_policy(policy: &ProcessRequiredApprovalPolicy) -> Result<Approv
 pub fn ensure_adapter_spec_complete(spec: &ApprovalAdapterSpec) -> Result<()> {
     if spec.subject_snapshot_fields.is_empty()
         || spec.owner_role.as_str().is_empty()
-        || spec.on_approval_start == spec.on_final_approve
-        || spec.on_approval_start == spec.cancel_action
-        || spec.on_final_approve == spec.cancel_action
+        || !ApprovalDomainAction::are_distinct(
+            spec.on_approval_start,
+            spec.on_final_approve,
+            spec.cancel_action,
+        )
         || spec.process_kind != process_kind_of(spec.document_type)
     {
         return Err(Error::Internal("审批适配器规格不完整".to_string()));

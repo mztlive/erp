@@ -7,7 +7,7 @@ use application_core::normalized_text;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::{PageParams, non_blank, normalize_sort};
+use super::{PageParams, non_blank};
 /// 契约分页形状与排序方向沿用 `dto` 共享定义，经本模块的既有路径继续可用。
 pub use super::{PageView, SortDir};
 use crate::entity::bulk_job::{
@@ -123,12 +123,17 @@ impl BulkSelectionSnapshotListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<BulkSelectionSnapshotListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, SNAPSHOT_SORT_FIELDS)?;
         Ok(BulkSelectionSnapshotListQuery {
             selection_type: self.selection_type,
             status: self.status,
             created_by: normalized_text(self.created_by.as_deref()),
-            paging: PageParams::normalized(self.page, self.page_size, sort_by, sort_dir),
+            paging: PageParams::resolve(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                SNAPSHOT_SORT_FIELDS,
+            )?,
         })
     }
 }
@@ -386,14 +391,19 @@ impl BackgroundJobListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<BackgroundJobListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, BACKGROUND_JOB_SORT_FIELDS)?;
         Ok(BackgroundJobListQuery {
             job_no: normalized_text(self.job_no.as_deref()),
             job_type: self.job_type,
             domain_job_type: normalized_text(self.domain_job_type.as_deref()),
             status: self.status,
             requested_by: normalized_text(self.requested_by.as_deref()),
-            paging: PageParams::normalized(self.page, self.page_size, sort_by, sort_dir),
+            paging: PageParams::resolve(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                BACKGROUND_JOB_SORT_FIELDS,
+            )?,
         })
     }
 }
@@ -560,7 +570,8 @@ impl CancelBackgroundJobFailure {
 mod tests {
     use validator::Validate;
 
-    use super::{BackgroundJobListParams, BulkSelectionSnapshotListParams, SortDir, normalize_sort};
+    use super::{BackgroundJobListParams, BulkSelectionSnapshotListParams, SortDir};
+    use crate::dto::normalize_sort;
     use crate::entity::bulk_job::{JobStatus, JobType, SelectionStatus, SelectionType};
 
     #[test]

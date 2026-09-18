@@ -15,6 +15,7 @@ mod offering_data_scope;
 mod organization;
 mod party;
 mod purchase_data_scope;
+mod scope_support;
 mod selection_data_scope;
 mod settlement_data_scope;
 mod supplier;

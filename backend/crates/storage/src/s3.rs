@@ -1,16 +1,17 @@
 use std::path::Path;
 use std::time::Duration;
 
-use aws_sdk_s3::Client;
 use aws_sdk_s3::config::{Credentials, Region};
 use aws_sdk_s3::error::SdkError;
 use aws_sdk_s3::operation::get_object::GetObjectError;
 use aws_sdk_s3::operation::head_object::HeadObjectError;
+use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
+use aws_sdk_s3::{Client, Config};
 use url::Url;
 
-use crate::path::object_key_path;
+use crate::path::{is_blank_or_padded, normalize_prefix, object_key_path};
 use crate::{Error, Result};
 
 /// 分片序号下限（S3 取值 1 起）。
@@ -155,6 +156,22 @@ pub struct UploadedPart {
     pub etag: String,
 }
 
+impl UploadedPart {
+    // S3 返回的 ETag 可能带引号，合并与校验统一去引号后使用。
+    fn normalized_etag(&self) -> &str {
+        self.etag.trim_matches('"')
+    }
+
+    // 分片序号与 ETag 的纯规则校验，与预签名同口径。
+    fn validate(&self) -> Result<()> {
+        validate_part_number(self.part_number)?;
+        if self.normalized_etag().trim().is_empty() {
+            return Err(Error::S3("分片 ETag 不能为空".to_string()));
+        }
+        Ok(())
+    }
+}
+
 impl S3Storage {
     /// 根据显式凭证和 endpoint 配置创建 S3 存储。
     ///
@@ -176,7 +193,7 @@ impl S3Storage {
             None,
             "erp-config",
         );
-        let mut sdk_config = aws_sdk_s3::Config::builder()
+        let mut sdk_config = Config::builder()
             .behavior_version_latest()
             .region(Region::new(config.region))
             .credentials_provider(credentials)
@@ -336,11 +353,9 @@ impl S3Storage {
         part_number: i32,
         expires_in: Duration,
     ) -> Result<String> {
-        if !(MIN_PART_NUMBER..=MAX_PART_NUMBER).contains(&part_number) {
-            return Err(Error::S3("分片序号必须在 1-10000 之间".to_string()));
-        }
+        validate_part_number(part_number)?;
         let key = self.object_key(path.as_ref())?;
-        let config = aws_sdk_s3::presigning::PresigningConfig::expires_in(expires_in)
+        let config = PresigningConfig::expires_in(expires_in)
             .map_err(|error| Error::S3(format!("预签名有效期非法: {error}")))?;
         let presigned = self
             .client
@@ -382,10 +397,7 @@ impl S3Storage {
         let completed = parts
             .into_iter()
             .map(|part| {
-                CompletedPart::builder()
-                    .part_number(part.part_number)
-                    .e_tag(part.etag.trim_matches('"'))
-                    .build()
+                CompletedPart::builder().part_number(part.part_number).e_tag(part.normalized_etag()).build()
             })
             .collect::<Vec<_>>();
         let upload = CompletedMultipartUpload::builder().set_parts(Some(completed)).build();
@@ -488,7 +500,7 @@ fn validate_config(config: &S3StorageConfig) -> Result<(Url, Option<String>)> {
         ("access_key_id", config.access_key_id.as_str()),
         ("secret_access_key", config.secret_access_key.as_str()),
     ] {
-        if value.trim().is_empty() || value.trim() != value {
+        if is_blank_or_padded(value) {
             return Err(Error::InvalidConfig(format!("S3 {name} 不能为空或包含首尾空白")));
         }
     }
@@ -496,7 +508,7 @@ fn validate_config(config: &S3StorageConfig) -> Result<(Url, Option<String>)> {
     if config.endpoint.as_deref().is_some_and(|endpoint| !is_valid_endpoint(endpoint)) {
         return Err(Error::InvalidConfig("S3 endpoint 必须使用 http:// 或 https:// 绝对地址".to_string()));
     }
-    if config.session_token.as_ref().is_some_and(|token| token.trim().is_empty() || token.trim() != token) {
+    if config.session_token.as_ref().is_some_and(|token| is_blank_or_padded(token)) {
         return Err(Error::InvalidConfig("S3 session_token 不能为空或包含首尾空白".to_string()));
     }
 
@@ -515,24 +527,29 @@ fn validate_complete_parts(upload_id: &str, parts: &[UploadedPart]) -> Result<()
         return Err(Error::S3("分片列表不能为空".to_string()));
     }
     for part in parts {
-        if !(MIN_PART_NUMBER..=MAX_PART_NUMBER).contains(&part.part_number) {
-            return Err(Error::S3("分片序号必须在 1-10000 之间".to_string()));
-        }
-        if part.etag.trim_matches('"').trim().is_empty() {
-            return Err(Error::S3("分片 ETag 不能为空".to_string()));
-        }
+        part.validate()?;
     }
     Ok(())
+}
+
+// 分片序号的纯规则校验，预签名与合并共用同口径。
+fn validate_part_number(part_number: i32) -> Result<()> {
+    if !(MIN_PART_NUMBER..=MAX_PART_NUMBER).contains(&part_number) {
+        return Err(Error::S3("分片序号必须在 1-10000 之间".to_string()));
+    }
+    Ok(())
+}
+
+// 公开 URL 与 endpoint 共用 HTTP(S) 判定，主机校验各保持原口径。
+fn is_http_scheme(url: &Url) -> bool {
+    matches!(url.scheme(), "http" | "https")
 }
 
 /// 解析并规范公开访问基础 URL，禁止查询与 fragment 污染对象 URL。
 fn public_base_url(value: &str) -> Result<Url> {
     let mut url = Url::parse(value)
         .map_err(|_| Error::InvalidConfig("S3 public_base_url 必须是合法 URL".to_string()))?;
-    if !matches!(url.scheme(), "http" | "https")
-        || url.host_str().is_none()
-        || url.query().is_some()
-        || url.fragment().is_some()
+    if !is_http_scheme(&url) || url.host_str().is_none() || url.query().is_some() || url.fragment().is_some()
     {
         return Err(Error::InvalidConfig(
             "S3 public_base_url 必须是不含 query/fragment 的 HTTP(S) URL".to_string(),
@@ -548,24 +565,7 @@ fn is_valid_endpoint(endpoint: &str) -> bool {
     let Ok(url) = Url::parse(endpoint) else {
         return false;
     };
-    matches!(url.scheme(), "http" | "https") && url.host_str().is_some_and(|host| !host.is_empty())
-}
-
-/// 将可选对象键前缀规范为不带首尾分隔符的相对键。
-fn normalize_prefix(prefix: Option<String>) -> Result<Option<String>> {
-    let Some(prefix) = prefix else {
-        return Ok(None);
-    };
-    if prefix.is_empty()
-        || prefix.trim() != prefix
-        || prefix.starts_with('/')
-        || prefix.ends_with('/')
-        || prefix.contains('\\')
-        || prefix.split('/').any(|segment| segment.is_empty() || segment == "." || segment == "..")
-    {
-        return Err(Error::InvalidConfig("S3 key_prefix 必须是不带首尾分隔符的相对对象键前缀".to_string()));
-    }
-    Ok(Some(prefix))
+    is_http_scheme(&url) && url.host_str().is_some_and(|host| !host.is_empty())
 }
 
 /// 将 S3 SDK 错误统一转换为存储错误。
@@ -588,11 +588,13 @@ fn head_not_found<R>(error: &SdkError<HeadObjectError, R>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use aws_sdk_s3::Config;
-    use aws_sdk_s3::config::{Credentials, Region};
     use aws_smithy_http_client::test_util::{CaptureRequestReceiver, capture_request};
 
     use super::*;
+
+    const TEST_BUCKET: &str = "erp-assets";
+    const TEST_PREFIX: &str = "tenant-a/uploads";
+    const TEST_PUBLIC_BASE_URL: &str = "https://cdn.example.com/assets";
 
     /// 构造带固定测试端点的存储与请求捕获器，各用例只传差异参数。
     fn test_storage(
@@ -615,11 +617,20 @@ mod tests {
         (storage, receiver)
     }
 
+    // 默认带键前缀的测试存储，覆盖多数用例的同一 bucket 与 CDN。
+    fn test_storage_with_prefix() -> (S3Storage, CaptureRequestReceiver) {
+        test_storage(TEST_BUCKET, Some(TEST_PREFIX), TEST_PUBLIC_BASE_URL)
+    }
+
+    // 不带键前缀的测试存储，供路径与分片校验用例使用。
+    fn test_storage_without_prefix() -> (S3Storage, CaptureRequestReceiver) {
+        test_storage(TEST_BUCKET, None, "https://cdn.example.com")
+    }
+
     /// S3 保存必须使用 bucket、键前缀和跨平台对象键发出 `PutObject`。
     #[tokio::test]
     async fn saves_object_with_configured_prefix() -> Result<()> {
-        let (storage, request_receiver) =
-            test_storage("erp-assets", Some("tenant-a/uploads"), "https://cdn.example.com/assets");
+        let (storage, request_receiver) = test_storage_with_prefix();
 
         storage.save_with_content_type("images/example.png", b"image-bytes", Some("image/png")).await?;
 
@@ -637,8 +648,7 @@ mod tests {
     /// S3 读取必须从同一 bucket 和键前缀发出 `GetObject`。
     #[tokio::test]
     async fn reads_object_with_configured_prefix() -> Result<()> {
-        let (storage, request_receiver) =
-            test_storage("erp-assets", Some("tenant-a/uploads"), "https://cdn.example.com/assets");
+        let (storage, request_receiver) = test_storage_with_prefix();
 
         let content = storage.read("images/example.png").await?;
 
@@ -655,8 +665,7 @@ mod tests {
     /// 公开 URL 必须包含基础路径、键前缀与经编码的对象路径。
     #[test]
     fn builds_public_url_from_complete_object_key() -> Result<()> {
-        let (storage, _) =
-            test_storage("erp-assets", Some("tenant-a/uploads"), "https://cdn.example.com/assets/");
+        let (storage, _) = test_storage(TEST_BUCKET, Some(TEST_PREFIX), "https://cdn.example.com/assets/");
 
         let url = storage.public_url("images/中 文.png")?;
 
@@ -667,7 +676,7 @@ mod tests {
     /// S3 对象键不得使用父目录分量越过配置前缀。
     #[tokio::test]
     async fn rejects_parent_directory_object_key() -> Result<()> {
-        let (storage, _) = test_storage("erp-assets", None, "https://cdn.example.com");
+        let (storage, _) = test_storage_without_prefix();
 
         let result = storage.save_with_content_type("../escaped.txt", b"escaped", None).await;
 
@@ -693,18 +702,18 @@ mod tests {
     #[test]
     fn storage_config_constructor_sets_required_fields() {
         let config = S3StorageConfig::new(
-            "erp-assets",
+            TEST_BUCKET,
             "us-east-1",
             "access-key",
             "secret-key",
             "https://cdn.example.com",
         )
         .with_endpoint("https://s3.example.com")
-        .with_key_prefix("tenant-a/uploads")
+        .with_key_prefix(TEST_PREFIX)
         .with_force_path_style(true);
-        assert_eq!(config.bucket, "erp-assets");
+        assert_eq!(config.bucket, TEST_BUCKET);
         assert_eq!(config.endpoint.as_deref(), Some("https://s3.example.com"));
-        assert_eq!(config.key_prefix.as_deref(), Some("tenant-a/uploads"));
+        assert_eq!(config.key_prefix.as_deref(), Some(TEST_PREFIX));
         assert!(config.force_path_style);
         assert!(config.session_token.is_none());
     }
@@ -712,8 +721,7 @@ mod tests {
     /// 分片上传初始化必须向同一 bucket 和键前缀发出 `CreateMultipartUpload`。
     #[tokio::test]
     async fn creates_multipart_upload_with_configured_prefix() -> Result<()> {
-        let (storage, request_receiver) =
-            test_storage("erp-assets", Some("tenant-a/uploads"), "https://cdn.example.com/assets");
+        let (storage, request_receiver) = test_storage_with_prefix();
 
         let _ = storage.create_multipart_upload("imports/req-1.xlsx", Some("application/octet-stream")).await;
 
@@ -727,15 +735,14 @@ mod tests {
     /// 合并分片必须发出 `CompleteMultipartUpload` 并去除 ETag 引号。
     #[tokio::test]
     async fn completes_multipart_upload_without_etag_quotes() -> Result<()> {
-        let (storage, request_receiver) =
-            test_storage("erp-assets", Some("tenant-a/uploads"), "https://cdn.example.com/assets");
+        let (storage, request_receiver) = test_storage_with_prefix();
 
         // 空 200 模拟无法解析合并响应 XML，仅断言请求体；成功语义由校验测试覆盖。
         storage
             .complete_multipart_upload(
                 "imports/req-1.xlsx",
                 "upload-id",
-                vec![super::UploadedPart { part_number: 1, etag: "\"etag-1\"".to_string() }],
+                vec![UploadedPart { part_number: 1, etag: "\"etag-1\"".to_string() }],
             )
             .await
             .ok();
@@ -755,8 +762,7 @@ mod tests {
     /// 取消分片上传必须发出 `AbortMultipartUpload`。
     #[tokio::test]
     async fn aborts_multipart_upload() -> Result<()> {
-        let (storage, request_receiver) =
-            test_storage("erp-assets", Some("tenant-a/uploads"), "https://cdn.example.com/assets");
+        let (storage, request_receiver) = test_storage_with_prefix();
 
         storage.abort_multipart_upload("imports/req-1.xlsx", "upload-id").await?;
 
@@ -773,7 +779,7 @@ mod tests {
             test_storage("erp-assets", Some("tenant-a/uploads"), "https://cdn.example.com/assets");
 
         let url = storage
-            .presign_upload_part("imports/req-1.xlsx", "upload-id", 2, std::time::Duration::from_secs(7200))
+            .presign_upload_part("imports/req-1.xlsx", "upload-id", 2, Duration::from_secs(7200))
             .await?;
 
         assert!(url.contains("partNumber=2"));
@@ -784,7 +790,7 @@ mod tests {
     /// 空分片列表合并必须在请求发出前失败。
     #[tokio::test]
     async fn rejects_complete_with_empty_parts() -> Result<()> {
-        let (storage, _) = test_storage("erp-assets", None, "https://cdn.example.com");
+        let (storage, _) = test_storage_without_prefix();
         let result = storage.complete_multipart_upload("imports/req-1.xlsx", "upload-id", vec![]).await;
 
         assert!(matches!(result, Err(Error::S3(_))));
@@ -794,10 +800,9 @@ mod tests {
     /// 非法分片序号预签名必须在请求发出前失败。
     #[tokio::test]
     async fn rejects_presign_with_invalid_part_number() -> Result<()> {
-        let (storage, _) = test_storage("erp-assets", None, "https://cdn.example.com");
-        let result = storage
-            .presign_upload_part("imports/req-1.xlsx", "upload-id", 0, std::time::Duration::from_secs(60))
-            .await;
+        let (storage, _) = test_storage_without_prefix();
+        let result =
+            storage.presign_upload_part("imports/req-1.xlsx", "upload-id", 0, Duration::from_secs(60)).await;
 
         assert!(matches!(result, Err(Error::S3(_))));
         Ok(())
@@ -806,13 +811,13 @@ mod tests {
     /// 合并分片必须校验上传标识、序号范围与 ETag 非空。
     #[tokio::test]
     async fn rejects_complete_with_invalid_upload_id_or_parts() -> Result<()> {
-        let (storage, request_receiver) = test_storage("erp-assets", None, "https://cdn.example.com");
+        let (storage, request_receiver) = test_storage_without_prefix();
 
         let result = storage
             .complete_multipart_upload(
                 "imports/req-1.xlsx",
                 "  ",
-                vec![super::UploadedPart { part_number: 1, etag: "etag-1".to_string() }],
+                vec![UploadedPart { part_number: 1, etag: "etag-1".to_string() }],
             )
             .await;
         assert!(matches!(result, Err(Error::S3(_))));
@@ -821,7 +826,7 @@ mod tests {
             .complete_multipart_upload(
                 "imports/req-1.xlsx",
                 "upload-id",
-                vec![super::UploadedPart { part_number: 0, etag: "etag-1".to_string() }],
+                vec![UploadedPart { part_number: 0, etag: "etag-1".to_string() }],
             )
             .await;
         assert!(matches!(result, Err(Error::S3(_))));
@@ -830,7 +835,7 @@ mod tests {
             .complete_multipart_upload(
                 "imports/req-1.xlsx",
                 "upload-id",
-                vec![super::UploadedPart { part_number: 1, etag: "  ".to_string() }],
+                vec![UploadedPart { part_number: 1, etag: "  ".to_string() }],
             )
             .await;
         assert!(matches!(result, Err(Error::S3(_))));

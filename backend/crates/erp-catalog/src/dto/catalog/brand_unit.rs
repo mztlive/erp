@@ -1,11 +1,12 @@
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use application_core::normalized_text;
 use erp_core::ids::FileAssetId;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::common::{PageParams, non_blank, normalize_sort};
+use super::common::{PageParams, non_blank, paging_params};
 use crate::entity::catalog::{EnableStatus, ProductBrand, UnitOfMeasure};
 use crate::error::Result;
+use crate::repository::{ProductBrandRow, UnitOfMeasureRow};
 
 /// 商品品牌列表允许的排序字段白名单。
 pub(crate) const PRODUCT_BRAND_SORT_FIELDS: &[&str] = &["created_at", "brand_code", "name"];
@@ -128,6 +129,27 @@ impl From<ProductBrand> for ProductBrandView {
     }
 }
 
+impl From<ProductBrandRow> for ProductBrandView {
+    /// 从投影行构造响应视图，与 `From<ProductBrand>` 同语义。
+    ///
+    /// # 参数
+    /// * `row` - 商品品牌列表投影行
+    ///
+    /// # 返回
+    /// 返回响应视图。
+    fn from(row: ProductBrandRow) -> Self {
+        Self {
+            id: row.id,
+            brand_code: row.brand_code,
+            name: row.name,
+            logo_asset_id: row.logo_asset_id,
+            status: row.status,
+            created_at: row.created_at,
+            version: row.version,
+        }
+    }
+}
+
 /// 商品品牌列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ProductBrandListParams {
@@ -178,18 +200,18 @@ impl ProductBrandListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ProductBrandListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, PRODUCT_BRAND_SORT_FIELDS)?;
         Ok(ProductBrandListQuery {
             q: normalized_text(self.q.as_deref()),
             brand_code: normalized_text(self.brand_code.as_deref()),
             name: normalized_text(self.name.as_deref()),
             status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: paging_params(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                PRODUCT_BRAND_SORT_FIELDS,
+            )?,
         })
     }
 }
@@ -273,6 +295,28 @@ impl From<UnitOfMeasure> for UnitOfMeasureView {
     }
 }
 
+impl From<UnitOfMeasureRow> for UnitOfMeasureView {
+    /// 从投影行构造响应视图，与 `From<UnitOfMeasure>` 同语义。
+    ///
+    /// # 参数
+    /// * `row` - 计量单位列表投影行
+    ///
+    /// # 返回
+    /// 返回响应视图。
+    fn from(row: UnitOfMeasureRow) -> Self {
+        Self {
+            id: row.id,
+            unit_code: row.unit_code,
+            name: row.name,
+            symbol: row.symbol,
+            quantity_scale: row.quantity_scale,
+            status: row.status,
+            created_at: row.created_at,
+            version: row.version,
+        }
+    }
+}
+
 /// 计量单位列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UnitOfMeasureListParams {
@@ -318,17 +362,17 @@ impl UnitOfMeasureListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<UnitOfMeasureListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, UNIT_OF_MEASURE_SORT_FIELDS)?;
         Ok(UnitOfMeasureListQuery {
             unit_code: normalized_text(self.unit_code.as_deref()),
             name: normalized_text(self.name.as_deref()),
             status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: paging_params(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                UNIT_OF_MEASURE_SORT_FIELDS,
+            )?,
         })
     }
 }

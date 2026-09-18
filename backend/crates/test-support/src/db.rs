@@ -1,20 +1,16 @@
 //! `TestDb`：按随机库名连接并创建、`Drop` 时清理的测试数据库夹具。
 
+use mongodb::bson::Document;
 use mongodb::{Client, Database};
-use uuid::Uuid;
 
-use crate::{Error, Result};
+use crate::{Error, Result, test_mongo_uri, uuid_hex_n};
 
 /// 数据库名最大字符数（MongoDB 上限 64 字节；字符集已过滤为 ASCII，
 /// 此处按字符计数，预留后缀空间）。
 const MAX_DB_NAME_LEN: usize = 32;
 
 /// 随机十六进制串截取长度：数据库名后缀。
-pub(crate) const UUID_DB_SUFFIX_LEN: usize = 8;
-/// 随机十六进制串截取长度：种子角色 ID 后缀。
-pub(crate) const UUID_ROLE_SUFFIX_LEN: usize = 8;
-/// 随机十六进制串截取长度：种子账号 ID 后缀。
-pub(crate) const UUID_ACCOUNT_SUFFIX_LEN: usize = 12;
+const UUID_DB_SUFFIX_LEN: usize = 8;
 
 /// 每个测试数据库内创建的标记集合，保证数据库真实存在、`drop` 可生效。
 const FIXTURE_COLLECTION: &str = "_fixture";
@@ -91,7 +87,7 @@ impl TestDb {
     /// # 关键业务约束
     /// 仅测试夹具可调用；不得替代生产唯一索引。生产路径必须继续依赖这些索引。
     pub async fn drop_named_indexes(&self, collection: &str, index_names: &[&str]) -> Result<()> {
-        let target = self.db.collection::<mongodb::bson::Document>(collection);
+        let target = self.db.collection::<Document>(collection);
         for name in index_names {
             target.drop_index(*name).await?;
         }
@@ -140,11 +136,7 @@ impl Drop for TestDb {
 /// # 错误
 /// 环境变量未设置或为空时返回 `Error::EnvMissing`。
 fn mongo_uri() -> Result<String> {
-    let uri = std::env::var("ERP_TEST_MONGO_URI").unwrap_or_default();
-    if uri.trim().is_empty() {
-        return Err(Error::EnvMissing("ERP_TEST_MONGO_URI"));
-    }
-    Ok(uri)
+    test_mongo_uri().ok_or(Error::EnvMissing(crate::TEST_MONGO_URI_ENV))
 }
 
 /// 生成 `前缀_uuid短前缀` 形式的合法数据库名。
@@ -162,18 +154,6 @@ fn random_db_name(prefix: &str) -> String {
         .collect();
     let prefix = if sanitized.is_empty() { "test".to_string() } else { sanitized };
     format!("{prefix}_{}", uuid_hex_n(UUID_DB_SUFFIX_LEN))
-}
-
-/// 生成随机十六进制短串。
-///
-/// # 参数
-/// * `len` - 截取长度（超过 32 时按 32 处理，保证不越界 panic）
-///
-/// # 返回值
-/// 返回 UUID v4 十六进制形式的前 `len` 个字符。
-pub(crate) fn uuid_hex_n(len: usize) -> String {
-    let hex = Uuid::new_v4().simple().to_string();
-    hex[..len.min(hex.len())].to_string()
 }
 
 #[cfg(test)]

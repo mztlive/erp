@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::{format_ident, quote};
 use syn::punctuated::Punctuated;
-use syn::{Error, Expr, ItemFn, Lit, LitStr, MetaNameValue, Result, Token, parse_macro_input};
+use syn::{Error, Expr, ExprLit, ItemFn, Lit, LitStr, MetaNameValue, Result, Token, parse_macro_input};
 
 /// Permission macro arguments.
 ///
@@ -25,28 +25,15 @@ struct PermissionArgs {
 /// 属性缺 `resource`/`action` 或其非字符串字面量时编译失败。
 #[proc_macro_attribute]
 pub fn permission(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let args_parser = Punctuated::<MetaNameValue, Token![,]>::parse_terminated;
-    let args = parse_macro_input!(attr with args_parser);
+    let args = parse_macro_input!(attr with Punctuated::<MetaNameValue, Token![,]>::parse_terminated);
     let item_fn = parse_macro_input!(item as ItemFn);
 
     let permission_args = match parse_permission_args(args) {
         Ok(args) => args,
-        Err(err) => {
-            let compile_err = err.to_compile_error();
-            return quote! {
-                #item_fn
-                #compile_err
-            }
-            .into();
-        },
+        Err(err) => return item_with_error(item_fn, err),
     };
     if let Err(err) = validate_permission_key(&permission_args.resource, &permission_args.action) {
-        let compile_err = err.to_compile_error();
-        return quote! {
-            #item_fn
-            #compile_err
-        }
-        .into();
+        return item_with_error(item_fn, err);
     }
 
     let handler_name = item_fn.sig.ident.to_string();
@@ -54,7 +41,7 @@ pub fn permission(attr: TokenStream, item: TokenStream) -> TokenStream {
     let resource = &permission_args.resource;
     let action = &permission_args.action;
 
-    let expanded = quote! {
+    quote! {
         #item_fn
 
         /// 返回处理器对应的权限键。
@@ -65,9 +52,25 @@ pub fn permission(attr: TokenStream, item: TokenStream) -> TokenStream {
             ::erp_identity::Permission::parse(concat!(#resource, ":", #action))
                 .expect(concat!("invalid permission key for handler ", #handler_name))
         }
-    };
+    }
+    .into()
+}
 
-    expanded.into()
+/// 保留原函数并附加编译错误。
+///
+/// # 参数
+/// * `item_fn` - 被标注的原函数项
+/// * `err` - 参数解析或权限键校验失败
+///
+/// # 返回
+/// 返回原函数与编译错误的组合流。
+fn item_with_error(item_fn: ItemFn, err: Error) -> TokenStream {
+    let compile_err = err.to_compile_error();
+    quote! {
+        #item_fn
+        #compile_err
+    }
+    .into()
 }
 
 /// 解析 permission 宏参数。
@@ -86,15 +89,11 @@ fn parse_permission_args(args: Punctuated<MetaNameValue, Token![,]>) -> Result<P
 
     for arg in args {
         if arg.path.is_ident("resource") {
-            let lit = require_string_value(&arg.value)?;
-            resource = Some(lit);
+            resource = Some(require_string_value(&arg.value)?);
         } else if arg.path.is_ident("action") {
-            let lit = require_string_value(&arg.value)?;
-            action = Some(lit);
-        } else if arg.path.is_ident("group") || arg.path.is_ident("group_desc") || arg.path.is_ident("desc") {
-            // 仅透传给权限收集，键生成不消费它们；保留全部接受行为。
+            action = Some(require_string_value(&arg.value)?);
         } else {
-            // 未知键保持静默忽略，接受集合不变。
+            // group/group_desc/desc 仅透传给权限收集，未知键保持接受不变。
         }
     }
 
@@ -116,10 +115,7 @@ fn parse_permission_args(args: Punctuated<MetaNameValue, Token![,]>) -> Result<P
 /// 非字符串字面量时在表达式位置报错。
 fn require_string_value(value: &Expr) -> Result<LitStr> {
     match value {
-        Expr::Lit(expr) => match &expr.lit {
-            Lit::Str(lit) => Ok(lit.clone()),
-            _ => Err(Error::new_spanned(value, "resource/action 必须为字符串字面量")),
-        },
+        Expr::Lit(ExprLit { lit: Lit::Str(lit), .. }) => Ok(lit.clone()),
         _ => Err(Error::new_spanned(value, "resource/action 必须为字符串字面量")),
     }
 }
@@ -138,11 +134,24 @@ fn require_string_value(value: &Expr) -> Result<LitStr> {
 /// # 错误
 /// 格式非法时在对应字面量位置报错。
 fn validate_permission_key(resource: &LitStr, action: &LitStr) -> Result<()> {
-    validate_permission_part(&resource.value(), true)
-        .map_err(|message| Error::new_spanned(resource, message))?;
-    validate_permission_part(&action.value(), false)
-        .map_err(|message| Error::new_spanned(action, message))?;
-    Ok(())
+    validate_part_spanned(resource, true)?;
+    validate_part_spanned(action, false)
+}
+
+/// 校验单段字面量并把错误定位到原文位置。
+///
+/// # 参数
+/// * `value` - 资源或动作字面量
+/// * `allow_slash` - 资源允许斜杠分段，动作不允许
+///
+/// # 返回
+/// 合法时返回空。
+///
+/// # 错误
+/// 格式非法时在对应字面量位置报错。
+fn validate_part_spanned(value: &LitStr, allow_slash: bool) -> Result<()> {
+    validate_permission_part(&value.value(), allow_slash)
+        .map_err(|message| Error::new_spanned(value, message))
 }
 
 /// 校验权限资源或动作单段，与运行时规则同口径。
@@ -156,19 +165,19 @@ fn validate_permission_key(resource: &LitStr, action: &LitStr) -> Result<()> {
 ///
 /// # 错误
 /// 非法时返回面向宏展开期的说明文本。
-fn validate_permission_part(value: &str, allow_slash: bool) -> std::result::Result<(), String> {
+fn validate_permission_part(value: &str, allow_slash: bool) -> std::result::Result<(), &'static str> {
     let normalized = value.trim().to_ascii_lowercase();
     if normalized.is_empty() {
-        return Err("权限资源或动作不能为空".to_string());
+        return Err("权限资源或动作不能为空");
     }
     if normalized.len() > 128 {
-        return Err("权限资源或动作长度不能超过128个字符".to_string());
+        return Err("权限资源或动作长度不能超过128个字符");
     }
     if normalized == "*" {
         return Ok(());
     }
     if !allow_slash && normalized.contains('/') {
-        return Err("权限动作不能包含斜杠".to_string());
+        return Err("权限动作不能包含斜杠");
     }
     let valid = normalized.split('/').all(|segment| {
         !segment.is_empty()
@@ -177,7 +186,7 @@ fn validate_permission_part(value: &str, allow_slash: bool) -> std::result::Resu
                 .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '_' | '-'))
     });
     if !valid {
-        return Err("权限资源或动作包含非法字符".to_string());
+        return Err("权限资源或动作包含非法字符");
     }
     Ok(())
 }

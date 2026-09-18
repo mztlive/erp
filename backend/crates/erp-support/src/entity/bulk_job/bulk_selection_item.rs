@@ -7,6 +7,8 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::entity::ensure_paired;
+
 /// 对象类型代码最大长度。
 const OBJECT_TYPE_MAX_LEN: usize = 64;
 /// 对象 ID 最大长度。
@@ -104,9 +106,11 @@ impl BulkSelectionItem {
             normalize_required_text(data.object_id, "对象ID不能为空", OBJECT_ID_MAX_LEN, "对象ID过长")?;
         let expected_version = normalize_optional_text(data.expected_version, "预期版本", VERSION_MAX_LEN)?;
         let expected_hash = normalize_optional_text(data.expected_hash, "内容摘要", HASH_MAX_LEN)?;
-        if expected_version.is_some() != expected_hash.is_some() {
-            return Err(Error::from("预期版本与内容摘要必须同时提供或同时省略"));
-        }
+        ensure_paired(
+            expected_version.is_some(),
+            expected_hash.is_some(),
+            "预期版本与内容摘要必须同时提供或同时省略",
+        )?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             selection_snapshot_id: data.selection_snapshot_id,

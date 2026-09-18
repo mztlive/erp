@@ -59,6 +59,20 @@ impl CustomerAccountStatus {
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
+
+    /// 返回停用状态阻断的业务动作稳定代码。
+    ///
+    /// 阻断口径的权威实现：DTO 的 `customer_status_blockers` 只负责组装
+    /// 展示文案，动作集合以此处为准。
+    ///
+    /// # 返回
+    /// 启用时为空；停用时返回禁止新合同与新销售单的动作代码。
+    pub fn blocked_actions(&self) -> &'static [&'static str] {
+        match self {
+            Self::Active => &[],
+            Self::Disabled => &["UPLOAD_CONTRACT_PDF", "CREATE_SALES_ORDER"],
+        }
+    }
 }
 
 impl DocumentState for CustomerAccountStatus {
@@ -210,10 +224,7 @@ impl CustomerAccount {
     /// # 错误
     /// 当前版本与期望版本不一致时返回错误。
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
-        if self.base.version == expected {
-            return Ok(());
-        }
-        Err(erp_core::Error::from("数据已被其他请求修改，请刷新后重试"))
+        super::ensure_entity_version(self.base.version, expected)
     }
 
     /// 应用默认付款条件更新。
@@ -367,6 +378,16 @@ mod tests {
                 .unwrap();
         assert!(account.ensure_version(1).is_ok());
         assert!(account.ensure_version(2).is_err());
+    }
+
+    /// 阻断口径：启用无阻断，停用阻断新合同与新销售单。
+    #[test]
+    fn blocked_actions_follow_status() {
+        assert!(CustomerAccountStatus::Active.blocked_actions().is_empty());
+        assert_eq!(
+            CustomerAccountStatus::Disabled.blocked_actions(),
+            &["UPLOAD_CONTRACT_PDF", "CREATE_SALES_ORDER"]
+        );
     }
 
     /// 手工 `PartialEq` 的字段覆盖约束（erp-customer-010）。

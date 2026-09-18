@@ -41,6 +41,8 @@ use crate::error::{Error, Result};
 use crate::ports::{BusinessDocumentPort, SupportAuditPort, is_business_document_type};
 use crate::repository::{BackgroundJobRegistration, BulkJobExt};
 
+use super::check_expected_version;
+
 /// 选择快照列表筛选条件类型（经 `BulkJobExt` 关联类型跨 crate 可达）。
 type BulkSelectionSnapshotFilter = <mongodb::Database as BulkJobExt>::BulkSelectionSnapshotFilter;
 /// 后台任务列表筛选条件类型。
@@ -564,9 +566,7 @@ impl BulkJobService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("选择快照不存在".to_string()))?;
-        if snapshot.base.version != expected_version {
-            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
-        }
+        check_expected_version(snapshot.base.version, expected_version)?;
         Ok(snapshot)
     }
 
@@ -628,9 +628,7 @@ impl BulkJobService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("后台任务不存在".to_string()))?;
-        if job.base.version != expected_version {
-            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
-        }
+        check_expected_version(job.base.version, expected_version)?;
         Ok(job)
     }
 }

@@ -1,8 +1,8 @@
-use application_core::{QueryIds, normalized_text, page_or_default, page_size_or_default};
+use application_core::{QueryIds, normalized_text};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::common::{PageParams, normalize_sort, reject_me_ids};
+use super::common::{PageParams, normalize_scoped_list};
 use super::task_decision::{ControlledEvidenceRef, ResolutionEvidencePolicyView};
 use crate::Result;
 use crate::entity::integration_ops::{ErrorClass, ErrorTaskStatus, IntegrationErrorTask, ResolutionType};

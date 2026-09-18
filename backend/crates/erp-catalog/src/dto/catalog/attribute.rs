@@ -1,11 +1,12 @@
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use application_core::normalized_text;
 use erp_core::ids::SkuAttributeId;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::common::{PageParams, non_blank, normalize_sort};
+use super::common::{PageParams, non_blank, paging_params};
 use crate::entity::catalog::{EnableStatus, SkuAttribute, SkuAttributeValue};
 use crate::error::Result;
+use crate::repository::{SkuAttributeRow, SkuAttributeValueRow};
 
 /// 规格属性列表允许的排序字段白名单。
 pub(crate) const SKU_ATTRIBUTE_SORT_FIELDS: &[&str] = &["created_at", "attribute_code", "name"];
@@ -82,6 +83,27 @@ impl From<SkuAttribute> for SkuAttributeView {
     }
 }
 
+impl From<SkuAttributeRow> for SkuAttributeView {
+    /// 从投影行构造响应视图，与 `From<SkuAttribute>` 同语义。
+    ///
+    /// # 参数
+    /// * `row` - 规格属性列表投影行
+    ///
+    /// # 返回
+    /// 返回响应视图。
+    fn from(row: SkuAttributeRow) -> Self {
+        Self {
+            id: row.id,
+            attribute_code: row.attribute_code,
+            name: row.name,
+            value_type: row.value_type,
+            status: row.status,
+            created_at: row.created_at,
+            version: row.version,
+        }
+    }
+}
+
 /// 规格属性列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SkuAttributeListParams {
@@ -131,18 +153,18 @@ impl SkuAttributeListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<SkuAttributeListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, SKU_ATTRIBUTE_SORT_FIELDS)?;
         Ok(SkuAttributeListQuery {
             attribute_code: normalized_text(self.attribute_code.as_deref()),
             name: normalized_text(self.name.as_deref()),
             value_type: self.value_type,
             status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: paging_params(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                SKU_ATTRIBUTE_SORT_FIELDS,
+            )?,
         })
     }
 }
@@ -223,6 +245,28 @@ impl From<SkuAttributeValue> for SkuAttributeValueView {
     }
 }
 
+impl From<SkuAttributeValueRow> for SkuAttributeValueView {
+    /// 从投影行构造响应视图，与 `From<SkuAttributeValue>` 同语义。
+    ///
+    /// # 参数
+    /// * `row` - 规格属性值列表投影行
+    ///
+    /// # 返回
+    /// 返回响应视图。
+    fn from(row: SkuAttributeValueRow) -> Self {
+        Self {
+            id: row.id,
+            attribute_id: row.attribute_id,
+            value_code: row.value_code,
+            display_value: row.display_value,
+            sort_order: row.sort_order,
+            status: row.status,
+            created_at: row.created_at,
+            version: row.version,
+        }
+    }
+}
+
 /// 规格属性值列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SkuAttributeValueListParams {
@@ -272,19 +316,18 @@ impl SkuAttributeValueListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<SkuAttributeValueListQuery> {
-        let (sort_by, sort_dir) =
-            normalize_sort(&self.sort_by, &self.sort_dir, SKU_ATTRIBUTE_VALUE_SORT_FIELDS)?;
         Ok(SkuAttributeValueListQuery {
             attribute_id: self.attribute_id.as_ref().map(|id| id.to_string()),
             value_code: normalized_text(self.value_code.as_deref()),
             display_value: normalized_text(self.display_value.as_deref()),
             status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: paging_params(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                SKU_ATTRIBUTE_VALUE_SORT_FIELDS,
+            )?,
         })
     }
 }

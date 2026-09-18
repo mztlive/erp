@@ -12,7 +12,8 @@ use crate::ids::{
 };
 use crate::model::types::ApprovalExecutionAssignmentSource;
 use crate::model::{
-    ApprovalInstanceAssignee, ApprovalProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp,
+    ApprovalInstanceAssignee, ApprovalProcessInstance, NewProcessInstance, ParticipantId, ProcessKind,
+    SubjectRef, Timestamp,
 };
 
 /// 启动命令：调用方提供全部 ID、时间；全部节点资格随绑定一并传入。
@@ -63,8 +64,9 @@ pub fn start(
     graph: &DefinitionGraph,
     bindings: &[StartAssigneeBinding],
 ) -> EngineResult<TransitionPlan> {
-    ensure_bindings_valid(graph, bindings)?;
-    let instance = ApprovalProcessInstance::start_running(crate::model::NewProcessInstance {
+    let by_node = indexed_bindings(graph, bindings)?;
+    ensure_bindings_match_definition(graph, &by_node)?;
+    let instance = ApprovalProcessInstance::start_running(NewProcessInstance {
         id: command.instance_id.clone(),
         process_definition_id: ApprovalProcessDefinitionId::new(graph.definition.base.id.clone()),
         definition_version: graph.definition.definition_version,
@@ -74,9 +76,8 @@ pub fn start(
         started_by: command.started_by.clone(),
         at: command.now,
     })?;
-    let assignees = freeze_assignees(&instance, graph, bindings, command.now)?;
+    let assignees = freeze_assignees(&instance, graph, &by_node, command.now)?;
     let entry = graph.entry_node()?;
-    let by_node = indexed_bindings(graph, bindings)?;
     let entry_binding = by_node
         .get(entry.node_key.as_str())
         .copied()
@@ -123,9 +124,11 @@ fn indexed_bindings<'a>(
     Ok(by_node)
 }
 
-/// 启动绑定必须逐节点匹配定义责任人及其有效资格。
-fn ensure_bindings_valid(graph: &DefinitionGraph, bindings: &[StartAssigneeBinding]) -> EngineResult<()> {
-    let by_node = indexed_bindings(graph, bindings)?;
+/// 启动绑定必须逐节点匹配定义责任人及其有效资格。索引由调用方一次建好复用。
+fn ensure_bindings_match_definition(
+    graph: &DefinitionGraph,
+    by_node: &HashMap<&str, &StartAssigneeBinding>,
+) -> EngineResult<()> {
     for node in &graph.nodes {
         let binding = by_node
             .get(node.node_key.as_str())
@@ -144,14 +147,13 @@ fn ensure_bindings_valid(graph: &DefinitionGraph, bindings: &[StartAssigneeBindi
     Ok(())
 }
 
-/// 为定义中每个节点冻结实例审批人，复用同一索引只做冻结。
+/// 为定义中每个节点冻结实例审批人，复用调用方已建好的索引不再重建。
 fn freeze_assignees(
     instance: &ApprovalProcessInstance,
     graph: &DefinitionGraph,
-    bindings: &[StartAssigneeBinding],
+    by_node: &HashMap<&str, &StartAssigneeBinding>,
     now: Timestamp,
 ) -> EngineResult<Vec<ApprovalInstanceAssignee>> {
-    let by_node = indexed_bindings(graph, bindings)?;
     let instance_id = instance.typed_id();
     let mut assignees = Vec::with_capacity(graph.nodes.len());
     for node in &graph.nodes {

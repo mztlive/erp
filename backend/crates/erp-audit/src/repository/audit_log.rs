@@ -301,11 +301,10 @@ impl<'a> AuditLogRepository<'a> {
         resource_ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<AuditLog>> {
-        if resource_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        self.find_many(
-            work_item_resource_filter(resource_type, resource_ids, Some(format!("{resource_type}.create"))),
+        self.find_work_item_audits(
+            resource_type,
+            resource_ids,
+            Some(format!("{resource_type}.create")),
             executor,
         )
         .await
@@ -335,10 +334,38 @@ impl<'a> AuditLogRepository<'a> {
         resource_ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<AuditLog>> {
+        self.find_work_item_audits(resource_type, resource_ids, None, executor).await
+    }
+}
+
+impl<'a> AuditLogRepository<'a> {
+    /// 按资源批量读取成功工作项审计的唯一入口（erp-audit-002）。
+    ///
+    /// 空集合直接返回且不访问数据库；`action` 为 `Some` 时限定固定创建动作，
+    /// 为 `None` 时返回全部成功事实。
+    ///
+    /// # 参数
+    /// * `resource_type` - 资源类型
+    /// * `resource_ids` - 资源 ID 集合；为空时直接返回空集合
+    /// * `action` - 限定的审计动作；`None` 表示全部成功事实
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回命中的成功审计。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    async fn find_work_item_audits(
+        &self,
+        resource_type: &str,
+        resource_ids: &[String],
+        action: Option<String>,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AuditLog>> {
         if resource_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_many(work_item_resource_filter(resource_type, resource_ids, None), executor).await
+        self.find_many(work_item_resource_filter(resource_type, resource_ids, action), executor).await
     }
 }
 

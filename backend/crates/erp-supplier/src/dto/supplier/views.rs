@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use erp_core::money::Rate;
 use serde::Serialize;
 
@@ -185,6 +187,21 @@ impl From<SupplierCommercialProfileRevision> for CommercialProfileView {
             version: revision.base.version,
             created_at: revision.base.created_at,
         }
+    }
+}
+
+impl CommercialProfileView {
+    /// 回填签约/付款主体的当前法定名称。
+    ///
+    /// 列表装配与详情装配共用本实现；缺失当前名称时保持 `None`。
+    ///
+    /// # 参数
+    /// * `names` - 主体 ID 到法定名称
+    pub(crate) fn fill_entity_names(&mut self, names: &HashMap<String, String>) {
+        self.signing_entity_name =
+            self.signing_entity_party_id.as_ref().and_then(|party_id| names.get(party_id)).cloned();
+        self.payment_entity_name =
+            self.payment_entity_party_id.as_ref().and_then(|party_id| names.get(party_id)).cloned();
     }
 }
 

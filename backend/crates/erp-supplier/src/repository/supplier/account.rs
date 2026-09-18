@@ -236,6 +236,9 @@ fn insert_supplier_id_constraints(
 
 /// 转换供应商角色 ID，供 MongoDB 集合条件使用。
 ///
+/// 批量 `$in` 条件的唯一构造入口（erp-supplier-013）：`$in` ID 列表、
+/// 空集合短路与去重语义集中一处，调用方不再各自拼 `map(ToString)`。
+///
 /// # 参数
 /// * `ids` - 强类型供应商角色 ID 集合
 ///
@@ -275,7 +278,7 @@ impl<'a> SupplierAccountRepository<'a> {
         if supplier_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let ids = supplier_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let ids = supplier_id_strings(supplier_ids);
         let collection = self.collection().clone_with_type::<SupplierNumberRow>();
         let rows = mongo_ops::find_many(
             &collection,
@@ -309,7 +312,7 @@ impl<'a> SupplierAccountRepository<'a> {
         if supplier_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let ids = supplier_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let ids = supplier_id_strings(supplier_ids);
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 
@@ -415,7 +418,8 @@ impl<'a> SupplierRepository<'a> {
         supplier_ids: &[SupplierAccountId],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, PartyId>> {
-        let supplier_ids = unique_strings(supplier_ids.iter().map(ToString::to_string));
+        let supplier_ids =
+            unique_strings(supplier_id_strings(supplier_ids).into_iter());
         if supplier_ids.is_empty() {
             return Ok(HashMap::new());
         }

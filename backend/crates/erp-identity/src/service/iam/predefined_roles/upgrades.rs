@@ -33,12 +33,7 @@ pub(crate) const APPROVAL_HTTP_ACTION_PERMISSIONS: &[&str] = &[
 /// # 错误
 /// 权限解析或 Casbin 写入失败时返回错误。
 pub(crate) async fn upgrade_approval_http_permissions(rbac: &SharedRbacService) -> Result<()> {
-    for role in PREDEFINED_ROLES {
-        let desired = parse_permissions(role.permissions)?;
-        let previous = approval_http_legacy_snapshot(role.id, &desired)?;
-        upgrade_exact(rbac, role.id, previous, desired).await?;
-    }
-    Ok(())
+    upgrade_all_roles_from_snapshot(rbac, approval_http_legacy_snapshot).await
 }
 
 /// 从当前目标权限还原删除领取/诊断权限前的精确快照。
@@ -56,10 +51,53 @@ pub(crate) fn approval_http_legacy_snapshot(
 
 /// 将仍保持旧工作流权限种子的角色收紧为显式最小动作。
 pub(crate) async fn upgrade_workflow_permissions(rbac: &SharedRbacService) -> Result<()> {
+    upgrade_all_roles_from_snapshot(rbac, legacy_workflow_permission_snapshot).await
+}
+
+/// 对全部预定义角色执行同一快照升级（审批动作与工作流收紧共用该循环）。
+///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务
+/// * `snapshot` - 由当前推荐权限还原上一版默认种子的纯函数
+///
+/// # 返回值
+/// 全部角色检查或升级完成后返回 `Ok(())`。
+///
+/// # 错误
+/// 权限解析或 Casbin policy 写入失败时返回错误。
+async fn upgrade_all_roles_from_snapshot(
+    rbac: &SharedRbacService,
+    snapshot: fn(&str, &[Permission]) -> Result<Vec<Permission>>,
+) -> Result<()> {
     for role in PREDEFINED_ROLES {
         let desired = parse_permissions(role.permissions)?;
-        let previous = legacy_workflow_permission_snapshot(role.id, &desired)?;
+        let previous = snapshot(role.id, &desired)?;
         upgrade_exact(rbac, role.id, previous, desired).await?;
+    }
+    Ok(())
+}
+
+/// 对给定角色执行“移除若干权限即得旧种子”的精确升级（各岗位补齐升级共用该循环）。
+///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务
+/// * `roles` - 角色 ID 与静态推荐权限
+/// * `removed` - 本轮新增的权限代码；移除后即为上一版默认种子
+///
+/// # 返回值
+/// 全部角色检查或升级完成后返回 `Ok(())`。
+///
+/// # 错误
+/// 权限解析或 Casbin policy 写入失败时返回错误。
+async fn upgrade_roles_by_removing(
+    rbac: &SharedRbacService,
+    roles: &[(&str, &[&str])],
+    removed: &[&str],
+) -> Result<()> {
+    for (role_id, raw) in roles {
+        let desired = parse_permissions(raw)?;
+        let previous = remove_permissions(&desired, removed);
+        upgrade_exact(rbac, role_id, previous, desired).await?;
     }
     Ok(())
 }
@@ -257,9 +295,9 @@ pub(crate) fn procurement_legacy_permission_snapshots(
 
 /// 仅为仍保持旧默认种子的角色收紧客户范围并补齐字段级权限。
 pub(crate) async fn upgrade_customer_role_boundaries(rbac: &SharedRbacService) -> Result<()> {
-    let finance_desired = parse_permissions(FINANCE_PERMISSIONS)?;
-    let finance_previous = remove_permissions(
-        &finance_desired,
+    upgrade_roles_by_removing(
+        rbac,
+        &[("role-finance", FINANCE_PERMISSIONS)],
         &[
             "customer_scope:detail",
             "customer_sensitive:reveal",
@@ -269,74 +307,71 @@ pub(crate) async fn upgrade_customer_role_boundaries(rbac: &SharedRbacService) -
             "party_bank_account:update",
             "party_bank_account:reveal",
         ],
-    );
-    upgrade_exact(rbac, "role-finance", finance_previous, finance_desired).await?;
-
-    for (role_id, raw) in
-        [("role-sales-leader", SALES_LEADER_PERMISSIONS), ("role-management", MANAGEMENT_PERMISSIONS)]
-    {
-        let desired = parse_permissions(raw)?;
-        let previous = remove_permissions(&desired, &["customer_scope:detail"]);
-        upgrade_exact(rbac, role_id, previous, desired).await?;
-    }
-    Ok(())
+    )
+    .await?;
+    upgrade_roles_by_removing(
+        rbac,
+        &[("role-sales-leader", SALES_LEADER_PERMISSIONS), ("role-management", MANAGEMENT_PERMISSIONS)],
+        &["customer_scope:detail"],
+    )
+    .await
 }
 
 /// 为仍保持旧默认种子的公司商品池读者补齐独立查询权限。
 pub(crate) async fn upgrade_sellable_sku_reader_permissions(rbac: &SharedRbacService) -> Result<()> {
-    for (role_id, raw) in
-        [("role-operations", OPERATIONS_PERMISSIONS), ("role-warehouse", WAREHOUSE_PERMISSIONS)]
-    {
-        let desired = parse_permissions(raw)?;
-        let previous = remove_permissions(&desired, &["sellable_sku:list"]);
-        upgrade_exact(rbac, role_id, previous, desired).await?;
-    }
-    Ok(())
+    upgrade_roles_by_removing(
+        rbac,
+        &[("role-operations", OPERATIONS_PERMISSIONS), ("role-warehouse", WAREHOUSE_PERMISSIONS)],
+        &["sellable_sku:list"],
+    )
+    .await
 }
 
 /// 为仍保持旧默认种子的 W18 五类业务责任角色补齐强类型确认权限。
 pub(crate) async fn upgrade_import_confirmation_permissions(rbac: &SharedRbacService) -> Result<()> {
-    for (role_id, raw) in [
-        ("role-sales", SALES_PERMISSIONS),
-        ("role-procurement", PROCUREMENT_PERMISSIONS),
-        ("role-operations", OPERATIONS_PERMISSIONS),
-        ("role-warehouse", WAREHOUSE_PERMISSIONS),
-        ("role-finance", FINANCE_PERMISSIONS),
-    ] {
-        let desired = parse_permissions(raw)?;
-        let previous = remove_permissions(
-            &desired,
-            &[
-                "legacy_import_confirmation:list",
-                "legacy_import_confirmation:detail",
-                "legacy_import_confirmation:complete",
-            ],
-        );
-        upgrade_exact(rbac, role_id, previous, desired).await?;
-    }
-    Ok(())
+    upgrade_roles_by_removing(
+        rbac,
+        &[
+            ("role-sales", SALES_PERMISSIONS),
+            ("role-procurement", PROCUREMENT_PERMISSIONS),
+            ("role-operations", OPERATIONS_PERMISSIONS),
+            ("role-warehouse", WAREHOUSE_PERMISSIONS),
+            ("role-finance", FINANCE_PERMISSIONS),
+        ],
+        &[
+            "legacy_import_confirmation:list",
+            "legacy_import_confirmation:detail",
+            "legacy_import_confirmation:complete",
+        ],
+    )
+    .await
 }
 
 /// 仅为仍保持上一版默认种子的 W29 固定责任角色补齐两项强命令权限。
 pub(crate) async fn upgrade_integration_task_permissions(rbac: &SharedRbacService) -> Result<()> {
-    for (role_id, raw) in [
-        ("role-sales", SALES_PERMISSIONS),
-        ("role-procurement", PROCUREMENT_PERMISSIONS),
-        ("role-operations", OPERATIONS_PERMISSIONS),
-        ("role-finance", FINANCE_PERMISSIONS),
-        ("role-sysadmin", SYSADMIN_PERMISSIONS),
-    ] {
-        let desired = parse_permissions(raw)?;
-        let previous = integration_task_legacy_snapshot(&desired);
-        upgrade_exact(rbac, role_id, previous, desired).await?;
-    }
-    Ok(())
+    upgrade_roles_by_removing(
+        rbac,
+        &[
+            ("role-sales", SALES_PERMISSIONS),
+            ("role-procurement", PROCUREMENT_PERMISSIONS),
+            ("role-operations", OPERATIONS_PERMISSIONS),
+            ("role-finance", FINANCE_PERMISSIONS),
+            ("role-sysadmin", SYSADMIN_PERMISSIONS),
+        ],
+        INTEGRATION_TASK_GAP_PERMISSIONS,
+    )
+    .await
 }
 
 /// 从当前目标权限精确移除 W29 两项强命令权限，形成上一版默认种子。
+#[cfg(test)]
 pub(crate) fn integration_task_legacy_snapshot(desired: &[Permission]) -> Vec<Permission> {
-    remove_permissions(desired, &["integration_task:process", "integration_task:complete"])
+    remove_permissions(desired, INTEGRATION_TASK_GAP_PERMISSIONS)
 }
+
+/// 本轮补齐前默认种子缺少的 W29 两项强命令权限。
+pub(crate) const INTEGRATION_TASK_GAP_PERMISSIONS: &[&str] =
+    &["integration_task:process", "integration_task:complete"];
 
 /// 从预定义权限集合中移除指定稳定权限代码。
 pub(crate) fn remove_permissions(permissions: &[Permission], removed: &[&str]) -> Vec<Permission> {

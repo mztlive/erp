@@ -10,10 +10,7 @@ use super::{PARTIES, PARTY_REVISIONS, PartyDomainRepository};
 use crate::entity::party::{
     Party, PartyAddress, PartyBankAccount, PartyContact, PartyRevision, PartyTaxProfile,
 };
-use crate::repository::owned::{
-    PartyAddressRepository, PartyBankAccountRepository, PartyContactRepository, PartyRepository,
-    PartyRevisionRepository,
-};
+use crate::repository::owned::{PartyRepository, PartyRevisionRepository};
 
 impl<'a> PartyDomainRepository<'a> {
     /// 按稳定 ID 读取未删除主体。
@@ -31,7 +28,10 @@ impl<'a> PartyDomainRepository<'a> {
         PartyRepository::new(self.db, PARTIES).find_party(party_id, executor).await
     }
 
-    /// 按稳定 ID 读取联系人。
+    /// 按稳定 ID 读取联系人（erp-party-012）。
+    ///
+    /// 仅保留 Service 明确消费的单条读取；调用方已有集合访问器时优先直用
+    /// 集合仓储，避免经本聚合再转发的无意义包装。
     ///
     /// # 参数
     /// * `record_id` - 联系人 ID
@@ -47,12 +47,12 @@ impl<'a> PartyDomainRepository<'a> {
         record_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<PartyContact>> {
-        PartyContactRepository::new(self.db, <Database as PartyExt>::PARTY_CONTACTS)
-            .find_contact(record_id, executor)
-            .await
+        self.db.party_contacts().find_by_id(record_id, executor).await
     }
 
-    /// 按稳定 ID 读取地址。
+    /// 按稳定 ID 读取地址（erp-party-012）。
+    ///
+    /// 同联系人读取：保留的单条聚合入口，优先直用集合仓储。
     ///
     /// # 参数
     /// * `record_id` - 地址 ID
@@ -68,12 +68,12 @@ impl<'a> PartyDomainRepository<'a> {
         record_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<PartyAddress>> {
-        PartyAddressRepository::new(self.db, <Database as PartyExt>::PARTY_ADDRESSES)
-            .find_address(record_id, executor)
-            .await
+        self.db.party_addresses().find_by_id(record_id, executor).await
     }
 
-    /// 按稳定 ID 读取银行账户。
+    /// 按稳定 ID 读取银行账户（erp-party-012）。
+    ///
+    /// 同联系人读取：保留的单条聚合入口，优先直用集合仓储。
     ///
     /// # 参数
     /// * `record_id` - 银行账户 ID
@@ -89,9 +89,7 @@ impl<'a> PartyDomainRepository<'a> {
         record_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<PartyBankAccount>> {
-        PartyBankAccountRepository::new(self.db, <Database as PartyExt>::PARTY_BANK_ACCOUNTS)
-            .find_bank_account(record_id, executor)
-            .await
+        self.db.party_bank_accounts().find_by_id(record_id, executor).await
     }
 
     /// 批量读取主体及其当前修订。

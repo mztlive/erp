@@ -550,12 +550,11 @@ async fn verify_decision_receipt_runtime_identity(
     {
         return Err(hidden_not_found());
     }
-    let document_type =
-        crate::entity::approval_integration::document_type_from_subject_kind(instance.subject.subject_kind())
-            .map_err(|_| hidden_not_found())?;
-    if instance.process_kind != process_kind_of(document_type) {
-        return Err(hidden_not_found());
-    }
+    let document_type = crate::entity::approval_integration::resolve_runtime_document_type(
+        instance.subject.subject_kind(),
+        instance.process_kind,
+    )
+    .map_err(|_| hidden_not_found())?;
     let snapshot = db
         .approval_subject_snapshots()
         .find_by_process_instance_id(&instance.base.id, session)
@@ -655,12 +654,11 @@ async fn authorize_decision_terminal_replay(
     if execution.process_instance_id.as_ref() != instance.base.id {
         return Err(hidden_not_found());
     }
-    let document_type =
-        crate::entity::approval_integration::document_type_from_subject_kind(instance.subject.subject_kind())
-            .map_err(|_| hidden_not_found())?;
-    if instance.process_kind != process_kind_of(document_type) {
-        return Err(hidden_not_found());
-    }
+    let document_type = crate::entity::approval_integration::resolve_runtime_document_type(
+        instance.subject.subject_kind(),
+        instance.process_kind,
+    )
+    .map_err(|_| hidden_not_found())?;
     let snapshot = db
         .approval_subject_snapshots()
         .find_by_process_instance_id(&instance.base.id, session)

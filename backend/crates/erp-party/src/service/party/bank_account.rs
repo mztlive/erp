@@ -143,8 +143,7 @@ impl PartyBankAccountService {
         actor: &AuditActor,
     ) -> Result<PartyBankAccountView> {
         req.validate()?;
-        super::ensure_party_exists(&self.db, party_id).await?;
-        super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(party_id)).await?;
+        super::ensure_new_fact_guards(&self.db, self.supplier_roles.as_ref(), party_id).await?;
         let account_number = req.account_number.clone();
         let mut account = PartyBankAccount::new(
             PartyBankAccountId::new(next_id()),
@@ -219,7 +218,7 @@ impl PartyBankAccountService {
             .await?
             .ok_or_else(|| Error::NotFound("银行账户不存在".to_string()))?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &account.party_id).await?;
-        account.ensure_version(req.version).map_err(|error| Error::ConflictError(error.to_string()))?;
+        super::map_version_conflict(account.ensure_version(req.version))?;
         account.update(
             PartyBankAccountUpdate {
                 status: req.status,

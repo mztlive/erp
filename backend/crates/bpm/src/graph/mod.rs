@@ -9,7 +9,9 @@ pub use linear::{LinearTransitionDraft, build_linear_transitions, generate_linea
 pub use validator::{ordered_nodes, validate_entry_node, validate_linear_graph, validate_transition};
 
 use crate::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
-use crate::model::types::{ApprovalDecision, ApprovalTransitionEvent, ModelError, ModelResult};
+use crate::model::types::{
+    ApprovalDecision, ApprovalTransitionEvent, ModelError, ModelResult, NODE_KEY_MAX_LEN, normalize_required,
+};
 use crate::model::{
     ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition, NewNodeDefinition,
     ParticipantId, ProcessKind, Timestamp,
@@ -83,12 +85,8 @@ impl NodeReplacementDraft {
         if new_node_id.as_ref().trim().is_empty() {
             return Err(ModelError::InvalidField("新节点ID不能为空"));
         }
-        let new_node_key = crate::model::types::normalize_required(
-            new_node_key,
-            "节点键不能为空",
-            crate::model::types::NODE_KEY_MAX_LEN,
-            "节点键过长",
-        )?;
+        let new_node_key =
+            normalize_required(new_node_key, "节点键不能为空", NODE_KEY_MAX_LEN, "节点键过长")?;
         Ok(Self {
             existing_node_id,
             new_node_id,
@@ -255,16 +253,38 @@ impl DefinitionGraph {
             ApprovalDecision::Approve => ApprovalTransitionEvent::Approve,
             ApprovalDecision::Reject => ApprovalTransitionEvent::Reject,
         };
-        let mut matches = self
-            .transitions
-            .iter()
-            .filter(|item| item.from_node_key == current_node_key && item.event == event);
+        let edge = self.unique_transition(current_node_key, event)?;
+        edge.validate_shape()?;
+        Ok(edge.to_node_key.clone())
+    }
+
+    /// 查找指定来源与事件的唯一连线。
+    ///
+    /// # 参数
+    /// * `from_node_key` - 事件来源节点键
+    /// * `event` - 通过或驳回事件
+    ///
+    /// # 返回
+    /// 同一来源与事件恰有一条连线时返回该连线引用。
+    ///
+    /// # 错误
+    /// 连线缺失或重复时返回连线错误。
+    ///
+    /// # 关键业务约束
+    /// 本方法不校验连线形状；调用方解析目标前必须调用
+    /// `validate_shape`，不得取第一条掩盖重复定义。
+    pub(crate) fn unique_transition(
+        &self,
+        from_node_key: &str,
+        event: ApprovalTransitionEvent,
+    ) -> ModelResult<&ApprovalTransitionDefinition> {
+        let mut matches =
+            self.transitions.iter().filter(|item| item.from_node_key == from_node_key && item.event == event);
         let edge = matches.next().ok_or(ModelError::InvalidTransition("审批定义缺少决定连线"))?;
         if matches.next().is_some() {
             return Err(ModelError::InvalidTransition("审批定义存在重复决定连线"));
         }
-        edge.validate_shape()?;
-        Ok(edge.to_node_key.clone())
+        Ok(edge)
     }
 
     /// 按整组替换输入规划草稿节点。
@@ -332,8 +352,7 @@ impl DefinitionGraph {
         transition_ids: Vec<ApprovalTransitionDefinitionId>,
         at: Timestamp,
     ) -> ModelResult<Self> {
-        let ordered = ordered_nodes(&nodes)?;
-        ensure_nodes_belong_to_definition(&nodes, &definition.base.id)?;
+        let ordered = ordered_nodes_for_definition(&nodes, &definition.base.id)?;
         let entry = ordered[0].node_key.clone();
         let mut definition = definition.clone();
         definition.set_entry_node_draft(entry, at)?;
@@ -372,8 +391,7 @@ impl DefinitionGraph {
             transition_ids,
             at,
         } = params;
-        let ordered = ordered_nodes(&nodes)?;
-        ensure_nodes_belong_to_definition(&nodes, definition_id.as_ref())?;
+        let ordered = ordered_nodes_for_definition(&nodes, definition_id.as_ref())?;
         let definition = ApprovalProcessDefinition::new_draft(
             definition_id,
             process_kind,
@@ -563,6 +581,29 @@ fn ensure_unique_node_identities(nodes: &[ApprovalNodeDefinition]) -> ModelResul
     Ok(())
 }
 
+/// 按展示顺序排列节点，并校验全部归属给定定义。
+///
+/// `rebuild_draft` 与 `new_populated_draft` 共用本规则：顺序非法、数量越界
+/// 或任一节点指向其它定义时均不得构图。
+///
+/// # 参数
+/// * `nodes` - 待构图节点
+/// * `definition_id` - 目标定义 ID
+///
+/// # 返回
+/// 返回从 `display_order = 1` 开始连续排列的节点引用。
+///
+/// # 错误
+/// 节点数量、顺序非法或归属不一致时返回模型错误。
+fn ordered_nodes_for_definition<'a>(
+    nodes: &'a [ApprovalNodeDefinition],
+    definition_id: &str,
+) -> ModelResult<Vec<&'a ApprovalNodeDefinition>> {
+    let ordered = ordered_nodes(nodes)?;
+    ensure_nodes_belong_to_definition(nodes, definition_id)?;
+    Ok(ordered)
+}
+
 /// 校验全部节点归属于给定定义。
 ///
 /// # 参数
@@ -591,10 +632,10 @@ mod tests {
         copy_nodes_for_definition,
     };
     use crate::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
-    use crate::model::types::ApprovalDecision;
+    use crate::model::types::{ApprovalDecision, ApprovalTransitionEvent, ModelError};
     use crate::model::{
-        ApprovalNodeDefinition, ApprovalProcessDefinition, NewNodeDefinition, ParticipantId, ProcessKind,
-        Timestamp,
+        ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition, NewNodeDefinition,
+        ParticipantId, ProcessKind, Timestamp,
     };
 
     /// 构造最小草稿定义。
@@ -820,6 +861,32 @@ mod tests {
         );
         assert_eq!(graph.decision_target_node_key("new-n2", ApprovalDecision::Approve).unwrap(), None);
         assert!(graph.decision_target_node_key("missing", ApprovalDecision::Approve).is_err());
+    }
+
+    /// 同一来源与事件出现重复连线时失败关闭，不得取第一条掩盖重复定义。
+    #[test]
+    fn duplicate_decision_edges_fail_closed() {
+        let at = Timestamp::from_unix_secs(1).unwrap();
+        let transition = |id: &str| {
+            ApprovalTransitionDefinition::to_node(
+                ApprovalTransitionDefinitionId::new(id),
+                ApprovalProcessDefinitionId::new("def"),
+                "n1",
+                ApprovalTransitionEvent::Approve,
+                "n2",
+                at,
+            )
+            .unwrap()
+        };
+        let graph = DefinitionGraph {
+            definition: definition("n1"),
+            nodes: vec![node("id1", "n1", 1, None), node("id2", "n2", 2, None)],
+            transitions: vec![transition("t1"), transition("t-dup")],
+        };
+        assert_eq!(
+            graph.decision_target_node_key("n1", ApprovalDecision::Approve),
+            Err(ModelError::InvalidTransition("审批定义存在重复决定连线"))
+        );
     }
 
     /// 只有已发布且线性完整的图可通过绑定校验；草稿、退役和损坏发布图失败关闭。

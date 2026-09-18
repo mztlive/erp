@@ -112,7 +112,8 @@ impl TransitionPlan {
 
     /// 追加另一份进入节点计划的执行、任务与事件，并采用其实例快照。
     ///
-    /// 已接受决定后的下一节点受阻不得改写为 `CommitRequired::Blocked`。
+    /// 已接受决定后的下一节点受阻不得改写为 `CommitRequired::Blocked`，
+    /// 因此通过/驳回路径使用 [`Self::merge_enter_keep_commit`]。
     ///
     /// # 参数
     /// * `enter` - `plan_enter_node` 的结果
@@ -121,7 +122,15 @@ impl TransitionPlan {
     /// # 返回
     /// 返回合并后的计划。
     pub fn merge_enter(&mut self, enter: TransitionPlan, keep_commit: bool) {
-        self.merge_enter_inner(enter, keep_commit);
+        self.instance = enter.instance;
+        self.created_executions.extend(enter.created_executions);
+        self.updated_executions.extend(enter.updated_executions);
+        self.created_assignees.extend(enter.created_assignees);
+        self.task_intents.extend(enter.task_intents);
+        self.events.extend(enter.events);
+        if !keep_commit {
+            self.commit = enter.commit;
+        }
     }
 
     /// 追加另一份进入节点计划并保留当前提交类别。
@@ -134,7 +143,7 @@ impl TransitionPlan {
     /// # 返回
     /// 返回合并后的计划。
     pub fn merge_enter_keep_commit(&mut self, enter: TransitionPlan) {
-        self.merge_enter_inner(enter, true);
+        self.merge_enter(enter, true);
     }
 
     /// 追加另一份进入节点计划并采用其提交类别。
@@ -145,18 +154,6 @@ impl TransitionPlan {
     /// # 返回
     /// 返回合并后的计划。
     pub fn merge_enter_adopt_commit(&mut self, enter: TransitionPlan) {
-        self.merge_enter_inner(enter, false);
-    }
-
-    fn merge_enter_inner(&mut self, enter: TransitionPlan, keep_commit: bool) {
-        self.instance = enter.instance;
-        self.created_executions.extend(enter.created_executions);
-        self.updated_executions.extend(enter.updated_executions);
-        self.created_assignees.extend(enter.created_assignees);
-        self.task_intents.extend(enter.task_intents);
-        self.events.extend(enter.events);
-        if !keep_commit {
-            self.commit = enter.commit;
-        }
+        self.merge_enter(enter, false);
     }
 }

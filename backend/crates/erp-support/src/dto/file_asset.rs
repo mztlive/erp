@@ -7,7 +7,7 @@ use application_core::normalized_text;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::{PageParams, non_blank, normalize_sort};
+use super::{PageParams, non_blank};
 /// 契约分页形状与排序方向沿用 `dto` 共享定义，经本模块的既有路径继续可用。
 pub use super::{PageView, SortDir};
 use crate::entity::file_asset::{
@@ -169,13 +169,18 @@ impl FileAssetListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<FileAssetListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, FILE_ASSET_SORT_FIELDS)?;
         Ok(FileAssetListQuery {
             file_name: normalized_text(self.file_name.as_deref()),
             security_scan_status: self.security_scan_status,
             retention_class: self.retention_class,
             sensitivity_class: self.sensitivity_class,
-            paging: PageParams::normalized(self.page, self.page_size, sort_by, sort_dir),
+            paging: PageParams::resolve(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                FILE_ASSET_SORT_FIELDS,
+            )?,
         })
     }
 }
@@ -331,9 +336,8 @@ mod tests {
     use serde_json::json;
     use validator::Validate;
 
-    use super::{
-        AttachToDocumentRequest, FileAssetListParams, RegisterFileAssetRequest, SortDir, normalize_sort,
-    };
+    use super::{AttachToDocumentRequest, FileAssetListParams, RegisterFileAssetRequest, SortDir};
+    use crate::dto::normalize_sort;
     use crate::entity::file_asset::{AttachmentUsage, RetentionClass, SensitivityClass};
 
     #[test]

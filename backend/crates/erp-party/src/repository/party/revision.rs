@@ -79,28 +79,6 @@ impl Pagination for PartyRevisionFilter {
 }
 
 impl<'a> PartyRevisionRepository<'a> {
-    /// 按修订 ID 集合批量读取主体修订。
-    ///
-    /// # 参数
-    /// * `revision_ids` - 主体修订 ID 集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配修订；返回顺序不承诺与输入一致。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_revisions_by_ids(
-        &self,
-        revision_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<PartyRevision>> {
-        if revision_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        self.find_many(doc! { "id": { "$in": revision_ids } }, executor).await
-    }
-
     /// 按修订 ID 查找主体修订。
     ///
     /// # 参数
@@ -172,7 +150,9 @@ impl<'a> PartyRevisionRepository<'a> {
             .await
     }
 
-    /// 按修订 ID 集合批量读取主体修订。
+    /// 按修订 ID 集合批量读取主体修订（erp-party-012）。
+    ///
+    /// 本域修订批量读取的唯一入口；早期的 `find_revisions_by_ids` 别名已删除。
     ///
     /// # 参数
     /// * `revision_ids` - 修订 ID 集合；为空时直接返回空集合
@@ -194,7 +174,10 @@ impl<'a> PartyRevisionRepository<'a> {
         self.find_many(doc! { "id": { "$in": revision_ids } }, executor).await
     }
 
-    /// 按法定名称或简称字面量模糊匹配主体 ID。
+    /// 按法定名称或简称字面量模糊匹配修订所属主体 ID。
+    ///
+    /// 返回修订直属主体 ID；是否当前生效由调用方按 `current_revision_id` 回指判定，
+    /// 不要在本方法隐含当前性语义（erp-party-012）。
     ///
     /// # 参数
     /// * `keyword` - 名称关键词

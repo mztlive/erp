@@ -140,16 +140,13 @@ pub fn prepare_failed_message_task(
     attempt_summary: Option<String>,
     attempt_at: Instant,
 ) -> Result<IntegrationErrorTask> {
-    let mut task = IntegrationErrorTask::new(
+    let mut task = IntegrationErrorTask::with_derived_owner_role(
         IntegrationErrorTaskId::new(next_id()),
-        IntegrationErrorTaskData {
-            message_id: Some(message_id),
-            business_object_id: None,
-            error_class,
-            owner_role: Some(error_owner_role(error_class).to_string()),
-            owner_user_id: Some(actor_id.to_string()),
-            owner_org_unit_id,
-        },
+        Some(message_id),
+        None,
+        error_class,
+        actor_id.to_string(),
+        owner_org_unit_id,
     )?;
     if attempt_summary.is_some() {
         task.record_attempt(attempt_at, attempt_summary)?;

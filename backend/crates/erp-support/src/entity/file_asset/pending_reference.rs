@@ -60,15 +60,10 @@ impl PendingFileReference {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct PendingFileTarget {
-    id: FileAssetId,
-}
-
 /// 单次业务命令登记的临时文件引用集合。
 #[derive(Debug, Clone, Default)]
 pub struct PendingFileReferenceSet {
-    targets: HashMap<PendingFileReference, PendingFileTarget>,
+    targets: HashMap<PendingFileReference, FileAssetId>,
     sensitivity_by_id: HashMap<String, SensitivityClass>,
 }
 
@@ -93,7 +88,7 @@ impl PendingFileReferenceSet {
             if sensitivity_by_id.insert(id.to_string(), sensitivity).is_some() {
                 return Err(Error::from("正式文件资产 ID 不能重复"));
             }
-            targets.insert(reference, PendingFileTarget { id });
+            targets.insert(reference, id);
         }
         Ok(Self { targets, sensitivity_by_id })
     }
@@ -117,7 +112,7 @@ impl PendingFileReferenceSet {
         if !used.insert(reference.as_str().to_string()) {
             return Err(Error::from("同一临时文件不能重复消费"));
         }
-        *id = target.id.clone();
+        *id = target.clone();
         Ok(true)
     }
 

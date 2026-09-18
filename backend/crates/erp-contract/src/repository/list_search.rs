@@ -1,5 +1,7 @@
 //! 合同列表先关联当前修订再筛选、排序、计数，禁止分页后匹配。
 
+use std::collections::HashMap;
+
 use erp_core::common::time::BusinessDate;
 use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, Pagination, QueryFilter, Result, insert_literal_regex_filter};
@@ -7,7 +9,9 @@ use serde::Deserialize;
 
 use super::ContractExt;
 use super::contract::{ContractDomainRepository, ContractFilter, ContractRow};
-use crate::dto::contract::{ContractFilterOption, ContractMetric, ContractMetrics};
+use crate::dto::contract::{
+    ContractFilterOption, ContractMetric, ContractMetrics, ContractRevisionView, ContractView,
+};
 
 /// 可见合同引用的客户搜索事实，外域数据由端口提供。
 #[derive(Debug, Clone)]
@@ -17,6 +21,71 @@ pub struct ContractCustomer {
     pub id: String,
     pub number: String,
     pub owner: String,
+}
+
+impl ContractCustomer {
+    /// 解析负责人展示标签（纯规则，无 I/O）。
+    ///
+    /// 空显示名回退稳定用户 ID；未分配显示破折号。
+    ///
+    /// # 参数
+    /// * `owner` - 当前主负责人 ID
+    /// * `names` - 账号显示名
+    ///
+    /// # 返回
+    /// 返回展示标签。
+    ///
+    /// # 关键业务约束
+    /// 不得用签约经办姓名填充未分配主责。
+    pub(crate) fn resolve_owner_label(owner: Option<&String>, names: &HashMap<String, String>) -> String {
+        owner
+            .map(|id| {
+                names
+                    .get(id)
+                    .map(|name| name.trim())
+                    .filter(|name| !name.is_empty())
+                    .unwrap_or(id)
+                    .to_string()
+            })
+            .unwrap_or_else(|| "—".to_string())
+    }
+}
+
+impl ContractRow {
+    /// 由行投影与已装配事实确定性组装列表视图（纯规则，无 I/O）。
+    ///
+    /// 同一客户事实供接口显示与搜索使用，防止搜索命中后展示另一套名称。
+    ///
+    /// # 参数
+    /// * `self` - 合同列表投影行
+    /// * `current_revision` - 当前修订摘要
+    /// * `customer` - 客户编号与当前主负责人
+    ///
+    /// # 返回
+    /// 返回列表视图。
+    ///
+    /// # 关键业务约束
+    /// `owner_user_id` 只来自客户当前主负责人。
+    pub(crate) fn into_view(
+        self,
+        current_revision: Option<ContractRevisionView>,
+        customer: Option<&ContractCustomer>,
+    ) -> ContractView {
+        ContractView {
+            id: self.id,
+            contract_no: self.contract_no,
+            customer_id: self.customer_id,
+            settlement_party_id: self.settlement_party_id,
+            status: self.status,
+            current_revision_id: self.current_revision_id,
+            current_revision,
+            customer_no: customer.map(|c| c.number.clone()).filter(|number| !number.is_empty()),
+            owner_user_id: customer.and_then(|c| c.owner_id.clone()),
+            owner_user_name: customer.filter(|c| c.owner_id.is_some()).map(|c| c.owner.clone()),
+            created_at: self.created_at,
+            version: self.version,
+        }
+    }
 }
 /// 列表新增筛选，精确字段与关键词按交集执行。
 #[derive(Debug, Clone, Default)]
@@ -361,5 +430,54 @@ mod tests {
             &doc! { "$lte": ["$current.valid_to", "2026-10-08"] }
         );
         assert_eq!(ContractSearchResult::default().total(), 0);
+    }
+
+    #[test]
+    fn owner_label_falls_back_to_id_and_dash() {
+        use std::collections::HashMap;
+
+        let names: HashMap<String, String> =
+            [("user-1".to_string(), " 张三 ".to_string()), ("user-2".to_string(), "   ".to_string())]
+                .into_iter()
+                .collect();
+        assert_eq!(ContractCustomer::resolve_owner_label(Some(&"user-1".to_string()), &names), "张三");
+        assert_eq!(ContractCustomer::resolve_owner_label(Some(&"user-2".to_string()), &names), "user-2");
+        assert_eq!(ContractCustomer::resolve_owner_label(None, &names), "—");
+    }
+
+    #[test]
+    fn row_into_view_keeps_owner_only_with_assignment() {
+        let row = ContractRow {
+            id: "c-1".into(),
+            contract_no: "HT-1".into(),
+            customer_id: "cust-1".into(),
+            settlement_party_id: "party-1".into(),
+            status: crate::entity::contract::ContractStatus::Effective,
+            current_revision_id: Some("rev-1".into()),
+            version: 2,
+            created_at: 1_700_000_000,
+            updated_at: 1_700_000_100,
+        };
+        let assigned = ContractCustomer {
+            owner_id: Some("user-1".into()),
+            id: "cust-1".into(),
+            number: "C-1".into(),
+            owner: "张三".into(),
+        };
+        let view = row.clone().into_view(None, Some(&assigned));
+        assert_eq!(view.customer_no.as_deref(), Some("C-1"));
+        assert_eq!(view.owner_user_id.as_deref(), Some("user-1"));
+        assert_eq!(view.owner_user_name.as_deref(), Some("张三"));
+
+        let unassigned = ContractCustomer {
+            owner_id: None,
+            id: "cust-1".into(),
+            number: String::new(),
+            owner: "—".into(),
+        };
+        let bare = row.into_view(None, Some(&unassigned));
+        assert_eq!(bare.customer_no, None);
+        assert_eq!(bare.owner_user_id, None);
+        assert_eq!(bare.owner_user_name, None);
     }
 }

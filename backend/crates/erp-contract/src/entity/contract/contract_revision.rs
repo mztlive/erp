@@ -9,16 +9,13 @@ use entity_macros::Entity;
 use erp_core::common::revision::RevisionBase;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ContractId, ContractRevisionId, FileAssetId, PartyId};
-use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::snapshot::{
-    CustomerSnapshot, InvoiceRequirementSnapshot, PaymentTermSnapshot, SettlementPartySnapshot,
+    ContractSnapshot, CustomerSnapshot, InvoiceRequirementSnapshot, PaymentTermSnapshot,
+    SettlementPartySnapshot,
 };
-
-/// 合同编号最大长度。
-const CONTRACT_NO_MAX_LEN: usize = 64;
 
 /// 合同归档来源（数据模型 §6.4：`CONTRACT_CENTER`、`SALES_ORDER_CREATE`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -144,12 +141,7 @@ impl ContractRevision {
         if revision_no == 0 {
             return Err(Error::from("合同版本号必须为正整数"));
         }
-        let contract_no = normalize_required_text(
-            data.contract_no,
-            "合同编号不能为空",
-            CONTRACT_NO_MAX_LEN,
-            "合同编号过长",
-        )?;
+        let contract_no = ContractSnapshot::new(data.contract_no)?.contract_no;
         if let Some(valid_to) = data.valid_to
             && valid_to <= data.valid_from
         {

@@ -134,8 +134,7 @@ impl PartyAddressService {
         actor: &AuditActor,
     ) -> Result<PartyAddressView> {
         req.validate()?;
-        super::ensure_party_exists(&self.db, party_id).await?;
-        super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(party_id)).await?;
+        super::ensure_new_fact_guards(&self.db, self.supplier_roles.as_ref(), party_id).await?;
         let address_plaintext = req.address.clone();
         let mut address = PartyAddress::new(
             PartyAddressId::new(next_id()),
@@ -208,7 +207,7 @@ impl PartyAddressService {
             .await?
             .ok_or_else(|| Error::NotFound("地址不存在".to_string()))?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &address.party_id).await?;
-        address.ensure_version(req.version).map_err(|error| Error::ConflictError(error.to_string()))?;
+        super::map_version_conflict(address.ensure_version(req.version))?;
         address.update(
             PartyAddressUpdate {
                 status: req.status,

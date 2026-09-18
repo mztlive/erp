@@ -29,9 +29,9 @@ mod sku_revision;
 mod specification_audit;
 mod voucher;
 
-pub use attribute::{SkuAttributeFilter, SkuAttributeValueFilter};
-pub use category::{ProductCategoryAttributeFilter, ProductCategoryFilter};
-pub use dictionary::{ProductBrandFilter, UnitOfMeasureFilter};
+pub use attribute::{SkuAttributeFilter, SkuAttributeRow, SkuAttributeValueFilter, SkuAttributeValueRow};
+pub use category::{ProductCategoryAttributeFilter, ProductCategoryFilter, ProductCategoryRow};
+pub use dictionary::{ProductBrandFilter, ProductBrandRow, UnitOfMeasureFilter, UnitOfMeasureRow};
 pub use listing::{ProductListingSummary, sku_is_listed_expr};
 use mongodb::Database;
 pub use parent_chain::CategoryParentChainFact;

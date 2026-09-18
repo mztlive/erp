@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 
 use erp_core::common::time::BusinessDate;
-use erp_core::ids::PartyId;
 
 use crate::dto::supplier::{CommercialProfileView, SupplierQualificationHealth, SupplierView};
 use crate::entity::supplier::{
@@ -78,33 +77,6 @@ struct SupplierRowContext<'a> {
     as_of: BusinessDate,
 }
 
-/// 收集商务版本引用的签约与付款主体 ID。
-///
-/// 商务主体 ID 收集的唯一实现（erp-supplier-005）：仓储 `bundle/detail.rs`
-/// 的去重逻辑已转调此处，两处语义一致（排序去重后映射 `PartyId`）。
-/// 同 crate 仓储经 `crate::service::supplier::commercial_party_ids_for_repository`
-/// 转调，避免业务领域内两份去重逻辑。
-///
-/// # 参数
-/// * `profiles` - 当前页商务资料
-///
-/// # 返回
-/// 返回去重后的主体 ID，供批量读取法定名称。
-///
-/// # 错误
-/// 无。
-pub(crate) fn commercial_party_ids(profiles: &[SupplierCommercialProfileRevision]) -> Vec<PartyId> {
-    let mut ids: Vec<String> = profiles
-        .iter()
-        .flat_map(|profile| {
-            [profile.signing_entity_party_id.to_string(), profile.payment_entity_party_id.to_string()]
-        })
-        .collect();
-    ids.sort();
-    ids.dedup();
-    ids.into_iter().map(|id| PartyId::new(&id)).collect()
-}
-
 /// 装配单行供应商视图。
 ///
 /// # 参数
@@ -169,10 +141,7 @@ fn named_profile(
     names: &HashMap<String, String>,
 ) -> CommercialProfileView {
     let mut view = CommercialProfileView::from(profile);
-    view.signing_entity_name =
-        view.signing_entity_party_id.as_ref().and_then(|party_id| names.get(party_id)).cloned();
-    view.payment_entity_name =
-        view.payment_entity_party_id.as_ref().and_then(|party_id| names.get(party_id)).cloned();
+    view.fill_entity_names(names);
     view
 }
 
@@ -262,7 +231,8 @@ mod tests {
     };
     use erp_core::money::Rate;
 
-    use super::{SupplierViewAssembleInput, assemble_supplier_views, commercial_party_ids};
+    use super::{SupplierViewAssembleInput, assemble_supplier_views};
+    use crate::entity::supplier::supplier_commercial_profile_revision::commercial_party_ids;
     use crate::entity::supplier::{
         CapabilityCode, CapabilityStatus, InvoiceType, QualificationStatus, QualificationType,
         ReconciliationCycle, SettlementMode, SupplierAccountStatus, SupplierCapability,

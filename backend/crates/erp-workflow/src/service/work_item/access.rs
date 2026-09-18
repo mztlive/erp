@@ -5,7 +5,6 @@ use std::collections::HashSet;
 use application_core::AuditActor;
 use persistence_core::{Executor, NoTransaction};
 
-use super::close::is_w29_fields_closable;
 use super::dto;
 use super::order_access::{require_order_task_read, task_read_error};
 use crate::entity::work_item::{
@@ -618,7 +617,7 @@ pub fn allowed_actions(
         if has_permission(access, REASSIGN_PERMISSION) {
             actions.push(WorkItemAllowedAction::Reassign);
         }
-        if is_w29_fields_closable(item) && has_permission(access, CLOSE_PERMISSION) {
+        if item.is_w29_closable() && has_permission(access, CLOSE_PERMISSION) {
             actions.push(WorkItemAllowedAction::Close);
         }
     }

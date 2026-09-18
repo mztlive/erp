@@ -1,9 +1,7 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
-};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter};
 use serde::{Deserialize, Serialize};
 
 use super::shared::{default_paging, sort_doc, whitelisted_sort};
@@ -135,10 +133,7 @@ impl<'a> SkuAttributeRepository<'a> {
             .projection(sku_attribute_projection())
             .build();
         let collection = self.collection().clone_with_type::<SkuAttributeRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        super::shared::search_projected(&collection, &self.collection(), filter, options, executor).await
     }
 }
 
@@ -268,10 +263,7 @@ impl<'a> SkuAttributeValueRepository<'a> {
             .projection(sku_attribute_value_projection())
             .build();
         let collection = self.collection().clone_with_type::<SkuAttributeValueRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        super::shared::search_projected(&collection, &self.collection(), filter, options, executor).await
     }
 }
 

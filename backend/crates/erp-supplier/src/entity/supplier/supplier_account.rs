@@ -1,5 +1,7 @@
 //! `supplier_account`：供应商角色（数据模型 §6.2，页面：W14）。
 
+use std::collections::HashSet;
+
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::Result;
@@ -419,6 +421,33 @@ fn normalize_payment_term_id(value: Option<String>) -> Result<Option<String>> {
         return Err(erp_core::Error::from("结算条件引用过长"));
     }
     Ok(Some(value))
+}
+
+/// 合并两个供应商角色候选集合；两个条件同时存在时取交集。
+///
+/// 列表筛选的能力与资质候选约束经此合并，输入顺序按 `current` 保留。
+///
+/// # 参数
+/// * `current` - 已有筛选条件命中的候选集合
+/// * `matched` - 新筛选条件命中的候选集合
+///
+/// # 返回
+/// 两者均存在时返回交集，仅一者存在时原样返回，均不存在时返回 `None`。
+///
+/// # 错误
+/// 无。
+pub(crate) fn intersect_supplier_ids(
+    current: Option<Vec<SupplierAccountId>>,
+    matched: Option<Vec<SupplierAccountId>>,
+) -> Option<Vec<SupplierAccountId>> {
+    let (current, matched) = match (current, matched) {
+        (Some(current), Some(matched)) => (current, matched),
+        (Some(current), None) => return Some(current),
+        (None, Some(matched)) => return Some(matched),
+        (None, None) => return None,
+    };
+    let matched: HashSet<String> = matched.into_iter().map(|id| id.to_string()).collect();
+    Some(current.into_iter().filter(|id| matched.contains(&id.to_string())).collect())
 }
 
 #[cfg(test)]

@@ -349,7 +349,7 @@ impl PartyService {
             party.company_profile = Some(company.clone());
         }
         ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(id)).await?;
-        party.ensure_version(req.version).map_err(|error| Error::ConflictError(error.to_string()))?;
+        map_version_conflict(party.ensure_version(req.version))?;
 
         // 预校验信用代码冲突：与实体规范化规则一致，避免仅依赖唯一索引透出笼统冲突。
         if let Some(raw_code) = req.unified_credit_code.as_ref() {
@@ -574,6 +574,46 @@ pub(crate) async fn ensure_party_exists(db: &Database, party_id: &str) -> Result
     Ok(())
 }
 
+/// 校验从属事实创建入口的同一守卫组合（erp-party-011）。
+///
+/// 主体存在性与供应商资料边界按创建路径固定顺序执行；与分开调用两守卫语义一致。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `supplier_roles` - 供应商角色事实端口
+/// * `party_id` - 主体 ID
+///
+/// # 返回
+/// 两守卫均通过返回 `Ok(())`。
+///
+/// # 错误
+/// * `NotFound` - 主体不存在
+/// * `BusinessLogicError` - 主体已挂供应商角色
+pub(crate) async fn ensure_new_fact_guards(
+    db: &Database,
+    supplier_roles: &dyn SupplierRolePort,
+    party_id: &str,
+) -> Result<()> {
+    ensure_party_exists(db, party_id).await?;
+    ensure_outside_supplier_profile(supplier_roles, &PartyId::new(party_id)).await
+}
+
+/// 将实体乐观锁冲突映射为稳定的业务冲突错误（erp-party-011）。
+///
+/// 各从属事实与主体更新入口的 `ensure_version` 映射唯一来源；冲突文案由实体层保证。
+///
+/// # 参数
+/// * `version_check` - 实体 `ensure_version` 的返回结果
+///
+/// # 返回
+/// 版本一致返回 `Ok(())`。
+///
+/// # 错误
+/// * `ConflictError` - 期望版本与当前版本不一致
+pub(crate) fn map_version_conflict(version_check: erp_core::Result<()>) -> Result<()> {
+    version_check.map_err(|error| Error::ConflictError(error.to_string()))
+}
+
 /// 将仓储查询结果转换为稳定的供应商资料边界错误。
 fn ensure_supplier_profile_boundary(has_supplier_role: bool) -> Result<()> {
     if has_supplier_role {
@@ -604,11 +644,21 @@ pub(crate) use clear_default_marks;
 
 #[cfg(test)]
 mod tests {
-    use super::ensure_supplier_profile_boundary;
+    use super::{ensure_supplier_profile_boundary, map_version_conflict};
 
     #[test]
     fn supplier_party_rejects_shared_party_subresource_access() {
         assert!(ensure_supplier_profile_boundary(true).is_err());
         assert!(ensure_supplier_profile_boundary(false).is_ok());
+    }
+
+    #[test]
+    fn version_conflict_maps_to_stable_conflict_error() {
+        assert!(map_version_conflict(Ok(())).is_ok());
+        let error =
+            map_version_conflict(Err(erp_core::Error::from("数据已被其他请求修改，请刷新后重试")))
+                .unwrap_err();
+        assert!(matches!(error, crate::error::Error::ConflictError(_)));
+        assert_eq!(error.to_string(), "数据冲突: 数据已被其他请求修改，请刷新后重试");
     }
 }

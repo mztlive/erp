@@ -1,6 +1,8 @@
 //! 退货与资金纠错的稳定命令编号、来源版本及已过账前置规则。
+use erp_core::money::Amount;
 use sha2::{Digest, Sha256};
 
+use crate::entity::returns::CumulativeAmountLimit;
 use crate::{Error, Result};
 
 /// 一次提交构造器的默认财务复核人（经办/复核分离，复核人固定）。
@@ -48,9 +50,35 @@ pub fn ensure_posted_source(
     Ok(())
 }
 
+/// 缺失单据统一映射为 `NotFound`（文案由调用方保持原语义）。
+pub(crate) fn or_not_found<T>(option: Option<T>, message: &str) -> Result<T> {
+    option.ok_or_else(|| Error::NotFound(message.to_string()))
+}
+
+/// 已冲正单据禁止再次过账（文案由调用方保持原语义）。
+pub(crate) fn reject_if_reversed(is_reversed: bool, message: &str) -> Result<()> {
+    if is_reversed {
+        return Err(Error::BusinessLogicError(message.to_string()));
+    }
+    Ok(())
+}
+
+/// 累计限额判断并按单据类型映射为面向用户的业务文案。
+pub(crate) fn ensure_cumulative_within(
+    source: Amount,
+    posted_before: Amount,
+    current: Amount,
+    message: &str,
+) -> Result<()> {
+    CumulativeAmountLimit::ensure_within_limit(source, posted_before, current)
+        .map_err(|_| Error::BusinessLogicError(message.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::ensure_posted_source;
+    use std::str::FromStr;
+
+    use super::{ensure_cumulative_within, ensure_posted_source, or_not_found, reject_if_reversed};
     use crate::Error;
     use crate::repository::returns::{
         CustomerRefundFilter, PurchaseReturnOrderFilter, SalesReturnCaseFilter,

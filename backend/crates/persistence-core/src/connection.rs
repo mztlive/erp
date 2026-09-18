@@ -54,17 +54,11 @@ fn is_replica_set(hello: &Document) -> bool {
     hello.get_str("setName").is_ok_and(|value| !value.trim().is_empty())
 }
 
-/// 副本集事务的最低 wire version（MongoDB 4.0 引入多文档事务）。
-fn replica_set_supports_transactions(max_wire_version: i64) -> bool {
-    max_wire_version >= MIN_REPLICA_SET_TRANSACTION_WIRE_VERSION
-}
-
-/// 分片事务的最低 wire version（MongoDB 4.2 起支持分片事务）。
-fn sharded_cluster_supports_transactions(max_wire_version: i64) -> bool {
-    max_wire_version >= MIN_SHARDED_TRANSACTION_WIRE_VERSION
-}
-
 /// 判断 `hello` 响应描述的拓扑是否具备事务所需的会话和 wire version。
+///
+/// 副本集要求 wire version 不低于 `MIN_REPLICA_SET_TRANSACTION_WIRE_VERSION`
+/// （MongoDB 4.0 引入多文档事务），分片集群要求不低于
+/// `MIN_SHARDED_TRANSACTION_WIRE_VERSION`（MongoDB 4.2 起支持分片事务）。
 fn topology_supports_transactions(hello: &Document) -> bool {
     if !sessions_enabled(hello) {
         return false;
@@ -73,8 +67,8 @@ fn topology_supports_transactions(hello: &Document) -> bool {
         return false;
     };
 
-    (is_replica_set(hello) && replica_set_supports_transactions(max_wire_version))
-        || (is_sharded_cluster(hello) && sharded_cluster_supports_transactions(max_wire_version))
+    (is_replica_set(hello) && max_wire_version >= MIN_REPLICA_SET_TRANSACTION_WIRE_VERSION)
+        || (is_sharded_cluster(hello) && max_wire_version >= MIN_SHARDED_TRANSACTION_WIRE_VERSION)
 }
 
 /// 将 BSON 的两种有符号整数表示统一为 `i64`。

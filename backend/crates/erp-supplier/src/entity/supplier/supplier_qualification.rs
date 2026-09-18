@@ -98,6 +98,20 @@ impl QualificationType {
         super::display::code_of(*self, &QUALIFICATION_TYPE_DISPLAY)
     }
 
+    /// 由稳定代码反查资质类型。
+    ///
+    /// 映射表见 [`QUALIFICATION_TYPE_DISPLAY`]（erp-supplier-002）；列表查询的
+    /// 逗号分隔代码经此归一化，不再于 DTO 侧重复分支。
+    ///
+    /// # 参数
+    /// * `code` - 稳定代码（如 `contract`）
+    ///
+    /// # 返回
+    /// 命中时返回对应资质类型，未知代码返回 `None`。
+    pub fn from_code(code: &str) -> Option<Self> {
+        super::display::from_code(code, &QUALIFICATION_TYPE_DISPLAY)
+    }
+
     /// 校验日期窗口；只有合同允许缺少起始日期。
     ///
     /// 写入路径的权威校验（erp-supplier-011）：修订创建与更新经此拒绝非法窗口；

@@ -15,13 +15,7 @@ const AUDIT_LOGS: &str = "audit_logs";
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
-    create_indexes(db, AUDIT_LOGS, audit_log_indexes()).await?;
-    Ok(())
-}
-
-/// 为单个集合创建一组幂等命名索引。
-async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection).create_indexes(indexes).await?;
+    db.collection::<Document>(AUDIT_LOGS).create_indexes(audit_log_indexes()).await?;
     Ok(())
 }
 

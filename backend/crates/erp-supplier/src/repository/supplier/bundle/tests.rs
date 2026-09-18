@@ -1,5 +1,6 @@
-use super::list::{intersect_supplier_ids, qualification_constraint_kind, qualification_expiry_cutoff};
+use super::list::{qualification_constraint_kind, qualification_expiry_cutoff};
 use super::{QualificationConstraintKind, SupplierQualificationHealthFilter};
+use crate::entity::supplier::supplier_account::intersect_supplier_ids;
 
 #[test]
 fn supplier_list_candidate_intersection_preserves_order_and_empty() {

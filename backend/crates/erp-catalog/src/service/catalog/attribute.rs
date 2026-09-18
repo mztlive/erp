@@ -48,19 +48,7 @@ impl CatalogService {
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
         let page = self.db.sku_attributes().search_sku_attributes(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| SkuAttributeView {
-                id: row.id,
-                attribute_code: row.attribute_code,
-                name: row.name,
-                value_type: row.value_type,
-                status: row.status,
-                created_at: row.created_at,
-                version: row.version,
-            })
-            .collect();
+        let items = page.items.into_iter().map(SkuAttributeView::from).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
@@ -175,20 +163,7 @@ impl CatalogService {
         };
         let page =
             self.db.sku_attribute_values().search_sku_attribute_values(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| SkuAttributeValueView {
-                id: row.id,
-                attribute_id: row.attribute_id,
-                value_code: row.value_code,
-                display_value: row.display_value,
-                sort_order: row.sort_order,
-                status: row.status,
-                created_at: row.created_at,
-                version: row.version,
-            })
-            .collect();
+        let items = page.items.into_iter().map(SkuAttributeValueView::from).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 

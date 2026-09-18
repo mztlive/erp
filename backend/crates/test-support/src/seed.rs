@@ -6,12 +6,12 @@
 //! 角色键前缀与主体前缀的取值同步身份领域 RBAC 实现（`role:` /
 //! `user:admin:`），改动任一侧须同步另一侧。
 
+use chrono::Utc;
 use erp_identity::{Role, RoleData};
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 
-use crate::Result;
-use crate::db::{UUID_ACCOUNT_SUFFIX_LEN, UUID_ROLE_SUFFIX_LEN, uuid_hex_n};
+use crate::{Result, uuid_hex_n};
 
 /// 账号集合名。
 const ACCOUNTS: &str = "accounts";
@@ -19,6 +19,11 @@ const ACCOUNTS: &str = "accounts";
 const ROLES: &str = "roles";
 /// Casbin 规则集合名。
 const CASBIN_RULES: &str = "casbin_rules";
+
+/// 随机十六进制串截取长度：种子角色 ID 后缀。
+const UUID_ROLE_SUFFIX_LEN: usize = 8;
+/// 随机十六进制串截取长度：种子账号 ID 后缀。
+const UUID_ACCOUNT_SUFFIX_LEN: usize = 12;
 
 /// 种子账号的持久化版本（`BaseModel::new` 固定为 1，与 `mint_jwt` 对应）。
 pub(crate) const ACCOUNT_VERSION: u64 = 1;
@@ -59,7 +64,7 @@ pub async fn seed_admin_account(db: &Database) -> Result<String> {
 /// 账号 `version` 固定为 `ACCOUNT_VERSION`、`deleted_at` 为 0，满足
 /// `BackofficeAuthService::validate_session` 的校验条件。
 async fn insert_account(db: &Database, account_id: &str, login: &str) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = Utc::now().timestamp();
     let account = doc! {
         "id": account_id,
         "version": ACCOUNT_VERSION as i64,

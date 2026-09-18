@@ -23,6 +23,10 @@ use persistence_core::{
 use serde::{Deserialize, Serialize};
 
 use super::extensions::WarehouseExt;
+// 排序白名单唯一来源：DTO 校验侧同名常量；仓储排序回落与之同源，禁止漂移。
+use crate::dto::warehouse::{
+    WAREHOUSE_REVISION_SORT_FIELDS, WAREHOUSE_SKU_POLICY_SORT_FIELDS, WAREHOUSE_SORT_FIELDS,
+};
 use crate::entity::warehouse::{EnableStatus, Warehouse, WarehouseRevision, WarehouseSkuPolicy};
 use crate::repository::owned::{
     WarehouseRepository, WarehouseRevisionRepository, WarehouseSkuPolicyRepository,
@@ -91,16 +95,17 @@ impl Default for WarehouseFilter {
     /// # 错误
     /// 无。
     fn default() -> Self {
+        let (page, page_size, sort_by, sort_ascending) = default_paging();
         Self {
             warehouse_id: None,
             require_inbound_handler: false,
             q: None,
             warehouse_code: None,
             status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            page,
+            page_size,
+            sort_by,
+            sort_ascending,
         }
     }
 }
@@ -227,7 +232,8 @@ impl Default for WarehouseRevisionFilter {
     /// # 错误
     /// 无。
     fn default() -> Self {
-        Self { warehouse_id: None, name: None, page: 1, page_size: 20, sort_by: None, sort_ascending: false }
+        let (page, page_size, sort_by, sort_ascending) = default_paging();
+        Self { warehouse_id: None, name: None, page, page_size, sort_by, sort_ascending }
     }
 }
 
@@ -367,15 +373,8 @@ impl Default for WarehouseSkuPolicyFilter {
     /// # 返回
     /// 返回筛选为空、降序的首页过滤条件。
     fn default() -> Self {
-        Self {
-            warehouse_id: None,
-            sku_id: None,
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        }
+        let (page, page_size, sort_by, sort_ascending) = default_paging();
+        Self { warehouse_id: None, sku_id: None, status: None, page, page_size, sort_by, sort_ascending }
     }
 }
 
@@ -612,12 +611,13 @@ where
     .await
 }
 
-/// `warehouses` 排序白名单（`created_at`/`warehouse_code`）。
-const WAREHOUSE_SORT_FIELDS: &[&str] = &["created_at", "warehouse_code"];
-/// `warehouse_revisions` 排序白名单（`created_at`/`revision_no`）。
-const WAREHOUSE_REVISION_SORT_FIELDS: &[&str] = &["created_at", "revision_no"];
-/// `warehouse_sku_policies` 排序白名单（`created_at`/`effective_from`）。
-const WAREHOUSE_SKU_POLICY_SORT_FIELDS: &[&str] = &["created_at", "effective_from"];
+/// 首页空筛选的分页初值（三类列表 Filter 共用；查询语义不变）。
+///
+/// # 返回
+/// 返回 `(page, page_size, sort_by, sort_ascending)` = `(1, 20, None, false)`。
+fn default_paging() -> (u64, u32, Option<String>, bool) {
+    (1, 20, None, false)
+}
 /// 关键词查询单次允许装入 `$in` 的修订 ID 上限（约束单次读取规模）。
 const KEYWORD_REVISION_ID_CAP: usize = 500;
 

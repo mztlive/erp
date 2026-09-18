@@ -384,10 +384,11 @@ pub fn ensure_actions_registered(policy: &ProcessRequiredApprovalPolicy) -> Resu
     ensure_real_action(policy.start_action)?;
     ensure_real_action(policy.final_approve_action)?;
     ensure_real_action(policy.cancel_action)?;
-    if policy.start_action == policy.final_approve_action
-        || policy.start_action == policy.cancel_action
-        || policy.final_approve_action == policy.cancel_action
-    {
+    if !ApprovalDomainAction::are_distinct(
+        policy.start_action,
+        policy.final_approve_action,
+        policy.cancel_action,
+    ) {
         return Err(Error::from_approval_code(ErrorCode::ApprovalPolicyNotRegistered));
     }
     Ok(())

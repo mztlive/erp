@@ -18,52 +18,24 @@ pub struct AuditLogListParams {
     pub page_size: Option<u32>,
 }
 
-impl AuditLogListParams {
-    /// 归一化审计日志列表查询参数。
+impl From<&AuditLogListParams> for crate::repository::AuditLogFilter {
+    /// 将查询参数转换为仓储过滤器（erp-audit-003）。
     ///
-    /// # 返回值
-    /// 返回不依赖仓储类型的规范化查询参数。
-    pub(crate) fn normalized(&self) -> NormalizedAuditLogListParams {
-        NormalizedAuditLogListParams {
-            actor_account: normalized_text(self.actor_account.as_deref()),
-            action: normalized_text(self.action.as_deref()),
-            resource_type: normalized_text(self.resource_type.as_deref()),
-            success: self.success,
-            page: page_or_default(self.page),
-            page_size: page_size_or_default(self.page_size),
-        }
-    }
-}
-
-/// Service 内部使用的规范化审计日志列表查询参数。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct NormalizedAuditLogListParams {
-    pub(crate) actor_account: Option<String>,
-    pub(crate) action: Option<String>,
-    pub(crate) resource_type: Option<String>,
-    pub(crate) success: Option<bool>,
-    pub(crate) page: u64,
-    pub(crate) page_size: u32,
-}
-
-impl From<NormalizedAuditLogListParams> for crate::repository::AuditLogFilter {
-    /// 将规范化参数转换为仓储过滤器（erp-audit-003）。
-    ///
-    /// 字段映射只在此一处实现；新增筛选字段时同步两结构体与本函数。
+    /// 文本归一化与分页缺省只在此一处实现；新增筛选字段时同步两结构体与本函数。
     ///
     /// # 参数
-    /// * `params` - 规范化查询参数
+    /// * `params` - 列表查询参数
     ///
     /// # 返回
     /// 返回仓储层过滤条件。
-    fn from(params: NormalizedAuditLogListParams) -> Self {
+    fn from(params: &AuditLogListParams) -> Self {
         Self {
-            actor_account: params.actor_account,
-            action: params.action,
-            resource_type: params.resource_type,
+            actor_account: normalized_text(params.actor_account.as_deref()),
+            action: normalized_text(params.action.as_deref()),
+            resource_type: normalized_text(params.resource_type.as_deref()),
             success: params.success,
-            page: params.page,
-            page_size: params.page_size,
+            page: page_or_default(params.page),
+            page_size: page_size_or_default(params.page_size),
         }
     }
 }
@@ -113,6 +85,7 @@ mod tests {
     use validator::Validate;
 
     use super::{AuditLogItem, AuditLogListParams};
+    use crate::repository::AuditLogFilter;
 
     #[test]
     fn list_params_normalize_text_and_pagination_defaults() {
@@ -124,7 +97,7 @@ mod tests {
             ..Default::default()
         };
 
-        let normalized = params.normalized();
+        let normalized = AuditLogFilter::from(&params);
 
         assert_eq!(normalized.actor_account.as_deref(), Some("admin01"));
         assert_eq!(normalized.action, None);
@@ -183,6 +156,6 @@ mod tests {
         let params = AuditLogListParams { page: Some(1), page_size: Some(u32::MAX), ..Default::default() };
 
         assert!(params.validate().is_err());
-        assert_eq!(params.normalized().page_size, 100);
+        assert_eq!(AuditLogFilter::from(&params).page_size, 100);
     }
 }

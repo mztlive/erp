@@ -4,6 +4,8 @@
 //! 重叠；区间与角色冲突由实体判定，P3 只负责事务内加载并持久化冲突行
 //! （§6.2）。负责人变化后只影响新增单据权限，不删除历史参与权（W03 / §11.1）。
 
+use std::collections::HashMap;
+
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::time::BusinessDate;
@@ -13,10 +15,12 @@ use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-/// 用户标识最大长度。
-const USER_ID_MAX_LEN: usize = 128;
-/// 调整原因最大长度。
-const CHANGE_REASON_MAX_LEN: usize = 500;
+/// 用户标识最大长度（归属实体与归属命令共用）。
+pub(crate) const USER_ID_MAX_LEN: usize = 128;
+/// 调整原因最大长度（归属实体与归属命令共用）。
+pub(crate) const CHANGE_REASON_MAX_LEN: usize = 500;
+/// 目标归属 ID 最大长度（结束归属命令使用）。
+pub(crate) const ASSIGNMENT_ID_MAX_LEN: usize = 128;
 
 /// 归属角色（§6.2：`OWNER` 或 `COLLABORATOR`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,14 +119,8 @@ impl CustomerAssignment {
     /// # 错误
     /// 当 user_id / change_reason 为空或超长，或生效区间倒挂时返回错误。
     pub fn new(id: CustomerAssignmentId, data: CustomerAssignmentData) -> Result<Self> {
-        let user_id =
-            normalize_required_text(data.user_id, "销售人员不能为空", USER_ID_MAX_LEN, "销售人员标识过长")?;
-        let change_reason = normalize_required_text(
-            data.change_reason,
-            "调整原因不能为空",
-            CHANGE_REASON_MAX_LEN,
-            "调整原因过长",
-        )?;
+        let user_id = normalize_user_id(data.user_id)?;
+        let change_reason = normalize_change_reason(data.change_reason)?;
         ensure_window_valid(data.valid_from, data.valid_to)?;
 
         Ok(Self {
@@ -244,10 +242,7 @@ impl CustomerAssignment {
     /// # 错误
     /// 当前版本与期望版本不一致时返回错误。
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
-        if self.base.version == expected {
-            return Ok(());
-        }
-        Err(Error::from("数据已被其他请求修改，请刷新后重试"))
+        super::ensure_entity_version(self.base.version, expected)
     }
 
     /// 判断归属当前是否有效（按业务日期判定有效期）。
@@ -276,6 +271,74 @@ impl CustomerAssignment {
         self.valid_to = Some(valid_to);
         Ok(())
     }
+}
+
+impl CustomerAssignment {
+    /// 解析同一客户归属行的主负责人与协作计数。
+    ///
+    /// # 参数
+    /// * `assignments` - 同一客户的归属行
+    /// * `account_names` - 账号显示名
+    ///
+    /// # 返回
+    /// 返回负责人 ID、显示名与协作人数。
+    pub fn owner_summary(
+        assignments: &[Self],
+        account_names: &HashMap<String, String>,
+    ) -> (Option<String>, Option<String>, u32) {
+        let owner_user_id = assignments
+            .iter()
+            .find(|assignment| assignment.assignment_role == AssignmentRole::Owner)
+            .map(|assignment| assignment.user_id.clone());
+        let owner_user_name = owner_user_id.as_ref().and_then(|id| account_names.get(id)).cloned();
+        let collaborator_count = assignments
+            .iter()
+            .filter(|assignment| assignment.assignment_role == AssignmentRole::Collaborator)
+            .count() as u32;
+        (owner_user_id, owner_user_name, collaborator_count)
+    }
+}
+
+/// 规范化销售人员 ID（归属实体与归属命令共用同一文案与长度）。
+///
+/// # 参数
+/// * `value` - 原始输入
+///
+/// # 返回
+/// 返回去空白后的账号 ID。
+///
+/// # 错误
+/// 为空或超长时返回领域逻辑错误。
+pub(crate) fn normalize_user_id(value: String) -> Result<String> {
+    normalize_required_text(value, "销售人员不能为空", USER_ID_MAX_LEN, "销售人员标识过长")
+}
+
+/// 规范化归属调整原因（归属实体与归属命令共用同一文案与长度）。
+///
+/// # 参数
+/// * `value` - 原始输入
+///
+/// # 返回
+/// 返回去空白后的原因文本。
+///
+/// # 错误
+/// 为空或超长时返回领域逻辑错误。
+pub(crate) fn normalize_change_reason(value: String) -> Result<String> {
+    normalize_required_text(value, "调整原因不能为空", CHANGE_REASON_MAX_LEN, "调整原因过长")
+}
+
+/// 规范化结束归属的目标归属 ID。
+///
+/// # 参数
+/// * `value` - 原始输入
+///
+/// # 返回
+/// 返回去空白后的归属主键。
+///
+/// # 错误
+/// 为空或超长时返回领域逻辑错误。
+pub(crate) fn normalize_assignment_id(value: String) -> Result<String> {
+    normalize_required_text(value, "目标归属 ID 不能为空", ASSIGNMENT_ID_MAX_LEN, "目标归属 ID 过长")
 }
 
 /// 判断两个生效区间是否重叠（结束日为开区间）。
@@ -479,5 +542,40 @@ mod tests {
         assert!(assignment.ensure_version(2).is_err());
         assert!(assignment.ensure_customer(&CustomerAccountId::new("customer-1")).is_ok());
         assert!(assignment.ensure_customer(&CustomerAccountId::new("customer-2")).is_err());
+    }
+
+    /// 规范化 helper：去空白成功，空值与超长失败。
+    #[test]
+    fn normalize_helpers_trim_and_reject() {
+        assert_eq!(super::normalize_user_id(" sales-1 ".to_string()).unwrap(), "sales-1");
+        assert_eq!(super::normalize_change_reason(" 换任 ".to_string()).unwrap(), "换任");
+        assert_eq!(super::normalize_assignment_id(" asg-1 ".to_string()).unwrap(), "asg-1");
+        assert!(super::normalize_user_id("   ".to_string()).is_err());
+        assert!(super::normalize_change_reason("   ".to_string()).is_err());
+        assert!(super::normalize_assignment_id("   ".to_string()).is_err());
+        assert!(super::normalize_user_id("u".repeat(129)).is_err());
+    }
+
+    /// 负责人汇总：解析主负责人显示名并统计协作人数。
+    #[test]
+    fn owner_summary_resolves_names_and_counts() {
+        let owner = CustomerAssignment::new(CustomerAssignmentId::new("o"), assignment_data()).unwrap();
+        let collaborator = CustomerAssignment::new(
+            CustomerAssignmentId::new("c"),
+            CustomerAssignmentData {
+                assignment_role: AssignmentRole::Collaborator,
+                user_id: "sales-lisi".to_string(),
+                ..assignment_data()
+            },
+        )
+        .unwrap();
+        let names = [("sales-zhangsan".to_string(), "张三".to_string())].into_iter().collect();
+        let (id, name, count) = CustomerAssignment::owner_summary(&[owner, collaborator], &names);
+        assert_eq!(id.as_deref(), Some("sales-zhangsan"));
+        assert_eq!(name.as_deref(), Some("张三"));
+        assert_eq!(count, 1);
+        let (empty_id, _, empty_count) = CustomerAssignment::owner_summary(&[], &names);
+        assert_eq!(empty_id, None);
+        assert_eq!(empty_count, 0);
     }
 }

@@ -133,6 +133,29 @@ pub fn document_type_from_subject_kind(kind: &str) -> Result<DocumentType> {
     DocumentType::try_from_code(kind)
 }
 
+/// 由 BPM 主体种类与流程种类联合解析已登记单据类型。
+///
+/// # 参数
+/// * `subject_kind` - BPM 主体持有的稳定种类代码
+/// * `process_kind` - 实例冻结的流程种类
+///
+/// # 返回
+/// 种类代码已登记且与流程种类一一对应时返回对应单据类型。
+///
+/// # 错误
+/// 未登记种类，或种类与流程种类不一致时返回错误；调用方按读写路径映射为隐藏式拒绝或冲突。
+///
+/// # 关键业务约束
+/// 精确代码规则由 [`DocumentType::try_from_code`] 拥有，种类与流程的对应关系由
+/// [`process_kind_of`] 拥有，本函数只做联合判定，不接受缺省回落。
+pub fn resolve_runtime_document_type(subject_kind: &str, process_kind: ProcessKind) -> Result<DocumentType> {
+    let document_type = document_type_from_subject_kind(subject_kind)?;
+    if process_kind_of(document_type) != process_kind {
+        return Err(Error::from("审批实例与冻结业务快照不一致"));
+    }
+    Ok(document_type)
+}
+
 /// 为单据类型与业务主键构造唯一 `SubjectRef`。
 ///
 /// # 参数
@@ -179,7 +202,7 @@ mod tests {
 
     use super::{
         document_type_from_subject_kind, document_type_of, document_type_of_sales_business, process_kind_of,
-        subject_ref_for, subject_ref_for_sales_business,
+        resolve_runtime_document_type, subject_ref_for, subject_ref_for_sales_business,
     };
     use crate::entity::approval_integration::identity::SalesBusinessKind;
     use crate::entity::document_registry::DocumentType;
@@ -273,5 +296,24 @@ mod tests {
         assert_eq!(sales.subject_kind(), "sales_order");
         assert_eq!(voucher.subject_kind(), "voucher_sales_order");
         assert_ne!(sales.subject_kind(), voucher.subject_kind());
+    }
+
+    /// 联合判定接受已登记且一致的种类/流程组合，拒绝未登记或错配组合。
+    #[test]
+    fn resolve_runtime_document_type_accepts_only_consistent_pairs() {
+        for document_type in DocumentType::ALL {
+            let resolved =
+                resolve_runtime_document_type(document_type.as_str(), process_kind_of(document_type))
+                    .expect("一致组合必须解析");
+            assert_eq!(resolved, document_type);
+        }
+        assert!(resolve_runtime_document_type("unknown_kind", ProcessKind::SalesOrder).is_err());
+        assert!(
+            resolve_runtime_document_type(
+                DocumentType::SalesOrder.as_str(),
+                process_kind_of(DocumentType::StockAdjustment),
+            )
+            .is_err()
+        );
     }
 }

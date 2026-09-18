@@ -10,13 +10,12 @@ use erp_customer::ports::CustomerScopeObject;
 use erp_customer::{CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope};
 use erp_identity::SharedRbacService;
 use erp_identity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
-use erp_identity::entity::organization::OrgTree;
-use erp_identity::entity::organization_change::OrganizationState;
-use erp_identity::repository::OrganizationRepository;
 use erp_identity::service::access_control::consumers::registration;
 use erp_identity::service::access_control::resolve::DataScopeService;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use super::scope_support::{expand_org_ids, load_organization_state, member_ids};
 
 /// 组合层客户范围 adapter，持有身份域解析所需依赖。
 #[derive(Clone)]
@@ -102,8 +101,8 @@ impl CustomerDataScopePort for MongoCustomerDataScope {
         include_descendants: bool,
         executor: &mut dyn Executor,
     ) -> erp_customer::Result<BTreeSet<String>> {
-        let state = organization_state(&self.db, executor).await?;
-        expand_org_units(&state, org_unit_ids, include_descendants)
+        let state = load_organization_state(&self.db, executor).await?;
+        expand_org_ids(&state, org_unit_ids, include_descendants).map_err(map_identity_error)
     }
 
     async fn org_member_ids(
@@ -112,7 +111,7 @@ impl CustomerDataScopePort for MongoCustomerDataScope {
         at: Instant,
         executor: &mut dyn Executor,
     ) -> erp_customer::Result<Vec<String>> {
-        let state = organization_state(&self.db, executor).await?;
+        let state = load_organization_state(&self.db, executor).await?;
         Ok(member_ids(&state, org_unit_ids, at))
     }
 
@@ -122,89 +121,9 @@ impl CustomerDataScopePort for MongoCustomerDataScope {
         at: Instant,
         executor: &mut dyn Executor,
     ) -> erp_customer::Result<Option<String>> {
-        let state = organization_state(&self.db, executor).await?;
+        let state = load_organization_state(&self.db, executor).await?;
         Ok(state.own_org(user_id, at).map_err(map_identity_error)?.map(str::to_string))
     }
-}
-
-/// 在调用方事务内读取组织快照。
-///
-/// # 参数
-/// * `db` - 身份数据库
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回同一事务中的组织状态。
-///
-/// # 错误
-/// 组织集合读取失败时拒绝。
-///
-/// # 关键业务约束
-/// 不得另开事务或换成 `NoTransaction`。
-async fn organization_state(
-    db: &Database,
-    executor: &mut dyn Executor,
-) -> erp_customer::Result<OrganizationState> {
-    Ok(OrganizationRepository::new(db).state(executor).await?)
-}
-
-/// 展开启用组织及其可选下级。
-///
-/// # 参数
-/// * `state` - 当前组织事实
-/// * `org_ids` - 请求中的组织 ID
-/// * `include_descendants` - 是否包含有效下级
-///
-/// # 返回
-/// 返回启用节点的组织 ID 集合。
-///
-/// # 错误
-/// 未知组织或组织树非法时拒绝。
-///
-/// # 关键业务约束
-/// 筛选只能收窄授权结果，不得忽略未知组织。
-fn expand_org_units(
-    state: &OrganizationState,
-    org_ids: &[String],
-    include_descendants: bool,
-) -> erp_customer::Result<BTreeSet<String>> {
-    let tree = OrgTree::new(&state.units).map_err(map_identity_error)?;
-    let mut expanded = BTreeSet::new();
-    for id in org_ids {
-        expanded.extend(tree.expand(id, include_descendants).map_err(map_identity_error)?);
-    }
-    Ok(expanded)
-}
-
-/// 读取指定组织在给定时点的有效主属成员。
-///
-/// # 参数
-/// * `state` - 组织事实
-/// * `org_ids` - 内部组织集合
-/// * `at` - 授权时点
-///
-/// # 返回
-/// 返回排序去重后的人员 ID。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 过期或未生效成员不得进入当前主责组织筛选。
-fn member_ids(state: &OrganizationState, org_ids: &BTreeSet<String>, at: Instant) -> Vec<String> {
-    let mut ids = state
-        .memberships
-        .iter()
-        .filter(|membership| {
-            !membership.base.is_deleted()
-                && org_ids.contains(&membership.org_unit_id)
-                && membership.validity.contains(at)
-        })
-        .map(|membership| membership.user_id.clone())
-        .collect::<Vec<_>>();
-    ids.sort();
-    ids.dedup();
-    ids
 }
 
 /// 转换全部角色条款；任一不支持维度即失败。

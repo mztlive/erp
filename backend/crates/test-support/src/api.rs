@@ -47,7 +47,7 @@ impl TestApi {
     /// # 返回值
     /// 返回 `(HTTP 状态码, JSON 响应体)`。
     pub async fn get(&self, path: &str, token: Option<&str>) -> (u16, Value) {
-        self.send(Method::GET, path, token, None).await
+        self.request(Method::GET, path, token, None).await
     }
 
     /// 发送 POST 请求。
@@ -60,13 +60,12 @@ impl TestApi {
     /// # 返回值
     /// 返回 `(HTTP 状态码, JSON 响应体)`。
     pub async fn post(&self, path: &str, token: Option<&str>, json: Option<Value>) -> (u16, Value) {
-        self.send(Method::POST, path, token, json).await
+        self.request(Method::POST, path, token, json).await
     }
 
-    /// 发送任意方法的请求（`get`/`post` 的通用入口）。
+    /// 发送任意方法的请求（`get`/`post` 均转调本方法，此处为唯一实现）。
     ///
-    /// 新增 `PUT`/`PATCH`/`DELETE` 等方法时直接调用本方法，不再复制
-    /// `send` 转调样板。
+    /// 新增 `PUT`/`PATCH`/`DELETE` 等方法时直接调用本方法。
     ///
     /// # 参数
     /// * `method` - HTTP 方法
@@ -77,26 +76,6 @@ impl TestApi {
     /// # 返回值
     /// 返回 `(HTTP 状态码, JSON 响应体)`；响应体非 JSON 时返回 `Value::Null`。
     pub async fn request(
-        &self,
-        method: Method,
-        path: &str,
-        token: Option<&str>,
-        json: Option<Value>,
-    ) -> (u16, Value) {
-        self.send(method, path, token, json).await
-    }
-
-    /// 组装并发送一次请求，解包响应为 `(状态码, JSON 响应体)`。
-    ///
-    /// # 参数
-    /// * `method` - HTTP 方法
-    /// * `path` - 请求路径
-    /// * `token` - 可选 JWT
-    /// * `json` - 可选 JSON 请求体
-    ///
-    /// # 返回值
-    /// 返回 `(HTTP 状态码, JSON 响应体)`；响应体非 JSON 时返回 `Value::Null`。
-    async fn send(
         &self,
         method: Method,
         path: &str,

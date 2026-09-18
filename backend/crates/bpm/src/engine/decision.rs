@@ -4,7 +4,7 @@ use super::enter_node::{EnterNodeInput, plan_enter_node, require_decision_edges}
 use super::event::{BpmEvent, BpmEventKind};
 use super::transition_plan::{CommitRequired, TaskCloseReason, TaskIntent, TransitionPlan};
 use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
-use crate::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
+use crate::ids::ApprovalNodeExecutionId;
 use crate::model::types::{
     ApprovalBlockerCode, ApprovalDecision, ApprovalExecutionAssignmentSource, ApprovalNodeExecutionStatus,
     ApprovalProcessInstanceStatus, ApprovalTerminalResult, ApprovalTransitionEvent,
@@ -85,13 +85,13 @@ fn apply_approve(
         plan.commit = CommitRequired::TerminalApproved;
         plan.events.push(BpmEvent::new(
             BpmEventKind::InstanceApproved,
-            process_id(&plan.instance),
+            plan.instance.typed_id(),
             plan.instance.current_round_no,
         ));
         return Ok(plan);
     }
     let next_key = approve_edge.to_node_key.as_deref().ok_or(EngineError::GraphCorrupted)?;
-    enter_after_decision(plan, graph, next_key, command, true)
+    enter_after_decision(plan, graph, next_key, command)
 }
 
 /// 驳回当前节点，轮次加一并进入入口。
@@ -114,14 +114,10 @@ fn apply_reject(
     let mut plan =
         completed_current_plan(instance, current, command.actor.clone(), BpmEventKind::NodeRejected);
     plan.events.push(
-        BpmEvent::new(
-            BpmEventKind::RoundRestarted,
-            process_id(&plan.instance),
-            plan.instance.current_round_no,
-        )
-        .with_reason(reason),
+        BpmEvent::new(BpmEventKind::RoundRestarted, plan.instance.typed_id(), plan.instance.current_round_no)
+            .with_reason(reason),
     );
-    enter_after_decision(plan, graph, &graph.definition.entry_node_key, command, true)
+    enter_after_decision(plan, graph, &graph.definition.entry_node_key, command)
 }
 
 /// 记录已完成的当前执行，并关闭对应任务。
@@ -131,10 +127,10 @@ fn completed_current_plan(
     actor: ParticipantId,
     kind: BpmEventKind,
 ) -> TransitionPlan {
-    let execution_id = execution_id(&current);
+    let execution_id = current.typed_id();
     let mut plan = TransitionPlan::for_instance(instance, CommitRequired::Proceed);
     plan.events.push(
-        BpmEvent::new(kind, process_id(&plan.instance), current.round_no)
+        BpmEvent::new(kind, plan.instance.typed_id(), current.round_no)
             .with_execution(execution_id.clone())
             .with_node_key(current.node_key.clone())
             .with_actor(actor),
@@ -150,7 +146,6 @@ fn enter_after_decision(
     graph: &DefinitionGraph,
     node_key: &str,
     command: DecideCommand,
-    keep_commit: bool,
 ) -> EngineResult<TransitionPlan> {
     let enter = plan_enter_node(EnterNodeInput {
         instance: plan.instance.clone(),
@@ -165,11 +160,7 @@ fn enter_after_decision(
         replaces_execution_id: None,
         now: command.now,
     })?;
-    if keep_commit {
-        plan.merge_enter_keep_commit(enter);
-    } else {
-        plan.merge_enter_adopt_commit(enter);
-    }
+    plan.merge_enter_keep_commit(enter);
     Ok(plan)
 }
 
@@ -199,10 +190,10 @@ pub fn block_current(
     ensure_current_token(&instance, &current)?;
     current.block(code, now)?;
     instance.enter_blocked(code, now)?;
-    let execution_id = execution_id(&current);
+    let execution_id = current.typed_id();
     let mut plan = TransitionPlan::for_instance(instance, CommitRequired::Blocked);
     plan.events.push(
-        BpmEvent::new(BpmEventKind::InstanceBlocked, process_id(&plan.instance), current.round_no)
+        BpmEvent::new(BpmEventKind::InstanceBlocked, plan.instance.typed_id(), current.round_no)
             .with_execution(execution_id.clone())
             .with_node_key(current.node_key.clone())
             .with_blocker(code),
@@ -247,12 +238,4 @@ fn ensure_reject_to_entry(
         return Err(EngineError::GraphCorrupted);
     }
     Ok(())
-}
-
-fn process_id(instance: &ApprovalProcessInstance) -> ApprovalProcessInstanceId {
-    instance.typed_id()
-}
-
-fn execution_id(execution: &ApprovalNodeExecution) -> ApprovalNodeExecutionId {
-    execution.typed_id()
 }

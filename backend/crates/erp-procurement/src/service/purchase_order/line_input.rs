@@ -130,15 +130,13 @@ pub fn build_submission_lines(
     submission_id: &PurchaseOrderSubmissionId,
     inputs: &[PurchaseLineInput],
 ) -> Result<Vec<PurchaseOrderSubmissionLine>> {
-    let mut result = Vec::with_capacity(inputs.len());
-    for (index, input) in inputs.iter().enumerate() {
+    build_lines(inputs, |input, line_no| {
         let data = input
-            .clone()
-            .into_submission_line_data(submission_id.clone(), (index + 1) as u32)
+            .into_submission_line_data(submission_id.clone(), line_no)
             .map_err(map_line_amount_violation)?;
-        result.push(PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new(next_id()), data)?);
-    }
-    Ok(result)
+        PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new(next_id()), data)
+            .map_err(Into::into)
+    })
 }
 
 /// 从类型化输入构建采购变更提交行。
@@ -159,16 +157,26 @@ pub fn build_change_submission_lines(
     submission_id: &str,
     inputs: &[PurchaseLineInput],
 ) -> Result<Vec<PurchaseChangeSubmissionLine>> {
-    let mut result = Vec::with_capacity(inputs.len());
-    for (index, input) in inputs.iter().enumerate() {
+    build_lines(inputs, |input, line_no| {
         let data = input
-            .clone()
             .into_change_submission_line_data(
                 PurchaseChangeSubmissionId::new(submission_id.to_string()),
-                (index + 1) as u32,
+                line_no,
             )
             .map_err(map_line_amount_violation)?;
-        result.push(PurchaseChangeSubmissionLine::new(PurchaseChangeSubmissionLineId::new(next_id()), data)?);
+        PurchaseChangeSubmissionLine::new(PurchaseChangeSubmissionLineId::new(next_id()), data)
+            .map_err(Into::into)
+    })
+}
+
+/// 按请求顺序为类型化输入分配行号并逐行构造实体。
+fn build_lines<Line>(
+    inputs: &[PurchaseLineInput],
+    mut make: impl FnMut(PurchaseLineInput, u32) -> Result<Line>,
+) -> Result<Vec<Line>> {
+    let mut result = Vec::with_capacity(inputs.len());
+    for (index, input) in inputs.iter().enumerate() {
+        result.push(make(input.clone(), (index + 1) as u32)?);
     }
     Ok(result)
 }

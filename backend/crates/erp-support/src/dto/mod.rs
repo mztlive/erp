@@ -19,6 +19,8 @@ pub(crate) use application_core::normalize_sort;
 use application_core::{page_or_default, page_size_or_default};
 use serde::{Deserialize, Serialize};
 
+use crate::error::Result;
+
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 ///
 /// 各列表 `normalized()` 共用本结构携带分页与排序结果；筛选字段保留在
@@ -54,6 +56,34 @@ impl PageParams {
         sort_dir: SortDir,
     ) -> Self {
         Self { page: page_or_default(page), page_size: page_size_or_default(page_size), sort_by, sort_dir }
+    }
+
+    /// 用原始分页与排序输入直接组装分页参数（各列表 `normalized()` 共用）。
+    ///
+    /// 把“排序白名单校验 + 分页默认值”两步收敛为一次调用；排序语义与
+    /// 逐个调用 `normalize_sort` 后再 `normalized` 完全一致。
+    ///
+    /// # 参数
+    /// * `page` - 原始页码输入；`None` 时取默认值
+    /// * `page_size` - 原始单页条数输入；`None` 时取默认值
+    /// * `sort_by` - 原始排序字段输入（过白名单校验）
+    /// * `sort_dir` - 原始排序方向输入（`asc`/`desc`）
+    /// * `allowed` - 该列表允许的排序字段白名单
+    ///
+    /// # 返回
+    /// 返回归一化后的分页参数。
+    ///
+    /// # 错误
+    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    pub fn resolve(
+        page: Option<u64>,
+        page_size: Option<u32>,
+        sort_by: &Option<String>,
+        sort_dir: &Option<String>,
+        allowed: &'static [&'static str],
+    ) -> Result<Self> {
+        let (sort_by, sort_dir) = normalize_sort(sort_by, sort_dir, allowed)?;
+        Ok(Self::normalized(page, page_size, sort_by, sort_dir))
     }
 
     /// 将归一化分页映射为仓储 `Filter` 的分页与排序字段。

@@ -36,6 +36,42 @@ pub(super) use application_core::non_blank;
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
 
+/// 归一化分页与排序参数（DTO `normalized()` 唯一入口）。
+///
+/// 九处列表查询的 `PageParams` 组装（`normalize_sort` + 默认页码/条数）
+/// 收敛至此；各 `normalized()` 只声明白名单并搬运筛选字段，不再复制
+/// 四行分页字面量。
+///
+/// # 参数
+/// * `page` - 可选页码；缺省为第一页
+/// * `page_size` - 可选单页条数；缺省 20 并 clamp 到 1–100
+/// * `sort_by` - 可选排序字段；空白视为未提供
+/// * `sort_dir` - 可选排序方向；空白视为未提供
+/// * `allowed_fields` - 该列表的排序白名单
+///
+/// # 返回
+/// 返回归一化后的分页与排序参数。
+///
+/// # 错误
+/// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
+pub(crate) fn paging_params(
+    page: Option<u64>,
+    page_size: Option<u32>,
+    sort_by: &Option<String>,
+    sort_dir: &Option<String>,
+    allowed_fields: &'static [&'static str],
+) -> Result<PageParams> {
+    use application_core::{page_or_default, page_size_or_default};
+
+    let (sort_by, sort_dir) = normalize_sort(sort_by, sort_dir, allowed_fields)?;
+    Ok(PageParams {
+        page: page_or_default(page),
+        page_size: page_size_or_default(page_size),
+        sort_by,
+        sort_dir,
+    })
+}
+
 /// 校验目录查询共用的销售价区间。
 ///
 /// 先检查任一端点为负，再检查同时存在的下限是否高于上限；该顺序与对外

@@ -4,21 +4,14 @@
 //! 拆开的必填组合，内部命令因此不存在非法状态。客户/账号存在性、重叠查询、
 //! 事务和审计不在本层。
 
+use erp_core::Result;
 use erp_core::common::time::BusinessDate;
-use erp_core::validation::normalize_required_text;
-use erp_core::{Error, Result};
 
 use super::CustomerAccountId;
 use super::customer_assignment::{
-    AssignmentRole, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId,
+    AssignmentRole, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId, ensure_window_valid,
+    normalize_assignment_id, normalize_change_reason, normalize_user_id,
 };
-
-/// 销售人员标识最大长度（与归属实体一致）。
-const USER_ID_MAX_LEN: usize = 128;
-/// 目标归属 ID 最大长度。
-const ASSIGNMENT_ID_MAX_LEN: usize = 128;
-/// 调整原因最大长度（与归属实体一致）。
-const CHANGE_REASON_MAX_LEN: usize = 500;
 
 /// 强类型客户归属写入命令。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,7 +55,7 @@ impl AssignCustomerAssignment {
     /// 返回已去除首尾空白、窗口合法的建立命令。
     ///
     /// # 错误
-    /// 销售人员或原因为空/超长，或结束日期不晚于开始日期时返回 [`Error::LogicError`]。
+    /// 销售人员或原因为空/超长，或结束日期不晚于开始日期时返回领域逻辑错误。
     ///
     /// # 关键业务约束
     /// 本命令不携带目标归属 ID 或乐观锁版本；那些字段属于结束动作。
@@ -73,14 +66,8 @@ impl AssignCustomerAssignment {
         valid_to: Option<BusinessDate>,
         change_reason: String,
     ) -> Result<Self> {
-        let user_id =
-            normalize_required_text(user_id, "销售人员不能为空", USER_ID_MAX_LEN, "销售人员标识过长")?;
-        let change_reason = normalize_required_text(
-            change_reason,
-            "调整原因不能为空",
-            CHANGE_REASON_MAX_LEN,
-            "调整原因过长",
-        )?;
+        let user_id = normalize_user_id(user_id)?;
+        let change_reason = normalize_change_reason(change_reason)?;
         ensure_window_valid(valid_from, valid_to)?;
         Ok(Self { user_id, assignment_role, valid_from, valid_to, change_reason })
     }
@@ -137,7 +124,7 @@ impl AssignCustomerAssignment {
     /// 返回新建的归属实体。
     ///
     /// # 错误
-    /// 窗口或文本不变量被破坏时返回 [`Error::LogicError`]。
+    /// 窗口或文本不变量被破坏时返回领域逻辑错误。
     pub fn into_assignment(
         self,
         id: CustomerAssignmentId,
@@ -170,7 +157,7 @@ impl EndCustomerAssignment {
     /// 返回已去除首尾空白且版本合法的结束命令。
     ///
     /// # 错误
-    /// 归属 ID 或原因为空/超长，或版本小于 1 时返回 [`Error::LogicError`]。
+    /// 归属 ID 或原因为空/超长，或版本小于 1 时返回领域逻辑错误。
     ///
     /// # 关键业务约束
     /// 本命令不携带销售人员、归属角色或生效开始日期；那些字段属于建立动作。
@@ -182,20 +169,10 @@ impl EndCustomerAssignment {
         change_reason: String,
     ) -> Result<Self> {
         if version < 1 {
-            return Err(Error::from("乐观锁版本必须大于 0"));
+            return Err(erp_core::Error::from("乐观锁版本必须大于 0"));
         }
-        let assignment_id = normalize_required_text(
-            assignment_id,
-            "目标归属 ID 不能为空",
-            ASSIGNMENT_ID_MAX_LEN,
-            "目标归属 ID 过长",
-        )?;
-        let change_reason = normalize_required_text(
-            change_reason,
-            "调整原因不能为空",
-            CHANGE_REASON_MAX_LEN,
-            "调整原因过长",
-        )?;
+        let assignment_id = normalize_assignment_id(assignment_id)?;
+        let change_reason = normalize_change_reason(change_reason)?;
         Ok(Self { assignment_id, valid_to, version, change_reason })
     }
 
@@ -230,24 +207,6 @@ impl EndCustomerAssignment {
     pub fn change_reason(&self) -> &str {
         &self.change_reason
     }
-}
-
-/// 校验生效区间：结束日必须晚于开始日（权威实现见 [`super::customer_assignment::ensure_window_valid`]）。
-///
-/// 本模块复用归属实体的同一窗口不变式；命令层与实体构造共用一处语义，
-/// DTO 只做字段组合分流（erp-customer-002）。
-///
-/// # 参数
-/// * `valid_from` - 生效开始日期
-/// * `valid_to` - 可选结束日期
-///
-/// # 返回
-/// 窗口合法时返回 `Ok(())`。
-///
-/// # 错误
-/// 结束日期不晚于开始日期时返回 [`Error::LogicError`]。
-fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> Result<()> {
-    super::customer_assignment::ensure_window_valid(valid_from, valid_to)
 }
 
 #[cfg(test)]

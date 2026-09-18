@@ -6,10 +6,11 @@ pub mod owned;
 
 pub use catalog::{
     CatalogReadScope, CatalogRepository, CatalogScopeClause, CategoryParentChainFact, ProductBrandFilter,
-    ProductCategoryAttributeFilter, ProductCategoryFilter, ProductFilter, ProductListingSummary,
-    ProductRevisionFilter, ProductRevisionRow, ProductRow, SellableSkuFilter, SellableSkuRow,
-    SkuAttributeFilter, SkuAttributeValueFilter, SkuFilter, SkuRevisionFilter, SkuRevisionRow, SkuRow,
-    UnitOfMeasureFilter, VoucherCategoryProfileRevisionFilter, VoucherCategoryProfileRevisionRow,
+    ProductBrandRow, ProductCategoryAttributeFilter, ProductCategoryFilter, ProductCategoryRow,
+    ProductFilter, ProductListingSummary, ProductRevisionFilter, ProductRevisionRow, ProductRow,
+    SellableSkuFilter, SellableSkuRow, SkuAttributeFilter, SkuAttributeRow, SkuAttributeValueFilter,
+    SkuAttributeValueRow, SkuFilter, SkuRevisionFilter, SkuRevisionRow, SkuRow, UnitOfMeasureFilter,
+    UnitOfMeasureRow, VoucherCategoryProfileRevisionFilter, VoucherCategoryProfileRevisionRow,
     sku_is_listed_expr,
 };
 pub use extensions::CatalogExt;

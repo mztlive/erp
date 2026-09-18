@@ -9,12 +9,10 @@ use entity_macros::Entity;
 use erp_core::common::stable::StableBase;
 use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::ids::{ContractId, CustomerAccountId, PartyId};
-use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-/// 合同编号最大长度。
-const CONTRACT_NO_MAX_LEN: usize = 64;
+use super::snapshot::ContractSnapshot;
 
 /// 合同状态（数据模型 §6.4：生效、终止、到期；W04 禁止产生 `DRAFT` 合同）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -134,12 +132,7 @@ impl Contract {
     /// # 错误
     /// 当 contract_no 为空或超长时返回错误。
     pub fn new(id: ContractId, data: ContractData, created_by: impl Into<String>) -> Result<Self> {
-        let contract_no = normalize_required_text(
-            data.contract_no,
-            "合同编号不能为空",
-            CONTRACT_NO_MAX_LEN,
-            "合同编号过长",
-        )?;
+        let contract_no = ContractSnapshot::new(data.contract_no)?.contract_no;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),

@@ -146,7 +146,7 @@ fn blocked_enter(
     instance.enter_blocked(code, now)?;
     let mut plan = TransitionPlan::for_instance(instance, CommitRequired::Blocked);
     plan.events.push(
-        BpmEvent::new(BpmEventKind::InstanceBlocked, plan.instance.typed_id(), node_round(&execution))
+        BpmEvent::new(BpmEventKind::InstanceBlocked, plan.instance.typed_id(), execution.round_no)
             .with_execution(execution_id)
             .with_node_key(node.node_key.clone())
             .with_blocker(code),
@@ -177,32 +177,13 @@ pub(crate) fn require_decision_edges<'a>(
     graph: &'a DefinitionGraph,
     from_node_key: &str,
 ) -> EngineResult<(&'a ApprovalTransitionDefinition, &'a ApprovalTransitionDefinition)> {
-    let approve = unique_transition(graph, from_node_key, ApprovalTransitionEvent::Approve)?;
-    let reject = unique_transition(graph, from_node_key, ApprovalTransitionEvent::Reject)?;
+    let approve = graph
+        .unique_transition(from_node_key, ApprovalTransitionEvent::Approve)
+        .map_err(|_| EngineError::GraphCorrupted)?;
+    approve.validate_shape()?;
+    let reject = graph
+        .unique_transition(from_node_key, ApprovalTransitionEvent::Reject)
+        .map_err(|_| EngineError::GraphCorrupted)?;
+    reject.validate_shape()?;
     Ok((approve, reject))
-}
-
-/// 读取指定事件的唯一连线。
-pub(crate) fn unique_transition<'a>(
-    graph: &'a DefinitionGraph,
-    from_node_key: &str,
-    event: ApprovalTransitionEvent,
-) -> EngineResult<&'a ApprovalTransitionDefinition> {
-    let matches: Vec<_> = graph
-        .transitions
-        .iter()
-        .filter(|item| item.from_node_key == from_node_key && item.event == event)
-        .collect();
-    match matches.as_slice() {
-        [only] => {
-            only.validate_shape()?;
-            Ok(*only)
-        },
-        _ => Err(EngineError::GraphCorrupted),
-    }
-}
-
-/// 从执行读取轮次。
-fn node_round(execution: &ApprovalNodeExecution) -> u32 {
-    execution.round_no
 }

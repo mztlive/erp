@@ -1,5 +1,7 @@
 //! 业务命令共享的版本化稳定指纹基元。
 
+use std::fmt::Display;
+
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -247,9 +249,8 @@ impl CommandReceiptFact {
     ///
     /// # 错误
     /// 无。
-    pub fn with_resource_id(mut self, resource_id: impl Into<String>) -> Self {
-        self.resource_id = Some(resource_id.into());
-        self
+    pub fn with_resource_id(self, resource_id: impl Into<String>) -> Self {
+        self.with_resource_id_opt(Some(resource_id.into()))
     }
 
     /// 设置目标资源 ID（`None` 保持缺省）。
@@ -292,9 +293,8 @@ impl CommandReceiptFact {
     ///
     /// # 错误
     /// 无。
-    pub fn with_message(mut self, message: impl Into<String>) -> Self {
-        self.message = Some(message.into());
-        self
+    pub fn with_message(self, message: impl Into<String>) -> Self {
+        self.with_message_opt(Some(message.into()))
     }
 
     /// 设置收据消息（`None` 保持缺省）。
@@ -335,13 +335,51 @@ pub struct CommandReceipt {
     legacy_fingerprints: Vec<String>,
 }
 
+/// 去首尾空白后非空校验，幂等键与资源 ID 共用空白判定。
+fn require_non_blank<'a>(value: &'a str, message: &str) -> Result<&'a str> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(Error::from(message));
+    }
+    Ok(trimmed)
+}
+
 /// 规范化幂等键，两构造入口共用。
 fn normalize_idempotency_key(idempotency_key: &str) -> Result<&str> {
-    let key = idempotency_key.trim();
-    if key.is_empty() {
-        return Err(Error::from("操作号不能为空"));
-    }
-    Ok(key)
+    require_non_blank(idempotency_key, "操作号不能为空")
+}
+
+/// 载荷序列化失败统一映射，两条序列化路径共用。
+fn payload_serialize_error(error: impl Display) -> Error {
+    Error::from(format!("业务命令请求序列化失败: {error}"))
+}
+
+/// 收据身份三元组，组装入口共用，避免长参数列。
+struct ReceiptHeader<'a> {
+    actor_id: &'a str,
+    action: &'a str,
+    resource_type: &'a str,
+}
+
+/// 组装收据主体，两构造入口共用身份去重与字段填充。
+fn assemble(
+    prefix: &str,
+    identity_parts: impl IntoIterator<Item = String>,
+    legacy_digest: &str,
+    header: ReceiptHeader<'_>,
+    fingerprint: CommandFingerprint,
+    legacy_fingerprint: String,
+) -> Result<CommandReceipt> {
+    let legacy_identity = format!("{prefix}{legacy_digest}");
+    let identity = CommandIdentity::new(prefix, identity_parts, [legacy_identity])?;
+    Ok(CommandReceipt {
+        identity,
+        actor_id: header.actor_id.to_string(),
+        action: header.action.to_string(),
+        resource_type: header.resource_type.to_string(),
+        fingerprint,
+        legacy_fingerprints: vec![legacy_fingerprint],
+    })
 }
 
 impl CommandReceipt {
@@ -370,29 +408,20 @@ impl CommandReceipt {
     ) -> Result<Self> {
         let key = normalize_idempotency_key(idempotency_key)?;
         let canonical_payload = canonical_json(payload)?;
-        let legacy_payload = serde_json::to_string(payload)
-            .map_err(|error| Error::from(format!("业务命令请求序列化失败: {error}")))?;
-        let legacy_identity =
-            format!("{prefix}{}", legacy_digest_parts(&[actor_id, action, resource_type, key]));
-        let identity = CommandIdentity::new(
-            prefix,
-            [actor_id, action, resource_type, key].into_iter().map(str::to_string),
-            [legacy_identity],
-        )?;
+        let legacy_payload = serde_json::to_string(payload).map_err(payload_serialize_error)?;
         let fingerprint = CommandFingerprint::from_parts([
             action.to_string(),
             resource_type.to_string(),
             canonical_payload,
         ]);
-        let legacy_fingerprints = vec![legacy_digest_parts(&[action, resource_type, &legacy_payload])];
-        Ok(Self {
-            identity,
-            actor_id: actor_id.to_string(),
-            action: action.to_string(),
-            resource_type: resource_type.to_string(),
+        assemble(
+            prefix,
+            [actor_id, action, resource_type, key].into_iter().map(str::to_string),
+            &legacy_compat::digest_parts(&[actor_id, action, resource_type, key]),
+            ReceiptHeader { actor_id, action, resource_type },
             fingerprint,
-            legacy_fingerprints,
-        })
+            legacy_compat::digest_parts(&[action, resource_type, &legacy_payload]),
+        )
     }
 
     /// 从资源定位命令的固定顺序字段形成 v1 收据。
@@ -424,27 +453,18 @@ impl CommandReceipt {
         fingerprint_parts: impl IntoIterator<Item = String>,
     ) -> Result<Self> {
         let key = normalize_idempotency_key(idempotency_key)?;
-        if resource_id.trim().is_empty() {
-            return Err(Error::from("命令资源 ID 不能为空"));
-        }
+        require_non_blank(resource_id, "命令资源 ID 不能为空")?;
         let fingerprint_parts = fingerprint_parts.into_iter().collect::<Vec<_>>();
-        let legacy_identity =
-            format!("{prefix}{}", legacy_compat::pipe_identity(actor_id, action, resource_id, key));
         let legacy_fingerprint_parts = fingerprint_parts.iter().map(String::as_str).collect::<Vec<_>>();
-        let legacy_fingerprint = legacy_digest_parts(&legacy_fingerprint_parts);
-        let identity = CommandIdentity::new(
+        let legacy_fingerprint = legacy_compat::digest_parts(&legacy_fingerprint_parts);
+        assemble(
             prefix,
             [actor_id, action, resource_type, resource_id, key].into_iter().map(str::to_string),
-            [legacy_identity],
-        )?;
-        Ok(Self {
-            identity,
-            actor_id: actor_id.to_string(),
-            action: action.to_string(),
-            resource_type: resource_type.to_string(),
-            fingerprint: CommandFingerprint::from_parts(fingerprint_parts),
-            legacy_fingerprints: vec![legacy_fingerprint],
-        })
+            &legacy_compat::pipe_identity(actor_id, action, resource_id, key),
+            ReceiptHeader { actor_id, action, resource_type },
+            CommandFingerprint::from_parts(fingerprint_parts),
+            legacy_fingerprint,
+        )
     }
 
     /// 返回新写入使用的收据 ID。
@@ -584,11 +604,17 @@ fn extract_persisted_fingerprint(
 }
 
 fn canonical_json<T: Serialize>(payload: &T) -> Result<String> {
-    let value = serde_json::to_value(payload)
-        .map_err(|error| Error::from(format!("业务命令请求序列化失败: {error}")))?;
+    let value = serde_json::to_value(payload).map_err(payload_serialize_error)?;
     let mut output = String::new();
     write_canonical_json(&value, &mut output)?;
     Ok(output)
+}
+
+/// 叶子 JSON 标量序列化失败路径共用收据序列化错误。
+fn write_scalar_json(value: &impl Serialize, output: &mut String) -> Result<()> {
+    let raw = serde_json::to_string(value).map_err(payload_serialize_error)?;
+    output.push_str(&raw);
+    Ok(())
 }
 
 fn write_canonical_json(value: &serde_json::Value, output: &mut String) -> Result<()> {
@@ -601,7 +627,7 @@ fn write_canonical_json(value: &serde_json::Value, output: &mut String) -> Resul
                 if index != 0 {
                     output.push(',');
                 }
-                output.push_str(&serde_json::to_string(key).map_err(|error| Error::from(error.to_string()))?);
+                write_scalar_json(key, output)?;
                 output.push(':');
                 write_canonical_json(&map[key], output)?;
             }
@@ -617,9 +643,7 @@ fn write_canonical_json(value: &serde_json::Value, output: &mut String) -> Resul
             }
             output.push(']');
         },
-        value => {
-            output.push_str(&serde_json::to_string(value).map_err(|error| Error::from(error.to_string()))?)
-        },
+        value => write_scalar_json(value, output)?,
     }
     Ok(())
 }
@@ -643,18 +667,13 @@ mod legacy_compat {
     }
 }
 
-fn legacy_digest_parts(parts: &[&str]) -> String {
-    legacy_compat::digest_parts(parts)
-}
-
 #[cfg(test)]
 mod tests {
     use serde::Serialize;
     use sha2::{Digest, Sha256};
 
-    use super::{
-        CommandFingerprint, CommandReceipt, CommandReceiptFact, CommandReceiptMatch, legacy_digest_parts,
-    };
+    use super::legacy_compat::digest_parts as legacy_digest_parts;
+    use super::{CommandFingerprint, CommandReceipt, CommandReceiptFact, CommandReceiptMatch};
 
     #[derive(Serialize)]
     struct Payload {

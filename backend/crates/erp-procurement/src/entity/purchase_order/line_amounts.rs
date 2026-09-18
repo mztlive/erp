@@ -231,13 +231,13 @@ pub fn compute_header_totals(
     Ok((gross, net, tax))
 }
 
-/// 零金额。
-fn zero_amount() -> Amount {
+/// 零金额（crate 内金额汇总的唯一规范零值）。
+pub(crate) fn zero_amount() -> Amount {
     Amount::try_from(rust_decimal::Decimal::ZERO).expect("零金额合法")
 }
 
-/// 零税率。
-fn zero_rate() -> Rate {
+/// 零税率（缺省计税的唯一规范零值）。
+pub(crate) fn zero_rate() -> Rate {
     Rate::try_from(rust_decimal::Decimal::ZERO).expect("零税率合法")
 }
 

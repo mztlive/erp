@@ -29,26 +29,24 @@ impl CalendarPeriod {
             .ok_or_else(|| Error::from("自然周期日期无效"))
     }
 
-    /// 通过下个周期首日减一天计算月度周期，自动处理闰年。
     fn end_date(self, date: NaiveDate) -> Option<NaiveDate> {
         match self {
             Self::Week => {
                 date.checked_add_days(Days::new(6 - u64::from(date.weekday().num_days_from_monday())))
             },
-            Self::Month | Self::Quarter | Self::HalfYear | Self::Year => {
-                let months = match self {
-                    Self::Month => 1,
-                    Self::Quarter => 3,
-                    Self::HalfYear => 6,
-                    Self::Year => 12,
-                    Self::Week => return None,
-                };
-                let next_month = (date.month0() / months + 1) * months;
-                let year = date.year().checked_add((next_month / 12) as i32)?;
-                NaiveDate::from_ymd_opt(year, next_month % 12 + 1, 1)?.pred_opt()
-            },
+            Self::Month => month_end(date, 1),
+            Self::Quarter => month_end(date, 3),
+            Self::HalfYear => month_end(date, 6),
+            Self::Year => month_end(date, 12),
         }
     }
+}
+
+/// 通过下个周期首日减一天计算月度周期，自动处理闰年。
+fn month_end(date: NaiveDate, months: u32) -> Option<NaiveDate> {
+    let next_month = (date.month0() / months + 1) * months;
+    let year = date.year().checked_add((next_month / 12) as i32)?;
+    NaiveDate::from_ymd_opt(year, next_month % 12 + 1, 1)?.pred_opt()
 }
 
 #[cfg(test)]

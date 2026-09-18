@@ -78,19 +78,14 @@ pub fn prepare_error_task(
     req: &CreateErrorTaskRequest,
     owner_org_unit_id: String,
 ) -> Result<IntegrationErrorTask> {
-    let task = IntegrationErrorTask::new(
+    IntegrationErrorTask::with_derived_owner_role(
         IntegrationErrorTaskId::new(next_id()),
-        IntegrationErrorTaskData {
-            message_id: req.message_id.clone(),
-            business_object_id: req.business_object_id.clone(),
-            error_class: req.error_class,
-            owner_role: Some(error_owner_role(req.error_class).to_string()),
-            owner_user_id: Some(req.owner_user_id.clone()),
-            owner_org_unit_id,
-        },
-    )?;
-
-    Ok(task)
+        req.message_id.clone(),
+        req.business_object_id.clone(),
+        req.error_class,
+        req.owner_user_id.clone(),
+        owner_org_unit_id,
+    )
 }
 
 /// 把已规范化查询与授权条件装配为仓储筛选。

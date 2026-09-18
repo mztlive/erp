@@ -50,6 +50,24 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+impl PageParams {
+    /// 返回仓储筛选用的排序字段名（白名单已校验）。
+    ///
+    /// # 返回
+    /// 返回归一化后的排序字段。
+    pub fn sort_field(&self) -> String {
+        self.sort_by.to_owned()
+    }
+
+    /// 判断排序是否为升序。
+    ///
+    /// # 返回
+    /// 升序返回 `true`，降序返回 `false`。
+    pub fn sort_ascending(&self) -> bool {
+        matches!(self.sort_dir, SortDir::Asc)
+    }
+}
+
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
 pub use application_core::PageView;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
@@ -357,5 +375,17 @@ mod tests {
             "request_id": "request-1"
         });
         assert!(serde_json::from_value::<super::ImportExecutionCommand>(numeric).is_err());
+    }
+
+    #[test]
+    fn page_params_exposes_repository_sort_shape() {
+        let params = LegacyImportBatchListParams {
+            sort_by: Some(" batch_no ".to_string()),
+            sort_dir: Some(" asc ".to_string()),
+            ..Default::default()
+        };
+        let query = params.normalized().unwrap();
+        assert_eq!(query.paging.sort_field(), "batch_no");
+        assert!(query.paging.sort_ascending());
     }
 }

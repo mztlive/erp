@@ -38,7 +38,7 @@ impl From<mongodb::error::Error> for Error {
     /// `TransientTransactionError` 标签的错误归类为可重试并发事务冲突；
     /// 其他写入或连接错误保持数据库错误。
     fn from(error: mongodb::error::Error) -> Self {
-        if is_duplicate_key(&error) {
+        if duplicate_key_message(&error).is_some() {
             return Self::DuplicateKey(error);
         }
         if error.contains_label(TRANSIENT_TRANSACTION_ERROR) {
@@ -58,7 +58,7 @@ impl Error {
     /// 唯一索引名；非 `DuplicateKey` 或无法解析时返回 `None`。
     pub fn duplicate_index_name(&self) -> Option<&str> {
         match self {
-            Self::DuplicateKey(error) => extract_duplicate_index_name(error),
+            Self::DuplicateKey(error) => duplicate_key_message(error).and_then(parse_index_name_from_message),
             _ => None,
         }
     }
@@ -66,8 +66,8 @@ impl Error {
 
 /// 以一次匹配提取唯一键冲突的错误文本；命中返回 `Some`，否则返回 `None`。
 ///
-/// `is_duplicate_key` 与 `extract_duplicate_index_name` 共用同一视图，
-/// 判重码 `11000` 与标签逻辑只维护一处。
+/// 错误分类（`From`）与索引名解析（`duplicate_index_name`）共用同一视图，
+/// 判重码 `11000` 匹配逻辑只维护一处。
 fn duplicate_key_message(error: &mongodb::error::Error) -> Option<&str> {
     match error.kind.as_ref() {
         ErrorKind::Command(error) if error.code == DUPLICATE_KEY_CODE => Some(error.message.as_str()),
@@ -87,23 +87,6 @@ fn duplicate_key_message(error: &mongodb::error::Error) -> Option<&str> {
             .map(|error| error.message.as_str()),
         _ => None,
     }
-}
-
-/// 判断 MongoDB 错误是否包含服务端唯一键冲突码。
-fn is_duplicate_key(error: &mongodb::error::Error) -> bool {
-    duplicate_key_message(error).is_some()
-}
-
-/// 从 MongoDB 唯一键冲突错误信息中提取索引名。
-///
-/// # 参数
-/// * `error` - MongoDB 原始错误
-///
-/// # 返回
-/// 解析到的索引名；无法从错误文本中定位时返回 `None`。
-fn extract_duplicate_index_name(error: &mongodb::error::Error) -> Option<&str> {
-    let message = duplicate_key_message(error)?;
-    parse_index_name_from_message(message)
 }
 
 /// 从 `E11000` 错误文本中解析 `index: <name>`。

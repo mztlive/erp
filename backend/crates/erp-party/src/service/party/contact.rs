@@ -141,8 +141,7 @@ impl PartyContactService {
         actor: &AuditActor,
     ) -> Result<PartyContactView> {
         req.validate()?;
-        super::ensure_party_exists(&self.db, party_id).await?;
-        super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(party_id)).await?;
+        super::ensure_new_fact_guards(&self.db, self.supplier_roles.as_ref(), party_id).await?;
         let mobile = req.mobile.clone();
         let mut contact = PartyContact::new(
             PartyContactId::new(next_id()),
@@ -217,7 +216,7 @@ impl PartyContactService {
             .await?
             .ok_or_else(|| Error::NotFound("联系人不存在".to_string()))?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &contact.party_id).await?;
-        contact.ensure_version(req.version).map_err(|error| Error::ConflictError(error.to_string()))?;
+        super::map_version_conflict(contact.ensure_version(req.version))?;
         contact.update(
             PartyContactUpdate {
                 status: req.status,

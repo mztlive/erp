@@ -22,26 +22,47 @@ pub enum SortDir {
     Desc,
 }
 
+/// 空白判定：去首尾空白后为空即空白，三处查询规范化入口共用。
+fn is_blank(value: &str) -> bool {
+    value.trim().is_empty()
+}
+
+/// 去首尾空白的可选查询条件，三处查询规范化入口共用。
+fn trimmed_query(value: Option<&str>) -> Option<&str> {
+    value.filter(|value| !is_blank(value)).map(str::trim)
+}
+
+/// 按领域白名单归一化排序字段，未提供时回退默认字段。
+fn resolve_sort_field(
+    sort_by: Option<&str>,
+    allowed_fields: &'static [&'static str],
+) -> Result<&'static str> {
+    match trimmed_query(sort_by) {
+        Some(field) => allowed_fields
+            .iter()
+            .find(|allowed| **allowed == field)
+            .copied()
+            .ok_or_else(|| Error::ValidationError(format!("不支持的排序字段: {field}"))),
+        None => Ok(DEFAULT_SORT_FIELD),
+    }
+}
+
+/// 归一化排序方向，缺省与显式降序统一为默认方向。
+fn resolve_sort_dir(sort_dir: Option<&str>) -> Result<SortDir> {
+    match trimmed_query(sort_dir) {
+        Some("asc") => Ok(SortDir::Asc),
+        Some("desc") | None => Ok(DEFAULT_SORT_DIR),
+        Some(other) => Err(Error::ValidationError(format!("非法排序方向: {other}"))),
+    }
+}
+
 /// 按领域白名单归一化列表排序字段与方向。
 pub fn normalize_sort(
     sort_by: &Option<String>,
     sort_dir: &Option<String>,
     allowed_fields: &'static [&'static str],
 ) -> Result<(&'static str, SortDir)> {
-    let sort_by = match sort_by.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
-        Some(field) => allowed_fields
-            .iter()
-            .find(|allowed| **allowed == field)
-            .copied()
-            .ok_or_else(|| Error::ValidationError(format!("不支持的排序字段: {field}")))?,
-        None => DEFAULT_SORT_FIELD,
-    };
-    let sort_dir = match sort_dir.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
-        Some("asc") => SortDir::Asc,
-        Some("desc") | None => DEFAULT_SORT_DIR,
-        Some(other) => return Err(Error::ValidationError(format!("非法排序方向: {other}"))),
-    };
-    Ok((sort_by, sort_dir))
+    Ok((resolve_sort_field(sort_by.as_deref(), allowed_fields)?, resolve_sort_dir(sort_dir.as_deref())?))
 }
 
 /// 服务列表统一分页响应。
@@ -74,13 +95,13 @@ impl<T> Default for PageView<T> {
     /// # 错误
     /// 无。
     fn default() -> Self {
-        Self { items: Vec::new(), total: 0, page: 1, page_size: 20 }
+        Self { items: Vec::new(), total: 0, page: DEFAULT_PAGE, page_size: DEFAULT_PAGE_SIZE }
     }
 }
 
 /// 校验文本去除首尾空白后非空。
 pub fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationError> {
-    if value.trim().is_empty() {
+    if is_blank(value) {
         return Err(validator::ValidationError::new("不能为空白"));
     }
     Ok(())
@@ -88,7 +109,7 @@ pub fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationEr
 
 /// 归一化可选的文本查询条件。
 pub fn normalized_text(value: Option<&str>) -> Option<String> {
-    value.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string)
+    trimmed_query(value).map(str::to_string)
 }
 
 /// 返回有效页码；未提供时使用第一页。
@@ -103,7 +124,30 @@ pub fn page_size_or_default(page_size: Option<u32>) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{PageView, page_size_or_default};
+    use super::{
+        DEFAULT_SORT_DIR, DEFAULT_SORT_FIELD, PageView, SortDir, normalize_sort, page_size_or_default,
+    };
+
+    #[test]
+    fn sort_normalization_accepts_allowlisted_field_and_direction() {
+        let allowed: &'static [&'static str] = &["created_at", "name"];
+        assert_eq!(
+            normalize_sort(&Some(" name ".to_string()), &Some("asc".to_string()), allowed).unwrap(),
+            ("name", SortDir::Asc)
+        );
+        assert_eq!(normalize_sort(&None, &None, allowed).unwrap(), (DEFAULT_SORT_FIELD, DEFAULT_SORT_DIR));
+        assert_eq!(
+            normalize_sort(&Some("  ".to_string()), &Some("desc".to_string()), allowed).unwrap(),
+            (DEFAULT_SORT_FIELD, DEFAULT_SORT_DIR)
+        );
+    }
+
+    #[test]
+    fn sort_normalization_rejects_unknown_field_and_direction() {
+        let allowed: &'static [&'static str] = &["created_at"];
+        assert!(normalize_sort(&Some("name".to_string()), &None, allowed).is_err());
+        assert!(normalize_sort(&None, &Some("up".to_string()), allowed).is_err());
+    }
 
     #[test]
     fn page_size_is_bounded_for_non_http_callers() {

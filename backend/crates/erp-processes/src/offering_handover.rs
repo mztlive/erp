@@ -2,8 +2,6 @@
 
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
-use erp_identity::entity::organization::OrgTree;
-use erp_identity::repository::OrganizationRepository;
 use erp_identity::{AccessControlExt, Permission, SharedRbacService};
 use erp_supply::{HandoverCandidateView, HandoverSupplierOfferingRequest, HandoverSupplierOfferingView};
 use mongodb::Database;
@@ -11,6 +9,7 @@ use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use crate::adapters::scoped_offering_service;
+use crate::handover_common::{ensure_org_enabled, ensure_replay_fingerprint, trimmed_idempotency_key};
 use crate::{Error, Result};
 
 /// 显式交接供给维护人；目标须有效且具备 `supplier_offering:update`。
@@ -35,10 +34,7 @@ pub async fn handover_offering(
     actor: &AuditActor,
 ) -> Result<HandoverSupplierOfferingView> {
     req.validate()?;
-    let key = req.idempotency_key.trim().to_string();
-    if key.is_empty() {
-        return Err(Error::ValidationError("幂等键不能为空".into()));
-    }
+    let key = trimmed_idempotency_key(&req.idempotency_key)?;
     let audit_id = format!("offering-handover-{}-{}-{key}", actor.id(), id);
     let fingerprint = handover_fingerprint(actor.id(), id, &req, &key)?;
     if let Some(existing) = replay(&db, &rbac, &audit_id, &fingerprint, id, actor).await? {
@@ -152,10 +148,11 @@ async fn replay(
     let Some(audit) = db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
         return Ok(None);
     };
-    let message = audit.message.as_deref().unwrap_or("");
-    if !replay_message_matches(message, expected_fingerprint) {
-        return Err(Error::ConflictError("同一幂等键已用于不同的供给交接".into()));
-    }
+    ensure_replay_fingerprint(
+        audit.message.as_deref(),
+        expected_fingerprint,
+        "同一幂等键已用于不同的供给交接",
+    )?;
     let offering = crate::adapters::offering_access(db.clone(), rbac.clone())
         .require_offering(actor, "update", offering_id, &mut NoTransaction)
         .await?;
@@ -191,35 +188,6 @@ async fn ensure_target_qualified(
     };
     if !account.is_active_backoffice() || !account_can_maintain(rbac, target).await? {
         return Err(Error::Forbidden("目标账号不存在、已失效或不具备供给维护资格".into()));
-    }
-    Ok(())
-}
-
-/// 校验显式目标组织整条路径均启用。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `target_org` - 可选目标组织
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 未指定组织或路径全部启用时成功。
-///
-/// # 错误
-/// 目标组织停用时拒绝。
-async fn ensure_org_enabled(
-    db: &Database,
-    target_org: Option<&str>,
-    executor: &mut dyn persistence_core::Executor,
-) -> Result<()> {
-    let Some(org) = target_org.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(());
-    };
-    let state = OrganizationRepository::new(db).state(executor).await?;
-    let tree = OrgTree::new(&state.units)?;
-    let path = tree.path(org)?;
-    if path.iter().any(|node| !node.enabled) {
-        return Err(Error::BusinessLogicError("目标业务组织已停用".into()));
     }
     Ok(())
 }
@@ -271,25 +239,10 @@ fn handover_fingerprint(
     .map_err(|error| Error::Internal(format!("供给交接命令序列化失败: {error}")))
 }
 
-/// 判断审计留言是否属于同一交接命令指纹。
-///
-/// # 参数
-/// * `message` - 已提交审计留言
-/// * `expected_fingerprint` - 本次命令指纹
-///
-/// # 返回
-/// 指纹一致时为 true。
-///
-/// # 错误
-/// 无。
-fn replay_message_matches(message: &str, expected_fingerprint: &str) -> bool {
-    let expected = format!("command_sha256={expected_fingerprint}");
-    message == expected || message.starts_with(&format!("{expected};"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::handover_common::replay_fingerprint_matches;
 
     fn request() -> HandoverSupplierOfferingRequest {
         HandoverSupplierOfferingRequest {
@@ -316,8 +269,8 @@ mod tests {
 
     #[test]
     fn replay_rejects_same_key_with_different_payload() {
-        assert!(replay_message_matches("command_sha256=abc;target=user-2;reason=交接", "abc"));
-        assert!(replay_message_matches("command_sha256=abc", "abc"));
-        assert!(!replay_message_matches("command_sha256=def;target=user-2;reason=交接", "abc"));
+        assert!(replay_fingerprint_matches(Some("command_sha256=abc;target=user-2;reason=交接"), "abc"));
+        assert!(replay_fingerprint_matches(Some("command_sha256=abc"), "abc"));
+        assert!(!replay_fingerprint_matches(Some("command_sha256=def;target=user-2;reason=交接"), "abc"));
     }
 }

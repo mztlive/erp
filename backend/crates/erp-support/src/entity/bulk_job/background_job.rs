@@ -95,6 +95,34 @@ impl DocumentState for JobStatus {
     }
 }
 
+/// 累加进度计数（成功/跳过/失败三路），溢出时失败关闭。
+///
+/// `record_progress` 与导入批次终态判定共用同一溢出口径；调用方保留各自的
+/// 状态守卫与错误文案，本函数只承担纯算术部分。
+///
+/// # 参数
+/// * `base` - 当前已处理数
+/// * `success` - 本批成功数
+/// * `skipped` - 本批跳过数
+/// * `failed` - 本批失败数
+///
+/// # 返回
+/// 返回累加后的已处理数。
+///
+/// # 错误
+/// 加法溢出时返回错误，不修改调用方状态。
+pub(super) fn add_progress_counts(
+    base: u64,
+    success: u64,
+    skipped: u64,
+    failed: u64,
+) -> Result<u64> {
+    base.checked_add(success)
+        .and_then(|value| value.checked_add(skipped))
+        .and_then(|value| value.checked_add(failed))
+        .ok_or_else(|| Error::from("处理计数溢出"))
+}
+
 /// 后台任务创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BackgroundJobData {
@@ -286,17 +314,11 @@ impl BackgroundJob {
     /// # 错误
     /// 当任务状态不允许记录进度，或累计已处理数超过目标总数时返回错误。
     pub fn record_progress(&mut self, success: u64, skipped: u64, failed: u64, at: Instant) -> Result<()> {
-        if self.finished_at.is_some()
-            || !matches!(self.status, JobStatus::Running | JobStatus::PartiallySucceeded)
-        {
+        if !self.can_record_progress() {
             return Err(Error::from(format!("状态 {:?} 不允许记录进度", self.status)));
         }
-        let processed = self
-            .processed_count
-            .checked_add(success)
-            .and_then(|value| value.checked_add(skipped))
-            .and_then(|value| value.checked_add(failed))
-            .ok_or_else(|| Error::from("处理计数溢出"))?;
+        let processed =
+            add_progress_counts(self.processed_count, success, skipped, failed)?;
         if processed > self.total_count {
             return Err(Error::from("已处理数不能超过目标总数"));
         }
@@ -450,6 +472,19 @@ impl BackgroundJob {
         if let Some(result_expires_at) = update.result_expires_at {
             self.result_expires_at = Some(result_expires_at);
         }
+    }
+
+    /// 判断任务是否允许记录进度（未结束且处于可执行状态）。
+    ///
+    /// `record_progress` 与导入批次判定共用同一谓词；调用方保留各自的
+    /// 错误文案，本方法只承担纯状态判定。
+    ///
+    /// # 返回
+    /// 未写入 `finished_at` 且状态为 `RUNNING` / `PARTIALLY_SUCCEEDED`
+    /// 时返回 `true`。
+    pub(super) fn can_record_progress(&self) -> bool {
+        self.finished_at.is_none()
+            && matches!(self.status, JobStatus::Running | JobStatus::PartiallySucceeded)
     }
 
     /// 判断任务是否已处于终态。

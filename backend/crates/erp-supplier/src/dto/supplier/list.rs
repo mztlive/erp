@@ -174,26 +174,12 @@ impl SupplierQualificationHealth {
 
 /// 归一化逗号分隔的供应能力代码。
 fn normalize_capability_codes(value: Option<&str>) -> Result<Vec<CapabilityCode>> {
-    normalize_code_list(value, "供应能力", |code| match code {
-        "physical" => Some(CapabilityCode::Physical),
-        "virtual" => Some(CapabilityCode::Virtual),
-        "offline_service" => Some(CapabilityCode::OfflineService),
-        "api" => Some(CapabilityCode::Api),
-        "printing" => Some(CapabilityCode::Printing),
-        _ => None,
-    })
+    normalize_code_list(value, "供应能力", CapabilityCode::from_code)
 }
 
 /// 归一化逗号分隔的资质类型代码。
 fn normalize_qualification_types(value: Option<&str>) -> Result<Vec<QualificationType>> {
-    normalize_code_list(value, "资质类型", |code| match code {
-        "certificate" => Some(QualificationType::Certificate),
-        "contract" => Some(QualificationType::Contract),
-        "authorization" => Some(QualificationType::Authorization),
-        "food_license" => Some(QualificationType::FoodLicense),
-        "legal_person_id" => Some(QualificationType::LegalPersonId),
-        _ => None,
-    })
+    normalize_code_list(value, "资质类型", QualificationType::from_code)
 }
 
 /// 清理、去重并校验逗号分隔的固定枚举代码。

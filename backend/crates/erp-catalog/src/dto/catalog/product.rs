@@ -1,4 +1,4 @@
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use application_core::normalized_text;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     FileAssetId, ProductBrandId, ProductCategoryId, ProductId, SkuId, SkuRevisionId, UnitOfMeasureId,
@@ -7,7 +7,7 @@ use erp_core::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::common::{PageParams, non_blank, normalize_sort};
+use super::common::{PageParams, non_blank, paging_params};
 use crate::entity::catalog::product_revision_media::{MediaRole, ProductRevisionMedia};
 use crate::entity::catalog::{
     EnableStatus, ListingStatus, ProductKind, ProductListingStatus, ProductRevision, Sku,
@@ -501,17 +501,16 @@ impl ProductRevisionListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ProductRevisionListQuery> {
-        let (sort_by, sort_dir) =
-            normalize_sort(&self.sort_by, &self.sort_dir, PRODUCT_REVISION_SORT_FIELDS)?;
         Ok(ProductRevisionListQuery {
             product_id: self.product_id.as_ref().map(|id| id.to_string()),
             status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: paging_params(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                PRODUCT_REVISION_SORT_FIELDS,
+            )?,
         })
     }
 }
@@ -646,19 +645,13 @@ impl SkuListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<SkuListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, SKU_SORT_FIELDS)?;
         Ok(SkuListQuery {
             q: normalized_text(self.q.as_deref()),
             sku_no: normalized_text(self.sku_no.as_deref()),
             product_id: self.product_id.as_ref().map(|id| id.to_string()),
             status: self.status,
             listing_status: self.listing_status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: paging_params(self.page, self.page_size, &self.sort_by, &self.sort_dir, SKU_SORT_FIELDS)?,
         })
     }
 }

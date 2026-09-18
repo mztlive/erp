@@ -15,6 +15,9 @@ pub mod contract_revision;
 mod entity;
 pub mod snapshot;
 
+/// 合同编号最大长度（主表与版本快照共用，单一来源）。
+pub(crate) const CONTRACT_NO_MAX_LEN: usize = 64;
+
 pub use contract_revision::{ArchiveSource, ContractRevision, ContractRevisionData};
 pub use entity::{Contract, ContractData, ContractStatus, ContractUpdate};
 /// 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。

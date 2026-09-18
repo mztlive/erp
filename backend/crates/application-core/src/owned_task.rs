@@ -2,12 +2,6 @@ use std::future::Future;
 
 use crate::Error;
 
-/// 返回任务诊断名，映射逻辑的可单测分离点。
-#[cfg(test)]
-fn owned_task_diagnostic_name(name: &'static str) -> &'static str {
-    name
-}
-
 /// 将 Tokio JoinError 映射为内部错误，保留任务名便于诊断。
 ///
 /// # 参数
@@ -59,16 +53,6 @@ where
 mod tests {
     use super::map_owned_join_error;
     use crate::Error;
-
-    #[test]
-    fn owned_task_name_is_preserved_for_diagnosis() {
-        // 映射层已分离为纯函数，可独立单测；运行时行为见 `await_owned`。
-        // 完整取消语义测试需 tokio sync/time 特性，基线未启用，此处不引入新依赖。
-        let message = super::owned_task_diagnostic_name("测试");
-
-        assert_eq!(message, "测试");
-        let _ = Error::Internal("占位".to_string());
-    }
 
     #[tokio::test]
     async fn join_error_maps_to_internal_error() {

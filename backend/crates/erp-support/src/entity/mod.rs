@@ -40,3 +40,47 @@ macro_rules! enum_str {
 }
 
 pub(crate) use enum_str;
+
+/// 校验两个可选字段必须同时提供或同时省略。
+///
+/// 成对出现是本域多个实体的共有不变式（映射时间/责任人、确认时间/确认人、
+/// 对象类型/对象 ID、预期版本/内容摘要等）；调用方只传入存在性布尔值，
+/// 避免移动原值，错误文案由调用方指定以保持既有合同。
+///
+/// # 参数
+/// * `first_present` - 第一个字段是否存在（`is_some()` 结果）
+/// * `second_present` - 第二个字段是否存在（`is_some()` 结果）
+/// * `message` - 不成对时返回的错误文案（保持既有合同文案不变）
+///
+/// # 返回
+/// 成对时返回 `Ok(())`。
+///
+/// # 错误
+/// 一个存在另一个缺失时返回 `LogicError`。
+pub(crate) fn ensure_paired(
+    first_present: bool,
+    second_present: bool,
+    message: &str,
+) -> erp_core::Result<()> {
+    if first_present != second_present {
+        return Err(erp_core::Error::from(message));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ensure_paired;
+
+    #[test]
+    fn paired_options_accept_both_present_or_both_absent() {
+        assert!(ensure_paired(true, true, "不成对").is_ok());
+        assert!(ensure_paired(false, false, "不成对").is_ok());
+    }
+
+    #[test]
+    fn paired_options_reject_half_present() {
+        assert!(ensure_paired(true, false, "必须成对").is_err());
+        assert!(ensure_paired(false, true, "必须成对").is_err());
+    }
+}

@@ -2,9 +2,7 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::ProductCategoryId;
 use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
-};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter};
 use serde::{Deserialize, Serialize};
 
 use super::shared::{default_paging, in_filter, sort_doc, whitelisted_sort};
@@ -242,10 +240,7 @@ impl<'a> ProductCategoryRepository<'a> {
             .projection(product_category_projection())
             .build();
         let collection = self.collection().clone_with_type::<ProductCategoryRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        super::shared::search_projected(&collection, &self.collection(), filter, options, executor).await
     }
 
     /// 查询指定父分类的直接子节点（投影行，按分类代码升序）。

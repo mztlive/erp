@@ -43,6 +43,18 @@ impl WarehouseSkuPolicyPeriod {
         Ok(Self { effective_from, effective_to })
     }
 
+    /// 判断业务日是否落在半开生效区间内（区间语义的唯一原语）。
+    ///
+    /// # 参数
+    /// * `business_day` - 待判断的业务日
+    ///
+    /// # 返回
+    /// 业务日落在 `[effective_from, effective_to)` 时返回 `true`；结束日当天返回 `false`。
+    pub fn contains(self, business_day: BusinessDate) -> bool {
+        business_day >= self.effective_from
+            && self.effective_to.is_none_or(|effective_to| business_day < effective_to)
+    }
+
     /// 判断两个半开区间是否存在交集。
     ///
     /// # 参数
@@ -51,8 +63,8 @@ impl WarehouseSkuPolicyPeriod {
     /// # 返回
     /// 两个区间存在至少一个共同业务日时返回 `true`；相邻区间返回 `false`。
     pub fn overlaps(self, other: Self) -> bool {
-        self.effective_to.is_none_or(|end| other.effective_from < end)
-            && other.effective_to.is_none_or(|end| self.effective_from < end)
+        // 非退化半开区间相交当且仅当一方的起点落在另一方内。
+        self.contains(other.effective_from) || other.contains(self.effective_from)
     }
 
     /// 返回生效开始日。
@@ -302,6 +314,25 @@ mod tests {
         assert_eq!(policy.sku_id, SkuId::new("sku-1"));
         assert_eq!(policy.minimum_available_quantity, Quantity::from_str("10.000000").unwrap());
         assert!(policy.status.is_active());
+    }
+
+    /// 半开区间包含判定：开始日含、结束日不含、无限期无上界。
+    #[test]
+    fn period_contains_is_half_open() {
+        let period = WarehouseSkuPolicyPeriod::new(
+            BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+            Some(BusinessDate::from_ymd(2026, 3, 1).unwrap()),
+        )
+        .unwrap();
+        assert!(period.contains(BusinessDate::from_ymd(2026, 1, 1).unwrap()));
+        assert!(period.contains(BusinessDate::from_ymd(2026, 2, 1).unwrap()));
+        assert!(!period.contains(BusinessDate::from_ymd(2026, 3, 1).unwrap()));
+        assert!(!period.contains(BusinessDate::from_ymd(2025, 12, 31).unwrap()));
+
+        let open_ended =
+            WarehouseSkuPolicyPeriod::new(BusinessDate::from_ymd(2026, 1, 1).unwrap(), None).unwrap();
+        assert!(open_ended.contains(BusinessDate::from_ymd(2030, 1, 1).unwrap()));
+        assert!(!open_ended.contains(BusinessDate::from_ymd(2025, 12, 31).unwrap()));
     }
 
     /// 半开区间与启用状态共同决定同维度策略冲突。

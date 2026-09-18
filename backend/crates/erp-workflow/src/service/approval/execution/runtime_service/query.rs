@@ -22,8 +22,7 @@ pub(crate) use super::query_contract::parse_document_type;
 pub use super::query_contract::{RuntimeInstanceListCursor, RuntimeInstanceListQuery};
 use super::read_auth::{
     RuntimeReadAuthorizationFacts, RuntimeReadSubject, current_execution_matches_instance,
-    ensure_mine_page_integrity, management_runtime_read_allowed, mine_execution_ids, mine_instance_ids,
-    mine_runtime_chain_matches, ordinary_runtime_read_allowed, started_runtime_read_allowed,
+    ensure_mine_page_integrity, mine_execution_ids, mine_instance_ids, mine_runtime_chain_matches,
     task_proves_current_responsibility, unique_by_id,
 };
 use super::{ApprovalRuntimeService, hidden_not_found};
@@ -352,19 +351,19 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .find_by_process_instance_id(instance_id.as_ref(), &mut NoTransaction)
             .await?
             .ok_or_else(hidden_not_found)?;
-        let document_type = crate::entity::approval_integration::document_type_from_subject_kind(
+        let document_type = crate::entity::approval_integration::resolve_runtime_document_type(
             instance.subject.subject_kind(),
+            instance.process_kind,
         )
         .map_err(|_| hidden_not_found())?;
         adapter_spec_of(document_type)?;
-        if instance.process_kind != process_kind_of(document_type)
-            || snapshot
-                .ensure_matches_runtime_subject(
-                    document_type,
-                    instance.subject.subject_id(),
-                    instance.subject_version,
-                )
-                .is_err()
+        if snapshot
+            .ensure_matches_runtime_subject(
+                document_type,
+                instance.subject.subject_id(),
+                instance.subject_version,
+            )
+            .is_err()
         {
             return Err(hidden_not_found());
         }
@@ -406,14 +405,16 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     ) -> Result<()> {
         self.ensure_order_approval_read(actor, subject).await?;
         let initiator = subject.instance.started_by.as_str() == actor.id();
-        if ordinary_runtime_read_allowed(RuntimeReadAuthorizationFacts {
+        if (RuntimeReadAuthorizationFacts {
             actor_active: true,
             initiator,
             current_responsibility: false,
             object_readable: false,
             scope_covers: false,
             runtime_admin: false,
-        }) {
+        })
+        .ordinary_allowed()
+        {
             return Ok(());
         }
         if self.current_runtime_responsibility(actor, subject).await? {
@@ -438,7 +439,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             ),
             runtime_admin: false,
         };
-        if ordinary_runtime_read_allowed(facts) {
+        if facts.ordinary_allowed() {
             return Ok(());
         }
         Err(hidden_not_found())
@@ -471,7 +472,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             ),
             runtime_admin: visibility.runtime_admin_types().contains(&subject.document_type),
         };
-        if management_runtime_read_allowed(facts) {
+        if facts.management_allowed() {
             return Ok(());
         }
         Err(hidden_not_found())
@@ -875,13 +876,12 @@ pub(super) fn item_from_summary(
     row: ApprovalInstanceSummary,
     snapshot: Option<&ApprovalSubjectSnapshot>,
 ) -> Result<RuntimeInstanceListItem> {
-    let document_type =
-        crate::entity::approval_integration::document_type_from_subject_kind(row.subject.subject_kind())
-            .map_err(|_| hidden_not_found())?;
+    let document_type = crate::entity::approval_integration::resolve_runtime_document_type(
+        row.subject.subject_kind(),
+        row.process_kind,
+    )
+    .map_err(|_| hidden_not_found())?;
     let document_id = row.subject.subject_id().to_string();
-    if row.process_kind != process_kind_of(document_type) {
-        return Err(hidden_not_found());
-    }
     let snapshot = snapshot
         .filter(|snapshot| snapshot.approval_process_instance_id.as_ref() == row.id.as_str())
         .filter(|snapshot| {
@@ -929,10 +929,8 @@ pub(super) fn item_from_runtime_read_row(
         runtime_admin: type_allowed,
     };
     let allowed = match view {
-        RuntimeInstanceListView::Started => started_runtime_read_allowed(facts),
-        RuntimeInstanceListView::Managed | RuntimeInstanceListView::Blocked => {
-            management_runtime_read_allowed(facts)
-        },
+        RuntimeInstanceListView::Started => facts.started_allowed(),
+        RuntimeInstanceListView::Managed | RuntimeInstanceListView::Blocked => facts.management_allowed(),
         RuntimeInstanceListView::Mine => false,
     };
     if !allowed {

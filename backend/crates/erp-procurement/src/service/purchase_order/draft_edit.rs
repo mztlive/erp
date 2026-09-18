@@ -45,10 +45,7 @@ pub async fn load_purchase_order(
     purchase_order_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<PurchaseOrder> {
-    db.purchase_orders()
-        .find_by_id(purchase_order_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))
+    super::shared::load_order_by_id(db, purchase_order_id, executor).await
 }
 /// 校验采购草稿保存目标的创建人、版本和状态。
 ///

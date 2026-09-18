@@ -1,10 +1,10 @@
 //! 域 D06 `access_control` 的 审计事件 DTO。
 
-use application_core::{normalized_text, page_or_default, page_size_or_default};
+use application_core::normalized_text;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::{PageParams, TIMESTAMP_SORT_FIELDS, normalize_sort};
+use super::PageParams;
 use crate::entity::access_control::{AuditEvent, AuditEventResult};
 use crate::error::Result;
 
@@ -173,7 +173,6 @@ impl AuditEventListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<AuditEventListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, TIMESTAMP_SORT_FIELDS)?;
         Ok(AuditEventListQuery {
             q: normalized_text(self.q.as_deref()),
             keyword_actions: normalized_text(self.keyword_actions.as_deref()),
@@ -186,12 +185,7 @@ impl AuditEventListParams {
             object_type: normalized_text(self.object_type.as_deref()),
             object_id: normalized_text(self.object_id.as_deref()),
             result: self.result,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: super::page_params(&self.sort_by, &self.sort_dir, self.page, self.page_size)?,
         })
     }
 }

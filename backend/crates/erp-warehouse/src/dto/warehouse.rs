@@ -43,6 +43,24 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+impl PageParams {
+    /// 返回仓储筛选可直接使用的排序字段名。
+    ///
+    /// # 返回
+    /// 返回白名单来源的排序字段 owned 副本。
+    pub(crate) fn sort_name(&self) -> String {
+        self.sort_by.to_string()
+    }
+
+    /// 返回仓储筛选可直接使用的排序方向。
+    ///
+    /// # 返回
+    /// 方向为升序时返回 `true`，降序时返回 `false`。
+    pub(crate) fn ascending(&self) -> bool {
+        matches!(self.sort_dir, SortDir::Asc)
+    }
+}
+
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
 pub use application_core::PageView;
 /// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串

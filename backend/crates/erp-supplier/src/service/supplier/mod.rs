@@ -36,7 +36,6 @@ pub use handover_identity::{
     capability_handover_audit_id, capability_handover_fingerprint, supplier_handover_audit_id,
     supplier_handover_audit_message, supplier_handover_fingerprint, supplier_handover_fingerprint_matches,
 };
-pub(crate) use list_view::commercial_party_ids as commercial_party_ids_for_repository;
 pub use profile::command_view;
 pub use scope::SupplierListView;
 
@@ -368,10 +367,7 @@ fn current_profile_subset(
 /// * `names` - 主体名称映射
 fn fill_commercial_names(profiles: &mut [CommercialProfileView], names: &HashMap<String, String>) {
     for profile in profiles {
-        profile.signing_entity_name =
-            profile.signing_entity_party_id.as_ref().and_then(|party_id| names.get(party_id)).cloned();
-        profile.payment_entity_name =
-            profile.payment_entity_party_id.as_ref().and_then(|party_id| names.get(party_id)).cloned();
+        profile.fill_entity_names(names);
     }
 }
 

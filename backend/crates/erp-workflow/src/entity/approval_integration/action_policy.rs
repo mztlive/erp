@@ -126,6 +126,22 @@ impl ApprovalDomainAction {
         }
     }
 
+    /// 三类审批动作两两互异时返回 `true`。
+    ///
+    /// # 参数
+    /// * `first` - 第一个待比较动作
+    /// * `second` - 第二个待比较动作
+    /// * `third` - 第三个待比较动作
+    ///
+    /// # 返回
+    /// 三个动作互不相同时返回 `true`，任两个相同时返回 `false`。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn are_distinct(first: Self, second: Self, third: Self) -> bool {
+        first != second && first != third && second != third
+    }
+
     /// 返回稳定动作代码。
     pub fn as_str(self) -> &'static str {
         match self {
@@ -188,5 +204,31 @@ mod tests {
             assert!(!action.document_type().as_str().is_empty());
             assert!(!action.as_str().is_empty());
         }
+    }
+
+    #[test]
+    fn distinct_triple_rejects_any_collision() {
+        use super::ApprovalDomainAction as Action;
+
+        assert!(Action::are_distinct(
+            Action::StockAdjustmentSubmit,
+            Action::StockAdjustmentPost,
+            Action::StockAdjustmentCancelApproval,
+        ));
+        assert!(!Action::are_distinct(
+            Action::StockAdjustmentSubmit,
+            Action::StockAdjustmentSubmit,
+            Action::StockAdjustmentCancelApproval,
+        ));
+        assert!(!Action::are_distinct(
+            Action::StockAdjustmentSubmit,
+            Action::StockAdjustmentPost,
+            Action::StockAdjustmentPost,
+        ));
+        assert!(!Action::are_distinct(
+            Action::StockAdjustmentPost,
+            Action::StockAdjustmentSubmit,
+            Action::StockAdjustmentPost,
+        ));
     }
 }

@@ -11,7 +11,7 @@ use validator::Validate;
 
 use super::ContractService;
 use super::scope::{ensure_page, ensure_scope_version, ensure_stable_snapshot, to_list_view};
-use crate::dto::contract::{ContractListParams, ContractListView, ContractRevisionView, ContractView};
+use crate::dto::contract::{ContractListParams, ContractListView, ContractRevisionView};
 use crate::error::Result;
 use crate::ports::{AccountNamePort, CustomerAssignmentFactsPort, CustomerFactsPort};
 use crate::repository::list_search::ContractCustomer;
@@ -110,7 +110,7 @@ pub(super) async fn list_customer_facts_with(
             id: id.clone(),
             number: numbers.get(id).cloned().unwrap_or_default(),
             owner_id: owners.get(id).cloned(),
-            owner: owner_label(owners.get(id), &names),
+            owner: ContractCustomer::resolve_owner_label(owners.get(id), &names),
         })
         .collect())
 }
@@ -149,67 +149,9 @@ pub(super) async fn contract_rows(
         .map(|row| {
             let customer = customers.get(row.customer_id.as_str()).copied();
             let revision = row.current_revision_id.as_ref().and_then(|id| revisions.remove(id));
-            contract_view(row, revision, customer)
+            row.into_view(revision, customer)
         })
         .collect())
-}
-
-/// 负责人空显示名回退稳定用户 ID；未分配显示破折号。
-///
-/// # 参数
-/// * `owner` - 当前主负责人 ID
-/// * `names` - 账号显示名
-///
-/// # 返回
-/// 返回展示标签。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 不得用签约经办姓名填充未分配主责。
-fn owner_label(owner: Option<&String>, names: &HashMap<String, String>) -> String {
-    owner
-        .map(|id| {
-            names.get(id).map(|name| name.trim()).filter(|name| !name.is_empty()).unwrap_or(id).to_string()
-        })
-        .unwrap_or_else(|| "—".to_string())
-}
-
-/// 同一客户事实供接口显示与搜索使用，防止搜索命中后展示另一套名称。
-///
-/// # 参数
-/// * `row` - 合同列表行
-/// * `current_revision` - 当前修订摘要
-/// * `customer` - 客户编号与当前主负责人
-///
-/// # 返回
-/// 返回列表视图。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// `owner_user_id` 只来自客户当前主负责人。
-fn contract_view(
-    row: ContractRow,
-    current_revision: Option<ContractRevisionView>,
-    customer: Option<&ContractCustomer>,
-) -> ContractView {
-    ContractView {
-        id: row.id,
-        contract_no: row.contract_no,
-        customer_id: row.customer_id,
-        settlement_party_id: row.settlement_party_id,
-        status: row.status,
-        current_revision_id: row.current_revision_id,
-        current_revision,
-        customer_no: customer.map(|c| c.number.clone()).filter(|number| !number.is_empty()),
-        owner_user_id: customer.and_then(|c| c.owner_id.clone()),
-        owner_user_name: customer.filter(|c| c.owner_id.is_some()).map(|c| c.owner.clone()),
-        created_at: row.created_at,
-        version: row.version,
-    }
 }
 
 #[cfg(test)]

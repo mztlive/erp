@@ -17,6 +17,7 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::handler::{reject_me_handler, require_handler_org_unit_id};
 use super::ReconciliationDifferenceId;
 
 /// 差异对象类型最大长度。
@@ -29,8 +30,6 @@ const DIFFERENCE_TYPE_MAX_LEN: usize = 64;
 const FACT_REFERENCE_MAX_LEN: usize = 512;
 /// 处理人标识最大长度。
 const OWNER_USER_ID_MAX_LEN: usize = 128;
-/// 处理人内部组织标识最大长度。
-const OWNER_ORG_UNIT_ID_MAX_LEN: usize = 128;
 
 /// 对账差异创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -208,20 +207,8 @@ impl ReconciliationDifference {
 /// 规范化并拒绝 `"me"` 占位的处理人 ID。
 fn require_handler_user_id(raw: String) -> Result<String> {
     let owner = normalize_required_text(raw, "处理人不能为空", OWNER_USER_ID_MAX_LEN, "处理人过长")?;
-    if owner.eq_ignore_ascii_case("me") {
-        return Err(Error::from("处理人不得使用 me 作为人员 ID"));
-    }
+    reject_me_handler(&owner)?;
     Ok(owner)
-}
-
-/// 规范化并拒绝公司占位的处理人内部组织。
-fn require_handler_org_unit_id(raw: String) -> Result<String> {
-    let org =
-        normalize_required_text(raw, "处理人组织不能为空", OWNER_ORG_UNIT_ID_MAX_LEN, "处理人组织过长")?;
-    if org.eq_ignore_ascii_case("company") {
-        return Err(Error::from("处理人组织不得使用公司占位"));
-    }
-    Ok(org)
 }
 
 #[cfg(test)]

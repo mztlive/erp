@@ -7,7 +7,7 @@ use application_core::normalized_text;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::{PageParams, non_blank, normalize_sort};
+use super::{PageParams, non_blank};
 /// 契约分页形状与排序方向沿用 `dto` 共享定义，经本模块的既有路径继续可用。
 pub use super::{PageView, SortDir};
 use crate::entity::source_registry::{
@@ -165,12 +165,17 @@ impl SourceSystemListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<SourceSystemListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, SOURCE_SYSTEM_SORT_FIELDS)?;
         Ok(SourceSystemListQuery {
             code: normalized_text(self.code.as_deref()),
             system_type: self.system_type,
             status: self.status,
-            paging: PageParams::normalized(self.page, self.page_size, sort_by, sort_dir),
+            paging: PageParams::resolve(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                SOURCE_SYSTEM_SORT_FIELDS,
+            )?,
         })
     }
 }
@@ -299,12 +304,16 @@ impl ExternalIdentityMapListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ExternalIdentityMapListQuery> {
-        let (sort_by, sort_dir) =
-            normalize_sort(&self.sort_by, &self.sort_dir, EXTERNAL_IDENTITY_MAP_SORT_FIELDS)?;
         Ok(ExternalIdentityMapListQuery {
             source_system_id: self.source_system_id.clone(),
             mapping_status: self.mapping_status,
-            paging: PageParams::normalized(self.page, self.page_size, sort_by, sort_dir),
+            paging: PageParams::resolve(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                EXTERNAL_IDENTITY_MAP_SORT_FIELDS,
+            )?,
         })
     }
 }
@@ -314,7 +323,8 @@ mod tests {
     use serde_json::json;
     use validator::Validate;
 
-    use super::{ExternalIdentityMapListParams, SortDir, SourceSystemListParams, normalize_sort};
+    use super::{ExternalIdentityMapListParams, SortDir, SourceSystemListParams};
+    use crate::dto::normalize_sort;
     use crate::entity::source_registry::{
         MappingStatus, SourceSystemId, SourceSystemStatus, SourceSystemType,
     };

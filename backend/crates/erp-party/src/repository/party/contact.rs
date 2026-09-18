@@ -7,7 +7,7 @@ use persistence_core::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::shared::{active_fact_filter, sort_doc};
+use super::shared::{active_fact_filter, default_first_sort, party_default_marks_filter, sort_doc};
 use crate::entity::party::{EffectiveRecordStatus, PartyContact};
 use crate::repository::owned::PartyContactRepository;
 
@@ -220,12 +220,7 @@ impl<'a> PartyContactRepository<'a> {
         as_of: erp_core::common::time::BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyContact>> {
-        self.find_many_sorted(
-            active_fact_filter(party_id, as_of),
-            doc! { "is_default": -1, "created_at": -1 },
-            executor,
-        )
-        .await
+        self.find_many_sorted(active_fact_filter(party_id, as_of), default_first_sort(), executor).await
     }
 
     /// 清除同一 Party 其他联系人的默认标记。
@@ -248,8 +243,7 @@ impl<'a> PartyContactRepository<'a> {
         exclude_id: Option<&str>,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let rows =
-            self.find_many(doc! { "party_id": party_id.to_string(), "is_default": true }, executor).await?;
+        let rows = self.find_many(party_default_marks_filter(party_id), executor).await?;
         for mut row in rows {
             if exclude_id.is_some_and(|id| id == row.base.id) {
                 continue;
@@ -276,12 +270,7 @@ impl<'a> PartyContactRepository<'a> {
         party_id: &PartyId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyContact>> {
-        self.find_many_sorted(
-            doc! { "party_id": party_id.to_string() },
-            doc! { "is_default": -1, "created_at": -1 },
-            executor,
-        )
-        .await
+        self.find_many_sorted(doc! { "party_id": party_id.to_string() }, default_first_sort(), executor).await
     }
 }
 /// 联系人列表投影字段（不含敏感字段）。

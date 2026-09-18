@@ -5,7 +5,7 @@ use mongodb::options::FindOptions;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
-use super::shared::{active_fact_filter, sort_doc};
+use super::shared::{active_fact_filter, default_first_sort, party_default_marks_filter, sort_doc};
 use crate::entity::party::{AddressType, EffectiveRecordStatus, PartyAddress};
 use crate::repository::owned::PartyAddressRepository;
 
@@ -182,12 +182,7 @@ impl<'a> PartyAddressRepository<'a> {
         as_of: erp_core::common::time::BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyAddress>> {
-        self.find_many_sorted(
-            active_fact_filter(party_id, as_of),
-            doc! { "is_default": -1, "created_at": -1 },
-            executor,
-        )
-        .await
+        self.find_many_sorted(active_fact_filter(party_id, as_of), default_first_sort(), executor).await
     }
 
     /// 清除同一 Party 其他地址的默认标记。
@@ -210,8 +205,7 @@ impl<'a> PartyAddressRepository<'a> {
         exclude_id: Option<&str>,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let rows =
-            self.find_many(doc! { "party_id": party_id.to_string(), "is_default": true }, executor).await?;
+        let rows = self.find_many(party_default_marks_filter(party_id), executor).await?;
         for mut row in rows {
             if exclude_id.is_some_and(|id| id == row.base.id) {
                 continue;
@@ -238,12 +232,7 @@ impl<'a> PartyAddressRepository<'a> {
         party_id: &PartyId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyAddress>> {
-        self.find_many_sorted(
-            doc! { "party_id": party_id.to_string() },
-            doc! { "is_default": -1, "created_at": -1 },
-            executor,
-        )
-        .await
+        self.find_many_sorted(doc! { "party_id": party_id.to_string() }, default_first_sort(), executor).await
     }
 }
 /// 地址列表投影字段（不含敏感字段）。

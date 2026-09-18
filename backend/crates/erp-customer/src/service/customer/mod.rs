@@ -408,9 +408,13 @@ pub(super) fn assemble_customer_views(
             let identity = identities.get(&row.party_id);
             let assignments = assignments_by_customer.get(&row.id).map(Vec::as_slice).unwrap_or_default();
             let (owner_user_id, owner_user_name, collaborator_count) =
-                owner_summary(assignments, &account_names);
-            let scope_tags =
-                scope_tags_for(assignments, owner_user_id.as_deref(), actor_user_id, requested_scope);
+                CustomerAssignment::owner_summary(assignments, &account_names);
+            let scope_tags = CustomerScope::tags_for(
+                assignments,
+                owner_user_id.as_deref(),
+                actor_user_id,
+                requested_scope,
+            );
             let mut view = CustomerView::from_account_parts(
                 row.id,
                 row.party_id,
@@ -431,61 +435,6 @@ pub(super) fn assemble_customer_views(
             view
         })
         .collect()
-}
-
-/// 解析主负责人与协作计数（erp-customer-007）。
-///
-/// # 参数
-/// * `assignments` - 同一客户的归属行
-/// * `account_names` - 账号显示名
-///
-/// # 返回
-/// 返回负责人 ID、显示名与协作人数。
-fn owner_summary(
-    assignments: &[CustomerAssignment],
-    account_names: &HashMap<String, String>,
-) -> (Option<String>, Option<String>, u32) {
-    let owner_user_id = assignments
-        .iter()
-        .find(|assignment| assignment.assignment_role == AssignmentRole::Owner)
-        .map(|assignment| assignment.user_id.clone());
-    let owner_user_name = owner_user_id.as_ref().and_then(|id| account_names.get(id)).cloned();
-    let collaborator_count = assignments
-        .iter()
-        .filter(|assignment| assignment.assignment_role == AssignmentRole::Collaborator)
-        .count() as u32;
-    (owner_user_id, owner_user_name, collaborator_count)
-}
-
-/// 装配目录范围标签（erp-customer-007）。
-///
-/// # 参数
-/// * `assignments` - 同一客户的归属行
-/// * `owner_user_id` - 已解析的主负责人
-/// * `actor_user_id` - 当前账号
-/// * `requested_scope` - 页面请求的目录范围
-///
-/// # 返回
-/// 返回命中原因标签，保证包含请求范围。
-fn scope_tags_for(
-    assignments: &[CustomerAssignment],
-    owner_user_id: Option<&str>,
-    actor_user_id: &str,
-    requested_scope: CustomerScope,
-) -> Vec<CustomerScope> {
-    let mut scope_tags = Vec::new();
-    if owner_user_id == Some(actor_user_id) {
-        scope_tags.push(CustomerScope::Mine);
-    }
-    if assignments.iter().any(|assignment| {
-        assignment.assignment_role == AssignmentRole::Collaborator && assignment.user_id == actor_user_id
-    }) {
-        scope_tags.push(CustomerScope::Collaborating);
-    }
-    if !scope_tags.contains(&requested_scope) {
-        scope_tags.push(requested_scope);
-    }
-    scope_tags
 }
 
 #[cfg(test)]

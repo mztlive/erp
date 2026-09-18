@@ -18,7 +18,7 @@ use persistence_core::{
 use serde::{Deserialize, Serialize};
 
 use super::extensions::BulkJobExt;
-use super::page::search_projected_page;
+use super::page::{created_updated_field, search_projected_page, sort_direction};
 use crate::entity::bulk_job::{
     BackgroundJob, BackgroundJobId, BackgroundJobItem, BulkSelectionItem, BulkSelectionSnapshot,
     BulkSelectionSnapshotId, ItemStatus, JobStatus, JobType, SelectionItemStatus, SelectionStatus,
@@ -649,11 +649,8 @@ impl<'a> BulkJobRepository<'a> {
 /// # 返回
 /// 返回排序条件文档。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
-    let direction = if sort_ascending { 1 } else { -1 };
-    let field = match sort_by {
-        Some("updated_at") => "updated_at",
-        _ => "created_at",
-    };
+    let direction = sort_direction(sort_ascending);
+    let field = created_updated_field(sort_by);
     doc! { field: direction, "id": direction }
 }
 

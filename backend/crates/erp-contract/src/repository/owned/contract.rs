@@ -2,9 +2,9 @@
 
 /// Owned repository for `Contract`.
 ///
-/// Composes [`persistence_core::Repository`] and exposes the CRUD and query
-/// methods callers need. Specialized queries stay in the original impl modules
-/// as inherent methods on this type.
+/// Composes [`persistence_core::Repository`] and exposes only the primitives
+/// actually used by domain writes and authorized reads. Specialized queries
+/// stay in the original impl modules as inherent methods on this type.
 pub struct ContractRepository<'a> {
     inner: persistence_core::Repository<'a, crate::entity::contract::Contract>,
 }
@@ -36,22 +36,6 @@ impl<'a> ContractRepository<'a> {
     /// Typed collection handle for this repository's collection.
     pub fn collection(&self) -> mongodb::Collection<crate::entity::contract::Contract> {
         self.inner.collection()
-    }
-
-    /// Creates an entity.
-    ///
-    /// # Parameters
-    /// * `entity` - entity to insert
-    /// * `executor` - data-access executor chosen by the caller
-    ///
-    /// # Errors
-    /// Duplicate-key or underlying write failures.
-    pub async fn create(
-        &self,
-        entity: &crate::entity::contract::Contract,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<()> {
-        self.inner.create(entity, executor).await
     }
 
     /// Finds an undeleted entity by id.
@@ -89,79 +73,6 @@ impl<'a> ContractRepository<'a> {
         self.inner.update(entity, executor).await
     }
 
-    /// Soft-deletes an active entity.
-    ///
-    /// # Parameters
-    /// * `entity` - entity to delete
-    /// * `executor` - data-access executor chosen by the caller
-    ///
-    /// # Errors
-    /// Version conflict or underlying write failures.
-    pub async fn soft_delete(
-        &self,
-        entity: &mut crate::entity::contract::Contract,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<()>
-    where
-        crate::entity::contract::Contract: entity_core::HasBaseModel,
-    {
-        self.inner.soft_delete(entity, executor).await
-    }
-
-    /// Restores a soft-deleted entity.
-    ///
-    /// # Parameters
-    /// * `entity` - entity to restore
-    /// * `executor` - data-access executor chosen by the caller
-    ///
-    /// # Errors
-    /// Version conflict or underlying write failures.
-    pub async fn restore(
-        &self,
-        entity: &mut crate::entity::contract::Contract,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<()>
-    where
-        crate::entity::contract::Contract: entity_core::HasBaseModel,
-    {
-        self.inner.restore(entity, executor).await
-    }
-
-    /// Lists all undeleted entities.
-    ///
-    /// # Parameters
-    /// * `executor` - data-access executor chosen by the caller
-    ///
-    /// # Errors
-    /// MongoDB query or cursor failures.
-    pub async fn list_all(
-        &self,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Vec<crate::entity::contract::Contract>> {
-        self.inner.list_all(executor).await
-    }
-
-    /// Finds one undeleted entity by a single field.
-    ///
-    /// # Parameters
-    /// * `field` - field name
-    /// * `value` - field value
-    /// * `executor` - data-access executor chosen by the caller
-    ///
-    /// # Errors
-    /// MongoDB query failures.
-    pub async fn find_one_by_field<V>(
-        &self,
-        field: &str,
-        value: V,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Option<crate::entity::contract::Contract>>
-    where
-        V: Into<mongodb::bson::Bson> + Send,
-    {
-        self.inner.find_one_by_field(field, value, executor).await
-    }
-
     /// Finds one undeleted entity matching `filter`.
     ///
     /// # Parameters
@@ -176,92 +87,5 @@ impl<'a> ContractRepository<'a> {
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Option<crate::entity::contract::Contract>> {
         self.inner.find_one(filter, executor).await
-    }
-
-    /// Finds undeleted entities matching `filter`.
-    ///
-    /// # Parameters
-    /// * `filter` - MongoDB filter document
-    /// * `executor` - data-access executor chosen by the caller
-    ///
-    /// # Errors
-    /// MongoDB query or cursor failures.
-    pub async fn find_many(
-        &self,
-        filter: mongodb::bson::Document,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Vec<crate::entity::contract::Contract>> {
-        self.inner.find_many(filter, executor).await
-    }
-
-    /// Finds undeleted entities matching `filter`, sorted by `sort`.
-    ///
-    /// # Parameters
-    /// * `filter` - MongoDB filter document
-    /// * `sort` - MongoDB sort document
-    /// * `executor` - data-access executor chosen by the caller
-    ///
-    /// # Errors
-    /// MongoDB query or cursor failures.
-    pub async fn find_many_sorted(
-        &self,
-        filter: mongodb::bson::Document,
-        sort: mongodb::bson::Document,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Vec<crate::entity::contract::Contract>> {
-        self.inner.find_many_sorted(filter, sort, executor).await
-    }
-
-    /// Loads undeleted entities by stable ids.
-    ///
-    /// Generic by-id projection primitive; not bound to WorkItem.
-    ///
-    /// # Parameters
-    /// * `ids` - stable ids
-    /// * `executor` - data-access executor chosen by the caller
-    ///
-    /// # Errors
-    /// MongoDB query or deserialization failures.
-    pub async fn list_active_by_ids(
-        &self,
-        ids: &[String],
-        executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Vec<crate::entity::contract::Contract>> {
-        self.inner.list_active_by_ids(ids, executor).await
-    }
-
-    /// Returns whether an active entity matching `filter` exists.
-    ///
-    /// # Parameters
-    /// * `filter` - MongoDB filter document
-    /// * `executor` - data-access executor chosen by the caller
-    ///
-    /// # Errors
-    /// MongoDB query failures.
-    pub async fn exists(
-        &self,
-        filter: mongodb::bson::Document,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<bool> {
-        self.inner.exists(filter, executor).await
-    }
-
-    /// Pages entities matching `filter`.
-    ///
-    /// # Parameters
-    /// * `filter` - filter and pagination
-    /// * `executor` - data-access executor chosen by the caller
-    ///
-    /// # Errors
-    /// MongoDB query, cursor, or count failures.
-    pub async fn search<F>(
-        &self,
-        filter: &F,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<persistence_core::PageResult<crate::entity::contract::Contract>>
-    where
-        F: persistence_core::QueryFilter + persistence_core::Pagination + Send + Sync,
-    {
-        self.inner.search(filter, executor).await
     }
 }

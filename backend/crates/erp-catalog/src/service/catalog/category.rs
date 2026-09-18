@@ -51,21 +51,7 @@ impl CatalogService {
         };
         let page =
             self.db.product_categories().search_product_categories(&filter, &mut NoTransaction).await?;
-        // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结），按字段映射为响应视图。
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| ProductCategoryView {
-                id: row.id,
-                category_code: row.category_code,
-                parent_category_id: row.parent_category_id,
-                name: row.name,
-                product_kind: row.product_kind,
-                status: row.status,
-                created_at: row.created_at,
-                version: row.version,
-            })
-            .collect();
+        let items = page.items.into_iter().map(ProductCategoryView::from).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 

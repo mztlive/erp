@@ -207,7 +207,7 @@ impl PartyContact {
         let telephone = normalize_optional_text(data.telephone, "电话", TELEPHONE_MAX_LEN)?;
         let email = normalize_optional_email(data.email, EMAIL_MAX_LEN)?;
         let created_by = created_by.into();
-        ensure_window_valid(data.valid_from, data.valid_to)?;
+        super::ensure_valid_window(data.valid_from, data.valid_to)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -264,7 +264,7 @@ impl PartyContact {
             self.status.transition_to(to)?;
         }
         if let Some(valid_to) = update.valid_to.into_option() {
-            ensure_window_valid(self.valid_from, Some(valid_to))?;
+            super::ensure_valid_window(self.valid_from, Some(valid_to))?;
             self.valid_to = Some(valid_to);
         }
         if let Some(is_default) = update.is_default {
@@ -281,26 +281,6 @@ impl PartyContact {
     pub fn is_active(&self) -> bool {
         self.status.is_active()
     }
-}
-
-/// 校验生效区间：`valid_to` 必须晚于 `valid_from`。
-///
-/// # 参数
-/// * `valid_from` - 生效开始日期
-/// * `valid_to` - 生效结束日期（可空）
-///
-/// # 返回
-/// 区间合法返回 `Ok(())`。
-///
-/// # 错误
-/// 结束日期不晚于开始日期时返回错误。
-fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> Result<()> {
-    if let Some(valid_to) = valid_to
-        && valid_to <= valid_from
-    {
-        return Err(Error::from("生效结束日期必须晚于生效开始日期"));
-    }
-    Ok(())
 }
 
 #[cfg(test)]

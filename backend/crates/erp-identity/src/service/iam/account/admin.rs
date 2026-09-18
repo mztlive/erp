@@ -8,7 +8,9 @@ use super::dto::{
     AdminItem, CreateAdminParams, InitializeSuperAdminParams, UpdateAdminParams, UpdateAdminRoleParams,
 };
 use crate::AccessControlExt;
-use crate::entity::account_core::{AccountCore, AccountCoreData, AccountCoreUpdate, AccountStatus};
+use crate::entity::account_core::{
+    AccountCore, AccountCoreData, AccountCoreUpdate, AccountStatus, ExistingSuperAdminState,
+};
 use crate::entity::auth::LoginAccount;
 use crate::entity::rbac::RoleIdSet;
 use crate::error::Result;
@@ -38,29 +40,6 @@ pub struct InitializeSuperAdminResult {
     pub reactivated: bool,
     /// 是否新增了 `role-root` 绑定。
     pub root_role_bound: bool,
-}
-
-/// 已存在超级管理员的账号状态。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ExistingSuperAdminState {
-    Active,
-    Inactive,
-    Deleted,
-}
-
-impl ExistingSuperAdminState {
-    /// 根据软删除与登录状态确定恢复语义。
-    fn from_state(is_deleted: bool, is_active: bool) -> Self {
-        if is_deleted {
-            return Self::Deleted;
-        }
-        if is_active { Self::Active } else { Self::Inactive }
-    }
-
-    /// 返回初始化是否恢复了不可登录或已删除账号。
-    fn reactivates(self) -> bool {
-        !matches!(self, Self::Active)
-    }
 }
 
 /// 超级管理员初始化后的合法状态。
@@ -562,7 +541,7 @@ impl AdminService {
 
 #[cfg(test)]
 mod tests {
-    use super::ExistingSuperAdminState;
+    use crate::entity::account_core::ExistingSuperAdminState;
 
     #[test]
     fn existing_super_admin_state_covers_active_inactive_and_deleted_accounts() {

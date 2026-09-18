@@ -58,86 +58,155 @@ impl ContractService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
-                    let no_scope = !context.has_scope_rules();
-                    let as_of = super::access::business_date(context.as_of)?;
-                    let (customer_ids, historical_contract_ids) = apply_list_filters(
+                    let (mut context, scope, no_scope, as_of) =
+                        resolve_list_scope(&access, &actor, executor).await?;
+                    let (filter, search) = load_list_filter_and_search(
                         &db,
                         data_scope.as_ref(),
                         assignments.as_ref(),
+                        customers.as_ref(),
+                        accounts.as_ref(),
                         &context,
                         &scope,
                         &query,
-                        executor,
-                    )
-                    .await?;
-                    let filter = list_filter(&query, customer_ids, historical_contract_ids);
-                    let ids = db.contract().list_customer_ids(&filter, executor).await?;
-                    let customer_facts = super::query::list_customer_facts_with(
-                        customers.as_ref(),
-                        assignments.as_ref(),
-                        accounts.as_ref(),
-                        &ids,
                         as_of,
                         executor,
                     )
                     .await?;
-                    let search = ContractSearch {
-                        q: query.q.clone(),
-                        metric: query.metric,
-                        settlement_party_id: query.settlement_party_id.clone(),
-                        owner_user_ids: query.owner_user_ids.clone(),
-                        customers: customer_facts,
-                    };
-                    let result = db.contract().search_list(&filter, &search, executor).await?;
-                    let versions = db.contract().query_versions(&filter, executor).await?;
-                    if versions.len() > 10_000 {
-                        return Err(Error::ValidationError(
-                            "合同查询超过上限，请收窄组织或负责人条件".into(),
-                        ));
-                    }
-                    let fingerprint =
-                        super::access::scope_fingerprint_input(&[], &[], versions.as_slice(), &[]);
-                    context.scope_version = format!(
-                        "{}:{:x}",
-                        context.scope_version,
-                        super::access::stable_fingerprint(&fingerprint)
-                    );
-                    let owner_options = accounts
-                        .filter_options(
-                            &search.customers.iter().filter_map(|c| c.owner_id.clone()).collect::<Vec<_>>(),
-                        )
-                        .await?
-                        .into_iter()
-                        .map(|o| crate::dto::contract::ContractFilterOption {
-                            value: o.value,
-                            label: o.label,
-                        })
-                        .collect();
-                    let total = result.total();
-                    let items =
-                        super::query::contract_rows(&db, result.items, &search.customers, executor).await?;
-                    Ok(ContractSnapshot {
-                        no_scope,
-                        context,
-                        view: ContractListView {
-                            ownership_basis: "current_customer_owner",
-                            scope_version: String::new(),
-                            policy_version: 0,
-                            organization_version: 0,
-                            as_of: String::new(),
-                            empty_reason: None,
-                            scope_summary: "合同当前客户主负责人、协作关系、负责人所属组织及合法单据参与",
-                            page: PageView { items, total, page: filter.page, page_size: filter.page_size },
-                            metrics: result.metrics.into_iter().next().unwrap_or_default(),
-                            settlement_options: result.settlement_options,
-                            owner_options,
-                        },
-                    })
+                    finish_list_snapshot(&db, accounts.as_ref(), filter, search, context, executor)
+                        .await
+                        .map(|(view, context)| ContractSnapshot { view, context, no_scope })
                 })
             })
             .await
     }
+}
+
+/// 解析列表授权范围与归属时点（`list_snapshot` 第一步）。
+///
+/// # 参数
+/// * `access` - 合同范围访问器
+/// * `actor` - 已认证操作人
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回已解析事实、读取范围、空范围标记与归属自然日。
+///
+/// # 错误
+/// 无动作权限或组织关系非法时拒绝。
+async fn resolve_list_scope(
+    access: &super::access::ContractAccess,
+    actor: &AuditActor,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<(ContractResolvedScope, ContractReadScope, bool, erp_core::common::time::BusinessDate)> {
+    let (context, scope) = access.resolve(actor, "list", executor).await?;
+    let no_scope = !context.has_scope_rules();
+    let as_of = super::access::business_date(context.as_of)?;
+    Ok((context, scope, no_scope, as_of))
+}
+
+/// 求交授权与业务筛选并装配搜索事实（`list_snapshot` 第二步）。
+///
+/// # 参数
+/// * `db` - 合同数据库
+/// * `data_scope` - 组织展开与成员事实 Port
+/// * `assignments` - 当前主责事实
+/// * `customers` - 客户编号事实
+/// * `accounts` - 账号显示名 Port
+/// * `context` - 已解析的合同范围事实
+/// * `scope` - 已映射的合同范围
+/// * `query` - 归一化查询
+/// * `as_of` - 客户归属自然日
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回仓储筛选与搜索条件。
+///
+/// # 错误
+/// 组织展开失败、成员超限或归属查询失败时拒绝。
+#[allow(clippy::too_many_arguments)]
+async fn load_list_filter_and_search(
+    db: &mongodb::Database,
+    data_scope: &dyn ContractDataScopePort,
+    assignments: &dyn crate::ports::CustomerAssignmentFactsPort,
+    customers: &dyn crate::ports::CustomerFactsPort,
+    accounts: &dyn crate::ports::AccountNamePort,
+    context: &ContractResolvedScope,
+    scope: &ContractReadScope,
+    query: &ContractListQuery,
+    as_of: erp_core::common::time::BusinessDate,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<(ContractFilter, ContractSearch)> {
+    let (customer_ids, historical_contract_ids) =
+        apply_list_filters(db, data_scope, assignments, context, scope, query, executor).await?;
+    let filter = list_filter(query, customer_ids, historical_contract_ids);
+    let ids = db.contract().list_customer_ids(&filter, executor).await?;
+    let customer_facts =
+        super::query::list_customer_facts_with(customers, assignments, accounts, &ids, as_of, executor)
+            .await?;
+    let search = ContractSearch {
+        q: query.q.clone(),
+        metric: query.metric,
+        settlement_party_id: query.settlement_party_id.clone(),
+        owner_user_ids: query.owner_user_ids.clone(),
+        customers: customer_facts,
+    };
+    Ok((filter, search))
+}
+
+/// 执行搜索聚合并组装对外视图（`list_snapshot` 第三步）。
+///
+/// # 参数
+/// * `db` - 合同数据库
+/// * `accounts` - 账号显示名 Port
+/// * `filter` - 已与授权求交的仓储筛选
+/// * `search` - 列表搜索条件
+/// * `context` - 已解析事实（指纹写入范围版本）
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回对外视图与携带指纹的授权上下文。
+///
+/// # 错误
+/// 聚合失败、版本超限或候选读取失败时拒绝。
+async fn finish_list_snapshot(
+    db: &mongodb::Database,
+    accounts: &dyn crate::ports::AccountNamePort,
+    filter: ContractFilter,
+    search: ContractSearch,
+    mut context: ContractResolvedScope,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<(ContractListView, ContractResolvedScope)> {
+    let result = db.contract().search_list(&filter, &search, executor).await?;
+    let versions = db.contract().query_versions(&filter, executor).await?;
+    if versions.len() > 10_000 {
+        return Err(Error::ValidationError("合同查询超过上限，请收窄组织或负责人条件".into()));
+    }
+    let fingerprint = super::access::scope_fingerprint_input(&[], &[], versions.as_slice(), &[]);
+    context.scope_version =
+        format!("{}:{:x}", context.scope_version, super::access::stable_fingerprint(&fingerprint));
+    let owner_options = accounts
+        .filter_options(&search.customers.iter().filter_map(|c| c.owner_id.clone()).collect::<Vec<_>>())
+        .await?
+        .into_iter()
+        .map(|o| crate::dto::contract::ContractFilterOption { value: o.value, label: o.label })
+        .collect();
+    let total = result.total();
+    let items = super::query::contract_rows(db, result.items, &search.customers, executor).await?;
+    let view = ContractListView {
+        ownership_basis: "current_customer_owner",
+        scope_version: String::new(),
+        policy_version: 0,
+        organization_version: 0,
+        as_of: String::new(),
+        empty_reason: None,
+        scope_summary: "合同当前客户主负责人、协作关系、负责人所属组织及合法单据参与",
+        page: PageView { items, total, page: filter.page, page_size: filter.page_size },
+        metrics: result.metrics.into_iter().next().unwrap_or_default(),
+        settlement_options: result.settlement_options,
+        owner_options,
+    };
+    Ok((view, context))
 }
 
 /// 将内部快照转换为对外列表视图。

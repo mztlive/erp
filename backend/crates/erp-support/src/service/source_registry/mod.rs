@@ -30,6 +30,8 @@ use crate::error::{Error, Result};
 use crate::ports::SupportAuditPort;
 use crate::repository::SourceRegistryExt;
 
+use super::check_expected_version;
+
 /// 来源系统列表筛选条件类型（经 `SourceRegistryExt` 关联类型跨 crate 可达）。
 type SourceSystemFilter = <mongodb::Database as SourceRegistryExt>::SourceSystemFilter;
 /// 外部身份映射列表筛选条件类型。
@@ -122,9 +124,7 @@ impl SourceRegistryService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("来源系统不存在".to_string()))?;
-        if system.base.version != req.version {
-            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
-        }
+        check_expected_version(system.base.version, req.version)?;
         system.update(SourceSystemUpdate { name: req.name, status: req.status }, actor.id())?;
         let audit = self.audit.resource_log(
             actor.clone(),

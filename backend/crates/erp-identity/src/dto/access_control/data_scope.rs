@@ -1,10 +1,10 @@
 //! 域 D06 `access_control` 的 数据范围 DTO。
 
-use application_core::{non_blank, normalized_text, page_or_default, page_size_or_default};
+use application_core::{non_blank, normalized_text};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::{PageParams, PageView, TIMESTAMP_SORT_FIELDS, normalize_sort};
+use super::{PageParams, PageView};
 use crate::entity::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
 use crate::error::{Error, Result};
 
@@ -289,7 +289,6 @@ impl DataScopeListParams {
     /// 排序字段不在白名单、方向非法、按主体查询缺少 `subject_type`，或资源
     /// 动作使用通配/显示名时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<DataScopeListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, TIMESTAMP_SORT_FIELDS)?;
         let subject_id = normalized_text(self.subject_id.as_deref());
         if subject_id.is_some() && self.subject_type.is_none() {
             return Err(Error::ValidationError("按主体查询时必须提供范围主体类型".to_string()));
@@ -301,12 +300,7 @@ impl DataScopeListParams {
             resource: registered_identifier(self.resource.as_deref(), "资源")?,
             action: registered_identifier(self.action.as_deref(), "动作")?,
             scope_version: normalized_text(self.scope_version.as_deref()),
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: super::page_params(&self.sort_by, &self.sort_dir, self.page, self.page_size)?,
         })
     }
 }

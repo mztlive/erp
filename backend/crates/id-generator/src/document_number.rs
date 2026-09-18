@@ -5,13 +5,13 @@
 //! `document_number_counters` 上的原子计数器（findAndModify 模式）取号，
 //! 保证并发环境下取号唯一、序号连续递增，且序号一经消费永不回收。
 
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::result::Result as StdResult;
 
 use chrono::NaiveDate;
+use mongodb::Database;
 use mongodb::bson::doc;
 use mongodb::options::ReturnDocument;
-use mongodb::{Collection, Database};
 use persistence_core::{Error as DatabaseError, Executor};
 use serde::{Deserialize, Serialize};
 
@@ -95,7 +95,7 @@ impl Display for DocumentNumberKind {
     ///
     /// # 错误
     /// 写入失败时返回格式化错误。
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter.write_str(self.counter_id_str())
     }
 }
@@ -106,27 +106,13 @@ impl DocumentNumberKind {
     /// # 参数
     /// 无。
     ///
-    /// # 返回值
+    /// # 返回
     /// 前缀为固定大写业务缩写（如 `SO`），编号格式串的一部分，一经启用不得变更。
     ///
     /// # 错误
     /// 无。
     pub fn prefix(self) -> &'static str {
-        match self {
-            Self::SalesOrder => "SO",
-            Self::PurchaseOrder => "PO",
-            Self::PurchaseReceipt => "GRN",
-            Self::Delivery => "DN",
-            Self::CustomerAcceptance => "CA",
-            Self::StockAdjustment => "SA",
-            Self::CustomerReceipt => "CR",
-            Self::SupplierPayment => "PM",
-            Self::Invoice => "INV",
-            Self::SalesReturn => "SR",
-            Self::PurchaseReturn => "PR",
-            Self::SupplierFulfillment => "SF",
-            Self::SupplierSettlement => "SS",
-        }
+        self.metadata().0
     }
 
     /// 返回计数器文档 `_id` 静态名。
@@ -134,26 +120,31 @@ impl DocumentNumberKind {
     /// # 参数
     /// 无。
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回与 serde snake_case 一致的静态计数器名。
     ///
     /// # 错误
     /// 无。
     pub(crate) fn counter_id_str(self) -> &'static str {
+        self.metadata().1
+    }
+
+    /// 单据种类的前缀与计数器标识，保持一一对应。
+    fn metadata(self) -> (&'static str, &'static str) {
         match self {
-            Self::SalesOrder => "sales_order",
-            Self::PurchaseOrder => "purchase_order",
-            Self::PurchaseReceipt => "purchase_receipt",
-            Self::Delivery => "delivery",
-            Self::CustomerAcceptance => "customer_acceptance",
-            Self::StockAdjustment => "stock_adjustment",
-            Self::CustomerReceipt => "customer_receipt",
-            Self::SupplierPayment => "supplier_payment",
-            Self::Invoice => "invoice",
-            Self::SalesReturn => "sales_return",
-            Self::PurchaseReturn => "purchase_return",
-            Self::SupplierFulfillment => "supplier_fulfillment",
-            Self::SupplierSettlement => "supplier_settlement",
+            Self::SalesOrder => ("SO", "sales_order"),
+            Self::PurchaseOrder => ("PO", "purchase_order"),
+            Self::PurchaseReceipt => ("GRN", "purchase_receipt"),
+            Self::Delivery => ("DN", "delivery"),
+            Self::CustomerAcceptance => ("CA", "customer_acceptance"),
+            Self::StockAdjustment => ("SA", "stock_adjustment"),
+            Self::CustomerReceipt => ("CR", "customer_receipt"),
+            Self::SupplierPayment => ("PM", "supplier_payment"),
+            Self::Invoice => ("INV", "invoice"),
+            Self::SalesReturn => ("SR", "sales_return"),
+            Self::PurchaseReturn => ("PR", "purchase_return"),
+            Self::SupplierFulfillment => ("SF", "supplier_fulfillment"),
+            Self::SupplierSettlement => ("SS", "supplier_settlement"),
         }
     }
 }
@@ -167,7 +158,7 @@ impl DocumentNumberKind {
 /// * `date` - 业务日期，决定日期段
 /// * `seq` - 已消费的序号
 ///
-/// # 返回值
+/// # 返回
 /// 返回完整业务编号字符串。
 ///
 /// # 错误
@@ -211,7 +202,7 @@ impl DocumentNumberGenerator {
     /// # 参数
     /// * `db` - 目标数据库（调用方业务库）
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回取号器实例。
     ///
     /// # 错误
@@ -227,7 +218,7 @@ impl DocumentNumberGenerator {
     /// * `date` - 业务日期，决定编号日期段（YYYYMMDD）
     /// * `executor` - 数据访问执行器；计数器自增始终独立提交，不加入调用方事务
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回形如 `SO20260701-000123` 的业务编号字符串。
     ///
     /// # 错误
@@ -253,7 +244,7 @@ impl DocumentNumberGenerator {
     /// * `kind` - 单据种类
     /// * `date` - 业务日期，写入计数器文档用于追溯
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回本次消费的序号（首次取号为 1）。
     ///
     /// # 错误
@@ -261,7 +252,8 @@ impl DocumentNumberGenerator {
     async fn next_seq(&self, kind: DocumentNumberKind, date: NaiveDate) -> Result<i64> {
         let counter_id = kind.counter_id_str();
         let counter = self
-            .collection()
+            .db
+            .collection::<NumberCounter>(COUNTER_COLLECTION)
             .find_one_and_update(
                 doc! { "_id": counter_id },
                 doc! {
@@ -278,11 +270,6 @@ impl DocumentNumberGenerator {
             return Err(Error::CounterMissing { kind });
         };
         Ok(counter.seq)
-    }
-
-    /// 返回计数器集合句柄。
-    fn collection(&self) -> Collection<NumberCounter> {
-        self.db.collection(COUNTER_COLLECTION)
     }
 }
 

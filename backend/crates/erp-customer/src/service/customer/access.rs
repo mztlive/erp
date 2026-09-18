@@ -78,10 +78,8 @@ impl CustomerAccess {
                 AssignmentRole::Collaborator => collaborating.push(assignment.customer_id.to_string()),
             }
         }
-        owned.sort();
-        owned.dedup();
-        collaborating.sort();
-        collaborating.dedup();
+        let owned = sorted_unique_ids(owned);
+        let collaborating = sorted_unique_ids(collaborating);
         let history = if allows_history(action) {
             self.historical_customers(actor.id(), executor).await?
         } else {
@@ -267,7 +265,7 @@ impl CustomerAccess {
     /// # 关键业务约束
     /// 历史参与必须来自归属事实，不得由创建人或业绩快照推导。
     async fn historical_customers(&self, user: &str, executor: &mut dyn Executor) -> Result<Vec<String>> {
-        let mut ids = self
+        let ids = self
             .db
             .customer_assignments()
             .list_for_user(user, executor)
@@ -275,8 +273,7 @@ impl CustomerAccess {
             .into_iter()
             .map(|assignment| assignment.customer_id.to_string())
             .collect::<Vec<_>>();
-        ids.sort();
-        ids.dedup();
+        let ids = sorted_unique_ids(ids);
         ensure_limit(ids.len(), "历史参与范围超过查询上限")?;
         Ok(ids)
     }
@@ -344,7 +341,7 @@ impl CustomerAccess {
         if members.is_empty() {
             return Ok(Vec::new());
         }
-        let mut customers = self
+        let customers = self
             .db
             .customer_assignments()
             .current_owners(None, Some(members), as_of, executor)
@@ -352,8 +349,7 @@ impl CustomerAccess {
             .into_iter()
             .map(|assignment| assignment.customer_id.to_string())
             .collect::<Vec<_>>();
-        customers.sort();
-        customers.dedup();
+        let customers = sorted_unique_ids(customers);
         ensure_limit(customers.len(), "组织主责客户超过查询上限")?;
         Ok(customers)
     }
@@ -513,9 +509,7 @@ fn clause_ids(
     {
         ids.extend(customers.iter().cloned());
     }
-    ids.sort();
-    ids.dedup();
-    Some(ids)
+    Some(sorted_unique_ids(ids))
 }
 
 /// 将角色条款求并为授权集合。
@@ -568,9 +562,7 @@ fn union_ids(left: Option<Vec<String>>, right: Option<Vec<String>>) -> Option<Ve
         (None, _) | (_, None) => None,
         (Some(mut left), Some(right)) => {
             left.extend(right);
-            left.sort();
-            left.dedup();
-            Some(left)
+            Some(sorted_unique_ids(left))
         },
     }
 }
@@ -622,6 +614,8 @@ pub(super) fn deny_object(action: &str) -> Error {
 
 /// 拒绝超过查询上限的展开结果。
 ///
+/// 列表与组织筛选共用同一上限（`scope` 复用本函数，避免各自硬编码 10000）。
+///
 /// # 参数
 /// * `count` - 已展开数量
 /// * `message` - 超限提示
@@ -634,11 +628,28 @@ pub(super) fn deny_object(action: &str) -> Error {
 ///
 /// # 关键业务约束
 /// 不得静默截断授权或筛选身份集合。
-fn ensure_limit(count: usize, message: &str) -> Result<()> {
-    if count > 10_000 {
+pub(super) fn ensure_limit(count: usize, message: &str) -> Result<()> {
+    if count > QUERY_LIMIT {
         return Err(Error::ValidationError(format!("{message}，请收窄授权范围")));
     }
     Ok(())
+}
+
+/// 授权与筛选集合的查询上限。
+pub(super) const QUERY_LIMIT: usize = 10_000;
+
+/// 将客户 ID 按升序去重（授权并集与组织展开的唯一入口）。
+///
+/// # 参数
+/// * `ids` - 原始客户 ID（可含重复、无序）
+///
+/// # 返回
+/// 返回升序去重后的客户 ID。
+pub(super) fn sorted_unique_ids(ids: Vec<String>) -> Vec<String> {
+    let mut ids = ids;
+    ids.sort();
+    ids.dedup();
+    ids
 }
 
 #[cfg(test)]
@@ -701,5 +712,16 @@ mod tests {
         assert!(matches!(deny_object("delete"), Error::Forbidden(_)));
         assert!(matches!(deny_object("create"), Error::Forbidden(_)));
         assert!(matches!(deny_object("detail"), Error::NotFound(_)));
+    }
+
+    #[test]
+    fn sorted_ids_dedup_and_limit_rejects_overflow() {
+        assert!(sorted_unique_ids(Vec::new()).is_empty());
+        assert_eq!(
+            sorted_unique_ids(vec!["c-2".to_string(), "c-1".to_string(), "c-2".to_string()]),
+            vec!["c-1".to_string(), "c-2".to_string()]
+        );
+        assert!(ensure_limit(QUERY_LIMIT, "主责范围超过查询上限").is_ok());
+        assert!(ensure_limit(QUERY_LIMIT + 1, "主责范围超过查询上限").is_err());
     }
 }

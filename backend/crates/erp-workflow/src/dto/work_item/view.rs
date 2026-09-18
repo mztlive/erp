@@ -117,6 +117,23 @@ impl From<WorkItem> for WorkItemFields {
     }
 }
 
+impl WorkItemFields {
+    /// 判断工作项投影是否属于 W29 可受控关闭关系。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 非审批的集成异常或对账差异任务返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn is_w29_closable(&self) -> bool {
+        self.work_item_type
+            .is_w29_closable(&self.business_object_type, self.approval_node_execution_id.is_some())
+    }
+}
+
 impl From<crate::repository::WorkItemRow> for WorkItemFields {
     fn from(item: crate::repository::WorkItemRow) -> Self {
         let root_business_object_id = item.business_object_id.clone();
@@ -151,5 +168,61 @@ impl From<crate::repository::WorkItemRow> for WorkItemFields {
             task_version: item.version,
             created_at: item.created_at,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WorkItemFields;
+    use crate::entity::work_item::{AssignmentSource, WorkItemPriority, WorkItemStatus, WorkItemType};
+
+    fn fields(
+        work_item_type: WorkItemType,
+        business_object_type: &str,
+        approval_node_execution_id: Option<&str>,
+    ) -> WorkItemFields {
+        WorkItemFields {
+            id: "wi-1".to_string(),
+            work_item_type,
+            approval_node_execution_id: approval_node_execution_id.map(str::to_string),
+            business_object_type: business_object_type.to_string(),
+            business_object_id: "object-1".to_string(),
+            root_business_object_id: "object-1".to_string(),
+            business_object_label: "对象".to_string(),
+            counterparty_label: None,
+            subject_version: "1".to_string(),
+            status: WorkItemStatus::Open,
+            owner_role: "role-1".to_string(),
+            owner_organization_id: "org-1".to_string(),
+            owner_user_id: Some("user-1".to_string()),
+            assignment_source: AssignmentSource::SystemRule,
+            assigned_at: None,
+            started_at: None,
+            current_assignment_at: None,
+            last_activity_at: None,
+            priority: WorkItemPriority::Normal,
+            due_at: None,
+            reason_code: None,
+            impact_summary: None,
+            completed_at: None,
+            completed_by: None,
+            closed_at: None,
+            closed_by: None,
+            close_reason: None,
+            task_version: 1,
+            created_at: 100,
+        }
+    }
+
+    /// 投影关闭判定与实体注册关系一致：仅非审批异常任务可关闭。
+    #[test]
+    fn projection_closability_follows_registered_relation() {
+        assert!(fields(WorkItemType::BusinessException, "integration_error_task", None).is_w29_closable());
+        assert!(
+            !fields(WorkItemType::BusinessException, "integration_error_task", Some("exec-1"))
+                .is_w29_closable()
+        );
+        assert!(!fields(WorkItemType::DocumentApproval, "integration_error_task", None).is_w29_closable());
+        assert!(!fields(WorkItemType::BusinessException, "SUPPLIER_OFFERING", None).is_w29_closable());
     }
 }

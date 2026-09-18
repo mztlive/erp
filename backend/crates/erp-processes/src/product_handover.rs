@@ -3,14 +3,13 @@
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_catalog::{HandoverCandidateView, HandoverProductRequest, HandoverProductView};
-use erp_identity::entity::organization::OrgTree;
-use erp_identity::repository::OrganizationRepository;
 use erp_identity::{AccessControlExt, Permission, SharedRbacService};
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use crate::adapters::scoped_catalog_service;
+use crate::handover_common::{ensure_org_enabled, ensure_replay_fingerprint, trimmed_idempotency_key};
 use crate::{Error, Result};
 
 /// 显式交接商品维护人；目标须有效且具备 `product:update`。
@@ -35,10 +34,7 @@ pub async fn handover_product(
     actor: &AuditActor,
 ) -> Result<HandoverProductView> {
     req.validate()?;
-    let key = req.idempotency_key.trim().to_string();
-    if key.is_empty() {
-        return Err(Error::ValidationError("幂等键不能为空".into()));
-    }
+    let key = trimmed_idempotency_key(&req.idempotency_key)?;
     let audit_id = format!("product-handover-{}-{}-{key}", actor.id(), id);
     let fingerprint = handover_fingerprint(actor.id(), id, &req, &key)?;
     if let Some(existing) = replay(&db, &rbac, &audit_id, &fingerprint, id, actor).await? {
@@ -152,11 +148,11 @@ async fn replay(
     let Some(audit) = db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
         return Ok(None);
     };
-    let expected = format!("command_sha256={expected_fingerprint}");
-    let message = audit.message.as_deref().unwrap_or("");
-    if message != expected && !message.starts_with(&format!("{expected};")) {
-        return Err(Error::ConflictError("同一幂等键已用于不同的商品交接".into()));
-    }
+    ensure_replay_fingerprint(
+        audit.message.as_deref(),
+        expected_fingerprint,
+        "同一幂等键已用于不同的商品交接",
+    )?;
     let product = crate::adapters::catalog_access(db.clone(), rbac.clone())
         .require_product(actor, "update", product_id, &mut NoTransaction)
         .await?;
@@ -192,35 +188,6 @@ async fn ensure_target_qualified(
     };
     if !account.is_active_backoffice() || !account_can_maintain(rbac, target).await? {
         return Err(Error::Forbidden("目标账号不存在、已失效或不具备商品维护资格".into()));
-    }
-    Ok(())
-}
-
-/// 校验显式目标组织整条路径均启用。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `target_org` - 可选目标组织
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 未指定组织或路径全部启用时成功。
-///
-/// # 错误
-/// 目标组织停用时拒绝。
-async fn ensure_org_enabled(
-    db: &Database,
-    target_org: Option<&str>,
-    executor: &mut dyn persistence_core::Executor,
-) -> Result<()> {
-    let Some(org) = target_org.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(());
-    };
-    let state = OrganizationRepository::new(db).state(executor).await?;
-    let tree = OrgTree::new(&state.units)?;
-    let path = tree.path(org)?;
-    if path.iter().any(|node| !node.enabled) {
-        return Err(Error::BusinessLogicError("目标业务组织已停用".into()));
     }
     Ok(())
 }
