@@ -7,8 +7,7 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
-use erp_identity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
-use erp_identity::service::access_control::consumers::registration;
+use erp_identity::access_control::{ScopeClause, ScopedObject};
 use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_integration::{
     IntegrationDataScopePort, IntegrationOpsService, IntegrationResolvedClause, IntegrationResolvedScope,
@@ -18,7 +17,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::identity_error::map_identity_error;
-use super::scope_support::{expand_org_ids, load_organization_state, member_ids};
+use super::scope_support::{self, evaluate_registered, reject_unsupported_dimensions, scope_clause};
 
 map_identity_error!(erp_integration);
 
@@ -98,8 +97,15 @@ impl IntegrationDataScopePort for MongoIntegrationDataScope {
         include_descendants: bool,
         executor: &mut dyn Executor,
     ) -> erp_integration::Result<BTreeSet<String>> {
-        let state = load_organization_state(&self.db, executor).await?;
-        expand_org_ids(&state, org_unit_ids, include_descendants).map_err(map_identity_error)
+        scope_support::expand_org_units(
+            &self.db,
+            org_unit_ids,
+            include_descendants,
+            executor,
+            Into::into,
+            map_identity_error,
+        )
+        .await
     }
 
     async fn org_member_ids(
@@ -108,8 +114,7 @@ impl IntegrationDataScopePort for MongoIntegrationDataScope {
         at: Instant,
         executor: &mut dyn Executor,
     ) -> erp_integration::Result<Vec<String>> {
-        let state = load_organization_state(&self.db, executor).await?;
-        Ok(member_ids(&state, org_unit_ids, at))
+        scope_support::org_member_ids(&self.db, org_unit_ids, at, executor, Into::into).await
     }
 
     async fn own_org(
@@ -118,8 +123,7 @@ impl IntegrationDataScopePort for MongoIntegrationDataScope {
         at: Instant,
         executor: &mut dyn Executor,
     ) -> erp_integration::Result<Option<String>> {
-        let state = load_organization_state(&self.db, executor).await?;
-        Ok(state.own_org(user_id, at).map_err(map_identity_error)?.map(str::to_string))
+        scope_support::own_org(&self.db, user_id, at, executor, Into::into, map_identity_error).await
     }
 }
 
@@ -155,9 +159,8 @@ fn map_clauses(clauses: &[ScopeClause]) -> erp_integration::Result<Vec<Integrati
 
 /// 将身份域条款转为集成已解析条款。
 fn map_clause(clause: &ScopeClause) -> erp_integration::Result<IntegrationResolvedClause> {
-    if !clause.settlement_party_ids.is_empty() || !clause.warehouse_ids.is_empty() {
-        return Err(erp_integration::Error::ValidationError("集成范围不支持结算主体或仓库维度".into()));
-    }
+    reject_unsupported_dimensions(clause, "集成范围不支持结算主体或仓库维度")
+        .map_err(erp_integration::Error::ValidationError)?;
     Ok(IntegrationResolvedClause {
         company: clause.company,
         self_owned: clause.self_owned,
@@ -186,13 +189,12 @@ fn evaluate_object(
     object: &IntegrationScopeObject,
 ) -> erp_integration::Result<bool> {
     ensure_integration_resource(&scope.resource)?;
-    let consumer = registration(&scope.resource, &scope.action).map_err(map_identity_error)?;
-    let resolved = ResolvedScope {
-        role_clauses: scope.role_clauses.iter().map(public_clause).collect(),
-        user_limit: scope.user_limit.as_ref().map(public_clause),
-    };
-    Ok(resolved.allows(
-        &ScopedObject {
+    evaluate_registered(
+        &scope.resource,
+        &scope.action,
+        scope.role_clauses.iter().map(public_clause),
+        scope.user_limit.as_ref().map(public_clause),
+        ScopedObject {
             owned: object.owned,
             collaborating: false,
             historical_read_participant: object.historical_read_participant,
@@ -200,19 +202,13 @@ fn evaluate_object(
             settlement_party_id: None,
             warehouse_id: None,
         },
-        consumer.allows_history,
-    ))
+        map_identity_error,
+    )
 }
 
 /// 转换已解析条款，保留本人、组织及空集。
 fn public_clause(clause: &IntegrationResolvedClause) -> ScopeClause {
-    ScopeClause {
-        company: clause.company,
-        self_owned: clause.self_owned,
-        collaborative: false,
-        org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
-        ..ScopeClause::default()
-    }
+    scope_clause(clause.company, clause.self_owned, false, &clause.org_unit_ids)
 }
 
 #[cfg(test)]

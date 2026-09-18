@@ -12,7 +12,6 @@
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
 use mongodb::Database;
-use mongodb::bson::{Document, doc};
 
 use super::extensions::ReceivableExt;
 
@@ -28,7 +27,10 @@ mod snapshot;
 pub use snapshot::{ReceivableAccountSnapshotExt, ReceivableEntrySnapshotExt};
 
 mod sales_order_summary;
-pub use account::{ReceivableAccountFilter, ReceivableAccountRepositoryExt, SettlementBatchResult};
+pub use account::{
+    ReceivableAccountFilter, ReceivableAccountInvoicingExt, ReceivableAccountRepositoryExt,
+    ReceivableAccountSettlementExt, SettlementBatchResult,
+};
 pub use command::{ReceivableListScope, ScopedCustomerReceiptQuery, ScopedInvoiceQuery};
 pub use customer_center::ReceivableAccountCustomerCenterExt;
 pub use entry::{ReceivableEntryOffsetRepositoryExt, ReceivableEntryRepositoryExt};
@@ -62,20 +64,7 @@ impl<'a> ReceivableRepository<'a> {
     }
 }
 
-/// 构建排序文档：字段名经白名单映射，未命中回退 `created_at` 降序。
-///
-/// # 参数
-/// * `sort_by` - 排序字段（白名单内有效）
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-/// * `allowed` - 允许的排序字段名集合（防止透传任意字段名）
-///
-/// # 返回
-/// 返回排序条件文档。
-pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
-    let direction = if sort_ascending { 1 } else { -1 };
-    let field = sort_by.filter(|name| allowed.contains(name)).unwrap_or("created_at");
-    doc! { field: direction, "id": direction }
-}
+pub(super) use super::sort_doc_with_id as sort_doc;
 
 pub mod money_progress;
 pub use money_progress::ReceivableAccountMoneyProgressExt;

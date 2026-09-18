@@ -332,12 +332,6 @@ mod tests {
     }
 
     #[test]
-    fn background_job_no_is_prefixed_and_unique() {
-        assert_eq!(format!("BJ-{}", "IMP-1"), "BJ-IMP-1");
-        assert_ne!(format!("BJ-{}", "IMP-1"), format!("BJ-{}", "IMP-2"));
-    }
-
-    #[test]
     fn import_execution_command_uses_frozen_wire_shape() {
         let request: super::ImportExecutionCommand = serde_json::from_value(json!({
             "batch_id": "batch-1",

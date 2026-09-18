@@ -7,11 +7,12 @@ autotests = false
 [dependencies]
 bson = { workspace = true }
 chrono = { workspace = true }
-entity-core = { workspace = true }
 entity-macros = { workspace = true }
 regex = { workspace = true }
 rust_decimal = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 thiserror = { workspace = true }
 validator = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

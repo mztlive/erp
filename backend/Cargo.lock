@@ -1648,8 +1648,6 @@ name = "erp-audit"
 version = "0.1.0"
 dependencies = [
  "application-core",
- "async-trait",
- "chrono",
  "entity-core",
  "entity-macros",
  "erp-core",
@@ -1660,7 +1658,6 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
- "tracing",
  "validator",
 ]
 
@@ -1711,7 +1708,6 @@ version = "0.1.0"
 dependencies = [
  "bson",
  "chrono",
- "entity-core",
  "entity-macros",
  "regex",
  "rust_decimal",
@@ -1831,8 +1827,6 @@ dependencies = [
  "entity-core",
  "entity-macros",
  "erp-core",
- "futures-util",
- "id-generator",
  "mongodb",
  "persistence-core",
  "serde",
@@ -1855,7 +1849,6 @@ dependencies = [
  "entity-macros",
  "erp-core",
  "futures-util",
- "hex",
  "id-generator",
  "mongodb",
  "persistence-core",
@@ -2039,7 +2032,6 @@ name = "erp-returns"
 version = "0.1.0"
 dependencies = [
  "application-core",
- "async-trait",
  "bson",
  "chrono",
  "entity-core",
@@ -2055,7 +2047,6 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "thiserror 2.0.20",
- "tokio",
  "tracing",
  "validator",
 ]
@@ -4931,7 +4922,6 @@ dependencies = [
  "hmac 0.12.1",
  "jwt",
  "mongodb",
- "serde",
  "serde_json",
  "sha2 0.10.9",
  "thiserror 2.0.20",

@@ -52,8 +52,8 @@ impl OrganizationService {
         let mut no_tx = NoTransaction;
         let access = self.access(actor, "list", &mut no_tx).await?;
         let visible = visible_state(access.organizations.clone(), &access);
-        let people = self.people_for_view(&visible, access.as_of, &mut no_tx).await?;
-        let roles = self.roles_for_view(&visible, &mut no_tx).await?;
+        let people = people_for(&self.db, &visible, access.as_of, &mut no_tx).await?;
+        let roles = roles_for(&self.db, &visible, &mut no_tx).await?;
         Ok(OrganizationStateView::compose(
             visible,
             access.scope_version.clone(),
@@ -63,52 +63,6 @@ impl OrganizationService {
             people,
             roles,
         ))
-    }
-
-    /// 读取组织页面人员展示与分派候选，不含联系方式。
-    ///
-    /// # 参数
-    /// * `visible` - 当前可管理组织事实
-    /// * `as_of` - 与范围解析相同的时点
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 后台账号 ID、显示名、登录账号、状态和当前主属组织。
-    ///
-    /// # 错误
-    /// 账号读取或主属关系冲突时失败。
-    ///
-    /// # 关键业务约束
-    /// 不要求账号管理权限；分派仍只接受有效后台账号。不返回邮箱、电话或密钥。
-    async fn people_for_view(
-        &self,
-        visible: &OrganizationState,
-        as_of: Instant,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<OrgPersonView>> {
-        people_for(&self.db, visible, as_of, executor).await
-    }
-
-    /// 读取管理授权展示与可选角色，不含权限清单。
-    ///
-    /// # 参数
-    /// * `visible` - 当前可管理组织事实
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 启用角色及现有管理关系引用的角色名称。
-    ///
-    /// # 错误
-    /// 角色读取失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 组织配置不把角色权限当作业务执行权授予。
-    async fn roles_for_view(
-        &self,
-        visible: &OrganizationState,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<OrgRoleView>> {
-        roles_for(&self.db, visible, executor).await
     }
 
     /// 预览通过同一校验准备的变更前后事实，不写入组织或业务任务。

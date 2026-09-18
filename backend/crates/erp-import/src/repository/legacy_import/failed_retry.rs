@@ -71,16 +71,7 @@ impl LegacyImportRowFailedRetryExt for persistence_core::Repository<'_, LegacyIm
         batch_id: &LegacyImportBatchId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<LegacyImportRow>> {
-        self.find_many_sorted(
-            doc! {
-                "batch_id": batch_id.to_string(),
-                "import_status": ImportStatus::Failed.as_str(),
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
-            doc! { "created_at": 1, "id": 1 },
-            executor,
-        )
-        .await
+        self.find_many_sorted(failed_retry_filter(batch_id), failed_retry_sort(), executor).await
     }
 
     async fn persist_failed_retry_rows(
@@ -98,30 +89,47 @@ impl LegacyImportRowFailedRetryExt for persistence_core::Repository<'_, LegacyIm
     }
 }
 
+/// 失败重试读取的精确过滤条件。
+///
+/// # 参数
+/// * `batch_id` - 目标导入批次
+///
+/// # 返回
+/// 返回含批次、失败状态与未软删除过滤的文档。
+fn failed_retry_filter(batch_id: &LegacyImportBatchId) -> mongodb::bson::Document {
+    doc! {
+        "batch_id": batch_id.to_string(),
+        "import_status": ImportStatus::Failed.as_str(),
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
+/// 失败重试读取的稳定排序。
+///
+/// # 返回
+/// 返回 `created_at/id` 升序排序文档。
+fn failed_retry_sort() -> mongodb::bson::Document {
+    doc! { "created_at": 1, "id": 1 }
+}
+
 #[cfg(test)]
 mod tests {
     use entity_core::NOT_DELETED_TIMESTAMP_BSON;
     use erp_core::ids::LegacyImportBatchId;
-    use mongodb::bson::doc;
 
-    use crate::entity::legacy_import::ImportStatus;
+    use super::{failed_retry_filter, failed_retry_sort};
 
     #[test]
     fn failed_retry_filter_pins_batch_status_and_not_deleted() {
-        let batch_id = LegacyImportBatchId::new("batch-1");
-        let filter = doc! {
-            "batch_id": batch_id.to_string(),
-            "import_status": ImportStatus::Failed.as_str(),
-            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-        };
+        let filter = failed_retry_filter(&LegacyImportBatchId::new("batch-1"));
         assert_eq!(filter.get_str("batch_id").unwrap(), "batch-1");
         assert_eq!(filter.get_str("import_status").unwrap(), "failed");
-        assert_eq!(filter.get_i64("deleted_at").unwrap(), 0);
+        assert_eq!(filter.get_i64("deleted_at").unwrap(), NOT_DELETED_TIMESTAMP_BSON);
     }
 
     #[test]
     fn failed_retry_sort_is_stable_by_created_at_then_id() {
-        let sort = doc! { "created_at": 1, "id": 1 };
+        let sort = failed_retry_sort();
         assert_eq!(sort.get_i32("created_at").unwrap(), 1);
         assert_eq!(sort.get_i32("id").unwrap(), 1);
     }

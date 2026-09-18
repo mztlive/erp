@@ -5,9 +5,7 @@ use persistence_core::Transactional;
 
 use super::ContractService;
 use super::access::intersect_ids;
-use crate::dto::contract::{
-    ContractListParams, ContractListQuery, ContractListScope, ContractListView, PageView,
-};
+use crate::dto::contract::{ContractListQuery, ContractListScope, ContractListView, PageView};
 use crate::error::{Error, Result};
 use crate::ports::{ContractDataScopePort, ContractResolvedScope};
 use crate::repository::list_search::ContractSearch;
@@ -29,7 +27,6 @@ impl ContractService {
     /// 授权、总数、候选与合同版本全部在同一个事务读取。
     ///
     /// # 参数
-    /// * `params` - 原始查询
     /// * `query` - 已归一化查询
     /// * `actor` - 已认证操作人
     ///
@@ -43,7 +40,6 @@ impl ContractService {
     /// 组织筛选按当前主负责人所属组织收窄，不得扩大授权结果。
     pub(super) async fn list_snapshot(
         &self,
-        _params: &ContractListParams,
         query: ContractListQuery,
         actor: &AuditActor,
     ) -> Result<ContractSnapshot> {
@@ -472,9 +468,6 @@ async fn apply_org_unit_filter(
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<Option<Vec<String>>> {
     let Some(org_ids) = &query.org_unit_ids else {
-        if query.include_descendants == Some(true) {
-            return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
-        }
         return Ok(ids);
     };
     if query.include_descendants == Some(true) && org_ids.as_slice().is_empty() {

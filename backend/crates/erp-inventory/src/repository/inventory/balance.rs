@@ -8,8 +8,8 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    active_entity_by_id, both_dec, both_inc, cross_inc, ids_to_strings, scoped_base_filter, sort_doc,
-    to_bson, with_id_tie_breaker,
+    active_entity_by_id, both_dec, both_inc, cross_inc, ids_to_strings, paged_projection_search,
+    scoped_base_filter, sort_doc, to_bson, with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_BALANCES};
 use crate::entity::inventory::StockBalance;
@@ -276,16 +276,16 @@ impl StockBalanceRepositoryExt for Repository<'_, StockBalance> {
         filter: &StockBalanceFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<StockBalanceRow>> {
-        let options = FindOptions::builder()
-            .sort(stock_balance_sort(filter))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(stock_balance_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<StockBalanceRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-        Ok(PageResult { items, total: total as i64 })
+        paged_projection_search(
+            &self.collection(),
+            filter.to_doc(),
+            stock_balance_sort(filter),
+            filter.skip(),
+            filter.limit(),
+            stock_balance_projection(),
+            executor,
+        )
+        .await
     }
 
     async fn find_by_dimensions(

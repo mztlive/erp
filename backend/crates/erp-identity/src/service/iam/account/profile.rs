@@ -63,9 +63,13 @@ impl AccountProfileService {
     /// 当账号不存在时返回错误。
     pub async fn account_profile(&self, user_id: &str, account_kind: AccountKind) -> Result<AccountProfile> {
         let policy_version = self.rbac.current_policy_revision().await?;
-        let account = self.load_account(user_id, account_kind, "管理员不存在").await?;
-        let role_ids = self.role_ids_for_account(&account).await?;
-        let permissions = self.account_permissions(&account).await?;
+        let account = account_of_kind(
+            self.db.accounts().find_by_id(user_id, &mut NoTransaction).await?,
+            account_kind,
+            "管理员不存在",
+        )?;
+        let role_ids = self.rbac.role_ids(account.kind, account.base.id.as_str()).await?;
+        let permissions = self.rbac.permissions(account.kind, account.base.id.as_str()).await?;
         let avatar = Self::normalized_avatar(account.avatar.as_deref());
         if !account.is_active_backoffice() {
             return Err(crate::Error::Forbidden("账号已失效".into()));
@@ -81,53 +85,6 @@ impl AccountProfileService {
         profile.policy_version = policy_version;
         profile.organization_version = organization_version;
         Ok(profile)
-    }
-
-    /// 查询账号绑定的角色ID集合。
-    ///
-    /// # 参数
-    /// * `account` - 账号实体
-    ///
-    /// # 返回值
-    /// 返回角色ID集合
-    async fn role_ids_for_account(&self, account: &AccountCore) -> Result<Vec<String>> {
-        self.rbac.role_ids(account.kind, account.base.id.as_str()).await
-    }
-
-    /// 按账号类型加载账号并校验类型。
-    ///
-    /// # 参数
-    /// * `user_id` - 账号ID
-    /// * `account_kind` - 账号类型
-    /// * `not_found_message` - 错误信息
-    ///
-    /// # 返回值
-    /// 返回匹配账号
-    ///
-    /// # 错误
-    /// 当账号不存在或类型不匹配时返回错误。
-    async fn load_account(
-        &self,
-        user_id: &str,
-        account_kind: AccountKind,
-        not_found_message: &str,
-    ) -> Result<AccountCore> {
-        account_of_kind(
-            self.db.accounts().find_by_id(user_id, &mut NoTransaction).await?,
-            account_kind,
-            not_found_message,
-        )
-    }
-
-    /// 计算账号权限集合。
-    ///
-    /// # 参数
-    /// * `account` - 账号实体
-    ///
-    /// # 返回值
-    /// 返回权限集合
-    async fn account_permissions(&self, account: &AccountCore) -> Result<Vec<Permission>> {
-        self.rbac.permissions(account.kind, account.base.id.as_str()).await
     }
 
     /// 构建统一账号资料响应。

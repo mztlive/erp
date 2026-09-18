@@ -10,10 +10,9 @@ autotests = false
 
 [dependencies]
 mongodb = { workspace = true }
-tokio = { workspace = true, features = ["rt", "macros", "sync"] }
+tokio = { workspace = true, features = ["rt"] }
 axum = { workspace = true }
 tower = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }

@@ -2,10 +2,10 @@ use chrono::Local;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::WarehouseId;
 use erp_core::money::Quantity;
-use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Result, mongo_ops};
+use mongodb::{Collection, Database};
+use persistence_core::{Executor, PageResult, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 /// 按主键读取未删除实体。
@@ -121,6 +121,45 @@ pub(super) fn scoped_base_filter(warehouse_ids: Option<&[WarehouseId]>) -> Docum
 pub(super) fn with_id_tie_breaker(mut sort: Document, sort_ascending: bool) -> Document {
     sort.insert("id", if sort_ascending { 1 } else { -1 });
     sort
+}
+
+/// 执行投影分页查询：组装 `FindOptions`、按行类型投影，并对同一查询文档
+/// 先 `find_many` 再 `count_documents`（计数使用原文档，列表使用克隆）。
+///
+/// 调用方各自构造 `to_doc()`、排序与投影；本函数不合并四套列表字段。
+///
+/// # 参数
+/// * `base` - 基集合句柄（用于计数）
+/// * `filter` - 调用方 `to_doc()` 得到的查询文档
+/// * `sort` - 排序文档
+/// * `skip` - 跳过行数
+/// * `limit` - 单页条数
+/// * `projection` - 投影文档
+/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+///
+/// # 返回
+/// 返回当前页投影行与满足筛选条件的总数。
+///
+/// # 错误
+/// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+pub(super) async fn paged_projection_search<Entity, Row>(
+    base: &Collection<Entity>,
+    filter: Document,
+    sort: Document,
+    skip: u64,
+    limit: i64,
+    projection: Document,
+    executor: &mut dyn Executor,
+) -> Result<PageResult<Row>>
+where
+    Entity: Send + Sync,
+    Row: for<'de> Deserialize<'de> + Serialize + Send + Sync,
+{
+    let options = FindOptions::builder().sort(sort).skip(skip).limit(limit).projection(projection).build();
+    let collection = base.clone_with_type::<Row>();
+    let items = mongo_ops::find_many(&collection, filter.clone(), options, executor).await?;
+    let total = mongo_ops::count_documents(base, filter, executor).await?;
+    Ok(PageResult { items, total: total as i64 })
 }
 
 /// 把 ID newtype 集合转为字符串集合（用于 `$in` 查询）。

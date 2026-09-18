@@ -15,6 +15,20 @@ use serde::de::DeserializeOwned;
 use crate::Executor;
 use crate::errors::Result;
 
+/// 按执行器是否携带会话，展开 MongoDB 驱动的带/不带 `session` 调用。
+///
+/// 错误继续经 `?` 走 `Error::from(mongodb::error::Error)`，保持 DuplicateKey /
+/// TransientTransactionConflict 分类。`find_many` 的 `SessionCursor::next` 还须再借
+/// 一次会话，不得使用本宏。
+macro_rules! exec_with_session {
+    ($executor:expr, $operation:expr) => {
+        match $executor.session() {
+            Some(session) => $operation.session(session).await?,
+            None => $operation.await?,
+        }
+    };
+}
+
 /// 按执行器语义插入单个文档。
 ///
 /// # 参数
@@ -35,10 +49,7 @@ pub async fn insert_one<T>(
 where
     T: Serialize + Send + Sync,
 {
-    match executor.session() {
-        Some(session) => collection.insert_one(document).session(session).await?,
-        None => collection.insert_one(document).await?,
-    };
+    exec_with_session!(executor, collection.insert_one(document));
     Ok(())
 }
 
@@ -68,10 +79,7 @@ where
         return Ok(());
     }
 
-    match executor.session() {
-        Some(session) => collection.insert_many(documents).session(session).await?,
-        None => collection.insert_many(documents).await?,
-    };
+    exec_with_session!(executor, collection.insert_many(documents));
     Ok(())
 }
 
@@ -99,10 +107,7 @@ pub async fn update_one<T>(
 where
     T: Send + Sync,
 {
-    let result = match executor.session() {
-        Some(session) => collection.update_one(filter, update).upsert(upsert).session(session).await?,
-        None => collection.update_one(filter, update).upsert(upsert).await?,
-    };
+    let result = exec_with_session!(executor, collection.update_one(filter, update).upsert(upsert));
     Ok(result)
 }
 
@@ -133,10 +138,7 @@ where
     T: DeserializeOwned + Send + Sync,
 {
     let operation = collection.find_one_and_update(filter, pipeline).return_document(ReturnDocument::After);
-    let document = match executor.session() {
-        Some(session) => operation.session(session).await?,
-        None => operation.await?,
-    };
+    let document = exec_with_session!(executor, operation);
     Ok(document)
 }
 
@@ -160,10 +162,7 @@ pub async fn delete_many<T>(
 where
     T: Send + Sync,
 {
-    let result = match executor.session() {
-        Some(session) => collection.delete_many(filter).session(session).await?,
-        None => collection.delete_many(filter).await?,
-    };
+    let result = exec_with_session!(executor, collection.delete_many(filter));
     Ok(result)
 }
 
@@ -187,10 +186,7 @@ pub async fn delete_one<T>(
 where
     T: Send + Sync,
 {
-    let result = match executor.session() {
-        Some(session) => collection.delete_one(filter).session(session).await?,
-        None => collection.delete_one(filter).await?,
-    };
+    let result = exec_with_session!(executor, collection.delete_one(filter));
     Ok(result)
 }
 
@@ -214,10 +210,7 @@ pub async fn find_one<T>(
 where
     T: DeserializeOwned + Send + Sync,
 {
-    let document = match executor.session() {
-        Some(session) => collection.find_one(filter).session(session).await?,
-        None => collection.find_one(filter).await?,
-    };
+    let document = exec_with_session!(executor, collection.find_one(filter));
     Ok(document)
 }
 
@@ -286,10 +279,7 @@ where
     T: DeserializeOwned + Send + Sync,
 {
     let projection = doc! { "_id": 1 };
-    let document = match executor.session() {
-        Some(session) => collection.find_one(filter).projection(projection).session(session).await?,
-        None => collection.find_one(filter).projection(projection).await?,
-    };
+    let document = exec_with_session!(executor, collection.find_one(filter).projection(projection));
     Ok(document.is_some())
 }
 
@@ -313,9 +303,6 @@ pub async fn count_documents<T>(
 where
     T: Send + Sync,
 {
-    let count = match executor.session() {
-        Some(session) => collection.count_documents(filter).session(session).await?,
-        None => collection.count_documents(filter).await?,
-    };
+    let count = exec_with_session!(executor, collection.count_documents(filter));
     Ok(count)
 }

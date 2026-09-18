@@ -157,7 +157,7 @@ fn pending_outside_filter(
 /// # 返回
 /// 返回去重后的行 ID 列表。
 fn unique_row_ids(row_ids: &[LegacyImportRowId]) -> Vec<LegacyImportRowId> {
-    dedupe_by_key(row_ids, |id| id.to_string()).into_iter().cloned().collect()
+    dedupe_by_key(row_ids, |id| id.clone()).into_iter().cloned().collect()
 }
 
 /// 按请求顺序报告未命中的行 ID。
@@ -257,26 +257,5 @@ mod tests {
         assert!(scope.rows.is_empty());
         assert!(scope.missing_row_ids.is_empty());
         assert_eq!(scope.pending_outside_request, 0);
-    }
-
-    #[tokio::test]
-    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
-    async fn apply_row_scope_reports_missing_soft_deleted_and_pending_outside() {
-        // Domain crate tests do not depend on shared test-support Mongo fixtures.
-        // In-memory missing/pending-outside contracts are covered above; real DB run is unverified.
-        let _ = row_in_batch("row-pending", "batch-apply");
-    }
-
-    fn row_in_batch(id: &str, batch_id: &str) -> LegacyImportRow {
-        LegacyImportRow::new(
-            LegacyImportRowId::new(id),
-            LegacyImportRowData {
-                batch_id: LegacyImportBatchId::new(batch_id),
-                source_object_type: "CONTRACT".to_string(),
-                source_row_key: id.to_string(),
-                normalized_payload_reference: format!("payload:{id}"),
-            },
-        )
-        .unwrap()
     }
 }

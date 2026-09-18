@@ -1,7 +1,10 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use application_core::AuditActor;
 use erp_core::AccountKind;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::dto::{
@@ -226,14 +229,13 @@ impl AdminService {
         policy_revision: u64,
     ) -> Result<()> {
         let db = self.db.clone();
-        self.rbac
-            .run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
-                Box::pin(async move {
-                    db.accounts().update(&mut account, executor).await?;
-                    Ok::<(), crate::error::Error>(())
-                })
+        self.run_admin_account_write(policy_revision, audit, move |executor| {
+            Box::pin(async move {
+                db.accounts().update(&mut account, executor).await?;
+                Ok(())
             })
-            .await
+        })
+        .await
     }
 
     /// 单独更新管理员角色。
@@ -266,14 +268,13 @@ impl AdminService {
         let audit =
             self.rbac.prepare_resource_log(actor, "admin.role.update", "admin", account_id.clone())?;
         let rbac = self.rbac.clone();
-        self.rbac
-            .run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
-                Box::pin(async move {
-                    rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
-                    Ok::<(), crate::error::Error>(())
-                })
+        self.run_admin_account_write(policy_revision, audit, move |executor| {
+            Box::pin(async move {
+                rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
+                Ok(())
             })
-            .await
+        })
+        .await
     }
 
     /// 删除管理员（软删除）。
@@ -321,15 +322,14 @@ impl AdminService {
         let rbac = self.rbac.clone();
         let account_id = account.base.id.clone();
         let policy_revision = grant.policy_revision();
-        self.rbac
-            .run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
-                Box::pin(async move {
-                    db.accounts().create(&account, executor).await?;
-                    rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
-                    Ok::<AccountCore, crate::error::Error>(account)
-                })
+        self.run_admin_account_write(policy_revision, audit, move |executor| {
+            Box::pin(async move {
+                db.accounts().create(&account, executor).await?;
+                rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
+                Ok(account)
             })
-            .await
+        })
+        .await
     }
 
     /// 在同一事务中更新管理员账号并覆盖完整角色绑定。
@@ -354,15 +354,14 @@ impl AdminService {
         let rbac = self.rbac.clone();
         let account_id = account.base.id.clone();
         let policy_revision = grant.policy_revision();
-        self.rbac
-            .run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
-                Box::pin(async move {
-                    db.accounts().update(&mut account, executor).await?;
-                    rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
-                    Ok::<AccountCore, crate::error::Error>(account)
-                })
+        self.run_admin_account_write(policy_revision, audit, move |executor| {
+            Box::pin(async move {
+                db.accounts().update(&mut account, executor).await?;
+                rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
+                Ok(account)
             })
-            .await
+        })
+        .await
     }
 
     /// 在系统初始化事务中创建管理员并绑定内建角色。
@@ -434,15 +433,32 @@ impl AdminService {
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let account_id = account.base.id.clone();
-        self.rbac
-            .run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
-                Box::pin(async move {
-                    db.accounts().soft_delete(&mut account, executor).await?;
-                    rbac.clear_roles(AccountKind::Admin, &account_id, executor).await?;
-                    Ok::<(), crate::error::Error>(())
-                })
+        self.run_admin_account_write(policy_revision, audit, move |executor| {
+            Box::pin(async move {
+                db.accounts().soft_delete(&mut account, executor).await?;
+                rbac.clear_roles(AccountKind::Admin, &account_id, executor).await?;
+                Ok(())
             })
-            .await
+        })
+        .await
+    }
+
+    /// 管理端账号写入：授权快照版本上的 policy 事务，并原子持久化审计。
+    ///
+    /// 系统初始化必须走 `run_system_policy_transaction`，不得并入本入口。
+    async fn run_admin_account_write<T, F>(
+        &self,
+        policy_revision: u64,
+        audit: PreparedResourceAudit,
+        write: F,
+    ) -> Result<T>
+    where
+        T: Send + 'static,
+        F: for<'a> FnOnce(&'a mut dyn Executor) -> Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>
+            + Send
+            + 'static,
+    {
+        self.rbac.run_authorized_audited_policy_transaction(policy_revision, audit, write).await
     }
 
     /// 确保超级管理员账号存在、启用并绑定 root 角色。

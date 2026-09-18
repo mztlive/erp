@@ -1,4 +1,6 @@
 //! 变更摘要按不可变提交编号保存，历史审批不得读取当前草稿原因。
+use super::super::brief::{BRIEF_LINE_LIMIT, BriefLine, ObjectBriefSource, join_list_summary};
+use super::mapping::{purchase_change_brief_source, sales_change_brief_source};
 use super::*;
 use crate::workbench::WorkbenchSubjectDisplay;
 

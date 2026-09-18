@@ -7,8 +7,7 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
-use erp_identity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
-use erp_identity::service::access_control::consumers::registration;
+use erp_identity::access_control::{ScopeClause, ScopedObject};
 use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_supplier::ports::SupplierScopeObject;
 use erp_supplier::{
@@ -18,7 +17,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::identity_error::map_identity_error;
-use super::scope_support::{expand_org_ids, load_organization_state, member_ids};
+use super::scope_support::{self, evaluate_registered, reject_unsupported_dimensions, scope_clause};
 
 map_identity_error!(erp_supplier);
 
@@ -100,8 +99,15 @@ impl SupplierDataScopePort for MongoSupplierDataScope {
         include_descendants: bool,
         executor: &mut dyn Executor,
     ) -> erp_supplier::Result<BTreeSet<String>> {
-        let state = load_organization_state(&self.db, executor).await?;
-        expand_org_ids(&state, org_unit_ids, include_descendants).map_err(map_identity_error)
+        scope_support::expand_org_units(
+            &self.db,
+            org_unit_ids,
+            include_descendants,
+            executor,
+            Into::into,
+            map_identity_error,
+        )
+        .await
     }
 
     async fn org_member_ids(
@@ -110,8 +116,7 @@ impl SupplierDataScopePort for MongoSupplierDataScope {
         at: Instant,
         executor: &mut dyn Executor,
     ) -> erp_supplier::Result<Vec<String>> {
-        let state = load_organization_state(&self.db, executor).await?;
-        Ok(member_ids(&state, org_unit_ids, at))
+        scope_support::org_member_ids(&self.db, org_unit_ids, at, executor, Into::into).await
     }
 
     async fn own_org(
@@ -120,8 +125,7 @@ impl SupplierDataScopePort for MongoSupplierDataScope {
         at: Instant,
         executor: &mut dyn Executor,
     ) -> erp_supplier::Result<Option<String>> {
-        let state = load_organization_state(&self.db, executor).await?;
-        Ok(state.own_org(user_id, at).map_err(map_identity_error)?.map(str::to_string))
+        scope_support::own_org(&self.db, user_id, at, executor, Into::into, map_identity_error).await
     }
 }
 
@@ -130,9 +134,8 @@ fn map_clauses(clauses: &[ScopeClause]) -> erp_supplier::Result<Vec<SupplierReso
 }
 
 fn map_clause(clause: &ScopeClause) -> erp_supplier::Result<SupplierResolvedClause> {
-    if !clause.settlement_party_ids.is_empty() || !clause.warehouse_ids.is_empty() {
-        return Err(erp_supplier::Error::ValidationError("供应商范围不支持结算主体或仓库维度".into()));
-    }
+    reject_unsupported_dimensions(clause, "供应商范围不支持结算主体或仓库维度")
+        .map_err(erp_supplier::Error::ValidationError)?;
     Ok(SupplierResolvedClause {
         company: clause.company,
         self_owned: clause.self_owned,
@@ -148,13 +151,12 @@ fn evaluate_object(
     if scope.resource != "supplier" {
         return Err(erp_supplier::Error::ValidationError("范围资源与消费方不一致".into()));
     }
-    let consumer = registration(&scope.resource, &scope.action).map_err(map_identity_error)?;
-    let resolved = ResolvedScope {
-        role_clauses: scope.role_clauses.iter().map(public_clause).collect(),
-        user_limit: scope.user_limit.as_ref().map(public_clause),
-    };
-    Ok(resolved.allows(
-        &ScopedObject {
+    evaluate_registered(
+        &scope.resource,
+        &scope.action,
+        scope.role_clauses.iter().map(public_clause),
+        scope.user_limit.as_ref().map(public_clause),
+        ScopedObject {
             owned: object.owned,
             collaborating: false,
             historical_read_participant: object.historical_read_participant,
@@ -162,18 +164,12 @@ fn evaluate_object(
             settlement_party_id: None,
             warehouse_id: None,
         },
-        consumer.allows_history,
-    ))
+        map_identity_error,
+    )
 }
 
 fn public_clause(clause: &SupplierResolvedClause) -> ScopeClause {
-    ScopeClause {
-        company: clause.company,
-        self_owned: clause.self_owned,
-        collaborative: clause.collaborative,
-        org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
-        ..ScopeClause::default()
-    }
+    scope_clause(clause.company, clause.self_owned, clause.collaborative, &clause.org_unit_ids)
 }
 
 /// 构造绑定身份数据库的供应商访问器。

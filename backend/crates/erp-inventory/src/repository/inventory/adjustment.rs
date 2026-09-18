@@ -9,8 +9,8 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    active_entity_by_id, entities_by_ids, find_by_field_in, ids_to_strings, scoped_base_filter, sort_doc,
-    to_bson, with_id_tie_breaker,
+    active_entity_by_id, entities_by_ids, find_by_field_in, ids_to_strings, paged_projection_search,
+    scoped_base_filter, sort_doc, to_bson, with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_ADJUSTMENT_LINES, STOCK_ADJUSTMENTS};
 use crate::entity::inventory::{
@@ -190,16 +190,16 @@ impl StockAdjustmentRepositoryExt for Repository<'_, StockAdjustment> {
         filter: &StockAdjustmentFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<StockAdjustmentRow>> {
-        let options = FindOptions::builder()
-            .sort(stock_adjustment_sort(filter))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(stock_adjustment_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<StockAdjustmentRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-        Ok(PageResult { items, total: total as i64 })
+        paged_projection_search(
+            &self.collection(),
+            filter.to_doc(),
+            stock_adjustment_sort(filter),
+            filter.skip(),
+            filter.limit(),
+            stock_adjustment_projection(),
+            executor,
+        )
+        .await
     }
 
     async fn find_work_item_stock_adjustment(

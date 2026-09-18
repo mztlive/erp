@@ -28,6 +28,7 @@ mod line_common;
 mod order;
 mod purchase_revision;
 mod purchase_submission;
+mod purchase_submission_line;
 mod snapshot;
 mod sourcing_plan;
 mod types;

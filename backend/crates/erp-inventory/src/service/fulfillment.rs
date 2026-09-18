@@ -171,82 +171,7 @@ pub struct ReceiptStockFact<'a> {
     /// 入库行身份。
     pub receipt_line_id: &'a str,
 }
-#[async_trait]
-trait ReceiptStockSteps: Send {
-    async fn balance(&mut self, executor: &mut dyn Executor) -> Result<String>;
-    async fn movement(&mut self, executor: &mut dyn Executor) -> Result<String>;
-    async fn last_movement(
-        &mut self,
-        balance_id: &str,
-        movement_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<()>;
-}
-async fn execute_receipt_stock(
-    steps: &mut impl ReceiptStockSteps,
-    executor: &mut dyn Executor,
-) -> Result<String> {
-    let balance_id = steps.balance(executor).await?;
-    let movement_id = steps.movement(executor).await?;
-    steps.last_movement(&balance_id, &movement_id, executor).await?;
-    Ok(balance_id)
-}
-struct ReceiptStockPosting<'a, S> {
-    store: &'a mut S,
-    fact: ReceiptStockFact<'a>,
-    occurred_at: Instant,
-    actor_id: &'a str,
-}
-#[async_trait]
-impl<S: InventoryWriteStore> ReceiptStockSteps for ReceiptStockPosting<'_, S> {
-    async fn balance(&mut self, executor: &mut dyn Executor) -> Result<String> {
-        ensure_or_create_balance(
-            self.store,
-            executor,
-            self.fact.warehouse_id,
-            self.fact.sku_id,
-            self.fact.quantity,
-        )
-        .await
-    }
-    async fn movement(&mut self, session: &mut dyn Executor) -> Result<String> {
-        let movement = StockMovement::new(
-            StockMovementId::new(next_id()),
-            StockMovementData {
-                warehouse_id: self.fact.warehouse_id.clone(),
-                sku_id: self.fact.sku_id.clone(),
-                movement_type: MovementType::PurchaseReceiptIn,
-                direction: MovementDirection::Increase,
-                quantity: self.fact.quantity,
-                source_document_id: self.fact.receipt_id.to_string(),
-                source_line_id: Some(self.fact.receipt_line_id.to_string()),
-                reversal_of_movement_id: None,
-                fact_no: next_id(),
-                occurred_at: self.occurred_at,
-                recorded_at: self.occurred_at,
-                recorded_by: self.actor_id.to_string(),
-                source_type: SourceType::Erp,
-                source_reference: None,
-                reason_code: None,
-                reason_text: None,
-            },
-        )?;
-        self.store.movement(&movement, session).await?;
-        Ok(movement.base.id)
-    }
-    async fn last_movement(
-        &mut self,
-        balance_id: &str,
-        movement_id: &str,
-        session: &mut dyn Executor,
-    ) -> Result<()> {
-        // 余额记录最后流水（台账「最后变动」列），与数量增减同事务
-        if !self.store.last_movement(balance_id, movement_id, session).await? {
-            return Err(Error::BusinessLogicError("库存余额行不存在".to_string()));
-        }
-        Ok(())
-    }
-}
+
 /// 在调用方事务内按余额、库存流水、最后流水顺序入账；失败立即返回根事务。
 pub async fn post_receipt_stock(
     db: &Database,
@@ -255,11 +180,46 @@ pub async fn post_receipt_stock(
     occurred_at: Instant,
     actor_id: &str,
 ) -> Result<String> {
-    execute_receipt_stock(
-        &mut ReceiptStockPosting { store: &mut MongoInventoryStore(db), fact, occurred_at, actor_id },
-        executor,
-    )
-    .await
+    post_receipt_stock_with_store(&mut MongoInventoryStore(db), executor, fact, occurred_at, actor_id).await
+}
+
+/// 实际入库过账算法；库存仓储和失败注入替身均从此入口执行。
+async fn post_receipt_stock_with_store(
+    store: &mut impl InventoryWriteStore,
+    executor: &mut dyn Executor,
+    fact: ReceiptStockFact<'_>,
+    occurred_at: Instant,
+    actor_id: &str,
+) -> Result<String> {
+    let balance_id =
+        ensure_or_create_balance(store, executor, fact.warehouse_id, fact.sku_id, fact.quantity).await?;
+    let movement = StockMovement::new(
+        StockMovementId::new(next_id()),
+        StockMovementData {
+            warehouse_id: fact.warehouse_id.clone(),
+            sku_id: fact.sku_id.clone(),
+            movement_type: MovementType::PurchaseReceiptIn,
+            direction: MovementDirection::Increase,
+            quantity: fact.quantity,
+            source_document_id: fact.receipt_id.to_string(),
+            source_line_id: Some(fact.receipt_line_id.to_string()),
+            reversal_of_movement_id: None,
+            fact_no: next_id(),
+            occurred_at,
+            recorded_at: occurred_at,
+            recorded_by: actor_id.to_string(),
+            source_type: SourceType::Erp,
+            source_reference: None,
+            reason_code: None,
+            reason_text: None,
+        },
+    )?;
+    store.movement(&movement, executor).await?;
+    // 余额记录最后流水（台账「最后变动」列），与数量增减同事务
+    if !store.last_movement(&balance_id, &movement.base.id, executor).await? {
+        return Err(Error::BusinessLogicError("库存余额行不存在".to_string()));
+    }
+    Ok(balance_id)
 }
 /// 建立/更新库存余额并返回余额主键（位于调用方事务内）。
 ///
@@ -321,188 +281,52 @@ pub struct ReceiptReservationFact<'a> {
     /// 本分配预占数量。
     pub quantity: Quantity,
 }
-#[async_trait]
-trait ReceiptReservationSteps: Send {
-    async fn reservation(&mut self, executor: &mut dyn Executor) -> Result<String>;
-    async fn reserve(&mut self, executor: &mut dyn Executor) -> Result<()>;
-    async fn entry(&mut self, reservation_id: &str, executor: &mut dyn Executor) -> Result<()>;
-}
-async fn execute_receipt_reservation(
-    steps: &mut impl ReceiptReservationSteps,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let reservation_id = steps.reservation(executor).await?;
-    steps.reserve(executor).await?;
-    steps.entry(&reservation_id, executor).await
-}
-struct ReceiptReservationPosting<'a, S> {
-    store: &'a mut S,
-    fact: ReceiptReservationFact<'a>,
-}
-#[async_trait]
-impl<S: InventoryWriteStore> ReceiptReservationSteps for ReceiptReservationPosting<'_, S> {
-    async fn reservation(&mut self, session: &mut dyn Executor) -> Result<String> {
-        let reservation = StockReservation::new(
-            StockReservationId::new(next_id()),
-            StockReservationData {
-                warehouse_id: self.fact.warehouse_id.clone(),
-                sku_id: self.fact.sku_id.clone(),
-                sales_order_line_id: self.fact.sales_order_line_id.clone(),
-                source_type: StockReservationSourceType::PurchaseReceipt,
-                purchase_line_sales_allocation_id: Some(self.fact.allocation_id.clone()),
-                source_receipt_line_id: Some(self.fact.receipt_line_id.clone()),
-                source_allocation_id: None,
-                reserved_quantity: self.fact.quantity,
-                consumed_quantity: zero_quantity(),
-                released_quantity: zero_quantity(),
-                status: ReservationStatus::Active,
-            },
-        )?;
-        self.store.create_reservation(&reservation, session).await?;
-        Ok(reservation.base.id)
-    }
-    async fn reserve(&mut self, session: &mut dyn Executor) -> Result<()> {
-        if !self.store.reserve(self.fact.balance_id, self.fact.quantity, session).await? {
-            return Err(Error::BusinessLogicError("可用库存不足，无法建立销售预占".to_string()));
-        }
-        Ok(())
-    }
-    async fn entry(&mut self, reservation_id: &str, session: &mut dyn Executor) -> Result<()> {
-        let entry = StockReservationEntry::new(
-            StockReservationEntryId::new(next_id()),
-            StockReservationEntryData {
-                reservation_id: reservation_id.to_string().into(),
-                entry_type: ReservationEntryType::Establish,
-                quantity: self.fact.quantity,
-                source_document_id: self.fact.receipt_id.to_string(),
-            },
-        )?;
-        self.store.create_entry(&entry, session).await?;
-        Ok(())
-    }
-}
 /// 逐条建立库存预占、冻结可用量、写预占分录；不预检下一条分配。
 pub async fn establish_receipt_reservation(
     db: &Database,
     executor: &mut dyn Executor,
     fact: ReceiptReservationFact<'_>,
 ) -> Result<()> {
-    execute_receipt_reservation(
-        &mut ReceiptReservationPosting { store: &mut MongoInventoryStore(db), fact },
-        executor,
-    )
-    .await
+    establish_receipt_reservation_with_store(&mut MongoInventoryStore(db), executor, fact).await
 }
 
-#[cfg(test)]
-mod receipt_write_tests {
-    use super::*;
-    struct TestExecutor {
-        _identity: u8,
+/// 实际预占建立算法；库存仓储和失败注入替身均从此入口执行。
+async fn establish_receipt_reservation_with_store(
+    store: &mut impl InventoryWriteStore,
+    executor: &mut dyn Executor,
+    fact: ReceiptReservationFact<'_>,
+) -> Result<()> {
+    let reservation = StockReservation::new(
+        StockReservationId::new(next_id()),
+        StockReservationData {
+            warehouse_id: fact.warehouse_id.clone(),
+            sku_id: fact.sku_id.clone(),
+            sales_order_line_id: fact.sales_order_line_id.clone(),
+            source_type: StockReservationSourceType::PurchaseReceipt,
+            purchase_line_sales_allocation_id: Some(fact.allocation_id.clone()),
+            source_receipt_line_id: Some(fact.receipt_line_id.clone()),
+            source_allocation_id: None,
+            reserved_quantity: fact.quantity,
+            consumed_quantity: zero_quantity(),
+            released_quantity: zero_quantity(),
+            status: ReservationStatus::Active,
+        },
+    )?;
+    store.create_reservation(&reservation, executor).await?;
+    if !store.reserve(fact.balance_id, fact.quantity, executor).await? {
+        return Err(Error::BusinessLogicError("可用库存不足，无法建立销售预占".to_string()));
     }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
-    struct RecordingSteps {
-        calls: Vec<&'static str>,
-        executor: usize,
-        fail_at: Option<&'static str>,
-    }
-    impl RecordingSteps {
-        fn step(&mut self, name: &'static str, executor: &mut dyn Executor) -> Result<()> {
-            assert_eq!(executor as *mut dyn Executor as *mut () as usize, self.executor);
-            self.calls.push(name);
-            if self.fail_at == Some(name) {
-                return Err(Error::BusinessLogicError("原库存写入错误".into()));
-            }
-            Ok(())
-        }
-    }
-    #[async_trait]
-    impl ReceiptStockSteps for RecordingSteps {
-        async fn balance(&mut self, ex: &mut dyn Executor) -> Result<String> {
-            self.step("balance", ex)?;
-            Ok("balance-1".into())
-        }
-        async fn movement(&mut self, ex: &mut dyn Executor) -> Result<String> {
-            self.step("movement", ex)?;
-            Ok("movement-1".into())
-        }
-        async fn last_movement(
-            &mut self,
-            balance: &str,
-            movement: &str,
-            ex: &mut dyn Executor,
-        ) -> Result<()> {
-            assert_eq!(balance, "balance-1");
-            assert_eq!(movement, "movement-1");
-            self.step("lastmovement", ex)
-        }
-    }
-    #[async_trait]
-    impl ReceiptReservationSteps for RecordingSteps {
-        async fn reservation(&mut self, ex: &mut dyn Executor) -> Result<String> {
-            self.step("reservation", ex)?;
-            Ok("reservation-1".into())
-        }
-        async fn reserve(&mut self, ex: &mut dyn Executor) -> Result<()> {
-            self.step("reserve", ex)
-        }
-        async fn entry(&mut self, reservation: &str, ex: &mut dyn Executor) -> Result<()> {
-            assert_eq!(reservation, "reservation-1");
-            self.step("entry", ex)
-        }
-    }
-    #[tokio::test]
-    async fn receipt_stock_preserves_balance_movement_lastmovement_and_executor() {
-        let mut ex = TestExecutor { _identity: 1 };
-        let mut steps =
-            RecordingSteps { calls: vec![], executor: &mut ex as *mut TestExecutor as usize, fail_at: None };
-        assert_eq!(execute_receipt_stock(&mut steps, &mut ex).await.unwrap(), "balance-1");
-        assert_eq!(steps.calls, ["balance", "movement", "lastmovement"]);
-    }
-    #[tokio::test]
-    async fn receipt_stock_failure_stops_later_writes_with_original_error() {
-        let order = ["balance", "movement", "lastmovement"];
-        for (index, step) in order.iter().enumerate() {
-            let mut ex = TestExecutor { _identity: 1 };
-            let mut steps = RecordingSteps {
-                calls: vec![],
-                executor: &mut ex as *mut TestExecutor as usize,
-                fail_at: Some(step),
-            };
-            assert!(
-                matches!(execute_receipt_stock(&mut steps,&mut ex).await,Err(Error::BusinessLogicError(message)) if message=="原库存写入错误")
-            );
-            assert_eq!(steps.calls, order[..=index]);
-        }
-    }
-    #[tokio::test]
-    async fn reservation_preserves_create_reserve_entry_and_executor() {
-        let mut ex = TestExecutor { _identity: 1 };
-        let mut steps =
-            RecordingSteps { calls: vec![], executor: &mut ex as *mut TestExecutor as usize, fail_at: None };
-        execute_receipt_reservation(&mut steps, &mut ex).await.unwrap();
-        assert_eq!(steps.calls, ["reservation", "reserve", "entry"]);
-    }
-    #[tokio::test]
-    async fn reservation_failure_stops_later_writes_with_original_error() {
-        let order = ["reservation", "reserve", "entry"];
-        for (index, step) in order.iter().enumerate() {
-            let mut ex = TestExecutor { _identity: 1 };
-            let mut steps = RecordingSteps {
-                calls: vec![],
-                executor: &mut ex as *mut TestExecutor as usize,
-                fail_at: Some(step),
-            };
-            assert!(
-                matches!(execute_receipt_reservation(&mut steps,&mut ex).await,Err(Error::BusinessLogicError(message)) if message=="原库存写入错误")
-            );
-            assert_eq!(steps.calls, order[..=index]);
-        }
-    }
+    let entry = StockReservationEntry::new(
+        StockReservationEntryId::new(next_id()),
+        StockReservationEntryData {
+            reservation_id: reservation.base.id.to_string().into(),
+            entry_type: ReservationEntryType::Establish,
+            quantity: fact.quantity,
+            source_document_id: fact.receipt_id.to_string(),
+        },
+    )?;
+    store.create_entry(&entry, executor).await?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -668,37 +492,33 @@ mod receipt_store_tests {
     async fn apply(store: &mut RecordingStore, ex: &mut dyn Executor) -> Result<()> {
         let warehouse = WarehouseId::new("warehouse-1");
         let sku = SkuId::new("sku-1");
-        let balance_id = execute_receipt_stock(
-            &mut ReceiptStockPosting {
-                store,
-                fact: ReceiptStockFact {
-                    warehouse_id: &warehouse,
-                    sku_id: &sku,
-                    quantity: q("2"),
-                    receipt_id: "receipt-1",
-                    receipt_line_id: "receipt-line-1",
-                },
-                occurred_at: Instant::from_unix_secs(12345),
-                actor_id: "actor-1",
-            },
+        let balance_id = post_receipt_stock_with_store(
+            store,
             ex,
+            ReceiptStockFact {
+                warehouse_id: &warehouse,
+                sku_id: &sku,
+                quantity: q("2"),
+                receipt_id: "receipt-1",
+                receipt_line_id: "receipt-line-1",
+            },
+            Instant::from_unix_secs(12345),
+            "actor-1",
         )
         .await?;
-        execute_receipt_reservation(
-            &mut ReceiptReservationPosting {
-                store,
-                fact: ReceiptReservationFact {
-                    warehouse_id: &warehouse,
-                    sku_id: &sku,
-                    sales_order_line_id: SalesOrderLineId::new("sales-line-1"),
-                    allocation_id: PurchaseLineSalesAllocationId::new("allocation-1"),
-                    receipt_line_id: PurchaseReceiptLineId::new("receipt-line-1"),
-                    receipt_id: "receipt-1",
-                    balance_id: &balance_id,
-                    quantity: q("2"),
-                },
-            },
+        establish_receipt_reservation_with_store(
+            store,
             ex,
+            ReceiptReservationFact {
+                warehouse_id: &warehouse,
+                sku_id: &sku,
+                sales_order_line_id: SalesOrderLineId::new("sales-line-1"),
+                allocation_id: PurchaseLineSalesAllocationId::new("allocation-1"),
+                receipt_line_id: PurchaseReceiptLineId::new("receipt-line-1"),
+                receipt_id: "receipt-1",
+                balance_id: &balance_id,
+                quantity: q("2"),
+            },
         )
         .await
     }

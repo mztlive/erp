@@ -16,12 +16,14 @@
 //!
 //! 跨域：无（依赖列为空；只经 `AccessControlExt` 访问本域仓储）。
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use crate::AccessControlExt;
@@ -155,17 +157,14 @@ impl AccessControlService {
             )
             .await?;
         let db = self.db.clone();
-        let client = db.client().clone();
         let permission_for_tx = permission.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    db.permissions().create(&permission_for_tx, executor).await?;
-                    db.audit_events().create(&event, executor).await?;
-                    Ok::<(), crate::error::Error>(())
-                })
+        self.with_audited_write(event, move |executor| {
+            Box::pin(async move {
+                db.permissions().create(&permission_for_tx, executor).await?;
+                Ok(())
             })
-            .await?;
+        })
+        .await?;
 
         Ok(permission.into())
     }
@@ -206,13 +205,11 @@ impl AccessControlService {
             )
             .await?;
         let db = self.db.clone();
-        let client = db.client().clone();
-        let updated = client
-            .with_transaction(move |executor| {
+        let updated = self
+            .with_audited_write(event, move |executor| {
                 Box::pin(async move {
                     db.permissions().update(&mut permission, executor).await?;
-                    db.audit_events().create(&event, executor).await?;
-                    Ok::<Permission, crate::error::Error>(permission)
+                    Ok(permission)
                 })
             })
             .await?;
@@ -247,16 +244,13 @@ impl AccessControlService {
             .build_audit_event(actor, "permission.delete", "permission", Some(id.to_string()), Vec::new())
             .await?;
         let db = self.db.clone();
-        let client = db.client().clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    db.permissions().soft_delete(&mut permission, executor).await?;
-                    db.audit_events().create(&event, executor).await?;
-                    Ok::<(), crate::error::Error>(())
-                })
+        self.with_audited_write(event, move |executor| {
+            Box::pin(async move {
+                db.permissions().soft_delete(&mut permission, executor).await?;
+                Ok(())
             })
-            .await
+        })
+        .await
     }
 
     /// 创建数据范围。
@@ -292,36 +286,33 @@ impl AccessControlService {
             )
             .await?;
         let db = self.db.clone();
-        let client = db.client().clone();
         let scope_for_tx = scope.clone();
         let targets = self.targets.clone();
         let rbac = self.rbac.clone().ok_or_else(|| Error::Forbidden("未装配范围配置授权".into()))?;
         let actor_for_tx = actor.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope_for_tx, "create", executor)
+        self.with_audited_write(event, move |executor| {
+            Box::pin(async move {
+                ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope_for_tx, "create", executor)
+                    .await?;
+                if scope_for_tx.binding.target_mode == Some(ScopeTargetMode::Explicit)
+                    && scope_for_tx.binding.target_dimension != ScopeDimension::InternalOrg
+                {
+                    targets
+                        .as_ref()
+                        .ok_or_else(|| Error::ValidationError("外部范围目标校验未装配".into()))?
+                        .validate_targets(
+                            scope_for_tx.binding.target_dimension,
+                            &scope_for_tx.scope_targets,
+                            executor,
+                        )
                         .await?;
-                    if scope_for_tx.binding.target_mode == Some(ScopeTargetMode::Explicit)
-                        && scope_for_tx.binding.target_dimension != ScopeDimension::InternalOrg
-                    {
-                        targets
-                            .as_ref()
-                            .ok_or_else(|| Error::ValidationError("外部范围目标校验未装配".into()))?
-                            .validate_targets(
-                                scope_for_tx.binding.target_dimension,
-                                &scope_for_tx.scope_targets,
-                                executor,
-                            )
-                            .await?;
-                    }
-                    db.data_scopes().create(&scope_for_tx, executor).await?;
-                    crate::MongoCasbinAdapter::new(db.clone()).bump_policy_revision(executor).await?;
-                    db.audit_events().create(&event, executor).await?;
-                    Ok::<(), crate::error::Error>(())
-                })
+                }
+                db.data_scopes().create(&scope_for_tx, executor).await?;
+                crate::MongoCasbinAdapter::new(db.clone()).bump_policy_revision(executor).await?;
+                Ok(())
             })
-            .await?;
+        })
+        .await?;
 
         Ok(scope.into())
     }
@@ -350,18 +341,15 @@ impl AccessControlService {
         let rbac = self.rbac.clone().ok_or_else(|| Error::Forbidden("未装配范围配置授权".into()))?;
         let actor_for_tx = actor.clone();
         let db = self.db.clone();
-        let client = db.client().clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope, "delete", executor).await?;
-                    db.data_scopes().soft_delete(&mut scope, executor).await?;
-                    crate::MongoCasbinAdapter::new(db.clone()).bump_policy_revision(executor).await?;
-                    db.audit_events().create(&event, executor).await?;
-                    Ok::<(), crate::error::Error>(())
-                })
+        self.with_audited_write(event, move |executor| {
+            Box::pin(async move {
+                ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope, "delete", executor).await?;
+                db.data_scopes().soft_delete(&mut scope, executor).await?;
+                crate::MongoCasbinAdapter::new(db.clone()).bump_policy_revision(executor).await?;
+                Ok(())
             })
-            .await
+        })
+        .await
     }
 
     /// 按用户查询角色绑定（W19 用户授权，含撤权历史）。
@@ -420,18 +408,14 @@ impl AccessControlService {
             )
             .await?;
         let db = self.db.clone();
-        let client = db.client().clone();
         let binding_for_tx = binding.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    db.access_control()
-                        .assign_user_role_with_audit(&binding_for_tx, &event, executor)
-                        .await?;
-                    Ok::<(), crate::error::Error>(())
-                })
+        self.with_audited_write(event, move |executor| {
+            Box::pin(async move {
+                db.user_roles().create(&binding_for_tx, executor).await?;
+                Ok(())
             })
-            .await?;
+        })
+        .await?;
 
         Ok(binding.into())
     }
@@ -469,12 +453,11 @@ impl AccessControlService {
             )
             .await?;
         let db = self.db.clone();
-        let client = db.client().clone();
         let id = id.to_string();
         let revoked_by = actor.id().to_string();
         let revoke_data = req.into_revoke_data();
-        let updated = client
-            .with_transaction(move |executor| {
+        let updated = self
+            .with_audited_write(event, move |executor| {
                 Box::pin(async move {
                     let mut binding = db
                         .user_roles()
@@ -483,8 +466,7 @@ impl AccessControlService {
                         .ok_or_else(|| Error::NotFound("用户角色绑定不存在".to_string()))?;
                     binding.revoke(revoke_data, &revoked_by, Instant::now())?;
                     db.user_roles().update(&mut binding, executor).await?;
-                    db.audit_events().create(&event, executor).await?;
-                    Ok::<UserRole, crate::error::Error>(binding)
+                    Ok(binding)
                 })
             })
             .await?;
@@ -601,6 +583,30 @@ impl AccessControlService {
         )
         .map_err(Into::into)
     }
+
+    /// 在同一事务中执行业务写入，成功后再追加审计事件。
+    ///
+    /// 调用方闭包负责业务写入；范围场景须在闭包内完成授权校验与
+    /// `bump_policy_revision`。顺序固定为「业务写入 →（范围场景）revision bump → 审计」。
+    async fn with_audited_write<T, F>(&self, event: AuditEvent, write: F) -> Result<T>
+    where
+        T: Send + 'static,
+        F: for<'a> FnOnce(&'a mut dyn Executor) -> Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>
+            + Send
+            + 'static,
+    {
+        let db = self.db.clone();
+        let client = db.client().clone();
+        client
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let value = write(executor).await?;
+                    db.audit_events().create(&event, executor).await?;
+                    Ok(value)
+                })
+            })
+            .await
+    }
 }
 
 /// 配置动作须由同一角色同时证明组织配置权与范围配置权，并具有明确公司配置边界。
@@ -610,7 +616,7 @@ async fn ensure_scope_configuration(
     actor: &AuditActor,
     scope: &DataScope,
     action: &str,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let permissions = [
         crate::Permission::parse("org_unit:manage")?,
@@ -647,7 +653,7 @@ async fn ensure_scope_subject(
     db: &Database,
     rbac: &crate::SharedRbacService,
     scope: &DataScope,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     use crate::access_control::DataScopeSubjectType;
     if scope.subject_type == DataScopeSubjectType::User {

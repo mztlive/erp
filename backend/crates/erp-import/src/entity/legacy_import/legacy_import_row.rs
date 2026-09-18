@@ -297,15 +297,19 @@ impl LegacyImportRow {
         error_code: Option<String>,
         error_detail: Option<String>,
     ) -> Result<()> {
-        ensure_transition(self.parse_status, status)?;
         if status == ParseStatus::Invalid {
-            let error_code = Self::required_error_code(error_code)?;
-            self.error_code = Some(error_code);
-            self.error_detail = Self::normalized_error_detail(error_detail)?;
-        } else {
-            self.error_code = None;
-            self.error_detail = None;
+            return Self::write_diagnostic(
+                &mut self.parse_status,
+                ParseStatus::Invalid,
+                &mut self.error_code,
+                &mut self.error_detail,
+                error_code.unwrap_or_default(),
+                error_detail,
+            );
         }
+        ensure_transition(self.parse_status, status)?;
+        self.error_code = None;
+        self.error_detail = None;
         self.parse_status = status;
         Ok(())
     }
@@ -548,9 +552,9 @@ impl LegacyImportRow {
         Ok(())
     }
 
-    /// 统一登记行级诊断（冲突/导入失败/跳过三分支共用；状态机与校验语义不变）。
+    /// 统一登记行级诊断（解析无效/映射冲突/导入失败/跳过共用；状态机与校验语义不变）。
     ///
-    /// 调用方先完成本分支特有的前置校验（`ensure_parseable`/`ensure_mapped`）。
+    /// 映射/导入分支调用方先完成本分支特有的前置校验（`ensure_parseable`/`ensure_mapped`）。
     /// 顺序固定为：状态迁移校验 → 错误码 → 错误明细 → 写状态 → 写错误字段。
     ///
     /// # 参数

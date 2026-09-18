@@ -14,7 +14,6 @@ entity-core = { workspace = true }
 entity-macros = { workspace = true }
 erp-core = { workspace = true }
 futures-util = { workspace = true }
-hex = { workspace = true }
 id-generator = { workspace = true }
 mongodb = { workspace = true }
 persistence-core = { workspace = true }

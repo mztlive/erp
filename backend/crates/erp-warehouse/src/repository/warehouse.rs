@@ -7,8 +7,8 @@
 //! `warehouse_revision` 与 `warehouse_sku_policy` 的敏感字段（地址/联系人加密列）
 //! 不进入任何列表投影；`warehouse_revision` 是追加写入修订，不提供软删除方法。
 //!
-//! 筛选/行类型定义在本文件，经 `WarehouseExt` 的关联类型对外暴露
-//! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
+//! 筛选/行类型定义在本文件，经 `repository/mod.rs` 再导出；`WarehouseExt` 仍保留
+//! 同名关联类型，不删除。
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::BusinessDate;
@@ -35,6 +35,43 @@ const WAREHOUSES: &str = <mongodb::Database as WarehouseExt>::WAREHOUSES;
 const WAREHOUSE_REVISIONS: &str = <mongodb::Database as WarehouseExt>::WAREHOUSE_REVISIONS;
 /// `warehouse_sku_policy` 集合名。
 const WAREHOUSE_SKU_POLICIES: &str = <mongodb::Database as WarehouseExt>::WAREHOUSE_SKU_POLICIES;
+
+/// 三类列表筛选的 `page`/`page_size` 分页 trait。
+macro_rules! filter_pagination {
+    ($filter:ty) => {
+        impl Pagination for $filter {
+            /// 返回页码与单页条数。
+            ///
+            /// # 返回
+            /// 返回 `(page, page_size)` 元组。
+            fn page_and_size(&self) -> (u64, u64) {
+                (self.page, u64::from(self.page_size))
+            }
+        }
+    };
+}
+
+/// 三类列表筛选的首页空筛选默认值（`page: 1`，`page_size: 20`，降序）。
+macro_rules! filter_default {
+    ($ty:ident { $($field:ident: $init:expr),* $(,)? }) => {
+        impl Default for $ty {
+            /// 返回首页空筛选（`page: 1`，`page_size: 20`，降序）。
+            ///
+            /// # 参数
+            /// 无。
+            ///
+            /// # 返回
+            /// 返回筛选为空、降序的首页过滤条件。
+            ///
+            /// # 错误
+            /// 无。
+            fn default() -> Self {
+                let (page, page_size, sort_by, sort_ascending) = default_paging();
+                Self { $($field: $init,)* page, page_size, sort_by, sort_ascending }
+            }
+        }
+    };
+}
 
 /// 仓库列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -80,32 +117,13 @@ pub struct WarehouseFilter {
     pub sort_ascending: bool,
 }
 
-impl Default for WarehouseFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回筛选为空、降序的首页过滤条件。
-    ///
-    /// # 错误
-    /// 无。
-    fn default() -> Self {
-        let (page, page_size, sort_by, sort_ascending) = default_paging();
-        Self {
-            warehouse_id: None,
-            require_inbound_handler: false,
-            q: None,
-            warehouse_code: None,
-            status: None,
-            page,
-            page_size,
-            sort_by,
-            sort_ascending,
-        }
-    }
-}
+filter_default!(WarehouseFilter {
+    warehouse_id: None,
+    require_inbound_handler: false,
+    q: None,
+    warehouse_code: None,
+    status: None,
+});
 
 impl QueryFilter for WarehouseFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
@@ -130,15 +148,7 @@ impl QueryFilter for WarehouseFilter {
     }
 }
 
-impl Pagination for WarehouseFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    fn page_and_size(&self) -> (u64, u64) {
-        (self.page, u64::from(self.page_size))
-    }
-}
+filter_pagination!(WarehouseFilter);
 
 /// 仓库集合仓储的域特有查询。
 #[allow(async_fn_in_trait)]
@@ -227,25 +237,13 @@ pub struct WarehouseRevisionFilter {
     pub sort_ascending: bool,
 }
 
-impl Default for WarehouseRevisionFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回筛选为空、降序的首页过滤条件。
-    ///
-    /// # 错误
-    /// 无。
-    fn default() -> Self {
-        let (page, page_size, sort_by, sort_ascending) = default_paging();
-        Self { warehouse_id: None, name: None, page, page_size, sort_by, sort_ascending }
-    }
-}
+filter_default!(WarehouseRevisionFilter { warehouse_id: None, name: None });
 
 impl QueryFilter for WarehouseRevisionFilter {
-    /// 转换为 MongoDB 查询条件（修订表不参与软删除）。
+    /// 转换为 MongoDB 查询条件。
+    ///
+    /// 修订表不提供软删除方法，但落库文档仍有 `deleted_at`；查询继续写入
+    /// `deleted_at: NOT_DELETED`，与既有文档形态一致。
     ///
     /// # 返回
     /// 返回查询条件文档。
@@ -259,15 +257,7 @@ impl QueryFilter for WarehouseRevisionFilter {
     }
 }
 
-impl Pagination for WarehouseRevisionFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    fn page_and_size(&self) -> (u64, u64) {
-        (self.page, u64::from(self.page_size))
-    }
-}
+filter_pagination!(WarehouseRevisionFilter);
 
 /// 仓库修订集合仓储的域特有查询。
 #[allow(async_fn_in_trait)]
@@ -374,26 +364,9 @@ impl QueryFilter for WarehouseSkuPolicyFilter {
     }
 }
 
-impl Pagination for WarehouseSkuPolicyFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    fn page_and_size(&self) -> (u64, u64) {
-        (self.page, u64::from(self.page_size))
-    }
-}
+filter_pagination!(WarehouseSkuPolicyFilter);
 
-impl Default for WarehouseSkuPolicyFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`，降序）。
-    ///
-    /// # 返回
-    /// 返回筛选为空、降序的首页过滤条件。
-    fn default() -> Self {
-        let (page, page_size, sort_by, sort_ascending) = default_paging();
-        Self { warehouse_id: None, sku_id: None, status: None, page, page_size, sort_by, sort_ascending }
-    }
-}
+filter_default!(WarehouseSkuPolicyFilter { warehouse_id: None, sku_id: None, status: None });
 
 /// 仓库-SKU 预警策略集合仓储的域特有查询。
 #[allow(async_fn_in_trait)]
@@ -651,6 +624,7 @@ where
 fn default_paging() -> (u64, u32, Option<String>, bool) {
     (1, 20, None, false)
 }
+
 /// 关键词查询单次允许装入 `$in` 的修订 ID 上限（约束单次读取规模）。
 const KEYWORD_REVISION_ID_CAP: usize = 500;
 
@@ -810,6 +784,7 @@ mod tests {
         };
 
         let document = filter.to_doc();
+        assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(document.get_str("warehouse_id").unwrap(), "wh-1");
         assert!(document.get("name").is_some());
     }
@@ -818,6 +793,7 @@ mod tests {
     fn sku_policy_filter_defaults_to_first_page_size_20() {
         let filter = WarehouseSkuPolicyFilter::default();
         assert_eq!((filter.page, filter.page_size), (1, 20));
+        assert!(filter.sort_by.is_none());
         assert!(!filter.sort_ascending);
     }
 

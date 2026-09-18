@@ -12,8 +12,8 @@ pub use super::payable::{
 };
 pub use super::receivable::{
     CustomerReceiptRepositoryExt, InvoiceRepositoryExt, ReceiptAllocationRepositoryExt,
-    ReceivableAccountCustomerCenterExt, ReceivableAccountMoneyProgressExt, ReceivableAccountRepositoryExt,
-    ReceivableAccountSalesOrderSummaryExt, ReceivableAccountSnapshotExt, ReceivableEntryOffsetRepositoryExt,
-    ReceivableEntryRepositoryExt, ReceivableEntrySnapshotExt, SalesInvoiceAllocationRepositoryExt,
-    SalesInvoiceRequestRepositoryExt,
+    ReceivableAccountCustomerCenterExt, ReceivableAccountInvoicingExt, ReceivableAccountMoneyProgressExt,
+    ReceivableAccountRepositoryExt, ReceivableAccountSalesOrderSummaryExt, ReceivableAccountSettlementExt,
+    ReceivableAccountSnapshotExt, ReceivableEntryOffsetRepositoryExt, ReceivableEntryRepositoryExt,
+    ReceivableEntrySnapshotExt, SalesInvoiceAllocationRepositoryExt, SalesInvoiceRequestRepositoryExt,
 };

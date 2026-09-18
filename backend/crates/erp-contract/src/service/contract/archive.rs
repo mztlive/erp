@@ -44,40 +44,51 @@ pub(crate) struct ArchiveSnapshotFields {
     signed_at: BusinessDate,
 }
 
-/// 由合同身份与快照组装不可变修订数据（三处规划函数共用）。
-///
-/// 版本号规则与默认来源回退由调用方完成，本函数只做字段搬运。
-///
-/// # 参数
-/// * `contract` - 合同实体（提供编号与结算主体）
-/// * `contract_pdf_file_id` - 本版本已签署合同 PDF 的文件资产
-/// * `archive_source` - 归档来源（调用方已完成默认回退）
-/// * `settlement_party_id` - 结算主体（调用方已按客户缺省补齐）
-/// * `snapshot` - 归档快照字段组
-///
-/// # 返回
-/// 返回尚未持久化的修订创建数据。
-fn revision_data(
-    contract: &Contract,
-    contract_pdf_file_id: FileAssetId,
-    archive_source: ArchiveSource,
-    settlement_party_id: PartyId,
-    snapshot: ArchiveSnapshotFields,
-) -> ContractRevisionData {
-    ContractRevisionData {
-        contract_no: contract.contract_no.clone(),
-        customer_name: snapshot.customer_name,
-        contract_pdf_file_id,
-        archive_source,
-        settlement_party_id,
-        settlement_party_name: snapshot.settlement_party_name,
-        payment_term_code: snapshot.payment_term_code,
-        payment_term_name: snapshot.payment_term_name,
-        invoice_type: snapshot.invoice_type,
-        tax_point: snapshot.tax_point,
-        valid_from: snapshot.valid_from,
-        valid_to: snapshot.valid_to,
-        signed_at: snapshot.signed_at,
+impl From<CreateContractRequest> for ArchiveSnapshotFields {
+    fn from(req: CreateContractRequest) -> Self {
+        Self {
+            customer_name: req.customer_name,
+            settlement_party_name: req.settlement_party_name,
+            payment_term_code: req.payment_term_code,
+            payment_term_name: req.payment_term_name,
+            invoice_type: req.invoice_type,
+            tax_point: req.tax_point,
+            valid_from: req.valid_from,
+            valid_to: req.valid_to,
+            signed_at: req.signed_at,
+        }
+    }
+}
+
+impl From<UploadContractRequest> for ArchiveSnapshotFields {
+    fn from(req: UploadContractRequest) -> Self {
+        Self {
+            customer_name: req.customer_name,
+            settlement_party_name: req.settlement_party_name,
+            payment_term_code: req.payment_term_code,
+            payment_term_name: req.payment_term_name,
+            invoice_type: req.invoice_type,
+            tax_point: req.tax_point,
+            valid_from: req.valid_from,
+            valid_to: req.valid_to,
+            signed_at: req.signed_at,
+        }
+    }
+}
+
+impl From<ArchiveContractRevisionRequest> for ArchiveSnapshotFields {
+    fn from(req: ArchiveContractRevisionRequest) -> Self {
+        Self {
+            customer_name: req.customer_name,
+            settlement_party_name: req.settlement_party_name,
+            payment_term_code: req.payment_term_code,
+            payment_term_name: req.payment_term_name,
+            invoice_type: req.invoice_type,
+            tax_point: req.tax_point,
+            valid_from: req.valid_from,
+            valid_to: req.valid_to,
+            signed_at: req.signed_at,
+        }
     }
 }
 
@@ -134,7 +145,21 @@ fn build_revision(
         ContractRevisionId::new(next_id()),
         contract.base.id.clone().into(),
         revision_no,
-        revision_data(contract, contract_pdf_file_id, archive_source, settlement_party_id, snapshot),
+        ContractRevisionData {
+            contract_no: contract.contract_no.clone(),
+            customer_name: snapshot.customer_name,
+            contract_pdf_file_id,
+            archive_source,
+            settlement_party_id,
+            settlement_party_name: snapshot.settlement_party_name,
+            payment_term_code: snapshot.payment_term_code,
+            payment_term_name: snapshot.payment_term_name,
+            invoice_type: snapshot.invoice_type,
+            tax_point: snapshot.tax_point,
+            valid_from: snapshot.valid_from,
+            valid_to: snapshot.valid_to,
+            signed_at: snapshot.signed_at,
+        },
     )?)
 }
 
@@ -154,23 +179,18 @@ pub fn plan_first_archive(
     actor_id: impl Into<String>,
 ) -> Result<PlannedContractArchive> {
     let actor_id = actor_id.into();
-    let contract = new_contract(req.contract_no, req.customer_id, req.settlement_party_id, actor_id)?;
+    let contract = new_contract(
+        req.contract_no.clone(),
+        req.customer_id.clone(),
+        req.settlement_party_id.clone(),
+        actor_id,
+    )?;
     let revision = build_revision(
         &contract,
-        req.contract_pdf_file_id,
+        req.contract_pdf_file_id.clone(),
         req.archive_source.unwrap_or(ArchiveSource::ContractCenter),
         contract.settlement_party_id.clone(),
-        ArchiveSnapshotFields {
-            customer_name: req.customer_name,
-            settlement_party_name: req.settlement_party_name,
-            payment_term_code: req.payment_term_code,
-            payment_term_name: req.payment_term_name,
-            invoice_type: req.invoice_type,
-            tax_point: req.tax_point,
-            valid_from: req.valid_from,
-            valid_to: req.valid_to,
-            signed_at: req.signed_at,
-        },
+        req.into(),
         1,
     )?;
     Ok(PlannedContractArchive { contract, revision })
@@ -196,23 +216,18 @@ pub fn plan_upload_archive(
     actor_id: impl Into<String>,
 ) -> Result<PlannedContractArchive> {
     let actor_id = actor_id.into();
-    let contract = new_contract(req.contract_no, req.customer_id, settlement_party_id.clone(), actor_id)?;
+    let contract = new_contract(
+        req.contract_no.clone(),
+        req.customer_id.clone(),
+        settlement_party_id.clone(),
+        actor_id,
+    )?;
     let revision = build_revision(
         &contract,
         file_asset_id,
         ArchiveSource::ContractCenter,
         settlement_party_id,
-        ArchiveSnapshotFields {
-            customer_name: req.customer_name,
-            settlement_party_name: req.settlement_party_name,
-            payment_term_code: req.payment_term_code,
-            payment_term_name: req.payment_term_name,
-            invoice_type: req.invoice_type,
-            tax_point: req.tax_point,
-            valid_from: req.valid_from,
-            valid_to: req.valid_to,
-            signed_at: req.signed_at,
-        },
+        req.into(),
         1,
     )?;
     Ok(PlannedContractArchive { contract, revision })
@@ -238,20 +253,10 @@ pub(crate) fn plan_next_revision(
     let next_no = ContractRevision::next_revision_no(current_revision_no)?;
     let revision = build_revision(
         contract,
-        req.contract_pdf_file_id,
+        req.contract_pdf_file_id.clone(),
         req.archive_source.unwrap_or(ArchiveSource::ContractCenter),
         contract.settlement_party_id.clone(),
-        ArchiveSnapshotFields {
-            customer_name: req.customer_name,
-            settlement_party_name: req.settlement_party_name,
-            payment_term_code: req.payment_term_code,
-            payment_term_name: req.payment_term_name,
-            invoice_type: req.invoice_type,
-            tax_point: req.tax_point,
-            valid_from: req.valid_from,
-            valid_to: req.valid_to,
-            signed_at: req.signed_at,
-        },
+        req.into(),
         next_no,
     )?;
     Ok(PlannedContractArchive { contract: contract.clone(), revision })

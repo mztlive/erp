@@ -31,6 +31,7 @@ pub use crate::dto::warehouse::{
     WarehouseFulfillmentHandlerOptionView, WarehouseListParams, WarehouseRevisionListParams,
     WarehouseRevisionView, WarehouseSkuPolicyListParams, WarehouseSkuPolicyView, WarehouseView,
 };
+use crate::dto::warehouse::{WarehouseListQuery, WarehouseRevisionListQuery, WarehouseSkuPolicyListQuery};
 use crate::entity::warehouse::status::EnableStatus;
 use crate::entity::warehouse::warehouse_entity::{Warehouse, WarehouseData, WarehouseUpdate};
 use crate::entity::warehouse::warehouse_revision::{SensitiveText, WarehouseRevision, WarehouseRevisionData};
@@ -39,15 +40,11 @@ use crate::error::{Error, Result};
 use crate::ports::{
     AttachmentFingerprintPort, HandlerDuty, HandlerIdentityFact, IdentityFactPort, WarehouseAuditPort,
 };
-use crate::repository::WarehouseExt;
 use crate::repository::prelude::*;
-
-/// 仓库列表筛选条件类型（经 `WarehouseExt` 关联类型跨 crate 可达）。
-type WarehouseFilter = <mongodb::Database as WarehouseExt>::WarehouseFilter;
-/// 仓库修订列表筛选条件类型。
-type WarehouseRevisionFilter = <mongodb::Database as WarehouseExt>::WarehouseRevisionFilter;
-/// 仓库-SKU 预警策略列表筛选条件类型。
-type WarehouseSkuPolicyFilter = <mongodb::Database as WarehouseExt>::WarehouseSkuPolicyFilter;
+use crate::repository::{
+    WarehouseExt, WarehouseFilter, WarehouseRevisionFilter, WarehouseRevisionRow, WarehouseRow,
+    WarehouseSkuPolicyFilter, WarehouseSkuPolicyRow,
+};
 
 /// 敏感字段指纹密钥（HMAC-SHA256，带密钥禁止裸摘要）。
 ///
@@ -137,30 +134,10 @@ impl WarehouseService {
     /// * `RepositoryError` - 数据库查询失败
     pub async fn warehouse_list(&self, params: &WarehouseListParams) -> Result<PageView<WarehouseView>> {
         params.validate()?;
-        let query = params.normalized()?;
-        let filter = WarehouseFilter {
-            warehouse_id: query.warehouse_id,
-            require_inbound_handler: query.require_inbound_handler,
-            q: query.q,
-            warehouse_code: query.warehouse_code,
-            status: query.status,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_name()),
-            sort_ascending: query.paging.ascending(),
-        };
-        // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结），按字段映射为响应视图。
+        let filter = params.normalized()?.into_filter();
         map_search_page(
             self.db.warehouses().search_warehouses(&filter, &mut NoTransaction),
-            |row| WarehouseView {
-                id: row.id,
-                warehouse_code: row.warehouse_code,
-                status: row.status,
-                inbound_handler_user_id: row.inbound_handler_user_id,
-                outbound_handler_user_id: row.outbound_handler_user_id,
-                created_at: row.created_at,
-                version: row.version,
-            },
+            WarehouseView::from_row,
             filter.page,
             filter.page_size,
         )
@@ -408,29 +385,11 @@ impl WarehouseService {
         params: &WarehouseRevisionListParams,
     ) -> Result<PageView<WarehouseRevisionView>> {
         params.validate()?;
-        let query = params.normalized()?;
-        let filter = WarehouseRevisionFilter {
-            warehouse_id: query.warehouse_id,
-            name: query.name,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_name()),
-            sort_ascending: query.paging.ascending(),
-        };
+        let filter = params.normalized()?.into_filter();
         let mut executor = NoTransaction;
         map_search_page(
             self.db.warehouse_revisions().search_warehouse_revisions(&filter, &mut executor),
-            |row| WarehouseRevisionView {
-                id: row.id,
-                warehouse_id: row.warehouse_id,
-                revision_no: row.revision_no,
-                name: row.name,
-                effective_from: row.effective_from,
-                effective_to: row.effective_to,
-                change_reason: row.change_reason,
-                created_at: row.created_at,
-                version: row.version,
-            },
+            WarehouseRevisionView::from_row,
             filter.page,
             filter.page_size,
         )
@@ -452,30 +411,11 @@ impl WarehouseService {
         params: &WarehouseSkuPolicyListParams,
     ) -> Result<PageView<WarehouseSkuPolicyView>> {
         params.validate()?;
-        let query = params.normalized()?;
-        let filter = WarehouseSkuPolicyFilter {
-            warehouse_id: query.warehouse_id,
-            sku_id: query.sku_id,
-            status: query.status,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_name()),
-            sort_ascending: query.paging.ascending(),
-        };
+        let filter = params.normalized()?.into_filter();
         let mut executor = NoTransaction;
         map_search_page(
             self.db.warehouse_sku_policies().search_warehouse_sku_policies(&filter, &mut executor),
-            |row| WarehouseSkuPolicyView {
-                id: row.id,
-                warehouse_id: row.warehouse_id,
-                sku_id: row.sku_id,
-                minimum_available_quantity: row.minimum_available_quantity,
-                status: row.status,
-                effective_from: row.effective_from,
-                effective_to: row.effective_to,
-                created_at: row.created_at,
-                version: row.version,
-            },
+            WarehouseSkuPolicyView::from_row,
             filter.page,
             filter.page_size,
         )
@@ -591,7 +531,7 @@ fn ensure_expected_version(current: u64, expected: u64) -> Result<()> {
 
 /// 执行投影分页查询并映射视图行（三类列表共用编排）。
 ///
-/// 各列表方法只保留筛选字段组装与行转视图闭包；查询语义与返回形状不变。
+/// 各列表方法经 crate 私有 `into_filter` / `from_row` 组装筛选与视图；查询语义与返回形状不变。
 ///
 /// # 参数
 /// * `search` - 投影分页查询 future
@@ -617,6 +557,119 @@ async fn map_search_page<Row, View>(
         page,
         page_size,
     })
+}
+
+impl WarehouseListQuery {
+    /// 转为仓储筛选；`sort_by` 保持 `Some(白名单字段)`。
+    ///
+    /// # 返回
+    /// 返回与规范化查询字段一一对应的 [`WarehouseFilter`]。
+    pub(crate) fn into_filter(self) -> WarehouseFilter {
+        WarehouseFilter {
+            warehouse_id: self.warehouse_id,
+            require_inbound_handler: self.require_inbound_handler,
+            q: self.q,
+            warehouse_code: self.warehouse_code,
+            status: self.status,
+            page: self.paging.page,
+            page_size: self.paging.page_size,
+            sort_by: Some(self.paging.sort_name()),
+            sort_ascending: self.paging.ascending(),
+        }
+    }
+}
+
+impl WarehouseRevisionListQuery {
+    /// 转为仓储筛选；`sort_by` 保持 `Some(白名单字段)`。
+    ///
+    /// # 返回
+    /// 返回与规范化查询字段一一对应的 [`WarehouseRevisionFilter`]。
+    pub(crate) fn into_filter(self) -> WarehouseRevisionFilter {
+        WarehouseRevisionFilter {
+            warehouse_id: self.warehouse_id,
+            name: self.name,
+            page: self.paging.page,
+            page_size: self.paging.page_size,
+            sort_by: Some(self.paging.sort_name()),
+            sort_ascending: self.paging.ascending(),
+        }
+    }
+}
+
+impl WarehouseSkuPolicyListQuery {
+    /// 转为仓储筛选；`sort_by` 保持 `Some(白名单字段)`。
+    ///
+    /// # 返回
+    /// 返回与规范化查询字段一一对应的 [`WarehouseSkuPolicyFilter`]。
+    pub(crate) fn into_filter(self) -> WarehouseSkuPolicyFilter {
+        WarehouseSkuPolicyFilter {
+            warehouse_id: self.warehouse_id,
+            sku_id: self.sku_id,
+            status: self.status,
+            page: self.paging.page,
+            page_size: self.paging.page_size,
+            sort_by: Some(self.paging.sort_name()),
+            sort_ascending: self.paging.ascending(),
+        }
+    }
+}
+
+impl WarehouseView {
+    /// 由列表投影行构造响应视图（不搬迁行上的 `#[serde(default)]`）。
+    ///
+    /// # 返回
+    /// 返回契约形状的仓库视图。
+    pub(crate) fn from_row(row: WarehouseRow) -> Self {
+        Self {
+            id: row.id,
+            warehouse_code: row.warehouse_code,
+            status: row.status,
+            inbound_handler_user_id: row.inbound_handler_user_id,
+            outbound_handler_user_id: row.outbound_handler_user_id,
+            created_at: row.created_at,
+            version: row.version,
+        }
+    }
+}
+
+impl WarehouseRevisionView {
+    /// 由列表投影行构造响应视图。
+    ///
+    /// # 返回
+    /// 返回不含敏感字段的修订视图。
+    pub(crate) fn from_row(row: WarehouseRevisionRow) -> Self {
+        Self {
+            id: row.id,
+            warehouse_id: row.warehouse_id,
+            revision_no: row.revision_no,
+            name: row.name,
+            effective_from: row.effective_from,
+            effective_to: row.effective_to,
+            change_reason: row.change_reason,
+            created_at: row.created_at,
+            version: row.version,
+        }
+    }
+}
+
+impl WarehouseSkuPolicyView {
+    /// 由列表投影行构造响应视图。
+    ///
+    /// # 返回
+    /// 返回策略列表视图。
+    pub(crate) fn from_row(row: WarehouseSkuPolicyRow) -> Self {
+        Self {
+            id: row.id,
+            warehouse_id: row.warehouse_id,
+            sku_id: row.sku_id,
+            minimum_available_quantity: row.minimum_available_quantity,
+            status: row.status,
+            effective_from: row.effective_from,
+            effective_to: row.effective_to,
+            created_at: row.created_at,
+            version: row.version,
+        }
+    }
 }
 
 /// 校验身份事实是否满足仓库经办人资格，并保留原错误文案。
@@ -725,7 +778,10 @@ fn build_warehouse_revision(
 mod tests {
     use erp_core::ids::WarehouseId;
 
-    use super::{HandlerDuty, ensure_handler_fact_eligible, handler_option_views};
+    use super::{
+        HandlerDuty, WarehouseListParams, WarehouseRevisionListParams, WarehouseSkuPolicyListParams,
+        WarehouseView, ensure_handler_fact_eligible, handler_option_views,
+    };
     use crate::entity::warehouse::EnableStatus;
     use crate::entity::warehouse::warehouse_entity::{
         Warehouse, WarehouseData, WarehouseFulfillmentOperation, WarehouseUpdate,
@@ -827,6 +883,85 @@ mod tests {
     fn version_conflict_message_matches_http_contract() {
         let error = Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string());
         assert_eq!(error.to_string(), "数据冲突: 数据已被其他请求修改，请刷新后重试");
+    }
+
+    #[test]
+    fn list_queries_into_filter_keep_sort_by_some() {
+        let warehouse: WarehouseListParams = serde_json::from_value(serde_json::json!({
+            "warehouse_id": "wh-1",
+            "require_inbound_handler": true,
+            "q": " 北京 ",
+            "warehouse_code": " WH-1 ",
+            "status": "active",
+            "page": 2,
+            "page_size": 50,
+            "sort_by": "warehouse_code",
+            "sort_dir": "asc",
+        }))
+        .unwrap();
+        let warehouse_filter = warehouse.normalized().unwrap().into_filter();
+        assert_eq!(warehouse_filter.warehouse_id.as_deref(), Some("wh-1"));
+        assert!(warehouse_filter.require_inbound_handler);
+        assert_eq!(warehouse_filter.q.as_deref(), Some("北京"));
+        assert_eq!(warehouse_filter.warehouse_code.as_deref(), Some("WH-1"));
+        assert_eq!(warehouse_filter.status, Some(EnableStatus::Active));
+        assert_eq!(warehouse_filter.page, 2);
+        assert_eq!(warehouse_filter.page_size, 50);
+        assert_eq!(warehouse_filter.sort_by.as_deref(), Some("warehouse_code"));
+        assert!(warehouse_filter.sort_ascending);
+
+        let default_warehouse: WarehouseListParams = serde_json::from_value(serde_json::json!({})).unwrap();
+        let default_filter = default_warehouse.normalized().unwrap().into_filter();
+        assert_eq!(default_filter.sort_by.as_deref(), Some("created_at"));
+        assert!(!default_filter.sort_ascending);
+        assert_eq!((default_filter.page, default_filter.page_size), (1, 20));
+
+        let revision: WarehouseRevisionListParams = serde_json::from_value(serde_json::json!({
+            "warehouse_id": "wh-1",
+            "name": " 北京 ",
+            "sort_by": "revision_no",
+            "sort_dir": "asc",
+        }))
+        .unwrap();
+        let revision_filter = revision.normalized().unwrap().into_filter();
+        assert_eq!(revision_filter.warehouse_id.as_deref(), Some("wh-1"));
+        assert_eq!(revision_filter.name.as_deref(), Some("北京"));
+        assert_eq!(revision_filter.sort_by.as_deref(), Some("revision_no"));
+        assert!(revision_filter.sort_ascending);
+
+        let policy: WarehouseSkuPolicyListParams = serde_json::from_value(serde_json::json!({
+            "status": "disabled",
+            "page": 3,
+            "page_size": 10,
+        }))
+        .unwrap();
+        let policy_filter = policy.normalized().unwrap().into_filter();
+        assert_eq!(policy_filter.status, Some(EnableStatus::Disabled));
+        assert_eq!(policy_filter.sort_by.as_deref(), Some("created_at"));
+        assert_eq!((policy_filter.page, policy_filter.page_size), (3, 10));
+        assert!(!policy_filter.sort_ascending);
+    }
+
+    #[test]
+    fn warehouse_view_from_row_keeps_optional_handlers() {
+        use crate::repository::WarehouseRow;
+
+        let view = WarehouseView::from_row(WarehouseRow {
+            id: "wh-1".into(),
+            warehouse_code: "WH-1".into(),
+            status: EnableStatus::Active,
+            inbound_handler_user_id: None,
+            outbound_handler_user_id: Some("u-1".into()),
+            version: 3,
+            created_at: 1,
+        });
+        assert_eq!(view.id, "wh-1");
+        assert_eq!(view.warehouse_code, "WH-1");
+        assert_eq!(view.status, EnableStatus::Active);
+        assert!(view.inbound_handler_user_id.is_none());
+        assert_eq!(view.outbound_handler_user_id.as_deref(), Some("u-1"));
+        assert_eq!(view.created_at, 1);
+        assert_eq!(view.version, 3);
     }
 
     #[test]

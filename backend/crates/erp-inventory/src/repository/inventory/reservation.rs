@@ -9,7 +9,8 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    ids_to_strings, negate_bson, scoped_base_filter, sort_doc, to_bson, with_id_tie_breaker,
+    ids_to_strings, negate_bson, paged_projection_search, scoped_base_filter, sort_doc, to_bson,
+    with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_RESERVATIONS};
 use crate::entity::inventory::{
@@ -212,17 +213,16 @@ impl StockReservationRepositoryExt for Repository<'_, StockReservation> {
         filter: &StockReservationFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<StockReservationRow>> {
-        let query = filter.to_doc();
-        let options = FindOptions::builder()
-            .sort(stock_reservation_sort(filter))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(stock_reservation_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<StockReservationRow>();
-        let items = mongo_ops::find_many(&collection, query.clone(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), query, executor).await?;
-        Ok(PageResult { items, total: total as i64 })
+        paged_projection_search(
+            &self.collection(),
+            filter.to_doc(),
+            stock_reservation_sort(filter),
+            filter.skip(),
+            filter.limit(),
+            stock_reservation_projection(),
+            executor,
+        )
+        .await
     }
 
     #[tracing::instrument(

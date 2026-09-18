@@ -809,6 +809,7 @@ mod tests {
             include_str!("runtime_service/decision_apply.rs"),
             include_str!("runtime_service/cancel_blocked.rs"),
             include_str!("runtime_service/query.rs"),
+            include_str!("runtime_service/query/query_list.rs"),
             include_str!("runtime_service/read_auth.rs"),
             include_str!("runtime_service/notifications.rs"),
             include_str!("runtime_service/tasks.rs"),

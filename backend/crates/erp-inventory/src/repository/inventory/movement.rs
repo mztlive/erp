@@ -7,7 +7,9 @@ use mongodb::options::FindOptions;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
-use super::shared::{entities_by_ids, scoped_base_filter, sort_doc, with_id_tie_breaker};
+use super::shared::{
+    entities_by_ids, paged_projection_search, scoped_base_filter, sort_doc, with_id_tie_breaker,
+};
 use super::{InventoryRepository, STOCK_MOVEMENTS};
 use crate::entity::inventory::{MovementDirection, MovementType, StockMovement};
 
@@ -200,17 +202,16 @@ impl StockMovementRepositoryExt for Repository<'_, StockMovement> {
         filter: &StockMovementFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<StockMovementRow>> {
-        let query = filter.to_doc();
-        let options = FindOptions::builder()
-            .sort(stock_movement_sort(filter))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(stock_movement_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<StockMovementRow>();
-        let items = mongo_ops::find_many(&collection, query.clone(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), query, executor).await?;
-        Ok(PageResult { items, total: total as i64 })
+        paged_projection_search(
+            &self.collection(),
+            filter.to_doc(),
+            stock_movement_sort(filter),
+            filter.skip(),
+            filter.limit(),
+            stock_movement_projection(),
+            executor,
+        )
+        .await
     }
 
     async fn find_by_source_document(
