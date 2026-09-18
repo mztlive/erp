@@ -1,7 +1,7 @@
 //! 审批对象读取的共用空值关闭。
 //!
 //! 各单据 `*_object_readable` 对组织与审批人做同一 trim 非空检查；本模块只收敛
-//! 这段机械判定。函数名仍留在各自 adapter，供 include_str! 守卫扫描。
+//! 这段机械判定。函数名仍留在各自 adapter。
 
 use crate::{Error, Result};
 

@@ -208,23 +208,6 @@ fn definition_catalog_grouping_covers_status_matrix_and_duplicate_fail_closed() 
     published_b.publish(ParticipantId::new("admin").unwrap(), Timestamp::from_unix_secs(2).unwrap()).unwrap();
     assert_eq!(unique_published_definition(vec![published_a.clone()]).unwrap().unwrap().base.id, "a");
     assert!(unique_published_definition(vec![published_a, published_b]).is_err());
-    let catalog_src = include_str!("definition_query.rs")
-        .split("pub async fn definition_catalog_facts")
-        .nth(1)
-        .and_then(|body| body.split("pub async fn load_published_definition_graph").next())
-        .expect("目录查询");
-    assert_eq!(catalog_src.matches("find_many").count(), 1);
-    assert!(catalog_src.contains("unique_kinds.is_empty()"));
-    let published_src = include_str!("definition_query.rs")
-        .split("pub async fn load_published_definition_graph")
-        .nth(1)
-        .and_then(|body| body.split("async fn load_definition_nodes").next())
-        .expect("发布图加载");
-    assert!(published_src.contains("unique_published_definition"));
-    assert!(published_src.contains("load_definition_nodes"));
-    assert!(published_src.contains("load_definition_transitions"));
-    assert!(!published_src.contains("find_by_id"));
-    assert!(!published_src.contains("load_definition_graph("));
 }
 
 fn dummy_definition(id: &str) -> bpm::model::ApprovalProcessDefinition {

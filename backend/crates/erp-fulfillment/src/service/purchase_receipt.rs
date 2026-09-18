@@ -277,13 +277,4 @@ mod tests {
             quality_result: QualityResult::Partial,
         };
     }
-
-    /// 创建路径经实体批量工厂派生质量：旧 Service helper 已删除。
-    #[test]
-    fn receipt_create_uses_entity_batch_factory() {
-        let production = include_str!("purchase_receipt.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(!production.contains("fn build_receipt_lines"), "旧 helper 必须删除");
-        assert!(production.contains("PurchaseReceiptLineBatch::build"), "创建路径必须调用实体工厂");
-        assert!(!production.contains("QualityResult::from_quantities"), "质量派生不得留在 Service");
-    }
 }

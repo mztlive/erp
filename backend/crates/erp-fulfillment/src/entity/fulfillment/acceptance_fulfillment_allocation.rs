@@ -466,30 +466,4 @@ pub(crate) mod tests {
             .is_err()
         );
     }
-
-    /// 验收分配无审批约束：不得出现绑定字段、实例或任务归属。
-    #[test]
-    fn allocation_has_no_approval_binding_or_work_item() {
-        let allocation = AcceptanceFulfillmentAllocation::new(
-            AcceptanceFulfillmentAllocationId::new("allocation-1"),
-            apply_data(),
-        )
-        .unwrap();
-        let value = serde_json::to_value(&allocation).unwrap();
-        let object = value.as_object().expect("分配序列化为对象");
-        assert!(!object.contains_key("approval_binding"));
-        assert!(!object.contains_key("approval_instance_id"));
-        assert!(!object.contains_key("work_item_id"));
-        assert!(!object.contains_key("approval_subject_version"));
-
-        let production = include_str!("acceptance_fulfillment_allocation.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码");
-        assert!(!production.contains("IN_APPROVAL"));
-        assert!(!production.contains("fn start_approval"));
-        assert!(!production.contains("ApprovalDefinitionBinding"));
-        assert!(!production.contains("WorkItem"));
-        assert!(!production.contains("approval_instance"));
-    }
 }

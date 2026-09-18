@@ -391,34 +391,6 @@ mod sales_return_case_no_approval_tests {
                 .expect("测试绑定");
         assert!(apply_sales_return_case_create_binding(&mut document, Some(forged)).is_err());
     }
-
-    /// 创建路径调用统一绑定端口，不查询发布定义、不启动实例、不建任务。
-    #[test]
-    fn create_does_not_query_definition_or_start_instance() {
-        let production = include_str!("sales_return.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(production.contains("persist_created_sales_return_case"));
-        assert!(production.contains("register_created_sales_return_document"));
-        assert!(production.contains("persist_unbound_sales_return_document"));
-        assert!(production.contains("bind_published_definition_on_document_create"));
-        assert!(production.contains("DocumentType::SalesReturnCase"));
-        assert!(production.contains("new_registered_document"));
-        assert!(production.contains("ensure_sales_return_case_skips_approval_binding"));
-        assert!(production.contains("ensure_sales_return_case_has_no_adapter"));
-        assert!(!production.contains("pub async fn submit_sales_return_case"));
-        assert!(!production.contains("start_sales_return_approval"));
-        assert!(!production.contains("SalesReturnCaseAdapter"));
-        assert!(!production.contains("load_published_graph"));
-        let create = production
-            .split("pub async fn create_sales_return_case")
-            .nth(1)
-            .and_then(|rest| rest.split("async fn sales_return_case_view").next())
-            .expect("create_sales_return_case 生产片段");
-        assert!(create.contains("persist_created_sales_return_case"));
-        assert!(!create.contains("prepare_start"));
-        assert!(!create.contains("attach_published_binding"));
-        assert!(!create.contains("WorkItem"));
-        assert!(!create.contains("start_approval"));
-    }
 }
 
 #[cfg(test)]

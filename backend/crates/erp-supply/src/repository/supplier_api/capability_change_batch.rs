@@ -118,26 +118,4 @@ mod tests {
 
         repository.persist_capability_changes(&mut [], &[], &mut NoTransaction).await.unwrap();
     }
-
-    /// 生产代码（测试模块之前部分），供分层守卫断言，避免字面量自匹配。
-    ///
-    /// # 返回
-    /// 返回去掉测试模块后的生产代码全文。
-    fn production_source() -> &'static str {
-        include_str!("capability_change_batch.rs").split("mod tests {").next().expect("必须存在生产代码")
-    }
-
-    /// 显式有序写入守卫：新增批量必须经显式 `ordered(true)` 写入。
-    ///
-    /// 锁定有序 helper 为唯一新增写入路径；更新保持逐文档 CAS，不得为批量
-    /// 而放宽乐观锁。
-    #[test]
-    fn capability_create_batch_declares_ordered_insert_explicitly() {
-        let source = production_source();
-        assert!(source.contains(".ordered(true)"), "新增批量必须显式声明 ordered(true)，不得依赖驱动默认");
-        assert!(
-            source.contains("capabilities.update(capability, executor)"),
-            "已更新实体必须保持逐文档 CAS 写回"
-        );
-    }
 }

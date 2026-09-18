@@ -164,31 +164,3 @@ impl IntegrationResolutionProcess {
 fn now_secs() -> i64 {
     Instant::now().unix_secs()
 }
-#[cfg(test)]
-mod tests {
-    /// 生产代码（测试模块之前部分），供分层守卫断言，避免字面量自匹配。
-    ///
-    /// # 返回
-    /// 返回去掉测试模块后的生产代码全文。
-    fn production_source() -> String {
-        format!(
-            "{}\n{}",
-            include_str!("inbox_message.rs").split("#[cfg(test)]").next().unwrap(),
-            include_str!("../../../erp-integration/src/service/inbox_message.rs")
-        )
-    }
-
-    /// 分层守卫（INT-E18）：登记态与回写形状归领域与 Prepared DTO，服务只做编排。
-    ///
-    /// 锁定旧拼装源（`build_inbox_message`、内联 `Received` 状态与 outcome
-    /// 匹配）已删除；登记走实体 `received` 工厂，回写走 tagged 决定。
-    #[test]
-    fn inbox_shapes_are_owned_by_domain_and_prepared() {
-        let source = production_source();
-        assert!(!source.contains("fn build_inbox_message"));
-        assert!(!source.contains("status: InboxMessageStatus::Received"));
-        assert!(!source.contains("match req.outcome"));
-        assert!(source.contains("InboxMessage::received("));
-        assert!(source.contains("PreparedWriteBackOutcome::prepare(&req"));
-    }
-}

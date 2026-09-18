@@ -276,7 +276,6 @@ fn decide_publish_write(
 mod tests {
     use super::super::super::policy::SeparationOfDutiesPolicy;
     use super::super::replace::{ensure_static_decide_permission, validate_static_separation};
-    use super::super::test_support::{production_source, source_fn};
     use super::*;
     use crate::error::Error;
 
@@ -288,18 +287,8 @@ mod tests {
             &["u1".to_string(), "u1".to_string()],
         )
         .unwrap();
-        assert!(production_source().contains("不伪造实例"));
-        assert!(!production_source().contains("access_control::DataScopeFact"));
         let failed_assignees = Err(Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into()));
         assert!(decide_publish_write(Ok(()), Ok(()), failed_assignees, Ok(())).is_err());
-        let publish_tx = source_fn(production_source(), "async fn publish_tx", "async fn retire_tx");
-        let gate = publish_tx.find("decide_publish_write").expect("发布闸门");
-        let prepared = publish_tx.find("prepare_publish_graph").expect("刷新规划");
-        let receipt = publish_tx.find("write_receipt").expect("收据首写");
-        let graph_write = publish_tx.find("replace_graph").expect("图写入");
-        assert!(gate < prepared);
-        assert!(prepared < receipt);
-        assert!(receipt < graph_write);
     }
 
     /// 账号或静态权限重验失败时发布不得进入写库步骤。

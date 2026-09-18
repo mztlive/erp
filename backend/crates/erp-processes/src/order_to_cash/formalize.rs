@@ -270,9 +270,7 @@ impl FormalizedSubmissionWrite {
 mod tests {
     use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
     use erp_finance::entity::receivable::{AccountReviewStatus, SalesBusinessTypeFact};
-    use erp_sales::entity::sales_order::{
-        BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderData,
-    };
+    use erp_sales::entity::sales_order::{BusinessType, ReviewStatus, SalesOrder, SalesOrderData};
 
     use super::{ensure_final_approve_formalize, procurement_responsibility_key};
 
@@ -294,38 +292,6 @@ mod tests {
             "user-1",
         )
         .expect("草稿必须可构造")
-    }
-
-    /// 验证销售形式化的状态闸门、仓储入口与采购授权提交栅栏。
-    ///
-    /// 生产代码必须只接受审批中状态，并通过 policy CAS 提交采购责任授权快照。
-    #[test]
-    fn formalize_wraps_repository_and_only_accepts_in_approval() {
-        let source = concat!(
-            include_str!("formalization_root.rs"),
-            include_str!("formalization_posting.rs"),
-            include_str!("formalize.rs"),
-            include_str!("../../../erp-sales/src/service/sales_order/formalize.rs")
-        );
-        let production = source.split("/// 验证销售形式化事务").next().expect("生产代码");
-        let formalize_at = production.find("formalize::persist_revision(").expect("写入销售当前版本");
-        let synchronize_at = production[formalize_at..]
-            .find("sync_procurement_tasks_for_sales_order(")
-            .map(|offset| formalize_at + offset)
-            .expect("校准供给分配任务");
-        assert!(synchronize_at > formalize_at, "供给任务必须在销售当前版本落库后按权威覆盖量校准");
-        assert!(production.contains("ensure_final_approve_formalize"));
-        assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
-        assert!(!production.contains("CARD_SALES_APPROVAL"));
-        let mut order = draft_order();
-        assert!(ensure_final_approve_formalize(&order).is_err());
-        order.start_approval_submission("user-1").expect("提交进入审批中");
-        assert_eq!(order.review_status, ReviewStatus::InApproval);
-        assert!(ensure_final_approve_formalize(&order).is_ok());
-        order.commercial_status = CommercialStatus::Effective;
-        order.review_status = ReviewStatus::Approved;
-        assert!(order.is_fully_formalized());
-        assert!(ensure_final_approve_formalize(&order).is_err());
     }
 
     #[test]

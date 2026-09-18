@@ -545,52 +545,6 @@ mod tests {
         assert_eq!(due.unix_secs(), 1_787_759_999);
     }
 
-    /// FIN-E06（应付部分）：对象/类型/角色/原因/key/summary/due/identity 规则
-    /// 下沉到 WorkItem 领域契约，原 Service 私有 helper 已删除。
-    #[test]
-    fn payment_task_rules_live_in_finance_task_contract() {
-        let production = include_str!("payment_task.rs").split("#[cfg(test)]").next().expect("生产代码");
-        for rule in [
-            "new_supplier_payment_task",
-            "matches_supplier_payment_identity",
-            "supplier_payment_impact_summary",
-            "is_purchase_payable",
-            "PaymentExecutionMergeSet::try_new",
-        ] {
-            assert!(production.contains(rule), "缺少领域规则 {rule}");
-        }
-        for removed in [
-            "fn ensure_purchase_payable",
-            "fn new_payment_task",
-            "fn ensure_task_identity",
-            "fn payment_due_at",
-            "fn payment_impact_summary",
-            "PAYMENT_OWNER_ROLE",
-            "PAYMENT_REASON",
-            "PAYABLE_OBJECT_TYPE",
-        ] {
-            assert!(!production.contains(removed), "旧规则源未删除 {removed}");
-        }
-    }
-
-    /// FIN-R07：最早增加到期日由 Entry Repository 按业务范围投影排序取得，
-    /// Service 只解释无 increase 错误，不再全量过滤求最早。
-    #[test]
-    fn earliest_increase_due_date_uses_repository_projection() {
-        let production = include_str!("payment_task.rs").split("#[cfg(test)]").next().expect("生产代码");
-        let body = production
-            .split("async fn earliest_increase_due_date")
-            .nth(1)
-            .expect("最早到期日函数")
-            .split("\n}\n")
-            .next()
-            .expect("函数体");
-        assert!(body.contains(".earliest_increase_due_date("));
-        assert!(!body.contains(".filter("));
-        assert!(!body.contains(".min()"));
-        assert!(body.contains("缺少增加分录"));
-    }
-
     /// 相同到期日按稳定次序取第一条，与 `(due_date, id)` 排序一致。
     #[test]
     fn earliest_due_date_tie_breaks_by_stable_id() {

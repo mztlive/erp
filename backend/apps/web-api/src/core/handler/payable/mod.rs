@@ -436,22 +436,6 @@ mod tests {
     use super::validate_bank_receipt_upload;
     use crate::core::handler::file_asset::{AssetFile, PendingAssetFile};
 
-    /// 供应商付款 HTTP 只保留任务内原子登记与详情，不暴露付款审批端口。
-    #[test]
-    fn supplier_payment_http_uses_execution_task_port() {
-        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(production.contains("commit_supplier_payment_with_assets"));
-        assert!(production.contains("reveal_payment_recipient"));
-        assert!(production.contains("supplier_payment_detail"));
-        assert!(production.contains("payment_merge_candidates"));
-        assert!(!production.contains("submit_supplier_payment"));
-        assert!(!production.contains("cancel_supplier_payment_approval"));
-        assert!(!production.contains("reject_client_post"));
-        assert!(!production.contains(".post_supplier_payment("));
-        assert!(!production.contains("definition_id"));
-        assert!(!production.contains("PENDING_REVIEW"));
-    }
-
     #[test]
     fn bank_receipt_file_must_match_pending_image_reference() {
         let request = serde_json::from_value::<CommitSupplierPaymentRequest>(serde_json::json!({

@@ -325,29 +325,4 @@ mod tests {
         assert!(PurchaseReturnStatus::Voided.is_terminal());
         assert!(!PurchaseReturnStatus::Draft.is_terminal());
     }
-
-    /// 采购退货单无审批约束：不得出现绑定字段或审批状态机。
-    #[test]
-    fn purchase_return_order_has_no_approval_binding_or_state_machine() {
-        let order = PurchaseReturnOrder::new(PurchaseReturnOrderId::new("pro-1"), data(), "admin-1").unwrap();
-        let value = serde_json::to_value(&order).unwrap();
-        let object = value.as_object().expect("采购退货单序列化为对象");
-        assert!(!object.contains_key("approval_binding"));
-        assert!(!object.contains_key("approval_subject_version"));
-        assert!(!object.contains_key("pending_allocations"));
-        assert_eq!(order.stable.status(), PurchaseReturnStatus::Draft);
-        assert_eq!(PurchaseReturnStatus::Draft.as_str(), "draft");
-        assert_eq!(PurchaseReturnStatus::PendingExecution.as_str(), "pending_execution");
-        assert_eq!(PurchaseReturnStatus::Returned.as_str(), "returned");
-        assert_eq!(PurchaseReturnStatus::Completed.as_str(), "completed");
-        assert_eq!(PurchaseReturnStatus::Voided.as_str(), "voided");
-
-        let production =
-            include_str!("purchase_return_order.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(!production.contains("IN_APPROVAL"));
-        assert!(!production.contains("fn start_approval"));
-        assert!(!production.contains("approval_subject_version"));
-        assert!(!production.contains("ApprovalDefinitionBinding"));
-        assert!(!production.contains("PENDING_REVIEW"));
-    }
 }

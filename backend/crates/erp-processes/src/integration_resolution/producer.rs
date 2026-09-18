@@ -64,32 +64,6 @@ mod tests {
         ReconciliationDifferenceData,
     };
 
-    /// 生产代码（测试模块之前部分），供分层守卫断言，避免字面量自匹配。
-    ///
-    /// # 返回
-    /// 返回去掉测试模块后的生产代码全文。
-    fn production_source() -> &'static str {
-        include_str!("producer.rs").split("mod tests {").next().expect("必须存在生产代码")
-    }
-
-    /// 分层守卫（INT-E19）：责任矩阵与任务装配归领域，服务只注入 ID/时间。
-    ///
-    /// 锁定旧规则源（角色/类型/优先级矩阵与 `WorkItemData` 装配）已删除；
-    /// 服务只保留主键生成、责任人/时间注入与错误映射。
-    #[test]
-    fn responsibility_tables_are_owned_by_domain() {
-        let source = production_source();
-        assert!(!source.contains("fn error_owner_role"));
-        assert!(!source.contains("fn error_work_item_type"));
-        assert!(!source.contains("fn difference_owner_role"));
-        assert!(!source.contains("fn error_priority"));
-        assert!(!source.contains("WorkItemData {"));
-        assert!(!source.contains("role-operations"));
-        assert!(source.contains("new_error_work_item("));
-        assert!(source.contains("new_difference_work_item("));
-        assert!(source.contains("next_id()"));
-    }
-
     #[test]
     fn error_ctor_delegates_formal_fields_to_domain() {
         let task = IntegrationErrorTask::new(

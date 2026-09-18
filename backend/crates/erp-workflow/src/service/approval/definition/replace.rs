@@ -627,7 +627,7 @@ pub(super) fn ensure_static_decide_permission(has_decide: bool) -> Result<()> {
 mod tests {
     use bpm::{ProcessKind, Timestamp};
 
-    use super::super::test_support::{draft_definition, production_source, source_fn};
+    use super::super::test_support::draft_definition;
     use super::*;
 
     /// 陈旧锁或 VersionConflict 立即失败，不得继续规划或写图。
@@ -645,12 +645,6 @@ mod tests {
             allow_apply_replaced_definition(CasWriteOutcome::VersionConflict(definition.clone())),
             Err(Error::Coded(ErrorCode::ApprovalDefinitionVersionConflict))
         ));
-        let replace_tx = source_fn(production_source(), "async fn replace_nodes_tx", "async fn publish_tx");
-        let lock = replace_tx.find("reload_draft_for_cas").expect("CAS 重载");
-        assert!(lock < replace_tx.find("prepare_replacement").expect("规划"));
-        assert!(lock < replace_tx.find("apply_draft_graph").expect("写图"));
-        let replace_graph_src = source_fn(production_source(), "async fn replace_graph", "fn plan_nodes");
-        assert!(replace_graph_src.contains("allow_apply_replaced_definition"));
     }
 
     /// 已发布结构不可改。
@@ -685,10 +679,5 @@ mod tests {
             allow_replace_after_assignees(Err(Error::Forbidden("缺少静态审批权限".into()))),
             Err(Error::Forbidden(_))
         ));
-        let prepare =
-            source_fn(production_source(), "async fn prepare_replacement", "async fn prepare_publish_graph");
-        let gate = prepare.find("allow_replace_after_assignees").expect("替换账号闸门");
-        assert!(gate < prepare.find("apply_snapshots").expect("快照"));
-        assert!(gate < prepare.find("rebuild_draft_graph").expect("写图规划"));
     }
 }

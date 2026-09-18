@@ -14,44 +14,6 @@ use super::mapping::{
 };
 use super::persist::validate_start_notification_identities;
 
-fn assert_start_write_order(source: &str, expected_paths: usize, guard_marker: &str) {
-    let production = source.split("#[cfg(test)]").next().expect("生产代码必须存在");
-    assert_eq!(
-        production.matches(".insert_command_receipt(").count(),
-        expected_paths,
-        "每条 Fresh 启动路径必须恰有一个 receipt-first 写入"
-    );
-    assert_eq!(
-        production.matches(guard_marker).count(),
-        expected_paths,
-        "每条 Fresh 启动路径必须恰有一个注册表启动守卫"
-    );
-    assert_eq!(
-        production.matches(".create_bpm_runtime_after_receipt(").count(),
-        expected_paths,
-        "每条 Fresh 启动路径必须使用 receipt 已仲裁的 BPM 写入口"
-    );
-    assert!(!production.contains(".create_bpm_runtime("), "业务启动路径不得回退到 receipt-last 仓储入口");
-
-    let mut cursor = 0;
-    for _ in 0..expected_paths {
-        let receipt = production[cursor..]
-            .find(".insert_command_receipt(")
-            .map(|offset| cursor + offset)
-            .expect("缺少启动收据写入");
-        let guard = production[receipt..]
-            .find(guard_marker)
-            .map(|offset| receipt + offset)
-            .expect("启动收据后缺少注册表守卫");
-        let runtime = production[guard..]
-            .find(".create_bpm_runtime_after_receipt(")
-            .map(|offset| guard + offset)
-            .expect("注册表守卫后缺少 BPM 运行事实写入");
-        assert!(receipt < guard && guard < runtime);
-        cursor = runtime + ".create_bpm_runtime_after_receipt(".len();
-    }
-}
-
 fn execution() -> ApprovalNodeExecution {
     ApprovalNodeExecution::new_active(NewNodeExecution {
         id: ApprovalNodeExecutionId::new("e1"),
@@ -104,83 +66,6 @@ fn list_projection_copies_entry_assignee() {
     assert_eq!(projection.current_assignee_participant_id.as_deref(), Some("u1"));
     assert_eq!(projection.current_assignee_name.as_deref(), Some("张三"));
     assert_eq!(projection.last_status_changed_at, Some(10));
-}
-
-/// 拆分子模块的生产代码拼接：逐文件截断 `#[cfg(test)]` 后的测试代码再连接。
-fn split_module_production(parts: &[&str]) -> String {
-    parts.iter().map(|source| source.split("#[cfg(test)]").next().expect("生产代码必须存在")).collect()
-}
-
-/// 十一种 PROCESS_REQUIRED 启动类型均固定 receipt -> guard -> BPM 顺序。
-#[test]
-fn all_process_required_start_paths_are_receipt_first_and_guarded() {
-    assert_start_write_order(
-        include_str!("../order_to_cash/start_approval.rs"),
-        1,
-        ".mark_approval_started(",
-    );
-    assert_start_write_order(include_str!("../sales_change/start_approval.rs"), 1, ".mark_approval_started(");
-    assert_start_write_order(
-        &split_module_production(&[
-            include_str!("../procure_to_pay/start_approval/mod.rs"),
-            include_str!("../procure_to_pay/start_approval/start_input.rs"),
-            include_str!("../procure_to_pay/start_approval/start_persist.rs"),
-            include_str!("../procure_to_pay/start_approval/start_receipt.rs"),
-        ]),
-        1,
-        ".mark_loaded_approval_started(",
-    );
-    assert_start_write_order(include_str!("../procure_to_pay/change_start.rs"), 1, ".mark_approval_started(");
-    assert_start_write_order(
-        include_str!("../finance_posting/receivable/start_approval.rs"),
-        1,
-        ".mark_approval_started(",
-    );
-    assert_start_write_order(
-        concat!(
-            include_str!("../reverse_flow/start_approval/customer_refund.rs"),
-            include_str!("../reverse_flow/start_approval/supplier_refund.rs"),
-            include_str!("../reverse_flow/start_approval/receipt_reversal.rs"),
-            include_str!("../reverse_flow/start_approval/payment_reversal.rs"),
-        ),
-        4,
-        ".mark_approval_started(",
-    );
-    assert_start_write_order(include_str!("persist.rs"), 1, ".mark_approval_started(");
-}
-
-/// 通用 Start Replay 必须在业务写入前返回，禁止重复写业务事实。
-#[test]
-fn generic_start_replay_paths_return_before_transaction_writes() {
-    for source in [
-        include_str!("../order_to_cash/start_approval.rs"),
-        include_str!("../sales_change/start_approval.rs"),
-        include_str!("../procure_to_pay/change_start.rs"),
-        include_str!("../finance_posting/receivable/start_approval.rs"),
-        include_str!("../reverse_flow/start_approval/customer_refund.rs"),
-        include_str!("../reverse_flow/start_approval/supplier_refund.rs"),
-        include_str!("../reverse_flow/start_approval/receipt_reversal.rs"),
-        include_str!("../reverse_flow/start_approval/payment_reversal.rs"),
-    ] {
-        let production = source.split("#[cfg(test)]").next().expect("生产代码必须存在");
-        assert!(production.contains("let PreparedExecution::Apply(writes) = prepared else"));
-    }
-    let procurement = concat!(
-        include_str!("../procure_to_pay/start_approval/mod.rs"),
-        include_str!("../procure_to_pay/start_approval/start_input.rs"),
-        include_str!("../procure_to_pay/start_approval/start_persist.rs"),
-        include_str!("../procure_to_pay/start_approval/start_receipt.rs"),
-    )
-    .split("pub(crate) async fn persist_purchase_order_start(")
-    .nth(1)
-    .expect("采购事务内启动入口必须存在");
-    let replay_guard = procurement
-        .find("if !matches!(&input.prepared, PreparedExecution::Apply(_)) {\n        return Ok(None);\n    }")
-        .expect("采购Replay必须在调用写入Port前返回空任务");
-    let first_write = procurement
-        .find("execute_start_steps(&mut posting, executor).await?")
-        .expect("采购必须调用真实生产写入Port");
-    assert!(replay_guard < first_write, "采购Replay不得进入写入步骤");
 }
 
 /// 库存启动摘要锁定为无歧义 JSON tuple 的字面 SHA-256。

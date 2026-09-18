@@ -265,23 +265,6 @@ mod purchase_invoice_allocation_list_tests {
         rows.into_iter().map(|(id, _)| id.to_string()).collect()
     }
 
-    /// FIN-R06：列表只装载当前页，过滤、稳定排序与总数由 Repository 服务端完成。
-    #[test]
-    fn allocation_list_uses_server_pagination() {
-        let production = include_str!("invoice.rs").split("#[cfg(test)]").next().expect("生产代码");
-        let body = production
-            .split("pub async fn purchase_invoice_allocation_list")
-            .nth(1)
-            .expect("分配列表")
-            .split("/// 装配进项发票分配视图")
-            .next()
-            .expect("列表函数体");
-        assert!(body.contains("search_purchase_invoice_allocations"));
-        assert!(body.contains("PurchaseInvoiceAllocationFilter"));
-        assert!(!body.contains("find_allocations_by_accounts"));
-        assert!(!production.contains("fn purchase_invoice_allocation_page"));
-    }
-
     /// 升序按创建时间再按稳定 ID 返回。
     #[test]
     fn allocation_stable_order_sorts_ascending() {

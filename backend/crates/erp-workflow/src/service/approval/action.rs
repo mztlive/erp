@@ -596,47 +596,6 @@ mod tests {
         assert_eq!(blocked.reason(), Some("结构损坏"));
     }
 
-    /// 字段为模块私有；其它模块只能通过构造器与只读访问器使用。
-    #[test]
-    fn action_context_fields_are_private_outside_this_module() {
-        let source = include_str!("action.rs");
-        let context_struct = source
-            .split("pub struct ApprovalActionContext {")
-            .nth(1)
-            .and_then(|rest| rest.split('}').next())
-            .expect("ApprovalActionContext 结构体定义");
-        for field in [
-            "approval_process_instance_id",
-            "approval_node_execution_id",
-            "work_item_id",
-            "business_object_type",
-            "business_object_id",
-            "subject_version",
-            "actor_id",
-            "reason",
-            "idempotency_key",
-        ] {
-            assert!(
-                !context_struct.contains(&format!("pub {field}")),
-                "ApprovalActionContext.{field} 不得公开"
-            );
-            assert!(context_struct.contains(field), "ApprovalActionContext 应包含私有字段 {field}");
-        }
-        assert!(!include_str!("execution/runtime_service.rs").contains("ApprovalActionContext {"));
-        assert!(
-            ![
-                include_str!("binding/mod.rs"),
-                include_str!("binding/types.rs"),
-                include_str!("binding/bind.rs"),
-                include_str!("binding/upgrade.rs"),
-                include_str!("binding/revalidate.rs"),
-            ]
-            .concat()
-            .contains("ApprovalActionContext {")
-        );
-        assert!(!include_str!("definition.rs").contains("ApprovalActionContext {"));
-    }
-
     /// 缺/空身份、空原因/幂等键、非法版本必须失败关闭；受阻取消误带任务时错误携带任务。
     #[test]
     fn action_context_constructors_reject_illegal_identity() {

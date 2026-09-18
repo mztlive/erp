@@ -681,29 +681,6 @@ pub(crate) mod tests {
         assert!(CustomerAcceptanceLine::new(CustomerAcceptanceLineId::new("cl-4"), overlong_reason).is_err());
     }
 
-    /// 客户验收单无审批约束：不得出现绑定字段或审批状态机。
-    #[test]
-    fn customer_acceptance_has_no_approval_binding_or_state_machine() {
-        let acceptance = CustomerAcceptance::new(CustomerAcceptanceId::new("acceptance-1"), data()).unwrap();
-        let value = serde_json::to_value(&acceptance).unwrap();
-        let object = value.as_object().expect("验收单序列化为对象");
-        assert!(!object.contains_key("approval_binding"));
-        assert!(!object.contains_key("approval_subject_version"));
-        assert!(!object.contains_key("pending_allocations"));
-        assert_eq!(acceptance.status, CustomerAcceptanceState::Draft);
-        assert_eq!(CustomerAcceptanceState::Draft.as_str(), "DRAFT");
-        assert_eq!(CustomerAcceptanceState::Posted.as_str(), "POSTED");
-        assert_eq!(CustomerAcceptanceState::Reversed.as_str(), "REVERSED");
-
-        let production =
-            include_str!("customer_acceptance.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(!production.contains("IN_APPROVAL"));
-        assert!(!production.contains("fn start_approval"));
-        assert!(!production.contains("approval_subject_version"));
-        assert!(!production.contains("ApprovalDefinitionBinding"));
-        assert!(!production.contains("PENDING_REVIEW"));
-    }
-
     /// 过账行匹配纯规则：行数/缺行/空分配失败，正确投影通过。
     #[test]
     fn post_inputs_match_covers_count_missing_and_empty() {

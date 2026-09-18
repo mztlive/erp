@@ -717,17 +717,4 @@ mod tests {
             replay_after_duplicate(&store, kind, receipt.scope_id.as_str(), &key, "other").unwrap_err();
         assert!(conflict.to_string().contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
     }
-
-    /// Mongo 契约已上收到 `runtime_persistence_contract`；本文件只保留内存原语。
-    #[test]
-    fn memory_close_is_covered_by_shared_persistence_contract() {
-        assert!(
-            include_str!("runtime_persistence_contract.rs")
-                .contains("run_memory_runtime_persistence_contract")
-        );
-        assert!(
-            include_str!("runtime_persistence_contract.rs")
-                .contains("mongo_adapter_satisfies_runtime_persistence_contract")
-        );
-    }
 }

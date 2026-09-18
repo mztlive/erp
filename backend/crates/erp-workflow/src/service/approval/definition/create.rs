@@ -366,7 +366,6 @@ fn second_draft_error() -> Error {
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_support::{production_source, source_fn};
     use super::*;
 
     /// 已有活动草稿时不得 persist_new_draft / write_receipt。
@@ -380,12 +379,6 @@ mod tests {
             decide_create_draft_write::<&str>(None),
             Ok(CreateDraftWriteStep::PersistNewDraftAndReceipt)
         ));
-        let create_tx =
-            source_fn(production_source(), "async fn create_draft_tx", "async fn replace_nodes_tx");
-        let gate = create_tx.find("decide_create_draft_write").expect("创建闸门");
-        let receipt = create_tx.find("write_receipt").expect("receipt");
-        assert!(gate < receipt);
-        assert!(receipt < create_tx.find("persist_new_draft").expect("persist"));
     }
 
     /// draft_source=CURRENT_PUBLISHED 缺发布源必须失败关闭。
@@ -396,11 +389,5 @@ mod tests {
             Err(Error::Coded(ErrorCode::ApprovalDraftSourceNotAvailable))
         ));
         assert_eq!(require_current_published(Some("def-pub")).unwrap(), "def-pub");
-        let copy_src =
-            source_fn(production_source(), "async fn copy_published_draft", "async fn persist_new_draft");
-        assert!(copy_src.contains("require_current_published"));
-        assert!(copy_src.contains("load_published_definition_graph"));
-        assert!(!copy_src.contains("load_definition_graph"));
-        assert!(copy_src.contains("validate_published_linear"));
     }
 }

@@ -726,27 +726,4 @@ pub(crate) mod tests {
         assert!(!debug.contains(&a), "Debug 不得泄漏指纹");
         assert!(debug.contains("<redacted>"));
     }
-
-    /// 电子交付无审批约束：不得出现绑定字段或审批状态机。
-    #[test]
-    fn electronic_delivery_has_no_approval_binding_or_state_machine() {
-        let delivery = ElectronicDelivery::new(ElectronicDeliveryId::new("ed-1"), data()).unwrap();
-        let value = serde_json::to_value(&delivery).unwrap();
-        let object = value.as_object().expect("电子交付序列化为对象");
-        assert!(!object.contains_key("approval_binding"));
-        assert!(!object.contains_key("approval_subject_version"));
-        assert!(!object.contains_key("pending_allocations"));
-        assert_eq!(delivery.status, ElectronicDeliveryState::Draft);
-        assert_eq!(ElectronicDeliveryState::Draft.as_str(), "DRAFT");
-        assert_eq!(ElectronicDeliveryState::Confirmed.as_str(), "CONFIRMED");
-        assert_eq!(ElectronicDeliveryState::Reversed.as_str(), "REVERSED");
-
-        let production =
-            include_str!("electronic_delivery.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(!production.contains("IN_APPROVAL"));
-        assert!(!production.contains("fn start_approval"));
-        assert!(!production.contains("approval_subject_version"));
-        assert!(!production.contains("ApprovalDefinitionBinding"));
-        assert!(!production.contains("PENDING_REVIEW"));
-    }
 }

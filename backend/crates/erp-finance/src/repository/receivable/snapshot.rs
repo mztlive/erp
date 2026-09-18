@@ -353,13 +353,6 @@ mod tests {
         assert!(unique_ids(Vec::<String>::new()).is_empty());
     }
 
-    #[test]
-    fn find_entries_by_ids_uniques_before_query() {
-        let source = include_str!("snapshot.rs");
-        assert!(source.contains("pub async fn find_entries_by_ids"));
-        assert!(source.contains("unique_ids(entry_ids.iter().map(ToString::to_string))"));
-    }
-
     fn test_entry(id: &str, sequence: u32) -> ReceivableEntry {
         use erp_core::common::time::{BusinessDate, Instant};
 

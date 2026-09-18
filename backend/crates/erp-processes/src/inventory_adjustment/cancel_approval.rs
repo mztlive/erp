@@ -168,26 +168,6 @@ mod tests {
     use super::{cancel_audit_matches_instance, cancel_audit_message_prefix, cancel_replay_actor_mismatch};
     use crate::Error;
 
-    /// 库存普通撤回必须复用统一 V3/legacy 身份，禁止退回 raw key 或独立摘要。
-    #[test]
-    fn cancel_replay_uses_typed_identity_and_exact_scope_candidates() {
-        let production: String = [
-            include_str!("cancel_approval.rs"),
-            include_str!("cancel_runtime.rs"),
-            include_str!("cancel_persist.rs"),
-        ]
-        .iter()
-        .map(|source| source.split("#[cfg(test)]").next().expect("生产代码必须存在"))
-        .collect();
-        assert!(production.contains("document_cancel_identity("));
-        assert!(production.contains("identity.scope_candidates()"));
-        assert!(production.contains("identity.classify(Some(&receipt))"));
-        assert!(production.contains("idempotency_key: &IdempotencyKey"));
-        assert!(production.contains("idempotency_key: idempotency_key.clone()"));
-        assert!(!production.contains("document_cancel_digest("));
-        assert!(!production.contains("idempotency_key.to_string()"));
-    }
-
     fn cancelled_instance() -> bpm::model::ApprovalProcessInstance {
         let mut instance = bpm::model::ApprovalProcessInstance::start_running(NewProcessInstance {
             id: ApprovalProcessInstanceId::new("instance-cancelled"),

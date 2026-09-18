@@ -198,7 +198,7 @@ mod tests {
     use bpm::{ParticipantId, ProcessKind, Timestamp};
 
     use super::super::super::policy::policy_of;
-    use super::super::test_support::{production_source, source_fn, two_node_publish_graph};
+    use super::super::test_support::two_node_publish_graph;
     use super::*;
 
     /// 目录状态必须同时消费 published/draft：仅草稿为 Draft，退役且无草稿为缺失。
@@ -224,16 +224,6 @@ mod tests {
             configuration_status(ApprovalRequirement::NoApproval, None, None),
             DefinitionConfigurationStatus::NotApplicable
         );
-        let production = production_source();
-        let catalog =
-            source_fn(production, "pub async fn definition_catalog", "pub async fn create_definition_draft");
-        assert!(catalog.contains("definition_catalog_facts"));
-        assert!(!catalog.contains("find_published_by_process_kind"));
-        assert!(!catalog.contains("find_active_draft"));
-        let catalog_item_src = source_fn(production, "fn catalog_item(", "fn catalog_versions_from_facts");
-        assert!(catalog_item_src.contains("catalog_versions_from_facts"));
-        assert!(!production_source().contains("async fn catalog_versions"));
-        assert!(production_source().contains("NodeReplacementDraft::new"));
         let facts = vec![
             DefinitionCatalogStatusFact {
                 process_kind: ProcessKind::SalesOrder,

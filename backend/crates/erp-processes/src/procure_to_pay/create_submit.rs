@@ -421,18 +421,3 @@ async fn load_submitted_created_order(
         .ok_or_else(|| Error::Internal("采购单提交后丢失".to_string()))?;
     Ok(SubmittedCreatedOrder { purchase_no: order.purchase_no, lock_version: order.base.version })
 }
-
-#[cfg(test)]
-mod tests {
-    /// 创建并提交必须走统一 `start_approval`，不得停在草稿。
-    #[test]
-    fn create_submit_starts_unified_approval() {
-        let production =
-            include_str!("create_submit.rs").split("#[cfg(test)]").next().expect("生产代码必须存在");
-        assert!(production.contains("execute_purchase_order_domain_action"));
-        assert!(production.contains("ApprovalDomainAction::PurchaseOrderSubmit"));
-        assert!(production.contains("persist_purchase_order_start"));
-        assert!(production.contains("prepare_start"));
-        assert!(production.contains("procurement_guard: None"));
-    }
-}

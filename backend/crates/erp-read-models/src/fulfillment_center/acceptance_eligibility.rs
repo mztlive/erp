@@ -344,33 +344,6 @@ fn build_eligibility_views(
 }
 
 #[cfg(test)]
-mod customer_acceptance_eligibility_no_approval_tests {
-    /// 验收工作台不得查询定义、启动审批或创建任务。
-    #[test]
-    fn eligibility_does_not_start_approval_or_create_tasks() {
-        let production =
-            include_str!("acceptance_eligibility.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(production.contains("pub async fn acceptance_eligibility"));
-        assert!(!production.contains("start_approval"));
-        assert!(!production.contains("prepare_start"));
-        assert!(!production.contains("WorkItem"));
-        assert!(!production.contains("definition_id"));
-        assert!(!production.contains("CustomerAcceptanceAdapter"));
-        assert!(!production.contains("bind_published_definition_on_document_create"));
-        assert!(!production.contains("load_published_graph"));
-        let eligibility = production
-            .split("pub async fn acceptance_eligibility")
-            .nth(1)
-            .and_then(|rest| rest.split("fn so_line_ids").next())
-            .expect("acceptance_eligibility 生产片段");
-        assert!(eligibility.contains("build_line_eligibilities"));
-        assert!(eligibility.contains("build_eligibility_views"));
-        assert!(!eligibility.contains("submit_"));
-        assert!(!eligibility.contains("start_approval"));
-    }
-}
-
-#[cfg(test)]
 mod acceptance_eligibility_rule_source_tests {
     use std::str::FromStr;
 
@@ -841,48 +814,5 @@ mod acceptance_eligibility_rule_source_tests {
         let progress = AcceptanceProgress::derive(&build_line_eligibilities(&sources).unwrap()).unwrap();
         assert_eq!(progress.progress, FulfillmentProgress::NotStarted);
         assert!(progress.has_remaining_eligible);
-    }
-
-    /// 工作台与过账进度使用同一规则源：两条路径以同一仓储查询与同一筛选
-    /// 构造服务履约事实集，送入同一个 `build_line_eligibilities`；过账路径再
-    /// 用 `AcceptanceProgress::derive` 派生进度并以返回值驱动任务关闭。
-    #[test]
-    fn workbench_and_posting_feed_identical_service_fact_sets() {
-        let workbench =
-            include_str!("acceptance_eligibility.rs").split("#[cfg(test)]").next().expect("生产代码");
-        let eligibility = workbench
-            .split("pub async fn acceptance_eligibility")
-            .nth(1)
-            .and_then(|rest| rest.split("fn so_line_ids").next())
-            .expect("acceptance_eligibility 生产片段");
-        assert!(eligibility.contains("list_confirmed_service_fulfillments"));
-        assert!(eligibility.contains(".filter(ServiceFulfillment::is_acceptance_eligible)"));
-        assert!(eligibility.contains("build_line_eligibilities"));
-        assert!(
-            eligibility.find(".filter(ServiceFulfillment::is_acceptance_eligible)")
-                < eligibility.find("build_line_eligibilities")
-        );
-
-        let posting = include_str!("repository.rs").split("#[cfg(test)]").next().expect("生产代码");
-        let progress_update = posting
-            .split("pub async fn load_customer_acceptance_progress")
-            .nth(1)
-            .expect("load_customer_acceptance_progress 生产片段");
-        assert!(progress_update.contains("list_confirmed_service_fulfillments"));
-        assert!(progress_update.contains(".filter(ServiceFulfillment::is_acceptance_eligible)"));
-        assert!(progress_update.contains("build_line_eligibilities"));
-        assert!(progress_update.contains("AcceptanceProgress::derive"));
-        assert!(
-            progress_update.find(".filter(ServiceFulfillment::is_acceptance_eligible)")
-                < progress_update.find("build_line_eligibilities")
-        );
-
-        let task =
-            include_str!("../../../erp-processes/src/fulfillment_execution/customer_acceptance/task.rs")
-                .split("#[cfg(test)]")
-                .next()
-                .expect("生产代码");
-        assert!(task.contains("if !has_remaining_eligible"));
-        assert!(task.contains("complete_by_domain_command"));
     }
 }

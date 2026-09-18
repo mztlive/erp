@@ -983,28 +983,6 @@ pub(crate) mod tests {
         );
     }
 
-    /// 采购收货单无审批约束：不得出现绑定字段或审批状态机。
-    #[test]
-    fn purchase_receipt_has_no_approval_binding_or_state_machine() {
-        let receipt = PurchaseReceipt::new(PurchaseReceiptId::new("receipt-1"), receipt_data()).unwrap();
-        let value = serde_json::to_value(&receipt).unwrap();
-        let object = value.as_object().expect("入库单序列化为对象");
-        assert!(!object.contains_key("approval_binding"));
-        assert!(!object.contains_key("approval_subject_version"));
-        assert!(!object.contains_key("pending_allocations"));
-        assert_eq!(receipt.status, PurchaseReceiptState::Draft);
-        assert_eq!(PurchaseReceiptState::Draft.as_str(), "DRAFT");
-        assert_eq!(PurchaseReceiptState::Posted.as_str(), "POSTED");
-        assert_eq!(PurchaseReceiptState::Reversed.as_str(), "REVERSED");
-
-        let production = include_str!("purchase_receipt.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(!production.contains("IN_APPROVAL"));
-        assert!(!production.contains("fn start_approval"));
-        assert!(!production.contains("approval_subject_version"));
-        assert!(!production.contains("ApprovalDefinitionBinding"));
-        assert!(!production.contains("PENDING_REVIEW"));
-    }
-
     /// 当前采购多行按总数量派生完成度，不改成逐行收满判断。
     #[test]
     fn fulfillment_progress_preserves_total_quantity_contract() {

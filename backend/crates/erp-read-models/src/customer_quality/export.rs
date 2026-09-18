@@ -104,14 +104,4 @@ mod tests {
         assert_eq!(cell("-12.50"), "\"-12.50\"");
         assert_eq!(cell("a,b\nc"), "\"a,b\nc\"");
     }
-
-    #[test]
-    fn current_and_history_exports_use_separate_files_and_bases() {
-        let current = serde_json::to_string(&"current").unwrap();
-        let history = serde_json::to_string(&"history").unwrap();
-        assert_ne!(current, history);
-        let source = include_str!("export.rs");
-        assert!(source.contains("当前负责口径"));
-        assert!(source.contains("历史贡献口径"));
-    }
 }

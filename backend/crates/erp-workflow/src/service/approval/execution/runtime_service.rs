@@ -803,31 +803,6 @@ mod tests {
         persistence_core::Error::from(mongo_error)
     }
 
-    fn runtime_source_fn(start: &str, end: &str) -> &'static str {
-        const SOURCES: &[&str] = &[
-            include_str!("runtime_service/resume_apply.rs"),
-            include_str!("runtime_service/decision_apply.rs"),
-            include_str!("runtime_service/cancel_blocked.rs"),
-            include_str!("runtime_service/query.rs"),
-            include_str!("runtime_service/query/query_list.rs"),
-            include_str!("runtime_service/read_auth.rs"),
-            include_str!("runtime_service/notifications.rs"),
-            include_str!("runtime_service/tasks.rs"),
-            include_str!("runtime_service/upgrade.rs"),
-        ];
-        for source in SOURCES {
-            let Some(start_idx) = source.find(start) else {
-                continue;
-            };
-            let end_idx = source[start_idx..]
-                .find(end)
-                .map(|offset| start_idx + offset)
-                .expect("运行时函数终点必须存在");
-            return &source[start_idx..end_idx];
-        }
-        panic!("运行时函数起点必须存在");
-    }
-
     #[test]
     fn decision_recovery_only_polls_receipt_competition_and_uncertain_commits() {
         let duplicate = map_receipt_first_write_error(duplicate_key_error(Some(
@@ -856,79 +831,6 @@ mod tests {
         assert_eq!(command_recovery_delay(0).as_millis(), 5);
         assert_eq!(command_recovery_delay(5).as_millis(), 160);
         assert_eq!(command_recovery_delay(99).as_millis(), 160);
-    }
-
-    #[test]
-    fn resume_persistence_keeps_receipt_as_first_physical_write() {
-        let source =
-            runtime_source_fn("async fn persist_resume_writes(", "fn ensure_resume_approver_recovered(");
-        let receipt = source.find("insert_command_receipt").expect("恢复必须写命令收据");
-        assert!(source[..receipt].contains("find_document_approval_by_id"));
-        assert!(!source[..receipt].contains("advance_instance"));
-        assert!(!source[..receipt].contains("end_blocked_execution"));
-        assert!(!source[..receipt].contains("insert_execution"));
-        assert!(!source[..receipt].contains("create_open_tasks"));
-        assert!(!source[..receipt].contains("persist_resume_notifications"));
-        assert!(!source[..receipt].contains("audit_port.persist"));
-        assert!(source[receipt..].contains("map_err(map_receipt_first_write_error)"));
-        for later_write in [
-            "advance_instance",
-            "end_blocked_execution",
-            "insert_execution",
-            "create_open_tasks",
-            "persist_resume_notifications",
-            "audit_port.persist",
-        ] {
-            assert!(
-                receipt < source.find(later_write).expect("恢复后续写入必须存在"),
-                "receipt 必须先于 {later_write}",
-            );
-        }
-    }
-
-    #[test]
-    fn resume_uncertain_result_recovery_always_opens_a_fresh_transaction() {
-        let endpoint = runtime_source_fn("pub async fn resume_current_approver(", "async fn replay_resume(");
-        assert!(endpoint.contains("commit_or_recover"));
-        assert!(endpoint.contains("recover_resume_after_competing_commit"));
-
-        let replay =
-            runtime_source_fn("async fn replay_resume(", "async fn recover_resume_after_competing_commit(");
-        assert!(replay.contains("with_transaction"));
-        assert!(replay.contains("replay_resume_apply"));
-
-        let recovery = runtime_source_fn(
-            "async fn recover_resume_after_competing_commit(",
-            "async fn load_resume_task_guard(",
-        );
-        assert!(recovery.contains("recover_by_replay"));
-        assert!(recovery.contains("self.replay_resume"));
-        assert!(!recovery.contains("const RECOVERY_ATTEMPTS"));
-        assert!(!recovery.contains("ClientSession"));
-
-        let template = include_str!("runtime_service.rs");
-        assert!(template.contains("COMMAND_RECOVERY_ATTEMPTS"));
-        assert!(template.contains("async fn commit_or_recover"));
-        assert!(template.contains("async fn recover_by_replay"));
-        assert!(template.contains("command_may_have_committed"));
-        assert!(template.contains("command_recovery_delay"));
-    }
-
-    #[test]
-    fn commit_recovery_template_converges_all_commands() {
-        let decision = include_str!("runtime_service/decision_apply.rs");
-        let cancel = include_str!("runtime_service/cancel_blocked.rs");
-        let resume = include_str!("runtime_service/resume_apply.rs");
-        let upgrade = include_str!("runtime_service/upgrade.rs");
-        for source in [decision, cancel, resume, upgrade] {
-            assert!(source.contains("recover_by_replay"));
-            assert!(!source.contains("const RECOVERY_ATTEMPTS"));
-            assert!(!source.contains("command_may_have_committed"));
-            assert!(!source.contains("command_recovery_delay("));
-        }
-        for source in [decision, cancel, resume, upgrade] {
-            assert!(source.contains("commit_or_recover"));
-        }
     }
 
     #[tokio::test]

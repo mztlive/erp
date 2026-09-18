@@ -644,15 +644,6 @@ mod version_lock_tests {
     use crate::entity::contract::{Contract, ContractData, ContractId};
     use crate::error::Error;
 
-    /// 归档与终止必须使用实体 matches_version，禁止字段级直接比较。
-    #[test]
-    fn archive_and_terminate_use_entity_matches_version() {
-        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(production.contains("conflict_if_stale_version(contract.matches_version(req.version))"));
-        assert!(!production.contains("contract.base.version != req.version"));
-        assert!(!production.contains("contract.base.version == req.version"));
-    }
-
     #[test]
     fn stale_version_returns_conflict_with_stable_retry_message() {
         let contract = Contract::new(

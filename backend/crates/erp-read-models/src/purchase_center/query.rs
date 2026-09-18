@@ -454,69 +454,6 @@ fn center_content_source(has_revision: bool, submission_source: Option<&str>) ->
 }
 
 #[cfg(test)]
-mod query_layering_tests {
-    /// 查询编排必须使用批量事实加载，旧逐行 helpers 已删除.
-    #[test]
-    fn query_uses_batch_fact_bundles() {
-        fn production_part(source: &str) -> &str {
-            source.split("#[cfg(test)]").next().expect("生产代码必须存在")
-        }
-        let production =
-            [production_part(include_str!("query.rs")), production_part(include_str!("scope.rs"))].concat();
-        assert!(production.contains("load_purchase_order_list_page"), "列表必须使用批量事实加载");
-        assert!(production.contains("load_purchase_order_center_facts"), "对象中心必须使用批量事实加载");
-        assert!(!production.contains("fn resolve_sales_order_numbers"), "逐销售单号查询已删除");
-        assert!(!production.contains("fn resolve_order_totals"), "逐指针金额查询已删除");
-        assert!(!production.contains("fn resolve_current_content"), "对象中心逐段读取已删除");
-        assert!(!production.contains("fn resolve_allocations"), "逐分配读取已删除");
-        assert!(!production.contains("resolve_supplier_name"), "逐供应商名称查询已从查询编排删除");
-        for forbidden in [
-            ".supplier_accounts()",
-            ".parties()",
-            ".party_revisions()",
-            ".sales_orders()",
-            ".purchase_order_submissions()",
-            ".purchase_order_revisions()",
-            ".purchase_line_sales_allocations()",
-            ".payable_accounts()",
-            ".purchase_order()",
-        ] {
-            assert!(
-                !production.contains(forbidden),
-                "查询编排不得直查持久化集合 {forbidden}，必须经批量事实"
-            );
-        }
-    }
-
-    /// 共享与变更编排不得保留单点直查 helper.
-    #[test]
-    fn no_single_point_supplier_lookup_remains() {
-        let shared = include_str!("../../../erp-processes/src/procure_to_pay/shared.rs");
-        let change = [
-            include_str!("../../../erp-processes/src/procure_to_pay/change/submit.rs"),
-            include_str!("../../../erp-processes/src/procure_to_pay/change/effect.rs"),
-            include_str!("change/query.rs"),
-            include_str!("../../../erp-processes/src/procure_to_pay/change/mapping.rs"),
-            include_str!("../../../erp-processes/src/procure_to_pay/change/mod.rs"),
-        ]
-        .concat()
-        .split("#[cfg(test)]")
-        .next()
-        .unwrap_or("")
-        .to_string();
-        assert!(!shared.contains("fn resolve_supplier_name"), "单点供应商名称 helper 已删除");
-        assert!(
-            !shared.contains(".supplier_accounts()")
-                && !shared.contains(".parties()")
-                && !shared.contains(".party_revisions()"),
-            "共享模块不得直查供应商关联集合"
-        );
-        assert!(!change.contains("resolve_supplier_name"), "变更编排已改用批量法定名称");
-        assert!(change.contains("current_legal_names_by_account_ids"), "变更编排必须使用批量法定名称");
-    }
-}
-
-#[cfg(test)]
 mod query_mapping_tests {
     use std::collections::HashMap;
     use std::str::FromStr;

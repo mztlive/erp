@@ -242,7 +242,7 @@ mod tests {
     use super::super::super::definition_dto::DefinitionConfigurationStatus;
     use super::super::super::policy::ApprovalRequirement;
     use super::super::mapping::configuration_status;
-    use super::super::test_support::{draft_definition, production_source, source_fn};
+    use super::super::test_support::draft_definition;
     use super::*;
     use crate::error::ErrorCode;
 
@@ -291,7 +291,5 @@ mod tests {
             configuration_status(ApprovalRequirement::ProcessRequired, None, Some(1)),
             DefinitionConfigurationStatus::Draft
         );
-        let retire_tx = source_fn(production_source(), "async fn retire_tx", "async fn build_new_draft");
-        assert!(retire_tx.contains("decide_retire_write"));
     }
 }

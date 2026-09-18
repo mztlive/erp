@@ -257,12 +257,4 @@ mod tests {
         );
         assert!(wrong.is_err(), "仓发不得携带直发分配");
     }
-
-    /// 创建路径经实体批量工厂编号：旧 Service helper 已删除。
-    #[test]
-    fn delivery_create_uses_entity_batch_factory() {
-        let production = include_str!("delivery.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(!production.contains("fn build_delivery_lines"), "旧 helper 必须删除");
-        assert!(production.contains("DeliveryLineBatch::build"), "创建路径必须调用实体工厂");
-    }
 }

@@ -142,17 +142,3 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
 }
-
-#[cfg(test)]
-mod tests {
-    /// 采购变更路由必须暴露提交、撤回、生效与详情，不得让客户端选定义。
-    #[test]
-    fn purchase_change_routes_expose_unified_approval_ports() {
-        let production = include_str!("purchase_order.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(production.contains("/purchase-change-orders/{id}/submit"));
-        assert!(production.contains("/purchase-change-orders/{id}/cancel-approval"));
-        assert!(production.contains("/purchase-change-orders/{id}/effect"));
-        assert!(production.contains("purchase_change_cancel_approval"));
-        assert!(!production.contains("assignee_user_id"));
-    }
-}

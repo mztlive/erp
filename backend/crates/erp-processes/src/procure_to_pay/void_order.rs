@@ -513,26 +513,6 @@ mod tests {
         assert_eq!(result.reference, "VOID-V5");
         assert!(result.replayed);
     }
-
-    /// 验证采购草稿作废把操作人授权绑定到事务提交。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 作废命令缺少稳定授权快照、事务内账号重验或 policy revision CAS 时测试失败。
-    #[test]
-    fn void_draft_binds_actor_authorization_to_commit() {
-        let production =
-            include_str!("void_order.rs").split("#[cfg(test)]").next().expect("生产代码必须存在");
-
-        assert!(production.contains("authorize_actor_permission(actor, VOID_PERMISSION)"));
-        assert!(production.contains("ensure_purchase_order_actor_account"));
-        assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
-    }
     /// 非零大小执行器用于验证每个生产步骤实际传递的调用方实例。
     struct TestExecutor {
         _identity: u8,

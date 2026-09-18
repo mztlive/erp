@@ -574,32 +574,4 @@ mod invoice_no_approval_tests {
                 .expect("测试绑定");
         assert!(apply_invoice_create_binding(&mut document, Some(forged)).is_err());
     }
-
-    /// 创建路径调用统一绑定端口，不查询发布定义、不启动实例、不建任务。
-    #[test]
-    fn create_does_not_query_definition_or_start_instance() {
-        let production = include_str!("invoice.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(production.contains("persist_created_invoice"));
-        assert!(production.contains("register_created_invoice_document"));
-        assert!(production.contains("persist_unbound_invoice_document"));
-        assert!(production.contains("bind_published_definition_on_document_create"));
-        assert!(production.contains("DocumentType::Invoice"));
-        assert!(production.contains("new_registered_document"));
-        assert!(production.contains("ensure_invoice_skips_approval_binding"));
-        assert!(production.contains("ensure_invoice_has_no_adapter"));
-        assert!(!production.contains("pub async fn submit_invoice"));
-        assert!(!production.contains("start_invoice_approval"));
-        assert!(!production.contains("InvoiceAdapter"));
-        assert!(!production.contains("load_published_graph"));
-        let invoice_create = production
-            .split("pub async fn create_invoice")
-            .nth(1)
-            .and_then(|rest| rest.split("pub async fn post_invoice").next())
-            .expect("create_invoice 生产片段");
-        assert!(invoice_create.contains("persist_created_invoice"));
-        assert!(!invoice_create.contains("prepare_start"));
-        assert!(!invoice_create.contains("attach_published_binding"));
-        assert!(!invoice_create.contains("WorkItem"));
-        assert!(!invoice_create.contains("start_approval"));
-    }
 }

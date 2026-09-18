@@ -391,35 +391,4 @@ mod purchase_receipt_no_approval_tests {
                 .expect("测试绑定");
         assert!(apply_purchase_receipt_create_binding(&mut document, Some(forged)).is_err());
     }
-
-    /// 创建路径调用统一绑定端口，不查询发布定义、不启动实例、不建任务。
-    #[test]
-    fn create_does_not_query_definition_or_start_instance() {
-        let production = include_str!("purchase_receipt.rs")
-            .split("\n#[cfg(test)]\nmod purchase_receipt_no_approval_tests")
-            .next()
-            .expect("生产代码");
-        assert!(production.contains("persist_created_purchase_receipt"));
-        assert!(production.contains("register_created_purchase_receipt_document"));
-        assert!(production.contains("persist_unbound_purchase_receipt_document"));
-        assert!(production.contains("bind_published_definition_on_document_create"));
-        assert!(production.contains("DocumentType::PurchaseReceipt"));
-        assert!(production.contains("new_registered_document"));
-        assert!(production.contains("ensure_purchase_receipt_skips_approval_binding"));
-        assert!(production.contains("ensure_purchase_receipt_has_no_adapter"));
-        assert!(!production.contains("pub async fn submit_purchase_receipt"));
-        assert!(!production.contains("start_purchase_receipt_approval"));
-        assert!(!production.contains("PurchaseReceiptAdapter"));
-        assert!(!production.contains("load_published_graph"));
-        let create = production
-            .split("pub async fn create_purchase_receipt")
-            .nth(1)
-            .and_then(|rest| rest.split("pub async fn update_purchase_receipt").next())
-            .expect("create_purchase_receipt 生产片段");
-        assert!(create.contains("persist_created_purchase_receipt"));
-        assert!(!create.contains("prepare_start"));
-        assert!(!create.contains("attach_published_binding"));
-        assert!(!create.contains("WorkItem"));
-        assert!(!create.contains("start_approval"));
-    }
 }

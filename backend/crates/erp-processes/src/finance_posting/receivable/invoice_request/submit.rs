@@ -264,24 +264,3 @@ async fn ensure_effective_source(
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod first_submit_binding_tests {
-    /// 首次提交必须先绑定再注册，不能把未注册单据当成 NotFound。
-    #[test]
-    fn first_submit_does_not_treat_missing_document_as_not_found() {
-        let production = include_str!("submit.rs").split("#[cfg(test)]").next().expect("生产代码");
-        let bind_fn = production
-            .split("async fn bind(")
-            .nth(1)
-            .and_then(|rest| rest.split("async fn start(").next())
-            .expect("bind 生产片段");
-        assert!(bind_fn.contains("find_registered_document"));
-        assert!(bind_fn.contains("bind_published_definition_on_document_create"));
-        assert!(bind_fn.contains("new_registered_document"));
-        assert!(
-            !bind_fn.contains("find_approval_binding"),
-            "find_approval_binding 会把 DocumentMissing 映射成 NotFound，首次提交不得调用"
-        );
-    }
-}

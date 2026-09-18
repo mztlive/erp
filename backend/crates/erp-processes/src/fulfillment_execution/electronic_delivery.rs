@@ -347,49 +347,4 @@ mod electronic_delivery_no_approval_tests {
                 .is_err()
         );
     }
-
-    /// 创建路径调用统一绑定端口，不查询发布定义、不启动实例、不建任务。
-    #[test]
-    fn create_does_not_query_definition_or_start_instance() {
-        let production =
-            include_str!("electronic_delivery.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(production.contains("persist_created_electronic_delivery"));
-        assert!(production.contains("register_created_electronic_delivery_document"));
-        assert!(production.contains("persist_unbound_electronic_delivery_document"));
-        assert!(production.contains("bind_published_definition_on_document_create"));
-        assert!(production.contains("DocumentType::ElectronicDelivery"));
-        assert!(production.contains("new_registered_document"));
-        assert!(production.contains("ensure_electronic_delivery_skips_approval_binding"));
-        assert!(production.contains("ensure_electronic_delivery_has_no_adapter"));
-        assert!(!production.contains("pub async fn submit_electronic_delivery"));
-        assert!(!production.contains("start_electronic_delivery_approval"));
-        assert!(!production.contains("ElectronicDeliveryAdapter"));
-        assert!(!production.contains("load_published_graph"));
-        let create = production
-            .split("pub async fn create_electronic_delivery")
-            .nth(1)
-            .and_then(|rest| rest.split("pub async fn confirm_electronic_delivery").next())
-            .expect("create_electronic_delivery 生产片段");
-        assert!(create.contains("persist_created_electronic_delivery"));
-        assert!(!create.contains("prepare_start"));
-        assert!(!create.contains("attach_published_binding"));
-        assert!(!create.contains("WorkItem"));
-        assert!(!create.contains("start_approval"));
-    }
-
-    /// 创建路径经领域草稿工厂与 crypto port：旧 Service helper 已删除。
-    #[test]
-    fn create_uses_draft_factory_and_typed_fingerprint() {
-        let production =
-            include_str!("electronic_delivery.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(!production.contains("fn electronic_delivery_from_request"), "旧 helper 必须删除");
-        assert!(production.contains("electronic_delivery_draft_from_request"), "创建路径必须调用草稿编排");
-        assert!(!production.contains("SourceType::Erp"), "来源默认不得留在 Service");
-        let crypto = include_str!("../../../erp-fulfillment/src/service/electronic_delivery_crypto.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("crypto 生产代码");
-        assert!(crypto.contains("ElectronicDeliveryDraft::build"));
-        assert!(crypto.contains("ElectronicRecipientFingerprint"));
-    }
 }

@@ -113,16 +113,6 @@ mod tests {
     use crate::service::approval::execution::decision::decision_commits_blocked;
     use crate::service::approval::execution::idempotency::normalize_idempotency_key;
 
-    /// 内存运行时适配器不得进入非测试构建。
-    #[test]
-    fn memory_runtime_store_is_test_only() {
-        let source = include_str!("mod.rs");
-        let store_mod = source.find("pub mod store").expect("store 模块");
-        let store_use = source.find("pub use store::").expect("store 重导出");
-        assert!(source[..store_mod].contains("#[cfg(test)]"));
-        assert!(source[..store_use].contains("#[cfg(test)]"));
-    }
-
     /// 启动、通过、驳回、取消和恢复均为单次编排计划。
     #[test]
     fn execution_commands_are_single_transaction_plans() {

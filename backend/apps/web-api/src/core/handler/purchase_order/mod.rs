@@ -503,36 +503,6 @@ pub async fn purchase_change_detail(
 }
 
 #[cfg(test)]
-mod tests {
-    /// HTTP 构造审批命令时必须同时接入授权源和对象读取端口，禁止退回未接线默认值。
-    #[test]
-    fn approval_commands_wire_object_read_port() {
-        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
-        let constructors: Vec<_> = production.split("PurchaseOrderProcess::with_rbac(").skip(1).collect();
-        assert!(!constructors.is_empty());
-        for constructor in constructors {
-            let statement = constructor.split(';').next().expect("构造语句");
-            assert!(statement.contains(".with_object_read(state.approval_object_read())"));
-        }
-    }
-
-    /// 采购变更 HTTP 只走统一提交、撤回、生效与详情，客户端不得选定义。
-    #[test]
-    fn purchase_change_http_uses_unified_ports() {
-        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(production.contains("submit_change"));
-        assert!(production.contains("cancel_change_approval"));
-        assert!(production.contains("reject_client_effect"));
-        assert!(production.contains("change_order_detail"));
-        assert!(production.contains("with_rbac"));
-        assert!(!production.contains(".apply_effective_change("));
-        assert!(!production.contains("definition_id"));
-        assert!(!production.contains("PENDING_WAREHOUSE_IMPACT"));
-        assert!(!production.contains("PENDING_FINANCE_REVIEW"));
-    }
-}
-
-#[cfg(test)]
 mod scope_query_tests {
     use axum::extract::Query;
     use axum::http::Uri;

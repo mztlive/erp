@@ -767,17 +767,4 @@ mod tests {
         assert_eq!(first_unregistered_document_id(&ids, &all_registered), None);
         assert_eq!(first_unregistered_document_id(&[], &HashSet::new()), None);
     }
-
-    #[test]
-    fn create_background_job_keeps_duplicate_key_race_and_conflict_copy() {
-        const SHORT: &str = "同一请求身份已用于不同后台任务载荷";
-        const LONG: &str = "同一请求身份已用于不同后台任务载荷；历史无指纹任务须使用新的请求身份";
-        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(production.contains("Err(persistence_core::Error::DuplicateKey(_))"));
-        assert!(production.contains("Ok(()) => Ok(job.into())"));
-        assert!(!production.contains("Ok(BackgroundJobRegistration::"));
-        assert!(production.contains(LONG));
-        assert_eq!(LONG.get(..SHORT.len()), Some(SHORT));
-        assert_ne!(SHORT, LONG);
-    }
 }

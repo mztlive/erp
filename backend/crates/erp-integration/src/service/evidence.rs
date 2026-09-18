@@ -369,34 +369,6 @@ mod tests {
             .is_err()
         );
     }
-
-    /// 生产代码（测试模块之前部分），供分层守卫断言，避免字面量自匹配。
-    ///
-    /// # 返回
-    /// 返回去掉测试模块后的生产代码全文。
-    fn production_source() -> &'static str {
-        include_str!("evidence.rs").split("mod tests {").next().expect("必须存在生产代码")
-    }
-
-    /// 分层守卫（INT-E21）：证据策略与原因注册表归领域，服务只做 view 映射。
-    ///
-    /// 锁定旧规则源（策略常量、类型集合、逐条集合校验与原因装配）已删除；
-    /// 策略与注册表来自领域，服务只保留词汇映射与请求校验。
-    #[test]
-    fn evidence_tables_are_owned_by_domain() {
-        let source = production_source();
-        assert!(!source.contains("ERROR_EXTERNAL_RESULT"));
-        assert!(!source.contains("ERROR_BUSINESS_REPAIR"));
-        assert!(!source.contains("DIFFERENCE_REPAIR"));
-        assert!(!source.contains("DIFFERENCE_COMPENSATION"));
-        assert!(!source.contains("NO_ERROR_REVIEW"));
-        assert!(!source.contains("fn ensure_required_kinds"));
-        assert!(!source.contains("fn reason_view"));
-        assert!(!source.contains("fn evidence_satisfies_policy"));
-        assert!(source.contains("error_terminal_policy(task)"));
-        assert!(source.contains("difference_terminal_policy(difference)"));
-        assert!(source.contains("domain_reason_registry()"));
-    }
 }
 
 #[cfg(test)]

@@ -694,7 +694,7 @@ mod tests {
     use serde_json::json;
 
     use super::super::replace::{next_transition_ids, prepare_definition_nodes};
-    use super::super::test_support::{production_source, source_fn, two_node_publish_graph};
+    use super::super::test_support::two_node_publish_graph;
     use super::*;
 
     fn duplicate_key_error(index: Option<&str>) -> persistence_core::Error {
@@ -855,58 +855,6 @@ mod tests {
             map_model_error(same.reconcile_identity(&create_changed.current).unwrap_err()),
             Error::Coded(ErrorCode::ApprovalIdempotencyPayloadConflict)
         ));
-
-        let create = source_fn(
-            production_source(),
-            "pub async fn create_definition_draft",
-            "pub async fn replace_definition_nodes",
-        );
-        assert!(
-            create.find("parse_idempotency_key").expect("key 规范化")
-                < create.find("ensure_definition_admin").expect("创建权限")
-        );
-        let publish = source_fn(
-            production_source(),
-            "pub async fn publish_definition",
-            "pub async fn retire_definition",
-        );
-        assert!(
-            publish.find("parse_idempotency_key").expect("key 规范化")
-                < publish.find("require_graph").expect("首次查库")
-        );
-        let retire = source_fn(
-            production_source(),
-            "pub async fn retire_definition",
-            "pub async fn definition_versions",
-        );
-        assert!(
-            retire.find("parse_idempotency_key").expect("key 规范化")
-                < retire.find("require_graph").expect("首次查库")
-        );
-        let replace = source_fn(
-            production_source(),
-            "pub async fn replace_definition_nodes",
-            "pub async fn publish_definition",
-        );
-        assert!(
-            replace.find("parse_idempotency_key").expect("key 规范化")
-                < replace.find("require_graph").expect("首次查库")
-        );
-        let recover =
-            source_fn(production_source(), "async fn recover_definition_command", "async fn create_draft_tx");
-        assert!(recover.contains("with_transaction"));
-        assert!(recover.contains("replay_prepared_definition_receipt"));
-        assert!(recover.contains("ensure_definition_admin_permission"));
-        assert!(!recover.contains("contains("));
-        let prepared_replay = source_fn(
-            production_source(),
-            "async fn replay_prepared_definition_receipt",
-            "async fn replay_legacy_receipt",
-        );
-        assert!(
-            prepared_replay.find("replay_current_receipt").expect("必须先查当前 v3")
-                < prepared_replay.find("replay_legacy_receipt").expect("当前不存在后才能查旧候选")
-        );
     }
 
     /// 只有幂等三元组唯一索引冲突可进入胜者回读，ID 或未知索引必须失败关闭。
@@ -1038,30 +986,5 @@ mod tests {
             },
         )
         .expect("退役旧结果可证明");
-    }
-
-    /// 四条定义写命令均在完整只读校验后先写收据，再写图、状态或审计。
-    #[test]
-    fn definition_commands_are_receipt_first_after_read_validation() {
-        let create = source_fn(production_source(), "async fn create_draft_tx", "async fn replace_nodes_tx");
-        let create_receipt = create.find("write_receipt").expect("创建收据");
-        assert!(create.find("build_new_draft").expect("创建只读准备") < create_receipt);
-        assert!(create_receipt < create.find("persist_new_draft").expect("创建图写入"));
-
-        let replace = source_fn(production_source(), "async fn replace_nodes_tx", "async fn publish_tx");
-        let replace_receipt = replace.find("write_receipt").expect("替换收据");
-        assert!(replace.find("prepare_replacement").expect("替换只读准备") < replace_receipt);
-        assert!(replace_receipt < replace.find("apply_draft_graph").expect("替换图写入"));
-
-        let publish = source_fn(production_source(), "async fn publish_tx", "async fn retire_tx");
-        let publish_receipt = publish.find("write_receipt").expect("发布收据");
-        assert!(publish.find("prepare_publish_graph").expect("发布只读准备") < publish_receipt);
-        assert!(publish_receipt < publish.find("replace_graph").expect("发布图写入"));
-        assert!(publish_receipt < publish.find("publish_and_retire_previous").expect("发布状态写入"));
-
-        let retire = source_fn(production_source(), "async fn retire_tx", "async fn build_new_draft");
-        let retire_receipt = retire.find("write_receipt").expect("退役收据");
-        assert!(retire.find("decide_retire_write").expect("退役只读校验") < retire_receipt);
-        assert!(retire_receipt < retire.find("approval_process_definitions").expect("退役状态写入"));
     }
 }

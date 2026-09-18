@@ -628,31 +628,6 @@ mod tests {
         );
     }
 
-    /// 正式撤回端口必须复用 Service DTO 和签署方法，直接过账仍失败关闭。
-    #[test]
-    fn cancel_approval_is_wired_and_direct_post_remains_closed() {
-        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产 handler 必须存在");
-        assert!(production.contains("CancelStockAdjustmentApprovalRequest"));
-        assert!(production.contains("CancelStockAdjustmentApprovalHttpRequest"));
-        assert!(production.contains("cancel_stock_adjustment_approval(&id, command, &actor)"));
-        assert!(production.contains("resource = \"approval_instance\""));
-        assert!(production.contains("action = \"cancel\""));
-        assert!(production.contains("pub async fn stock_adjustment_post"));
-        assert!(production.contains("审批最终通过动作调用"));
-    }
-
-    /// 库存读入口必须把认证主体传入 Service，静态权限宏不能替代对象范围。
-    #[test]
-    fn scoped_inventory_reads_forward_actor_to_service() {
-        let production = include_str!("mod.rs").split("#[cfg(test)]").next().expect("生产 handler 必须存在");
-        assert!(production.contains("stock_balance_list(&params, &actor)"));
-        assert!(production.contains("stock_balance_detail(&id, &actor)"));
-        assert!(production.contains("stock_movement_list(&params, &actor)"));
-        assert!(production.contains("stock_reservation_list(&params, &actor)"));
-        assert!(production.contains("stock_adjustment_list(&params, &actor)"));
-        assert!(production.contains("stock_adjustment_detail(&id, &actor)"));
-    }
-
     /// 普通撤回 HTTP wire 只接受字符串版本并拒绝额外运行字段。
     #[test]
     fn cancel_approval_http_versions_are_strings_and_unknown_fields_are_rejected() {

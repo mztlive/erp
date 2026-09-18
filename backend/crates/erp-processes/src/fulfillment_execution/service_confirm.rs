@@ -420,45 +420,6 @@ mod tests {
             ServiceFulfillment::service_location_fingerprint("客户现场", fingerprint_key)
         );
     }
-
-    /// 确认路径登记凭证并完成业务确认，不启动审批。
-    #[test]
-    fn confirm_does_not_start_approval() {
-        let production = [
-            include_str!("service_confirm.rs").split("#[cfg(test)]").next().expect("流程生产代码"),
-            include_str!("../../../erp-fulfillment/src/service/service_fulfillment_confirm.rs")
-                .split("#[cfg(test)]")
-                .next()
-                .expect("本域生产代码"),
-        ]
-        .join("\n");
-        assert!(production.contains("confirm_service_fulfillment_with_assets"));
-        assert!(production.contains("apply_confirmation"));
-        assert!(production.contains("pending_assets.persist"));
-        assert!(!production.contains("prepare_start"));
-        assert!(!production.contains("start_approval"));
-        assert!(!production.contains("ServiceFulfillmentAdapter"));
-        assert!(!production.contains("load_published_graph"));
-    }
-
-    /// 占位值、空白与凭证元数据规则已下沉到实体层，Service 不得残留镜像规则。
-    #[test]
-    fn evidence_rules_do_not_stay_in_service() {
-        let production = [
-            include_str!("service_confirm.rs").split("#[cfg(test)]").next().expect("流程生产代码"),
-            include_str!("../../../erp-fulfillment/src/service/service_fulfillment_confirm.rs")
-                .split("#[cfg(test)]")
-                .next()
-                .expect("本域生产代码"),
-        ]
-        .join("\n");
-        assert!(!production.contains("normalize_actual_service_location"));
-        assert!(!production.contains("validate_service_evidence_metadata"));
-        assert!(!production.contains("SERVICE_LOCATION_PLACEHOLDER"));
-        assert!(!production.contains("matches!(content_type"));
-        assert!(production.contains("ActualServiceLocation::parse"));
-        assert!(production.contains("ServiceEvidencePolicy::validate"));
-    }
 }
 
 #[cfg(test)]

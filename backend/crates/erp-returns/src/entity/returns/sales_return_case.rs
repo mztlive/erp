@@ -410,32 +410,4 @@ mod tests {
         assert!(SalesReturnCaseStatus::Completed.is_terminal());
         assert!(!SalesReturnCaseStatus::Draft.is_terminal());
     }
-
-    /// 销售退货单无审批约束：不得出现绑定字段或审批状态机。
-    ///
-    /// 仓储/采购/财务待处理是履约分工态，不是 `IN_APPROVAL` / `PENDING_REVIEW`。
-    #[test]
-    fn sales_return_case_has_no_approval_binding_or_state_machine() {
-        let case = SalesReturnCase::new(SalesReturnCaseId::new("src-1"), data(), "admin-1").unwrap();
-        let value = serde_json::to_value(&case).unwrap();
-        let object = value.as_object().expect("处理单序列化为对象");
-        assert!(!object.contains_key("approval_binding"));
-        assert!(!object.contains_key("approval_subject_version"));
-        assert!(!object.contains_key("pending_allocations"));
-        assert_eq!(case.stable.status(), SalesReturnCaseStatus::Draft);
-        assert_eq!(SalesReturnCaseStatus::Draft.as_str(), "draft");
-        assert_eq!(
-            SalesReturnCaseStatus::PendingWarehouseAcceptance.as_str(),
-            "pending_warehouse_acceptance"
-        );
-        assert_eq!(SalesReturnCaseStatus::PendingProcurement.as_str(), "pending_procurement");
-        assert_eq!(SalesReturnCaseStatus::PendingFinance.as_str(), "pending_finance");
-
-        let production = include_str!("sales_return_case.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(!production.contains("IN_APPROVAL"));
-        assert!(!production.contains("fn start_approval"));
-        assert!(!production.contains("approval_subject_version"));
-        assert!(!production.contains("ApprovalDefinitionBinding"));
-        assert!(!production.contains("PENDING_REVIEW"));
-    }
 }

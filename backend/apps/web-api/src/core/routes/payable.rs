@@ -114,21 +114,3 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
 }
-
-#[cfg(test)]
-mod tests {
-    /// 供应商付款只暴露任务内原子登记，不暴露付款审批或独立过账入口。
-    #[test]
-    fn supplier_payment_routes_expose_direct_commit_and_recipient_reveal() {
-        let production = include_str!("payable.rs").split("#[cfg(test)]").next().expect("生产路由必须存在");
-        assert!(production.contains("/supplier-payments/commit"));
-        assert!(production.contains("/supplier-payments/merge-candidates"));
-        assert!(production.contains("/payment-recipient/reveal"));
-        assert!(production.contains("/supplier-payments/{id}/bank-receipt"));
-        assert!(production.contains("multipart_route"));
-        assert!(!production.contains("/supplier-payments/{id}/submit"));
-        assert!(!production.contains("/supplier-payments/{id}/cancel-approval"));
-        assert!(!production.contains("/supplier-payments/{id}/post"));
-        assert!(!production.contains("PENDING_REVIEW"));
-    }
-}

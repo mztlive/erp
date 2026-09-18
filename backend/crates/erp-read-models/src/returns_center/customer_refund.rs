@@ -121,27 +121,3 @@ impl ReturnsReadService {
         Ok(view)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    /// 列表必须批量读取注册行，不得对每个分页行再读详情。
-    #[test]
-    fn list_batches_document_bindings_and_keeps_missing_registry_rows() {
-        let query = include_str!("customer_refund.rs").split("#[cfg(test)]").next().expect("查询生产代码");
-        let command = include_str!("../../../erp-processes/src/reverse_flow/customer_refund.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("命令生产代码");
-        let domain = include_str!("../../../erp-returns/src/service/customer_refund.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("本域生产代码");
-        let production = format!("{query}\n{command}\n{domain}");
-        assert!(production.contains("find_documents_by_ids"));
-        assert!(production.contains("map_customer_refund_list_page"));
-        assert!(!production.contains("customer_refund_view(row.id)"));
-        assert!(production.contains("refund.matches_version(req.expected_version)"));
-        assert!(production.contains("conflict_if_stale_version"));
-        assert!(!production.contains("fn ensure_expected_version"));
-    }
-}

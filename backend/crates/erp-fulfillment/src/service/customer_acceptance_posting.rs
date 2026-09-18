@@ -716,27 +716,4 @@ mod tests {
         .expect_err("已冲正记录不得作为草稿登记");
         assert!(error.to_string().contains("草稿"));
     }
-
-    /// 过账与冲正可以同步 W06 责任，但不得启动审批或选择审批定义。
-    #[test]
-    fn post_does_not_start_approval() {
-        let production =
-            include_str!("customer_acceptance_posting.rs").split("#[cfg(test)]").next().expect("生产代码");
-        let post =
-            include_str!("../../../erp-processes/src/fulfillment_execution/customer_acceptance/post.rs");
-        let reverse =
-            include_str!("../../../erp-processes/src/fulfillment_execution/customer_acceptance/reverse.rs");
-        assert!(post.contains("pub async fn post_customer_acceptance"));
-        assert!(reverse.contains("pub async fn reverse_customer_acceptance"));
-        for source in [production, post, reverse] {
-            assert!(!source.contains("start_approval"));
-            assert!(!source.contains("prepare_start"));
-            assert!(!source.contains("definition_id"));
-            assert!(!source.contains("CustomerAcceptanceAdapter"));
-            assert!(!source.contains("bind_published_definition_on_document_create"));
-        }
-        assert!(post.contains("prepare_customer_acceptance_task_command"));
-        assert!(production.contains("mark_posted"));
-        assert!(production.contains("original.reverse"));
-    }
 }

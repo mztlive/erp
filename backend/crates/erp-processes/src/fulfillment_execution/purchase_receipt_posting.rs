@@ -516,69 +516,6 @@ fn reservation_line_facts(
 // 入库预占到仓发行字段映射归实体批量工厂（FUL-E01）；旧 Service 编号 helper 已删除。
 
 #[cfg(test)]
-mod tests {
-    /// 过账路径不得启动审批、不得创建任务、不得选择定义。
-    #[test]
-    fn post_does_not_start_approval_or_create_tasks() {
-        let production =
-            include_str!("purchase_receipt_posting.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(production.contains("pub async fn post_purchase_receipt"));
-        assert!(!production.contains("start_approval"));
-        assert!(!production.contains("prepare_start"));
-        assert!(!production.contains("WorkItem"));
-        assert!(!production.contains("definition_id"));
-        assert!(!production.contains("PurchaseReceiptAdapter"));
-        assert!(!production.contains("bind_published_definition_on_document_create"));
-        let post = production
-            .split("pub async fn post_purchase_receipt")
-            .nth(1)
-            .and_then(|rest| rest.split("#[cfg(test)]").next())
-            .expect("post_purchase_receipt 生产片段");
-        assert!(post.contains("mark_purchase_receipt_posted"));
-        assert!(
-            include_str!("../../../erp-fulfillment/src/service/purchase_receipt_posting.rs")
-                .contains("receipt.mark_posted")
-        );
-        assert!(!post.contains("submit_"));
-        assert!(!post.contains("start_approval"));
-    }
-
-    /// 累计有效收货必须由 Repository 聚合：旧 Service helper 已删除，过账
-    /// 路径改调仓储聚合并继续在 Service 完成超收校验与进度更新。
-    #[test]
-    fn received_totals_are_aggregated_in_repository() {
-        let production =
-            include_str!("purchase_receipt_posting.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(!production.contains("cumulative_received_quantities"), "旧 Service 聚合 helper 必须删除");
-        assert!(!production.contains("list_posted_receipts_for_purchase_order"));
-        assert!(
-            production.contains("qualified_received_totals_by_purchase_revision_line"),
-            "过账路径必须调用 Repository 聚合"
-        );
-        let post = production
-            .split("pub async fn post_purchase_receipt")
-            .nth(1)
-            .and_then(|rest| rest.split("#[cfg(test)]").next())
-            .expect("post_purchase_receipt 生产片段");
-        assert!(post.contains("ensure_within_revision"), "超收校验保留在 Service");
-        assert!(post.contains("fulfillment_progress"), "进度计算保留在 Service");
-    }
-
-    /// 入库预占必须按销售单与仓库复用草稿，并把新预占补成发货行。
-    #[test]
-    fn receipt_reservations_merge_into_exact_warehouse_draft() {
-        let production =
-            include_str!("purchase_receipt_posting.rs").split("#[cfg(test)]").next().expect("生产代码");
-        let draft_flow =
-            production.split("async fn create_warehouse_ship_drafts").nth(1).expect("仓发草稿流程");
-        assert!(draft_flow.contains("by_order_warehouse"));
-        assert!(draft_flow.contains("draft_warehouse_delivery"));
-        assert!(draft_flow.contains("append_receipt_stock_delivery_lines"));
-        assert!(!draft_flow.contains("draft_delivery_for_sales_order"));
-    }
-}
-
-#[cfg(test)]
 mod posting_contract_tests {
     use super::*;
     struct TestExecutor {

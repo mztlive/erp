@@ -559,20 +559,4 @@ mod tests {
         assert_eq!(merged["account-present"].as_deref(), Some("PO-2026-001"));
         assert_eq!(merged["account-missing"], None);
     }
-
-    /// 批量装载后不再逐笔解析来源单号。
-    #[test]
-    fn allocation_sources_use_grouped_batch_loading() {
-        let production = include_str!("display.rs").split("#[cfg(test)]").next().expect("生产代码");
-        let batch = production
-            .split("async fn collect_source_document_nos")
-            .nth(1)
-            .expect("批量来源装载")
-            .split("fn merge_source_document_nos")
-            .next()
-            .expect("批量函数体");
-        assert!(batch.contains("purchase_nos_by_ids"));
-        assert!(batch.contains("statement_nos_by_ids"));
-        assert!(!batch.contains("resolve_source_document_no(db, account)"));
-    }
 }

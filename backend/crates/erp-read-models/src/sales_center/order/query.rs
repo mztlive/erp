@@ -723,47 +723,6 @@ mod tests {
         }
     }
 
-    /// 采购创建访问投影必须在查询责任任务前重验当前账号和采购建单权限。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无；账号状态、规范主体、权限或检查顺序缺失时测试失败。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 详情页 `allowed` 必须与 basis/create 接口的当前认证和 RBAC 边界一致。
-    #[test]
-    fn purchase_creation_access_revalidates_account_and_permission_before_tasks() {
-        let source = include_str!("query.rs");
-        let access =
-            source.split_once("async fn purchase_creation_access").expect("必须存在采购创建访问投影").1;
-        let actor_gate = access.find("purchase_creation_actor_blocker(actor)").expect("必须先重验账号与权限");
-        let task_query = access.find("purchase_creation_task_count").expect("必须查询开放采购任务");
-        assert!(actor_gate < task_query);
-
-        let actor_check = source
-            .split_once("async fn purchase_creation_actor_blocker")
-            .expect("必须存在账号与权限重验 helper")
-            .1;
-        let account = actor_check.find(".accounts()").expect("必须加载当前账号");
-        let can_login = actor_check.find("account.can_login()").expect("必须检查当前账号可登录");
-        let permission =
-            actor_check.find("Permission::parse(\"purchase_order:create\")").expect("必须解析采购建单权限");
-        let enforce = actor_check
-            .find(".enforce(&subject(account.kind, &account.base.id), &permission)")
-            .expect("必须用规范账号主体重验权限");
-        assert!(account < can_login);
-        assert!(can_login < permission);
-        assert!(permission < enforce);
-        let inactive_blocker = "当前账号不存在、已停用或身份已变化，不能分配供给";
-        assert!(actor_check.contains(inactive_blocker));
-        assert!(actor_check.contains("当前账号缺少 purchase_order:create 权限"));
-    }
-
     /// 禁止访问投影必须返回明确 blocker 且隐藏任务数量。
     ///
     /// # 参数

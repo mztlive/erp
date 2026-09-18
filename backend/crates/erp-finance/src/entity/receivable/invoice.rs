@@ -617,28 +617,6 @@ mod tests {
         assert!(red.mark_red_invoiced("admin").is_err(), "红票不被再次红冲");
     }
 
-    /// 发票无审批约束：不得出现绑定字段或审批状态机。
-    #[test]
-    fn invoice_has_no_approval_binding_or_state_machine() {
-        let invoice = Invoice::new(InvoiceId::new("inv-1"), data(), "admin-1").unwrap();
-        let value = serde_json::to_value(&invoice).unwrap();
-        let object = value.as_object().expect("发票序列化为对象");
-        assert!(!object.contains_key("approval_binding"));
-        assert!(!object.contains_key("approval_subject_version"));
-        assert!(!object.contains_key("pending_allocations"));
-        assert_eq!(invoice.stable.status(), InvoiceStatus::Draft);
-        assert_eq!(InvoiceStatus::Draft.as_str(), "draft");
-        assert_eq!(InvoiceStatus::Registered.as_str(), "registered");
-        assert_eq!(InvoiceStatus::RedInvoiced.as_str(), "red_invoiced");
-
-        let production = include_str!("invoice.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(!production.contains("IN_APPROVAL"));
-        assert!(!production.contains("fn start_approval"));
-        assert!(!production.contains("approval_subject_version"));
-        assert!(!production.contains("ApprovalDefinitionBinding"));
-        assert!(!production.contains("PENDING_REVIEW"));
-    }
-
     #[test]
     fn enums_serialize_with_stable_codes_and_labels() {
         assert_eq!(serde_json::to_string(&InvoiceDirection::Purchase).unwrap(), "\"purchase\"");

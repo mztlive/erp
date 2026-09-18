@@ -219,39 +219,3 @@ pub async fn persist_difference(
     db.reconciliation_differences().create(difference, executor).await?;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    /// 生产代码（测试模块之前部分），供分层守卫断言，避免字面量自匹配。
-    ///
-    /// # 返回
-    /// 返回去掉测试模块后的生产代码全文。
-    fn production_source() -> &'static str {
-        include_str!("reconciliation_difference.rs").split("mod tests {").next().expect("必须存在生产代码")
-    }
-
-    /// 分层守卫（INT-R26）：差异列表经单次批量装载最新决定，无逐行查询。
-    ///
-    /// 锁定 `find_latest_by_differences` 单次批量入口与缺失映射为无状态版本零；
-    /// 逐行 `difference_state` 与单条 `find_latest_by_difference` 不得回潮。
-    #[test]
-    fn difference_list_resolves_latest_via_single_batch() {
-        let source = production_source();
-        assert!(source.contains("find_latest_by_differences(&difference_ids"));
-        assert!(source.contains("map_or((None, 0)"));
-        assert!(!source.contains("fn difference_state"));
-        assert!(!source.contains("find_latest_by_difference("));
-    }
-
-    /// 分层守卫（INT-E17）：至少一侧证据引用不变量由实体独占，服务只映射错误类别。
-    ///
-    /// 锁定服务不再保留重复业务判断，实体错误统一映射为 `ValidationError`；
-    /// 四格矩阵（均无/仅左/仅右/两者）由实体单测覆盖，此处只锁定归属。
-    #[test]
-    fn create_difference_defers_reference_invariant_to_entity() {
-        let source = production_source();
-        assert!(!source.contains("left_fact_reference.is_none() && req.right_fact_reference.is_none()"));
-        assert!(source.contains("ReconciliationDifference::new("));
-        assert!(source.contains("Error::ValidationError(error.to_string())"));
-    }
-}

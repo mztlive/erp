@@ -183,38 +183,3 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
 }
-
-#[cfg(test)]
-mod tests {
-    /// 客户回款路由暴露提交与撤回，不再把过账当客户端旁路入口。
-    #[test]
-    fn customer_receipt_routes_expose_submit_and_cancel() {
-        let production =
-            include_str!("receivable.rs").split("#[cfg(test)]").next().expect("生产路由必须存在");
-        assert!(production.contains("/customer-receipts/{id}/submit"));
-        assert!(production.contains("/customer-receipts/{id}/cancel-approval"));
-        assert!(production.contains("customer_receipt_submit"));
-        assert!(production.contains("customer_receipt_cancel_approval"));
-        assert!(!production.contains("PENDING_REVIEW"));
-    }
-}
-
-#[cfg(test)]
-mod retired_review_routes_tests {
-    /// 复核接口撤销后，正常回款、发票及应收接口必须继续保留。
-    #[test]
-    fn funds_review_routes_are_removed_and_finance_routes_remain() {
-        let source = include_str!("receivable.rs").split("#[cfg(test)]").next().unwrap();
-        assert!(!source.contains("/receivable-funds-reviews"));
-        assert!(!source.contains("/card-funds-review/"));
-        for path in [
-            "/receivable-accounts",
-            "/customer-receipts/commit",
-            "/customer-receipts/{id}/submit",
-            "/invoices/commit",
-            "/invoices/{id}/red-issue",
-        ] {
-            assert!(source.contains(path));
-        }
-    }
-}

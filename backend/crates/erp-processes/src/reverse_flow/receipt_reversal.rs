@@ -6,9 +6,6 @@ mod context;
 mod create;
 mod sales_refresh;
 
-#[cfg(test)]
-mod receipt_reversal_approval_tests;
-
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt};

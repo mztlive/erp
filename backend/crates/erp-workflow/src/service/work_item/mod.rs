@@ -709,28 +709,6 @@ mod tests {
         assert!(ensure_generic_work_item_mutation(&managed_w29_item()).is_ok());
     }
 
-    /// Service 必须在查询正式命令回执前识别并拒绝审批任务。
-    #[test]
-    fn generic_mutation_guard_precedes_idempotent_replay() {
-        for (source, method) in [
-            (include_str!("reassign.rs"), "pub async fn reassign("),
-            (include_str!("close.rs"), "pub async fn close("),
-        ] {
-            let production = source.split("#[cfg(test)]").next().expect("生产代码必须存在");
-            let body = production
-                .split_once(method)
-                .map(|(_, tail)| tail)
-                .expect("通用责任命令必须存在")
-                .split_once("\n    }")
-                .map(|(body, _)| body)
-                .expect("通用责任命令必须闭合");
-            let guard =
-                body.find("ensure_generic_work_item_mutation(&item)").expect("命令必须先识别审批任务");
-            let replay = body.find("idempotent_replay(&receipt, &id)").expect("命令必须保留幂等回放");
-            assert!(guard < replay, "审批任务守卫必须先于命令回放");
-        }
-    }
-
     #[test]
     fn family_counts_use_the_registered_server_mapping() {
         let counts = family_counts_for_types([

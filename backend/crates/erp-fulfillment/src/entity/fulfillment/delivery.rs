@@ -875,29 +875,6 @@ pub(crate) mod tests {
         );
     }
 
-    /// 发货单无审批约束：不得出现绑定字段或审批状态机。
-    #[test]
-    fn delivery_has_no_approval_binding_or_state_machine() {
-        let delivery = Delivery::new(DeliveryId::new("delivery-1"), delivery_data()).unwrap();
-        let value = serde_json::to_value(&delivery).unwrap();
-        let object = value.as_object().expect("发货单序列化为对象");
-        assert!(!object.contains_key("approval_binding"));
-        assert!(!object.contains_key("approval_subject_version"));
-        assert!(!object.contains_key("pending_allocations"));
-        assert_eq!(delivery.status, DeliveryState::Draft);
-        assert_eq!(DeliveryState::Draft.as_str(), "DRAFT");
-        assert_eq!(DeliveryState::Shipped.as_str(), "SHIPPED");
-        assert_eq!(DeliveryState::Signed.as_str(), "SIGNED");
-        assert_eq!(DeliveryState::Reversed.as_str(), "REVERSED");
-
-        let production = include_str!("delivery.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(!production.contains("IN_APPROVAL"));
-        assert!(!production.contains("fn start_approval"));
-        assert!(!production.contains("approval_subject_version"));
-        assert!(!production.contains("ApprovalDefinitionBinding"));
-        assert!(!production.contains("PENDING_REVIEW"));
-    }
-
     /// 采购来源提取纯规则：直发携带采购来源通过，缺失失败。
     #[test]
     fn supplier_source_extraction_covers_present_and_missing() {

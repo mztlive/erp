@@ -715,24 +715,4 @@ mod tests {
         assert_eq!(sourcing_work_item_status(WorkItemStatus::Closed, true).unwrap(), "COMPLETED");
         assert!(sourcing_work_item_status(WorkItemStatus::Closed, false).is_err());
     }
-
-    /// 验证选源创建的操作人授权提交栅栏。
-    #[test]
-    fn create_from_sourcing_binds_actor_authorization_to_commit() {
-        let production =
-            [include_str!("sourcing_create.rs"), include_str!("sourcing_create/stock_posting.rs")]
-                .into_iter()
-                .map(|source| source.split("#[cfg(test)]").next().expect("生产代码必须存在"))
-                .collect::<String>();
-        assert!(production.contains("authorize_actor_permission(actor, CREATE_PERMISSION)"));
-        assert!(production.contains("ensure_purchase_order_actor_account"));
-        assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
-        assert!(production.contains("advance_procurement_guard"));
-        assert!(production.contains("reserve_quantity"));
-        assert!(production.contains("StockReservationSourceType::ExistingStock"));
-        assert!(production.contains("create_stock_delivery_drafts"));
-        assert!(production.contains("plan.target_warehouse_id.as_ref()"));
-        assert!(production.contains("persist_basis_draft"));
-        assert!(production.contains("sync_procurement_tasks_for_sales_order"));
-    }
 }

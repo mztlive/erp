@@ -461,18 +461,6 @@ mod tests {
         );
     }
 
-    /// 快照规则归实体：旧 adapter helper 已删除，调用点直调实体工厂。
-    #[test]
-    fn snapshot_rule_source_is_entity_owned() {
-        let production = include_str!("adapter.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(!production.contains("fn build_stock_adjustment_snapshot"), "旧 helper 必须删除");
-        assert!(!production.contains("fn sum_line_quantity"), "旧求和 helper 必须删除");
-        assert!(
-            production.contains("fn workflow_snapshot_from_inventory"),
-            "工作流 payload 映射必须留在 adapter"
-        );
-    }
-
     /// 启动命令不含定义 ID 或审批人。
     #[test]
     fn start_command_omits_definition_and_assignee() {

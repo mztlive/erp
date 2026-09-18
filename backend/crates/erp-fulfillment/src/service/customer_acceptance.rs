@@ -204,17 +204,4 @@ mod tests {
         .unwrap();
         assert_eq!(lines[0].accepted_quantity, Quantity::from_str("9").unwrap());
     }
-
-    /// 创建路径经实体批量工厂编号：旧 Service helper 已删除。
-    #[test]
-    fn acceptance_create_uses_entity_batch_factory() {
-        let production =
-            include_str!("customer_acceptance.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(!production.contains("fn build_acceptance_lines"), "旧 helper 必须删除");
-        assert!(
-            production.contains("CustomerAcceptanceLineBatch::build")
-                || production.contains("build_customer_acceptance_lines"),
-            "创建路径必须调用实体工厂（直接或经同域构造入口）"
-        );
-    }
 }

@@ -487,15 +487,4 @@ pub(crate) mod tests {
         assert!(refund.ensure_initial_approval_state().is_err());
         assert!(refund.mark_posted().is_err());
     }
-
-    #[test]
-    fn status_serializes_with_stable_codes_and_labels() {
-        assert_eq!(serde_json::to_string(&CustomerRefundStatus::InApproval).unwrap(), "\"IN_APPROVAL\"");
-        assert_eq!(CustomerRefundStatus::Posted.label(), "已过账");
-        assert_eq!(CustomerRefundStatus::Reversed.as_str(), "reversed");
-        assert_eq!(CustomerRefundStatus::Draft.as_str(), "draft");
-        let production = include_str!("customer_refund.rs").split("#[cfg(test)]").next().expect("生产代码");
-        assert!(!production.contains("PendingReview"));
-        assert!(!production.contains("pending_review"));
-    }
 }

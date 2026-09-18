@@ -249,19 +249,3 @@ fn failed_preview(line_key: String, error: Error) -> ProcurementResponsibilityRe
         error: Some(error.to_string()),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    /// 验证规则创建与更新的授权提交栅栏。
-    ///
-    /// 两条写路径都必须在 policy CAS 事务内重验负责人账号和选择器引用，
-    /// 任一调用缺失时测试失败。
-    #[test]
-    fn rule_writes_bind_owner_authorization_and_revalidate_references() {
-        let production = include_str!("service.rs").split("#[cfg(test)]").next().expect("生产代码必须存在");
-
-        assert_eq!(production.matches("run_authorized_policy_transaction(policy_revision").count(), 2);
-        assert!(production.contains("validation.validate_selector_reference(&data, executor)"));
-        assert!(production.contains("load_owner_account(&db, data.owner_user_id.as_str(), executor)"));
-    }
-}

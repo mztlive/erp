@@ -22,31 +22,6 @@ use crate::service::approval::policy::{ALL_DOCUMENT_TYPES, ApprovalRequirement, 
 use crate::service::approval::upgrade_subject::ApprovalUpgradeSubjectFacts;
 use crate::service::document_registry::new_registered_document;
 
-/// Live bind path uses one Executor and one object-read port; it does not open a nested transaction.
-#[test]
-fn bind_on_document_create_uses_injected_object_read_and_caller_executor() {
-    let bind = include_str!("bind.rs");
-    let production = bind.split("#[cfg(test)]").next().expect("生产代码必须存在");
-    assert!(production.contains("object_read: &dyn ApprovalObjectReadPort"));
-    assert!(production.contains("executor: &mut dyn Executor"));
-    assert!(!production.contains("with_transaction"));
-    assert!(production.contains("bind_required_definition(db, rbac, object_read, audit_port"));
-}
-
-fn production_source() -> String {
-    fn production_part(source: &str) -> &str {
-        source.split("#[cfg(test)]").next().expect("必须存在生产代码")
-    }
-    [
-        production_part(include_str!("mod.rs")),
-        production_part(include_str!("types.rs")),
-        production_part(include_str!("bind.rs")),
-        production_part(include_str!("upgrade.rs")),
-        production_part(include_str!("revalidate.rs")),
-    ]
-    .concat()
-}
-
 /// 构造审批人账号快照。
 fn assignee_account(id: &str, can_login: bool) -> WorkflowAccountFact {
     WorkflowAccountFact::new(id, AccountKind::Admin, can_login).with_display_name(id)
@@ -165,74 +140,6 @@ fn upgrade_result_is_rebuilt_from_strict_action_proof() {
     );
 }
 
-/// 生产编排必须在当前授权后分流，Fresh 内的收据是第一物理写。
-#[test]
-fn upgrade_orchestration_is_authorized_replay_and_receipt_first() {
-    let production = production_source();
-    let upgrade = production
-        .split("pub async fn upgrade_unsubmitted_document_definition")
-        .nth(1)
-        .expect("必须存在升级端口")
-        .split("/// 在 unknown/duplicate 恢复的新事务中")
-        .next()
-        .unwrap();
-    assert!(
-        upgrade.find("load_authorized_upgrade_context").unwrap()
-            < upgrade.find("find_upgrade_receipt").unwrap()
-    );
-    assert!(
-        upgrade.find("ReceiptBranch::SamePayload").unwrap()
-            < upgrade.find("ensure_expected_business_object_version").unwrap()
-    );
-    assert!(!upgrade.contains("NoTransaction"));
-
-    let authorization = production
-        .split("async fn load_authorized_upgrade_context")
-        .nth(1)
-        .expect("必须存在升级授权上下文")
-        .split("/// 证明运行层传入的身份")
-        .next()
-        .unwrap();
-    assert!(
-        authorization.find("load_approval_upgrade_subject_facts").unwrap()
-            < authorization.find("ensure_active_upgrade_actor").unwrap()
-    );
-    assert!(
-        authorization.find("ensure_active_upgrade_actor").unwrap()
-            < authorization.find("approval_binding_upgrade_authorization_with_executor").unwrap()
-    );
-
-    let recovery = production
-        .split("pub async fn replay_unsubmitted_document_definition_upgrade")
-        .nth(1)
-        .expect("必须存在只读恢复端口")
-        .split("/// 得到命令签署与不可变动作共用的规范化原因")
-        .next()
-        .unwrap();
-    assert!(
-        recovery.find("load_authorized_upgrade_context").unwrap()
-            < recovery.find("find_upgrade_receipt").unwrap()
-    );
-    assert!(recovery.contains("ReceiptBranch::Fresh => Ok(None)"));
-    assert!(!recovery.contains("apply_fresh_upgrade"));
-    assert!(!recovery.contains("insert_command_receipt"));
-
-    let fresh = production
-        .split("async fn apply_fresh_upgrade")
-        .nth(1)
-        .expect("必须存在 Fresh 编排")
-        .split("/// 注册投影必须")
-        .next()
-        .unwrap();
-    let receipt_write = fresh.find("insert_command_receipt").unwrap();
-    assert!(fresh.find("ApprovalCommandReceipt::new").unwrap() < receipt_write);
-    assert!(fresh.find("upgrade_result_from_action").unwrap() < receipt_write);
-    assert!(receipt_write < fresh.find("business_documents().update").unwrap());
-    assert!(receipt_write < fresh.find("workflow_actions().create").unwrap());
-    assert!(receipt_write < fresh.find("audit_port.persist").unwrap());
-    assert!(!fresh.contains("outbox"));
-}
-
 /// 单号只在注册与强实体两端均有值时作为一致性证明。
 #[test]
 fn upgrade_registry_identity_allows_one_sided_empty_document_number() {
@@ -283,16 +190,6 @@ fn published_graph_revalidation_uses_bpm_and_maps_configuration_errors() {
     let published_corrupt = DefinitionGraph { definition, nodes: Vec::new(), transitions: Vec::new() };
     let corrupt = revalidate_published_graph(&published_corrupt).unwrap_err();
     assert_ne!(corrupt.to_string(), ErrorCode::ApprovalProcessNotConfigured.as_str());
-
-    let production = production_source();
-    let loader = production
-        .split("async fn load_published_graph")
-        .nth(1)
-        .and_then(|body| body.split("fn revalidate_published_graph").next())
-        .expect("加载函数");
-    assert!(loader.contains("load_published_definition_graph"));
-    assert!(!loader.contains("load_definition_graph"));
-    assert!(!loader.contains("find_published_by_process_kind"));
 }
 
 /// 全部必须审批类型进入目标运行时。

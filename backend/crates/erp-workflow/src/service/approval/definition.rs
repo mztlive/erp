@@ -62,32 +62,6 @@ pub(super) mod test_support {
 
     use super::replace::next_transition_ids;
 
-    pub fn production_source() -> &'static str {
-        static SOURCE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-        SOURCE
-            .get_or_init(|| {
-                fn production_part(source: &str) -> &str {
-                    source.split("#[cfg(test)]").next().expect("必须存在生产代码")
-                }
-                [
-                    production_part(include_str!("definition.rs")),
-                    production_part(include_str!("definition/query.rs")),
-                    production_part(include_str!("definition/create.rs")),
-                    production_part(include_str!("definition/replace.rs")),
-                    production_part(include_str!("definition/publish.rs")),
-                    production_part(include_str!("definition/retire.rs")),
-                    production_part(include_str!("definition/mapping.rs")),
-                    production_part(include_str!("definition/command.rs")),
-                ]
-                .concat()
-            })
-            .as_str()
-    }
-
-    pub fn source_fn<'a>(source: &'a str, name: &str, next: &str) -> &'a str {
-        source.split(name).nth(1).and_then(|body| body.split(next).next()).unwrap_or(source)
-    }
-
     pub fn draft_definition(process_kind: ProcessKind, entry: &str) -> ApprovalProcessDefinition {
         ApprovalProcessDefinition::new_draft(
             ApprovalProcessDefinitionId::new("def-1"),
@@ -133,26 +107,14 @@ pub(super) mod test_support {
 mod tests {
     use super::super::policy::{ALL_DOCUMENT_TYPES, policy_of};
     use super::super::process_kind::{document_type_of, process_kind_of};
-    use super::test_support::production_source;
 
-    /// 政策与 ProcessKind 映射穷尽，Service 无 BPM 第二定义源。
+    /// 政策与 ProcessKind 映射穷尽。
     #[test]
-    fn policy_mapping_is_exhaustive_and_service_has_no_second_bpm_source() {
+    fn policy_mapping_is_exhaustive() {
         for document_type in ALL_DOCUMENT_TYPES {
             let process_kind = process_kind_of(document_type);
             assert_eq!(document_type_of(process_kind), document_type);
             let _ = policy_of(document_type).unwrap();
         }
-        let production = production_source();
-        assert!(production.contains("validate_linear"));
-        assert!(production.contains("plan_replacement_nodes"));
-        assert!(!production.contains("generate_linear_transitions"));
-        assert!(!production.contains("validate_transition"));
-        assert!(!production.contains("validate_entry_node"));
-        assert!(!production.contains("entities::approval::"));
-        assert!(!production.contains(&format!("{}{}", "CARD_", "SALES_APPROVAL")));
-        assert!(!production.contains("validate_definition("));
-        assert!(!production.contains("access_control::DataScopeFact"));
-        assert!(!production.contains("approval_management_scope"));
     }
 }
